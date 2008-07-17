@@ -24,6 +24,7 @@ import Unpack
 import qualified Distribution.Server.BlobStorage as Blob
 
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy.Char8 as Lazy
 
 hackageEntryPoint :: Proxy PackagesState
 hackageEntryPoint = Proxy
@@ -48,11 +49,28 @@ handlePackageById pkgid =
                                     where pkg_desc = PD.packageDescription (pkgDesc pkg)
   ]
 
+downloadPackageById pkgid =
+    [ anyRequest $ do mbPkgInfo <- query $ LookupPackageId pkgid
+                      blobId <- undefined
+                      store <- liftIO $ Blob.open "packages"
+                      file <- liftIO $ Blob.fetch store blobId
+                      ok $ toResponse $ Tarball file
+    ]
+
+newtype Tarball = Tarball Lazy.ByteString
+
+instance ToMessage Tarball where
+    toContentType _ = BS.pack "application/gzip"
+    toResponse (Tarball bs) = (toResponse ()) { rsBody = bs }
+
 instance FromReqURI PackageIdentifier where
   fromReqURI = simpleParse
 
 impl =
-  [ dir "packages" [ path $ handlePackageById ]
+  [ dir "packages" [ path $ handlePackageById
+                   , dir "download"
+                     [ path $ downloadPackageById ]
+                   ]
 --  , dir "test"     [ support [("text/plain", ok $ toResponse "plain" )
 --                             ,("text/html", ok $ toResponse "html" )] ]
   , dir "upload" [ withDataFn (lookInput "upload") $ \input ->
