@@ -16,7 +16,14 @@ import Hackage.Types (PkgInfo(..))
 import System.Environment
 import Control.Exception
 import Data.Version
+import Data.Maybe
 import Control.Monad
+import Control.Monad.Trans
+
+import Unpack
+import qualified Distribution.Server.BlobStorage as Blob
+
+import qualified Data.ByteString.Char8 as BS
 
 hackageEntryPoint :: Proxy PackagesState
 hackageEntryPoint = Proxy
@@ -46,5 +53,19 @@ instance FromReqURI PackageIdentifier where
 
 impl =
   [ dir "packages" [ path $ handlePackageById ]
+--  , dir "test"     [ support [("text/plain", ok $ toResponse "plain" )
+--                             ,("text/html", ok $ toResponse "html" )] ]
+  , dir "upload" [ withDataFn (lookInput "upload") $ \input ->
+                       [ anyRequest $
+                         do ret <- liftIO $ unpackPackage (fromMaybe "noname" $ inputFilename input) (inputValue input) False
+                            case ret of
+                              Left err -> ok $ toResponse $ err
+                              Right (pkgDesc, warns) ->
+                                  do store <- liftIO $ Blob.open "packages"
+                                     blobId <- liftIO $ Blob.add store (inputValue input)
+                                     ok $ toResponse "Package valid"
+                       ]
+                 , fileServe [] "upload.html"
+                 ]
   ]
 
