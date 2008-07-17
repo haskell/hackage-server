@@ -38,9 +38,8 @@ import System.IO.Error (isDoesNotExistError)
 -- the 'Repo'.
 --
 readPackageIndex :: Verbosity -> FilePath -> IO (PackageIndex PkgInfo)
-readPackageIndex verbosity cacheDir =
-  let indexFile = cacheDir </> "00-index.tar"
-   in fmap parseRepoIndex (BS.readFile indexFile)
+readPackageIndex verbosity indexFile =
+   fmap parseRepoIndex (BS.readFile indexFile)
           `catch` (\e -> do case e of
                               IOException ioe | isDoesNotExistError ioe ->
                                 warn verbosity "The package list does not exist. Run 'cabal update' to download it."
@@ -67,7 +66,8 @@ readPackageIndex verbosity cacheDir =
                   in case simpleParse vers of
                        Just ver -> return PkgInfo {
                            pkgInfoId = PackageIdentifier pkgname ver,
-                           pkgDesc = descr
+                           pkgDesc = descr,
+                           pkgData = content
                          }
                        _ -> []
                _ -> []

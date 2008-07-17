@@ -13,25 +13,38 @@ import qualified Distribution.Verbosity as Verbosity (normal)
 import Hackage.IndexUtils (readPackageIndex)
 import Hackage.Types (PkgInfo(..))
 
-main = do
-  pkgindex <- readPackageIndex Verbosity.normal "."
-  simpleHTTP nullConf { port = 5000 } (impl pkgindex)
+import System.Environment
+import Control.Exception
+import Data.Version
+import Control.Monad
+
+hackageEntryPoint :: Proxy PackagesState
+hackageEntryPoint = Proxy
 
 
-handlePackageById :: PackageIndex PkgInfo -> PackageIdentifier -> [ServerPart Response]
-handlePackageById pkgindex pkgid =
-  [ anyRequest $ ok $ toResponse $
-       "Package " ++ display pkgid ++ " addressed.\n"
-    ++ case PackageIndex.lookupPackageId pkgindex pkgid of
-         Nothing -> "No such package"
-	 Just pkg -> PD.author pkg_desc
-	   where pkg_desc = PD.packageDescription (pkgDesc pkg)
+main = bracket (startSystemState hackageEntryPoint) (shutdownSystem) $ \ctl ->
+       do args <- getArgs -- FIXME: use GetOpt
+          forM_ args $ \pkgFile ->
+              do pkgIndex <- readPackageIndex Verbosity.normal pkgFile
+                 update $ BulkImport (PackageIndex.allPackages pkgIndex)
+          simpleHTTP nullConf { port = 5000 } impl
+
+
+handlePackageById :: PackageIdentifier -> [ServerPart Response]
+handlePackageById pkgid =
+  [ anyRequest $ do mbPkgInfo <- query $ LookupPackageId pkgid
+                    ok $ toResponse $
+                           "Package " ++ display pkgid ++ " addressed.\n"
+                           ++ case mbPkgInfo of
+                                Nothing -> "No such package"
+	                        Just pkg -> PD.author pkg_desc
+                                    where pkg_desc = PD.packageDescription (pkgDesc pkg)
   ]
 
 instance FromReqURI PackageIdentifier where
   fromReqURI = simpleParse
 
-impl pkgindex =
-  [ dir "packages" [ path $ handlePackageById pkgindex ]
+impl =
+  [ dir "packages" [ path $ handlePackageById ]
   ]
 

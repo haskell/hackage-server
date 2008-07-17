@@ -19,6 +19,7 @@ import Distribution.PackageDescription (GenericPackageDescription(..), parsePack
 import Distribution.Text
          ( display )
 import Distribution.Simple.Utils (intercalate)
+import Data.ByteString.Lazy (ByteString)
 
 import Data.Typeable
 import System.FilePath ((</>), (<.>))
@@ -38,9 +39,10 @@ deriving instance Typeable PackageIdentifier
 -- field to store the tarball URL.
 data PkgInfo = PkgInfo {
     pkgInfoId :: PackageIdentifier,
-    pkgDesc   :: GenericPackageDescription
+    pkgDesc   :: GenericPackageDescription,
+    pkgData   :: ByteString
   }
-  deriving (Read, Show, Typeable)
+  deriving (Read,Show,Typeable)
 
 instance Package PkgInfo where packageId = pkgInfoId
 
