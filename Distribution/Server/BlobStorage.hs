@@ -12,6 +12,7 @@
 module Distribution.Server.BlobStorage (
     BlobStorage,
     BlobId,
+    open,
     add,
     fetch,
   ) where
@@ -22,6 +23,9 @@ import Data.Digest.Pure.MD5
          ( MD5Digest, md5 )
 import System.FilePath
          ( (</>) )
+import Control.Exception as Exception
+import System.Directory
+import System.IO
 
 -- | An id for a blob. The content of the blob is stable.
 --
@@ -46,17 +50,17 @@ incomingDir (BlobStorage store) = store </> "incoming"
 --
 add :: BlobStorage -> ByteString -> IO BlobId
 add store content = do
-  (file, hnd) <- openBinaryTempFile (incommingDir store) "tmp"
+  (file, hnd) <- openBinaryTempFile (incomingDir store) "tmp"
   handleExceptions file hnd $ do
     -- TODO: calculate the md5 and write to the temp file in one pass:
-    BS.put hnd content
+    BS.hPut hnd content
     hSeek hnd AbsoluteSeek 0
-    blobId <- evaluate . BlobId . md5 =<< BS.hGetContents tmpHandle
+    blobId <- evaluate . BlobId . md5 =<< BS.hGetContents hnd
     --TODO: if the target already exists then there is no need to overwrite it
     --      since it will have the same content. Checking and then renaming
     --      would give a race condition but that's ok since they have the same
     --      content.
-    renameFile tmpFile (filepath store blobId)
+    renameFile file (filepath store blobId)
     return blobId
 
   where
@@ -80,7 +84,11 @@ fetch store blobid = BS.readFile (filepath store blobid)
 -- * The given directory have previously been 'initialise'd.
 --
 open :: FilePath -> IO BlobStorage
-open = undefined
+open pkgDir
+    = do createDirectoryIfMissing False pkgDir
+         let blob = BlobStorage pkgDir
+         createDirectoryIfMissing False (incomingDir blob)
+         return blob
 
 -- | Initialise a new persistent blob storage area.
 --
