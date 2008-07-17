@@ -1,6 +1,6 @@
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Hackage.Check
+-- Module      :  Hackage.Tar
 -- Copyright   :  (c) 2007 Bjorn Bringert, 2008 Andrea Vezzosi
 -- License     :  BSD-like
 --
@@ -14,160 +14,114 @@
 --
 -----------------------------------------------------------------------------
 module Hackage.Tar (
-  TarHeader(..),
-  TarFileType(..),
-  readTarArchive,
-  extractTarGzFile,
-  createTarGzFile
+  -- * Tar file entry
+  Entry(..),
+  FileType(..),
+  
+  -- * Reading tar format
+  read,
+  Entries(..), foldEntries, unfoldEntries,
+  
+  -- * Writing tar format
+  write
   ) where
 
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.Char8 as BS.Char8
 import Data.ByteString.Lazy (ByteString)
-import Data.Bits ((.&.),(.|.))
 import Data.Char (ord)
 import Data.Int (Int8, Int64)
-import Data.List (unfoldr,partition,foldl')
-import Data.Maybe (catMaybes)
-import Numeric (readOct,showOct)
-import System.Directory
-         ( getDirectoryContents, doesFileExist, doesDirectoryExist
-         , getModificationTime,  createDirectoryIfMissing, copyFile
-         , Permissions(..), setPermissions, getPermissions )
+import Data.List (foldl')
+import Numeric (readOct, showOct)
 import System.Time (ClockTime(..))
-import System.FilePath as FilePath
-         ( (</>), isValid, isAbsolute, splitFileName, splitDirectories, makeRelative )
+--import qualified System.FilePath as FilePath
 import qualified System.FilePath.Posix as FilePath.Posix
-         ( joinPath, pathSeparator )
 import System.Posix.Types (FileMode)
-import System.IO
-         ( Handle, IOMode(ReadMode), openBinaryFile, hFileSize, hClose )
-import System.IO.Unsafe (unsafeInterleaveIO)
-import Control.Monad (liftM,when)
-import Distribution.Simple.Utils (die)
 
--- GNU gzip
-import qualified Codec.Compression.GZip as GZip
-         ( decompress, compress )
+import Prelude hiding (read, fail)
 
--- Or use Ian's gunzip:
--- import Codec.Compression.GZip.GUnZip (gunzip)
+data Entry = Entry {
+    fileName    :: FilePath,
+    fileMode    :: FileMode,
+    fileType    :: FileType,
+    linkTarget  :: FilePath,
+    fileModTime :: EpochTime,
+    fileSize    :: Int64,
+    fileContent :: ByteString
+  } deriving Show
 
-data TarHeader = TarHeader {
-                    tarFileName   :: FilePath,
-                    tarFileMode   :: FileMode,
-                    tarFileType   :: TarFileType,
-                    tarLinkTarget :: FilePath
-                   } deriving Show
+type EpochTime = Int
 
-data TarFileType = TarNormalFile
-                 | TarHardLink
-                 | TarSymbolicLink
-                 | TarDirectory
-                 | TarOther Char
-                  deriving (Eq,Show)
-
-readTarArchive :: ByteString -> [(TarHeader,ByteString)]
-readTarArchive = catMaybes . unfoldr getTarEntry
-
-extractTarArchive :: FilePath -> [(TarHeader,ByteString)] -> IO ()
-extractTarArchive dir tar = extract files >> extract links
-    where
-    extract = mapM_ (uncurry (extractEntry dir))
-    -- TODO: does this cause a memory leak?
-    (files, links) = partition (not . isLink . tarFileType . fst) tar
-    isLink TarHardLink     = True
-    isLink TarSymbolicLink = True
-    isLink _               = False
-
-extractTarGzFile :: FilePath -- ^ Destination directory
-                 -> FilePath -- ^ Tarball
-                 -> IO ()
-extractTarGzFile dir file =
-  extractTarArchive dir . readTarArchive . GZip.decompress =<< BS.readFile file
-
---
--- * Extracting
---
-
-extractEntry :: FilePath -> TarHeader -> ByteString -> IO ()
-extractEntry dir hdr cnt
-    = do path <- relativizePath dir (tarFileName hdr)
-         let setPerms   = setPermissions path (fileModeToPermissions (tarFileMode hdr))
-             copyLinked =
-                let (base, _) = splitFileName path
-                    sourceName = base </> tarLinkTarget hdr
-                in copyFile sourceName path
-         case tarFileType hdr of
-           TarNormalFile   -> BS.writeFile path cnt >> setPerms
-           TarHardLink     -> copyLinked >> setPerms
-           TarSymbolicLink -> copyLinked
-           TarDirectory    -> createDirectoryIfMissing False path >> setPerms
-           TarOther _      -> return () -- FIXME: warning?
-
-relativizePath :: Monad m => FilePath -> FilePath -> m FilePath
-relativizePath dir file
-    | isAbsolute file    = fail $ "Absolute file name in TAR archive: " ++ show file
-    | not (isValid file) = fail $ "Invalid file name in TAR archive: " ++ show file
-    | otherwise          = return $ dir </> file
-
-fileModeToPermissions :: FileMode -> Permissions
-fileModeToPermissions m = 
-    Permissions {
-                 readable   = m .&. ownerReadMode    /= 0,
-                 writable   = m .&. ownerWriteMode   /= 0,
-                 executable = m .&. ownerExecuteMode /= 0,
-                 searchable = m .&. ownerExecuteMode /= 0
-                }
-
-ownerReadMode    :: FileMode
-ownerReadMode    = 0o000400
-
-ownerWriteMode   :: FileMode
-ownerWriteMode   = 0o000200
-
-ownerExecuteMode :: FileMode
-ownerExecuteMode = 0o000100
+data FileType = NormalFile
+              | HardLink
+              | SymbolicLink
+              | Directory
+              | Other Char
+  deriving (Eq,Show)
 
 --
 -- * Reading
 --
 
-getTarEntry :: ByteString -> Maybe (Maybe (TarHeader,ByteString), ByteString)
-getTarEntry bs | endBlock = Nothing
-               | BS.length hdr < 512 = error "Truncated TAR archive."
-               | not (checkChkSum hdr chkSum) = error "TAR checksum error."
-               | otherwise = Just (Just (info, cnt), bs''')
+data Entries = Next Entry Entries | Done | Fail String
 
-   where (hdr,bs') = BS.splitAt 512 bs
+read :: ByteString -> Entries
+read = unfoldEntries getEntry
 
-         endBlock  = getByte 0 hdr == '\0'
+unfoldEntries :: (a -> Either String (Maybe (Entry, a))) -> a -> Entries
+unfoldEntries f = unfold
+  where
+    unfold x = case f x of
+      Left err             -> Fail err
+      Right Nothing        -> Done
+      Right (Just (e, x')) -> Next e (unfold x')
 
-         fileSuffix = getString   0 100 hdr
-         mode       = getOct    100   8 hdr
-         chkSum     = getOct    148   8 hdr
-         typ        = getByte   156     hdr
-         size       = getOct    124  12 hdr
-         linkTarget = getString 157 100 hdr
-         filePrefix = getString 345 155 hdr
+foldEntries :: (Entry -> a -> a) -> a -> (String -> a) -> Entries -> a
+foldEntries next done fail = fold
+  where
+    fold (Next e es) = next e (fold es)
+    fold Done        = done
+    fold (Fail err)  = fail err
 
-         padding    = (512 - size) `mod` 512
-         (cnt,bs'') = BS.splitAt size bs'
-         bs'''      = BS.drop padding bs''
+getEntry :: ByteString -> Either String (Maybe (Entry, ByteString))
+getEntry bs | endBlock = Right Nothing
+            | BS.length hdr < 512 = Left "Truncated TAR archive"
+            | not (checkChkSum hdr chkSum) = Left "TAR checksum error"
+            | otherwise = Right (Just (entry, bs'''))
+  where
+   (hdr,bs') = BS.splitAt 512 bs
 
-         fileType   = case typ of
-                        '\0'-> TarNormalFile
-                        '0' -> TarNormalFile
-                        '1' -> TarHardLink
-                        '2' -> TarSymbolicLink
-                        '5' -> TarDirectory
-                        c   -> TarOther c
-                        
-         path       = filePrefix ++ fileSuffix
-         info       = TarHeader { tarFileName   = path, 
-                                  tarFileMode   = mode,
-                                  tarFileType   = fileType,
-                                  tarLinkTarget = linkTarget }
+   endBlock  = getByte 0 hdr == '\0'
+
+   fileSuffix = getString   0 100 hdr
+   mode       = getOct    100   8 hdr
+   chkSum     = getOct    148   8 hdr
+   typ        = getByte   156     hdr
+   size       = getOct    124  12 hdr
+   linkTarget = getString 157 100 hdr
+   filePrefix = getString 345 155 hdr
+
+   padding    = (512 - size) `mod` 512
+   (cnt,bs'') = BS.splitAt (fromIntegral size) bs'
+   bs'''      = BS.drop (fromIntegral padding) bs''
+
+   fileType   = case typ of
+                  '\0'-> NormalFile
+                  '0' -> NormalFile
+                  '1' -> HardLink
+                  '2' -> SymbolicLink
+                  '5' -> Directory
+                  c   -> Other c
+
+   path       = filePrefix ++ fileSuffix
+   entry      = Entry {
+     fileName    = path, 
+     fileMode    = mode,
+     fileType    = fileType,
+     linkTarget  = linkTarget,
+     fileSize    = size,
+     fileContent = cnt
+   }
 
 checkChkSum :: ByteString -> Int -> Bool
 checkChkSum hdr s = s == chkSum hdr' || s == signedChkSum hdr'
@@ -204,151 +158,71 @@ getString off len = BS.Char8.unpack . BS.Char8.takeWhile (/='\0') . getBytes off
 -- * Writing
 --
 
--- | Creates a tar gzipped archive, the paths in the archive will be relative
--- to the base directory.
---
-createTarGzFile :: FilePath        -- ^ Full Tarball path
-                -> FilePath        -- ^ Base directory
-                -> FilePath        -- ^ Directory or file to package, relative to the base dir
-                -> IO ()
-createTarGzFile tarFile baseDir sourceDir = do
-      (entries,hs) <- fmap unzip
-                    . mapM (unsafeInterleaveIO
-                          . (\path -> createTarEntry path
-                                      $ makeRelative baseDir path))
-                  =<< recurseDirectories [baseDir </> sourceDir]
-      BS.writeFile tarFile . GZip.compress . entries2Archive $ entries
-      mapM_ hClose (catMaybes hs) -- TODO: the handles are explicitly closed because of a bug in bytestring-0.9.0.1,
-                                  -- once we depend on a later version we can avoid this hack.
-
-recurseDirectories :: [FilePath] -> IO [FilePath]
-recurseDirectories = 
-    liftM concat . mapM (\p -> liftM (p:) $ unsafeInterleaveIO $ descendants p)
-  where 
-    descendants path =
-        do d <- doesDirectoryExist path
-           if d then do cs <- getDirectoryContents path
-                        let cs' = [path</>c | c <- cs, includeDir c]
-                        ds <- recurseDirectories cs'
-                        return ds
-                else return []
-     where includeDir "." = False
-           includeDir ".." = False
-           includeDir _ = True
-
-data TarEntry = TarEntry { entryHdr :: TarHeader, entrySize :: Integer, entryModTime :: EpochTime, entryCnt :: ByteString }
-
 -- | Creates an uncompressed archive
-entries2Archive :: [TarEntry] -> ByteString
-entries2Archive es = BS.concat $ (map putTarEntry es) ++ [BS.replicate (512*2) 0]
+write :: [Entry] -> ByteString
+write es = BS.concat $ map putEntry es ++ [BS.replicate (512*2) 0]
 
--- TODO: It needs to return the handle only because of the hack in createTarGzFile
-createTarEntry :: FilePath -- ^ path to find the file
-               -> FilePath -- ^ path to use for the TarHeader
-               -> IO (TarEntry,Maybe Handle)
-createTarEntry path relpath =
-    do ftype <- getFileType path
-       let tarpath = nativePathToTarPath ftype relpath
-       when (null tarpath || length tarpath > 255) $
-            die $ "Path too long: " ++ show tarpath
-       mode <- getFileMode ftype path
-       let hdr = TarHeader {
-                   tarFileName = tarpath,
-                   tarFileMode = mode,
-                   tarFileType = ftype,
-                   tarLinkTarget = ""
-                 }
-       (sz,cnt,mh) <- case ftype of
-                TarNormalFile -> do h <- openBinaryFile path ReadMode
-                                    sz <- hFileSize h
-                                    cnt <- BS.hGetContents h
-                                    return (sz,cnt,Just h)
-                _             -> return (0,BS.empty,Nothing)
-       time <- getModTime path
-       return $ (TarEntry hdr sz time cnt,mh)
+putEntry :: Entry -> ByteString
+putEntry entry = BS.concat [ header, content, padding ]
+  where
+    header  = putHeader entry
+    content = fileContent entry
+    padding = BS.replicate paddingSize 0
+    paddingSize = fromIntegral $ negate (fileSize entry) `mod` 512
 
-getFileType :: FilePath -> IO TarFileType
-getFileType path = do b <- doesFileExist path
-                      if b then return TarNormalFile
-                        else do b' <- doesDirectoryExist path
-                                if b' then return TarDirectory
-                                   else fail $ "tar: Not directory nor regular file: " ++ path
+putHeader :: Entry -> BS.ByteString
+putHeader entry =  
+     BS.Char8.pack $ take 148 block
+  ++ putOct 8 chkSum
+  ++ drop 156 block
+  where
+    block  = putHeaderNoChkSum entry
+    chkSum = foldl' (\x y -> x + ord y) 0 block
+        
+putHeaderNoChkSum :: Entry -> String
+putHeaderNoChkSum entry = concat
+  [ putString  100 $ fileSuffix
+  , putOct       8 $ fileMode entry
+  , putOct       8 $ zero --tarOwnerID hdr
+  , putOct       8 $ zero --tarGroupID hdr
+  , putOct      12 $ fileSize entry
+  , putOct      12 $ fileModTime entry
+  , fill         8 $ ' ' -- dummy checksum
+  , putFileType    $ fileType entry
+  , putString  100 $ linkTarget entry -- FIXME: take suffix split at / if too long
+  , putString    6 $ "ustar"
+  , putString    2 $ "00" -- no nul byte
+  , putString   32 $ "" --tarOwnerName hdr
+  , putString   32 $ "" --tarGroupName hdr
+  , putOct       8 $ zero --tarDeviceMajor hdr
+  , putOct       8 $ zero --tarDeviceMinor hdr
+  , putString  155 $ filePrefix
+  , fill        12 $ '\NUL'
+  ]
+  where
+    (filePrefix, fileSuffix) = splitLongPath (fileName entry)
+    zero :: Int
+    zero = 0
 
--- We can't be precise because of portability, so we default to rw-r--r-- for normal files
--- and rwxr-xr-x for directories and executables.
-getFileMode :: TarFileType -> FilePath -> IO FileMode
-getFileMode ftype path = do
-  perms <- getPermissions path
-  let x = if executable perms || ftype == TarDirectory then 0o000111 else 0
-  return $ 0o000644 .|. x
-
-type EpochTime = Int
-          
-getModTime :: FilePath -> IO EpochTime
-getModTime path = 
-    do (TOD s _) <- getModificationTime path
-       return (fromIntegral s)
-
-putTarEntry :: TarEntry -> ByteString
-putTarEntry TarEntry{entryHdr=hdr,entrySize=size,entryModTime=time,entryCnt=cnt} = 
-  BS.concat
-    [putTarHeader hdr size time
-    ,cnt
-    ,BS.replicate ((- fromIntegral size) `mod` 512) 0
-    ]
-
-
-putTarHeader :: TarHeader -> Integer -> EpochTime -> BS.ByteString
-putTarHeader hdr filesize modTime = 
-    let block = concat $ (putHeaderNoChkSum hdr filesize modTime)
-        chkSum = foldl' (\x y -> x + ord y) 0 block
-    in BS.Char8.pack $ take 148 block ++
-       putOct 8 chkSum ++
-       drop 156 block
-
-putHeaderNoChkSum :: TarHeader -> Integer -> EpochTime -> [String]
-putHeaderNoChkSum hdr filesize modTime =
-    let (filePrefix, fileSuffix) = splitLongPath (tarFileName hdr) in
-    [   putString  100 $ fileSuffix
-     ,  putOct       8 $ tarFileMode hdr
-     ,  putOct       8 $ zero --tarOwnerID hdr
-     ,  putOct       8 $ zero --tarGroupID hdr
-     ,  putOct      12 $ filesize --tarFileSize hdr
-     ,  putOct      12 $ modTime --epochTimeToSecs $ tarModTime hdr
-     ,  fill         8 $ ' ' -- dummy checksum
-     ,  putTarFileType $ tarFileType hdr
-     ,  putString  100 $ tarLinkTarget hdr -- FIXME: take suffix split at / if too long
-     ,  putString    6 $ "ustar"
-     ,  putString    2 $ "00" -- no nul byte
-     ,  putString   32 $ "" --tarOwnerName hdr
-     ,  putString   32 $ "" --tarGroupName hdr
-     ,  putOct       8 $ zero --tarDeviceMajor hdr
-     ,  putOct       8 $ zero --tarDeviceMinor hdr
-     ,  putString  155 $ filePrefix
-     ,  fill        12 $ '\NUL'
-    ]
-    where zero :: Int
-          zero = 0
-
-putTarFileType :: TarFileType -> String
-putTarFileType t = 
+putFileType :: FileType -> String
+putFileType t = 
     putChar8 $ case t of
-                 TarNormalFile      -> '0'
-                 TarHardLink        -> '1'
-                 TarSymbolicLink    -> '2'
-                 TarDirectory       -> '5'
-                 TarOther c         -> c
+                 NormalFile      -> '0'
+                 HardLink        -> '1'
+                 SymbolicLink    -> '2'
+                 Directory       -> '5'
+                 Other c         -> c
 
 -- | Convert a native path to a unix/posix style path
 -- and for directories add a trailing @\/@.
 --
-nativePathToTarPath :: TarFileType -> FilePath -> FilePath
+nativePathToTarPath :: FileType -> FilePath -> FilePath
 nativePathToTarPath ftype = addTrailingSep ftype
                           . FilePath.Posix.joinPath
                           . FilePath.splitDirectories
   where 
-    addTrailingSep TarDirectory path = path ++ [FilePath.Posix.pathSeparator]
-    addTrailingSep _            path = path
+    addTrailingSep Directory path = path ++ [FilePath.Posix.pathSeparator]
+    addTrailingSep _         path = path
 
 -- | Takes a sanitized path, i.e. converted to Posix form
 splitLongPath :: FilePath -> (String,String)
@@ -368,18 +242,20 @@ splitLongPath path =
 
 -- * TAR format primitive output
 
-putString :: Int -> String -> String
-putString n s = take n s ++
-                   fill (n - length s) '\NUL'
+type FieldWidth = Int
 
-putOct :: (Integral a) => Int -> a -> String
-putOct n x = let o = take (n-1) $ showOct x "" in
-                fill (n - length o - 1) '0' ++
-                o ++
-                putChar8 '\NUL'
+putString :: FieldWidth -> String -> String
+putString n s = take n s ++ fill (n - length s) '\NUL'
+
+putOct :: Integral a => FieldWidth -> a -> String
+putOct n x =
+  let octStr = take (n-1) $ showOct x ""
+   in fill (n - length octStr - 1) '0'
+   ++ octStr
+   ++ putChar8 '\NUL'
 
 putChar8 :: Char -> String
 putChar8 c = [c]
 
-fill :: Int -> Char -> String
+fill :: FieldWidth -> Char -> String
 fill n c = replicate n c

@@ -11,64 +11,75 @@
 -- Extra utils related to the package indexes.
 -----------------------------------------------------------------------------
 module Hackage.IndexUtils (
-  readPackageIndex,
+  read, write,
   ) where
 
-import Hackage.Tar
+import Hackage.Tar (readTarArchive, TarHeader(..))
 import Hackage.Types (PkgInfo(..))
 
-import Distribution.Package (PackageIdentifier(..), Package(..), Dependency(Dependency))
+import Distribution.Package
+        ( PackageIdentifier(..), Package(..) )
 import Distribution.Simple.PackageIndex (PackageIndex)
 import qualified Distribution.Simple.PackageIndex as PackageIndex
-import Distribution.PackageDescription (parsePackageDescription, ParseResult(..))
+import Distribution.PackageDescription
+         ( GenericPackageDescription
+         , parsePackageDescription, ParseResult(..) )
 import Distribution.Text
          ( simpleParse )
 import Distribution.Verbosity (Verbosity)
 import Distribution.Simple.Utils (die, warn, intercalate, fromUTF8)
 
-import Prelude hiding (catch)
-import Control.Exception (catch, Exception(IOException))
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.Char8 as BS.Char8
 import Data.ByteString.Lazy (ByteString)
-import System.FilePath ((</>), takeExtension, splitDirectories, normalise)
-import System.IO.Error (isDoesNotExistError)
+import System.FilePath
+         ( (</>), (<.>), takeExtension, splitDirectories, normalise )
+import Prelude hiding (read)
 
--- | Read a repository index from disk, from the local file specified by
--- the 'Repo'.
+-- | Parse an uncompressed tar repository index file from a 'ByteString'.
 --
-readPackageIndex :: Verbosity -> FilePath -> IO (PackageIndex PkgInfo)
-readPackageIndex verbosity indexFile =
-   fmap parseRepoIndex (BS.readFile indexFile)
-          `catch` (\e -> do case e of
-                              IOException ioe | isDoesNotExistError ioe ->
-                                warn verbosity "The package list does not exist. Run 'cabal update' to download it."
-                              _ -> warn verbosity (show e)
-                            return (PackageIndex.fromList []))
+read :: Package pkg
+     => (PackageIdentifier -> GenericPackageDescription -> ByteString -> pkg)
+     -> ByteString
+     -> PackageIndex pkg
+read mkPackage indexFileContent =
+  PackageIndex.fromList $ do
+  (hdr, content) <- Tar.read indexFileContent
+  if takeExtension (tarFileName hdr) == ".cabal"
+    then case splitDirectories (normalise (tarFileName hdr)) of
+           [pkgname,vers,_] ->
+             let parsed = parsePackageDescription
+                            (fromUTF8 . BS.Char8.unpack $ content)
+                 descr  = case parsed of
+                   ParseOk _ d -> d
+                   _           -> error $ "Couldn't read cabal file "
+                                       ++ show (tarFileName hdr)
+              in case simpleParse vers of
+                   Just ver -> return $ mkPackage pkgid content descr
+                     where pkgid = PackageIdentifier pkgname ver
+                   _ -> []
+           _ -> []
+    else []
 
+
+write :: Package pkg
+      => (pkg -> ByteString)
+      -> PackageIndex pkg
+      -> ByteString
+write externalPackageRep =
+  Tar.write . map entry . PackageIndex.allPackages
   where
-    -- | Parse a repository index file from a 'ByteString'.
-    --
-    -- All the 'PkgInfo's are marked as having come from the given 'Repo'.
-    --
-    parseRepoIndex :: ByteString -> PackageIndex PkgInfo
-    parseRepoIndex s = PackageIndex.fromList $ do
-      (hdr, content) <- readTarArchive s
-      if takeExtension (tarFileName hdr) == ".cabal"
-        then case splitDirectories (normalise (tarFileName hdr)) of
-               [pkgname,vers,_] ->
-                 let parsed = parsePackageDescription
-                                (fromUTF8 . BS.Char8.unpack $ content)
-                     descr  = case parsed of
-                       ParseOk _ d -> d
-                       _           -> error $ "Couldn't read cabal file "
-                                           ++ show (tarFileName hdr)
-                  in case simpleParse vers of
-                       Just ver -> return PkgInfo {
-                           pkgInfoId = PackageIdentifier pkgname ver,
-                           pkgDesc = descr,
-                           pkgData = content
-                         }
-                       _ -> []
-               _ -> []
-        else []
+    entry pkg =
+      let content = externalPackageRep pkg
+       in TarEntry {
+            entryHdr = TarHeader {
+              tarFileName   = packageName pkg </> packageVersion pkg
+                          </> packageName pkg <.> "cabal",
+              tarFileMode   = 0,
+              tarFileType   = TarNormalFile,
+              tarLinkTarget = ""
+            },
+            entrySize       = BS.length content,
+            entryModTime    = 0,
+            entryCnt        = content
+          }
