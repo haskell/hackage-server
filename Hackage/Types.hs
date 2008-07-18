@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, DeriveDataTypeable, StandaloneDeriving #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Hackage.Types
@@ -14,23 +15,12 @@
 module Hackage.Types where
 
 import Distribution.Package
-         ( PackageIdentifier(..), Package(..), Dependency )
-import Distribution.PackageDescription (GenericPackageDescription(..), parsePackageDescription, ParseResult(..))
-import Distribution.Text
-         ( display )
-import Distribution.Simple.Utils (intercalate)
+         ( PackageIdentifier(..), Package(..) )
+import Distribution.PackageDescription
+         ( GenericPackageDescription(..) )
+
 import Data.ByteString.Lazy (ByteString)
-
-import Data.Typeable
-import System.FilePath ((</>), (<.>))
-
-type Username = String
-type Password = String
-
-instance Read GenericPackageDescription where
-    readsPrec _ s = case parsePackageDescription s of
-        ParseFailed e -> [(undefined, "")]
-        ParseOk _ x   -> [(x, "")]
+import Data.Typeable (Typeable)
 
 deriving instance Typeable GenericPackageDescription
 deriving instance Typeable PackageIdentifier
@@ -42,7 +32,7 @@ data PkgInfo = PkgInfo {
     pkgDesc   :: GenericPackageDescription,
     pkgData   :: ByteString
   }
-  deriving (Read,Show,Typeable)
+  deriving Typeable
 
 instance Package PkgInfo where packageId = pkgInfoId
 
