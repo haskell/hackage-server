@@ -6,21 +6,24 @@ import Distribution.Package (PackageIdentifier,Package)
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.PackageDescription (parsePackageDescription, ParseResult(..))
 import Hackage.Types (PkgInfo(..))
+import qualified Hackage.IndexUtils as PackageIndex (write)
 
 import HAppS.State
 import HAppS.Data.Serialize
-import Data.Binary
+import qualified Data.Binary as Binary
 
 import Data.Typeable
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import Data.Monoid
-
 import Data.ByteString.Lazy.Char8 (unpack,empty,ByteString)
+import qualified Codec.Compression.GZip as GZip
 
 
-data PackagesState = PackagesState { packageList  :: PackageIndex.PackageIndex PkgInfo
-                                   , packageIndex :: ByteString }
+data PackagesState = PackagesState {
+    packageList  :: PackageIndex.PackageIndex PkgInfo,
+    packageIndexTarball :: ByteString
+  }
   deriving (Typeable)
 
 instance Version PackagesState where
@@ -31,14 +34,14 @@ instance Serialize PackagesState where
   getCopy = contain $ do packages <- safeGet
                          return $ cachePackagesState $
                                   PackagesState { packageList = PackageIndex.fromList packages
-                                                , packageIndex = empty }
+                                                , packageIndexTarball = empty }
 
 cachePackagesState :: PackagesState -> PackagesState
-cachePackagesState pkgsState = pkgsState { packageIndex = index }
-    where index = generatePackageIndex (packageList pkgsState)
+cachePackagesState pkgsState = pkgsState { packageIndexTarball = indexTarball }
+    where indexTarball = generatePackageIndex (packageList pkgsState)
 
 generatePackageIndex :: PackageIndex.PackageIndex PkgInfo -> ByteString
-generatePackageIndex = const empty
+generatePackageIndex = GZip.compress . PackageIndex.write pkgData
 
 
 
@@ -46,17 +49,17 @@ instance Version PackageIdentifier where
   mode = Versioned 0 Nothing
 
 instance Serialize PackageIdentifier where
-  putCopy = contain . put . show
-  getCopy = contain $ fmap read get
+  putCopy = contain . Binary.put . show
+  getCopy = contain $ fmap read Binary.get
 
 instance Version PkgInfo where
   mode = Versioned 0 Nothing
 
 instance Serialize PkgInfo where
   putCopy pkgInfo = contain $ do safePut (pkgInfoId pkgInfo)
-                                 put (pkgData pkgInfo)
+                                 Binary.put (pkgData pkgInfo)
   getCopy = contain $ do infoId <- safeGet
-                         bstring <- get
+                         bstring <- Binary.get
                          return $ PkgInfo { pkgInfoId = infoId
                                           , pkgDesc   = case parsePackageDescription (unpack bstring) of
                                                           -- XXX: Better error message?
