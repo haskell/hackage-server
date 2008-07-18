@@ -1,3 +1,4 @@
+{-# LANGUAGE PatternGuards #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Hackage.IndexUtils
@@ -14,11 +15,11 @@ module Hackage.IndexUtils (
   read, write,
   ) where
 
-import Hackage.Tar (readTarArchive, TarHeader(..))
-import Hackage.Types (PkgInfo(..))
+import qualified Hackage.Tar as Tar
+         ( Entry(..), FileType(..), Entries(..), read, write )
 
 import Distribution.Package
-        ( PackageIdentifier(..), Package(..) )
+         ( PackageIdentifier(..), Package(..), packageName, packageVersion )
 import Distribution.Simple.PackageIndex (PackageIndex)
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.PackageDescription
@@ -26,8 +27,10 @@ import Distribution.PackageDescription
          , parsePackageDescription, ParseResult(..) )
 import Distribution.Text
          ( simpleParse )
-import Distribution.Verbosity (Verbosity)
-import Distribution.Simple.Utils (die, warn, intercalate, fromUTF8)
+import Distribution.Simple.Utils
+         ( fromUTF8 )
+import Distribution.Text
+         ( display )
 
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.Char8 as BS.Char8
@@ -41,26 +44,29 @@ import Prelude hiding (read)
 read :: Package pkg
      => (PackageIdentifier -> GenericPackageDescription -> ByteString -> pkg)
      -> ByteString
-     -> PackageIndex pkg
-read mkPackage indexFileContent =
-  PackageIndex.fromList $ do
-  (hdr, content) <- Tar.read indexFileContent
-  if takeExtension (tarFileName hdr) == ".cabal"
-    then case splitDirectories (normalise (tarFileName hdr)) of
-           [pkgname,vers,_] ->
-             let parsed = parsePackageDescription
-                            (fromUTF8 . BS.Char8.unpack $ content)
-                 descr  = case parsed of
-                   ParseOk _ d -> d
-                   _           -> error $ "Couldn't read cabal file "
-                                       ++ show (tarFileName hdr)
-              in case simpleParse vers of
-                   Just ver -> return $ mkPackage pkgid content descr
-                     where pkgid = PackageIdentifier pkgname ver
-                   _ -> []
-           _ -> []
-    else []
+     -> Either String (PackageIndex pkg)
+read mkPackage indexFileContent = collect [] entries
+  where
+    entries = Tar.read indexFileContent
+    collect es' Tar.Done        = Right (PackageIndex.fromList es')
+    collect es' (Tar.Next e es) = case entry e of
+                       Just e' -> collect (e':es') es
+                       Nothing -> collect     es'  es
+    collect _   (Tar.Fail err)  = Left err
 
+    entry Tar.Entry { Tar.fileName = fileName
+                    , Tar.fileContent = content }
+      | takeExtension fileName == ".cabal"
+      , [pkgname,versionStr,_] <- splitDirectories (normalise fileName)
+      , Just version <- simpleParse versionStr
+      = let pkgid  = PackageIdentifier pkgname version
+            pkgstr = fromUTF8 (BS.Char8.unpack content)
+            pkg    = case parsePackageDescription pkgstr of
+              ParseOk _ desc -> desc
+              _              -> error $ "Couldn't read cabal file "
+                                    ++ show fileName
+         in Just (mkPackage pkgid pkg content)
+    entry _ = Nothing
 
 write :: Package pkg
       => (pkg -> ByteString)
@@ -69,17 +75,14 @@ write :: Package pkg
 write externalPackageRep =
   Tar.write . map entry . PackageIndex.allPackages
   where
-    entry pkg =
-      let content = externalPackageRep pkg
-       in TarEntry {
-            entryHdr = TarHeader {
-              tarFileName   = packageName pkg </> packageVersion pkg
-                          </> packageName pkg <.> "cabal",
-              tarFileMode   = 0,
-              tarFileType   = TarNormalFile,
-              tarLinkTarget = ""
-            },
-            entrySize       = BS.length content,
-            entryModTime    = 0,
-            entryCnt        = content
-          }
+    entry pkg = Tar.Entry {
+        Tar.fileName    = packageName pkg </> display (packageVersion pkg)
+                      </> packageName pkg <.> "cabal",
+        Tar.fileMode    = 0,
+        Tar.fileType    = Tar.NormalFile,
+        Tar.linkTarget  = "",
+        Tar.fileSize    = BS.length content,
+        Tar.fileModTime = 0,
+        Tar.fileContent = content
+      }
+      where content = externalPackageRep pkg

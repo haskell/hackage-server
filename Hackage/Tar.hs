@@ -26,16 +26,18 @@ module Hackage.Tar (
   write
   ) where
 
+import Data.Char (ord)
+import Data.Int  (Int8, Int64)
+import Data.List (foldl')
+import Numeric   (readOct, showOct)
+
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.Char8 as BS.Char8
 import Data.ByteString.Lazy (ByteString)
-import Data.Char (ord)
-import Data.Int (Int8, Int64)
-import Data.List (foldl')
-import Numeric (readOct, showOct)
-import System.Time (ClockTime(..))
---import qualified System.FilePath as FilePath
+import qualified System.FilePath as FilePath
+         ( splitDirectories )
 import qualified System.FilePath.Posix as FilePath.Posix
+         ( joinPath, pathSeparator )
 import System.Posix.Types (FileMode)
 
 import Prelude hiding (read, fail)
@@ -91,21 +93,22 @@ getEntry bs | endBlock = Right Nothing
   where
    (hdr,bs') = BS.splitAt 512 bs
 
-   endBlock  = getByte 0 hdr == '\0'
+   endBlock     = getByte 0 hdr == '\0'
 
    fileSuffix = getString   0 100 hdr
    mode       = getOct    100   8 hdr
+   size       = getOct    124  12 hdr
+   modTime    = getOct    136  12 hdr
    chkSum     = getOct    148   8 hdr
    typ        = getByte   156     hdr
-   size       = getOct    124  12 hdr
-   linkTarget = getString 157 100 hdr
+   linkTarget_ = getString 157 100 hdr
    filePrefix = getString 345 155 hdr
 
    padding    = (512 - size) `mod` 512
    (cnt,bs'') = BS.splitAt (fromIntegral size) bs'
    bs'''      = BS.drop (fromIntegral padding) bs''
 
-   fileType   = case typ of
+   fileType_  = case typ of
                   '\0'-> NormalFile
                   '0' -> NormalFile
                   '1' -> HardLink
@@ -117,8 +120,9 @@ getEntry bs | endBlock = Right Nothing
    entry      = Entry {
      fileName    = path, 
      fileMode    = mode,
-     fileType    = fileType,
-     linkTarget  = linkTarget,
+     fileType    = fileType_,
+     linkTarget  = linkTarget_,
+     fileModTime = modTime,
      fileSize    = size,
      fileContent = cnt
    }
@@ -200,7 +204,8 @@ putHeaderNoChkSum entry = concat
   , fill        12 $ '\NUL'
   ]
   where
-    (filePrefix, fileSuffix) = splitLongPath (fileName entry)
+    (filePrefix, fileSuffix) =
+      splitLongPath (nativePathToTarPath (fileType entry) (fileName entry))
     zero :: Int
     zero = 0
 
