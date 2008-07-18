@@ -10,7 +10,7 @@ import qualified Distribution.PackageDescription as PD
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.Simple.PackageIndex (PackageIndex)
 import qualified Distribution.Verbosity as Verbosity (normal)
-import Hackage.IndexUtils (readPackageIndex)
+import qualified Hackage.IndexUtils as PackageIndex (read, write)
 import Hackage.Types (PkgInfo(..))
 
 import System.Environment
@@ -24,7 +24,7 @@ import Unpack
 import qualified Distribution.Server.BlobStorage as Blob
 
 import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Lazy.Char8 as Lazy
+import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
 
 hackageEntryPoint :: Proxy PackagesState
 hackageEntryPoint = Proxy
@@ -33,7 +33,9 @@ hackageEntryPoint = Proxy
 main = bracket (startSystemState hackageEntryPoint) (shutdownSystem) $ \ctl ->
        do args <- getArgs -- FIXME: use GetOpt
           forM_ args $ \pkgFile ->
-              do pkgIndex <- readPackageIndex Verbosity.normal pkgFile
+              do pkgIndex <- either fail return
+                           . PackageIndex.read PkgInfo
+                         =<< BS.Lazy.readFile pkgFile
                  update $ BulkImport (PackageIndex.allPackages pkgIndex)
           simpleHTTP nullConf { port = 5000 } impl
 
@@ -57,7 +59,7 @@ downloadPackageById pkgid =
                       ok $ toResponse $ Tarball file
     ]
 
-newtype Tarball = Tarball Lazy.ByteString
+newtype Tarball = Tarball BS.Lazy.ByteString
 
 instance ToMessage Tarball where
     toContentType _ = BS.pack "application/gzip"
@@ -75,7 +77,7 @@ impl =
 --                             ,("text/html", ok $ toResponse "html" )] ]
   , dir "upload" [ withDataFn (lookInput "upload") $ \input ->
                        [ anyRequest $
-                         do ret <- liftIO $ unpackPackage (fromMaybe "noname" $ inputFilename input) (inputValue input) False
+                         do ret <- liftIO $ unpackPackage (fromMaybe "noname" $ inputFilename input) (inputValue input)
                             case ret of
                               Left err -> ok $ toResponse $ err
                               Right (pkgDesc, warns) ->
