@@ -8,14 +8,11 @@ import HAppS.State
 import Distribution.Server.PackagesState
 import qualified Distribution.PackageDescription as PD
 import qualified Distribution.Simple.PackageIndex as PackageIndex
-import Distribution.Simple.PackageIndex (PackageIndex)
-import qualified Distribution.Verbosity as Verbosity (normal)
-import qualified Hackage.IndexUtils as PackageIndex (read, write)
+import qualified Hackage.IndexUtils as PackageIndex (read)
 import Hackage.Types (PkgInfo(..))
 
 import System.Environment
 import Control.Exception
-import Data.Version
 import Data.Maybe
 import Control.Monad
 import Control.Monad.Trans
@@ -29,8 +26,8 @@ import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
 hackageEntryPoint :: Proxy PackagesState
 hackageEntryPoint = Proxy
 
-
-main = bracket (startSystemState hackageEntryPoint) (shutdownSystem) $ \ctl ->
+main :: IO ()
+main = bracket (startSystemState hackageEntryPoint) shutdownSystem $ \_ctl ->
        do args <- getArgs -- FIXME: use GetOpt
           forM_ args $ \pkgFile ->
               do pkgIndex <- either fail return
