@@ -5,6 +5,7 @@ import Control.Monad		( unless, when )
 import Control.Monad.Error	( ErrorT(..), throwError )
 import Control.Monad.Reader	( ReaderT(..), ask )
 import Control.Monad.Writer	( WriterT(..), tell )
+import Control.Monad.Trans      ( MonadIO(liftIO) )
 import Data.ByteString.Lazy as BS
 				( ByteString, writeFile )
 import Data.List		( isSuffixOf, nub, (\\), partition )
@@ -21,30 +22,27 @@ import Distribution.PackageDescription.Check
 				  checkPackage, checkPackageFiles )
 import Distribution.ParseUtils	( ParseResult(..),
 				  locatedErrorMsg, showPWarning )
-import Distribution.Text	( display )
-import Network.CGI		( liftIO )
+import Distribution.Text	( display, simpleParse )
 import System.Cmd		( rawSystem )
 import System.Directory		( doesFileExist )
 import System.Exit		( ExitCode(..) )
 import System.FilePath		( (</>), (<.>) )
-import System.Posix.Files	( setFileCreationMask )
 
-import PublicFile
-import Util
+import PublicFile               ( localFile )
+import Util                     ( packageFile, cabalFile
+                                , allocatedTopLevelNodes, withTempDirectory )
 
 -- | Upload or check a tarball containing a Cabal package.
 -- Returns either an fatal error or a package description and a list
 -- of warnings.
-unpackPackage :: FilePath -> ByteString -> Bool ->
-	IO (Either String (GenericPackageDescription, [String]))
-unpackPackage tarFile contents doInstall = runPutMonad $ do
+unpackPackage :: FilePath -> ByteString
+              -> IO (Either String (GenericPackageDescription, [String]))
+unpackPackage tarFile contents = runPutMonad $ do
 	unless (".tar.gz" `isSuffixOf` tarFile) $
 		die $ tarFile ++ " is not a gzipped tar file"
 	let pkgIdStr = take (length tarFile - 7) tarFile
 
-	liftIO $ setFileCreationMask fileMask
-
-	PackageIdentifier pName pVersion <- case readPackageId pkgIdStr of
+	PackageIdentifier pName pVersion <- case simpleParse pkgIdStr of
 	    Just pkgId | display pkgId == pkgIdStr -> return pkgId
 	    _ -> die $ "malformed package identifier " ++ pkgIdStr
 
@@ -79,7 +77,6 @@ unpackPackage tarFile contents doInstall = runPutMonad $ do
 	when (pkgVersion pkgId /= pVersion) $
 		die "package version in the cabal file does not match the file name"
 
-	let pkgDir = localFile (packageDir pkgId)
 	let installedTarFile = localFile (packageFile pkgId)
 	let installedCabalFile = localFile (cabalFile pkgId)
 
@@ -89,12 +86,6 @@ unpackPackage tarFile contents doInstall = runPutMonad $ do
 	when (tarPresent && cabalPresent) $
 		die "this version of the package is already present in the database"
 	extraChecks pkgDesc tmpPkgDir
-
-	-- Install the new package
-	when doInstall $ liftIO $ do
-		ensureDirectoryExists pkgDir
-		myCopyFile tmpTarFile installedTarFile
-		myCopyFile tmpCabalFile installedCabalFile
 
 	return pkgDesc
   where showError (Nothing, msg) = msg

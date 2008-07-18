@@ -1,14 +1,16 @@
-module Util where
+module Util (
+    packageFile,
+    cabalFile,
+    allocatedTopLevelNodes,
+    withTempDirectory
+  ) where
 
 import Control.Exception	( bracket )
 import Control.Monad		( unless, filterM, liftM )
 import Data.Bits		( (.&.), complement )
 import Data.Char		( isSpace )
 import Data.List		( (\\), sort )
-import Data.Map			( Map )
-import qualified Data.Map as Map
 import Data.Maybe		( listToMaybe )
-import qualified Data.Set as Set ( fromList, toList )
 import Distribution.Compat.ReadP( readP_to_S )
 import Distribution.Package	( PackageIdentifier(..), Dependency(..) )
 import Distribution.PackageDescription
@@ -21,12 +23,11 @@ import System.Directory		( copyFile, createDirectory, doesFileExist,
 				  doesDirectoryExist, getDirectoryContents,
 				  removeDirectoryRecursive )
 import System.FilePath		( (</>), isPathSeparator )
-import System.Posix.Files	( setFileMode )
-import System.Posix.Process	( getProcessID )
 import System.Posix.Types	( FileMode )
+import System.Random            ( getStdGen, setStdGen, RandomGen(next) )
 import Text.XHtml		( URL )
 
-import PublicFile
+import PublicFile               ( PublicFile(..), slash )
 import Locations		( archiveDir, pkgScriptURL )
 
 -- | Registered top-level nodes in the class hierarchy.
@@ -46,23 +47,6 @@ packageNameURL pkg = pkgScriptURL ++ "/" ++ pkg
 
 -- package utilities
 
--- | Available versions (if any) for each package mentioned in this one.
-getDependencies :: GenericPackageDescription -> IO (Map String [Version])
-getDependencies pkg = do
-	with_vs <- mapM getVersions ps
-	return (Map.fromList (filter (not . null . snd) with_vs))
-  where ps = Set.toList $ Set.fromList $ map getPkg $
-		buildDepends (packageDescription pkg) ++
-		maybe [] depsCondTree (condLibrary pkg) ++
-		concatMap (depsCondTree . snd) (condExecutables pkg)
-	getPkg (Dependency n _) = n
-	depsCondTree (CondNode _ deps comps) =
-		deps ++ concatMap depsComponent comps
-	depsComponent (_, t, me) =
-		depsCondTree t ++ maybe [] depsCondTree me
-	getVersions n = do
-		vs <- availableVersions n
-		return (n, vs)
 
 -- | All package names available in the archive
 availablePackages :: IO [String]
@@ -121,18 +105,12 @@ splitOn x ys = front : case back of
 withTempDirectory :: (FilePath -> IO a) -> IO a
 withTempDirectory = bracket newTempDirectory removeDirectoryRecursive
   where newTempDirectory = do
-		pid <- getProcessID
-		let tmpDir = "/tmp/cabal-put." ++ show pid
+		gen <- getStdGen
+                let (n, gen') = next gen
+                setStdGen gen'
+		let tmpDir = "/tmp/cabal-put." ++ show n
 		createDirectory tmpDir
 		return tmpDir
-
-ensureDirectoryExists :: FilePath -> IO ()
-ensureDirectoryExists dir = do
-	exists <- doesDirectoryExist dir
-	unless exists $ do
-		ensureDirectoryExists (dirname dir)
-		createDirectory dir
-		setFileMode dir dirMode
 
 dirContents :: FilePath -> IO [FilePath]
 dirContents dir = do
@@ -140,16 +118,6 @@ dirContents dir = do
 	if isDir
 		then liftM (\\ [".", ".."]) $ getDirectoryContents dir
 		else return []
-
-myCopyFile :: FilePath -> FilePath -> IO ()
-myCopyFile src dest = do
-	copyFile src dest
-	setFileMode dest fileMode
-
-fileMask, fileMode, dirMode :: FileMode
-fileMask = 0o002
-fileMode = 0o666 .&. complement fileMask
-dirMode = 0o2777 .&. complement fileMask
 
 basename :: FilePath -> String
 basename file = reverse (takeWhile (not . isPathSeparator) (reverse file))
