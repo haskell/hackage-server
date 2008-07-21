@@ -75,6 +75,8 @@ bulkImport newIndex
          State.put $ cachePackagesState $ pkgsState { packageList = packageList pkgsState `mappend`
                                                                     PackageIndex.fromList newIndex }
 
+getIndexTarball :: Query PackagesState ByteString
+getIndexTarball = asks packageIndexTarball
 
 lookupPackageId :: PackageIdentifier -> Query PackagesState (Maybe PkgInfo)
 lookupPackageId pkgid = do
@@ -82,7 +84,8 @@ lookupPackageId pkgid = do
   return (PackageIndex.lookupPackageId (packageList pkgsState) pkgid)
 
 $(mkMethods ''PackagesState ['lookupPackageId
-                            ,'bulkImport])
+                            ,'bulkImport
+                            ,'getIndexTarball])
 
 instance Component PackagesState where
   type Dependencies PackagesState = End

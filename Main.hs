@@ -60,7 +60,7 @@ newtype Tarball = Tarball BS.Lazy.ByteString
 
 instance ToMessage Tarball where
     toContentType _ = BS.pack "application/gzip"
-    toResponse (Tarball bs) = (toResponse ()) { rsBody = bs }
+    toMessage (Tarball bs) = bs
 
 instance FromReqURI PackageIdentifier where
   fromReqURI = simpleParse
@@ -84,5 +84,7 @@ impl =
                        ]
                  , fileServe [] "upload.html"
                  ]
+  , dir "00-index.tar.gz" [ method GET $ do tarball <- query $ GetIndexTarball
+                                            ok $ toResponse $ Tarball tarball ]
   ]
 
