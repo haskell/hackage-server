@@ -1,0 +1,63 @@
+body {
+	font-family: sans-serif;
+	color: black; background: white;
+}
+div.header {
+	border: thin solid black;
+}
+h1 {
+	text-align: center;
+	margin-top: 0.6ex;
+	margin-bottom: 0.9ex;
+	font-weight: normal;
+	color: #888;
+}
+table.navigation {
+	background: #f1f1f1;
+	border-top: thin solid black;
+	width: 100%;
+}
+table.navigation td {
+	text-align: center;
+}
+.floatright {
+	float: right;
+	margin-right: 0;
+}
+.floatright a:link img { border-width: 1px; }
+.floatright a:visited img { border-width: 1px; }
+.floatright a:active img { border-width: 1px; }
+.toc {
+	font-size: smaller;
+	padding: 3px;
+	background: #f1f1f1;
+	border: thin solid black;
+}
+h3.category {
+	color: #008; background-color: #e0f0ff;
+	padding: 2px 3px;
+	margin: 0;
+}
+ul.packages {
+	margin: 1ex 0;
+	list-style-image: url(/images/Cabal-tiny.png);
+	list-style-type: circle;
+}
+table.properties {
+	width: 100%;
+}
+tr.odd { background: #e2e2e2 }
+tr.even { background: #f1f1f1 }
+th.horizontal {
+	vertical-align: top;
+	text-align: left;
+}
+form.box {
+	background-color: #f8e8c1;
+	padding: 0.4ex 0.4em;
+	border-style: solid;
+	border-width: 2px;
+	border-color: #f4f3f2 #797876 #797876 #f4f3f2;
+	margin: 1.5ex 0;
+}
+strong.warning { color: red; }

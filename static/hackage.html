@@ -1,0 +1,66 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0//EN">
+<TITLE>HackageDB: introduction</TITLE>
+<LINK REL="stylesheet" HREF="hackage.css" TYPE="text/css">
+
+<DIV CLASS="header">
+<H1>hackageDB :: [Package]</H1>
+
+<TABLE CLASS="navigation">
+<TR>
+<TD><A HREF="/packages/hackage.html">Introduction</A></TD>
+<TD><A HREF="/packages/archive/pkg-list.html">Packages</A></TD>
+<TD><A HREF="/packages/archive/recent.html">What's new</A></TD>
+<TD><A HREF="/packages/upload.html">Upload</A></TD>
+<TD><A HREF="/packages/accounts.html">User accounts<A></TD>
+</TR>
+</TABLE>
+</DIV>
+
+<DIV CLASS="content">
+<H2>About HackageDB</H2>
+
+<P>HackageDB is a collection of released
+<A HREF="http://www.haskell.org/">Haskell</A> packages.
+Each package is in the <A HREF="http://www.haskell.org/cabal">Cabal</A> format,
+a standard way of packaging Haskell source code that makes it easy to build
+and install.
+(HackageDB and Cabal are components of a broader Haskell infrastructure effort
+called <A HREF="http://hackage.haskell.org/trac/hackage/">Hackage</A>.)
+These pages are a basic web interface to the Hackage package database.
+
+<H3>Finding packages</H3>
+
+<P>The <I>Packages</I> link above lists the available packages
+and provides a full text search of the package pages (via Google),
+while <I>What's new</I> lists recent additions (also available
+<A HREF="http://hackage.haskell.org/packages/archive/recent.rss">as an RSS feed</A>).
+See <A HREF="http://www.haskell.org/haskellwiki/Cabal/How_to_install_a_Cabal_package">How to install a Cabal package</A> for instructions on installing the packages you find here.
+There is also an experimental
+<A HREF="http://hackage.haskell.org/trac/hackage/wiki/CabalInstall">command-line tool</A>
+that will make this easier.
+
+<H3>Releasing packages through HackageDB</H3>
+
+<P>To upload your own releases, you'll first need to package them as Cabal
+source packages.
+See <A HREF="http://www.haskell.org/haskellwiki/How_to_write_a_Haskell_program">How to create a Haskell package</A>
+for a tutorial.
+You can check and upload your package using the <I>Upload</I> link above,
+though to upload packages you'll need a HackageDB
+<A HREF="accounts.html">username</A> and password.
+
+<H3>Getting the raw data</H3>
+
+<UL>
+<LI><A HREF="http://hackage.haskell.org/packages/archive/log">upload log</A> (60KB)
+<LI><A HREF="http://hackage.haskell.org/packages/archive/00-index.tar.gz">tarball of package descriptions</A> (300KB)
+<LI><A HREF="/cgi-bin/hackage-scripts/archive.tar">archive</A>
+of the latest version of all the packages (30MB tar file)
+</UL>
+
+<H3>Development</H3>
+
+<P>See the
+<A HREF="http://hackage.haskell.org/trac/hackage/wiki/HackageDB">HackageDB wiki page</A>.
+
+</DIV>
