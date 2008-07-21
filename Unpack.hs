@@ -24,13 +24,13 @@ import Distribution.ParseUtils	( ParseResult(..),
 				  locatedErrorMsg, showPWarning )
 import Distribution.Text	( display, simpleParse )
 import System.Cmd		( rawSystem )
-import System.Directory		( doesFileExist )
 import System.Exit		( ExitCode(..) )
 import System.FilePath		( (</>), (<.>) )
 
-import PublicFile               ( localFile )
-import Util                     ( packageFile, cabalFile
-                                , allocatedTopLevelNodes, withTempDirectory )
+import Control.Exception	( bracket )
+import System.Directory
+         ( createDirectory, doesFileExist, removeDirectoryRecursive )
+import System.Random            ( getStdGen, setStdGen, RandomGen(next) )
 
 -- | Upload or check a tarball containing a Cabal package.
 -- Returns either an fatal error or a package description and a list
@@ -77,8 +77,8 @@ unpackPackage tarFile contents = runPutMonad $ do
 	when (pkgVersion pkgId /= pVersion) $
 		die "package version in the cabal file does not match the file name"
 
-	let installedTarFile = localFile (packageFile pkgId)
-	let installedCabalFile = localFile (cabalFile pkgId)
+	let installedTarFile = packageFile pkgId
+	let installedCabalFile = cabalFile pkgId
 
 	-- Do not allow replacing of existing packages (for security)
 	tarPresent <- liftIO $ doesFileExist installedTarFile
@@ -139,3 +139,48 @@ warn msg = tell [msg]
 
 runPutMonad :: PutMonad a -> IO (Either String (a, [String]))
 runPutMonad m = withTempDirectory $ runErrorT . runWriterT . runReaderT m
+
+-- | Registered top-level nodes in the class hierarchy.
+allocatedTopLevelNodes :: [String]
+allocatedTopLevelNodes = [
+	"Algebra", "Codec", "Control", "Data", "Database", "Debug",
+	"Distribution", "DotNet", "Foreign", "Graphics", "Language",
+	"Network", "Numeric", "Prelude", "Sound", "System", "Test", "Text"]
+
+
+-- package utilities
+
+-- The tarball and .cabal file are placed in
+--	<archiveDir>/<package>/<version>/<package>-<version>.tar.gz
+--	<archiveDir>/<package>/<version>/<package>.cabal
+
+packageDir :: PackageIdentifier -> FilePath
+packageDir pkgId =
+	archiveDir </> pkgName pkgId </> display (pkgVersion pkgId)
+
+-- | The name of the Cabal file for a given package identifier
+cabalFile :: PackageIdentifier -> FilePath
+cabalFile pkgId = packageDir pkgId </> (pkgName pkgId ++ ".cabal")
+
+-- | The name of the package file for a given package identifier
+packageFile :: PackageIdentifier -> FilePath
+packageFile pkgId = packageDir pkgId </> display pkgId <.> "tar.gz"
+
+-- file utilities
+
+withTempDirectory :: (FilePath -> IO a) -> IO a
+withTempDirectory = bracket newTempDirectory removeDirectoryRecursive
+  where newTempDirectory = do
+		gen <- getStdGen
+                let (n, gen') = next gen
+                setStdGen gen'
+		let tmpDir = "/tmp/cabal-put." ++ show n
+		createDirectory tmpDir
+		return tmpDir
+
+docRoot :: FilePath
+docRoot = "/srv/www/hackage.haskell.org/public_html"
+
+-- Package archive directory
+archiveDir :: FilePath
+archiveDir = docRoot </> "packages/archive"
