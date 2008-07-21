@@ -89,5 +89,5 @@ $(mkMethods ''PackagesState ['lookupPackageId
 
 instance Component PackagesState where
   type Dependencies PackagesState = End
-  initialValue = PackagesState mempty empty
+  initialValue = cachePackagesState $ PackagesState mempty empty
 
