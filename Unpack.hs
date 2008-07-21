@@ -1,5 +1,8 @@
+{-# LANGUAGE PatternGuards #-}
 -- Unpack a tarball containing a Cabal package
 module Unpack (unpackPackage) where
+
+import qualified Distribution.Server.Tar as Tar
 
 import Control.Monad		( unless, when )
 import Control.Monad.Error	( ErrorT(..), throwError )
@@ -8,8 +11,8 @@ import Control.Monad.Writer	( WriterT(..), tell )
 import Control.Monad.Trans      ( MonadIO(liftIO) )
 import Data.ByteString.Lazy as BS
 				( ByteString, writeFile )
-import Data.List		( isSuffixOf, nub, (\\), partition )
-import Distribution.Package	( PackageIdentifier(..) )
+import Data.List		( nub, (\\), partition )
+import Distribution.Package	( PackageIdentifier(..), packageName )
 import Distribution.PackageDescription
 				( GenericPackageDescription(..),
 				  PackageDescription(..), exposedModules )
@@ -25,7 +28,7 @@ import Distribution.ParseUtils	( ParseResult(..),
 import Distribution.Text	( display, simpleParse )
 import System.Cmd		( rawSystem )
 import System.Exit		( ExitCode(..) )
-import System.FilePath		( (</>), (<.>) )
+import System.FilePath		( (</>), (<.>), splitExtension )
 
 import Control.Exception	( bracket )
 import System.Directory
@@ -37,10 +40,12 @@ import System.Random            ( getStdGen, setStdGen, RandomGen(next) )
 -- of warnings.
 unpackPackage :: FilePath -> ByteString
               -> IO (Either String (GenericPackageDescription, [String]))
-unpackPackage tarFile contents = runPutMonad $ do
-	unless (".tar.gz" `isSuffixOf` tarFile) $
-		die $ tarFile ++ " is not a gzipped tar file"
-	let pkgIdStr = take (length tarFile - 7) tarFile
+unpackPackage tarGzFile contents = runPutMonad $ do
+	let (pkgIdStr, ext) = (base, tar ++ gz)
+              where (tarFile, gz) = splitExtension tarGzFile
+                    (base,   tar) = splitExtension tarFile
+	unless (ext == ".tar.gz") $
+		die $ tarGzFile ++ " is not a gzipped tar file"
 
 	PackageIdentifier pName pVersion <- case simpleParse pkgIdStr of
 	    Just pkgId | display pkgId == pkgIdStr -> return pkgId
@@ -48,20 +53,20 @@ unpackPackage tarFile contents = runPutMonad $ do
 
 	tmpDir <- getTmpDir
 	-- save a copy of the tar file
-	let tmpTarFile = tmpDir </> tarFile
+	let tmpTarFile = tmpDir </> tarGzFile
 	liftIO $ BS.writeFile tmpTarFile contents
 
 	-- unpack package dir <package>-<version> the tarball
 	systemOrFail
 		"tar" ["-C", tmpDir, "-xzf", tmpTarFile, pkgIdStr]
-		("could not extract " ++ pkgIdStr ++ " directory from " ++ tarFile)
+		("could not extract " ++ pkgIdStr ++ " directory from " ++ tarGzFile)
 
 	let srcCabalFile = pkgIdStr </> pName <.> "cabal"
 	let tmpPkgDir = tmpDir </> pkgIdStr
 	let tmpCabalFile = tmpDir </> srcCabalFile
 	cabalIncluded <- liftIO $ doesFileExist tmpCabalFile
 	when (not cabalIncluded) $
-		die $ "could not extract " ++ srcCabalFile ++ " from " ++ tarFile
+		die $ "could not extract " ++ srcCabalFile ++ " from " ++ tarGzFile
 
 	-- Check that the name and version in Cabal file match
 	pkgDesc <- do
@@ -77,6 +82,9 @@ unpackPackage tarFile contents = runPutMonad $ do
 	when (pkgVersion pkgId /= pVersion) $
 		die "package version in the cabal file does not match the file name"
 
+  --FIXME: lookup in the existing index to check if it's already present
+  --       but watch out for race conditions!
+{-
 	let installedTarFile = packageFile pkgId
 	let installedCabalFile = cabalFile pkgId
 
@@ -85,6 +93,7 @@ unpackPackage tarFile contents = runPutMonad $ do
 	cabalPresent <- liftIO $ doesFileExist installedCabalFile
 	when (tarPresent && cabalPresent) $
 		die "this version of the package is already present in the database"
+-}
 	extraChecks pkgDesc tmpPkgDir
 
 	return pkgDesc
@@ -148,24 +157,6 @@ allocatedTopLevelNodes = [
 	"Network", "Numeric", "Prelude", "Sound", "System", "Test", "Text"]
 
 
--- package utilities
-
--- The tarball and .cabal file are placed in
---	<archiveDir>/<package>/<version>/<package>-<version>.tar.gz
---	<archiveDir>/<package>/<version>/<package>.cabal
-
-packageDir :: PackageIdentifier -> FilePath
-packageDir pkgId =
-	archiveDir </> pkgName pkgId </> display (pkgVersion pkgId)
-
--- | The name of the Cabal file for a given package identifier
-cabalFile :: PackageIdentifier -> FilePath
-cabalFile pkgId = packageDir pkgId </> (pkgName pkgId ++ ".cabal")
-
--- | The name of the package file for a given package identifier
-packageFile :: PackageIdentifier -> FilePath
-packageFile pkgId = packageDir pkgId </> display pkgId <.> "tar.gz"
-
 -- file utilities
 
 withTempDirectory :: (FilePath -> IO a) -> IO a
@@ -178,9 +169,26 @@ withTempDirectory = bracket newTempDirectory removeDirectoryRecursive
 		createDirectory tmpDir
 		return tmpDir
 
-docRoot :: FilePath
-docRoot = "/srv/www/hackage.haskell.org/public_html"
+checkPackageTarSanity :: PackageIdentifier -> Tar.Entries -> Either String Tar.Entry
+checkPackageTarSanity pkgid = check Nothing
+  where
+    expectedCabalPath = display pkgid
+                    </> packageName pkgid <.> "cabal"
 
--- Package archive directory
-archiveDir :: FilePath
-archiveDir = docRoot </> "packages/archive"
+    check _        (Tar.Fail err)  = Left err
+    check Nothing  Tar.Done        = Left "No .cabal file in the package"
+    check (Just c) Tar.Done        = Right c
+    check _        (Tar.Next e _)
+      | Just err <- entryProblem e = Left err
+    check c (Tar.Next e es)
+      | Tar.fileName e == expectedCabalPath
+      = case c of
+          Nothing  -> check (Just e) es
+          Just _   -> Left "multiple .cabal files"
+      | otherwise  = check c es
+    
+    entryProblem e
+      | Tar.fileType e /= Tar.NormalFile
+     && Tar.fileType e /= Tar.Directory = Just "unexpected file kind in the tarball"
+    --TODO: check sanity of file names, must start with pkgid/ or ./pkgid/
+      | otherwise = Nothing

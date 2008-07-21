@@ -17,7 +17,7 @@ import Data.Maybe
 import Control.Monad
 import Control.Monad.Trans
 
-import Unpack
+import Unpack (unpackPackage)
 import qualified Distribution.Server.BlobStorage as Blob
 
 import qualified Data.ByteString.Char8 as BS
