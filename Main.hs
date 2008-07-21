@@ -86,6 +86,6 @@ impl =
                  ]
   , dir "00-index.tar.gz" [ method GET $ do tarball <- query $ GetIndexTarball
                                             ok $ toResponse $ Tarball tarball ]
-  , fileServe [] "static"
+  , fileServe ["hackage.html"] "static"
   ]
 
