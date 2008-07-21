@@ -16,7 +16,7 @@ module Hackage.IndexUtils (
   ) where
 
 import qualified Hackage.Tar as Tar
-         ( Entry(..), FileType(..), Entries(..), read, write )
+         ( Entry(..), Entries(..), read, write, simpleFileEntry )
 
 import Distribution.Package
          ( PackageIdentifier(..), Package(..), packageName, packageVersion )
@@ -75,14 +75,6 @@ write :: Package pkg
 write externalPackageRep =
   Tar.write . map entry . PackageIndex.allPackages
   where
-    entry pkg = Tar.Entry {
-        Tar.fileName    = packageName pkg </> display (packageVersion pkg)
-                      </> packageName pkg <.> "cabal",
-        Tar.fileMode    = 0,
-        Tar.fileType    = Tar.NormalFile,
-        Tar.linkTarget  = "",
-        Tar.fileSize    = BS.length content,
-        Tar.fileModTime = 0,
-        Tar.fileContent = content
-      }
-      where content = externalPackageRep pkg
+    entry pkg = Tar.simpleFileEntry fileName (externalPackageRep pkg)
+      where fileName = packageName pkg </> display (packageVersion pkg)
+                   </> packageName pkg <.> "cabal"

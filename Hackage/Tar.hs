@@ -23,11 +23,12 @@ module Hackage.Tar (
   Entries(..), foldEntries, unfoldEntries,
   
   -- * Writing tar format
-  write
+  write,
+  simpleFileEntry,
   ) where
 
 import Data.Char (ord)
-import Data.Int  (Int8, Int64)
+import Data.Int  (Int64)
 import Data.List (foldl')
 import Numeric   (readOct, showOct)
 
@@ -42,30 +43,158 @@ import System.Posix.Types (FileMode)
 
 import Prelude hiding (read, fail)
 
+-- | A TAR archive is a sequence of entries.
+data Entries = Next Entry Entries
+             | Done
+             | Fail String
+
+type UserId    = Int
+type GroupId   = Int
+type EpochTime = Int -- ^ The number of seconds since the UNIX epoch
+type DevMajor  = Int
+type DevMinor  = Int
+
+-- | TAR archive entry
 data Entry = Entry {
-    fileName    :: FilePath,
-    fileMode    :: FileMode,
-    fileType    :: FileType,
-    linkTarget  :: FilePath,
-    fileModTime :: EpochTime,
-    fileSize    :: Int64,
+
+    -- | Path of the file or directory. The path separator should be @/@ for
+    -- portable TAR archives.
+    fileName :: FilePath,
+
+    -- | UNIX file mode.
+    fileMode :: FileMode,
+
+    -- | Numeric owner user id. Should be set to @0@ if unknown.
+    ownerId :: UserId,
+
+    -- | Numeric owner group id. Should be set to @0@ if unknown.
+    groupId :: GroupId,
+
+    -- | File size in bytes. Should be 0 for entries other than normal files.
+    fileSize :: Int64,
+
+    -- | Last modification time.
+    modTime :: EpochTime,
+
+    -- | Type of this entry.
+    fileType :: FileType,
+
+    -- | If the entry is a hard link or a symbolic link, this is the path of
+    -- the link target. For all other entry types this should be @\"\"@.
+    linkTarget :: FilePath,
+    
+    -- | The remaining meta-data is in the V7, ustar/posix or gnu formats
+    -- For V7 there is no extended info at all and for posix/ustar the
+    -- information is the same though the kind affects the way the information
+    -- is encoded. 
+    headerExt :: ExtendedHeader,
+
+    -- | Entry contents. For entries other than normal 
+    -- files, this should be an empty string.
     fileContent :: ByteString
-  } deriving Show
+  } 
 
-type EpochTime = Int
+data ExtendedHeader
+   = V7
+   | Ustar {
+    -- | The owner user name. Should be set to @\"\"@ if unknown.
+    ownerName :: String,
 
+    -- | The owner group name. Should be set to @\"\"@ if unknown.
+    groupName :: String,
+
+    -- | For character and block device entries, this is the 
+    -- major number of the device. For all other entry types, it
+    -- should be set to @0@.
+    deviceMajor :: DevMajor,
+
+    -- | For character and block device entries, this is the 
+    -- minor number of the device. For all other entry types, it
+    -- should be set to @0@.
+    deviceMinor :: DevMinor
+   }
+   | Gnu {
+    -- | The owner user name. Should be set to @\"\"@ if unknown.
+    ownerName :: String,
+
+    -- | The owner group name. Should be set to @\"\"@ if unknown.
+    groupName :: String,
+
+    -- | For character and block device entries, this is the 
+    -- major number of the device. For all other entry types, it
+    -- should be set to @0@.
+    deviceMajor :: DevMajor,
+
+    -- | For character and block device entries, this is the 
+    -- minor number of the device. For all other entry types, it
+    -- should be set to @0@.
+    deviceMinor :: DevMinor
+   }
+
+-- | TAR archive entry types.
 data FileType = NormalFile
               | HardLink
               | SymbolicLink
+              | CharacterDevice
+              | BlockDevice
               | Directory
-              | Other Char
-  deriving (Eq,Show)
+              | FIFO
+              | ExtendedHeader
+              | GlobalHeader
+              | Custom Char   -- 'A' .. 'Z'
+              | Reserved Char -- other / reserved / unknown
+
+toFileTypeCode :: FileType -> Char
+toFileTypeCode NormalFile      = '0'
+toFileTypeCode HardLink        = '1'
+toFileTypeCode SymbolicLink    = '2'
+toFileTypeCode CharacterDevice = '3'
+toFileTypeCode BlockDevice     = '4'
+toFileTypeCode Directory       = '5'
+toFileTypeCode FIFO            = '6'
+toFileTypeCode ExtendedHeader  = 'x'
+toFileTypeCode GlobalHeader    = 'g'
+toFileTypeCode (Custom   c)    = c
+toFileTypeCode (Reserved c)    = c
+
+fromFileTypeCode :: Char -> FileType 
+fromFileTypeCode '0'  = NormalFile
+fromFileTypeCode '\0' = NormalFile
+fromFileTypeCode '1'  = HardLink
+fromFileTypeCode '2'  = SymbolicLink
+fromFileTypeCode '3'  = CharacterDevice
+fromFileTypeCode '4'  = BlockDevice
+fromFileTypeCode '5'  = Directory
+fromFileTypeCode '6'  = FIFO
+fromFileTypeCode '7'  = NormalFile
+fromFileTypeCode 'x'  = ExtendedHeader
+fromFileTypeCode 'g'  = GlobalHeader
+fromFileTypeCode  c   | c >= 'A' && c <= 'Z'
+                      = Custom c
+fromFileTypeCode  c   = Reserved c
+
+simpleFileEntry :: FilePath -> ByteString -> Entry
+simpleFileEntry name content = Entry {
+    fileName = name,
+    fileMode = 493, -- = 755 octal
+    ownerId = 0,
+    groupId  = 0,
+    fileSize = BS.length content,
+    modTime  = 0,
+    fileType = NormalFile,
+    linkTarget = "",
+    headerExt = Ustar {
+      ownerName = "",
+      groupName = "",
+      deviceMajor = 0,
+      deviceMinor = 0
+    },
+    fileContent = content
+  }
 
 --
 -- * Reading
 --
-
-data Entries = Next Entry Entries | Done | Fail String
 
 read :: ByteString -> Entries
 read = unfoldEntries getEntry
@@ -86,74 +215,98 @@ foldEntries next done fail = fold
     fold (Fail err)  = fail err
 
 getEntry :: ByteString -> Either String (Maybe (Entry, ByteString))
-getEntry bs | endBlock = Right Nothing
-            | BS.length hdr < 512 = Left "Truncated TAR archive"
-            | not (checkChkSum hdr chkSum) = Left "TAR checksum error"
-            | otherwise = Right (Just (entry, bs'''))
+getEntry bs
+  | BS.length header < 512 = Left "Truncated TAR archive"
+  | endBlock = Right Nothing
+  | not (correctChecksum header chksum)  = Left "TAR checksum error"
+  | magic /= "ustar\NUL00"
+ && magic /= "ustar  \NUL" = Left $ "TAR entry not ustar format: " ++ show magic
+  | otherwise = Right (Just (entry, bs'''))
   where
-   (hdr,bs') = BS.splitAt 512 bs
+   (header,bs')  = BS.splitAt 512 bs
 
-   endBlock     = getByte 0 hdr == '\0'
+   endBlock   = getByte 0 header == '\0'
 
-   fileSuffix = getString   0 100 hdr
-   mode       = getOct    100   8 hdr
-   size       = getOct    124  12 hdr
-   modTime    = getOct    136  12 hdr
-   chkSum     = getOct    148   8 hdr
-   typ        = getByte   156     hdr
-   linkTarget_ = getString 157 100 hdr
-   filePrefix = getString 345 155 hdr
+   name       = getString   0 100 header
+   mode       = getOct    100   8 header
+   uid        = getOct    108   8 header
+   gid        = getOct    116   8 header
+   size       = getOct    124  12 header
+   mtime      = getOct    136  12 header
+   chksum     = getOct    148   8 header
+   typecode   = getByte   156     header
+   linkname   = getString 157 100 header
+   magic      = getChars  257   8 header
+   uname      = getString 265  32 header
+   gname      = getString 297  32 header
+   devmajor   = getOct    329   8 header
+   devminor   = getOct    337   8 header
+   prefix     = getString 345 155 header
+--   trailing   = getBytes  500  12 header --TODO: check all \0's
 
    padding    = (512 - size) `mod` 512
-   (cnt,bs'') = BS.splitAt (fromIntegral size) bs'
-   bs'''      = BS.drop (fromIntegral padding) bs''
+   (cnt,bs'') = BS.splitAt size bs'
+   bs'''      = BS.drop padding bs''
 
-   fileType_  = case typ of
-                  '\0'-> NormalFile
-                  '0' -> NormalFile
-                  '1' -> HardLink
-                  '2' -> SymbolicLink
-                  '5' -> Directory
-                  c   -> Other c
-
-   path       = filePrefix ++ fileSuffix
    entry      = Entry {
-     fileName    = path, 
+     fileName    = prefix ++ name,
      fileMode    = mode,
-     fileType    = fileType_,
-     linkTarget  = linkTarget_,
-     fileModTime = modTime,
+     ownerId     = uid,
+     groupId     = gid,
      fileSize    = size,
+     modTime     = mtime,
+     fileType    = fromFileTypeCode typecode,
+     linkTarget  = linkname,
+     headerExt   = case magic of
+       "\0\0\0\0\0\0\0\0" -> V7
+       "ustar\NUL00" -> Ustar {
+         ownerName   = uname,
+         groupName   = gname,
+         deviceMajor = devmajor,
+         deviceMinor = devminor
+       }
+       "ustar  \NUL" -> Gnu {
+         ownerName   = uname,
+         groupName   = gname,
+         deviceMajor = devmajor,
+         deviceMinor = devminor
+       }
+       _ -> V7, --FIXME: fail instead
      fileContent = cnt
    }
 
-checkChkSum :: ByteString -> Int -> Bool
-checkChkSum hdr s = s == chkSum hdr' || s == signedChkSum hdr'
+correctChecksum :: ByteString -> Int -> Bool
+correctChecksum header checksum = checksum == checksum'
   where 
-    -- replace the checksum with spaces
-    hdr' = BS.concat [BS.take 148 hdr, BS.Char8.replicate 8 ' ', BS.drop 156 hdr]
-    -- tar.info says that Sun tar is buggy and 
-    -- calculates the checksum using signed chars
-    chkSum = BS.Char8.foldl' (\x y -> x + ord y) 0
-    signedChkSum = BS.Char8.foldl' (\x y -> x + (ordSigned y)) 0
-
-ordSigned :: Char -> Int
-ordSigned c = fromIntegral (fromIntegral (ord c) :: Int8)
+    -- sum of all 512 bytes in the header block,
+    -- treating each byte as an 8-bit unsigned value
+    checksum' = BS.Char8.foldl' (\x y -> x + ord y) 0 header'
+    -- treating the 8 bytes of chksum as blank characters.
+    header'   = BS.concat [BS.take 148 header, 
+                           BS.Char8.replicate 8 ' ',
+                           BS.drop 156 header]
 
 -- * TAR format primitive input
 
 getOct :: Integral a => Int64 -> Int64 -> ByteString -> a
-getOct off len = parseOct . getString off len
-  where parseOct "" = 0
-        parseOct s = case readOct s of
-                       [(x,_)] -> x
-                       _       -> error $ "Number format error: " ++ show s
+getOct off len = parseOct
+               . BS.Char8.unpack
+               . BS.Char8.takeWhile (\c -> c /= '\NUL' && c /= ' ')
+               . getBytes off len
+  where
+    parseOct "" = 0
+    parseOct s = case readOct s of
+                   [(x,[])] -> x
+                   _        -> error $ "Number format error: " ++ show s
 
 getBytes :: Int64 -> Int64 -> ByteString -> ByteString
 getBytes off len = BS.take len . BS.drop off
 
 getByte :: Int64 -> ByteString -> Char
 getByte off bs = BS.Char8.index bs off
+
+getChars :: Int64 -> Int64 -> ByteString -> String
+getChars off len = BS.Char8.unpack . getBytes off len
 
 getString :: Int64 -> Int64 -> ByteString -> String
 getString off len = BS.Char8.unpack . BS.Char8.takeWhile (/='\0') . getBytes off len
@@ -177,46 +330,52 @@ putEntry entry = BS.concat [ header, content, padding ]
 putHeader :: Entry -> BS.ByteString
 putHeader entry =  
      BS.Char8.pack $ take 148 block
-  ++ putOct 8 chkSum
-  ++ drop 156 block
+  ++ putOct 7 checksum
+  ++ ' ' : drop 156 block
   where
-    block  = putHeaderNoChkSum entry
-    chkSum = foldl' (\x y -> x + ord y) 0 block
+    block    = putHeaderNoChkSum entry
+    checksum = foldl' (\x y -> x + ord y) 0 block
         
 putHeaderNoChkSum :: Entry -> String
 putHeaderNoChkSum entry = concat
-  [ putString  100 $ fileSuffix
-  , putOct       8 $ fileMode entry
-  , putOct       8 $ zero --tarOwnerID hdr
-  , putOct       8 $ zero --tarGroupID hdr
-  , putOct      12 $ fileSize entry
-  , putOct      12 $ fileModTime entry
-  , fill         8 $ ' ' -- dummy checksum
-  , putFileType    $ fileType entry
-  , putString  100 $ linkTarget entry -- FIXME: take suffix split at / if too long
-  , putString    6 $ "ustar"
-  , putString    2 $ "00" -- no nul byte
-  , putString   32 $ "" --tarOwnerName hdr
-  , putString   32 $ "" --tarGroupName hdr
-  , putOct       8 $ zero --tarDeviceMajor hdr
-  , putOct       8 $ zero --tarDeviceMinor hdr
-  , putString  155 $ filePrefix
-  , fill        12 $ '\NUL'
-  ]
+    [ putString  100 $ name
+    , putOct       8 $ fileMode entry
+    , putOct       8 $ ownerId entry
+    , putOct       8 $ groupId entry
+    , putOct      12 $ fileSize entry
+    , putOct      12 $ modTime entry
+    , fill         8 $ ' ' -- dummy checksum
+    , putChar8       $ toFileTypeCode (fileType entry)
+    , putString  100 $ linkTarget entry
+    ] ++
+  case headerExt entry of
+  V7    ->
+      fill 255 '\NUL'
+  ext@Ustar {}-> concat
+    [ putString    8 $ "ustar\NUL00"
+    , putString   32 $ ownerName ext
+    , putString   32 $ groupName ext
+    , putOct       8 $ deviceMajor ext
+    , putOct       8 $ deviceMinor ext
+    , putString  155 $ prefix
+    , fill        12 $ '\NUL'
+    ]
+  ext@Gnu {} -> concat
+    [ putString    8 $ "ustar  \NUL"
+    , putString   32 $ ownerName ext
+    , putString   32 $ groupName ext
+    , putGnuDev    8 $ deviceMajor ext
+    , putGnuDev    8 $ deviceMinor ext
+    , putString  155 $ prefix
+    , fill        12 $ '\NUL'
+    ]
   where
-    (filePrefix, fileSuffix) =
+    (prefix, name) =
       splitLongPath (nativePathToTarPath (fileType entry) (fileName entry))
-    zero :: Int
-    zero = 0
-
-putFileType :: FileType -> String
-putFileType t = 
-    putChar8 $ case t of
-                 NormalFile      -> '0'
-                 HardLink        -> '1'
-                 SymbolicLink    -> '2'
-                 Directory       -> '5'
-                 Other c         -> c
+    putGnuDev w n = case fileType entry of
+      CharacterDevice -> putOct w n
+      BlockDevice     -> putOct w n
+      _               -> replicate w '\NUL'
 
 -- | Convert a native path to a unix/posix style path
 -- and for directories add a trailing @\/@.
