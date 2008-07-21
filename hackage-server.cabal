@@ -19,7 +19,8 @@ cabal-version: >=1.2
 data-files:
   static/hackage.html,
   static/hackage.css,
-  static/upload.html
+  static/upload.html,
+  static/accounts.html
 
 executable hackage-server
   main-is: Main.hs

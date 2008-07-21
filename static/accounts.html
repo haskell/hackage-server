@@ -1,0 +1,71 @@
+<html><head><title>HackageDB: User accounts</title></head><body>
+<title>HackageDB: HackageDB: User accounts</title>
+<link rel="stylesheet" href="/packages/hackage.css" type="text/css">
+<div class="header">
+<h1>hackageDB :: [Package]</h1>
+<table class="navigation">
+<tr>
+<td><A HREF="/packages/hackage.html">Introduction</A></td>
+<td><A HREF="/packages/archive/pkg-list.html">Packages</A></td>
+<td><A HREF="/packages/archive/recent.html">What's new</A></td>
+<td><A HREF="/packages/upload.html">Upload</A></td>
+<td><A HREF="/packages/accounts.html">User accounts</A></td>
+</tr>
+</table>
+</div>
+
+<h2>User accounts</h2>
+<p>Most of the functions of the HackageDB web interface
+(including browsing and checking packages) are available to all.
+However, uploading packages requires a HackageDB username and password.
+Your username will be your name in CamelCase (e.g. "JosephBloggs").
+
+<h3>Getting a Hackage username</h3>
+
+<p><b>Note:</b> This is only for releasing packages.
+For hosting a Haskell source repository, you could try
+<a href="http://community.haskell.org/">community.haskell.org</a>.
+
+<p><a href="/cgi-bin/hackage-scripts/list-users">Some people</a>
+have already been added, initially with the same password as they used for the
+<A HREF="http://hackage.haskell.org/trac/ghc">GHC Wiki</A> in January 2007
+(but with a different username, see above).
+If you need a username, please send mail to
+<A HREF="mailto:ross@soi.city.ac.uk">ross@soi.city.ac.uk</A>.
+Any real person with a Cabal package to upload is welcome.
+
+<h3>Change password</h3>
+<P>If you have a HackageDB username,
+you can use this form to change the associated password.
+
+<FORM CLASS="box" METHOD="POST" ACTION="/cgi-bin/hackage-scripts/htpasswd">
+
+<TABLE>
+<TR>
+<TD>HackageDB username: </TD>
+
+ <TD><INPUT NAME="user"></TD>
+</TR>
+
+<TR>
+<TD>Current password: </TD>
+ <TD><INPUT TYPE=PASSWORD NAME="old"></TD>
+</TR>
+
+<TR>
+<TD>New password: </TD>
+ <TD><INPUT TYPE=PASSWORD NAME="new"></TD>
+</TR>
+
+<TR>
+<TD>Confirm new password: </TD>
+ <TD><INPUT TYPE=PASSWORD NAME="new2"></TD>
+</TR>
+</TABLE>
+
+<P><INPUT TYPE="submit" VALUE=" Change password "></P>
+</FORM>
+
+<P>Passwords are stored encrypted, so if you forget yours we can't recover it,
+but will need to assign a new one.  Just ask.
+</body></html>
