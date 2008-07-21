@@ -5,8 +5,8 @@ module Distribution.Server.PackagesState where
 import Distribution.Package (PackageIdentifier,Package)
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.PackageDescription (parsePackageDescription, ParseResult(..))
-import Hackage.Types (PkgInfo(..))
-import qualified Hackage.IndexUtils as PackageIndex (write)
+import Distribution.Server.Types (PkgInfo(..))
+import qualified Distribution.Server.IndexUtils as PackageIndex (write)
 
 import HAppS.State
 import HAppS.Data.Serialize

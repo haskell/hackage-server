@@ -2,7 +2,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Hackage.Types
+-- Module      :  Distribution.Server.Types
 -- Copyright   :  (c) David Himmelstrup 2005
 -- License     :  BSD-like
 --
@@ -12,7 +12,7 @@
 --
 -- All data types for the entire cabal-install system gathered here to avoid some .hs-boot files.
 -----------------------------------------------------------------------------
-module Hackage.Types where
+module Distribution.Server.Types where
 
 import Distribution.Package
          ( PackageIdentifier(..), Package(..) )

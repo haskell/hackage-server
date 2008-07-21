@@ -1,7 +1,7 @@
 {-# LANGUAGE PatternGuards #-}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Hackage.IndexUtils
+-- Module      :  Distribution.Server.IndexUtils
 -- Copyright   :  (c) Duncan Coutts 2008
 -- License     :  BSD-like
 --
@@ -11,11 +11,11 @@
 --
 -- Extra utils related to the package indexes.
 -----------------------------------------------------------------------------
-module Hackage.IndexUtils (
+module Distribution.Server.IndexUtils (
   read, write,
   ) where
 
-import qualified Hackage.Tar as Tar
+import qualified Distribution.Server.Tar as Tar
          ( Entry(..), Entries(..), read, write, simpleFileEntry )
 
 import Distribution.Package

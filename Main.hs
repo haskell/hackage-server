@@ -8,8 +8,8 @@ import HAppS.State
 import Distribution.Server.PackagesState
 import qualified Distribution.PackageDescription as PD
 import qualified Distribution.Simple.PackageIndex as PackageIndex
-import qualified Hackage.IndexUtils as PackageIndex (read)
-import Hackage.Types (PkgInfo(..))
+import qualified Distribution.Server.IndexUtils as PackageIndex (read)
+import Distribution.Server.Types (PkgInfo(..))
 
 import System.Environment
 import Control.Exception

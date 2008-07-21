@@ -1,27 +1,28 @@
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Hackage.Tar
--- Copyright   :  (c) 2007 Bjorn Bringert, 2008 Andrea Vezzosi
+-- Module      :  Distribution.Server.Tar
+-- Copyright   :  (c) 2007 Bjorn Bringert,
+--                    2008 Andrea Vezzosi,
+--                    2008 Duncan Coutts
 -- License     :  BSD-like
 --
 -- Maintainer  :  duncan@haskell.org
 -- Stability   :  provisional
 -- Portability :  portable
 --
--- Simplistic TAR archive reading and writing
---
--- Only handles the file names and file contents, ignores other file metadata.
+-- TAR archive reading and writing
 --
 -----------------------------------------------------------------------------
-module Hackage.Tar (
+module Distribution.Server.Tar (
   -- * Tar file entry
   Entry(..),
+  ExtendedHeader(..),
   FileType(..),
-  
+
   -- * Reading tar format
   read,
   Entries(..), foldEntries, unfoldEntries,
-  
+
   -- * Writing tar format
   write,
   simpleFileEntry,
@@ -82,17 +83,17 @@ data Entry = Entry {
     -- | If the entry is a hard link or a symbolic link, this is the path of
     -- the link target. For all other entry types this should be @\"\"@.
     linkTarget :: FilePath,
-    
+
     -- | The remaining meta-data is in the V7, ustar/posix or gnu formats
     -- For V7 there is no extended info at all and for posix/ustar the
     -- information is the same though the kind affects the way the information
-    -- is encoded. 
+    -- is encoded.
     headerExt :: ExtendedHeader,
 
-    -- | Entry contents. For entries other than normal 
+    -- | Entry contents. For entries other than normal
     -- files, this should be an empty string.
     fileContent :: ByteString
-  } 
+  }
 
 data ExtendedHeader
    = V7
@@ -103,12 +104,12 @@ data ExtendedHeader
     -- | The owner group name. Should be set to @\"\"@ if unknown.
     groupName :: String,
 
-    -- | For character and block device entries, this is the 
+    -- | For character and block device entries, this is the
     -- major number of the device. For all other entry types, it
     -- should be set to @0@.
     deviceMajor :: DevMajor,
 
-    -- | For character and block device entries, this is the 
+    -- | For character and block device entries, this is the
     -- minor number of the device. For all other entry types, it
     -- should be set to @0@.
     deviceMinor :: DevMinor
@@ -120,12 +121,12 @@ data ExtendedHeader
     -- | The owner group name. Should be set to @\"\"@ if unknown.
     groupName :: String,
 
-    -- | For character and block device entries, this is the 
+    -- | For character and block device entries, this is the
     -- major number of the device. For all other entry types, it
     -- should be set to @0@.
     deviceMajor :: DevMajor,
 
-    -- | For character and block device entries, this is the 
+    -- | For character and block device entries, this is the
     -- minor number of the device. For all other entry types, it
     -- should be set to @0@.
     deviceMinor :: DevMinor
@@ -157,7 +158,7 @@ toFileTypeCode GlobalHeader    = 'g'
 toFileTypeCode (Custom   c)    = c
 toFileTypeCode (Reserved c)    = c
 
-fromFileTypeCode :: Char -> FileType 
+fromFileTypeCode :: Char -> FileType
 fromFileTypeCode '0'  = NormalFile
 fromFileTypeCode '\0' = NormalFile
 fromFileTypeCode '1'  = HardLink
@@ -277,12 +278,12 @@ getEntry bs
 
 correctChecksum :: ByteString -> Int -> Bool
 correctChecksum header checksum = checksum == checksum'
-  where 
+  where
     -- sum of all 512 bytes in the header block,
     -- treating each byte as an 8-bit unsigned value
     checksum' = BS.Char8.foldl' (\x y -> x + ord y) 0 header'
     -- treating the 8 bytes of chksum as blank characters.
-    header'   = BS.concat [BS.take 148 header, 
+    header'   = BS.concat [BS.take 148 header,
                            BS.Char8.replicate 8 ' ',
                            BS.drop 156 header]
 
@@ -328,14 +329,14 @@ putEntry entry = BS.concat [ header, content, padding ]
     paddingSize = fromIntegral $ negate (fileSize entry) `mod` 512
 
 putHeader :: Entry -> BS.ByteString
-putHeader entry =  
+putHeader entry =
      BS.Char8.pack $ take 148 block
   ++ putOct 7 checksum
   ++ ' ' : drop 156 block
   where
     block    = putHeaderNoChkSum entry
     checksum = foldl' (\x y -> x + ord y) 0 block
-        
+
 putHeaderNoChkSum :: Entry -> String
 putHeaderNoChkSum entry = concat
     [ putString  100 $ name
@@ -384,21 +385,21 @@ nativePathToTarPath :: FileType -> FilePath -> FilePath
 nativePathToTarPath ftype = addTrailingSep ftype
                           . FilePath.Posix.joinPath
                           . FilePath.splitDirectories
-  where 
+  where
     addTrailingSep Directory path = path ++ [FilePath.Posix.pathSeparator]
     addTrailingSep _         path = path
 
 -- | Takes a sanitized path, i.e. converted to Posix form
 splitLongPath :: FilePath -> (String,String)
 splitLongPath path =
-    let (x,y) = splitAt (length path - 101) path 
-              -- 101 since we will always move a separator to the prefix  
-     in if null x 
+    let (x,y) = splitAt (length path - 101) path
+              -- 101 since we will always move a separator to the prefix
+     in if null x
          then if null y then err "Empty path." else ("", y)
          else case break (==FilePath.Posix.pathSeparator) y of
               --TODO: convert this to use FilePath.Posix.splitPath
-                (_,"")    -> err "Can't split path." 
-                (_,_:"")  -> err "Can't split path." 
+                (_,"")    -> err "Can't split path."
+                (_,_:"")  -> err "Can't split path."
                 (y1,s:y2) | length p > 155 || length y2 > 100 -> err "Can't split path."
                           | otherwise -> (p,y2)
                       where p = x ++ y1 ++ [s]
