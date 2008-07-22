@@ -11,6 +11,8 @@ import qualified Distribution.Simple.PackageIndex as PackageIndex
 import qualified Distribution.Server.IndexUtils as PackageIndex (read)
 import Distribution.Server.Types (PkgInfo(..))
 
+import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)
+
 import System.Environment
 import Control.Exception
 import Data.Maybe
@@ -69,6 +71,9 @@ impl =
   [ dir "packages" [ path $ handlePackageById
                    , dir "download"
                      [ path $ downloadPackageById ]
+                   , method GET $ do
+                       state <- query $ GetPackagesState
+                       ok $ toResponse $ Pages.packageIndex (packageList state)
                    ]
 --  , dir "test"     [ support [("text/plain", ok $ toResponse "plain" )
 --                             ,("text/html", ok $ toResponse "html" )] ]

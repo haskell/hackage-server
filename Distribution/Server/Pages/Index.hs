@@ -1,6 +1,6 @@
 -- Generate an HTML page listing all available packages
 
-module Distribution.Server.Pages.Index (packageIndexPage) where
+module Distribution.Server.Pages.Index (packageIndex) where
 
 import Distribution.Server.Pages.Template	( hackagePage )
 
@@ -21,8 +21,8 @@ import Data.List (intersperse, sortBy, groupBy, nub, maximumBy)
 import Data.Maybe ()
 
 
-packageIndexPage :: PackageIndex.PackageIndex PkgInfo -> Html
-packageIndexPage = formatPkgGroups
+packageIndex :: PackageIndex.PackageIndex PkgInfo -> Html
+packageIndex = formatPkgGroups
                  . map (flattenPackageDescription
                       . pkgDesc
                       . maximumBy (comparing packageVersion))
