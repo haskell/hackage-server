@@ -24,6 +24,9 @@ data-files:
 
 executable hackage-server
   main-is: Main.hs
+  other-modules:
+    Distribution.Server.Pages.Package.HaddockParse
+    Distribution.Server.Pages.Package.HaddockLex
   build-depends:
     base,
     filepath >= 1.1,
@@ -34,6 +37,9 @@ executable hackage-server
     random >= 1.0,
     process >= 1.0,
     -- FIXME: remove process, only needed temporarily
+    array >= 0.1,
+    containers >= 0.1,
+    network >= 2.1,
     mtl >= 1.1,
     binary >= 0.4,
     pureMD5 >= 0.2,

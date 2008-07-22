@@ -12,6 +12,7 @@ import qualified Distribution.Server.IndexUtils as PackageIndex (read)
 import Distribution.Server.Types (PkgInfo(..))
 
 import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)
+import qualified Distribution.Server.Pages.Package as Pages
 
 import System.Environment
 import Control.Exception
