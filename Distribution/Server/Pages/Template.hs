@@ -39,7 +39,7 @@ stylesheetURL = "/hackage.css"
 
 -- URL of the package list
 pkgListURL :: URL
-pkgListURL = "/pkg-list.html"
+pkgListURL = "/packages/"
 
 -- URL of the upload form
 introductionURL :: URL
