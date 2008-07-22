@@ -169,6 +169,7 @@ withTempDirectory = bracket newTempDirectory removeDirectoryRecursive
 		createDirectory tmpDir
 		return tmpDir
 
+{-
 checkPackageTarSanity :: PackageIdentifier -> Tar.Entries -> Either String Tar.Entry
 checkPackageTarSanity pkgid = check Nothing
   where
@@ -192,3 +193,4 @@ checkPackageTarSanity pkgid = check Nothing
      && Tar.fileType e /= Tar.Directory = Just "unexpected file kind in the tarball"
     --TODO: check sanity of file names, must start with pkgid/ or ./pkgid/
       | otherwise = Nothing
+-}
