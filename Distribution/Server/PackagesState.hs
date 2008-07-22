@@ -21,8 +21,7 @@ import qualified Codec.Compression.GZip as GZip
 
 
 data PackagesState = PackagesState {
-    packageList  :: PackageIndex.PackageIndex PkgInfo,
-    packageIndexTarball :: ByteString
+    packageList  :: PackageIndex.PackageIndex PkgInfo
   }
   deriving (Typeable)
 
@@ -30,15 +29,10 @@ instance Version PackagesState where
     mode = Versioned 0 Nothing
 
 instance Serialize PackagesState where
-  putCopy (PackagesState idx _) = contain $ safePut $ PackageIndex.allPackages idx
+  putCopy (PackagesState idx) = contain $ safePut $ PackageIndex.allPackages idx
   getCopy = contain $ do packages <- safeGet
-                         return $ cachePackagesState $
-                                  PackagesState { packageList = PackageIndex.fromList packages
-                                                , packageIndexTarball = empty }
+                         return $ PackagesState { packageList = PackageIndex.fromList packages }
 
-cachePackagesState :: PackagesState -> PackagesState
-cachePackagesState pkgsState = pkgsState { packageIndexTarball = indexTarball }
-    where indexTarball = generatePackageIndex (packageList pkgsState)
 
 generatePackageIndex :: PackageIndex.PackageIndex PkgInfo -> ByteString
 generatePackageIndex = GZip.compress . PackageIndex.write pkgData
@@ -72,14 +66,11 @@ instance Serialize PkgInfo where
 bulkImport :: [PkgInfo] -> Update PackagesState ()
 bulkImport newIndex
     = do pkgsState <- State.get
-         State.put $ cachePackagesState $ pkgsState { packageList = packageList pkgsState `mappend`
-                                                                    PackageIndex.fromList newIndex }
+         State.put $ pkgsState { packageList = packageList pkgsState `mappend`
+                                               PackageIndex.fromList newIndex }
 
 getPackagesState :: Query PackagesState PackagesState
 getPackagesState = ask
-
-getIndexTarball :: Query PackagesState ByteString
-getIndexTarball = asks packageIndexTarball
 
 lookupPackageId :: PackageIdentifier -> Query PackagesState (Maybe PkgInfo)
 lookupPackageId pkgid = do
@@ -88,10 +79,9 @@ lookupPackageId pkgid = do
 
 $(mkMethods ''PackagesState ['lookupPackageId
                             ,'bulkImport
-                            ,'getPackagesState
-                            ,'getIndexTarball])
+                            ,'getPackagesState])
 
 instance Component PackagesState where
   type Dependencies PackagesState = End
-  initialValue = cachePackagesState $ PackagesState mempty empty
+  initialValue = PackagesState mempty
 

@@ -6,6 +6,7 @@ import HAppS.Server
 import HAppS.State
 
 import Distribution.Server.PackagesState
+import Distribution.Server.Caches
 import qualified Distribution.PackageDescription as PD
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import qualified Distribution.Server.IndexUtils as PackageIndex (read)
@@ -31,7 +32,8 @@ hackageEntryPoint = Proxy
 
 main :: IO ()
 main = bracket (startSystemState hackageEntryPoint) shutdownSystem $ \_ctl ->
-       do args <- getArgs -- FIXME: use GetOpt
+       do cacheThread
+          args <- getArgs -- FIXME: use GetOpt
           forM_ args $ \pkgFile ->
               do pkgIndex <- either fail return
                            . PackageIndex.read PkgInfo
@@ -73,8 +75,7 @@ impl =
                    , dir "download"
                      [ path $ downloadPackageById ]
                    , method GET $ do
-                       state <- query $ GetPackagesState
-                       ok $ toResponse $ Pages.packageIndex (packageList state)
+                       liftIO fetchPackagesPage
                    ]
 --  , dir "test"     [ support [("text/plain", ok $ toResponse "plain" )
 --                             ,("text/html", ok $ toResponse "html" )] ]
@@ -90,7 +91,7 @@ impl =
                        ]
                  , fileServe [] "upload.html"
                  ]
-  , dir "00-index.tar.gz" [ method GET $ do tarball <- query $ GetIndexTarball
+  , dir "00-index.tar.gz" [ method GET $ do tarball <- liftIO $ fetchIndexTarball
                                             ok $ toResponse $ Tarball tarball ]
   , fileServe ["hackage.html"] "static"
   ]
