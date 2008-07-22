@@ -55,8 +55,8 @@ updateCache = do state <- query $ GetPackagesState
                  -- FIXME: compute in parallel
                  evaluate $ Lazy.length pkgIndex
                  evaluate $ Lazy.length (rsBody packagePage)
-                 atomicModifyIORef cacheEnv $ \cache -> (cache { cacheIndexTarball = pkgIndex
-                                                               , cachePackagesPage = packagePage }
-                                                        ,())
+                 atomicModifyIORef cacheEnv $ \_ -> (Cache { cacheIndexTarball = pkgIndex
+                                                           , cachePackagesPage = packagePage }
+                                                    ,())
 
 
