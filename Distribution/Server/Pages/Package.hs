@@ -152,7 +152,7 @@ propertySection pd = [
 	vmap = pdDependencies pd
 	mb_doc = pdDocURL pd
 	showVers v =
-		anchor ! [href (packageURL (PackageIdentifier pname v))] <<
+		anchor ! [href (display (PackageIdentifier pname v))] <<
 			display v
 	pkg = flattenPackageDescription (pdDescription pd)
 	pkgId = package pkg
@@ -184,7 +184,7 @@ showDependency vmap (Dependency pname vs) =
 	showPkg mb_vers +++ showVers vs
   where showPkg Nothing = toHtml pname
 	showPkg (Just v) =
-		anchor ! [href (packageURL (PackageIdentifier pname v))] <<
+		anchor ! [href (display (PackageIdentifier pname v))] <<
 			pname
 	showVers AnyVersion = noHtml
 	showVers vs' = toHtml (" (" ++ display vs' ++ ")")
