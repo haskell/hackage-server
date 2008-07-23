@@ -18,7 +18,7 @@ import qualified Distribution.Server.Pages.Package as Pages
 import System.Environment
 import System.IO (hFlush, stdout)
 import Control.Exception
-import Data.Maybe
+import Data.Maybe; import Data.Version
 import Control.Monad
 import Control.Monad.Trans
 
@@ -49,6 +49,11 @@ main = do
 
 
 handlePackageById :: PackageIdentifier -> [ServerPart Response]
+handlePackageById pkgid | pkgVersion pkgid == Version [] [] =
+  [ anyRequest $ do pkgInfos <- query $ LookupPackageName (pkgName pkgid)
+                    ok $ toResponse $ pkgName pkgid ++ ": " ++ show (length pkgInfos)
+  ]
+
 handlePackageById pkgid =
   [ anyRequest $ do mbPkgInfo <- query $ LookupPackageId pkgid
                     ok $ case mbPkgInfo of
