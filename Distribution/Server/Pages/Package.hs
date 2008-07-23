@@ -364,8 +364,8 @@ cabalFile :: PackageIdentifier -> URL
 cabalFile pkgId = packageURL pkgId </> pkgName pkgId <.> "cabal"
 
 cabalLogoURL :: URL
-cabalLogoURL = "/images/Built-with-Cabal-light.png"
+cabalLogoURL = "/built-with-cabal.png"
 
 -- global URLs
 cabalHomeURL :: URL
-cabalHomeURL = "http://www.haskell.org/cabal"
+cabalHomeURL = "http://haskell.org/cabal/"
