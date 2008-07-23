@@ -49,11 +49,10 @@ formatPkgGroups pkgs = hackagePage "packages by category" docBody
 	searchBox =
 		[form ! [method "get", action "http://www.google.co.uk/search"] <<
 			[input ! [thetype "hidden", name "hl", value "en"],
-			 input ! [thetype "hidden", name "as_sitesearch", value (server ++ pkgScriptURL)],
+			 input ! [thetype "hidden", name "as_sitesearch", value "hackage.haskell.org/packages"],
 			 input ! [thetype "text", size "20", name "as_q", value ""],
 			 input ! [thetype "submit", value "Search package pages"]
 			]]
-	server = "hackage.haskell.org"
 	catLink (cat, sub_pkgs) =
 		(anchor ! [href ("#" ++ catLabel catName)] << catName) +++
 		spaceHtml +++
