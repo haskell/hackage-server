@@ -16,9 +16,11 @@ import Data.Typeable
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import Data.Monoid
-import Data.ByteString.Lazy.Char8 (unpack,empty,ByteString)
+import qualified Data.ByteString.Lazy.Char8 as BS (unpack)
+import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Codec.Compression.GZip as GZip
 
+import Distribution.Simple.Utils (fromUTF8)
 
 data PackagesState = PackagesState {
     packageList  :: PackageIndex.PackageIndex PkgInfo
@@ -52,14 +54,18 @@ instance Version PkgInfo where
 instance Serialize PkgInfo where
   putCopy pkgInfo = contain $ do safePut (pkgInfoId pkgInfo)
                                  Binary.put (pkgData pkgInfo)
-  getCopy = contain $ do infoId <- safeGet
-                         bstring <- Binary.get
-                         return $ PkgInfo { pkgInfoId = infoId
-                                          , pkgDesc   = case parsePackageDescription (unpack bstring) of
-                                                          -- XXX: Better error message?
-                                                          ParseFailed e -> error $ "Internal error: " ++ show e
-                                                          ParseOk _ x   -> x
-                                          , pkgData   = bstring }
+  getCopy = contain $ do
+    infoId <- safeGet
+    bstring <- Binary.get
+    return PkgInfo {
+      pkgInfoId = infoId,
+      pkgDesc   = case parse bstring of
+                    -- XXX: Better error message?
+                    ParseFailed e -> error $ "Internal error: " ++ show e
+                    ParseOk _ x   -> x,
+      pkgData   = bstring
+    }
+    where parse = parsePackageDescription . fromUTF8 . BS.unpack
 
 --insert
 
