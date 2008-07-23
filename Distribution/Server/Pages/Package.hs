@@ -30,9 +30,11 @@ import qualified Data.Map as Map
 import Data.Ord			( comparing )
 import System.FilePath          ( (</>), (<.>) )
 
-packagePage :: PkgInfo -> Html
-packagePage pkg =
-  let pkgData = emptyPackageData (pkgDesc pkg)
+packagePage :: PkgInfo -> [PkgInfo] -> Html
+packagePage pkg allVersions =
+  let pkgData = (emptyPackageData (pkgDesc pkg)) {
+        pdAllVersions = sort (map packageVersion allVersions)
+      }
    in hackagePage (display $ packageId pkg) (pkgBody pkgData)
 
 -- | Data about a package used in the package page.

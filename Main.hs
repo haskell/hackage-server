@@ -21,6 +21,7 @@ import Control.Exception
 import Data.Maybe; import Data.Version
 import Control.Monad
 import Control.Monad.Trans
+import Data.Ord (comparing)
 
 import Unpack (unpackPackage)
 import qualified Distribution.Server.BlobStorage as Blob
@@ -51,15 +52,18 @@ main = do
 handlePackageById :: PackageIdentifier -> [ServerPart Response]
 handlePackageById pkgid | pkgVersion pkgid == Version [] [] =
   [ anyRequest $ do index <- packageList <$> query GetPackagesState
-                    let pkgInfos = PackageIndex.lookupPackageName index (pkgName pkgid)
-                    ok $ toResponse $ pkgName pkgid ++ ": " ++ show (length pkgInfos)
+                    ok $ case PackageIndex.lookupPackageName index (pkgName pkgid) of
+                      []   -> toResponse "No such package"
+                      pkgs -> toResponse (Pages.packagePage pkg pkgs)
+                        where pkg = maximumBy (comparing packageVersion) pkgs
   ]
 
 handlePackageById pkgid =
   [ anyRequest $ do index <- packageList <$> query GetPackagesState
                     ok $ case PackageIndex.lookupPackageId index pkgid of
                            Nothing -> toResponse "No such package"
-                           Just pkg -> toResponse (Pages.packagePage pkg)
+                           Just pkg -> toResponse (Pages.packagePage pkg pkgs)
+                             where pkgs = PackageIndex.lookupPackageName index (pkgName pkgid)
   ]
 
 downloadPackageById pkgid =
