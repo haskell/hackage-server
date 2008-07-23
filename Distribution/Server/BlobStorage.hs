@@ -79,9 +79,7 @@ add store content = do
 fetch :: BlobStorage -> BlobId -> IO ByteString
 fetch store blobid = BS.readFile (filepath store blobid)
 
--- | Opens an existing blob storage area.
---
--- * The given directory have previously been 'initialise'd.
+-- | Opens an existing or new blob storage area.
 --
 open :: FilePath -> IO BlobStorage
 open pkgDir
@@ -89,10 +87,3 @@ open pkgDir
          let blob = BlobStorage pkgDir
          createDirectoryIfMissing False (incomingDir blob)
          return blob
-
--- | Initialise a new persistent blob storage area.
---
--- * The given directory must not already exist.
---
-initialise :: FilePath -> IO BlobStorage
-initialise = undefined

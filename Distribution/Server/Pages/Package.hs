@@ -9,7 +9,7 @@ import Distribution.Server.Pages.Package.HaddockParse	( parseParas )
 import Distribution.Server.Pages.Package.HaddockLex	( tokenise )
 import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Pages.Template		( hackagePage )
-import Distribution.Server.Types (PkgInfo(..))
+import Distribution.Server.Types (PkgInfo(pkgDesc))
 
 
 import Distribution.PackageDescription.Configuration
@@ -59,6 +59,7 @@ data PackageData = PackageData
 		-- (if available).
 	}
 
+emptyPackageData :: GenericPackageDescription -> PackageData
 emptyPackageData pkg = PackageData {
   pdDescription = pkg,
   pdTags = [],

@@ -1,4 +1,5 @@
 {
+{-# OPTIONS_GHC -w #-}
 module Distribution.Server.Pages.Package.HaddockParse (parseParas) where
 
 import Distribution.Server.Pages.Package.HaddockLex

@@ -49,6 +49,7 @@ cacheThread = do updateCache
                  return ()
 
 
+updateCache :: IO ()
 updateCache = do state <- query $ GetPackagesState
                  let pkgIndex = generatePackageIndex (packageList state)
                      packagePage = toResponse (packageIndex (packageList state))

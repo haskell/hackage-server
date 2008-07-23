@@ -5,6 +5,7 @@
 --
 
 {
+{-# OPTIONS_GHC -w #-}
 module Distribution.Server.Pages.Package.HaddockLex ( 
 	Token(..), 
 	tokenise 
@@ -106,28 +107,28 @@ alexInputPrevChar (c,_) = c
 
 tokenise :: String -> [Token]
 tokenise str = let toks = go ('\n', eofHack str) para in {-trace (show toks)-} toks
-  where go inp@(_,str) sc =
+  where go inp@(_,str') sc =
 	  case alexScan inp sc of
 		AlexEOF -> []
 		AlexError _ -> error "lexical error"
-		AlexSkip  inp' len     -> go inp' sc
-		AlexToken inp' len act -> act (take len str) sc (\sc -> go inp' sc)
+		AlexSkip  inp' _       -> go inp' sc
+		AlexToken inp' len act -> act (take len str') sc (go inp')
 
 -- NB. we add a final \n to the string, (see comment in the beginning of line
 -- production above).
 eofHack str = str++"\n"
 
 andBegin  :: Action -> StartCode -> Action
-andBegin act new_sc = \str sc cont -> act str new_sc cont
+andBegin act new_sc = \str _sc cont -> act str new_sc cont
 
 token :: Token -> Action
-token t = \str sc cont -> t : cont sc
+token t = \_str sc cont -> t : cont sc
 
 strtoken :: (String -> Token) -> Action
 strtoken t = \str sc cont -> t str : cont sc
 
 begin :: StartCode -> Action
-begin sc = \str _ cont -> cont sc
+begin sc = \_str _ cont -> cont sc
 
 -- -----------------------------------------------------------------------------
 -- Lex a string as a Haskell identifier

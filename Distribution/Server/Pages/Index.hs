@@ -10,12 +10,9 @@ import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
 				( flattenPackageDescription )
 import qualified Distribution.Simple.PackageIndex as PackageIndex
-import qualified Distribution.Server.IndexUtils as PackageIndex
 import Distribution.Server.Types (PkgInfo(..))
 import Distribution.Simple.Utils (comparing, equating)
 
-import qualified Data.ByteString.Lazy as BS
-import Control.Applicative ((<$>))
 import Data.Char (toLower, toUpper, isSpace)
 import Data.List (intersperse, sortBy, groupBy, nub, maximumBy)
 import Data.Maybe ()

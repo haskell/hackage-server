@@ -45,10 +45,6 @@ pkgListURL = "/packages/"
 introductionURL :: URL
 introductionURL = "/"
 
--- URL of the search page
-searchURL :: URL
-searchURL = "/search.html"
-
 -- URL of the upload form
 uploadURL :: URL
 uploadURL = "/upload.html"
