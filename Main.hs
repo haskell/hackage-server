@@ -1,6 +1,6 @@
 module Main (main) where
 
-import Distribution.Package (PackageIdentifier(..))
+import Distribution.Package (PackageIdentifier(..),packageVersion)
 import Distribution.Text    (display, simpleParse)
 import HAppS.Server
 import HAppS.State
@@ -21,7 +21,9 @@ import Control.Exception
 import Data.Maybe; import Data.Version
 import Control.Monad
 import Control.Monad.Trans
+import Data.List (maximumBy)
 import Data.Ord (comparing)
+import Control.Applicative
 
 import Unpack (unpackPackage)
 import qualified Distribution.Server.BlobStorage as Blob
@@ -66,6 +68,7 @@ handlePackageById pkgid =
                              where pkgs = PackageIndex.lookupPackageName index (pkgName pkgid)
   ]
 
+downloadPackageById :: PackageIdentifier -> [ServerPart Response]
 downloadPackageById pkgid =
     [ anyRequest $ do index <- packageList <$> query GetPackagesState
                       blobId <- undefined
