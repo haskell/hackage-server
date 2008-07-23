@@ -47,7 +47,7 @@ formatPkgGroups pkgs = hackagePage "packages by category" docBody
 			formatPkgList (sortBy (comparing sortKey) sub_pkgs) |
 			(cat, sub_pkgs) <- cat_pkgs]
 	searchBox =
-		[form ! [method "GET", action "http://www.google.co.uk/search"] <<
+		[form ! [method "get", action "http://www.google.co.uk/search"] <<
 			[input ! [thetype "hidden", name "hl", value "en"],
 			 input ! [thetype "hidden", name "as_sitesearch", value (server ++ pkgScriptURL)],
 			 input ! [thetype "text", size "20", name "as_q", value ""],
