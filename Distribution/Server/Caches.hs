@@ -17,7 +17,7 @@ import HAppS.State
 import HAppS.Data
 import HAppS.Server
 
-import Distribution.Server.PackagesState
+import Distribution.Server.State
 import Distribution.Server.Pages.Index
 
 data Cache = Cache {

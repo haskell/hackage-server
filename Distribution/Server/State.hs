@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell,
              FlexibleInstances, FlexibleContexts, MultiParamTypeClasses  #-}
-module Distribution.Server.PackagesState where
+module Distribution.Server.State where
 
 import Distribution.Package (PackageIdentifier)
 import qualified Distribution.Simple.PackageIndex as PackageIndex

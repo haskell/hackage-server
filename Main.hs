@@ -5,7 +5,7 @@ import Distribution.Text    (display, simpleParse)
 import HAppS.Server
 import HAppS.State
 
-import Distribution.Server.PackagesState
+import Distribution.Server.State
 import Distribution.Server.Caches
 import qualified Distribution.PackageDescription as PD
 import qualified Distribution.Simple.PackageIndex as PackageIndex
