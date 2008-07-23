@@ -50,19 +50,20 @@ main = do
 
 handlePackageById :: PackageIdentifier -> [ServerPart Response]
 handlePackageById pkgid | pkgVersion pkgid == Version [] [] =
-  [ anyRequest $ do pkgInfos <- query $ LookupPackageName (pkgName pkgid)
+  [ anyRequest $ do index <- packageList <$> query GetPackagesState
+                    let pkgInfos = PackageIndex.lookupPackageName index (pkgName pkgid)
                     ok $ toResponse $ pkgName pkgid ++ ": " ++ show (length pkgInfos)
   ]
 
 handlePackageById pkgid =
-  [ anyRequest $ do mbPkgInfo <- query $ LookupPackageId pkgid
-                    ok $ case mbPkgInfo of
+  [ anyRequest $ do index <- packageList <$> query GetPackagesState
+                    ok $ case PackageIndex.lookupPackageId index pkgid of
                            Nothing -> toResponse "No such package"
                            Just pkg -> toResponse (Pages.packagePage pkg)
   ]
 
 downloadPackageById pkgid =
-    [ anyRequest $ do mbPkgInfo <- query $ LookupPackageId pkgid
+    [ anyRequest $ do index <- packageList <$> query GetPackagesState
                       blobId <- undefined
                       store <- liftIO $ Blob.open "packages"
                       file <- liftIO $ Blob.fetch store blobId

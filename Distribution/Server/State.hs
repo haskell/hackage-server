@@ -78,23 +78,9 @@ bulkImport newIndex
 getPackagesState :: Query PackagesState PackagesState
 getPackagesState = ask
 
-lookupPackageId :: PackageIdentifier -> Query PackagesState (Maybe PkgInfo)
-lookupPackageId pkgid = do
-  pkgsState <- ask
-  return (PackageIndex.lookupPackageId (packageList pkgsState) pkgid)
-
---TODO: Cabal-1.5 now has PackageName as a newtype
-type PackageName = String
-
-lookupPackageName :: PackageName -> Query PackagesState [PkgInfo]
-lookupPackageName pkgid = do
-  pkgsState <- ask
-  return (PackageIndex.lookupPackageName (packageList pkgsState) pkgid)
-
-$(mkMethods ''PackagesState ['lookupPackageId
-                            ,'lookupPackageName
+$(mkMethods ''PackagesState ['getPackagesState
                             ,'bulkImport
-                            ,'getPackagesState])
+                            ])
 
 instance Component PackagesState where
   type Dependencies PackagesState = End
