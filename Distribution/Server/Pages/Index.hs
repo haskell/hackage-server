@@ -75,7 +75,7 @@ formatPkgList pkgs = ulist ! [theclass "packages"] << map formatPkg pkgs
 formatPkg :: PackageDescription -> Html
 formatPkg pkg = li << (pkgLink : toHtml (" " ++ ptype) : defn)
   where pname = pkgName (package pkg)
-	pkgLink = anchor ! [href pname] << pname
+	pkgLink = anchor ! [href (packageNameURL pname)] << pname
 	defn
 	  | null (synopsis pkg) = []
 	  | otherwise = [toHtml (": " ++ trim (synopsis pkg))]
@@ -128,3 +128,8 @@ allocatedTopLevelNodes = [
 	"Algebra", "Codec", "Control", "Data", "Database", "Debug",
 	"Distribution", "DotNet", "Foreign", "Graphics", "Language",
 	"Network", "Numeric", "Prelude", "Sound", "System", "Test", "Text"]
+
+packageNameURL :: PackageName -> URL
+packageNameURL pkg = "/paclages/" ++ pkg
+
+type PackageName = String --FIXME: Cabal-1.5 uses a newtype
