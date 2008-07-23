@@ -2,12 +2,15 @@
 module Distribution.Server.Pages.Package (
     PackageData(..),
     Build(..),
-    pkgBody
+    packagePage
   ) where
 
-import Distribution.Server.Pages.Package.HaddockParse		( parseParas )
-import Distribution.Server.Pages.Package.HaddockLex		( tokenise )
+import Distribution.Server.Pages.Package.HaddockParse	( parseParas )
+import Distribution.Server.Pages.Package.HaddockLex	( tokenise )
 import Distribution.Server.Pages.Package.HaddockHtml
+import Distribution.Server.Pages.Template		( hackagePage )
+import Distribution.Server.Types (PkgInfo(..))
+
 
 import Distribution.PackageDescription.Configuration
 				( flattenPackageDescription )
@@ -26,6 +29,11 @@ import Data.Map			( Map )
 import qualified Data.Map as Map
 import Data.Ord			( comparing )
 import System.FilePath          ( (</>), (<.>) )
+
+packagePage :: PkgInfo -> Html
+packagePage pkg =
+  let pkgData = emptyPackageData (pkgDesc pkg)
+   in hackagePage (display $ packageId pkg) (pkgBody pkgData)
 
 -- | Data about a package used in the package page.
 data PackageData = PackageData
@@ -50,6 +58,16 @@ data PackageData = PackageData
 		-- ^ Failed builds of this version of the package
 		-- (if available).
 	}
+
+emptyPackageData pkg = PackageData {
+  pdDescription = pkg,
+  pdTags = [],
+  pdAllVersions = [],
+  pdDependencies = Map.empty,
+  pdDocURL = Nothing,
+  pdBuilds = [],
+  pdBuildFailures = []
+}
 
 -- | Record of a build of the package
 data Build = Build

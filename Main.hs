@@ -45,12 +45,9 @@ main = bracket (startSystemState hackageEntryPoint) shutdownSystem $ \_ctl ->
 handlePackageById :: PackageIdentifier -> [ServerPart Response]
 handlePackageById pkgid =
   [ anyRequest $ do mbPkgInfo <- query $ LookupPackageId pkgid
-                    ok $ toResponse $
-                           "Package " ++ display pkgid ++ " addressed.\n"
-                           ++ case mbPkgInfo of
-                                Nothing -> "No such package"
-	                        Just pkg -> PD.author pkg_desc
-                                    where pkg_desc = PD.packageDescription (pkgDesc pkg)
+                    ok $ case mbPkgInfo of
+                           Nothing -> toResponse "No such package"
+                           Just pkg -> toResponse (Pages.packagePage pkg)
   ]
 
 downloadPackageById pkgid =
