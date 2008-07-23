@@ -53,7 +53,7 @@ main = do
 
 handlePackageById :: PackageIdentifier -> [ServerPart Response]
 handlePackageById pkgid | pkgVersion pkgid == Version [] [] =
-  [ anyRequest $ do index <- packageList <$> query GetPackagesState
+  [ method GET $ do index <- packageList <$> query GetPackagesState
                     ok $ case PackageIndex.lookupPackageName index (pkgName pkgid) of
                       []   -> toResponse "No such package"
                       pkgs -> toResponse (Pages.packagePage pkg pkgs)
@@ -61,7 +61,7 @@ handlePackageById pkgid | pkgVersion pkgid == Version [] [] =
   ]
 
 handlePackageById pkgid =
-  [ anyRequest $ do index <- packageList <$> query GetPackagesState
+  [ method GET $ do index <- packageList <$> query GetPackagesState
                     ok $ case PackageIndex.lookupPackageId index pkgid of
                            Nothing -> toResponse "No such package"
                            Just pkg -> toResponse (Pages.packagePage pkg pkgs)
