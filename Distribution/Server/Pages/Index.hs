@@ -130,6 +130,6 @@ allocatedTopLevelNodes = [
 	"Network", "Numeric", "Prelude", "Sound", "System", "Test", "Text"]
 
 packageNameURL :: PackageName -> URL
-packageNameURL pkg = "/paclages/" ++ pkg
+packageNameURL pkg = "/packages/" ++ pkg
 
 type PackageName = String --FIXME: Cabal-1.5 uses a newtype
