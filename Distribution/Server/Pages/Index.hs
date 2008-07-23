@@ -78,7 +78,7 @@ formatPkgList pkgs = ulist ! [theclass "packages"] << map formatPkg pkgs
 formatPkg :: PackageDescription -> Html
 formatPkg pkg = li << (pkgLink : toHtml (" " ++ ptype) : defn)
   where pname = pkgName (package pkg)
-	pkgLink = anchor ! [href (packageNameURL pname)] << pname
+	pkgLink = anchor ! [href pname] << pname
 	defn
 	  | null (synopsis pkg) = []
 	  | otherwise = [toHtml (": " ++ trim (synopsis pkg))]
@@ -131,11 +131,3 @@ allocatedTopLevelNodes = [
 	"Algebra", "Codec", "Control", "Data", "Database", "Debug",
 	"Distribution", "DotNet", "Foreign", "Graphics", "Language",
 	"Network", "Numeric", "Prelude", "Sound", "System", "Test", "Text"]
-
--- URL of the CGI script to show details of a package
-pkgScriptURL :: URL
-pkgScriptURL = "packages"
-
--- | URL describing a package, including version.
-packageNameURL :: String -> URL
-packageNameURL pkg = pkgScriptURL ++ "/" ++ pkg
