@@ -16,6 +16,7 @@ import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)
 import qualified Distribution.Server.Pages.Package as Pages
 
 import System.Environment
+import System.IO (hFlush, stdout)
 import Control.Exception
 import Data.Maybe
 import Control.Monad
@@ -31,14 +32,19 @@ hackageEntryPoint :: Proxy PackagesState
 hackageEntryPoint = Proxy
 
 main :: IO ()
-main = bracket (startSystemState hackageEntryPoint) shutdownSystem $ \_ctl ->
-       do cacheThread
+main = do
+  putStr "hackage-server initialising..."
+  hFlush stdout
+  bracket (startSystemState hackageEntryPoint) shutdownSystem $ \_ctl -> do
+          cacheThread
           args <- getArgs -- FIXME: use GetOpt
           forM_ args $ \pkgFile ->
               do pkgIndex <- either fail return
                            . PackageIndex.read PkgInfo
                          =<< BS.Lazy.readFile pkgFile
                  update $ BulkImport (PackageIndex.allPackages pkgIndex)
+          putStr " ready.\n"
+          hFlush stdout
           simpleHTTP nullConf { port = 5000 } impl
 
 
