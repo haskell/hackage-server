@@ -1,6 +1,6 @@
 module Main (main) where
 
-import Distribution.Package (PackageIdentifier(..),packageVersion)
+import Distribution.Package (PackageIdentifier(..), packageName, packageVersion)
 import Distribution.Text    (display, simpleParse)
 import HAppS.Server
 import HAppS.State
@@ -53,29 +53,32 @@ main = do
 
 
 handlePackageById :: PackageIdentifier -> [ServerPart Response]
-handlePackageById pkgid | pkgVersion pkgid == Version [] [] =
-  [ method GET $ do index <- packageList <$> query GetPackagesState
-                    ok $ case PackageIndex.lookupPackageName index (pkgName pkgid) of
-                      []   -> toResponse "No such package"
-                      pkgs -> toResponse (Pages.packagePage pkg pkgs)
-                        where pkg = maximumBy (comparing packageVersion) pkgs
-  ]
-
 handlePackageById pkgid =
-  [ method GET $ do index <- packageList <$> query GetPackagesState
-                    ok $ case PackageIndex.lookupPackageId index pkgid of
-                           Nothing -> toResponse "No such package"
-                           Just pkg -> toResponse (Pages.packagePage pkg pkgs)
-                             where pkgs = PackageIndex.lookupPackageName index (pkgName pkgid)
+  [ method GET $
+      withPackage pkgid $ \pkg pkgs ->
+        ok $ toResponse (Pages.packagePage pkg pkgs)
+
   , dir "cabal"
-    [ method GET $ do
-         index <- packageList <$> query GetPackagesState
-         ok $ case PackageIndex.lookupPackageId index pkgid of
-           Nothing -> toResponse "No such package" --FIXME: 404
-           Just pkg -> toResponse (CabalFile (pkgData pkg))
+    [ method GET $
+      withPackage pkgid $ \pkg pkgs ->
+        ok $ toResponse (CabalFile (pkgData pkg))
 --  , method PUT $ do ...
     ]
   ]
+  
+  where
+    withPackage pkgid action = do
+      index <- packageList <$> query GetPackagesState
+      case PackageIndex.lookupPackageName index (packageName pkgid) of
+        []   -> notFound $ toResponse "No such package"
+        pkgs  | pkgVersion pkgid == Version [] []
+             -> action pkg pkgs
+          where pkg = maximumBy (comparing packageVersion) pkgs
+ 
+        pkgs -> case toMaybe [ pkg | pkg <- pkgs, packageVersion pkg
+                                               == packageVersion pkgid ] of
+          Nothing  -> notFound $ toResponse "No such package version"
+          Just pkg -> action pkg pkgs
 
 downloadPackageById :: PackageIdentifier -> [ServerPart Response]
 downloadPackageById pkgid =
