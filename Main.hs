@@ -75,7 +75,7 @@ handlePackageById pkgid =
              -> action pkg pkgs
           where pkg = maximumBy (comparing packageVersion) pkgs
  
-        pkgs -> case toMaybe [ pkg | pkg <- pkgs, packageVersion pkg
+        pkgs -> case listToMaybe [ pkg | pkg <- pkgs, packageVersion pkg
                                                == packageVersion pkgid ] of
           Nothing  -> notFound $ toResponse "No such package version"
           Just pkg -> action pkg pkgs
