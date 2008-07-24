@@ -24,6 +24,7 @@ import Control.Monad.Trans
 import Data.List (maximumBy)
 import Data.Ord (comparing)
 import Control.Applicative
+import qualified Data.Map as Map
 
 import Unpack (unpackPackage)
 import qualified Distribution.Server.BlobStorage as Blob
@@ -100,6 +101,8 @@ instance ToMessage CabalFile where
 instance FromReqURI PackageIdentifier where
   fromReqURI = simpleParse
 
+basicUsers = Map.fromList [("Lemmih","kodeord")]
+
 impl =
   [ dir "packages" [ path $ handlePackageById
                    , dir "download"
@@ -107,9 +110,9 @@ impl =
                    , method GET $ do
                        liftIO fetchPackagesPage
                    ]
---  , dir "test"     [ support [("text/plain", ok $ toResponse "plain" )
---                             ,("text/html", ok $ toResponse "html" )] ]
-  , dir "upload" [ withDataFn (lookInput "upload") $ \input ->
+  , dir "upload" [ methodSP POST $
+                   basicAuth "hackage" basicUsers
+                   [ withDataFn (lookInput "upload") $ \input ->
                        [ anyRequest $
                          do ret <- liftIO $ unpackPackage (fromMaybe "noname" $ inputFilename input) (inputValue input)
                             case ret of
@@ -119,6 +122,7 @@ impl =
                                      blobId <- liftIO $ Blob.add store (inputValue input)
                                      ok $ toResponse "Package valid"
                        ]
+                   ]
                  , fileServe [] "upload.html"
                  ]
   , dir "00-index.tar.gz" [ method GET $ do tarball <- liftIO $ fetchIndexTarball
