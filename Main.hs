@@ -66,6 +66,14 @@ handlePackageById pkgid =
                            Nothing -> toResponse "No such package"
                            Just pkg -> toResponse (Pages.packagePage pkg pkgs)
                              where pkgs = PackageIndex.lookupPackageName index (pkgName pkgid)
+  , dir "cabal"
+    [ method GET $ do
+         index <- packageList <$> query GetPackagesState
+         ok $ case PackageIndex.lookupPackageId index pkgid of
+           Nothing -> toResponse "No such package" --FIXME: 404
+           Just pkg -> toResponse (CabalFile (pkgData pkg))
+--  , method PUT $ do ...
+    ]
   ]
 
 downloadPackageById :: PackageIdentifier -> [ServerPart Response]
@@ -82,6 +90,12 @@ newtype Tarball = Tarball BS.Lazy.ByteString
 instance ToMessage Tarball where
     toContentType _ = BS.pack "application/gzip"
     toMessage (Tarball bs) = bs
+
+newtype CabalFile = CabalFile BS.Lazy.ByteString
+
+instance ToMessage CabalFile where
+    toContentType _ = BS.pack "text/plain"
+    toMessage (CabalFile bs) = bs
 
 instance FromReqURI PackageIdentifier where
   fromReqURI = simpleParse
