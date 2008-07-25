@@ -17,6 +17,8 @@ module Distribution.Server.IndexUtils (
 
 import qualified Distribution.Server.Tar as Tar
          ( Entry(..), Entries(..), read, write, simpleFileEntry )
+import Distribution.Server.Types
+         ( PkgInfo(..) )
 
 import Distribution.Package
          ( PackageIdentifier(..), Package(..), packageName, packageVersion )
@@ -39,13 +41,26 @@ import System.FilePath
          ( (</>), (<.>), takeExtension, splitDirectories, normalise )
 import Prelude hiding (read)
 
+read :: ByteString -> Either String (PackageIndex PkgInfo)
+read = readGeneric mkPkgInfo
+  where
+    mkPkgInfo pkgid pkg string _entry = PkgInfo {
+      pkgInfoId     = pkgid,
+      pkgDesc       = pkg,
+      pkgData       = string
+    }
+
+write :: PackageIndex PkgInfo -> ByteString
+write = writeGeneric pkgData (const id)
+
 -- | Parse an uncompressed tar repository index file from a 'ByteString'.
 --
-read :: Package pkg
-     => (PackageIdentifier -> GenericPackageDescription -> ByteString -> pkg)
-     -> ByteString
-     -> Either String (PackageIndex pkg)
-read mkPackage indexFileContent = collect [] entries
+readGeneric :: Package pkg
+            => (PackageIdentifier -> GenericPackageDescription
+                                  -> ByteString -> Tar.Entry -> pkg)
+            -> ByteString
+            -> Either String (PackageIndex pkg)
+readGeneric mkPackage indexFileContent = collect [] entries
   where
     entries = Tar.read indexFileContent
     collect es' Tar.Done        = Right (PackageIndex.fromList es')
@@ -54,7 +69,7 @@ read mkPackage indexFileContent = collect [] entries
                        Nothing -> collect     es'  es
     collect _   (Tar.Fail err)  = Left err
 
-    entry Tar.Entry { Tar.fileName = fileName
+    entry e@Tar.Entry { Tar.fileName = fileName
                     , Tar.fileContent = content }
       | takeExtension fileName == ".cabal"
       , [pkgname,versionStr,_] <- splitDirectories (normalise fileName)
@@ -65,16 +80,20 @@ read mkPackage indexFileContent = collect [] entries
               ParseOk _ desc -> desc
               _              -> error $ "Couldn't read cabal file "
                                     ++ show fileName
-         in Just (mkPackage pkgid pkg content)
+         in Just (mkPackage pkgid pkg content e)
     entry _ = Nothing
 
-write :: Package pkg
-      => (pkg -> ByteString)
-      -> PackageIndex pkg
-      -> ByteString
-write externalPackageRep =
+writeGeneric :: Package pkg
+             => (pkg -> ByteString)
+             -> (pkg -> Tar.Entry -> Tar.Entry)
+             -> PackageIndex pkg
+             -> ByteString
+writeGeneric externalPackageRep updateEntry =
   Tar.write . map entry . PackageIndex.allPackages
   where
-    entry pkg = Tar.simpleFileEntry fileName (externalPackageRep pkg)
-      where fileName = packageName pkg </> display (packageVersion pkg)
-                   </> packageName pkg <.> "cabal"
+    entry pkg = updateEntry pkg
+              . Tar.simpleFileEntry fileName
+              $ externalPackageRep pkg
+      where
+        fileName = packageName pkg </> display (packageVersion pkg)
+                                   </> packageName pkg <.> "cabal"

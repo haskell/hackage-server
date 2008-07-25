@@ -44,7 +44,7 @@ main = do
           args <- getArgs -- FIXME: use GetOpt
           forM_ args $ \pkgFile ->
               do pkgIndex <- either fail return
-                           . PackageIndex.read PkgInfo
+                           . PackageIndex.read
                          =<< BS.Lazy.readFile pkgFile
                  update $ BulkImport (PackageIndex.allPackages pkgIndex)
                  Cache.put cache . stateToCache =<< query GetPackagesState
@@ -56,7 +56,7 @@ stateToCache :: PackagesState -> Cache.State
 stateToCache state =
   Cache.State {
     Cache.packagesPage = toResponse (Pages.packageIndex index),
-    Cache.indexTarball = GZip.compress (PackageIndex.write pkgData index)
+    Cache.indexTarball = GZip.compress (PackageIndex.write index)
   }
   where index = packageList state
 
