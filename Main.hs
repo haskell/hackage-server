@@ -68,7 +68,7 @@ handlePackageById pkgid =
   
   where
     withPackage pkgid action = do
-      index <- packageList <$> query GetPackagesState
+      index <- return . packageList =<< query GetPackagesState
       case PackageIndex.lookupPackageName index (packageName pkgid) of
         []   -> notFound $ toResponse "No such package"
         pkgs  | pkgVersion pkgid == Version [] []
@@ -82,7 +82,7 @@ handlePackageById pkgid =
 
 downloadPackageById :: PackageIdentifier -> [ServerPart Response]
 downloadPackageById pkgid =
-    [ anyRequest $ do index <- packageList <$> query GetPackagesState
+    [ anyRequest $ do index <- return . packageList =<< query GetPackagesState
                       blobId <- undefined
                       store <- liftIO $ Blob.open "packages"
                       file <- liftIO $ Blob.fetch store blobId
