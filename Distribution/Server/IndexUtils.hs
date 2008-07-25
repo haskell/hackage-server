@@ -33,6 +33,10 @@ import Distribution.Simple.Utils
          ( fromUTF8 )
 import Distribution.Text
          ( display )
+import Data.Time.Clock
+         ( UTCTime )
+import Data.Time.Clock.POSIX
+         ( posixSecondsToUTCTime, utcTimeToPOSIXSeconds )
 
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.Char8 as BS.Char8
@@ -44,14 +48,23 @@ import Prelude hiding (read)
 read :: ByteString -> Either String (PackageIndex PkgInfo)
 read = readGeneric mkPkgInfo
   where
-    mkPkgInfo pkgid pkg string _entry = PkgInfo {
+    mkPkgInfo pkgid pkg string entry = PkgInfo {
       pkgInfoId     = pkgid,
       pkgDesc       = pkg,
+      pkgUploadTime = unixTimeToUTC (Tar.modTime entry),
       pkgData       = string
     }
+    unixTimeToUTC :: Int -> UTCTime
+    unixTimeToUTC = posixSecondsToUTCTime . realToFrac
 
 write :: PackageIndex PkgInfo -> ByteString
-write = writeGeneric pkgData (const id)
+write = writeGeneric pkgData setModTime
+  where
+    setModTime pkgInfo entry = entry {
+      Tar.modTime = utcToUnixTime (pkgUploadTime pkgInfo)
+    }
+    utcToUnixTime :: UTCTime -> Int
+    utcToUnixTime = truncate . utcTimeToPOSIXSeconds
 
 -- | Parse an uncompressed tar repository index file from a 'ByteString'.
 --

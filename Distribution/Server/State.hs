@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell,
+{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, TypeFamilies, TemplateHaskell,
              FlexibleInstances, FlexibleContexts, MultiParamTypeClasses  #-}
 module Distribution.Server.State where
 
@@ -16,6 +16,8 @@ import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import Data.Monoid
 import qualified Data.ByteString.Lazy.Char8 as BS (unpack)
+import Data.Time.Clock (UTCTime(..))
+import Data.Time.Calendar (Day(..))
 
 import Distribution.Simple.Utils (fromUTF8)
 
@@ -44,10 +46,14 @@ instance Version PkgInfo where
   mode = Versioned 0 Nothing
 
 instance Serialize PkgInfo where
-  putCopy pkgInfo = contain $ do safePut (pkgInfoId pkgInfo)
-                                 Binary.put (pkgData pkgInfo)
+  putCopy pkgInfo = contain $ do
+    safePut (pkgInfoId pkgInfo)
+    safePut (pkgUploadTime pkgInfo)
+    Binary.put (pkgData pkgInfo)
+
   getCopy = contain $ do
     infoId <- safeGet
+    mtime  <- safeGet
     bstring <- Binary.get
     return PkgInfo {
       pkgInfoId = infoId,
@@ -55,9 +61,28 @@ instance Serialize PkgInfo where
                     -- XXX: Better error message?
                     ParseFailed e -> error $ "Internal error: " ++ show e
                     ParseOk _ x   -> x,
+      pkgUploadTime = mtime,
       pkgData   = bstring
     }
     where parse = parsePackageDescription . fromUTF8 . BS.unpack
+
+deriving instance Typeable UTCTime
+
+instance Version UTCTime where
+  mode = Versioned 0 Nothing
+
+instance Serialize UTCTime where
+  putCopy = contain . Binary.put
+  getCopy = contain Binary.get
+
+instance Binary.Binary UTCTime where
+  put time = do
+    Binary.put (toModifiedJulianDay $ utctDay time)
+    Binary.put (toRational $ utctDayTime time)
+  get = do
+    day  <- Binary.get
+    secs <- Binary.get
+    return (UTCTime (ModifiedJulianDay day) (fromRational secs))
 
 --insert
 

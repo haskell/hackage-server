@@ -20,6 +20,7 @@ import Distribution.PackageDescription
          ( GenericPackageDescription(..) )
 
 import Data.ByteString.Lazy (ByteString)
+import Data.Time.Clock (UTCTime)
 import Data.Typeable (Typeable)
 
 deriving instance Typeable GenericPackageDescription
@@ -30,6 +31,7 @@ deriving instance Typeable PackageIdentifier
 data PkgInfo = PkgInfo {
     pkgInfoId :: PackageIdentifier,
     pkgDesc   :: GenericPackageDescription,
+    pkgUploadTime :: UTCTime,
     pkgData   :: ByteString
   }
   deriving Typeable
