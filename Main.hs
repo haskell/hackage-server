@@ -6,7 +6,7 @@ import HAppS.Server
 import HAppS.State
 
 import Distribution.Server.State
-import Distribution.Server.Caches
+import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.PackageDescription as PD
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import qualified Distribution.Server.IndexUtils as PackageIndex (read)
@@ -14,6 +14,7 @@ import Distribution.Server.Types (PkgInfo(..))
 
 import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)
 import qualified Distribution.Server.Pages.Package as Pages
+import qualified Distribution.Server.IndexUtils as PackageIndex (write)
 
 import System.Environment
 import System.IO (hFlush, stdout)
@@ -31,6 +32,7 @@ import qualified Distribution.Server.BlobStorage as Blob
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
+import qualified Codec.Compression.GZip as GZip
 
 hackageEntryPoint :: Proxy PackagesState
 hackageEntryPoint = Proxy
@@ -40,17 +42,27 @@ main = do
   putStr "hackage-server initialising..."
   hFlush stdout
   bracket (startSystemState hackageEntryPoint) shutdownSystem $ \_ctl -> do
-          cacheThread
+          state <- query GetPackagesState
+          cache <- Cache.new (stateToCache state)
           args <- getArgs -- FIXME: use GetOpt
           forM_ args $ \pkgFile ->
               do pkgIndex <- either fail return
                            . PackageIndex.read PkgInfo
                          =<< BS.Lazy.readFile pkgFile
                  update $ BulkImport (PackageIndex.allPackages pkgIndex)
+                 state <- query GetPackagesState
+                 Cache.put cache (stateToCache state)
           putStr " ready.\n"
           hFlush stdout
-          simpleHTTP nullConf { port = 5000 } impl
+          simpleHTTP nullConf { port = 5000 } (impl cache)
 
+stateToCache :: PackagesState -> Cache.State
+stateToCache state =
+  Cache.State {
+    Cache.packagesPage = toResponse (Pages.packageIndex index),
+    Cache.indexTarball = GZip.compress (PackageIndex.write pkgData index)
+  }
+  where index = packageList state
 
 handlePackageById :: PackageIdentifier -> [ServerPart Response]
 handlePackageById pkgid =
@@ -106,12 +118,13 @@ instance FromReqURI PackageIdentifier where
 
 basicUsers = Map.fromList [("Lemmih","kodeord")]
 
-impl =
+impl cache =
   [ dir "packages" [ path $ handlePackageById
                    , dir "download"
                      [ path $ downloadPackageById ]
                    , method GET $ do
-                       liftIO fetchPackagesPage
+                       cacheState <- Cache.get cache
+                       ok $ Cache.packagesPage cacheState
                    ]
   , dir "upload" [ methodSP POST $
                    basicAuth "hackage" basicUsers
@@ -128,8 +141,8 @@ impl =
                    ]
                  , fileServe [] "upload.html"
                  ]
-  , dir "00-index.tar.gz" [ method GET $ do tarball <- liftIO $ fetchIndexTarball
-                                            ok $ toResponse $ Tarball tarball ]
+  , dir "00-index.tar.gz" [ method GET $ do cacheState <- Cache.get cache
+                                            ok $ toResponse $ Tarball (Cache.indexTarball cacheState) ]
   , fileServe ["hackage.html"] "static"
   ]
 

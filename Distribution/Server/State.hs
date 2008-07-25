@@ -6,7 +6,6 @@ import Distribution.Package (PackageIdentifier)
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.PackageDescription (parsePackageDescription, ParseResult(..))
 import Distribution.Server.Types (PkgInfo(..))
-import qualified Distribution.Server.IndexUtils as PackageIndex (write)
 
 import HAppS.State
 import HAppS.Data.Serialize
@@ -18,7 +17,6 @@ import qualified Control.Monad.State as State
 import Data.Monoid
 import qualified Data.ByteString.Lazy.Char8 as BS (unpack)
 import Data.ByteString.Lazy.Char8 (ByteString)
-import qualified Codec.Compression.GZip as GZip
 
 import Distribution.Simple.Utils (fromUTF8)
 
@@ -34,11 +32,6 @@ instance Serialize PackagesState where
   putCopy (PackagesState idx) = contain $ safePut $ PackageIndex.allPackages idx
   getCopy = contain $ do packages <- safeGet
                          return $ PackagesState { packageList = PackageIndex.fromList packages }
-
-
-generatePackageIndex :: PackageIndex.PackageIndex PkgInfo -> ByteString
-generatePackageIndex = GZip.compress . PackageIndex.write pkgData
-
 
 
 instance Version PackageIdentifier where
