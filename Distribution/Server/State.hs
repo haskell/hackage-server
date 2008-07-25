@@ -16,7 +16,6 @@ import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import Data.Monoid
 import qualified Data.ByteString.Lazy.Char8 as BS (unpack)
-import Data.ByteString.Lazy.Char8 (ByteString)
 
 import Distribution.Simple.Utils (fromUTF8)
 

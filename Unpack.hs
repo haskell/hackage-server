@@ -2,7 +2,7 @@
 -- Unpack a tarball containing a Cabal package
 module Unpack (unpackPackage) where
 
-import qualified Distribution.Server.Tar as Tar
+--import qualified Distribution.Server.Tar as Tar
 
 import Control.Monad		( unless, when )
 import Control.Monad.Error	( ErrorT(..), throwError )
@@ -12,7 +12,7 @@ import Control.Monad.Trans      ( MonadIO(liftIO) )
 import Data.ByteString.Lazy as BS
 				( ByteString, writeFile )
 import Data.List		( nub, (\\), partition )
-import Distribution.Package	( PackageIdentifier(..), packageName )
+import Distribution.Package	( PackageIdentifier(..) )
 import Distribution.PackageDescription
 				( GenericPackageDescription(..),
 				  PackageDescription(..), exposedModules )

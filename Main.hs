@@ -1,13 +1,12 @@
 module Main (main) where
 
 import Distribution.Package (PackageIdentifier(..), packageName, packageVersion)
-import Distribution.Text    (display, simpleParse)
+import Distribution.Text    (simpleParse)
 import HAppS.Server
 import HAppS.State
 
 import Distribution.Server.State
 import qualified Distribution.Server.Cache as Cache
-import qualified Distribution.PackageDescription as PD
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import qualified Distribution.Server.IndexUtils as PackageIndex (read)
 import Distribution.Server.Types (PkgInfo(..))
@@ -24,7 +23,6 @@ import Control.Monad
 import Control.Monad.Trans
 import Data.List (maximumBy)
 import Data.Ord (comparing)
-import Control.Applicative
 import qualified Data.Map as Map
 
 import Unpack (unpackPackage)
@@ -42,16 +40,14 @@ main = do
   putStr "hackage-server initialising..."
   hFlush stdout
   bracket (startSystemState hackageEntryPoint) shutdownSystem $ \_ctl -> do
-          state <- query GetPackagesState
-          cache <- Cache.new (stateToCache state)
+          cache <- Cache.new . stateToCache =<< query GetPackagesState
           args <- getArgs -- FIXME: use GetOpt
           forM_ args $ \pkgFile ->
               do pkgIndex <- either fail return
                            . PackageIndex.read PkgInfo
                          =<< BS.Lazy.readFile pkgFile
                  update $ BulkImport (PackageIndex.allPackages pkgIndex)
-                 state <- query GetPackagesState
-                 Cache.put cache (stateToCache state)
+                 Cache.put cache . stateToCache =<< query GetPackagesState
           putStr " ready.\n"
           hFlush stdout
           simpleHTTP nullConf { port = 5000 } (impl cache)
@@ -67,19 +63,19 @@ stateToCache state =
 handlePackageById :: PackageIdentifier -> [ServerPart Response]
 handlePackageById pkgid =
   [ method GET $
-      withPackage pkgid $ \pkg pkgs ->
+      withPackage $ \pkg pkgs ->
         ok $ toResponse (Pages.packagePage pkg pkgs)
 
   , dir "cabal"
     [ method GET $
-      withPackage pkgid $ \pkg pkgs ->
+      withPackage $ \pkg _pkgs ->
         ok $ toResponse (CabalFile (pkgData pkg))
 --  , method PUT $ do ...
     ]
   ]
   
   where
-    withPackage pkgid action = do
+    withPackage action = do
       index <- return . packageList =<< query GetPackagesState
       case PackageIndex.lookupPackageName index (packageName pkgid) of
         []   -> notFound $ toResponse "No such package"
@@ -91,7 +87,7 @@ handlePackageById pkgid =
                                                == packageVersion pkgid ] of
           Nothing  -> notFound $ toResponse "No such package version"
           Just pkg -> action pkg pkgs
-
+{-
 downloadPackageById :: PackageIdentifier -> [ServerPart Response]
 downloadPackageById pkgid =
     [ anyRequest $ do index <- return . packageList =<< query GetPackagesState
@@ -100,7 +96,7 @@ downloadPackageById pkgid =
                       file <- liftIO $ Blob.fetch store blobId
                       ok $ toResponse $ Tarball file
     ]
-
+-}
 newtype Tarball = Tarball BS.Lazy.ByteString
 
 instance ToMessage Tarball where
@@ -116,12 +112,14 @@ instance ToMessage CabalFile where
 instance FromReqURI PackageIdentifier where
   fromReqURI = simpleParse
 
+basicUsers :: Map.Map String String
 basicUsers = Map.fromList [("Lemmih","kodeord")]
 
+impl :: Cache.Cache -> [ServerPartT IO Response]
 impl cache =
   [ dir "packages" [ path $ handlePackageById
-                   , dir "download"
-                     [ path $ downloadPackageById ]
+--                   , dir "download"
+--                     [ path $ downloadPackageById ]
                    , method GET $ do
                        cacheState <- Cache.get cache
                        ok $ Cache.packagesPage cacheState
@@ -133,9 +131,9 @@ impl cache =
                          do ret <- liftIO $ unpackPackage (fromMaybe "noname" $ inputFilename input) (inputValue input)
                             case ret of
                               Left err -> ok $ toResponse $ err
-                              Right (pkgDesc, warns) ->
+                              Right (_pkgDesc, _warns) ->
                                   do store <- liftIO $ Blob.open "packages"
-                                     blobId <- liftIO $ Blob.add store (inputValue input)
+                                     _blobId <- liftIO $ Blob.add store (inputValue input)
                                      ok $ toResponse "Package valid"
                        ]
                    ]
