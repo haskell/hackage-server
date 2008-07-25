@@ -9,7 +9,7 @@ import Distribution.Server.Pages.Package.HaddockParse	( parseParas )
 import Distribution.Server.Pages.Package.HaddockLex	( tokenise )
 import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Pages.Template		( hackagePage )
-import Distribution.Server.Types (PkgInfo(pkgDesc))
+import Distribution.Server.Types (PkgInfo(..))
 
 
 import Distribution.PackageDescription.Configuration
@@ -29,13 +29,17 @@ import Data.Map			( Map )
 import qualified Data.Map as Map
 import Data.Ord			( comparing )
 import System.FilePath          ( (</>), (<.>) )
+import System.Locale            ( defaultTimeLocale )
+import Data.Time.Format         ( formatTime )
 
 packagePage :: PkgInfo -> [PkgInfo] -> Html
 packagePage pkg allVersions =
-  let pkgData = (emptyPackageData (pkgDesc pkg)) {
-        pdAllVersions = sort (map packageVersion allVersions)
+  let packageData = (emptyPackageData (pkgDesc pkg)) {
+        pdAllVersions = sort (map packageVersion allVersions),
+        pdTags = [("upload date", showTime (pkgUploadTime pkg))]
       }
-   in hackagePage (display $ packageId pkg) (pkgBody pkgData)
+      showTime = formatTime defaultTimeLocale "%c"
+   in hackagePage (display $ packageId pkg) (pkgBody packageData)
 
 -- | Data about a package used in the package page.
 data PackageData = PackageData
