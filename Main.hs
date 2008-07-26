@@ -3,7 +3,8 @@ module Main (main) where
 import Distribution.Package (PackageIdentifier(..), packageName, packageVersion)
 import Distribution.Text    (simpleParse, display)
 import Distribution.Simple.Utils    (die)
-import HAppS.Server
+import HAppS.Server hiding (port)
+import qualified HAppS.Server
 import HAppS.State
 
 import Distribution.Server.State
@@ -48,6 +49,12 @@ main = do
     (Nothing, Nothing) -> return Nothing
     (Just indexFile, Just logFile) -> return (Just (indexFile, logFile))
     _ -> die "A package index and log file must be supplied together."
+  port <- case optPort opts of
+    Nothing    -> return 5000
+    Just str   -> case reads str of
+      [(n,"")]  | n >= 1 && n <= 65535
+               -> return n
+      _        -> die $ "bad port number " ++ show str
 
   putStr "hackage-server: initialising..." >> hFlush stdout
   bracket (startSystemState hackageEntryPoint) shutdownSystem $ \_ctl -> do
@@ -62,8 +69,8 @@ main = do
        update $ BulkImport (PackageIndex.allPackages pkgIndex)
        Cache.put cache . stateToCache =<< query GetPackagesState
 
-    putStr " ready.\n" >> hFlush stdout
-    simpleHTTP nullConf { port = 5000 } (impl cache)
+    putStrLn (" ready. Serving on port " ++ show port) >> hFlush stdout
+    simpleHTTP nullConf { HAppS.Server.port = port } (impl cache)
 
 stateToCache :: PackagesState -> Cache.State
 stateToCache state =
@@ -160,6 +167,7 @@ impl cache =
 -- GetOpt
 
 data Options = Options {
+    optPort        :: Maybe String,
     optImportIndex :: Maybe FilePath,
     optImportLog   :: Maybe FilePath,
     optVersion     :: Bool,
@@ -168,6 +176,7 @@ data Options = Options {
 
 defaultOptions :: Options
 defaultOptions = Options {
+    optPort        = Nothing,
     optImportIndex = Nothing,
     optImportLog   = Nothing,
     optVersion     = False,
@@ -207,6 +216,9 @@ optionDescriptions =
   , Option ['V'] ["version"]
       (NoArg (\opts -> opts { optVersion = True }))
       "Print version information"
+  , Option [] ["port"]
+      (ReqArg (\port opts -> opts { optPort = Just port }) "PORT")
+      "Port number to serve on (default 5000)"
   , Option [] ["import-index"]
       (ReqArg (\file opts -> opts { optImportIndex = Just file }) "TARBALL")
       "Import an existing hackage index file (00-index.tar.gz)"
