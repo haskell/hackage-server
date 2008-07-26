@@ -45,7 +45,7 @@ import System.FilePath
          ( (</>), (<.>), takeExtension, splitDirectories, normalise )
 import Prelude hiding (read)
 
-read :: ByteString -> Either String (PackageIndex PkgInfo)
+read :: ByteString -> Either String [PkgInfo]
 read = readGeneric mkPkgInfo
   where
     mkPkgInfo pkgid pkg string entry = PkgInfo {
@@ -72,11 +72,11 @@ readGeneric :: Package pkg
             => (PackageIdentifier -> GenericPackageDescription
                                   -> ByteString -> Tar.Entry -> pkg)
             -> ByteString
-            -> Either String (PackageIndex pkg)
+            -> Either String [pkg]
 readGeneric mkPackage indexFileContent = collect [] entries
   where
     entries = Tar.read indexFileContent
-    collect es' Tar.Done        = Right (PackageIndex.fromList es')
+    collect es' Tar.Done        = Right es'
     collect es' (Tar.Next e es) = case entry e of
                        Just e' -> collect (e':es') es
                        Nothing -> collect     es'  es

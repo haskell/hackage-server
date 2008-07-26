@@ -10,12 +10,12 @@ import HAppS.State
 import Distribution.Server.State
 import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.Simple.PackageIndex as PackageIndex
-import qualified Distribution.Server.IndexUtils as PackageIndex (read)
 import Distribution.Server.Types (PkgInfo(..))
 
 import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)
 import qualified Distribution.Server.Pages.Package as Pages
 import qualified Distribution.Server.IndexUtils as PackageIndex (write)
+import qualified Distribution.Server.BulkImport as BulkImport (read)
 
 import System.Environment (getArgs)
 import System.IO (hFlush, stdout)
@@ -62,11 +62,11 @@ main = do
 
     case imports of
      Nothing -> return ()
-     Just (indexFile, _logFile) -> do
-       pkgIndex <- either fail return
-                 . PackageIndex.read
-               =<< BS.Lazy.readFile indexFile
-       update $ BulkImport (PackageIndex.allPackages pkgIndex)
+     Just (indexFileName, logFileName) -> do
+       indexFile <- BS.Lazy.readFile indexFileName
+       logFile   <- BS.Lazy.readFile logFileName
+       pkgsInfo  <- either fail return (BulkImport.read indexFile logFile)
+       update $ BulkImport pkgsInfo
        Cache.put cache . stateToCache =<< query GetPackagesState
 
     putStrLn (" ready. Serving on port " ++ show port) >> hFlush stdout
