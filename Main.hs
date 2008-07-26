@@ -1,7 +1,7 @@
 module Main (main) where
 
 import Distribution.Package (PackageIdentifier(..), packageName, packageVersion)
-import Distribution.Text    (simpleParse)
+import Distribution.Text    (simpleParse, display)
 import HAppS.Server
 import HAppS.State
 
@@ -15,15 +15,18 @@ import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)
 import qualified Distribution.Server.Pages.Package as Pages
 import qualified Distribution.Server.IndexUtils as PackageIndex (write)
 
-import System.Environment
+import System.Environment (getArgs)
 import System.IO (hFlush, stdout)
+import System.Exit (exitWith, ExitCode(..))
 import Control.Exception
 import Data.Maybe; import Data.Version
 import Control.Monad
 import Control.Monad.Trans
-import Data.List (maximumBy)
+import Data.List (maximumBy, intersperse)
 import Data.Ord (comparing)
 import qualified Data.Map as Map
+import System.Console.GetOpt
+         ( OptDescr(..), ArgDescr(..), ArgOrder(..), getOpt, usageInfo )
 
 import Unpack (unpackPackage)
 import qualified Distribution.Server.BlobStorage as Blob
@@ -31,6 +34,8 @@ import qualified Distribution.Server.BlobStorage as Blob
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
 import qualified Codec.Compression.GZip as GZip
+
+import qualified Paths_hackage_server as Distribution.Server (version)
 
 hackageEntryPoint :: Proxy PackagesState
 hackageEntryPoint = Proxy
@@ -41,13 +46,16 @@ main = do
   hFlush stdout
   bracket (startSystemState hackageEntryPoint) shutdownSystem $ \_ctl -> do
           cache <- Cache.new . stateToCache =<< query GetPackagesState
-          args <- getArgs -- FIXME: use GetOpt
-          forM_ args $ \pkgFile ->
-              do pkgIndex <- either fail return
+          opts <- getOpts
+          case (optImportIndex opts, optImportLog opts) of
+            (Nothing, Nothing) -> return ()
+            (Just indexFile, Just logFile) -> do
+                 pkgIndex <- either fail return
                            . PackageIndex.read
-                         =<< BS.Lazy.readFile pkgFile
+                         =<< BS.Lazy.readFile indexFile
                  update $ BulkImport (PackageIndex.allPackages pkgIndex)
                  Cache.put cache . stateToCache =<< query GetPackagesState
+            _ -> fail "A package index and log file must be supplied together."
           putStr " ready.\n"
           hFlush stdout
           simpleHTTP nullConf { port = 5000 } (impl cache)
@@ -144,3 +152,60 @@ impl cache =
   , fileServe ["hackage.html"] "static"
   ]
 
+-- GetOpt
+
+data Options = Options {
+    optImportIndex :: Maybe FilePath,
+    optImportLog   :: Maybe FilePath,
+    optVersion     :: Bool,
+    optHelp        :: Bool
+  }
+
+defaultOptions :: Options
+defaultOptions = Options {
+    optImportIndex = Nothing,
+    optImportLog   = Nothing,
+    optVersion     = False,
+    optHelp        = False
+  }
+
+getOpts :: IO Options
+getOpts = do
+  args <- getArgs
+  case accumOpts $ getOpt RequireOrder optionDescriptions args of
+    (opts, _,    _)
+      | optHelp opts    -> printUsage
+    (opts, [],  [])
+      | optVersion opts -> printVersion
+      | otherwise       -> return opts
+    (_,     _, errs)    -> printErrors errs
+  where
+    printErrors errs = do
+      putStr (concat (intersperse "\n" errs))
+      exitWith (ExitFailure 1)
+    printUsage = do
+      putStrLn (usageInfo usageHeader optionDescriptions)
+      exitWith ExitSuccess
+    usageHeader  = "hackage web server\n\nusage: hackage-server [OPTION ...]"
+    printVersion = do
+      putStrLn $ "hackage-server version "
+              ++ display Distribution.Server.version
+      exitWith ExitSuccess
+    accumOpts (opts, args, errs) =
+      (foldr (flip (.)) id opts defaultOptions, args, errs)
+
+optionDescriptions :: [OptDescr (Options -> Options)]
+optionDescriptions =
+  [ Option ['h'] ["help"]
+      (NoArg (\opts -> opts { optHelp = True }))
+      "Show this help text"
+  , Option ['V'] ["version"]
+      (NoArg (\opts -> opts { optVersion = True }))
+      "Print version information"
+  , Option [] ["import-index"]
+      (ReqArg (\file opts -> opts { optImportIndex = Just file }) "TARBALL")
+      "Import an existing hackage index file (00-index.tar.gz)"
+  , Option [] ["import-log"]
+      (ReqArg (\file opts -> opts { optImportLog = Just file }) "LOG")
+      "Import an existing hackage upload log file"
+  ]
