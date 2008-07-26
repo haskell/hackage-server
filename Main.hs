@@ -2,6 +2,7 @@ module Main (main) where
 
 import Distribution.Package (PackageIdentifier(..), packageName, packageVersion)
 import Distribution.Text    (simpleParse, display)
+import Distribution.Simple.Utils    (die)
 import HAppS.Server
 import HAppS.State
 
@@ -42,23 +43,27 @@ hackageEntryPoint = Proxy
 
 main :: IO ()
 main = do
-  putStr "hackage-server initialising..."
-  hFlush stdout
+  opts <- getOpts
+  imports <- case (optImportIndex opts, optImportLog opts) of
+    (Nothing, Nothing) -> return Nothing
+    (Just indexFile, Just logFile) -> return (Just (indexFile, logFile))
+    _ -> die "A package index and log file must be supplied together."
+
+  putStr "hackage-server: initialising..." >> hFlush stdout
   bracket (startSystemState hackageEntryPoint) shutdownSystem $ \_ctl -> do
-          cache <- Cache.new . stateToCache =<< query GetPackagesState
-          opts <- getOpts
-          case (optImportIndex opts, optImportLog opts) of
-            (Nothing, Nothing) -> return ()
-            (Just indexFile, Just logFile) -> do
-                 pkgIndex <- either fail return
-                           . PackageIndex.read
-                         =<< BS.Lazy.readFile indexFile
-                 update $ BulkImport (PackageIndex.allPackages pkgIndex)
-                 Cache.put cache . stateToCache =<< query GetPackagesState
-            _ -> fail "A package index and log file must be supplied together."
-          putStr " ready.\n"
-          hFlush stdout
-          simpleHTTP nullConf { port = 5000 } (impl cache)
+    cache <- Cache.new . stateToCache =<< query GetPackagesState
+
+    case imports of
+     Nothing -> return ()
+     Just (indexFile, _logFile) -> do
+       pkgIndex <- either fail return
+                 . PackageIndex.read
+               =<< BS.Lazy.readFile indexFile
+       update $ BulkImport (PackageIndex.allPackages pkgIndex)
+       Cache.put cache . stateToCache =<< query GetPackagesState
+
+    putStr " ready.\n" >> hFlush stdout
+    simpleHTTP nullConf { port = 5000 } (impl cache)
 
 stateToCache :: PackagesState -> Cache.State
 stateToCache state =
