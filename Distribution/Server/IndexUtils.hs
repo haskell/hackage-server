@@ -12,7 +12,10 @@
 -- Extra utils related to the package indexes.
 -----------------------------------------------------------------------------
 module Distribution.Server.IndexUtils (
-  read, write,
+  read,
+  readGeneric,
+  write,
+  writeGeneric,
   ) where
 
 import qualified Distribution.Server.Tar as Tar
@@ -25,8 +28,7 @@ import Distribution.Package
 import Distribution.Simple.PackageIndex (PackageIndex)
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.PackageDescription
-         ( GenericPackageDescription
-         , parsePackageDescription, ParseResult(..) )
+         ( parsePackageDescription, ParseResult(..) )
 import Distribution.Text
          ( simpleParse )
 import Distribution.Simple.Utils
@@ -48,12 +50,17 @@ import Prelude hiding (read)
 read :: ByteString -> Either String [PkgInfo]
 read = readGeneric mkPkgInfo
   where
-    mkPkgInfo pkgid pkg string entry = PkgInfo {
+    mkPkgInfo pkgid entry = PkgInfo {
       pkgInfoId     = pkgid,
       pkgDesc       = pkg,
       pkgUploadTime = unixTimeToUTC (Tar.modTime entry),
-      pkgData       = string
+      pkgData       = Tar.fileContent entry
     }
+      where pkgstr = fromUTF8 . BS.Char8.unpack . Tar.fileContent $ entry
+            pkg    = case parsePackageDescription pkgstr of
+              ParseOk _ desc -> desc
+              _              -> error $ "Couldn't read cabal file "
+                                     ++ show (Tar.fileName entry)
     unixTimeToUTC :: Int -> UTCTime
     unixTimeToUTC = posixSecondsToUTCTime . realToFrac
 
@@ -68,9 +75,7 @@ write = writeGeneric pkgData setModTime
 
 -- | Parse an uncompressed tar repository index file from a 'ByteString'.
 --
-readGeneric :: Package pkg
-            => (PackageIdentifier -> GenericPackageDescription
-                                  -> ByteString -> Tar.Entry -> pkg)
+readGeneric :: (PackageIdentifier -> Tar.Entry -> pkg)
             -> ByteString
             -> Either String [pkg]
 readGeneric mkPackage indexFileContent = collect [] entries
@@ -82,18 +87,12 @@ readGeneric mkPackage indexFileContent = collect [] entries
                        Nothing -> collect     es'  es
     collect _   (Tar.Fail err)  = Left err
 
-    entry e@Tar.Entry { Tar.fileName = fileName
-                    , Tar.fileContent = content }
+    entry e@Tar.Entry { Tar.fileName = fileName }
       | takeExtension fileName == ".cabal"
       , [pkgname,versionStr,_] <- splitDirectories (normalise fileName)
       , Just version <- simpleParse versionStr
       = let pkgid  = PackageIdentifier pkgname version
-            pkgstr = fromUTF8 (BS.Char8.unpack content)
-            pkg    = case parsePackageDescription pkgstr of
-              ParseOk _ desc -> desc
-              _              -> error $ "Couldn't read cabal file "
-                                    ++ show fileName
-         in Just (mkPackage pkgid pkg content e)
+         in Just (mkPackage pkgid e)
     entry _ = Nothing
 
 writeGeneric :: Package pkg

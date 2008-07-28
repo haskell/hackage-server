@@ -64,7 +64,7 @@ main = do
      Nothing -> return ()
      Just (indexFileName, logFileName) -> do
        indexFile <- BS.Lazy.readFile indexFileName
-       logFile   <- BS.Lazy.readFile logFileName
+       logFile   <-         readFile logFileName
        pkgsInfo  <- either fail return (BulkImport.read indexFile logFile)
        update $ BulkImport pkgsInfo
        Cache.put cache . stateToCache =<< query GetPackagesState
