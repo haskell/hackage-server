@@ -49,11 +49,15 @@ instance Serialize PkgInfo where
   putCopy pkgInfo = contain $ do
     safePut (pkgInfoId pkgInfo)
     safePut (pkgUploadTime pkgInfo)
+    safePut (pkgUploadUser pkgInfo)
+    safePut (pkgUploadOld pkgInfo)
     Binary.put (pkgData pkgInfo)
 
   getCopy = contain $ do
     infoId <- safeGet
     mtime  <- safeGet
+    user   <- safeGet
+    old    <- safeGet
     bstring <- Binary.get
     return PkgInfo {
       pkgInfoId = infoId,
@@ -62,6 +66,8 @@ instance Serialize PkgInfo where
                     ParseFailed e -> error $ "Internal error: " ++ show e
                     ParseOk _ x   -> x,
       pkgUploadTime = mtime,
+      pkgUploadUser = user,
+      pkgUploadOld  = old,
       pkgData   = bstring
     }
     where parse = parsePackageDescription . fromUTF8 . BS.unpack
