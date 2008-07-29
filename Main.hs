@@ -2,7 +2,6 @@ module Main (main) where
 
 import Distribution.Package (PackageIdentifier(..), packageName, packageVersion)
 import Distribution.Text    (simpleParse, display)
-import Distribution.Simple.Utils    (die)
 import HAppS.Server hiding (port)
 import qualified HAppS.Server
 import HAppS.State
@@ -39,6 +38,8 @@ import qualified Codec.Compression.GZip as GZip
 
 import qualified Paths_hackage_server as Distribution.Server (version)
 
+import Prelude hiding (log)
+
 hackageEntryPoint :: Proxy PackagesState
 hackageEntryPoint = Proxy
 
@@ -56,7 +57,7 @@ main = do
                -> return n
       _        -> die $ "bad port number " ++ show str
 
-  putStr "hackage-server: initialising..." >> hFlush stdout
+  log "hackage-server: initialising..."
   bracket (startSystemState hackageEntryPoint) shutdownSystem $ \_ctl -> do
     cache <- Cache.new . stateToCache =<< query GetPackagesState
 
@@ -69,8 +70,14 @@ main = do
        update $ BulkImport pkgsInfo
        Cache.put cache . stateToCache =<< query GetPackagesState
 
-    putStrLn (" ready. Serving on port " ++ show port) >> hFlush stdout
+    log (" ready. Serving on port " ++ show port ++ "\n")
     simpleHTTP nullConf { HAppS.Server.port = port } (impl cache)
+
+log :: String -> IO ()
+log msg = putStr msg   >> hFlush stdout
+
+die :: String -> IO a
+die msg = putStrLn msg >> exitWith (ExitFailure 1)
 
 stateToCache :: PackagesState -> Cache.State
 stateToCache state =
@@ -194,9 +201,7 @@ getOpts = do
       | otherwise       -> return opts
     (_,     _, errs)    -> printErrors errs
   where
-    printErrors errs = do
-      putStr (concat (intersperse "\n" errs))
-      exitWith (ExitFailure 1)
+    printErrors errs = die (concat (intersperse "\n" errs))
     printUsage = do
       putStrLn (usageInfo usageHeader optionDescriptions)
       exitWith ExitSuccess
