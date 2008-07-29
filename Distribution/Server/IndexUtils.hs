@@ -13,7 +13,6 @@
 -----------------------------------------------------------------------------
 module Distribution.Server.IndexUtils (
   read,
-  readGeneric,
   write,
   writeGeneric,
   ) where
@@ -27,42 +26,20 @@ import Distribution.Package
          ( PackageIdentifier(..), Package(..), packageName, packageVersion )
 import Distribution.Simple.PackageIndex (PackageIndex)
 import qualified Distribution.Simple.PackageIndex as PackageIndex
-import Distribution.PackageDescription
-         ( parsePackageDescription, ParseResult(..) )
 import Distribution.Text
          ( simpleParse )
-import Distribution.Simple.Utils
-         ( fromUTF8 )
 import Distribution.Text
          ( display )
 import Data.Time.Clock
          ( UTCTime )
 import Data.Time.Clock.POSIX
-         ( posixSecondsToUTCTime, utcTimeToPOSIXSeconds )
+         ( utcTimeToPOSIXSeconds )
 
 import qualified Data.ByteString.Lazy as BS
-import qualified Data.ByteString.Lazy.Char8 as BS.Char8
 import Data.ByteString.Lazy (ByteString)
 import System.FilePath
          ( (</>), (<.>), takeExtension, splitDirectories, normalise )
 import Prelude hiding (read)
-
-read :: ByteString -> Either String [PkgInfo]
-read = readGeneric mkPkgInfo
-  where
-    mkPkgInfo pkgid entry = PkgInfo {
-      pkgInfoId     = pkgid,
-      pkgDesc       = pkg,
-      pkgUploadTime = unixTimeToUTC (Tar.modTime entry),
-      pkgData       = Tar.fileContent entry
-    }
-      where pkgstr = fromUTF8 . BS.Char8.unpack . Tar.fileContent $ entry
-            pkg    = case parsePackageDescription pkgstr of
-              ParseOk _ desc -> desc
-              _              -> error $ "Couldn't read cabal file "
-                                     ++ show (Tar.fileName entry)
-    unixTimeToUTC :: Int -> UTCTime
-    unixTimeToUTC = posixSecondsToUTCTime . realToFrac
 
 write :: PackageIndex PkgInfo -> ByteString
 write = writeGeneric pkgData setModTime
@@ -75,10 +52,10 @@ write = writeGeneric pkgData setModTime
 
 -- | Parse an uncompressed tar repository index file from a 'ByteString'.
 --
-readGeneric :: (PackageIdentifier -> Tar.Entry -> pkg)
+read :: (PackageIdentifier -> Tar.Entry -> pkg)
             -> ByteString
             -> Either String [pkg]
-readGeneric mkPackage indexFileContent = collect [] entries
+read mkPackage indexFileContent = collect [] entries
   where
     entries = Tar.read indexFileContent
     collect es' Tar.Done        = Right es'

@@ -26,13 +26,25 @@ import Data.Typeable (Typeable)
 deriving instance Typeable GenericPackageDescription
 deriving instance Typeable PackageIdentifier
 
--- | We re-use @GenericPackageDescription@ and use the @package-url@
--- field to store the tarball URL.
+type UserName = String --FIXME: use proper username type
+
+-- | The information we keep about a particular version of a package.
 data PkgInfo = PkgInfo {
     pkgInfoId :: PackageIdentifier,
     pkgDesc   :: GenericPackageDescription,
+
+    -- | The .cabal file text.
+    pkgData   :: ByteString,
+
+    -- | When the .tar.gz file was uploaded.
     pkgUploadTime :: UTCTime,
-    pkgData   :: ByteString
+
+    -- | Who uploaded the .tar.gz file.
+    pkgUploadUser :: String,
+
+    -- | Previous upload times and users. We normally disallow re-uploading but
+    -- we may make occasional exceptions, and there are some such old packages.
+    pkgUploadOld  :: [(UTCTime, String)]
   }
   deriving Typeable
 

@@ -40,6 +40,7 @@ executable hackage-server
     -- FIXME: remove process, only needed temporarily
     array >= 0.1,
     containers >= 0.1,
+    pretty >= 1.0,
     network >= 2.1,
     mtl >= 1.1,
     binary >= 0.4,

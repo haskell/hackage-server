@@ -23,7 +23,7 @@ import Control.Exception
 import Data.Maybe; import Data.Version
 import Control.Monad
 import Control.Monad.Trans
-import Data.List (maximumBy, intersperse)
+import Data.List (maximumBy, intersperse, sort)
 import Data.Ord (comparing)
 import qualified Data.Map as Map
 import System.Console.GetOpt
@@ -48,7 +48,14 @@ main = do
   opts <- getOpts
   imports <- case (optImportIndex opts, optImportLog opts) of
     (Nothing, Nothing) -> return Nothing
-    (Just indexFile, Just logFile) -> return (Just (indexFile, logFile))
+    (Just indexFileName, Just logFileName) -> do
+      indexFile <- BS.Lazy.readFile indexFileName
+      logFile   <-         readFile logFileName
+      (pkgsInfo, badlog) <- either die return (BulkImport.read indexFile logFile)
+      unless (null badlog) $ putStr $
+           "Warning: Upload log entries for non-existant packages:\n"
+        ++ unlines (map display (sort badlog))
+      return (Just pkgsInfo)
     _ -> die "A package index and log file must be supplied together."
   port <- case optPort opts of
     Nothing    -> return 5000
@@ -63,10 +70,7 @@ main = do
 
     case imports of
      Nothing -> return ()
-     Just (indexFileName, logFileName) -> do
-       indexFile <- BS.Lazy.readFile indexFileName
-       logFile   <-         readFile logFileName
-       pkgsInfo  <- either fail return (BulkImport.read indexFile logFile)
+     Just pkgsInfo -> do
        update $ BulkImport pkgsInfo
        Cache.put cache . stateToCache =<< query GetPackagesState
 

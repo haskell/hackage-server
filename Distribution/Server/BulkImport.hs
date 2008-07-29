@@ -14,7 +14,7 @@ module Distribution.Server.BulkImport (
   read
   ) where
 
-import qualified Distribution.Server.IndexUtils as PackageIndex (readGeneric)
+import qualified Distribution.Server.IndexUtils as PackageIndex (read)
 import qualified Distribution.Server.Tar as Tar
          ( Entry(..) )
 import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
@@ -35,9 +35,8 @@ import Distribution.Simple.Utils
 import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BS
          (  unpack )
+import qualified Codec.Compression.GZip as GZip
 import Control.Monad.Error () --intance Monad (Either String)
-import Data.Time.LocalTime
-         ( zonedTimeToUTC )
 import Data.List
          ( sortBy )
 import Data.Ord
@@ -45,11 +44,13 @@ import Data.Ord
 
 import Prelude hiding (read)
 
-importPkgInfo :: PackageIdentifier -> Tar.Entry -> UploadLog.Entry
+importPkgInfo :: PackageIdentifier
+              -> Tar.Entry
+              -> UploadLog.Entry -> [UploadLog.Entry]
               -> Either String PkgInfo
 importPkgInfo pkgid
   Tar.Entry { Tar.fileName = fileName, Tar.fileContent = pkgstr }
-  (UploadLog.Entry _ ztime user others)
+  (UploadLog.Entry time user _) others
   = case parsePackageDescription (fromUTF8 (BS.unpack pkgstr)) of
       ParseFailed err -> fail $ fileName
                              ++ maybe "" (\n -> ":" ++ show n) lineno
@@ -59,33 +60,35 @@ importPkgInfo pkgid
       ParseOk _ pkg   -> return PkgInfo {
         pkgInfoId     = pkgid,
         pkgDesc       = pkg,
-        pkgUploadTime = zonedTimeToUTC ztime,
-        pkgData       = pkgstr
+        pkgData       = pkgstr,
+        pkgUploadTime = time,
+        pkgUploadUser = user,
+        pkgUploadOld  = [ (time', user')
+                        | UploadLog.Entry time' user' _ <- others]
       }
 
-read :: ByteString -> String -> Either String [PkgInfo]
+read :: ByteString -> String -> Either String ([PkgInfo], [UploadLog.Entry])
 read indexFile logFile = do
-  pkgs    <- PackageIndex.readGeneric (,) indexFile
+  pkgs    <- PackageIndex.read (,) (GZip.decompress indexFile)
   entries <-    UploadLog.read logFile
   
-  mergePkgs [] $
+  mergePkgs [] [] $
     mergeBy comparingPackageId
       (sortBy (comparing fst) pkgs)
-      (sortBy (comparing (\(UploadLog.Entry pkgid _ _ _) -> pkgid)) entries)
+      (sortBy (comparing (\(UploadLog.Entry _ _ pkgid, _) -> pkgid)) entries)
   where
-    comparingPackageId (pkgid, _) (UploadLog.Entry pkgid' _ _ _) =
+    comparingPackageId (pkgid, _) (UploadLog.Entry _ _ pkgid', _) =
       compare pkgid pkgid'
 
-    mergePkgs merged []  = Right merged
-    mergePkgs merged (next:remaining) = case next of
-      InBoth (pkgid, tarEntry) logEntry ->
-        case importPkgInfo pkgid tarEntry logEntry of
+    mergePkgs merged nonexistant []  = Right (merged, nonexistant)
+    mergePkgs merged nonexistant (next:remaining) = case next of
+      InBoth (pkgid, tarEntry) (logEntry, logEntries) ->
+        case importPkgInfo pkgid tarEntry logEntry logEntries of
           Left problem  -> Left problem
-          Right ok      -> mergePkgs (ok:merged) remaining
-      OnlyInLeft  entry ->
-        Left $ "Package with no upload log " ++ display (fst entry)
-      OnlyInRight entry -> mergePkgs merged remaining
---        Left $ "Upload log for non-existant package " ++ show entry
+          Right ok      -> mergePkgs (ok:merged) nonexistant remaining
+      OnlyInLeft (pkgid, _) ->
+        Left $ "Package with no upload log " ++ display pkgid
+      OnlyInRight (entry,_) -> mergePkgs merged (entry:nonexistant) remaining
 
 mergeBy :: (a -> b -> Ordering) -> [a] -> [b] -> [MergeResult a b]
 mergeBy cmp = merge

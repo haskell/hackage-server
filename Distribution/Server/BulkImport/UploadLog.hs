@@ -17,52 +17,68 @@ module Distribution.Server.BulkImport.UploadLog (
   ) where
 
 import Distribution.Package
-         ( PackageIdentifier )
+         ( PackageIdentifier(..), parsePackageName )
 import Distribution.Text
-         ( simpleParse )
+         ( Text(..), simpleParse )
+import qualified Distribution.Compat.ReadP as Parse
+import qualified Text.PrettyPrint          as Disp
+import Text.PrettyPrint
+         ( (<+>) )
 import Distribution.Simple.Utils
          ( comparing, equating )
 
+import Data.Time.Clock
+         ( UTCTime )
 import Data.Time.LocalTime
          ( ZonedTime(..), TimeZone(..), zonedTimeToUTC )
 import Data.Time.Format
-         ( parseTime )
+         ( readsTime, formatTime )
 import System.Locale
          ( defaultTimeLocale )
 import Data.List
          ( sortBy, groupBy )
+import qualified Data.Char as Char
+         ( isAlphaNum )
 
 import Prelude hiding (read)
 
-data Entry = Entry PackageIdentifier ZonedTime UserName [(ZonedTime, UserName)]
+data Entry = Entry UTCTime UserName PackageIdentifier
+  deriving (Eq, Ord)
 type UserName = String
 
+instance Text Entry where
+  disp (Entry time user pkgid) =
+        Disp.text (formatTime defaultTimeLocale "%c" time)
+    <+> Disp.text user <+> disp pkgid
+  parse = do
+    time <- Parse.readS_to_P (readsTime defaultTimeLocale "%c")
+    Parse.skipSpaces
+    user <- Parse.munch1 Char.isAlphaNum
+    Parse.skipSpaces
+    pkg  <- parsePackageName
+    Parse.skipSpaces
+    ver  <- parse
+    let pkgid = PackageIdentifier pkg ver
+    return (Entry (zonedTimeToUTC (fixupTimeZone time)) user pkgid)
 
-read :: String -> Either String [Entry]
+read :: String -> Either String [(Entry, [Entry])]
 read = either Left (Right . groupEntries) . check [] . map parseLine . lines
   where
     check es' []           = Right es'
-    check es' (Just  e:es) = check (e:es') es
-    check _   (Nothing:_)  = Left "FIXME"
+    check es' (Right e:es) = check (e:es') es
+    check _   (Left err:_) = Left err
+    parseLine line = maybe (Left err) Right (simpleParse line)
+      where err = "Failed to parse log line:\n" ++ show line
 
-groupEntries :: [Entry] -> [Entry]
+groupEntries :: [Entry] -> [(Entry, [Entry])]
 groupEntries =
-    map ((\(Entry p zt u _:ps) -> Entry p zt u [ (zt', u')
-                                               | Entry _ zt' u' _ <- ps ])
+    map ((\(p:ps) -> (p, ps))
        . sortBy (comparing packageTime))
   . groupBy (equating packageId)
   . sortBy (comparing packageId)
   where
-    packageId   (Entry pkgid _  _ _) = pkgid
-    packageTime (Entry _     zt _ _) = zonedTimeToUTC zt
-    
-parseLine :: String -> Maybe Entry
-parseLine line = do
-  [day, mon, dayno, time, tz, year, user, pkg, vers] <- return (words line)
-  zt <- parseTime defaultTimeLocale "%c" $
-          unwords [day, mon, dayno, time, tz, year]
-  pkgId <- simpleParse (pkg ++ "-" ++ vers)
-  return (Entry pkgId (fixupTimeZone zt) user [])
+    packageId   (Entry _  _ pkgid) = pkgid
+    packageTime (Entry t  _ _)     = t
 
 -- | The time lib doesn't know the time offsets of standard time zones so we
 -- have to do it ourselves for a couple zones we're interested in. Sigh.
