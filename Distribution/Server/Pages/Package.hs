@@ -36,7 +36,8 @@ packagePage :: PkgInfo -> [PkgInfo] -> Html
 packagePage pkg allVersions =
   let packageData = (emptyPackageData (pkgDesc pkg)) {
         pdAllVersions = sort (map packageVersion allVersions),
-        pdTags = [("upload date", showTime (pkgUploadTime pkg))]
+        pdTags = [("upload date", showTime (pkgUploadTime pkg))
+                 ,("uploaded by", pkgUploadUser pkg)]
       }
       showTime = formatTime defaultTimeLocale "%c"
    in hackagePage (display $ packageId pkg) (pkgBody packageData)
