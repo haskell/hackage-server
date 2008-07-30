@@ -78,13 +78,13 @@ rssFeedURL = "/packages/recent.rss"
 recentAdditionsURL :: URL
 recentAdditionsURL = "/packages/recent.html"
 
-recentFeed :: UTCTime -> [PkgInfo] -> RSS.RSS
-recentFeed now pkgs = RSS.RSS
+recentFeed :: UTCTime -> [PkgInfo] -> RSS
+recentFeed now pkgs = RSS
   "Recent additions"
   (hackageURI recentAdditionsURL)
   desc
   (channel now)
-  (map releaseItem pkgs)
+  (map releaseItem (take 20 pkgs))
   where
     desc = "The 20 most recent additions to HackageDB, the Haskell package database."
 
