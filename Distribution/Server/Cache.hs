@@ -18,15 +18,19 @@ import Control.Monad.Trans (MonadIO(liftIO))
 newtype Cache = Cache (AsyncVar State)
 
 data State = State {
-    packagesPage :: Response,
-    indexTarball :: ByteString
+    packagesPage :: Response,    -- Rendered HTML page
+    indexTarball :: ByteString,  -- GZipped tarball
+    recentChanges :: Response,   -- Rendered HTML page
+    packagesFeed  :: Response    -- Rendered RSS feed
   }
 
 force :: State -> ()
 force state =
   let a = ByteString.length (rsBody $ packagesPage state)
       b = ByteString.length (indexTarball state)
-   in a `seq` b `seq` () --FIXME: do in parallel
+      c = ByteString.length (rsBody $ recentChanges state)
+      d = ByteString.length (rsBody $ packagesFeed state)
+   in foldr seq () [a,b,c,d] --FIXME: do in parallel
 
 new :: State -> IO Cache
 new state = Cache `fmap` AsyncVar.new force state

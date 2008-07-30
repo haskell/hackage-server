@@ -23,7 +23,7 @@ import Control.Exception
 import Data.Maybe; import Data.Version
 import Control.Monad
 import Control.Monad.Trans
-import Data.List (maximumBy, intersperse, sort)
+import Data.List (maximumBy, intersperse, sort, sortBy)
 import Data.Ord (comparing)
 import qualified Data.Map as Map
 import System.Console.GetOpt
@@ -86,10 +86,14 @@ die msg = putStrLn msg >> exitWith (ExitFailure 1)
 stateToCache :: PackagesState -> Cache.State
 stateToCache state =
   Cache.State {
-    Cache.packagesPage = toResponse (Pages.packageIndex index),
-    Cache.indexTarball = GZip.compress (PackageIndex.write index)
+    Cache.packagesPage  = toResponse (Pages.packageIndex index),
+    Cache.indexTarball  = GZip.compress (PackageIndex.write index),
+    Cache.recentChanges = toResponse (x {-Packages.recentPage-} recentChanges),
+    Cache.packagesFeed  = toResponse (x {-Packages.recentFeed-} recentChanges)
   }
   where index = packageList state
+        x _ = ()
+        recentChanges = reverse $ sortBy (comparing pkgUploadTime) (PackageIndex.allPackages index)
 
 handlePackageById :: PackageIdentifier -> [ServerPart Response]
 handlePackageById pkgid =
