@@ -29,6 +29,8 @@ import Data.Ord (comparing)
 import qualified Data.Map as Map
 import System.Console.GetOpt
          ( OptDescr(..), ArgDescr(..), ArgOrder(..), getOpt, usageInfo )
+import Text.RSS
+import Data.Time.Clock
 
 import Unpack (unpackPackage)
 import qualified Distribution.Server.BlobStorage as Blob
@@ -67,13 +69,13 @@ main = do
 
   log "hackage-server: initialising..."
   bracket (startSystemState hackageEntryPoint) shutdownSystem $ \_ctl -> do
-    cache <- Cache.new . stateToCache =<< query GetPackagesState
+    cache <- Cache.new =<< stateToCache =<< query GetPackagesState
 
     case imports of
      Nothing -> return ()
      Just pkgsInfo -> do
        update $ BulkImport pkgsInfo
-       Cache.put cache . stateToCache =<< query GetPackagesState
+       Cache.put cache =<< stateToCache =<< query GetPackagesState
 
     log (" ready. Serving on port " ++ show port ++ "\n")
     simpleHTTP nullConf { HAppS.Server.port = port } (impl cache)
@@ -84,16 +86,15 @@ log msg = putStr msg   >> hFlush stdout
 die :: String -> IO a
 die msg = putStrLn msg >> exitWith (ExitFailure 1)
 
-stateToCache :: PackagesState -> Cache.State
-stateToCache state =
+stateToCache :: PackagesState -> IO Cache.State
+stateToCache state = getCurrentTime >>= \now -> return
   Cache.State {
     Cache.packagesPage  = toResponse (Pages.packageIndex index),
     Cache.indexTarball  = GZip.compress (PackageIndex.write index),
-    Cache.recentChanges = toResponse (x {-Packages.recentPage-} recentChanges),
-    Cache.packagesFeed  = toResponse (x {-Packages.recentFeed-} recentChanges)
+    Cache.recentChanges = toResponse (Pages.recentPage recentChanges),
+    Cache.packagesFeed  = toResponse (Pages.recentFeed now recentChanges)
   }
   where index = packageList state
-        x _ = ()
         recentChanges = reverse $ sortBy (comparing pkgUploadTime) (PackageIndex.allPackages index)
 
 handlePackageById :: PackageIdentifier -> [ServerPart Response]
@@ -145,6 +146,10 @@ instance ToMessage CabalFile where
     toContentType _ = BS.pack "text/plain"
     toMessage (CabalFile bs) = bs
 
+instance ToMessage RSS where
+    toContentType _ = BS.pack "application/rss+xml"
+    toMessage rss = BS.Lazy.pack $ showXML $ rssToXML rss
+
 instance FromReqURI PackageIdentifier where
   fromReqURI = simpleParse
 
@@ -160,6 +165,16 @@ impl cache =
                        cacheState <- Cache.get cache
                        ok $ Cache.packagesPage cacheState
                    ]
+  , dir "archive" [ dir "recent" [ dir "rss"
+                                           [ method GET $ do
+                                               cacheState <- Cache.get cache
+                                               ok $ Cache.packagesFeed cacheState
+                                           ]
+                                 , method GET $ do
+                                     cacheState <- Cache.get cache
+                                     ok $ Cache.recentChanges cacheState
+                                 ]
+                  ]
   , dir "upload" [ methodSP POST $
                    basicAuth "hackage" basicUsers
                    [ withDataFn (lookInput "upload") $ \input ->
