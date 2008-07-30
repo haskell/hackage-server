@@ -13,6 +13,7 @@ import Distribution.Server.Types (PkgInfo(..))
 
 import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)
 import qualified Distribution.Server.Pages.Package as Pages
+import qualified Distribution.Server.Pages.Recent  as Pages
 import qualified Distribution.Server.IndexUtils as PackageIndex (write)
 import qualified Distribution.Server.BulkImport as BulkImport (read)
 
