@@ -18,7 +18,8 @@ module Distribution.Server.IndexUtils (
   ) where
 
 import qualified Distribution.Server.Tar as Tar
-         ( Entry(..), Entries(..), read, write, simpleFileEntry )
+         ( Entry(..), Entries(..), ExtendedHeader(..)
+         , read, write, simpleFileEntry )
 import Distribution.Server.Types
          ( PkgInfo(..) )
 
@@ -45,7 +46,11 @@ write :: PackageIndex PkgInfo -> ByteString
 write = writeGeneric pkgData setModTime
   where
     setModTime pkgInfo entry = entry {
-      Tar.modTime = utcToUnixTime (pkgUploadTime pkgInfo)
+      Tar.modTime   = utcToUnixTime (pkgUploadTime pkgInfo),
+      Tar.headerExt = (Tar.headerExt entry) {
+        Tar.ownerName = pkgUploadUser pkgInfo,
+        Tar.groupName = "HackageDB"
+      }
     }
     utcToUnixTime :: UTCTime -> Int
     utcToUnixTime = truncate . utcTimeToPOSIXSeconds
