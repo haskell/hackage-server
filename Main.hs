@@ -70,7 +70,7 @@ main = do
       [(n,"")]  | n >= 1 && n <= 65535
                -> return n
       _        -> die $ "bad port number " ++ show str
-  hostname <- getHostName
+  hostname <- maybe getHostName return (optHost opts)
   let host = URIAuth "" hostname (if port == 80 then "" else ':' : show port)
 
   log "hackage-server: initialising..."
@@ -83,7 +83,7 @@ main = do
        update $ BulkImport pkgsInfo
        Cache.put cache =<< stateToCache host =<< query GetPackagesState
 
-    log (" ready. Serving on port " ++ show port ++ "\n")
+    log (" ready. Serving on " ++ hostname ++" port " ++ show port ++ "\n")
     simpleHTTP nullConf { HAppS.Server.port = port } (impl cache)
 
 log :: String -> IO ()
@@ -199,6 +199,7 @@ impl cache =
 
 data Options = Options {
     optPort        :: Maybe String,
+    optHost        :: Maybe String,
     optImportIndex :: Maybe FilePath,
     optImportLog   :: Maybe FilePath,
     optVersion     :: Bool,
@@ -208,6 +209,7 @@ data Options = Options {
 defaultOptions :: Options
 defaultOptions = Options {
     optPort        = Nothing,
+    optHost        = Nothing,
     optImportIndex = Nothing,
     optImportLog   = Nothing,
     optVersion     = False,
@@ -248,6 +250,9 @@ optionDescriptions =
   , Option [] ["port"]
       (ReqArg (\port opts -> opts { optPort = Just port }) "PORT")
       "Port number to serve on (default 5000)"
+  , Option [] ["host"]
+      (ReqArg (\host opts -> opts { optHost = Just host }) "NAME")
+      "Server's host name (defaults to machine name)"
   , Option [] ["import-index"]
       (ReqArg (\file opts -> opts { optImportIndex = Just file }) "TARBALL")
       "Import an existing hackage index file (00-index.tar.gz)"
