@@ -31,6 +31,10 @@ import System.Console.GetOpt
          ( OptDescr(..), ArgDescr(..), ArgOrder(..), getOpt, usageInfo )
 import Text.RSS
 import Data.Time.Clock
+import Network.BSD
+         ( getHostName )
+import Network.URI
+         ( URIAuth(URIAuth) )
 
 import Unpack (unpackPackage)
 import qualified Distribution.Server.BlobStorage as Blob
@@ -66,16 +70,18 @@ main = do
       [(n,"")]  | n >= 1 && n <= 65535
                -> return n
       _        -> die $ "bad port number " ++ show str
+  hostname <- getHostName
+  let host = URIAuth "" hostname (if port == 80 then "" else ':' : show port)
 
   log "hackage-server: initialising..."
   bracket (startSystemState hackageEntryPoint) shutdownSystem $ \_ctl -> do
-    cache <- Cache.new =<< stateToCache =<< query GetPackagesState
+    cache <- Cache.new =<< stateToCache host =<< query GetPackagesState
 
     case imports of
      Nothing -> return ()
      Just pkgsInfo -> do
        update $ BulkImport pkgsInfo
-       Cache.put cache =<< stateToCache =<< query GetPackagesState
+       Cache.put cache =<< stateToCache host =<< query GetPackagesState
 
     log (" ready. Serving on port " ++ show port ++ "\n")
     simpleHTTP nullConf { HAppS.Server.port = port } (impl cache)
@@ -86,13 +92,13 @@ log msg = putStr msg   >> hFlush stdout
 die :: String -> IO a
 die msg = putStrLn msg >> exitWith (ExitFailure 1)
 
-stateToCache :: PackagesState -> IO Cache.State
-stateToCache state = getCurrentTime >>= \now -> return
+stateToCache :: URIAuth -> PackagesState -> IO Cache.State
+stateToCache host state = getCurrentTime >>= \now -> return
   Cache.State {
     Cache.packagesPage  = toResponse (Pages.packageIndex index),
     Cache.indexTarball  = GZip.compress (PackageIndex.write index),
     Cache.recentChanges = toResponse (Pages.recentPage recentChanges),
-    Cache.packagesFeed  = toResponse (Pages.recentFeed now recentChanges)
+    Cache.packagesFeed  = toResponse (Pages.recentFeed host now recentChanges)
   }
   where index = packageList state
         recentChanges = reverse $ sortBy (comparing pkgUploadTime) (PackageIndex.allPackages index)
