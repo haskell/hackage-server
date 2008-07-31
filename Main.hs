@@ -165,16 +165,10 @@ impl cache =
                        cacheState <- Cache.get cache
                        ok $ Cache.packagesPage cacheState
                    ]
-  , dir "archive" [ dir "recent" [ dir "rss"
-                                           [ method GET $ do
-                                               cacheState <- Cache.get cache
-                                               ok $ Cache.packagesFeed cacheState
-                                           ]
-                                 , method GET $ do
-                                     cacheState <- Cache.get cache
-                                     ok $ Cache.recentChanges cacheState
-                                 ]
-                  ]
+  , dir "recent.rss"
+      [ method GET $ ok . Cache.packagesFeed =<< Cache.get cache ]
+  , dir "recent.html"
+      [ method GET $ ok . Cache.recentChanges =<< Cache.get cache ]
   , dir "upload" [ methodSP POST $
                    basicAuth "hackage" basicUsers
                    [ withDataFn (lookInput "upload") $ \input ->

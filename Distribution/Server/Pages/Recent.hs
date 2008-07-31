@@ -73,10 +73,10 @@ packageURL :: PackageIdentifier -> URL
 packageURL pkgid = "/packages/" ++ display pkgid
 
 rssFeedURL :: URL
-rssFeedURL = "/packages/recent.rss"
+rssFeedURL = "/recent.rss"
 
 recentAdditionsURL :: URL
-recentAdditionsURL = "/packages/recent.html"
+recentAdditionsURL = "/recent.html"
 
 recentFeed :: UTCTime -> [PkgInfo] -> RSS
 recentFeed now pkgs = RSS
