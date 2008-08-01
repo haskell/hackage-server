@@ -4,7 +4,7 @@ import Distribution.Package (PackageIdentifier(..), packageName, packageVersion)
 import Distribution.Text    (simpleParse, display)
 import HAppS.Server hiding (port)
 import qualified HAppS.Server
-import HAppS.State
+import HAppS.State hiding (Version)
 
 import Distribution.Server.State
 import qualified Distribution.Server.Cache as Cache
@@ -103,6 +103,24 @@ stateToCache host state = getCurrentTime >>= \now -> return
   where index = packageList state
         recentChanges = reverse $ sortBy (comparing pkgUploadTime) (PackageIndex.allPackages index)
 
+-- Support the same URL scheme as the first version of hackage.
+legacySupport :: ServerPart Response
+legacySupport = multi
+    [ path $ \name ->
+      [ path $ \version ->
+        [ let dirName = display pkgid ++ ".tar.gz"
+              pkgid = PackageIdentifier {pkgName = name, pkgVersion = version}
+          in dir dirName
+             [ method GET $ do
+                 movedPermanently ("/packages/"++display pkgid++"/tarball") (toResponse "")
+             ]
+        ]]
+    , dir "00-index.tar.gz"
+      [ method GET $
+               movedPermanently "/00-index.tar.gz" (toResponse "")
+      ]
+    ]
+
 handlePackageById :: PackageIdentifier -> [ServerPart Response]
 handlePackageById pkgid =
   [ method GET $
@@ -161,16 +179,16 @@ instance ToMessage RSS where
 instance FromReqURI PackageIdentifier where
   fromReqURI = simpleParse
 
+instance FromReqURI Version where
+  fromReqURI = simpleParse
+
 basicUsers :: Map.Map String String
 basicUsers = Map.fromList [("Lemmih","kodeord")]
 
 impl :: Cache.Cache -> [ServerPartT IO Response]
 impl cache =
   [ dir "packages" [ path $ handlePackageById
-                   , dir "00-index.tar.gz"
-                     [ method GET $
-                         movePermanently "/00-index.tar.gz" (toResponse "")
-                     ]
+                   , legacySupport
                    , method GET $ do
                        cacheState <- Cache.get cache
                        ok $ Cache.packagesPage cacheState
