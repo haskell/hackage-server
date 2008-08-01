@@ -167,6 +167,11 @@ basicUsers = Map.fromList [("Lemmih","kodeord")]
 impl :: Cache.Cache -> [ServerPartT IO Response]
 impl cache =
   [ dir "packages" [ path $ handlePackageById
+                   , dir "00-index.tar.gz"
+                     [ method GET $ do
+                         cacheState <- Cache.get cache
+                         ok $ toResponse $ Tarball (Cache.indexTarball cacheState)
+                     ]
                    , method GET $ do
                        cacheState <- Cache.get cache
                        ok $ Cache.packagesPage cacheState
@@ -190,8 +195,6 @@ impl cache =
                    ]
                  , fileServe [] "upload.html"
                  ]
-  , dir "00-index.tar.gz" [ method GET $ do cacheState <- Cache.get cache
-                                            ok $ toResponse $ Tarball (Cache.indexTarball cacheState) ]
   , fileServe ["hackage.html"] "static"
   ]
 
