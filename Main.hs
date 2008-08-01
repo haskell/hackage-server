@@ -60,8 +60,12 @@ main = do
     (Just indexFileName, Just logFileName) -> do
       indexFile <- BS.Lazy.readFile indexFileName
       logFile   <-         readFile logFileName
+      tarballs  <- case optImportArchive opts of
+        Nothing          -> return []
+        Just archiveFile -> BulkImport.importTarballs store
+                        =<< BS.Lazy.readFile archiveFile
       (pkgsInfo, badlog) <- either die return
-        (BulkImport.importPkgInfo indexFile logFile [])
+        (BulkImport.importPkgInfo indexFile logFile tarballs)
       unless (null badlog) $ putStr $
            "Warning: Upload log entries for non-existant packages:\n"
         ++ unlines (map display (sort badlog))
@@ -221,22 +225,24 @@ impl store cache =
 -- GetOpt
 
 data Options = Options {
-    optPort        :: Maybe String,
-    optHost        :: Maybe String,
-    optImportIndex :: Maybe FilePath,
-    optImportLog   :: Maybe FilePath,
-    optVersion     :: Bool,
-    optHelp        :: Bool
+    optPort          :: Maybe String,
+    optHost          :: Maybe String,
+    optImportIndex   :: Maybe FilePath,
+    optImportLog     :: Maybe FilePath,
+    optImportArchive :: Maybe FilePath,
+    optVersion       :: Bool,
+    optHelp          :: Bool
   }
 
 defaultOptions :: Options
 defaultOptions = Options {
-    optPort        = Nothing,
-    optHost        = Nothing,
-    optImportIndex = Nothing,
-    optImportLog   = Nothing,
-    optVersion     = False,
-    optHelp        = False
+    optPort          = Nothing,
+    optHost          = Nothing,
+    optImportIndex   = Nothing,
+    optImportLog     = Nothing,
+    optImportArchive = Nothing,
+    optVersion       = False,
+    optHelp          = False
   }
 
 getOpts :: IO Options
@@ -282,4 +288,7 @@ optionDescriptions =
   , Option [] ["import-log"]
       (ReqArg (\file opts -> opts { optImportLog = Just file }) "LOG")
       "Import an existing hackage upload log file"
+  , Option [] ["import-archive"]
+      (ReqArg (\file opts -> opts { optImportArchive = Just file }) "LOG")
+      "Import an existing hackage package tarball archive file (archive.tar)"
   ]
