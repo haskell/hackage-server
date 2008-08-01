@@ -15,7 +15,7 @@ import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)
 import qualified Distribution.Server.Pages.Package as Pages
 import qualified Distribution.Server.Pages.Recent  as Pages
 import qualified Distribution.Server.IndexUtils as PackageIndex (write)
-import qualified Distribution.Server.BulkImport as BulkImport (read)
+import qualified Distribution.Server.BulkImport as BulkImport
 
 import System.Environment (getArgs)
 import System.IO (hFlush, stdout)
@@ -58,7 +58,8 @@ main = do
     (Just indexFileName, Just logFileName) -> do
       indexFile <- BS.Lazy.readFile indexFileName
       logFile   <-         readFile logFileName
-      (pkgsInfo, badlog) <- either die return (BulkImport.read indexFile logFile)
+      (pkgsInfo, badlog) <- either die return
+        (BulkImport.importPkgInfo indexFile logFile [])
       unless (null badlog) $ putStr $
            "Warning: Upload log entries for non-existant packages:\n"
         ++ unlines (map display (sort badlog))

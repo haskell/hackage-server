@@ -58,8 +58,8 @@ write = writeGeneric pkgData setModTime
 -- | Parse an uncompressed tar repository index file from a 'ByteString'.
 --
 read :: (PackageIdentifier -> Tar.Entry -> pkg)
-            -> ByteString
-            -> Either String [pkg]
+     -> ByteString
+     -> Either String [pkg]
 read mkPackage indexFileContent = collect [] entries
   where
     entries = Tar.read indexFileContent
@@ -70,8 +70,7 @@ read mkPackage indexFileContent = collect [] entries
     collect _   (Tar.Fail err)  = Left err
 
     entry e@Tar.Entry { Tar.fileName = fileName }
-      | takeExtension fileName == ".cabal"
-      , [pkgname,versionStr,_] <- splitDirectories (normalise fileName)
+      | [pkgname,versionStr,_] <- splitDirectories (normalise fileName)
       , Just version <- simpleParse versionStr
       = let pkgid  = PackageIdentifier pkgname version
          in Just (mkPackage pkgid e)
