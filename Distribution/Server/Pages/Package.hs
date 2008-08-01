@@ -365,7 +365,7 @@ packageURL pkgId = "/packages" </> display pkgId
 
 -- | The name of the package file for a given package identifier
 packageFile :: PackageIdentifier -> URL
-packageFile pkgId = packageURL pkgId </> display pkgId <.> "tar.gz"
+packageFile pkgId = packageURL pkgId </> "tarball"
 
 -- | The name of the Cabal file for a given package identifier
 cabalFile :: PackageIdentifier -> URL

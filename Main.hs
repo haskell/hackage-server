@@ -115,6 +115,17 @@ handlePackageById pkgid =
         ok $ toResponse (CabalFile (pkgData pkg))
 --  , method PUT $ do ...
     ]
+
+  , dir "tarball"
+    [ method GET $
+        withPackage $ \pkg _pkgs -> do
+          case pkgTarball pkg of
+            Nothing -> notFound $ toResponse "No tarball available"
+            Just blobId -> do
+              store <- liftIO $ Blob.open "packages"
+              file <- liftIO $ Blob.fetch store blobId
+              ok $ toResponse $ Tarball file
+    ]
   ]
   
   where
@@ -130,16 +141,7 @@ handlePackageById pkgid =
                                                == packageVersion pkgid ] of
           Nothing  -> notFound $ toResponse "No such package version"
           Just pkg -> action pkg pkgs
-{-
-downloadPackageById :: PackageIdentifier -> [ServerPart Response]
-downloadPackageById pkgid =
-    [ anyRequest $ do index <- return . packageList =<< query GetPackagesState
-                      blobId <- undefined
-                      store <- liftIO $ Blob.open "packages"
-                      file <- liftIO $ Blob.fetch store blobId
-                      ok $ toResponse $ Tarball file
-    ]
--}
+
 newtype Tarball = Tarball BS.Lazy.ByteString
 
 instance ToMessage Tarball where
@@ -165,8 +167,6 @@ basicUsers = Map.fromList [("Lemmih","kodeord")]
 impl :: Cache.Cache -> [ServerPartT IO Response]
 impl cache =
   [ dir "packages" [ path $ handlePackageById
---                   , dir "download"
---                     [ path $ downloadPackageById ]
                    , method GET $ do
                        cacheState <- Cache.get cache
                        ok $ Cache.packagesPage cacheState
