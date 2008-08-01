@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Server.BlobStorage
@@ -21,6 +22,8 @@ import qualified Data.ByteString.Lazy as BS
 import Data.ByteString.Lazy (ByteString)
 import Data.Digest.Pure.MD5
          ( MD5Digest, md5 )
+import Data.Typeable (Typeable)
+import Data.Binary (Binary)
 import System.FilePath
          ( (</>) )
 import Control.Exception as Exception

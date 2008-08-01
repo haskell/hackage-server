@@ -6,6 +6,7 @@ import Distribution.Package (PackageIdentifier)
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.PackageDescription (parsePackageDescription, ParseResult(..))
 import Distribution.Server.Types (PkgInfo(..))
+import Distribution.Server.BlobStorage (BlobId)
 
 import HAppS.State
 import HAppS.Data.Serialize
