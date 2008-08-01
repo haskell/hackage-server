@@ -167,6 +167,10 @@ basicUsers = Map.fromList [("Lemmih","kodeord")]
 impl :: Cache.Cache -> [ServerPartT IO Response]
 impl cache =
   [ dir "packages" [ path $ handlePackageById
+                   , dir "00-index.tar.gz"
+                     [ method GET $
+                         movePermanently "/00-index.tar.gz" (toResponse "")
+                     ]
                    , method GET $ do
                        cacheState <- Cache.get cache
                        ok $ Cache.packagesPage cacheState
