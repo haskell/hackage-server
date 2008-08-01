@@ -37,7 +37,8 @@ import Network.URI
          ( URIAuth(URIAuth) )
 
 import Unpack (unpackPackage)
-import qualified Distribution.Server.BlobStorage as Blob
+import qualified Distribution.Server.BlobStorage as BlobStorage
+import Distribution.Server.BlobStorage (BlobStorage)
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
@@ -53,6 +54,7 @@ hackageEntryPoint = Proxy
 main :: IO ()
 main = do
   opts <- getOpts
+  store <- BlobStorage.open "packages"
   imports <- case (optImportIndex opts, optImportLog opts) of
     (Nothing, Nothing) -> return Nothing
     (Just indexFileName, Just logFileName) -> do
@@ -85,7 +87,7 @@ main = do
        Cache.put cache =<< stateToCache host =<< query GetPackagesState
 
     log (" ready. Serving on " ++ hostname ++" port " ++ show port ++ "\n")
-    simpleHTTP nullConf { HAppS.Server.port = port } (impl cache)
+    simpleHTTP nullConf { HAppS.Server.port = port } (impl store cache)
 
 log :: String -> IO ()
 log msg = putStr msg   >> hFlush stdout
@@ -122,8 +124,8 @@ legacySupport = multi
       ]
     ]
 
-handlePackageById :: PackageIdentifier -> [ServerPart Response]
-handlePackageById pkgid =
+handlePackageById :: BlobStorage -> PackageIdentifier -> [ServerPart Response]
+handlePackageById store pkgid =
   [ method GET $
       withPackage $ \pkg pkgs ->
         ok $ toResponse (Pages.packagePage pkg pkgs)
@@ -141,8 +143,7 @@ handlePackageById pkgid =
           case pkgTarball pkg of
             Nothing -> notFound $ toResponse "No tarball available"
             Just blobId -> do
-              store <- liftIO $ Blob.open "packages"
-              file <- liftIO $ Blob.fetch store blobId
+              file <- liftIO $ BlobStorage.fetch store blobId
               ok $ toResponse $ Tarball file
     ]
   ]
@@ -186,9 +187,9 @@ instance FromReqURI Version where
 basicUsers :: Map.Map String String
 basicUsers = Map.fromList [("Lemmih","kodeord")]
 
-impl :: Cache.Cache -> [ServerPartT IO Response]
-impl cache =
-  [ dir "packages" [ path $ handlePackageById
+impl :: BlobStorage -> Cache.Cache -> [ServerPartT IO Response]
+impl store cache =
+  [ dir "packages" [ path $ handlePackageById store
                    , legacySupport
                    , method GET $ do
                        cacheState <- Cache.get cache
@@ -206,8 +207,7 @@ impl cache =
                             case ret of
                               Left err -> ok $ toResponse $ err
                               Right (_pkgDesc, _warns) ->
-                                  do store <- liftIO $ Blob.open "packages"
-                                     _blobId <- liftIO $ Blob.add store (inputValue input)
+                                  do _blobId <- liftIO $ BlobStorage.add store (inputValue input)
                                      ok $ toResponse "Package valid"
                        ]
                    ]
