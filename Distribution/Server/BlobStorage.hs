@@ -30,6 +30,7 @@ import System.IO
 -- | An id for a blob. The content of the blob is stable.
 --
 newtype BlobId = BlobId MD5Digest
+  deriving (Eq, Ord, Show, Binary, Typeable)
 
 -- | A persistent blob storage area. Blobs can be added and retrieved but
 -- not removed or modified.

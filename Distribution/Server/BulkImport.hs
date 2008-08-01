@@ -61,6 +61,7 @@ importPkgInfo pkgid
         pkgInfoId     = pkgid,
         pkgDesc       = pkg,
         pkgData       = pkgstr,
+        pkgTarball    = Nothing,
         pkgUploadTime = time,
         pkgUploadUser = user,
         pkgUploadOld  = [ (time', user')

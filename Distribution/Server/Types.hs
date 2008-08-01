@@ -14,6 +14,9 @@
 -----------------------------------------------------------------------------
 module Distribution.Server.Types where
 
+import Distribution.Server.BlobStorage
+         ( BlobId )
+
 import Distribution.Package
          ( PackageIdentifier(..), Package(..) )
 import Distribution.PackageDescription
@@ -35,6 +38,10 @@ data PkgInfo = PkgInfo {
 
     -- | The .cabal file text.
     pkgData   :: ByteString,
+
+    -- | The actual package .tar.gz file. It is optional for the moment
+    -- to make testing easier, eg using archives of just the latest packages.
+    pkgTarball :: Maybe BlobId,
 
     -- | When the .tar.gz file was uploaded.
     pkgUploadTime :: UTCTime,

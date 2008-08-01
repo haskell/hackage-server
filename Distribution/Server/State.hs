@@ -51,6 +51,7 @@ instance Serialize PkgInfo where
     safePut (pkgUploadTime pkgInfo)
     safePut (pkgUploadUser pkgInfo)
     safePut (pkgUploadOld pkgInfo)
+    safePut (pkgTarball pkgInfo)
     Binary.put (pkgData pkgInfo)
 
   getCopy = contain $ do
@@ -58,6 +59,7 @@ instance Serialize PkgInfo where
     mtime  <- safeGet
     user   <- safeGet
     old    <- safeGet
+    tarball<- safeGet
     bstring <- Binary.get
     return PkgInfo {
       pkgInfoId = infoId,
@@ -68,7 +70,8 @@ instance Serialize PkgInfo where
       pkgUploadTime = mtime,
       pkgUploadUser = user,
       pkgUploadOld  = old,
-      pkgData   = bstring
+      pkgData   = bstring,
+      pkgTarball= tarball
     }
     where parse = parsePackageDescription . fromUTF8 . BS.unpack
 
@@ -89,6 +92,13 @@ instance Binary.Binary UTCTime where
     day  <- Binary.get
     secs <- Binary.get
     return (UTCTime (ModifiedJulianDay day) (fromRational secs))
+
+instance Version BlobId where
+  mode = Versioned 0 Nothing
+
+instance Serialize BlobId where
+  putCopy = contain . Binary.put
+  getCopy = contain Binary.get
 
 --insert
 
