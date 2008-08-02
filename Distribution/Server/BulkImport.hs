@@ -115,7 +115,7 @@ mergeIndexWithUploadLog pkgs entries =
   mergePkgs [] [] $
     mergeBy comparingPackageId
       (sortBy (comparing fst)
-              [ pkg | pkg@(pkgid, entry) <- pkgs
+              [ pkg | pkg@(_, entry) <- pkgs
                     , takeExtension (Tar.fileName entry) == ".cabal" ])
       (sortBy (comparing (\(UploadLog.Entry _ _ pkgid, _) -> pkgid)) entries)
   where
@@ -151,7 +151,7 @@ mergeTarballs tarballInfo pkgs =
 
     mergePkgs merged []  = Right merged
     mergePkgs merged (next:remaining) = case next of
-      InBoth (pkgid, blobid) pkginfo -> mergePkgs (pkginfo':merged) remaining
+      InBoth (_, blobid) pkginfo -> mergePkgs (pkginfo':merged) remaining
          where pkginfo' = pkginfo { pkgTarball = Just blobid }
       OnlyInLeft (pkgid, _)          -> Left missing
          where missing = "Package tarball missing metadata " ++ display pkgid

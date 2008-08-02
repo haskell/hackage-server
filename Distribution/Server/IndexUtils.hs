@@ -39,7 +39,7 @@ import Data.Time.Clock.POSIX
 import qualified Data.ByteString.Lazy as BS
 import Data.ByteString.Lazy (ByteString)
 import System.FilePath
-         ( (</>), (<.>), takeExtension, splitDirectories, normalise )
+         ( (</>), (<.>), splitDirectories, normalise )
 import Prelude hiding (read)
 
 write :: PackageIndex PkgInfo -> ByteString
