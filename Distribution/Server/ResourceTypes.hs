@@ -46,7 +46,7 @@ data PackageTarball = PackageTarball BS.Lazy.ByteString BlobId UTCTime
 instance ToMessage PackageTarball where
   toResponse (PackageTarball bs blobid time) = mkResponse bs
     [ ("Content-Type",  "application/gzip")
-    , ("MD5-Content",   show blobid)
+    , ("Content-MD5",   show blobid)
     , ("ETag",          '"' : show blobid ++ ['"'])
     , ("Last-modified", formatTime time)
     ]
