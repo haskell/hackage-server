@@ -147,7 +147,8 @@ handlePackageById store pkgid =
             Nothing -> notFound $ toResponse "No tarball available"
             Just blobId -> do
               file <- liftIO $ BlobStorage.fetch store blobId
-              ok $ toResponse $ Resource.PackageTarball file blobId
+              ok $ toResponse $
+                Resource.PackageTarball file blobId (pkgUploadTime pkg)
     ]
   ]
   

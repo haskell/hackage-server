@@ -27,6 +27,12 @@ import Text.RSS
          ( RSS )
 import qualified Text.RSS as RSS
          ( rssToXML, showXML )
+import Data.Time.Clock
+         ( UTCTime )
+import qualified Data.Time.Format as Time
+         ( formatTime )
+import System.Locale
+         ( defaultTimeLocale )
 
 data IndexTarball = IndexTarball BS.Lazy.ByteString
 
@@ -35,14 +41,22 @@ instance ToMessage IndexTarball where
   toMessage (IndexTarball bs) = bs
 
 
-data PackageTarball = PackageTarball BS.Lazy.ByteString BlobId
+data PackageTarball = PackageTarball BS.Lazy.ByteString BlobId UTCTime
 
 instance ToMessage PackageTarball where
-  toResponse (PackageTarball bs blobid) = mkResponse bs
-    [ ("Content-Type", "application/gzip")
-    , ("MD5-Content",  show blobid)
+  toResponse (PackageTarball bs blobid time) = mkResponse bs
+    [ ("Content-Type",  "application/gzip")
+    , ("MD5-Content",   show blobid)
+    , ("ETag",          '"' : show blobid ++ ['"'])
+    , ("Last-modified", formatTime time)
     ]
 
+formatTime :: UTCTime -> String
+formatTime = Time.formatTime defaultTimeLocale rfc822DateFormat
+  where
+    -- HACK! we're using UTC but http requires GMT
+    -- hopefully it's ok to just say it's GMT
+    rfc822DateFormat = "%a, %d %b %Y %H:%M:%S GMT"
 
 newtype CabalFile = CabalFile BS.Lazy.ByteString
 
