@@ -9,8 +9,9 @@ import HAppS.State hiding (Version)
 import Distribution.Server.State
 import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.Simple.PackageIndex as PackageIndex
-import Distribution.Server.Types (PkgInfo(..))
-
+import Distribution.Server.Types
+         ( PkgInfo(..) )
+import qualified Distribution.Server.ResourceTypes as Resource
 import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)
 import qualified Distribution.Server.Pages.Package as Pages
 import qualified Distribution.Server.Pages.Recent  as Pages
@@ -29,7 +30,6 @@ import Data.Ord (comparing)
 import qualified Data.Map as Map
 import System.Console.GetOpt
          ( OptDescr(..), ArgDescr(..), ArgOrder(..), getOpt, usageInfo )
-import Text.RSS
 import Data.Time.Clock
 import Network.BSD
          ( getHostName )
@@ -40,7 +40,6 @@ import Unpack (unpackPackage)
 import qualified Distribution.Server.BlobStorage as BlobStorage
 import Distribution.Server.BlobStorage (BlobStorage)
 
-import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
 import qualified Codec.Compression.GZip as GZip
 
@@ -137,7 +136,7 @@ handlePackageById store pkgid =
   , dir "cabal"
     [ method GET $
       withPackage $ \pkg _pkgs ->
-        ok $ toResponse (CabalFile (pkgData pkg))
+        ok $ toResponse (Resource.CabalFile (pkgData pkg))
 --  , method PUT $ do ...
     ]
 
@@ -148,7 +147,7 @@ handlePackageById store pkgid =
             Nothing -> notFound $ toResponse "No tarball available"
             Just blobId -> do
               file <- liftIO $ BlobStorage.fetch store blobId
-              ok $ toResponse $ Tarball file
+              ok $ toResponse $ Resource.Tarball file
     ]
   ]
   
@@ -165,22 +164,6 @@ handlePackageById store pkgid =
                                                == packageVersion pkgid ] of
           Nothing  -> notFound $ toResponse "No such package version"
           Just pkg -> action pkg pkgs
-
-newtype Tarball = Tarball BS.Lazy.ByteString
-
-instance ToMessage Tarball where
-    toContentType _ = BS.pack "application/gzip"
-    toMessage (Tarball bs) = bs
-
-newtype CabalFile = CabalFile BS.Lazy.ByteString
-
-instance ToMessage CabalFile where
-    toContentType _ = BS.pack "text/plain"
-    toMessage (CabalFile bs) = bs
-
-instance ToMessage RSS where
-    toContentType _ = BS.pack "application/rss+xml"
-    toMessage rss = BS.Lazy.pack $ showXML $ rssToXML rss
 
 instance FromReqURI PackageIdentifier where
   fromReqURI = simpleParse
@@ -217,8 +200,11 @@ impl store cache =
                    ]
                  , fileServe [] "upload.html"
                  ]
-  , dir "00-index.tar.gz" [ method GET $ do cacheState <- Cache.get cache
-                                            ok $ toResponse $ Tarball (Cache.indexTarball cacheState) ]
+  , dir "00-index.tar.gz"
+      [ method GET $ do
+          cacheState <- Cache.get cache
+          ok $ toResponse $ Resource.Tarball (Cache.indexTarball cacheState)
+      ]
   , fileServe ["hackage.html"] "static"
   ]
 
