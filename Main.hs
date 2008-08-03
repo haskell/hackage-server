@@ -147,7 +147,7 @@ handlePackageById store pkgid =
             Nothing -> notFound $ toResponse "No tarball available"
             Just blobId -> do
               file <- liftIO $ BlobStorage.fetch store blobId
-              ok $ toResponse $ Resource.Tarball file
+              ok $ toResponse $ Resource.PackageTarball file blobId
     ]
   ]
   
@@ -203,7 +203,7 @@ impl store cache =
   , dir "00-index.tar.gz"
       [ method GET $ do
           cacheState <- Cache.get cache
-          ok $ toResponse $ Resource.Tarball (Cache.indexTarball cacheState)
+          ok $ toResponse $ Resource.IndexTarball (Cache.indexTarball cacheState)
       ]
   , fileServe ["hackage.html"] "static"
   ]

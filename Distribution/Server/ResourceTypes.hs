@@ -15,21 +15,33 @@
 -----------------------------------------------------------------------------
 module Distribution.Server.ResourceTypes where
 
-import HAppS.Server (ToMessage(..))
+import Distribution.Server.BlobStorage
+         ( BlobId )
+
+import HAppS.Server
+         ( ToMessage(..), Response(..), RsFlags(..), nullRsFlags, mkHeaders )
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
-import qualified Text.RSS as RSS
 import Text.RSS
          ( RSS )
 import qualified Text.RSS as RSS
          ( rssToXML, showXML )
 
-newtype Tarball = Tarball BS.Lazy.ByteString
+data IndexTarball = IndexTarball BS.Lazy.ByteString
 
-instance ToMessage Tarball where
-    toContentType _ = BS.pack "application/gzip"
-    toMessage (Tarball bs) = bs
+instance ToMessage IndexTarball where
+  toContentType _ = BS.pack "application/gzip"
+  toMessage (IndexTarball bs) = bs
+
+
+data PackageTarball = PackageTarball BS.Lazy.ByteString BlobId
+
+instance ToMessage PackageTarball where
+  toResponse (PackageTarball bs blobid) = mkResponse bs
+    [ ("Content-Type", "application/gzip")
+    , ("MD5-Content",  show blobid)
+    ]
 
 
 newtype CabalFile = CabalFile BS.Lazy.ByteString
@@ -41,3 +53,20 @@ instance ToMessage CabalFile where
 instance ToMessage RSS where
     toContentType _ = BS.pack "application/rss+xml"
     toMessage = BS.Lazy.pack . RSS.showXML . RSS.rssToXML
+
+
+mkResponse :: BS.Lazy.ByteString -> [(String, String)] -> Response
+mkResponse bs headers = Response {
+    rsCode    = 200,
+    rsHeaders = mkHeaders headers,
+    rsFlags   = nullRsFlags,
+    rsBody    = bs
+  }
+
+mkResponseLen :: BS.Lazy.ByteString -> Int -> [(String, String)] -> Response
+mkResponseLen bs len headers = Response {
+    rsCode    = 200,
+    rsHeaders = mkHeaders (("Content-Length", show len) : headers),
+    rsFlags   = nullRsFlags { rsfContentLength = False },
+    rsBody    = bs
+  }
