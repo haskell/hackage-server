@@ -15,6 +15,7 @@ module Distribution.Server.BlobStorage (
     BlobId,
     open,
     add,
+    addWith,
     fetch,
   ) where
 
@@ -55,19 +56,50 @@ incomingDir (BlobStorage store) = store </> "incoming"
 --   gives the same 'BlobId'.
 --
 add :: BlobStorage -> ByteString -> IO BlobId
-add store content = do
+add store content =
+  withIncomming store content $ \_ blobId -> return (blobId, True)
+
+-- | Like 'add' but we get another chance to make another pass over the input
+-- 'ByteString'.
+--
+-- What happens is that we stream the input into a temp file in an incomming
+-- area. Then we can make a second pass over it to do some validation or
+-- processing. If the validator decides to reject then we rollback and the
+-- blob is not entered into the store. If it accepts then the blob is added
+-- and the 'BlobId' is returned.
+--
+addWith :: BlobStorage -> ByteString
+        -> (ByteString -> Either error result)
+        -> IO (Either error (result, BlobId))
+addWith store content check =
+  withIncomming store content $ \hnd blobId -> do
+    hSeek hnd AbsoluteSeek 0
+    content' <- BS.hGetContents hnd
+    case check content' of
+      Left  err -> return (Left  err,          False)
+      Right res -> return (Right (res, blobId), True)
+
+withIncomming :: BlobStorage -> ByteString
+              -> (Handle -> BlobId -> IO (a, Bool))
+              -> IO a
+withIncomming store content action = do
   (file, hnd) <- openBinaryTempFile (incomingDir store) "tmp"
   handleExceptions file hnd $ do
     -- TODO: calculate the md5 and write to the temp file in one pass:
     BS.hPut hnd content
     hSeek hnd AbsoluteSeek 0
     blobId <- evaluate . BlobId . md5 =<< BS.hGetContents hnd
-    --TODO: if the target already exists then there is no need to overwrite it
-    --      since it will have the same content. Checking and then renaming
-    --      would give a race condition but that's ok since they have the same
-    --      content.
-    renameFile file (filepath store blobId)
-    return blobId
+
+    (res, commit) <- action hnd blobId
+    hClose hnd
+    if commit
+      --TODO: if the target already exists then there is no need to overwrite
+      -- it since it will have the same content. Checking and then renaming
+      -- would give a race condition but that's ok since they have the same
+      -- content.
+      then renameFile file (filepath store blobId)
+      else removeFile file
+    return res
 
   where
     handleExceptions tmpFile tmpHandle =
