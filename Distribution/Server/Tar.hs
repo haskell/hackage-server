@@ -144,6 +144,7 @@ data FileType = NormalFile
               | GlobalHeader
               | Custom Char   -- 'A' .. 'Z'
               | Reserved Char -- other / reserved / unknown
+  deriving (Eq, Show)
 
 toFileTypeCode :: FileType -> Char
 toFileTypeCode NormalFile      = '0'

@@ -67,7 +67,7 @@ warns about sundry other matters,
 and presents a preview of the web page for the package.
 It does not add the package to the database.
 
-<FORM CLASS="box" action="/cgi-bin/hackage-scripts/check-pkg" method="post" enctype="multipart/form-data">
+<FORM CLASS="box" action="/upload" method="post" enctype="multipart/form-data">
 <P>Local file containing Cabal package: <INPUT type="file" name="package">
 <INPUT type="submit" value="Check">
 </P>
@@ -81,7 +81,7 @@ When you submit it, you'll be prompted for your HackageDB
 <A HREF="accounts.html">username</A> and password.
 (Alternatively, there's a <A HREF="/cgi-bin/hackage-scripts/package/cabal-upload">command-line interface</A>, which also needs the same username and password.)
 
-<FORM CLASS="box" action="/cgi-bin/hackage-scripts/protected/upload-pkg" method="post" enctype="multipart/form-data">
+<FORM CLASS="box" action="/upload" method="post" enctype="multipart/form-data">
 <P>Local file containing Cabal package: <INPUT type="file" name="package">
 <INPUT type="submit" value="Upload">
 </P>

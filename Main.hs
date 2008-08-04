@@ -17,6 +17,9 @@ import qualified Distribution.Server.Pages.Package as Pages
 import qualified Distribution.Server.Pages.Recent  as Pages
 import qualified Distribution.Server.IndexUtils as PackageIndex (write)
 import qualified Distribution.Server.BulkImport as BulkImport
+import qualified Distribution.Server.Upload as Upload (unpackPackage)
+import qualified Distribution.Server.BlobStorage as BlobStorage
+import Distribution.Server.BlobStorage (BlobStorage)
 
 import System.Environment (getArgs)
 import System.IO (hFlush, stdout)
@@ -35,10 +38,6 @@ import Network.BSD
          ( getHostName )
 import Network.URI
          ( URIAuth(URIAuth) )
-
-import Unpack (unpackPackage)
-import qualified Distribution.Server.BlobStorage as BlobStorage
-import Distribution.Server.BlobStorage (BlobStorage)
 
 import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
 import qualified Codec.Compression.GZip as GZip
@@ -187,20 +186,24 @@ impl store cache =
       [ method GET $ ok . Cache.packagesFeed =<< Cache.get cache ]
   , dir "recent.html"
       [ method GET $ ok . Cache.recentChanges =<< Cache.get cache ]
-  , dir "upload" [ methodSP POST $
-                   basicAuth "hackage" basicUsers
-                   [ withDataFn (lookInput "upload") $ \input ->
-                       [ anyRequest $
-                         do ret <- liftIO $ unpackPackage (fromMaybe "noname" $ inputFilename input) (inputValue input)
-                            case ret of
-                              Left err -> ok $ toResponse $ err
-                              Right (_pkgDesc, _warns) ->
-                                  do _blobId <- liftIO $ BlobStorage.add store (inputValue input)
-                                     ok $ toResponse "Package valid"
-                       ]
-                   ]
-                 , fileServe [] "upload.html"
-                 ]
+  , dir "upload"
+      [ methodSP POST $
+          basicAuth "hackage" basicUsers
+          [ withDataFn (lookInput "upload") $ \input ->
+              [ anyRequest $ do
+                  let fileName    = (fromMaybe "noname" $ inputFilename input)
+                      fileContent = inputValue input
+                   in case Upload.unpackPackage fileName fileContent of
+                        Left err -> ok $ toResponse $ err
+                        Right (_pkgDesc, []) ->
+                          ok $ toResponse $ "Package valid, no warnings."
+                        Right (_pkgDesc, warnings) ->
+                          ok $ toResponse $ unlines warnings
+--                         do _blobId <- liftIO $ BlobStorage.add store (inputValue input)
+--                            ok $ toResponse "Package valid"
+              ]
+          ]
+      ]
   , dir "00-index.tar.gz"
       [ method GET $ do
           cacheState <- Cache.get cache
