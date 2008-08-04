@@ -165,6 +165,29 @@ handlePackageById store pkgid =
           Nothing  -> notFound $ toResponse "No such package version"
           Just pkg -> action pkg pkgs
 
+uploadPackage :: BlobStorage -> ServerPart Response
+uploadPackage store =
+  methodSP POST $
+    basicAuth "hackage" basicUsers
+      [ withDataFn (lookInput "upload") $ \input ->
+          [ anyRequest $
+              let fileName    = (fromMaybe "noname" $ inputFilename input)
+                  fileContent = inputValue input
+               in upload fileName fileContent
+          ]
+      ]
+  where
+    upload name content = do
+      --TODO: check if the package is in the index already, before we embark
+      -- on writing the tarball into the store and validating etc.
+      res <- liftIO $ BlobStorage.addWith store content
+                        (Upload.unpackPackage name)
+      case res of
+        Left  err -> badRequest $ toResponse err
+        Right ((pkg, warnings), blobId) -> do
+          --TODO: enter pkg into index
+          ok $ toResponse $ unlines warnings
+
 instance FromReqURI PackageIdentifier where
   fromReqURI = simpleParse
 
@@ -187,23 +210,7 @@ impl store cache =
   , dir "recent.html"
       [ method GET $ ok . Cache.recentChanges =<< Cache.get cache ]
   , dir "upload"
-      [ methodSP POST $
-          basicAuth "hackage" basicUsers
-          [ withDataFn (lookInput "upload") $ \input ->
-              [ anyRequest $ do
-                  let fileName    = (fromMaybe "noname" $ inputFilename input)
-                      fileContent = inputValue input
-                   in case Upload.unpackPackage fileName fileContent of
-                        Left err -> ok $ toResponse $ err
-                        Right (_pkgDesc, []) ->
-                          ok $ toResponse $ "Package valid, no warnings."
-                        Right (_pkgDesc, warnings) ->
-                          ok $ toResponse $ unlines warnings
---                         do _blobId <- liftIO $ BlobStorage.add store (inputValue input)
---                            ok $ toResponse "Package valid"
-              ]
-          ]
-      ]
+      [ uploadPackage store ]
   , dir "00-index.tar.gz"
       [ method GET $ do
           cacheState <- Cache.get cache
