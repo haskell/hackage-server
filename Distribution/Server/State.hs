@@ -2,7 +2,7 @@
              FlexibleInstances, FlexibleContexts, MultiParamTypeClasses  #-}
 module Distribution.Server.State where
 
-import Distribution.Package (PackageIdentifier)
+import Distribution.Package (PackageIdentifier,Package(packageId))
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.PackageDescription (parsePackageDescription, ParseResult(..))
 import Distribution.Server.Types (PkgInfo(..))
@@ -101,7 +101,13 @@ instance Serialize BlobId where
   putCopy = contain . Binary.put
   getCopy = contain Binary.get
 
---insert
+insert :: PkgInfo -> Update PackagesState Bool
+insert pkg
+    = do pkgsState <- State.get
+         case PackageIndex.lookupPackageId (packageList pkgsState) (packageId pkg) of
+           Nothing -> do State.put $ pkgsState { packageList = PackageIndex.insert pkg (packageList pkgsState) }
+                         return True
+           Just{}  -> do return False
 
 bulkImport :: [PkgInfo] -> Update PackagesState ()
 bulkImport newIndex
@@ -114,6 +120,7 @@ getPackagesState = ask
 
 $(mkMethods ''PackagesState ['getPackagesState
                             ,'bulkImport
+                            ,'insert
                             ])
 
 instance Component PackagesState where

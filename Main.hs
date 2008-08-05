@@ -1,6 +1,7 @@
 module Main (main) where
 
-import Distribution.Package (PackageIdentifier(..), packageName, packageVersion)
+import Distribution.Package ( PackageIdentifier(..), Package(packageId)
+                            , packageName, packageVersion )
 import Distribution.Text    (simpleParse, display)
 import HAppS.Server hiding (port)
 import qualified HAppS.Server
@@ -37,7 +38,7 @@ import Data.Time.Clock
 import Network.BSD
          ( getHostName )
 import Network.URI
-         ( URIAuth(URIAuth) )
+         ( URIAuth(URIAuth), URI )
 
 import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
 import qualified Codec.Compression.GZip as GZip
@@ -89,7 +90,10 @@ main = do
        Cache.put cache =<< stateToCache host =<< query GetPackagesState
 
     log (" ready. Serving on " ++ hostname ++" port " ++ show port ++ "\n")
-    simpleHTTP nullConf { HAppS.Server.port = port } (impl store cache)
+    simpleHTTP nullConf { HAppS.Server.port = port } (impl store cache host)
+
+updateCache cache host
+    = liftIO (Cache.put cache =<< stateToCache host =<< query GetPackagesState)
 
 log :: String -> IO ()
 log msg = putStr msg   >> hFlush stdout
@@ -165,11 +169,11 @@ handlePackageById store pkgid =
           Nothing  -> notFound $ toResponse "No such package version"
           Just pkg -> action pkg pkgs
 
-uploadPackage :: BlobStorage -> ServerPart Response
-uploadPackage store =
+uploadPackage :: BlobStorage -> Cache.Cache -> URIAuth -> ServerPart Response
+uploadPackage store cache host =
   methodSP POST $
     basicAuth "hackage" basicUsers
-      [ withDataFn (lookInput "upload") $ \input ->
+      [ withDataFn (lookInput "package") $ \input ->
           [ anyRequest $
               let fileName    = (fromMaybe "noname" $ inputFilename input)
                   fileContent = inputValue input
@@ -185,8 +189,19 @@ uploadPackage store =
       case res of
         Left  err -> badRequest $ toResponse err
         Right (((pkg, pkgStr), warnings), blobId) -> do
-          --TODO: enter pkg into index
-          ok $ toResponse $ unlines warnings
+          now <- liftIO $ getCurrentTime
+          success <- update $ Insert $ PkgInfo
+                                        { pkgInfoId = packageId pkg
+                                        , pkgDesc   = pkg
+                                        , pkgData   = pkgStr
+                                        , pkgTarball= Just blobId
+                                        , pkgUploadTime = now
+                                        , pkgUploadUser = "Unknown"
+                                        , pkgUploadOld  = [] }
+          if success
+             then do updateCache cache host
+                     ok $ toResponse $ unlines warnings
+             else forbidden $ toResponse "Package already exist."
 
 instance FromReqURI PackageIdentifier where
   fromReqURI = simpleParse
@@ -197,8 +212,8 @@ instance FromReqURI Version where
 basicUsers :: Map.Map String String
 basicUsers = Map.fromList [("Lemmih","kodeord")]
 
-impl :: BlobStorage -> Cache.Cache -> [ServerPartT IO Response]
-impl store cache =
+impl :: BlobStorage -> Cache.Cache -> URIAuth -> [ServerPartT IO Response]
+impl store cache host =
   [ dir "packages" [ path $ handlePackageById store
                    , legacySupport
                    , method GET $ do
@@ -210,7 +225,7 @@ impl store cache =
   , dir "recent.html"
       [ method GET $ ok . Cache.recentChanges =<< Cache.get cache ]
   , dir "upload"
-      [ uploadPackage store ]
+      [ uploadPackage store cache host ]
   , dir "00-index.tar.gz"
       [ method GET $ do
           cacheState <- Cache.get cache
