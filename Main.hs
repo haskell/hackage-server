@@ -184,7 +184,7 @@ uploadPackage store =
                         (Upload.unpackPackage name)
       case res of
         Left  err -> badRequest $ toResponse err
-        Right ((pkg, warnings), blobId) -> do
+        Right (((pkg, pkgStr), warnings), blobId) -> do
           --TODO: enter pkg into index
           ok $ toResponse $ unlines warnings
 

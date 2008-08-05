@@ -43,7 +43,8 @@ import System.FilePath
 -- Returns either an fatal error or a package description and a list
 -- of warnings.
 unpackPackage :: FilePath -> ByteString
-              -> Either String (GenericPackageDescription, [String])
+              -> Either String
+                        ((GenericPackageDescription, ByteString), [String])
 unpackPackage tarGzFile contents = runUploadMonad $ do
   let (pkgidStr, ext) = (base, tar ++ gz)
         where (tarFile, gz) = splitExtension tarGzFile
@@ -92,7 +93,7 @@ unpackPackage tarGzFile contents = runUploadMonad $ do
 
   extraChecks pkgDesc
 
-  return pkgDesc
+  return (pkgDesc, Tar.fileContent cabalEntry)
 
   where
     showError (Nothing, msg) = msg
