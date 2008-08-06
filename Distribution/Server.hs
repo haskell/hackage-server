@@ -10,7 +10,7 @@ import HAppS.Server hiding (port)
 import qualified HAppS.Server
 import HAppS.State hiding (Version)
 
-import Distribution.Server.State hiding (buildReports)
+import Distribution.Server.State as State hiding (buildReports)
 import qualified  Distribution.Server.State as State
 import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.Simple.PackageIndex as PackageIndex
@@ -178,7 +178,16 @@ uploadPackage store cache host =
 
 buildReports :: BlobStorage -> [ServerPart Response]
 buildReports store =
-  [ methodSP POST $ withRequest $ \Request { rqBody = Body body } ->
+  [ path $ \reportId ->
+      [ method GET $ do
+          reports <- return . State.buildReports =<< query GetPackagesState
+          case BuildReports.lookupReport reports reportId of
+            Nothing     -> notFound $ toResponse "No such report"
+            Just report ->
+              ok $ toResponse $ BuildReport.showBuildReport report
+      ]
+
+  , methodSP POST $ withRequest $ \Request { rqBody = Body body } ->
       case BuildReport.parseBuildReport (BS.Char8.unpack body) of
         Left err -> badRequest $ toResponse err
         Right report -> do
