@@ -20,6 +20,7 @@ import qualified Distribution.Server.ResourceTypes as Resource
 import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)
 import qualified Distribution.Server.Pages.Package as Pages
 import qualified Distribution.Server.Pages.Recent  as Pages
+import qualified Distribution.Server.Pages.BuildReports as Pages
 import qualified Distribution.Server.IndexUtils as PackageIndex (write)
 import qualified Distribution.Server.Upload as Upload (unpackPackage)
 import qualified Distribution.Server.BlobStorage as BlobStorage
@@ -125,6 +126,16 @@ handlePackageById store pkgid =
               file <- liftIO $ BlobStorage.fetch store blobId
               ok $ toResponse $
                 Resource.PackageTarball file blobId (pkgUploadTime pkg)
+    ]
+  , dir "buildreports"
+    [ method GET $ do
+        state <- query GetPackagesState
+        case PackageIndex.lookupPackageId (packageList state) pkgid of
+          Nothing -> notFound $ toResponse "No such package"
+          Just _  -> do
+            let reports = BuildReports.lookupPackageReports
+                            (State.buildReports state) pkgid
+            ok $ toResponse (Pages.buildReportSummary pkgid reports)
     ]
   ]
   
