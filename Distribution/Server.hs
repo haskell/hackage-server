@@ -10,7 +10,8 @@ import HAppS.Server hiding (port)
 import qualified HAppS.Server
 import HAppS.State hiding (Version)
 
-import Distribution.Server.State
+import Distribution.Server.State hiding (buildReports)
+import qualified  Distribution.Server.State as State
 import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.Server.Types
@@ -172,6 +173,11 @@ uploadPackage store cache host =
                      ok $ toResponse $ unlines warnings
              else forbidden $ toResponse "Package already exist."
 
+buildReports :: BlobStorage -> [ServerPart Response]
+buildReports store =
+  [
+  ]
+
 instance FromReqURI PackageIdentifier where
   fromReqURI = simpleParse
 
@@ -189,6 +195,7 @@ impl store cache host =
                        cacheState <- Cache.get cache
                        ok $ Cache.packagesPage cacheState
                    ]
+  , dir "buildreports" (buildReports store)
   , dir "recent.rss"
       [ method GET $ ok . Cache.packagesFeed =<< Cache.get cache ]
   , dir "recent.html"
