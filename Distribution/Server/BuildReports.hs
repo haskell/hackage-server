@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
 module Distribution.Server.BuildReports (
     BuildReports,
     BuildReportId,
@@ -11,8 +11,6 @@ module Distribution.Server.BuildReports (
     lookupPackageReports,
   ) where
 
-import Distribution.Server.Types
-         ( UserName )
 import qualified Distribution.Server.BlobStorage as BlobStorage
 import qualified Distribution.Server.BuildReport as BuildReport
 import Distribution.Server.BuildReport (BuildReport)
@@ -21,16 +19,16 @@ import Distribution.Package
          ( PackageIdentifier )
 
 import qualified Data.Map as Map
---import qualified Data.Binary as Binary
---import Data.Binary (Binary)
-import Data.Time.Clock (UTCTime)
+import qualified Data.ByteString.Char8 as BS.Char8
+import qualified Data.Binary as Binary
+import Data.Binary (Binary)
+import Data.Typeable (Typeable)
 
 newtype BuildReportId = BuildReportId Int
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Binary)
 
-data BuildLog = BuildLog BlobStorage.BlobId UTCTime UserName
-
---instance Binary BuildLog where
+newtype BuildLog = BuildLog BlobStorage.BlobId
+  deriving (Eq, Binary)
 
 data BuildReports = BuildReports {
     reports :: !(Map.Map BuildReportId BuildReport),
@@ -38,8 +36,7 @@ data BuildReports = BuildReports {
     index   :: !(Map.Map PackageIdentifier [(BuildReportId, BuildReport)]),
     nextId  :: !BuildReportId
   }
-
---instance Binary BuildReports where
+  deriving Typeable
 
 empty :: BuildReports
 empty = BuildReports {
@@ -50,15 +47,14 @@ empty = BuildReports {
   }
 
 addReport :: BuildReports -> BuildReport -> (BuildReports, BuildReportId)
-addReport buildReports report = (buildReports', nextId')
+addReport buildReports report = (buildReports', curid)
   where
-    nextId'       = case nextId buildReports of
-                      BuildReportId n -> BuildReportId (n + 1)
+    curid         = nextId buildReports
     pkgid         = BuildReport.package report
     buildReports' = buildReports {
-      reports     = Map.insert  nextId'          report  (reports buildReports),
-      index       =     prepend pkgid  (nextId', report) (index   buildReports),
-      nextId      = nextId'
+      reports     = Map.insert  curid         report  (reports buildReports),
+      index       =     prepend pkgid (curid, report) (index   buildReports),
+      nextId      = case curid of BuildReportId n -> BuildReportId (n + 1)
     }
     prepend k v = Map.insertWith (\_ vs -> v:vs) k [v]
 
@@ -84,3 +80,31 @@ lookupPackageReports buildReports pkgid =
   case Map.lookup pkgid (index buildReports) of
     Nothing -> []
     Just rs -> rs
+
+
+-------------------
+-- Binary instances
+--
+
+instance Binary BuildReport where
+  put = Binary.put . BS.Char8.pack . BuildReport.showBuildReport
+  get = (BuildReport.readBuildReport . BS.Char8.unpack) `fmap` Binary.get
+
+instance Binary BuildReports where
+  put (BuildReports rs ls _ _) = do
+    Binary.put rs
+    Binary.put ls
+  get = do
+    rs <- Binary.get
+    ls <- Binary.get
+    return BuildReports {
+      reports = rs,
+      logs    = ls,
+      index   = Map.fromListWith (++)
+                  [ (BuildReport.package r, [e])
+                  | e@(_, r) <- Map.toList rs ],
+      nextId  = if Map.null rs
+                  then BuildReportId 0
+                  else case maximum (Map.keys rs) of
+                         BuildReportId n -> BuildReportId (n + 1)
+    }

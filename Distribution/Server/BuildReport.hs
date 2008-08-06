@@ -18,6 +18,7 @@ module Distribution.Server.BuildReport (
 
     -- * parsing and pretty printing
     parseBuildReport,
+    readBuildReport,
     parseBuildReports,
     showBuildReport,
   ) where
@@ -37,7 +38,7 @@ import Distribution.Text
 import Distribution.ParseUtils
          ( FieldDescr(..), Field(F), simpleField, listField
          , ParseResult(..), readFields, ppFields
-         , warning, lineNo )
+         , warning, lineNo, locatedErrorMsg )
 import qualified Distribution.Compat.ReadP as Parse
          ( ReadP, pfail, munch1, char, option, skipSpaces )
 import qualified Text.PrettyPrint.HughesPJ as Disp
@@ -126,6 +127,12 @@ initialBuildReport = BuildReport {
 
 -- -----------------------------------------------------------------------------
 -- Parsing
+
+readBuildReport :: String -> BuildReport
+readBuildReport s = case parseBuildReport s of
+  ParseFailed err -> error $ "error parsing build report: " ++ msg
+                       where (_, msg) = locatedErrorMsg err
+  ParseOk   _ rpt -> rpt
 
 parseBuildReport :: String -> ParseResult BuildReport
 parseBuildReport = parseFields fieldDescrs initialBuildReport

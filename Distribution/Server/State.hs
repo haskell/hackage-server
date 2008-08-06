@@ -7,6 +7,8 @@ import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.PackageDescription (parsePackageDescription, ParseResult(..))
 import Distribution.Server.Types (PkgInfo(..))
 import Distribution.Server.BlobStorage (BlobId)
+import qualified Distribution.Server.BuildReports as BuildReports
+import Distribution.Server.BuildReports (BuildReports)
 
 import HAppS.State
 import HAppS.Data.Serialize
@@ -23,18 +25,39 @@ import Data.Time.Calendar (Day(..))
 import Distribution.Simple.Utils (fromUTF8)
 
 data PackagesState = PackagesState {
-    packageList  :: PackageIndex.PackageIndex PkgInfo
+    packageList  :: !(PackageIndex.PackageIndex PkgInfo),
+    buildReports :: !BuildReports
   }
-  deriving (Typeable)
+  deriving Typeable
+
+instance Component PackagesState where
+  type Dependencies PackagesState = End
+  initialValue = PackagesState {
+    packageList  = mempty,
+    buildReports = BuildReports.empty
+  }
 
 instance Version PackagesState where
     mode = Versioned 0 Nothing
 
 instance Serialize PackagesState where
-  putCopy (PackagesState idx) = contain $ safePut $ PackageIndex.allPackages idx
-  getCopy = contain $ do packages <- safeGet
-                         return $ PackagesState { packageList = PackageIndex.fromList packages }
+  putCopy (PackagesState idx rpts) = contain $ do
+    safePut $ PackageIndex.allPackages idx
+    safePut rpts
+  getCopy = contain $ do
+    packages <- safeGet
+    reports  <- safeGet
+    return PackagesState {
+      packageList  = PackageIndex.fromList packages,
+      buildReports = reports
+    }
 
+instance Version BuildReports where
+  mode = Versioned 0 Nothing
+
+instance Serialize BuildReports where
+  putCopy = contain . Binary.put
+  getCopy = contain Binary.get
 
 instance Version PackageIdentifier where
   mode = Versioned 0 Nothing
@@ -122,8 +145,3 @@ $(mkMethods ''PackagesState ['getPackagesState
                             ,'bulkImport
                             ,'insert
                             ])
-
-instance Component PackagesState where
-  type Dependencies PackagesState = End
-  initialValue = PackagesState mempty
-
