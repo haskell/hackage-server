@@ -17,6 +17,8 @@ import Distribution.Server.BuildReport (BuildReport)
 
 import Distribution.Package
          ( PackageIdentifier )
+import Distribution.Text
+         ( Text(..) )
 
 import HAppS.Data.Serialize
 
@@ -25,6 +27,10 @@ import qualified Data.ByteString.Char8 as BS.Char8
 import qualified Data.Binary as Binary
 import Data.Binary (Binary)
 import Data.Typeable (Typeable)
+import qualified Data.Char as Char
+
+import qualified Distribution.Compat.ReadP as Parse
+import qualified Text.PrettyPrint          as Disp
 
 newtype BuildReportId = BuildReportId Int
   deriving (Eq, Ord, Binary, Typeable)
@@ -35,6 +41,19 @@ instance Version BuildReportId where
 instance Serialize BuildReportId where
     putCopy = contain . Binary.put
     getCopy = contain Binary.get
+
+instance Text BuildReportId where
+  disp (BuildReportId n) = Disp.int n
+  parse = do
+    n <- digits
+    return (BuildReportId n)
+    where
+      digits = do
+        first <- Parse.satisfy Char.isDigit
+        if first == '0'
+          then return 0
+          else do rest <- Parse.munch Char.isDigit
+                  return (read (first : rest))
 
 newtype BuildLog = BuildLog BlobStorage.BlobId
   deriving (Eq, Binary, Typeable)
