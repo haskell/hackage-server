@@ -130,12 +130,13 @@ initialBuildReport = BuildReport {
 
 readBuildReport :: String -> BuildReport
 readBuildReport s = case parseBuildReport s of
-  ParseFailed err -> error $ "error parsing build report: " ++ msg
-                       where (_, msg) = locatedErrorMsg err
-  ParseOk   _ rpt -> rpt
+  Left  err -> error $ "error parsing build report: " ++ err
+  Right rpt -> rpt
 
-parseBuildReport :: String -> ParseResult BuildReport
-parseBuildReport = parseFields fieldDescrs initialBuildReport
+parseBuildReport :: String -> Either String BuildReport
+parseBuildReport str = case parseFields fieldDescrs initialBuildReport str of
+  ParseFailed err -> Left  msg where (_, msg) = locatedErrorMsg err
+  ParseOk   _ rpt -> Right rpt
 
 --FIXME: this function is now in Cabal as of 1.5, so remove this local copy
 parseFields :: [FieldDescr a] -> a -> String -> ParseResult a
@@ -155,7 +156,7 @@ parseFields fields initial = \str ->
 
 parseBuildReports :: String -> [BuildReport]
 parseBuildReports str =
-  [ report | ParseOk [] report <- map parseBuildReport (split str) ]
+  [ report | Right report <- map parseBuildReport (split str) ]
 
   where
     split :: String -> [String]
