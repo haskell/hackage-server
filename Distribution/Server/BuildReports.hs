@@ -18,6 +18,8 @@ import Distribution.Server.BuildReport (BuildReport)
 import Distribution.Package
          ( PackageIdentifier )
 
+import HAppS.Data.Serialize
+
 import qualified Data.Map as Map
 import qualified Data.ByteString.Char8 as BS.Char8
 import qualified Data.Binary as Binary
@@ -25,10 +27,24 @@ import Data.Binary (Binary)
 import Data.Typeable (Typeable)
 
 newtype BuildReportId = BuildReportId Int
-  deriving (Eq, Ord, Binary)
+  deriving (Eq, Ord, Binary, Typeable)
+
+instance Version BuildReportId where
+    mode = Versioned 0 Nothing
+
+instance Serialize BuildReportId where
+    putCopy = contain . Binary.put
+    getCopy = contain Binary.get
 
 newtype BuildLog = BuildLog BlobStorage.BlobId
-  deriving (Eq, Binary)
+  deriving (Eq, Binary, Typeable)
+
+instance Version BuildLog where
+    mode = Versioned 0 Nothing
+
+instance Serialize BuildLog where
+    putCopy = contain . Binary.put
+    getCopy = contain Binary.get
 
 data BuildReports = BuildReports {
     reports :: !(Map.Map BuildReportId BuildReport),
@@ -89,6 +105,13 @@ lookupPackageReports buildReports pkgid =
 instance Binary BuildReport where
   put = Binary.put . BS.Char8.pack . BuildReport.showBuildReport
   get = (BuildReport.readBuildReport . BS.Char8.unpack) `fmap` Binary.get
+
+instance Version BuildReport where
+    mode = Versioned 0 Nothing
+
+instance Serialize BuildReport where
+    putCopy = contain . Binary.put
+    getCopy = contain Binary.get
 
 instance Binary BuildReports where
   put (BuildReports rs ls _ _) = do

@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Client.Reporting
@@ -52,6 +53,8 @@ import Control.Monad
          ( foldM )
 import Data.Char as Char
          ( isAlpha, isAlphaNum )
+import Data.Typeable
+         ( Typeable )
 import qualified Data.Map as Map
 
 data BuildReport
@@ -90,6 +93,7 @@ data BuildReport
     -- | Configure outcome, did configure work ok?
     testsOutcome    :: Outcome
   }
+  deriving Typeable
 
 data InstallOutcome
    = DependencyFailed PackageIdentifier

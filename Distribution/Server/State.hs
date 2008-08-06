@@ -8,7 +8,8 @@ import Distribution.PackageDescription (parsePackageDescription, ParseResult(..)
 import Distribution.Server.Types (PkgInfo(..))
 import Distribution.Server.BlobStorage (BlobId)
 import qualified Distribution.Server.BuildReports as BuildReports
-import Distribution.Server.BuildReports (BuildReports)
+import Distribution.Server.BuildReports (BuildReports,BuildReportId,BuildLog)
+import Distribution.Server.BuildReport (BuildReport)
 
 import HAppS.State
 import HAppS.Data.Serialize
@@ -138,10 +139,28 @@ bulkImport newIndex
          State.put $ pkgsState { packageList = packageList pkgsState `mappend`
                                                PackageIndex.fromList newIndex }
 
+addReport :: BuildReport -> Update PackagesState BuildReportId
+addReport report
+    = do pkgsState <- State.get
+         let (reports, reportId) = BuildReports.addReport (buildReports pkgsState) report
+         State.put pkgsState{buildReports = reports}
+         return reportId
+
+addBuildLog :: BuildReportId -> BuildLog -> Update PackagesState Bool
+addBuildLog reportId buildLog
+    = do pkgsState <- State.get
+         case BuildReports.addBuildLog (buildReports pkgsState) reportId buildLog of
+           Nothing -> return False
+           Just reports -> do State.put pkgsState{buildReports = reports}
+                              return True
+
+
 getPackagesState :: Query PackagesState PackagesState
 getPackagesState = ask
 
 $(mkMethods ''PackagesState ['getPackagesState
                             ,'bulkImport
                             ,'insert
+                            ,'addReport
+                            ,'addBuildLog
                             ])
