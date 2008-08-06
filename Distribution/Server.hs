@@ -24,6 +24,8 @@ import qualified Distribution.Server.IndexUtils as PackageIndex (write)
 import qualified Distribution.Server.Upload as Upload (unpackPackage)
 import qualified Distribution.Server.BlobStorage as BlobStorage
 import Distribution.Server.BlobStorage (BlobStorage)
+import qualified Distribution.Server.BuildReport as BuildReport
+import qualified Distribution.Server.BuildReports as BuildReports
 
 import System.IO (hFlush, stdout)
 import Control.Exception
@@ -36,6 +38,7 @@ import Data.Time.Clock
 import Network.URI
          ( URIAuth(URIAuth) )
 
+import qualified Data.ByteString.Lazy.Char8 as BS.Char8
 import qualified Codec.Compression.GZip as GZip
 
 import qualified Paths_hackage_server (version)
@@ -175,13 +178,22 @@ uploadPackage store cache host =
 
 buildReports :: BlobStorage -> [ServerPart Response]
 buildReports store =
-  [
+  [ methodSP POST $ withRequest $ \Request { rqBody = Body body } ->
+      case BuildReport.parseBuildReport (BS.Char8.unpack body) of
+        Left err -> badRequest $ toResponse err
+        Right report -> do
+          reportId <- update $ AddReport report
+          seeOther ("/buildreports/"++display reportId) $
+            toResponse ""
   ]
 
 instance FromReqURI PackageIdentifier where
   fromReqURI = simpleParse
 
 instance FromReqURI Version where
+  fromReqURI = simpleParse
+
+instance FromReqURI BuildReports.BuildReportId where
   fromReqURI = simpleParse
 
 basicUsers :: Map.Map String String
