@@ -64,6 +64,12 @@ instance ToMessage CabalFile where
     toContentType _ = BS.pack "text/plain"
     toMessage (CabalFile bs) = bs
 
+newtype BuildLog = BuildLog BS.Lazy.ByteString
+
+instance ToMessage BuildLog where
+    toContentType _ = BS.pack "text/plain"
+    toMessage (BuildLog bs) = bs
+
 instance ToMessage RSS where
     toContentType _ = BS.pack "application/rss+xml"
     toMessage = BS.Lazy.pack . RSS.showXML . RSS.rssToXML

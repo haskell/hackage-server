@@ -179,14 +179,24 @@ uploadPackage store cache host =
 buildReports :: BlobStorage -> [ServerPart Response]
 buildReports store =
   [ path $ \reportId ->
+    [ method GET $ do
+        reports <- return . State.buildReports =<< query GetPackagesState
+        case BuildReports.lookupReport reports reportId of
+          Nothing     -> notFound $ toResponse "No such report"
+          Just report ->
+            ok $ toResponse $ BuildReport.showBuildReport report
+
+    , dir "buildlog" $
       [ method GET $ do
           reports <- return . State.buildReports =<< query GetPackagesState
-          case BuildReports.lookupReport reports reportId of
-            Nothing     -> notFound $ toResponse "No such report"
-            Just report ->
-              ok $ toResponse $ BuildReport.showBuildReport report
+          case BuildReports.lookupBuildLog reports reportId of
+            Nothing -> notFound $ toResponse "No build log available"
+            Just (BuildReports.BuildLog blobId) -> do
+              file <- liftIO $ BlobStorage.fetch store blobId
+              ok $ toResponse $
+                Resource.BuildLog file
       ]
-
+    ]
   , methodSP POST $ withRequest $ \Request { rqBody = Body body } ->
       case BuildReport.parseBuildReport (BS.Char8.unpack body) of
         Left err -> badRequest $ toResponse err
