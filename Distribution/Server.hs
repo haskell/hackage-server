@@ -195,6 +195,17 @@ buildReports store =
               file <- liftIO $ BlobStorage.fetch store blobId
               ok $ toResponse $
                 Resource.BuildLog file
+
+      , methodSP PUT $ withRequest $ \Request { rqBody = Body body } -> do
+          reports <- return . State.buildReports =<< query GetPackagesState
+          case BuildReports.lookupReport reports reportId of
+            Nothing -> notFound $ toResponse "No such report"
+            Just _  -> do
+              --FIXME: authorisation, depending on report id
+              blobId <- liftIO $ BlobStorage.add store body
+              update $ AddBuildLog reportId (BuildReports.BuildLog blobId)
+              setResponseCode 204
+              return $ toResponse ""
       ]
     ]
   , methodSP POST $ withRequest $ \Request { rqBody = Body body } ->
