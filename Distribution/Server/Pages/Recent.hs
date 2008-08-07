@@ -102,7 +102,7 @@ channel now =
   , RSS.Generator "rss-feed"
   ]
   where
-    email = "Ross Paterson <ross@soi.city.ac.uk>"
+    email = "duncan@haskell.org (Duncan Coutts)"
     now'  = convertTime now
 
 releaseItem :: URIAuth -> PkgInfo -> [RSS.ItemElem]
