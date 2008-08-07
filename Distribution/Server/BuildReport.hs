@@ -9,7 +9,7 @@
 -- Stability   :  experimental
 -- Portability :  portable
 --
--- Report data structure
+-- Anonymous build report data structure, printing and parsing
 --
 -----------------------------------------------------------------------------
 module Distribution.Server.BuildReport (
@@ -18,10 +18,11 @@ module Distribution.Server.BuildReport (
     Outcome(..),
 
     -- * parsing and pretty printing
-    parseBuildReport,
-    readBuildReport,
-    parseBuildReports,
-    showBuildReport,
+    read,
+    parse,
+    parseList,
+    show,
+    showList,
   ) where
 
 import Distribution.Package
@@ -34,28 +35,30 @@ import Distribution.System
          ( OS, Arch )
 import Distribution.Compiler
          ( CompilerId )
-import Distribution.Text
+import qualified Distribution.Text as Text
          ( Text(disp, parse) )
 import Distribution.ParseUtils
-         ( FieldDescr(..), Field(F), simpleField, listField
-         , ParseResult(..), readFields, ppFields
-         , warning, lineNo, locatedErrorMsg )
+         ( FieldDescr(..), ParseResult(..), Field(..)
+         , simpleField, listField, ppFields, readFields
+         , syntaxError, locatedErrorMsg )
+import Distribution.Simple.Utils
+         ( comparing )
+
 import qualified Distribution.Compat.ReadP as Parse
-         ( ReadP, pfail, munch1, char, option, skipSpaces )
+         ( ReadP, pfail, munch1, skipSpaces )
 import qualified Text.PrettyPrint.HughesPJ as Disp
          ( Doc, render, char, text )
 import Text.PrettyPrint.HughesPJ
          ( (<+>), (<>) )
 
 import Data.List
-         ( unfoldr )
-import Control.Monad
-         ( foldM )
+         ( unfoldr, sortBy )
 import Data.Char as Char
          ( isAlpha, isAlphaNum )
 import Data.Typeable
          ( Typeable )
-import qualified Data.Map as Map
+
+import Prelude hiding (show, read)
 
 data BuildReport
    = BuildReport {
@@ -132,35 +135,44 @@ initialBuildReport = BuildReport {
 -- -----------------------------------------------------------------------------
 -- Parsing
 
-readBuildReport :: String -> BuildReport
-readBuildReport s = case parseBuildReport s of
+read :: String -> BuildReport
+read s = case parse s of
   Left  err -> error $ "error parsing build report: " ++ err
   Right rpt -> rpt
 
-parseBuildReport :: String -> Either String BuildReport
-parseBuildReport str = case parseFields fieldDescrs initialBuildReport str of
-  ParseFailed err -> Left  msg where (_, msg) = locatedErrorMsg err
-  ParseOk   _ rpt -> Right rpt
+parse :: String -> Either String BuildReport
+parse s = case parseFields s of
+  ParseFailed perror -> Left  msg where (_, msg) = locatedErrorMsg perror
+  ParseOk   _ report -> Right report
 
---FIXME: this function is now in Cabal as of 1.5, so remove this local copy
-parseFields :: [FieldDescr a] -> a -> String -> ParseResult a
-parseFields fields initial = \str ->
-  readFields str >>= foldM setField initial
+--FIXME: this does not allow for optional or repeated fields
+parseFields :: String -> ParseResult BuildReport
+parseFields input = do
+  fields <- mapM extractField =<< readFields input
+  let merged = mergeBy (\desc (_,name,_) -> compare (fieldName desc) name)
+                       sortedFieldDescrs
+                       (sortBy (comparing (\(_,name,_) -> name)) fields)
+  checkMerged initialBuildReport merged
+
   where
-    fieldMap = Map.fromList
-      [ (name, f) | f@(FieldDescr name _ _) <- fields ]
-    setField accum (F line name value) = case Map.lookup name fieldMap of
-      Just (FieldDescr _ _ set) -> set line value accum
-      Nothing -> do
-        warning $ "Unrecognized field " ++ name ++ " on line " ++ show line
-        return accum
-    setField accum f = do
-        warning $ "Unrecognized stanza on line " ++ show (lineNo f)
-        return accum
+    extractField :: Field -> ParseResult (Int, String, String)
+    extractField (F line name value)  = return (line, name, value)
+    extractField (Section line _ _ _) = syntaxError line "Unrecognized stanza"
+    extractField (IfBlock line _ _ _) = syntaxError line "Unrecognized stanza"
 
-parseBuildReports :: String -> [BuildReport]
-parseBuildReports str =
-  [ report | Right report <- map parseBuildReport (split str) ]
+    checkMerged report [] = return report
+    checkMerged report (merged:remaining) = case merged of
+      InBoth fieldDescr (line, _name, value) -> do
+        report' <- fieldSet fieldDescr line value report
+        checkMerged report' remaining
+      OnlyInRight (line, name, _) ->
+        syntaxError line ("Unrecognized field " ++ name)
+      OnlyInLeft  fieldDescr ->
+        fail ("Missing field " ++ fieldName fieldDescr)
+
+parseList :: String -> [BuildReport]
+parseList str =
+  [ report | Right report <- map parse (split str) ]
 
   where
     split :: String -> [String]
@@ -172,8 +184,8 @@ parseBuildReports str =
 -- -----------------------------------------------------------------------------
 -- Pretty-printing
 
-showBuildReport :: BuildReport -> String
-showBuildReport = showFields fieldDescrs
+show :: BuildReport -> String
+show = showFields fieldDescrs
 
 --FIXME: this function is now in Cabal as of 1.5, so remove this local copy
 showFields :: [FieldDescr a] -> a -> String
@@ -184,27 +196,30 @@ showFields fields = Disp.render . flip ppFields fields
 
 fieldDescrs :: [FieldDescr BuildReport]
 fieldDescrs =
- [ simpleField "package"         disp           parse
+ [ simpleField "package"         Text.disp      Text.parse
                                  package        (\v r -> r { package = v })
- , simpleField "os"              disp           parse
+ , simpleField "os"              Text.disp      Text.parse
                                  os             (\v r -> r { os = v })
- , simpleField "arch"            disp           parse
+ , simpleField "arch"            Text.disp      Text.parse
                                  arch           (\v r -> r { arch = v })
- , simpleField "compiler"        disp           parse
+ , simpleField "compiler"        Text.disp      Text.parse
                                  compiler       (\v r -> r { compiler = v })
- , simpleField "client"          disp           parse
+ , simpleField "client"          Text.disp      Text.parse
                                  client         (\v r -> r { client = v })
  , listField   "flags"           dispFlag       parseFlag
                                  flagAssignment (\v r -> r { flagAssignment = v })
- , listField   "dependencies"    disp           parse
+ , listField   "dependencies"    Text.disp      Text.parse
                                  dependencies   (\v r -> r { dependencies = v })
- , simpleField "install-outcome" disp           parse
+ , simpleField "install-outcome" Text.disp      Text.parse
                                  installOutcome (\v r -> r { installOutcome = v })
- , simpleField "docs-outcome"    disp           parse
+ , simpleField "docs-outcome"    Text.disp      Text.parse
                                  docsOutcome    (\v r -> r { docsOutcome = v })
- , simpleField "tests-outcome"   disp           parse
+ , simpleField "tests-outcome"   Text.disp      Text.parse
                                  testsOutcome   (\v r -> r { testsOutcome = v })
  ]
+
+sortedFieldDescrs :: [FieldDescr BuildReport]
+sortedFieldDescrs = sortBy (comparing fieldName) fieldDescrs
 
 dispFlag :: (FlagName, Bool) -> Disp.Doc
 dispFlag (FlagName name, True)  =                  Disp.text name
@@ -212,12 +227,13 @@ dispFlag (FlagName name, False) = Disp.char '-' <> Disp.text name
 
 parseFlag :: Parse.ReadP r (FlagName, Bool)
 parseFlag = do
-  value <- Parse.option True (Parse.char '-' >> return False)
-  name  <- Parse.munch1 (\c -> Char.isAlphaNum c || c == '_' || c == '-')
-  return (FlagName name, value)
+  name <- Parse.munch1 (\c -> Char.isAlphaNum c || c == '_' || c == '-')
+  case name of
+    ('-':flag) -> return (FlagName flag, False)
+    flag       -> return (FlagName flag, True)
 
-instance Text InstallOutcome where
-  disp (DependencyFailed pkgid) = Disp.text "DependencyFailed" <+> disp pkgid
+instance Text.Text InstallOutcome where
+  disp (DependencyFailed pkgid) = Disp.text "DependencyFailed" <+> Text.disp pkgid
   disp DownloadFailed  = Disp.text "DownloadFailed"
   disp UnpackFailed    = Disp.text "UnpackFailed"
   disp SetupFailed     = Disp.text "SetupFailed"
@@ -230,7 +246,7 @@ instance Text InstallOutcome where
     name <- Parse.munch1 Char.isAlphaNum
     case name of
       "DependencyFailed" -> do Parse.skipSpaces
-                               pkgid <- parse
+                               pkgid <- Text.parse
                                return (DependencyFailed pkgid)
       "DownloadFailed"   -> return DownloadFailed
       "UnpackFailed"     -> return UnpackFailed
@@ -241,7 +257,7 @@ instance Text InstallOutcome where
       "InstallOk"        -> return InstallOk
       _                  -> Parse.pfail
 
-instance Text Outcome where
+instance Text.Text Outcome where
   disp NotTried = Disp.text "NotTried"
   disp Failed   = Disp.text "Failed"
   disp Ok       = Disp.text "Ok"
@@ -252,3 +268,16 @@ instance Text Outcome where
       "Failed"   -> return Failed
       "Ok"       -> return Ok
       _          -> Parse.pfail
+
+mergeBy :: (a -> b -> Ordering) -> [a] -> [b] -> [MergeResult a b]
+mergeBy cmp = merge
+  where
+    merge []     ys     = [ OnlyInRight y | y <- ys]
+    merge xs     []     = [ OnlyInLeft  x | x <- xs]
+    merge (x:xs) (y:ys) =
+      case x `cmp` y of
+        GT -> OnlyInRight   y : merge (x:xs) ys
+        EQ -> InBoth      x y : merge xs     ys
+        LT -> OnlyInLeft  x   : merge xs  (y:ys)
+
+data MergeResult a b = OnlyInLeft a | InBoth a b | OnlyInRight b

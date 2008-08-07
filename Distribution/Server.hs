@@ -199,7 +199,7 @@ buildReports store =
         case BuildReports.lookupReport reports reportId of
           Nothing     -> notFound $ toResponse "No such report"
           Just report ->
-            ok $ toResponse $ BuildReport.showBuildReport report
+            ok $ toResponse $ BuildReport.show report
 
     , dir "buildlog" $
       [ method GET $ do
@@ -224,7 +224,7 @@ buildReports store =
       ]
     ]
   , methodSP POST $ withRequest $ \Request { rqBody = Body body } ->
-      case BuildReport.parseBuildReport (BS.Char8.unpack body) of
+      case BuildReport.parse (BS.Char8.unpack body) of
         Left err -> badRequest $ toResponse err
         Right report -> do
           reportId <- update $ AddReport report

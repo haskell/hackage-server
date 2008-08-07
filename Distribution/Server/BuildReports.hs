@@ -122,8 +122,8 @@ lookupPackageReports buildReports pkgid =
 --
 
 instance Binary BuildReport where
-  put = Binary.put . BS.Char8.pack . BuildReport.showBuildReport
-  get = (BuildReport.readBuildReport . BS.Char8.unpack) `fmap` Binary.get
+  put = Binary.put . BS.Char8.pack . BuildReport.show
+  get = (BuildReport.read . BS.Char8.unpack) `fmap` Binary.get
 
 instance Version BuildReport where
     mode = Versioned 0 Nothing
