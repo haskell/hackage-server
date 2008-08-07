@@ -4,7 +4,7 @@ module Distribution.Server.Pages.Index (packageIndex) where
 
 import Distribution.Server.Pages.Template	( hackagePage )
 
-import Text.XHtml		hiding ( p )
+import Text.XHtml.Strict hiding ( p )
 import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration

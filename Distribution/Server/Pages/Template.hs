@@ -1,7 +1,7 @@
 -- Common wrapper for HTML pages
 module Distribution.Server.Pages.Template (hackagePage, hackagePageWith) where
 
-import Text.XHtml		hiding ( p )
+import Text.XHtml.Strict	hiding ( p )
 
 -- | Create top-level HTML document by wrapping the Html with boilerplate.
 hackagePage :: String -> [Html] -> Html
@@ -10,8 +10,6 @@ hackagePage = hackagePageWith []
 hackagePageWith :: [Html] -> String -> [Html] -> Html
 hackagePageWith links heading docs = toHtml [header << docHead, body << docBody]
   where docHead =
-		meta ! [httpequiv "Content-type",
-			content "text/html; charset=ISO-8859-1"] :
 		thetitle << ("HackageDB: " ++ heading) :
 		thelink ! [rel "stylesheet", href stylesheetURL,
 			thetype "text/css"] << noHtml :

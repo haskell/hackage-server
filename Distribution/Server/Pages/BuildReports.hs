@@ -12,8 +12,8 @@ import Distribution.Package
 import Distribution.Text
          ( display )
 
-import qualified Text.XHtml as XHtml
-import Text.XHtml ((<<), (!), tr, th, td)
+import qualified Text.XHtml.Strict as XHtml
+import Text.XHtml.Strict ((<<), (!), tr, th, td)
 
 
 buildReportSummary :: PackageIdentifier

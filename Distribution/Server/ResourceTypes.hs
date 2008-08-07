@@ -27,6 +27,8 @@ import Text.RSS
          ( RSS )
 import qualified Text.RSS as RSS
          ( rssToXML, showXML )
+import qualified Text.XHtml.Strict as XHtml
+         ( Html, renderHtml )
 import Data.Time.Clock
          ( UTCTime )
 import qualified Data.Time.Format as Time
@@ -74,6 +76,11 @@ instance ToMessage RSS where
     toContentType _ = BS.pack "application/rss+xml"
     toMessage = BS.Lazy.pack . RSS.showXML . RSS.rssToXML
 
+newtype XHtml = XHtml XHtml.Html
+
+instance ToMessage XHtml where
+    toContentType _ = BS.pack "application/xhtml+xml"
+    toMessage (XHtml xhtml) = BS.Lazy.pack (XHtml.renderHtml xhtml)
 
 mkResponse :: BS.Lazy.ByteString -> [(String, String)] -> Response
 mkResponse bs headers = Response {

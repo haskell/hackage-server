@@ -18,7 +18,7 @@ import Distribution.PackageDescription
 import Distribution.Text
          ( display )
 
-import qualified Text.XHtml as XHtml
+import qualified Text.XHtml.Strict as XHtml
 import Text.XHtml
          ( Html, URL, (<<), (!) )
 import qualified Text.RSS as RSS

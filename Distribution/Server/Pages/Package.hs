@@ -18,7 +18,7 @@ import Distribution.Package
 import Distribution.PackageDescription as P
 import Distribution.Version
 import Distribution.Text	( display )
-import Text.XHtml		hiding ( p, (</>) )
+import Text.XHtml.Strict hiding ( p )
 
 import Control.Monad		( liftM2 )
 import qualified Data.Foldable as Foldable

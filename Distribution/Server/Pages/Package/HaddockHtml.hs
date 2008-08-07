@@ -2,7 +2,7 @@
 module Distribution.Server.Pages.Package.HaddockHtml where
 
 import Data.Char		(isSpace)
-import Text.XHtml		hiding (p)
+import Text.XHtml.Strict	hiding (p)
 import Network.URI              (escapeURIString, isUnreserved)
 
 data GenDoc id

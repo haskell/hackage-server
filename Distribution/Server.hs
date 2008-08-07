@@ -78,10 +78,13 @@ log msg = putStr msg >> hFlush stdout
 stateToCache :: URIAuth -> PackagesState -> IO Cache.State
 stateToCache host state = getCurrentTime >>= \now -> return
   Cache.State {
-    Cache.packagesPage  = toResponse (Pages.packageIndex index),
-    Cache.indexTarball  = GZip.compress (PackageIndex.write index),
-    Cache.recentChanges = toResponse (Pages.recentPage recentChanges),
-    Cache.packagesFeed  = toResponse (Pages.recentFeed host now recentChanges)
+    Cache.packagesPage  = toResponse $ Resource.XHtml $
+                            Pages.packageIndex index,
+    Cache.indexTarball  = GZip.compress $ PackageIndex.write index,
+    Cache.recentChanges = toResponse $ Resource.XHtml $
+                            Pages.recentPage recentChanges,
+    Cache.packagesFeed  = toResponse $
+                            Pages.recentFeed host now recentChanges
   }
   where index = packageList state
         recentChanges = reverse $ sortBy (comparing pkgUploadTime) (PackageIndex.allPackages index)
@@ -108,7 +111,7 @@ handlePackageById :: BlobStorage -> PackageIdentifier -> [ServerPart Response]
 handlePackageById store pkgid =
   [ method GET $
       withPackage $ \pkg pkgs ->
-        ok $ toResponse (Pages.packagePage pkg pkgs)
+        ok $ toResponse $ Resource.XHtml $ Pages.packagePage pkg pkgs
 
   , dir "cabal"
     [ method GET $
@@ -135,7 +138,8 @@ handlePackageById store pkgid =
           Just _  -> do
             let reports = BuildReports.lookupPackageReports
                             (State.buildReports state) pkgid
-            ok $ toResponse (Pages.buildReportSummary pkgid reports)
+            ok $ toResponse $ Resource.XHtml $
+                   Pages.buildReportSummary pkgid reports
     ]
   ]
   
