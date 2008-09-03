@@ -37,7 +37,8 @@ import Data.ByteString.Lazy.Char8
          ( ByteString )
 import System.FilePath
          ( (</>), (<.>), splitExtension, splitDirectories, normalise )
-
+import qualified System.FilePath.Windows
+         ( takeFileName )
 
 -- | Upload or check a tarball containing a Cabal package.
 -- Returns either an fatal error or a package description and a list
@@ -47,7 +48,7 @@ unpackPackage :: FilePath -> ByteString
                         ((GenericPackageDescription, ByteString), [String])
 unpackPackage tarGzFile contents = runUploadMonad $ do
   let (pkgidStr, ext) = (base, tar ++ gz)
-        where (tarFile, gz) = splitExtension tarGzFile
+        where (tarFile, gz) = splitExtension (portableTakeFileName tarGzFile)
               (base,   tar) = splitExtension tarFile
   unless (ext == ".tar.gz") $
     fail $ tarGzFile ++ " is not a gzipped tar file, it must have the .tar.gz extension"
@@ -98,6 +99,14 @@ unpackPackage tarGzFile contents = runUploadMonad $ do
   where
     showError (Nothing, msg) = msg
     showError (Just n, msg) = "line " ++ show n ++ ": " ++ msg
+
+-- | The issue is that browsers can upload the file name using either unix
+-- or windows convention, so we need to take the basename using either
+-- convention. Since windows allows the unix '/' as a separator then we can
+-- use the Windows.takeFileName as a portable solution.
+--
+portableTakeFileName :: FilePath -> String
+portableTakeFileName = System.FilePath.Windows.takeFileName
 
 -- Miscellaneous checks on package description
 extraChecks :: GenericPackageDescription -> UploadMonad ()
