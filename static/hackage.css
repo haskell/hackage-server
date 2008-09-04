@@ -40,7 +40,7 @@ h3.category {
 }
 ul.packages {
 	margin: 1ex 0;
-	list-style-image: url(/images/Cabal-tiny.png);
+	list-style-image: url(/cabal-tiny.png);
 	list-style-type: circle;
 }
 table.properties {
