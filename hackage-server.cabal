@@ -59,8 +59,6 @@ executable hackage-server
     old-locale >= 1.0,
     directory >= 1.0,
     random >= 1.0,
-    process >= 1.0,
-    -- FIXME: remove process, only needed temporarily
     array >= 0.1,
     containers >= 0.1,
     pretty >= 1.0,
