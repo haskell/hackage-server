@@ -44,10 +44,10 @@ instance Show BlobId where show (BlobId digest) = show digest
 newtype BlobStorage = BlobStorage FilePath -- ^ location of the store
 
 filepath :: BlobStorage -> BlobId -> FilePath
-filepath (BlobStorage store) (BlobId hash) = store </> show hash
+filepath (BlobStorage storeDir) (BlobId hash) = storeDir </> show hash
 
 incomingDir :: BlobStorage -> FilePath
-incomingDir (BlobStorage store) = store </> "incoming"
+incomingDir (BlobStorage storeDir) = storeDir </> "incoming"
 
 -- | Add a blob into the store. The result is a 'BlobId' that can be used
 -- later with 'fetch' to retrieve the blob content.
@@ -83,7 +83,7 @@ withIncomming :: BlobStorage -> ByteString
               -> (Handle -> BlobId -> IO (a, Bool))
               -> IO a
 withIncomming store content action = do
-  (file, hnd) <- openBinaryTempFile (incomingDir store) "tmp"
+  (file, hnd) <- openBinaryTempFile (incomingDir store) "new"
   handleExceptions file hnd $ do
     -- TODO: calculate the md5 and write to the temp file in one pass:
     BS.hPut hnd content
@@ -120,8 +120,8 @@ fetch store blobid = BS.readFile (filepath store blobid)
 -- | Opens an existing or new blob storage area.
 --
 open :: FilePath -> IO BlobStorage
-open pkgDir
-    = do createDirectoryIfMissing False pkgDir
-         let blob = BlobStorage pkgDir
-         createDirectoryIfMissing False (incomingDir blob)
-         return blob
+open storeDir = do
+  createDirectoryIfMissing False storeDir
+  let store = BlobStorage storeDir
+  createDirectoryIfMissing False (incomingDir store)
+  return store
