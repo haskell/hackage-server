@@ -17,10 +17,13 @@ license-file: LICENSE
 build-type: Simple
 cabal-version: >=1.2
 data-files:
-  static/hackage.html,
-  static/hackage.css,
-  static/upload.html,
+  static/hackage.css
   static/accounts.html
+  static/hackage.html
+  static/upload.html
+  static/favicon.ico
+  static/built-with-cabal.png
+  static/cabal-tiny.png
 
 executable hackage-server
   main-is: Main.hs
