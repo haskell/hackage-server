@@ -25,8 +25,28 @@ data-files:
 executable hackage-server
   main-is: Main.hs
   other-modules:
-    Distribution.Server.Pages.Package.HaddockParse
+    Distribution.Server
+    Distribution.Server.AsyncVar
+    Distribution.Server.BlobStorage
+    Distribution.Server.BuildReport
+    Distribution.Server.BuildReports
+    Distribution.Server.BulkImport
+    Distribution.Server.BulkImport.UploadLog
+    Distribution.Server.Cache
+    Distribution.Server.IndexUtils
+    Distribution.Server.Pages.BuildReports
+    Distribution.Server.Pages.Index
+    Distribution.Server.Pages.Package
+    Distribution.Server.Pages.Package.HaddockHtml
     Distribution.Server.Pages.Package.HaddockLex
+    Distribution.Server.Pages.Package.HaddockParse
+    Distribution.Server.Pages.Recent
+    Distribution.Server.Pages.Template
+    Distribution.Server.ResourceTypes
+    Distribution.Server.State
+    Distribution.Server.Tar
+    Distribution.Server.Types
+    Distribution.Server.Upload
   build-depends:
     base,
     filepath >= 1.1,
