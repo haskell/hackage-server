@@ -1,6 +1,6 @@
 module Main (main) where
 
-import qualified Distribution.Server (main, version)
+import qualified Distribution.Server (main, Config(..), version)
 import qualified Distribution.Server.BlobStorage as BlobStorage (open)
 import qualified Distribution.Server.BulkImport as BulkImport
 
@@ -11,12 +11,18 @@ import System.Environment
          ( getArgs )
 import System.Exit
          ( exitWith, ExitCode(..) )
+import System.FilePath
+         ( (</>) )
+import System.Directory
+         ( createDirectoryIfMissing )
 import System.Console.GetOpt
          ( OptDescr(..), ArgDescr(..), ArgOrder(..), getOpt, usageInfo )
 import Network.BSD
          ( getHostName )
 import Data.List
          ( sort, intersperse )
+import Data.Maybe
+         ( fromMaybe )
 import Control.Monad
          ( unless )
 import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
@@ -27,7 +33,9 @@ main :: IO ()
 main = do
   opts <- getOpts
 
-  store <- BlobStorage.open "packages"
+  let stateDir = fromMaybe "state" (optStateDir opts)
+  createDirectoryIfMissing False stateDir
+  store <- BlobStorage.open (stateDir </> "blobs")
 
   imports <- case (optImportIndex opts, optImportLog opts) of
     (Nothing, Nothing) -> return []
@@ -54,7 +62,13 @@ main = do
       _        -> die $ "bad port number " ++ show str
   hostname <- maybe getHostName return (optHost opts)
 
-  Distribution.Server.main hostname port store imports
+  let config = Distribution.Server.Config {
+        Distribution.Server.hostName  = hostname,
+        Distribution.Server.portNum   = port,
+        Distribution.Server.stateDir  = stateDir,
+        Distribution.Server.blobStore = store
+      }
+   in Distribution.Server.main config imports
 
 die :: String -> IO a
 die msg = putStrLn msg >> exitWith (ExitFailure 1)
@@ -64,6 +78,7 @@ die msg = putStrLn msg >> exitWith (ExitFailure 1)
 data Options = Options {
     optPort          :: Maybe String,
     optHost          :: Maybe String,
+    optStateDir      :: Maybe FilePath,
     optImportIndex   :: Maybe FilePath,
     optImportLog     :: Maybe FilePath,
     optImportArchive :: Maybe FilePath,
@@ -75,6 +90,7 @@ defaultOptions :: Options
 defaultOptions = Options {
     optPort          = Nothing,
     optHost          = Nothing,
+    optStateDir      = Nothing,
     optImportIndex   = Nothing,
     optImportLog     = Nothing,
     optImportArchive = Nothing,
@@ -119,6 +135,9 @@ optionDescriptions =
   , Option [] ["host"]
       (ReqArg (\host opts -> opts { optHost = Just host }) "NAME")
       "Server's host name (defaults to machine name)"
+  , Option [] ["state-dir"]
+      (ReqArg (\file opts -> opts { optStateDir = Just file }) "DIR")
+      "Directory in which to store the persistent state of the server"
   , Option [] ["import-index"]
       (ReqArg (\file opts -> opts { optImportIndex = Just file }) "TARBALL")
       "Import an existing hackage index file (00-index.tar.gz)"

@@ -1,5 +1,6 @@
 module Distribution.Server (
    main,
+   Config(..),
    Paths_hackage_server.version,
  ) where
 
@@ -29,6 +30,7 @@ import qualified Distribution.Server.BuildReport as BuildReport
 import qualified Distribution.Server.BuildReports as BuildReports
 
 import System.IO (hFlush, stdout)
+import System.FilePath ((</>))
 import Control.Exception
 import Data.Maybe; import Data.Version
 import Control.Monad.Trans
@@ -46,11 +48,18 @@ import qualified Paths_hackage_server (version)
 
 import Prelude hiding (log)
 
-main :: String -> Int -> BlobStorage -> [PkgInfo] -> IO ()
-main hostname port store imports = do
+data Config = Config {
+  hostName  :: String,
+  portNum   :: Int,
+  stateDir  :: FilePath,
+  blobStore :: BlobStorage
+}
+
+main :: Config -> [PkgInfo] -> IO ()
+main (Config hostname port state store) imports = do
 
   log "hackage-server: initialising..."
-  bracket (startSystemState hackageEntryPoint) shutdownSystem $ \_ctl -> do
+  withServerState $ \_txCtl -> do
     cache <- Cache.new =<< stateToCache host =<< query GetPackagesState
 
     case imports of
@@ -60,10 +69,17 @@ main hostname port store imports = do
        Cache.put cache =<< stateToCache host =<< query GetPackagesState
 
     log (" ready. Serving on " ++ hostname ++" port " ++ show port ++ "\n")
-    simpleHTTP nullConf { HAppS.Server.port = port } (impl store cache host)
+    simpleHTTP conf (impl store cache host)
 
   where
+    conf = nullConf { HAppS.Server.port = port }
     host = URIAuth "" hostname (if port == 80 then "" else ':' : show port)
+
+    withServerState = bracket start stop
+      where
+        start = runTxSystem saver hackageEntryPoint
+        saver = Queue (FileSaver (state </> "db"))
+        stop  = shutdownSystem
 
 hackageEntryPoint :: Proxy PackagesState
 hackageEntryPoint = Proxy
