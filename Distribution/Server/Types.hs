@@ -26,9 +26,6 @@ import Data.ByteString.Lazy (ByteString)
 import Data.Time.Clock (UTCTime)
 import Data.Typeable (Typeable)
 
-deriving instance Typeable GenericPackageDescription
-deriving instance Typeable PackageIdentifier
-
 type UserName = String --FIXME: use proper username type
 
 -- | The information we keep about a particular version of a package.

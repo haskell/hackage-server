@@ -1,6 +1,8 @@
-{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, TypeFamilies, TemplateHaskell,
+{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell,
              FlexibleInstances, FlexibleContexts, MultiParamTypeClasses  #-}
 module Distribution.Server.State where
+
+import Distribution.Server.Instances ()
 
 import Distribution.Package (PackageIdentifier,Package(packageId))
 import qualified Distribution.Simple.PackageIndex as PackageIndex
@@ -21,7 +23,6 @@ import qualified Control.Monad.State as State
 import Data.Monoid
 import qualified Data.ByteString.Lazy.Char8 as BS (unpack)
 import Data.Time.Clock (UTCTime(..))
-import Data.Time.Calendar (Day(..))
 
 import Distribution.Simple.Utils (fromUTF8)
 
@@ -100,23 +101,12 @@ instance Serialize PkgInfo where
     }
     where parse = parsePackageDescription . fromUTF8 . BS.unpack
 
-deriving instance Typeable UTCTime
-
 instance Version UTCTime where
   mode = Versioned 0 Nothing
 
 instance Serialize UTCTime where
   putCopy = contain . Binary.put
   getCopy = contain Binary.get
-
-instance Binary.Binary UTCTime where
-  put time = do
-    Binary.put (toModifiedJulianDay $ utctDay time)
-    Binary.put (toRational $ utctDayTime time)
-  get = do
-    day  <- Binary.get
-    secs <- Binary.get
-    return (UTCTime (ModifiedJulianDay day) (fromRational secs))
 
 instance Version BlobId where
   mode = Versioned 0 Nothing

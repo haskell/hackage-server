@@ -39,6 +39,7 @@ executable hackage-server
     Distribution.Server.BulkImport.UploadLog
     Distribution.Server.Cache
     Distribution.Server.IndexUtils
+    Distribution.Server.Instances
     Distribution.Server.Pages.BuildReports
     Distribution.Server.Pages.Index
     Distribution.Server.Pages.Package
