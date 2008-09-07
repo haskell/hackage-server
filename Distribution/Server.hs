@@ -36,10 +36,11 @@ import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
 
 import System.FilePath ((</>))
 import System.Directory
-         ( createDirectoryIfMissing )
+         ( createDirectoryIfMissing, doesDirectoryExist )
 import Control.Concurrent.MVar (MVar)
 import Data.Maybe; import Data.Version
 import Control.Monad.Trans
+import Control.Monad (when)
 import Data.List (maximumBy, sortBy)
 import Data.Ord (comparing)
 import qualified Data.Map as Map
@@ -53,23 +54,29 @@ import Network.BSD
 import qualified Data.ByteString.Lazy.Char8 as BS.Char8
 import qualified Codec.Compression.GZip as GZip
 
+import Paths_hackage_server (getDataDir)
+
 data Config = Config {
-  confHostName :: String,
-  confPortNum  :: Int,
-  confStateDir :: FilePath
+  confHostName  :: String,
+  confPortNum   :: Int,
+  confStateDir  :: FilePath,
+  confStaticDir :: FilePath
 }
 
 defaultConfig :: IO Config
 defaultConfig = do
-  host <- getHostName
+  hostName <- getHostName
+  dataDir  <- getDataDir
   return Config {
-    confHostName = host,
-    confPortNum  = 5000,
-    confStateDir = "state"
+    confHostName  = hostName,
+    confPortNum   = 5000,
+    confStateDir  = "state",
+    confStaticDir = dataDir </> "static"
   }
 
 data Server = Server {
   serverStore      :: BlobStorage,
+  serverStaticDir  :: FilePath,
   serverTxControl  :: MVar TxControl,
   serverCache      :: Cache.Cache,
   serverURI        :: URIAuth,
@@ -77,7 +84,12 @@ data Server = Server {
 }
 
 initialise :: Config -> IO Server
-initialise (Config hostName portNum stateDir) = do
+initialise (Config hostName portNum stateDir staticDir) = do
+
+  exists <- doesDirectoryExist staticDir
+  when (not exists) $
+    fail $ "The directory '" ++ staticDir ++ "' does not exist. It should "
+        ++ "contain the hackage server's static html and other files."
 
   createDirectoryIfMissing False stateDir
   store   <- BlobStorage.open blobStoreDir
@@ -87,6 +99,7 @@ initialise (Config hostName portNum stateDir) = do
 
   return Server {
     serverStore      = store,
+    serverStaticDir  = staticDir,
     serverTxControl  = txCtl,
     serverCache      = cache,
     serverURI        = hostURI,
@@ -111,7 +124,7 @@ run server = simpleHTTP conf (impl server)
 bulkImport :: Server
            -> ByteString -> String -> Maybe ByteString
            -> IO [UploadLog.Entry]
-bulkImport (Server store _ cache host _) indexFile logFile archive = do
+bulkImport (Server store _ _ cache host _) indexFile logFile archive = do
   --TODO: check the other two first
   tarballs  <- maybe (return []) (BulkImport.importTarballs store) archive
 
@@ -297,7 +310,7 @@ basicUsers :: Map.Map String String
 basicUsers = Map.fromList [("Lemmih","kodeord")]
 
 impl :: Server -> [ServerPartT IO Response]
-impl (Server store _ cache host _) =
+impl (Server store static _ cache host _) =
   [ dir "packages" [ path $ handlePackageById store
                    , legacySupport
                    , method GET $ do
@@ -316,5 +329,5 @@ impl (Server store _ cache host _) =
           cacheState <- Cache.get cache
           ok $ toResponse $ Resource.IndexTarball (Cache.indexTarball cacheState)
       ]
-  , fileServe ["hackage.html"] "static"
+  , fileServe ["hackage.html"] static
   ]

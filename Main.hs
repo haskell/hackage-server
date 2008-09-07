@@ -39,13 +39,15 @@ main = topHandler $ do
   defaults <- Distribution.Server.defaultConfig
 
   port <- checkPortOpt defaults (optPort opts)
-  let hostname = fromMaybe (confHostName defaults) (optHost opts)
-      stateDir = fromMaybe (confStateDir defaults) (optStateDir opts)
+  let hostname  = fromMaybe (confHostName  defaults) (optHost      opts)
+      stateDir  = fromMaybe (confStateDir  defaults) (optStateDir  opts)
+      staticDir = fromMaybe (confStaticDir defaults) (optStaticDir opts)
 
       config = defaults {
-        confHostName = hostname,
-        confPortNum  = port,
-        confStateDir = stateDir
+        confHostName  = hostname,
+        confPortNum   = port,
+        confStateDir  = stateDir,
+        confStaticDir = staticDir
       }
 
   info "initialising..."
@@ -104,6 +106,7 @@ data Options = Options {
     optPort          :: Maybe String,
     optHost          :: Maybe String,
     optStateDir      :: Maybe FilePath,
+    optStaticDir     :: Maybe FilePath,
     optImportIndex   :: Maybe FilePath,
     optImportLog     :: Maybe FilePath,
     optImportArchive :: Maybe FilePath,
@@ -116,6 +119,7 @@ defaultOptions = Options {
     optPort          = Nothing,
     optHost          = Nothing,
     optStateDir      = Nothing,
+    optStaticDir     = Nothing,
     optImportIndex   = Nothing,
     optImportLog     = Nothing,
     optImportArchive = Nothing,
@@ -162,6 +166,9 @@ optionDescriptions =
   , Option [] ["state-dir"]
       (ReqArg (\file opts -> opts { optStateDir = Just file }) "DIR")
       "Directory in which to store the persistent state of the server"
+  , Option [] ["static-dir"]
+      (ReqArg (\file opts -> opts { optStaticDir = Just file }) "DIR")
+      "Directory in which to find the html and other static files"
   , Option [] ["import-index"]
       (ReqArg (\file opts -> opts { optImportIndex = Just file }) "TARBALL")
       "Import an existing hackage index file (00-index.tar.gz)"
