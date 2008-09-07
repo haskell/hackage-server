@@ -18,8 +18,8 @@ module Distribution.Server.IndexUtils (
   ) where
 
 import qualified Distribution.Server.Tar as Tar
-         ( Entry(..), Entries(..), ExtendedHeader(..)
-         , read, write, simpleFileEntry )
+         ( Entry(..), Entries(..), fileName, ExtendedHeader(..), FileType(..)
+         , read, write, simpleFileEntry, toTarPath )
 import Distribution.Server.Types
          ( PkgInfo(..) )
 
@@ -69,8 +69,8 @@ read mkPackage indexFileContent = collect [] entries
                        Nothing -> collect     es'  es
     collect _   (Tar.Fail err)  = Left err
 
-    entry e@Tar.Entry { Tar.fileName = fileName }
-      | [pkgname,versionStr,_] <- splitDirectories (normalise fileName)
+    entry e
+      | [pkgname,versionStr,_] <- splitDirectories (normalise (Tar.fileName e))
       , Just version <- simpleParse versionStr
       = let pkgid  = PackageIdentifier pkgname version
          in Just (mkPackage pkgid e)
@@ -85,8 +85,9 @@ writeGeneric externalPackageRep updateEntry =
   Tar.write . map entry . PackageIndex.allPackages
   where
     entry pkg = updateEntry pkg
-              . Tar.simpleFileEntry fileName
+              . Tar.simpleFileEntry tarPath
               $ externalPackageRep pkg
       where
+        Right tarPath = Tar.toTarPath Tar.NormalFile fileName
         fileName = packageName pkg </> display (packageVersion pkg)
                                    </> packageName pkg <.> "cabal"

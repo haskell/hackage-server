@@ -17,7 +17,7 @@ module Distribution.Server.BulkImport (
 
 import qualified Distribution.Server.IndexUtils as PackageIndex (read)
 import qualified Distribution.Server.Tar as Tar
-         ( Entry(..) )
+         ( Entry(..), fileName )
 import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
          ( Entry(..), read )
 import qualified Distribution.Server.BlobStorage as BlobStorage
@@ -53,11 +53,9 @@ newPkgInfo :: PackageIdentifier
            -> Tar.Entry
            -> UploadLog.Entry -> [UploadLog.Entry]
            -> Either String PkgInfo
-newPkgInfo pkgid
-  Tar.Entry { Tar.fileName = fileName, Tar.fileContent = pkgstr }
-  (UploadLog.Entry time user _) others
-  = case parsePackageDescription (fromUTF8 (BS.unpack pkgstr)) of
-      ParseFailed err -> fail $ fileName
+newPkgInfo pkgid entry (UploadLog.Entry time user _) others =
+  case parse (Tar.fileContent entry) of
+      ParseFailed err -> fail $ Tar.fileName entry
                              ++ maybe "" (\n -> ":" ++ show n) lineno
                              ++ ": " ++ message
         where (lineno, message) = locatedErrorMsg err
@@ -65,13 +63,14 @@ newPkgInfo pkgid
       ParseOk _ pkg   -> return PkgInfo {
         pkgInfoId     = pkgid,
         pkgDesc       = pkg,
-        pkgData       = pkgstr,
+        pkgData       = Tar.fileContent entry,
         pkgTarball    = Nothing,
         pkgUploadTime = time,
         pkgUploadUser = user,
         pkgUploadOld  = [ (time', user')
                         | UploadLog.Entry time' user' _ <- others]
       }
+  where parse = parsePackageDescription . fromUTF8 . BS.unpack
 
 -- | Actually write the tarballs to disk and return an association of
 -- 'PackageIdentifier' to the 'BlobStorage.BlobId' of the tarball added to the
