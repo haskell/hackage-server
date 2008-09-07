@@ -1,7 +1,10 @@
 module Distribution.Server (
-   main,
+   Server,
+   initialise,
    Config(..),
-   Paths_hackage_server.version,
+   defaultConfig,
+   run,
+   bulkImport,
  ) where
 
 import Distribution.Package ( PackageIdentifier(..), Package(packageId)
@@ -11,7 +14,7 @@ import HAppS.Server hiding (port)
 import qualified HAppS.Server
 import HAppS.State hiding (Version)
 
-import Distribution.Server.State as State hiding (buildReports)
+import Distribution.Server.State as State hiding (buildReports, bulkImport)
 import qualified  Distribution.Server.State as State
 import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.Simple.PackageIndex as PackageIndex
@@ -28,68 +31,101 @@ import qualified Distribution.Server.BlobStorage as BlobStorage
 import Distribution.Server.BlobStorage (BlobStorage)
 import qualified Distribution.Server.BuildReport as BuildReport
 import qualified Distribution.Server.BuildReports as BuildReports
+import qualified Distribution.Server.BulkImport as BulkImport
+import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
 
-import System.IO (hFlush, stdout)
 import System.FilePath ((</>))
-import Control.Exception
+import System.Directory
+         ( createDirectoryIfMissing )
+import Control.Concurrent.MVar (MVar)
 import Data.Maybe; import Data.Version
 import Control.Monad.Trans
 import Data.List (maximumBy, sortBy)
 import Data.Ord (comparing)
 import qualified Data.Map as Map
+import Data.ByteString.Lazy.Char8 (ByteString)
 import Data.Time.Clock
 import Network.URI
          ( URIAuth(URIAuth) )
+import Network.BSD
+         ( getHostName )
 
 import qualified Data.ByteString.Lazy.Char8 as BS.Char8
 import qualified Codec.Compression.GZip as GZip
 
-import qualified Paths_hackage_server (version)
-
-import Prelude hiding (log)
-
 data Config = Config {
-  hostName  :: String,
-  portNum   :: Int,
-  stateDir  :: FilePath,
-  blobStore :: BlobStorage
+  confHostName :: String,
+  confPortNum  :: Int,
+  confStateDir :: FilePath
 }
 
-main :: Config -> [PkgInfo] -> IO ()
-main (Config hostname port state store) imports = do
+defaultConfig :: IO Config
+defaultConfig = do
+  host <- getHostName
+  return Config {
+    confHostName = host,
+    confPortNum  = 5000,
+    confStateDir = "state"
+  }
 
-  log "hackage-server: initialising..."
-  withServerState $ \_txCtl -> do
-    cache <- Cache.new =<< stateToCache host =<< query GetPackagesState
+data Server = Server {
+  serverStore      :: BlobStorage,
+  serverTxControl  :: MVar TxControl,
+  serverCache      :: Cache.Cache,
+  serverURI        :: URIAuth,
+  serverPort       :: Int
+}
 
-    case imports of
-     []       -> return ()
-     pkgsInfo -> do
-       update $ BulkImport pkgsInfo
-       Cache.put cache =<< stateToCache host =<< query GetPackagesState
+initialise :: Config -> IO Server
+initialise (Config hostName portNum stateDir) = do
 
-    log (" ready. Serving on " ++ hostname ++" port " ++ show port ++ "\n")
-    simpleHTTP conf (impl store cache host)
+  createDirectoryIfMissing False stateDir
+  store   <- BlobStorage.open blobStoreDir
+
+  txCtl   <- runTxSystem (Queue (FileSaver happsStateDir)) hackageEntryPoint
+  cache   <- Cache.new =<< stateToCache hostURI =<< query GetPackagesState
+
+  return Server {
+    serverStore      = store,
+    serverTxControl  = txCtl,
+    serverCache      = cache,
+    serverURI        = hostURI,
+    serverPort       = portNum
+  }
 
   where
-    conf = nullConf { HAppS.Server.port = port }
-    host = URIAuth "" hostname (if port == 80 then "" else ':' : show port)
-
-    withServerState = bracket start stop
-      where
-        start = runTxSystem saver hackageEntryPoint
-        saver = Queue (FileSaver (state </> "db"))
-        stop  = shutdownSystem
+    happsStateDir = stateDir </> "db"
+    blobStoreDir  = stateDir </> "blobs"
+    hostURI       = URIAuth "" hostName portStr
+      where portStr | portNum == 80 = ""
+                    | otherwise     = ':' : show portNum
 
 hackageEntryPoint :: Proxy PackagesState
 hackageEntryPoint = Proxy
 
+run :: Server -> IO ()
+run server = simpleHTTP conf (impl server)
+  where
+    conf = nullConf { HAppS.Server.port = serverPort server }
+
+bulkImport :: Server
+           -> ByteString -> String -> Maybe ByteString
+           -> IO [UploadLog.Entry]
+bulkImport (Server store _ cache host _) indexFile logFile archive = do
+  --TODO: check the other two first
+  tarballs  <- maybe (return []) (BulkImport.importTarballs store) archive
+
+  (pkgsInfo, badLogEntries) <- either fail return
+    (BulkImport.importPkgInfo indexFile logFile tarballs)
+
+  update $ BulkImport pkgsInfo
+  Cache.put cache =<< stateToCache host =<< query GetPackagesState
+
+  return badLogEntries
+
 updateCache :: MonadIO m => Cache.Cache -> URIAuth -> m ()
 updateCache cache host
     = liftIO (Cache.put cache =<< stateToCache host =<< query GetPackagesState)
-
-log :: String -> IO ()
-log msg = putStr msg >> hFlush stdout
 
 stateToCache :: URIAuth -> PackagesState -> IO Cache.State
 stateToCache host state = getCurrentTime >>= \now -> return
@@ -260,8 +296,8 @@ instance FromReqURI BuildReports.BuildReportId where
 basicUsers :: Map.Map String String
 basicUsers = Map.fromList [("Lemmih","kodeord")]
 
-impl :: BlobStorage -> Cache.Cache -> URIAuth -> [ServerPartT IO Response]
-impl store cache host =
+impl :: Server -> [ServerPartT IO Response]
+impl (Server store _ cache host _) =
   [ dir "packages" [ path $ handlePackageById store
                    , legacySupport
                    , method GET $ do

@@ -1,77 +1,102 @@
 module Main (main) where
 
-import qualified Distribution.Server (main, Config(..), version)
-import qualified Distribution.Server.BlobStorage as BlobStorage (open)
-import qualified Distribution.Server.BulkImport as BulkImport
+import qualified Distribution.Server
+import Distribution.Server (Config(..))
 
 import Distribution.Text
          ( display )
 
 import System.Environment
-         ( getArgs )
+         ( getArgs, getProgName )
 import System.Exit
          ( exitWith, ExitCode(..) )
-import System.FilePath
-         ( (</>) )
-import System.Directory
-         ( createDirectoryIfMissing )
+import Control.Exception
+         ( handleJust, errorCalls, userErrors )
+import System.IO
+         ( stdout, hFlush )
 import System.Console.GetOpt
          ( OptDescr(..), ArgDescr(..), ArgOrder(..), getOpt, usageInfo )
-import Network.BSD
-         ( getHostName )
 import Data.List
          ( sort, intersperse )
 import Data.Maybe
          ( fromMaybe )
 import Control.Monad
-         ( unless )
-import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
+         ( unless, MonadPlus(mplus) )
+import qualified Data.ByteString.Lazy.Char8 as BS
+
+import Paths_hackage_server (version)
 
 -- | Handle the command line args and hand off to "Distribution.Server"
 --
 main :: IO ()
-main = do
+main = topHandler $ do
   opts <- getOpts
 
-  let stateDir = fromMaybe "state" (optStateDir opts)
-  createDirectoryIfMissing False stateDir
-  store <- BlobStorage.open (stateDir </> "blobs")
+  maybeImports <- checkImportOpts (optImportIndex opts)
+                                  (optImportLog opts)
+                                  (optImportArchive opts)
 
-  imports <- case (optImportIndex opts, optImportLog opts) of
-    (Nothing, Nothing) -> return []
-    (Just indexFileName, Just logFileName) -> do
-      indexFile <- BS.Lazy.readFile indexFileName
-      logFile   <-         readFile logFileName
-      tarballs  <- case optImportArchive opts of
-        Nothing          -> return []
-        Just archiveFile -> BulkImport.importTarballs store
-                        =<< BS.Lazy.readFile archiveFile
-      (pkgsInfo, badlog) <- either die return
-        (BulkImport.importPkgInfo indexFile logFile tarballs)
-      unless (null badlog) $ putStr $
-           "Warning: Upload log entries for non-existant packages:\n"
-        ++ unlines (map display (sort badlog))
-      return pkgsInfo
-    _ -> die "A package index and log file must be supplied together."
+  defaults <- Distribution.Server.defaultConfig
 
-  port <- case optPort opts of
-    Nothing    -> return 5000
-    Just str   -> case reads str of
+  port <- checkPortOpt defaults (optPort opts)
+  let hostname = fromMaybe (confHostName defaults) (optHost opts)
+      stateDir = fromMaybe (confStateDir defaults) (optStateDir opts)
+
+      config = defaults {
+        confHostName = hostname,
+        confPortNum  = port,
+        confStateDir = stateDir
+      }
+
+  info "initialising..."
+  server <- Distribution.Server.initialise config
+
+  case maybeImports of
+    Nothing -> return ()
+    Just imports -> do
+      info "importing..."
+      doBulkImport server imports
+
+  info $ "ready, serving on '" ++ hostname ++ "' port " ++ show port
+  Distribution.Server.run server
+
+  where
+    checkPortOpt defaults Nothing    = return (confPortNum defaults)
+    checkPortOpt _        (Just str) = case reads str of
       [(n,"")]  | n >= 1 && n <= 65535
                -> return n
-      _        -> die $ "bad port number " ++ show str
-  hostname <- maybe getHostName return (optHost opts)
+      _        -> fail $ "bad port number " ++ show str
 
-  let config = Distribution.Server.Config {
-        Distribution.Server.hostName  = hostname,
-        Distribution.Server.portNum   = port,
-        Distribution.Server.stateDir  = stateDir,
-        Distribution.Server.blobStore = store
-      }
-   in Distribution.Server.main config imports
+    checkImportOpts Nothing Nothing _ = return Nothing
+    checkImportOpts (Just indexFileName) (Just logFileName) archiveFile = do
+      indexFile <- BS.readFile indexFileName
+      logFile   <-    readFile logFileName
+      tarballs  <- maybe (return Nothing) (fmap Just . BS.readFile) archiveFile
+      return (Just (indexFile, logFile, tarballs))
+
+    checkImportOpts _ _ _ =
+      fail "A package index and log file must be supplied together."
+
+    doBulkImport server (indexFile, logFile, tarballs) = do
+      badLogEntries <- Distribution.Server.bulkImport server
+                         indexFile logFile tarballs
+      unless (null badLogEntries) $ putStr $
+           "Warning: Upload log entries for non-existant packages:\n"
+        ++ unlines (map display (sort badLogEntries))
+
+topHandler :: IO a -> IO a
+topHandler = handleJust (\e -> errorCalls e `mplus` userErrors e) die
 
 die :: String -> IO a
-die msg = putStrLn msg >> exitWith (ExitFailure 1)
+die msg = do
+  info msg
+  exitWith (ExitFailure 1)
+
+info :: String -> IO ()
+info msg = do
+  pname <- getProgName
+  putStrLn (pname ++ ": " ++ msg)
+  hFlush stdout
 
 -- GetOpt
 
@@ -109,14 +134,13 @@ getOpts = do
       | otherwise       -> return opts
     (_,     _, errs)    -> printErrors errs
   where
-    printErrors errs = die (concat (intersperse "\n" errs))
+    printErrors errs = fail (concat (intersperse "\n" errs))
     printUsage = do
       putStrLn (usageInfo usageHeader optionDescriptions)
       exitWith ExitSuccess
     usageHeader  = "hackage web server\n\nusage: hackage-server [OPTION ...]"
     printVersion = do
-      putStrLn $ "hackage-server version "
-              ++ display Distribution.Server.version
+      putStrLn $ "hackage-server version " ++ display version
       exitWith ExitSuccess
     accumOpts (opts, args, errs) =
       (foldr (flip (.)) id opts defaultOptions, args, errs)
