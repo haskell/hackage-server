@@ -13,7 +13,7 @@
 -- TAR archive reading and writing
 --
 -----------------------------------------------------------------------------
-module Distribution.Server.Tar (
+module Distribution.Server.Util.Tar (
   -- * Reading and writing the tar format
   read,
   write,

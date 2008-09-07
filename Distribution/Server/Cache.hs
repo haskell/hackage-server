@@ -6,8 +6,8 @@ module Distribution.Server.Cache (
     put,
   ) where
 
-import qualified Distribution.Server.AsyncVar as AsyncVar
-import Distribution.Server.AsyncVar (AsyncVar)
+import qualified Distribution.Server.Util.AsyncVar as AsyncVar
+import Distribution.Server.Util.AsyncVar (AsyncVar)
 
 import HAppS.Server (Response(rsBody))
 

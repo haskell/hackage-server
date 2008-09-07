@@ -17,7 +17,7 @@ module Distribution.Server.IndexUtils (
   writeGeneric,
   ) where
 
-import qualified Distribution.Server.Tar as Tar
+import qualified Distribution.Server.Util.Tar as Tar
          ( Entry(..), Entries(..), fileName, ExtendedHeader(..), FileType(..)
          , read, write, simpleFileEntry, toTarPath )
 import Distribution.Server.Types

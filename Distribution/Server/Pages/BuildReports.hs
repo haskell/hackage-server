@@ -2,9 +2,9 @@
 
 module Distribution.Server.Pages.BuildReports (buildReportSummary) where
 
-import qualified Distribution.Server.BuildReport as BuildReport
-import Distribution.Server.BuildReport (BuildReport)
-import Distribution.Server.BuildReports
+import qualified Distribution.Server.BuildReport.BuildReport as BuildReport
+import Distribution.Server.BuildReport.BuildReport (BuildReport)
+import Distribution.Server.BuildReport.BuildReports
 import Distribution.Server.Pages.Template ( hackagePage )
 
 import Distribution.Package

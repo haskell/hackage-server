@@ -6,10 +6,10 @@ import Distribution.Package (PackageIdentifier,Package(packageId))
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.PackageDescription (parsePackageDescription, ParseResult(..))
 import Distribution.Server.Types (PkgInfo(..))
-import Distribution.Server.BlobStorage (BlobId)
-import qualified Distribution.Server.BuildReports as BuildReports
-import Distribution.Server.BuildReports (BuildReports,BuildReportId,BuildLog)
-import Distribution.Server.BuildReport (BuildReport)
+import Distribution.Server.Util.BlobStorage (BlobId)
+import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
+import Distribution.Server.BuildReport.BuildReports (BuildReports,BuildReportId,BuildLog)
+import Distribution.Server.BuildReport.BuildReport (BuildReport)
 
 import HAppS.State
 import HAppS.Data.Serialize

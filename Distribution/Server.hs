@@ -27,10 +27,10 @@ import qualified Distribution.Server.Pages.Recent  as Pages
 import qualified Distribution.Server.Pages.BuildReports as Pages
 import qualified Distribution.Server.IndexUtils as PackageIndex (write)
 import qualified Distribution.Server.Upload as Upload (unpackPackage)
-import qualified Distribution.Server.BlobStorage as BlobStorage
-import Distribution.Server.BlobStorage (BlobStorage)
-import qualified Distribution.Server.BuildReport as BuildReport
-import qualified Distribution.Server.BuildReports as BuildReports
+import qualified Distribution.Server.Util.BlobStorage as BlobStorage
+import Distribution.Server.Util.BlobStorage (BlobStorage)
+import qualified Distribution.Server.BuildReport.BuildReport as BuildReport
+import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
 import qualified Distribution.Server.BulkImport as BulkImport
 import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
 

@@ -2,7 +2,7 @@
 -- Unpack a tarball containing a Cabal package
 module Distribution.Server.Upload (unpackPackage) where
 
-import qualified Distribution.Server.Tar as Tar
+import qualified Distribution.Server.Util.Tar as Tar
 
 import Distribution.Version
          ( Version(..) )

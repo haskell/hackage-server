@@ -14,7 +14,7 @@
 -----------------------------------------------------------------------------
 module Distribution.Server.Types where
 
-import Distribution.Server.BlobStorage
+import Distribution.Server.Util.BlobStorage
          ( BlobId )
 
 import Distribution.Package

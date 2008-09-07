@@ -1,4 +1,4 @@
-module Distribution.Server.AsyncVar (
+module Distribution.Server.Util.AsyncVar (
   AsyncVar,
   new,
   read,

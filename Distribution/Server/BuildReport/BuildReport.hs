@@ -12,7 +12,7 @@
 -- Anonymous build report data structure, printing and parsing
 --
 -----------------------------------------------------------------------------
-module Distribution.Server.BuildReport (
+module Distribution.Server.BuildReport.BuildReport (
     BuildReport(..),
     InstallOutcome(..),
     Outcome(..),

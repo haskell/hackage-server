@@ -33,10 +33,8 @@ executable hackage-server
     Distribution.Server.Auth.Crypt
     Distribution.Server.Auth.HtPasswdDb
     Distribution.Server.Auth.Types
-    Distribution.Server.AsyncVar
-    Distribution.Server.BlobStorage
-    Distribution.Server.BuildReport
-    Distribution.Server.BuildReports
+    Distribution.Server.BuildReport.BuildReport
+    Distribution.Server.BuildReport.BuildReports
     Distribution.Server.BulkImport
     Distribution.Server.BulkImport.UploadLog
     Distribution.Server.Cache
@@ -51,9 +49,11 @@ executable hackage-server
     Distribution.Server.Pages.Template
     Distribution.Server.ResourceTypes
     Distribution.Server.State
-    Distribution.Server.Tar
     Distribution.Server.Types
     Distribution.Server.Upload
+    Distribution.Server.Util.AsyncVar
+    Distribution.Server.Util.BlobStorage
+    Distribution.Server.Util.Tar
   build-depends:
     base,
     filepath >= 1.1,

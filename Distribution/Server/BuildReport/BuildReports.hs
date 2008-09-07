@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
-module Distribution.Server.BuildReports (
+module Distribution.Server.BuildReport.BuildReports (
     BuildReports,
     BuildReportId,
     BuildLog(..),
@@ -11,9 +11,9 @@ module Distribution.Server.BuildReports (
     lookupPackageReports,
   ) where
 
-import qualified Distribution.Server.BlobStorage as BlobStorage
-import qualified Distribution.Server.BuildReport as BuildReport
-import Distribution.Server.BuildReport (BuildReport)
+import qualified Distribution.Server.Util.BlobStorage as BlobStorage
+import qualified Distribution.Server.BuildReport.BuildReport as BuildReport
+import Distribution.Server.BuildReport.BuildReport (BuildReport)
 
 import Distribution.Package
          ( PackageIdentifier )

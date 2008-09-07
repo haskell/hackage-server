@@ -16,12 +16,12 @@ module Distribution.Server.BulkImport (
   ) where
 
 import qualified Distribution.Server.IndexUtils as PackageIndex (read)
-import qualified Distribution.Server.Tar as Tar
+import qualified Distribution.Server.Util.Tar as Tar
          ( Entry(..), fileName )
 import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
          ( Entry(..), read )
-import qualified Distribution.Server.BlobStorage as BlobStorage
-import Distribution.Server.BlobStorage (BlobStorage)
+import qualified Distribution.Server.Util.BlobStorage as BlobStorage
+import Distribution.Server.Util.BlobStorage (BlobStorage)
 import Distribution.Server.Types (PkgInfo(..))
 
 import Distribution.Package

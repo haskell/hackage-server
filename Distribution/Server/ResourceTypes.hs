@@ -15,7 +15,7 @@
 -----------------------------------------------------------------------------
 module Distribution.Server.ResourceTypes where
 
-import Distribution.Server.BlobStorage
+import Distribution.Server.Util.BlobStorage
          ( BlobId )
 
 import HAppS.Server
