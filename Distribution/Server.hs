@@ -26,7 +26,7 @@ import qualified Distribution.Server.Pages.Package as Pages
 import qualified Distribution.Server.Pages.Recent  as Pages
 import qualified Distribution.Server.Pages.BuildReports as Pages
 import qualified Distribution.Server.IndexUtils as PackageIndex (write)
-import qualified Distribution.Server.Upload as Upload (unpackPackage)
+import qualified Distribution.Server.PackageUpload.Unpack as Upload (unpackPackage)
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
 import qualified Distribution.Server.BuildReport.BuildReport as BuildReport

@@ -1,6 +1,5 @@
-{-# LANGUAGE PatternGuards #-}
 -- Unpack a tarball containing a Cabal package
-module Distribution.Server.Upload (unpackPackage) where
+module Distribution.Server.PackageUpload.Unpack (unpackPackage) where
 
 import qualified Distribution.Server.Util.Tar as Tar
 
