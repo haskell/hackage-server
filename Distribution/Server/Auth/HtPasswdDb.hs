@@ -5,13 +5,14 @@ module Distribution.Server.Auth.HtPasswdDb (
   ) where
 
 import Distribution.Server.Auth.Types
+import Distribution.Server.Users.Types
 import qualified Distribution.Server.Auth.Crypt as Crypt
 
 import qualified Data.Map as Map
 
 newtype HtPasswdDb = HtPasswdDb (Map.Map UserName PasswdHash)
 
-passwdCheck :: HtPasswdDb -> PasswdCheck
+passwdCheck :: HtPasswdDb -> UserName -> PasswdPlain -> Bool
 passwdCheck (HtPasswdDb authMap) username passwd =
   case Map.lookup username authMap of
     Nothing   -> False

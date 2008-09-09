@@ -4,6 +4,7 @@ module Distribution.Server.Auth.Basic (
   ) where
 
 import Distribution.Server.Auth.Types
+import Distribution.Server.Users.Types
 import qualified Distribution.Server.Auth.Crypt as Crypt
 
 import HAppS.Server
@@ -17,7 +18,7 @@ import qualified Data.ByteString.Char8 as BS
 
 -- This is directly ripped out of HAppS-Server and generalised
 --
-basicAuth :: MonadIO m => String -> PasswdCheck
+basicAuth :: MonadIO m => String -> (UserName -> PasswdPlain -> Bool)
           -> [ServerPartT m a] -> ServerPartT m a
 basicAuth realmName validLogin xs = multi $ basicAuthImpl:xs
   where
@@ -34,6 +35,7 @@ basicAuth realmName validLogin xs = multi $ basicAuthImpl:xs
     err = escape $ unauthorized $
             addHeader headerName headerValue $ toResponse "Not authorized"
 
-plainPasswdCheck :: Map.Map UserName PasswdPlain -> PasswdCheck
+plainPasswdCheck :: Map.Map UserName PasswdPlain
+                 -> UserName -> PasswdPlain -> Bool
 plainPasswdCheck authMap name (PasswdPlain pass) =
   Map.lookup name authMap == Just (PasswdPlain pass)

@@ -1,11 +1,11 @@
+{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
 module Distribution.Server.Auth.Types where
 
-newtype UserName    = UserName String deriving (Eq, Ord, Show)
-newtype PasswdPlain = PasswdPlain String deriving (Eq, Ord, Show)
-newtype PasswdHash  = PasswdHash  String deriving (Eq, Ord, Show)
+import Data.Binary (Binary)
+import Data.Typeable (Typeable)
 
--- | Does the given user really have this as their password?
---
-type PasswdCheck    = UserName     -- ^ user name
-                   -> PasswdPlain  -- ^ plain text password
-                   -> Bool
+newtype PasswdPlain = PasswdPlain String
+  deriving (Eq, Ord, Show, Binary, Typeable)
+
+newtype PasswdHash  = PasswdHash  String
+  deriving (Eq, Ord, Show, Binary, Typeable)

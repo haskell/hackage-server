@@ -52,6 +52,9 @@ executable hackage-server
     Distribution.Server.ResourceTypes
     Distribution.Server.State
     Distribution.Server.Types
+    Distribution.Server.Users.Group
+    Distribution.Server.Users.Types
+    Distribution.Server.Users.Users
     Distribution.Server.Util.AsyncVar
     Distribution.Server.Util.BlobStorage
     Distribution.Server.Util.Tar
