@@ -73,11 +73,12 @@ newPkgInfo pkgid entry (UploadLog.Entry time user _) others users =
         pkgData       = Tar.fileContent entry,
         pkgTarball    = Nothing,
         pkgUploadTime = time,
-        pkgUploadUser = user,
-        pkgUploadOld  = [ (time', user')
+        pkgUploadUser = userName user,
+        pkgUploadOld  = [ (time', userName user')
                         | UploadLog.Entry time' user' _ <- others]
       }
   where parse = parsePackageDescription . fromUTF8 . BS.unpack
+        userName (Users.UserName name) = name
 
 importPkgIndex :: ByteString -> Either String [(PackageIdentifier, Tar.Entry)]
 importPkgIndex = PackageIndex.read (,) . GZip.decompress
@@ -133,7 +134,7 @@ mergeDeletedUsers logEntries =
 
   where
     addUser (users, added) (UploadLog.Entry _ userName _) =
-      case Users.add (Users.UserName userName) dummyAuth users of
+      case Users.add userName dummyAuth users of
         Nothing               -> (users ,        added) -- already present
         Just (users', userId) -> (users', userId:added)
 

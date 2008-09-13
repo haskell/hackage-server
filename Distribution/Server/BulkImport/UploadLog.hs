@@ -16,6 +16,9 @@ module Distribution.Server.BulkImport.UploadLog (
     read,
   ) where
 
+import Distribution.Server.Users.Types
+         ( UserName )
+
 import Distribution.Package
          ( PackageIdentifier(..), parsePackageName )
 import Distribution.Text
@@ -37,23 +40,20 @@ import System.Locale
          ( defaultTimeLocale )
 import Data.List
          ( sortBy, groupBy )
-import qualified Data.Char as Char
-         ( isAlphaNum )
 
 import Prelude hiding (read)
 
 data Entry = Entry UTCTime UserName PackageIdentifier
   deriving (Eq, Ord)
-type UserName = String
 
 instance Text Entry where
   disp (Entry time user pkgid) =
         Disp.text (formatTime defaultTimeLocale "%c" time)
-    <+> Disp.text user <+> disp pkgid
+    <+> disp user <+> disp pkgid
   parse = do
     time <- Parse.readS_to_P (readsTime defaultTimeLocale "%c")
     Parse.skipSpaces
-    user <- Parse.munch1 Char.isAlphaNum
+    user <- parse
     Parse.skipSpaces
     pkg  <- parsePackageName
     Parse.skipSpaces
