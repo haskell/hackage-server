@@ -124,12 +124,14 @@ run server = simpleHTTP conf (impl server)
 bulkImport :: Server
            -> ByteString -> String -> Maybe ByteString
            -> IO [UploadLog.Entry]
-bulkImport (Server store _ _ cache host _) indexFile logFile archive = do
-  --TODO: check the other two first
-  tarballs  <- maybe (return []) (BulkImport.importTarballs store) archive
+bulkImport (Server store _ _ cache host _)
+           indexFile logFile archiveFile = do
+  pkgIndex  <- either fail return (BulkImport.importPkgIndex indexFile)
+  uploadLog <- either fail return (BulkImport.importUploadLog logFile)
+  tarballs  <- BulkImport.importTarballs store archiveFile
 
   (pkgsInfo, badLogEntries) <- either fail return
-    (BulkImport.importPkgInfo indexFile logFile tarballs)
+    (BulkImport.mergePkgInfo pkgIndex uploadLog tarballs)
 
   update $ BulkImport pkgsInfo
   Cache.put cache =<< stateToCache host =<< query GetPackagesState

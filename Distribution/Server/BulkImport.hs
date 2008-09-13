@@ -11,8 +11,10 @@
 -- Support for importing data from the old hackage server.
 -----------------------------------------------------------------------------
 module Distribution.Server.BulkImport (
-  importPkgInfo,
+  importPkgIndex,
+  importUploadLog,
   importTarballs,
+  mergePkgInfo,
   ) where
 
 import qualified Distribution.Server.IndexUtils as PackageIndex (read)
@@ -72,14 +74,21 @@ newPkgInfo pkgid entry (UploadLog.Entry time user _) others =
       }
   where parse = parsePackageDescription . fromUTF8 . BS.unpack
 
+importPkgIndex :: ByteString -> Either String [(PackageIdentifier, Tar.Entry)]
+importPkgIndex = PackageIndex.read (,) . GZip.decompress
+
+importUploadLog :: String -> Either String [(UploadLog.Entry, [UploadLog.Entry])]
+importUploadLog = UploadLog.read
+
 -- | Actually write the tarballs to disk and return an association of
 -- 'PackageIdentifier' to the 'BlobStorage.BlobId' of the tarball added to the
 -- 'BlobStorage' area.
 --
 importTarballs :: BlobStorage
-               -> ByteString
+               -> Maybe ByteString
                -> IO [(PackageIdentifier, BlobStorage.BlobId)]
-importTarballs store archiveFile =
+importTarballs _      Nothing           = return []
+importTarballs store (Just archiveFile) =
   case PackageIndex.read (,) archiveFile of
     Left  problem  -> fail problem
     Right tarballs -> sequence
@@ -88,15 +97,14 @@ importTarballs store archiveFile =
       | (pkgid, entry) <- tarballs
       , takeExtension (Tar.fileName entry) == ".gz" ] --FIXME: .tar.gz
 
--- | Merge all the package info together
-importPkgInfo :: ByteString
-              -> String
-              -> [(PackageIdentifier, BlobStorage.BlobId)]
-              -> Either String ([PkgInfo], [UploadLog.Entry])
-importPkgInfo indexFile logFile tarballInfo = do
-  pkgDescs    <- PackageIndex.read (,) (GZip.decompress indexFile)
-  logEntries  <-    UploadLog.read logFile
-  
+
+-- | Merge all the package and user info together
+--
+mergePkgInfo :: [(PackageIdentifier, Tar.Entry)]
+             -> [(UploadLog.Entry, [UploadLog.Entry])]
+             -> [(PackageIdentifier, BlobStorage.BlobId)]
+             -> Either String ([PkgInfo], [UploadLog.Entry])
+mergePkgInfo pkgDescs logEntries tarballInfo = do
   (pkgs, extraLogEntries) <- mergeIndexWithUploadLog pkgDescs logEntries
   pkgs' <- mergeTarballs tarballInfo pkgs
   return (pkgs', extraLogEntries)
