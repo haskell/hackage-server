@@ -32,9 +32,9 @@ main :: IO ()
 main = topHandler $ do
   opts <- getOpts
 
-  maybeImports <- checkImportOpts (optImportIndex opts)
-                                  (optImportLog opts)
-                                  (optImportArchive opts)
+  maybeImports <- checkImportOpts
+    (optImportIndex   opts) (optImportLog      opts)
+    (optImportArchive opts) (optImportHtPasswd opts)
 
   defaults <- Distribution.Server.defaultConfig
 
@@ -69,19 +69,21 @@ main = topHandler $ do
                -> return n
       _        -> fail $ "bad port number " ++ show str
 
-    checkImportOpts Nothing Nothing _ = return Nothing
-    checkImportOpts (Just indexFileName) (Just logFileName) archiveFile = do
+    checkImportOpts Nothing Nothing _ _ = return Nothing
+    checkImportOpts (Just indexFileName) (Just logFileName)
+                    archiveFile htpasswdFile = do
       indexFile <- BS.readFile indexFileName
       logFile   <-    readFile logFileName
       tarballs  <- maybe (return Nothing) (fmap Just . BS.readFile) archiveFile
-      return (Just (indexFile, logFile, tarballs))
+      htpasswd  <- maybe (return Nothing) (fmap Just . readFile) htpasswdFile
+      return (Just (indexFile, logFile, tarballs, htpasswd))
 
-    checkImportOpts _ _ _ =
+    checkImportOpts _ _ _ _ =
       fail "A package index and log file must be supplied together."
 
-    doBulkImport server (indexFile, logFile, tarballs) = do
+    doBulkImport server (indexFile, logFile, tarballs, htpasswd) = do
       badLogEntries <- Distribution.Server.bulkImport server
-                         indexFile logFile tarballs
+                         indexFile logFile tarballs htpasswd
       unless (null badLogEntries) $ putStr $
            "Warning: Upload log entries for non-existant packages:\n"
         ++ unlines (map display (sort badLogEntries))
@@ -110,6 +112,7 @@ data Options = Options {
     optImportIndex   :: Maybe FilePath,
     optImportLog     :: Maybe FilePath,
     optImportArchive :: Maybe FilePath,
+    optImportHtPasswd:: Maybe FilePath,
     optVersion       :: Bool,
     optHelp          :: Bool
   }
@@ -123,6 +126,7 @@ defaultOptions = Options {
     optImportIndex   = Nothing,
     optImportLog     = Nothing,
     optImportArchive = Nothing,
+    optImportHtPasswd= Nothing,
     optVersion       = False,
     optHelp          = False
   }
@@ -178,4 +182,7 @@ optionDescriptions =
   , Option [] ["import-archive"]
       (ReqArg (\file opts -> opts { optImportArchive = Just file }) "LOG")
       "Import an existing hackage package tarball archive file (archive.tar)"
+  , Option [] ["import-accounts"]
+      (ReqArg (\file opts -> opts { optImportHtPasswd = Just file }) "HTPASSWD")
+      "Import an existing apache 'htpasswd' user account database file"
   ]

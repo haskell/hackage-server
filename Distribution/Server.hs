@@ -122,16 +122,17 @@ run server = simpleHTTP conf (impl server)
     conf = nullConf { HAppS.Server.port = serverPort server }
 
 bulkImport :: Server
-           -> ByteString -> String -> Maybe ByteString
+           -> ByteString -> String -> Maybe ByteString -> Maybe String
            -> IO [UploadLog.Entry]
 bulkImport (Server store _ _ cache host _)
-           indexFile logFile archiveFile = do
+           indexFile logFile archiveFile htPasswdFile = do
   pkgIndex  <- either fail return (BulkImport.importPkgIndex indexFile)
   uploadLog <- either fail return (BulkImport.importUploadLog logFile)
   tarballs  <- BulkImport.importTarballs store archiveFile
+  accounts  <- either fail return (BulkImport.importUsers htPasswdFile)
 
-  (pkgsInfo, badLogEntries) <- either fail return
-    (BulkImport.mergePkgInfo pkgIndex uploadLog tarballs)
+  (pkgsInfo, users, badLogEntries) <- either fail return
+    (BulkImport.mergePkgInfo pkgIndex uploadLog tarballs accounts)
 
   update $ BulkImport pkgsInfo
   Cache.put cache =<< stateToCache host =<< query GetPackagesState
