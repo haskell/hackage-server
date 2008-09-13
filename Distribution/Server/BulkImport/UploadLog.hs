@@ -61,6 +61,10 @@ instance Text Entry where
     let pkgid = PackageIdentifier pkg ver
     return (Entry (zonedTimeToUTC (fixupTimeZone time)) user pkgid)
 
+-- | Returns a list of log entries, however some packages have been uploaded
+-- more than once, so each entry is paired with any older entries for the same
+-- package.
+--
 read :: String -> Either String [(Entry, [Entry])]
 read = either Left (Right . groupEntries) . check [] . map parseLine . lines
   where
