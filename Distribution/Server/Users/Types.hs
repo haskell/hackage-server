@@ -1,8 +1,10 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
-module Distribution.Server.Users.Types where
+module Distribution.Server.Users.Types (
+    module Distribution.Server.Users.Types,
+    module Distribution.Server.Auth.Types
+  ) where
 
 import Distribution.Server.Auth.Types
-         ( PasswdHash )
 
 import Data.Typeable (Typeable)
 import Data.Binary (Binary)
