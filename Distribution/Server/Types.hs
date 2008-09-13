@@ -14,6 +14,8 @@
 -----------------------------------------------------------------------------
 module Distribution.Server.Types where
 
+import Distribution.Server.Users.Types
+         ( UserId )
 import Distribution.Server.Util.BlobStorage
          ( BlobId )
 import Distribution.Server.Instances ()
@@ -32,8 +34,6 @@ import Data.ByteString.Lazy (ByteString)
 import Data.Time.Clock (UTCTime)
 import Data.Typeable (Typeable)
 
-type UserName = String --FIXME: use proper username type
-
 -- | The information we keep about a particular version of a package.
 data PkgInfo = PkgInfo {
     pkgInfoId :: PackageIdentifier,
@@ -50,11 +50,11 @@ data PkgInfo = PkgInfo {
     pkgUploadTime :: UTCTime,
 
     -- | Who uploaded the .tar.gz file.
-    pkgUploadUser :: String,
+    pkgUploadUser :: UserId,
 
     -- | Previous upload times and users. We normally disallow re-uploading but
     -- we may make occasional exceptions, and there are some such old packages.
-    pkgUploadOld  :: [(UTCTime, String)]
+    pkgUploadOld  :: [(UTCTime, UserId)]
   }
   deriving Typeable
 

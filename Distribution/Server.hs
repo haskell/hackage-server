@@ -20,6 +20,8 @@ import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.Server.Types
          ( PkgInfo(..) )
+import Distribution.Server.Users.Types
+         ( UserId(..) )
 import qualified Distribution.Server.ResourceTypes as Resource
 import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)
 import qualified Distribution.Server.Pages.Package as Pages
@@ -148,13 +150,14 @@ stateToCache host state = getCurrentTime >>= \now -> return
   Cache.State {
     Cache.packagesPage  = toResponse $ Resource.XHtml $
                             Pages.packageIndex index,
-    Cache.indexTarball  = GZip.compress $ Packages.Index.write index,
+    Cache.indexTarball  = GZip.compress $ Packages.Index.write users index,
     Cache.recentChanges = toResponse $ Resource.XHtml $
-                            Pages.recentPage recentChanges,
+                            Pages.recentPage users recentChanges,
     Cache.packagesFeed  = toResponse $
-                            Pages.recentFeed host now recentChanges
+                            Pages.recentFeed users host now recentChanges
   }
   where index = packageList state
+        users = userDb state
         recentChanges = reverse $ sortBy (comparing pkgUploadTime) (PackageIndex.allPackages index)
 
 -- Support the same URL scheme as the first version of hackage.
@@ -178,19 +181,19 @@ legacySupport = multi
 handlePackageById :: BlobStorage -> PackageIdentifier -> [ServerPart Response]
 handlePackageById store pkgid =
   [ method GET $
-      withPackage $ \pkg pkgs ->
-        ok $ toResponse $ Resource.XHtml $ Pages.packagePage pkg pkgs
+      withPackage $ \users pkg pkgs ->
+        ok $ toResponse $ Resource.XHtml $ Pages.packagePage users pkg pkgs
 
   , dir "cabal"
     [ method GET $
-      withPackage $ \pkg _pkgs ->
+      withPackage $ \_ pkg _pkgs ->
         ok $ toResponse (Resource.CabalFile (pkgData pkg))
 --  , method PUT $ do ...
     ]
 
   , dir "tarball"
     [ method GET $
-        withPackage $ \pkg _pkgs -> do
+        withPackage $ \_ pkg _pkgs -> do
           case pkgTarball pkg of
             Nothing -> notFound $ toResponse "No tarball available"
             Just blobId -> do
@@ -213,17 +216,19 @@ handlePackageById store pkgid =
   
   where
     withPackage action = do
-      index <- return . packageList =<< query GetPackagesState
+      state <- query GetPackagesState
+      let index = packageList state
+          users = userDb state
       case PackageIndex.lookupPackageName index (packageName pkgid) of
         []   -> notFound $ toResponse "No such package"
         pkgs  | pkgVersion pkgid == Version [] []
-             -> action pkg pkgs
+             -> action users pkg pkgs
           where pkg = maximumBy (comparing packageVersion) pkgs
  
         pkgs -> case listToMaybe [ pkg | pkg <- pkgs, packageVersion pkg
                                                == packageVersion pkgid ] of
           Nothing  -> notFound $ toResponse "No such package version"
-          Just pkg -> action pkg pkgs
+          Just pkg -> action users pkg pkgs
 
 uploadPackage :: BlobStorage -> Cache.Cache -> URIAuth -> ServerPart Response
 uploadPackage store cache host =
@@ -252,7 +257,7 @@ uploadPackage store cache host =
                                         , pkgData   = pkgStr
                                         , pkgTarball= Just blobId
                                         , pkgUploadTime = now
-                                        , pkgUploadUser = "Unknown"
+                                        , pkgUploadUser = UserId 0
                                         , pkgUploadOld  = [] }
           if success
              then do updateCache cache host

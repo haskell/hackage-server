@@ -73,12 +73,11 @@ newPkgInfo pkgid entry (UploadLog.Entry time user _) others users =
         pkgData       = Tar.fileContent entry,
         pkgTarball    = Nothing,
         pkgUploadTime = time,
-        pkgUploadUser = userName user,
-        pkgUploadOld  = [ (time', userName user')
+        pkgUploadUser = Users.nameToId users user,
+        pkgUploadOld  = [ (time', Users.nameToId users user')
                         | UploadLog.Entry time' user' _ <- others]
       }
   where parse = parsePackageDescription . fromUTF8 . BS.unpack
-        userName (Users.UserName name) = name
 
 importPkgIndex :: ByteString -> Either String [(PackageIdentifier, Tar.Entry)]
 importPkgIndex = PackageIndex.read (,) . GZip.decompress

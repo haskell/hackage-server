@@ -21,7 +21,11 @@ import qualified Distribution.Server.Util.Index as PackageIndex
 
 import Distribution.Server.Types
          ( PkgInfo(..) )
+import qualified Distribution.Server.Users.Users as Users
+         ( Users, idToName )
 
+import Distribution.Text
+         ( display )
 import Distribution.Simple.PackageIndex (PackageIndex)
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Data.Time.Clock
@@ -33,15 +37,16 @@ import qualified Data.ByteString.Lazy as BS
 import Data.ByteString.Lazy (ByteString)
 import Prelude hiding (read)
 
-write :: PackageIndex PkgInfo -> ByteString
-write = PackageIndex.write pkgData setModTime
+write :: Users.Users -> PackageIndex PkgInfo -> ByteString
+write users = PackageIndex.write pkgData setModTime
   where
     setModTime pkgInfo entry = entry {
       Tar.modTime   = utcToUnixTime (pkgUploadTime pkgInfo),
       Tar.headerExt = (Tar.headerExt entry) {
-        Tar.ownerName = pkgUploadUser pkgInfo,
+        Tar.ownerName = userName (pkgUploadUser pkgInfo),
         Tar.groupName = "HackageDB"
       }
     }
     utcToUnixTime :: UTCTime -> Int
     utcToUnixTime = truncate . utcTimeToPOSIXSeconds
+    userName = display . Users.idToName users

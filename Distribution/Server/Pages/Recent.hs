@@ -7,6 +7,8 @@ module Distribution.Server.Pages.Recent (
 
 import Distribution.Server.Types
          ( PkgInfo(..) )
+import qualified Distribution.Server.Users.Users as Users
+import Distribution.Server.Users.Users (Users)
 import Distribution.Server.Pages.Template
          ( hackagePageWith )
 
@@ -39,9 +41,9 @@ import System.Time --sadly have to use the old-time lib as well as new :-(
 
 -- | Takes a list of package info, in reverse order by timestamp.
 --
-recentPage :: [PkgInfo] -> Html
-recentPage pkgs =
-  let log_rows = map makeRow (take 20 pkgs)
+recentPage :: Users -> [PkgInfo] -> Html
+recentPage users pkgs =
+  let log_rows = map (makeRow users) (take 20 pkgs)
       docBody = [XHtml.h2 << "Recent additions",
 	  XHtml.table ! [XHtml.align "center"] << log_rows]
       rss_link = XHtml.thelink ! [XHtml.rel "alternate",
@@ -50,17 +52,21 @@ recentPage pkgs =
                                   XHtml.href rssFeedURL] << XHtml.noHtml
    in hackagePageWith [rss_link] "recent additions" docBody
 
-makeRow :: PkgInfo -> Html
-makeRow PkgInfo { pkgInfoId = pkgid
-                , pkgUploadTime = time, pkgUploadUser = user } =
+makeRow :: Users -> PkgInfo -> Html
+makeRow users PkgInfo {
+      pkgInfoId = pkgid
+    , pkgUploadTime = time
+    , pkgUploadUser = userId
+  } =
   XHtml.tr <<
     [XHtml.td ! [XHtml.align "right"] <<
 	    [XHtml.toHtml (showTime time), nbsp, nbsp],
-     XHtml.td ! [XHtml.align "left"] << user,
+     XHtml.td ! [XHtml.align "left"] << display user,
      XHtml.td ! [XHtml.align "left"] <<
 	    [nbsp, nbsp, XHtml.anchor !
                            [XHtml.href (packageURL pkgid)] << display pkgid]]
   where nbsp = XHtml.primHtmlChar "nbsp"
+        user = Users.idToName users userId
 
 convertTime :: UTCTime -> CalendarTime
 convertTime utc = toUTCTime (TOD (floor (utcTimeToPOSIXSeconds utc)) 0)
@@ -78,13 +84,13 @@ rssFeedURL = "/recent.rss"
 recentAdditionsURL :: URL
 recentAdditionsURL = "/recent.html"
 
-recentFeed :: URIAuth -> UTCTime -> [PkgInfo] -> RSS
-recentFeed host now pkgs = RSS
+recentFeed :: Users -> URIAuth -> UTCTime -> [PkgInfo] -> RSS
+recentFeed users host now pkgs = RSS
   "Recent additions"
   (hackageURI host recentAdditionsURL)
   desc
   (channel now)
-  [ releaseItem host pkg | pkg <- take 20 pkgs ]
+  [ releaseItem users host pkg | pkg <- take 20 pkgs ]
   where
     desc = "The 20 most recent additions to HackageDB, the Haskell package database."
 
@@ -105,9 +111,13 @@ channel now =
     email = "duncan@haskell.org (Duncan Coutts)"
     now'  = convertTime now
 
-releaseItem :: URIAuth -> PkgInfo -> [RSS.ItemElem]
-releaseItem host PkgInfo { pkgInfoId = pkgId, pkgDesc = pkg
-                         , pkgUploadTime = time, pkgUploadUser = user } =
+releaseItem :: Users -> URIAuth -> PkgInfo -> [RSS.ItemElem]
+releaseItem users host PkgInfo {
+      pkgInfoId = pkgId
+    , pkgDesc = pkg
+    , pkgUploadTime = time
+    , pkgUploadUser = userId
+  } =
   [ RSS.Title title
   , RSS.Link uri
   , RSS.Guid True (uriToString id uri "")
@@ -118,5 +128,6 @@ releaseItem host PkgInfo { pkgInfoId = pkgId, pkgDesc = pkg
     uri   = hackageURI host (packageURL pkgId)
     title = packageName pkgId ++ " " ++ display (packageVersion pkgId)
     body  = synopsis (packageDescription pkg)
-    desc  = "<i>Added by " ++ user ++ ", " ++ showTime time ++ ".</i>"
+    desc  = "<i>Added by " ++ display user ++ ", " ++ showTime time ++ ".</i>"
 	 ++ if null body then "" else "<p>" ++ body
+    user = Users.idToName users userId

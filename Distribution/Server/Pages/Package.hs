@@ -10,6 +10,7 @@ import Distribution.Server.Pages.Package.HaddockLex	( tokenise )
 import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Pages.Template		( hackagePage )
 import Distribution.Server.Types (PkgInfo(..))
+import qualified Distribution.Server.Users.Users as Users
 
 
 import Distribution.PackageDescription.Configuration
@@ -32,14 +33,15 @@ import System.FilePath          ( (</>) )
 import System.Locale            ( defaultTimeLocale )
 import Data.Time.Format         ( formatTime )
 
-packagePage :: PkgInfo -> [PkgInfo] -> Html
-packagePage pkg allVersions =
+packagePage :: Users.Users -> PkgInfo -> [PkgInfo] -> Html
+packagePage users pkg allVersions =
   let packageData = (emptyPackageData (pkgDesc pkg)) {
         pdAllVersions = sort (map packageVersion allVersions),
         pdTags = [("upload date", showTime (pkgUploadTime pkg))
-                 ,("uploaded by", pkgUploadUser pkg)]
+                 ,("uploaded by", display userName)]
       }
       showTime = formatTime defaultTimeLocale "%c"
+      userName = Users.idToName users (pkgUploadUser pkg)
    in hackagePage (display $ packageId pkg) (pkgBody packageData)
 
 -- | Data about a package used in the package page.
