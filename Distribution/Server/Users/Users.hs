@@ -1,13 +1,26 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
 module Distribution.Server.Users.Users (
+    -- * Users type
     Users,
+
+    -- * Construction
     empty,
     add,
+
+    -- * Modification
     delete,
     disable,
     enable,
+
+    -- * Lookup
     lookupId,
     lookupName,
+
+    -- ** Lookup utils
+    idToName,
+    nameToId,
+
+    -- * Enumeration
     enumerateAll,
     enumerateEnabled,
   ) where
@@ -147,6 +160,20 @@ lookupId (UserId userId) users = IntMap.lookup userId (userIdMap users)
 
 lookupName :: UserName -> Users -> Maybe UserId
 lookupName name users = Map.lookup name (userNameMap users)
+
+-- | Convert a 'UserId' to a 'UserName'. The user id must exist.
+--
+idToName :: Users -> UserId -> UserName
+idToName users userId = case lookupId userId users of
+  Just user -> userName user
+  Nothing   -> error $ "Users.idToName: no such user id " ++ show userId
+
+-- | Convert a 'UserName' to a 'UserId'. The user name must exist.
+--
+nameToId :: Users -> UserName -> UserId
+nameToId users name = case lookupName name users of
+  Just userId -> userId
+  Nothing     -> error $ "Users.nameToId: no such user name " ++ show name
 
 enumerateAll :: Users -> [UserInfo]
 enumerateAll users = IntMap.elems (userIdMap users)
