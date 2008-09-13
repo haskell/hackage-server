@@ -1,27 +1,18 @@
 module Distribution.Server.Auth.HtPasswdDb (
     HtPasswdDb,
-    passwdCheck,
     parse,
   ) where
 
-import Distribution.Server.Auth.Types
 import Distribution.Server.Users.Types
+         ( UserName(..), PasswdHash(..) )
 import qualified Distribution.Server.Auth.Crypt as Crypt
 
-import qualified Data.Map as Map
-
-newtype HtPasswdDb = HtPasswdDb (Map.Map UserName PasswdHash)
-
-passwdCheck :: HtPasswdDb -> UserName -> PasswdPlain -> Bool
-passwdCheck (HtPasswdDb authMap) username passwd =
-  case Map.lookup username authMap of
-    Nothing   -> False
-    Just hash -> Crypt.checkPasswd passwd hash
+type HtPasswdDb = [(UserName, PasswdHash)]
 
 parse :: String -> Either String HtPasswdDb
 parse = accum 0 [] . map parseLine . lines
   where
-    accum _ pairs []               = Right (HtPasswdDb (Map.fromList pairs))
+    accum _ pairs []               = Right pairs
     accum n pairs (Just pair:rest) = accum (n+1) (pair:pairs) rest
     accum n _     (Nothing  :_   ) = Left errmsg
       where errmsg = "parse error in htpasswd file on line " ++ show (n :: Int)
