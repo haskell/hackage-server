@@ -6,6 +6,13 @@ module Distribution.Server.Users.Types (
 
 import Distribution.Server.Auth.Types
 
+import Distribution.Text
+         ( Text(..) )
+import qualified Distribution.Server.Util.Parse as Parse
+import qualified Distribution.Compat.ReadP as Parse
+import qualified Text.PrettyPrint          as Disp
+import qualified Data.Char as Char
+
 import Data.Typeable (Typeable)
 import qualified Data.Binary as Binary
 import Data.Binary (Binary)
@@ -27,6 +34,14 @@ data AccountStatus = Deleted
                    | Enabled  UserAuth
 
 type UserAuth = PasswdHash
+
+instance Text UserId where
+  disp (UserId uid) = Disp.int uid
+  parse = UserId <$> Parse.int
+
+instance Text UserName where
+  disp (UserName name) = Disp.text name
+  parse = UserName <$> Parse.munch1 Char.isAlphaNum
 
 instance Binary AccountStatus where
   put Deleted         = Binary.putWord8 1
