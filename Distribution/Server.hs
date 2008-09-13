@@ -25,7 +25,7 @@ import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)
 import qualified Distribution.Server.Pages.Package as Pages
 import qualified Distribution.Server.Pages.Recent  as Pages
 import qualified Distribution.Server.Pages.BuildReports as Pages
-import qualified Distribution.Server.IndexUtils as PackageIndex (write)
+import qualified Distribution.Server.Packages.Index as Packages.Index (write)
 import qualified Distribution.Server.PackageUpload.Unpack as Upload (unpackPackage)
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
@@ -148,7 +148,7 @@ stateToCache host state = getCurrentTime >>= \now -> return
   Cache.State {
     Cache.packagesPage  = toResponse $ Resource.XHtml $
                             Pages.packageIndex index,
-    Cache.indexTarball  = GZip.compress $ PackageIndex.write index,
+    Cache.indexTarball  = GZip.compress $ Packages.Index.write index,
     Cache.recentChanges = toResponse $ Resource.XHtml $
                             Pages.recentPage recentChanges,
     Cache.packagesFeed  = toResponse $

@@ -18,7 +18,7 @@ module Distribution.Server.BulkImport (
   mergePkgInfo,
   ) where
 
-import qualified Distribution.Server.IndexUtils as PackageIndex (read)
+import qualified Distribution.Server.Util.Index as PackageIndex (read)
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Util.Tar as Tar
@@ -73,13 +73,11 @@ newPkgInfo pkgid entry (UploadLog.Entry time user _) others users =
         pkgData       = Tar.fileContent entry,
         pkgTarball    = Nothing,
         pkgUploadTime = time,
-        pkgUploadUser = userId user,
-        pkgUploadOld  = [ (time', userId user')
+        pkgUploadUser = user,
+        pkgUploadOld  = [ (time', user')
                         | UploadLog.Entry time' user' _ <- others]
       }
   where parse = parsePackageDescription . fromUTF8 . BS.unpack
-        userId name = name
-          where Just uid = Users.lookupName (Users.UserName name) users
 
 importPkgIndex :: ByteString -> Either String [(PackageIdentifier, Tar.Entry)]
 importPkgIndex = PackageIndex.read (,) . GZip.decompress

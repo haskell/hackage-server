@@ -1,7 +1,7 @@
 {-# LANGUAGE PatternGuards #-}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Distribution.Server.IndexUtils
+-- Module      :  Distribution.Server.Util.Index
 -- Copyright   :  (c) Duncan Coutts 2008
 -- License     :  BSD-like
 --
@@ -11,30 +11,21 @@
 --
 -- Extra utils related to the package indexes.
 -----------------------------------------------------------------------------
-module Distribution.Server.IndexUtils (
-  read,
-  write,
-  writeGeneric,
+module Distribution.Server.Util.Index (
+    read,
+    write,
   ) where
 
 import qualified Distribution.Server.Util.Tar as Tar
-         ( Entry(..), Entries(..), fileName, ExtendedHeader(..), FileType(..)
+         ( Entry(..), Entries(..), fileName, FileType(..)
          , read, write, simpleFileEntry, toTarPath )
-import Distribution.Server.Types
-         ( PkgInfo(..) )
 
 import Distribution.Package
          ( PackageIdentifier(..), Package(..), packageName, packageVersion )
 import Distribution.Simple.PackageIndex (PackageIndex)
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.Text
-         ( simpleParse )
-import Distribution.Text
-         ( display )
-import Data.Time.Clock
-         ( UTCTime )
-import Data.Time.Clock.POSIX
-         ( utcTimeToPOSIXSeconds )
+         ( display, simpleParse )
 
 import qualified Data.ByteString.Lazy as BS
 import Data.ByteString.Lazy (ByteString)
@@ -42,20 +33,9 @@ import System.FilePath
          ( (</>), (<.>), splitDirectories, normalise )
 import Prelude hiding (read)
 
-write :: PackageIndex PkgInfo -> ByteString
-write = writeGeneric pkgData setModTime
-  where
-    setModTime pkgInfo entry = entry {
-      Tar.modTime   = utcToUnixTime (pkgUploadTime pkgInfo),
-      Tar.headerExt = (Tar.headerExt entry) {
-        Tar.ownerName = pkgUploadUser pkgInfo,
-        Tar.groupName = "HackageDB"
-      }
-    }
-    utcToUnixTime :: UTCTime -> Int
-    utcToUnixTime = truncate . utcTimeToPOSIXSeconds
-
 -- | Parse an uncompressed tar repository index file from a 'ByteString'.
+--
+-- Takes a function to turn a tar entry into a package
 --
 read :: (PackageIdentifier -> Tar.Entry -> pkg)
      -> ByteString
@@ -76,12 +56,16 @@ read mkPackage indexFileContent = collect [] entries
          in Just (mkPackage pkgid e)
     entry _ = Nothing
 
-writeGeneric :: Package pkg
-             => (pkg -> ByteString)
-             -> (pkg -> Tar.Entry -> Tar.Entry)
-             -> PackageIndex pkg
-             -> ByteString
-writeGeneric externalPackageRep updateEntry =
+-- | Create an uncompressed tar repository index file as a 'ByteString'.
+--
+-- Takes a couple functions to turn a package into a tar entry
+--
+write :: Package pkg
+      => (pkg -> ByteString)
+      -> (pkg -> Tar.Entry -> Tar.Entry)
+      -> PackageIndex pkg
+      -> ByteString
+write externalPackageRep updateEntry =
   Tar.write . map entry . PackageIndex.allPackages
   where
     entry pkg = updateEntry pkg
