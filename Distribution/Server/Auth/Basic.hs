@@ -2,20 +2,20 @@ module Distribution.Server.Auth.Basic (
    hackageAuth,
   ) where
 
-import Distribution.Server.Auth.Types
 import Distribution.Server.Users.Types
-import qualified Distribution.Server.Auth.Crypt as Crypt
+         ( UserId, UserName(..), PasswdPlain(..) )
+import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
+import qualified Distribution.Server.Auth.Crypt as Crypt
 
 import HAppS.Server
-         ( ServerPartT(..), multi, withRequest, getHeader, noHandle, escape
+         ( ServerPartT(..), multi, withRequest, getHeader, escape
          , unauthorized, addHeader, toResponse )
 import qualified HAppS.Crypto.Base64 as Base64
 
 import Control.Monad.Trans (MonadIO)
 import Control.Monad (guard)
-import qualified Data.Map as Map
 import qualified Data.ByteString.Char8 as BS
 
 hackageAuth :: MonadIO m => Users.Users -> Maybe Group.UserGroup
@@ -24,12 +24,12 @@ hackageAuth :: MonadIO m => Users.Users -> Maybe Group.UserGroup
 hackageAuth users authorisedGroup = genericBasicAuth realm cryptPasswdCheck
   where
     realm = "hackage"
-    cryptPasswdCheck user passwd = do
-      userId <- Users.lookupName user users
-      user   <- Users.lookupId userId users
-      guard $ case userStatus user of
-        Enabled hash -> Crypt.checkPasswd passwd hash
-        _            -> False
+    cryptPasswdCheck userName passwd = do
+      userId   <- Users.lookupName userName users
+      userInfo <- Users.lookupId userId users
+      guard $ case Users.userStatus userInfo of
+        Users.Enabled hash -> Crypt.checkPasswd passwd hash
+        _                  -> False
       guard (maybe True (Group.member userId) authorisedGroup)
       return userId
 

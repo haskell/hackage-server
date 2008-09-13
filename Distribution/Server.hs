@@ -18,10 +18,9 @@ import Distribution.Server.State as State hiding (buildReports, bulkImport)
 import qualified  Distribution.Server.State as State
 import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.Simple.PackageIndex as PackageIndex
+import qualified Distribution.Server.Auth.Basic as Auth
 import Distribution.Server.Types
          ( PkgInfo(..) )
-import Distribution.Server.Users.Types
-         ( UserId(..) )
 import qualified Distribution.Server.ResourceTypes as Resource
 import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)
 import qualified Distribution.Server.Pages.Package as Pages
@@ -45,7 +44,6 @@ import Control.Monad.Trans
 import Control.Monad (when)
 import Data.List (maximumBy, sortBy)
 import Data.Ord (comparing)
-import qualified Data.Map as Map
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Data.Time.Clock
 import Network.URI
@@ -232,17 +230,19 @@ handlePackageById store pkgid =
 
 uploadPackage :: BlobStorage -> Cache.Cache -> URIAuth -> ServerPart Response
 uploadPackage store cache host =
-  methodSP POST $
-    basicAuth "hackage" basicUsers
+  methodSP POST $ do
+    --TODO: this ought to be easier, ServerPart should be in MonadIO
+    state <- withRequest $ \_ -> liftIO $ query GetPackagesState
+    Auth.hackageAuth (userDb state) Nothing $ \user ->
       [ withDataFn (lookInput "package") $ \input ->
           [ anyRequest $
               let fileName    = (fromMaybe "noname" $ inputFilename input)
                   fileContent = inputValue input
-               in upload fileName fileContent
+               in upload user fileName fileContent
           ]
       ]
   where
-    upload name content = do
+    upload user name content = do
       --TODO: check if the package is in the index already, before we embark
       -- on writing the tarball into the store and validating etc.
       res <- liftIO $ BlobStorage.addWith store content
@@ -251,14 +251,15 @@ uploadPackage store cache host =
         Left  err -> badRequest $ toResponse err
         Right (((pkg, pkgStr), warnings), blobId) -> do
           now <- liftIO $ getCurrentTime
-          success <- update $ Insert $ PkgInfo
-                                        { pkgInfoId = packageId pkg
-                                        , pkgDesc   = pkg
-                                        , pkgData   = pkgStr
-                                        , pkgTarball= Just blobId
-                                        , pkgUploadTime = now
-                                        , pkgUploadUser = UserId 0
-                                        , pkgUploadOld  = [] }
+          success <- update $ Insert PkgInfo {
+            pkgInfoId     = packageId pkg,
+            pkgDesc       = pkg,
+            pkgData       = pkgStr,
+            pkgTarball    = Just blobId,
+            pkgUploadTime = now,
+            pkgUploadUser = user,
+            pkgUploadOld  = []
+          }
           if success
              then do updateCache cache host
                      ok $ toResponse $ unlines warnings
@@ -313,9 +314,6 @@ instance FromReqURI Version where
 
 instance FromReqURI BuildReports.BuildReportId where
   fromReqURI = simpleParse
-
-basicUsers :: Map.Map String String
-basicUsers = Map.fromList [("Lemmih","kodeord")]
 
 impl :: Server -> [ServerPartT IO Response]
 impl (Server store static _ cache host _) =
