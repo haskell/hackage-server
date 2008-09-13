@@ -1,8 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
 module Distribution.Server.Users.Users (
-    UserId(..),
-    UserInfo(..), --TODO: move into another module
     Users,
+    empty,
     add,
     delete,
     disable,
@@ -43,6 +42,13 @@ invariant _ = True
   -- need to be adjusted when an account is enabled/disabled/deleted
   -- it also allows us to track historical info, like name of uploader
   -- even if that user name has been recycled, the user ids will be distinct.
+
+empty :: Users
+empty = Users {
+    userIdMap   = IntMap.empty,
+    userNameMap = Map.empty,
+    nextId      = UserId 0
+  }
 
 -- | Add a new user account.
 --
