@@ -18,7 +18,7 @@ import Control.Monad (guard)
 import qualified Data.Map as Map
 import qualified Data.ByteString.Char8 as BS
 
-hackageAuth :: MonadIO m => Users.Users -> Group.UserGroup
+hackageAuth :: MonadIO m => Users.Users -> Maybe Group.UserGroup
             -> (UserId -> [ServerPartT m a])
             -> ServerPartT m a
 hackageAuth users authorisedGroup = genericBasicAuth realm cryptPasswdCheck
@@ -30,7 +30,7 @@ hackageAuth users authorisedGroup = genericBasicAuth realm cryptPasswdCheck
       guard $ case userStatus user of
         Enabled hash -> Crypt.checkPasswd passwd hash
         _            -> False
-      guard (Group.member userId authorisedGroup)
+      guard (maybe True (Group.member userId) authorisedGroup)
       return userId
 
 -- This is directly ripped out of HAppS-Server and generalised
