@@ -8,6 +8,8 @@ import Distribution.Package (PackageIdentifier,Package(packageId))
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.PackageDescription (parsePackageDescription, ParseResult(..))
 import Distribution.Server.Types (PkgInfo(..))
+import qualified Distribution.Server.Users.Users as Users
+import Distribution.Server.Users.Users (Users)
 import Distribution.Server.Util.BlobStorage (BlobId)
 import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
 import Distribution.Server.BuildReport.BuildReports (BuildReports,BuildReportId,BuildLog)
@@ -28,7 +30,8 @@ import Distribution.Simple.Utils (fromUTF8)
 
 data PackagesState = PackagesState {
     packageList  :: !(PackageIndex.PackageIndex PkgInfo),
-    buildReports :: !BuildReports
+    buildReports :: !BuildReports,
+    userDb       :: !Users
   }
   deriving Typeable
 
@@ -36,23 +39,34 @@ instance Component PackagesState where
   type Dependencies PackagesState = End
   initialValue = PackagesState {
     packageList  = mempty,
-    buildReports = BuildReports.empty
+    buildReports = BuildReports.empty,
+    userDb       = Users.empty
   }
 
 instance Version PackagesState where
     mode = Versioned 0 Nothing
 
 instance Serialize PackagesState where
-  putCopy (PackagesState idx rpts) = contain $ do
+  putCopy (PackagesState idx rpts users) = contain $ do
     safePut $ PackageIndex.allPackages idx
     safePut rpts
+    safePut users
   getCopy = contain $ do
     packages <- safeGet
     reports  <- safeGet
+    users    <- safeGet
     return PackagesState {
       packageList  = PackageIndex.fromList packages,
-      buildReports = reports
+      buildReports = reports,
+      userDb       = users
     }
+
+instance Version Users where
+  mode = Versioned 0 Nothing
+
+instance Serialize Users where
+  putCopy = contain . Binary.put
+  getCopy = contain Binary.get
 
 instance Version BuildReports where
   mode = Versioned 0 Nothing
@@ -123,11 +137,14 @@ insert pkg
                          return True
            Just{}  -> do return False
 
-bulkImport :: [PkgInfo] -> Update PackagesState ()
-bulkImport newIndex
-    = do pkgsState <- State.get
-         State.put $ pkgsState { packageList = packageList pkgsState `mappend`
-                                               PackageIndex.fromList newIndex }
+-- NOTE! overwrites any existing data
+bulkImport :: [PkgInfo] -> Users -> Update PackagesState ()
+bulkImport newIndex users = do
+  pkgsState <- State.get
+  State.put pkgsState {
+    packageList = PackageIndex.fromList newIndex,
+    userDb = users
+  }
 
 addReport :: BuildReport -> Update PackagesState BuildReportId
 addReport report

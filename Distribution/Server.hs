@@ -134,7 +134,7 @@ bulkImport (Server store _ _ cache host _)
   (pkgsInfo, users, badLogEntries) <- either fail return
     (BulkImport.mergePkgInfo pkgIndex uploadLog tarballs accounts)
 
-  update $ BulkImport pkgsInfo
+  update $ BulkImport pkgsInfo users
   Cache.put cache =<< stateToCache host =<< query GetPackagesState
 
   return badLogEntries
