@@ -14,6 +14,7 @@
 module Distribution.Server.BulkImport.UploadLog (
     Entry(..),
     read,
+    group,
   ) where
 
 import Distribution.Server.Users.Types
@@ -65,8 +66,8 @@ instance Text Entry where
 -- more than once, so each entry is paired with any older entries for the same
 -- package.
 --
-read :: String -> Either String [(Entry, [Entry])]
-read = either Left (Right . groupEntries) . check [] . map parseLine . lines
+read :: String -> Either String [Entry]
+read = check [] . map parseLine . lines
   where
     check es' []           = Right es'
     check es' (Right e:es) = check (e:es') es
@@ -74,8 +75,8 @@ read = either Left (Right . groupEntries) . check [] . map parseLine . lines
     parseLine line = maybe (Left err) Right (simpleParse line)
       where err = "Failed to parse log line:\n" ++ show line
 
-groupEntries :: [Entry] -> [(Entry, [Entry])]
-groupEntries =
+group :: [Entry] -> [(Entry, [Entry])]
+group =
     map ((\(p:ps) -> (p, ps))
        . sortBy (comparing packageTime))
   . groupBy (equating packageId)

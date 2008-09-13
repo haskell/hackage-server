@@ -20,11 +20,11 @@ module Distribution.Server.BulkImport (
 
 import qualified Distribution.Server.Util.Index as PackageIndex (read)
 import qualified Distribution.Server.Users.Users as Users
+import           Distribution.Server.Users.Users   (Users)
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Util.Tar as Tar
          ( Entry(..), fileName )
 import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
-         ( Entry(..), read )
 import qualified Distribution.Server.Auth.HtPasswdDb as HtPasswdDb
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
@@ -82,7 +82,7 @@ newPkgInfo pkgid entry (UploadLog.Entry time user _) others users =
 importPkgIndex :: ByteString -> Either String [(PackageIdentifier, Tar.Entry)]
 importPkgIndex = PackageIndex.read (,) . GZip.decompress
 
-importUploadLog :: String -> Either String [(UploadLog.Entry, [UploadLog.Entry])]
+importUploadLog :: String -> Either String [UploadLog.Entry]
 importUploadLog = UploadLog.read
 
 -- | Actually write the tarballs to disk and return an association of
@@ -126,10 +126,11 @@ importUsers (Just htpasswdFile) = importUsers' Users.empty
 -- upload log entry from a named user and there is currently such a named user
 -- that they are in fact one and the same.
 --
-mergeDeletedUsers :: [UploadLog.Entry] -> Users.Users -> Users.Users
-mergeDeletedUsers logEntries =
-    (\(users, toDel) -> foldl' deleteUser users      toDel)
-  . (\users          -> foldl' addUser   (users, []) logEntries)
+mergeDeletedUsers :: [UploadLog.Entry] -> Users -> (Users, Users)
+mergeDeletedUsers logEntries users0 =
+  let (users1, toDelete) = foldl' addUser (users0, []) logEntries
+      users2             = foldl' deleteUser users1 toDelete
+   in (users1, users2)
 
   where
     addUser (users, added) (UploadLog.Entry _ userName _) =
@@ -145,15 +146,16 @@ mergeDeletedUsers logEntries =
 -- | Merge all the package and user info together
 --
 mergePkgInfo :: [(PackageIdentifier, Tar.Entry)]
-             -> [(UploadLog.Entry, [UploadLog.Entry])]
+             -> [UploadLog.Entry]
              -> [(PackageIdentifier, BlobStorage.BlobId)]
              -> Users.Users
              -> Either String ([PkgInfo], Users.Users, [UploadLog.Entry])
 mergePkgInfo pkgDescs logEntries tarballInfo users = do
-  let users' = mergeDeletedUsers (map fst logEntries) users
-  (pkgs, extraLogEntries) <- mergeIndexWithUploadLog pkgDescs logEntries users'
+  let (users', users'') = mergeDeletedUsers logEntries users
+      logEntries'       = UploadLog.group logEntries
+  (pkgs, extraLogEntries) <- mergeIndexWithUploadLog pkgDescs logEntries' users'
   pkgs' <- mergeTarballs tarballInfo pkgs
-  return (pkgs', users', extraLogEntries)
+  return (pkgs', users'', extraLogEntries)
 
 -- | Merge the package index meta data with the upload log to make initial
 --   'PkgInfo' records, but without tarballs.
