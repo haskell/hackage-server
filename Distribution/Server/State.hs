@@ -6,7 +6,6 @@ import Distribution.Server.Instances ()
 
 import Distribution.Package (PackageIdentifier,Package(packageId))
 import qualified Distribution.Simple.PackageIndex as PackageIndex
-import Distribution.PackageDescription (parsePackageDescription, ParseResult(..))
 import Distribution.Server.Types (PkgInfo(..))
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users)
@@ -23,10 +22,7 @@ import Data.Typeable
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import Data.Monoid
-import qualified Data.ByteString.Lazy.Char8 as BS (unpack)
 import Data.Time.Clock (UTCTime(..))
-
-import Distribution.Simple.Utils (fromUTF8)
 
 data PackagesState = PackagesState {
     packageList  :: !(PackageIndex.PackageIndex PkgInfo),
@@ -86,34 +82,8 @@ instance Version PkgInfo where
   mode = Versioned 0 Nothing
 
 instance Serialize PkgInfo where
-  putCopy pkgInfo = contain $ do
-    safePut (pkgInfoId pkgInfo)
-    safePut (pkgUploadTime pkgInfo)
-    safePut (pkgUploadUser pkgInfo)
-    safePut (pkgUploadOld pkgInfo)
-    safePut (pkgTarball pkgInfo)
-    Binary.put (pkgData pkgInfo)
-
-  getCopy = contain $ do
-    infoId <- safeGet
-    mtime  <- safeGet
-    user   <- safeGet
-    old    <- safeGet
-    tarball<- safeGet
-    bstring <- Binary.get
-    return PkgInfo {
-      pkgInfoId = infoId,
-      pkgDesc   = case parse bstring of
-                    -- XXX: Better error message?
-                    ParseFailed e -> error $ "Internal error: " ++ show e
-                    ParseOk _ x   -> x,
-      pkgUploadTime = mtime,
-      pkgUploadUser = user,
-      pkgUploadOld  = old,
-      pkgData   = bstring,
-      pkgTarball= tarball
-    }
-    where parse = parsePackageDescription . fromUTF8 . BS.unpack
+  putCopy = contain . Binary.put
+  getCopy = contain Binary.get
 
 instance Version UTCTime where
   mode = Versioned 0 Nothing

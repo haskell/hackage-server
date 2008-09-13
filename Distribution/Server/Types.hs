@@ -16,12 +16,18 @@ module Distribution.Server.Types where
 
 import Distribution.Server.Util.BlobStorage
          ( BlobId )
+import Distribution.Server.Instances ()
 
 import Distribution.Package
          ( PackageIdentifier(..), Package(..) )
 import Distribution.PackageDescription
-         ( GenericPackageDescription(..) )
+         ( GenericPackageDescription(..)
+         , parsePackageDescription, ParseResult(..) )
+import Distribution.Simple.Utils (fromUTF8)
 
+import qualified Data.Binary as Binary
+import Data.Binary (Binary)
+import qualified Data.ByteString.Lazy.Char8 as BS (unpack)
 import Data.ByteString.Lazy (ByteString)
 import Data.Time.Clock (UTCTime)
 import Data.Typeable (Typeable)
@@ -54,3 +60,32 @@ data PkgInfo = PkgInfo {
 
 instance Package PkgInfo where packageId = pkgInfoId
 
+instance Binary PkgInfo where
+  put pkgInfo = do
+    Binary.put (pkgInfoId pkgInfo)
+    Binary.put (pkgUploadTime pkgInfo)
+    Binary.put (pkgUploadUser pkgInfo)
+    Binary.put (pkgUploadOld pkgInfo)
+    Binary.put (pkgTarball pkgInfo)
+    Binary.put (pkgData pkgInfo)
+
+  get = do
+    infoId  <- Binary.get
+    mtime   <- Binary.get
+    user    <- Binary.get
+    old     <- Binary.get
+    tarball <- Binary.get
+    bstring <- Binary.get
+    return PkgInfo {
+      pkgInfoId = infoId,
+      pkgDesc   = case parse bstring of
+                    -- XXX: Better error message?
+                    ParseFailed e -> error $ "Internal error: " ++ show e
+                    ParseOk _ x   -> x,
+      pkgUploadTime = mtime,
+      pkgUploadUser = user,
+      pkgUploadOld  = old,
+      pkgData   = bstring,
+      pkgTarball= tarball
+    }
+    where parse = parsePackageDescription . fromUTF8 . BS.unpack
