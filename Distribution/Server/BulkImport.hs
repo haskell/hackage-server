@@ -14,14 +14,18 @@ module Distribution.Server.BulkImport (
   importPkgIndex,
   importUploadLog,
   importTarballs,
+  importUsers,
   mergePkgInfo,
   ) where
 
 import qualified Distribution.Server.IndexUtils as PackageIndex (read)
+import qualified Distribution.Server.Users.Users as Users
+import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Util.Tar as Tar
          ( Entry(..), fileName )
 import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
          ( Entry(..), read )
+import qualified Distribution.Server.Auth.HtPasswdDb as HtPasswdDb
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
 import Distribution.Server.Types (PkgInfo(..))
@@ -45,7 +49,7 @@ import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Codec.Compression.GZip as GZip
 import Control.Monad.Error () --intance Monad (Either String)
 import Data.List
-         ( sortBy )
+         ( sortBy, foldl' )
 import Data.Ord
          ( comparing )
 
@@ -54,8 +58,9 @@ import Prelude hiding (read)
 newPkgInfo :: PackageIdentifier
            -> Tar.Entry
            -> UploadLog.Entry -> [UploadLog.Entry]
+           -> Users.Users
            -> Either String PkgInfo
-newPkgInfo pkgid entry (UploadLog.Entry time user _) others =
+newPkgInfo pkgid entry (UploadLog.Entry time user _) others users =
   case parse (Tar.fileContent entry) of
       ParseFailed err -> fail $ Tar.fileName entry
                              ++ maybe "" (\n -> ":" ++ show n) lineno
@@ -68,11 +73,13 @@ newPkgInfo pkgid entry (UploadLog.Entry time user _) others =
         pkgData       = Tar.fileContent entry,
         pkgTarball    = Nothing,
         pkgUploadTime = time,
-        pkgUploadUser = user,
-        pkgUploadOld  = [ (time', user')
+        pkgUploadUser = userId user,
+        pkgUploadOld  = [ (time', userId user')
                         | UploadLog.Entry time' user' _ <- others]
       }
   where parse = parsePackageDescription . fromUTF8 . BS.unpack
+        userId name = name
+          where Just uid = Users.lookupName (Users.UserName name) users
 
 importPkgIndex :: ByteString -> Either String [(PackageIdentifier, Tar.Entry)]
 importPkgIndex = PackageIndex.read (,) . GZip.decompress
@@ -97,17 +104,58 @@ importTarballs store (Just archiveFile) =
       | (pkgid, entry) <- tarballs
       , takeExtension (Tar.fileName entry) == ".gz" ] --FIXME: .tar.gz
 
+-- | The active users are simply all those listed in the current htpasswd file.
+--
+importUsers :: Maybe String -> Either String Users.Users
+importUsers Nothing             = Right Users.empty
+importUsers (Just htpasswdFile) = importUsers' Users.empty
+                              =<< HtPasswdDb.parse htpasswdFile
+  where
+    importUsers' users [] = Right users
+    importUsers' users ((userName, userAuth):rest) =
+      case Users.add userName userAuth users of
+        Nothing                -> Left (alreadyPresent userName)
+        Just (users', _userId) -> importUsers' users' rest
+
+    alreadyPresent name = "User " ++ show name ++ " is already present"
+
+-- | All users who have ever uploaded a package must have been a user at some
+-- point however it may be that some users who uploaded packages are not
+-- current users. However We still need a 'UserId' for these package uploaders
+-- so we must create a bunch of historical deleted users.
+--
+-- Note that we do make the potentially false assumption that if there is a
+-- upload log entry from a named user and there is currently such a named user
+-- that they are in fact one and the same.
+--
+mergeDeletedUsers :: [UploadLog.Entry] -> Users.Users -> Users.Users
+mergeDeletedUsers logEntries =
+    (\(users, toDel) -> foldl' deleteUser users      toDel)
+  . (\users          -> foldl' addUser   (users, []) logEntries)
+
+  where
+    addUser (users, added) (UploadLog.Entry _ userName _) =
+      case Users.add (Users.UserName userName) dummyAuth users of
+        Nothing               -> (users ,        added) -- already present
+        Just (users', userId) -> (users', userId:added)
+
+    dummyAuth = Users.PasswdHash ""
+
+    deleteUser users userId = users'
+      where Just users' = Users.delete userId users
 
 -- | Merge all the package and user info together
 --
 mergePkgInfo :: [(PackageIdentifier, Tar.Entry)]
              -> [(UploadLog.Entry, [UploadLog.Entry])]
              -> [(PackageIdentifier, BlobStorage.BlobId)]
-             -> Either String ([PkgInfo], [UploadLog.Entry])
-mergePkgInfo pkgDescs logEntries tarballInfo = do
-  (pkgs, extraLogEntries) <- mergeIndexWithUploadLog pkgDescs logEntries
+             -> Users.Users
+             -> Either String ([PkgInfo], Users.Users, [UploadLog.Entry])
+mergePkgInfo pkgDescs logEntries tarballInfo users = do
+  let users' = mergeDeletedUsers (map fst logEntries) users
+  (pkgs, extraLogEntries) <- mergeIndexWithUploadLog pkgDescs logEntries users'
   pkgs' <- mergeTarballs tarballInfo pkgs
-  return (pkgs', extraLogEntries)
+  return (pkgs', users', extraLogEntries)
 
 -- | Merge the package index meta data with the upload log to make initial
 --   'PkgInfo' records, but without tarballs.
@@ -117,8 +165,9 @@ mergePkgInfo pkgDescs logEntries tarballInfo = do
 --
 mergeIndexWithUploadLog :: [(PackageIdentifier, Tar.Entry)]
                         -> [(UploadLog.Entry, [UploadLog.Entry])]
+                        -> Users.Users
                         -> Either String ([PkgInfo], [UploadLog.Entry])
-mergeIndexWithUploadLog pkgs entries =
+mergeIndexWithUploadLog pkgs entries users =
   mergePkgs [] [] $
     mergeBy comparingPackageId
       (sortBy (comparing fst)
@@ -132,7 +181,7 @@ mergeIndexWithUploadLog pkgs entries =
     mergePkgs merged nonexistant []  = Right (reverse merged, nonexistant)
     mergePkgs merged nonexistant (next:remaining) = case next of
       InBoth (pkgid, tarEntry) (logEntry, logEntries) ->
-        case newPkgInfo pkgid tarEntry logEntry logEntries of
+        case newPkgInfo pkgid tarEntry logEntry logEntries users of
           Left problem  -> Left problem
           Right ok      -> mergePkgs (ok:merged) nonexistant remaining
       OnlyInLeft (pkgid, _) ->
