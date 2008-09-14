@@ -44,6 +44,24 @@ If you notice anything broken, please report it on the
 <A HREF="http://trac.haskell.org/haddock">Haddock bug tracker</A>.
 </UL>
 
+<TABLE BORDER=1><TR><TD>
+<H3>Indicate who supports the package</H3>
+
+<P>If the <TT>Maintainer</TT> field names a person or group, the release
+as a whole (including packaging) should be the named maintainer's approved
+release, which they are supporting (at least for some time after the
+release).  Ideally a maintainer would make that clear by uploading the
+release themselves.
+
+<P>A <TT>Maintainer</TT> value of <B>none</B> indicates that the package
+is not supported.
+
+<P>If a package is being maintained, any release not approved and
+supported by the maintainer should use a different package name.
+Then use the <TT>Maintainer</TT> field as above either to commit to
+supporting the fork yourself or to mark it as unsupported.
+</TD></TR></TABLE>
+
 <H3>Checking a Cabal package</H3>
 
 <P><STRONG CLASS="warning">Re-uploading a package with the same version
@@ -67,7 +85,7 @@ warns about sundry other matters,
 and presents a preview of the web page for the package.
 It does not add the package to the database.
 
-<FORM CLASS="box" action="/upload" method="post" enctype="multipart/form-data">
+<FORM CLASS="box" action="/check" method="post" enctype="multipart/form-data">
 <P>Local file containing Cabal package: <INPUT type="file" name="package">
 <INPUT type="submit" value="Check">
 </P>
@@ -79,7 +97,7 @@ It does not add the package to the database.
 <P>This form does the uploading.
 When you submit it, you'll be prompted for your HackageDB
 <A HREF="accounts.html">username</A> and password.
-(Alternatively, there's a <A HREF="/cgi-bin/hackage-scripts/package/cabal-upload">command-line interface</A>, which also needs the same username and password.)
+(Alternatively, there's a <A HREF="/packages/cabal-upload">command-line interface</A>, which also needs the same username and password.)
 
 <FORM CLASS="box" action="/upload" method="post" enctype="multipart/form-data">
 <P>Local file containing Cabal package: <INPUT type="file" name="package">
