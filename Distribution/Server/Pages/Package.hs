@@ -24,7 +24,7 @@ import Text.XHtml.Strict hiding ( p )
 import Control.Monad		( liftM2 )
 import qualified Data.Foldable as Foldable
 import Data.Char		( toLower, toUpper )
-import Data.List		( delete, intersperse, partition, sort, sortBy )
+import Data.List		( intersperse, partition, sort, sortBy )
 import Data.Maybe
 import Data.Map			( Map )
 import qualified Data.Map as Map
@@ -94,20 +94,20 @@ pkgBody pd =
 	propertySection pd ++
 	downloadSection pd
   where	pkg = packageDescription (pdDescription pd)
+	short = synopsis pkg
 	pkgId = package pkg
 	pname = pkgName pkgId
-	pversion = display (pkgVersion pkgId)
-	docTitle = "The " ++ pname ++ " package (version " ++ pversion ++ ")"
+	docTitle
+	  | null short = pname
+	  | otherwise = pname ++ ": " ++ short
 	cabalLink = anchor ! [href cabalHomeURL] <<
 		(image ! [alt "Built with Cabal", src cabalLogoURL])
 
 prologue :: PackageDescription -> [Html]
 prologue pkg
-  | not (null desc) = html_desc
-  | not (null short) = [paragraph << short]
-  | otherwise = []
+  | null desc = []
+  | otherwise = html_desc
   where desc = description pkg
-	short = synopsis pkg
 	html_desc = case parseParas (tokenise desc) of
 	    Left _ -> [paragraph << p | p <- paragraphs desc]
 	    Right doc -> [markup htmlMarkup doc]
@@ -138,9 +138,10 @@ propertySection :: PackageData -> [Html]
 propertySection pd = [
 	-- h3 << "Package properties",
 	tabulate $
-		(if null other_vs then []
-		 else [("Other versions",
-			commaList (map showVers other_vs))]) ++
+		[(if null earlier_vs && null later_vs then "Version" else "Versions",
+		 commaList (map linkVers earlier_vs ++
+			    (bold << display pversion) :
+			    map linkVers later_vs))] ++
 		[("Dependencies", html_deps_list)] ++
 		[(fname, f_value) |
 			(fname, htmlField) <- showFields mb_doc,
@@ -155,10 +156,12 @@ propertySection pd = [
 		    bs ->
 			[("Built on", commaList (map (toHtml . buildDesc) bs))]
 	]
-  where other_vs = delete pversion (pdAllVersions pd)
+  where all_vs = pdAllVersions pd
+	earlier_vs = takeWhile (< pversion) all_vs
+	later_vs = dropWhile (<= pversion) all_vs
 	vmap = pdDependencies pd
 	mb_doc = pdDocURL pd
-	showVers v =
+	linkVers v =
 		anchor ! [href (packageURL (PackageIdentifier pname v))] <<
 			display v
 	pkg = flattenPackageDescription (pdDescription pd)
@@ -204,7 +207,7 @@ showFields mb_doc = [
 	("License",	toHtml . show . license),
 	("Copyright",	toHtml . P.copyright),
 	("Author",	toHtml . author),
-	("Maintainer",	toHtml . maintainer),
+	("Maintainer",	mkMaint . maintainer),
 	("Stability",	toHtml . stability),
 	("Category",	toHtml . category),
 	("Home page",	mkRef . homepage),
@@ -216,6 +219,10 @@ showFields mb_doc = [
 	]
   where mkRef "" = noHtml
 	mkRef url = anchor ! [href url] << url
+	mkMaint n
+	  | unmaintained n = strong ! [theclass "warning"] << toHtml "none"
+	  | otherwise = toHtml n
+	unmaintained n = map toLower n == "none"
 	modLink url modName = anchor ! [href mod_url] << modName
 	  where mod_url = url ++ "/" ++ map toFile modName ++ ".html"
 		toFile '.' = '-'
@@ -230,6 +237,7 @@ flatDependencies :: GenericPackageDescription -> [[Dependency]]
 flatDependencies pkg =
 	map (map dependency . sortOn (map toLower . fst)) $ sort $
 	map get_deps $
+	foldr reduceDisjunct [] $
 	foldr intersectDisjunct head_deps $
 		maybe id ((:) . fromCondTree) (condLibrary pkg) $
 		map (fromCondTree . snd) (condExecutables pkg)
@@ -259,6 +267,10 @@ flatDependencies pkg =
 	fromComponent (_, then_part, Just else_part) =
 		unionDisjunct (fromCondTree then_part)
 			(fromCondTree else_part)
+
+	reduceDisjunct c cs
+	  | any (c `subConjunct`) cs = cs
+	  | otherwise = c : filter (not . (`subConjunct` c)) cs
 
 -- Same as @sortBy (comparing f)@, but without recomputing @f@.
 sortOn :: Ord b => (a -> b) -> [a] -> [a]
