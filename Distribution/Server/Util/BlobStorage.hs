@@ -89,9 +89,9 @@ withIncomming store content action = do
     BS.hPut hnd content
     hSeek hnd AbsoluteSeek 0
     blobId <- evaluate . BlobId . md5 =<< BS.hGetContents hnd
-
-    (res, commit) <- action hnd blobId
-    hClose hnd
+    -- open a new Handle since the old one is closed by hGetContents
+    (res, commit) <- withBinaryFile file ReadWriteMode $ \hnd' ->
+                     action hnd' blobId
     if commit
       --TODO: if the target already exists then there is no need to overwrite
       -- it since it will have the same content. Checking and then renaming
