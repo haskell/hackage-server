@@ -69,7 +69,7 @@ main = topHandler $ do
                -> return n
       _        -> fail $ "bad port number " ++ show str
 
-    checkImportOpts Nothing Nothing _ _ = return Nothing
+    checkImportOpts Nothing Nothing Nothing Nothing = return Nothing
     checkImportOpts (Just indexFileName) (Just logFileName)
                     archiveFile htpasswdFile = do
       indexFile <- BS.readFile indexFileName
@@ -78,6 +78,10 @@ main = topHandler $ do
       htpasswd  <- maybe (return Nothing) (fmap Just . readFile) htpasswdFile
       return (Just (indexFile, logFile, tarballs, htpasswd))
 
+    checkImportOpts Nothing Nothing (Just _) _ =
+      fail "Currently an archive file is only imported along with an index"
+    checkImportOpts Nothing Nothing _ (Just _) =
+      fail "Currently an htpasswd file is only imported along with an index"
     checkImportOpts _ _ _ _ =
       fail "A package index and log file must be supplied together."
 

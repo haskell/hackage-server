@@ -263,7 +263,7 @@ uploadPackage store cache host =
           if success
              then do updateCache cache host
                      ok $ toResponse $ unlines warnings
-             else forbidden $ toResponse "Package already exist."
+             else forbidden $ toResponse "Package already exists."
 
 buildReports :: BlobStorage -> [ServerPart Response]
 buildReports store =
