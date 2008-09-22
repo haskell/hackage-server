@@ -12,6 +12,8 @@ import Distribution.Server.Pages.Template		( hackagePage )
 import Distribution.Server.Types (PkgInfo(..))
 import qualified Distribution.Server.Users.Users as Users
 
+import qualified Distribution.Simple.PackageIndex as PackageIndex
+import Distribution.Simple.PackageIndex (PackageIndex)
 
 import Distribution.PackageDescription.Configuration
 				( flattenPackageDescription )
@@ -25,7 +27,8 @@ import Control.Monad		( liftM2 )
 import qualified Data.Foldable as Foldable
 import Data.Char		( toLower, toUpper )
 import Data.List		( intersperse, partition, sort, sortBy )
-import Data.Maybe
+import Data.Maybe   ( listToMaybe )
+import Data.Monoid  ( mempty )
 import Data.Map			( Map )
 import qualified Data.Map as Map
 import Data.Ord			( comparing )
@@ -33,12 +36,13 @@ import System.FilePath          ( (</>) )
 import System.Locale            ( defaultTimeLocale )
 import Data.Time.Format         ( formatTime )
 
-packagePage :: Users.Users -> PkgInfo -> [PkgInfo] -> Html
-packagePage users pkg allVersions =
+packagePage :: Users.Users -> PackageIndex PkgInfo -> PkgInfo -> [PkgInfo] -> Html
+packagePage users pkgs pkg allVersions =
   let packageData = (emptyPackageData (pkgDesc pkg)) {
         pdAllVersions = sort (map packageVersion allVersions),
         pdTags = [("upload date", showTime (pkgUploadTime pkg))
-                 ,("uploaded by", display userName)]
+                 ,("uploaded by", display userName)],
+        pdDependencies = pkgs
       }
       showTime = formatTime defaultTimeLocale "%c"
       userName = Users.idToName users (pkgUploadUser pkg)
@@ -54,7 +58,7 @@ data PackageData = PackageData
 	, pdAllVersions	:: [Version]
 		-- ^ all versions of the package in the database, in
 		-- ascending order.
-	, pdDependencies :: Map String [Version]
+	, pdDependencies :: PackageIndex PkgInfo
 		-- ^ dependent packages from 'pdDescription', each paired
 		-- with available versions of that package (if any).
 	, pdDocURL	:: Maybe URL
@@ -73,7 +77,7 @@ emptyPackageData pkg = PackageData {
   pdDescription = pkg,
   pdTags = [],
   pdAllVersions = [],
-  pdDependencies = Map.empty,
+  pdDependencies = mempty,
   pdDocURL = Nothing,
   pdBuilds = [],
   pdBuildFailures = []
@@ -186,10 +190,10 @@ tabulate items = table ! [theclass "properties"] <<
 		[th ! [theclass "horizontal"] << t, td << d] |
 		(n, (t, d)) <- zip [(1::Int)..] items]
 
-showDependencies :: Map String [Version] -> [Dependency] -> Html
+showDependencies :: PackageIndex PkgInfo -> [Dependency] -> Html
 showDependencies vmap deps = commaList (map (showDependency vmap) deps)
 
-showDependency :: Map String [Version] -> Dependency -> Html
+showDependency :: PackageIndex PkgInfo -> Dependency -> Html
 showDependency vmap (Dependency pname vs) =
 	showPkg mb_vers +++ showVers vs
   where showPkg Nothing = toHtml pname
@@ -198,8 +202,8 @@ showDependency vmap (Dependency pname vs) =
 			pname
 	showVers AnyVersion = noHtml
 	showVers vs' = toHtml (" (" ++ display vs' ++ ")")
-	mb_vers = maybeLast $ filter (`withinRange` vs) $
-		Map.findWithDefault [] pname vmap
+	mb_vers = maybeLast $ filter (`withinRange` vs) $ map packageVersion $
+		PackageIndex.lookupPackageName vmap pname
 
 showFields :: Maybe URL -> [(String, PackageDescription -> Html)]
 showFields mb_doc = [

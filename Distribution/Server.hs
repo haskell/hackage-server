@@ -179,8 +179,9 @@ legacySupport = multi
 handlePackageById :: BlobStorage -> PackageIdentifier -> [ServerPart Response]
 handlePackageById store pkgid =
   [ method GET $
-      withPackage $ \users pkg pkgs ->
-        ok $ toResponse $ Resource.XHtml $ Pages.packagePage users pkg pkgs
+      withPackage $ \state pkg pkgs ->
+        ok $ toResponse $ Resource.XHtml $
+          Pages.packagePage (userDb state) (packageList state) pkg pkgs
 
   , dir "cabal"
     [ method GET $
@@ -216,17 +217,16 @@ handlePackageById store pkgid =
     withPackage action = do
       state <- query GetPackagesState
       let index = packageList state
-          users = userDb state
       case PackageIndex.lookupPackageName index (packageName pkgid) of
         []   -> notFound $ toResponse "No such package"
         pkgs  | pkgVersion pkgid == Version [] []
-             -> action users pkg pkgs
+             -> action state pkg pkgs
           where pkg = maximumBy (comparing packageVersion) pkgs
  
         pkgs -> case listToMaybe [ pkg | pkg <- pkgs, packageVersion pkg
                                                == packageVersion pkgid ] of
           Nothing  -> notFound $ toResponse "No such package version"
-          Just pkg -> action users pkg pkgs
+          Just pkg -> action state pkg pkgs
 
 uploadPackage :: BlobStorage -> Cache.Cache -> URIAuth -> ServerPart Response
 uploadPackage store cache host =
