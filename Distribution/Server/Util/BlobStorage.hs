@@ -72,15 +72,14 @@ addWith :: BlobStorage -> ByteString
         -> (ByteString -> Either error result)
         -> IO (Either error (result, BlobId))
 addWith store content check =
-  withIncomming store content $ \hnd blobId -> do
-    hSeek hnd AbsoluteSeek 0
-    content' <- BS.hGetContents hnd
+  withIncomming store content $ \file blobId -> do
+    content' <- BS.readFile file
     case check content' of
       Left  err -> return (Left  err,          False)
       Right res -> return (Right (res, blobId), True)
 
 withIncomming :: BlobStorage -> ByteString
-              -> (Handle -> BlobId -> IO (a, Bool))
+              -> (FilePath -> BlobId -> IO (a, Bool))
               -> IO a
 withIncomming store content action = do
   (file, hnd) <- openBinaryTempFile (incomingDir store) "new"
@@ -89,9 +88,9 @@ withIncomming store content action = do
     BS.hPut hnd content
     hSeek hnd AbsoluteSeek 0
     blobId <- evaluate . BlobId . md5 =<< BS.hGetContents hnd
+    hClose hnd
     -- open a new Handle since the old one is closed by hGetContents
-    (res, commit) <- withBinaryFile file ReadWriteMode $ \hnd' ->
-                     action hnd' blobId
+    (res, commit) <- action file blobId
     if commit
       --TODO: if the target already exists then there is no need to overwrite
       -- it since it will have the same content. Checking and then renaming
