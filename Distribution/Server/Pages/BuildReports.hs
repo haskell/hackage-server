@@ -19,7 +19,7 @@ import Distribution.Text
 
 import qualified Text.XHtml.Strict as XHtml
 import Text.XHtml.Strict
-         ( Html, (<<), (!), tr, th, td, h2
+         ( Html, (<<), (!), tr, th, td, p, h2, ulist, li
          , toHtml, table, theclass, concatHtml, isNoHtml )
 import Data.List (intersperse)
 
@@ -48,17 +48,24 @@ buildReportSummary pkgid reports = hackagePage title body
     detailLink reportId =
       XHtml.anchor ! [XHtml.href $ "/buildreports/" ++ display reportId ]
 
-buildReportDetail :: BuildReport -> XHtml.Html
-buildReportDetail report = hackagePage title [h2 << title, body]
+buildReportDetail :: BuildReport -> BuildReportId -> Maybe BuildLog -> XHtml.Html
+buildReportDetail report reportId buildLog = hackagePage title body
   where
     title = display pkgid ++ ": build report"
     pkgid = BuildReport.package report
-    body  = tabulate
+    body  = [h2 << title, details, buildLogPara]
+    details = tabulate
             [ (name, value)
             | (name, field) <- showFields
             , let value = field report
             , not (isNoHtml value) ]
     
+    buildLogPara = p << [ ulist << [li << buildLogLink]]
+    buildLogLink = case buildLog of
+      Nothing -> toHtml "No build log available"
+      _       -> XHtml.anchor ! [XHtml.href buildLogURL ] << "Build log"
+    buildLogURL  = "/buildreports/" ++ display reportId ++ "/buildlog"
+
     showFields :: [(String, BuildReport -> Html)]
     showFields =
       [ ("Package",             displayHtml      . BuildReport.package)

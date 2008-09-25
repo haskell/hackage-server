@@ -273,7 +273,9 @@ buildReports store =
         case BuildReports.lookupReport reports reportId of
           Nothing     -> notFound $ toResponse "No such report"
           Just report ->
-            ok $ toResponse $ Pages.buildReportDetail report
+            ok $ toResponse $ Pages.buildReportDetail report reportId buildLog
+            where
+              buildLog = BuildReports.lookupBuildLog reports reportId
 
     , dir "buildlog" $
       [ method GET $ do
