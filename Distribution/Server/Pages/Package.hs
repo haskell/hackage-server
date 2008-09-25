@@ -96,7 +96,8 @@ pkgBody pd =
 	(h2 << docTitle) :
 	prologue pkg ++
 	propertySection pd ++
-	downloadSection pd
+	downloadSection pd ++
+	reportsSection pd
   where	pkg = packageDescription (pdDescription pd)
 	short = synopsis pkg
 	pkgId = package pkg
@@ -137,6 +138,15 @@ downloadSection pd = [
 	cabalURL = cabalFile pkgId
 	tarBall = display pkgId ++ ".tar.gz"
 	pkgId = package (packageDescription (pdDescription pd))
+
+reportsSection :: PackageData -> [Html]
+reportsSection pd =
+  [ h3 << "Reports"
+  , ulist << [li << buildReports ] ]
+  where
+    buildReports =
+		  [anchor ! [href (packageURL pkgid </> "buildreports")] << "Build reports"]
+    pkgid = package (packageDescription (pdDescription pd))
 
 propertySection :: PackageData -> [Html]
 propertySection pd = [
