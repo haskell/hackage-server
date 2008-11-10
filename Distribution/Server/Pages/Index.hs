@@ -12,6 +12,7 @@ import Distribution.PackageDescription.Configuration
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.Server.Types (PkgInfo(..))
 import Distribution.Simple.Utils (comparing, equating)
+import Distribution.ModuleName (toFilePath)
 
 import Data.Char (toLower, toUpper, isSpace)
 import Data.List (intersperse, sortBy, groupBy, nub, maximumBy)
@@ -57,7 +58,7 @@ formatPkgGroups pkgs = hackagePage "packages by category" docBody
 	  where catName = categoryName cat
 	cat_pkgs = groupOnFstBy normalizeCategory $ [(capitalize cat, pkg) |
 			pkg <- pkgs, cat <- categories pkg]
-	sortKey pkg = map toLower $ pkgName $ package pkg
+	sortKey pkg = map toLower $ unPackageName $ pkgName $ package pkg
 	formatCategory cat =
 		h3 ! [theclass "category"] <<
 			anchor ! [name (catLabel catName)] << catName
@@ -75,7 +76,7 @@ formatPkgList pkgs = ulist ! [theclass "packages"] << map formatPkg pkgs
 formatPkg :: PackageDescription -> Html
 formatPkg pkg = li << (pkgLink : toHtml (" " ++ ptype) : defn)
   where pname = pkgName (package pkg)
-	pkgLink = anchor ! [href (packageNameURL pname)] << pname
+	pkgLink = anchor ! [href (packageNameURL pname)] << unPackageName pname
 	defn
 	  | null (synopsis pkg) = []
 	  | otherwise = [toHtml (": " ++ trim (synopsis pkg))]
@@ -106,7 +107,7 @@ categories pkg
 		(front, []) -> [Category front]
 	-- if no category specified, use top-level of module hierarchy
 	top_level_nodes =
-		maybe [] (nub . map (takeWhile (/= '.')) . exposedModules)
+		maybe [] (nub . map (takeWhile (/= '.') . toFilePath) . exposedModules)
 		(library pkg)
 
 -- categories we ignore
@@ -130,6 +131,7 @@ allocatedTopLevelNodes = [
 	"Network", "Numeric", "Prelude", "Sound", "System", "Test", "Text"]
 
 packageNameURL :: PackageName -> URL
-packageNameURL pkg = "/packages/" ++ pkg
+packageNameURL pkg = "/packages/" ++ unPackageName pkg
 
-type PackageName = String --FIXME: Cabal-1.5 uses a newtype
+unPackageName (PackageName name) = name
+-- type PackageName = String --FIXME: Cabal-1.5 uses a newtype

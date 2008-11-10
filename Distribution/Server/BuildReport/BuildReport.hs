@@ -40,7 +40,7 @@ import qualified Distribution.Text as Text
 import Distribution.ParseUtils
          ( FieldDescr(..), ParseResult(..), Field(..)
          , simpleField, listField, ppFields, readFields
-         , syntaxError, locatedErrorMsg )
+         , syntaxError, locatedErrorMsg, showFields )
 import Distribution.Simple.Utils
          ( comparing )
 
@@ -186,10 +186,6 @@ parseList str =
 
 show :: BuildReport -> String
 show = showFields fieldDescrs
-
---FIXME: this function is now in Cabal as of 1.5, so remove this local copy
-showFields :: [FieldDescr a] -> a -> String
-showFields fields = Disp.render . flip ppFields fields
 
 -- -----------------------------------------------------------------------------
 -- Description of the fields, for parsing/printing

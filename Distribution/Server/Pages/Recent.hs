@@ -13,7 +13,7 @@ import Distribution.Server.Pages.Template
          ( hackagePageWith )
 
 import Distribution.Package
-         ( PackageIdentifier, packageName, packageVersion )
+         ( PackageIdentifier, packageName, packageVersion, PackageName(..) )
 import Distribution.PackageDescription
          ( GenericPackageDescription(packageDescription)
          , PackageDescription(synopsis)  )
@@ -126,8 +126,10 @@ releaseItem users host PkgInfo {
   ]
   where
     uri   = hackageURI host (packageURL pkgId)
-    title = packageName pkgId ++ " " ++ display (packageVersion pkgId)
+    title = unPackageName (packageName pkgId) ++ " " ++ display (packageVersion pkgId)
     body  = synopsis (packageDescription pkg)
     desc  = "<i>Added by " ++ display user ++ ", " ++ showTime time ++ ".</i>"
 	 ++ if null body then "" else "<p>" ++ body
     user = Users.idToName users userId
+
+unPackageName (PackageName name) = name

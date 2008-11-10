@@ -8,7 +8,7 @@ module Distribution.Server (
  ) where
 
 import Distribution.Package ( PackageIdentifier(..), Package(packageId)
-                            , packageName, packageVersion )
+                            , packageName, packageVersion, PackageName(..) )
 import Distribution.Text    (simpleParse, display)
 import HAppS.Server hiding (port)
 import qualified HAppS.Server
@@ -164,7 +164,7 @@ legacySupport = multi
     [ path $ \name ->
       [ path $ \version ->
         [ let dirName = display pkgid ++ ".tar.gz"
-              pkgid = PackageIdentifier {pkgName = name, pkgVersion = version}
+              pkgid = PackageIdentifier {pkgName = PackageName name, pkgVersion = version}
           in dir dirName
              [ method GET $ do
                  movedPermanently ("/packages/"++display pkgid++"/tarball") (toResponse "")

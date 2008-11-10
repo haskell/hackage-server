@@ -6,11 +6,11 @@ import qualified Distribution.Server.Util.Tar as Tar
 import Distribution.Version
          ( Version(..) )
 import Distribution.Package
-         ( PackageIdentifier, packageVersion, packageName )
+         ( PackageIdentifier, packageVersion, packageName, PackageName(..) )
 import Distribution.PackageDescription
          ( GenericPackageDescription(..), PackageDescription(..)
          , exposedModules )
-import Distribution.PackageDescription
+import Distribution.PackageDescription.Parse
          ( parsePackageDescription )
 import Distribution.PackageDescription.Configuration
          ( flattenPackageDescription )
@@ -22,6 +22,8 @@ import Distribution.Text
          ( display, simpleParse )
 import Distribution.Simple.Utils
          ( fromUTF8 )
+import Distribution.ModuleName
+         ( toFilePath )
 
 import Data.List
          ( nub, (\\), partition, intercalate )
@@ -67,7 +69,8 @@ unpackPackage tarGzFile contents = runUploadMonad $ do
                       >> checkTarFilePath pkgid entry
       
       selectEntry entry = cabalFileName == normalise (Tar.fileName entry)
-      cabalFileName     = display pkgid </> packageName pkgid <.> "cabal"
+      PackageName name  = packageName pkgid
+      cabalFileName     = display pkgid </> name <.> "cabal"
       entries           = Tar.read (GZip.decompress contents)
   cabalEntries <- extractTarEntries checkEntry selectEntry entries
   cabalEntry   <- case cabalEntries of
@@ -134,7 +137,7 @@ extraChecks genPkgDesc = do
 
   -- Check reasonableness of names of exposed modules
   let badTopLevel =
-          maybe [] (nub . map (takeWhile (/= '.')) . exposedModules)
+          maybe [] (nub . map (takeWhile (/= '.') . toFilePath) . exposedModules)
                   (library pkgDesc) \\
           allocatedTopLevelNodes
 

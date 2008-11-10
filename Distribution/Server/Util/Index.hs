@@ -21,7 +21,8 @@ import qualified Distribution.Server.Util.Tar as Tar
          , read, write, simpleFileEntry, toTarPath )
 
 import Distribution.Package
-         ( PackageIdentifier(..), Package(..), packageName, packageVersion )
+         ( PackageIdentifier(..), Package(..), packageName, packageVersion
+         , PackageName(..))
 import Distribution.Simple.PackageIndex (PackageIndex)
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.Text
@@ -52,7 +53,7 @@ read mkPackage indexFileContent = collect [] entries
     entry e
       | [pkgname,versionStr,_] <- splitDirectories (normalise (Tar.fileName e))
       , Just version <- simpleParse versionStr
-      = let pkgid  = PackageIdentifier pkgname version
+      = let pkgid  = PackageIdentifier (PackageName pkgname) version
          in Just (mkPackage pkgid e)
     entry _ = Nothing
 
@@ -73,5 +74,6 @@ write externalPackageRep updateEntry =
               $ externalPackageRep pkg
       where
         Right tarPath = Tar.toTarPath Tar.NormalFile fileName
-        fileName = packageName pkg </> display (packageVersion pkg)
-                                   </> packageName pkg <.> "cabal"
+        PackageName name = packageName pkg
+        fileName = name </> display (packageVersion pkg)
+                        </> name <.> "cabal"

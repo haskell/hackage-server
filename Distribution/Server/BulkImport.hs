@@ -32,7 +32,7 @@ import Distribution.Server.Types (PkgInfo(..))
 
 import Distribution.Package
          ( PackageIdentifier, Package(packageId) )
-import Distribution.PackageDescription
+import Distribution.PackageDescription.Parse
          ( parsePackageDescription )
 import Distribution.ParseUtils
          ( ParseResult(..), locatedErrorMsg )

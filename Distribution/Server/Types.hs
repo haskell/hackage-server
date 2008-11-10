@@ -23,8 +23,9 @@ import Distribution.Server.Instances ()
 import Distribution.Package
          ( PackageIdentifier(..), Package(..) )
 import Distribution.PackageDescription
-         ( GenericPackageDescription(..)
-         , parsePackageDescription, ParseResult(..) )
+         ( GenericPackageDescription(..))
+import Distribution.PackageDescription.Parse
+         ( parsePackageDescription, ParseResult(..) )
 import Distribution.Simple.Utils (fromUTF8)
 
 import qualified Data.Binary as Binary

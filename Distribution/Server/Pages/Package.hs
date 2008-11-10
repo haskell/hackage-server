@@ -18,6 +18,7 @@ import Distribution.Simple.PackageIndex (PackageIndex)
 import Distribution.PackageDescription.Configuration
 				( flattenPackageDescription )
 import Distribution.Package
+import Distribution.ModuleName (toFilePath)
 import Distribution.PackageDescription as P
 import Distribution.Version
 import Distribution.Text	( display )
@@ -101,7 +102,7 @@ pkgBody pd =
   where	pkg = packageDescription (pdDescription pd)
 	short = synopsis pkg
 	pkgId = package pkg
-	pname = pkgName pkgId
+	PackageName pname = pkgName pkgId
 	docTitle
 	  | null short = pname
 	  | otherwise = pname ++ ": " ++ short
@@ -204,16 +205,16 @@ showDependencies :: PackageIndex PkgInfo -> [Dependency] -> Html
 showDependencies vmap deps = commaList (map (showDependency vmap) deps)
 
 showDependency :: PackageIndex PkgInfo -> Dependency -> Html
-showDependency vmap (Dependency pname vs) =
+showDependency vmap (Dependency (PackageName pname) vs) =
 	showPkg mb_vers +++ showVers vs
   where showPkg Nothing = toHtml pname
 	showPkg (Just v) =
-		anchor ! [href (packageURL (PackageIdentifier pname v))] <<
+		anchor ! [href (packageURL (PackageIdentifier (PackageName pname) v))] <<
 			pname
 	showVers AnyVersion = noHtml
 	showVers vs' = toHtml (" (" ++ display vs' ++ ")")
 	mb_vers = maybeLast $ filter (`withinRange` vs) $ map packageVersion $
-		PackageIndex.lookupPackageName vmap pname
+		PackageIndex.lookupPackageName vmap (PackageName pname)
 
 showFields :: Maybe URL -> [(String, PackageDescription -> Html)]
 showFields mb_doc = [
@@ -227,7 +228,7 @@ showFields mb_doc = [
 	("Home page",	mkRef . homepage),
 	("Exposed modules",
 			commaList .
-				map (maybe toHtml modLink mb_doc) .
+				map (maybe toHtml modLink mb_doc . toFilePath) .
 				maybe [] exposedModules . library),
 	("Executables",	commaList . map toHtml . map exeName . executables)
 	]
@@ -255,7 +256,7 @@ flatDependencies pkg =
 	foldr intersectDisjunct head_deps $
 		maybe id ((:) . fromCondTree) (condLibrary pkg) $
 		map (fromCondTree . snd) (condExecutables pkg)
-  where dependency (p, i) = Dependency p (toVersionRange i)
+  where dependency (p, i) = Dependency (PackageName p) (toVersionRange i)
 
 	-- put the constrained ones first, for sorting purposes
 	get_deps m = ranges ++ others
@@ -269,7 +270,7 @@ flatDependencies pkg =
 	fromDependencies :: [Dependency] -> Disjunct
 	fromDependencies = foldr addDep unitDisjunct
 	  where	addDep (Dependency p vr) =
-			liftM2 (Map.insertWith intersectInterval p)
+			liftM2 (Map.insertWith intersectInterval (unPackageName p))
 				(fromVersionRange vr)
 
 	fromCondTree :: CondTree v [Dependency] a -> Disjunct
@@ -405,3 +406,5 @@ cabalLogoURL = "/built-with-cabal.png"
 -- global URLs
 cabalHomeURL :: URL
 cabalHomeURL = "http://haskell.org/cabal/"
+
+unPackageName (PackageName name) = name
