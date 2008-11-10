@@ -11,7 +11,7 @@ import System.Environment
 import System.Exit
          ( exitWith, ExitCode(..) )
 import Control.Exception
-         ( handleJust, errorCalls, userErrors )
+         ( handleJust, ErrorCall(..))
 import System.IO
          ( stdout, hFlush )
 import System.Console.GetOpt
@@ -21,7 +21,7 @@ import Data.List
 import Data.Maybe
          ( fromMaybe )
 import Control.Monad
-         ( unless, MonadPlus(mplus) )
+         ( unless )
 import qualified Data.ByteString.Lazy.Char8 as BS
 
 import Paths_hackage_server (version)
@@ -93,7 +93,7 @@ main = topHandler $ do
         ++ unlines (map display (sort badLogEntries))
 
 topHandler :: IO a -> IO a
-topHandler = handleJust (\e -> errorCalls e `mplus` userErrors e) die
+topHandler = handleJust (\(ErrorCall err) -> Just err) die
 
 die :: String -> IO a
 die msg = do
