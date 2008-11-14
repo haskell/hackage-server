@@ -87,7 +87,8 @@ mkResponse bs headers = Response {
     rsCode    = 200,
     rsHeaders = mkHeaders headers,
     rsFlags   = nullRsFlags,
-    rsBody    = bs
+    rsBody    = bs,
+    rsValidator = Nothing
   }
 
 mkResponseLen :: BS.Lazy.ByteString -> Int -> [(String, String)] -> Response
@@ -95,5 +96,6 @@ mkResponseLen bs len headers = Response {
     rsCode    = 200,
     rsHeaders = mkHeaders (("Content-Length", show len) : headers),
     rsFlags   = nullRsFlags { rsfContentLength = False },
-    rsBody    = bs
+    rsBody    = bs,
+    rsValidator = Nothing
   }
