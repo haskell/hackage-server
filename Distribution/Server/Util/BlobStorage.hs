@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, ScopedTypeVariables #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Server.BlobStorage
@@ -102,7 +102,7 @@ withIncomming store content action = do
 
   where
     handleExceptions tmpFile tmpHandle =
-      Exception.handle $ \err -> do
+      Exception.handle $ \(err::SomeException) -> do
         hClose tmpHandle
         removeFile tmpFile
         Exception.throwIO err
