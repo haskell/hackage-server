@@ -18,9 +18,9 @@ import Control.Monad.Trans (MonadIO)
 import Control.Monad (guard)
 import qualified Data.ByteString.Char8 as BS
 
-hackageAuth :: MonadIO m => Users.Users -> Maybe Group.UserGroup
-            -> (UserId -> [ServerPartT m a])
-            -> ServerPartT m a
+--hackageAuth :: MonadIO m => Users.Users -> Maybe Group.UserGroup
+--            -> (UserId -> [ServerPartT m a])
+--            -> ServerPartT m a
 hackageAuth users authorisedGroup = genericBasicAuth realm cryptPasswdCheck
   where
     realm = "hackage"
@@ -35,12 +35,12 @@ hackageAuth users authorisedGroup = genericBasicAuth realm cryptPasswdCheck
 
 -- This is directly ripped out of HAppS-Server and generalised
 --
-genericBasicAuth :: MonadIO m => String -> (UserName -> PasswdPlain -> Maybe a)
-                 -> (a -> [ServerPartT m b]) -> ServerPartT m b
-genericBasicAuth realmName validLogin xs = withRequest $ \req ->
+--genericBasicAuth :: MonadIO m => String -> (UserName -> PasswdPlain -> Maybe a)
+--                 -> (a -> [ServerPartT m b]) -> ServerPartT m b
+genericBasicAuth realmName validLogin = withRequest $ \req ->
   case getHeader "authorization" req of
     Just h -> case checkAuth h of
-      Just ok -> unServerPartT (multi (xs ok)) req
+      Just ok -> return ok -- unServerPartT (multi (xs ok)) req
       Nothing -> err
     _         -> err
   where

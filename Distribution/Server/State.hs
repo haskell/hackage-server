@@ -1,12 +1,16 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell,
-             FlexibleInstances, FlexibleContexts, MultiParamTypeClasses  #-}
+             FlexibleInstances, FlexibleContexts, MultiParamTypeClasses,
+             TypeOperators #-}
 module Distribution.Server.State where
 
 import Distribution.Server.Instances ()
 
-import Distribution.Package (PackageIdentifier,Package(packageId))
+import Distribution.Package (PackageIdentifier,Package(packageId),PackageName)
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.Server.Types (PkgInfo(..))
+import qualified Distribution.Server.Users.Group as Group
+import Distribution.Server.Users.Group (UserGroup)
+import Distribution.Server.Users.Types (UserId,UserName)
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users)
 import Distribution.Server.Util.BlobStorage (BlobId)
@@ -19,10 +23,49 @@ import HAppS.Data.Serialize
 import qualified Data.Binary as Binary
 
 import Data.Typeable
+import Data.Maybe (fromMaybe)
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import Data.Monoid
 import Data.Time.Clock (UTCTime(..))
+
+import qualified Data.Map as Map
+
+data Documentation = Documentation {
+     documentation :: Map.Map PackageIdentifier BlobId
+     } deriving Typeable
+
+instance Component Documentation where
+    type Dependencies Documentation = End
+    initialValue = Documentation Map.empty
+
+instance Version Documentation where
+    mode = Versioned 0 Nothing -- Version 0, no previous types
+
+instance Serialize Documentation where
+    putCopy (Documentation m) = contain $ safePut m
+    getCopy = contain $ liftM Documentation safeGet
+
+
+
+--type GroupName = String
+data GroupName = Administrator | Trustee | PackageMaintainer PackageName
+                 deriving (Read,Show,Ord,Typeable,Eq)
+data Permissions = Permissions
+       { permissions :: Map.Map GroupName UserGroup
+       } deriving Typeable
+
+instance Component Permissions where
+    type Dependencies Permissions = End
+    initialValue = Permissions Map.empty
+
+instance Version Permissions where
+    mode = Versioned 0 Nothing
+
+instance Serialize Permissions where
+   putCopy (Permissions p) = contain $ safePut p
+   getCopy = contain $ liftM Permissions safeGet
+
 
 data PackagesState = PackagesState {
     packageList  :: !(PackageIndex.PackageIndex PkgInfo),
@@ -64,6 +107,30 @@ instance Serialize Users where
   putCopy = contain . Binary.put
   getCopy = contain Binary.get
 
+instance Version UserGroup where
+  mode = Versioned 0 Nothing
+instance Serialize UserGroup where
+  putCopy = contain . Binary.put
+  getCopy = contain Binary.get
+
+instance Version GroupName where
+  mode = Versioned 0 Nothing
+instance Serialize GroupName where
+  putCopy = contain . Binary.put . show
+  getCopy = contain (liftM read Binary.get)
+
+instance Version UserId where
+  mode = Versioned 0 Nothing
+instance Serialize UserId where
+  putCopy = contain . Binary.put
+  getCopy = contain Binary.get
+
+instance Version UserName where
+  mode = Versioned 0 Nothing
+instance Serialize UserName where
+  putCopy = contain . Binary.put
+  getCopy = contain Binary.get
+
 instance Version BuildReports where
   mode = Versioned 0 Nothing
 
@@ -98,6 +165,43 @@ instance Version BlobId where
 instance Serialize BlobId where
   putCopy = contain . Binary.put
   getCopy = contain Binary.get
+
+
+
+
+lookupDocumentation :: PackageIdentifier -> Query Documentation (Maybe BlobId)
+lookupDocumentation pkgId
+    = do m <- asks documentation
+         return $ Map.lookup pkgId m
+
+insertDocumentation :: PackageIdentifier -> BlobId -> Update Documentation ()
+insertDocumentation pkgId blob
+    = State.modify $ \doc -> doc{documentation = Map.insert pkgId blob (documentation doc)}
+
+
+
+lookupUserGroup :: GroupName -> Query Permissions UserGroup
+lookupUserGroup groupName = lookupUserGroups [groupName]
+
+lookupUserGroups :: [GroupName] -> Query Permissions UserGroup
+lookupUserGroups groups
+    = do m <- asks permissions
+         return $ Group.unions [ Map.findWithDefault Group.empty groupName m
+                                 | groupName <- groups ]
+
+addToGroup :: GroupName -> UserId -> Update Permissions ()
+addToGroup groupName userId
+    = State.modify $ \st -> st{permissions = Map.alter fn groupName (permissions st)}
+    where fn mbGroup = Just $ Group.add userId (fromMaybe Group.empty mbGroup)
+
+removeFromGroup :: GroupName -> UserId -> Update Permissions ()
+removeFromGroup groupName userId
+    = State.modify $ \st -> st{permissions = Map.alter fn groupName (permissions st)}
+    where fn Nothing = Nothing
+          fn (Just group) = Just $ Group.remove userId group
+
+
+
 
 insert :: PkgInfo -> Update PackagesState Bool
 insert pkg
@@ -135,9 +239,42 @@ addBuildLog reportId buildLog
 getPackagesState :: Query PackagesState PackagesState
 getPackagesState = ask
 
+listGroupMembers :: UserGroup -> Query PackagesState [UserName]
+listGroupMembers userGroup
+    = do users <- asks userDb
+         return [ Users.idToName users uid | uid <- Group.enumerate userGroup ]
+         
+
+
+$(mkMethods ''Documentation ['insertDocumentation
+                            ,'lookupDocumentation])
+
+$(mkMethods ''Permissions ['lookupUserGroup
+                          ,'lookupUserGroups
+                          ,'addToGroup
+                          ,'removeFromGroup])
+
 $(mkMethods ''PackagesState ['getPackagesState
+                            ,'listGroupMembers
                             ,'bulkImport
                             ,'insert
                             ,'addReport
                             ,'addBuildLog
                             ])
+
+
+
+data HackageEntryPoint = HackageEntryPoint deriving Typeable
+
+instance Version HackageEntryPoint
+instance Serialize HackageEntryPoint where
+    putCopy HackageEntryPoint = contain $ return ()
+    getCopy = contain $ return HackageEntryPoint
+
+instance Component HackageEntryPoint where
+    type Dependencies HackageEntryPoint = PackagesState :+: Documentation :+: Permissions :+: End
+    initialValue = HackageEntryPoint
+
+
+$(mkMethods ''HackageEntryPoint [])
+

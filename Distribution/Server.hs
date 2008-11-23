@@ -1,5 +1,5 @@
 module Distribution.Server (
-   Server,
+   Server(),
    initialise,
    Config(..),
    defaultConfig,
@@ -30,6 +30,7 @@ import qualified Distribution.Server.Packages.Index as Packages.Index (write)
 import qualified Distribution.Server.PackageUpload.Unpack as Upload (unpackPackage)
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
+import Distribution.Server.Util.Serve (serveTarball)
 import qualified Distribution.Server.BuildReport.BuildReport as BuildReport
 import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
 import qualified Distribution.Server.BulkImport as BulkImport
@@ -113,7 +114,7 @@ initialise (Config hostName portNum stateDir staticDir) = do
       where portStr | portNum == 80 = ""
                     | otherwise     = ':' : show portNum
 
-hackageEntryPoint :: Proxy PackagesState
+hackageEntryPoint :: Proxy HackageEntryPoint
 hackageEntryPoint = Proxy
 
 run :: Server -> IO ()
@@ -178,21 +179,21 @@ legacySupport = multi
 
 handlePackageById :: BlobStorage -> PackageIdentifier -> [ServerPart Response]
 handlePackageById store pkgid =
-  [ method GET $
-      withPackage $ \state pkg pkgs ->
+  [ withPackage $ \state pkg pkgs ->
+      method GET $
         ok $ toResponse $ Resource.XHtml $
           Pages.packagePage (userDb state) (packageList state) pkg pkgs
 
   , dir "cabal"
-    [ method GET $
-      withPackage $ \_ pkg _pkgs ->
+    [ withPackage $ \_ pkg _pkgs ->
+      method GET $
         ok $ toResponse (Resource.CabalFile (pkgData pkg))
 --  , method PUT $ do ...
     ]
 
   , dir "tarball"
-    [ method GET $
-        withPackage $ \_ pkg _pkgs -> do
+    [ withPackage $ \_ pkg _pkgs -> do
+        method GET $
           case pkgTarball pkg of
             Nothing -> notFound $ toResponse "No tarball available"
             Just blobId -> do
@@ -211,6 +212,22 @@ handlePackageById store pkgid =
             ok $ toResponse $ Resource.XHtml $
                    Pages.buildReportSummary pkgid reports
     ]
+  , dir "documentation"
+    [ withPackage $ \state pkg pkgs ->
+        methodSP POST $ do
+          authGroup <- query $ LookupUserGroups [Trustee, PackageMaintainer (pkgName pkgid)]
+          user <- Auth.hackageAuth (userDb state) Nothing -- (Just authGroup)
+          withRequest $ \Request{rqBody = Body body} -> do
+              blob <- liftIO $ BlobStorage.add store body
+              liftIO $ putStrLn $ "Putting to: " ++ show (display pkgid, blob)
+              update $ InsertDocumentation pkgid blob
+              seeOther ("/packages/"++display pkgid++"/documentation/") $ toResponse ""
+    , require (query $ LookupDocumentation pkgid) $ \blob ->
+      [ withRequest $ \rq ->
+         do tarball <- liftIO $ BlobStorage.fetch store blob
+            serveTarball ["index.html"] (display pkgid) rq tarball
+      ]
+    ]
   ]
   
   where
@@ -218,29 +235,29 @@ handlePackageById store pkgid =
       state <- query GetPackagesState
       let index = packageList state
       case PackageIndex.lookupPackageName index (packageName pkgid) of
-        []   -> notFound $ toResponse "No such package"
+        []   -> anyRequest $ notFound $ toResponse "No such package"
         pkgs  | pkgVersion pkgid == Version [] []
              -> action state pkg pkgs
           where pkg = maximumBy (comparing packageVersion) pkgs
  
         pkgs -> case listToMaybe [ pkg | pkg <- pkgs, packageVersion pkg
                                                == packageVersion pkgid ] of
-          Nothing  -> notFound $ toResponse "No such package version"
+          Nothing  -> anyRequest $ notFound $ toResponse "No such package version"
           Just pkg -> action state pkg pkgs
 
 uploadPackage :: BlobStorage -> Cache.Cache -> URIAuth -> ServerPart Response
 uploadPackage store cache host =
   methodSP POST $ do
-    --TODO: this ought to be easier, ServerPart should be in MonadIO
-    state <- withRequest $ \_ -> liftIO $ query GetPackagesState
-    Auth.hackageAuth (userDb state) Nothing $ \user ->
-      [ withDataFn (lookInput "package") $ \input ->
-          [ anyRequest $
-              let fileName    = (fromMaybe "noname" $ inputFilename input)
-                  fileContent = inputValue input
-               in upload user fileName fileContent
-          ]
-      ]
+    state <- query GetPackagesState
+    user <- Auth.hackageAuth (userDb state) Nothing
+    withDataFn (lookInput "package") $ \input ->
+          let {-withEntry = do str <- look "entry"
+                               case simpleParse str of
+                                 Nothing -> fail "no parse"
+                                 Just x  -> return (x::UploadLog.Entry)-}
+              fileName    = (fromMaybe "noname" $ inputFilename input)
+              fileContent = inputValue input
+          in [ anyRequest $ upload user fileName fileContent ]
   where
     upload user name content = do
       --TODO: check if the package is in the index already, before we embark
@@ -250,14 +267,15 @@ uploadPackage store cache host =
       case res of
         Left  err -> badRequest $ toResponse err
         Right (((pkg, pkgStr), warnings), blobId) -> do
-          now <- liftIO $ getCurrentTime
+          (realUser, realTime) <- do now <- liftIO $ getCurrentTime
+                                     return (user,now)
           success <- update $ Insert PkgInfo {
             pkgInfoId     = packageId pkg,
             pkgDesc       = pkg,
             pkgData       = pkgStr,
             pkgTarball    = Just blobId,
-            pkgUploadTime = now,
-            pkgUploadUser = user,
+            pkgUploadTime = realTime,
+            pkgUploadUser = realUser,
             pkgUploadOld  = []
           }
           if success
@@ -308,6 +326,30 @@ buildReports store =
             toResponse ""
   ]
 
+{-
+{-
+/groups/pkg/packageName
+/groups/admin
+/groups/trustee
+-}
+groupInterface :: [ServerPart Response]
+groupInterface =
+    [ dir "pkg"
+      [ path $ \pkgName -> groupMethods (PackageMaintainer (PackageName pkgName)) ]
+    , dir "admin" (groupMethods Administrator)
+    , dir "trustee" (groupMethods Trustee)
+    ]
+    where groupMethods groupName
+              = [ method GET $
+                  do userGroup <- query $ LookupUserGroup groupName
+                     userNames <- query $ ListGroupMembers userGroup
+                     ok $ toResponse $ unlines (map display userNames)
+                , method PUT $ ...
+                , method DELETE $ ...
+                ]
+-}
+
+
 instance FromReqURI PackageIdentifier where
   fromReqURI = simpleParse
 
@@ -326,6 +368,7 @@ impl (Server store static _ cache host _) =
                        ok $ Cache.packagesPage cacheState
                    ]
   , dir "buildreports" (buildReports store)
+--  , dir "groups" (groupInterface)
   , dir "recent.rss"
       [ method GET $ ok . Cache.packagesFeed =<< Cache.get cache ]
   , dir "recent.html"
