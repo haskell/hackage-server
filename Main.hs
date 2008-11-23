@@ -1,10 +1,15 @@
 module Main (main) where
 
 import qualified Distribution.Server
-import Distribution.Server (Config(..))
+import Distribution.Server (Config(..),Server()) -- serverTxControl))
 
 import Distribution.Text
          ( display )
+
+import HAppS.State
+         ( waitForTermination ) -- , createCheckpoint )
+import Control.Concurrent
+         ( forkIO )
 
 import System.Environment
          ( getArgs, getProgName )
@@ -60,7 +65,11 @@ main = topHandler $ do
       doBulkImport server imports
 
   info $ "ready, serving on '" ++ hostname ++ "' port " ++ show port
-  Distribution.Server.run server
+  forkIO $ Distribution.Server.run server
+
+  waitForTermination
+  --info $ "committing checkpoint"
+  --createCheckpoint (serverTxControl server)
 
   where
     checkPortOpt defaults Nothing    = return (confPortNum defaults)
