@@ -13,13 +13,12 @@ module Distribution.Server.Pages.Package.HaddockLex (
 
 import Data.Char
 import Numeric
---import Debug.Trace
 }
 
 $ws    = $white # \n
 $digit = [0-9]
 $hexdigit = [0-9a-fA-F]
-$special =  [\"\@\/]
+$special =  [\"\@]
 $alphanum = [A-Za-z0-9]
 $ident    = [$alphanum \'\_\.\!\#\$\%\&\*\+\/\<\=\>\?\@\\\\\^\|\-\~]
 
@@ -52,18 +51,19 @@ $ident    = [$alphanum \'\_\.\!\#\$\%\&\*\+\/\<\=\>\?\@\\\\\^\|\-\~]
 
 <string,def> {
   $special			{ strtoken $ \s -> TokSpecial (head s) }
-  \<.*\>			{ strtoken $ \s -> TokURL (init (tail s)) }
   \<\<.*\>\>                    { strtoken $ \s -> TokPic (init $ init $ tail $ tail s) }
+  \<.*\>			{ strtoken $ \s -> TokURL (init (tail s)) }
   \#.*\#			{ strtoken $ \s -> TokAName (init (tail s)) }
+  \/ [^\/]* \/                  { strtoken $ \s -> TokEmphasis (init (tail s)) }
   [\'\`] $ident+ [\'\`]		{ ident }
   \\ .				{ strtoken (TokString . tail) }
   "&#" $digit+ \;		{ strtoken $ \s -> TokString [chr (read (init (drop 2 s)))] }
   "&#" [xX] $hexdigit+ \;	{ strtoken $ \s -> case readHex (init (drop 3 s)) of [(n,_)] -> TokString [chr n] }
   -- allow special characters through if they don't fit one of the previous
   -- patterns.
-  [\'\`\<\#\&\\]			{ strtoken TokString }
-  [^ $special \< \# \n \'\` \& \\ \]]* \n { strtoken TokString `andBegin` line }
-  [^ $special \< \# \n \'\` \& \\ \]]+    { strtoken TokString }
+  [\/\'\`\<\#\&\\]			{ strtoken TokString }
+  [^ $special \/ \< \# \n \'\` \& \\ \]]* \n { strtoken TokString `andBegin` line }
+  [^ $special \/ \< \# \n \'\` \& \\ \]]+    { strtoken TokString }
 }
 
 <def> {
@@ -88,6 +88,7 @@ data Token
   | TokString String
   | TokURL String
   | TokPic String
+  | TokEmphasis String
   | TokAName String
   | TokBirdTrack String
   deriving Show
@@ -107,28 +108,28 @@ alexInputPrevChar (c,_) = c
 
 tokenise :: String -> [Token]
 tokenise str = let toks = go ('\n', eofHack str) para in {-trace (show toks)-} toks
-  where go inp@(_,str') sc =
+  where go inp@(_,str) sc =
 	  case alexScan inp sc of
 		AlexEOF -> []
 		AlexError _ -> error "lexical error"
 		AlexSkip  inp' _       -> go inp' sc
-		AlexToken inp' len act -> act (take len str') sc (go inp')
+		AlexToken inp' len act -> act (take len str) sc (\sc -> go inp' sc)
 
 -- NB. we add a final \n to the string, (see comment in the beginning of line
 -- production above).
 eofHack str = str++"\n"
 
 andBegin  :: Action -> StartCode -> Action
-andBegin act new_sc = \str _sc cont -> act str new_sc cont
+andBegin act new_sc = \str _ cont -> act str new_sc cont
 
 token :: Token -> Action
-token t = \_str sc cont -> t : cont sc
+token t = \_ sc cont -> t : cont sc
 
 strtoken :: (String -> Token) -> Action
 strtoken t = \str sc cont -> t str : cont sc
 
 begin :: StartCode -> Action
-begin sc = \_str _ cont -> cont sc
+begin sc = \_ _ cont -> cont sc
 
 -- -----------------------------------------------------------------------------
 -- Lex a string as a Haskell identifier

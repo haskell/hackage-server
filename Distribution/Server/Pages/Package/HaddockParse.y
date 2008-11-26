@@ -1,6 +1,6 @@
 {
 {-# OPTIONS_GHC -w #-}
-module Distribution.Server.Pages.Package.HaddockParse (parseParas) where
+module Distribution.Server.Pages.Package.HaddockParse (parseHaddockParagraphs) where
 
 import Distribution.Server.Pages.Package.HaddockLex
 import Distribution.Server.Pages.Package.HaddockHtml
@@ -10,14 +10,15 @@ import Control.Monad.Error	()
 
 %tokentype { Token }
 
-%token	'/'	{ TokSpecial '/' }
+%token
 	'@'	{ TokSpecial '@' }
 	'['     { TokDefStart }
 	']'     { TokDefEnd }
 	DQUO 	{ TokSpecial '\"' }
 	URL	{ TokURL $$ }
-        PIC     { TokPic $$ }
+	PIC     { TokPic $$ }
 	ANAME	{ TokAName $$ }
+	'/../'  { TokEmphasis $$ }
 	'-'	{ TokBullet }
 	'(n)'	{ TokNumber }
 	'>..'	{ TokBirdTrack $$ }
@@ -27,8 +28,8 @@ import Control.Monad.Error	()
 
 %monad { Either String }
 
-%name parseParas  doc
-%name parseString seq
+%name parseHaddockParagraphs  doc
+%name parseHaddockString seq
 
 %%
 
@@ -70,14 +71,15 @@ elem	:: { Doc }
 	| '@' seq1 '@'		{ DocMonospaced $2 }
 
 seq1	:: { Doc }
-	: elem1 seq1		{ docAppend $1 $2 }
+	: PARA seq1             { docAppend (DocString "\n") $2 }
+	| elem1 seq1            { docAppend $1 $2 }
 	| elem1			{ $1 }
 
 elem1	:: { Doc }
 	: STRING		{ DocString $1 }
-	| '/' strings '/'	{ DocEmphasis (DocString $2) }
+	| '/../'                { DocEmphasis (DocString $1) }
 	| URL			{ DocURL $1 }
-        | PIC                   { DocPic $1 }
+	| PIC                   { DocPic $1 }
 	| ANAME			{ DocAName $1 }
 	| IDENT			{ DocIdentifier $1 }
 	| DQUO strings DQUO	{ DocModule $2 }

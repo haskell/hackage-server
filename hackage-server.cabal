@@ -47,6 +47,7 @@ executable hackage-server
     Distribution.Server.Pages.Package.HaddockHtml
     Distribution.Server.Pages.Package.HaddockLex
     Distribution.Server.Pages.Package.HaddockParse
+    Distribution.Server.Pages.Package.ModuleForest
     Distribution.Server.Pages.Recent
     Distribution.Server.Pages.Template
     Distribution.Server.ResourceTypes

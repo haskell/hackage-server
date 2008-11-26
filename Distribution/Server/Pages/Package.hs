@@ -1,13 +1,13 @@
 -- Body of the HTML page for a package
 module Distribution.Server.Pages.Package (
     PackageData(..),
-    Build(..),
     packagePage
   ) where
 
-import Distribution.Server.Pages.Package.HaddockParse	( parseParas )
+import Distribution.Server.Pages.Package.HaddockParse	( parseHaddockParagraphs )
 import Distribution.Server.Pages.Package.HaddockLex	( tokenise )
 import Distribution.Server.Pages.Package.HaddockHtml
+import Distribution.Server.Pages.Package.ModuleForest ( moduleForest )
 import Distribution.Server.Pages.Template		( hackagePage )
 import Distribution.Server.Types (PkgInfo(..))
 import qualified Distribution.Server.Users.Users as Users
@@ -18,11 +18,10 @@ import Distribution.Simple.PackageIndex (PackageIndex)
 import Distribution.PackageDescription.Configuration
 				( flattenPackageDescription )
 import Distribution.Package
-import Distribution.ModuleName (toFilePath)
 import Distribution.PackageDescription as P
 import Distribution.Version
 import Distribution.Text	( display )
-import Text.XHtml.Strict hiding ( p )
+import Text.XHtml.Strict hiding ( p, name )
 
 import Control.Monad		( liftM2 )
 import qualified Data.Foldable as Foldable
@@ -65,13 +64,15 @@ data PackageData = PackageData
 	, pdDocURL	:: Maybe URL
 		-- ^ URL of Haddock documentation for this version of the
 		-- package (if available).
-	, pdBuilds	:: [Build]
+	, pdBuilds	:: Map GHCVersion URL
 		-- ^ Successful builds of this version of the package
 		-- (if available).
-	, pdBuildFailures :: [Build]
+	, pdBuildFailures :: Map GHCVersion URL
 		-- ^ Failed builds of this version of the package
 		-- (if available).
 	}
+
+type GHCVersion = String
 
 emptyPackageData :: GenericPackageDescription -> PackageData
 emptyPackageData pkg = PackageData {
@@ -80,15 +81,9 @@ emptyPackageData pkg = PackageData {
   pdAllVersions = [],
   pdDependencies = mempty,
   pdDocURL = Nothing,
-  pdBuilds = [],
-  pdBuildFailures = []
+  pdBuilds = mempty,
+  pdBuildFailures = mempty
 }
-
--- | Record of a build of the package
-data Build = Build
-	{ buildDesc :: String	-- ^ description of build target
-	, buildLog :: URL	-- ^ URL of build log
-	}
 
 -- | Body of the package page
 pkgBody :: PackageData -> [Html]
@@ -97,6 +92,7 @@ pkgBody pd =
 	(h2 << docTitle) :
 	prologue pkg ++
 	propertySection pd ++
+	moduleSection pd ++
 	downloadSection pd ++
 	reportsSection pd
   where	pkg = packageDescription (pdDescription pd)
@@ -114,7 +110,7 @@ prologue pkg
   | null desc = []
   | otherwise = html_desc
   where desc = description pkg
-	html_desc = case parseParas (tokenise desc) of
+	html_desc = case parseHaddockParagraphs (tokenise desc) of
 	    Left _ -> [paragraph << p | p <- paragraphs desc]
 	    Right doc -> [markup htmlMarkup doc]
 
@@ -140,6 +136,12 @@ downloadSection pd = [
 	tarBall = display pkgId ++ ".tar.gz"
 	pkgId = package (packageDescription (pdDescription pd))
 
+moduleSection :: PackageData -> [Html]
+moduleSection pd = maybe [] msect (library pkg)
+  where msect lib = [h3 << "Modules",
+		moduleForest (pdDocURL pd) (exposedModules lib)]
+	pkg = flattenPackageDescription (pdDescription pd)
+
 reportsSection :: PackageData -> [Html]
 reportsSection pd =
   [ h3 << "Reports"
@@ -159,23 +161,20 @@ propertySection pd = [
 			    map linkVers later_vs))] ++
 		[("Dependencies", html_deps_list)] ++
 		[(fname, f_value) |
-			(fname, htmlField) <- showFields mb_doc,
+			(fname, htmlField) <- showFields,
 			let f_value = htmlField pkg,
 			not (isNoHtml f_value)] ++
-		[(capitalize fname, toHtml f_value) |
+		[(capitalize fname, dispTagVal fname f_value) |
 			(fname, f_value) <- pdTags pd] ++
-		case pdBuilds pd of
-		    [] -> case pdBuildFailures pd of
-			[] -> []
-			bs -> [("Build failure", commaList (map showLog bs))]
-		    bs ->
-			[("Built on", commaList (map (toHtml . buildDesc) bs))]
+		(if null successes then []
+		 else [("Built on", commaList (map toHtml successes))]) ++
+		(if null failures then []
+		 else [("Build failure", commaList (map showLog failures))])
 	]
   where all_vs = pdAllVersions pd
 	earlier_vs = takeWhile (< pversion) all_vs
 	later_vs = dropWhile (<= pversion) all_vs
 	vmap = pdDependencies pd
-	mb_doc = pdDocURL pd
 	linkVers v =
 		anchor ! [href (packageURL (PackageIdentifier pname v))] <<
 			display v
@@ -187,12 +186,16 @@ propertySection pd = [
 		intersperse (toHtml " " +++ bold (toHtml "or") +++ br) $
 		map (showDependencies vmap) deps_list
 	deps_list = flatDependencies (pdDescription pd)
-	showLog (Build desc url) =
+	successes = Map.keys (pdBuilds pd)
+	failures = Map.toList (Map.difference (pdBuildFailures pd) (pdBuilds pd))
+	showLog (desc, url) =
 		toHtml (desc ++ " (") +++
 		(anchor ! [href url] << "log") +++
 		toHtml ")"
 	capitalize (c:cs) = toUpper c : cs
 	capitalize "" = ""
+        dispTagVal "superseded by" v = anchor ! [href (packageURL (PackageIdentifier (PackageName v) (Version [] [])))] << v
+        dispTagVal _ v = toHtml v
 
 tabulate :: [(String, Html)] -> Html
 -- tabulate items = dlist << concat [[dterm << t, ddef << d] | (t, d) <- items]
@@ -216,8 +219,8 @@ showDependency vmap (Dependency (PackageName pname) vs) =
 	mb_vers = maybeLast $ filter (`withinRange` vs) $ map packageVersion $
 		PackageIndex.lookupPackageName vmap (PackageName pname)
 
-showFields :: Maybe URL -> [(String, PackageDescription -> Html)]
-showFields mb_doc = [
+showFields :: [(String, PackageDescription -> Html)]
+showFields = [
 	-- Cabal-Version
 	("License",	toHtml . show . license),
 	("Copyright",	toHtml . P.copyright),
@@ -226,10 +229,6 @@ showFields mb_doc = [
 	("Stability",	toHtml . stability),
 	("Category",	toHtml . category),
 	("Home page",	mkRef . homepage),
-	("Exposed modules",
-			commaList .
-				map (maybe toHtml modLink mb_doc . toFilePath) .
-				maybe [] exposedModules . library),
 	("Executables",	commaList . map toHtml . map exeName . executables)
 	]
   where mkRef "" = noHtml
@@ -238,10 +237,6 @@ showFields mb_doc = [
 	  | unmaintained n = strong ! [theclass "warning"] << toHtml "none"
 	  | otherwise = toHtml n
 	unmaintained n = map toLower n == "none"
-	modLink url modName = anchor ! [href mod_url] << modName
-	  where mod_url = url ++ "/" ++ map toFile modName ++ ".html"
-		toFile '.' = '-'
-		toFile c   = c
 
 commaList :: [Html] -> Html
 commaList = concatHtml . intersperse (toHtml ", ")
@@ -250,13 +245,14 @@ commaList = concatHtml . intersperse (toHtml ", ")
 -- disjunctive normal form.
 flatDependencies :: GenericPackageDescription -> [[Dependency]]
 flatDependencies pkg =
-	map (map dependency . sortOn (map toLower . fst)) $ sort $
+	map (map dependency . sortOn (packageNameLowerCase . fst)) $ sort $
 	map get_deps $
 	foldr reduceDisjunct [] $
 	foldr intersectDisjunct head_deps $
 		maybe id ((:) . fromCondTree) (condLibrary pkg) $
 		map (fromCondTree . snd) (condExecutables pkg)
-  where dependency (p, i) = Dependency (PackageName p) (toVersionRange i)
+  where dependency (p, i) = Dependency p (toVersionRange i)
+        packageNameLowerCase (PackageName name) = map toLower name
 
 	-- put the constrained ones first, for sorting purposes
 	get_deps m = ranges ++ others
@@ -270,7 +266,7 @@ flatDependencies pkg =
 	fromDependencies :: [Dependency] -> Disjunct
 	fromDependencies = foldr addDep unitDisjunct
 	  where	addDep (Dependency p vr) =
-			liftM2 (Map.insertWith intersectInterval (unPackageName p))
+			liftM2 (Map.insertWith intersectInterval p)
 				(fromVersionRange vr)
 
 	fromCondTree :: CondTree v [Dependency] a -> Disjunct
@@ -354,7 +350,7 @@ subInterval (Interval l1 u1) (Interval l2 u2) = l2 <= l1 && u1 <= u2
 
 -- Constraints in disjunctive normal form
 
-type Conjunct = Map String (Interval Version)
+type Conjunct = Map PackageName (Interval Version)
 
 nullConjunct :: Conjunct -> Bool
 nullConjunct = Foldable.any nullInterval
@@ -406,5 +402,3 @@ cabalLogoURL = "/built-with-cabal.png"
 -- global URLs
 cabalHomeURL :: URL
 cabalHomeURL = "http://haskell.org/cabal/"
-
-unPackageName (PackageName name) = name
