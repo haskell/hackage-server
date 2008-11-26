@@ -61,7 +61,7 @@ executable hackage-server
     Distribution.Server.Util.Parse
     Distribution.Server.Util.Tar
   build-depends:
-    base,
+    base == 3.*,
     filepath >= 1.1,
     bytestring >= 0.9,
     zlib >= 0.4,

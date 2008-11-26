@@ -102,7 +102,7 @@ withIncomming store content action = do
 
   where
     handleExceptions tmpFile tmpHandle =
-      Exception.handle $ \(err::SomeException) -> do
+      Exception.handle $ \err -> do
         hClose tmpHandle
         removeFile tmpFile
         Exception.throwIO err

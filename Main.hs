@@ -16,7 +16,7 @@ import System.Environment
 import System.Exit
          ( exitWith, ExitCode(..) )
 import Control.Exception
-         ( handleJust, ErrorCall(..))
+         ( handleJust, Exception(ErrorCall) )
 import System.IO
          ( stdout, hFlush )
 import System.Console.GetOpt
