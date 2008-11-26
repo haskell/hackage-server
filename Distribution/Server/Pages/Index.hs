@@ -4,7 +4,6 @@ module Distribution.Server.Pages.Index (packageIndex) where
 
 import Distribution.Server.Pages.Template	( hackagePage )
 
-import Text.XHtml.Strict hiding ( p )
 import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
@@ -14,9 +13,11 @@ import Distribution.Server.Types (PkgInfo(..))
 import Distribution.Simple.Utils (comparing, equating)
 import Distribution.ModuleName (toFilePath)
 
+import Text.XHtml.Strict hiding ( p, name )
+import qualified Text.XHtml.Strict as XHtml ( name )
+
 import Data.Char (toLower, toUpper, isSpace)
 import Data.List (intersperse, sortBy, groupBy, nub, maximumBy)
-import Data.Maybe ()
 
 
 packageIndex :: PackageIndex.PackageIndex PkgInfo -> Html
@@ -46,9 +47,9 @@ formatPkgGroups pkgs = hackagePage "packages by category" docBody
 			(cat, sub_pkgs) <- cat_pkgs]
 	searchBox =
 		[form ! [method "get", action "http://www.google.co.uk/search"] <<
-			[input ! [thetype "hidden", name "hl", value "en"],
-			 input ! [thetype "hidden", name "as_sitesearch", value "hackage.haskell.org/packages"],
-			 input ! [thetype "text", size "20", name "as_q", value ""],
+			[input ! [thetype "hidden", XHtml.name "hl", value "en"],
+			 input ! [thetype "hidden", XHtml.name "as_sitesearch", value "hackage.haskell.org/packages"],
+			 input ! [thetype "text", size "20", XHtml.name "as_q", value ""],
 			 input ! [thetype "submit", value "Search package pages"]
 			]]
 	catLink (cat, sub_pkgs) =
@@ -61,7 +62,7 @@ formatPkgGroups pkgs = hackagePage "packages by category" docBody
 	sortKey pkg = map toLower $ unPackageName $ pkgName $ package pkg
 	formatCategory cat =
 		h3 ! [theclass "category"] <<
-			anchor ! [name (catLabel catName)] << catName
+			anchor ! [XHtml.name (catLabel catName)] << catName
 	  where catName = categoryName cat
 	catLabel cat = "cat:" ++ cat
 	categoryName (Category cat) = cat
@@ -133,5 +134,5 @@ allocatedTopLevelNodes = [
 packageNameURL :: PackageName -> URL
 packageNameURL pkg = "/packages/" ++ unPackageName pkg
 
+unPackageName :: PackageName -> String
 unPackageName (PackageName name) = name
--- type PackageName = String --FIXME: Cabal-1.5 uses a newtype

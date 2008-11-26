@@ -39,7 +39,7 @@ import qualified Distribution.Text as Text
          ( Text(disp, parse) )
 import Distribution.ParseUtils
          ( FieldDescr(..), ParseResult(..), Field(..)
-         , simpleField, listField, ppFields, readFields
+         , simpleField, listField, readFields
          , syntaxError, locatedErrorMsg, showFields )
 import Distribution.Simple.Utils
          ( comparing )
@@ -47,7 +47,7 @@ import Distribution.Simple.Utils
 import qualified Distribution.Compat.ReadP as Parse
          ( ReadP, pfail, munch1, skipSpaces )
 import qualified Text.PrettyPrint.HughesPJ as Disp
-         ( Doc, render, char, text )
+         ( Doc, char, text )
 import Text.PrettyPrint.HughesPJ
          ( (<+>), (<>) )
 

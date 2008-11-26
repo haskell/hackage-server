@@ -132,4 +132,5 @@ releaseItem users host PkgInfo {
 	 ++ if null body then "" else "<p>" ++ body
     user = Users.idToName users userId
 
+unPackageName :: PackageName -> String
 unPackageName (PackageName name) = name
