@@ -229,6 +229,7 @@ showFields = [
 	("Stability",	toHtml . stability),
 	("Category",	toHtml . category),
 	("Home page",	mkRef . homepage),
+	("Bug tracker",	mkRef . bugReports),
 	("Executables",	commaList . map toHtml . map exeName . executables)
 	]
   where mkRef "" = noHtml
