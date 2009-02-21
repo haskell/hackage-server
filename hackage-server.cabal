@@ -64,6 +64,7 @@ executable hackage-server
     Distribution.Server.Util.BlobStorage
     Distribution.Server.Util.Index
     Distribution.Server.Util.Parse
+    Distribution.Server.Util.Serve
     Distribution.Server.Util.Tar
   build-depends:
     base == 3.*,
