@@ -1,21 +1,21 @@
 name:         hackage-server
-version:      0.1
+version:      0.2
 category:     Distribution
-synopsis:     A prototype HackageDB web server
-description:  A prototype HackageDB web server based on the HAppS architecture.
+synopsis:     A prototype Hackage web server
+description:  A prototype Hackage web server based on the Happstack architecture.
 author:       Duncan Coutts <duncan@haskell.org>
               David Himmelstrup <lemmih@gmail.com>
               Ross Paterson <ross@soi.city.ac.uk>
 maintainer:   Duncan Coutts <duncan@haskell.org>
               David Himmelstrup <lemmih@gmail.com>
-copyright:    2008 Duncan Coutts
+copyright:    2008-2009 Duncan Coutts
               2008 David Himmelstrup
               2007 Ross Paterson
 license:      BSD3
 license-file: LICENSE
 
 build-type: Simple
-cabal-version: >=1.2
+cabal-version: >=1.6
 data-files:
   static/hackage.css
   static/accounts.html
@@ -24,6 +24,10 @@ data-files:
   static/favicon.ico
   static/built-with-cabal.png
   static/cabal-tiny.png
+
+source-repository head
+  type: darcs
+  location: http://code.haskell.org/hackage-server/
 
 executable hackage-server
   main-is: Main.hs
@@ -81,12 +85,11 @@ executable hackage-server
     binary >= 0.4,
     pureMD5 >= 0.2,
     xhtml >= 3000.1,
-    rss >= 3000.0 && < 3000.1,
-    Cabal >= 1.6.0,
-    HAppS-Data   >= 0.9.3 && < 1.0,
-    HAppS-Util   >= 0.9.3 && < 1.0,
-    HAppS-IxSet  >= 0.9.3 && < 1.0,
-    HAppS-State  >= 0.9.3 && < 1.0,
-    HAppS-Server >= 0.9.3 && < 1.0
+    rss == 3000.0.*,
+    Cabal == 1.6.*,
+    happstack-data   == 0.1.*,
+    happstack-util   == 0.1.*,
+    happstack-state  == 0.1.*,
+    happstack-server == 0.1.*
   extra-libraries: crypt
   ghc-options: -Wall -fno-warn-orphans
