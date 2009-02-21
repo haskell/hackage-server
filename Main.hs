@@ -102,7 +102,11 @@ main = topHandler $ do
         ++ unlines (map display (sort badLogEntries))
 
 topHandler :: IO a -> IO a
-topHandler = handleJust (\(ErrorCall err) -> Just err) die
+topHandler =
+  handleJust (\err -> case err of
+                        ErrorCall e -> Just e
+                        _           -> Nothing)
+             die
 
 die :: String -> IO a
 die msg = do
