@@ -1,0 +1,28 @@
+
+Users and auth
+ * Allow creating new users, updating passwds
+ * Allow importing user auth info later
+ * Digest authentication
+ * Restrict uploads to package group
+ * Admin and collection maintainer users
+ * Allow editing per-package groups
+
+Packages
+ * Serve tarballs as .tar.gz not tarball
+ * Serve package contents
+ * Serve and uploading doc tarballs
+
+Server
+ * Send etag and last modified times
+
+Index
+ * look at relaxing the index format
+ * incremental updates, serve byte ranges
+
+Backup
+ * dump all info into a tarball format, allow reload
+
+Build reports
+
+General
+ * improve modularity
