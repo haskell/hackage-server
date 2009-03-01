@@ -15,8 +15,8 @@ module Distribution.Server.Packages.Index (
     write,
   ) where
 
-import qualified Distribution.Server.Util.Tar as Tar
-         ( Entry(..), ExtendedHeader(..) )
+import qualified Codec.Archive.Tar.Entry as Tar
+         ( Entry(..), Ownership(..) )
 import qualified Distribution.Server.Util.Index as PackageIndex
 
 import Distribution.Server.Types
@@ -32,6 +32,7 @@ import Data.Time.Clock
          ( UTCTime )
 import Data.Time.Clock.POSIX
          ( utcTimeToPOSIXSeconds )
+import Data.Int (Int64)
 
 import qualified Data.ByteString.Lazy as BS
 import Data.ByteString.Lazy (ByteString)
@@ -41,12 +42,14 @@ write :: Users.Users -> PackageIndex PkgInfo -> ByteString
 write users = PackageIndex.write pkgData setModTime
   where
     setModTime pkgInfo entry = entry {
-      Tar.modTime   = utcToUnixTime (pkgUploadTime pkgInfo),
-      Tar.headerExt = (Tar.headerExt entry) {
+      Tar.entryTime      = utcToUnixTime (pkgUploadTime pkgInfo),
+      Tar.entryOwnership = Tar.Ownership {
         Tar.ownerName = userName (pkgUploadUser pkgInfo),
-        Tar.groupName = "HackageDB"
+        Tar.groupName = "HackageDB",
+        Tar.ownerId = 0,
+        Tar.groupId = 0
       }
     }
-    utcToUnixTime :: UTCTime -> Int
+    utcToUnixTime :: UTCTime -> Int64
     utcToUnixTime = truncate . utcTimeToPOSIXSeconds
     userName = display . Users.idToName users

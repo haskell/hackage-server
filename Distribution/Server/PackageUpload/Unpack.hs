@@ -1,7 +1,7 @@
 -- Unpack a tarball containing a Cabal package
 module Distribution.Server.PackageUpload.Unpack (unpackPackage) where
 
-import qualified Distribution.Server.Util.Tar as Tar
+import qualified Codec.Archive.Tar as Tar
 
 import Distribution.Version
          ( Version(..) )
@@ -65,14 +65,16 @@ unpackPackage tarGzFile contents = runUploadMonad $ do
              ++ ". The tarball must use the name of the package."
 
   -- Check the tarball content for sanity and extract the .cabal file
-  let checkEntry entry = checkTarFileType       entry
-                      >> checkTarFilePath pkgid entry
-      
-      selectEntry entry = cabalFileName == normalise (Tar.fileName entry)
+  let checkEntries = Tar.mapEntries (checkTarFilePath pkgid)
+                   . Tar.mapEntries checkTarFileType
+      selectEntry entry = case Tar.entryContent entry of
+        Tar.NormalFile bs _ | cabalFileName == normalise (Tar.entryPath entry)
+                           -> Just bs
+        _                  -> Nothing
       PackageName name  = packageName pkgid
       cabalFileName     = display pkgid </> name <.> "cabal"
       entries           = Tar.read (GZip.decompress contents)
-  cabalEntries <- extractTarEntries checkEntry selectEntry entries
+  cabalEntries <- selectEntries selectEntry (checkEntries entries)
   cabalEntry   <- case cabalEntries of
     [cabalEntry] -> return cabalEntry
     [] -> fail $ "The " ++ quote cabalFileName
@@ -81,7 +83,7 @@ unpackPackage tarGzFile contents = runUploadMonad $ do
               ++ quote cabalFileName ++ "."
   
   -- Parse the Cabal file
-  let cabalFileContent = fromUTF8 (BS.unpack (Tar.fileContent cabalEntry))
+  let cabalFileContent = fromUTF8 (BS.unpack cabalEntry)
   pkgDesc <- case parsePackageDescription cabalFileContent of
     ParseFailed err -> fail $ showError (locatedErrorMsg err)
     ParseOk warnings pkgDesc -> do
@@ -96,7 +98,7 @@ unpackPackage tarGzFile contents = runUploadMonad $ do
 
   extraChecks pkgDesc
 
-  return (pkgDesc, Tar.fileContent cabalEntry)
+  return (pkgDesc, cabalEntry)
 
   where
     showError (Nothing, msg) = msg
@@ -163,48 +165,50 @@ allocatedTopLevelNodes = [
         "Distribution", "DotNet", "Foreign", "Graphics", "Language",
         "Network", "Numeric", "Prelude", "Sound", "System", "Test", "Text"]
 
-extractTarEntries :: (Tar.Entry -> UploadMonad ())
-                  -> (Tar.Entry -> Bool)
-                  -> Tar.Entries
-                  -> UploadMonad [Tar.Entry]
-extractTarEntries check select = extract []
+selectEntries :: (Tar.Entry -> Maybe a)
+              -> Tar.Entries
+              -> UploadMonad [a]
+selectEntries select = extract []
   where
     extract _        (Tar.Fail err)           = fail err
     extract selected  Tar.Done                = return selected
     extract selected (Tar.Next entry entries) = do
-      check entry 
-      if select entry
-        then extract (entry : selected) entries
-        else extract          selected  entries
+      case select entry of
+        Nothing    -> extract          selected  entries
+        Just saved -> extract (saved : selected) entries
 
-checkTarFileType :: Tar.Entry -> UploadMonad ()
-checkTarFileType Tar.Entry { Tar.fileType = ftype }
-  | ftype == Tar.NormalFile
- || ftype == Tar.Directory
- || ftype == Tar.HardLink
- || ftype == Tar.SymbolicLink
-  = return ()
+checkTarFileType :: Tar.Entry -> Either String Tar.Entry 
+checkTarFileType entry
+  | case Tar.entryContent entry of
+      Tar.NormalFile _ _ -> True
+      Tar.Directory      -> True
+      Tar.SymbolicLink _ -> True
+      Tar.HardLink     _ -> True
+      _                  -> False
+  = Right entry
 
   | otherwise
-  = fail $ "Bad file type in package tarball: " ++ show ftype
+  = Left $ "Bad file type in package tarball: " ++ Tar.entryPath entry
         ++ "\nFor portability, package tarballs should use the 'ustar' format "
         ++ "and only contain normal files, directories and file links. "
         ++ "Your tar program may be using non-standard extensions. For "
         ++ "example with GNU tar, use --format=ustar to get the portable "
         ++ "format."
 
-checkTarFilePath :: PackageIdentifier -> Tar.Entry -> UploadMonad ()
-checkTarFilePath pkgid = \entry -> do
-  let dirs = splitDirectories (Tar.fileName entry)
-  unless (all (/= "..") dirs) $
-    fail $ "Bad file name in package tarball: " ++ quote (Tar.fileName entry)
+checkTarFilePath :: PackageIdentifier -> Tar.Entry -> Either String Tar.Entry 
+checkTarFilePath pkgid entry
+  | not (all (/= "..") dirs)
+  = Left $ "Bad file name in package tarball: " ++ quote (Tar.entryPath entry)
         ++ "\nFor security reasons, files in package tarballs may not use"
         ++ " \"..\" components in their path." 
-  unless (inPkgSubdir dirs) $
-    fail $ "Bad file name in package tarball: " ++ quote (Tar.fileName entry)
+  | not (inPkgSubdir dirs)
+  = Left $ "Bad file name in package tarball: " ++ quote (Tar.entryPath entry)
         ++ "\nAll the file in the package tarball must be in the subdirectory "
         ++ quote pkgstr ++ "."
+  | otherwise
+  = Right entry
   where
+    dirs = splitDirectories (Tar.entryPath entry)
     pkgstr = display pkgid
     inPkgSubdir (".":pkgstr':_) = pkgstr == pkgstr'
     inPkgSubdir (    pkgstr':_) = pkgstr == pkgstr'

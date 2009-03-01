@@ -16,9 +16,10 @@ module Distribution.Server.Util.Index (
     write,
   ) where
 
-import qualified Distribution.Server.Util.Tar as Tar
-         ( Entry(..), Entries(..), fileName, FileType(..)
-         , read, write, simpleFileEntry, toTarPath )
+import qualified Codec.Archive.Tar       as Tar
+         ( read, write, Entries(..) )
+import qualified Codec.Archive.Tar.Entry as Tar
+         ( Entry(..), entryPath, fileEntry, toTarPath )
 
 import Distribution.Package
          ( PackageIdentifier(..), Package(..), packageName, packageVersion
@@ -51,7 +52,7 @@ read mkPackage indexFileContent = collect [] entries
     collect _   (Tar.Fail err)  = Left err
 
     entry e
-      | [pkgname,versionStr,_] <- splitDirectories (normalise (Tar.fileName e))
+      | [pkgname,versionStr,_] <- splitDirectories (normalise (Tar.entryPath e))
       , Just version <- simpleParse versionStr
       = let pkgid  = PackageIdentifier (PackageName pkgname) version
          in Just (mkPackage pkgid e)
@@ -70,10 +71,10 @@ write externalPackageRep updateEntry =
   Tar.write . map entry . PackageIndex.allPackages
   where
     entry pkg = updateEntry pkg
-              . Tar.simpleFileEntry tarPath
+              . Tar.fileEntry tarPath
               $ externalPackageRep pkg
       where
-        Right tarPath = Tar.toTarPath Tar.NormalFile fileName
+        Right tarPath = Tar.toTarPath False fileName
         PackageName name = packageName pkg
         fileName = name </> display (packageVersion pkg)
                         </> name <.> "cabal"

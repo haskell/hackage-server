@@ -22,8 +22,8 @@ import qualified Distribution.Server.Util.Index as PackageIndex (read)
 import qualified Distribution.Server.Users.Users as Users
 import           Distribution.Server.Users.Users   (Users)
 import qualified Distribution.Server.Users.Types as Users
-import qualified Distribution.Server.Util.Tar as Tar
-         ( Entry(..), fileName )
+import qualified Codec.Archive.Tar.Entry as Tar
+         ( Entry(..), entryPath, EntryContent(..) )
 import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
 import qualified Distribution.Server.Auth.HtPasswdDb as HtPasswdDb
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
@@ -56,13 +56,14 @@ import Data.Ord
 import Prelude hiding (read)
 
 newPkgInfo :: PackageIdentifier
-           -> Tar.Entry
+           -> (FilePath, ByteString)
            -> UploadLog.Entry -> [UploadLog.Entry]
            -> Users.Users
            -> Either String PkgInfo
-newPkgInfo pkgid entry (UploadLog.Entry time user _) others users =
-  case parse (Tar.fileContent entry) of
-      ParseFailed err -> fail $ Tar.fileName entry
+newPkgInfo pkgid (cabalFilePath, cabalFile) (UploadLog.Entry time user _)
+           others users =
+  case parse cabalFile of
+      ParseFailed err -> fail $ cabalFilePath
                              ++ maybe "" (\n -> ":" ++ show n) lineno
                              ++ ": " ++ message
         where (lineno, message) = locatedErrorMsg err
@@ -70,7 +71,7 @@ newPkgInfo pkgid entry (UploadLog.Entry time user _) others users =
       ParseOk _ pkg   -> return PkgInfo {
         pkgInfoId     = pkgid,
         pkgDesc       = pkg,
-        pkgData       = Tar.fileContent entry,
+        pkgData       = cabalFile,
         pkgTarball    = Nothing,
         pkgUploadTime = time,
         pkgUploadUser = Users.nameToId users user,
@@ -97,10 +98,12 @@ importTarballs store (Just archiveFile) =
   case PackageIndex.read (,) archiveFile of
     Left  problem  -> fail problem
     Right tarballs -> sequence
-      [ do blobid <- BlobStorage.add store (Tar.fileContent entry)
+      [ do blobid <- BlobStorage.add store fileContent
            return (pkgid, blobid)
-      | (pkgid, entry) <- tarballs
-      , takeExtension (Tar.fileName entry) == ".gz" ] --FIXME: .tar.gz
+      | (pkgid, entry@Tar.Entry {
+                  Tar.entryContent = Tar.NormalFile fileContent _
+                }) <- tarballs
+      , takeExtension (Tar.entryPath entry) == ".gz" ] --FIXME: .tar.gz
 
 -- | The active users are simply all those listed in the current htpasswd file.
 --
@@ -171,8 +174,12 @@ mergeIndexWithUploadLog pkgs entries users =
   mergePkgs [] [] $
     mergeBy comparingPackageId
       (sortBy (comparing fst)
-              [ pkg | pkg@(_, entry) <- pkgs
-                    , takeExtension (Tar.fileName entry) == ".cabal" ])
+              [ (pkgid, (path, cabalFile))
+              | (pkgid, entry@Tar.Entry {
+                          Tar.entryContent = Tar.NormalFile cabalFile _
+                        }) <- pkgs
+              , let path = Tar.entryPath entry
+              , takeExtension path == ".cabal" ])
       (sortBy (comparing (\(UploadLog.Entry _ _ pkgid, _) -> pkgid)) entries)
   where
     comparingPackageId (pkgid, _) (UploadLog.Entry _ _ pkgid', _) =
@@ -180,8 +187,8 @@ mergeIndexWithUploadLog pkgs entries users =
 
     mergePkgs merged nonexistant []  = Right (reverse merged, nonexistant)
     mergePkgs merged nonexistant (next:remaining) = case next of
-      InBoth (pkgid, tarEntry) (logEntry, logEntries) ->
-        case newPkgInfo pkgid tarEntry logEntry logEntries users of
+      InBoth (pkgid, cabalFile) (logEntry, logEntries) ->
+        case newPkgInfo pkgid cabalFile logEntry logEntries users of
           Left problem  -> Left problem
           Right ok      -> mergePkgs (ok:merged) nonexistant remaining
       OnlyInLeft (pkgid, _) ->
