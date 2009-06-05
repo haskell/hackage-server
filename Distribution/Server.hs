@@ -161,22 +161,21 @@ stateToCache host state = getCurrentTime >>= \now -> return
 
 -- Support the same URL scheme as the first version of hackage.
 legacySupport :: ServerPart Response
-legacySupport = mzero
-    -- msum
-    -- [ path $ \name -> msum
-    --   [ path $ \version -> msum
-    --     [ let dirName = display pkgid ++ ".tar.gz"
-    --           pkgid = PackageIdentifier {pkgName = PackageName name, pkgVersion = version}
-    --       in dir dirName msum
-    --          [ method GET $ do
-    --              movedPermanently ("/packages/"++display pkgid++"/tarball") (toResponse "")
-    --          ]
-    --     ]]
-    -- , dir "00-index.tar.gz" msum
-    --   [ method GET $
-    --            movedPermanently "/00-index.tar.gz" (toResponse "")
-    --   ]
-    -- ]
+legacySupport = msum
+    [ path $ \name -> msum
+      [ path $ \version -> msum
+        [ let dirName = display pkgid ++ ".tar.gz"
+              pkgid = PackageIdentifier {pkgName = PackageName name, pkgVersion = version}
+          in dir dirName $ msum
+             [ method GET $ do
+                 movedPermanently ("/packages/"++display pkgid++"/tarball") (toResponse "")
+             ]
+        ]]
+    , dir "00-index.tar.gz" $ msum
+      [ method GET $
+               movedPermanently "/00-index.tar.gz" (toResponse "")
+      ]
+    ]
 
 handlePackageById :: BlobStorage -> PackageIdentifier -> [ServerPart Response]
 handlePackageById store pkgid = 
@@ -185,50 +184,50 @@ handlePackageById store pkgid =
         ok $ toResponse $ Resource.XHtml $
           Pages.packagePage (userDb state) (packageList state) pkg pkgs
 
---   , dir "cabal" msum
---     [ withPackage $ \_ pkg _pkgs ->
---       method GET $
---         ok $ toResponse (Resource.CabalFile (pkgData pkg))
--- --  , method PUT $ do ...
---     ]
+  , dir "cabal" $ msum
+    [ withPackage $ \_ pkg _pkgs ->
+      method GET $
+        ok $ toResponse (Resource.CabalFile (pkgData pkg))
+--  , method PUT $ do ...
+    ]
 
---   , dir "tarball" msum
---     [ withPackage $ \_ pkg _pkgs -> do
---         method GET $
---           case pkgTarball pkg of
---             Nothing -> notFound $ toResponse "No tarball available"
---             Just blobId -> do
---               file <- liftIO $ BlobStorage.fetch store blobId
---               ok $ toResponse $
---                 Resource.PackageTarball file blobId (pkgUploadTime pkg)
---     ]
---   , dir "buildreports" msum
---     [ method GET $ do
---         state <- query GetPackagesState
---         case PackageIndex.lookupPackageId (packageList state) pkgid of
---           Nothing -> notFound $ toResponse "No such package"
---           Just _  -> do
---             let reports = BuildReports.lookupPackageReports
---                             (State.buildReports state) pkgid
---             ok $ toResponse $ Resource.XHtml $
---                    Pages.buildReportSummary pkgid reports
---     ]
---   , dir "documentation" msum
---     [ withPackage $ \state pkg pkgs ->
---         methodSP POST $ do
---           authGroup <- query $ LookupUserGroups [Trustee, PackageMaintainer (pkgName pkgid)]
---           user <- Auth.hackageAuth (userDb state) Nothing -- (Just authGroup)
---           withRequest $ \Request{rqBody = Body body} -> do
---               blob <- liftIO $ BlobStorage.add store body
---               liftIO $ putStrLn $ "Putting to: " ++ show (display pkgid, blob)
---               update $ InsertDocumentation pkgid blob
---               seeOther ("/packages/"++display pkgid++"/documentation/") $ toResponse ""
---     , require (query $ LookupDocumentation pkgid) $ \blob -> msum
---       [ withRequest $ \rq ->
---          do tarball <- liftIO $ BlobStorage.fetch store blob
---             serveTarball ["index.html"] (display pkgid) rq tarball
---       ]
---     ]
+  , dir "tarball" $ msum
+    [ withPackage $ \_ pkg _pkgs -> do
+        method GET $
+          case pkgTarball pkg of
+            Nothing -> notFound $ toResponse "No tarball available"
+            Just blobId -> do
+              file <- liftIO $ BlobStorage.fetch store blobId
+              ok $ toResponse $
+                Resource.PackageTarball file blobId (pkgUploadTime pkg)
+    ]
+  , dir "buildreports" $ msum
+    [ method GET $ do
+        state <- query GetPackagesState
+        case PackageIndex.lookupPackageId (packageList state) pkgid of
+          Nothing -> notFound $ toResponse "No such package"
+          Just _  -> do
+            let reports = BuildReports.lookupPackageReports
+                            (State.buildReports state) pkgid
+            ok $ toResponse $ Resource.XHtml $
+                   Pages.buildReportSummary pkgid reports
+    ]
+  , dir "documentation" $ msum
+    [ withPackage $ \state pkg pkgs ->
+        methodSP POST $ do
+          authGroup <- query $ LookupUserGroups [Trustee, PackageMaintainer (pkgName pkgid)]
+          user <- Auth.hackageAuth (userDb state) Nothing -- (Just authGroup)
+          withRequest $ \Request{rqBody = Body body} -> do
+              blob <- liftIO $ BlobStorage.add store body
+              liftIO $ putStrLn $ "Putting to: " ++ show (display pkgid, blob)
+              update $ InsertDocumentation pkgid blob
+              seeOther ("/packages/"++display pkgid++"/documentation/") $ toResponse ""
+    , require (query $ LookupDocumentation pkgid) $ \blob -> msum
+      [ withRequest $ \rq ->
+         do tarball <- liftIO $ BlobStorage.fetch store blob
+            serveTarball ["index.html"] (display pkgid) rq tarball
+      ]
+    ]
   ]
   
   where
@@ -362,26 +361,25 @@ instance FromReqURI BuildReports.BuildReportId where
 
 impl :: Server -> [ServerPartT IO Response]
 impl (Server store static _ cache host _) =
-  [
---   [ dir "packages" msum [ msum $ path $ handlePackageById store
---                         , legacySupport
---                         , method GET $ do
---                             cacheState <- Cache.get cache
---                             ok $ Cache.packagesPage cacheState
---                         ]
---   , dir "buildreports" msum (buildReports store)
--- --  , dir "groups" (groupInterface)
---   , dir "recent.rss" msum
---       [ method GET $ ok . Cache.packagesFeed =<< Cache.get cache ]
---   , dir "recent.html" msum
---       [ method GET $ ok . Cache.recentChanges =<< Cache.get cache ]
---   , dir "upload" msum
---       [ uploadPackage store cache host ]
---   , dir "00-index.tar.gz" msum
---       [ method GET $ do
---           cacheState <- Cache.get cache
---           ok $ toResponse $ Resource.IndexTarball (Cache.indexTarball cacheState)
---       ]
---   ,
+  [ dir "packages" $ msum [ path $ msum . handlePackageById store
+                          , legacySupport
+                          , methodSP GET $ do
+                            cacheState <- Cache.get cache
+                            ok $ Cache.packagesPage cacheState
+                        ]
+  , dir "buildreports" $ msum (buildReports store)
+--  , dir "groups" (groupInterface)
+  , dir "recent.rss" $ msum
+      [ method GET $ ok . Cache.packagesFeed =<< Cache.get cache ]
+  , dir "recent.html" $ msum
+      [ method GET $ ok . Cache.recentChanges =<< Cache.get cache ]
+  , dir "upload" $ msum
+      [ uploadPackage store cache host ]
+  , dir "00-index.tar.gz" $ msum
+      [ method GET $ do
+          cacheState <- Cache.get cache
+          ok $ toResponse $ Resource.IndexTarball (Cache.indexTarball cacheState)
+      ]
+  ,
   fileServe ["hackage.html"] static
   ]
