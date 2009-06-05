@@ -42,7 +42,7 @@ import System.Directory
 import Control.Concurrent.MVar (MVar)
 import Data.Maybe; import Data.Version
 import Control.Monad.Trans
-import Control.Monad (when,msum,mzero)
+import Control.Monad (when,msum)
 import Data.List (maximumBy, sortBy)
 import Data.Ord (comparing)
 import Data.ByteString.Lazy.Char8 (ByteString)
@@ -167,12 +167,12 @@ legacySupport = msum
         [ let dirName = display pkgid ++ ".tar.gz"
               pkgid = PackageIdentifier {pkgName = PackageName name, pkgVersion = version}
           in dir dirName $ msum
-             [ method GET $ do
+             [ methodSP GET $ do
                  movedPermanently ("/packages/"++display pkgid++"/tarball") (toResponse "")
              ]
         ]]
     , dir "00-index.tar.gz" $ msum
-      [ method GET $
+      [ methodSP GET $
                movedPermanently "/00-index.tar.gz" (toResponse "")
       ]
     ]
@@ -180,20 +180,20 @@ legacySupport = msum
 handlePackageById :: BlobStorage -> PackageIdentifier -> [ServerPart Response]
 handlePackageById store pkgid = 
   [ withPackage $ \state pkg pkgs ->
-      method GET $
+      methodSP GET $
         ok $ toResponse $ Resource.XHtml $
           Pages.packagePage (userDb state) (packageList state) pkg pkgs
 
   , dir "cabal" $ msum
     [ withPackage $ \_ pkg _pkgs ->
-      method GET $
+      methodSP GET $
         ok $ toResponse (Resource.CabalFile (pkgData pkg))
---  , method PUT $ do ...
+--  , methodSP PUT $ do ...
     ]
 
   , dir "tarball" $ msum
     [ withPackage $ \_ pkg _pkgs -> do
-        method GET $
+        methodSP GET $
           case pkgTarball pkg of
             Nothing -> notFound $ toResponse "No tarball available"
             Just blobId -> do
@@ -202,7 +202,7 @@ handlePackageById store pkgid =
                 Resource.PackageTarball file blobId (pkgUploadTime pkg)
     ]
   , dir "buildreports" $ msum
-    [ method GET $ do
+    [ methodSP GET $ do
         state <- query GetPackagesState
         case PackageIndex.lookupPackageId (packageList state) pkgid of
           Nothing -> notFound $ toResponse "No such package"
@@ -213,10 +213,10 @@ handlePackageById store pkgid =
                    Pages.buildReportSummary pkgid reports
     ]
   , dir "documentation" $ msum
-    [ withPackage $ \state pkg pkgs ->
+    [ withPackage $ \_ _ _ ->
         methodSP POST $ do
-          authGroup <- query $ LookupUserGroups [Trustee, PackageMaintainer (pkgName pkgid)]
-          user <- Auth.hackageAuth (userDb state) Nothing -- (Just authGroup)
+--          authGroup <- query $ LookupUserGroups [Trustee, PackageMaintainer (pkgName pkgid)]
+--          user <- Auth.hackageAuth (userDb state) Nothing -- (Just authGroup)
           withRequest $ \Request{rqBody = Body body} -> do
               blob <- liftIO $ BlobStorage.add store body
               liftIO $ putStrLn $ "Putting to: " ++ show (display pkgid, blob)
@@ -286,7 +286,7 @@ uploadPackage store cache host =
 buildReports :: BlobStorage -> [ServerPart Response]
 buildReports store =
   [ path $ \reportId -> msum
-    [ method GET $ do
+    [ methodSP GET $ do
         reports <- return . State.buildReports =<< query GetPackagesState
         case BuildReports.lookupReport reports reportId of
           Nothing     -> notFound $ toResponse "No such report"
@@ -296,7 +296,7 @@ buildReports store =
               buildLog = BuildReports.lookupBuildLog reports reportId
 
     , dir "buildlog" $ msum
-      [ method GET $ do
+      [ methodSP GET $ do
           reports <- return . State.buildReports =<< query GetPackagesState
           case BuildReports.lookupBuildLog reports reportId of
             Nothing -> notFound $ toResponse "No build log available"
@@ -340,12 +340,12 @@ groupInterface =
     , dir "trustee" (groupMethods Trustee)
     ]
     where groupMethods groupName
-              = [ method GET $
+              = [ methodSP GET $
                   do userGroup <- query $ LookupUserGroup groupName
                      userNames <- query $ ListGroupMembers userGroup
                      ok $ toResponse $ unlines (map display userNames)
-                , method PUT $ ...
-                , method DELETE $ ...
+                , methodSP PUT $ ...
+                , methodSP DELETE $ ...
                 ]
 -}
 
@@ -370,13 +370,13 @@ impl (Server store static _ cache host _) =
   , dir "buildreports" $ msum (buildReports store)
 --  , dir "groups" (groupInterface)
   , dir "recent.rss" $ msum
-      [ method GET $ ok . Cache.packagesFeed =<< Cache.get cache ]
+      [ methodSP GET $ ok . Cache.packagesFeed =<< Cache.get cache ]
   , dir "recent.html" $ msum
-      [ method GET $ ok . Cache.recentChanges =<< Cache.get cache ]
+      [ methodSP GET $ ok . Cache.recentChanges =<< Cache.get cache ]
   , dir "upload" $ msum
       [ uploadPackage store cache host ]
   , dir "00-index.tar.gz" $ msum
-      [ method GET $ do
+      [ methodSP GET $ do
           cacheState <- Cache.get cache
           ok $ toResponse $ Resource.IndexTarball (Cache.indexTarball cacheState)
       ]

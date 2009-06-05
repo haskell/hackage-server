@@ -22,13 +22,14 @@ import Data.ByteString.Lazy (ByteString)
 --import qualified Codec.Compression.GZip as GZip
 import System.FilePath
 import Happstack.Server.SimpleHTTP
+import Control.Monad
 
 serveTarball :: [FilePath]
              -> FilePath
              -> Request
              -> ByteString
              -> Web Response
-serveTarball _ _ _ _ = noHandle
+serveTarball _ _ _ _ = mzero
 {-
 serveTarball _indices _offset rq _tarball | rqMethod rq /= GET = noHandle
 serveTarball indices offset rq tarball

@@ -1,7 +1,7 @@
 module Main (main) where
 
 import qualified Distribution.Server
-import Distribution.Server (Config(..),Server()) -- serverTxControl))
+import Distribution.Server (Config(..)) -- serverTxControl))
 
 import Distribution.Text
          ( display )
@@ -15,8 +15,8 @@ import System.Environment
          ( getArgs, getProgName )
 import System.Exit
          ( exitWith, ExitCode(..) )
-import Control.Exception
-         ( handleJust, Exception(ErrorCall) )
+import Control.Exception.Extensible
+         ( handleJust, ErrorCall(ErrorCall) )
 import System.IO
          ( stdout, hFlush )
 import System.Console.GetOpt

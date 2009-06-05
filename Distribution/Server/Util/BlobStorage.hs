@@ -27,7 +27,7 @@ import Data.Typeable (Typeable)
 import Data.Binary (Binary)
 import System.FilePath
          ( (</>) )
-import Control.Exception as Exception
+import Control.Exception.Extensible (handle, throwIO, evaluate)
 import System.Directory
 import System.IO
 
@@ -102,10 +102,10 @@ withIncomming store content action = do
 
   where
     handleExceptions tmpFile tmpHandle =
-      Exception.handle $ \err -> do
+      handle $ \err -> do
         hClose tmpHandle
         removeFile tmpFile
-        Exception.throwIO (err :: Exception)
+        throwIO (err :: IOError)
 
 -- | Retrieve a blob from the store given its 'BlobId'.
 --
