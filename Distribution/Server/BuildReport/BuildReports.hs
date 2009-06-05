@@ -20,7 +20,7 @@ import Distribution.Package
 import Distribution.Text
          ( Text(..) )
 
-import HAppS.Data.Serialize
+import Happstack.Data.Serialize
 
 import qualified Data.Map as Map
 import qualified Data.ByteString.Char8 as BS.Char8

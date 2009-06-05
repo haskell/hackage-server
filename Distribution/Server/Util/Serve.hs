@@ -12,15 +12,16 @@
 -----------------------------------------------------------------------------
 module Distribution.Server.Util.Serve where
 
-import HAppS.Server hiding (path)
-import HAppS.Server.HTTP.FileServe (mimeTypes)
-import qualified Codec.Archive.Tar as Tar
+--import Happstack.Server hiding (path)
+--import Happstack.Server.HTTP.FileServe (mimeTypes)
+--import qualified Codec.Archive.Tar as Tar
 
-import Data.Maybe (listToMaybe)
-import qualified Data.Map as Map
+--import Data.Maybe (listToMaybe)
+--import qualified Data.Map as Map
 import Data.ByteString.Lazy (ByteString)
-import qualified Codec.Compression.GZip as GZip
+--import qualified Codec.Compression.GZip as GZip
 import System.FilePath
+import Happstack.Server.SimpleHTTP
 
 serveTarball :: [FilePath]
              -> FilePath

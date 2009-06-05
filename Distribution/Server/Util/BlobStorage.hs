@@ -105,7 +105,7 @@ withIncomming store content action = do
       Exception.handle $ \err -> do
         hClose tmpHandle
         removeFile tmpFile
-        Exception.throwIO err
+        Exception.throwIO (err :: Exception)
 
 -- | Retrieve a blob from the store given its 'BlobId'.
 --

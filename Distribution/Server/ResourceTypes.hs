@@ -18,7 +18,7 @@ module Distribution.Server.ResourceTypes where
 import Distribution.Server.Util.BlobStorage
          ( BlobId )
 
-import HAppS.Server
+import Happstack.Server
          ( ToMessage(..), Response(..), RsFlags(..), nullRsFlags, mkHeaders )
 
 import qualified Data.ByteString.Char8 as BS

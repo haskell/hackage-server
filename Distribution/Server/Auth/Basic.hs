@@ -9,10 +9,10 @@ import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
 import qualified Distribution.Server.Auth.Crypt as Crypt
 
-import HAppS.Server
+import Happstack.Server
          ( ServerPartT(..), withRequest, getHeader, escape
          , unauthorized, addHeader, toResponse )
-import qualified HAppS.Crypto.Base64 as Base64
+import qualified Happstack.Crypto.Base64 as Base64
 
 import Control.Monad.Trans (MonadIO)
 import Control.Monad (guard)
@@ -32,7 +32,7 @@ hackageAuth users authorisedGroup = genericBasicAuth realm cryptPasswdCheck
       guard (maybe True (Group.member userId) authorisedGroup)
       return userId
 
--- This is directly ripped out of HAppS-Server and generalised
+-- This is directly ripped out of Happstack-Server and generalised
 --
 genericBasicAuth :: Monad m => String -> (UserName -> PasswdPlain -> Maybe a)
                  -> ServerPartT m a

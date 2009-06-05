@@ -18,8 +18,8 @@ import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
 import Distribution.Server.BuildReport.BuildReports (BuildReports,BuildReportId,BuildLog)
 import Distribution.Server.BuildReport.BuildReport (BuildReport)
 
-import HAppS.State
-import HAppS.Data.Serialize
+import Happstack.State
+import Happstack.Data.Serialize
 import qualified Data.Binary as Binary
 
 import Data.Typeable

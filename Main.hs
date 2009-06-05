@@ -6,7 +6,7 @@ import Distribution.Server (Config(..),Server()) -- serverTxControl))
 import Distribution.Text
          ( display )
 
-import HAppS.State
+import Happstack.State.Control
          ( waitForTermination ) -- , createCheckpoint )
 import Control.Concurrent
          ( forkIO )

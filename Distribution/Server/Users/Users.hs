@@ -44,8 +44,8 @@ data Users = Users {
   }
   deriving Typeable
 
-invariant :: Users -> Bool
-invariant _ = True
+-- invariant :: Users -> Bool
+-- invariant _ = True
   --TODO: 1) the next id should be 0 if the userIdMap is empty
   --         or one bigger than the maximum allocated id
   --      2) there must be no overlap in the user names of active accounts

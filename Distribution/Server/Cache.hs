@@ -9,7 +9,7 @@ module Distribution.Server.Cache (
 import qualified Distribution.Server.Util.AsyncVar as AsyncVar
 import Distribution.Server.Util.AsyncVar (AsyncVar)
 
-import HAppS.Server (Response(rsBody))
+import Happstack.Server (Response(rsBody))
 
 import qualified Data.ByteString.Lazy as ByteString
 import Data.ByteString.Lazy (ByteString)

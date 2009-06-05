@@ -88,9 +88,9 @@ executable hackage-server
     xhtml >= 3000.1,
     rss == 3000.0.*,
     Cabal == 1.6.*,
-    happstack-data   == 0.1.*,
-    happstack-util   == 0.1.*,
-    happstack-state  == 0.1.*,
-    happstack-server == 0.1.*
+    happstack-data   == 0.2.*,
+    happstack-util   == 0.2.*,
+    happstack-state  == 0.2.*,
+    happstack-server == 0.2.*
   extra-libraries: crypt
   ghc-options: -Wall -fno-warn-orphans

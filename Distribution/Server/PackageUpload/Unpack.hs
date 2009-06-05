@@ -15,7 +15,7 @@ import Distribution.PackageDescription.Parse
 import Distribution.PackageDescription.Configuration
          ( flattenPackageDescription )
 import Distribution.PackageDescription.Check
-         ( PackageCheck(..), checkPackage, checkPackageFiles )
+         ( PackageCheck(..), checkPackage )
 import Distribution.ParseUtils
          ( ParseResult(..), locatedErrorMsg, showPWarning )
 import Distribution.Text
