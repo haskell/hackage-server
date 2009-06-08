@@ -168,7 +168,7 @@ legacySupport = msum
               pkgid = PackageIdentifier {pkgName = PackageName name, pkgVersion = version}
           in dir dirName $ msum
              [ methodSP GET $ do
-                 movedPermanently ("/packages/"++display pkgid++"/tarball") (toResponse "")
+                 movedPermanently ("/packages/"++ display pkgid ++ "/") (toResponse "")
              ]
         ]]
     , dir "00-index.tar.gz" $ msum
@@ -179,27 +179,16 @@ legacySupport = msum
 
 handlePackageById :: BlobStorage -> PackageIdentifier -> [ServerPart Response]
 handlePackageById store pkgid = 
-  [ withPackage $ \state pkg pkgs ->
+  [ withPackage pkgid $ \state pkg pkgs ->
       methodSP GET $
         ok $ toResponse $ Resource.XHtml $
           Pages.packagePage (userDb state) (packageList state) pkg pkgs
 
   , dir "cabal" $ msum
-    [ withPackage $ \_ pkg _pkgs ->
+    [ withPackage pkgid $ \_ pkg _pkgs ->
       methodSP GET $
         ok $ toResponse (Resource.CabalFile (pkgData pkg))
 --  , methodSP PUT $ do ...
-    ]
-
-  , dir "tarball" $ msum
-    [ withPackage $ \_ pkg _pkgs -> do
-        methodSP GET $
-          case pkgTarball pkg of
-            Nothing -> notFound $ toResponse "No tarball available"
-            Just blobId -> do
-              file <- liftIO $ BlobStorage.fetch store blobId
-              ok $ toResponse $
-                Resource.PackageTarball file blobId (pkgUploadTime pkg)
     ]
   , dir "buildreports" $ msum
     [ methodSP GET $ do
@@ -213,7 +202,7 @@ handlePackageById store pkgid =
                    Pages.buildReportSummary pkgid reports
     ]
   , dir "documentation" $ msum
-    [ withPackage $ \_ _ _ ->
+    [ withPackage pkgid $ \_ _ _ ->
         methodSP POST $ do
 --          authGroup <- query $ LookupUserGroups [Trustee, PackageMaintainer (pkgName pkgid)]
 --          user <- Auth.hackageAuth (userDb state) Nothing -- (Just authGroup)
@@ -230,20 +219,39 @@ handlePackageById store pkgid =
     ]
   ]
   
+withPackage :: PackageIdentifier -> (PackagesState -> PkgInfo -> [PkgInfo] -> ServerPart Response) -> ServerPart Response
+withPackage pkgid action = do
+  state <- query GetPackagesState
+  let index = packageList state
+  case PackageIndex.lookupPackageName index (packageName pkgid) of
+    []   -> anyRequest $ notFound $ toResponse "No such package in package index"
+    pkgs  | pkgVersion pkgid == Version [] []
+         -> action state pkg pkgs
+      where pkg = maximumBy (comparing packageVersion) pkgs
+
+    pkgs -> case listToMaybe [ pkg | pkg <- pkgs, packageVersion pkg
+                                           == packageVersion pkgid ] of
+      Nothing  -> anyRequest $ notFound $ toResponse "No such package version"
+      Just pkg -> action state pkg pkgs
+
+servePackage :: BlobStorage -> String -> ServerPart Response
+servePackage store pkgIdStr = methodSP GET $ do
+    let (pkgVer,t) = splitAt (length pkgIdStr - length ext) pkgIdStr
+        pkgid = fromReqURI pkgVer
+    case pkgid of
+        Just p  -> serve p t
+        Nothing -> notFound $ toResponse "Not a valid package-version format"
   where
-    withPackage action = do
-      state <- query GetPackagesState
-      let index = packageList state
-      case PackageIndex.lookupPackageName index (packageName pkgid) of
-        []   -> anyRequest $ notFound $ toResponse "No such package"
-        pkgs  | pkgVersion pkgid == Version [] []
-             -> action state pkg pkgs
-          where pkg = maximumBy (comparing packageVersion) pkgs
- 
-        pkgs -> case listToMaybe [ pkg | pkg <- pkgs, packageVersion pkg
-                                               == packageVersion pkgid ] of
-          Nothing  -> anyRequest $ notFound $ toResponse "No such package version"
-          Just pkg -> action state pkg pkgs
+    ext = ".tar.gz"
+    serve pkgId t | t /= ext = notFound $ toResponse "No such package in store"
+                  | otherwise = withPackage pkgId $ \_ pkg _ ->
+        case pkgTarball pkg of
+            Nothing     -> notFound $ toResponse "No tarball available"
+            Just blobId -> do
+                  file <- liftIO $ BlobStorage.fetch store blobId
+                  ok $ toResponse $ 
+                    Resource.PackageTarball file blobId (pkgUploadTime pkg)
+
 
 checkPackage :: ServerPart Response
 checkPackage = methodSP POST $ do
@@ -377,6 +385,7 @@ impl (Server store static _ cache host _) =
                             cacheState <- Cache.get cache
                             ok $ Cache.packagesPage cacheState
                         ]
+  , dir "package" (path $ servePackage store)
   , dir "buildreports" $ msum (buildReports store)
 --  , dir "groups" (groupInterface)
   , dir "recent.rss" $ msum
