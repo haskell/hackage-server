@@ -42,7 +42,7 @@ import System.Directory
 import Control.Concurrent.MVar (MVar)
 import Data.Maybe; import Data.Version
 import Control.Monad.Trans
-import Control.Monad (when,msum)
+import Control.Monad (when,msum,mzero)
 import Data.List (maximumBy, sortBy)
 import Data.Ord (comparing)
 import Data.ByteString.Lazy.Char8 (ByteString)
@@ -245,6 +245,16 @@ handlePackageById store pkgid =
           Nothing  -> anyRequest $ notFound $ toResponse "No such package version"
           Just pkg -> action state pkg pkgs
 
+checkPackage :: ServerPart Response
+checkPackage = methodSP POST $ do
+    input <- getDataFn (lookInput "package") >>= maybe mzero return
+    let res = Upload.unpackPackage (fromMaybe "noname" $ inputFilename input) (inputValue input)
+    case res of
+         Left err -> return $ toResponse err
+         Right (_,[]) -> return $ toResponse "Check succeeded, no warnings."
+         Right (_,warn) -> return . toResponse . unlines $ "Check succeeded with warnings.\n" : warn
+
+
 uploadPackage :: BlobStorage -> Cache.Cache -> URIAuth -> ServerPart Response
 uploadPackage store cache host =
   methodSP POST $ do
@@ -380,6 +390,6 @@ impl (Server store static _ cache host _) =
           cacheState <- Cache.get cache
           ok $ toResponse $ Resource.IndexTarball (Cache.indexTarball cacheState)
       ]
-  ,
-  fileServe ["hackage.html"] static
+  , dir "check" checkPackage
+  , fileServe ["hackage.html"] static
   ]
