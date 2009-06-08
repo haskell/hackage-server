@@ -72,7 +72,7 @@ executable hackage-server
     bytestring >= 0.9,
     zlib >= 0.4 && < 0.6,
     tar  == 0.3.*,
-    time >= 1.1,
+    time == 1.1.2.*,
     old-time >= 1.0,
     -- we'd like to use just the new time library howerer
     -- the rss packages uses old-time in it's public api :-(
