@@ -93,5 +93,11 @@ executable hackage-server
     happstack-util   == 0.2.*,
     happstack-state  == 0.2.*,
     happstack-server == 0.2.*
-  extra-libraries: crypt
+
+  if os(osx)
+     -- crypt is found in unistd.h on OS X
+     CC-Options: -DCRYPT_IN_UNISTD
+  if !os(osx)
+     extra-libraries: crypt
+
   ghc-options: -Wall -fno-warn-orphans
