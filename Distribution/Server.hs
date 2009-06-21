@@ -19,6 +19,8 @@ import qualified  Distribution.Server.State as State
 import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import qualified Distribution.Server.Auth.Basic as Auth
+import qualified Distribution.Server.Auth.Types as Auth
+import qualified Distribution.Server.Auth.Crypt as Auth
 import Distribution.Server.Types
          ( PkgInfo(..) )
 import qualified Distribution.Server.ResourceTypes as Resource
@@ -36,15 +38,10 @@ import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
 import qualified Distribution.Server.BulkImport as BulkImport
 import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
 
-import Distribution.Server.Auth.Crypt (newPasswd)
-import qualified Distribution.Server.Users.Users as Users
-import Distribution.Server.Auth.Types (PasswdPlain(..))
-import Distribution.Server.Users.Types (UserInfo(..), AccountStatus(..))
-import System.Random (newStdGen)
-
 import System.FilePath ((</>))
 import System.Directory
          ( createDirectoryIfMissing, doesDirectoryExist )
+import System.Random (newStdGen)
 import Control.Concurrent.MVar (MVar)
 import Data.Maybe; import Data.Version
 import Control.Monad.Trans
@@ -429,8 +426,140 @@ impl (Server store static _ cache host _) =
           cacheState <- Cache.get cache
           ok $ toResponse $ Resource.IndexTarball (Cache.indexTarball cacheState)
       ]
-  , dir "check" checkPackage
-  , dir "htpasswd" $ msum
-      [ changePassword ]
-  , fileServe ["hackage.html"] static
+  ,
+  fileServe ["hackage.html"] static
   ]
+
+guardAuth :: [GroupName] -> ServerPart ()
+guardAuth gNames = do
+  state <- query GetPackagesState
+  group <- query $ LookupUserGroups gNames
+  _ <- Auth.hackageAuth (userDb state) (Just group)
+  return ()
+
+-- Top level server part for administrative actions under the "admin"
+-- directory
+admin :: Cache.Cache -> URIAuth -> ServerPart Response
+admin cache host = do
+
+  guardAuth [Administrator]
+
+  msum
+   [ dir "users" (userAdmin cache host)
+   ]
+
+-- Assumes that the user has already been autheniticated
+-- and has proper permissions
+userAdmin :: Cache.Cache -> URIAuth -> ServerPart Response
+userAdmin cache host
+    = msum
+      [ dir "add" $ msum
+          [ methodSP POST $ do
+              reqData <- getDataFn lookUserNamePasswords
+              case reqData of
+                Nothing -> ok $ toResponse "try to fill out all the fields"
+                Just (userName, pwd1, pwd2) ->
+
+                    adminAddUser cache host (Users.UserName userName)
+                           (Auth.PasswdPlain pwd1) (Auth.PasswdPlain pwd2)
+          ]
+      , dir "change-password" $ msum
+          [ methodSP POST $ do
+              reqData <- getDataFn lookUserNamePasswords
+              case reqData of
+                Nothing -> ok $ toResponse "try to fill out all the fields"
+                Just (userName, pwd1, pwd2) ->
+
+                    adminChangePassword cache host (Users.UserName userName)
+                             (Auth.PasswdPlain pwd1) (Auth.PasswdPlain pwd2)
+          ]
+      -- , dir "disable" $ undefined
+      -- , dir "enable" $ undefined
+      -- , dir "delete" $ undefined
+      , dir "toggle-admin" $ msum
+          [ methodSP POST $ do
+              reqData <- getDataFn $ do
+                userName <- lookUserName
+                makeAdmin <- lookRead "admin"
+                return (userName, makeAdmin)
+              
+              case reqData of
+                Nothing -> ok $ toResponse "Bad inputs, somehow"
+                Just (userName, makeAdmin) ->
+                    adminToggleAdmin (Users.UserName userName) makeAdmin
+          ]
+      ]
+
+ where lookUserNamePasswords = do
+         userName <- lookUserName
+         pwd1 <- look "password"
+         pwd2 <- look "repeat-password"
+         return (userName, pwd1, pwd2)
+
+       lookUserName = look "user-name"
+
+adminToggleAdmin :: Users.UserName -> Bool -> ServerPart Response
+adminToggleAdmin userName makeAdmin
+    = do
+  mUser <- query $ LookupUserName userName
+
+  if isNothing mUser then ok $ toResponse "Unknown user name" else do
+
+  let Just user = mUser
+
+  if makeAdmin
+   then update $ AddToGroup Administrator user
+   else update $ RemoveFromGroup Administrator user
+
+  ok $ toResponse "Success!"
+
+
+adminChangePassword
+    :: Cache.Cache -> URIAuth
+    -> Users.UserName -> Auth.PasswdPlain -> Auth.PasswdPlain
+    -> ServerPart Response
+adminChangePassword _ _ _ pwd1 pwd2
+    | pwd1 /= pwd2
+        = ok $ toResponse "Entered passwords do not match"
+adminChangePassword cache host userName password _
+    = do
+
+  mUser <- query $ LookupUserName userName
+
+  case mUser of
+    Nothing -> ok $ toResponse "Unknown user name"
+    Just user ->
+        do
+          auth <- newPasswd password
+          result <- update $ ReplaceUserAuth user auth
+          updateCache cache host
+
+          ok $ toResponse $
+           if result then "Success!"
+           else "Failure!"
+
+
+adminAddUser :: Cache.Cache -> URIAuth
+        -> Users.UserName -> Auth.PasswdPlain -> Auth.PasswdPlain
+        -> ServerPart Response
+adminAddUser _ _ _ pwd1 pwd2
+    | pwd1 /= pwd2
+        = ok $ toResponse "Entered passwords do not match"
+adminAddUser cache host userName password _
+    = do
+
+  userAuth <- newPasswd password
+  result <- update $ AddUser userName userAuth  
+
+  case result of
+    Nothing -> ok $ toResponse "Failed!"
+    Just _  ->
+        do
+          updateCache cache host
+          ok $ toResponse "Ok!"
+          
+newPasswd :: MonadIO m => Auth.PasswdPlain -> m Auth.PasswdHash
+newPasswd pwd =
+    do
+      gen <- liftIO newStdGen
+      return $ Auth.newPasswd gen pwd

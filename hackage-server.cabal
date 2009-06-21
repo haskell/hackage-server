@@ -21,6 +21,7 @@ data-files:
   static/accounts.html
   static/hackage.html
   static/upload.html
+  static/admin.html
   static/favicon.ico
   static/built-with-cabal.png
   static/cabal-tiny.png

@@ -11,7 +11,6 @@ module Distribution.Server.Users.Users (
     delete,
     disable,
     enable,
-    update,
 
     -- * Lookup
     lookupId,
@@ -182,6 +181,29 @@ nameToId :: Users -> UserName -> UserId
 nameToId users name = case lookupName name users of
   Just userId -> userId
   Nothing     -> error $ "Users.nameToId: no such user name " ++ show name
+
+-- | Replace the user authentication for the given user.
+--   Returns 'Nothing' if the user does not exist.
+--
+--   If the given user exists and is deleted, 'Just'
+--   is returned even though the user still may not
+--   authenticate.
+replaceAuth :: Users -> UserId -> UserAuth -> Maybe Users
+replaceAuth users userId newAuth
+    = modifyUser users userId $ \userInfo ->
+      case userStatus userInfo of
+        Disabled _ -> userInfo { userStatus = Disabled newAuth }
+        Enabled  _ -> userInfo { userStatus = Enabled  newAuth }
+        Deleted    -> userInfo 
+
+-- | Modify a single user. Returns 'Nothing' if the user does not
+--   exist.
+modifyUser :: Users -> UserId -> (UserInfo -> UserInfo) -> Maybe Users
+modifyUser users (UserId userId) fn =
+    -- I'm using 'updateLookupWithKey' so I can tell if the lookup succeded
+    case IntMap.updateLookupWithKey (\_ user -> Just (fn user)) userId (userIdMap users) of
+      (Nothing,_) -> Nothing
+      (_,newMap)  -> Just $ users { userIdMap = newMap }
 
 enumerateAll :: Users -> [UserInfo]
 enumerateAll users = IntMap.elems (userIdMap users)

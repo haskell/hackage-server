@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell,
              FlexibleInstances, FlexibleContexts, MultiParamTypeClasses,
-             TypeOperators #-}
+             TypeOperators, TypeSynonymInstances #-}
 module Distribution.Server.State where
 
 import Distribution.Server.Instances ()
@@ -10,7 +10,8 @@ import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.Server.Types (PkgInfo(..))
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserGroup)
-import Distribution.Server.Users.Types (UserId,UserName)
+import Distribution.Server.Users.Types (UserId,UserName,UserAuth)
+import Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users)
 import Distribution.Server.Util.BlobStorage (BlobId)
@@ -131,6 +132,12 @@ instance Serialize UserName where
   putCopy = contain . Binary.put
   getCopy = contain Binary.get
 
+instance Version UserAuth where
+  mode = Versioned 0 Nothing
+instance Serialize UserAuth where
+  putCopy = contain . Binary.put
+  getCopy = contain Binary.get
+
 instance Version BuildReports where
   mode = Versioned 0 Nothing
 
@@ -225,6 +232,60 @@ bulkImport newIndex users = do
     userDb = users
   }
 
+-- Returns 'Nothing' if the user name is in use
+addUser :: UserName -> UserAuth -> Update PackagesState (Maybe UserId)
+addUser userName auth = updateUsers' updateFn formatFn
+
+  where updateFn = Users.add userName auth
+        formatFn = id
+
+-- Disables the indicated user
+disableUser :: UserId -> Update PackagesState Bool
+disableUser userId = updateUsers $ Users.disable userId
+
+-- Enables the indicated previously disabled user
+enableUser :: UserId -> Update PackagesState Bool
+enableUser userId = updateUsers $ Users.enable userId
+
+-- Deletes the indicated user. Cannot be re-enabled. The associated
+-- user name is available for re-use 
+deleteUser :: UserId -> Update PackagesState Bool
+deleteUser userId = updateUsers $ Users.delete userId
+
+-- Re-set the user autenication info
+replaceUserAuth :: UserId -> UserAuth -> Update PackagesState Bool
+replaceUserAuth userId auth
+    = updateUsers $ \users ->
+      Users.replaceAuth users userId auth
+    
+
+-- updates the user db with a simpler function
+updateUsers :: (Users -> Maybe Users) -> Update PackagesState Bool
+updateUsers update = updateUsers' updateFn formatFn
+
+    where updateFn users = fmap (swap . (,) ()) $ update users
+          formatFn = maybe False (const True)
+          swap (x,y) = (y,x)
+
+-- Helper function for updating the users db
+updateUsers' :: (Users -> Maybe (Users, a)) -> (Maybe a -> b) -> Update PackagesState b
+updateUsers' update format = do
+  state <- State.get
+  let users = userDb state
+      result = update users
+
+  liftM format $ case result of
+    Nothing -> return Nothing
+    Just (users',a) -> do
+      State.put state { userDb = users' }
+      return (Just a)
+
+lookupUserName :: UserName -> Query PackagesState (Maybe UserId)
+lookupUserName = queryUsers . Users.lookupName
+
+queryUsers :: (Users -> a) -> Query PackagesState a
+queryUsers queryFn = liftM queryFn (asks userDb)
+
 addReport :: BuildReport -> Update PackagesState BuildReportId
 addReport report
     = do pkgsState <- State.get
@@ -265,7 +326,6 @@ $(mkMethods ''PackagesState ['getPackagesState
                             ,'insert
                             ,'addReport
                             ,'addBuildLog
-                            ,'updateUsers
                             ])
 
 

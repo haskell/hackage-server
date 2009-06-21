@@ -1,0 +1,87 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0//EN">
+<HTML>
+<HEAD>
+<TITLE>HackageDB: user administartion</TITLE>
+<LINK REL="stylesheet" HREF="/hackage.css" TYPE="text/css">
+</HEAD>
+
+<BODY>
+<DIV CLASS="header">
+<H1>hackageDB :: [Package]</H1>
+<TABLE CLASS="navigation">
+<TR>
+<TD><A HREF="/">Introduction</A></TD>
+<TD><A HREF="/packages/">Packages</A></TD>
+<TD><A HREF="/recent.html">What's new</A></TD>
+<TD><A HREF="/upload.html">Upload</A></TD>
+<TD><A HREF="/accounts.html">User accounts</A></TD>
+</TR>
+</TABLE>
+</DIV>
+
+<DIV CLASS="content">
+<H2>Admin front-end</H2>
+
+<H3>Add User</H3>
+
+<FORM CLASS="box" action="/admin/users/add" method="post" enctype="multipart/form-data">
+<P>User name: <INPUT type="text" name="user-name"></P>
+<P>Password:  <INPUT type="password" name="password"></P>
+<P>Repeat password: <INPUT type="password" name="repeat-password"></P>
+<INPUT type="submit" value="Add User">
+</FORM>
+
+  
+<H3>Change Password</H3>
+
+<FORM CLASS="box" action="/admin/users/change-password" method="post" enctype="multipart/form-data">
+<P>User name: <INPUT type="text" name="user-name"></P>
+<P>Password:  <INPUT type="password" name="password"></P>
+<P>Repeat password: <INPUT type="password" name="repeat-password"></P>
+<INPUT type="submit" value="Change Password">
+</FORM>
+
+<!--  
+<H3>Disable User</H3>
+
+<FORM CLASS="box" action="/admin/users/disable" method="post" enctype="multipart/form-data">
+<P>User name: <INPUT type="text" name="user-name"></P>
+<INPUT type="submit" value="Disable user">
+</FORM>
+
+  
+<H3>Re-Enable User</H3>
+
+<FORM CLASS="box" action="/admin/users/enable" method="post" enctype="multipart/form-data">
+<P>User name: <INPUT type="text" name="user-name"></P>
+<INPUT type="submit" value="Enable user">
+</FORM>
+
+<H3>Delete User</H3>
+
+<P>THIS IS PERMANENT</P>
+<FORM CLASS="box" action="/admin/users/delete" method="post" enctype="multipart/form-data">
+<P>User name: <INPUT type="text" name="user-name"></P>
+<INPUT type="submit" value="Delete user">
+</FORM>
+
+  -->
+
+<H3>Make User Admin</H3>
+
+<FORM CLASS="box" action="/admin/users/toggle-admin" method="post" enctype="multipart/form-data">
+<P>User name: <INPUT type="text" name="user-name"></P>
+<INPUT type="hidden" name="admin" value="True">
+<INPUT type="submit" value="Make admin">
+</FORM>
+
+<H3>Revoke Admin Status</H3>
+
+<FORM CLASS="box" action="/admin/users/toggle-admin" method="post" enctype="multipart/form-data">
+<P>User name: <INPUT type="text" name="user-name"></P>
+<INPUT type="hidden" name="admin" value="False">
+<INPUT type="submit" value="Revoke admin status">
+</FORM>
+
+</DIV> <!-- content -->
+</HTML>
