@@ -32,10 +32,5 @@ crypt key salt =
     withCAString salt $ \saltPtr ->
       peekCAString =<< ccrypt keyPtr saltPtr
 
-#if CRYPT_IN_UNISTD
-foreign import ccall "unistd.h crypt"
+foreign import ccall "crypt"
   ccrypt :: CString -> CString -> IO CString
-#else
-foreign import ccall "crypt.h crypt"
-  ccrypt :: CString -> CString -> IO CString
-#endif
