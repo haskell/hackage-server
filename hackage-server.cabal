@@ -89,10 +89,10 @@ executable hackage-server
     xhtml >= 3000.1,
     rss == 3000.0.*,
     Cabal == 1.6.*,
-    happstack-data   == 0.2.*,
-    happstack-util   == 0.2.*,
-    happstack-state  == 0.2.*,
-    happstack-server == 0.2.*
+    happstack-data   == 0.3.*,
+    happstack-util   == 0.3.*,
+    happstack-state  == 0.3.*,
+    happstack-server == 0.3.*
 
   if os(linux)
      extra-libraries: crypt
