@@ -11,6 +11,7 @@ module Distribution.Server.Users.Users (
     delete,
     disable,
     enable,
+    update,
 
     -- * Lookup
     lookupId,
@@ -154,6 +155,13 @@ enable (UserId userId) users = do
       Deleted       -> Nothing
       Disabled auth -> Just userInfo { userStatus = Enabled auth }
       Enabled  _    -> Just userInfo
+
+-- | Update the UserInfo of an account.
+--
+-- This operation maintains the user ID number but can be used to modify the
+-- user name and (more likely) password.  Replaced values are not recoverable.
+update :: (UserInfo -> Maybe UserInfo) -> UserId -> Users -> Users
+update f (UserId uid) users = users { userIdMap = IntMap.update f uid (userIdMap users) }
 
 lookupId :: UserId -> Users -> Maybe UserInfo
 lookupId (UserId userId) users = IntMap.lookup userId (userIdMap users)

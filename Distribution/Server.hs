@@ -36,13 +36,19 @@ import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
 import qualified Distribution.Server.BulkImport as BulkImport
 import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
 
+import Distribution.Server.Auth.Crypt (newPasswd)
+import qualified Distribution.Server.Users.Users as Users
+import Distribution.Server.Auth.Types (PasswdPlain(..))
+import Distribution.Server.Users.Types (UserInfo(..), AccountStatus(..))
+import System.Random (newStdGen)
+
 import System.FilePath ((</>))
 import System.Directory
          ( createDirectoryIfMissing, doesDirectoryExist )
 import Control.Concurrent.MVar (MVar)
 import Data.Maybe; import Data.Version
 import Control.Monad.Trans
-import Control.Monad (when,msum,mzero)
+import Control.Monad (when,msum,mzero,liftM2,mplus)
 import Data.List (maximumBy, sortBy)
 import Data.Ord (comparing)
 import Data.ByteString.Lazy.Char8 (ByteString)
@@ -301,6 +307,30 @@ uploadPackage store cache host =
                      ok $ toResponse $ unlines warnings
              else forbidden $ toResponse "Package already exists."
 
+data ChangePassword = ChangePassword { first, second :: String } deriving (Eq, Ord, Show)
+instance FromData ChangePassword where
+	fromData = liftM2 ChangePassword (look "new" `mplus` return "") (look "new2" `mplus` return "")
+
+changePassword :: ServerPart Response
+changePassword =
+  methodSP POST $ do
+    state <- query GetPackagesState
+    let users = userDb state
+    uid <- Auth.hackageAuth users Nothing
+    let name = Users.idToName users uid
+    pwd <- getData >>= maybe (return $ ChangePassword "not" "valid") return
+    if (first pwd == second pwd && first pwd /= "")
+        then do gen <- liftIO newStdGen
+                let passwd = PasswdPlain (first pwd)
+                    auth = newPasswd gen passwd
+                    users' = Users.update (updateAccount auth) uid users
+                update $ UpdateUsers users'
+                ok $ toResponse "Password Changed"
+        else forbidden $ toResponse "Copies of new password do not match or is an invalid password (ex: blank)"
+  where
+  updateAccount auth (UserInfo n (Enabled _)) = Just $ UserInfo n (Enabled auth) 
+  updateAccount _ i = Just $ i
+
 buildReports :: BlobStorage -> [ServerPart Response]
 buildReports store =
   [ path $ \reportId -> msum
@@ -400,5 +430,7 @@ impl (Server store static _ cache host _) =
           ok $ toResponse $ Resource.IndexTarball (Cache.indexTarball cacheState)
       ]
   , dir "check" checkPackage
+  , dir "htpasswd" $ msum
+      [ changePassword ]
   , fileServe ["hackage.html"] static
   ]
