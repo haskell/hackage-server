@@ -218,11 +218,6 @@ insert pkg
                          return True
            Just{}  -> do return False
 
-updateUsers :: Users -> Update PackagesState ()
-updateUsers u = do
-    st <- State.get
-    State.put st { userDb = u }
-
 -- NOTE! overwrites any existing data
 bulkImport :: [PkgInfo] -> Users -> Update PackagesState ()
 bulkImport newIndex users = do
@@ -326,6 +321,14 @@ $(mkMethods ''PackagesState ['getPackagesState
                             ,'insert
                             ,'addReport
                             ,'addBuildLog
+
+                            -- User management
+                            ,'addUser
+                            ,'disableUser
+                            ,'enableUser
+                            ,'deleteUser
+                            ,'replaceUserAuth
+                            ,'lookupUserName
                             ])
 
 

@@ -38,6 +38,12 @@ import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
 import qualified Distribution.Server.BulkImport as BulkImport
 import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
 
+import qualified Distribution.Server.Users.Users as Users
+import qualified Distribution.Server.Users.Types as Users
+
+import Distribution.Server.Auth.Types (PasswdPlain(..))
+
+
 import System.FilePath ((</>))
 import System.Directory
          ( createDirectoryIfMissing, doesDirectoryExist )
@@ -317,16 +323,11 @@ changePassword =
     let name = Users.idToName users uid
     pwd <- getData >>= maybe (return $ ChangePassword "not" "valid") return
     if (first pwd == second pwd && first pwd /= "")
-        then do gen <- liftIO newStdGen
-                let passwd = PasswdPlain (first pwd)
-                    auth = newPasswd gen passwd
-                    users' = Users.update (updateAccount auth) uid users
-                update $ UpdateUsers users'
+        then do let passwd = PasswdPlain (first pwd)
+                auth <- newPasswd passwd
+                update $ ReplaceUserAuth uid auth
                 ok $ toResponse "Password Changed"
         else forbidden $ toResponse "Copies of new password do not match or is an invalid password (ex: blank)"
-  where
-  updateAccount auth (UserInfo n (Enabled _)) = Just $ UserInfo n (Enabled auth) 
-  updateAccount _ i = Just $ i
 
 buildReports :: BlobStorage -> [ServerPart Response]
 buildReports store =
@@ -426,8 +427,13 @@ impl (Server store static _ cache host _) =
           cacheState <- Cache.get cache
           ok $ toResponse $ Resource.IndexTarball (Cache.indexTarball cacheState)
       ]
+  , dir "admin" $ msum
+      [ admin cache host ]
+  , dir "check" checkPackage
+  , dir "htpasswd" $ msum
+      [ changePassword ]
   ,
-  fileServe ["hackage.html"] static
+  fileServe ["hackage.html","admin.html"] static
   ]
 
 guardAuth :: [GroupName] -> ServerPart ()
