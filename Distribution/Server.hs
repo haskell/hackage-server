@@ -152,12 +152,17 @@ bulkImport (Server store _ _ cache host _)
 
   update $ BulkImport pkgsInfo users
 
-  case admins of
-    Nothing -> return ()
+  admPerms <- case admins of
+    Nothing -> return []
     Just adminUsers -> do
         state <- query GetPackagesState
         uids <- either fail return $ lookupUsers (userDb state) adminUsers
-        update $ BulkImportPermissions $ map (\uid -> (uid, Administrator)) uids
+        return $ map (\uid -> (uid, Administrator)) uids
+
+  let uploadPerms
+          = map (\pkg -> (pkgUploadUser pkg, PackageMaintainer (packageName pkg))) pkgsInfo 
+
+  update $ BulkImportPermissions (admPerms ++ uploadPerms)
 
   Cache.put cache =<< stateToCache host =<< query GetPackagesState
 
@@ -254,10 +259,11 @@ handlePackageById store pkgid =
                    Pages.buildReportSummary pkgid reports
     ]
   , dir "documentation" $ msum
-    [ withPackage pkgid $ \_ _ _ ->
+    [ withPackage pkgid $ \state pkg _ ->
         methodSP POST $ do
---          authGroup <- query $ LookupUserGroups [Trustee, PackageMaintainer (pkgName pkgid)]
---          user <- Auth.hackageAuth (userDb state) Nothing -- (Just authGroup)
+          authGroup <- query $ LookupUserGroups
+                       [Trustee, PackageMaintainer (packageName pkg)]
+          user <- Auth.hackageAuth (userDb state) (Just authGroup)
           withRequest $ \Request{rqBody = Body body} -> do
               blob <- liftIO $ BlobStorage.add store body
               liftIO $ putStrLn $ "Putting to: " ++ show (display pkgid, blob)
@@ -318,8 +324,6 @@ checkPackage = methodSP POST $ do
 uploadPackage :: BlobStorage -> Cache.Cache -> URIAuth -> ServerPart Response
 uploadPackage store cache host =
   methodSP POST $ do
-    state <- query GetPackagesState
-    user <- Auth.hackageAuth (userDb state) Nothing
     withDataFn (lookInput "package") $ \input ->
           let {-withEntry = do str <- look "entry"
                                case simpleParse str of
@@ -327,9 +331,9 @@ uploadPackage store cache host =
                                  Just x  -> return (x::UploadLog.Entry)-}
               fileName    = (fromMaybe "noname" $ inputFilename input)
               fileContent = inputValue input
-          in msum [ anyRequest $ upload user fileName fileContent ]
+          in msum [ upload fileName fileContent ]
   where
-    upload user name content = do
+    upload name content = do
       --TODO: check if the package is in the index already, before we embark
       -- on writing the tarball into the store and validating etc.
       res <- liftIO $ BlobStorage.addWith store content
@@ -337,6 +341,11 @@ uploadPackage store cache host =
       case res of
         Left  err -> badRequest $ toResponse err
         Right (((pkg, pkgStr), warnings), blobId) -> do
+          state <- query GetPackagesState
+
+          let pkgExists = packageExists state pkg
+          user <- uploadUser state pkg
+
           (realUser, realTime) <- do now <- liftIO $ getCurrentTime
                                      return (user,now)
           success <- update $ Insert PkgInfo {
@@ -349,9 +358,30 @@ uploadPackage store cache host =
             pkgUploadOld  = []
           }
           if success
-             then do updateCache cache host
-                     ok $ toResponse $ unlines warnings
+             then do
+               -- Update the package maintainers group.
+               if not pkgExists then
+                   update $ AddToGroup (PackageMaintainer (packageName pkg)) realUser
+                else return ()
+               
+               updateCache cache host
+               ok $ toResponse $ unlines warnings
              else forbidden $ toResponse "Package already exists."
+
+    uploadUser state pkg = do
+          group <- uploadUserGroup state pkg
+          Auth.hackageAuth (userDb state) group
+
+    -- Auth group for uploading a package.
+    -- A new package may be uped by anyone
+    -- An existing package may only be uploaded by a maintainer of
+    -- that package or a trustee.
+    uploadUserGroup state pkg =          
+          if packageExists state pkg
+             then Just `fmap` (query $ LookupUserGroups [Trustee, PackageMaintainer (packageName pkg)])
+             else return Nothing
+
+    packageExists state pkg = not . null $ PackageIndex.lookupPackageName  (packageList state) (packageName pkg)
 
 data ChangePassword = ChangePassword { first, second :: String } deriving (Eq, Ord, Show)
 instance FromData ChangePassword where
