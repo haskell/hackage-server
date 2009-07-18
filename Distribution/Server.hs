@@ -5,6 +5,7 @@ module Distribution.Server (
    defaultConfig,
    run,
    bulkImport,
+   initState,
  ) where
 
 import Distribution.Package ( PackageIdentifier(..), Package(packageId)
@@ -132,22 +133,64 @@ run server = simpleHTTP conf $ msum (impl server)
     conf = nullConf { Happstack.Server.port = serverPort server }
 
 bulkImport :: Server
-           -> ByteString -> String -> Maybe ByteString -> Maybe String
+           -> ByteString  -- Index
+           -> String      -- Log
+           -> Maybe ByteString -- archive
+           -> Maybe String -- users
+           -> Maybe String -- admin users
            -> IO [UploadLog.Entry]
 bulkImport (Server store _ _ cache host _)
-           indexFile logFile archiveFile htPasswdFile = do
+           indexFile logFile archiveFile htPasswdFile adminsFile = do
   pkgIndex  <- either fail return (BulkImport.importPkgIndex indexFile)
   uploadLog <- either fail return (BulkImport.importUploadLog logFile)
   tarballs  <- BulkImport.importTarballs store archiveFile
   accounts  <- either fail return (BulkImport.importUsers htPasswdFile)
+  let admins = importAdminsList adminsFile
 
   (pkgsInfo, users, badLogEntries) <- either fail return
     (BulkImport.mergePkgInfo pkgIndex uploadLog tarballs accounts)
 
   update $ BulkImport pkgsInfo users
+
+  case admins of
+    Nothing -> return ()
+    Just adminUsers -> do
+        state <- query GetPackagesState
+        uids <- either fail return $ lookupUsers (userDb state) adminUsers
+        update $ BulkImportPermissions $ map (\uid -> (uid, Administrator)) uids
+
   Cache.put cache =<< stateToCache host =<< query GetPackagesState
 
   return badLogEntries
+
+ where
+   importAdminsList :: Maybe String -> Maybe [Users.UserName]
+   importAdminsList
+       = maybe Nothing (Just . map Users.UserName . lines)
+
+   lookupUsers users names = mapM lookup names
+    where lookup name = case Users.lookupName name users of
+           Nothing -> Left $ "User " ++ show name ++ " not found"
+           Just uid -> Right uid
+
+-- An alternative to a bulk import.
+-- Starts the server off to a sane initial state.
+initState ::  MonadIO m => Server -> m ()
+initState (Server _ _ _ cache host _) = do
+  -- clear off existing state
+  update $ BulkImport [] Users.empty
+  update $ BulkImportPermissions []
+
+  -- create default admin user
+  let userName = Users.UserName "admin"
+  userAuth <- newPasswd (PasswdPlain "admin")
+  result <- update $ AddUser userName userAuth
+
+  case result of
+    Just user -> update $ AddToGroup Administrator user
+    _ -> fail "Failed to create admin user!"
+
+  updateCache cache host
 
 updateCache :: MonadIO m => Cache.Cache -> URIAuth -> m ()
 updateCache cache host

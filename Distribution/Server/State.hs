@@ -227,6 +227,13 @@ bulkImport newIndex users = do
     userDb = users
   }
 
+-- overwrites existing permissions
+bulkImportPermissions :: [(UserId, GroupName)] -> Update Permissions ()
+bulkImportPermissions perms = do
+
+  State.put $ Permissions Map.empty
+  mapM_ (\(user, group) -> addToGroup group user) perms
+
 -- Returns 'Nothing' if the user name is in use
 addUser :: UserName -> UserAuth -> Update PackagesState (Maybe UserId)
 addUser userName auth = updateUsers' updateFn formatFn
@@ -313,7 +320,10 @@ $(mkMethods ''Documentation ['insertDocumentation
 $(mkMethods ''Permissions ['lookupUserGroup
                           ,'lookupUserGroups
                           ,'addToGroup
-                          ,'removeFromGroup])
+                          ,'removeFromGroup
+
+                          -- Import
+                          ,'bulkImportPermissions])
 
 $(mkMethods ''PackagesState ['getPackagesState
                             ,'listGroupMembers

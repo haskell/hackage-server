@@ -40,6 +40,7 @@ main = topHandler $ do
   maybeImports <- checkImportOpts
     (optImportIndex   opts) (optImportLog      opts)
     (optImportArchive opts) (optImportHtPasswd opts)
+    (optImportAdmins opts)
 
   defaults <- Distribution.Server.defaultConfig
 
@@ -58,11 +59,18 @@ main = topHandler $ do
   info "initialising..."
   server <- Distribution.Server.initialise config
 
+  -- only process optInitialize if not importing
   case maybeImports of
-    Nothing -> return ()
     Just imports -> do
       info "importing..."
       doBulkImport server imports
+
+    Nothing ->
+      if optInitialize opts
+        then do
+          info "creating initial state..."
+          Distribution.Server.initState server
+        else return ()
 
   info $ "ready, serving on '" ++ hostname ++ "' port " ++ show port
   forkIO $ Distribution.Server.run server
@@ -78,25 +86,28 @@ main = topHandler $ do
                -> return n
       _        -> fail $ "bad port number " ++ show str
 
-    checkImportOpts Nothing Nothing Nothing Nothing = return Nothing
+    checkImportOpts Nothing Nothing Nothing Nothing Nothing= return Nothing
+    checkImportOpts _ _ _ Nothing Just{} =
+        fail "Currently cannot import administrators witout users"
     checkImportOpts (Just indexFileName) (Just logFileName)
-                    archiveFile htpasswdFile = do
+                    archiveFile htpasswdFile adminsFile = do
       indexFile <- BS.readFile indexFileName
       logFile   <-    readFile logFileName
       tarballs  <- maybe (return Nothing) (fmap Just . BS.readFile) archiveFile
       htpasswd  <- maybe (return Nothing) (fmap Just . readFile) htpasswdFile
-      return (Just (indexFile, logFile, tarballs, htpasswd))
+      admins    <- maybe (return Nothing) (fmap Just . readFile) adminsFile
+      return (Just (indexFile, logFile, tarballs, htpasswd, admins))
 
-    checkImportOpts Nothing Nothing (Just _) _ =
+    checkImportOpts Nothing Nothing (Just _) _ _ =
       fail "Currently an archive file is only imported along with an index"
-    checkImportOpts Nothing Nothing _ (Just _) =
+    checkImportOpts Nothing Nothing _ (Just _) _ =
       fail "Currently an htpasswd file is only imported along with an index"
-    checkImportOpts _ _ _ _ =
+    checkImportOpts _ _ _ _ _ =
       fail "A package index and log file must be supplied together."
 
-    doBulkImport server (indexFile, logFile, tarballs, htpasswd) = do
+    doBulkImport server (indexFile, logFile, tarballs, htpasswd, admins) = do
       badLogEntries <- Distribution.Server.bulkImport server
-                         indexFile logFile tarballs htpasswd
+                         indexFile logFile tarballs htpasswd admins
       unless (null badLogEntries) $ putStr $
            "Warning: Upload log entries for non-existant packages:\n"
         ++ unlines (map display (sort badLogEntries))
@@ -130,6 +141,8 @@ data Options = Options {
     optImportLog     :: Maybe FilePath,
     optImportArchive :: Maybe FilePath,
     optImportHtPasswd:: Maybe FilePath,
+    optImportAdmins  :: Maybe FilePath,
+    optInitialize    :: Bool,
     optVersion       :: Bool,
     optHelp          :: Bool
   }
@@ -144,6 +157,8 @@ defaultOptions = Options {
     optImportLog     = Nothing,
     optImportArchive = Nothing,
     optImportHtPasswd= Nothing,
+    optImportAdmins  = Nothing,
+    optInitialize    = False,
     optVersion       = False,
     optHelp          = False
   }
@@ -178,6 +193,9 @@ optionDescriptions =
   , Option ['V'] ["version"]
       (NoArg (\opts -> opts { optVersion = True }))
       "Print version information"
+  , Option [] ["initialize"]
+      (NoArg (\opts -> opts { optInitialize = True }))
+      "Initialize the server state to a useful default"
   , Option [] ["port"]
       (ReqArg (\port opts -> opts { optPort = Just port }) "PORT")
       "Port number to serve on (default 5000)"
@@ -202,4 +220,7 @@ optionDescriptions =
   , Option [] ["import-accounts"]
       (ReqArg (\file opts -> opts { optImportHtPasswd = Just file }) "HTPASSWD")
       "Import an existing apache 'htpasswd' user account database file"
+  , Option [] ["import-admins"]
+      (ReqArg (\file opts -> opts { optImportAdmins = Just file}) "ADMINS")
+      "Import a text file containing a list a users which should be administrators"
   ]
