@@ -94,7 +94,8 @@ pkgBody pd =
 	propertySection pd ++
 	moduleSection pd ++
 	downloadSection pd ++
-	reportsSection pd
+	reportsSection pd ++
+        adminSection pd
   where	pkg = packageDescription (pdDescription pd)
 	short = synopsis pkg
 	pkgId = package pkg
@@ -149,6 +150,16 @@ reportsSection pd =
   where
     buildReports =
 		  [anchor ! [href (packageURL pkgid </> "buildreports")] << "Build reports"]
+    pkgid = package (packageDescription (pdDescription pd))
+
+adminSection :: PackageData -> [Html]
+adminSection pd =
+  [ h3 << "Administration"
+  , ulist << [li << admin]
+  ]
+  where
+    admin =
+        [anchor ! [href (packageNameURL pkgid </> "admin")] << "Administration"]
     pkgid = package (packageDescription (pdDescription pd))
 
 propertySection :: PackageData -> [Html]
@@ -388,6 +399,9 @@ maybeLast = listToMaybe . reverse
 -- | URL describing a package.
 packageURL :: PackageIdentifier -> URL
 packageURL pkgId = "/packages" </> display pkgId
+
+packageNameURL :: PackageIdentifier -> URL
+packageNameURL pkgId = "/packages" </> display (pkgName pkgId)
 
 -- | The name of the package file for a given package identifier
 packageFile :: PackageIdentifier -> URL

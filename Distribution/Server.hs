@@ -27,6 +27,7 @@ import Distribution.Server.Types
 import qualified Distribution.Server.ResourceTypes as Resource
 import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)
 import qualified Distribution.Server.Pages.Package as Pages
+import qualified Distribution.Server.Pages.PackageAdmin as Pages
 import qualified Distribution.Server.Pages.Recent  as Pages
 import qualified Distribution.Server.Pages.BuildReports as Pages
 import qualified Distribution.Server.Packages.Index as Packages.Index (write)
@@ -41,6 +42,7 @@ import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
 
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
+import qualified Distribution.Server.Users.Group as Groups
 
 import Distribution.Server.Auth.Types (PasswdPlain(..))
 
@@ -275,8 +277,58 @@ handlePackageById store pkgid =
             serveTarball ["index.html"] (display pkgid) rq tarball
       ]
     ]
+  , dir "admin" (packageAdmin pkgid)
   ]
-  
+
+packageAdmin :: PackageIdentifier -> ServerPart Response
+packageAdmin pkgid =
+    withPackage pkgid $ \state pkg _ -> do
+    guardAuth [Trustee, PackageMaintainer (packageName pkg)]
+    msum
+     [ methodSP GET $ do
+        maintainers <- packageMaintainers pkg
+        ok $ toResponse $ Resource.XHtml $
+           Pages.packageAdminPage maintainers pkg
+     , adminPost
+     ]
+
+ where
+   packageMaintainers pkg =
+    do
+      group <- query $ LookupUserGroup (PackageMaintainer (packageName pkg))
+      let uids = Groups.enumerate group
+      state <- query $ GetPackagesState
+      return $ lookupUserNames (userDb state) uids
+
+   -- this needs work, as it won't skip over deleted users.
+   lookupUserNames users = map (Users.idToName users)
+
+   lookUser = do
+     reqData <- getDataFn (look "user")
+     case reqData of
+       Nothing -> return Nothing
+       Just userString ->
+           query $ LookupUserName (Users.UserName userString)
+
+   adminPost :: ServerPart Response
+   adminPost = msum
+       [ dir "addMaintainer" $ methodSP POST $ do
+           userM <- lookUser
+           case userM of
+             Nothing -> ok $ toResponse "Not a valid user!"
+             Just user -> do
+                 update $ AddToGroup (PackageMaintainer (packageName pkgid)) user
+                 ok $ toResponse "Ok!"
+       , dir "removeMaintainer" $ methodSP POST $ do
+           userM <- lookUser
+           case userM of
+             Nothing -> ok $ toResponse "Not a valid user!"
+             Just user -> do
+                 update $ RemoveFromGroup (PackageMaintainer (packageName pkgid)) user
+                 ok $ toResponse "Ok!"
+       ]
+
+
 withPackage :: PackageIdentifier -> (PackagesState -> PkgInfo -> [PkgInfo] -> ServerPart Response) -> ServerPart Response
 withPackage pkgid action = do
   state <- query GetPackagesState
