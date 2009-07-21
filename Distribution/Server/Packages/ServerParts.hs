@@ -9,8 +9,9 @@ module Distribution.Server.Packages.ServerParts (
     buildReports,
   ) where
 
-import Distribution.Package ( PackageIdentifier(..), Package(packageId)
-                            , packageName, packageVersion, PackageName(..) )
+import Distribution.Package
+         ( PackageIdentifier(..), packageName, packageVersion
+         , Package(packageId) )
 import Distribution.Text    (simpleParse, display)
 import Happstack.Server hiding (port)
 import qualified Happstack.Server
@@ -25,8 +26,6 @@ import qualified  Distribution.Server.Packages.State as State
 import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import qualified Distribution.Server.Auth.Basic as Auth
-import qualified Distribution.Server.Auth.Types as Auth
-import qualified Distribution.Server.Auth.Crypt as Auth
 import Distribution.Server.Packages.Types
          ( PkgInfo(..) )
 import qualified Distribution.Server.ResourceTypes as Resource
@@ -42,37 +41,24 @@ import Distribution.Server.Util.BlobStorage (BlobStorage)
 import Distribution.Server.Util.Serve (serveTarball)
 import qualified Distribution.Server.BuildReport.BuildReport as BuildReport
 import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
-import qualified Distribution.Server.BulkImport as BulkImport
-import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
 
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Group as Groups
 
-import Distribution.Server.Auth.Types (PasswdPlain(..))
-
-
-import System.FilePath ((</>))
-import System.Directory
-         ( createDirectoryIfMissing, doesDirectoryExist )
-import System.Random (newStdGen)
-import Control.Concurrent.MVar (MVar)
-import Data.Maybe; import Data.Version
+import Data.Maybe
+import Data.Version
 import Control.Monad.Trans
-import Control.Monad (when,msum,mzero,liftM2,mplus)
+import Control.Monad (msum,mzero)
 import Data.List (maximumBy, sortBy)
 import Data.Ord (comparing)
-import Data.ByteString.Lazy.Char8 (ByteString)
 import Data.Time.Clock
 import Network.URI
-         ( URIAuth(URIAuth) )
-import Network.BSD
-         ( getHostName )
+         ( URIAuth )
 
 import qualified Data.ByteString.Lazy.Char8 as BS.Char8
 import qualified Codec.Compression.GZip as GZip
 
-import Paths_hackage_server (getDataDir)
 
 --TODO: switch to new cache mechanism:
 

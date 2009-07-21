@@ -5,66 +5,28 @@ module Distribution.Server.Users.ServerParts (
     guardAuth,
   ) where
 
-import Distribution.Package ( PackageIdentifier(..), Package(packageId)
-                            , packageName, packageVersion, PackageName(..) )
-import Distribution.Text    (simpleParse, display)
 import Happstack.Server hiding (port)
 import qualified Happstack.Server
 import Happstack.State hiding (Version)
 
 import Distribution.Server.Users.State as State
 import Distribution.Server.Packages.State as State
-import qualified  Distribution.Server.State as State
 import qualified Distribution.Server.Cache as Cache
-import qualified Distribution.Simple.PackageIndex as PackageIndex
 import qualified Distribution.Server.Auth.Basic as Auth
 import qualified Distribution.Server.Auth.Types as Auth
 import qualified Distribution.Server.Auth.Crypt as Auth
-import Distribution.Server.Packages.Types
-         ( PkgInfo(..) )
-import qualified Distribution.Server.ResourceTypes as Resource
-import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)
-import qualified Distribution.Server.Pages.Package as Pages
-import qualified Distribution.Server.Pages.PackageAdmin as Pages
-import qualified Distribution.Server.Pages.Recent  as Pages
-import qualified Distribution.Server.Pages.BuildReports as Pages
-import qualified Distribution.Server.Packages.Index as Packages.Index (write)
-import qualified Distribution.Server.PackageUpload.Unpack as Upload (unpackPackage)
-import qualified Distribution.Server.Util.BlobStorage as BlobStorage
-import Distribution.Server.Util.BlobStorage (BlobStorage)
-import Distribution.Server.Util.Serve (serveTarball)
-import qualified Distribution.Server.BuildReport.BuildReport as BuildReport
-import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
-import qualified Distribution.Server.BulkImport as BulkImport
-import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
 
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
-import qualified Distribution.Server.Users.Group as Groups
 
 import Distribution.Server.Auth.Types (PasswdPlain(..))
 
-
-import System.FilePath ((</>))
-import System.Directory
-         ( createDirectoryIfMissing, doesDirectoryExist )
 import System.Random (newStdGen)
-import Control.Concurrent.MVar (MVar)
-import Data.Maybe; import Data.Version
+import Data.Maybe
 import Control.Monad.Trans
-import Control.Monad (when,msum,mzero,liftM2,mplus)
-import Data.List (maximumBy, sortBy)
-import Data.Ord (comparing)
-import Data.ByteString.Lazy.Char8 (ByteString)
-import Data.Time.Clock
+import Control.Monad (msum,liftM2,mplus)
 import Network.URI
-         ( URIAuth(URIAuth) )
-import Network.BSD
-         ( getHostName )
-
-import qualified Data.ByteString.Lazy.Char8 as BS.Char8
-import qualified Codec.Compression.GZip as GZip
-
+         ( URIAuth )
 
 data ChangePassword = ChangePassword { first, second :: String } deriving (Eq, Ord, Show)
 instance FromData ChangePassword where

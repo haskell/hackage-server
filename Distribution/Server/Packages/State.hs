@@ -6,7 +6,7 @@ module Distribution.Server.Packages.State where
 import Distribution.Server.Instances ()
 import Distribution.Server.Users.State ()
 
-import Distribution.Package (PackageIdentifier,Package(packageId),PackageName)
+import Distribution.Package (PackageIdentifier,Package(packageId))
 import qualified Distribution.Simple.PackageIndex as PackageIndex
 import Distribution.Server.Packages.Types (PkgInfo(..))
 import qualified Distribution.Server.Users.Group as Group
@@ -25,7 +25,6 @@ import Happstack.Data.Serialize
 import qualified Data.Binary as Binary
 
 import Data.Typeable
-import Data.Maybe (fromMaybe)
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import Data.Monoid

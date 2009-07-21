@@ -5,19 +5,14 @@ module Distribution.Server.Users.State where
 
 import Distribution.Server.Instances ()
 
-import Distribution.Package (PackageIdentifier,Package(packageId),PackageName)
-import qualified Distribution.Simple.PackageIndex as PackageIndex
-import Distribution.Server.Packages.Types (PkgInfo(..))
+import Distribution.Package
+         ( PackageName )
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserGroup)
 import Distribution.Server.Users.Types (UserId,UserName,UserAuth)
 import Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users)
-import Distribution.Server.Util.BlobStorage (BlobId)
-import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
-import Distribution.Server.BuildReport.BuildReports (BuildReports,BuildReportId,BuildLog)
-import Distribution.Server.BuildReport.BuildReport (BuildReport)
 
 import Happstack.State
 import Happstack.Data.Serialize
@@ -27,8 +22,6 @@ import Data.Typeable
 import Data.Maybe (fromMaybe)
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
-import Data.Monoid
-import Data.Time.Clock (UTCTime(..))
 
 import qualified Data.Map as Map
 
