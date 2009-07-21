@@ -15,8 +15,8 @@ import System.Environment
          ( getArgs, getProgName )
 import System.Exit
          ( exitWith, ExitCode(..) )
-import Control.Exception.Extensible
-         ( handleJust, ErrorCall(ErrorCall) )
+import Control.Exception
+         ( handle, ErrorCall(ErrorCall) )
 import System.IO
          ( stdout, hFlush )
 import System.Console.GetOpt
@@ -113,11 +113,7 @@ main = topHandler $ do
         ++ unlines (map display (sort badLogEntries))
 
 topHandler :: IO a -> IO a
-topHandler =
-  handleJust (\err -> case err of
-                        ErrorCall e -> Just e
-                        _           -> Nothing)
-             die
+topHandler = handle $ \(ErrorCall msg) -> die msg
 
 die :: String -> IO a
 die msg = do

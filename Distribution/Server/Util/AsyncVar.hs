@@ -8,7 +8,7 @@ module Distribution.Server.Util.AsyncVar (
 import Control.Concurrent
 import Control.Concurrent.MVar
 import Control.Concurrent.Chan
-import Control.Exception.Extensible
+import Control.Exception
 
 import Prelude hiding (read)
 

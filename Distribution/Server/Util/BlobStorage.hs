@@ -27,7 +27,8 @@ import Data.Typeable (Typeable)
 import Data.Binary (Binary)
 import System.FilePath
          ( (</>) )
-import Control.Exception.Extensible (handle, throwIO, evaluate)
+import Control.Exception
+         ( handle, throwIO, evaluate )
 import System.Directory
 import System.IO
 
