@@ -11,7 +11,7 @@ import Distribution.Server.Pages.Package.HaddockParse	( parseHaddockParagraphs )
 import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Pages.Package.HaddockLex	( tokenise )
 import Distribution.Server.Pages.Template		( hackagePage )
-import Distribution.Server.Types
+import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Users.Types as Users
 
 import Distribution.Package

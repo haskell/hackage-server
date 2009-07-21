@@ -22,7 +22,7 @@ import qualified Distribution.Simple.PackageIndex as PackageIndex
 import qualified Distribution.Server.Auth.Basic as Auth
 import qualified Distribution.Server.Auth.Types as Auth
 import qualified Distribution.Server.Auth.Crypt as Auth
-import Distribution.Server.Types
+import Distribution.Server.Packages.Types
          ( PkgInfo(..) )
 import qualified Distribution.Server.ResourceTypes as Resource
 import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)

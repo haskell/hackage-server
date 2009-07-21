@@ -5,7 +5,7 @@ module Distribution.Server.Pages.Recent (
     recentFeed,
   ) where
 
-import Distribution.Server.Types
+import Distribution.Server.Packages.Types
          ( PkgInfo(..) )
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users)

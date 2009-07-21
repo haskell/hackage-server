@@ -9,7 +9,7 @@ import Distribution.Server.Pages.Package.HaddockLex	( tokenise )
 import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Pages.Package.ModuleForest ( moduleForest )
 import Distribution.Server.Pages.Template		( hackagePage )
-import Distribution.Server.Types (PkgInfo(..))
+import Distribution.Server.Packages.Types (PkgInfo(..))
 import qualified Distribution.Server.Users.Users as Users
 
 import qualified Distribution.Simple.PackageIndex as PackageIndex

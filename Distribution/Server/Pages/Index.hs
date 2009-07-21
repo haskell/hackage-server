@@ -9,7 +9,7 @@ import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
 				( flattenPackageDescription )
 import qualified Distribution.Simple.PackageIndex as PackageIndex
-import Distribution.Server.Types (PkgInfo(..))
+import Distribution.Server.Packages.Types (PkgInfo(..))
 import Distribution.Simple.Utils (comparing, equating)
 import Distribution.ModuleName (toFilePath)
 

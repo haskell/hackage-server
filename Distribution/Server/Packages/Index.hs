@@ -19,7 +19,7 @@ import qualified Codec.Archive.Tar.Entry as Tar
          ( Entry(..), Ownership(..) )
 import qualified Distribution.Server.Util.Index as PackageIndex
 
-import Distribution.Server.Types
+import Distribution.Server.Packages.Types
          ( PkgInfo(..) )
 import qualified Distribution.Server.Users.Users as Users
          ( Users, idToName )

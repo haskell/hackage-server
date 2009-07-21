@@ -28,7 +28,7 @@ import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
 import qualified Distribution.Server.Auth.HtPasswdDb as HtPasswdDb
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
-import Distribution.Server.Types (PkgInfo(..))
+import Distribution.Server.Packages.Types (PkgInfo(..))
 
 import Distribution.Package
          ( PackageIdentifier, Package(packageId) )

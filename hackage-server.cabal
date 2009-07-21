@@ -45,6 +45,7 @@ executable hackage-server
     Distribution.Server.Cache
     Distribution.Server.Instances
     Distribution.Server.Packages.Index
+    Distribution.Server.Packages.Types
     Distribution.Server.PackageUpload.Unpack
     Distribution.Server.Pages.BuildReports
     Distribution.Server.Pages.Index
@@ -57,7 +58,6 @@ executable hackage-server
     Distribution.Server.Pages.Template
     Distribution.Server.ResourceTypes
     Distribution.Server.State
-    Distribution.Server.Types
     Distribution.Server.Users.Group
     Distribution.Server.Users.Types
     Distribution.Server.Users.Users
