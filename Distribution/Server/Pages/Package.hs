@@ -32,7 +32,7 @@ import Data.Monoid  ( mempty )
 import Data.Map			( Map )
 import qualified Data.Map as Map
 import Data.Ord			( comparing )
-import System.FilePath          ( (</>) )
+import System.FilePath.Posix    ( (</>) )
 import System.Locale            ( defaultTimeLocale )
 import Data.Time.Format         ( formatTime )
 
