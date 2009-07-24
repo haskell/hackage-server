@@ -193,7 +193,7 @@ bulkImport (Server store _ _ cache host _)
 
   update $ BulkImportPermissions (admPerms ++ uploadPerms)
 
-  Cache.put cache =<< stateToCache host =<< query GetPackagesState
+  updateCache cache host
 
   return badLogEntries
 
