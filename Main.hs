@@ -53,27 +53,21 @@ main = topHandler $ do
         confStaticDir = staticDir
       }
 
+  -- Do some pre-init sanity checks
   hasSavedState <- Distribution.Server.hasSavedState config
   checkAccidentalDataLoss hasSavedState maybeImports opts
   checkBlankServerState   hasSavedState maybeImports opts
 
+  -- Startup the server, including the data store
   withServer config $ \server -> do
 
-    -- only process optInitialize if not importing
-    case maybeImports of
-      Just imports -> do
-        info "importing..."
-        doBulkImport server imports
+    -- Import data or set initial data (ie. admin user account) if requested
+    handleInitialDbstate server maybeImports opts
 
-      Nothing ->
-        if optInitialize opts
-          then do
-            info "creating initial state..."
-            Distribution.Server.initState server
-          else return ()
-
+    -- setup a Unix signal handler so we can checkpoint the server state
     withCheckpointHandler server $ do
 
+      -- Go!
       info $ "ready, serving on '" ++ hostname ++ "' port " ++ show port
       Distribution.Server.run server
 
@@ -158,12 +152,20 @@ main = topHandler $ do
 
     -- Importing
     --
-    doBulkImport server (indexFile, logFile, tarballs, htpasswd, admins) = do
+    handleInitialDbstate server _maybeImports opts | optInitialize opts = do
+      info "creating initial state..."
+      Distribution.Server.initState server
+
+    handleInitialDbstate server
+      (Just (indexFile, logFile, tarballs, htpasswd, admins)) _opts = do
+      info "importing..."
       badLogEntries <- Distribution.Server.bulkImport server
                          indexFile logFile tarballs htpasswd admins
       unless (null badLogEntries) $ putStr $
            "Warning: Upload log entries for non-existant packages:\n"
         ++ unlines (map display (sort badLogEntries))
+
+    handleInitialDbstate _ _ _ = return ()
 
 topHandler :: IO a -> IO a
 topHandler = handle $ \(ErrorCall msg) -> die msg
