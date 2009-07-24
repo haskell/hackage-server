@@ -5,17 +5,21 @@ import Distribution.Server (Config(..), Server)
 
 import Distribution.Text
          ( display )
+import Distribution.Simple.Utils
+         ( wrapText )
 
 import System.Environment
          ( getArgs, getProgName )
 import System.Exit
          ( exitWith, ExitCode(..) )
 import Control.Exception
-         ( handle, ErrorCall(ErrorCall), bracket )
+         ( bracket )
 import System.Posix.Signals as Signal
          ( installHandler, Handler(Catch), userDefinedSignal1 )
 import System.IO
-         ( stdout, hFlush )
+         ( stdout, stderr, hFlush, hPutStr )
+import System.IO.Error
+         ( ioeGetErrorString )
 import System.Console.GetOpt
          ( OptDescr(..), ArgDescr(..), ArgOrder(..), getOpt, usageInfo )
 import Data.List
@@ -168,12 +172,17 @@ main = topHandler $ do
     handleInitialDbstate _ _ _ = return ()
 
 topHandler :: IO a -> IO a
-topHandler = handle $ \(ErrorCall msg) -> die msg
+topHandler prog = catch prog handle
+  where
+    handle ioe = do
+      hFlush stdout
+      pname <- getProgName
+      let message = wrapText (pname ++ ": " ++ ioeGetErrorString ioe)
+      hPutStr stderr message
+      exitWith (ExitFailure 1)
 
 die :: String -> IO a
-die msg = do
-  info msg
-  exitWith (ExitFailure 1)
+die msg = ioError (userError msg)
 
 info :: String -> IO ()
 info msg = do
