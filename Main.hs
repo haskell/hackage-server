@@ -21,7 +21,7 @@ import System.Console.GetOpt
 import Data.List
          ( sort, intersperse )
 import Data.Maybe
-         ( fromMaybe )
+         ( fromMaybe, isJust )
 import Control.Monad
          ( unless )
 import qualified Data.ByteString.Lazy.Char8 as BS
@@ -52,6 +52,10 @@ main = topHandler $ do
         confStateDir  = stateDir,
         confStaticDir = staticDir
       }
+
+  hasSavedState <- Distribution.Server.hasSavedState config
+  checkAccidentalDataLoss hasSavedState maybeImports opts
+  checkBlankServerState   hasSavedState maybeImports opts
 
   withServer config $ \server -> do
 
@@ -129,6 +133,28 @@ main = topHandler $ do
       fail "Currently an htpasswd file is only imported along with an index"
     checkImportOpts _ _ _ _ _ =
       fail "A package index and log file must be supplied together."
+
+    -- Sanity checking
+    --
+    checkAccidentalDataLoss hasSavedState maybeImports opts
+      | (optInitialize opts || isJust maybeImports)
+     && hasSavedState = die $
+            "The server already has an initialised database!!\n"
+         ++ "If you really *really* intend to completely reset the "
+         ++ "whole database then use the additional flag "
+         ++ "--obliterate-all-existing-data"
+      | otherwise = return ()
+
+    checkBlankServerState   hasSavedState maybeImports opts
+      | not (optInitialize opts || isJust maybeImports)
+     && not hasSavedState = die $
+            "There is no existing server state.\nYou can either import "
+         ++ "existing data using the various --import-* flags, or start with "
+         ++ "an empty state using --initialise. Either way, we have to make "
+         ++ "sure that there is at least one admin user account, otherwise "
+         ++ "you'll not be able to administer your shiny new hackage server!"
+      | otherwise = return ()
+
 
     -- Importing
     --
