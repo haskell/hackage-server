@@ -4,6 +4,7 @@ module Distribution.Server (
    initialise,
    Config(..),
    defaultConfig,
+   hasSavedState,
 
    run,
    shutdown,
@@ -68,6 +69,10 @@ data Config = Config {
   confStaticDir :: FilePath
 }
 
+confHappsStateDir, confBlobStoreDir :: Config -> FilePath
+confHappsStateDir config = confStateDir config </> "db"
+confBlobStoreDir  config = confStateDir config </> "blobs"
+
 defaultConfig :: IO Config
 defaultConfig = do
   hostName <- getHostName
@@ -88,8 +93,11 @@ data Server = Server {
   serverPort       :: Int
 }
 
+hasSavedState :: Config -> IO Bool
+hasSavedState = doesDirectoryExist . confHappsStateDir
+
 initialise :: Config -> IO Server
-initialise (Config hostName portNum stateDir staticDir) = do
+initialise config@(Config hostName portNum stateDir staticDir) = do
 
   exists <- doesDirectoryExist staticDir
   when (not exists) $
@@ -112,8 +120,8 @@ initialise (Config hostName portNum stateDir staticDir) = do
   }
 
   where
-    happsStateDir = stateDir </> "db"
-    blobStoreDir  = stateDir </> "blobs"
+    happsStateDir = confHappsStateDir config
+    blobStoreDir  = confBlobStoreDir  config
     hostURI       = URIAuth "" hostName portStr
       where portStr | portNum == 80 = ""
                     | otherwise     = ':' : show portNum
