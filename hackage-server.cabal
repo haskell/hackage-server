@@ -87,6 +87,7 @@ executable hackage-server
     containers >= 0.1,
     pretty >= 1.0,
     network >= 2.1,
+    unix < 2.4,
     mtl >= 1.1,
     binary >= 0.4,
     pureMD5 >= 0.2,

@@ -12,6 +12,8 @@ import System.Exit
          ( exitWith, ExitCode(..) )
 import Control.Exception
          ( handle, ErrorCall(ErrorCall), bracket )
+import System.Posix.Signals as Signal
+         ( installHandler, Handler(Catch), userDefinedSignal1 )
 import System.IO
          ( stdout, hFlush )
 import System.Console.GetOpt
@@ -66,8 +68,10 @@ main = topHandler $ do
             Distribution.Server.initState server
           else return ()
 
-    info $ "ready, serving on '" ++ hostname ++ "' port " ++ show port
-    Distribution.Server.run server
+    withCheckpointHandler server $ do
+
+      info $ "ready, serving on '" ++ hostname ++ "' port " ++ show port
+      Distribution.Server.run server
 
   where
     withServer :: Config -> (Server -> IO ()) -> IO ()
@@ -84,6 +88,20 @@ main = topHandler $ do
           -- Distribution.Server.checkpoint server
           info "shutting down..."
           Distribution.Server.shutdown server
+
+    -- Set a Unix signal handler for SIG USR1 to create a state checkpoint.
+    -- Useage:
+    -- > kill -USR1 $the_pid
+    --
+    withCheckpointHandler :: Server -> IO () -> IO ()
+    withCheckpointHandler server action =
+        bracket (setHandler handler) setHandler (\_ -> action)
+      where
+        handler = Signal.Catch $ do
+          info "writing checkpoint..."
+          Distribution.Server.checkpoint server
+        setHandler h =
+          Signal.installHandler Signal.userDefinedSignal1 h Nothing
 
     -- Option handling:
     --
