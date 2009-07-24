@@ -1,22 +1,17 @@
 module Main (main) where
 
 import qualified Distribution.Server
-import Distribution.Server (Config(..)) -- serverTxControl))
+import Distribution.Server (Config(..), Server)
 
 import Distribution.Text
          ( display )
-
-import Happstack.State.Control
-         ( waitForTermination ) -- , createCheckpoint )
-import Control.Concurrent
-         ( forkIO )
 
 import System.Environment
          ( getArgs, getProgName )
 import System.Exit
          ( exitWith, ExitCode(..) )
 import Control.Exception
-         ( handle, ErrorCall(ErrorCall) )
+         ( handle, ErrorCall(ErrorCall), bracket )
 import System.IO
          ( stdout, hFlush )
 import System.Console.GetOpt
@@ -56,8 +51,7 @@ main = topHandler $ do
         confStaticDir = staticDir
       }
 
-  info "initialising..."
-  server <- Distribution.Server.initialise config
+  withServer config $ \server -> do
 
   -- only process optInitialize if not importing
   case maybeImports of
@@ -73,13 +67,26 @@ main = topHandler $ do
         else return ()
 
   info $ "ready, serving on '" ++ hostname ++ "' port " ++ show port
-  forkIO $ Distribution.Server.run server
-
-  waitForTermination
-  --info $ "committing checkpoint"
-  --createCheckpoint (serverTxControl server)
+  Distribution.Server.run server
 
   where
+    withServer :: Config -> (Server -> IO ()) -> IO ()
+    withServer config = bracket initialise shutdown
+      where
+        initialise = do
+          info "initialising..."
+          Distribution.Server.initialise config
+
+        shutdown server = do
+          -- TODO: we probably do not want to write a checkpint every time,
+          -- perhaps only after a certain amount of time or number of updates.
+          -- info "writing checkpoint..."
+          -- Distribution.Server.checkpoint server
+          info "shutting down..."
+          Distribution.Server.shutdown server
+
+    -- Option handling:
+    --
     checkPortOpt defaults Nothing    = return (confPortNum defaults)
     checkPortOpt _        (Just str) = case reads str of
       [(n,"")]  | n >= 1 && n <= 65535
@@ -105,6 +112,8 @@ main = topHandler $ do
     checkImportOpts _ _ _ _ _ =
       fail "A package index and log file must be supplied together."
 
+    -- Importing
+    --
     doBulkImport server (indexFile, logFile, tarballs, htpasswd, admins) = do
       badLogEntries <- Distribution.Server.bulkImport server
                          indexFile logFile tarballs htpasswd admins
