@@ -27,6 +27,7 @@ import qualified Data.Binary as Binary
 import Data.Typeable
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
+import Data.Maybe (isJust)
 import Data.Monoid
 import Data.Time.Clock (UTCTime(..))
 
@@ -175,16 +176,16 @@ addUser userName auth = updateUsers' updateFn formatFn
 
 -- Disables the indicated user
 disableUser :: UserId -> Update PackagesState Bool
-disableUser userId = updateUsers $ Users.disable userId
+disableUser = updateUsers . Users.disable
 
 -- Enables the indicated previously disabled user
 enableUser :: UserId -> Update PackagesState Bool
-enableUser userId = updateUsers $ Users.enable userId
+enableUser = updateUsers . Users.enable
 
 -- Deletes the indicated user. Cannot be re-enabled. The associated
 -- user name is available for re-use 
 deleteUser :: UserId -> Update PackagesState Bool
-deleteUser userId = updateUsers $ Users.delete userId
+deleteUser = updateUsers . Users.delete
 
 -- Re-set the user autenication info
 replaceUserAuth :: UserId -> UserAuth -> Update PackagesState Bool
@@ -195,10 +196,9 @@ replaceUserAuth userId auth
 
 -- updates the user db with a simpler function
 updateUsers :: (Users -> Maybe Users) -> Update PackagesState Bool
-updateUsers update = updateUsers' updateFn formatFn
+updateUsers update = updateUsers' updateFn isJust
 
     where updateFn users = fmap (swap . (,) ()) $ update users
-          formatFn = maybe False (const True)
           swap (x,y) = (y,x)
 
 -- Helper function for updating the users db

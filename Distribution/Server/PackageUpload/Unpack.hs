@@ -156,7 +156,7 @@ warn :: String -> UploadMonad ()
 warn msg = tell [msg]
 
 runUploadMonad :: UploadMonad a -> Either String (a, [String])
-runUploadMonad m = runWriterT m
+runUploadMonad = runWriterT
 
 -- | Registered top-level nodes in the class hierarchy.
 allocatedTopLevelNodes :: [String]
@@ -172,7 +172,7 @@ selectEntries select = extract []
   where
     extract _        (Tar.Fail err)           = fail err
     extract selected  Tar.Done                = return selected
-    extract selected (Tar.Next entry entries) = do
+    extract selected (Tar.Next entry entries) =
       case select entry of
         Nothing    -> extract          selected  entries
         Just saved -> extract (saved : selected) entries

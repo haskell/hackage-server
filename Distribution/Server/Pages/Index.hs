@@ -94,7 +94,7 @@ formatPkg pkg = li << (pkgLink : toHtml (" " ++ ptype) : defn)
 
 categories :: PackageDescription -> [Category]
 categories pkg
-  | not (null cats) && not (cats `elem` blacklist) = split cats
+  | not (null cats) && (cats `notElem` blacklist) = split cats
   | not (null top_level_nodes) && length top_level_nodes < 3 &&
 	all (`elem` allocatedTopLevelNodes) top_level_nodes =
 	map Category top_level_nodes

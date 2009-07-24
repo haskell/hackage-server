@@ -53,7 +53,7 @@ import System.Directory
 import Control.Concurrent.MVar (MVar)
 import Data.Maybe
 import Control.Monad.Trans
-import Control.Monad (when,msum)
+import Control.Monad (unless,msum)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Network.URI
          ( URIAuth(URIAuth) )
@@ -114,7 +114,7 @@ initialise :: Config -> IO Server
 initialise config@(Config hostName portNum stateDir staticDir) = do
 
   exists <- doesDirectoryExist staticDir
-  when (not exists) $
+  unless exists $
     fail $ "The static data directory " ++ staticDir ++ " does not exist. It "
         ++ "should contain the hackage server's static html and other files."
 
@@ -234,7 +234,7 @@ legacySupport = msum
         [ let dirName = display pkgid ++ ".tar.gz"
               pkgid = PackageIdentifier {pkgName = PackageName name, pkgVersion = version}
           in dir dirName $ msum
-             [ methodSP GET $ do
+             [ methodSP GET $
                  movedPermanently ("/packages/"++ display pkgid ++ "/") (toResponse "")
              ]
         ]]

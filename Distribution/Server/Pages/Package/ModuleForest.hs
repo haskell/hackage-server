@@ -24,7 +24,7 @@ data ModuleTree = Node String       -- ^ Part of module name
 --------------------------------------------------------------------------------
 
 mkModuleForest :: [ModuleName] -> ModuleForest
-mkModuleForest = foldr (\m -> addToForest (components m)) []
+mkModuleForest = foldr (addToForest . components) []
 
 addToForest :: [String] -> ModuleForest -> ModuleForest
 addToForest [] ts = ts

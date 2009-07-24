@@ -49,7 +49,7 @@ import qualified Distribution.Server.Users.Group as Groups
 import Data.Maybe
 import Data.Version
 import Control.Monad.Trans
-import Control.Monad (msum,mzero)
+import Control.Monad (msum,mzero,unless)
 import Data.List (maximumBy, sortBy)
 import Data.Ord (comparing)
 import Data.Time.Clock
@@ -142,7 +142,7 @@ packageAdmin pkgid =
     do
       group <- query $ LookupUserGroup (PackageMaintainer (packageName pkg))
       let uids = Groups.enumerate group
-      state <- query $ GetPackagesState
+      state <- query GetPackagesState
       return $ lookupUserNames (userDb state) uids
 
    -- this needs work, as it won't skip over deleted users.
@@ -220,7 +220,7 @@ checkPackage = methodSP POST $ do
 
 uploadPackage :: BlobStorage -> Cache.Cache -> URIAuth -> ServerPart Response
 uploadPackage store cache host =
-  methodSP POST $ do
+  methodSP POST $
     withDataFn (lookInput "package") $ \input ->
           let {-withEntry = do str <- look "entry"
                                case simpleParse str of
@@ -243,7 +243,7 @@ uploadPackage store cache host =
           let pkgExists = packageExists state pkg
           user <- uploadUser state pkg
 
-          (realUser, realTime) <- do now <- liftIO $ getCurrentTime
+          (realUser, realTime) <- do now <- liftIO getCurrentTime
                                      return (user,now)
           success <- update $ Insert PkgInfo {
             pkgInfoId     = packageId pkg,
@@ -257,9 +257,8 @@ uploadPackage store cache host =
           if success
              then do
                -- Update the package maintainers group.
-               if not pkgExists then
+               unless pkgExists $
                    update $ AddToGroup (PackageMaintainer (packageName pkg)) realUser
-                else return ()
                
                updateCache cache host
                ok $ toResponse $ unlines warnings
@@ -275,7 +274,7 @@ uploadPackage store cache host =
     -- that package or a trustee.
     uploadUserGroup state pkg =          
           if packageExists state pkg
-             then Just `fmap` (query $ LookupUserGroups [Trustee, PackageMaintainer (packageName pkg)])
+             then Just `fmap` query (LookupUserGroups [Trustee, PackageMaintainer (packageName pkg)])
              else return Nothing
 
     packageExists state pkg = not . null $ PackageIndex.lookupPackageName  (packageList state) (packageName pkg)

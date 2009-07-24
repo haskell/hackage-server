@@ -241,7 +241,7 @@ showFields = [
 	("Category",	toHtml . category),
 	("Home page",	mkRef . homepage),
 	("Bug tracker",	mkRef . bugReports),
-	("Executables",	commaList . map toHtml . map exeName . executables)
+	("Executables",	commaList . map (toHtml . exeName) . executables)
 	]
   where mkRef "" = noHtml
 	mkRef url = anchor ! [href url] << url
