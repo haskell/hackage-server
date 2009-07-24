@@ -53,21 +53,21 @@ main = topHandler $ do
 
   withServer config $ \server -> do
 
-  -- only process optInitialize if not importing
-  case maybeImports of
-    Just imports -> do
-      info "importing..."
-      doBulkImport server imports
+    -- only process optInitialize if not importing
+    case maybeImports of
+      Just imports -> do
+        info "importing..."
+        doBulkImport server imports
 
-    Nothing ->
-      if optInitialize opts
-        then do
-          info "creating initial state..."
-          Distribution.Server.initState server
-        else return ()
+      Nothing ->
+        if optInitialize opts
+          then do
+            info "creating initial state..."
+            Distribution.Server.initState server
+          else return ()
 
-  info $ "ready, serving on '" ++ hostname ++ "' port " ++ show port
-  Distribution.Server.run server
+    info $ "ready, serving on '" ++ hostname ++ "' port " ++ show port
+    Distribution.Server.run server
 
   where
     withServer :: Config -> (Server -> IO ()) -> IO ()
