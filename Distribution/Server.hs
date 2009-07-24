@@ -266,11 +266,10 @@ impl (Server store static _ cache host _) =
           cacheState <- Cache.get cache
           ok $ toResponse $ Resource.IndexTarball (Cache.indexTarball cacheState)
       ]
-  , dir "admin" $ msum
-      [ admin cache host ]
+  , dir "admin" (admin cache host)
   , dir "check" checkPackage
   , dir "htpasswd" $ msum
       [ changePassword ]
   ,
-  fileServe ["hackage.html","admin.html"] static
+  fileServe ["hackage.html"] static
   ]
