@@ -1,9 +1,14 @@
 module Distribution.Server (
    Server(),
+
    initialise,
    Config(..),
    defaultConfig,
+
    run,
+   shutdown,
+   checkpoint,
+
    bulkImport,
    initState,
  ) where
@@ -120,6 +125,12 @@ run :: Server -> IO ()
 run server = simpleHTTP conf $ msum (impl server)
   where
     conf = nullConf { Happstack.Server.port = serverPort server }
+
+shutdown :: Server -> IO ()
+shutdown server = closeTxControl (serverTxControl server)
+
+checkpoint :: Server -> IO ()
+checkpoint server = createCheckpoint (serverTxControl server)
 
 bulkImport :: Server
            -> ByteString  -- Index
