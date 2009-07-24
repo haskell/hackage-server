@@ -1,15 +1,17 @@
 module Distribution.Server (
-   Server(),
-
+   -- * Server control
+   Server,
    initialise,
-   Config(..),
-   defaultConfig,
-   hasSavedState,
-
    run,
    shutdown,
    checkpoint,
 
+   -- * Server configuration
+   Config(..),
+   defaultConfig,
+   hasSavedState,
+
+   -- * First time initialisation of the database
    bulkImport,
    initState,
  ) where
@@ -93,16 +95,28 @@ data Server = Server {
   serverPort       :: Int
 }
 
+-- | If we made a server instance from this 'Config', would we find some
+-- existing saved state or would it be a totally clean instance with no
+-- existing state.
+--
 hasSavedState :: Config -> IO Bool
 hasSavedState = doesDirectoryExist . confHappsStateDir
 
+-- | Make a server instance from the server configuration.
+--
+-- This does not yet run the server (see 'run') but it does setup the server
+-- state system, making it possible to import data.
+--
+-- Note: the server instance must eventually be 'shutdown' or you'll end up
+-- with stale lock files.
+--
 initialise :: Config -> IO Server
 initialise config@(Config hostName portNum stateDir staticDir) = do
 
   exists <- doesDirectoryExist staticDir
   when (not exists) $
-    fail $ "The directory '" ++ staticDir ++ "' does not exist. It should "
-        ++ "contain the hackage server's static html and other files."
+    fail $ "The static data directory " ++ staticDir ++ " does not exist. It "
+        ++ "should contain the hackage server's static html and other files."
 
   createDirectoryIfMissing False stateDir
   store   <- BlobStorage.open blobStoreDir
@@ -129,14 +143,21 @@ initialise config@(Config hostName portNum stateDir staticDir) = do
 hackageEntryPoint :: Proxy HackageEntryPoint
 hackageEntryPoint = Proxy
 
+-- | Actually run the server, i.e. start accepting client http connections.
+--
 run :: Server -> IO ()
 run server = simpleHTTP conf $ msum (impl server)
   where
     conf = nullConf { Happstack.Server.port = serverPort server }
 
+-- | Perform a clean shutdown of the server.
+--
 shutdown :: Server -> IO ()
 shutdown server = closeTxControl (serverTxControl server)
 
+-- | Write out a checkpoint of the server state. This makes recovery quicker
+-- because fewer logged transactions have to be replayed.
+--
 checkpoint :: Server -> IO ()
 checkpoint server = createCheckpoint (serverTxControl server)
 
