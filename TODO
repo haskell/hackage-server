@@ -1,10 +1,8 @@
 
 Users and auth
- * Allow creating new users, updating passwds
  * Allow importing user auth info later
  * Digest authentication
- * Restrict uploads to package group
- * Admin and collection maintainer users
+ * Collection maintainer users
  * Allow editing per-package groups
 
 Packages
