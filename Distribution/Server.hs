@@ -115,8 +115,7 @@ initialise config@(Config hostName portNum stateDir staticDir) = do
 
   exists <- doesDirectoryExist staticDir
   when (not exists) $
-    fail $ "The static data directory " ++ staticDir ++ " does not exist. It "
-        ++ "should contain the hackage server's static html and other files."
+    fail $ "The static files directory " ++ staticDir ++ " does not exist."
 
   createDirectoryIfMissing False stateDir
   store   <- BlobStorage.open blobStoreDir

@@ -20,6 +20,8 @@ import System.IO
          ( stdout, stderr, hFlush, hPutStr )
 import System.IO.Error
          ( ioeGetErrorString )
+import System.Directory
+         ( doesDirectoryExist )
 import System.Console.GetOpt
          ( OptDescr(..), ArgDescr(..), ArgOrder(..), getOpt, usageInfo )
 import Data.List
@@ -27,7 +29,7 @@ import Data.List
 import Data.Maybe
          ( fromMaybe, isJust )
 import Control.Monad
-         ( unless )
+         ( unless, when )
 import qualified Data.ByteString.Lazy.Char8 as BS
 
 import Paths_hackage_server (version)
@@ -56,6 +58,16 @@ main = topHandler $ do
         confStateDir  = stateDir,
         confStaticDir = staticDir
       }
+
+  -- Be helpful to people running from the build tree
+  exists <- doesDirectoryExist staticDir
+  when (not exists) $
+    if isJust (optStaticDir opts)
+      then fail $ "The given static files directory " ++ staticDir
+               ++ " does not exist."
+      else fail $ "It looks like you are running the server without installing "
+               ++ "it. That is fine but you will have to give the location of "
+               ++ "the static html files with the --static-dir flag."
 
   -- Do some pre-init sanity checks
   hasSavedState <- Distribution.Server.hasSavedState config
