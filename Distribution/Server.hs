@@ -81,7 +81,7 @@ defaultConfig = do
   dataDir  <- getDataDir
   return Config {
     confHostName  = hostName,
-    confPortNum   = 5000,
+    confPortNum   = 8080,
     confStateDir  = "state",
     confStaticDir = dataDir </> "static"
   }

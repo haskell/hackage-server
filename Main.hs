@@ -258,7 +258,7 @@ optionDescriptions =
       "Initialize the server state to a useful default"
   , Option [] ["port"]
       (ReqArg (\port opts -> opts { optPort = Just port }) "PORT")
-      "Port number to serve on (default 5000)"
+      "Port number to serve on (default 8080)"
   , Option [] ["host"]
       (ReqArg (\host opts -> opts { optHost = Just host }) "NAME")
       "Server's host name (defaults to machine name)"
