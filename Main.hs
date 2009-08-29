@@ -147,7 +147,7 @@ main = topHandler $ do
     -- Sanity checking
     --
     checkAccidentalDataLoss hasSavedState maybeImports opts
-      | (optInitialize opts || isJust maybeImports)
+      | (optInitialise opts || isJust maybeImports)
      && hasSavedState = die $
             "The server already has an initialised database!!\n"
          ++ "If you really *really* intend to completely reset the "
@@ -156,7 +156,7 @@ main = topHandler $ do
       | otherwise = return ()
 
     checkBlankServerState   hasSavedState maybeImports opts
-      | not (optInitialize opts || isJust maybeImports)
+      | not (optInitialise opts || isJust maybeImports)
      && not hasSavedState = die $
             "There is no existing server state.\nYou can either import "
          ++ "existing data using the various --import-* flags, or start with "
@@ -168,7 +168,7 @@ main = topHandler $ do
 
     -- Importing
     --
-    handleInitialDbstate server _maybeImports opts | optInitialize opts = do
+    handleInitialDbstate server _maybeImports opts | optInitialise opts = do
       info "creating initial state..."
       Distribution.Server.initState server
 
@@ -214,7 +214,7 @@ data Options = Options {
     optImportArchive :: Maybe FilePath,
     optImportHtPasswd:: Maybe FilePath,
     optImportAdmins  :: Maybe FilePath,
-    optInitialize    :: Bool,
+    optInitialise    :: Bool,
     optVersion       :: Bool,
     optHelp          :: Bool
   }
@@ -230,7 +230,7 @@ defaultOptions = Options {
     optImportArchive = Nothing,
     optImportHtPasswd= Nothing,
     optImportAdmins  = Nothing,
-    optInitialize    = False,
+    optInitialise    = False,
     optVersion       = False,
     optHelp          = False
   }
@@ -265,8 +265,8 @@ optionDescriptions =
   , Option ['V'] ["version"]
       (NoArg (\opts -> opts { optVersion = True }))
       "Print version information"
-  , Option [] ["initialize"]
-      (NoArg (\opts -> opts { optInitialize = True }))
+  , Option [] ["initialise"]
+      (NoArg (\opts -> opts { optInitialise = True }))
       "Initialize the server state to a useful default"
   , Option [] ["port"]
       (ReqArg (\port opts -> opts { optPort = Just port }) "PORT")
