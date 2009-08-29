@@ -19,7 +19,7 @@ import Foreign.C (CString, withCAString, peekCAString)
 newPasswd :: RandomGen rnd => rnd -> PasswdPlain -> PasswdHash
 newPasswd rnd (PasswdPlain plain) = PasswdHash (crypt plain salt)
   where
-    salt :: String
+    salt :: [Char]
     salt = take 2 (randomRs ('\1', '\255') rnd)
 
 checkPasswd :: PasswdPlain -> PasswdHash -> Bool
