@@ -88,7 +88,7 @@ handlePackageById store pkgid =
         ok $ toResponse $ Resource.XHtml $
           Pages.packagePage (userDb state) (packageList state) pkg pkgs
 
-  , dir "cabal" $ msum
+  , dir (display (packageName pkgid) ++ ".cabal") $ msum
     [ withPackage pkgid $ \_ pkg _pkgs ->
       methodSP GET $
         ok $ toResponse (Resource.CabalFile (pkgData pkg))

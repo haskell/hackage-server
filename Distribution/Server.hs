@@ -245,13 +245,15 @@ legacySupport = msum
 
 impl :: Server -> [ServerPartT IO Response]
 impl (Server store static _ cache host _) =
-  [ dir "packages" $ msum [ path $ msum . handlePackageById store
-                          , legacySupport
-                          , methodSP GET $ do
-                            cacheState <- Cache.get cache
-                            ok $ Cache.packagesPage cacheState
-                        ]
-  , dir "package" (path $ servePackage store)
+  [ dir "packages" $ msum
+      [ legacySupport
+      , methodSP GET $
+          ok . Cache.packagesPage =<< Cache.get cache
+      ]
+  , dir "package" $ msum
+      [ path $ msum . handlePackageById store
+      , path $ servePackage store
+      ]
   , dir "buildreports" $ msum (buildReports store)
 --  , dir "groups" (groupInterface)
   , dir "recent.rss" $ msum

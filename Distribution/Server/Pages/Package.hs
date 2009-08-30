@@ -32,7 +32,7 @@ import Data.Monoid  ( mempty )
 import Data.Map			( Map )
 import qualified Data.Map as Map
 import Data.Ord			( comparing )
-import System.FilePath.Posix    ( (</>) )
+import System.FilePath.Posix    ( (</>), (<.>) )
 import System.Locale            ( defaultTimeLocale )
 import Data.Time.Format         ( formatTime )
 
@@ -398,18 +398,18 @@ maybeLast = listToMaybe . reverse
 
 -- | URL describing a package.
 packageURL :: PackageIdentifier -> URL
-packageURL pkgId = "/packages" </> display pkgId
+packageURL pkgId = "/package" </> display pkgId
 
 packageNameURL :: PackageIdentifier -> URL
-packageNameURL pkgId = "/packages" </> display (pkgName pkgId)
+packageNameURL pkgId = "/package" </> display (pkgName pkgId)
 
 -- | The name of the package file for a given package identifier
 packageFile :: PackageIdentifier -> URL
-packageFile pkgId =  "/package" </> (display pkgId ++ ".tar.gz")
+packageFile pkgId =  "/package" </> display pkgId <.> "tar.gz"
 
 -- | The name of the Cabal file for a given package identifier
 cabalFile :: PackageIdentifier -> URL
-cabalFile pkgId = packageURL pkgId </> "cabal"
+cabalFile pkgId = packageURL pkgId </> display (pkgName pkgId) <.> "cabal"
 
 cabalLogoURL :: URL
 cabalLogoURL = "/built-with-cabal.png"
