@@ -17,9 +17,9 @@ moduleForest mb_doc = renderModuleForest mb_doc . mkModuleForest
 
 type ModuleForest = [ModuleTree]
 
-data ModuleTree = Node String       -- ^ Part of module name
-                       Bool         -- ^ Is this an existing module?
-                       ModuleForest -- ^ Sub modules
+data ModuleTree = Node String       -- Part of module name
+                       Bool         -- Is this an existing module?
+                       ModuleForest -- Sub modules
 
 --------------------------------------------------------------------------------
 
