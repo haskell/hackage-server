@@ -132,7 +132,7 @@ allocatedTopLevelNodes = [
 	"Network", "Numeric", "Prelude", "Sound", "System", "Test", "Text"]
 
 packageNameURL :: PackageName -> URL
-packageNameURL pkg = "/packages/" ++ unPackageName pkg
+packageNameURL pkg = "/package/" ++ unPackageName pkg
 
 unPackageName :: PackageName -> String
 unPackageName (PackageName name) = name

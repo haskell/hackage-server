@@ -76,7 +76,7 @@ showTime = formatTime defaultTimeLocale "%c"
 
 -- | URL describing a package.
 packageURL :: PackageIdentifier -> URL
-packageURL pkgid = "/packages/" ++ display pkgid
+packageURL pkgid = "/package/" ++ display pkgid
 
 rssFeedURL :: URL
 rssFeedURL = "/recent.rss"
