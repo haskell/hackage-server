@@ -9,29 +9,24 @@ import Distribution.Package
          ( PackageName )
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserGroup)
+import qualified Distribution.Server.Users.Permissions as Permissions
+import Distribution.Server.Users.Permissions (Permissions(..),GroupName)
 import Distribution.Server.Users.Types (UserId,UserName,UserAuth)
 import Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users)
+
+import qualified Data.Map as Map
 
 import Happstack.State
 import Happstack.Data.Serialize
 import qualified Data.Binary as Binary
 
 import Data.Typeable
-import Data.Maybe (fromMaybe)
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
 
-import qualified Data.Map as Map
 
-
---type GroupName = String
-data GroupName = Administrator | Trustee | PackageMaintainer PackageName
-                 deriving (Read,Show,Ord,Typeable,Eq)
-data Permissions = Permissions
-       { permissions :: Map.Map GroupName UserGroup
-       } deriving Typeable
 
 instance Component Permissions where
     type Dependencies Permissions = End
@@ -83,32 +78,29 @@ instance Serialize UserAuth where
 
 
 lookupUserGroup :: GroupName -> Query Permissions UserGroup
-lookupUserGroup groupName = lookupUserGroups [groupName]
+lookupUserGroup group
+    = Permissions.lookupUserGroup group `fmap` ask
 
 lookupUserGroups :: [GroupName] -> Query Permissions UserGroup
-lookupUserGroups groups
-    = do m <- asks permissions
-         return $ Group.unions [ Map.findWithDefault Group.empty groupName m
-                                 | groupName <- groups ]
+lookupUserGroups groups =
+    Permissions.lookupUserGroups groups `fmap` ask
 
 addToGroup :: GroupName -> UserId -> Update Permissions ()
 addToGroup groupName userId
-    = State.modify $ \st -> st{permissions = Map.alter fn groupName (permissions st)}
-    where fn mbGroup = Just $ Group.add userId (fromMaybe Group.empty mbGroup)
+    = State.modify $ Permissions.addToGroup groupName userId
 
 removeFromGroup :: GroupName -> UserId -> Update Permissions ()
 removeFromGroup groupName userId
-    = State.modify $ \st -> st{permissions = Map.alter fn groupName (permissions st)}
-    where fn Nothing = Nothing
-          fn (Just group) = Just $ Group.remove userId group
+    = State.modify $ Permissions.removeFromGroup groupName userId
 
-
+getPermissions :: Query Permissions Permissions
+getPermissions = ask
 
 -- overwrites existing permissions
 bulkImportPermissions :: [(UserId, GroupName)] -> Update Permissions ()
 bulkImportPermissions perms = do
 
-  State.put $ Permissions Map.empty
+  State.put Permissions.empty
   mapM_ (\(user, group) -> addToGroup group user) perms
 
          
@@ -116,6 +108,7 @@ $(mkMethods ''Permissions ['lookupUserGroup
                           ,'lookupUserGroups
                           ,'addToGroup
                           ,'removeFromGroup
+                          ,'getPermissions
 
                           -- Import
                           ,'bulkImportPermissions])

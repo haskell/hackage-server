@@ -82,6 +82,13 @@ instance ToMessage XHtml where
     toContentType _ = BS.pack "application/xhtml+xml"
     toMessage (XHtml xhtml) = BS.Lazy.pack (XHtml.renderHtml xhtml)
 
+newtype ExportTarball = ExportTarball BS.Lazy.ByteString
+
+instance ToMessage ExportTarball where
+    toContentType _ = BS.pack "application/gzip"
+    toMessage (ExportTarball bs) = bs
+
+
 mkResponse :: BS.Lazy.ByteString -> [(String, String)] -> Response
 mkResponse bs headers = Response {
     rsCode    = 200,

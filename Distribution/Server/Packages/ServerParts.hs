@@ -21,6 +21,7 @@ import Distribution.Server.Users.ServerParts (guardAuth)
 
 import Distribution.Server.Packages.State as State hiding (buildReports)
 import Distribution.Server.Users.State as State
+import Distribution.Server.Users.Permissions (GroupName(..))
 
 import qualified  Distribution.Server.Packages.State as State
 import qualified Distribution.Server.Cache as Cache

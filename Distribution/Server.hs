@@ -26,6 +26,7 @@ import Happstack.State hiding (Version)
 
 import Distribution.Server.Packages.ServerParts
 import Distribution.Server.Users.ServerParts
+import Distribution.Server.Users.Permissions (GroupName(..))
 
 import Distribution.Server.State as State
 import Distribution.Server.Packages.State as State hiding (buildReports, bulkImport)
@@ -45,7 +46,6 @@ import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
 
 import Distribution.Server.Auth.Types (PasswdPlain(..))
-
 
 import System.FilePath ((</>))
 import System.Directory
@@ -267,7 +267,7 @@ impl (Server store static _ cache host _) =
           cacheState <- Cache.get cache
           ok $ toResponse $ Resource.IndexTarball (Cache.indexTarball cacheState)
       ]
-  , dir "admin" (admin cache host)
+  , dir "admin" (admin store cache host)
   , dir "check" checkPackage
   , dir "htpasswd" $ msum
       [ changePassword ]

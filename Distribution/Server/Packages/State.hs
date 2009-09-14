@@ -130,6 +130,9 @@ insertDocumentation :: PackageIdentifier -> BlobId -> Update Documentation ()
 insertDocumentation pkgId blob
     = State.modify $ \doc -> doc{documentation = Map.insert pkgId blob (documentation doc)}
 
+getDocumentation :: Query Documentation Documentation
+getDocumentation = ask
+
 insert :: PkgInfo -> Update PackagesState Bool
 insert pkg
     = do pkgsState <- State.get
@@ -227,7 +230,9 @@ listGroupMembers userGroup
 
 
 $(mkMethods ''Documentation ['insertDocumentation
-                            ,'lookupDocumentation])
+                            ,'lookupDocumentation
+                            ,'getDocumentation
+                            ])
 
 $(mkMethods ''PackagesState ['getPackagesState
                             ,'listGroupMembers

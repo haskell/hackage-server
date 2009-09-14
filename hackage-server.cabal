@@ -43,6 +43,10 @@ executable hackage-server
     Distribution.Server.BulkImport
     Distribution.Server.BulkImport.UploadLog
     Distribution.Server.Cache
+    Distribution.Server.Export
+    Distribution.Server.Export.FlatFiles
+    Distribution.Server.Export.ServerParts
+    Distribution.Server.Export.Utils
     Distribution.Server.Instances
     Distribution.Server.Packages.Index
     Distribution.Server.Packages.ServerParts
@@ -76,7 +80,7 @@ executable hackage-server
     bytestring >= 0.9,
     zlib >= 0.4 && < 0.6,
     tar  == 0.3.*,
-    time == 1.1.4.*,
+    time == 1.1.2.*,
     old-time >= 1.0,
     -- we'd like to use just the new time library howerer
     -- the rss packages uses old-time in it's public api :-(
@@ -93,7 +97,7 @@ executable hackage-server
     pureMD5 >= 0.2,
     xhtml >= 3000.1,
     rss == 3000.0.*,
-    Cabal == 1.8.*,
+    Cabal == 1.6.*,
     happstack-data   == 0.3.*,
     happstack-util   == 0.3.*,
     happstack-state  == 0.3.*,
