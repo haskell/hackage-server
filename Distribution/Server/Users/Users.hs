@@ -6,6 +6,7 @@ module Distribution.Server.Users.Users (
     -- * Construction
     empty,
     add,
+    insert,
 
     -- * Modification
     delete,
@@ -89,6 +90,39 @@ add name auth users =
           userNameMap =    Map.insert name (UserId userId) (userNameMap users),
           nextId      = UserId (userId + 1)
         }
+
+-- | Inserts the given info with the given id.
+-- If a user is already present with the passed in
+-- id, 'Nothing' is returned.
+--
+-- If the 'UserInfo' does not correspond to that of a
+-- deleted user and the user name is already in use,
+-- 'Nothing' will be returned.
+insert :: UserId -> UserInfo -> Users -> Maybe Users
+insert user@(UserId ident) info users
+    = let name = userName info
+
+          isDeleted = case userStatus info of
+                        Deleted{} -> True
+                        _ -> False
+          idMap'
+              = intInsertMaybe ident info (userIdMap users)
+
+          nameMap'
+              = insertMaybe name user (userNameMap users)
+
+          nextIdent
+              | user >= nextId users = UserId (ident + 1)
+              | otherwise = nextId users
+
+      in case idMap' of
+           Nothing -> Nothing -- Id clash, always fatal
+           Just idMap -> if isDeleted
+                then Just $ Users idMap (userNameMap users) nextIdent
+                else case nameMap' of
+                       Nothing -> Nothing -- name clash, fatal if non-deleted user
+                       Just nameMap -> Just $ Users idMap nameMap nextIdent
+
 
 -- | Delete a user account.
 --
@@ -205,6 +239,21 @@ enumerateAll users = IntMap.elems (userIdMap users)
 enumerateEnabled :: Users -> [UserInfo]
 enumerateEnabled users =
   [ user | user@UserInfo { userStatus = Enabled _ } <- enumerateAll users ]
+
+
+-- | Insertion fails if key is present
+insertMaybe :: Ord k => k -> a -> Map.Map k a -> (Maybe (Map.Map k a))
+insertMaybe k a map
+    = case Map.insertLookupWithKey undefined k a map of
+        (Nothing, map') -> Just map'
+        _ -> Nothing
+
+intInsertMaybe
+    :: IntMap.Key -> a -> IntMap.IntMap a -> (Maybe (IntMap.IntMap a))
+intInsertMaybe k a map
+    = case IntMap.insertLookupWithKey undefined k a map of
+        (Nothing, map') -> Just map'
+        _ -> Nothing
 
 
 instance Binary Users where

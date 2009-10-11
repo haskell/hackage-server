@@ -12,7 +12,7 @@ import Distribution.Server.Packages.Types (PkgInfo(..))
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserGroup)
 import Distribution.Server.Users.Types (UserId,UserName,UserAuth)
-import Distribution.Server.Users.Users as Users
+import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users)
 import Distribution.Server.Util.BlobStorage (BlobId)

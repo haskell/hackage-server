@@ -5,6 +5,7 @@ module Distribution.Server.BuildReport.BuildReports (
     BuildLog(..),
     empty,
     addReport,
+    insertReport,
     addBuildLog,
     lookupReport,
     lookupBuildLog,
@@ -76,13 +77,37 @@ addReport :: BuildReports -> BuildReport -> (BuildReports, BuildReportId)
 addReport buildReports report = (buildReports', curid)
   where
     curid         = nextId buildReports
-    pkgid         = BuildReport.package report
-    buildReports' = buildReports {
-      reports     = Map.insert  curid         report  (reports buildReports),
-      index       =     prepend pkgid (curid, report) (index   buildReports),
-      nextId      = case curid of BuildReportId n -> BuildReportId (n + 1)
-    }
-    prepend k v = Map.insertWith (\_ vs -> v:vs) k [v]
+    nextRepId     = case curid of BuildReportId n -> BuildReportId (n + 1)
+    buildReports' = unsafeInsertReport buildReports curid report nextRepId
+
+
+insertReport :: BuildReports -> BuildReportId -> BuildReport -> Maybe BuildReports
+insertReport buildReports repId report
+    = case lookupReport buildReports repId of
+        Just{} -> Nothing
+        _ -> Just $
+             unsafeInsertReport buildReports repId report nextRepId
+
+ where nextRepId
+           | repId >= nextIdent
+               = case repId of BuildReportId n -> BuildReportId (n + 1)
+           | otherwise = nextIdent
+
+       nextIdent = nextId buildReports
+
+-- No checks are made that we're not re-using an id
+unsafeInsertReport
+    :: BuildReports -> BuildReportId -> BuildReport -> BuildReportId -> BuildReports
+unsafeInsertReport buildReports repId report nextRepId
+    = buildReports'
+ where
+   pkgid = BuildReport.package report
+   buildReports' = buildReports {
+     reports = Map.insert repId report (reports buildReports),
+     index   = prepend pkgid (repId, report) (index buildReports),
+     nextId  = nextRepId
+   }
+   prepend k v = Map.insertWith (\_ vs -> v:vs) k [v]
 
 addBuildLog :: BuildReports -> BuildReportId -> BuildLog -> Maybe BuildReports
 addBuildLog buildReports reportId buildLog =
