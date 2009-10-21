@@ -30,7 +30,8 @@ import Data.Maybe
          ( fromMaybe, isJust )
 import Control.Monad
          ( unless, when )
-import qualified Data.ByteString.Lazy.Char8 as BS
+import qualified Data.ByteString.Lazy as BS
+import Data.ByteString.Lazy (ByteString)
 
 import Paths_hackage_server (version)
 
@@ -40,10 +41,10 @@ main :: IO ()
 main = topHandler $ do
   opts <- getOpts
 
-  maybeImports <- checkImportOpts
-    (optImportIndex   opts) (optImportLog      opts)
-    (optImportArchive opts) (optImportHtPasswd opts)
-    (optImportAdmins opts)
+  imports <- checkImportOpts
+    (optImport opts)         (optImportIndex   opts)
+    (optImportLog opts)      (optImportArchive opts)
+    (optImportHtPasswd opts) (optImportAdmins opts)
 
   defaults <- Distribution.Server.defaultConfig
 
@@ -71,14 +72,14 @@ main = topHandler $ do
 
   -- Do some pre-init sanity checks
   hasSavedState <- Distribution.Server.hasSavedState config
-  checkAccidentalDataLoss hasSavedState maybeImports opts
-  checkBlankServerState   hasSavedState maybeImports opts
+  checkAccidentalDataLoss hasSavedState imports opts
+  checkBlankServerState   hasSavedState imports opts
 
   -- Startup the server, including the data store
   withServer config $ \server -> do
 
     -- Import data or set initial data (ie. admin user account) if requested
-    handleInitialDbstate server maybeImports opts
+    handleInitialDbstate server imports opts
 
     -- setup a Unix signal handler so we can checkpoint the server state
     withCheckpointHandler server $ do
@@ -125,29 +126,35 @@ main = topHandler $ do
                -> return n
       _        -> fail $ "bad port number " ++ show str
 
-    checkImportOpts Nothing Nothing Nothing Nothing Nothing= return Nothing
-    checkImportOpts _ _ _ Nothing Just{} =
+    checkImportOpts
+       Nothing Nothing Nothing Nothing Nothing Nothing = return ImportNone
+    checkImportOpts
+       Just{} a b c d e | any isJust [a, b, c, d, e] =
+         fail "Importing from a tarball is not supported with any other import options"
+    checkImportOpts
+       (Just tarFile) _ _ _ _ _ = fmap ImportTarball (BS.readFile tarFile)
+    checkImportOpts _ _ _ _ Nothing Just{} =
         fail "Currently cannot import administrators witout users"
-    checkImportOpts (Just indexFileName) (Just logFileName)
+    checkImportOpts _ (Just indexFileName) (Just logFileName)
                     archiveFile htpasswdFile adminsFile = do
       indexFile <- BS.readFile indexFileName
       logFile   <-    readFile logFileName
       tarballs  <- maybe (return Nothing) (fmap Just . BS.readFile) archiveFile
       htpasswd  <- maybe (return Nothing) (fmap Just . readFile) htpasswdFile
       admins    <- maybe (return Nothing) (fmap Just . readFile) adminsFile
-      return (Just (indexFile, logFile, tarballs, htpasswd, admins))
+      return $ ImportBulk indexFile logFile tarballs htpasswd admins
 
-    checkImportOpts Nothing Nothing (Just _) _ _ =
+    checkImportOpts _ Nothing Nothing (Just _) _ _ =
       fail "Currently an archive file is only imported along with an index"
-    checkImportOpts Nothing Nothing _ (Just _) _ =
+    checkImportOpts _ Nothing Nothing _ (Just _) _ =
       fail "Currently an htpasswd file is only imported along with an index"
-    checkImportOpts _ _ _ _ _ =
+    checkImportOpts _ _ _ _ _ _ =
       fail "A package index and log file must be supplied together."
 
     -- Sanity checking
     --
-    checkAccidentalDataLoss hasSavedState maybeImports opts
-      | (optInitialise opts || isJust maybeImports)
+    checkAccidentalDataLoss hasSavedState imports opts
+      | (optInitialise opts || imports /= ImportNone)
      && hasSavedState = die $
             "The server already has an initialised database!!\n"
          ++ "If you really *really* intend to completely reset the "
@@ -155,8 +162,8 @@ main = topHandler $ do
          ++ "--obliterate-all-existing-data"
       | otherwise = return ()
 
-    checkBlankServerState   hasSavedState maybeImports opts
-      | not (optInitialise opts || isJust maybeImports)
+    checkBlankServerState   hasSavedState imports opts
+      | not (optInitialise opts || imports /= ImportNone)
      && not hasSavedState = die $
             "There is no existing server state.\nYou can either import "
          ++ "existing data using the various --import-* flags, or start with "
@@ -168,12 +175,12 @@ main = topHandler $ do
 
     -- Importing
     --
-    handleInitialDbstate server _maybeImports opts | optInitialise opts = do
+    handleInitialDbstate server _imports opts | optInitialise opts = do
       info "creating initial state..."
       Distribution.Server.initState server
 
     handleInitialDbstate server
-      (Just (indexFile, logFile, tarballs, htpasswd, admins)) _opts = do
+      (ImportBulk indexFile logFile tarballs htpasswd admins) _opts = do
       info "importing..."
       badLogEntries <- Distribution.Server.bulkImport server
                          indexFile logFile tarballs htpasswd admins
@@ -181,7 +188,29 @@ main = topHandler $ do
            "Warning: Upload log entries for non-existant packages:\n"
         ++ unlines (map display (sort badLogEntries))
 
+    handleInitialDbstate server
+      (ImportTarball tar) _opts = do
+      info "importing ..."
+      res <- Distribution.Server.importTar server tar
+      case res of
+        Just err -> fail err
+        _ -> return ()
+
     handleInitialDbstate _ _ _ = return ()
+
+data Import
+    = ImportNone
+    | ImportBulk
+      { impIndex   :: ByteString,
+        impLog     :: String,
+        impArchive :: Maybe ByteString,
+        impHtPasswd:: Maybe String,
+        impAdmins  :: Maybe String
+      }
+    | ImportTarball
+      { impTarball :: ByteString
+      }
+ deriving Eq
 
 topHandler :: IO a -> IO a
 topHandler prog = catch prog handle
@@ -209,6 +238,7 @@ data Options = Options {
     optHost          :: Maybe String,
     optStateDir      :: Maybe FilePath,
     optStaticDir     :: Maybe FilePath,
+    optImport        :: Maybe FilePath,
     optImportIndex   :: Maybe FilePath,
     optImportLog     :: Maybe FilePath,
     optImportArchive :: Maybe FilePath,
@@ -225,6 +255,7 @@ defaultOptions = Options {
     optHost          = Nothing,
     optStateDir      = Nothing,
     optStaticDir     = Nothing,
+    optImport        = Nothing,
     optImportIndex   = Nothing,
     optImportLog     = Nothing,
     optImportArchive = Nothing,
@@ -280,6 +311,9 @@ optionDescriptions =
   , Option [] ["static-dir"]
       (ReqArg (\file opts -> opts { optStaticDir = Just file }) "DIR")
       "Directory in which to find the html and other static files"
+  , Option [] ["import-tarball"]
+      (ReqArg (\file opts -> opts { optImport = Just file }) "TARBALL")
+      "Complete import tarball. Not compatable with other import options"
   , Option [] ["import-index"]
       (ReqArg (\file opts -> opts { optImportIndex = Just file }) "TARBALL")
       "Import an existing hackage index file (00-index.tar.gz)"

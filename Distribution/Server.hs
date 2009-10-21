@@ -13,6 +13,7 @@ module Distribution.Server (
 
    -- * First time initialisation of the database
    bulkImport,
+   importTar,
    initState,
  ) where
 
@@ -23,6 +24,8 @@ import Distribution.Text
 import Happstack.Server hiding (port)
 import qualified Happstack.Server
 import Happstack.State hiding (Version)
+
+import qualified Distribution.Server.Import as Import ( importTar )
 
 import Distribution.Server.Packages.ServerParts
 import Distribution.Server.Users.ServerParts
@@ -206,7 +209,16 @@ bulkImport (Server store _ _ cache host _)
            Nothing -> Left $ "User " ++ show name ++ " not found"
            Just uid -> Right uid
 
--- An alternative to a bulk import.
+importTar :: Server -> ByteString -> IO (Maybe String)
+importTar (Server store _ _ cache host _) tar = do
+  res <- Import.importTar store tar
+  case res of
+    Nothing -> do
+             updateCache cache host
+    Just err -> return ()
+  return res
+
+-- An alternative to an import.
 -- Starts the server off to a sane initial state.
 initState ::  MonadIO m => Server -> m ()
 initState (Server _ _ _ cache host _) = do
