@@ -33,8 +33,8 @@ module Distribution.Server.Export
     ( export
     ) where
 
-import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.Encoding as TL
+import Distribution.Simple.Utils (toUTF8)
+import qualified Data.ByteString.Lazy.Char8 as BS8
 
 import Data.Maybe (maybe)
 
@@ -230,7 +230,8 @@ bsToEntry chunk path
         Left err -> error $ "Error in export: " ++ err
 
 -- via UTF8 conversion.
-stringToBytes = TL.encodeUtf8 . TL.pack
+stringToBytes = BS8.pack . toUTF8
+
 csvToBytes = stringToBytes . printCSV
 
 concatM :: (Monad m, Functor m) => [m [a]] -> m [a]

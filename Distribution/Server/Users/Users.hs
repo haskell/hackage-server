@@ -24,7 +24,9 @@ module Distribution.Server.Users.Users (
 
     -- * Enumeration
     enumerateAll,
+    enumerateAllWithIds,
     enumerateEnabled,
+
   ) where
 
 import Distribution.Server.Users.Types
@@ -60,6 +62,8 @@ data Users = Users {
   -- need to be adjusted when an account is enabled/disabled/deleted
   -- it also allows us to track historical info, like name of uploader
   -- even if that user name has been recycled, the user ids will be distinct.
+
+
 
 empty :: Users
 empty = Users {
@@ -235,6 +239,12 @@ modifyUser users (UserId userId) fn =
 
 enumerateAll :: Users -> [UserInfo]
 enumerateAll users = IntMap.elems (userIdMap users)
+
+enumerateAllWithIds :: Users -> [(UserId, UserInfo)]
+enumerateAllWithIds
+    = mapFst UserId . IntMap.assocs . userIdMap
+
+ where mapFst f = map $ \(x,y) -> (f x, y)
 
 enumerateEnabled :: Users -> [UserInfo]
 enumerateEnabled users =

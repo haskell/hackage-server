@@ -13,8 +13,10 @@ import Control.Monad.State.Class
 import Data.Time (UTCTime)
 import qualified Data.Time as Time
 import System.Locale
-import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.Encoding as TL
+
+import Distribution.Simple.Utils (fromUTF8)
+import qualified Data.ByteString.Lazy.Char8 as BS8
+
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.Map as Map
 import System.FilePath (splitDirectories, splitExtension)
@@ -289,7 +291,7 @@ parse label text
         Just a -> return a
                             
 bytesToString :: ByteString -> String
-bytesToString = TL.unpack . TL.decodeUtf8
+bytesToString = fromUTF8 . BS8.unpack
 
 -- Import is a state monad over the IS data type
 
