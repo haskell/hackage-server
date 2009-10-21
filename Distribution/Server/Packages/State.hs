@@ -133,6 +133,10 @@ insertDocumentation pkgId blob
 getDocumentation :: Query Documentation Documentation
 getDocumentation = ask
 
+-- |Replace all existing documentation
+replaceDocumentation :: Documentation -> Update Documentation ()
+replaceDocumentation = State.put
+
 insert :: PkgInfo -> Update PackagesState Bool
 insert pkg
     = do pkgsState <- State.get
@@ -150,6 +154,9 @@ bulkImport newIndex users = do
     userDb = users
   }
 
+-- |Replace all existing packages, users and reports
+replacePackagesState :: PackagesState -> Update PackagesState ()
+replacePackagesState = State.put
 
 addReport :: BuildReport -> Update PackagesState BuildReportId
 addReport report
@@ -232,11 +239,13 @@ listGroupMembers userGroup
 $(mkMethods ''Documentation ['insertDocumentation
                             ,'lookupDocumentation
                             ,'getDocumentation
+                            ,'replaceDocumentation
                             ])
 
 $(mkMethods ''PackagesState ['getPackagesState
                             ,'listGroupMembers
                             ,'bulkImport
+                            ,'replacePackagesState
                             ,'insert
                             ,'addReport
                             ,'addBuildLog

@@ -96,13 +96,16 @@ removeFromGroup groupName userId
 getPermissions :: Query Permissions Permissions
 getPermissions = ask
 
--- overwrites existing permissions
+-- |overwrites existing permissions
 bulkImportPermissions :: [(UserId, GroupName)] -> Update Permissions ()
 bulkImportPermissions perms = do
 
   State.put Permissions.empty
   mapM_ (\(user, group) -> addToGroup group user) perms
 
+-- |overwrites existing permissions
+replacePermissions :: Permissions -> Update Permissions ()
+replacePermissions = State.put
          
 $(mkMethods ''Permissions ['lookupUserGroup
                           ,'lookupUserGroups
@@ -111,4 +114,6 @@ $(mkMethods ''Permissions ['lookupUserGroup
                           ,'getPermissions
 
                           -- Import
-                          ,'bulkImportPermissions])
+                          ,'bulkImportPermissions
+                          ,'replacePermissions
+                          ])
