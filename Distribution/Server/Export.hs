@@ -36,6 +36,8 @@ module Distribution.Server.Export
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TL
 
+import Data.Maybe (maybe)
+
 import Text.CSV
 
 import qualified Data.Map as Map
@@ -113,29 +115,35 @@ mkPackageEntries baseDir pkgs docs reports storage
 
 mkPackageEntry baseDir storage docs reports pkgInfo
     = do
-  sourceEntry <- mkSourceEntry baseDir pkgInfo storage
+
+  -- docs and build reports each ship separate
   docsEntry <- mkDocumentationEntry baseDir pkgInfo docs storage
   buildReportEntries <- mkBuildReportEntries baseDir pkgInfo reports storage
+
+  -- the source, uploads, and cabal files get lumped together in their
+  -- own tar file
+  sourceEntry <- mkSourceEntry pkgInfo storage
   let uploadsEntry = csvToEntry (uploadsToCSV pkgInfo) $
-                     (pkgEntryPath baseDir pkgInfo) </> "uploads" <.> "csv"
-      cabalEntry = mkCabalEntry baseDir pkgInfo
-  return $ concat
-    [ catMaybes
-      [ Just cabalEntry
-      , Just uploadsEntry
-      , sourceEntry
-      , docsEntry
-      ]
-    , buildReportEntries
-    ]
+                     "uploads" <.> "csv"
+      cabalEntry = mkCabalEntry pkgInfo
+
+      pkgTar = Tar.write $ catMaybes
+               [ sourceEntry
+               , Just cabalEntry
+               , Just uploadsEntry
+               ]
+      pkgEntry
+          = bsToEntry pkgTar $
+            pkgEntryPath baseDir pkgInfo <.> "tar"
+  return $ pkgEntry : maybe [] return docsEntry ++ buildReportEntries
 
 
 -- | Tar entry for the source tarball
-mkSourceEntry baseDir pkgInfo storage
+mkSourceEntry pkgInfo storage
     = case pkgTarball pkgInfo of
         Nothing   -> return Nothing
         Just blob -> Just `fmap` (mkBlobEntry storage blob $
-                     pkgEntryBaseFileName baseDir pkgInfo <.> "tar" <.> "gz")
+                     display (packageName pkgInfo) <.> "tar" <.> "gz")
 
 -- | Tar entry for the documentation for this package
 mkDocumentationEntry baseDir pkgInfo (Documentation docs) storage
@@ -148,38 +156,38 @@ mkDocumentationEntry baseDir pkgInfo (Documentation docs) storage
 --
 -- NOTE - there's no current way to export
 -- build reports that correspond to package ids
--- that are not in the pass-in package index
+-- that are not in the passed-in package index
 mkBuildReportEntries baseDir pkgInfo reports storage
     = flip concatMapM
       (Build.lookupPackageReports reports (packageId pkgInfo))
 
       $ \(reportId, report) ->
           case Build.lookupBuildLog reports reportId of
-            Nothing -> return [mkBuildReportEntry baseDir pkgInfo reportId report]
+            Nothing -> return [mkBuildReportEntry baseDir reportId report]
             Just (Build.BuildLog blob) -> do
-              buildLogEntry <- mkBuildLogEntry baseDir pkgInfo reportId blob storage
-              let buildReportEntry = mkBuildReportEntry baseDir pkgInfo reportId report
+              buildLogEntry <- mkBuildLogEntry baseDir reportId blob storage
+              let buildReportEntry = mkBuildReportEntry baseDir reportId report
               return [buildReportEntry, buildLogEntry]
 
 -- | Tar entry for a single build report
-mkBuildReportEntry baseDir pkgInfo reportId report
+mkBuildReportEntry baseDir reportId report
     = bsToEntry (stringToBytes . Build.show $ report) $
-      reportBasePath baseDir pkgInfo reportId </> "report" <.> "txt"
+      reportBasePath baseDir reportId </> "report.txt"
 
 -- I'm not sure about the extension here
 -- | Tar entry for a single build log
-mkBuildLogEntry baseDir pkgInfo reportId blob storage
+mkBuildLogEntry baseDir reportId blob storage
     = mkBlobEntry storage blob $
-      reportBasePath baseDir pkgInfo reportId </> "log" <.> "txt"
+      reportBasePath baseDir reportId </> "log.txt"
 
-reportBasePath baseDir pkgInfo reportId
-    = pkgEntryPath baseDir pkgInfo </> display reportId
+reportBasePath baseDir reportId
+    = baseDir </> "build-reports" </> display reportId
 
 
 -- | Tar entry for the .cabal file
-mkCabalEntry baseDir pkgInfo
+mkCabalEntry pkgInfo
     = bsToEntry (pkgData pkgInfo) $
-      pkgEntryPath baseDir pkgInfo </> (display $ packageName pkgInfo)  <.> "cabal"
+      (display $ packageName pkgInfo)  <.> "cabal"
 
 
 pkgEntryPath baseDir pkgInfo
