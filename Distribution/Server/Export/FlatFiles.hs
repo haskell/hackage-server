@@ -57,7 +57,7 @@ usersToCSV users
     = ([showVersion userCSVVer]:) $
       (usersCSVKey:) $
 
-      flip map (Users.enumerateAllWithIds users) $ \(user, userInfo) ->
+      flip map (Users.enumerateAll users) $ \(user, userInfo) ->
 
       [ display . Users.userName $ userInfo
       , display user

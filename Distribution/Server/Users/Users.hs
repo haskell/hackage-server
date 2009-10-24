@@ -24,7 +24,6 @@ module Distribution.Server.Users.Users (
 
     -- * Enumeration
     enumerateAll,
-    enumerateAllWithIds,
     enumerateEnabled,
 
   ) where
@@ -237,18 +236,15 @@ modifyUser users (UserId userId) fn =
       (Nothing,_) -> Nothing
       (_,newMap)  -> Just $ users { userIdMap = newMap }
 
-enumerateAll :: Users -> [UserInfo]
-enumerateAll users = IntMap.elems (userIdMap users)
-
-enumerateAllWithIds :: Users -> [(UserId, UserInfo)]
-enumerateAllWithIds
+enumerateAll :: Users -> [(UserId, UserInfo)]
+enumerateAll
     = mapFst UserId . IntMap.assocs . userIdMap
 
  where mapFst f = map $ \(x,y) -> (f x, y)
 
-enumerateEnabled :: Users -> [UserInfo]
+enumerateEnabled :: Users -> [(UserId, UserInfo)]
 enumerateEnabled users =
-  [ user | user@UserInfo { userStatus = Enabled _ } <- enumerateAll users ]
+  [ x | x@(id, UserInfo { userStatus = Enabled _ }) <- enumerateAll users ]
 
 
 -- | Insertion fails if key is present
