@@ -432,7 +432,9 @@ io2imp x
     = Imp $ \_ k s ->
       x >>= \v -> k v s
 
--- |Chops off the last entry if it's null
+-- |Chops off the last entry if it's null.
+-- I'm not sure why parseCSV does this, but it's
+-- irritating.
 customParseCSV :: String -> String -> Either String CSV
 customParseCSV filename inp
     = case parseCSV filename inp of

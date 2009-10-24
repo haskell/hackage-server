@@ -4,24 +4,18 @@ Create a tarball with the following structure:
 
 backup-timestamp/
   users/
-   authinfo
-    user: UserName
-     active: True/False
-     basic-auth:######
-    <white-space>
-   permissions
-    Group: GroupName
-     memebers: User1,User2
-    <whitespace>
+   auth.csv        - users DB
+   permissions.csv - permissions DB
+
   package/
     package-id/
-     package.cabal
-     upload.tar.gz
+     package-id.tar/
+       package.cabal      -- package description
+       package-id.tar.gz  -- uploaded tarbal
+       uploads.csv        -- upload log (who/when)
      documentation.tar.gz -- optional
-     uploads.txt
-      On: ISO-time
-       user: UserName
-     build-reports/
+
+  build-reports/
        <n>/
         buildreport
         buildlog        -- optional

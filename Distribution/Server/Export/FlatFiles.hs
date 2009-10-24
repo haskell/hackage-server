@@ -42,7 +42,6 @@ A few guiding philosophies:
 
   - Human readbale/editable is good
   - Machine parasable is also good
-  - secret id numbers are not preserved (such as user ids)
 
  -} 
 
