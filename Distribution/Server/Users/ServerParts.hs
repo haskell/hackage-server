@@ -19,12 +19,11 @@ import qualified Distribution.Server.Auth.Crypt as Auth
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
 import Distribution.Server.Users.Permissions(GroupName(..))
-
 import Distribution.Server.Auth.Types (PasswdPlain(..))
-
 import Distribution.Server.Export.ServerParts (export)
-
 import Distribution.Server.Util.BlobStorage (BlobStorage)
+
+import Distribution.Text (simpleParse)
 
 import System.Random (newStdGen)
 import Data.Maybe
@@ -108,7 +107,7 @@ userAdmin cache host
                 Nothing -> ok $ toResponse "try to fill out all the fields"
                 Just (userName, pwd1, pwd2) ->
 
-                    adminAddUser cache host (Users.UserName userName)
+                    adminAddUser cache host userName
                            (Auth.PasswdPlain pwd1) (Auth.PasswdPlain pwd2)
           ]
       , dir "change-password" $ msum
@@ -187,23 +186,22 @@ adminChangePassword cache host userName password _
 
 
 adminAddUser :: Cache.Cache -> URIAuth
-        -> Users.UserName -> Auth.PasswdPlain -> Auth.PasswdPlain
+        -> String -> Auth.PasswdPlain -> Auth.PasswdPlain
         -> ServerPart Response
 adminAddUser _ _ _ pwd1 pwd2
     | pwd1 /= pwd2
         = ok $ toResponse "Entered passwords do not match"
-adminAddUser _ _ userName _ _
-    | invalidUserName userName
-        = ok $ toResponse $ userNameErrorDesc
-adminAddUser cache host userName password _
-    = do
+adminAddUser cache host userNameStr password _
+    = case simpleParse userNameStr of
+        Nothing -> ok $ toResponse "Not a valid user name!"
+        Just userName
+            -> do
+          userAuth <- newPasswd password
+          result <- update $ AddUser userName userAuth  
 
-  userAuth <- newPasswd password
-  result <- update $ AddUser userName userAuth  
-
-  case result of
-    Nothing -> ok $ toResponse "Failed!"
-    Just _  -> ok $ toResponse "Ok!"
+          case result of
+            Nothing -> ok $ toResponse "Failed!"
+            Just _  -> ok $ toResponse "Ok!"
           
 newPasswd :: MonadIO m => Auth.PasswdPlain -> m Auth.PasswdHash
 newPasswd pwd =
@@ -211,18 +209,3 @@ newPasswd pwd =
       gen <- liftIO newStdGen
       return $ Auth.newPasswd gen pwd
 
--- | Returns 'True' if we should not allow the use
---   of the passed in user name.
---
---   None of the internals care, but if we want to dump
---   the server state out to flat-files, it will be easier
---   to work with if we have a few sensible restrictions
-invalidUserName :: Users.UserName -> Bool
-invalidUserName (Users.UserName name)
-    = any ((not . isPrint) .||  isSpace) name
- where
-   (f .|| g) x = f x || g x
-
-userNameErrorDesc :: String
-userNameErrorDesc
-    = "User names may not contain spaces or non-printable charecters"
