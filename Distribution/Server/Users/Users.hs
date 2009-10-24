@@ -244,21 +244,21 @@ enumerateAll
 
 enumerateEnabled :: Users -> [(UserId, UserInfo)]
 enumerateEnabled users =
-  [ x | x@(id, UserInfo { userStatus = Enabled _ }) <- enumerateAll users ]
+  [ x | x@(_, UserInfo { userStatus = Enabled _ }) <- enumerateAll users ]
 
 
 -- | Insertion fails if key is present
 insertMaybe :: Ord k => k -> a -> Map.Map k a -> (Maybe (Map.Map k a))
-insertMaybe k a map
-    = case Map.insertLookupWithKey undefined k a map of
-        (Nothing, map') -> Just map'
+insertMaybe k a m
+    = case Map.insertLookupWithKey undefined k a m of
+        (Nothing, m') -> Just m'
         _ -> Nothing
 
 intInsertMaybe
     :: IntMap.Key -> a -> IntMap.IntMap a -> (Maybe (IntMap.IntMap a))
-intInsertMaybe k a map
-    = case IntMap.insertLookupWithKey undefined k a map of
-        (Nothing, map') -> Just map'
+intInsertMaybe k a m
+    = case IntMap.insertLookupWithKey undefined k a m of
+        (Nothing, m') -> Just m'
         _ -> Nothing
 
 

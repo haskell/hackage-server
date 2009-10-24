@@ -5,8 +5,6 @@ module Distribution.Server.Users.State where
 
 import Distribution.Server.Instances ()
 
-import Distribution.Package
-         ( PackageName )
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserGroup)
 import qualified Distribution.Server.Users.Permissions as Permissions

@@ -111,7 +111,7 @@ handlePackageById store pkgid =
         methodSP POST $ do
           authGroup <- query $ LookupUserGroups
                        [Trustee, PackageMaintainer (packageName pkg)]
-          user <- Auth.hackageAuth (userDb state) (Just authGroup)
+          _user <- Auth.hackageAuth (userDb state) (Just authGroup)
           withRequest $ \Request{rqBody = Body body} -> do
               blob <- liftIO $ BlobStorage.add store body
               liftIO $ putStrLn $ "Putting to: " ++ show (display pkgid, blob)
@@ -128,7 +128,7 @@ handlePackageById store pkgid =
 
 packageAdmin :: PackageIdentifier -> ServerPart Response
 packageAdmin pkgid =
-    withPackage pkgid $ \state pkg _ -> do
+    withPackage pkgid $ \_ pkg _ -> do
     guardAuth [Trustee, PackageMaintainer (packageName pkg)]
     msum
      [ methodSP GET $ do

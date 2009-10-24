@@ -206,17 +206,17 @@ replaceUserAuth userId auth
 
 -- updates the user db with a simpler function
 updateUsers :: (Users -> Maybe Users) -> Update PackagesState Bool
-updateUsers update = updateUsers' updateFn isJust
+updateUsers f = updateUsers' updateFn isJust
 
-    where updateFn users = fmap (swap . (,) ()) $ update users
+    where updateFn users = fmap (swap . (,) ()) $ f users
           swap (x,y) = (y,x)
 
 -- Helper function for updating the users db
 updateUsers' :: (Users -> Maybe (Users, a)) -> (Maybe a -> b) -> Update PackagesState b
-updateUsers' update format = do
+updateUsers' f format = do
   state <- State.get
   let users = userDb state
-      result = update users
+      result = f users
 
   liftM format $ case result of
     Nothing -> return Nothing

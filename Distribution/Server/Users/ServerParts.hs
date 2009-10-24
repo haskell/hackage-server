@@ -16,7 +16,6 @@ import qualified Distribution.Server.Auth.Basic as Auth
 import qualified Distribution.Server.Auth.Types as Auth
 import qualified Distribution.Server.Auth.Crypt as Auth
 
-import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
 import Distribution.Server.Users.Permissions(GroupName(..))
 import Distribution.Server.Auth.Types (PasswdPlain(..))
@@ -32,7 +31,6 @@ import Control.Monad (msum,liftM2,mplus)
 import Network.URI
          ( URIAuth )
 
-import Data.Char (isPrint, isSpace)
 
 data ChangePassword = ChangePassword { first, second :: String } deriving (Eq, Ord, Show)
 instance FromData ChangePassword where
@@ -44,7 +42,6 @@ changePassword =
     state <- query GetPackagesState
     let users = userDb state
     uid <- Auth.hackageAuth users Nothing
-    let name = Users.idToName users uid
     pwd <- getData >>= maybe (return $ ChangePassword "not" "valid") return
     if (first pwd == second pwd && first pwd /= "")
         then do let passwd = PasswdPlain (first pwd)
@@ -91,14 +88,14 @@ admin storage cache host = do
   guardAuth [Administrator]
 
   msum
-   [ dir "users" (userAdmin cache host)
+   [ dir "users" userAdmin
    , dir "export.tar.gz" (export storage)
    ]
 
 -- Assumes that the user has already been autheniticated
 -- and has proper permissions
-userAdmin :: Cache.Cache -> URIAuth -> ServerPart Response
-userAdmin cache host
+userAdmin :: ServerPart Response
+userAdmin
     = msum
       [ dir "add" $ msum
           [ methodSP POST $ do
@@ -107,7 +104,7 @@ userAdmin cache host
                 Nothing -> ok $ toResponse "try to fill out all the fields"
                 Just (userName, pwd1, pwd2) ->
 
-                    adminAddUser cache host userName
+                    adminAddUser userName
                            (Auth.PasswdPlain pwd1) (Auth.PasswdPlain pwd2)
           ]
       , dir "change-password" $ msum
@@ -117,7 +114,7 @@ userAdmin cache host
                 Nothing -> ok $ toResponse "try to fill out all the fields"
                 Just (userName, pwd1, pwd2) ->
 
-                    adminChangePassword cache host (Users.UserName userName)
+                    adminChangePassword (Users.UserName userName)
                              (Auth.PasswdPlain pwd1) (Auth.PasswdPlain pwd2)
           ]
       -- , dir "disable" $ undefined
@@ -162,13 +159,12 @@ adminToggleAdmin userName makeAdmin
 
 
 adminChangePassword
-    :: Cache.Cache -> URIAuth
-    -> Users.UserName -> Auth.PasswdPlain -> Auth.PasswdPlain
+    :: Users.UserName -> Auth.PasswdPlain -> Auth.PasswdPlain
     -> ServerPart Response
-adminChangePassword _ _ _ pwd1 pwd2
+adminChangePassword _ pwd1 pwd2
     | pwd1 /= pwd2
         = ok $ toResponse "Entered passwords do not match"
-adminChangePassword cache host userName password _
+adminChangePassword userName password _
     = do
 
   mUser <- query $ LookupUserName userName
@@ -178,28 +174,27 @@ adminChangePassword cache host userName password _
     Just user ->
         do
           auth <- newPasswd password
-          result <- update $ ReplaceUserAuth user auth
+          res <- update $ ReplaceUserAuth user auth
 
           ok $ toResponse $
-           if result then "Success!"
+           if res then "Success!"
            else "Failure!"
 
 
-adminAddUser :: Cache.Cache -> URIAuth
-        -> String -> Auth.PasswdPlain -> Auth.PasswdPlain
+adminAddUser :: String -> Auth.PasswdPlain -> Auth.PasswdPlain
         -> ServerPart Response
-adminAddUser _ _ _ pwd1 pwd2
+adminAddUser _ pwd1 pwd2
     | pwd1 /= pwd2
         = ok $ toResponse "Entered passwords do not match"
-adminAddUser cache host userNameStr password _
+adminAddUser userNameStr password _
     = case simpleParse userNameStr of
         Nothing -> ok $ toResponse "Not a valid user name!"
         Just userName
             -> do
           userAuth <- newPasswd password
-          result <- update $ AddUser userName userAuth  
+          res <- update $ AddUser userName userAuth  
 
-          case result of
+          case res of
             Nothing -> ok $ toResponse "Failed!"
             Just _  -> ok $ toResponse "Ok!"
           

@@ -14,8 +14,6 @@ module Distribution.Server.Export.FlatFiles
     ) where
 
 
-import Data.Maybe
-
 import Distribution.Server.Export.Utils
 
 import Distribution.Server.Users.Types as Users
@@ -119,8 +117,8 @@ permsToCSV perms
               )    
                    
 
+permsCSVVer :: Version
 permsCSVVer = userCSVVer
-
 
 -- uploads.csv
 {-| For a particular package, when and by whom was it
@@ -142,6 +140,7 @@ uploadsToCSV pkgInfo
             , "time"
             ]
 
+uploadsCSVVer :: Version
 uploadsCSVVer = userCSVVer
 
 uploadTimes :: PkgInfo -> [(UTCTime, UserId)]

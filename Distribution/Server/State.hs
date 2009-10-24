@@ -6,7 +6,6 @@ module Distribution.Server.State where
 import Distribution.Server.Instances ()
 
 import Distribution.Server.Packages.State
-import Distribution.Server.Users.State
 import Distribution.Server.Users.Permissions (Permissions)
 
 import Happstack.State

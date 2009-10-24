@@ -21,7 +21,7 @@ import Data.ByteString.Lazy (ByteString)
 import qualified Data.Map as Map
 import System.FilePath (splitDirectories, splitExtension)
 import Data.List (isPrefixOf, isSuffixOf)
-import Text.CSV
+import Text.CSV hiding (csv)
 
 import Distribution.PackageDescription (GenericPackageDescription)
 import Distribution.PackageDescription.Parse
@@ -29,12 +29,10 @@ import Distribution.PackageDescription.Parse
     , ParseResult(..)
     )
 
-import Distribution.Server.Auth.Types
 import Distribution.Server.Export.Utils
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage, BlobId)
 
-import Distribution.Server.Packages.Types (PkgInfo)
 import Distribution.Server.Packages.State
     ( Documentation(..)
     , PackagesState(..)
@@ -126,7 +124,8 @@ fromFile path contents
 
    go _ = return () -- ignore unknown files
 
-package [pkgName, pkgIdStr, "documentation.tar.gz"] contents
+package :: [String] -> ByteString -> Import ()
+package [_, pkgIdStr, "documentation.tar.gz"] contents
     = do
   pkgId <- parse "package id" pkgIdStr
   blobId <- addFile contents
@@ -171,8 +170,8 @@ package [pkgName, pkgTarName] contents
            = fail $ "Bad tar for " ++ from
 
        parseUploads :: ByteString -> Import [(UTCTime, UserId)]
-       parseUploads contents
-           = case customParseCSV "uploads.csv" (bytesToString contents) of
+       parseUploads file
+           = case customParseCSV "uploads.csv" (bytesToString file) of
                Left err -> fail . show $ err
                Right records -> mapM fromRecord (drop 2 records) 
 
@@ -189,10 +188,11 @@ package [pkgName, pkgTarName] contents
                Just x  -> return x
 
        parsePackageDesc :: ByteString -> Import GenericPackageDescription
-       parsePackageDesc contents
-           = case parsePackageDescription (bytesToString contents) of
+       parsePackageDesc file
+           = case parsePackageDescription (bytesToString file) of
                ParseFailed err     -> fail . show $ err
                ParseOk _warnings a -> return a
+package _ _ = return () -- ignore unknown files
 
 -- The pieces needed for a package entry are stuffed together
 -- in their own tarball, so we can gaurantee they arrive at the
@@ -205,7 +205,7 @@ packageParts :: Tar.Entries
 packageParts entries
     = go entries (Nothing, Nothing, Nothing)
  where go Tar.Done x       = return x
-       go (Tar.Fail err) x = fail err
+       go (Tar.Fail err) _ = fail err
        go (Tar.Next one rest) x
            = processEntry one x >>= go rest
 
@@ -355,10 +355,10 @@ insertBuildReport reportId report
       put $ s { isBuildReps = buildReps' }
 
 insertBuildLog :: BuildReportId -> BuildLog -> Import ()
-insertBuildLog reportId log
+insertBuildLog reportId buildLog
     = do
   s <- get
-  case Reports.addBuildLog (isBuildReps s) reportId log of
+  case Reports.addBuildLog (isBuildReps s) reportId buildLog of
     Nothing -> fail $ "Duplicate report id for log: " ++ display reportId
     Just buildReps' -> do
       put $ s { isBuildReps = buildReps' }

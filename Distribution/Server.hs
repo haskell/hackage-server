@@ -204,8 +204,8 @@ bulkImport (Server store _ _ cache host _)
    importAdminsList
        = maybe Nothing (Just . map Users.UserName . lines)
 
-   lookupUsers users names = mapM lookup names
-    where lookup name = case Users.lookupName name users of
+   lookupUsers users names = mapM lookupUser names
+    where lookupUser name = case Users.lookupName name users of
            Nothing -> Left $ "User " ++ show name ++ " not found"
            Just uid -> Right uid
 
@@ -213,9 +213,8 @@ importTar :: Server -> ByteString -> IO (Maybe String)
 importTar (Server store _ _ cache host _) tar = do
   res <- Import.importTar store tar
   case res of
-    Nothing -> do
-             updateCache cache host
-    Just err -> return ()
+    Nothing -> updateCache cache host
+    Just _err -> return ()
   return res
 
 -- An alternative to an import.
@@ -229,9 +228,9 @@ initState (Server _ _ _ cache host _) = do
   -- create default admin user
   let userName = Users.UserName "admin"
   userAuth <- newPasswd (PasswdPlain "admin")
-  result <- update $ AddUser userName userAuth
+  res <- update $ AddUser userName userAuth
 
-  case result of
+  case res of
     Just user -> update $ AddToGroup Administrator user
     _ -> fail "Failed to create admin user!"
 

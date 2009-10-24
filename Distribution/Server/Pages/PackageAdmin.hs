@@ -43,7 +43,7 @@ prologue pkg
   | otherwise = html_desc
   where desc = description pkg
 	html_desc = case parseHaddockParagraphs (tokenise desc) of
-	              Left _ -> [paragraph << p | p <- paragraphs desc]
+	              Left _ -> [paragraph << para | para <- paragraphs desc]
 	              Right doc -> [markup htmlMarkup doc]
 
 
