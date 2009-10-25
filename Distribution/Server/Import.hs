@@ -308,11 +308,11 @@ strucuture, I'm okay with this.
 
 data IS
     = IS
-      { isUsers :: Users
-      , isPerms :: Permissions
-      , isPackages :: PackageIndex PkgInfo
-      , isDocs :: Documentation
-      , isBuildReps :: BuildReports
+      { isUsers :: !Users
+      , isPerms :: !Permissions
+      , isPackages :: !(PackageIndex PkgInfo)
+      , isDocs :: !Documentation
+      , isBuildReps :: !BuildReports
       , isStorage :: BlobStorage
       }
 

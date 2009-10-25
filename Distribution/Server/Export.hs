@@ -65,6 +65,7 @@ import qualified Codec.Archive.Tar.Entry as Tar
 
 import System.FilePath
 import System.Locale
+import System.IO.Unsafe (unsafeInterleaveIO)
 import Data.Time
 
 export :: Users
@@ -111,8 +112,25 @@ mkPackageEntries :: FilePath
                  -> IO [Tar.Entry]
 mkPackageEntries baseDir pkgs docs reports storage
     = let pkgList = allPackages pkgs
-      in concatMapM (mkPackageEntry baseDir storage docs reports) pkgList
+      in unsafeInterleaveConcatMap
+             (mkPackageEntry baseDir storage docs reports) pkgList
 
+{- let's be crazy lazy
+
+   The only non-pure operations we do are reading files
+   from the blob-storage, which is already lazy IO.
+
+   So we may as well not force the spine of the tar-ball
+   before we need to.
+-}
+unsafeInterleaveConcatMap :: (a -> IO [b]) -> [a] -> IO [b]
+unsafeInterleaveConcatMap f = go 
+
+ where go [] = return []
+       go (x:xs) = do
+         ys <- f x
+         yss <- unsafeInterleaveIO $ go xs
+         return (ys++yss)
 
 mkPackageEntry :: FilePath
                -> BlobStorage
