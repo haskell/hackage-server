@@ -18,7 +18,6 @@ Index
  * incremental updates, serve byte ranges
 
 Backup
- * dump all info into a tarball format, allow reload
 
 Build reports
 
