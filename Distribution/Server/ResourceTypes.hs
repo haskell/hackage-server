@@ -19,7 +19,8 @@ import Distribution.Server.Util.BlobStorage
          ( BlobId )
 
 import Happstack.Server
-         ( ToMessage(..), Response(..), RsFlags(..), nullRsFlags, mkHeaders )
+         ( ToMessage(..), Response(..), RsFlags(..), nullRsFlags, mkHeaders
+         , noContentLength )
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
@@ -85,8 +86,9 @@ instance ToMessage XHtml where
 newtype ExportTarball = ExportTarball BS.Lazy.ByteString
 
 instance ToMessage ExportTarball where
-    toContentType _ = BS.pack "application/gzip"
-    toMessage (ExportTarball bs) = bs
+    toResponse (ExportTarball bs)
+        = noContentLength $ mkResponse bs
+          [("Content-Type",  "application/gzip")]
 
 
 mkResponse :: BS.Lazy.ByteString -> [(String, String)] -> Response
