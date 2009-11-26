@@ -26,8 +26,8 @@ import qualified Distribution.Server.Users.Users as Users
 
 import Distribution.Text
          ( display )
-import Distribution.Simple.PackageIndex (PackageIndex)
-import qualified Distribution.Simple.PackageIndex as PackageIndex
+import Distribution.Server.PackageIndex (PackageIndex)
+import qualified Distribution.Server.PackageIndex as PackageIndex
 import Data.Time.Clock
          ( UTCTime )
 import Data.Time.Clock.POSIX

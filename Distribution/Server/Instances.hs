@@ -16,7 +16,6 @@ import Data.Time.Calendar (Day(..))
 import qualified Data.Binary as Binary
 import Data.Binary (Binary)
 
-deriving instance Typeable UTCTime
 deriving instance Typeable PackageIdentifier
 deriving instance Typeable GenericPackageDescription
 

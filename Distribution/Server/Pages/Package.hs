@@ -12,14 +12,18 @@ import Distribution.Server.Pages.Template		( hackagePage )
 import Distribution.Server.Packages.Types (PkgInfo(..))
 import qualified Distribution.Server.Users.Users as Users
 
-import qualified Distribution.Simple.PackageIndex as PackageIndex
-import Distribution.Simple.PackageIndex (PackageIndex)
+import qualified Distribution.Server.PackageIndex as PackageIndex
+import Distribution.Server.PackageIndex (PackageIndex)
 
 import Distribution.PackageDescription.Configuration
 				( flattenPackageDescription )
 import Distribution.Package
 import Distribution.PackageDescription as P
 import Distribution.Version
+    ( Version (..)
+    , VersionRange (..)
+    , withinRange
+    )
 import Distribution.Text	( display )
 import Text.XHtml.Strict hiding ( p, name )
 

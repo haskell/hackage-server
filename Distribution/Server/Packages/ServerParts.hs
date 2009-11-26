@@ -24,7 +24,7 @@ import Distribution.Server.Users.State as State
 
 import qualified  Distribution.Server.Packages.State as State
 import qualified Distribution.Server.Cache as Cache
-import qualified Distribution.Simple.PackageIndex as PackageIndex
+import qualified Distribution.Server.PackageIndex as PackageIndex
 import qualified Distribution.Server.Auth.Basic as Auth
 import Distribution.Server.Packages.Types
          ( PkgInfo(..) )

@@ -7,7 +7,7 @@ import Distribution.Server.Instances ()
 import Distribution.Server.Users.State ()
 
 import Distribution.Package (PackageIdentifier,Package(packageId))
-import qualified Distribution.Simple.PackageIndex as PackageIndex
+import qualified Distribution.Server.PackageIndex as PackageIndex
 import Distribution.Server.Packages.Types (PkgInfo(..))
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserGroup)
