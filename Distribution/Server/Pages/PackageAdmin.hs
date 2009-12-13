@@ -105,5 +105,5 @@ maybeLast = listToMaybe . reverse
 -}
 
 packageNameURL :: PackageIdentifier -> URL
-packageNameURL pkgId = "/packages" </> display (pkgName pkgId)
+packageNameURL pkgId = "/package" </> display (pkgName pkgId)
 

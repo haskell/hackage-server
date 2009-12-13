@@ -234,7 +234,7 @@ legacySupport = msum
               pkgid = PackageIdentifier {pkgName = PackageName name, pkgVersion = version}
           in dir dirName $ msum
              [ methodSP GET $
-                 movedPermanently ("/packages/"++ display pkgid ++ "/") (toResponse "")
+                 movedPermanently ("/package/"++ display pkgid ++ "/") (toResponse "")
              ]
         ]]
     , dir "00-index.tar.gz" $ msum
