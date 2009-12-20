@@ -51,7 +51,7 @@ import qualified Distribution.Server.Users.Permissions as Permissions
 
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.State
-import Distribution.Simple.PackageIndex
+import Distribution.Server.PackageIndex
 import Distribution.Package
 
 import Distribution.Server.Util.BlobStorage

@@ -54,8 +54,8 @@ import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Permissions (Permissions,GroupName)
 import Distribution.Server.Users.State (ReplacePermissions(..))
 
-import qualified Distribution.Simple.PackageIndex as PackageIndex
-import Distribution.Simple.PackageIndex (PackageIndex)
+import qualified Distribution.Server.PackageIndex as PackageIndex
+import Distribution.Server.PackageIndex (PackageIndex)
 import Distribution.Package
 
 import Distribution.Text hiding (parse)
