@@ -155,7 +155,7 @@ run server = simpleHTTP conf $ msum (impl server)
 -- | Perform a clean shutdown of the server.
 --
 shutdown :: Server -> IO ()
-shutdown server = closeTxControl (serverTxControl server)
+shutdown server = shutdownSystem (serverTxControl server)
 
 -- | Write out a checkpoint of the server state. This makes recovery quicker
 -- because fewer logged transactions have to be replayed.

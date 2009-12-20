@@ -100,10 +100,10 @@ executable hackage-server
     rss == 3000.0.*,
     Cabal == 1.8.*,
     csv == 0.1.*,
-    happstack-data   == 0.3.*,
-    happstack-util   == 0.3.*,
-    happstack-state  == 0.3.*,
-    happstack-server == 0.3.*
+    happstack-data   == 0.4.*,
+    happstack-util   == 0.4.*,
+    happstack-state  == 0.4.*,
+    happstack-server == 0.4.*
 
   if os(linux)
      extra-libraries: crypt
