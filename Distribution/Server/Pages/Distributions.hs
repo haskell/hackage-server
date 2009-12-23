@@ -1,0 +1,151 @@
+
+module Distribution.Server.Pages.Distributions
+    ( homePage
+    , adminHomePage
+    , distroListing
+    , distroPage
+    , adminDistroPage
+    )
+    where
+
+import Distribution.Server.Pages.Template (hackagePage)
+import Distribution.Server.Distributions.Distributions
+import Distribution.Server.Users.Types
+import Distribution.Text
+
+import Distribution.Package
+
+import System.FilePath.Posix
+import Text.XHtml.Strict
+
+import Text.URI (escapeString, okInPath)
+
+-- | List of known distributions
+homePage :: [DistroName] -> Html
+homePage = hackagePage "Distributions" . listing "/distro"
+
+-- | List of known distributions. Includes a form
+-- to add a new distribution.
+adminHomePage :: [DistroName] -> Html
+adminHomePage distros
+    = hackagePage "Distributions" $ concat
+      [ listing "/admin/distro" distros
+      , addDistroForm
+      ]
+
+-- | Display the packages in a distribution. The passed-in URL is the
+-- link to the admin page.
+distroListing :: DistroName -> [(PackageName, DistroPackageInfo)] -> URL -> Html
+distroListing distro packages adminLink
+    = hackagePage (display distro) $ concat
+      [ packageListing distro packages
+      , adminLinkHtml adminLink
+      ]
+
+ where
+   packageListing :: DistroName -> [(PackageName, DistroPackageInfo)] -> [Html]
+   packageListing distro packages
+       = [ h3 << ("Packages in " ++ display distro)
+         , ulist << map (uncurry packageHtml) packages
+         ]
+
+   packageHtml pName pInfo
+       = li << (display pName ++ " " ++ display (distro_version pInfo))
+
+   adminLinkHtml adminLink
+       = [ h3 << "Admin Tasks"
+         , anchor ! [href adminLink] << "Administrative tasks"
+         ]
+
+-- | Admin page for a distribution. Includes a list
+-- of the maintainers and a form to add maintainers.
+distroPage :: DistroName -> [UserName] -> Html
+distroPage distro users
+    = hackagePage (display distro) $ concat
+      [ addPackageForm distro
+      , userList distro users
+      , addUserForm distro
+      ]
+
+addPackageForm :: DistroName -> [Html]
+addPackageForm distro  =
+    let actionUri =
+            "/distro" </> displayDir distro </> "admin" </> "addPackage"
+    in [ h3 << "Add a package"
+       , gui actionUri ! [theclass "box"] <<
+         [ p << [stringToHtml "Package: ", textfield "packageName"]
+         , p << [stringToHtml "Version: ", textfield "version"]
+         , p << [stringToHtml "URL: ", textfield "uri"]
+         , submit "submit" "Add package"
+         ]
+       ]
+
+-- | Admin form for a distribution. Includes a list
+-- of the maintainers, a form to add maintainers and
+-- a button to destroy this distribution.
+adminDistroPage :: DistroName -> [UserName] -> Html
+adminDistroPage distro users
+    = hackagePage (display distro) $ concat
+      [ userList distro users
+      , addUserForm distro
+      , deleteDistro distro
+      ]
+
+addDistroForm :: [Html]
+addDistroForm =
+    [ h3 << "Add Distribution"
+    , gui "/admin/createDistro" ! [theclass "box"] <<
+        [ p << [stringToHtml "Name: ", textfield "distroName"]
+        , submit "submit" "Add distribution"
+        ]
+    ]
+
+addUserForm :: DistroName -> [Html]
+addUserForm distro =
+    [ h3 << "Add a maintainer"
+    , gui ("/distro" </> displayDir distro </> "admin" </> "addMember") ! [theclass "box"]
+      << [ p << [stringToHtml "User: ", textfield "userName"]
+         , submit "submit" "Add user"
+         ]
+    ]
+
+displayDir :: Text a => a -> String
+displayDir = escapeString pred . display
+ where pred c = okInPath c && c /= '/'
+
+deleteDistro :: DistroName -> [Html]
+deleteDistro distro
+    = [ h3 << "Delete distribution"
+      , gui ("/admin/distro" </> displayDir distro </> "delete") <<
+        submit "submit" "Delete Distribution"
+      ]
+
+userList :: DistroName -> [UserName] -> [Html]
+userList distro users
+    = [ h3 << "Maintainers"
+      , ulist << map (userHtml distro) users
+      ]
+
+userHtml :: DistroName -> UserName -> Html
+userHtml distro user
+    = li << [ stringToHtml $ display user
+            , removeUser user distro
+            ]
+
+removeUser :: UserName -> DistroName -> Html
+removeUser user distro
+    = gui ("/distro" </> displayDir distro </> "admin" </> "removeMember")
+      << [ hidden "userName" $ display user
+         , submit "submit" "Remove"
+         ]
+
+listing :: FilePath -> [DistroName] -> [Html]
+listing rootPath distros
+    = [ h3 << "Distributions"
+      , ulist << map (distroHtml rootPath) distros
+      ]
+
+distroHtml :: FilePath -> DistroName -> Html
+distroHtml rootPath distro
+    = li << anchor ! [href $ rootPath </> displayDir distro ]
+      << display distro

@@ -43,6 +43,9 @@ executable hackage-server
     Distribution.Server.BulkImport
     Distribution.Server.BulkImport.UploadLog
     Distribution.Server.Cache
+    Distribution.Server.Distributions.Distributions
+    Distribution.Server.Distributions.State
+    Distribution.Server.Distributions.Types
     Distribution.Server.Export
     Distribution.Server.Export.FlatFiles
     Distribution.Server.Export.ServerParts
@@ -55,6 +58,7 @@ executable hackage-server
     Distribution.Server.Packages.Types
     Distribution.Server.PackageUpload.Unpack
     Distribution.Server.Pages.BuildReports
+    Distribution.Server.Pages.Distributions
     Distribution.Server.Pages.Index
     Distribution.Server.Pages.Package
     Distribution.Server.Pages.Package.HaddockHtml
@@ -103,7 +107,8 @@ executable hackage-server
     happstack-data   == 0.4.*,
     happstack-util   == 0.4.*,
     happstack-state  == 0.4.*,
-    happstack-server == 0.4.*
+    happstack-server == 0.4.*,
+    uri == 0.1.*
 
   if os(linux)
      extra-libraries: crypt

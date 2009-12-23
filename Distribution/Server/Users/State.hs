@@ -25,7 +25,6 @@ import Control.Monad.Reader
 import qualified Control.Monad.State as State
 
 
-
 instance Component Permissions where
     type Dependencies Permissions = End
     initialValue = Permissions Map.empty

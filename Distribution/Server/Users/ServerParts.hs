@@ -1,8 +1,7 @@
 module Distribution.Server.Users.ServerParts (
-    admin,
+    userAdmin,
     changePassword,
     newPasswd,
-    guardAuth,
   ) where
 
 import Happstack.Server hiding (port)
@@ -50,47 +49,6 @@ changePassword =
                 ok $ toResponse "Password Changed"
         else forbidden $ toResponse "Copies of new password do not match or is an invalid password (ex: blank)"
 
-{-
-{-
-/groups/pkg/packageName
-/groups/admin
-/groups/trustee
--}
-groupInterface :: [ServerPart Response]
-groupInterface =
-    [ dir "pkg"
-      [ path $ \pkgName -> groupMethods (PackageMaintainer (PackageName pkgName)) ]
-    , dir "admin" (groupMethods Administrator)
-    , dir "trustee" (groupMethods Trustee)
-    ]
-    where groupMethods groupName
-              = [ methodSP GET $
-                  do userGroup <- query $ LookupUserGroup groupName
-                     userNames <- query $ ListGroupMembers userGroup
-                     ok $ toResponse $ unlines (map display userNames)
-                , methodSP PUT $ ...
-                , methodSP DELETE $ ...
-                ]
--}
-
-guardAuth :: [GroupName] -> ServerPart ()
-guardAuth gNames = do
-  state <- query GetPackagesState
-  group <- query $ LookupUserGroups gNames
-  _ <- Auth.hackageAuth (userDb state) (Just group)
-  return ()
-
--- Top level server part for administrative actions under the "admin"
--- directbory
-admin :: BlobStorage -> Cache.Cache -> URIAuth -> ServerPart Response
-admin storage cache host = do
-
-  guardAuth [Administrator]
-
-  msum
-   [ dir "users" userAdmin
-   , dir "export.tar.gz" (export storage)
-   ]
 
 -- Assumes that the user has already been autheniticated
 -- and has proper permissions

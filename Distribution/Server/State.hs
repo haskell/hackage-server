@@ -7,6 +7,8 @@ import Distribution.Server.Instances ()
 
 import Distribution.Server.Packages.State
 import Distribution.Server.Users.Permissions (Permissions)
+import Distribution.Server.Users.State
+import Distribution.Server.Distributions.State (Distros)
 
 import Happstack.State
 import Happstack.Data.Serialize
@@ -22,7 +24,9 @@ instance Serialize HackageEntryPoint where
     getCopy = contain $ return HackageEntryPoint
 
 instance Component HackageEntryPoint where
-    type Dependencies HackageEntryPoint = PackagesState :+: Documentation :+: Permissions :+: End
+    type Dependencies HackageEntryPoint
+        = PackagesState :+: Documentation :+: Permissions :+:
+          Distros :+: End
     initialValue = HackageEntryPoint
 
 

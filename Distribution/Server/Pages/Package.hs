@@ -10,6 +10,8 @@ import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Pages.Package.ModuleForest ( moduleForest )
 import Distribution.Server.Pages.Template		( hackagePage )
 import Distribution.Server.Packages.Types (PkgInfo(..))
+import Distribution.Server.Distributions.Distributions
+    (DistroPackageInfo(..), DistroName)
 import qualified Distribution.Server.Users.Users as Users
 
 import qualified Distribution.Server.PackageIndex as PackageIndex
@@ -40,13 +42,15 @@ import System.FilePath.Posix    ( (</>), (<.>) )
 import System.Locale            ( defaultTimeLocale )
 import Data.Time.Format         ( formatTime )
 
-packagePage :: Users.Users -> PackageIndex PkgInfo -> PkgInfo -> [PkgInfo] -> Html
-packagePage users pkgs pkg allVersions =
+packagePage :: Users.Users -> PackageIndex PkgInfo ->
+               PkgInfo -> [PkgInfo] -> [(DistroName, DistroPackageInfo)] -> Html
+packagePage users pkgs pkg allVersions distributions =
   let packageData = (emptyPackageData (pkgDesc pkg)) {
         pdAllVersions = sort (map packageVersion allVersions),
         pdTags = [("upload date", showTime (pkgUploadTime pkg))
                  ,("uploaded by", display userName)],
-        pdDependencies = pkgs
+        pdDependencies = pkgs,
+        pdDistributions = distributions
       }
       showTime = formatTime defaultTimeLocale "%c"
       userName = Users.idToName users (pkgUploadUser pkg)
@@ -74,6 +78,8 @@ data PackageData = PackageData
 	, pdBuildFailures :: Map GHCVersion URL
 		-- ^ Failed builds of this version of the package
 		-- (if available).
+        , pdDistributions :: [(DistroName, DistroPackageInfo)]
+                -- ^ Distributions which have this package available
 	}
 
 type GHCVersion = String
@@ -86,7 +92,8 @@ emptyPackageData pkg = PackageData {
   pdDependencies = mempty,
   pdDocURL = Nothing,
   pdBuilds = mempty,
-  pdBuildFailures = mempty
+  pdBuildFailures = mempty,
+  pdDistributions = mempty
 }
 
 -- | Body of the package page
@@ -184,7 +191,9 @@ propertySection pd = [
 		(if null successes then []
 		 else [("Built on", commaList (map toHtml successes))]) ++
 		(if null failures then []
-		 else [("Build failure", commaList (map showLog failures))])
+		 else [("Build failure", commaList (map showLog failures))]) ++
+                (if null distributions then []
+                 else [("Distributions:", commaList $ map showDist distributions )])
 	]
   where all_vs = pdAllVersions pd
 	earlier_vs = takeWhile (< pversion) all_vs
@@ -211,6 +220,12 @@ propertySection pd = [
 	capitalize "" = ""
         dispTagVal "superseded by" v = anchor ! [href (packageURL (PackageIdentifier (PackageName v) (Version [] [])))] << v
         dispTagVal _ v = toHtml v
+        distributions = pdDistributions pd
+        showDist (name, info)
+            = let version = distro_version info
+                  url = distro_url info
+              in toHtml (display name ++ ":") +++
+                 anchor ! [href url] << toHtml (display version)
 
 tabulate :: [(String, Html)] -> Html
 -- tabulate items = dlist << concat [[dterm << t, ddef << d] | (t, d) <- items]

@@ -25,10 +25,13 @@ import Happstack.Server hiding (port)
 import qualified Happstack.Server
 import Happstack.State hiding (Version)
 
+import Distribution.Server.ServerParts
+    (guardAuth)
 import qualified Distribution.Server.Import as Import ( importTar )
 
 import Distribution.Server.Packages.ServerParts
 import Distribution.Server.Users.ServerParts
+import Distribution.Server.Distributions.ServerParts
 import Distribution.Server.Users.Permissions (GroupName(..))
 
 import Distribution.Server.State as State
@@ -278,10 +281,23 @@ impl (Server store static _ cache host _) =
           cacheState <- Cache.get cache
           ok $ toResponse $ Resource.IndexTarball (Cache.indexTarball cacheState)
       ]
-  , dir "admin" (admin store cache host)
+  , dir "admin" admin
   , dir "check" checkPackage
   , dir "htpasswd" $ msum
       [ changePassword ]
-  ,
-  fileServe ["hackage.html"] static
+  , dir "distro" distros
+  , fileServe ["hackage.html"] static
   ]
+
+
+-- Top level server part for administrative actions under the "admin"
+-- directory
+admin :: ServerPart Response
+admin = do
+
+  guardAuth [Administrator]
+
+  msum
+   [ dir "users" userAdmin
+   , adminDist
+   ]

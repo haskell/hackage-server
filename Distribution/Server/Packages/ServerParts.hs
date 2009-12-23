@@ -17,10 +17,11 @@ import Happstack.Server hiding (port)
 import qualified Happstack.Server
 import Happstack.State hiding (Version)
 
-import Distribution.Server.Users.ServerParts (guardAuth)
+import Distribution.Server.ServerParts (guardAuth)
 
 import Distribution.Server.Packages.State as State hiding (buildReports)
 import Distribution.Server.Users.State as State
+import Distribution.Server.Distributions.State as State
 import Distribution.Server.Users.Permissions (GroupName(..))
 
 import qualified  Distribution.Server.Packages.State as State
@@ -85,9 +86,10 @@ stateToCache host state = getCurrentTime >>= \now -> return
 handlePackageById :: BlobStorage -> PackageIdentifier -> [ServerPart Response]
 handlePackageById store pkgid = 
   [ withPackage pkgid $ \state pkg pkgs ->
-      methodSP GET $
+      methodSP GET $ do
+        distributions <- query $ State.PackageStatus (packageName pkgid)
         ok $ toResponse $ Resource.XHtml $
-          Pages.packagePage (userDb state) (packageList state) pkg pkgs
+          Pages.packagePage (userDb state) (packageList state) pkg pkgs distributions
 
   , dir (display (packageName pkgid) ++ ".cabal") $ msum
     [ withPackage pkgid $ \_ pkg _pkgs ->

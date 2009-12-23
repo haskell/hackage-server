@@ -15,6 +15,7 @@ module Distribution.Server.Users.Permissions
 
 import Distribution.Package
          ( PackageName )
+import Distribution.Server.Distributions.Types (DistroId)
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserGroup)
 import Distribution.Server.Users.Types (UserId)
@@ -29,14 +30,20 @@ import Data.Typeable
 
 
 
-data GroupName = Administrator | Trustee | PackageMaintainer PackageName
-                 deriving (Read,Show,Ord,Typeable,Eq)
+data GroupName
+    = Administrator
+    | Trustee
+    | PackageMaintainer PackageName
+    | DistroMaintainer DistroId
+  deriving (Read,Show,Ord,Typeable,Eq)
 
 instance Text GroupName where
     disp Administrator = text "Administrator"
     disp Trustee = text "Trustee"
     disp (PackageMaintainer pkgName)
         = text "PackageMaintainer" <+> disp pkgName
+    disp (DistroMaintainer distroId)
+        = text "DistroMaintainer" <+> disp distroId
 
     parse
         = choice
@@ -45,6 +52,9 @@ instance Text GroupName where
           , string "PackageMaintainer" >>
             skipSpaces >>
             PackageMaintainer `fmap` parse
+          , string "DistroMaintainer" >>
+            skipSpaces >>
+            DistroMaintainer `fmap` parse
           ]
 
 
