@@ -82,6 +82,7 @@ adminDist
 {-| End user entry points. This function performs all
   need permission verification.
 
+
 The first are a set of REST-style requests, intended
 to be usable from command-line tools such as curl and
 wget.
@@ -193,43 +194,40 @@ distros
 -- Targeted towards hackage admins.
 adminHomePage :: ServerPart Response
 adminHomePage = do
-  distNames <- map snd `fmap` query Dist.Enumerate
+  distNames <- query Dist.Enumerate
   ok $ toResponse $ Resources.XHtml $ Pages.adminHomePage distNames
 
 -- | Admin page for a particular distribution.
 -- Targeted towards hackage admins.
-adminDistroPage :: DistroId -> ServerPart Response
+adminDistroPage :: DistroName -> ServerPart Response
 adminDistroPage dist = do
-  Just distName <- query $ LookupDistroName dist
   distGroup <- query $ LookupUserGroup $ DistroMaintainer dist
   distUsers <- query $ ListGroupMembers distGroup
-  ok $ toResponse $ Resources.XHtml $ Pages.adminDistroPage distName distUsers
+  ok $ toResponse $ Resources.XHtml $ Pages.adminDistroPage dist distUsers
 
 -- | Listing of a all known distros.
 -- Public.
 homePage :: ServerPart Response
 homePage = do
-  distNames <- map snd `fmap` query Dist.Enumerate
+  distNames <- query Dist.Enumerate
   ok $ toResponse $ Resources.XHtml $ Pages.homePage distNames
 
 -- | Public page for a particular distro
-distroPage :: DistroId -> ServerPart Response
+distroPage :: DistroName -> ServerPart Response
 distroPage dist
     = do
-  Just distName <- query $ LookupDistroName dist
   distPkgs <- query $ DistroStatus dist
   ok $ toResponse $ Resources.XHtml $
-    Pages.distroListing distName distPkgs $
-    "/distro" </> displayDir distName </> "admin"
+    Pages.distroListing dist distPkgs $
+    "/distro" </> displayDir dist </> "admin"
 
 -- | Admin page for a particular distro.
 -- For distro maintainer.
-distroAdminPage :: DistroId -> ServerPart Response
+distroAdminPage :: DistroName -> ServerPart Response
 distroAdminPage dist = do
-  Just distName <- query $ LookupDistroName dist
   distGroup <- query $ LookupUserGroup $ DistroMaintainer dist
   distUsers <- query $ ListGroupMembers distGroup
-  ok $ toResponse $ Resources.XHtml $ Pages.distroPage distName distUsers
+  ok $ toResponse $ Resources.XHtml $ Pages.distroPage dist distUsers
 
 
 -- Actions
@@ -241,14 +239,13 @@ distroAdminPage dist = do
 create :: DistroName -> ServerPart Response
 create distroName
     = do
-  mdistro <- update $ AddDistro distroName
-  case mdistro of
-    Nothing
-        -> ok $ toResponse $
-           hackageError "Selected distribution name is already in use"
-    Just{}
-        -> seeOther ("/admin/distro/" ++ displayDir distroName) $
-           toResponse "Ok!"
+  success <- update $ AddDistro distroName
+  if not success
+     then ok $ toResponse $
+          hackageError "Selected distribution name is already in use"
+
+     else seeOther ("/admin/distro/" ++ displayDir distroName) $
+          toResponse "Ok!"
 
 displayDir :: Text a => a -> String
 displayDir = escapeString pred . display
@@ -258,36 +255,36 @@ displayDir = escapeString pred . display
 -- | POST request to remove a distribution.
 -- The caller is responsible for verifying
 -- permissions.
-delete :: MonadIO m => DistroId -> m ()
+delete :: MonadIO m => DistroName -> m ()
 delete distro
     = update $ RemoveDistro distro
       
-deletePackage :: DistroId -> PackageName -> ServerPart Response
+deletePackage :: DistroName -> PackageName -> ServerPart Response
 deletePackage distro packageName
     = do
   update $ DropPackage distro packageName
   ok $ toResponse "Ok!"
       
 
-addMember :: DistroId -> ServerPart Response
+addMember :: DistroName -> ServerPart Response
 addMember distro
     = lookUserId $ \user -> do
       update $ AddToGroup (DistroMaintainer distro) user
       nextUri <- bounceUri "/distro"
       seeOther nextUri $ toResponse "Ok!"
 
-removeMember :: DistroId -> ServerPart Response
+removeMember :: DistroName -> ServerPart Response
 removeMember distro
     = lookUserId $ \user -> do
       update $ RemoveFromGroup (DistroMaintainer distro) user
       nextUri <- bounceUri "/distro"
       seeOther nextUri $ toResponse "Ok!"
 
-addPackageForm :: DistroId -> ServerPart Response
+addPackageForm :: DistroName -> ServerPart Response
 addPackageForm dist
     = lookPackageName $ addPackagePart dist
 
-addPackagePart :: DistroId -> PackageName -> ServerPart Response
+addPackagePart :: DistroName -> PackageName -> ServerPart Response
 addPackagePart dist packageName =
       lookPackageInfo $ \distInfo -> do
        update $ AddPackage dist packageName distInfo
@@ -296,16 +293,16 @@ addPackagePart dist packageName =
 
 -- Combinators for server-parts, utility functions
 
--- |Pop a distro name off of the path, lookup the corresponding
--- id. Returns 404 on failure to find distro.
-withDistro :: (DistroId -> ServerPart a) -> ServerPart a
+-- |Pop a distro name off of the path, verify that it's a valid
+-- distribution in the db. Returns 404 on failure to find distro.
+withDistro :: (DistroName -> ServerPart a) -> ServerPart a
 withDistro k
-    = withText $ \distName -> do
-        mdist <- query $ LookupDistroId distName
-        case mdist of
-          Nothing   -> finishNotFound $ toResponse $
-                       hackageNotFound "No such distribution"
-          Just dist -> k dist
+    = withText $ \distro -> do
+        present <- query $ IsDistribution distro
+        if not present
+          then finishNotFound $ toResponse $
+               hackageNotFound "No such distribution"
+          else k distro
 
 -- |Pop a parsable thing off of the path.
 withText :: Text t => (t -> ServerPart a) -> ServerPart a
@@ -365,17 +362,17 @@ lookPackageInfo k
     Just pInfo -> k pInfo
 
 
--- | Form validation for entering a distribution. Peforms
--- a lookup from name to id, which also validates the existence
--- of the named distribution
-lookDistroId :: (DistroId -> ServerPart a) -> ServerPart a
-lookDistroId k
-    = lookDistroName $ \distroName -> do
-      mDistro <- query $ LookupDistroId distroName
-      case mDistro of
-        Nothing -> finishOk $ toResponse $
-                   hackageError "Distribution does not exist"
-        Just distro -> k distro
+-- | Form validation for entering a distribution. Is the same
+-- as lookDistroName, except that we also check to see that
+-- the named distro is in the db
+lookDistro :: (DistroName -> ServerPart a) -> ServerPart a
+lookDistro k
+    = lookDistroName $ \distro -> do
+      present <- query $ IsDistribution distro
+      if not present
+       then finishOk $ toResponse $
+            hackageError "Distribution does not exist"
+       else k distro
 
 
 -- | Retrieves the form element "userName" and converts

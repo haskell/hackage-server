@@ -4,15 +4,12 @@
 
 module Distribution.Server.Distributions.Distributions
     ( DistroName
-    , DistroId
     , Distributions
     , emptyDistributions
     , addDistro
-    , insertDistro
     , removeDistro
-    , lookupDistroName
-    , lookupDistroId
     , enumerate
+    , isDistribution
     , DistroVersions
     , emptyDistroVersions
     , DistroPackageInfo(..)
@@ -35,112 +32,77 @@ import Data.List (foldl')
 import Data.Maybe (fromJust)
 
 emptyDistributions :: Distributions
-emptyDistributions = Distributions IntMap.empty Map.empty 0
-
+emptyDistributions = Distributions Set.empty
 
 emptyDistroVersions :: DistroVersions
-emptyDistroVersions = DistroVersions Map.empty IntMap.empty
+emptyDistroVersions = DistroVersions Map.empty Map.empty
 
 
 --- Distribution updating
 
--- | Add a distribution, generate a fresh id. Returns 'Nothing' if the
+isDistribution :: DistroName -> Distributions -> Bool
+isDistribution distro d@Distributions{..}
+    = Set.member distro name_map
+
+-- | Add a distribution. Returns 'Nothing' if the
 -- name is already in use.
-addDistro :: DistroName -> Distributions -> Maybe (DistroId, Distributions)
+addDistro :: DistroName -> Distributions -> Maybe Distributions
 addDistro name d@Distributions{..}
-    = case lookupDistroId name d of
-        Just{} -> Nothing
-        Nothing ->
-            let newDistro = DistroId next_id
-            in Just
-                   (newDistro
-                   , d
-                    { name_map = IntMap.insert next_id name name_map
-                    , id_map   = Map.insert name newDistro id_map
-                    , next_id = next_id + 1
-                    }
-                   )
+    | isDistribution name d = Nothing
+    | otherwise = Just . Distributions $ Set.insert name name_map
 
--- | Add a dsitribution with the specified id and name. Returns 'Nothing'
--- if either the id or name are in use.
-insertDistro :: DistroId -> DistroName -> Distributions -> Maybe Distributions
-insertDistro dId@(DistroId distro) name d@Distributions{..}
-    = case (lookupDistroId name d, lookupDistroName dId d) of
-        (Nothing, Nothing) ->
-            Just d{ name_map = IntMap.insert distro name name_map
-                  , id_map   = Map.insert name dId id_map
-                  }
-        _ -> Nothing
-
--- | Lookup the id of a distribution from its name.
-lookupDistroId :: DistroName -> Distributions -> Maybe DistroId
-lookupDistroId name Distributions{..}
-    = Map.lookup name id_map
-
--- | Lookup the name of a distribution from its id.
-lookupDistroName :: DistroId -> Distributions -> Maybe DistroName
-lookupDistroName (DistroId distro) Distributions{..}
-    = IntMap.lookup distro name_map
 
 -- | List all known distributions
-enumerate :: Distributions -> [(DistroId, DistroName)]
+enumerate :: Distributions -> [DistroName]
 enumerate Distributions{..}
-    = map (onFst DistroId) $ IntMap.toList name_map
- where onFst f (x,y) = (f x, y)
+    = Set.toList name_map
 
 --- Queries
 
 -- | For a particular distribution, which packages do they have, and
 -- at which version.
-distroStatus :: DistroId -> DistroVersions -> [(PackageName, DistroPackageInfo)]
-distroStatus  (DistroId distro) DistroVersions{..}
-    = let packageNames = maybe [] Set.toList (IntMap.lookup distro distro_map)
+distroStatus :: DistroName -> DistroVersions -> [(PackageName, DistroPackageInfo)]
+distroStatus  distro DistroVersions{..}
+    = let packageNames = maybe [] Set.toList (Map.lookup distro distro_map)
           f packageName = let infoMap = fromJust $ Map.lookup packageName package_map
-                              info = fromJust $ IntMap.lookup distro infoMap
+                              info = fromJust $ Map.lookup distro infoMap
                           in (packageName, info)
       in map f packageNames
 
 -- | For a particular package, which distributions contain it and at which
 -- version.
-packageStatus :: PackageName -> DistroVersions -> [(DistroId, DistroPackageInfo)]
+packageStatus :: PackageName -> DistroVersions -> [(DistroName, DistroPackageInfo)]
 packageStatus packageName DistroVersions{..}
-    = map (onFst DistroId) $
-      maybe [] IntMap.toList (Map.lookup packageName package_map)
- where onFst f (x,y) = (f x, y)
-
+    = maybe [] Map.toList (Map.lookup packageName package_map)
 
 --- Removing
 
 -- | Remove a distirbution from the list of known distirbutions
-removeDistro :: DistroId -> Distributions -> Distributions
-removeDistro dId@(DistroId distro) distros@Distributions{..}
-    = case lookupDistroName dId distros of
-        Nothing -> distros
-        Just distroName ->
-            distros
-            { name_map = IntMap.delete distro name_map
-            , id_map   = Map.delete distroName id_map
-            }
+removeDistro :: DistroName -> Distributions -> Distributions
+removeDistro distro distros@Distributions{..}
+    = distros
+      { name_map = Set.delete distro name_map
+      }
 
 -- | Drop all packages for a distribution.
-removeDistroVersions :: DistroId -> DistroVersions -> DistroVersions
-removeDistroVersions dId@(DistroId distro) dv@DistroVersions{..}
-    = let packageNames = maybe [] Set.toList (IntMap.lookup distro distro_map)
-      in foldl' (flip $ dropPackage dId) dv packageNames
+removeDistroVersions :: DistroName -> DistroVersions -> DistroVersions
+removeDistroVersions distro dv@DistroVersions{..}
+    = let packageNames = maybe [] Set.toList (Map.lookup distro distro_map)
+      in foldl' (flip $ dropPackage distro) dv packageNames
 
 --- Updating
 
 -- | Flag a package as no longer being distributed
-dropPackage :: DistroId -> PackageName -> DistroVersions -> DistroVersions
-dropPackage (DistroId distro) packageName dv@DistroVersions{..}
+dropPackage :: DistroName -> PackageName -> DistroVersions -> DistroVersions
+dropPackage distro packageName dv@DistroVersions{..}
     = dv
       { package_map = Map.update pUpdate packageName package_map
-      , distro_map  = IntMap.update dUpdate distro distro_map
+      , distro_map  = Map.update dUpdate distro distro_map
       }
  where pUpdate infoMap = 
-           case IntMap.delete distro infoMap of
+           case Map.delete distro infoMap of
              infoMap'
-                 -> if IntMap.null infoMap'
+                 -> if Map.null infoMap'
                     then Nothing
                     else Just infoMap'
 
@@ -153,17 +115,17 @@ dropPackage (DistroId distro) packageName dv@DistroVersions{..}
 
 -- | Add a package for a distribution. If the distribution already
 -- had information for the specified package, that information is replaced.
-addPackage :: DistroId -> PackageName -> DistroPackageInfo
+addPackage :: DistroName -> PackageName -> DistroPackageInfo
            -> DistroVersions -> DistroVersions
-addPackage did@(DistroId distro) packageName info dv@DistroVersions{..}
+addPackage distro packageName info dv@DistroVersions{..}
     = dv
       { package_map = Map.insertWith'
-                      (const $ IntMap.insert distro info)
+                      (const $ Map.insert distro info)
                       packageName
-                      (IntMap.singleton distro info)
+                      (Map.singleton distro info)
                       package_map
 
-      , distro_map  = IntMap.insertWith  -- should be insertWith'?
+      , distro_map  = Map.insertWith  -- should be insertWith'?
                       (const $ Set.insert packageName)
                       distro
                       (Set.singleton packageName)

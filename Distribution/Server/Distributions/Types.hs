@@ -11,7 +11,6 @@ module Distribution.Server.Distributions.Types where
 import Distribution.Server.Instances()
 
 import qualified Data.Map as Map
-import qualified Data.IntMap as IntMap
 import qualified Data.Set as Set
 
 import qualified Distribution.Version as Version
@@ -35,26 +34,16 @@ import Data.Typeable
 
 -- | Distribution names may contain letters, numbers and punctuation.
 newtype DistroName = DistroName String
- deriving (Eq, Ord, Show, Typeable)
+ deriving (Eq, Ord, Read, Show, Typeable)
 instance Version DistroName
 instance Text DistroName where
   disp (DistroName name) = Disp.text name
   parse = DistroName <$> Parse.munch1 (\c -> Char.isAlphaNum c || Char.isPunctuation c)
 
 
-newtype DistroId = DistroId Int
- deriving (Eq, Ord, Read, Show, Typeable)
-instance Version DistroId
-
-instance Text DistroId where
-    disp (DistroId id) = Disp.int id
-    parse = DistroId <$> Parse.int
-
 -- | Listing of known distirbutions 
 data Distributions = Distributions
-    { name_map :: !(IntMap.IntMap DistroName)
-    , id_map   :: !(Map.Map DistroName DistroId)
-    , next_id  :: !Int
+    { name_map :: !(Set.Set DistroName)
     }
  deriving Typeable
 instance Version Distributions
@@ -62,8 +51,8 @@ instance Version Distributions
 -- | Listing of which distirbutions have which version of particular
 -- packages.
 data DistroVersions = DistroVersions
-    { package_map :: !(Map.Map PackageName (IntMap.IntMap DistroPackageInfo))
-    , distro_map  :: !(IntMap.IntMap (Set.Set PackageName))
+    { package_map :: !(Map.Map PackageName (Map.Map DistroName DistroPackageInfo))
+    , distro_map  :: !(Map.Map DistroName (Set.Set PackageName))
     }
  deriving Typeable
 instance Version DistroVersions
@@ -80,7 +69,6 @@ instance Version DistroPackageInfo
 -- happstack magic
 $(deriveSerializeFor
   [ ''DistroName
-  , ''DistroId
   , ''Distributions
   , ''DistroVersions
   , ''DistroPackageInfo
