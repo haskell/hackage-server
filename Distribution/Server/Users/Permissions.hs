@@ -7,6 +7,7 @@ module Distribution.Server.Users.Permissions
     , empty
     , addToGroup
     , removeFromGroup
+    , removeGroup
       -- querying
     , lookupUserGroup
     , lookupUserGroups
@@ -88,3 +89,7 @@ removeFromGroup groupName userId perms
     =  perms{permissions = Map.alter fn groupName (permissions perms)}
     where fn Nothing = Nothing
           fn (Just group) = Just $ Group.remove userId group
+
+removeGroup :: GroupName -> Permissions -> Permissions
+removeGroup groupName perms
+    = perms{permissions = Map.delete groupName (permissions perms)}

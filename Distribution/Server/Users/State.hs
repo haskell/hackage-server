@@ -90,6 +90,10 @@ removeFromGroup :: GroupName -> UserId -> Update Permissions ()
 removeFromGroup groupName userId
     = State.modify $ Permissions.removeFromGroup groupName userId
 
+removeGroup :: GroupName -> Update Permissions ()
+removeGroup groupName
+    = State.modify $ Permissions.removeGroup groupName
+
 getPermissions :: Query Permissions Permissions
 getPermissions = ask
 
@@ -108,6 +112,7 @@ $(mkMethods ''Permissions ['lookupUserGroup
                           ,'lookupUserGroups
                           ,'addToGroup
                           ,'removeFromGroup
+                          ,'removeGroup
                           ,'getPermissions
 
                           -- Import

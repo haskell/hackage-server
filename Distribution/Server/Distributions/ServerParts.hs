@@ -257,7 +257,9 @@ displayDir = escapeString pred . display
 -- permissions.
 delete :: MonadIO m => DistroName -> m ()
 delete distro
-    = update $ RemoveDistro distro
+    = do
+  update $ RemoveDistro distro
+  update $ RemoveGroup $ DistroMaintainer distro
       
 deletePackage :: DistroName -> PackageName -> ServerPart Response
 deletePackage distro packageName
