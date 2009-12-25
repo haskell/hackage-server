@@ -116,17 +116,17 @@ dropPackage distro package dv@DistroVersions{..}
 -- had information for the specified package, that information is replaced.
 addPackage :: DistroName -> PackageName -> DistroPackageInfo
            -> DistroVersions -> DistroVersions
-addPackage distro packageName info dv@DistroVersions{..}
+addPackage distro package info dv@DistroVersions{..}
     = dv
       { package_map = Map.insertWith'
                       (const $ Map.insert distro info)
-                      packageName
+                      package
                       (Map.singleton distro info)
                       package_map
 
       , distro_map  = Map.insertWith  -- should be insertWith'?
-                      (const $ Set.insert packageName)
+                      (const $ Set.insert package)
                       distro
-                      (Set.singleton packageName)
+                      (Set.singleton package)
                       distro_map
       }

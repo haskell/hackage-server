@@ -131,7 +131,7 @@ fromFile path contents
    go ["build-reports", repIdString, "log.txt"]
        = importLog repIdString contents
 
-   go ("package" : rest) = package rest contents
+   go ("package" : rest) = impPackage rest contents
 
    go (["distros", filename])
        | takeExtension filename == ".csv"
@@ -139,14 +139,14 @@ fromFile path contents
 
    go _ = return () -- ignore unknown files
 
-package :: [String] -> ByteString -> Import ()
-package [_, pkgIdStr, "documentation.tar.gz"] contents
+impPackage :: [String] -> ByteString -> Import ()
+impPackage [_, pkgIdStr, "documentation.tar.gz"] contents
     = do
   pkgId <- parse "package id" pkgIdStr
   blobId <- addFile contents
   addDocumentation pkgId blobId
 
-package [pkgName, pkgTarName] contents
+impPackage [pkgName, pkgTarName] contents
     | pkgName `isPrefixOf` pkgTarName
       && ".tar" `isSuffixOf` pkgTarName
     = let (pkgIdStr,_) = splitExtension pkgTarName
@@ -207,7 +207,7 @@ package [pkgName, pkgTarName] contents
            = case parsePackageDescription (bytesToString file) of
                ParseFailed err     -> fail . show $ err
                ParseOk _warnings a -> return a
-package _ _ = return () -- ignore unknown files
+impPackage _ _ = return () -- ignore unknown files
 
 -- The pieces needed for a package entry are stuffed together
 -- in their own tarball, so we can gaurantee they arrive at the
@@ -311,9 +311,9 @@ importDistro filename contents
         , versionStr
         , uri
         ] = do
-         packageName <- parse "package name" packageStr
+         package <- parse "package name" packageStr
          version <- parse "version" versionStr
-         addDistroPackage distro packageName $ Distros.DistroPackageInfo version uri
+         addDistroPackage distro package $ Distros.DistroPackageInfo version uri
        fromRecord _ x
            = fail $
              "Invalid distribution record in " ++ filename ++ " : " ++ show x

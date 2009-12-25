@@ -20,7 +20,7 @@ module Distribution.Server.Util.Serve where
 --import qualified Data.Map as Map
 import Data.ByteString.Lazy (ByteString)
 --import qualified Codec.Compression.GZip as GZip
-import System.FilePath
+--import System.FilePath
 import Happstack.Server.SimpleHTTP
 import Control.Monad
 

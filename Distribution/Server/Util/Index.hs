@@ -29,7 +29,6 @@ import qualified Distribution.Server.PackageIndex as PackageIndex
 import Distribution.Text
          ( display, simpleParse )
 
-import qualified Data.ByteString.Lazy as BS
 import Data.ByteString.Lazy (ByteString)
 import System.FilePath
          ( (</>), (<.>), splitDirectories, normalise )

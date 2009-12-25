@@ -7,14 +7,11 @@ import Distribution.Server.Instances ()
 
 import Distribution.Server.Packages.State
 import Distribution.Server.Users.Permissions (Permissions)
-import Distribution.Server.Users.State
 import Distribution.Server.Distributions.State (Distros)
 
 import Happstack.State
-import Happstack.Data.Serialize
 
 import Data.Typeable
-import qualified Control.Monad.State as State
 
 data HackageEntryPoint = HackageEntryPoint deriving Typeable
 

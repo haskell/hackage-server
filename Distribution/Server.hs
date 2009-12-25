@@ -21,7 +21,7 @@ import Distribution.Package
          ( PackageIdentifier(..), packageName, PackageName(..) )
 import Distribution.Text
          ( display )
-import Happstack.Server hiding (port)
+import Happstack.Server hiding (port, host)
 import qualified Happstack.Server
 import Happstack.State hiding (Version)
 
@@ -37,9 +37,7 @@ import Distribution.Server.Users.Permissions (GroupName(..))
 import Distribution.Server.State as State
 import Distribution.Server.Packages.State as State hiding (buildReports, bulkImport)
 import Distribution.Server.Users.State as State
-import qualified Distribution.Server.State as State
 import qualified Distribution.Server.Cache as Cache
-import qualified Distribution.Server.Auth.Types as Auth
 import Distribution.Server.Packages.Types
          ( PkgInfo(..) )
 import qualified Distribution.Server.ResourceTypes as Resource
@@ -59,7 +57,6 @@ import System.FilePath ((</>))
 import System.Directory
          ( createDirectoryIfMissing, doesDirectoryExist )
 import Control.Concurrent.MVar (MVar)
-import Data.Maybe
 import Control.Monad.Trans
 import Control.Monad (when,msum)
 import Data.ByteString.Lazy.Char8 (ByteString)
@@ -68,7 +65,6 @@ import Network.URI
 import Network.BSD
          ( getHostName )
 
-import qualified Data.ByteString.Lazy.Char8 as BS.Char8
 
 import Paths_hackage_server (getDataDir)
 

@@ -38,13 +38,13 @@ adminHomePage distros
 distroListing :: DistroName -> [(PackageName, DistroPackageInfo)] -> URL -> Html
 distroListing distro packages adminLink
     = hackagePage (display distro) $ concat
-      [ packageListing distro packages
-      , adminLinkHtml adminLink
+      [ packageListing
+      , adminLinkHtml
       ]
 
  where
-   packageListing :: DistroName -> [(PackageName, DistroPackageInfo)] -> [Html]
-   packageListing distro packages
+   packageListing :: [Html]
+   packageListing
        = [ h3 << ("Packages in " ++ display distro)
          , ulist << map (uncurry packageHtml) packages
          ]
@@ -52,7 +52,7 @@ distroListing distro packages adminLink
    packageHtml pName pInfo
        = li << (display pName ++ " " ++ display (distro_version pInfo))
 
-   adminLinkHtml adminLink
+   adminLinkHtml
        = [ h3 << "Admin Tasks"
          , anchor ! [href adminLink] << "Administrative tasks"
          ]
@@ -110,8 +110,8 @@ addUserForm distro =
     ]
 
 displayDir :: Text a => a -> String
-displayDir = escapeString pred . display
- where pred c = okInPath c && c /= '/'
+displayDir = escapeString f . display
+ where f c = okInPath c && c /= '/'
 
 deleteDistro :: DistroName -> [Html]
 deleteDistro distro

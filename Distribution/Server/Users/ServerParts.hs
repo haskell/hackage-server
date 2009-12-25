@@ -39,8 +39,10 @@ changePassword =
     if (first pwd == second pwd && first pwd /= "")
         then do let passwd = PasswdPlain (first pwd)
                 auth <- newPasswd passwd
-                update $ ReplaceUserAuth uid auth
-                ok $ toResponse "Password Changed"
+                res <- update $ ReplaceUserAuth uid auth
+                if res
+                 then ok $ toResponse "Password Changed"
+                 else ok $ toResponse "Error changing password"
         else forbidden $ toResponse "Copies of new password do not match or is an invalid password (ex: blank)"
 
 

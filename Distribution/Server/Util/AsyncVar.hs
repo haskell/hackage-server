@@ -6,8 +6,6 @@ module Distribution.Server.Util.AsyncVar (
   ) where
 
 import Control.Concurrent
-import Control.Concurrent.MVar
-import Control.Concurrent.Chan
 import Control.Exception
 
 import Prelude hiding (read)
@@ -22,7 +20,7 @@ new force initial = do
   let loop = do
         value <- readChan inChan
         evaluate (force value) -- TODO: catch exceptions
-        takeMVar outVar
+        _ <- takeMVar outVar
         putMVar outVar value
         loop
   forkIO loop

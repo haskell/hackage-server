@@ -27,14 +27,12 @@ import qualified Distribution.Server.Users.Users as Users
 import Distribution.Text
          ( display )
 import Distribution.Server.PackageIndex (PackageIndex)
-import qualified Distribution.Server.PackageIndex as PackageIndex
 import Data.Time.Clock
          ( UTCTime )
 import Data.Time.Clock.POSIX
          ( utcTimeToPOSIXSeconds )
 import Data.Int (Int64)
 
-import qualified Data.ByteString.Lazy as BS
 import Data.ByteString.Lazy (ByteString)
 import Prelude hiding (read)
 

@@ -46,21 +46,16 @@ import Prelude hiding (lookup)
 import Control.Exception (assert)
 import qualified Data.Map as Map
 import Data.Map (Map)
-import qualified Data.Tree  as Tree
-import qualified Data.Graph as Graph
-import qualified Data.Array as Array
-import Data.Array ((!))
-import Data.List (groupBy, sortBy, nub, find, isInfixOf)
+import Data.List (groupBy, sortBy, find, isInfixOf)
 import Data.Monoid (Monoid(..))
-import Data.Maybe (isNothing, fromMaybe)
+import Data.Maybe (fromMaybe)
 
 import Distribution.Package
          ( PackageName(..), PackageIdentifier(..)
          , Package(..), packageName, packageVersion
-         , Dependency(Dependency), PackageFixedDeps(..) )
-import Distribution.Version
-         ( Version, withinRange )
-import Distribution.Simple.Utils (lowercase, equating, comparing)
+         , Dependency(Dependency) )
+import Distribution.Version ( withinRange )
+import Distribution.Simple.Utils (lowercase, comparing)
 
 
 -- | The collection of information about packages from one or more 'PackageDB's.

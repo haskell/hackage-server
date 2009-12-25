@@ -5,7 +5,6 @@ module Distribution.Server.Auth.HtPasswdDb (
 
 import Distribution.Server.Users.Types
          ( UserName(..), PasswdHash(..) )
-import qualified Distribution.Server.Auth.Crypt as Crypt
 
 type HtPasswdDb = [(UserName, PasswdHash)]
 

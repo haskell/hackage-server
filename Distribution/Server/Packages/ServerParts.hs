@@ -13,8 +13,7 @@ import Distribution.Package
          ( PackageIdentifier(..), packageName, packageVersion
          , Package(packageId) )
 import Distribution.Text    (simpleParse, display)
-import Happstack.Server hiding (port)
-import qualified Happstack.Server
+import Happstack.Server hiding (port, host)
 import Happstack.State hiding (Version)
 
 import Distribution.Server.ServerParts (guardAuth)
@@ -311,7 +310,7 @@ buildReports store =
             Just _  -> do
               --FIXME: authorisation, depending on report id
               blobId <- liftIO $ BlobStorage.add store body
-              update $ AddBuildLog reportId (BuildReports.BuildLog blobId)
+              _ <- update $ AddBuildLog reportId (BuildReports.BuildLog blobId)
               setResponseCode 204
               return $ toResponse ""
       ]
