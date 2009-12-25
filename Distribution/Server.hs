@@ -51,6 +51,8 @@ import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
 
+import Distribution.Server.Export.ServerParts (export)
+
 import Distribution.Server.Auth.Types (PasswdPlain(..))
 
 import System.FilePath ((</>))
@@ -281,7 +283,7 @@ impl (Server store static _ cache host _) =
           cacheState <- Cache.get cache
           ok $ toResponse $ Resource.IndexTarball (Cache.indexTarball cacheState)
       ]
-  , dir "admin" admin
+  , dir "admin" $ admin store
   , dir "check" checkPackage
   , dir "htpasswd" $ msum
       [ changePassword ]
@@ -292,12 +294,13 @@ impl (Server store static _ cache host _) =
 
 -- Top level server part for administrative actions under the "admin"
 -- directory
-admin :: ServerPart Response
-admin = do
+admin :: BlobStorage -> ServerPart Response
+admin storage = do
 
   guardAuth [Administrator]
 
   msum
    [ dir "users" userAdmin
+   , dir "export.tar.gz" (export storage)
    , adminDist
    ]

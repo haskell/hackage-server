@@ -19,6 +19,9 @@ backup-timestamp/
        <n>/
         buildreport
         buildlog        -- optional
+
+  distros/
+    <distroname>.csv  -- we have one csv file per known distribution
 -}
 
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -45,6 +48,10 @@ import Distribution.Server.BuildReport.BuildReports (BuildReports)
 import qualified Distribution.Server.BuildReport.BuildReports as Build
 import qualified Distribution.Server.BuildReport.BuildReport as Build
 
+import Distribution.Server.Distributions.Distributions
+    (DistroName, Distributions, DistroVersions)
+import qualified Distribution.Server.Distributions.Distributions as Distros
+
 import Distribution.Server.Users.Users (Users)
 import Distribution.Server.Users.Permissions (Permissions)
 import qualified Distribution.Server.Users.Permissions as Permissions
@@ -68,18 +75,21 @@ import System.Locale
 import System.IO.Unsafe (unsafeInterleaveIO)
 import Data.Time
 
+
 export :: Users
        -> Permissions.Permissions
        -> PackageIndex PkgInfo
        -> Documentation
        -> BuildReports
        -> BlobStorage
+       -> Distributions
+       -> DistroVersions
        -> IO BSL.ByteString
-export users permissions pkgs docs reports storage
+export users permissions pkgs docs reports storage dists distInfo
     = (compress . Tar.write) `fmap` tarball
  where
    tarball :: IO [Tar.Entry]
-       = mkExportEntries users permissions pkgs docs reports storage
+       = mkExportEntries users permissions pkgs docs reports storage dists distInfo
 
 mkExportEntries :: Users
                 -> Permissions.Permissions
@@ -87,8 +97,10 @@ mkExportEntries :: Users
                 -> Documentation
                 -> BuildReports
                 -> BlobStorage
+                -> Distributions
+                -> DistroVersions
                 -> IO [Tar.Entry]
-mkExportEntries users perms pkgs docs reports storage
+mkExportEntries users perms pkgs docs reports storage dists distInfo
     = do
 
   baseDir <- mkBaseDir `fmap` getCurrentTime
@@ -97,6 +109,7 @@ mkExportEntries users perms pkgs docs reports storage
   return $ concat
     [ mkUserEntries baseDir users
     , mkPermsEntries baseDir perms
+    , mkDistroEntries baseDir dists distInfo
     , packageEntries
     ]
 
@@ -247,8 +260,17 @@ mkPermsEntries baseDir perms
     = return $ csvToEntry (permsToCSV perms) $
       baseDir </> "users" </> "permissions" <.> "csv"
 
+-- | Tar entries fr distribution packaging information.
+mkDistroEntries :: FilePath -> Distributions -> DistroVersions -> [Tar.Entry]
+mkDistroEntries baseDir dists distInfo
+    = flip map (Distros.enumerate dists) $ \distro ->
+      csvToEntry (distroToCSV distro distInfo) (distroPath baseDir distro)
 
--- | Create a tat entry for an entry
+distroPath :: FilePath -> DistroName -> FilePath
+distroPath baseDir distro
+    = baseDir </> "distros" </> display distro <.> "csv"
+
+-- | Create a tar entry for an entry
 -- in the blob store
 mkBlobEntry :: BlobStorage -> BlobId -> FilePath -> IO Tar.Entry
 mkBlobEntry storage blob path

@@ -26,7 +26,7 @@ import Happstack.Data.Serialize
 import qualified Data.Binary as Binary
 
 import Control.Monad.State.Class (get, put, modify)
-import Control.Monad.Reader.Class (asks)
+import Control.Monad.Reader.Class (ask, asks)
 
 data Distros
     = Distros
@@ -68,6 +68,9 @@ isDistribution :: DistroName -> Query Distros Bool
 isDistribution distro
     = asks $ Dist.isDistribution distro . dist_distros
 
+getDistributions :: Query Distros Distros
+getDistributions = ask
+
 addPackage :: DistroName -> PackageName -> DistroPackageInfo -> Update Distros ()
 addPackage distro package info
     = modify $ \state@Distros{..} ->
@@ -104,5 +107,8 @@ $(mkMethods
   -- query status of package versions
   , 'distroStatus
   , 'packageStatus
+
+  -- import/export
+  , 'getDistributions
   ]
  )

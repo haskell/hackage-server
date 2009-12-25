@@ -11,6 +11,7 @@ module Distribution.Server.Export.FlatFiles
     ( usersToCSV
     , permsToCSV
     , uploadsToCSV
+    , distroToCSV
     ) where
 
 
@@ -20,6 +21,13 @@ import Distribution.Server.Users.Types as Users
 import Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Permissions as Permissions
+
+import qualified Distribution.Server.Distributions.Distributions as Distros
+import Distribution.Server.Distributions.Distributions
+    ( DistroName
+    , DistroVersions
+    , DistroPackageInfo(..)
+    )
 
 import Distribution.Server.Packages.Types
 
@@ -149,3 +157,23 @@ uploadTimes pkgInfo
 
  where front = (pkgUploadTime pkgInfo, pkgUploadUser pkgInfo)
        back  = pkgUploadOld pkgInfo
+
+distroToCSV :: DistroName -> DistroVersions -> CSV
+distroToCSV distro distInfo
+    = let stats = Distros.distroStatus distro distInfo
+      in ([showVersion distrosCSVVer]:) $
+         ([display distro]:) $
+         (distrosCSVKey:) $
+
+         flip map stats . uncurry $
+           \packageName (DistroPackageInfo version url) ->
+               [display packageName, showVersion version, url]
+ where
+   distrosCSVKey
+       = [ "package"
+         , "version"
+         , "url"
+         ]
+
+distrosCSVVer :: Version
+distrosCSVVer = userCSVVer

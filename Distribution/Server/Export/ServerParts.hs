@@ -8,6 +8,7 @@ import qualified Distribution.Server.Export as Export
 import Happstack.Server
 import Happstack.State
 
+import Distribution.Server.Distributions.State
 import Distribution.Server.Users.State
 import Distribution.Server.Packages.State
 import qualified Distribution.Server.ResourceTypes as Resources
@@ -21,12 +22,16 @@ export storage
         state <- query GetPackagesState
         perms <- query GetPermissions
         docs  <- query GetDocumentation
+        dist  <- query GetDistributions
 
         let pkgs = packageList state
             rpts = buildReports state
             users = userDb state
+            dists = dist_distros dist
+            distInfo = dist_versions dist
 
-        tarball <- liftIO $ Export.export users perms pkgs docs rpts storage
+        tarball <- liftIO $
+           Export.export users perms pkgs docs rpts storage dists distInfo
 
         return $ toResponse . Resources.ExportTarball $ tarball
 

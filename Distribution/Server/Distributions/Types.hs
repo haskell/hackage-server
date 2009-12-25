@@ -38,7 +38,7 @@ newtype DistroName = DistroName String
 instance Version DistroName
 instance Text DistroName where
   disp (DistroName name) = Disp.text name
-  parse = DistroName <$> Parse.munch1 (\c -> Char.isAlphaNum c || Char.isPunctuation c)
+  parse = DistroName <$> Parse.munch1 (\c -> Char.isAlphaNum c || c `elem` "-_()[]{}=$,;")
 
 
 -- | Listing of known distirbutions 

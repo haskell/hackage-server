@@ -84,12 +84,14 @@ addToGroup groupName userId perms
     = perms{permissions = Map.alter fn groupName (permissions perms)}
     where fn mbGroup = Just $ Group.add userId (fromMaybe Group.empty mbGroup)
 
+-- | Remove the indicated user from the indicated group
 removeFromGroup :: GroupName -> UserId -> Permissions -> Permissions
 removeFromGroup groupName userId perms
     =  perms{permissions = Map.alter fn groupName (permissions perms)}
     where fn Nothing = Nothing
           fn (Just group) = Just $ Group.remove userId group
 
+-- | Drop all members from the indicated group
 removeGroup :: GroupName -> Permissions -> Permissions
 removeGroup groupName perms
     = perms{permissions = Map.delete groupName (permissions perms)}
