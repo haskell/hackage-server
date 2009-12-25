@@ -16,14 +16,9 @@ import qualified Distribution.Server.Distributions.Distributions as Dist
 import Distribution.Server.Distributions.Distributions
     (DistroName, Distributions, DistroVersions, DistroPackageInfo)
 
-import Data.Maybe (mapMaybe)
 import Data.Typeable
 
 import Happstack.State
-import Happstack.State.ComponentSystem
-import Happstack.Data.Serialize
-
-import qualified Data.Binary as Binary
 
 import Control.Monad.State.Class (get, put, modify)
 import Control.Monad.Reader.Class (ask, asks)

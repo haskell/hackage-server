@@ -248,8 +248,8 @@ create distroName
           toResponse "Ok!"
 
 displayDir :: Text a => a -> String
-displayDir = escapeString pred . display
- where pred c = okInPath c && c /= '/'
+displayDir = escapeString p . display
+ where p c = okInPath c && c /= '/'
 
 
 -- | POST request to remove a distribution.
@@ -363,20 +363,6 @@ lookPackageInfo k
                hackageError "Sorry, something went wrong there"
     Just pInfo -> k pInfo
 
-
--- | Form validation for entering a distribution. Is the same
--- as lookDistroName, except that we also check to see that
--- the named distro is in the db
-lookDistro :: (DistroName -> ServerPart a) -> ServerPart a
-lookDistro k
-    = lookDistroName $ \distro -> do
-      present <- query $ IsDistribution distro
-      if not present
-       then finishOk $ toResponse $
-            hackageError "Distribution does not exist"
-       else k distro
-
-
 -- | Retrieves the form element "userName" and converts
 -- it to a user id, which validates that the user exists
 lookUserId :: (UserId -> ServerPart a) -> ServerPart a
@@ -390,9 +376,9 @@ lookUserId k
         -> case simpleParse userStr of
              Nothing -> finishOk $ toResponse
                         $ hackageError "Malformed user name"
-             Just userName
+             Just user_name
                  -> do
-                  mUser <- query $ LookupUserName userName
+                  mUser <- query $ LookupUserName user_name
                   case mUser of
                     Nothing
                         -> finishOk $ toResponse $

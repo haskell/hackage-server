@@ -5,22 +5,17 @@ module Distribution.Server.Users.State where
 
 import Distribution.Server.Instances ()
 
-import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserGroup)
 import qualified Distribution.Server.Users.Permissions as Permissions
 import Distribution.Server.Users.Permissions (Permissions(..),GroupName)
 import Distribution.Server.Users.Types (UserId,UserName,UserAuth)
 import Distribution.Server.Users.Users as Users
-import qualified Distribution.Server.Users.Users as Users
-import Distribution.Server.Users.Users (Users)
 
 import qualified Data.Map as Map
 
 import Happstack.State
-import Happstack.Data.Serialize
 import qualified Data.Binary as Binary
 
-import Data.Typeable
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
 

@@ -21,7 +21,6 @@ module Distribution.Server.Distributions.Distributions
     ) where
 
 import qualified Data.Map as Map
-import qualified Data.IntMap as IntMap
 import qualified Data.Set as Set
 
 import Distribution.Server.Distributions.Types
@@ -41,7 +40,7 @@ emptyDistroVersions = DistroVersions Map.empty Map.empty
 --- Distribution updating
 
 isDistribution :: DistroName -> Distributions -> Bool
-isDistribution distro d@Distributions{..}
+isDistribution distro Distributions{..}
     = Set.member distro name_map
 
 -- | Add a distribution. Returns 'Nothing' if the
@@ -64,16 +63,16 @@ enumerate Distributions{..}
 distroStatus :: DistroName -> DistroVersions -> [(PackageName, DistroPackageInfo)]
 distroStatus  distro DistroVersions{..}
     = let packageNames = maybe [] Set.toList (Map.lookup distro distro_map)
-          f packageName = let infoMap = fromJust $ Map.lookup packageName package_map
-                              info = fromJust $ Map.lookup distro infoMap
-                          in (packageName, info)
+          f package = let infoMap = fromJust $ Map.lookup package package_map
+                          info = fromJust $ Map.lookup distro infoMap
+                      in (package, info)
       in map f packageNames
 
 -- | For a particular package, which distributions contain it and at which
 -- version.
 packageStatus :: PackageName -> DistroVersions -> [(DistroName, DistroPackageInfo)]
-packageStatus packageName DistroVersions{..}
-    = maybe [] Map.toList (Map.lookup packageName package_map)
+packageStatus package DistroVersions{..}
+    = maybe [] Map.toList (Map.lookup package package_map)
 
 --- Removing
 
@@ -94,9 +93,9 @@ removeDistroVersions distro dv@DistroVersions{..}
 
 -- | Flag a package as no longer being distributed
 dropPackage :: DistroName -> PackageName -> DistroVersions -> DistroVersions
-dropPackage distro packageName dv@DistroVersions{..}
+dropPackage distro package dv@DistroVersions{..}
     = dv
-      { package_map = Map.update pUpdate packageName package_map
+      { package_map = Map.update pUpdate package package_map
       , distro_map  = Map.update dUpdate distro distro_map
       }
  where pUpdate infoMap = 
@@ -107,7 +106,7 @@ dropPackage distro packageName dv@DistroVersions{..}
                     else Just infoMap'
 
        dUpdate packageNames =
-           case Set.delete packageName packageNames of
+           case Set.delete package packageNames of
              packageNames'
                  -> if Set.null packageNames'
                     then Nothing

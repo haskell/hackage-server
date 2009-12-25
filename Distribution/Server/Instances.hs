@@ -21,7 +21,6 @@ import qualified Data.Binary as Binary
 import Data.Binary (Binary)
 
 import qualified Happstack.State as Happs
-import qualified Happstack.Data.Serialize as Happs
 
 import Data.Maybe (fromJust)
 

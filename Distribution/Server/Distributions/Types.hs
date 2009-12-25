@@ -16,18 +16,16 @@ import qualified Data.Set as Set
 import qualified Distribution.Version as Version
 import Distribution.Package
 
-import Control.Applicative ((<$>), (<*>))
+import Control.Applicative ((<$>))
 
 import Distribution.Text
          ( Text(..) )
 
-import qualified Distribution.Server.Util.Parse as Parse
 import qualified Distribution.Compat.ReadP as Parse
 import qualified Text.PrettyPrint          as Disp
 import qualified Data.Char as Char
 
 import Happstack.State
-import Happstack.Data.Serialize
 
 import Data.Typeable
 

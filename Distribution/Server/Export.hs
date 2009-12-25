@@ -33,8 +33,6 @@ module Distribution.Server.Export
 import Distribution.Simple.Utils (toUTF8)
 import qualified Data.ByteString.Lazy.Char8 as BS8
 
-import Data.Maybe (maybe)
-
 import Text.CSV hiding (csv)
 
 import qualified Data.Map as Map

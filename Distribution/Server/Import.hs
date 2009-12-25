@@ -69,6 +69,7 @@ import Distribution.Package
 
 import Distribution.Text hiding (parse)
 
+
 -- | Takes apart the import tarball. If there are any errors,
 -- the first error encounter is returned.
 -- Otherwise the result of the import is injected into the running

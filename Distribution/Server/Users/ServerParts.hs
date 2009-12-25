@@ -5,12 +5,10 @@ module Distribution.Server.Users.ServerParts (
   ) where
 
 import Happstack.Server hiding (port)
-import qualified Happstack.Server
 import Happstack.State hiding (Version)
 
 import Distribution.Server.Users.State as State
 import Distribution.Server.Packages.State as State
-import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.Server.Auth.Basic as Auth
 import qualified Distribution.Server.Auth.Types as Auth
 import qualified Distribution.Server.Auth.Crypt as Auth
@@ -18,8 +16,6 @@ import qualified Distribution.Server.Auth.Crypt as Auth
 import qualified Distribution.Server.Users.Types as Users
 import Distribution.Server.Users.Permissions(GroupName(..))
 import Distribution.Server.Auth.Types (PasswdPlain(..))
-import Distribution.Server.Export.ServerParts (export)
-import Distribution.Server.Util.BlobStorage (BlobStorage)
 
 import Distribution.Text (simpleParse)
 
@@ -27,8 +23,6 @@ import System.Random (newStdGen)
 import Data.Maybe
 import Control.Monad.Trans
 import Control.Monad (msum,liftM2,mplus)
-import Network.URI
-         ( URIAuth )
 
 
 data ChangePassword = ChangePassword { first, second :: String } deriving (Eq, Ord, Show)
