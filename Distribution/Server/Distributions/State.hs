@@ -71,6 +71,10 @@ isDistribution distro
 getDistributions :: Query Distros Distros
 getDistributions = ask
 
+replaceDistributions :: Distributions -> DistroVersions -> Update Distros ()
+replaceDistributions distributions distroVersions
+    = put $ Distros distributions distroVersions
+
 addPackage :: DistroName -> PackageName -> DistroPackageInfo -> Update Distros ()
 addPackage distro package info
     = modify $ \state@Distros{..} ->
@@ -110,5 +114,6 @@ $(mkMethods
 
   -- import/export
   , 'getDistributions
+  , 'replaceDistributions
   ]
  )

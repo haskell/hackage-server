@@ -19,7 +19,7 @@ import qualified Data.ByteString.Lazy.Char8 as BS8
 
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.Map as Map
-import System.FilePath (splitDirectories, splitExtension)
+import System.FilePath (splitDirectories, splitExtension, takeExtension)
 import Data.List (isPrefixOf, isSuffixOf)
 import Text.CSV hiding (csv)
 
@@ -32,6 +32,15 @@ import Distribution.PackageDescription.Parse
 import Distribution.Server.Export.Utils
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage, BlobId)
+
+import qualified Distribution.Server.Distributions.Distributions as Distros
+import Distribution.Server.Distributions.Distributions
+    ( Distributions
+    , DistroName
+    , DistroVersions
+    , DistroPackageInfo(..)
+    )
+import Distribution.Server.Distributions.State (ReplaceDistributions(..))
 
 import Distribution.Server.Packages.State
     ( Documentation(..)
@@ -82,6 +91,7 @@ importTar storage tar
                   isBuildReps
                   isUsers
       update $ ReplacePermissions isPerms
+      update $ ReplaceDistributions isDistributions isDistVersions
       return Nothing
 
 fromEntries :: Tar.Entries -> Import ()
@@ -121,6 +131,10 @@ fromFile path contents
        = importLog repIdString contents
 
    go ("package" : rest) = package rest contents
+
+   go (["distros", filename])
+       | takeExtension filename == ".csv"
+           = importDistro filename contents
 
    go _ = return () -- ignore unknown files
 
@@ -242,7 +256,7 @@ importLog repIdStr contents
 importAuth :: ByteString -> Import ()
 importAuth contents
     = case customParseCSV "auth.csv" (bytesToString contents) of
-        Left e -> fail $ e
+        Left e -> fail e
         Right csv -> mapM_ fromRecord (drop 2 csv)
 
  where fromRecord
@@ -270,7 +284,7 @@ importAuth contents
 importPermissions :: ByteString -> Import ()
 importPermissions contents
     = case customParseCSV "permissions.csv" (bytesToString contents) of
-        Left e -> fail $ e
+        Left e -> fail e
         Right csv -> mapM_ fromRecord (drop 1 csv)
 
  where fromRecord
@@ -280,6 +294,28 @@ importPermissions contents
           forM_ users $ \userStr ->
               parse "user id" userStr >>= addPermission groupName
        fromRecord x = fail $ "Error handling permissions record: " ++ show x
+
+importDistro :: String -> ByteString -> Import ()
+importDistro filename contents
+    = case customParseCSV filename (bytesToString contents) of
+        Left e -> fail e
+        Right csv -> do
+          let [[distroStr]] = take 1 $ drop 1 csv
+          distro <- parse "distribution name" distroStr
+          addDistribution distro
+          mapM_ (fromRecord distro) (drop 3 csv)
+
+ where fromRecord distro
+        [ packageStr
+        , versionStr
+        , uri
+        ] = do
+         packageName <- parse "package name" packageStr
+         version <- parse "version" versionStr
+         addDistroPackage distro packageName $ Distros.DistroPackageInfo version uri
+       fromRecord _ x
+           = fail $
+             "Invalid distribution record in " ++ filename ++ " : " ++ show x
 
 -- Parse a string, throw an error if it's bad
 parse :: Text a => String -> String -> Import a
@@ -313,6 +349,8 @@ data IS
       , isPackages :: !(PackageIndex PkgInfo)
       , isDocs :: !Documentation
       , isBuildReps :: !BuildReports
+      , isDistributions :: !Distributions
+      , isDistVersions :: !DistroVersions
       , isStorage :: BlobStorage
       }
 
@@ -363,6 +401,19 @@ insertBuildLog reportId buildLog
     Just buildReps' -> do
       put $ s { isBuildReps = buildReps' }
 
+addDistribution :: DistroName -> Import ()
+addDistribution distro
+    = do
+  is <- get
+  case Distros.addDistro distro (isDistributions is) of
+    Nothing -> fail $ "Could not add distro: " ++ display distro
+    Just dists -> put is{isDistributions = dists}
+
+addDistroPackage :: DistroName -> PackageName -> DistroPackageInfo -> Import ()
+addDistroPackage distro package info
+    = do
+  is <- get
+  put is{isDistVersions = Distros.addPackage distro package info (isDistVersions is)}
 
 
 -- implementation of the Import data type
@@ -389,6 +440,8 @@ runImport storage imp = unImp imp err k initState
               (PackageIndex.fromList [])
               (Documentation Map.empty)
               Reports.empty
+              Distros.emptyDistributions
+              Distros.emptyDistroVersions
               storage
 
 
