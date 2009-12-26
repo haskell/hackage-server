@@ -124,6 +124,12 @@ lookupDocumentation pkgId
     = do m <- asks documentation
          return $ Map.lookup pkgId m
 
+hasDocumentation :: PackageIdentifier -> Query Documentation Bool
+hasDocumentation pkgId
+    = lookupDocumentation pkgId >>= \x -> case x of
+         Just{} -> return True
+         _      -> return False
+
 insertDocumentation :: PackageIdentifier -> BlobId -> Update Documentation ()
 insertDocumentation pkgId blob
     = State.modify $ \doc -> doc{documentation = Map.insert pkgId blob (documentation doc)}
@@ -236,6 +242,7 @@ listGroupMembers userGroup
 
 $(mkMethods ''Documentation ['insertDocumentation
                             ,'lookupDocumentation
+                            ,'hasDocumentation
                             ,'getDocumentation
                             ,'replaceDocumentation
                             ])

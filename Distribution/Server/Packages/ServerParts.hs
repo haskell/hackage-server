@@ -56,6 +56,7 @@ import Data.Ord (comparing)
 import Data.Time.Clock
 import Network.URI
          ( URIAuth )
+import System.FilePath.Posix ((</>))
 
 import qualified Data.ByteString.Lazy.Char8 as BS.Char8
 import qualified Codec.Compression.GZip as GZip
@@ -86,9 +87,13 @@ handlePackageById :: BlobStorage -> PackageIdentifier -> [ServerPart Response]
 handlePackageById store pkgid = 
   [ withPackage pkgid $ \state pkg pkgs ->
       methodSP GET $ do
-        distributions <- query $ State.PackageStatus (packageName pkgid)
+        distributions <- query $ State.PackageStatus (packageName pkg)
+        hasDocs       <- query $ State.HasDocumentation (packageId pkg)
+        let docURL | hasDocs   = Just $ "/package" </> display pkgid </> "documentation"
+                   | otherwise = Nothing
+
         ok $ toResponse $ Resource.XHtml $
-          Pages.packagePage (userDb state) (packageList state) pkg pkgs distributions
+          Pages.packagePage (userDb state) (packageList state) pkg pkgs distributions docURL
 
   , dir (display (packageName pkgid) ++ ".cabal") $ msum
     [ withPackage pkgid $ \_ pkg _pkgs ->
@@ -119,7 +124,7 @@ handlePackageById store pkgid =
               blob <- liftIO $ BlobStorage.add store body
               liftIO $ putStrLn $ "Putting to: " ++ show (display resolvedPkgId, blob)
               update $ InsertDocumentation resolvedPkgId blob
-              seeOther ("/packages/"++display pkgid++"/documentation/") $ toResponse ""
+              seeOther ("/package/"++display pkgid++"/documentation/") $ toResponse ""
 
         , require (query $ LookupDocumentation resolvedPkgId) $ \blob -> do
             tarball <- liftIO $ BlobStorage.fetch store blob

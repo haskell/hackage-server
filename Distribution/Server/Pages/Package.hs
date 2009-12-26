@@ -43,14 +43,16 @@ import System.Locale            ( defaultTimeLocale )
 import Data.Time.Format         ( formatTime )
 
 packagePage :: Users.Users -> PackageIndex PkgInfo ->
-               PkgInfo -> [PkgInfo] -> [(DistroName, DistroPackageInfo)] -> Html
-packagePage users pkgs pkg allVersions distributions =
+               PkgInfo -> [PkgInfo] -> [(DistroName, DistroPackageInfo)] ->
+               Maybe URL -> Html
+packagePage users pkgs pkg allVersions distributions docURL =
   let packageData = (emptyPackageData (pkgDesc pkg)) {
         pdAllVersions = sort (map packageVersion allVersions),
         pdTags = [("upload date", showTime (pkgUploadTime pkg))
                  ,("uploaded by", display userName)],
         pdDependencies = pkgs,
-        pdDistributions = distributions
+        pdDistributions = distributions,
+        pdDocURL = docURL
       }
       showTime = formatTime defaultTimeLocale "%c"
       userName = Users.idToName users (pkgUploadUser pkg)
