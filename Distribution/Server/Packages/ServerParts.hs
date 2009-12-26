@@ -109,20 +109,22 @@ handlePackageById store pkgid =
     ]
   , dir "documentation" $ msum
     [ withPackage pkgid $ \state pkg _ ->
-        methodSP POST $ do
-          authGroup <- query $ LookupUserGroups
-                       [Trustee, PackageMaintainer (packageName pkg)]
-          _user <- Auth.hackageAuth (userDb state) (Just authGroup)
-          withRequest $ \Request{rqBody = Body body} -> do
+        let resolvedPkgId = packageId pkg in msum
+
+        [ methodSP POST $ do
+            authGroup <- query $ LookupUserGroups
+                         [Trustee, PackageMaintainer (packageName pkg)]
+            _user <- Auth.hackageAuth (userDb state) (Just authGroup)
+            withRequest $ \Request{rqBody = Body body} -> do
               blob <- liftIO $ BlobStorage.add store body
-              liftIO $ putStrLn $ "Putting to: " ++ show (display pkgid, blob)
-              update $ InsertDocumentation pkgid blob
+              liftIO $ putStrLn $ "Putting to: " ++ show (display resolvedPkgId, blob)
+              update $ InsertDocumentation resolvedPkgId blob
               seeOther ("/packages/"++display pkgid++"/documentation/") $ toResponse ""
-    , require (query $ LookupDocumentation pkgid) $ \blob -> msum
-      [ withRequest $ \rq ->
-         do tarball <- liftIO $ BlobStorage.fetch store blob
-            serveTarball ["index.html"] (display pkgid) rq tarball
-      ]
+
+        , require (query $ LookupDocumentation resolvedPkgId) $ \blob -> do
+            tarball <- liftIO $ BlobStorage.fetch store blob
+            serveTarball ["index.html"] (display $ packageName pkgid) tarball
+        ]
     ]
   , dir "admin" (packageAdmin pkgid)
   ]
