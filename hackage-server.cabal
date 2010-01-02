@@ -77,6 +77,7 @@ executable hackage-server
     Distribution.Server.Util.AsyncVar
     Distribution.Server.Util.BlobStorage
     Distribution.Server.Util.Index
+    Distribution.Server.Util.Happstack
     Distribution.Server.Util.Parse
     Distribution.Server.Util.Serve
   build-depends:

@@ -13,10 +13,10 @@
 -----------------------------------------------------------------------------
 module Distribution.Server.Util.Serve where
 
+import Distribution.Server.Util.Happstack
 import Happstack.Server hiding (path)
 import qualified Codec.Archive.Tar as Tar
 
-import qualified Data.Map as Map
 import Data.ByteString.Lazy (ByteString)
 import qualified Codec.Compression.GZip as GZip
 import System.FilePath
@@ -89,11 +89,3 @@ foldEntriesM next fail' entries = fold entries
    fold (Tar.Next e es) = next e `mplus` fold es
    fold Tar.Done        = mzero
    fold (Tar.Fail err)  = fail' err
-
-remainingPath :: ([String] -> ServerPart a) -> ServerPart a
-remainingPath handle = do
-  rq <- askRq
-  handle $ rqPaths rq
-
-mime :: FilePath -> String
-mime x  = Map.findWithDefault "text/plain" (drop 1 (takeExtension x)) mimeTypes

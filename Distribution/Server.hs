@@ -18,9 +18,9 @@ module Distribution.Server (
  ) where
 
 import Distribution.Package
-         ( PackageIdentifier(..), packageName, PackageName(..) )
+         ( PackageIdentifier(..), packageName, PackageId )
 import Distribution.Text
-         ( display )
+         ( display, simpleParse )
 import Happstack.Server hiding (port, host)
 import qualified Happstack.Server
 import Happstack.State hiding (Version)
@@ -43,6 +43,7 @@ import Distribution.Server.Packages.Types
 import qualified Distribution.Server.ResourceTypes as Resource
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
+import Distribution.Server.Util.Happstack (remainingPath)
 import qualified Distribution.Server.BulkImport as BulkImport
 import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
 
@@ -54,11 +55,12 @@ import Distribution.Server.Export.ServerParts (export)
 import Distribution.Server.Auth.Types (PasswdPlain(..))
 
 import System.FilePath ((</>))
+import qualified System.FilePath.Posix as Posix (joinPath, splitExtension)
 import System.Directory
          ( createDirectoryIfMissing, doesDirectoryExist )
 import Control.Concurrent.MVar (MVar)
 import Control.Monad.Trans
-import Control.Monad (when,msum)
+import Control.Monad (when,msum,mzero)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Network.URI
          ( URIAuth(URIAuth) )
@@ -240,20 +242,55 @@ initState (Server _ _ _ cache host _) = do
 -- Support the same URL scheme as the first version of hackage.
 legacySupport :: ServerPart Response
 legacySupport = msum
-    [ path $ \name -> msum
-      [ path $ \version -> msum
-        [ let dirName = display pkgid ++ ".tar.gz"
-              pkgid = PackageIdentifier {pkgName = PackageName name, pkgVersion = version}
-          in dir dirName $ msum
-             [ methodSP GET $
-                 movedPermanently ("/package/"++ display pkgid ++ "/") (toResponse "")
+    [ dir "archive" $ msum
+      [
+       path $ \nameStr -> do
+         let Just name = simpleParse nameStr
+         msum
+          [ path $ \version ->
+            let pkgid = PackageIdentifier {pkgName = name, pkgVersion = version}
+            in msum
+             [ let dirName = display pkgid ++ ".tar.gz"
+               in dir dirName $ methodSP GET $
+                  movedPermanently (packageTarball pkgid) (toResponse "")
+
+             , let fileName = display name ++ ".cabal"
+               in dir fileName $ methodSP GET $
+                  movedPermanently (cabalPath pkgid) (toResponse "")
+
+             , dir "doc" $ dir "html" $ remainingPath $ \paths ->
+                 let doc = Posix.joinPath paths
+                 in methodSP GET $
+                    movedPermanently (docPath pkgid doc) (toResponse "")
              ]
-        ]]
-    , dir "00-index.tar.gz" $ msum
-      [ methodSP GET $
-               movedPermanently "/00-index.tar.gz" (toResponse "")
+          ]
+
+      , dir "package" $ path $ \fileName -> methodSP GET $
+       case Posix.splitExtension fileName of
+        (fileName', ".gz") -> case Posix.splitExtension fileName' of
+           (packageStr, ".tar") -> case simpleParse packageStr of
+              Just pkgid ->
+                movedPermanently (packageTarball pkgid) $ toResponse ""
+              _ -> mzero
+           _ -> mzero
+        _ -> mzero
+
+      , dir "00-index.tar.gz" $ msum
+        [ methodSP GET $
+          movedPermanently "/00-index.tar.gz" (toResponse "")
+        ]
       ]
     ]
+
+ where packageTarball :: PackageId -> String
+       packageTarball pkgid
+           = "/package/" ++ display pkgid ++ ".tar.gz"
+
+       docPath pkgid file = "/package/" ++ display pkgid ++ "/"
+                            ++ "documentation/" ++ file
+
+       cabalPath pkgid = "/package/" ++ display pkgid ++ "/"
+                         ++ display (packageName pkgid) ++ ".cabal"
 
 impl :: Server -> [ServerPartT IO Response]
 impl (Server store static _ cache host _) =
