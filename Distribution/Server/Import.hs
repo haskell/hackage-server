@@ -48,6 +48,8 @@ import Distribution.Server.Packages.State
     , ReplacePackagesState(..)
     , ReplaceDocumentation(..)
     )
+import qualified Distribution.Server.TarIndex.State as TarIndexMap
+import qualified Distribution.Server.Util.Serve as TarIndex
 
 import Distribution.Server.BuildReport.BuildReport (BuildReport)
 import qualified Distribution.Server.BuildReport.BuildReport as Reports
@@ -87,6 +89,7 @@ importTar storage tar
     Right IS{..}
         -> do
       update $ ReplaceDocumentation isDocs
+      update $ TarIndexMap.ReplaceTarIndexMap isTarIndex
       update $ ReplacePackagesState $ PackagesState
                   isPackages
                   isBuildReps
@@ -140,11 +143,12 @@ fromFile path contents
    go _ = return () -- ignore unknown files
 
 impPackage :: [String] -> ByteString -> Import ()
-impPackage [_, pkgIdStr, "documentation.tar.gz"] contents
+impPackage [_, pkgIdStr, "documentation.tar"] contents
     = do
   pkgId <- parse "package id" pkgIdStr
   blobId <- addFile contents
   addDocumentation pkgId blobId
+  addTarIndex blobId
 
 impPackage [pkgName, pkgTarName] contents
     | pkgName `isPrefixOf` pkgTarName
@@ -349,6 +353,7 @@ data IS
       , isPerms :: !Permissions
       , isPackages :: !(PackageIndex PkgInfo)
       , isDocs :: !Documentation
+      , isTarIndex :: !TarIndexMap.TarIndexMap
       , isBuildReps :: !BuildReports
       , isDistributions :: !Distributions
       , isDistVersions :: !DistroVersions
@@ -383,6 +388,15 @@ addDocumentation :: PackageIdentifier -> BlobId -> Import ()
 addDocumentation pkgId blob
     = modify $ \is ->
       is { isDocs = Documentation (Map.insert pkgId blob (documentation (isDocs is)))}
+
+addTarIndex :: BlobId -> Import ()
+addTarIndex blob
+    = do
+  store <- gets isStorage
+  let tarFile = BlobStorage.filepath store blob
+  index <- io2imp $ TarIndex.readTarIndex tarFile
+  modify $ \is ->
+      is { isTarIndex = TarIndexMap.insertTarIndex blob index (isTarIndex is) }
 
 insertBuildReport :: BuildReportId -> BuildReport -> Import ()
 insertBuildReport reportId report
@@ -440,6 +454,7 @@ runImport storage imp = unImp imp err k initState
               Permissions.empty
               (PackageIndex.fromList [])
               (Documentation Map.empty)
+              TarIndexMap.emptyTarIndex
               Reports.empty
               Distros.emptyDistributions
               Distros.emptyDistroVersions

@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving #-}
+{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, FlexibleContexts #-}
 
 -- | 'Typeable' and 'Binary' instances for various types from Cabal
 --
@@ -12,6 +12,8 @@ import Distribution.PackageDescription
          ( GenericPackageDescription(..) )
 import Distribution.Version
          ( Version )
+
+import qualified Data.Array.Unboxed as UA
 
 import Data.Typeable
 import Data.Time.Clock (UTCTime(..))
@@ -49,6 +51,19 @@ textGet = (fromJust . simpleParse)  `fmap` Binary.get
 
 textPut :: Text a => a -> Binary.Put
 textPut = Binary.put . display
+
+instance Happs.Version (UA.UArray ix e) where
+    mode = Happs.Primitive
+
+instance (Happs.Serialize ix, Happs.Serialize e, UA.Ix ix,
+          UA.IArray UA.UArray e) => Happs.Serialize (UA.UArray ix e) where
+    getCopy = Happs.contain $ do
+                bounds <- Happs.safeGet
+                assocs <- Happs.safeGet
+                return $ UA.array bounds assocs
+
+    putCopy arr = Happs.contain
+                  (Happs.safePut (UA.bounds arr) >> Happs.safePut (UA.assocs arr))
 
 instance Binary UTCTime where
   put time = do

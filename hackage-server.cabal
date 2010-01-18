@@ -33,6 +33,10 @@ source-repository head
 executable hackage-server
   main-is: Main.hs
   other-modules:
+    Data.IntTrie
+    Data.StringTable
+    Data.TarIndex
+
     Distribution.Server
     Distribution.Server.Auth.Basic
     Distribution.Server.Auth.Crypt
@@ -44,6 +48,7 @@ executable hackage-server
     Distribution.Server.BulkImport.UploadLog
     Distribution.Server.Cache
     Distribution.Server.Distributions.Distributions
+    Distribution.Server.Distributions.ServerParts
     Distribution.Server.Distributions.State
     Distribution.Server.Distributions.Types
     Distribution.Server.Export
@@ -52,6 +57,7 @@ executable hackage-server
     Distribution.Server.Export.Utils
     Distribution.Server.Import
     Distribution.Server.Instances
+    Distribution.Server.PackageIndex
     Distribution.Server.Packages.Index
     Distribution.Server.Packages.ServerParts
     Distribution.Server.Packages.State
@@ -65,11 +71,16 @@ executable hackage-server
     Distribution.Server.Pages.Package.HaddockLex
     Distribution.Server.Pages.Package.HaddockParse
     Distribution.Server.Pages.Package.ModuleForest
+    Distribution.Server.Pages.PackageAdmin
     Distribution.Server.Pages.Recent
     Distribution.Server.Pages.Template
+    Distribution.Server.Pages.Util
     Distribution.Server.ResourceTypes
+    Distribution.Server.ServerParts
     Distribution.Server.State
+    Distribution.Server.TarIndex.State
     Distribution.Server.Users.Group
+    Distribution.Server.Users.Permissions
     Distribution.Server.Users.ServerParts
     Distribution.Server.Users.State
     Distribution.Server.Users.Types

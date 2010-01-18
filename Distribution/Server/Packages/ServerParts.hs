@@ -21,6 +21,8 @@ import Distribution.Server.ServerParts (guardAuth)
 import Distribution.Server.Packages.State as State hiding (buildReports)
 import Distribution.Server.Users.State as State
 import Distribution.Server.Distributions.State as State
+import qualified Distribution.Server.TarIndex.State as TarIndex
+import qualified Distribution.Server.Util.Serve as TarIndex
 import Distribution.Server.Users.Permissions (GroupName(..))
 
 import qualified  Distribution.Server.Packages.State as State
@@ -121,18 +123,41 @@ handlePackageById store pkgid =
                          [Trustee, PackageMaintainer (packageName pkg)]
             _user <- Auth.hackageAuth (userDb state) (Just authGroup)
             withRequest $ \Request{rqBody = Body body} -> do
-              blob <- liftIO $ BlobStorage.add store body
+
+              {-
+                The order of operations:
+                
+                - Insert new documentation into blob store
+                - Generate the new index
+                - Drop the index for the old tar-file
+                - Link the new documentation to the package
+
+               -}
+
+              blob <- liftIO $ BlobStorage.add store (GZip.decompress body)
+              tarIndex <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blob)
+              update $ TarIndex.AddIndex blob tarIndex
               liftIO $ putStrLn $ "Putting to: " ++ show (display resolvedPkgId, blob)
+              dropOldDocs resolvedPkgId
               update $ InsertDocumentation resolvedPkgId blob
               seeOther ("/package/"++display pkgid++"/documentation/") $ toResponse ""
 
-        , require (query $ LookupDocumentation resolvedPkgId) $ \blob -> do
-            tarball <- liftIO $ BlobStorage.fetch store blob
-            serveTarball ["index.html"] (display $ packageName pkgid) tarball
+        , require (query $ LookupDocumentation resolvedPkgId) $ \blob ->
+          require (query $ TarIndex.LookupIndex blob)         $ \index -> do
+            let tarball = BlobStorage.filepath store blob
+            serveTarball ["index.html"] (display $ packageName pkgid) tarball index
         ]
     ]
   , dir "admin" (packageAdmin pkgid)
   ]
+
+ where dropOldDocs pkgId
+           = do
+         mBlob <- query $ LookupDocumentation pkgId
+         case mBlob of
+           Nothing -> return ()
+           Just blob -> do
+               update $ TarIndex.DropIndex blob
 
 packageAdmin :: PackageIdentifier -> ServerPart Response
 packageAdmin pkgid =

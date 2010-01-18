@@ -17,6 +17,7 @@ module Distribution.Server.Util.BlobStorage (
     add,
     addWith,
     fetch,
+    filepath,
   ) where
 
 import qualified Data.ByteString.Lazy as BS
@@ -24,7 +25,7 @@ import Data.ByteString.Lazy (ByteString)
 import Data.Digest.Pure.MD5
          ( MD5Digest, md5 )
 import Data.Typeable (Typeable)
-import Data.Binary (Binary)
+import Data.Binary (Binary, get, put)
 import System.FilePath
          ( (</>) )
 import Control.Exception

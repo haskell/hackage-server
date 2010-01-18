@@ -190,7 +190,7 @@ mkDocumentationEntry baseDir pkgInfo (Documentation docs) storage
     = case Map.lookup (packageId pkgInfo) docs of
         Nothing   -> return Nothing
         Just blob -> Just `fmap` (mkBlobEntry storage blob $
-                     pkgEntryPath baseDir pkgInfo </> "documentation" <.> "tar" <.> "gz")
+                     pkgEntryPath baseDir pkgInfo </> "documentation" <.> "tar")
 
 -- | Tar entries for build reports.
 --
