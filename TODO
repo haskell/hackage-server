@@ -3,12 +3,10 @@ Users and auth
  * Allow importing user auth info later
  * Digest authentication
  * Collection maintainer users
- * Allow editing per-package groups
 
 Packages
- * Serve tarballs as .tar.gz not tarball
  * Serve package contents
- * Serve and uploading doc tarballs
+ * Uploading doc tarballs
 
 Server
  * Send etag and last modified times
@@ -16,10 +14,6 @@ Server
 Index
  * look at relaxing the index format
  * incremental updates, serve byte ranges
-
-Backup
-
-Build reports
 
 General
  * improve modularity
