@@ -16,7 +16,7 @@ module Distribution.Server.Util.Serve
     , readTarIndex
     ) where
 
-import Happstack.Server as Happstack
+import Happstack.Server as Happstack hiding (path)
 import Distribution.Server.Util.Happstack
 
 import qualified Codec.Archive.Tar as Tar
@@ -58,9 +58,9 @@ serveTarball indices offset tarball tarIndex = do
  where serveFiles paths
            = flip map paths $ \path ->
              case TarIndex.lookup tarIndex path of
-               Just (TarIndex.TarFileEntry offset)
+               Just (TarIndex.TarFileEntry off)
                    -> do
-                 tfe <- liftIO $ serveTarEntry tarball offset path
+                 tfe <- liftIO $ serveTarEntry tarball off path
                  ok (toResponse tfe)
                _ -> mzero
 
@@ -101,6 +101,8 @@ serveTarEntry tarfile off fname = do
          return response
     _ -> fail "oh noes!!"
 
+-- | Extended mapping from file extension to mime type
+mimeTypes' :: Map.Map String String
 mimeTypes' = Happstack.mimeTypes `Map.union` Map.fromList
   [("xhtml", "application/xhtml+xml")]
 
@@ -117,8 +119,8 @@ type Block = Int
 extractInfo :: Tar.Entries -> Maybe [(FilePath, Block)]
 extractInfo = go 0 []
   where
-    go n es' (Tar.Done)      = Just es'
-    go n es' (Tar.Fail _)    = Nothing
+    go _ es' (Tar.Done)      = Just es'
+    go _ _   (Tar.Fail _)    = Nothing
     go n es' (Tar.Next e es) = go n' ((Tar.entryPath e, n) : es') es
       where
         n' = n + 1

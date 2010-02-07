@@ -6,8 +6,7 @@ module Distribution.Server.TarIndex.State
 
 import Control.Applicative ((<$>))
 import Control.Monad.Reader.Class (asks)
-import Control.Monad.State.Class (get, put, modify, gets)
-import Control.Monad.Trans (liftIO)
+import Control.Monad.State.Class (put, modify)
 import qualified Data.Map as Map
 
 import Happstack.Data
@@ -16,9 +15,7 @@ import Happstack.State
 import Data.TarIndex (TarIndex)
 
 import Distribution.Server.Packages.State()
-import Distribution.Server.Util.BlobStorage (BlobId, BlobStorage)
-import qualified Distribution.Server.Util.BlobStorage as BlobStorage
-import Distribution.Server.Util.Serve (readTarIndex)
+import Distribution.Server.Util.BlobStorage (BlobId)
 
 data TarIndexMap = M {indexMap :: Map.Map BlobId TarIndex}
  deriving Typeable

@@ -201,15 +201,13 @@ main = topHandler $ do
 data Import
     = ImportNone
     | ImportBulk
-      { impIndex   :: ByteString,
-        impLog     :: String,
-        impArchive :: Maybe ByteString,
-        impHtPasswd:: Maybe String,
-        impAdmins  :: Maybe String
-      }
+       ByteString -- ^Index
+       String     -- ^Log
+       (Maybe ByteString)  -- ^Archive
+       (Maybe String) -- ^HtPasswd
+       (Maybe String)  -- ^Admins
     | ImportTarball
-      { impTarball :: ByteString
-      }
+       ByteString
  deriving Eq
 
 topHandler :: IO a -> IO a
