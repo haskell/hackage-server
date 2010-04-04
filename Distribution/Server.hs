@@ -241,64 +241,89 @@ initState (Server _ _ _ cache host _) = do
 
 -- Support the same URL scheme as the first version of hackage.
 legacySupport :: ServerPart Response
-legacySupport = msum
-    [ dir "archive" $ msum
-      [
-       path $ \nameStr -> do
-         let Just name = simpleParse nameStr
+legacySupport
+    = msum [ legPackagesPath, legCgiScripts]
+
+ where
+
+   -- the old "packages/archive" directory
+   legPackagesPath
+       = dir "packages" $
+         dir "archive" $
          msum
-          [ path $ \version ->
-            let pkgid = PackageIdentifier {pkgName = name, pkgVersion = version}
-            in msum
-             [ let dirName = display pkgid ++ ".tar.gz"
-               in dir dirName $ methodSP GET $
-                  movedPermanently (packageTarball pkgid) (toResponse "")
+         [ path $ \name ->
+           path $ \version ->
+           let pkgid = PackageIdentifier {pkgName = name, pkgVersion = version}
+           in msum
+                  [ let dirName = display pkgid ++ ".tar.gz"
+                    in dir dirName $ methodSP GET $
+                    movedPermanently (packageTarball pkgid) (toResponse "")
 
-             , let fileName = display name ++ ".cabal"
-               in dir fileName $ methodSP GET $
-                  movedPermanently (cabalPath pkgid) (toResponse "")
+                  , let fileName = display name ++ ".cabal"
+                    in dir fileName $ methodSP GET $
+                    movedPermanently (cabalPath pkgid) (toResponse "")
 
-             , dir "doc" $ dir "html" $ remainingPath $ \paths ->
-                 let doc = Posix.joinPath paths
-                 in methodSP GET $
-                    movedPermanently (docPath pkgid doc) (toResponse "")
-             ]
-          ]
+                  , dir "doc" $ dir "html" $ remainingPath $ \paths ->
+                    let doc = Posix.joinPath paths
+                    in methodSP GET $
+                       movedPermanently (docPath pkgid doc) (toResponse "")
+                  ]         
 
-      , dir "package" $ path $ \fileName -> methodSP GET $
-       case Posix.splitExtension fileName of
-        (fileName', ".gz") -> case Posix.splitExtension fileName' of
-           (packageStr, ".tar") -> case simpleParse packageStr of
-              Just pkgid ->
-                movedPermanently (packageTarball pkgid) $ toResponse ""
-              _ -> mzero
-           _ -> mzero
-        _ -> mzero
+         , dir "package" $ path $ \fileName -> methodSP GET $
+           do packageStr <- splitExtensions fileName [".gz", ".tar"]
+              case simpleParse packageStr of
+                Just pkgid -> movedPermanently (packageTarball pkgid) $ toResponse ""
+                _ -> mzero
 
-      , dir "00-index.tar.gz" $ msum
-        [ methodSP GET $
-          movedPermanently "/00-index.tar.gz" (toResponse "")
-        ]
-      ]
-    ]
+         , dir "00-index.tar.gz" $
+           methodSP GET $
+           movedPermanently "/00-index.tar.gz" (toResponse "")
+         ]
 
- where packageTarball :: PackageId -> String
-       packageTarball pkgid
-           = "/package/" ++ display pkgid ++ ".tar.gz"
+   -- the old "cgi-bin/hackage-scripts" directory
+   legCgiScripts =
+       dir "cgi-bin" $
+       dir "hackage-scripts" $
+       msum
+       [ dir "check-pkg" $
+         methodSP POST $
+         movedPermanently "/check" $
+         toResponse ""
+       , dir "upload-pkg" $
+         methodSP POST $
+         movedPermanently "/upload" $
+         toResponse ""
+       , dir "package" $ path $
+         \packageId ->
+         methodSP GET $
+         movedPermanently ("/package/" ++ display (packageId :: PackageId)) $
+         toResponse ""
+       ]
 
-       docPath pkgid file = "/package/" ++ display pkgid ++ "/"
-                            ++ "documentation/" ++ file
 
-       cabalPath pkgid = "/package/" ++ display pkgid ++ "/"
-                         ++ display (packageName pkgid) ++ ".cabal"
+   packageTarball :: PackageId -> String
+   packageTarball pkgid
+       = "/package/" ++ display pkgid ++ ".tar.gz"
+
+   docPath pkgid file = "/package/" ++ display pkgid ++ "/"
+                        ++ "documentation/" ++ file
+
+   cabalPath pkgid = "/package/" ++ display pkgid ++ "/"
+                     ++ display (packageName pkgid) ++ ".cabal"
+
+   splitExtensions fp [] = return fp
+   splitExtensions fp (x:xs) =
+       case Posix.splitExtension fp of
+         (fp', ext) | ext == x -> splitExtensions fp' xs
+         _ -> mzero
+
 
 impl :: Server -> [ServerPartT IO Response]
 impl (Server store static _ cache host _) =
-  [ dir "packages" $ msum
-      [ legacySupport
-      , methodSP GET $
-          ok . Cache.packagesPage =<< Cache.get cache
-      ]
+  [ legacySupport
+  , dir "packages" $
+    methodSP GET $
+             ok . Cache.packagesPage =<< Cache.get cache
   , dir "package" $ msum
       [ path $ msum . handlePackageById store
       , path $ servePackage store

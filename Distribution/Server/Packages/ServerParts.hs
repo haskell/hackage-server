@@ -10,7 +10,7 @@ module Distribution.Server.Packages.ServerParts (
   ) where
 
 import Distribution.Package
-         ( PackageIdentifier(..), packageName, packageVersion
+         ( PackageIdentifier(..), PackageName, packageName, packageVersion
          , Package(packageId) )
 import Distribution.Text    (simpleParse, display)
 import Happstack.Server hiding (port, host)
@@ -358,6 +358,9 @@ buildReports store =
 
 
 instance FromReqURI PackageIdentifier where
+  fromReqURI = simpleParse
+
+instance FromReqURI PackageName where
   fromReqURI = simpleParse
 
 instance FromReqURI Version where
