@@ -61,7 +61,7 @@ instance Text GroupName where
 
 data Permissions = Permissions
        { permissions :: Map.Map GroupName UserGroup
-       } deriving Typeable
+       } deriving (Typeable, Show)
 
 empty :: Permissions
 empty = Permissions Map.empty

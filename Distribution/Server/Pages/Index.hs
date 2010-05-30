@@ -28,7 +28,7 @@ packageIndex = formatPkgGroups
                  . PackageIndex.allPackagesByName
 
 data Category = Category String | NoCategory
-	deriving (Eq, Ord)
+	deriving (Eq, Ord, Show)
 
 -- Packages, grouped by category and ordered by name with each category.
 formatPkgGroups :: [PackageDescription] -> Html

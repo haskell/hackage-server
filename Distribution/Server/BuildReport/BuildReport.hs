@@ -96,7 +96,7 @@ data BuildReport
     -- | Configure outcome, did configure work ok?
     testsOutcome    :: Outcome
   }
-  deriving Typeable
+  deriving (Typeable, Show)
 
 data InstallOutcome
    = DependencyFailed PackageIdentifier
@@ -107,8 +107,9 @@ data InstallOutcome
    | BuildFailed
    | InstallFailed
    | InstallOk
+   deriving (Show)
 
-data Outcome = NotTried | Failed | Ok
+data Outcome = NotTried | Failed | Ok deriving (Show)
 
 -- ------------------------------------------------------------
 -- * External format

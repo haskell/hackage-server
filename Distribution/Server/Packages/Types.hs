@@ -57,7 +57,7 @@ data PkgInfo = PkgInfo {
     -- we may make occasional exceptions, and there are some such old packages.
     pkgUploadOld  :: [(UTCTime, UserId)]
   }
-  deriving Typeable
+  deriving (Typeable, Show)
 
 instance Package PkgInfo where packageId = pkgInfoId
 

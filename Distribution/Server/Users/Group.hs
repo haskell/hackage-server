@@ -21,7 +21,7 @@ import Prelude hiding (id)
 -- | Some subset of users, eg those allowed to perform some action.
 --
 newtype UserGroup = UserGroup IntSet.IntSet
-  deriving (Eq, Monoid, Binary, Typeable)
+  deriving (Eq, Monoid, Binary, Typeable, Show)
 
 empty :: UserGroup
 empty = UserGroup IntSet.empty

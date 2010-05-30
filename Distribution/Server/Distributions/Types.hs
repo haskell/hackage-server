@@ -43,7 +43,7 @@ instance Text DistroName where
 data Distributions = Distributions
     { name_map :: !(Set.Set DistroName)
     }
- deriving Typeable
+ deriving (Typeable, Show)
 instance Version Distributions
 
 -- | Listing of which distirbutions have which version of particular
@@ -52,7 +52,7 @@ data DistroVersions = DistroVersions
     { package_map :: !(Map.Map PackageName (Map.Map DistroName DistroPackageInfo))
     , distro_map  :: !(Map.Map DistroName (Set.Set PackageName))
     }
- deriving Typeable
+ deriving (Typeable, Show)
 instance Version DistroVersions
 
 
@@ -61,7 +61,7 @@ data DistroPackageInfo
       { distro_version :: Version.Version
       , distro_url     :: String
       }
- deriving Typeable
+ deriving (Typeable, Show)
 instance Version DistroPackageInfo
 
 -- happstack magic

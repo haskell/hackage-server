@@ -18,7 +18,7 @@ import Distribution.Server.Packages.State()
 import Distribution.Server.Util.BlobStorage (BlobId)
 
 data TarIndexMap = M {indexMap :: Map.Map BlobId TarIndex}
- deriving Typeable
+ deriving (Typeable, Show)
 
 addIndex :: BlobId -> TarIndex -> Update TarIndexMap ()
 addIndex blob index = modify $ insertTarIndex blob index 

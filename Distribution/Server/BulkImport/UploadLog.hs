@@ -46,7 +46,7 @@ import Data.List
 import Prelude hiding (read)
 
 data Entry = Entry UTCTime UserName PackageIdentifier
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Show)
 
 instance Text Entry where
   disp (Entry time user pkgid) =

@@ -82,7 +82,7 @@ data PackageData = PackageData
 		-- (if available).
         , pdDistributions :: [(DistroName, DistroPackageInfo)]
                 -- ^ Distributions which have this package available
-	}
+	} deriving (Show)
 
 type GHCVersion = String
 

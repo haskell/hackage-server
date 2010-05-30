@@ -231,4 +231,4 @@ mergeBy cmp = merge
         EQ -> InBoth      x y : merge xs     ys
         LT -> OnlyInLeft  x   : merge xs  (y:ys)
 
-data MergeResult a b = OnlyInLeft a | InBoth a b | OnlyInRight b
+data MergeResult a b = OnlyInLeft a | InBoth a b | OnlyInRight b deriving (Show)

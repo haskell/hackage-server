@@ -28,7 +28,7 @@ data Distros
       { dist_distros  :: !Distributions
       , dist_versions :: !DistroVersions
       }
- deriving Typeable
+ deriving (Typeable, Show)
 
 instance Version Distros
 $(deriveSerialize ''Distros)

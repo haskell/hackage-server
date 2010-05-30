@@ -27,11 +27,12 @@ newtype UserName  = UserName String
 data UserInfo = UserInfo {
     userName   :: UserName,
     userStatus :: AccountStatus
-  }
+  } deriving (Show)
 
 data AccountStatus = Deleted
                    | Disabled UserAuth
                    | Enabled  UserAuth
+  deriving (Show)
 
 type UserAuth = PasswdHash
 

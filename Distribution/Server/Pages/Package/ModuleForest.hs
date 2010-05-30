@@ -20,6 +20,7 @@ type ModuleForest = [ModuleTree]
 data ModuleTree = Node String       -- Part of module name
                        Bool         -- Is this an existing module?
                        ModuleForest -- Sub modules
+    deriving (Show)
 
 --------------------------------------------------------------------------------
 

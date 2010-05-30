@@ -34,7 +34,7 @@ import qualified Distribution.Server.Util.Parse as Parse
 import qualified Text.PrettyPrint          as Disp
 
 newtype BuildReportId = BuildReportId Int
-  deriving (Eq, Ord, Binary, Typeable)
+  deriving (Eq, Ord, Binary, Typeable, Show)
 
 instance Version BuildReportId where
     mode = Versioned 0 Nothing
@@ -48,7 +48,7 @@ instance Text BuildReportId where
   parse = BuildReportId <$> Parse.int
 
 newtype BuildLog = BuildLog BlobStorage.BlobId
-  deriving (Eq, Binary, Typeable)
+  deriving (Eq, Binary, Typeable, Show)
 
 instance Version BuildLog where
     mode = Versioned 0 Nothing
@@ -63,7 +63,7 @@ data BuildReports = BuildReports {
     index   :: !(Map.Map PackageIdentifier [(BuildReportId, BuildReport)]),
     nextId  :: !BuildReportId
   }
-  deriving Typeable
+  deriving (Typeable, Show)
 
 empty :: BuildReports
 empty = BuildReports {

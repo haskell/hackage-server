@@ -33,7 +33,7 @@ import qualified Data.Map as Map
 
 data Documentation = Documentation {
      documentation :: Map.Map PackageIdentifier BlobId
-     } deriving Typeable
+     } deriving (Typeable, Show)
 
 instance Component Documentation where
     type Dependencies Documentation = End
@@ -53,7 +53,7 @@ data PackagesState = PackagesState {
     buildReports :: !BuildReports,
     userDb       :: !Users
   }
-  deriving Typeable
+  deriving (Typeable, Show)
 
 instance Component PackagesState where
   type Dependencies PackagesState = End

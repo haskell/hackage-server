@@ -45,7 +45,7 @@ data Users = Users {
     userNameMap :: !(Map.Map UserName UserId),
     nextId      :: !UserId
   }
-  deriving Typeable
+  deriving (Typeable, Show)
 
 -- invariant :: Users -> Bool
 -- invariant _ = True

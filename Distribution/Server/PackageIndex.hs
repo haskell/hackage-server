@@ -275,7 +275,7 @@ searchByName (PackageIndex m) name =
       Nothing       -> Ambiguous (map snd pkgss)
   where lname = lowercase name
 
-data SearchResult a = None | Unambiguous a | Ambiguous [a]
+data SearchResult a = None | Unambiguous a | Ambiguous [a] deriving (Show)
 
 -- | Does a case-insensitive substring search by package name.
 --
