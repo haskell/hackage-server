@@ -119,10 +119,10 @@ executable hackage-server
     rss == 3000.0.*,
     Cabal == 1.8.*,
     csv == 0.1.*,
-    happstack-data   == 0.4.*,
-    happstack-util   == 0.4.*,
-    happstack-state  == 0.4.*,
-    happstack-server == 0.4.*,
+    happstack-data   == 0.5.*,
+    happstack-util   == 0.5.*,
+    happstack-state  == 0.5.*,
+    happstack-server == 0.5.*,
     uri == 0.1.*
 
   if os(linux)

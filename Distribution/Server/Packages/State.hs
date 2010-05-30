@@ -102,12 +102,14 @@ instance Serialize PkgInfo where
   putCopy = contain . Binary.put
   getCopy = contain Binary.get
 
+{-- These are included in happstack-state 0.5.*
 instance Version UTCTime where
   mode = Versioned 0 Nothing
 
 instance Serialize UTCTime where
   putCopy = contain . Binary.put
   getCopy = contain Binary.get
+-}
 
 instance Version BlobId where
   mode = Versioned 0 Nothing
