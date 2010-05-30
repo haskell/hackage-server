@@ -30,9 +30,9 @@ source-repository head
   type: darcs
   location: http://code.haskell.org/hackage-server/
 
-executable hackage-server
-  main-is: Main.hs
-  other-modules:
+-- I've commandeered the directory tree to use it as a library.
+library
+  Exposed-modules:
     Data.IntTrie
     Data.StringTable
     Data.TarIndex
@@ -125,11 +125,14 @@ executable hackage-server
     happstack-server == 0.5.*,
     uri == 0.1.*
 
-  if os(linux)
-     extra-libraries: crypt
   if os(linux) || os(solaris)
      includes: crypt.h
   else
      includes: unistd.h
+  ghc-options: -Wall -fno-warn-orphans
 
+executable hackage-server
+  main-is: Main.hs
+  if os(linux)
+     extra-libraries: crypt
   ghc-options: -Wall -fno-warn-orphans
