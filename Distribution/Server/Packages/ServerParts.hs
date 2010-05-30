@@ -10,13 +10,13 @@ module Distribution.Server.Packages.ServerParts (
   ) where
 
 import Distribution.Package
-         ( PackageIdentifier(..), PackageName, packageName, packageVersion
-         , Package(packageId) )
+         ( PackageIdentifier(..), packageName, packageVersion , Package(packageId) )
 import Distribution.Text    (simpleParse, display)
 import Happstack.Server hiding (port, host)
 import Happstack.State hiding (Version)
 
 import Distribution.Server.ServerParts (guardAuth)
+import Distribution.Server.Instances ()
 
 import Distribution.Server.Packages.State as State hiding (buildReports)
 import Distribution.Server.Users.State as State
@@ -65,7 +65,6 @@ import qualified Codec.Compression.GZip as GZip
 
 
 --TODO: switch to new cache mechanism:
-
 updateCache :: MonadIO m => Cache.Cache -> URIAuth -> m ()
 updateCache cache host
     = liftIO (Cache.put cache =<< stateToCache host =<< query GetPackagesState)
@@ -355,16 +354,6 @@ buildReports store =
           seeOther ("/buildreports/"++display reportId) $
             toResponse ""
   ]
-
-
-instance FromReqURI PackageIdentifier where
-  fromReqURI = simpleParse
-
-instance FromReqURI PackageName where
-  fromReqURI = simpleParse
-
-instance FromReqURI Version where
-  fromReqURI = simpleParse
 
 instance FromReqURI BuildReports.BuildReportId where
   fromReqURI = simpleParse

@@ -23,6 +23,7 @@ import qualified Data.Binary as Binary
 import Data.Binary (Binary)
 
 import qualified Happstack.State as Happs
+import qualified Happstack.Server as Happs
 
 import Data.Maybe (fromJust)
 
@@ -43,6 +44,15 @@ instance Happs.Version Version
 instance Happs.Serialize Version where
     getCopy = Happs.contain textGet
     putCopy = Happs.contain . textPut
+
+instance Happs.FromReqURI PackageIdentifier where
+  fromReqURI = simpleParse
+
+instance Happs.FromReqURI PackageName where
+  fromReqURI = simpleParse
+
+instance Happs.FromReqURI Version where
+  fromReqURI = simpleParse
 
 -- These assume that the text representations
 -- for Cabal types will be stable over time

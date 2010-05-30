@@ -55,6 +55,9 @@ executable hackage-server
     Distribution.Server.Export.FlatFiles
     Distribution.Server.Export.ServerParts
     Distribution.Server.Export.Utils
+    Distribution.Server.Feature
+    Distribution.Server.Features
+    Distribution.Server.Features.LegacyRedirects
     Distribution.Server.Import
     Distribution.Server.Instances
     Distribution.Server.PackageIndex
