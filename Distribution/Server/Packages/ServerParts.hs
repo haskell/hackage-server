@@ -63,6 +63,32 @@ import System.FilePath.Posix ((</>))
 import qualified Data.ByteString.Lazy.Char8 as BS.Char8
 import qualified Codec.Compression.GZip as GZip
 
+{-
+TODO: change this module to support Resources that do:
+    dir "package" $ msum
+      [ path $ msum . handlePackageById store
+      , path $ servePackage store
+      ]
+  , dir "check" checkPackage
+  , dir "upload" $ msum
+      [ uploadPackage store cache host ]
+
+With these BranchPaths:
+/packages/
+[StaticBranch "packages"]
+/packages/index.tar.gz
+[StaticBranch "index.tar.gz", StaticBranch "packages"]
+/package/<package>
+[DynamicBranch "package", StaticBranch "packages"]
+/package/<package>/<package>.cabal
+[DynamicBranch "cabal", DynamicBranch "package", StaticBranch "packages"]
+/package/<package>/<package>.tar.gz
+[DynamicBranch "tarball", DynamicBranch "package", StaticBranch "packages"]
+/package/<package>/doc/<doctree>
+[DynamicBranch "doctree", StaticBranch "doc", DynamicBranch "package", StaticBranch "packages"]
+/package/<package>/maintainers
+Automatic user group creation
+-}
 
 --TODO: switch to new cache mechanism:
 updateCache :: MonadIO m => Cache.Cache -> URIAuth -> m ()

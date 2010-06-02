@@ -17,22 +17,21 @@ module Distribution.Server (
    initState,
  ) where
 
-import Distribution.Package
-         ( PackageIdentifier(..), packageName, PackageId )
-import Distribution.Text
-         ( display, simpleParse )
+import Distribution.Package (packageName)
 import Happstack.Server hiding (port, host)
 import qualified Happstack.Server
 import Happstack.State hiding (Version)
 
-import Distribution.Server.ServerParts
-    (guardAuth)
+import Distribution.Server.ServerParts (guardAuth)
 import qualified Distribution.Server.Import as Import ( importTar )
 
 import Distribution.Server.Packages.ServerParts
 import Distribution.Server.Users.ServerParts
 import Distribution.Server.Distributions.ServerParts
 import Distribution.Server.Users.Permissions (GroupName(..))
+
+import qualified Distribution.Server.Feature as Feature
+import qualified Distribution.Server.Features as Features
 
 import Distribution.Server.State as State
 import Distribution.Server.Packages.State as State hiding (buildReports, bulkImport)
@@ -43,7 +42,6 @@ import Distribution.Server.Packages.Types
 import qualified Distribution.Server.ResourceTypes as Resource
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
-import Distribution.Server.Util.Happstack (remainingPath)
 import qualified Distribution.Server.BulkImport as BulkImport
 import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
 
@@ -51,22 +49,25 @@ import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
 
 import Distribution.Server.Export.ServerParts (export)
-
 import Distribution.Server.Auth.Types (PasswdPlain(..))
 
+import Distribution.Server.Resource (addResponse, serverTreeEmpty, renderServerTree, spiffyResources)
+import Data.List (foldl')
+
 import System.FilePath ((</>))
-import qualified System.FilePath.Posix as Posix (joinPath, splitExtension)
 import System.Directory
          ( createDirectoryIfMissing, doesDirectoryExist )
 import Control.Concurrent.MVar (MVar)
 import Control.Monad.Trans
-import Control.Monad (when,msum,mzero)
+import Control.Monad (when, msum)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Network.URI
          ( URIAuth(URIAuth) )
 import Network.BSD
          ( getHostName )
+import qualified Data.Map as Map (empty)
 
+import qualified Data.ByteString.Lazy.Char8 as BS
 
 import Paths_hackage_server (getDataDir)
 
@@ -75,7 +76,7 @@ data Config = Config {
   confPortNum   :: Int,
   confStateDir  :: FilePath,
   confStaticDir :: FilePath
-}
+} deriving (Show)
 
 confHappsStateDir, confBlobStoreDir :: Config -> FilePath
 confHappsStateDir config = confStateDir config </> "db"
@@ -93,12 +94,10 @@ defaultConfig = do
   }
 
 data Server = Server {
-  serverStore      :: BlobStorage,
-  serverStaticDir  :: FilePath,
-  serverTxControl  :: MVar TxControl,
-  serverCache      :: Cache.Cache,
-  serverURI        :: URIAuth,
-  serverPort       :: Int
+  serverTxControl     :: MVar TxControl,
+  serverFeatureConfig :: Feature.Config,
+  serverPort          :: Int,
+  serverCache         :: Cache.Cache
 }
 
 -- | If we made a server instance from this 'Config', would we find some
@@ -130,12 +129,14 @@ initialise config@(Config hostName portNum stateDir staticDir) = do
   cache   <- Cache.new =<< stateToCache hostURI =<< query GetPackagesState
 
   return Server {
-    serverStore      = store,
-    serverStaticDir  = staticDir,
     serverTxControl  = txCtl,
-    serverCache      = cache,
-    serverURI        = hostURI,
-    serverPort       = portNum
+    serverFeatureConfig = Feature.Config {
+      Feature.serverStore      = store,
+      Feature.serverStaticDir  = staticDir,
+      Feature.serverURI        = hostURI
+    },
+    serverPort       = portNum,
+    serverCache      = cache
   }
 
   where
@@ -151,9 +152,16 @@ hackageEntryPoint = Proxy
 -- | Actually run the server, i.e. start accepting client http connections.
 --
 run :: Server -> IO ()
-run server = simpleHTTP conf $ msum (impl server)
+run server = simpleHTTP conf $ mungeRequest $ impl server
   where
     conf = nullConf { Happstack.Server.port = serverPort server }
+    mungeRequest = localRq mungeMethod
+    mungeMethod req = case (rqMethod req, lookup "_method" (rqInputs req)) of
+        (POST, Just input) -> case reads (BS.unpack (inputValue input)) of
+            [(newMethod, "")] -> req { rqMethod = newMethod }
+            _ -> req
+        _ -> req
+    -- todo: given a .json or .html suffix, munge it into an Accept header
 
 -- | Perform a clean shutdown of the server.
 --
@@ -173,7 +181,7 @@ bulkImport :: Server
            -> Maybe String -- users
            -> Maybe String -- admin users
            -> IO [UploadLog.Entry]
-bulkImport (Server store _ _ cache host _)
+bulkImport (Server _ (Feature.Config store _ host) _ cache)
            indexFile logFile archiveFile htPasswdFile adminsFile = do
   pkgIndex  <- either fail return (BulkImport.importPkgIndex indexFile)
   uploadLog <- either fail return (BulkImport.importUploadLog logFile)
@@ -213,7 +221,7 @@ bulkImport (Server store _ _ cache host _)
            Just uid -> Right uid
 
 importTar :: Server -> ByteString -> IO (Maybe String)
-importTar (Server store _ _ cache host _) tar = do
+importTar (Server _ (Feature.Config store _ host) _ cache) tar = do
   res <- Import.importTar store tar
   case res of
     Nothing -> updateCache cache host
@@ -223,7 +231,7 @@ importTar (Server store _ _ cache host _) tar = do
 -- An alternative to an import.
 -- Starts the server off to a sane initial state.
 initState ::  MonadIO m => Server -> m ()
-initState (Server _ _ _ cache host _) = do
+initState (Server _ (Feature.Config _ _ host) _ cache) = do
   -- clear off existing state
   update $ BulkImport [] Users.empty
   update $ BulkImportPermissions []
@@ -239,89 +247,13 @@ initState (Server _ _ _ cache host _) = do
 
   updateCache cache host
 
--- Support the same URL scheme as the first version of hackage.
-legacySupport :: ServerPart Response
-legacySupport
-    = msum [ legPackagesPath, legCgiScripts]
 
- where
+impl :: Server -> ServerPart Response
+impl server = flip renderServerTree Map.empty $ spiffyResources $ foldl' (flip $ uncurry addResponse) serverTreeEmpty $ ([], core server):concatMap (Feature.serverParts) Features.hackageFeatures
 
-   -- the old "packages/archive" directory
-   legPackagesPath
-       = dir "packages" $
-         dir "archive" $
-         msum
-         [ path $ \name ->
-           path $ \version ->
-           let pkgid = PackageIdentifier {pkgName = name, pkgVersion = version}
-           in msum
-                  [ let dirName = display pkgid ++ ".tar.gz"
-                    in dir dirName $ methodSP GET $
-                    movedPermanently (packageTarball pkgid) (toResponse "")
-
-                  , let fileName = display name ++ ".cabal"
-                    in dir fileName $ methodSP GET $
-                    movedPermanently (cabalPath pkgid) (toResponse "")
-
-                  , dir "doc" $ dir "html" $ remainingPath $ \paths ->
-                    let doc = Posix.joinPath paths
-                    in methodSP GET $
-                       movedPermanently (docPath pkgid doc) (toResponse "")
-                  ]         
-
-         , dir "package" $ path $ \fileName -> methodSP GET $
-           do packageStr <- splitExtensions fileName [".gz", ".tar"]
-              case simpleParse packageStr of
-                Just pkgid -> movedPermanently (packageTarball pkgid) $ toResponse ""
-                _ -> mzero
-
-         , dir "00-index.tar.gz" $
-           methodSP GET $
-           movedPermanently "/00-index.tar.gz" (toResponse "")
-         ]
-
-   -- the old "cgi-bin/hackage-scripts" directory
-   legCgiScripts =
-       dir "cgi-bin" $
-       dir "hackage-scripts" $
-       msum
-       [ dir "check-pkg" $
-         methodSP POST $
-         movedPermanently "/check" $
-         toResponse ""
-       , dir "upload-pkg" $
-         methodSP POST $
-         movedPermanently "/upload" $
-         toResponse ""
-       , dir "package" $ path $
-         \packageId ->
-         methodSP GET $
-         movedPermanently ("/package/" ++ display (packageId :: PackageId)) $
-         toResponse ""
-       ]
-
-
-   packageTarball :: PackageId -> String
-   packageTarball pkgid
-       = "/package/" ++ display pkgid ++ ".tar.gz"
-
-   docPath pkgid file = "/package/" ++ display pkgid ++ "/"
-                        ++ "documentation/" ++ file
-
-   cabalPath pkgid = "/package/" ++ display pkgid ++ "/"
-                     ++ display (packageName pkgid) ++ ".cabal"
-
-   splitExtensions fp [] = return fp
-   splitExtensions fp (x:xs) =
-       case Posix.splitExtension fp of
-         (fp', ext) | ext == x -> splitExtensions fp' xs
-         _ -> mzero
-
-
-impl :: Server -> [ServerPartT IO Response]
-impl (Server store static _ cache host _) =
-  [ legacySupport
-  , dir "packages" $
+core :: Server -> ServerPart Response
+core (Server _ (Feature.Config store static host) _ cache) = msum
+  [ dir "packages" $
     methodSP GET $
              ok . Cache.packagesPage =<< Cache.get cache
   , dir "package" $ msum
@@ -341,7 +273,7 @@ impl (Server store static _ cache host _) =
           cacheState <- Cache.get cache
           ok $ toResponse $ Resource.IndexTarball (Cache.indexTarball cacheState)
       ]
-  , dir "admin" $ admin store
+  , dir "admin" $ admin static store
   , dir "check" checkPackage
   , dir "htpasswd" $ msum
       [ changePassword ]
@@ -349,11 +281,10 @@ impl (Server store static _ cache host _) =
   , fileServe ["hackage.html"] static
   ]
 
-
 -- Top level server part for administrative actions under the "admin"
 -- directory
-admin :: BlobStorage -> ServerPart Response
-admin storage = do
+admin :: FilePath -> BlobStorage -> ServerPart Response
+admin static storage = do
 
   guardAuth [Administrator]
 
@@ -361,4 +292,5 @@ admin storage = do
    [ dir "users" userAdmin
    , dir "export.tar.gz" (export storage)
    , adminDist
+   , fileServe ["admin.html"] static
    ]

@@ -77,6 +77,7 @@ executable hackage-server
     Distribution.Server.Pages.Recent
     Distribution.Server.Pages.Template
     Distribution.Server.Pages.Util
+    Distribution.Server.Resource
     Distribution.Server.ResourceTypes
     Distribution.Server.ServerParts
     Distribution.Server.State
