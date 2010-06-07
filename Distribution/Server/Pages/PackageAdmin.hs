@@ -56,8 +56,9 @@ forms pkg = concat
 addMaintainer :: PkgInfo -> [Html]
 addMaintainer pkg =
     [ h3 << "Add Maintainer"
-    , gui (adminAction pkg "addMaintainer") ! [theclass "box"] <<
-        [ p << [stringToHtml "User: ", textfield "user"]
+    , gui (adminAction pkg) ! [theclass "box"] <<
+        [ p << [stringToHtml "User: ", textfield "_patharg"]
+        , hidden "_method" "PUT"
         , submit "submit" "Add maintainer"
         ]
     ]
@@ -65,8 +66,9 @@ addMaintainer pkg =
 removeMaintainer :: PkgInfo -> [Html]
 removeMaintainer pkg =
     [ h3 << "Remove Maintainer"
-    , gui (adminAction pkg "removeMaintainer") ! [theclass "box"] <<
-       [ p << [stringToHtml "User: ", textfield "user"]
+    , gui (adminAction pkg) ! [theclass "box"] <<
+       [ p << [stringToHtml "User: ", textfield "_patharg"]
+       , hidden "_method" "DELETE"
        , submit "submit" "Remove maintainer"
        ]
     ]
@@ -78,8 +80,8 @@ listMaintainers users =
     , p << unordList (map display users)
     ]
 
-adminAction :: PkgInfo -> String -> String
-adminAction pkg act =packageNameURL (packageId pkg) </> "admin" </> act
+adminAction :: PkgInfo -> String
+adminAction pkg = packageNameURL (packageId pkg) </> "maintainers"
 
 -- Break text into paragraphs (separated by blank lines)
 paragraphs :: String -> [String]

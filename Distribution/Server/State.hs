@@ -6,7 +6,8 @@ module Distribution.Server.State where
 import Distribution.Server.Instances ()
 
 import Distribution.Server.Packages.State
-import Distribution.Server.Users.Permissions (Permissions)
+import Distribution.Server.BuildReport.BuildReports (BuildReports)
+import Distribution.Server.Users.Users (Users)
 import Distribution.Server.Distributions.State (Distros)
 import Distribution.Server.TarIndex.State (TarIndexMap)
 
@@ -23,8 +24,9 @@ instance Serialize HackageEntryPoint where
 
 instance Component HackageEntryPoint where
     type Dependencies HackageEntryPoint
-        = PackagesState :+: Documentation :+: Permissions :+:
-          Distros :+: TarIndexMap :+: End
+        = PackagesState :+: Documentation :+: Users :+:
+          BuildReports :+: Distros :+: TarIndexMap :+:
+          PackageMaintainers :+: End
     initialValue = HackageEntryPoint
 
 

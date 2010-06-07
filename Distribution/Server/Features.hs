@@ -3,7 +3,8 @@ module Distribution.Server.Features where
 
 import Distribution.Server.Feature (HackageFeature)
 
---import Distribution.Server.Features.Users (usersFeature)
+import Distribution.Server.Users.ServerParts (usersFeature)
+import Distribution.Server.Packages.ServerParts (packagePagesFeature)
 --import Distribution.Server.Features.StaticFiles (staticFilesFeature)
 import Distribution.Server.Features.LegacyRedirects (legacyRedirectsFeature)
 --import Distribution.Server.Users.State (UsersStore)
@@ -17,8 +18,9 @@ import Data.Typeable
 hackageFeatures :: [HackageFeature]
 hackageFeatures =
   [ legacyRedirectsFeature
---  , usersFeature
---  , staticFilesFeature
+  , usersFeature
+  , packagePagesFeature
+--, staticFilesFeature
   ]
 
 -- For the sake of the happstack state system we need to give the list

@@ -1,7 +1,7 @@
 module Main (main) where
 
 import qualified Distribution.Server
-import Distribution.Server (Config(..), Server)
+import Distribution.Server (ServerConfig(..), Server)
 
 import Distribution.Text
          ( display )
@@ -46,7 +46,7 @@ main = topHandler $ do
     (optImportLog opts)      (optImportArchive opts)
     (optImportHtPasswd opts) (optImportAdmins opts)
 
-  defaults <- Distribution.Server.defaultConfig
+  defaults <- Distribution.Server.defaultServerConfig
 
   port <- checkPortOpt defaults (optPort opts)
   let hostname  = fromMaybe (confHostName  defaults) (optHost      opts)
@@ -89,7 +89,7 @@ main = topHandler $ do
       Distribution.Server.run server
 
   where
-    withServer :: Config -> (Server -> IO ()) -> IO ()
+    withServer :: ServerConfig -> (Server -> IO ()) -> IO ()
     withServer config = bracket initialise shutdown
       where
         initialise = do
@@ -184,6 +184,7 @@ main = topHandler $ do
       info "importing..."
       badLogEntries <- Distribution.Server.bulkImport server
                          indexFile logFile tarballs htpasswd admins
+      info "done"
       unless (null badLogEntries) $ putStr $
            "Warning: Upload log entries for non-existant packages:\n"
         ++ unlines (map display (sort badLogEntries))

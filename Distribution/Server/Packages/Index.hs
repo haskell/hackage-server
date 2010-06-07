@@ -39,10 +39,10 @@ import Prelude hiding (read)
 write :: Users.Users -> PackageIndex PkgInfo -> ByteString
 write users = PackageIndex.write pkgData setModTime
   where
-    setModTime pkgInfo entry = entry {
-      Tar.entryTime      = utcToUnixTime (pkgUploadTime pkgInfo),
+    setModTime pkgInfo entry = let (utime, uuser) = pkgUploadData pkgInfo in entry {
+      Tar.entryTime      = utcToUnixTime utime,
       Tar.entryOwnership = Tar.Ownership {
-        Tar.ownerName = userName (pkgUploadUser pkgInfo),
+        Tar.ownerName = userName uuser,
         Tar.groupName = "HackageDB",
         Tar.ownerId = 0,
         Tar.groupId = 0

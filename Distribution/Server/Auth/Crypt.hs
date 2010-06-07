@@ -2,7 +2,8 @@
 module Distribution.Server.Auth.Crypt (
    PasswdPlain(..),
    PasswdHash(..),
-   newPasswd,
+   newBasicPass,
+   newDigestPass,
    checkPasswd,
 
    -- * raw crypt
@@ -10,14 +11,22 @@ module Distribution.Server.Auth.Crypt (
   ) where
 
 import Distribution.Server.Auth.Types
+import Distribution.Server.Users.Types (UserName(..))
 
 import System.Random (Random(randomRs), RandomGen)
+import Data.Digest.Pure.MD5 (md5)
+import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
+import Data.List (intercalate)
 
 import Foreign (unsafePerformIO)
 import Foreign.C (CString, withCAString, peekCAString)
 
-newPasswd :: RandomGen rnd => rnd -> PasswdPlain -> PasswdHash
-newPasswd rnd (PasswdPlain plain) = PasswdHash (crypt plain salt)
+newDigestPass :: UserName -> PasswdPlain -> String -> PasswdHash
+newDigestPass (UserName userName) (PasswdPlain passwd) realm =
+    PasswdHash . show . md5 . BS.Lazy.pack $ intercalate ":" [userName, realm, passwd]
+
+newBasicPass :: RandomGen rnd => rnd -> PasswdPlain -> PasswdHash
+newBasicPass rnd (PasswdPlain plain) = PasswdHash (crypt plain salt)
   where
     salt :: [Char]
     salt = take 2 (randomRs ('\1', '\255') rnd)

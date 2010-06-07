@@ -5,31 +5,17 @@ module Distribution.Server.Users.State where
 
 import Distribution.Server.Instances ()
 
-import Distribution.Server.Users.Group (UserGroup)
-import qualified Distribution.Server.Users.Permissions as Permissions
-import Distribution.Server.Users.Permissions (Permissions(..),GroupName)
 import Distribution.Server.Users.Types (UserId,UserName,UserAuth)
+import Distribution.Server.Users.Group as Group (UserList(..), enumerate, add, remove)
 import Distribution.Server.Users.Users as Users
 
-import qualified Data.Map as Map
+import Data.Maybe (isJust)
 
 import Happstack.State
 import qualified Data.Binary as Binary
 
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
-
-
-instance Component Permissions where
-    type Dependencies Permissions = End
-    initialValue = Permissions Map.empty
-
-instance Version Permissions where
-    mode = Versioned 0 Nothing
-
-instance Serialize Permissions where
-   putCopy (Permissions p) = contain $ safePut p
-   getCopy = contain $ liftM Permissions safeGet
 
 instance Version Users where
   mode = Versioned 0 Nothing
@@ -38,17 +24,11 @@ instance Serialize Users where
   putCopy = contain . Binary.put
   getCopy = contain Binary.get
 
-instance Version UserGroup where
+instance Version UserList where
   mode = Versioned 0 Nothing
-instance Serialize UserGroup where
+instance Serialize UserList where
   putCopy = contain . Binary.put
   getCopy = contain Binary.get
-
-instance Version GroupName where
-  mode = Versioned 0 Nothing
-instance Serialize GroupName where
-  putCopy = contain . Binary.put . show
-  getCopy = contain (liftM read Binary.get)
 
 instance Version UserId where
   mode = Versioned 0 Nothing
@@ -68,31 +48,94 @@ instance Serialize UserAuth where
   putCopy = contain . Binary.put
   getCopy = contain Binary.get
 
+instance Component Users where
+  type Dependencies Users = End
+  initialValue = Users.empty
 
-lookupUserGroup :: GroupName -> Query Permissions UserGroup
-lookupUserGroup group
-    = Permissions.lookupUserGroup group `fmap` ask
+--------------------------------------------
 
-lookupUserGroups :: [GroupName] -> Query Permissions UserGroup
-lookupUserGroups groups =
-    Permissions.lookupUserGroups groups `fmap` ask
+-- Returns 'Nothing' if the user name is in use
+addUser :: UserName -> UserAuth -> Update Users (Maybe UserId)
+addUser userName auth = updateUsers' updateFn formatFn
+  where updateFn = Users.add userName auth
+        formatFn = id
 
-addToGroup :: GroupName -> UserId -> Update Permissions ()
-addToGroup groupName userId
-    = State.modify $ Permissions.addToGroup groupName userId
+-- Disables the indicated user
+setEnabledUser :: UserId -> Bool -> Update Users Bool
+setEnabledUser uid en = updateUsers $ Users.setEnabled en uid
 
-removeFromGroup :: GroupName -> UserId -> Update Permissions ()
-removeFromGroup groupName userId
-    = State.modify $ Permissions.removeFromGroup groupName userId
+-- Deletes the indicated user. Cannot be re-enabled. The associated
+-- user name is available for re-use 
+deleteUser :: UserId -> Update Users Bool
+deleteUser = updateUsers . Users.delete
 
-removeGroup :: GroupName -> Update Permissions ()
-removeGroup groupName
-    = State.modify $ Permissions.removeGroup groupName
+-- Re-set the user autenication info
+replaceUserAuth :: UserId -> UserAuth -> Update Users Bool
+replaceUserAuth userId auth
+    = updateUsers $ \users -> Users.replaceAuth users userId auth
 
-getPermissions :: Query Permissions Permissions
-getPermissions = ask
+-- updates the user db with a simpler function
+updateUsers :: (Users -> Maybe Users) -> Update Users Bool
+updateUsers f = updateUsers' updateFn isJust
+    where updateFn users = fmap (swap . (,) ()) $ f users
+          swap (x,y) = (y,x)
 
--- |overwrites existing permissions
+-- Helper function for updating the users db
+updateUsers' :: (Users -> Maybe (Users, a)) -> (Maybe a -> b) -> Update Users b
+updateUsers' f format = do
+  users <- State.get
+  liftM format $ case (f users) of
+    Nothing -> return Nothing
+    Just (users',a) -> do
+      State.put users'
+      return (Just a)
+
+lookupUserName :: UserName -> Query Users (Maybe UserId)
+lookupUserName = queryUsers . Users.lookupName
+
+queryUsers :: (Users -> a) -> Query Users a
+queryUsers queryFn = liftM queryFn ask
+
+getUserDb :: Query Users Users
+getUserDb = ask
+
+replaceUserDb :: Users -> Update Users ()
+replaceUserDb = State.put
+
+listGroupMembers :: UserList -> Query Users [UserName]
+listGroupMembers userList
+    = do users <- ask
+         return [ Users.idToName users uid | uid <- Group.enumerate userList ]
+
+getHackageAdmins :: Query Users UserList
+getHackageAdmins = asks adminList
+
+getJustHackageAdmins :: Query Users (Maybe UserList)
+getJustHackageAdmins = Just `fmap` asks adminList
+
+modifyHackageAdmins :: (UserList -> UserList) -> Update Users ()
+modifyHackageAdmins func = State.modify (\users -> users { adminList = func (adminList users) })
+
+addHackageAdmin :: UserId -> Update Users ()
+addHackageAdmin uid = modifyHackageAdmins (Group.add uid)
+
+removeHackageAdmin :: UserId -> Update Users ()
+removeHackageAdmin uid = modifyHackageAdmins (Group.remove uid)
+
+$(mkMethods ''Users ['addUser
+                    ,'setEnabledUser
+                    ,'deleteUser
+                    ,'replaceUserAuth
+                    ,'lookupUserName
+                    ,'getUserDb
+                    ,'replaceUserDb
+
+                    ,'getHackageAdmins
+                    ,'getJustHackageAdmins
+                    ,'addHackageAdmin
+                    ,'removeHackageAdmin
+                    ])
+{--- |overwrites existing permissions
 bulkImportPermissions :: [(UserId, GroupName)] -> Update Permissions ()
 bulkImportPermissions perms = do
 
@@ -113,4 +156,4 @@ $(mkMethods ''Permissions ['lookupUserGroup
                           -- Import
                           ,'bulkImportPermissions
                           ,'replacePermissions
-                          ])
+                          ])-}

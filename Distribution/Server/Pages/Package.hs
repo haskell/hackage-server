@@ -21,11 +21,7 @@ import Distribution.PackageDescription.Configuration
 				( flattenPackageDescription )
 import Distribution.Package
 import Distribution.PackageDescription as P
-import Distribution.Version
-    ( Version (..)
-    , VersionRange (..)
-    , withinRange
-    )
+import Distribution.Version (Version (..), VersionRange (..), withinRange)
 import Distribution.Text	( display )
 import Text.XHtml.Strict hiding ( p, name )
 
@@ -48,14 +44,14 @@ packagePage :: Users.Users -> PackageIndex PkgInfo ->
 packagePage users pkgs pkg allVersions distributions docURL =
   let packageData = (emptyPackageData (pkgDesc pkg)) {
         pdAllVersions = sort (map packageVersion allVersions),
-        pdTags = [("upload date", showTime (pkgUploadTime pkg))
+        pdTags = [("upload date", showTime (fst $ pkgUploadData pkg))
                  ,("uploaded by", display userName)],
         pdDependencies = pkgs,
         pdDistributions = distributions,
         pdDocURL = docURL
       }
       showTime = formatTime defaultTimeLocale "%c"
-      userName = Users.idToName users (pkgUploadUser pkg)
+      userName = Users.idToName users (snd $ pkgUploadData pkg)
    in hackagePage (display $ packageId pkg) (pkgBody packageData)
 
 -- | Data about a package used in the package page.
@@ -368,6 +364,8 @@ fromVersionRange (UnionVersionRanges r1 r2) =
 fromVersionRange (IntersectVersionRanges r1 r2) =
 	filter (not . nullInterval) $
 	liftM2 intersectInterval (fromVersionRange r1) (fromVersionRange r2)
+-- temporary fix. TODO: change this entire module to use Distribution.Version.VersionInterval
+fromVersionRange _ = []
 
 intersectInterval :: Ord a => Interval a -> Interval a -> Interval a
 intersectInterval (Interval l1 u1) (Interval l2 u2) =

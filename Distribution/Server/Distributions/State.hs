@@ -16,6 +16,11 @@ import qualified Distribution.Server.Distributions.Distributions as Dist
 import Distribution.Server.Distributions.Distributions
     (DistroName, Distributions, DistroVersions, DistroPackageInfo)
 
+import Distribution.Server.Users.Group (UserList)
+import Distribution.Server.Users.Types (UserId)
+import qualified Distribution.Server.Users.Group as Group
+import Distribution.Server.Users.State ()
+
 import Data.Typeable
 
 import Happstack.State
@@ -23,11 +28,10 @@ import Happstack.State
 import Control.Monad.State.Class (get, put, modify)
 import Control.Monad.Reader.Class (ask, asks)
 
-data Distros
-    = Distros
-      { dist_distros  :: !Distributions
-      , dist_versions :: !DistroVersions
-      }
+data Distros = Distros {
+    dist_distros  :: !Distributions,
+    dist_versions :: !DistroVersions
+}
  deriving (Typeable, Show)
 
 instance Version Distros
@@ -44,17 +48,16 @@ addDistro name
   let distros = dist_distros state
   case Dist.addDistro name distros of
     Nothing -> return False
-    Just distros'
-        -> put state{dist_distros = distros'} >> return True
+    Just distros' -> put state{dist_distros = distros'} >> return True
 
 -- DELETES a distribution. The name may then be re-used.
 -- You should also clean up the permissions DB as well.
 removeDistro :: DistroName -> Update Distros ()
 removeDistro distro
     = modify $ \state@Distros{..} ->
-      state{ dist_distros  = Dist.removeDistro distro dist_distros
-           , dist_versions = Dist.removeDistroVersions distro dist_versions
-           }
+      state { dist_distros  = Dist.removeDistro distro dist_distros
+            , dist_versions = Dist.removeDistroVersions distro dist_versions
+            }
 
 enumerate :: Query Distros [DistroName]
 enumerate = asks $ Dist.enumerate . dist_distros
@@ -88,6 +91,17 @@ packageStatus :: PackageName -> Query Distros [(DistroName, DistroPackageInfo)]
 packageStatus package
     = asks $ Dist.packageStatus package . dist_versions
 
+getDistroMaintainers :: DistroName -> Query Distros (Maybe UserList)
+getDistroMaintainers name = fmap (Dist.getDistroMaintainers name) (asks dist_distros)
+
+modifyDistroMaintainers :: DistroName -> (UserList -> UserList) -> Update Distros ()
+modifyDistroMaintainers name func = modify (\distros -> distros {dist_distros = Dist.modifyDistroMaintainers name func (dist_distros distros) })
+
+addDistroMaintainer :: DistroName -> UserId -> Update Distros ()
+addDistroMaintainer name uid = modifyDistroMaintainers name (Group.add uid)
+
+removeDistroMaintainer :: DistroName -> UserId -> Update Distros ()
+removeDistroMaintainer name uid = modifyDistroMaintainers name (Group.remove uid)
 
 $(mkMethods
   ''Distros
@@ -110,5 +124,10 @@ $(mkMethods
   -- import/export
   , 'getDistributions
   , 'replaceDistributions
+
+  -- distro maintainers
+  , 'getDistroMaintainers
+  , 'addDistroMaintainer
+  , 'removeDistroMaintainer
   ]
  )

@@ -9,7 +9,7 @@
  -}
 module Distribution.Server.Export.FlatFiles
     ( usersToCSV
-    , permsToCSV
+--    , permsToCSV
     , uploadsToCSV
     , distroToCSV
     ) where
@@ -19,8 +19,6 @@ import Distribution.Server.Export.Utils
 
 import Distribution.Server.Users.Types as Users
 import Distribution.Server.Users.Users as Users
-import Distribution.Server.Users.Group as Group
-import Distribution.Server.Users.Permissions as Permissions
 
 import qualified Distribution.Server.Distributions.Distributions as Distros
 import Distribution.Server.Distributions.Distributions
@@ -30,6 +28,7 @@ import Distribution.Server.Distributions.Distributions
     )
 
 import Distribution.Server.Packages.Types
+import Distribution.Server.Auth.Types
 
 import Distribution.Text
 
@@ -85,48 +84,30 @@ usersToCSV users
    infoToStatus :: Users.UserInfo -> String
    infoToStatus userInfo
        = case Users.userStatus userInfo of
-           Users.Deleted{}  -> "deleted"
-           Users.Disabled{} -> "disabled"
-           Users.Enabled{}  -> "enabled"
+           Users.Deleted  -> "deleted"
+           Users.Active Users.Disabled _ -> "disabled"
+           Users.Active Users.Enabled  _ -> "enabled"
 
-   -- one of "none" or "basic"
+   -- one of "none", "basic", or "digest"
    infoToAuthType :: Users.UserInfo -> String
    infoToAuthType userInfo
        = case Users.userStatus userInfo of
-           Users.Deleted{} -> "none"
-           _ -> "basic"
+           Users.Deleted -> "none"
+           Users.Active _ (Users.UserAuth _ atype)-> case atype of
+               BasicAuth -> "basic"
+               DigestAuth -> "digest"
 
    -- may be null
    infoToAuth :: Users.UserInfo -> String
    infoToAuth userInfo
        = case Users.userStatus userInfo of
            Users.Deleted{} -> ""
-           Users.Disabled (PasswdHash hash) -> hash
-           Users.Enabled  (PasswdHash hash) -> hash
+           Users.Active _ (UserAuth (PasswdHash hash) _) -> hash
 
 
 
 userCSVVer :: Version
-userCSVVer = Version [0,1] ["unstable"]
-
--- permissions.csv
-{-| User groups membership.
- -}
-permsToCSV :: Permissions.Permissions -> CSV
-permsToCSV perms
-    = ([showVersion permsCSVVer]:) $
-      -- (permsCSVKey:) $
-
-      flip map (Permissions.enumerate perms) . uncurry
-        $ \groupName group ->
-            (display groupName:) $
-              (
-               map display . Group.enumerate $ group
-              )    
-                   
-
-permsCSVVer :: Version
-permsCSVVer = userCSVVer
+userCSVVer = Version [0,1] ["unstable"]                   
 
 -- uploads.csv
 {-| For a particular package, when and by whom was it
@@ -153,10 +134,10 @@ uploadsCSVVer = userCSVVer
 
 uploadTimes :: PkgInfo -> [(UTCTime, UserId)]
 uploadTimes pkgInfo
-    = front : back
+    = [front]
 
- where front = (pkgUploadTime pkgInfo, pkgUploadUser pkgInfo)
-       back  = pkgUploadOld pkgInfo
+ where front = pkgUploadData pkgInfo
+--       back  = pkgUploadOld pkgInfo
 
 distroToCSV :: DistroName -> DistroVersions -> CSV
 distroToCSV distro distInfo

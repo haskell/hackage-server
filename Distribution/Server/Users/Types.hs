@@ -26,37 +26,40 @@ newtype UserName  = UserName String
 
 data UserInfo = UserInfo {
     userName   :: UserName,
-    userStatus :: AccountStatus
+    userStatus :: UserStatus
   } deriving (Show)
 
-data AccountStatus = Deleted
-                   | Disabled UserAuth
-                   | Enabled  UserAuth
-  deriving (Show)
+data UserStatus = Deleted
+                | Active !AccountEnabled UserAuth
+    deriving (Show)
+data AccountEnabled = Enabled | Disabled deriving (Show, Enum, Eq)
 
-type UserAuth = PasswdHash
+data UserAuth = UserAuth PasswdHash AuthType deriving (Show, Eq, Typeable)
 
 instance Text UserId where
-  disp (UserId uid) = Disp.int uid
-  parse = UserId <$> Parse.int
+    disp (UserId uid) = Disp.int uid
+    parse = UserId <$> Parse.int
 
 instance Text UserName where
-  disp (UserName name) = Disp.text name
-  parse = UserName <$> Parse.munch1 Char.isAlphaNum
+    disp (UserName name) = Disp.text name
+    parse = UserName <$> Parse.munch1 Char.isAlphaNum
 
-instance Binary AccountStatus where
-  put Deleted         = Binary.putWord8 1
-  put (Disabled auth) = Binary.putWord8 2 >> Binary.put auth
-  put (Enabled  auth) = Binary.putWord8 3 >> Binary.put auth
+instance Binary UserAuth where
+    put (UserAuth hash atype) = Binary.put hash >> Binary.put atype
+    get = UserAuth <$> Binary.get <*> Binary.get
 
-  get = do
-    w <- Binary.getWord8
-    case w of
-        1 -> pure Deleted
-        2 -> Disabled <$> Binary.get
-        3 -> Enabled  <$> Binary.get
-        _ -> error "decoding AccountStatus"
+instance Binary UserStatus where
+    put Deleted         = Binary.putWord8 1
+    put (Active Enabled  auth) = Binary.putWord8 2 >> Binary.put auth
+    put (Active Disabled auth) = Binary.putWord8 3 >> Binary.put auth
+    get = do
+        w <- Binary.getWord8
+        case w of
+            1 -> pure Deleted
+            2 -> Active Enabled  <$> Binary.get
+            3 -> Active Disabled <$> Binary.get
+            _ -> error "decoding AccountStatus"
 
 instance Binary UserInfo where
-  put (UserInfo a b) = Binary.put a >> Binary.put b
-  get = UserInfo <$> Binary.get <*> Binary.get
+    put (UserInfo a b) = Binary.put a >> Binary.put b
+    get = UserInfo <$> Binary.get <*> Binary.get

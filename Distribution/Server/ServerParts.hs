@@ -1,10 +1,10 @@
 
 module Distribution.Server.ServerParts
-    ( guardAuth
+    ( --guardAuth
     )
     where
 
-import Distribution.Server.Packages.State
+{-import Distribution.Server.Packages.State
 import Distribution.Server.Users.State
 import Distribution.Server.Users.Permissions (GroupName)
 
@@ -20,4 +20,4 @@ guardAuth gNames = do
   _ <- Auth.hackageAuth (userDb state) (Just group)
   return ()
 
-
+-}

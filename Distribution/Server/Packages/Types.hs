@@ -14,10 +14,8 @@
 -----------------------------------------------------------------------------
 module Distribution.Server.Packages.Types where
 
-import Distribution.Server.Users.Types
-         ( UserId )
-import Distribution.Server.Util.BlobStorage
-         ( BlobId )
+import Distribution.Server.Users.Types (UserId)
+import Distribution.Server.Util.BlobStorage (BlobId)
 import Distribution.Server.Instances ()
 
 import Distribution.Package
@@ -36,44 +34,46 @@ import Data.Time.Clock (UTCTime)
 import Data.Typeable (Typeable)
 
 -- | The information we keep about a particular version of a package.
+-- 
+-- Previous versions of this package name and version may exist as well.
+-- We normally disallow re-uploading but may make occasional exceptions,
+-- such as , and there are some such old packages.
 data PkgInfo = PkgInfo {
-    pkgInfoId :: PackageIdentifier,
-    pkgDesc   :: GenericPackageDescription,
-
+    pkgInfoId :: !PackageIdentifier,
+    pkgDesc   :: !GenericPackageDescription,
     -- | The .cabal file text.
-    pkgData   :: ByteString,
+    pkgData   :: !ByteString,
+    -- | The actual package .tar.gz file. It is optional for making an incomplete
+    -- mirror, e.g. using archives of just the latest packages, or perhaps for a
+    -- multipart upload process.
+    pkgTarball :: ![(BlobId, UploadInfo)],
+    -- | Previous data
+    pkgDataOld :: ![(ByteString, UploadInfo)],
+    -- | When the package was created. Imports will override this with time in their logs.
+    pkgUploadData :: !UploadInfo
+} deriving (Typeable, Show)
 
-    -- | The actual package .tar.gz file. It is optional for the moment
-    -- to make testing easier, eg using archives of just the latest packages.
-    pkgTarball :: Maybe BlobId,
+type UploadInfo = (UTCTime, UserId)
 
-    -- | When the .tar.gz file was uploaded.
-    pkgUploadTime :: UTCTime,
+pkgUploadTime :: PkgInfo -> UTCTime
+pkgUploadTime = fst . pkgUploadData
 
-    -- | Who uploaded the .tar.gz file.
-    pkgUploadUser :: UserId,
-
-    -- | Previous upload times and users. We normally disallow re-uploading but
-    -- we may make occasional exceptions, and there are some such old packages.
-    pkgUploadOld  :: [(UTCTime, UserId)]
-  }
-  deriving (Typeable, Show)
+pkgUploadUser :: PkgInfo -> UserId
+pkgUploadUser = snd . pkgUploadData
 
 instance Package PkgInfo where packageId = pkgInfoId
 
 instance Binary PkgInfo where
   put pkgInfo = do
     Binary.put (pkgInfoId pkgInfo)
-    Binary.put (pkgUploadTime pkgInfo)
-    Binary.put (pkgUploadUser pkgInfo)
-    Binary.put (pkgUploadOld pkgInfo)
+    Binary.put (pkgUploadData pkgInfo)
+    Binary.put (pkgDataOld pkgInfo)
     Binary.put (pkgTarball pkgInfo)
     Binary.put (pkgData pkgInfo)
 
   get = do
     infoId  <- Binary.get
-    mtime   <- Binary.get
-    user    <- Binary.get
+    updata  <- Binary.get
     old     <- Binary.get
     tarball <- Binary.get
     bstring <- Binary.get
@@ -83,10 +83,9 @@ instance Binary PkgInfo where
                     -- XXX: Better error message?
                     ParseFailed e -> error $ "Internal error: " ++ show e
                     ParseOk _ x   -> x,
-      pkgUploadTime = mtime,
-      pkgUploadUser = user,
-      pkgUploadOld  = old,
-      pkgData   = bstring,
-      pkgTarball= tarball
+      pkgUploadData = updata,
+      pkgDataOld    = old,
+      pkgTarball    = tarball,
+      pkgData       = bstring
     }
     where parse = parsePackageDescription . fromUTF8 . BS.unpack

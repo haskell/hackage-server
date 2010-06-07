@@ -16,7 +16,6 @@ import Distribution.Server.Users.State
 
 import Distribution.Server.Distributions.Distributions
 import Distribution.Server.Users.Types
-import Distribution.Server.Users.Permissions (GroupName(..))
 
 import qualified Distribution.Server.ResourceTypes as Resources
 
@@ -35,6 +34,16 @@ import System.FilePath.Posix ((</>))
 
 import Text.URI (escapeString, okInPath)
 
+maintainersGroup :: DynamicPath -> Maybe (UserGroup GetDistroMaintainers AddDistroMaintainer RemoveDistroMaintainer)
+maintainersGroup dpath = do
+    distroStr <- lookup "distro" dpath
+    let distroName = DistroName distroStr
+    return $ UserGroup {
+        groupName = "Maintainers for " ++ distroStr,
+        queryUserList = Dist.GetDistroMaintainers distroName,
+        addUserList = Dist.AddDistroMaintainer distroName,
+        removeUserList = Dist.RemoveDistroMaintainer distroName
+    }
 
 {-| Administrator entry points. Assumes that permissions
   have already been verified. These parts are for driving

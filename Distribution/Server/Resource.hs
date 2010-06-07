@@ -1,127 +1,159 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, StandaloneDeriving, FlexibleContexts #-}
 
-module Distribution.Server.Resource where
+module Distribution.Server.Resource (
+    Config(..),
+    Resource (..),
+    DynamicPath,
+    BranchComponent(..),
+    BranchPath,
+    ServerResponse,
+    ServerTree(..),
+    makeGroupResources,
+    serverTreeEmpty,
+    trunkAt,
+    resourceAt,
+    defaultResource,
+    serveResource,
+    renderServerTree,
+    addResponse
+  ) where
 
 import Happstack.Server
-import qualified Data.ByteString.Char8 as BS
-import qualified Network.URI as URI
-import Data.Time.Clock (UTCTime)
+import Distribution.Server.Util.BlobStorage (BlobStorage)
+import Distribution.Server.Users.Group (UserGroup(..), UserList(..))
+
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Set (Set)
-import qualified Data.Set as Set
-import Control.Monad (mplus, msum, when)
+import Control.Monad (msum)
 import Data.Maybe (maybeToList)
-import Data.List (intercalate)
+import Data.List (intercalate, find)
 import Data.Monoid (mappend)
+import qualified Text.ParserCombinators.ReadP as Parse
+import qualified Network.URI as URI
+import qualified Distribution.Server.Cache as Cache
 
 import Happstack.State (QueryEvent, UpdateEvent, query, update)
 
 
+data Config = Config {
+  serverStore      :: BlobStorage,
+  serverStaticDir  :: FilePath,
+  serverURI        :: URI.URIAuth,
+  serverCache      :: Cache.Cache
+}
+
 data Resource = Resource {
     resourceLocation :: BranchPath,
-    resourceMethods :: Map Method (DynamicPath -> MediaType -> ServerPart (Response, Bool)),
-    resourceInvalidates :: [BranchPath]
+    resourceGet    :: Maybe ServerResponse,
+    resourcePut    :: Maybe ServerResponse,
+    resourcePost   :: Maybe ServerResponse,
+    resourceDelete :: Maybe ServerResponse
 }
 
-type DynamicPath = Map String String
-type MediaType = Maybe BS.ByteString
+resourceAt :: String -> Resource
+resourceAt = defaultResource . trunkAt
+
+defaultResource :: BranchPath -> Resource
+defaultResource bpath = Resource bpath Nothing Nothing Nothing Nothing
+
+-- to be used with functions like withPackage :: DynamicPath -> (PackagesState -> PkgInfo -> [PkgInfo] -> ServerPart Response) -> ServerPart Response
+
+type DynamicPath = [(String, String)]
 -- until Happstack 0.6.*
 deriving instance Ord Method
-data BranchComponent = StaticBranch String | DynamicBranch String
+data BranchComponent = StaticBranch String | DynamicBranch String deriving (Show, Eq, Ord)
 type BranchPath = [BranchComponent]
-type ClientCache = Map URI.URI UTCTime
+
+type ServerResponse = Config -> DynamicPath -> ServerPart Response
 
 data ServerTree = ServerTree {
-    nodeResource :: Maybe (Resource),
-    nodeResponse :: Maybe (ServerPart Response),
-    dirForest :: DirForest,
-    resourceForest :: ResourceForest
+    nodeResponse :: Maybe ServerResponse,
+    nodeForest :: Map BranchComponent ServerTree
 }
-
 
 -- Shared user group abstraction should probably go elsewhere, but the
 -- group-resource-factory is in this module for now
-type UserList = Set Int
-class (QueryEvent a UserList, UpdateEvent a ()) => UserGroup a where
-    -- call: query queryUserList
-    queryUserList :: a
-    -- call: update (\group -> ...)
-    updateUserList :: (UserList -> UserList) -> a
 
-{-
--- Helper functions
-removeUser :: UserGroup a => UserId -> a
-removeUser user = updateUserList (Set.delete user)
-
-addUser :: UserGroup a => UserId -> a
-addUser user = addUser (Set.insert user)
--}
-
+--data UserGroup a = UserGroup {
+--    groupName :: String,
+--    queryUserList :: a,
+--    updateUserList :: (UserList -> UserList) -> a
+--}
 -- TODO: implement
-makeGroupResources :: UserGroup a => a -> BranchPath -> [Resource]
-makeGroupResources group prefix = []
-
-type DirForest = Map String ServerTree
-type ResourceForest = Map String ServerTree
+makeGroupResources :: (QueryEvent a (Maybe UserList), UpdateEvent b (), UpdateEvent c ()) => BranchPath -> (DynamicPath -> Maybe (UserGroup a b c)) -> [Resource]
+makeGroupResources branch group = [] {-[viewList, modifyList]
+  where
+    viewList = defaultResource branch { resourceGet = getList, resourcePost = postUser }
+    getList dpath = do
+        userList <- liftIO (query $ queryList dpath)
+        return $ toResponse ()
+    modifyList = defaultResource (DynamicBranch "user":branch) { resourceGet = getUser, resourceDelete = deleteUser }
+    putUser dpath = withUser dpath $ \userId ->
+        liftIO (update $ updateList dpath (Map.insert userId))
+    deleteUser dpath = withUser dpath $ \userId ->
+        liftIO (update $ updateList dpath (Map.delete userId))
+    -- require (return - group dpath)
+--(UserGroup name queryList updateList)-}
 
 serverTreeEmpty :: ServerTree
-serverTreeEmpty = ServerTree Nothing Nothing Map.empty Map.empty
+serverTreeEmpty = ServerTree Nothing Map.empty
 
-spiffyResources :: ServerTree -> ServerTree
-spiffyResources (ServerTree mresource response sdirs resources) = ServerTree (fmap spiffyResource mresource) response
-                                                                (Map.map spiffyResources sdirs) (Map.map spiffyResources resources)
-    where spiffyResource :: Resource -> Resource
-          spiffyResource resource = resource { resourceMethods =
-                           addMissingWithMap (Just . makeOptions . Map.keys) OPTIONS
-                         . addMissingWithMap (fmap makeHead . Map.lookup GET) HEAD
-                         $ resourceMethods resource }
-          addMissingWithMap :: Ord k => (Map k a -> Maybe a) -> k -> Map k a -> Map k a
-          addMissingWithMap f key mmap = Map.alter (`mplus` f mmap) key mmap
-          makeHead responseForGET = \dpath mediaType -> do
-              (_, _) <- responseForGET dpath mediaType
-              noBody
-          -- one downside of the DynamicBranch String approach (as opposed to a more typeful
-          -- generic system) is that, out of multiple resources served from the same
-          -- ServerTree node, only the first one's options will be answered
-          makeOptions methods = \_ _ -> do
-              setHeaderM "Allow" (intercalate ", " . map show $ methods)
-              noBody
-          noBody = return $ (toResponse "", False)
-
-renderServerTree :: ServerTree -> DynamicPath -> ServerPart Response
-renderServerTree (ServerTree resource response sdirs resources) dpath = msum $ maybeToList response ++ maybeToList (fmap renderResource resource) ++ renderDirs ++ [renderResources]
+-- "/package/:package/doc/:doctree/"
+trunkAt :: String -> BranchPath
+trunkAt arg = fromTrunkJust . find (\(_, str) -> null str || str == "/") . Parse.readP_to_S parser $ arg
+            -- Parser gives ReadS BranchPath = [BranchPath, String)]
   where
-    renderDirs = map (\(name, tree) -> dir name $ renderServerTree tree dpath) (Map.toList sdirs)
-    renderResources = path $ \pname -> msum $ map (\(name, tree) -> renderServerTree tree (Map.insert name pname dpath)) $ Map.toList resources
-    renderResource (Resource _ resourceMap resourceDepends) = do
-        -- use map instead of msum, slightly more efficient (?)
-        met <- fmap rqMethod askRq
-        require (return $ Map.lookup met resourceMap) $ \task -> methodSP met $ do
-            mediaType <- getHeaderM "accept"
-            (resResponse, isModified) <- task dpath mediaType
-            when isModified $ invalidate resourceDepends
-            return resResponse
-    invalidate _ = return ()
+    fromTrunkJust (Just a) = reverse (fst a)
+    -- bottom, not ideal, but this is one of the risks of using declarative parsers
+    -- alternatively return a dummy path, like [StaticBranch "error"]
+    fromTrunkJust Nothing  = error $ "Distribution.Server.Resource.trunkLiteral: Could not parse trunk literal " ++ show arg
+    parser :: Parse.ReadP BranchPath -- = [BranchComponent]
+    parser = Parse.many $ do
+        Parse.char '/'
+        fmap DynamicBranch (Parse.char ':' >> Parse.munch1 (/='/')) Parse.<++ (fmap StaticBranch (Parse.munch1 (/='/')))
 
---withPackage :: DynamicPath -> (PackagesState -> PkgInfo -> [PkgInfo] -> ServerPart Response) -> ServerPart Response
+serveResource :: Resource -> (BranchPath, ServerResponse)
+serveResource (Resource trunk rget rput rpost rdelete) = (,) trunk $ \config dpath -> msum $
+    map (\func -> func config dpath) ([ (methodSP met .) . res | (Just res, met) <- zip methods methodsList]
+                   ++ return (makeOptions $ concat [ met | (Just _, met) <- zip methods methodsList]))
+  where
+    methods = [rget, rput, rpost, rdelete]
+    methodsList = [[GET, HEAD], [PUT], [POST], [DELETE]]
+    -- apparently Happstack can do HEAD on its own! plus we need the Content-Length
+    makeHead :: ServerResponse -> ServerResponse
+    makeHead responseGET = \config dpath -> do
+      _ <- responseGET config dpath
+      noBody
+    -- one downside of the DynamicBranch String approach (as opposed to a more typeful
+    -- generic system) is that, out of multiple resources served from the same
+    -- ServerTree node, only the first one's options will be answered
+    makeOptions :: [Method] -> ServerResponse
+    makeOptions methodList = \_ _ -> do
+      setHeaderM "Allow" (intercalate ", " . map show $ methodList)
+      noBody
+    noBody = return $ toResponse ()
 
-reinsert :: String -> ServerTree -> Map String ServerTree -> Map String ServerTree
-reinsert key newTree pairMap = Map.insertWith combine key newTree pairMap
+renderServerTree :: Config -> DynamicPath -> ServerTree -> ServerPart Response
+renderServerTree config dpath (ServerTree func forest) = msum $ maybeToList (fmap (\fun -> fun config dpath) func) ++ map (uncurry renderBranch) (Map.toList forest)
+  where
+    renderBranch :: BranchComponent -> ServerTree -> ServerPart Response
+    renderBranch (StaticBranch  sdir) tree = dir sdir $ renderServerTree config dpath tree
+    renderBranch (DynamicBranch sdir) tree = path $ \pname -> renderServerTree config ((sdir, pname):dpath) tree
+
+reinsert :: BranchComponent -> ServerTree -> Map BranchComponent ServerTree -> Map BranchComponent ServerTree
+-- combine will only be called if branchMap already contains the key
+reinsert key newTree branchMap = Map.insertWith combine key newTree branchMap
+
 
 -- combine new old
 combine :: ServerTree -> ServerTree -> ServerTree
-combine (ServerTree resource response sdirs resources) (ServerTree resource' response' sdirs' resources') =
+combine (ServerTree response forest) (ServerTree response' forest') =
     -- replace old resource with new resource, combine old and new responses
-    ServerTree (mplus resource resource') (mappend response response')
-               (Map.foldWithKey reinsert sdirs' sdirs) -- this combines them
-               (Map.foldWithKey reinsert resources resources')
+    -- reinsert will only be called if forest' is non-empty
+    ServerTree (mappend response response') (Map.foldWithKey reinsert forest forest')
 
-addResource :: Resource -> ServerTree -> ServerTree
-addResource resource tree = snd $ treeFold (resourceLocation resource) (ServerTree (Just resource) Nothing Map.empty Map.empty) tree
-
-addResponse :: BranchPath -> ServerPart Response -> ServerTree -> ServerTree
-addResponse trunk response tree = snd $ treeFold trunk (ServerTree Nothing (Just response) Map.empty Map.empty) tree
+addResponse :: BranchPath -> ServerResponse -> ServerTree -> ServerTree
+addResponse trunk response tree = snd $ treeFold trunk (ServerTree (Just response) Map.empty) tree
 
 --this function takes a list whose head is the resource and traverses leftwards in the URI
 --this is due to the original design of specifying URI branches: if the resources are
@@ -130,9 +162,9 @@ addResponse trunk response tree = snd $ treeFold trunk (ServerTree Nothing (Just
 --is nearly too 'clever' for me to even debug, though it works.
 treeFold :: BranchPath -> ServerTree -> ServerTree -> (ServerTree, ServerTree)
 treeFold [] newChild topLevel = (topLevel, combine newChild topLevel)
-treeFold (StaticBranch sdir:otherTree) newChild topLevel = (Map.findWithDefault serverTreeEmpty sdir (dirForest tree), newTree)
-    where (tree, newTree) = treeFold otherTree (tree { dirForest = reinsert sdir newChild (dirForest tree) }) topLevel
-treeFold (DynamicBranch sdir:otherTree) newChild topLevel = (Map.findWithDefault serverTreeEmpty sdir (resourceForest tree), newTree)
-    where (tree, newTree) = treeFold otherTree (tree { resourceForest = reinsert sdir newChild (resourceForest tree) }) topLevel
+treeFold (sdir:otherTree) newChild topLevel = (Map.findWithDefault serverTreeEmpty sdir (nodeForest tree), newTree)
+    where (tree, newTree) = treeFold otherTree (tree { nodeForest = reinsert sdir newChild (nodeForest tree) }) topLevel
+--treeFold (DynamicBranch sdir:otherTree) newChild topLevel = (Map.findWithDefault serverTreeEmpty sdir (resourceForest tree), newTree)
+--    where (tree, newTree) = treeFold otherTree (tree { resourceForest = reinsert sdir newChild (resourceForest tree) }) topLevel
 
 

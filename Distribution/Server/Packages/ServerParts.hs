@@ -1,7 +1,7 @@
 module Distribution.Server.Packages.ServerParts (
+    packagePagesFeature,
     updateCache,
     stateToCache,
-    
     handlePackageById,
     servePackage,
     checkPackage,
@@ -9,28 +9,26 @@ module Distribution.Server.Packages.ServerParts (
     buildReports,
   ) where
 
-import Distribution.Package
-         ( PackageIdentifier(..), packageName, packageVersion , Package(packageId) )
+import Distribution.Package (PackageIdentifier(..), PackageId, packageName, packageVersion , Package(packageId))
 import Distribution.Text    (simpleParse, display)
 import Happstack.Server hiding (port, host)
 import Happstack.State hiding (Version)
 
-import Distribution.Server.ServerParts (guardAuth)
+--import Distribution.Server.ServerParts (guardAuth)
 import Distribution.Server.Instances ()
 
-import Distribution.Server.Packages.State as State hiding (buildReports)
+import Distribution.Server.Packages.State as State
 import Distribution.Server.Users.State as State
+
 import Distribution.Server.Distributions.State as State
 import qualified Distribution.Server.TarIndex.State as TarIndex
 import qualified Distribution.Server.Util.Serve as TarIndex
-import Distribution.Server.Users.Permissions (GroupName(..))
 
 import qualified  Distribution.Server.Packages.State as State
 import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.Server.PackageIndex as PackageIndex
 import qualified Distribution.Server.Auth.Basic as Auth
-import Distribution.Server.Packages.Types
-         ( PkgInfo(..) )
+import Distribution.Server.Packages.Types (PkgInfo(..), pkgUploadUser, pkgUploadTime)
 import qualified Distribution.Server.ResourceTypes as Resource
 import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)
 import qualified Distribution.Server.Pages.Package as Pages
@@ -45,14 +43,18 @@ import Distribution.Server.Util.Serve (serveTarball)
 import qualified Distribution.Server.BuildReport.BuildReport as BuildReport
 import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
 
+import Distribution.Server.Resource
+import Distribution.Server.Feature
+
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Group as Groups
+import Distribution.Server.Users.Group (UserGroup(..), UserList(..))
 
 import Data.Maybe
 import Data.Version
 import Control.Monad.Trans
-import Control.Monad (msum,mzero,unless)
+import Control.Monad (msum, mzero, unless, guard)
 import Data.List (maximumBy, sortBy)
 import Data.Ord (comparing)
 import Data.Time.Clock
@@ -63,40 +65,94 @@ import System.FilePath.Posix ((</>))
 import qualified Data.ByteString.Lazy.Char8 as BS.Char8
 import qualified Codec.Compression.GZip as GZip
 
-{-
-TODO: change this module to support Resources that do:
-    dir "package" $ msum
-      [ path $ msum . handlePackageById store
-      , path $ servePackage store
-      ]
-  , dir "check" checkPackage
-  , dir "upload" $ msum
-      [ uploadPackage store cache host ]
+packagePagesFeature :: HackageFeature 
+packagePagesFeature = HackageFeature {
+    featureName = "package pages",
+    -- todo: add checking
+    locations   = map serveResource $ 
+                  [ (resourceAt "/packages/") { resourceGet = Just serveIndexPage, resourcePost = Just uploadPackageTarball }
+                  , (resourceAt "/packages/index.tar.gz") { resourceGet = Just serveIndexTarball }
+                  , (resourceAt "/package/:package") { resourceGet = Just servePackagePage, resourceDelete = Nothing, resourcePut = Nothing }
+                  , (resourceAt "/package/:package/:cabal") { resourceGet = Just serveCabalFile, resourcePut = Nothing }
+                  , (resourceAt "/package/:package/:tarball") { resourceGet = Just servePackageTarball, resourcePut = Nothing, resourceDelete = Nothing }
+                  , (resourceAt "/package/:package/doc/:doctree")
+                  , (resourceAt "/package/:package/buildreports/") { resourceGet = Just serveBuildReports }
+                  ] ++ makeGroupResources (trunkAt "/package/:package/maintainers") maintainersGroup,
+    dumpBackup    = return [],
+    restoreBackup = \_ -> return ()
+}
+-- "/package/:package/candidate", "/package/:package/candidate/:cabal", "/package/:package/candidate/:tarball"
 
-With these BranchPaths:
-/packages/
-[StaticBranch "packages"]
-/packages/index.tar.gz
-[StaticBranch "index.tar.gz", StaticBranch "packages"]
-/package/<package>
-[DynamicBranch "package", StaticBranch "packages"]
-/package/<package>/<package>.cabal
-[DynamicBranch "cabal", DynamicBranch "package", StaticBranch "packages"]
-/package/<package>/<package>.tar.gz
-[DynamicBranch "tarball", DynamicBranch "package", StaticBranch "packages"]
-/package/<package>/doc/<doctree>
-[DynamicBranch "doctree", StaticBranch "doc", DynamicBranch "package", StaticBranch "packages"]
-/package/<package>/maintainers
-Automatic user group creation
--}
+maintainersGroup :: DynamicPath -> Maybe (UserGroup GetPackageMaintainers AddPackageMaintainer RemovePackageMaintainer)
+maintainersGroup dpath = do
+    name <- fmap pkgName (simpleParse =<< lookup "package" dpath)
+    return $ UserGroup {
+        groupName = "Maintainers for " ++ display name,
+        queryUserList = GetPackageMaintainers name,
+        addUserList = AddPackageMaintainer name,
+        removeUserList = RemovePackageMaintainer name
+    }
+
+serveBuildReports, serveIndexPage, serveIndexTarball, servePackageTarball,
+    servePackagePage, serveCabalFile :: Config -> DynamicPath -> ServerPart Response
+
+serveBuildReports config dpath = withPackageId dpath $ \pkgid -> do
+    state <- query GetPackagesState
+    buildReports <- query GetBuildReports
+    case PackageIndex.lookupPackageId (packageList state) pkgid of
+        Nothing -> notFound $ toResponse "No such package"
+        Just _  -> do
+            let reports = BuildReports.lookupPackageReports
+                            buildReports pkgid
+            ok $ toResponse $ Resource.XHtml $
+                   Pages.buildReportSummary pkgid reports
+
+serveIndexPage config dpath = do
+    cacheState <- Cache.get (serverCache config)
+    ok $ Cache.packagesPage cacheState
+
+uploadPackageTarball :: Config -> DynamicPath -> ServerPart Response
+uploadPackageTarball config dpath = uploadPackage (serverStore config) (serverCache config) (serverURI config)
+
+serveIndexTarball config dpath = do
+    cacheState <- Cache.get (serverCache config)
+    ok $ toResponse $ Resource.IndexTarball (Cache.indexTarball cacheState)
+
+servePackageTarball config dpath = withPackageId dpath $ \pkgid ->
+           require (return $ lookup "tarball" dpath) $ \tarball -> do
+    -- FIXME: more accurate versioning. currently /package/foo-1.2/bar-3.14.tar.gz is possible
+    servePackage (serverStore config) tarball
+   
+servePackagePage config dpath = withPackagePath dpath $ \state pkg pkgs -> do
+    let pkgid = pkgInfoId pkg
+    distributions <- query $ State.PackageStatus (packageName pkg)
+    hasDocs       <- query $ State.HasDocumentation (packageId pkg)
+    let docURL | hasDocs   = Just $ "/package" </> display pkgid </> "documentation"
+               | otherwise = Nothing
+    userDb <- query $ GetUserDb
+    ok $ toResponse $ Resource.XHtml $
+      Pages.packagePage userDb (packageList state) pkg pkgs distributions docURL
+
+serveCabalFile config dpath = withPackagePath dpath $ \_ pkg _ -> do
+    guard (lookup "cabal" dpath == Just (display (packageName pkg) ++ ".cabal"))
+    ok $ toResponse (Resource.CabalFile (pkgData pkg))
+
+withPackagePath :: DynamicPath -> (PackagesState -> PkgInfo -> [PkgInfo] -> ServerPart Response) -> ServerPart Response
+withPackagePath dpath func = withPackageId dpath $ \pkgid -> withPackage pkgid func
+
+withPackageId :: DynamicPath -> (PackageId -> ServerPart Response) -> ServerPart Response
+withPackageId dpath = require (return $ lookup "package" dpath >>= fromReqURI)
 
 --TODO: switch to new cache mechanism:
 updateCache :: MonadIO m => Cache.Cache -> URIAuth -> m ()
-updateCache cache host
-    = liftIO (Cache.put cache =<< stateToCache host =<< query GetPackagesState)
+updateCache cache host = liftIO $ do
+    state  <- query GetPackagesState
+    userDb <- query GetUserDb
+    cacheState <- stateToCache host state userDb
+    Cache.put cache cacheState
 
-stateToCache :: URIAuth -> PackagesState -> IO Cache.State
-stateToCache host state = getCurrentTime >>= \now -> return
+stateToCache :: URIAuth -> PackagesState -> Users.Users -> IO Cache.State
+stateToCache host state users = getCurrentTime >>= \now -> return
   Cache.State {
     Cache.packagesPage  = toResponse $ Resource.XHtml $
                             Pages.packageIndex index,
@@ -107,58 +163,24 @@ stateToCache host state = getCurrentTime >>= \now -> return
                             Pages.recentFeed users host now recentChanges
   }
   where index = packageList state
-        users = userDb state
-        recentChanges = reverse $ sortBy (comparing pkgUploadTime) (PackageIndex.allPackages index)
+        recentChanges = reverse $ sortBy (comparing (fst . pkgUploadData)) (PackageIndex.allPackages index)
 
-handlePackageById :: BlobStorage -> PackageIdentifier -> [ServerPart Response]
+handlePackageById :: BlobStorage -> PackageId -> [ServerPart Response]
 handlePackageById store pkgid = 
-  [ withPackage pkgid $ \state pkg pkgs ->
-      methodSP GET $ do
-        distributions <- query $ State.PackageStatus (packageName pkg)
-        hasDocs       <- query $ State.HasDocumentation (packageId pkg)
-        let docURL | hasDocs   = Just $ "/package" </> display pkgid </> "documentation"
-                   | otherwise = Nothing
-
-        ok $ toResponse $ Resource.XHtml $
-          Pages.packagePage (userDb state) (packageList state) pkg pkgs distributions docURL
-
-  , dir (display (packageName pkgid) ++ ".cabal") $ msum
-    [ withPackage pkgid $ \_ pkg _pkgs ->
-      methodSP GET $
-        ok $ toResponse (Resource.CabalFile (pkgData pkg))
---  , methodSP PUT $ do ...
-    ]
-  , dir "buildreports" $ msum
-    [ methodSP GET $ do
-        state <- query GetPackagesState
-        case PackageIndex.lookupPackageId (packageList state) pkgid of
-          Nothing -> notFound $ toResponse "No such package"
-          Just _  -> do
-            let reports = BuildReports.lookupPackageReports
-                            (State.buildReports state) pkgid
-            ok $ toResponse $ Resource.XHtml $
-                   Pages.buildReportSummary pkgid reports
-    ]
-  , dir "documentation" $ msum
+  [ dir "documentation" $ msum
     [ withPackage pkgid $ \state pkg _ ->
         let resolvedPkgId = packageId pkg in msum
 
         [ methodSP POST $ do
-            authGroup <- query $ LookupUserGroups
-                         [Trustee, PackageMaintainer (packageName pkg)]
-            _user <- Auth.hackageAuth (userDb state) (Just authGroup)
+            requirePackageAuth pkgid
             withRequest $ \Request{rqBody = Body body} -> do
-
               {-
                 The order of operations:
-                
                 - Insert new documentation into blob store
                 - Generate the new index
                 - Drop the index for the old tar-file
                 - Link the new documentation to the package
-
                -}
-
               blob <- liftIO $ BlobStorage.add store (GZip.decompress body)
               tarIndex <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blob)
               update $ TarIndex.AddIndex blob tarIndex
@@ -184,25 +206,24 @@ handlePackageById store pkgid =
            Just blob -> do
                update $ TarIndex.DropIndex blob
 
-packageAdmin :: PackageIdentifier -> ServerPart Response
-packageAdmin pkgid =
-    withPackage pkgid $ \_ pkg _ -> do
-    guardAuth [Trustee, PackageMaintainer (packageName pkg)]
+packageAdmin :: PackageId -> ServerPart Response
+packageAdmin pkgid = withPackage pkgid $ \_ pkg _ -> do
+    requirePackageAuth pkgid
     msum
      [ methodSP GET $ do
-        maintainers <- packageMaintainers pkg
+        mains <- packageMaintainers pkg
         ok $ toResponse $ Resource.XHtml $
-           Pages.packageAdminPage maintainers pkg
+           Pages.packageAdminPage mains pkg
      , adminPost
      ]
 
  where
    packageMaintainers pkg =
     do
-      group <- query $ LookupUserGroup (PackageMaintainer (packageName pkg))
-      let uids = Groups.enumerate group
-      state <- query GetPackagesState
-      return $ lookupUserNames (userDb state) uids
+      group <- query $ GetPackageMaintainers (packageName pkg)
+      let uids = Groups.enumerate (fromMaybe Groups.empty group)
+      userDb <- query GetUserDb
+      return $ lookupUserNames userDb uids
 
    -- this needs work, as it won't skip over deleted users.
    lookupUserNames users = map (Users.idToName users)
@@ -221,19 +242,19 @@ packageAdmin pkgid =
            case userM of
              Nothing -> ok $ toResponse "Not a valid user!"
              Just user -> do
-                 update $ AddToGroup (PackageMaintainer (packageName pkgid)) user
+                 update $ AddPackageMaintainer (packageName pkgid) user
                  ok $ toResponse "Ok!"
        , dir "removeMaintainer" $ methodSP POST $ do
            userM <- lookUser
            case userM of
              Nothing -> ok $ toResponse "Not a valid user!"
              Just user -> do
-                 update $ RemoveFromGroup (PackageMaintainer (packageName pkgid)) user
+                 update $ RemovePackageMaintainer (packageName pkgid) user
                  ok $ toResponse "Ok!"
        ]
 
 
-withPackage :: PackageIdentifier -> (PackagesState -> PkgInfo -> [PkgInfo] -> ServerPart Response) -> ServerPart Response
+withPackage :: PackageId -> (PackagesState -> PkgInfo -> [PkgInfo] -> ServerPart Response) -> ServerPart Response
 withPackage pkgid action = do
   state <- query GetPackagesState
   let index = packageList state
@@ -248,6 +269,7 @@ withPackage pkgid action = do
       Nothing  -> anyRequest $ notFound $ toResponse "No such package version"
       Just pkg -> action state pkg pkgs
 
+
 servePackage :: BlobStorage -> String -> ServerPart Response
 servePackage store pkgIdStr = methodSP GET $ do
     let (pkgVer,t) = splitAt (length pkgIdStr - length ext) pkgIdStr
@@ -260,12 +282,10 @@ servePackage store pkgIdStr = methodSP GET $ do
     serve pkgId t | t /= ext = notFound $ toResponse "No such package in store"
                   | otherwise = withPackage pkgId $ \_ pkg _ ->
         case pkgTarball pkg of
-            Nothing     -> notFound $ toResponse "No tarball available"
-            Just blobId -> do
+            [] -> notFound $ toResponse "No tarball available"
+            ((blobId, _):_) -> do
                   file <- liftIO $ BlobStorage.fetch store blobId
-                  ok $ toResponse $ 
-                    Resource.PackageTarball file blobId (pkgUploadTime pkg)
-
+                  ok $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)
 
 checkPackage :: ServerPart Response
 checkPackage = methodSP POST $ do
@@ -297,52 +317,51 @@ uploadPackage store cache host =
       case res of
         Left  err -> badRequest $ toResponse err
         Right (((pkg, pkgStr), warnings), blobId) -> do
-          state <- query GetPackagesState
-
+          state  <- query GetPackagesState
           let pkgExists = packageExists state pkg
-          user <- uploadUser state pkg
-
-          (realUser, realTime) <- do now <- liftIO getCurrentTime
-                                     return (user,now)
+          user <- uploadingUser state (packageId pkg)
+          uploadData <- do now <- liftIO getCurrentTime
+                           return (now, user)
           success <- update $ Insert PkgInfo {
             pkgInfoId     = packageId pkg,
             pkgDesc       = pkg,
             pkgData       = pkgStr,
-            pkgTarball    = Just blobId,
-            pkgUploadTime = realTime,
-            pkgUploadUser = realUser,
-            pkgUploadOld  = []
+            pkgTarball    = [(blobId, uploadData)], --does this merge properly?
+            pkgUploadData = uploadData,
+            pkgDataOld    = [] -- what about this?
           }
           if success
              then do
                -- Update the package maintainers group.
-               unless pkgExists $
-                   update $ AddToGroup (PackageMaintainer (packageName pkg)) realUser
-               
+               unless pkgExists $ update $ AddPackageMaintainer (packageName pkg) user
                updateCache cache host
                ok $ toResponse $ unlines warnings
              else forbidden $ toResponse "Package already exists."
-
-    uploadUser state pkg = do
-          group <- uploadUserGroup state pkg
-          Auth.hackageAuth (userDb state) group
 
     -- Auth group for uploading a package.
     -- A new package may be uped by anyone
     -- An existing package may only be uploaded by a maintainer of
     -- that package or a trustee.
-    uploadUserGroup state pkg =          
-          if packageExists state pkg
-             then Just `fmap` query (LookupUserGroups [Trustee, PackageMaintainer (packageName pkg)])
-             else return Nothing
+    uploadingUser state pkg =
+      if packageExists state pkg
+        then requirePackageAuth pkg
+        else query GetUserDb >>= \users -> Auth.requireHackageAuth users Nothing Nothing
 
-    packageExists state pkg = not . null $ PackageIndex.lookupPackageName  (packageList state) (packageName pkg)
+    packageExists state pkg = not . null $ PackageIndex.lookupPackageName (packageList state) (packageName pkg)
+
+requirePackageAuth :: (MonadIO m, Package pkg) => pkg -> ServerPartT m Users.UserId
+requirePackageAuth pkg = do
+    userDb <- query $ GetUserDb
+    pkgm   <- query $ GetPackageMaintainers (packageName pkg)
+    let admins   = Users.adminList userDb
+        groupSum = Groups.unions [admins, fromMaybe Groups.empty pkgm]
+    Auth.requireHackageAuth userDb (Just groupSum) Nothing
 
 buildReports :: BlobStorage -> [ServerPart Response]
 buildReports store =
   [ path $ \reportId -> msum
     [ methodSP GET $ do
-        reports <- return . State.buildReports =<< query GetPackagesState
+        reports <- query GetBuildReports
         case BuildReports.lookupReport reports reportId of
           Nothing     -> notFound $ toResponse "No such report"
           Just report ->
@@ -352,7 +371,7 @@ buildReports store =
 
     , dir "buildlog" $ msum
       [ methodSP GET $ do
-          reports <- return . State.buildReports =<< query GetPackagesState
+          reports <- query GetBuildReports
           case BuildReports.lookupBuildLog reports reportId of
             Nothing -> notFound $ toResponse "No build log available"
             Just (BuildReports.BuildLog blobId) -> do
@@ -361,7 +380,7 @@ buildReports store =
                 Resource.BuildLog file
 
       , methodSP PUT $ withRequest $ \Request { rqBody = Body body } -> do
-          reports <- return . State.buildReports =<< query GetPackagesState
+          reports <- query GetBuildReports
           case BuildReports.lookupReport reports reportId of
             Nothing -> notFound $ toResponse "No such report"
             Just _  -> do
@@ -382,4 +401,4 @@ buildReports store =
   ]
 
 instance FromReqURI BuildReports.BuildReportId where
-  fromReqURI = simpleParse
+    fromReqURI = simpleParse

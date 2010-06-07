@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
 module Distribution.Server.Users.Users (
     -- * Users type
-    Users,
+    Users(..),
 
     -- * Construction
     empty,
@@ -10,8 +10,7 @@ module Distribution.Server.Users.Users (
 
     -- * Modification
     delete,
-    disable,
-    enable,
+    setEnabled,
     replaceAuth,
 
     -- * Lookup
@@ -29,6 +28,7 @@ module Distribution.Server.Users.Users (
   ) where
 
 import Distribution.Server.Users.Types
+import qualified Distribution.Server.Users.Group as Group
 
 import Data.Typeable (Typeable)
 import qualified Data.Map as Map
@@ -43,7 +43,8 @@ import Control.Applicative ((<$>), (<*>))
 data Users = Users {
     userIdMap   :: !(IntMap.IntMap UserInfo),
     userNameMap :: !(Map.Map UserName UserId),
-    nextId      :: !UserId
+    nextId      :: !UserId,
+    adminList   :: !Group.UserList
   }
   deriving (Typeable, Show)
 
@@ -62,13 +63,12 @@ data Users = Users {
   -- it also allows us to track historical info, like name of uploader
   -- even if that user name has been recycled, the user ids will be distinct.
 
-
-
 empty :: Users
 empty = Users {
     userIdMap   = IntMap.empty,
     userNameMap = Map.empty,
-    nextId      = UserId 0
+    nextId      = UserId 0,
+    adminList   = Group.empty
   }
 
 -- | Add a new user account.
@@ -86,7 +86,7 @@ add name auth users =
         UserId userId = nextId users
         userInfo = UserInfo {
           userName   = name,
-          userStatus = Enabled auth
+          userStatus = Active Enabled auth
         }
         users'   = users {
           userIdMap   = IntMap.insert userId userInfo (userIdMap users),
@@ -102,30 +102,22 @@ add name auth users =
 -- deleted user and the user name is already in use,
 -- 'Nothing' will be returned.
 insert :: UserId -> UserInfo -> Users -> Maybe Users
-insert user@(UserId ident) info users
-    = let name = userName info
-
-          isDeleted = case userStatus info of
-                        Deleted{} -> True
-                        _ -> False
-          idMap'
-              = intInsertMaybe ident info (userIdMap users)
-
-          nameMap'
-              = insertMaybe name user (userNameMap users)
-
-          nextIdent
-              | user >= nextId users = UserId (ident + 1)
-              | otherwise = nextId users
-
-      in case idMap' of
-           Nothing -> Nothing -- Id clash, always fatal
-           Just idMap -> if isDeleted
-                then Just $ Users idMap (userNameMap users) nextIdent
-                else case nameMap' of
-                       Nothing -> Nothing -- name clash, fatal if non-deleted user
-                       Just nameMap -> Just $ Users idMap nameMap nextIdent
-
+insert user@(UserId ident) info users =
+    let name = userName info
+        isDeleted = case userStatus info of
+            Deleted -> True
+            _ -> False
+        idMap' = intInsertMaybe ident info (userIdMap users)
+        nameMap' = insertMaybe name user (userNameMap users)
+        nextIdent | user >= nextId users = UserId (ident + 1)
+                  | otherwise = nextId users
+    in case idMap' of
+        Nothing -> Nothing -- Id clash, always fatal
+        Just idMap -> if isDeleted
+             then Just $ Users idMap (userNameMap users) nextIdent (adminList users)
+             else case nameMap' of
+                    Nothing -> Nothing -- name clash, fatal if non-deleted user
+                    Just nameMap -> Just $ Users idMap nameMap nextIdent (adminList users)
 
 -- | Delete a user account.
 --
@@ -150,7 +142,7 @@ delete (UserId userId) users = do
     userNameMap = Map.delete (userName userInfo) (userNameMap users)
   }
 
--- | Disable a user account.
+-- | Change the status of a user account to enabled or disabled.
 --
 -- Prevents the given user from performing any authenticated operations.
 -- This operation is idempotent and reversable. Use 'enable' to re-enable a
@@ -161,37 +153,17 @@ delete (UserId userId) users = do
 --
 -- * Returns 'Nothing' if the user id does not exist or is deleted
 --
-disable :: UserId -> Users -> Maybe Users
-disable (UserId userId) users = do
-  userInfo   <- IntMap.lookup userId (userIdMap users)
-  userInfo'  <- disableAccount userInfo
-  return $! users {
-    userIdMap = IntMap.insert userId userInfo' (userIdMap users)
-  }
+setEnabled :: Bool -> UserId -> Users -> Maybe Users
+setEnabled newStatus (UserId userId) users = do
+    userInfo  <- IntMap.lookup userId (userIdMap users)
+    userInfo' <- changeStatus userInfo
+    return $! users {
+        userIdMap = IntMap.insert userId userInfo' (userIdMap users)
+    }
   where
-    disableAccount userInfo = case userStatus userInfo of
-      Deleted       -> Nothing
-      Disabled _    -> Just userInfo
-      Enabled  auth -> Just userInfo { userStatus = Disabled auth }
-
--- | Enable a user account.
---
--- This operation is idempotent and reversable. The ordinary state of accounts
--- is enabled. Accounts can be 'disable'd and this operation is used to
--- re-enable them.
---
-enable :: UserId -> Users -> Maybe Users
-enable (UserId userId) users = do
-  userInfo   <- IntMap.lookup userId (userIdMap users)
-  userInfo'  <- enableAccount userInfo
-  return $! users {
-    userIdMap = IntMap.insert userId userInfo' (userIdMap users)
-  }
-  where
-    enableAccount userInfo = case userStatus userInfo of
-      Deleted       -> Nothing
-      Disabled auth -> Just userInfo { userStatus = Enabled auth }
-      Enabled  _    -> Just userInfo
+    changeStatus userInfo = case userStatus userInfo of
+        Deleted       -> Nothing
+        Active _ auth -> Just userInfo { userStatus = Active (if newStatus then Enabled else Disabled) auth }
 
 lookupId :: UserId -> Users -> Maybe UserInfo
 lookupId (UserId userId) users = IntMap.lookup userId (userIdMap users)
@@ -223,8 +195,7 @@ replaceAuth :: Users -> UserId -> UserAuth -> Maybe Users
 replaceAuth users userId newAuth
     = modifyUser users userId $ \userInfo ->
       case userStatus userInfo of
-        Disabled _ -> userInfo { userStatus = Disabled newAuth }
-        Enabled  _ -> userInfo { userStatus = Enabled  newAuth }
+        Active status _ -> userInfo { userStatus = Active status newAuth }
         Deleted    -> userInfo 
 
 -- | Modify a single user. Returns 'Nothing' if the user does not
@@ -243,8 +214,7 @@ enumerateAll
  where mapFst f = map $ \(x,y) -> (f x, y)
 
 enumerateEnabled :: Users -> [(UserId, UserInfo)]
-enumerateEnabled users =
-  [ x | x@(_, UserInfo { userStatus = Enabled _ }) <- enumerateAll users ]
+enumerateEnabled users = [ x | x@(_, UserInfo { userStatus = Active Enabled _ }) <- enumerateAll users ]
 
 
 -- | Insertion fails if key is present
@@ -263,5 +233,5 @@ intInsertMaybe k a m
 
 
 instance Binary Users where
-  put (Users a b c) = Binary.put a >> Binary.put b >> Binary.put c
-  get = Users <$> Binary.get <*> Binary.get <*> Binary.get
+  put (Users a b c d) = Binary.put a >> Binary.put b >> Binary.put c >> Binary.put d
+  get = Users <$> Binary.get <*> Binary.get <*> Binary.get <*> Binary.get

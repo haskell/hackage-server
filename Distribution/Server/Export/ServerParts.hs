@@ -20,18 +20,17 @@ export :: BlobStorage -> ServerPart Response
 export storage
     = methodSP GET $ do
         state <- query GetPackagesState
-        perms <- query GetPermissions
         docs  <- query GetDocumentation
         dist  <- query GetDistributions
+        users <- query GetUserDb
+        rpts  <- query GetBuildReports
 
         let pkgs = packageList state
-            rpts = buildReports state
-            users = userDb state
             dists = dist_distros dist
             distInfo = dist_versions dist
 
         tarball <- liftIO $
-           Export.export users perms pkgs docs rpts storage dists distInfo
+           Export.export users pkgs docs rpts storage dists distInfo
 
         return $ toResponse . Resources.ExportTarball $ tarball
 

@@ -51,8 +51,6 @@ import Distribution.Server.Distributions.Distributions
 import qualified Distribution.Server.Distributions.Distributions as Distros
 
 import Distribution.Server.Users.Users (Users)
-import Distribution.Server.Users.Permissions (Permissions)
-import qualified Distribution.Server.Users.Permissions as Permissions
 
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.State
@@ -75,7 +73,6 @@ import Data.Time
 
 
 export :: Users
-       -> Permissions.Permissions
        -> PackageIndex PkgInfo
        -> Documentation
        -> BuildReports
@@ -83,14 +80,13 @@ export :: Users
        -> Distributions
        -> DistroVersions
        -> IO BSL.ByteString
-export users permissions pkgs docs reports storage dists distInfo
+export users pkgs docs reports storage dists distInfo
     = (compress . Tar.write) `fmap` tarball
  where
    tarball :: IO [Tar.Entry]
-       = mkExportEntries users permissions pkgs docs reports storage dists distInfo
+       = mkExportEntries users pkgs docs reports storage dists distInfo
 
 mkExportEntries :: Users
-                -> Permissions.Permissions
                 -> PackageIndex PkgInfo
                 -> Documentation
                 -> BuildReports
@@ -98,7 +94,7 @@ mkExportEntries :: Users
                 -> Distributions
                 -> DistroVersions
                 -> IO [Tar.Entry]
-mkExportEntries users perms pkgs docs reports storage dists distInfo
+mkExportEntries users pkgs docs reports storage dists distInfo
     = do
 
   baseDir <- mkBaseDir `fmap` getCurrentTime
@@ -106,7 +102,6 @@ mkExportEntries users perms pkgs docs reports storage dists distInfo
   
   return $ concat
     [ mkUserEntries baseDir users
-    , mkPermsEntries baseDir perms
     , mkDistroEntries baseDir dists distInfo
     , packageEntries
     ]
@@ -178,9 +173,9 @@ mkPackageEntry baseDir storage docs reports pkgInfo
 mkSourceEntry :: PkgInfo -> BlobStorage -> IO (Maybe Tar.Entry)
 mkSourceEntry pkgInfo storage
     = case pkgTarball pkgInfo of
-        Nothing   -> return Nothing
-        Just blob -> Just `fmap` (mkBlobEntry storage blob $
-                     display (packageName pkgInfo) <.> "tar" <.> "gz")
+        []        -> return Nothing
+        ((blob, _):_) -> Just `fmap` (mkBlobEntry storage blob $
+                         display (packageName pkgInfo) <.> "tar" <.> "gz")
 
 -- | Tar entry for the documentation for this package
 mkDocumentationEntry
@@ -251,12 +246,6 @@ mkUserEntries :: FilePath -> Users -> [Tar.Entry]
 mkUserEntries baseDir users
     = return $ csvToEntry (usersToCSV users) $
       baseDir </> "users" </> "auth" <.> "csv"
-
--- | Tar entry for the permissions db
-mkPermsEntries :: FilePath -> Permissions -> [Tar.Entry]
-mkPermsEntries baseDir perms
-    = return $ csvToEntry (permsToCSV perms) $
-      baseDir </> "users" </> "permissions" <.> "csv"
 
 -- | Tar entries fr distribution packaging information.
 mkDistroEntries :: FilePath -> Distributions -> DistroVersions -> [Tar.Entry]

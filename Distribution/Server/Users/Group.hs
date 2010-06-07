@@ -1,6 +1,7 @@
-{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, ExistentialQuantification #-}
 module Distribution.Server.Users.Group (
-    UserGroup,
+    UserList(..),
+    UserGroup(..),
     empty,
     add,
     remove,
@@ -20,23 +21,31 @@ import Prelude hiding (id)
 
 -- | Some subset of users, eg those allowed to perform some action.
 --
-newtype UserGroup = UserGroup IntSet.IntSet
+newtype UserList = UserList IntSet.IntSet
   deriving (Eq, Monoid, Binary, Typeable, Show)
 
-empty :: UserGroup
-empty = UserGroup IntSet.empty
+--forall a b. QueryEvent a (Maybe UserList), UpdateEvent b (), UpdateEvent c ()
+data UserGroup a b c = UserGroup {
+    groupName :: String,
+    queryUserList :: a,
+    addUserList :: UserId -> b,
+    removeUserList :: UserId -> c
+}
 
-add :: UserId -> UserGroup -> UserGroup
-add (UserId id) (UserGroup group) = UserGroup (IntSet.insert id group)
+empty :: UserList
+empty = UserList IntSet.empty
 
-remove :: UserId -> UserGroup -> UserGroup
-remove (UserId id) (UserGroup group) = UserGroup (IntSet.delete id group)
+add :: UserId -> UserList -> UserList
+add (UserId id) (UserList group) = UserList (IntSet.insert id group)
 
-member :: UserId -> UserGroup -> Bool
-member (UserId id) (UserGroup group) = IntSet.member id group
+remove :: UserId -> UserList -> UserList
+remove (UserId id) (UserList group) = UserList (IntSet.delete id group)
 
-enumerate :: UserGroup -> [UserId]
-enumerate (UserGroup group) = map UserId (IntSet.toList group)
+member :: UserId -> UserList -> Bool
+member (UserId id) (UserList group) = IntSet.member id group
 
-unions :: [UserGroup] -> UserGroup
-unions groups = UserGroup (IntSet.unions [ group | UserGroup group <- groups ])
+enumerate :: UserList -> [UserId]
+enumerate (UserList group) = map UserId (IntSet.toList group)
+
+unions :: [UserList] -> UserList
+unions groups = UserList (IntSet.unions [ group | UserList group <- groups ])

@@ -55,8 +55,7 @@ recentPage users pkgs =
 makeRow :: Users -> PkgInfo -> Html
 makeRow users PkgInfo {
       pkgInfoId = pkgid
-    , pkgUploadTime = time
-    , pkgUploadUser = userId
+    , pkgUploadData = (time, userId)
   } =
   XHtml.tr <<
     [XHtml.td ! [XHtml.align "right"] <<
@@ -115,8 +114,7 @@ releaseItem :: Users -> URIAuth -> PkgInfo -> [RSS.ItemElem]
 releaseItem users host PkgInfo {
       pkgInfoId = pkgId
     , pkgDesc = pkg
-    , pkgUploadTime = time
-    , pkgUploadUser = userId
+    , pkgUploadData = (time, userId)
   } =
   [ RSS.Title title
   , RSS.Link uri

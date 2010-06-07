@@ -7,8 +7,8 @@ module Distribution.Server (
    checkpoint,
 
    -- * Server configuration
-   Config(..),
-   defaultConfig,
+   ServerConfig(..),
+   defaultServerConfig,
    hasSavedState,
 
    -- * First time initialisation of the database
@@ -17,29 +17,23 @@ module Distribution.Server (
    initState,
  ) where
 
-import Distribution.Package (packageName)
 import Happstack.Server hiding (port, host)
 import qualified Happstack.Server
 import Happstack.State hiding (Version)
 
-import Distribution.Server.ServerParts (guardAuth)
-import qualified Distribution.Server.Import as Import ( importTar )
+import qualified Distribution.Server.Import as Import (importTar)
 
 import Distribution.Server.Packages.ServerParts
 import Distribution.Server.Users.ServerParts
-import Distribution.Server.Distributions.ServerParts
-import Distribution.Server.Users.Permissions (GroupName(..))
+--import Distribution.Server.Distributions.ServerParts -- this will take some effort to revamp
 
 import qualified Distribution.Server.Feature as Feature
 import qualified Distribution.Server.Features as Features
 
 import Distribution.Server.State as State
-import Distribution.Server.Packages.State as State hiding (buildReports, bulkImport)
+import Distribution.Server.Packages.State as State hiding (bulkImport)
 import Distribution.Server.Users.State as State
 import qualified Distribution.Server.Cache as Cache
-import Distribution.Server.Packages.Types
-         ( PkgInfo(..) )
-import qualified Distribution.Server.ResourceTypes as Resource
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
 import qualified Distribution.Server.BulkImport as BulkImport
@@ -49,44 +43,43 @@ import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
 
 import Distribution.Server.Export.ServerParts (export)
-import Distribution.Server.Auth.Types (PasswdPlain(..))
+import qualified Distribution.Server.Auth.Types as Auth
+import qualified Distribution.Server.Auth.Basic as Auth
+import qualified Distribution.Server.Auth.Crypt as Auth
 
-import Distribution.Server.Resource (addResponse, serverTreeEmpty, renderServerTree, spiffyResources)
-import Data.List (foldl')
+import Distribution.Server.Resource --(addResponse, serverTreeEmpty, renderServerTree)
+--import Data.List (foldl')
 
 import System.FilePath ((</>))
-import System.Directory
-         ( createDirectoryIfMissing, doesDirectoryExist )
+import System.Directory (createDirectoryIfMissing, doesDirectoryExist)
 import Control.Concurrent.MVar (MVar)
 import Control.Monad.Trans
 import Control.Monad (when, msum)
 import Data.ByteString.Lazy.Char8 (ByteString)
-import Network.URI
-         ( URIAuth(URIAuth) )
-import Network.BSD
-         ( getHostName )
-import qualified Data.Map as Map (empty)
+import Network.URI (URIAuth(URIAuth))
+import Network.BSD (getHostName)
+import Data.Char (toUpper)
 
 import qualified Data.ByteString.Lazy.Char8 as BS
 
 import Paths_hackage_server (getDataDir)
 
-data Config = Config {
+data ServerConfig = ServerConfig {
   confHostName  :: String,
   confPortNum   :: Int,
   confStateDir  :: FilePath,
   confStaticDir :: FilePath
 } deriving (Show)
 
-confHappsStateDir, confBlobStoreDir :: Config -> FilePath
+confHappsStateDir, confBlobStoreDir :: ServerConfig -> FilePath
 confHappsStateDir config = confStateDir config </> "db"
 confBlobStoreDir  config = confStateDir config </> "blobs"
 
-defaultConfig :: IO Config
-defaultConfig = do
+defaultServerConfig :: IO ServerConfig
+defaultServerConfig = do
   hostName <- getHostName
   dataDir  <- getDataDir
-  return Config {
+  return ServerConfig {
     confHostName  = hostName,
     confPortNum   = 8080,
     confStateDir  = "state",
@@ -94,17 +87,16 @@ defaultConfig = do
   }
 
 data Server = Server {
-  serverTxControl     :: MVar TxControl,
-  serverFeatureConfig :: Feature.Config,
-  serverPort          :: Int,
-  serverCache         :: Cache.Cache
+  serverTxControl :: MVar TxControl,
+  serverPort      :: Int,
+  serverConfig    :: Config
 }
 
 -- | If we made a server instance from this 'Config', would we find some
 -- existing saved state or would it be a totally clean instance with no
 -- existing state.
 --
-hasSavedState :: Config -> IO Bool
+hasSavedState :: ServerConfig -> IO Bool
 hasSavedState = doesDirectoryExist . confHappsStateDir
 
 -- | Make a server instance from the server configuration.
@@ -115,9 +107,8 @@ hasSavedState = doesDirectoryExist . confHappsStateDir
 -- Note: the server instance must eventually be 'shutdown' or you'll end up
 -- with stale lock files.
 --
-initialise :: Config -> IO Server
-initialise config@(Config hostName portNum stateDir staticDir) = do
-
+initialise :: ServerConfig -> IO Server
+initialise config@(ServerConfig hostName portNum stateDir staticDir) = do
   exists <- doesDirectoryExist staticDir
   when (not exists) $
     fail $ "The static files directory " ++ staticDir ++ " does not exist."
@@ -126,17 +117,20 @@ initialise config@(Config hostName portNum stateDir staticDir) = do
   store   <- BlobStorage.open blobStoreDir
 
   txCtl   <- runTxSystem (Queue (FileSaver happsStateDir)) hackageEntryPoint
-  cache   <- Cache.new =<< stateToCache hostURI =<< query GetPackagesState
+  cache   <- do
+      packages <- query GetPackagesState
+      users    <- query GetUserDb
+      Cache.new =<< stateToCache hostURI packages users
 
   return Server {
     serverTxControl  = txCtl,
-    serverFeatureConfig = Feature.Config {
-      Feature.serverStore      = store,
-      Feature.serverStaticDir  = staticDir,
-      Feature.serverURI        = hostURI
-    },
     serverPort       = portNum,
-    serverCache      = cache
+    serverConfig = Config {
+      serverStore      = store,
+      serverStaticDir  = staticDir,
+      serverURI        = hostURI,
+      serverCache      = cache
+    }
   }
 
   where
@@ -156,13 +150,20 @@ run server = simpleHTTP conf $ mungeRequest $ impl server
   where
     conf = nullConf { Happstack.Server.port = serverPort server }
     mungeRequest = localRq mungeMethod
+    -- this is not restful.
     mungeMethod req = case (rqMethod req, lookup "_method" (rqInputs req)) of
-        (POST, Just input) -> case reads (BS.unpack (inputValue input)) of
+        (POST, Just input) -> case reads . map toUpper . BS.unpack $ inputValue input of
             [(newMethod, "")] -> req { rqMethod = newMethod }
             _ -> req
         _ -> req
     -- todo: given a .json or .html suffix, munge it into an Accept header
+    -- can use MessageWrap.pathEls to reparse rqPath
 
+
+{-case lookup "_patharg" (rqInputs req) of
+                Just param -> req' { rqUri = rqUri req </> SURI.escape param, rqPath = rqPath req ++ [param] }
+                _ -> req'
+              where req' = -}
 -- | Perform a clean shutdown of the server.
 --
 shutdown :: Server -> IO ()
@@ -181,7 +182,7 @@ bulkImport :: Server
            -> Maybe String -- users
            -> Maybe String -- admin users
            -> IO [UploadLog.Entry]
-bulkImport (Server _ (Feature.Config store _ host) _ cache)
+bulkImport (Server _ _ (Config store _ host cache))
            indexFile logFile archiveFile htPasswdFile adminsFile = do
   pkgIndex  <- either fail return (BulkImport.importPkgIndex indexFile)
   uploadLog <- either fail return (BulkImport.importUploadLog logFile)
@@ -192,19 +193,18 @@ bulkImport (Server _ (Feature.Config store _ host) _ cache)
   (pkgsInfo, users, badLogEntries) <- either fail return
     (BulkImport.mergePkgInfo pkgIndex uploadLog tarballs accounts)
 
-  update $ BulkImport pkgsInfo users
+  update $ BulkImport pkgsInfo
+  update $ ReplaceUserDb users
 
-  admPerms <- case admins of
-    Nothing -> return []
+  case admins of
+    Nothing -> return ()
     Just adminUsers -> do
-        state <- query GetPackagesState
-        uids <- either fail return $ lookupUsers (userDb state) adminUsers
-        return $ map (\uid -> (uid, Administrator)) uids
+        userDb <- query GetUserDb
+        uids <- either fail return $ lookupUsers userDb adminUsers
+        mapM_ (\uid -> update $ AddHackageAdmin uid) uids
 
-  let uploadPerms
-          = map (\pkg -> (pkgUploadUser pkg, PackageMaintainer (packageName pkg))) pkgsInfo 
-
-  update $ BulkImportPermissions (admPerms ++ uploadPerms)
+  --let uploadPerms = map (\pkg -> (pkgUploadUser pkg, PackageMaintainer (packageName pkg))) pkgsInfo 
+  --update $ BulkImportPermissions (admPerms ++ uploadPerms)
 
   updateCache cache host
 
@@ -221,7 +221,7 @@ bulkImport (Server _ (Feature.Config store _ host) _ cache)
            Just uid -> Right uid
 
 importTar :: Server -> ByteString -> IO (Maybe String)
-importTar (Server _ (Feature.Config store _ host) _ cache) tar = do
+importTar (Server _ _ (Config store _ host cache)) tar = do
   res <- Import.importTar store tar
   case res of
     Nothing -> updateCache cache host
@@ -231,53 +231,43 @@ importTar (Server _ (Feature.Config store _ host) _ cache) tar = do
 -- An alternative to an import.
 -- Starts the server off to a sane initial state.
 initState ::  MonadIO m => Server -> m ()
-initState (Server _ (Feature.Config _ _ host) _ cache) = do
+initState (Server _ _ (Config _ _ host cache)) = do
   -- clear off existing state
-  update $ BulkImport [] Users.empty
-  update $ BulkImportPermissions []
+  update $ BulkImport []
+  update $ ReplaceUserDb Users.empty
+--update $ BulkImportPermissions []
 
   -- create default admin user
   let userName = Users.UserName "admin"
-  userAuth <- newPasswd (PasswdPlain "admin")
-  res <- update $ AddUser userName userAuth
+      userAuth = Auth.newDigestPass userName (Auth.PasswdPlain "admin") "hackage"
+  res <- update $ AddUser userName (Users.UserAuth userAuth Auth.DigestAuth)
 
   case res of
-    Just user -> update $ AddToGroup Administrator user
+    Just user -> update $ State.AddHackageAdmin user
     _ -> fail "Failed to create admin user!"
 
   updateCache cache host
 
 
 impl :: Server -> ServerPart Response
-impl server = flip renderServerTree Map.empty $ spiffyResources $ foldl' (flip $ uncurry addResponse) serverTreeEmpty $ ([], core server):concatMap (Feature.serverParts) Features.hackageFeatures
+impl server = renderServerTree (serverConfig server) [] $ foldr (uncurry addResponse) serverTreeEmpty $ ([], \_ _ -> core server):concatMap Feature.locations Features.hackageFeatures
 
 core :: Server -> ServerPart Response
-core (Server _ (Feature.Config store static host) _ cache) = msum
-  [ dir "packages" $
-    methodSP GET $
-             ok . Cache.packagesPage =<< Cache.get cache
-  , dir "package" $ msum
+core (Server _ _ (Config store static _ cache)) = msum
+{-  [ dir "package" $ msum
       [ path $ msum . handlePackageById store
       , path $ servePackage store
-      ]
-  , dir "buildreports" $ msum (buildReports store)
+      ]-}
+  [ dir "buildreports" $ msum (buildReports store)
 --  , dir "groups" (groupInterface)
   , dir "recent.rss" $ msum
       [ methodSP GET $ ok . Cache.packagesFeed =<< Cache.get cache ]
   , dir "recent.html" $ msum
       [ methodSP GET $ ok . Cache.recentChanges =<< Cache.get cache ]
-  , dir "upload" $ msum
-      [ uploadPackage store cache host ]
-  , dir "00-index.tar.gz" $ msum
-      [ methodSP GET $ do
-          cacheState <- Cache.get cache
-          ok $ toResponse $ Resource.IndexTarball (Cache.indexTarball cacheState)
-      ]
   , dir "admin" $ admin static store
   , dir "check" checkPackage
-  , dir "htpasswd" $ msum
-      [ changePassword ]
-  , dir "distro" distros
+--  , dir "htpasswd" $ msum [ changePassword ]
+--  , dir "distro" distros
   , fileServe ["hackage.html"] static
   ]
 
@@ -285,12 +275,12 @@ core (Server _ (Feature.Config store static host) _ cache) = msum
 -- directory
 admin :: FilePath -> BlobStorage -> ServerPart Response
 admin static storage = do
-
-  guardAuth [Administrator]
-
-  msum
-   [ dir "users" userAdmin
-   , dir "export.tar.gz" (export storage)
-   , adminDist
-   , fileServe ["admin.html"] static
-   ]
+    userDb <- query State.GetUserDb
+    let admins = Users.adminList userDb
+    Auth.requireHackageAuth userDb (Just admins) Nothing
+    msum
+        [ dir "users" userAdmin
+        , dir "export.tar.gz" (export storage)
+--        , adminDist
+        , fileServe ["admin.html"] static
+        ]

@@ -23,8 +23,7 @@ import Control.Monad (msum, mzero)
 legacyRedirectsFeature :: HackageFeature
 legacyRedirectsFeature = HackageFeature {
     featureName = "legacy redirects",
-    resources   = [],
-    serverParts = [([], serveLegacyRedirects)],
+    locations   = [([], \config dpath -> serveLegacyRedirects)],
     -- There is no persistent state for this feature,
     -- so nothing needs to be backed up.
     dumpBackup    = return [],

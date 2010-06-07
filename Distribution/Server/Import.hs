@@ -47,6 +47,7 @@ import Distribution.Server.Packages.State
     , PackagesState(..)
     , ReplacePackagesState(..)
     , ReplaceDocumentation(..)
+    , ReplaceBuildReports(..)
     )
 import qualified Distribution.Server.TarIndex.State as TarIndexMap
 import qualified Distribution.Server.Util.Serve as TarIndex
@@ -59,11 +60,10 @@ import qualified Distribution.Server.BuildReport.BuildReports as Reports
 
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users)
+import Distribution.Server.Users.State (ReplaceUserDb(..))
 import Distribution.Server.Users.Types
-import qualified Distribution.Server.Users.Permissions as Permissions
 import Distribution.Server.Packages.Types
-import Distribution.Server.Users.Permissions (Permissions,GroupName)
-import Distribution.Server.Users.State (ReplacePermissions(..))
+import Distribution.Server.Auth.Types
 
 import qualified Distribution.Server.PackageIndex as PackageIndex
 import Distribution.Server.PackageIndex (PackageIndex)
@@ -90,11 +90,10 @@ importTar storage tar
         -> do
       update $ ReplaceDocumentation isDocs
       update $ TarIndexMap.ReplaceTarIndexMap isTarIndex
-      update $ ReplacePackagesState $ PackagesState
-                  isPackages
-                  isBuildReps
-                  isUsers
-      update $ ReplacePermissions isPerms
+      update $ ReplacePackagesState $ PackagesState isPackages
+      update $ ReplaceBuildReports $ isBuildReps
+      update $ ReplaceUserDb $ isUsers
+      -- update permissions here
       update $ ReplaceDistributions isDistributions isDistVersions
       return Nothing
 
@@ -125,8 +124,7 @@ fromFile path contents
    go ["users","auth.csv"]
        = importAuth contents
 
-   go ["users","permissions.csv"]
-       = importPermissions contents
+--   go ["users","permissions.csv"] = importPermissions contents
 
    go ["build-reports", repIdString, "report.txt"]
        = importReport repIdString contents
@@ -164,15 +162,14 @@ impPackage [pkgName, pkgTarName] contents
         pkgDesc <- parsePackageDesc cabalContents
 
         case uploads of
-          (upTime,upUser):rest
+          updata:rest -- reuploads without data aren't significant
               -> addPackage $ PkgInfo
                  { pkgInfoId = pkgId
                  , pkgDesc = pkgDesc
                  , pkgData = cabalContents
-                 , pkgTarball = source
-                 , pkgUploadTime = upTime
-                 , pkgUploadUser = upUser
-                 , pkgUploadOld = rest
+                 , pkgTarball = case source of Just source' -> [(source', updata)]; Nothing -> []
+                 , pkgUploadData = updata
+                 , pkgDataOld = []
                  }
           _ -> fail $ "Package " ++ show (display pkgId)
                 ++ "requires at least one uploading user"
@@ -272,33 +269,24 @@ importAuth contents
           insertUser user $ UserInfo name Deleted
 
        fromRecord
-        [nameStr, idStr, authType, "basic", auth]
+        [nameStr, idStr, isEnabled, authType, auth]
             = do
           name <- parse "user name" nameStr
           user <- parse "user id" idStr
-          authInfo <- parseAuth authType
-          insertUser user $ UserInfo name $ authInfo auth
+          authEn <- parseEnabled isEnabled
+          atype <- parseAuth authType
+          insertUser user $ UserInfo name (Active authEn $ UserAuth (PasswdHash auth) atype)
 
        fromRecord x = fail $ "Error processing auth record: " ++ show x
 
        -- parseAuth :: String -> Import (String -> UserAuth)
-       parseAuth "enabled"  = return $ Enabled  . PasswdHash
-       parseAuth "disabled" = return $ Disabled . PasswdHash
+       parseEnabled "enabled"  = return Enabled
+       parseEnabled "disabled" = return Disabled
+       parseEnabled sts = fail $ "unable to parse whether user enabled: " ++ sts
+
+       parseAuth "digest" = return DigestAuth
+       parseAuth "basic"  = return BasicAuth
        parseAuth sts = fail $ "unable to parse auth status: " ++ sts
-
-importPermissions :: ByteString -> Import ()
-importPermissions contents
-    = case customParseCSV "permissions.csv" (bytesToString contents) of
-        Left e -> fail e
-        Right csv -> mapM_ fromRecord (drop 1 csv)
-
- where fromRecord
-        (groupStr:users)
-            = do
-          groupName <- parse "group name" groupStr
-          forM_ users $ \userStr ->
-              parse "user id" userStr >>= addPermission groupName
-       fromRecord x = fail $ "Error handling permissions record: " ++ show x
 
 importDistro :: String -> ByteString -> Import ()
 importDistro filename contents
@@ -350,7 +338,6 @@ strucuture, I'm okay with this.
 data IS
     = IS
       { isUsers :: !Users
-      , isPerms :: !Permissions
       , isPackages :: !(PackageIndex PkgInfo)
       , isDocs :: !Documentation
       , isTarIndex :: !TarIndexMap.TarIndexMap
@@ -373,11 +360,6 @@ insertUser user info
     Nothing -> fail $ "Duplicate user id for user: " ++ display user
     Just users' -> do
       put $ s {isUsers = users'}
-
-addPermission :: GroupName -> UserId -> Import ()
-addPermission group user
-    = modify $ \is ->
-      is {isPerms = Permissions.addToGroup group user (isPerms is)}
 
 addPackage :: PkgInfo -> Import ()
 addPackage pkg
@@ -451,7 +433,6 @@ runImport storage imp = unImp imp err k initState
        initState
            = IS
               Users.empty
-              Permissions.empty
               (PackageIndex.fromList [])
               (Documentation Map.empty)
               TarIndexMap.emptyTarIndex
@@ -514,3 +495,24 @@ customParseCSV filename inp
    chopLastRecord [] = []
    chopLastRecord ([""]:[]) = []
    chopLastRecord (x:xs) = x : chopLastRecord xs
+
+{-importPermissions :: ByteString -> Import ()
+importPermissions contents
+    = case customParseCSV "permissions.csv" (bytesToString contents) of
+        Left e -> fail e
+        Right csv -> mapM_ fromRecord (drop 1 csv)
+
+ where fromRecord
+        (groupStr:users)
+            = do
+          groupName <- parse "group name" groupStr
+          forM_ users $ \userStr ->
+              parse "user id" userStr >>= addPermission groupName
+       fromRecord x = fail $ "Error handling permissions record: " ++ show x
+
+addPermission :: GroupName -> UserId -> Import ()
+addPermission group user
+    = modify $ \is ->
+      is {isPerms = Permissions.addToGroup group user (isPerms is)}
+-}
+

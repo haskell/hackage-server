@@ -26,6 +26,7 @@ import qualified Codec.Archive.Tar.Entry as Tar
          ( Entry(..), entryPath, EntryContent(..) )
 import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
 import qualified Distribution.Server.Auth.HtPasswdDb as HtPasswdDb
+import qualified Distribution.Server.Auth.Types as Auth
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
 import Distribution.Server.Packages.Types (PkgInfo(..))
@@ -72,11 +73,10 @@ newPkgInfo pkgid (cabalFilePath, cabalFile) (UploadLog.Entry time user _)
         pkgInfoId     = pkgid,
         pkgDesc       = pkg,
         pkgData       = cabalFile,
-        pkgTarball    = Nothing,
-        pkgUploadTime = time,
-        pkgUploadUser = Users.nameToId users user,
-        pkgUploadOld  = [ (time', Users.nameToId users user')
-                        | UploadLog.Entry time' user' _ <- others]
+        pkgTarball    = [],
+        pkgUploadData = (time, Users.nameToId users user),
+        pkgDataOld    = []--[ (time', Users.nameToId users user')
+                        -- | UploadLog.Entry time' user' _ <- others]
       }
   where parse = parsePackageDescription . fromUTF8 . BS.unpack
 
@@ -114,7 +114,7 @@ importUsers (Just htpasswdFile) = importUsers' Users.empty
   where
     importUsers' users [] = Right users
     importUsers' users ((userName, userAuth):rest) =
-      case Users.add userName userAuth users of
+      case Users.add userName (Users.UserAuth userAuth Auth.BasicAuth) users of
         Nothing                -> Left (alreadyPresent userName)
         Just (users', _userId) -> importUsers' users' rest
 
@@ -138,10 +138,10 @@ mergeDeletedUsers logEntries users0 =
   where
     addUser (users, added) (UploadLog.Entry _ userName _) =
       case Users.add userName dummyAuth users of
-        Nothing               -> (users ,        added) -- already present
-        Just (users', userId) -> (users', userId:added)
+        Nothing               -> (users ,        added) -- are already present
+        Just (users', userId) -> (users', userId:added) -- shall not be spared from the delete-fold
 
-    dummyAuth = Users.PasswdHash ""
+    dummyAuth = Users.UserAuth (Auth.PasswdHash "") (Auth.BasicAuth)
 
     deleteUser users userId = users'
       where Just users' = Users.delete userId users
@@ -215,7 +215,7 @@ mergeTarballs tarballInfo pkgs =
     mergePkgs merged []  = Right merged
     mergePkgs merged (next:remaining) = case next of
       InBoth (_, blobid) pkginfo -> mergePkgs (pkginfo':merged) remaining
-         where pkginfo' = pkginfo { pkgTarball = Just blobid }
+         where pkginfo' = pkginfo { pkgTarball = (blobid, pkgUploadData pkginfo):pkgTarball pkginfo }
       OnlyInLeft (pkgid, _)          -> Left missing
          where missing = "Package tarball missing metadata " ++ display pkgid
       OnlyInRight            pkginfo -> mergePkgs (pkginfo:merged) remaining

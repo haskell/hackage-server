@@ -9,6 +9,8 @@
 module Distribution.Server.Distributions.Types where
 
 import Distribution.Server.Instances()
+import Distribution.Server.Users.State()
+import Distribution.Server.Users.Group (UserList)
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -18,8 +20,7 @@ import Distribution.Package
 
 import Control.Applicative ((<$>))
 
-import Distribution.Text
-         ( Text(..) )
+import Distribution.Text (Text(..))
 
 import qualified Distribution.Compat.ReadP as Parse
 import qualified Text.PrettyPrint          as Disp
@@ -40,21 +41,19 @@ instance Text DistroName where
 
 
 -- | Listing of known distirbutions 
-data Distributions = Distributions
-    { name_map :: !(Set.Set DistroName)
-    }
+data Distributions = Distributions {
+    name_map :: !(Map.Map DistroName UserList)
+}
  deriving (Typeable, Show)
 instance Version Distributions
 
 -- | Listing of which distirbutions have which version of particular
 -- packages.
-data DistroVersions = DistroVersions
-    { package_map :: !(Map.Map PackageName (Map.Map DistroName DistroPackageInfo))
-    , distro_map  :: !(Map.Map DistroName (Set.Set PackageName))
-    }
- deriving (Typeable, Show)
+data DistroVersions = DistroVersions {
+    packageDistroMap :: !(Map.Map PackageName (Map.Map DistroName DistroPackageInfo)),
+    distroMap  :: !(Map.Map DistroName (Set.Set PackageName))
+} deriving (Typeable, Show)
 instance Version DistroVersions
-
 
 data DistroPackageInfo
     = DistroPackageInfo

@@ -83,7 +83,6 @@ executable hackage-server
     Distribution.Server.State
     Distribution.Server.TarIndex.State
     Distribution.Server.Users.Group
-    Distribution.Server.Users.Permissions
     Distribution.Server.Users.ServerParts
     Distribution.Server.Users.State
     Distribution.Server.Users.Types

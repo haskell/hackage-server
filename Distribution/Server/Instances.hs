@@ -1,17 +1,16 @@
 {-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, FlexibleContexts #-}
 
 -- | 'Typeable' and 'Binary' instances for various types from Cabal
+-- Major version changes may break this module.
 --
+
 module Distribution.Server.Instances () where
 
 import Distribution.Text
 
-import Distribution.Package
-         ( PackageIdentifier(..), PackageName(..) )
-import Distribution.PackageDescription
-         ( GenericPackageDescription(..) )
-import Distribution.Version
-         ( Version )
+import Distribution.Package (PackageIdentifier(..), PackageName(..))
+import Distribution.PackageDescription (GenericPackageDescription(..))
+import Distribution.Version (Version)
 
 import qualified Data.Array.Unboxed as UA
 
@@ -22,8 +21,9 @@ import Data.Time.Calendar (Day(..))
 import qualified Data.Binary as Binary
 import Data.Binary (Binary)
 
+import Happstack.State hiding (Version)
 import qualified Happstack.State as Happs
-import qualified Happstack.Server as Happs
+import Happstack.Server
 
 import Data.Maybe (fromJust)
 
@@ -35,23 +35,28 @@ instance Binary PackageIdentifier where
   put = Binary.put . show
   get = fmap read Binary.get
 
+instance Happs.Version PackageIdentifier
+instance Serialize PackageIdentifier where
+  putCopy = contain . Binary.put . show
+  getCopy = contain $ fmap read Binary.get
+
 instance Happs.Version PackageName
-instance Happs.Serialize PackageName where
-    getCopy = Happs.contain textGet
-    putCopy = Happs.contain . textPut
+instance Serialize PackageName where
+    getCopy = contain textGet
+    putCopy = contain . textPut
 
 instance Happs.Version Version
-instance Happs.Serialize Version where
-    getCopy = Happs.contain textGet
-    putCopy = Happs.contain . textPut
+instance Serialize Version where
+    getCopy = contain textGet
+    putCopy = contain . textPut
 
-instance Happs.FromReqURI PackageIdentifier where
+instance FromReqURI PackageIdentifier where
   fromReqURI = simpleParse
 
-instance Happs.FromReqURI PackageName where
+instance FromReqURI PackageName where
   fromReqURI = simpleParse
 
-instance Happs.FromReqURI Version where
+instance FromReqURI Version where
   fromReqURI = simpleParse
 
 -- These assume that the text representations
@@ -63,17 +68,17 @@ textPut :: Text a => a -> Binary.Put
 textPut = Binary.put . display
 
 instance Happs.Version (UA.UArray ix e) where
-    mode = Happs.Primitive
+    mode = Primitive
 
-instance (Happs.Serialize ix, Happs.Serialize e, UA.Ix ix,
-          UA.IArray UA.UArray e) => Happs.Serialize (UA.UArray ix e) where
-    getCopy = Happs.contain $ do
-                bounds <- Happs.safeGet
-                assocs <- Happs.safeGet
+instance (Serialize ix, Serialize e, UA.Ix ix,
+          UA.IArray UA.UArray e) => Serialize (UA.UArray ix e) where
+    getCopy = contain $ do
+                bounds <- safeGet
+                assocs <- safeGet
                 return $ UA.array bounds assocs
 
-    putCopy arr = Happs.contain
-                  (Happs.safePut (UA.bounds arr) >> Happs.safePut (UA.assocs arr))
+    putCopy arr = contain
+                  (safePut (UA.bounds arr) >> safePut (UA.assocs arr))
 
 instance Binary UTCTime where
   put time = do
