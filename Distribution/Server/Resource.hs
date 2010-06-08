@@ -123,7 +123,7 @@ serveResource (Resource trunk rget rput rpost rdelete) = (,) trunk $ \config dpa
     -- generic system) is that, out of multiple resources served from the same
     -- ServerTree node, only the first one's options will be answered
     makeOptions :: [Method] -> ServerResponse
-    makeOptions methodList = \_ _ -> do
+    makeOptions methodList = \_ _ -> methodSP OPTIONS $ do
       setHeaderM "Allow" (intercalate ", " . map show $ methodList)
       noBody
     noBody = return $ toResponse ()
