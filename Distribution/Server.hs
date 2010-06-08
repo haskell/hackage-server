@@ -254,6 +254,10 @@ initState (Server _ _ (Config _ _ host cache)) = do
 impl :: Server -> ServerPart Response
 impl server = renderServerTree (serverConfig server) [] $ foldr (uncurry addResponse) serverTreeEmpty $ ([], \_ _ -> core server):concatMap Feature.locations Features.hackageFeatures
 
+--showServerTree tree = trace (showServerTree' tree) tree 
+--  where showServerTree' (ServerTree resp for) = printf "[%s: %s]" (case resp of Just _ -> "resp"; _ -> "X") (concatMap (\(comp, serv) -> printf "%s/%s" (show comp) (showServerTree' serv) :: String) $ Map.toList for)
+
+
 core :: Server -> ServerPart Response
 core (Server _ _ (Config store static _ cache)) = msum
 {-  [ dir "package" $ msum
@@ -278,7 +282,7 @@ core (Server _ _ (Config store static _ cache)) = msum
 admin :: FilePath -> BlobStorage -> ServerPart Response
 admin static storage = do
     userDb <- query State.GetUserDb
-    let admins = Users.adminList userDb
+    admins <- query State.GetHackageAdmins
     Auth.requireHackageAuth userDb (Just admins) Nothing
     msum
         [ dir "users" userAdmin

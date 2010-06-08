@@ -8,6 +8,7 @@ import Distribution.Server.Instances ()
 import Distribution.Server.Packages.State
 import Distribution.Server.BuildReport.BuildReports (BuildReports)
 import Distribution.Server.Users.Users (Users)
+import Distribution.Server.Users.State (HackageAdmins)
 import Distribution.Server.Distributions.State (Distros)
 import Distribution.Server.TarIndex.State (TarIndexMap)
 

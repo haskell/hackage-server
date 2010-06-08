@@ -28,7 +28,6 @@ import Data.Maybe (maybe)
 import Data.List (find, intercalate)
 import Data.Digest.Pure.MD5 (md5)
 
--- genericBasicAuth :: Request -> String -> (UserName -> Maybe (a, Users.UserAuth)) -> Either AuthError a
 getHackageAuth :: Monad m => Users.Users -> ServerPartT m (Either AuthError UserId)
 getHackageAuth users = askRq >>= \req -> return $ case getAuthType req of
     Just BasicAuth  -> genericBasicAuth req "hackage" (getPasswdInfo users)

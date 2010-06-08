@@ -43,8 +43,7 @@ import Control.Applicative ((<$>), (<*>))
 data Users = Users {
     userIdMap   :: !(IntMap.IntMap UserInfo),
     userNameMap :: !(Map.Map UserName UserId),
-    nextId      :: !UserId,
-    adminList   :: !Group.UserList
+    nextId      :: !UserId
   }
   deriving (Typeable, Show)
 
@@ -67,8 +66,7 @@ empty :: Users
 empty = Users {
     userIdMap   = IntMap.empty,
     userNameMap = Map.empty,
-    nextId      = UserId 0,
-    adminList   = Group.empty
+    nextId      = UserId 0
   }
 
 -- | Add a new user account.
@@ -114,10 +112,10 @@ insert user@(UserId ident) info users =
     in case idMap' of
         Nothing -> Nothing -- Id clash, always fatal
         Just idMap -> if isDeleted
-             then Just $ Users idMap (userNameMap users) nextIdent (adminList users)
+             then Just $ Users idMap (userNameMap users) nextIdent
              else case nameMap' of
                     Nothing -> Nothing -- name clash, fatal if non-deleted user
-                    Just nameMap -> Just $ Users idMap nameMap nextIdent (adminList users)
+                    Just nameMap -> Just $ Users idMap nameMap nextIdent
 
 -- | Delete a user account.
 --
@@ -231,7 +229,6 @@ intInsertMaybe k a m
         (Nothing, m') -> Just m'
         _ -> Nothing
 
-
 instance Binary Users where
-  put (Users a b c d) = Binary.put a >> Binary.put b >> Binary.put c >> Binary.put d
-  get = Users <$> Binary.get <*> Binary.get <*> Binary.get <*> Binary.get
+  put (Users a b c) = Binary.put a >> Binary.put b >> Binary.put c
+  get = Users <$> Binary.get <*> Binary.get <*> Binary.get

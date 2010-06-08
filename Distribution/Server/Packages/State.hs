@@ -206,3 +206,49 @@ $(mkMethods ''PackageMaintainers ['getPackageMaintainers
                                  ,'removePackageMaintainer
                                  ])
 
+-------------------------------- Trustee list
+-- this could be reasonably merged into the above, as a PackageGroups data structure
+data HackageTrustees = HackageTrustees {
+    trustees :: UserList
+} deriving (Show, Typeable)
+
+instance Version HackageTrustees where
+  mode = Versioned 0 Nothing
+$(deriveSerialize ''HackageTrustees)
+
+instance Component HackageTrustees where
+  type Dependencies HackageTrustees = End
+  initialValue = HackageTrustees Group.empty
+
+getHackageTrustees :: Query HackageTrustees UserList
+getHackageTrustees = asks trustees
+
+getMaybeHackageTrustees :: Query HackageTrustees (Maybe UserList)
+getMaybeHackageTrustees = fmap Just getHackageTrustees
+
+modifyHackageTrustees :: (UserList -> UserList) -> Update HackageTrustees ()
+modifyHackageTrustees func = State.modify (\ht -> ht {trustees = func (trustees ht) })
+
+addHackageTrustee :: UserId -> Update HackageTrustees ()
+addHackageTrustee uid = modifyHackageTrustees (Group.add uid)
+
+removeHackageTrustee :: UserId -> Update HackageTrustees ()
+removeHackageTrustee uid = modifyHackageTrustees (Group.remove uid)
+
+$(mkMethods ''HackageTrustees ['getHackageTrustees
+                              ,'getMaybeHackageTrustees
+                              ,'addHackageTrustee
+                              ,'removeHackageTrustee
+                              ])
+
+---------------------------------------------
+data PackageUpload = PackageUpload deriving (Typeable)
+instance Version PackageUpload where
+  mode = Versioned 0 Nothing
+$(deriveSerialize ''PackageUpload)
+
+instance Component PackageUpload where
+    type Dependencies PackageUpload = PackageMaintainers :+: HackageTrustees :+: End
+    initialValue = PackageUpload
+
+$(mkMethods ''PackageUpload [])

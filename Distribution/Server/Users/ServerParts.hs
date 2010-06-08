@@ -74,14 +74,16 @@ serveUserPage config dpath = return . toResponse $ "Welcome to the illustrious u
 
 changePassword :: Config -> DynamicPath -> ServerPart Response
 changePassword config dpath = do
-    users <- query State.GetUserDb
+    users  <- query State.GetUserDb
+    admins <- query State.GetHackageAdmins
     uid <- Auth.requireHackageAuth users Nothing Nothing
     let muserIdName = userName `fmap` Users.lookupId uid users
         muserPathName = simpleParse =<< lookup "username" dpath
         muserPathId = flip Users.lookupName users =<< muserPathName
     case (muserPathId, muserPathName, muserIdName) of
       (Just userPathId, Just userPathName, Just userIdName) ->
-        if uid == userPathId || (uid `Group.member` Users.adminList users)
+        -- if this user's id corresponds to the one in the path, or is an admin
+        if uid == userPathId || (uid `Group.member` admins)
           then do
             pwd <- maybe (return $ ChangePassword "not" "valid" Auth.BasicAuth) return =<< getData
             if (first pwd == second pwd && first pwd /= "")

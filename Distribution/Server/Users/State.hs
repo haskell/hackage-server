@@ -6,9 +6,10 @@ module Distribution.Server.Users.State where
 import Distribution.Server.Instances ()
 
 import Distribution.Server.Users.Types (UserId,UserName,UserAuth)
-import Distribution.Server.Users.Group as Group (UserList(..), enumerate, add, remove)
+import Distribution.Server.Users.Group as Group (UserList(..), enumerate, add, remove, empty)
 import Distribution.Server.Users.Users as Users
 
+import Data.Typeable (Typeable)
 import Data.Maybe (isJust)
 
 import Happstack.State
@@ -17,6 +18,7 @@ import qualified Data.Binary as Binary
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
 
+--TODO: substitute equivalent deriveSerializes
 instance Version Users where
   mode = Versioned 0 Nothing
 
@@ -107,21 +109,6 @@ listGroupMembers userList
     = do users <- ask
          return [ Users.idToName users uid | uid <- Group.enumerate userList ]
 
-getHackageAdmins :: Query Users UserList
-getHackageAdmins = asks adminList
-
-getJustHackageAdmins :: Query Users (Maybe UserList)
-getJustHackageAdmins = Just `fmap` asks adminList
-
-modifyHackageAdmins :: (UserList -> UserList) -> Update Users ()
-modifyHackageAdmins func = State.modify (\users -> users { adminList = func (adminList users) })
-
-addHackageAdmin :: UserId -> Update Users ()
-addHackageAdmin uid = modifyHackageAdmins (Group.add uid)
-
-removeHackageAdmin :: UserId -> Update Users ()
-removeHackageAdmin uid = modifyHackageAdmins (Group.remove uid)
-
 $(mkMethods ''Users ['addUser
                     ,'setEnabledUser
                     ,'deleteUser
@@ -129,12 +116,42 @@ $(mkMethods ''Users ['addUser
                     ,'lookupUserName
                     ,'getUserDb
                     ,'replaceUserDb
+                    ])
 
-                    ,'getHackageAdmins
+-----------------------------------------------------
+
+data HackageAdmins = HackageAdmins {
+    adminList :: !Group.UserList
+} deriving (Typeable)
+$(deriveSerialize ''HackageAdmins)
+instance Version HackageAdmins where
+    mode = Versioned 0 Nothing
+
+getHackageAdmins :: Query HackageAdmins UserList
+getHackageAdmins = asks adminList
+
+getJustHackageAdmins :: Query HackageAdmins (Maybe UserList)
+getJustHackageAdmins = Just `fmap` asks adminList
+
+modifyHackageAdmins :: (UserList -> UserList) -> Update HackageAdmins ()
+modifyHackageAdmins func = State.modify (\users -> users { adminList = func (adminList users) })
+
+addHackageAdmin :: UserId -> Update HackageAdmins ()
+addHackageAdmin uid = modifyHackageAdmins (Group.add uid)
+
+removeHackageAdmin :: UserId -> Update HackageAdmins ()
+removeHackageAdmin uid = modifyHackageAdmins (Group.remove uid)
+
+instance Component HackageAdmins where
+    type Dependencies HackageAdmins = End
+    initialValue = HackageAdmins Group.empty
+
+$(mkMethods ''HackageAdmins
+                    ['getHackageAdmins
                     ,'getJustHackageAdmins
                     ,'addHackageAdmin
-                    ,'removeHackageAdmin
-                    ])
+                    ,'removeHackageAdmin])
+
 {--- |overwrites existing permissions
 bulkImportPermissions :: [(UserId, GroupName)] -> Update Permissions ()
 bulkImportPermissions perms = do

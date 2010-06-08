@@ -351,10 +351,10 @@ uploadPackage store cache host =
 
 requirePackageAuth :: (MonadIO m, Package pkg) => pkg -> ServerPartT m Users.UserId
 requirePackageAuth pkg = do
-    userDb <- query $ GetUserDb
-    pkgm   <- query $ GetPackageMaintainers (packageName pkg)
-    let admins   = Users.adminList userDb
-        groupSum = Groups.unions [admins, fromMaybe Groups.empty pkgm]
+    userDb  <- query $ GetUserDb
+    pkgm    <- query $ GetPackageMaintainers (packageName pkg)
+    trustee <- query $ GetHackageTrustees
+    let groupSum = Groups.unions [trustee, fromMaybe Groups.empty pkgm]
     Auth.requireHackageAuth userDb (Just groupSum) Nothing
 
 buildReports :: BlobStorage -> [ServerPart Response]
