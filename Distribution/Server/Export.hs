@@ -51,6 +51,7 @@ import Distribution.Server.Distributions.Distributions
 import qualified Distribution.Server.Distributions.Distributions as Distros
 
 import Distribution.Server.Users.Users (Users)
+import Distribution.Server.Users.UserBackup
 
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.State

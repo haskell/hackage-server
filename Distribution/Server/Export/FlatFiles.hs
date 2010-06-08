@@ -19,6 +19,7 @@ import Distribution.Server.Export.Utils
 
 import Distribution.Server.Users.Types as Users
 import Distribution.Server.Users.Users as Users
+import Distribution.Server.Users.UserBackup
 
 import qualified Distribution.Server.Distributions.Distributions as Distros
 import Distribution.Server.Distributions.Distributions
@@ -50,65 +51,6 @@ A few guiding philosophies:
 
  -} 
 
--- auth.csv
-{- | Produces a CSV file for the users DB.
-   .
-   Format:
-   .
-   User name,User Id,(enabled|disabled|deleted),(basic-auth,no-auth),pwd-hash   
- -}
-usersToCSV :: Users.Users -> CSV
-usersToCSV users
-    = ([showVersion userCSVVer]:) $
-      (usersCSVKey:) $
-
-      flip map (Users.enumerateAll users) $ \(user, userInfo) ->
-
-      [ display . Users.userName $ userInfo
-      , display user
-      , infoToStatus userInfo
-      , infoToAuthType userInfo
-      , infoToAuth userInfo
-      ]
-
- where
-   usersCSVKey =
-       [ "name"
-       , "id"
-       , "status"
-       , "auth-type"
-       , "auth-info"
-       ]
-
-   -- one of "enabled" "disabled" or "deleted"
-   infoToStatus :: Users.UserInfo -> String
-   infoToStatus userInfo
-       = case Users.userStatus userInfo of
-           Users.Deleted  -> "deleted"
-           Users.Active Users.Disabled _ -> "disabled"
-           Users.Active Users.Enabled  _ -> "enabled"
-
-   -- one of "none", "basic", or "digest"
-   infoToAuthType :: Users.UserInfo -> String
-   infoToAuthType userInfo
-       = case Users.userStatus userInfo of
-           Users.Deleted -> "none"
-           Users.Active _ (Users.UserAuth _ atype)-> case atype of
-               BasicAuth -> "basic"
-               DigestAuth -> "digest"
-
-   -- may be null
-   infoToAuth :: Users.UserInfo -> String
-   infoToAuth userInfo
-       = case Users.userStatus userInfo of
-           Users.Deleted{} -> ""
-           Users.Active _ (UserAuth (PasswdHash hash) _) -> hash
-
-
-
-userCSVVer :: Version
-userCSVVer = Version [0,1] ["unstable"]                   
-
 -- uploads.csv
 {-| For a particular package, when and by whom was it
   uploaded.
@@ -130,7 +72,7 @@ uploadsToCSV pkgInfo
             ]
 
 uploadsCSVVer :: Version
-uploadsCSVVer = userCSVVer
+uploadsCSVVer = Version [0,1] ["unstable"]
 
 uploadTimes :: PkgInfo -> [(UTCTime, UserId)]
 uploadTimes pkgInfo
@@ -157,4 +99,4 @@ distroToCSV distro distInfo
          ]
 
 distrosCSVVer :: Version
-distrosCSVVer = userCSVVer
+distrosCSVVer = Version [0,1] ["unstable"]
