@@ -3,6 +3,7 @@ module Distribution.Server.Features where
 
 import Distribution.Server.Feature (HackageFeature)
 
+import Distribution.Server.Core (coreFeature)
 import Distribution.Server.Users.ServerParts (usersFeature)
 import Distribution.Server.Packages.ServerParts (packagePagesFeature)
 --import Distribution.Server.Features.StaticFiles (staticFilesFeature)
@@ -17,7 +18,8 @@ import Data.Typeable
 
 hackageFeatures :: [HackageFeature]
 hackageFeatures =
-  [ legacyRedirectsFeature
+  [ coreFeature
+  , legacyRedirectsFeature
   , usersFeature
   , packagePagesFeature
 --, staticFilesFeature

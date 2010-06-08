@@ -1,8 +1,14 @@
-{-# LANGUAGE RankNTypes, MultiParamTypeClasses, RecordWildCards  #-}
+{-# LANGUAGE RankNTypes, MultiParamTypeClasses, RecordWildCards, FlexibleInstances  #-}
 
-module Distribution.Server.Import
-    ( importTar
-    ) where
+module Distribution.Server.Import (
+    RestoreBackup(..),
+    BackupEntry,
+    importTar,
+    importCSV,
+    Import,
+    runImport,
+    parse
+  ) where
 
 import Happstack.State (update)
 
@@ -58,12 +64,8 @@ import qualified Distribution.Server.BuildReport.BuildReport as Reports
 import Distribution.Server.BuildReport.BuildReports (BuildReports, BuildReportId, BuildLog)
 import qualified Distribution.Server.BuildReport.BuildReports as Reports
 
-import qualified Distribution.Server.Users.Users as Users
-import Distribution.Server.Users.Users (Users)
-import Distribution.Server.Users.State (ReplaceUserDb(..))
 import Distribution.Server.Users.Types
 import Distribution.Server.Packages.Types
-import Distribution.Server.Auth.Types
 
 import qualified Distribution.Server.PackageIndex as PackageIndex
 import Distribution.Server.PackageIndex (PackageIndex)
@@ -71,40 +73,71 @@ import Distribution.Package
 
 import Distribution.Text hiding (parse)
 
+import Data.Monoid
+import qualified Data.Map as Map
+import Data.Map (Map)
+
+type BackupEntry = ([FilePath], ByteString)
+
+data RestoreBackup = RestoreBackup {
+    restoreEntry :: BackupEntry -> IO (Either String RestoreBackup),
+    restoreComplete :: IO ()
+}
+instance Monoid RestoreBackup where
+    mempty = RestoreBackup
+        { restoreEntry    = \_ -> return . Right $ mempty
+        , restoreComplete = return ()
+        }
+    mappend (RestoreBackup run comp) (RestoreBackup run' comp') = RestoreBackup
+        { restoreEntry = \entry -> do
+              res <- run entry
+              case res of
+                  Right backup -> do
+                      res' <- run' entry
+                      return $ fmap (mappend backup) res'
+                  bad -> return bad
+        , restoreComplete = comp >> comp'
+        }
 
 -- | Takes apart the import tarball. If there are any errors,
 -- the first error encounter is returned.
 -- Otherwise the result of the import is injected into the running
 -- happs state.
 -- The format of the input is assumed to be tar.gz
-importTar :: BlobStorage -> ByteString -> IO (Maybe String)
-importTar storage tar
-    = do
-  res <- runImport storage .
-                fromEntries .
-                Tar.read .
-                decompress $ tar
-  case res of
-    Left err -> return . Just $ err
-    Right IS{..}
-        -> do
-      update $ ReplaceDocumentation isDocs
-      update $ TarIndexMap.ReplaceTarIndexMap isTarIndex
-      update $ ReplacePackagesState $ PackagesState isPackages
-      update $ ReplaceBuildReports $ isBuildReps
-      update $ ReplaceUserDb $ isUsers
-      -- update permissions here
-      update $ ReplaceDistributions isDistributions isDistVersions
-      return Nothing
+importTar :: BlobStorage -> ByteString -> Map String RestoreBackup -> IO (Maybe String)
+importTar storage tar featureMap = do
+    res <- runImport initState .
+             fromEntries .
+             Tar.read .
+             decompress $ tar
+    case res of
+      Left err -> return . Just $ err
+      Right IS{..} -> do
+        update $ ReplaceDocumentation isDocs
+        update $ TarIndexMap.ReplaceTarIndexMap isTarIndex
+        update $ ReplacePackagesState $ PackagesState isPackages
+        update $ ReplaceBuildReports $ isBuildReps
+        update $ ReplaceDistributions isDistributions isDistVersions
+        mapM_ restoreComplete (Map.elems isFeatureMap)
+        return Nothing
 
-fromEntries :: Tar.Entries -> Import ()
+  where initState = IS
+            featureMap
+            (PackageIndex.fromList [])
+            (Documentation Map.empty)
+            TarIndexMap.emptyTarIndex
+            Reports.empty
+            Distros.emptyDistributions
+            Distros.emptyDistroVersions
+            storage
+
+fromEntries :: Tar.Entries -> Import IS ()
 fromEntries Tar.Done = return ()
 fromEntries (Tar.Fail err) = fail err
 fromEntries (Tar.Next x xs) = fromEntry x >> fromEntries xs
 
-fromEntry :: Tar.Entry -> Import ()
-fromEntry entry
-    = case Tar.entryContent entry of
+fromEntry :: Tar.Entry -> Import IS ()
+fromEntry entry = case Tar.entryContent entry of
         Tar.NormalFile bytes _ ->
             fromFile (Tar.entryPath entry) bytes
 
@@ -112,35 +145,42 @@ fromEntry entry
 
         _ -> fail $ "Unexpected entry: " ++ Tar.entryPath entry
 
-fromFile :: FilePath -> ByteString -> Import ()
+fromFile :: FilePath -> ByteString -> Import IS ()
 fromFile path contents
     = let paths = splitDirectories path
       in case paths of
-           baseDir:rest | "export-" `isPrefixOf` baseDir
-                                   -> go rest
+           baseDir:rest | "export-" `isPrefixOf` baseDir -> go rest
            _ -> return () -- ignore unknown files
 
  where
-   go ["users","auth.csv"]
-       = importAuth contents
+    go (pathFront:pathEnd) = do
+        is <- get
+        let featureMap = isFeatureMap is
+        case Map.lookup pathFront featureMap of
+            Just restorer -> do
+                res <- io2imp $ restoreEntry restorer (pathEnd, contents)
+                case res of Left e          -> fail e
+                            Right restorer' -> put is {isFeatureMap = Map.insert pathFront restorer' featureMap }
+            Nothing -> go' (pathFront:pathEnd)
+    go _ = return ()
 
---   go ["users","permissions.csv"] = importPermissions contents
+--  go' ["users","auth.csv"] = importAuth contents
+--  go' ["users","permissions.csv"] = importPermissions contents
 
-   go ["build-reports", repIdString, "report.txt"]
+    go' ["build-reports", repIdString, "report.txt"]
        = importReport repIdString contents
 
-   go ["build-reports", repIdString, "log.txt"]
+    go' ["build-reports", repIdString, "log.txt"]
        = importLog repIdString contents
 
-   go ("package" : rest) = impPackage rest contents
+    go' ("package" : rest) = impPackage rest contents
 
-   go (["distros", filename])
-       | takeExtension filename == ".csv"
-           = importDistro filename contents
+    go' ["distros", filename]
+        | takeExtension filename == ".csv" = importDistro filename contents
 
-   go _ = return () -- ignore unknown files
+    go' _ = return () -- ignore unknown files
 
-impPackage :: [String] -> ByteString -> Import ()
+impPackage :: [String] -> ByteString -> Import IS ()
 impPackage [_, pkgIdStr, "documentation.tar"] contents
     = do
   pkgId <- parse "package id" pkgIdStr
@@ -162,7 +202,7 @@ impPackage [pkgName, pkgTarName] contents
         pkgDesc <- parsePackageDesc cabalContents
 
         case uploads of
-          updata:rest -- reuploads without data aren't significant
+          updata:_ -- the second part, reuploads without data, aren't significant
               -> addPackage $ PkgInfo
                  { pkgInfoId = pkgId
                  , pkgDesc = pkgDesc
@@ -185,7 +225,7 @@ impPackage [pkgName, pkgTarName] contents
        validateError from
            = fail $ "Bad tar for " ++ from
 
-       parseUploads :: ByteString -> Import [(UTCTime, UserId)]
+       parseUploads :: ByteString -> Import IS [(UTCTime, UserId)]
        parseUploads file
            = case customParseCSV "uploads.csv" (bytesToString file) of
                Left err -> fail . show $ err
@@ -203,7 +243,7 @@ impPackage [pkgName, pkgTarName] contents
                Nothing -> fail $ "Unable to parse time: " ++ str
                Just x  -> return x
 
-       parsePackageDesc :: ByteString -> Import GenericPackageDescription
+       parsePackageDesc :: ByteString -> Import IS GenericPackageDescription
        parsePackageDesc file
            = case parsePackageDescription (bytesToString file) of
                ParseFailed err     -> fail . show $ err
@@ -214,10 +254,10 @@ impPackage _ _ = return () -- ignore unknown files
 -- in their own tarball, so we can gaurantee they arrive at the
 -- same place in the tar entries stream for the import
 packageParts :: Tar.Entries
-             -> Import (Maybe BlobId     -- source tarball
-                       ,Maybe ByteString -- .cabal file
-                       ,Maybe ByteString -- uploads csv
-                       )
+             -> Import IS ( Maybe BlobId     -- source tarball
+                          , Maybe ByteString -- .cabal file
+                          , Maybe ByteString -- uploads csv
+                          )
 packageParts entries
     = go entries (Nothing, Nothing, Nothing)
  where go Tar.Done x       = return x
@@ -240,7 +280,7 @@ packageParts entries
                         _ -> return x
                _ -> return x
 
-importReport :: String -> ByteString -> Import ()
+importReport :: String -> ByteString -> Import IS ()
 importReport repIdStr contents
     = do
   repId <- parse "report id" repIdStr
@@ -248,47 +288,14 @@ importReport repIdStr contents
     Left err -> fail err
     Right report -> insertBuildReport repId report
 
-importLog :: String -> ByteString -> Import ()
+importLog :: String -> ByteString -> Import IS ()
 importLog repIdStr contents
     = do
   repId <- parse "report id" repIdStr
   blobId <- addFile contents
   insertBuildLog repId (Reports.BuildLog blobId)
 
-importAuth :: ByteString -> Import ()
-importAuth contents
-    = case customParseCSV "auth.csv" (bytesToString contents) of
-        Left e -> fail e
-        Right csv -> mapM_ fromRecord (drop 2 csv)
-
- where fromRecord
-        [nameStr, idStr, "deleted", "none", ""]
-            = do
-          name <- parse "user name" nameStr
-          user <- parse "user id" idStr
-          insertUser user $ UserInfo name Deleted
-
-       fromRecord
-        [nameStr, idStr, isEnabled, authType, auth]
-            = do
-          name <- parse "user name" nameStr
-          user <- parse "user id" idStr
-          authEn <- parseEnabled isEnabled
-          atype <- parseAuth authType
-          insertUser user $ UserInfo name (Active authEn $ UserAuth (PasswdHash auth) atype)
-
-       fromRecord x = fail $ "Error processing auth record: " ++ show x
-
-       -- parseAuth :: String -> Import (String -> UserAuth)
-       parseEnabled "enabled"  = return Enabled
-       parseEnabled "disabled" = return Disabled
-       parseEnabled sts = fail $ "unable to parse whether user enabled: " ++ sts
-
-       parseAuth "digest" = return DigestAuth
-       parseAuth "basic"  = return BasicAuth
-       parseAuth sts = fail $ "unable to parse auth status: " ++ sts
-
-importDistro :: String -> ByteString -> Import ()
+importDistro :: String -> ByteString -> Import IS ()
 importDistro filename contents
     = case customParseCSV filename (bytesToString contents) of
         Left e -> fail e
@@ -311,12 +318,11 @@ importDistro filename contents
              "Invalid distribution record in " ++ filename ++ " : " ++ show x
 
 -- Parse a string, throw an error if it's bad
-parse :: Text a => String -> String -> Import a
+parse :: Text a => String -> String -> Import s a
 parse label text
     = case simpleParse text of
         Nothing
-            -> fail $
-               "Unable to parse " ++ label ++ " : " ++ show text
+            -> fail $ "Unable to parse " ++ label ++ " : " ++ show text
         Just a -> return a
                             
 bytesToString :: ByteString -> String
@@ -335,9 +341,8 @@ strucuture, I'm okay with this.
 
 -}
 
-data IS
-    = IS
-      { isUsers :: !Users
+data IS = IS
+      { isFeatureMap :: !(Map String RestoreBackup)
       , isPackages :: !(PackageIndex PkgInfo)
       , isDocs :: !Documentation
       , isTarIndex :: !TarIndexMap.TarIndexMap
@@ -347,31 +352,22 @@ data IS
       , isStorage :: BlobStorage
       }
 
-addFile :: ByteString -> Import BlobId
+addFile :: ByteString -> Import IS BlobId
 addFile file = do
   store <- gets isStorage
   io2imp $ BlobStorage.add store file
 
-insertUser :: UserId -> UserInfo -> Import ()
-insertUser user info
-    = do
-  s <- get
-  case Users.insert user info (isUsers s) of
-    Nothing -> fail $ "Duplicate user id for user: " ++ display user
-    Just users' -> do
-      put $ s {isUsers = users'}
-
-addPackage :: PkgInfo -> Import ()
+addPackage :: PkgInfo -> Import IS ()
 addPackage pkg
     = modify $ \is ->
       is {isPackages = PackageIndex.insert pkg (isPackages is)}
 
-addDocumentation :: PackageIdentifier -> BlobId -> Import ()
+addDocumentation :: PackageIdentifier -> BlobId -> Import IS ()
 addDocumentation pkgId blob
     = modify $ \is ->
       is { isDocs = Documentation (Map.insert pkgId blob (documentation (isDocs is)))}
 
-addTarIndex :: BlobId -> Import ()
+addTarIndex :: BlobId -> Import IS ()
 addTarIndex blob
     = do
   store <- gets isStorage
@@ -380,7 +376,7 @@ addTarIndex blob
   modify $ \is ->
       is { isTarIndex = TarIndexMap.insertTarIndex blob index (isTarIndex is) }
 
-insertBuildReport :: BuildReportId -> BuildReport -> Import ()
+insertBuildReport :: BuildReportId -> BuildReport -> Import IS ()
 insertBuildReport reportId report
     = do
   s <- get
@@ -389,7 +385,7 @@ insertBuildReport reportId report
     Just buildReps' -> do
       put $ s { isBuildReps = buildReps' }
 
-insertBuildLog :: BuildReportId -> BuildLog -> Import ()
+insertBuildLog :: BuildReportId -> BuildLog -> Import IS ()
 insertBuildLog reportId buildLog
     = do
   s <- get
@@ -398,7 +394,7 @@ insertBuildLog reportId buildLog
     Just buildReps' -> do
       put $ s { isBuildReps = buildReps' }
 
-addDistribution :: DistroName -> Import ()
+addDistribution :: DistroName -> Import IS ()
 addDistribution distro
     = do
   is <- get
@@ -406,7 +402,7 @@ addDistribution distro
     Nothing -> fail $ "Could not add distro: " ++ display distro
     Just dists -> put is{isDistributions = dists}
 
-addDistroPackage :: DistroName -> PackageName -> DistroPackageInfo -> Import ()
+addDistroPackage :: DistroName -> PackageName -> DistroPackageInfo -> Import IS ()
 addDistroPackage distro package info
     = do
   is <- get
@@ -415,39 +411,25 @@ addDistroPackage distro package info
 
 -- implementation of the Import data type
 
-newtype Import a
+newtype Import s a
     = Imp 
       {unImp :: forall r .
           (String -> IO r)   -- error
-       -> (a -> IS -> IO r)  -- success
-       -> IS                 -- state
+       -> (a -> s -> IO r)  -- success
+       -> s                  -- state
        -> IO r
       }
 
-runImport :: BlobStorage -> Import () -> IO (Either String IS)
-runImport storage imp = unImp imp err k initState
+runImport :: s -> Import s a -> IO (Either String s)
+runImport initState imp = unImp imp err k initState
  where k _ s = return $ Right s
-
-       err = return . Left
-
-       initState
-           = IS
-              Users.empty
-              (PackageIndex.fromList [])
-              (Documentation Map.empty)
-              TarIndexMap.emptyTarIndex
-              Reports.empty
-              Distros.emptyDistributions
-              Distros.emptyDistroVersions
-              storage
+       err   = return . Left
 
 
-instance Functor Import where
-    f `fmap` g
-        = Imp $ \err k ->
-          unImp g err (k . f)
+instance Functor (Import s) where
+    f `fmap` g = Imp $ \err k -> unImp g err (k . f)
 
-instance Monad Import where
+instance Monad (Import s) where
     return a = Imp $ \_ k -> k a
 
     m >>= f
@@ -464,20 +446,16 @@ instance Monad Import where
         = Imp $ \err _k _s ->
           err str
 
-instance MonadState IS Import where
-    get
-        = Imp $ \_ k s ->
-          k s s
-    put s
-        = Imp $ \_ k _ ->
-          {- s `seq` -} k () s
+instance MonadState s (Import s) where
+    get   = Imp $ \_ k s -> k s s
+    put s = Imp $ \_ k _ -> {- s `seq` -} k () s
 
 -- not sure if this is as good as it could be,
 -- but it seems that k must be fully applied if I want
 -- to unwrap x
 --
 -- todo: catch IO errors and re-throw as Import errors?
-io2imp :: IO a -> Import a
+io2imp :: IO a -> Import s a
 io2imp x
     = Imp $ \_ k s ->
       x >>= \v -> k v s
@@ -486,15 +464,19 @@ io2imp x
 -- I'm not sure why parseCSV does this, but it's
 -- irritating.
 customParseCSV :: String -> String -> Either String CSV
-customParseCSV filename inp
-    = case parseCSV filename inp of
-        Left err -> Left . show $ err
-        Right csv -> Right . chopLastRecord $ csv
-
+customParseCSV filename inp = case parseCSV filename inp of
+    Left err -> Left . show $ err
+    Right csv -> Right . chopLastRecord $ csv
  where
    chopLastRecord [] = []
    chopLastRecord ([""]:[]) = []
    chopLastRecord (x:xs) = x : chopLastRecord xs
+
+-- | Made this into a nifty combinator.
+importCSV :: String -> ByteString -> (CSV -> Import s a) -> Import s a
+importCSV filename inp comb = case customParseCSV filename (bytesToString inp) of
+    Left  err -> fail err
+    Right csv -> comb csv
 
 {-importPermissions :: ByteString -> Import ()
 importPermissions contents

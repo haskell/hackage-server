@@ -47,7 +47,7 @@ PUT: change password. Admins can change anyone's password, but everyone else can
 
 usersFeature :: HackageFeature 
 usersFeature = HackageFeature {
-    featureName = "user pages",
+    featureName = "users",
     -- todo: add checking
     locations   = map serveResource $ 
                   [ (resourceAt "/users/") { resourceGet = Just serveUserList, resourcePost = Just adminAddUser }
@@ -56,7 +56,7 @@ usersFeature = HackageFeature {
                   , (resourceAt "/user/:username/password") { resourcePut = Just changePassword }
                   ] ++ makeGroupResources (trunkAt "/users/admins") (\_ -> Just $ Group.UserGroup "Site administrators" GetJustHackageAdmins AddHackageAdmin RemoveHackageAdmin),
     dumpBackup    = return [],  
-    restoreBackup = \_ -> return ()
+    restoreBackup = Nothing
 }
 
 data ChangePassword = ChangePassword { first :: String, second :: String, newAuthType :: Auth.AuthType } deriving (Eq, Show)

@@ -1,7 +1,7 @@
 module Distribution.Server.Feature where
 
+import Distribution.Server.Import (RestoreBackup, BackupEntry)
 import Distribution.Server.Resource
-import Happstack.Server
 
 -- This module defines a plugin interface for hackage features.
 --
@@ -12,11 +12,8 @@ import Happstack.Server
 data HackageFeature = HackageFeature {
     featureName    :: String,
     locations      :: [(BranchPath, ServerResponse)],
+--  resources      :: [Resource],
     dumpBackup     :: IO [BackupEntry],
-    restoreBackup  :: [BackupEntry] -> IO ()
+    restoreBackup  :: Maybe RestoreBackup
 }
-
--- TODO: move this to a backup dump/restore module
--- filesystem name + human readable content
-type BackupEntry = ([FilePath], {-Byte-}String)
 

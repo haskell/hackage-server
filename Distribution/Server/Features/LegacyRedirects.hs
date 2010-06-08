@@ -22,12 +22,12 @@ import Control.Monad (msum, mzero)
 --
 legacyRedirectsFeature :: HackageFeature
 legacyRedirectsFeature = HackageFeature {
-    featureName = "legacy redirects",
-    locations   = [([], \config dpath -> serveLegacyRedirects)],
+    featureName = "legacy",
+    locations   = [([], \_ _ -> serveLegacyRedirects)],
     -- There is no persistent state for this feature,
     -- so nothing needs to be backed up.
     dumpBackup    = return [],
-    restoreBackup = \_ -> return ()
+    restoreBackup = Nothing
 }
 
 -- | Support for the old URL scheme from the first version of hackage.

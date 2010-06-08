@@ -24,13 +24,16 @@ import Distribution.Server.Users.Group (UserGroup(..), UserList(..))
 
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Control.Monad (msum)
+import Control.Monad (msum, liftM2)
+import Control.Monad.Trans (liftIO)
 import Data.Maybe (maybeToList)
 import Data.List (intercalate, find)
 import Data.Monoid (mappend)
 import qualified Text.ParserCombinators.ReadP as Parse
 import qualified Network.URI as URI
 import qualified Distribution.Server.Cache as Cache
+
+import Text.Printf
 
 import Happstack.State (QueryEvent, UpdateEvent, query, update)
 
@@ -71,14 +74,6 @@ data ServerTree = ServerTree {
     nodeForest :: Map BranchComponent ServerTree
 }
 
--- Shared user group abstraction should probably go elsewhere, but the
--- group-resource-factory is in this module for now
-
---data UserGroup a = UserGroup {
---    groupName :: String,
---    queryUserList :: a,
---    updateUserList :: (UserList -> UserList) -> a
---}
 -- TODO: implement
 makeGroupResources :: (QueryEvent a (Maybe UserList), UpdateEvent b (), UpdateEvent c ()) => BranchPath -> (DynamicPath -> Maybe (UserGroup a b c)) -> [Resource]
 makeGroupResources branch group = [] {-[viewList, modifyList]

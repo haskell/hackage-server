@@ -67,7 +67,7 @@ import qualified Codec.Compression.GZip as GZip
 
 packagePagesFeature :: HackageFeature 
 packagePagesFeature = HackageFeature {
-    featureName = "package pages",
+    featureName = "pkgpage",
     -- todo: add checking
     locations   = map serveResource $ 
                   [ (resourceAt "/packages/") { resourceGet = Just serveIndexPage, resourcePost = Just uploadPackageTarball }
@@ -79,7 +79,7 @@ packagePagesFeature = HackageFeature {
                   , (resourceAt "/package/:package/buildreports/") { resourceGet = Just serveBuildReports }
                   ] ++ makeGroupResources (trunkAt "/package/:package/maintainers") maintainersGroup,
     dumpBackup    = return [],
-    restoreBackup = \_ -> return ()
+    restoreBackup = Nothing
 }
 -- "/package/:package/candidate", "/package/:package/candidate/:cabal", "/package/:package/candidate/:tarball"
 

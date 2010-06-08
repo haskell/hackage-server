@@ -59,6 +59,7 @@ import Data.ByteString.Lazy.Char8 (ByteString)
 import Network.URI (URIAuth(URIAuth))
 import Network.BSD (getHostName)
 import Data.Char (toUpper)
+import qualified Data.Map as Map
 
 import qualified Data.ByteString.Lazy.Char8 as BS
 
@@ -222,11 +223,12 @@ bulkImport (Server _ _ (Config store _ host cache))
 
 importTar :: Server -> ByteString -> IO (Maybe String)
 importTar (Server _ _ (Config store _ host cache)) tar = do
-  res <- Import.importTar store tar
-  case res of
-    Nothing -> updateCache cache host
-    Just _err -> return ()
-  return res
+    let featureMap = Map.fromList . concatMap (\f -> maybe [] (\r -> [(Feature.featureName f, r)]) $ Feature.restoreBackup f) $ Features.hackageFeatures
+    res <- Import.importTar store tar featureMap
+    case res of
+        Nothing -> updateCache cache host
+        Just _err -> return ()
+    return res
 
 -- An alternative to an import.
 -- Starts the server off to a sane initial state.

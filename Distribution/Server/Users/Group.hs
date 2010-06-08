@@ -24,7 +24,7 @@ import Prelude hiding (id)
 newtype UserList = UserList IntSet.IntSet
   deriving (Eq, Monoid, Binary, Typeable, Show)
 
---forall a b. QueryEvent a (Maybe UserList), UpdateEvent b (), UpdateEvent c ()
+--forall a b c. QueryEvent a (Maybe UserList), UpdateEvent b (), UpdateEvent c ()
 data UserGroup a b c = UserGroup {
     groupName :: String,
     queryUserList :: a,
