@@ -55,7 +55,7 @@ import Distribution.Server.Packages.State
     , ReplaceDocumentation(..)
     , ReplaceBuildReports(..)
     )
-import qualified Distribution.Server.TarIndex.State as TarIndexMap
+import qualified Distribution.Server.Util.TarIndex as TarIndexMap
 import qualified Distribution.Server.Util.Serve as TarIndex
 
 import Distribution.Server.BuildReport.BuildReport (BuildReport)

@@ -24,6 +24,7 @@ import Data.Typeable
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import Data.Monoid
+import Data.Maybe (fromMaybe)
 
 import qualified Data.Map as Map
 

@@ -1,11 +1,16 @@
 module Distribution.Server.Packages.ServerParts (
+    withPackageId,
+    withPackagePath,
+    withPackage,
+    servePackageTarball,
+    serveCabalFile,
+
     packagePagesFeature,
     updateCache,
     stateToCache,
     handlePackageById,
     servePackage,
     checkPackage,
-    uploadPackage,
     buildReports,
   ) where
 
@@ -20,46 +25,46 @@ import Distribution.Server.Instances ()
 import Distribution.Server.Packages.State as State
 import Distribution.Server.Users.State as State
 
-import Distribution.Server.Distributions.State as State
-import qualified Distribution.Server.TarIndex.State as TarIndex
+import qualified Distribution.Server.Util.TarIndex as TarIndex
 import qualified Distribution.Server.Util.Serve as TarIndex
 
 import qualified  Distribution.Server.Packages.State as State
+import qualified  Distribution.Server.Distributions.State as State
 import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.Server.PackageIndex as PackageIndex
 import qualified Distribution.Server.Auth.Basic as Auth
-import Distribution.Server.Packages.Types (PkgInfo(..), pkgUploadUser, pkgUploadTime)
+import Distribution.Server.Packages.Types (PkgInfo(..), pkgUploadTime)
 import qualified Distribution.Server.ResourceTypes as Resource
 import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)
 import qualified Distribution.Server.Pages.Package as Pages
-import qualified Distribution.Server.Pages.PackageAdmin as Pages
 import qualified Distribution.Server.Pages.Recent  as Pages
 import qualified Distribution.Server.Pages.BuildReports as Pages
 import qualified Distribution.Server.Packages.Index as Packages.Index (write)
-import qualified Distribution.Server.PackageUpload.Unpack as Upload (unpackPackage)
+import qualified Distribution.Server.Packages.Unpack as Upload (unpackPackage)
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
 import Distribution.Server.Util.Serve (serveTarball)
 import qualified Distribution.Server.BuildReport.BuildReport as BuildReport
 import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
 
-import Distribution.Server.Resource
+--import Distribution.Server.Resource
 import Distribution.Server.Feature
+import Distribution.Server.Types
+--import Distribution.Server.Hook
 
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Group as Groups
-import Distribution.Server.Users.Group (UserGroup(..), UserList(..))
+import Distribution.Server.Users.Group (UserGroup(..))
 
 import Data.Maybe
 import Data.Version
 import Control.Monad.Trans
-import Control.Monad (msum, mzero, unless, guard)
+import Control.Monad (msum, mzero, guard, unless)
 import Data.List (maximumBy, sortBy)
 import Data.Ord (comparing)
 import Data.Time.Clock
-import Network.URI
-         ( URIAuth )
+import Network.URI (URIAuth)
 import System.FilePath.Posix ((</>))
 
 import qualified Data.ByteString.Lazy.Char8 as BS.Char8

@@ -1,5 +1,5 @@
 -- Unpack a tarball containing a Cabal package
-module Distribution.Server.PackageUpload.Unpack (unpackPackage) where
+module Distribution.Server.Packages.Unpack (unpackPackage) where
 
 import qualified Codec.Archive.Tar as Tar
 

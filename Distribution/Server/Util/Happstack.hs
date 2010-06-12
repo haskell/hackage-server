@@ -7,14 +7,16 @@ of Hackage.
 
 -}
 
-module Distribution.Server.Util.Happstack
-    ( remainingPath
-    , mime
-    ) where
+module Distribution.Server.Util.Happstack (
+    remainingPath,
+    remainingPathString,
+    mime
+  ) where
 
 import Happstack.Server
+import qualified Happstack.Server.SURI as SURI
 import qualified Data.Map as Map
-import System.FilePath.Posix (takeExtension)
+import System.FilePath.Posix (takeExtension, (</>))
 
 -- |Passes a list of remaining path segments in the URL. Does not
 -- include the query string. This call only fails if the passed in
@@ -23,6 +25,12 @@ remainingPath :: ([String] -> ServerPart a) -> ServerPart a
 remainingPath handle = do
   rq <- askRq
   localRq (\newRq -> newRq{rqPaths=[]}) $ handle (rqPaths rq)
+
+-- |Passes the concatenated remaining path segments in the URL. Does not
+-- include the query string. This call only fails if the passed in
+-- handler fails.
+remainingPathString :: (String -> ServerPart a) -> ServerPart a
+remainingPathString handle = remainingPath $ \strs -> handle $ if null strs then "" else foldr1 (</>) . map SURI.escape $ strs
 
 -- |Returns a mime-type string based on the extension of the passed in
 -- file.

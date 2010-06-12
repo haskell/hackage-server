@@ -1,7 +1,9 @@
 -- Body of the HTML page for a package
 module Distribution.Server.Pages.Package (
     PackageData(..),
-    packagePage
+    packagePage,
+    maintainerDescription,
+    trusteeDescription
   ) where
 
 import Distribution.Server.Pages.Package.HaddockParse	( parseHaddockParagraphs )
@@ -13,6 +15,7 @@ import Distribution.Server.Packages.Types (PkgInfo(..))
 import Distribution.Server.Distributions.Distributions
     (DistroPackageInfo(..), DistroName)
 import qualified Distribution.Server.Users.Users as Users
+import Distribution.Server.Users.Group (GroupDescription(..), nullDescription)
 
 import qualified Distribution.Server.PackageIndex as PackageIndex
 import Distribution.Server.PackageIndex (PackageIndex)

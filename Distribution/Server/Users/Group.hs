@@ -2,6 +2,8 @@
 module Distribution.Server.Users.Group (
     UserList(..),
     UserGroup(..),
+    GroupDescription(..),
+    nullDescription,
     empty,
     add,
     remove,
@@ -16,6 +18,7 @@ import qualified Data.IntSet as IntSet
 import Data.Monoid (Monoid)
 import Data.Binary (Binary)
 import Data.Typeable (Typeable)
+import Text.XHtml.Strict (Html)
 
 import Prelude hiding (id)
 

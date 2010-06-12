@@ -1,22 +1,16 @@
 -- Body of the HTML page for a package
-module Distribution.Server.Pages.PackageAdmin (
-    packageAdminPage
+module Distribution.Server.Pages.Group (
+    groupPage
   ) where
 
 import Text.XHtml.Strict
 import System.FilePath.Posix ((</>))
 
-
-import Distribution.Server.Pages.Package.HaddockParse	( parseHaddockParagraphs )
-import Distribution.Server.Pages.Package.HaddockHtml
-import Distribution.Server.Pages.Package.HaddockLex	( tokenise )
-import Distribution.Server.Pages.Template		( hackagePage )
-import Distribution.Server.Packages.Types
+import Distribution.Server.Pages.Template (hackagePage)
 import qualified Distribution.Server.Users.Types as Users
-
-import Distribution.Package
-import Distribution.PackageDescription
+import Distribution.Server.Users.Group (GroupDescription(..))
 import Distribution.Text
+import Data.Maybe
 
 packageAdminPage :: [Users.UserName] -> PkgInfo -> Html
 packageAdminPage users pkg =

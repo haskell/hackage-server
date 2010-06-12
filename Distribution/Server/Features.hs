@@ -1,11 +1,11 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, TypeOperators #-}
 module Distribution.Server.Features where
 
-import Distribution.Server.Feature (HackageFeature)
+import Distribution.Server.Feature
 
-import Distribution.Server.Core (coreFeature)
-import Distribution.Server.Users.ServerParts (usersFeature)
-import Distribution.Server.Packages.ServerParts (packagePagesFeature)
+import Distribution.Server.Core (initCoreFeature)
+--import Distribution.Server.Users.ServerParts (usersFeature)
+--import Distribution.Server.Packages.ServerParts (packagePagesFeature)
 --import Distribution.Server.Features.StaticFiles (staticFilesFeature)
 import Distribution.Server.Features.LegacyRedirects (legacyRedirectsFeature)
 --import Distribution.Server.Users.State (UsersStore)

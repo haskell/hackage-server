@@ -1,49 +1,40 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, StandaloneDeriving, FlexibleContexts #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, StandaloneDeriving, FlexibleContexts, FlexibleInstances #-}
 
 module Distribution.Server.Resource (
-    Config(..),
     Resource (..),
-    DynamicPath,
     BranchComponent(..),
     BranchPath,
-    ServerResponse,
+    Content,
     ServerTree(..),
-    makeGroupResources,
+    URIGen,
     serverTreeEmpty,
     trunkAt,
+    renderURI,
+    renderResource,
+    renderLink,
     resourceAt,
     defaultResource,
     serveResource,
     renderServerTree,
-    addResponse
+    addServerNode
   ) where
 
 import Happstack.Server
-import Distribution.Server.Util.BlobStorage (BlobStorage)
-import Distribution.Server.Users.Group (UserGroup(..), UserList(..))
+import Distribution.Server.Types
 
+import Data.Monoid
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Control.Monad (msum, liftM2)
-import Control.Monad.Trans (liftIO)
+import Control.Applicative ((<*>), (<$>))
+import Control.Monad (msum)
 import Data.Maybe (maybeToList)
 import Data.List (intercalate, find)
-import Data.Monoid (mappend)
 import qualified Text.ParserCombinators.ReadP as Parse
-import qualified Network.URI as URI
-import qualified Distribution.Server.Cache as Cache
 
-import Text.Printf
-
-import Happstack.State (QueryEvent, UpdateEvent, query, update)
-
-
-data Config = Config {
-  serverStore      :: BlobStorage,
-  serverStaticDir  :: FilePath,
-  serverURI        :: URI.URIAuth,
-  serverCache      :: Cache.Cache
-}
+import qualified Happstack.Server.SURI as SURI
+import System.FilePath.Posix ((</>))
+--for basic link creating
+import Text.XHtml.Strict (anchor, href, (!), (<<), toHtml, Html)
 
 data Resource = Resource {
     resourceLocation :: BranchPath,

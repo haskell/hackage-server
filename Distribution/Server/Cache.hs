@@ -4,6 +4,10 @@ module Distribution.Server.Cache (
     new,
     get,
     put,
+    GenCache(..),
+    newCache,
+    getCache,
+    putCache
   ) where
 
 import qualified Distribution.Server.Util.AsyncVar as AsyncVar

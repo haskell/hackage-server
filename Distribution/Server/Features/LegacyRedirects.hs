@@ -3,6 +3,7 @@ module Distribution.Server.Features.LegacyRedirects (
   ) where
 
 import Distribution.Server.Feature
+import Distribution.Server.Resource
 import Distribution.Server.Instances ()
 
 import Happstack.Server as Happs

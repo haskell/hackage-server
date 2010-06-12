@@ -18,6 +18,8 @@ import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Types
 import Distribution.Server.Feature
 import Distribution.Server.Resource
+import Distribution.Server.Types
+import Distribution.Server.Hook
 import qualified Distribution.Server.Auth.Types as Auth
 import qualified Distribution.Server.Auth.Crypt as Auth
 import qualified Distribution.Server.Auth.Basic as Auth

@@ -64,16 +64,16 @@ executable hackage-server
     Distribution.Server.Packages.ServerParts
     Distribution.Server.Packages.State
     Distribution.Server.Packages.Types
-    Distribution.Server.PackageUpload.Unpack
+    Distribution.Server.Packages.Unpack
     Distribution.Server.Pages.BuildReports
     Distribution.Server.Pages.Distributions
+    Distribution.Server.Pages.Group
     Distribution.Server.Pages.Index
     Distribution.Server.Pages.Package
     Distribution.Server.Pages.Package.HaddockHtml
     Distribution.Server.Pages.Package.HaddockLex
     Distribution.Server.Pages.Package.HaddockParse
     Distribution.Server.Pages.Package.ModuleForest
-    Distribution.Server.Pages.PackageAdmin
     Distribution.Server.Pages.Recent
     Distribution.Server.Pages.Template
     Distribution.Server.Pages.Util
@@ -81,7 +81,6 @@ executable hackage-server
     Distribution.Server.ResourceTypes
     Distribution.Server.ServerParts
     Distribution.Server.State
-    Distribution.Server.TarIndex.State
     Distribution.Server.Users.Group
     Distribution.Server.Users.ServerParts
     Distribution.Server.Users.State
@@ -93,6 +92,7 @@ executable hackage-server
     Distribution.Server.Util.Happstack
     Distribution.Server.Util.Parse
     Distribution.Server.Util.Serve
+    Distribution.Server.Util.TarIndex
   build-depends:
     base == 4.*,
     filepath >= 1.1,
@@ -131,3 +131,4 @@ executable hackage-server
   else
      includes: unistd.h
   ghc-options: -Wall -fno-warn-orphans
+---fwarn-unused-matches

@@ -23,8 +23,8 @@ import Happstack.State hiding (Version)
 
 import qualified Distribution.Server.Import as Import (importTar)
 
-import Distribution.Server.Packages.ServerParts
-import Distribution.Server.Users.ServerParts
+--import Distribution.Server.Users.ServerParts
+import Distribution.Server.Packages.ServerParts (stateToCache, updateCache) -- for the centralized caches
 --import Distribution.Server.Distributions.ServerParts -- this will take some effort to revamp
 
 import qualified Distribution.Server.Feature as Feature
@@ -35,30 +35,27 @@ import Distribution.Server.Packages.State as State hiding (bulkImport)
 import Distribution.Server.Users.State as State
 import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
-import Distribution.Server.Util.BlobStorage (BlobStorage)
 import qualified Distribution.Server.BulkImport as BulkImport
 import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
 
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
-
-import Distribution.Server.Export.ServerParts (export)
 import qualified Distribution.Server.Auth.Types as Auth
-import qualified Distribution.Server.Auth.Basic as Auth
 import qualified Distribution.Server.Auth.Crypt as Auth
 
-import Distribution.Server.Resource --(addResponse, serverTreeEmpty, renderServerTree)
---import Data.List (foldl')
+import Distribution.Server.Resource
+import Distribution.Server.Types
 
 import System.FilePath ((</>))
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist)
 import Control.Concurrent.MVar (MVar)
 import Control.Monad.Trans
-import Control.Monad (when, msum)
+import Control.Monad (when)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Network.URI (URIAuth(URIAuth))
 import Network.BSD (getHostName)
 import Data.Char (toUpper)
+import Data.List (foldl')
 import qualified Data.Map as Map
 
 import qualified Data.ByteString.Lazy.Char8 as BS
@@ -237,7 +234,6 @@ initState (Server _ _ (Config _ _ host cache)) = do
   -- clear off existing state
   update $ BulkImport []
   update $ ReplaceUserDb Users.empty
---update $ BulkImportPermissions []
 
   -- create default admin user
   let userName = Users.UserName "admin"

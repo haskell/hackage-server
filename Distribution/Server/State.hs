@@ -10,7 +10,7 @@ import Distribution.Server.BuildReport.BuildReports (BuildReports)
 import Distribution.Server.Users.Users (Users)
 import Distribution.Server.Users.State (HackageAdmins)
 import Distribution.Server.Distributions.State (Distros)
-import Distribution.Server.TarIndex.State (TarIndexMap)
+import Distribution.Server.Util.TarIndex (TarIndexMap)
 
 import Happstack.State
 

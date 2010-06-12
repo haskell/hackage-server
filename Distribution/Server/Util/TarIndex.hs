@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell, DeriveDataTypeable, TypeFamilies, TemplateHaskell,
       MultiParamTypeClasses, FlexibleInstances, FlexibleContexts #-}
 
-module Distribution.Server.TarIndex.State
+module Distribution.Server.Util.TarIndex
     where
 
 import Control.Applicative ((<$>))
