@@ -87,15 +87,21 @@ packagePagesFeature = HackageModule {
 }
 -- "/package/:package/candidate", "/package/:package/candidate/:cabal", "/package/:package/candidate/:tarball"
 
-maintainersGroup :: DynamicPath -> Maybe (UserGroup GetPackageMaintainers AddPackageMaintainer RemovePackageMaintainer)
-maintainersGroup dpath = do
-    name <- fmap pkgName (simpleParse =<< lookup "package" dpath)
-    return $ UserGroup {
-        groupName = "Maintainers for " ++ display name,
-        queryUserList = GetPackageMaintainers name,
-        addUserList = AddPackageMaintainer name,
-        removeUserList = RemovePackageMaintainer name
-    }
+maintainersGroup :: DynamicPath -> IO (Maybe UserGroup)
+maintainersGroup dpath = case fmap pkgName (simpleParse =<< lookup "package" dpath) of
+  Nothing -> return Nothing
+  Just name -> do 
+    pkgstate <- query GetPackagesState
+    case PackageIndex.lookupPackageName (packageList pkgstate) name of
+      []   -> return Nothing
+      pkgs -> do
+        let pkgInfo = maximumBy (comparing packageVersion) pkgs
+        return . Just $ UserGroup {
+            groupDesc = Pages.maintainerDescription pkgInfo,
+            queryUserList = query $ GetPackageMaintainers name,
+            addUserList = update . AddPackageMaintainer name,
+            removeUserList = update . RemovePackageMaintainer name
+        }
 
 serveBuildReports, serveIndexPage, serveIndexTarball, servePackageTarball,
     servePackagePage, serveCabalFile :: Config -> DynamicPath -> ServerPart Response
@@ -358,7 +364,7 @@ requirePackageAuth pkg = do
     userDb  <- query $ GetUserDb
     pkgm    <- query $ GetPackageMaintainers (packageName pkg)
     trustee <- query $ GetHackageTrustees
-    let groupSum = Groups.unions [trustee, fromMaybe Groups.empty pkgm]
+    let groupSum = Groups.unions [trustee, pkgm]
     Auth.requireHackageAuth userDb (Just groupSum) Nothing
 
 buildReports :: BlobStorage -> [ServerPart Response]

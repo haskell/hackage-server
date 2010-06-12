@@ -27,12 +27,21 @@ import Prelude hiding (id)
 newtype UserList = UserList IntSet.IntSet
   deriving (Eq, Monoid, Binary, Typeable, Show)
 
---forall a b c. QueryEvent a (Maybe UserList), UpdateEvent b (), UpdateEvent c ()
-data UserGroup a b c = UserGroup {
-    groupName :: String,
-    queryUserList :: a,
-    addUserList :: UserId -> b,
-    removeUserList :: UserId -> c
+data GroupDescription = GroupDescription {
+    groupTitle :: String,
+    groupShort :: String,
+    groupEntityURL :: String,
+    groupPrologue  :: [Html]
+}
+nullDescription = GroupDescription { groupTitle = "", groupShort = "",
+                                     groupEntityURL = "", groupPrologue = [] }
+
+--used to require: forall a b c. QueryEvent a (Maybe UserList), UpdateEvent b (), UpdateEvent c ()
+data UserGroup = UserGroup {
+    groupDesc :: GroupDescription,
+    queryUserList :: IO UserList,
+    addUserList :: UserId -> IO (),
+    removeUserList :: UserId -> IO ()
 }
 
 empty :: UserList

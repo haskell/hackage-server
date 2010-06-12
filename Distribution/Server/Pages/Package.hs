@@ -41,6 +41,24 @@ import System.FilePath.Posix    ( (</>), (<.>) )
 import System.Locale            ( defaultTimeLocale )
 import Data.Time.Format         ( formatTime )
 
+maintainerDescription :: PkgInfo -> GroupDescription
+maintainerDescription pkgInfo = GroupDescription
+  { groupTitle = "Maintainers for " ++ pname
+  , groupShort = short
+  , groupEntityURL = "/package/" ++ pname
+  , groupPrologue  = [] --prologue (desciption pkg)?
+  }
+  where
+    pkg = packageDescription (pkgDesc pkgInfo)
+    short = synopsis pkg
+    pname = display (packageName pkgInfo)
+
+trusteeDescription :: GroupDescription
+trusteeDescription = nullDescription
+  { groupTitle = "Package trustees"
+  , groupEntityURL = "/packages"
+  }
+
 packagePage :: Users.Users -> PackageIndex PkgInfo ->
                PkgInfo -> [PkgInfo] -> [(DistroName, DistroPackageInfo)] ->
                Maybe URL -> Html

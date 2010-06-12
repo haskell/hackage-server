@@ -116,6 +116,7 @@ $(mkMethods ''Users ['addUser
                     ,'lookupUserName
                     ,'getUserDb
                     ,'replaceUserDb
+                    ,'listGroupMembers
                     ])
 
 -----------------------------------------------------
@@ -130,8 +131,6 @@ instance Version HackageAdmins where
 getHackageAdmins :: Query HackageAdmins UserList
 getHackageAdmins = asks adminList
 
-getJustHackageAdmins :: Query HackageAdmins (Maybe UserList)
-getJustHackageAdmins = Just `fmap` asks adminList
 
 modifyHackageAdmins :: (UserList -> UserList) -> Update HackageAdmins ()
 modifyHackageAdmins func = State.modify (\users -> users { adminList = func (adminList users) })
@@ -148,7 +147,6 @@ instance Component HackageAdmins where
 
 $(mkMethods ''HackageAdmins
                     ['getHackageAdmins
-                    ,'getJustHackageAdmins
                     ,'addHackageAdmin
                     ,'removeHackageAdmin])
 

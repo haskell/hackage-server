@@ -190,8 +190,8 @@ instance Component PackageMaintainers where
   type Dependencies PackageMaintainers = End
   initialValue = PackageMaintainers Map.empty
 
-getPackageMaintainers :: PackageName -> Query PackageMaintainers (Maybe UserList)
-getPackageMaintainers name = fmap (Map.lookup name) (asks maintainers)
+getPackageMaintainers :: PackageName -> Query PackageMaintainers UserList
+getPackageMaintainers name = fmap (fromMaybe Group.empty . Map.lookup name) (asks maintainers)
 
 modifyPackageMaintainers :: PackageName -> (UserList -> UserList) -> Update PackageMaintainers ()
 modifyPackageMaintainers name func = State.modify (\pm -> pm {maintainers = Map.update (Just . func) name (maintainers pm) })
@@ -224,9 +224,6 @@ instance Component HackageTrustees where
 getHackageTrustees :: Query HackageTrustees UserList
 getHackageTrustees = asks trustees
 
-getMaybeHackageTrustees :: Query HackageTrustees (Maybe UserList)
-getMaybeHackageTrustees = fmap Just getHackageTrustees
-
 modifyHackageTrustees :: (UserList -> UserList) -> Update HackageTrustees ()
 modifyHackageTrustees func = State.modify (\ht -> ht {trustees = func (trustees ht) })
 
@@ -237,7 +234,6 @@ removeHackageTrustee :: UserId -> Update HackageTrustees ()
 removeHackageTrustee uid = modifyHackageTrustees (Group.remove uid)
 
 $(mkMethods ''HackageTrustees ['getHackageTrustees
-                              ,'getMaybeHackageTrustees
                               ,'addHackageTrustee
                               ,'removeHackageTrustee
                               ])

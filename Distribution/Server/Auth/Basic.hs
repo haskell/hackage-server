@@ -62,8 +62,9 @@ requireHackageAuth users authorisedGroup forceType = getHackageAuth users >>= \r
         req <- askRq
         let response = toResponse $ "401 Unathorized: " ++ str -- todo: render pretty XHTML
             theAsk = case forceType `mplus` getAuthType req of
-                Just BasicAuth -> askBasicAuth
-                _ -> askDigestAuth
+                Just BasicAuth  -> askBasicAuth
+                Just DigestAuth -> askDigestAuth
+                Nothing -> askBasicAuth -- for now?
         theAsk "hackage" response
 
 getPasswdInfo :: Users.Users -> UserName -> Maybe (UserId, Users.UserAuth)

@@ -12,94 +12,48 @@ import Distribution.Server.Users.Group (GroupDescription(..))
 import Distribution.Text
 import Data.Maybe
 
-packageAdminPage :: [Users.UserName] -> PkgInfo -> Html
-packageAdminPage users pkg =
-    hackagePage (display $ packageName pkg) (adminBody users pkg)
+-- Primitive access control: the URI to post a new user request to, or the the URI/<username> to DELETE
+groupPage :: [Users.UserName] -> Maybe String -> Maybe String -> GroupDescription -> Html
+groupPage users addUri removeUri desc = hackagePage (groupTitle desc) (groupBody users addUri removeUri desc)
 
 -- | Body of the page
-adminBody :: [Users.UserName] -> PkgInfo -> [Html]
-adminBody users pkgInfo = concat
+groupBody :: [Users.UserName] -> Maybe String -> Maybe String -> GroupDescription -> [Html]
+groupBody users addUri removeUri desc = concat
         [ return (h2 << docTitle)
-        , prologue pkg
-        , listMaintainers users
-        , forms pkgInfo
+        , groupPrologue desc
+        , listGroup users removeUri
+        , forms addUri
         ]
-  where	pkg = packageDescription (pkgDesc pkgInfo)
-	short = synopsis pkg
-	pname = display (packageName pkgInfo)
-	docTitle
-	  | null short = pname
-	  | otherwise = pname ++ ": " ++ short
+  where	docTitle = groupTitle desc ++ case groupShort desc of
+                                        []    -> ""
+                                        short -> ": " ++ short
 
-prologue :: PackageDescription -> [Html]
-prologue pkg
-  | null desc = []
-  | otherwise = html_desc
-  where desc = description pkg
-	html_desc = case parseHaddockParagraphs (tokenise desc) of
-	              Left _ -> [paragraph << para | para <- paragraphs desc]
-	              Right doc -> [markup htmlMarkup doc]
+forms :: Maybe String -> [Html]
+forms Nothing    = []
+forms (Just uri) = addUser uri
 
-
-forms :: PkgInfo -> [Html]
-forms pkg = concat
-    [ addMaintainer pkg
-    , removeMaintainer pkg
-    ]
-
-addMaintainer :: PkgInfo -> [Html]
-addMaintainer pkg =
-    [ h3 << "Add Maintainer"
-    , gui (adminAction pkg) ! [theclass "box"] <<
-        [ p << [stringToHtml "User: ", textfield "_patharg"]
-        , hidden "_method" "PUT"
+addUser :: String -> [Html]
+addUser uri =
+    [ h3 << "Add user"
+    , gui uri ! [theclass "box"] <<
+        [ p << [stringToHtml "User: ", textfield "user"]
         , submit "submit" "Add maintainer"
         ]
     ]
 
-removeMaintainer :: PkgInfo -> [Html]
-removeMaintainer pkg =
-    [ h3 << "Remove Maintainer"
-    , gui (adminAction pkg) ! [theclass "box"] <<
-       [ p << [stringToHtml "User: ", textfield "_patharg"]
-       , hidden "_method" "DELETE"
-       , submit "submit" "Remove maintainer"
+removeUser :: Users.UserName -> String -> [Html]
+removeUser name uri =
+    [ gui (uri </> display name) <<
+       [ hidden "_method" "DELETE"
+       , submit "submit" "Remove"
        ]
     ]
 
-listMaintainers :: [Users.UserName] -> [Html]
-listMaintainers [] = []
-listMaintainers users =
-    [ h3 << "Package Maintainers"
-    , p << unordList (map display users)
+listGroup :: [Users.UserName] -> Maybe String -> [Html]
+listGroup [] _ = []
+listGroup users muri =
+    [ p << unordList (map displayName users)
     ]
-
-adminAction :: PkgInfo -> String
-adminAction pkg = packageNameURL (packageId pkg) </> "maintainers"
-
--- Break text into paragraphs (separated by blank lines)
-paragraphs :: String -> [String]
-paragraphs = map unlines . paras . lines
-  where paras xs = case dropWhile null xs of
-		[] -> []
-		xs' -> case break null xs' of
-			(para, xs'') -> para : paras xs''
-{-
-commaList :: [Html] -> Html
-commaList = concatHtml . intersperse (toHtml ", ")
-
--- Same as @sortBy (comparing f)@, but without recomputing @f@.
-sortOn :: Ord b => (a -> b) -> [a] -> [a]
-sortOn f xs = map snd (sortBy (comparing fst) [(f x, x) | x <- xs])
--}
-
-
--- UTILS:
-{-
-maybeLast :: [a] -> Maybe a
-maybeLast = listToMaybe . reverse
--}
-
-packageNameURL :: PackageIdentifier -> URL
-packageNameURL pkgId = "/package" </> display (pkgName pkgId)
+  where displayName uname = [ toHtml $ display uname ++ " " ] ++
+                            fromMaybe [] (fmap (removeUser uname) muri)
 
