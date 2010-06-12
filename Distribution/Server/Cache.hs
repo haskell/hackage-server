@@ -44,3 +44,19 @@ get (Cache avar) = liftIO $ AsyncVar.read avar
 
 put :: Cache -> State -> IO ()
 put (Cache avar) state = AsyncVar.write avar state
+
+-------------------------- this should replace Cache eventually
+-- though it's an extremely loose wrapper around AsyncVar, so why not use that directly?
+newtype GenCache a = GenCache {
+    cacheState :: AsyncVar a
+}
+
+newCache :: a -> (a -> b) -> IO (GenCache a)
+newCache state force = GenCache `fmap` AsyncVar.new (\a -> force a `seq` ()) state
+
+getCache :: MonadIO m => GenCache a -> m a
+getCache (GenCache avar) = liftIO $ AsyncVar.read avar
+
+putCache :: MonadIO m => GenCache a -> a -> m ()
+putCache (GenCache avar) state = liftIO $ AsyncVar.write avar state
+

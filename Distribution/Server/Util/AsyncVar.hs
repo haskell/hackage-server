@@ -10,6 +10,7 @@ import Control.Exception
 
 import Prelude hiding (read)
 
+-- idea: partition the chan into Either (state -> state) state?
 data AsyncVar state = AsyncVar !(Chan state) !(MVar state)
 
 new :: (state -> ()) -> state -> IO (AsyncVar state)
@@ -19,7 +20,7 @@ new force initial = do
   outVar <- newMVar initial
   let loop = do
         value <- readChan inChan
-        evaluate (force value) -- TODO: catch exceptions
+        evaluate (force value) -- TODO: catch exceptions.. also accept 'poison' pills
         _ <- takeMVar outVar
         putMVar outVar value
         loop
