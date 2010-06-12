@@ -70,19 +70,18 @@ import System.FilePath.Posix ((</>))
 import qualified Data.ByteString.Lazy.Char8 as BS.Char8
 import qualified Codec.Compression.GZip as GZip
 
-packagePagesFeature :: HackageFeature 
-packagePagesFeature = HackageFeature {
+packagePagesFeature :: HackageModule
+packagePagesFeature = HackageModule {
     featureName = "pkgpage",
     -- todo: add checking
-    locations   = map serveResource $ 
-                  [ (resourceAt "/packages/") { resourceGet = Just serveIndexPage, resourcePost = Just uploadPackageTarball }
+    resources   = [] {-(resourceAt "/packages/") { resourceGet = Just serveIndexPage, resourcePost = Just uploadPackageTarball }
                   , (resourceAt "/packages/index.tar.gz") { resourceGet = Just serveIndexTarball }
                   , (resourceAt "/package/:package") { resourceGet = Just servePackagePage, resourceDelete = Nothing, resourcePut = Nothing }
                   , (resourceAt "/package/:package/:cabal") { resourceGet = Just serveCabalFile, resourcePut = Nothing }
                   , (resourceAt "/package/:package/:tarball") { resourceGet = Just servePackageTarball, resourcePut = Nothing, resourceDelete = Nothing }
                   , (resourceAt "/package/:package/doc/:doctree")
                   , (resourceAt "/package/:package/buildreports/") { resourceGet = Just serveBuildReports }
-                  ] ++ makeGroupResources (trunkAt "/package/:package/maintainers") maintainersGroup,
+                  ] ++ makeGroupResources (trunkAt "/package/:package/maintainers") maintainersGroup -},
     dumpBackup    = return [],
     restoreBackup = Nothing
 }
@@ -117,7 +116,7 @@ serveIndexPage config dpath = do
     ok $ Cache.packagesPage cacheState
 
 uploadPackageTarball :: Config -> DynamicPath -> ServerPart Response
-uploadPackageTarball config dpath = uploadPackage (serverStore config) (serverCache config) (serverURI config)
+uploadPackageTarball config dpath = uploadPackage config
 
 serveIndexTarball config dpath = do
     cacheState <- Cache.get (serverCache config)
@@ -148,13 +147,13 @@ withPackagePath dpath func = withPackageId dpath $ \pkgid -> withPackage pkgid f
 withPackageId :: DynamicPath -> (PackageId -> ServerPart Response) -> ServerPart Response
 withPackageId dpath = require (return $ lookup "package" dpath >>= fromReqURI)
 
---TODO: switch to new cache mechanism:
-updateCache :: MonadIO m => Cache.Cache -> URIAuth -> m ()
-updateCache cache host = liftIO $ do
+--TODO: switch to new cache mechanism: ??
+updateCache :: MonadIO m => Config -> m ()
+updateCache config = liftIO $ do
     state  <- query GetPackagesState
     userDb <- query GetUserDb
-    cacheState <- stateToCache host state userDb
-    Cache.put cache cacheState
+    cacheState <- stateToCache (serverURI config) state userDb
+    Cache.put (serverCache config) cacheState
 
 stateToCache :: URIAuth -> PackagesState -> Users.Users -> IO Cache.State
 stateToCache host state users = getCurrentTime >>= \now -> return
@@ -200,7 +199,6 @@ handlePackageById store pkgid =
             serveTarball ["index.html"] (display $ packageName pkgid) tarball index
         ]
     ]
-  , dir "admin" (packageAdmin pkgid)
   ]
 
  where dropOldDocs pkgId
@@ -211,6 +209,7 @@ handlePackageById store pkgid =
            Just blob -> do
                update $ TarIndex.DropIndex blob
 
+{-
 packageAdmin :: PackageId -> ServerPart Response
 packageAdmin pkgid = withPackage pkgid $ \_ pkg _ -> do
     requirePackageAuth pkgid
@@ -257,7 +256,7 @@ packageAdmin pkgid = withPackage pkgid $ \_ pkg _ -> do
                  update $ RemovePackageMaintainer (packageName pkgid) user
                  ok $ toResponse "Ok!"
        ]
-
+-}
 
 withPackage :: PackageId -> (PackagesState -> PkgInfo -> [PkgInfo] -> ServerPart Response) -> ServerPart Response
 withPackage pkgid action = do
@@ -302,8 +301,8 @@ checkPackage = methodSP POST $ do
          Right (_,warn) -> return . toResponse . unlines $ "Check succeeded with warnings.\n" : warn
 
 
-uploadPackage :: BlobStorage -> Cache.Cache -> URIAuth -> ServerPart Response
-uploadPackage store cache host =
+uploadPackage :: Config -> ServerPart Response
+uploadPackage config =
   methodSP POST $
     withDataFn (lookInput "package") $ \input ->
           let {-withEntry = do str <- look "entry"
@@ -317,7 +316,7 @@ uploadPackage store cache host =
     upload name content = do
       --TODO: check if the package is in the index already, before we embark
       -- on writing the tarball into the store and validating etc.
-      res <- liftIO $ BlobStorage.addWith store content
+      res <- liftIO $ BlobStorage.addWith (serverStore config) content
                         (Upload.unpackPackage name)
       case res of
         Left  err -> badRequest $ toResponse err
@@ -339,7 +338,7 @@ uploadPackage store cache host =
              then do
                -- Update the package maintainers group.
                unless pkgExists $ update $ AddPackageMaintainer (packageName pkg) user
-               updateCache cache host
+               updateCache config
                ok $ toResponse $ unlines warnings
              else forbidden $ toResponse "Package already exists."
 

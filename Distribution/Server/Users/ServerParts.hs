@@ -31,32 +31,15 @@ import Data.Maybe
 import Control.Monad.Trans
 import Control.Monad (msum, liftM3, mplus)
 
-{-
-/users/
-GET: list of users
-/users/admins/
-GET: list of admins and contact info
-/users/admins/<username>
-PUT: add admin (may not be provided by web interface for security reasons)
-DELETE: delete admin (likewise)
-/user/<username>
-GET: return basic user info, perhaps packages uploaded
-PUT: Add user, admin only. If free registration were allowed, it might be as a POST to /users/
-DELETE: Delete user
-/user/<username>/password
-PUT: change password. Admins can change anyone's password, but everyone else can only change their own.
--}
-
-usersFeature :: HackageFeature 
-usersFeature = HackageFeature {
+usersFeature :: HackageModule
+usersFeature = HackageModule {
     featureName = "users",
     -- todo: add checking
-    locations   = map serveResource $ 
-                  [ (resourceAt "/users/") { resourceGet = Just serveUserList, resourcePost = Just adminAddUser }
+    resources   = [ {- (resourceAt "/users/") { resourceGet = Just serveUserList, resourcePost = Just adminAddUser }
                   , (resourceAt "/user/:username") { resourceGet = Just serveUserPage, resourceDelete = Nothing }
                   , (resourceAt "/user/:username/enabled")
-                  , (resourceAt "/user/:username/password") { resourcePut = Just changePassword }
-                  ] ++ makeGroupResources (trunkAt "/users/admins") (\_ -> Just $ Group.UserGroup "Site administrators" GetJustHackageAdmins AddHackageAdmin RemoveHackageAdmin),
+                  , (resourceAt "/user/:username/password") { resourcePut = Just changePassword } -}
+                  ] -- ++ makeGroupResources (trunkAt "/users/admins") (Group.UserGroup "Site administrators" GetJustHackageAdmins AddHackageAdmin RemoveHackageAdmin),
     dumpBackup    = return [],  
     restoreBackup = Nothing
 }

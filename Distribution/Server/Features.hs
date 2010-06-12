@@ -16,14 +16,11 @@ import Data.Typeable
 
 -- This module ties together all the hackage features that we will use.
 
-hackageFeatures :: [HackageFeature]
-hackageFeatures =
-  [ coreFeature
-  , legacyRedirectsFeature
-  , usersFeature
-  , packagePagesFeature
---, staticFilesFeature
-  ]
+hackageFeatures :: IO [HackageModule]
+hackageFeatures = do
+    coreFeature <- initCoreFeature
+    return [ getFeature coreFeature, legacyRedirectsFeature ]
+-- legacyRedirectsFeature, usersFeature, packagePagesFeature, staticFilesFeature
 
 -- For the sake of the happstack state system we need to give the list
 -- of all data components used by each hackage feature.

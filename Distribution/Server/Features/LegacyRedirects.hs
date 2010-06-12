@@ -21,12 +21,11 @@ import Control.Monad (msum, mzero)
 -- | A feature to provide redirection for URLs that existed in the first
 -- incarnation of the hackage server.
 --
-legacyRedirectsFeature :: HackageFeature
-legacyRedirectsFeature = HackageFeature {
+legacyRedirectsFeature :: HackageModule
+legacyRedirectsFeature = HackageModule {
     featureName = "legacy",
-    locations   = [([], \_ _ -> serveLegacyRedirects)],
-    -- There is no persistent state for this feature,
-    -- so nothing needs to be backed up.
+    -- get rid of untyped resource and manually create a mapping?
+    resources   = [(resourceAt "") { resourceUntyped = Just $ \_ _ -> serveLegacyRedirects }],
     dumpBackup    = return [],
     restoreBackup = Nothing
 }
@@ -41,9 +40,7 @@ serveLegacyRedirects = msum
       , postedMove "upload"          "/upload"
       , postedMove "check"           "/check"
       , simpleMove "00-index.tar.gz" "/00-index.tar.gz"
-      , simpleMove "accounts.html"   "/accounts"
-      , simpleMove "admin.html"      "/admin"
-        --also search.html and advancedsearch.html
+        --also search.html, advancedsearch.html, accounts.html, and admin.html
       ]
   , dir "cgi-bin" $ dir "hackage-scripts" $ msum
       [ dir "package" $ path $ \packageId -> methodSP GET $

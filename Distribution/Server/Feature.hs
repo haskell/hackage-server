@@ -9,11 +9,18 @@ import Distribution.Server.Resource
 -- features. The intention is to make the hackage server reasonably modular
 -- by allowing distinct features to be designed independently.
 
-data HackageFeature = HackageFeature {
-    featureName    :: String,
-    locations      :: [(BranchPath, ServerResponse)],
---  resources      :: [Resource],
-    dumpBackup     :: IO [BackupEntry],
-    restoreBackup  :: Maybe RestoreBackup
+data HackageModule = HackageModule {
+    featureName   :: String,
+    resources     :: [Resource],
+    dumpBackup    :: IO [BackupEntry],
+    restoreBackup :: Maybe RestoreBackup
 }
 
+class HackageFeature a where
+    getFeature :: a -> HackageModule
+
+-- degenerate
+instance HackageFeature HackageModule where
+    getFeature = id
+
+--core, package pages, upload, docs, buildreports, revdeps/graph

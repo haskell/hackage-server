@@ -86,6 +86,7 @@ defaultServerConfig = do
 
 data Server = Server {
   serverTxControl :: MVar TxControl,
+  serverFeatures  :: [Feature.HackageModule],
   serverPort      :: Int,
   serverConfig    :: Config
 }
@@ -120,8 +121,11 @@ initialise config@(ServerConfig hostName portNum stateDir staticDir) = do
       users    <- query GetUserDb
       Cache.new =<< stateToCache hostURI packages users
 
+  features <- Features.hackageFeatures
+
   return Server {
     serverTxControl  = txCtl,
+    serverFeatures   = features,
     serverPort       = portNum,
     serverConfig = Config {
       serverStore      = store,
@@ -156,12 +160,11 @@ run server = simpleHTTP conf $ mungeRequest $ impl server
         _ -> req
     -- todo: given a .json or .html suffix, munge it into an Accept header
     -- can use MessageWrap.pathEls to reparse rqPath
-
-
-{-case lookup "_patharg" (rqInputs req) of
+    {- considered but discarded for PUTs: case lookup "_patharg" (rqInputs req) of
                 Just param -> req' { rqUri = rqUri req </> SURI.escape param, rqPath = rqPath req ++ [param] }
                 _ -> req'
               where req' = -}
+
 -- | Perform a clean shutdown of the server.
 --
 shutdown :: Server -> IO ()
@@ -180,33 +183,32 @@ bulkImport :: Server
            -> Maybe String -- users
            -> Maybe String -- admin users
            -> IO [UploadLog.Entry]
-bulkImport (Server _ _ (Config store _ host cache))
-           indexFile logFile archiveFile htPasswdFile adminsFile = do
-  pkgIndex  <- either fail return (BulkImport.importPkgIndex indexFile)
-  uploadLog <- either fail return (BulkImport.importUploadLog logFile)
-  tarballs  <- BulkImport.importTarballs store archiveFile
-  accounts  <- either fail return (BulkImport.importUsers htPasswdFile)
-  let admins = importAdminsList adminsFile
+bulkImport server  indexFile logFile archiveFile htPasswdFile adminsFile = do
+    let config = serverConfig server
+    pkgIndex  <- either fail return (BulkImport.importPkgIndex indexFile)
+    uploadLog <- either fail return (BulkImport.importUploadLog logFile)
+    tarballs  <- BulkImport.importTarballs (serverStore config) archiveFile
+    accounts  <- either fail return (BulkImport.importUsers htPasswdFile)
+    let admins = importAdminsList adminsFile
 
-  (pkgsInfo, users, badLogEntries) <- either fail return
-    (BulkImport.mergePkgInfo pkgIndex uploadLog tarballs accounts)
+    (pkgsInfo, users, badLogEntries) <- either fail return
+        (BulkImport.mergePkgInfo pkgIndex uploadLog tarballs accounts)
 
-  update $ BulkImport pkgsInfo
-  update $ ReplaceUserDb users
+    update $ BulkImport pkgsInfo
+    update $ ReplaceUserDb users
 
-  case admins of
-    Nothing -> return ()
-    Just adminUsers -> do
+    case admins of
+      Nothing -> return ()
+      Just adminUsers -> do
         userDb <- query GetUserDb
         uids <- either fail return $ lookupUsers userDb adminUsers
         mapM_ (\uid -> update $ AddHackageAdmin uid) uids
+    --let uploadPerms = map (\pkg -> (pkgUploadUser pkg, PackageMaintainer (packageName pkg))) pkgsInfo 
+    --update $ BulkImportPermissions (admPerms ++ uploadPerms)
 
-  --let uploadPerms = map (\pkg -> (pkgUploadUser pkg, PackageMaintainer (packageName pkg))) pkgsInfo 
-  --update $ BulkImportPermissions (admPerms ++ uploadPerms)
+    updateCache config
 
-  updateCache cache host
-
-  return badLogEntries
+    return badLogEntries
 
  where
    importAdminsList :: Maybe String -> Maybe [Users.UserName]
@@ -219,18 +221,19 @@ bulkImport (Server _ _ (Config store _ host cache))
            Just uid -> Right uid
 
 importTar :: Server -> ByteString -> IO (Maybe String)
-importTar (Server _ _ (Config store _ host cache)) tar = do
-    let featureMap = Map.fromList . concatMap (\f -> maybe [] (\r -> [(Feature.featureName f, r)]) $ Feature.restoreBackup f) $ Features.hackageFeatures
-    res <- Import.importTar store tar featureMap
+importTar server tar = do
+    let config = serverConfig server
+    let featureMap = Map.fromList . concatMap (\f -> maybe [] (\r -> [(Feature.featureName f, r)]) $ Feature.restoreBackup f) $ serverFeatures server
+    res <- Import.importTar (serverStore config) tar featureMap
     case res of
-        Nothing -> updateCache cache host
+        Nothing -> updateCache config
         Just _err -> return ()
     return res
 
 -- An alternative to an import.
 -- Starts the server off to a sane initial state.
 initState ::  MonadIO m => Server -> m ()
-initState (Server _ _ (Config _ _ host cache)) = do
+initState server = do
   -- clear off existing state
   update $ BulkImport []
   update $ ReplaceUserDb Users.empty
@@ -244,22 +247,30 @@ initState (Server _ _ (Config _ _ host cache)) = do
     Just user -> update $ State.AddHackageAdmin user
     _ -> fail "Failed to create admin user!"
 
-  updateCache cache host
+  updateCache (serverConfig server)
 
 
 impl :: Server -> ServerPart Response
-impl server = renderServerTree (serverConfig server) [] $ foldr (uncurry addResponse) serverTreeEmpty $ ([], \_ _ -> core server):concatMap Feature.locations Features.hackageFeatures
+impl server =
+    -- ServerPart Response
+    renderServerTree (serverConfig server) []
+    -- ServerTree ServerResponse
+    . fmap (snd . serveResource)
+    -- ServerTree Resource
+    . foldl' (\acc res -> addServerNode (resourceLocation res) res acc) serverTreeEmpty
+    -- [Resource]
+    $ concatMap Feature.resources (serverFeatures server)
 
 --showServerTree tree = trace (showServerTree' tree) tree 
 --  where showServerTree' (ServerTree resp for) = printf "[%s: %s]" (case resp of Just _ -> "resp"; _ -> "X") (concatMap (\(comp, serv) -> printf "%s/%s" (show comp) (showServerTree' serv) :: String) $ Map.toList for)
 
 
-core :: Server -> ServerPart Response
-core (Server _ _ (Config store static _ cache)) = msum
-{-  [ dir "package" $ msum
+{-core :: Server -> ServerPart Response
+core server = msum []
+  [ dir "package" $ msum
       [ path $ msum . handlePackageById store
       , path $ servePackage store
-      ]-}
+      ]
   [ dir "buildreports" $ msum (buildReports store)
 --  , dir "groups" (groupInterface)
   , dir "recent.rss" $ msum
@@ -285,4 +296,4 @@ admin static storage = do
         , dir "export.tar.gz" (export storage)
 --        , adminDist
         , fileServe ["admin.html"] static
-        ]
+        ]-}
