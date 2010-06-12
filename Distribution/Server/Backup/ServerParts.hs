@@ -1,9 +1,8 @@
-
-module Distribution.Server.Export.ServerParts
+module Distribution.Server.Backup.ServerParts
     ( export
     ) where
 
-import qualified Distribution.Server.Export as Export
+import qualified Distribution.Server.Backup.Export as Export
 
 import Happstack.Server
 import Happstack.State
@@ -29,9 +28,9 @@ export storage
             dists = dist_distros dist
             distInfo = dist_versions dist
 
+        -- lazy tarball
         tarball <- liftIO $
            Export.export users pkgs docs rpts storage dists distInfo
 
         return $ toResponse . Resources.ExportTarball $ tarball
 
-        

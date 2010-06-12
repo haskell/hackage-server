@@ -16,7 +16,7 @@ import Distribution.Server.Users.State (ReplaceUserDb(..))
 
 import Happstack.State (update)
 import Data.ByteString.Lazy.Char8 (ByteString)
-import Distribution.Server.Import
+import Distribution.Server.Backup.Import
 import Distribution.Text (display)
 import Data.Version
 import Control.Monad.State (get, put)

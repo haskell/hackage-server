@@ -7,7 +7,7 @@
   For the rest of the data we format it to CSV
   files.
  -}
-module Distribution.Server.Export.FlatFiles
+module Distribution.Server.Backup.FlatFiles
     ( usersToCSV
 --    , permsToCSV
     , uploadsToCSV
@@ -15,7 +15,7 @@ module Distribution.Server.Export.FlatFiles
     ) where
 
 
-import Distribution.Server.Export.Utils
+import Distribution.Server.Backup.Utils
 
 import Distribution.Server.Users.Types as Users
 import Distribution.Server.Users.Users as Users

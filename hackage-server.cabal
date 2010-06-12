@@ -43,21 +43,29 @@ executable hackage-server
     Distribution.Server.Auth.Types
     Distribution.Server.BuildReport.BuildReport
     Distribution.Server.BuildReport.BuildReports
-    Distribution.Server.BulkImport
-    Distribution.Server.BulkImport.UploadLog
+    Distribution.Server.Backup.BulkImport
+    Distribution.Server.Backup.FlatFiles
+    Distribution.Server.Backup.Import
+    Distribution.Server.Backup.ServerParts
+    Distribution.Server.Backup.UploadLog
+    Distribution.Server.Backup.Utils
     Distribution.Server.Cache
     Distribution.Server.Distributions.Distributions
     Distribution.Server.Distributions.ServerParts
     Distribution.Server.Distributions.State
     Distribution.Server.Distributions.Types
-    Distribution.Server.Export
-    Distribution.Server.Export.FlatFiles
-    Distribution.Server.Export.ServerParts
-    Distribution.Server.Export.Utils
     Distribution.Server.Feature
     Distribution.Server.Features
+    Distribution.Server.Features.Check
+    Distribution.Server.Features.Core
+    Distribution.Server.Features.Html
+    Distribution.Server.Features.Json
     Distribution.Server.Features.LegacyRedirects
-    Distribution.Server.Import
+    Distribution.Server.Features.Mirror
+    Distribution.Server.Features.Packages
+    Distribution.Server.Features.StaticFiles
+    Distribution.Server.Features.Upload
+    Distribution.Server.Features.Users
     Distribution.Server.Instances
     Distribution.Server.PackageIndex
     Distribution.Server.Packages.Index

@@ -1,6 +1,6 @@
 module Distribution.Server.Feature where
 
-import Distribution.Server.Import (RestoreBackup, BackupEntry)
+import Distribution.Server.Backup.Import (RestoreBackup, BackupEntry)
 import Distribution.Server.Resource
 
 -- This module defines a plugin interface for hackage features.

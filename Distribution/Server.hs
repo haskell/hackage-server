@@ -21,7 +21,7 @@ import Happstack.Server hiding (port, host)
 import qualified Happstack.Server
 import Happstack.State hiding (Version)
 
-import qualified Distribution.Server.Import as Import (importTar)
+import qualified Distribution.Server.Backup.Import as Import (importTar)
 
 --import Distribution.Server.Users.ServerParts
 import Distribution.Server.Packages.ServerParts (stateToCache, updateCache) -- for the centralized caches
@@ -35,8 +35,8 @@ import Distribution.Server.Packages.State as State hiding (bulkImport)
 import Distribution.Server.Users.State as State
 import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
-import qualified Distribution.Server.BulkImport as BulkImport
-import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
+import qualified Distribution.Server.Backup.BulkImport as BulkImport
+import qualified Distribution.Server.Backup.UploadLog as UploadLog
 
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users

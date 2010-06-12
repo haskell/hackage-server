@@ -1,4 +1,4 @@
-module Distribution.Server.Export.Utils where
+module Distribution.Server.Backup.Utils where
 
 -- | Time/Date format used in exported files.
 -- Variant on ISO formatted date, with time and time zone.

@@ -26,7 +26,7 @@ backup-timestamp/
 
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Distribution.Server.Export
+module Distribution.Server.Backup.Export
     ( export
     ) where
 
@@ -38,7 +38,7 @@ import Text.CSV hiding (csv)
 import qualified Data.Map as Map
 import Data.Maybe (catMaybes)
 
-import Distribution.Server.Export.FlatFiles
+import Distribution.Server.Backup.FlatFiles
 
 import qualified Distribution.Server.Util.BlobStorage as Blob
 

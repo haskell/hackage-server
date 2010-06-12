@@ -10,7 +10,7 @@
 --
 -- Support for importing data from the old hackage server.
 -----------------------------------------------------------------------------
-module Distribution.Server.BulkImport (
+module Distribution.Server.Backup.BulkImport (
   importPkgIndex,
   importUploadLog,
   importTarballs,
@@ -24,7 +24,7 @@ import           Distribution.Server.Users.Users   (Users)
 import qualified Distribution.Server.Users.Types as Users
 import qualified Codec.Archive.Tar.Entry as Tar
          ( Entry(..), entryPath, EntryContent(..) )
-import qualified Distribution.Server.BulkImport.UploadLog as UploadLog
+import qualified Distribution.Server.Backup.UploadLog as UploadLog
 import qualified Distribution.Server.Auth.HtPasswdDb as HtPasswdDb
 import qualified Distribution.Server.Auth.Types as Auth
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage

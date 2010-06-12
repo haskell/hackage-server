@@ -1,8 +1,10 @@
 module Distribution.Server.Features.Users (
-    usersFeature
+    UserFeature(..),
+    initUsersFeature
   ) where
 
 import Distribution.Server.Feature
+import Distribution.Server.Features.Core
 import qualified Distribution.Server.ResourceTypes as Resource
 
 import Distribution.Server.Users.State as State
@@ -27,6 +29,19 @@ import Control.Monad.Trans
 import Control.Monad (MonadPlus(..), msum)
 
 import Text.XHtml.Strict
+
+data UserFeature = UserFeature
+
+instance HackageFeature UserFeature where
+    getFeature _ = HackageModule
+      { featureName = "users"
+      , resources   = []
+      , dumpBackup    = return []
+      , restoreBackup = Nothing
+      }
+
+initUsersFeature :: CoreFeature -> IO UserFeature
+initUsersFeature _ = return UserFeature
 
 -- | A feature to allow manipulation of the database of users.
 --

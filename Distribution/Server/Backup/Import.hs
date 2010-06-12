@@ -1,6 +1,6 @@
 {-# LANGUAGE RankNTypes, MultiParamTypeClasses, RecordWildCards, FlexibleInstances  #-}
 
-module Distribution.Server.Import (
+module Distribution.Server.Backup.Import (
     RestoreBackup(..),
     BackupEntry,
     importTar,
@@ -35,7 +35,7 @@ import Distribution.PackageDescription.Parse
     , ParseResult(..)
     )
 
-import Distribution.Server.Export.Utils
+import Distribution.Server.Backup.Utils
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage, BlobId)
 
