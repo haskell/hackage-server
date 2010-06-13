@@ -3,13 +3,14 @@ module Distribution.Server.Pages.Package (
     PackageData(..),
     packagePage,
     maintainerDescription,
-    trusteeDescription
+    trusteeDescription,
+    flatDependencies
   ) where
 
 import Distribution.Server.Pages.Package.HaddockParse	( parseHaddockParagraphs )
 import Distribution.Server.Pages.Package.HaddockLex	( tokenise )
 import Distribution.Server.Pages.Package.HaddockHtml
-import Distribution.Server.Pages.Package.ModuleForest ( moduleForest )
+import Distribution.Server.Packages.ModuleForest
 import Distribution.Server.Pages.Template		( hackagePage )
 import Distribution.Server.Packages.Types (PkgInfo(..))
 import Distribution.Server.Distributions.Distributions
@@ -20,8 +21,7 @@ import Distribution.Server.Users.Group (GroupDescription(..), nullDescription)
 import qualified Distribution.Server.PackageIndex as PackageIndex
 import Distribution.Server.PackageIndex (PackageIndex)
 
-import Distribution.PackageDescription.Configuration
-				( flattenPackageDescription )
+import Distribution.PackageDescription.Configuration (flattenPackageDescription)
 import Distribution.Package
 import Distribution.PackageDescription as P
 import Distribution.Version (Version (..), VersionRange (..), withinRange)
@@ -31,7 +31,7 @@ import Text.XHtml.Strict hiding ( p, name )
 import Control.Monad		( liftM2 )
 import qualified Data.Foldable as Foldable
 import Data.Char		( toLower, toUpper )
-import Data.List		( intersperse, partition, sort, sortBy )
+import Data.List		( intersperse, intercalate, partition, sort, sortBy )
 import Data.Maybe   ( listToMaybe )
 import Data.Monoid  ( mempty )
 import Data.Map			( Map )
@@ -170,7 +170,7 @@ downloadSection pd = [
 moduleSection :: PackageData -> [Html]
 moduleSection pd = maybe [] msect (library pkg)
   where msect lib = [h3 << "Modules",
-		moduleForest (pdDocURL pd) (exposedModules lib)]
+		renderModuleForest (pdDocURL pd) . moduleForest . exposedModules $ lib]
 	pkg = flattenPackageDescription (pdDescription pd)
 
 reportsSection :: PackageData -> [Html]
@@ -291,6 +291,7 @@ showFields = [
 commaList :: [Html] -> Html
 commaList = concatHtml . intersperse (toHtml ", ")
 
+-----------------------------------------------------------------------
 -- Flatten the dependencies of a GenericPackageDescription into
 -- disjunctive normal form.
 flatDependencies :: GenericPackageDescription -> [[Dependency]]
@@ -430,6 +431,30 @@ unionDisjunct xs ys = xs' ++ ys'
   where ys' = [y | y <- ys, not (or [subConjunct y x | x <- xs])]
 	xs' = [x | x <- xs, not (or [subConjunct x y | y <- ys'])]
 
+-----------------------------------------------------------------------------
+
+renderModuleForest :: Maybe URL -> ModuleForest -> Html
+renderModuleForest mb_url = renderForest []
+    where
+      renderForest _       [] = noHtml
+      renderForest pathRev ts = myUnordList $ map renderTree ts
+          where
+            renderTree (Node s isModule subs) =
+                    ( if isModule then moduleEntry newPath else italics << s )
+                +++ renderForest newPathRev subs
+                where
+                  newPathRev = s:pathRev
+                  newPath = reverse newPathRev
+
+      moduleEntry = maybe modName linkedName mb_url
+      modName path = toHtml (intercalate "." path)
+      linkedName url path = anchor ! [href modUrl] << modName path
+          where
+            modUrl = url ++ "/" ++ intercalate "-" path ++ ".html"
+      myUnordList :: HTML a => [a] -> Html
+      myUnordList = unordList ! [theclass "modules"]
+
+------------------------------------------------------------------------------
 
 -- UTILS:
 

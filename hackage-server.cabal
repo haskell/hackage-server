@@ -69,6 +69,7 @@ executable hackage-server
     Distribution.Server.Instances
     Distribution.Server.PackageIndex
     Distribution.Server.Packages.Index
+    Distribution.Server.Packages.ModuleForest
     Distribution.Server.Packages.ServerParts
     Distribution.Server.Packages.State
     Distribution.Server.Packages.Types
@@ -81,7 +82,6 @@ executable hackage-server
     Distribution.Server.Pages.Package.HaddockHtml
     Distribution.Server.Pages.Package.HaddockLex
     Distribution.Server.Pages.Package.HaddockParse
-    Distribution.Server.Pages.Package.ModuleForest
     Distribution.Server.Pages.Recent
     Distribution.Server.Pages.Template
     Distribution.Server.Pages.Util
