@@ -9,7 +9,7 @@ data UploadFeature = UploadFeature
 
 instance HackageFeature UploadFeature where
     getFeature _ = HackageModule
-      { featureName = "core"
+      { featureName = "upload"
       , resources   = []
       , dumpBackup    = return []
       , restoreBackup = Nothing

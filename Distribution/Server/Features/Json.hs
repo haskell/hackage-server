@@ -9,7 +9,7 @@ data JsonFeature = JsonFeature
 
 instance HackageFeature JsonFeature where
     getFeature _ = HackageModule
-      { featureName = "core"
+      { featureName = "json"
       , resources   = []
       , dumpBackup    = return []
       , restoreBackup = Nothing

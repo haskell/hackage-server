@@ -151,8 +151,9 @@ run :: Server -> IO ()
 run server = simpleHTTP conf $ mungeRequest $ impl server
   where
     conf = nullConf { Happstack.Server.port = serverPort server }
+    mungeRequest :: ServerPart Response -> ServerPart Response
     mungeRequest = localRq mungeMethod
-    -- this is not restful.
+    -- like HTTP methods, but.. less so.
     mungeMethod req = case (rqMethod req, lookup "_method" (rqInputs req)) of
         (POST, Just input) -> case reads . map toUpper . BS.unpack $ inputValue input of
             [(newMethod, "")] -> req { rqMethod = newMethod }

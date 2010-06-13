@@ -8,7 +8,6 @@ import Distribution.Server.Resource
 -- We compose the overall hackage server featureset from a bunch of these
 -- features. The intention is to make the hackage server reasonably modular
 -- by allowing distinct features to be designed independently.
-
 data HackageModule = HackageModule {
     featureName   :: String,
     resources     :: [Resource],
@@ -16,6 +15,13 @@ data HackageModule = HackageModule {
     restoreBackup :: Maybe RestoreBackup
 }
 
+-- A type belonging to the HackageFeature class is a data structure from which
+-- a HackageModule can be created. These data structures are initialized manually
+-- in Features.hs, possibly depending on each other to register for hooks, construct
+-- URIs, and (maybe in the future) retrieve or encapsulate TxControl handles.
+--
+-- With this class, they are combined into homogenous list of HackageModules
+-- used by the Server data structure.
 class HackageFeature a where
     getFeature :: a -> HackageModule
 

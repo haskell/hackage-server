@@ -215,55 +215,6 @@ handlePackageById store pkgid =
            Just blob -> do
                update $ TarIndex.DropIndex blob
 
-{-
-packageAdmin :: PackageId -> ServerPart Response
-packageAdmin pkgid = withPackage pkgid $ \_ pkg _ -> do
-    requirePackageAuth pkgid
-    msum
-     [ methodSP GET $ do
-        mains <- packageMaintainers pkg
-        ok $ toResponse $ Resource.XHtml $
-           Pages.packageAdminPage mains pkg
-     , adminPost
-     ]
-
- where
-   packageMaintainers pkg =
-    do
-      group <- query $ GetPackageMaintainers (packageName pkg)
-      let uids = Groups.enumerate (fromMaybe Groups.empty group)
-      userDb <- query GetUserDb
-      return $ lookupUserNames userDb uids
-
-   -- this needs work, as it won't skip over deleted users.
-   lookupUserNames users = map (Users.idToName users)
-
-   lookUser = do
-     reqData <- getDataFn (look "user")
-     case reqData of
-       Nothing -> return Nothing
-       Just userString ->
-           query $ LookupUserName (Users.UserName userString)
-
-   adminPost :: ServerPart Response
-   adminPost = msum
-       [ dir "addMaintainer" $ methodSP POST $ do
-           userM <- lookUser
-           case userM of
-             Nothing -> ok $ toResponse "Not a valid user!"
-             Just user -> do
-                 update $ AddPackageMaintainer (packageName pkgid) user
-                 ok $ toResponse "Ok!"
-       , dir "removeMaintainer" $ methodSP POST $ do
-           userM <- lookUser
-           case userM of
-             Nothing -> ok $ toResponse "Not a valid user!"
-             Just user -> do
-                 update $ RemovePackageMaintainer (packageName pkgid) user
-                 ok $ toResponse "Ok!"
-       ]
--}
-
 withPackage :: PackageId -> (PackagesState -> PkgInfo -> [PkgInfo] -> ServerPart Response) -> ServerPart Response
 withPackage pkgid action = do
   state <- query GetPackagesState

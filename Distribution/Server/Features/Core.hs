@@ -45,7 +45,6 @@ data CoreFeature = CoreFeature {
     -- For download counters, although an update for every download doesn't scale well
     tarballDownload    :: HookList (IO ()),
     adminGroup :: UserGroup
-  --packageRender :: PackageId -> IO PackageRender,
 }
 data CoreResource = CoreResource {
     coreIndexPage    :: Resource,
@@ -82,11 +81,12 @@ initCoreFeature = do
     downHook <- newHookList
     changeHook <- newHookList
     registerHook changeHook $ computeCache thePackages indexTar
-    -- Create initial pages here. Might want to do this after other features
-    -- have registered to it, maybe by adding a runInitialHooks function to
-    -- the HackageFeature typeclass.
+    -- Create initial pages here by running the changeHook.
+    -- Might want to do this after other features have registered to it,
+    -- maybe by adding a runInitialHooks function to the HackageFeature typeclass.
     -- A Maybe PkgInfo argument might also be desirable.
     runZeroHook changeHook
+
     return CoreFeature
       { coreResource = let resource = CoreResource {
             -- the rudimentary HTML resources are for when we don't want an additional HTML feature

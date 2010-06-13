@@ -9,7 +9,7 @@ data MirrorFeature = MirrorFeature
 
 instance HackageFeature MirrorFeature where
     getFeature _ = HackageModule
-      { featureName = "core"
+      { featureName = "mirror"
       , resources   = []
       , dumpBackup    = return []
       , restoreBackup = Nothing

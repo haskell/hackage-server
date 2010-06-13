@@ -9,7 +9,7 @@ data HtmlFeature = HtmlFeature
 
 instance HackageFeature HtmlFeature where
     getFeature _ = HackageModule
-      { featureName = "core"
+      { featureName = "html"
       , resources   = []
       , dumpBackup    = return []
       , restoreBackup = Nothing

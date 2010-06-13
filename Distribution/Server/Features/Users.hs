@@ -16,6 +16,7 @@ import Distribution.Server.Users.State as State
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users)
+-- move this one here?
 import Distribution.Server.Users.ServerParts (changePassword)
 
 import qualified Distribution.Server.Auth.Basic as Auth
@@ -64,7 +65,7 @@ initUsersFeature _ = do
           , userPage = (resourceAt "/user/:username/") { resourceGet = [("text", textUserPage)], resourceDelete = [("", deleteAccount)] }
           , passwordResource = (resourceAt "/user/:username/password") { resourcePut = [("", changePassword)] }
           , enabledResource = (resourceAt "/user/:username/enabled") { resourcePut = [("", enabledAccount)] }
-          , loginResource = (resourceAt "/users/login") { resourceGet = [("", requireAuth)] }
+          , loginResource = (resourceAt "/users/login") { resourceGet = [("", requireAuth)] } -- also split into basic/digest
           }
       , userAdded = addHook
       }

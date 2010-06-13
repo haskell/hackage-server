@@ -80,6 +80,20 @@ defaultResource bpath = Resource bpath [] [] [] [] Nothing
 extendResource :: Resource -> Resource
 extendResource resource = defaultResource (resourceLocation resource)
 
+-- | A path element of a URI. Unstable data structure. Possible to-be-removed current and to-be-added future components include:
+--
+-- * StaticBranch dirName - \/dirName
+-- * DynamicBranch dynamicName - \/anyName (mapping created dynamicName -> anyName)
+-- * DynamicFormat dynamicName - like DynamicBranch, but optional mapping created for \/anyName.anyFormat ("format" -> anyFormat)
+-- * StaticFormat dirName - extends StaticBranch with \/dirName.anyFormat, and mapping created ("format" -> anyFormat)
+-- * TrailingSlash bool - this would indicate a preferred or nonpreferred slash at the end, 
+--       with GET requests being rerouted automatically to the canonical slashing
+-- * TrailingPath - this consumes the remaining path and creates a mapping ("all" -> remainingPathString)
+--
+-- And of course there would be a string literal syntax for all of it, as currently trunkAt does "\/users\/:username\/enabled"
+-- e.g. "\/package\/:package\/doc\/...", "\/logs\/upload\/:page.:format\/!", more complicated to parse - ReadP probably not sufficient -
+-- and more difficult to handle server-side in the renderServerTree method. e.g. retaining formats on redirection.
+-- We could make '.' a separator like in Ruby, so there could be "\/package\/:package\/:tarball.tar.gz"
 data BranchComponent = StaticBranch String | DynamicBranch String  | DynamicFormat String | StaticFormat String deriving (Show, Eq, Ord)
 type BranchPath = [BranchComponent]
 
@@ -148,13 +162,14 @@ serveResource (Resource trunk rget rput rpost rdelete run) = (,) trunk $ \config
     noBody = return $ toResponse ()
 
 -- essentially a ReaderT (Config, DynamicPath) ServerPart Response
+-- this always renders parent URIs, but usually we guard against remaining path segments, so it's fine
 renderServerTree :: Config -> DynamicPath -> ServerTree ServerResponse -> ServerPart Response
 renderServerTree config dpath (ServerTree func forest) = msum $ maybeToList (fmap (\fun -> fun config dpath) func) ++ map (uncurry renderBranch) (Map.toList forest)
   where
     renderBranch :: BranchComponent -> ServerTree ServerResponse -> ServerPart Response
     renderBranch (StaticBranch  sdir) tree = dir sdir $ renderServerTree config dpath tree
     renderBranch (DynamicBranch sdir) tree = path $ \pname -> renderServerTree config ((sdir, pname):dpath) tree
-    renderBranch _ _ = return . toResponse $ "Uncharted territory" -- parse formats and munge accept headers accordingly
+  --renderBranch _ _ = return . toResponse $ "Uncharted territory" -- parse formats and munge accept headers accordingly
 
 reinsert :: Monoid a => BranchComponent -> ServerTree a -> Map BranchComponent (ServerTree a) -> Map BranchComponent (ServerTree a)
 -- combine will only be called if branchMap already contains the key
