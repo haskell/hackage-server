@@ -50,7 +50,7 @@ import System.FilePath ((</>))
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist)
 import Control.Concurrent.MVar (MVar)
 import Control.Monad.Trans
-import Control.Monad (when)
+import Control.Monad (when, mplus)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Network.URI (URIAuth(URIAuth))
 import Network.BSD (getHostName)
@@ -252,8 +252,9 @@ initState server = do
 
 impl :: Server -> ServerPart Response
 impl server =
+      flip mplus (fileServe ["hackage.html"] . serverStaticDir . serverConfig $ server)
     -- ServerPart Response
-    renderServerTree (serverConfig server) []
+    . renderServerTree (serverConfig server) []
     -- ServerTree ServerResponse
     . fmap (snd . serveResource)
     -- ServerTree Resource

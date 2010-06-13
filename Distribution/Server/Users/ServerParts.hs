@@ -39,7 +39,7 @@ usersFeature = HackageModule {
                   , (resourceAt "/user/:username") { resourceGet = Just serveUserPage, resourceDelete = Nothing }
                   , (resourceAt "/user/:username/enabled")
                   , (resourceAt "/user/:username/password") { resourcePut = Just changePassword } -}
-                  ] -- ++ makeGroupResources (trunkAt "/users/admins") (Group.UserGroup "Site administrators" GetJustHackageAdmins AddHackageAdmin RemoveHackageAdmin),
+                  ], -- ++ makeGroupResources (trunkAt "/users/admins") (Group.UserGroup "Site administrators" GetJustHackageAdmins AddHackageAdmin RemoveHackageAdmin),
     dumpBackup    = return [],  
     restoreBackup = Nothing
 }
@@ -94,20 +94,6 @@ newBasicPass pwd = do
 newDigestPass :: UserName -> PasswdPlain -> UserAuth
 newDigestPass name pwd = UserAuth (Auth.newDigestPass name pwd "hackage") Auth.DigestAuth
 
-adminAddUser :: Config -> DynamicPath -> ServerPart Response
-adminAddUser config dpath = do
-    reqData <- getDataFn lookUserNamePasswords
-    case reqData of
-        Nothing -> ok $ toResponse "try to fill out all the fields"
-        Just (userName, pwd1, pwd2) -> doAdminAddUser userName
-                                       (Auth.PasswdPlain pwd1) (Auth.PasswdPlain pwd2)
- where
-    lookUserNamePasswords = do
-        userName <- look "user-name"
-        pwd1 <- look "password"
-        pwd2 <- look "repeat-password"
-        return (userName, pwd1, pwd2)
-
 -- Assumes that the user has already been autheniticated
 -- and has proper permissions
 userAdmin :: ServerPart Response
@@ -115,20 +101,20 @@ userAdmin = msum
       [ dir "toggle-admin" $ msum
           [ methodSP POST $ do
               reqData <- getDataFn $ do
-                userName <- look "user-name"
+                uname <- look "user-name"
                 makeAdmin <- lookRead "admin"
-                return (userName, makeAdmin)
+                return (uname, makeAdmin)
               
               case reqData of
                 Nothing -> ok $ toResponse "Bad inputs, somehow"
-                Just (userName, makeAdmin) ->
-                    adminToggleAdmin (UserName userName) makeAdmin
+                Just (uname, makeAdmin) ->
+                    adminToggleAdmin (UserName uname) makeAdmin
           ]
       ]
 
 adminToggleAdmin :: UserName -> Bool -> ServerPart Response
-adminToggleAdmin userName makeAdmin = do
-    mUser <- query $ LookupUserName userName
+adminToggleAdmin uname makeAdmin = do
+    mUser <- query $ LookupUserName uname
     if isNothing mUser then ok $ toResponse "Unknown user name" else do
     let Just user = mUser
     if makeAdmin
@@ -136,17 +122,3 @@ adminToggleAdmin userName makeAdmin = do
         else update $ RemoveHackageAdmin user
     ok $ toResponse "Success!"
 
-doAdminAddUser :: String -> Auth.PasswdPlain -> Auth.PasswdPlain -> ServerPart Response
-doAdminAddUser _ pwd1 pwd2
-    | pwd1 /= pwd2
-        = ok $ toResponse "Entered passwords do not match"
-doAdminAddUser userNameStr password _
-    = case simpleParse userNameStr of
-        Nothing -> ok $ toResponse "Not a valid user name!"
-        Just userName
-            -> do
-          let userAuth = newDigestPass userName password
-          res <- update $ AddUser userName userAuth
-          case res of
-            Nothing -> ok $ toResponse "Failed!"
-            Just _  -> ok $ toResponse "Ok!"

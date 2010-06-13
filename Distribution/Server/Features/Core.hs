@@ -92,7 +92,7 @@ initCoreFeature = do
             -- the rudimentary HTML resources are for when we don't want an additional HTML feature
             coreIndexPage = (resourceAt "") { resourceGet = [("html", indexPage)] }
           , coreIndexTarball = (resourceAt "/packages/index.tar.gz") { resourceGet = [("tarball", respondCache indexTar Resource.IndexTarball)] }
-          , corePackagesPage = (resourceAt "") { resourceGet = [("html", respondCache thePackages id)] }
+          , corePackagesPage = (resourceAt "/packages/") { resourceGet = [("html", respondCache thePackages id)] }
           , corePackagePage = (resourceAt "/package/:package") { resourceGet = [("html", basicPackagePage (renderResource $ coreCabalFile resource) (renderResource $ corePackageTarball resource))] }
           , corePackageTarball = (resourceAt "/package/:package/:tarball") { resourceGet = [("tarball", servePackageTarball)] }
           , coreCabalFile  = (resourceAt "/package/:package/:cabal") { resourceGet = [("cabal", serveCabalFile)] }

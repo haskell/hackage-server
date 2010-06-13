@@ -18,7 +18,7 @@ import Control.Monad.Trans (MonadIO, liftIO)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
 
-import Control.Monad (join, liftM2, mplus, when)
+import Control.Monad (join, liftM2, mplus, unless)
 import Data.Char (intToDigit, isAsciiLower)
 import System.Random (randomRs, newStdGen)
 import Data.Map (Map)
@@ -46,10 +46,10 @@ requireHackageAuth :: MonadIO m => Users.Users -> Maybe Group.UserList -> Maybe 
 requireHackageAuth users authorisedGroup forceType = getHackageAuth users >>= \res -> case res of
     Right userId -> do
         let forbid = escape $ forbidden $ toResponse "No access for this page."
-            isDisabled = case Users.userStatus `fmap` Users.lookupId userId users of
-                Just (Users.Active Users.Disabled _) -> True
-                _ -> False
-        when (maybe True (\group -> Group.member userId group && not isDisabled) authorisedGroup) $ forbid
+        case Users.userStatus `fmap` Users.lookupId userId users of
+            Just (Users.Active Users.Disabled _) -> forbid
+            _ -> return ()
+        unless (maybe True (Group.member userId) authorisedGroup) $ forbid
         return userId
     Left NoAuthError -> makeAuthPage "No authorization provided."
     Left UnrecognizedAuthError -> makeAuthPage "Authorization scheme not recognized."

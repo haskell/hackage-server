@@ -9,7 +9,7 @@ import Distribution.Server.Features.Core (initCoreFeature)
 --import Distribution.Server.Features.Check (initCheckFeature)
 --import Distribution.Server.Features.Upload (initUploadFeature)
 --import Distribution.Server.Features.Packages (initPackagesFeature)
---import Distribution.Server.Features.Users (initUsersFeature)
+import Distribution.Server.Features.Users (initUsersFeature)
 --import Distribution.Server.Features.Mirror (initMirrorFeature)
 import Distribution.Server.Features.LegacyRedirects (legacyRedirectsFeature)
 --import Distribution.Server.Users.State (UsersStore)
@@ -26,13 +26,13 @@ hackageFeatures = do
     --mirrorFeature <- initMirrorFeature coreFeature
 
     -- > and for richer content...
-    --usersFeature <- initUsersFeature coreFeature
+    usersFeature <- initUsersFeature coreFeature
     --uploadFeature <- initUploadFeature coreFeature
     --packagesFeature <- initPackagesFeature coreFeature
     --checkFeature <- initCheckFeature coreFeature uploadFeature
     --htmlFeature <- initHtmlFeature packagesFeature usersFeature uploadFeature checkFeature
-    --jsonFeature <- initJsonFeature packagesFeature usersFeature
-    return [ getFeature coreFeature, legacyRedirectsFeature ]
+    --jsonFeature <- initJsonFeature packagesFeature usersFeature uploadFeature checkFeature
+    return [ getFeature coreFeature, getFeature usersFeature, legacyRedirectsFeature ]
 
 -- Still using Distribution.Server.State.HackageEntryPoint for the moment, it seems
 {-

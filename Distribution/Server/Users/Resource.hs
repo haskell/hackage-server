@@ -5,9 +5,10 @@ module Distribution.Server.Users.Resource (
 
 import Distribution.Server.Resource
 import Distribution.Server.Types
-import Distribution.Server.Users.Types (UserId)
+import Distribution.Server.Users.Types (UserId, UserName)
 import Distribution.Server.Users.Group (UserGroup(..))
 import Distribution.Server.Users.State
+import Distribution.Server.Features.Users
 import qualified Distribution.Server.ResourceTypes as Resource
 import qualified Distribution.Server.Users.Group as Group
 import qualified Distribution.Server.Pages.Group as Pages
@@ -41,20 +42,22 @@ makeDynamicGroupResources branch groupGen = [viewList, modifyList]
     makeGroupURI dpath = fromJust $ renderURI branch dpath
 
 -- todo: this should return more than (). e.g. if user exists or not
-doDeleteUser :: UserGroup -> DynamicPath -> ServerPart ()
-doDeleteUser group dpath = withUser dpath $ \uid -> do
+doDeleteUser :: UserGroup -> DynamicPath -> ServerPart Response
+doDeleteUser group dpath = withUserPath dpath $ \uid _ -> do
     users  <- query GetUserDb
     -- alternatively, specify which groups can remove from this group in the UserGroup itself
     admins <- query GetHackageAdmins
     Auth.requireHackageAuth users (Just admins) Nothing
     liftIO $ removeUserList group uid
+    return $ toResponse ()
 
-doAddUser :: UserGroup -> DynamicPath -> ServerPart ()
-doAddUser group dpath = withUser dpath $ \uid -> do
+doAddUser :: UserGroup -> DynamicPath -> ServerPart Response
+doAddUser group dpath = withUserPath dpath $ \uid _ -> do
     users <- query GetUserDb
     ulist <- liftIO $ queryUserList group
     Auth.requireHackageAuth users (Just ulist) Nothing
     liftIO $ addUserList group uid
+    return $ toResponse ()
 
 doDisplayUsers :: UserGroup -> String -> ServerPart Response
 doDisplayUsers group uri = do
@@ -67,10 +70,3 @@ doDisplayUsers group uri = do
     unames <- query $ ListGroupMembers ulist
     ok $ toResponse $ Resource.XHtml $ Pages.groupPage unames (maybeUri canAdd) (maybeUri canDel) (groupDesc group)
 
---groupPage :: [Users.UserName] -> Maybe String -> Maybe String -> GroupDescription -> Html
-
-
-withUser :: DynamicPath -> (UserId -> ServerPart a) -> ServerPart a
-withUser dpath func = case simpleParse =<< lookup "user" dpath of
-    Nothing -> mzero -- notFound $ toResponse "Could not find user"
-    Just uid -> func uid
