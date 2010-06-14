@@ -121,8 +121,8 @@ serveIndexPage config dpath = do
     cacheState <- Cache.get (serverCache config)
     ok $ Cache.packagesPage cacheState
 
-uploadPackageTarball :: Config -> DynamicPath -> ServerPart Response
-uploadPackageTarball config dpath = uploadPackage config
+--uploadPackageTarball :: Config -> DynamicPath -> ServerPart Response
+--uploadPackageTarball config dpath = uploadPackage config
 
 serveIndexTarball config dpath = do
     cacheState <- Cache.get (serverCache config)
@@ -177,7 +177,7 @@ stateToCache host state users = getCurrentTime >>= \now -> return
 
 handlePackageById :: BlobStorage -> PackageId -> [ServerPart Response]
 handlePackageById store pkgid = 
-  [ dir "documentation" $ msum
+  [] {-dir "documentation" $ msum
     [ withPackage pkgid $ \state pkg _ ->
         let resolvedPkgId = packageId pkg in msum
 
@@ -206,14 +206,13 @@ handlePackageById store pkgid =
         ]
     ]
   ]
-
  where dropOldDocs pkgId
            = do
          mBlob <- query $ LookupDocumentation pkgId
          case mBlob of
            Nothing -> return ()
            Just blob -> do
-               update $ TarIndex.DropIndex blob
+               update $ TarIndex.DropIndex blob-}
 
 withPackage :: PackageId -> (PackagesState -> PkgInfo -> [PkgInfo] -> ServerPart Response) -> ServerPart Response
 withPackage pkgid action = do
@@ -257,66 +256,6 @@ checkPackage = methodSP POST $ do
          Right (_,[]) -> return $ toResponse "Check succeeded, no warnings."
          Right (_,warn) -> return . toResponse . unlines $ "Check succeeded with warnings.\n" : warn
 
-
-uploadPackage :: Config -> ServerPart Response
-uploadPackage config =
-  methodSP POST $
-    withDataFn (lookInput "package") $ \input ->
-          let {-withEntry = do str <- look "entry"
-                               case simpleParse str of
-                                 Nothing -> fail "no parse"
-                                 Just x  -> return (x::UploadLog.Entry)-}
-              fileName    = (fromMaybe "noname" $ inputFilename input)
-              fileContent = inputValue input
-          in msum [ upload fileName fileContent ]
-  where
-    upload name content = do
-      --TODO: check if the package is in the index already, before we embark
-      -- on writing the tarball into the store and validating etc.
-      res <- liftIO $ BlobStorage.addWith (serverStore config) content
-                        (Upload.unpackPackage name)
-      case res of
-        Left  err -> badRequest $ toResponse err
-        Right (((pkg, pkgStr), warnings), blobId) -> do
-          state  <- query GetPackagesState
-          let pkgExists = packageExists state pkg
-          user <- uploadingUser state (packageId pkg)
-          uploadData <- do now <- liftIO getCurrentTime
-                           return (now, user)
-          success <- update $ Insert PkgInfo {
-            pkgInfoId     = packageId pkg,
-            pkgDesc       = pkg,
-            pkgData       = pkgStr,
-            pkgTarball    = [(blobId, uploadData)], --does this merge properly?
-            pkgUploadData = uploadData,
-            pkgDataOld    = [] -- what about this?
-          }
-          if success
-             then do
-               -- Update the package maintainers group.
-               unless pkgExists $ update $ AddPackageMaintainer (packageName pkg) user
-               updateCache config
-               ok $ toResponse $ unlines warnings
-             else forbidden $ toResponse "Package already exists."
-
-    -- Auth group for uploading a package.
-    -- A new package may be uped by anyone
-    -- An existing package may only be uploaded by a maintainer of
-    -- that package or a trustee.
-    uploadingUser state pkg =
-      if packageExists state pkg
-        then requirePackageAuth pkg
-        else query GetUserDb >>= \users -> Auth.requireHackageAuth users Nothing Nothing
-
-    packageExists state pkg = not . null $ PackageIndex.lookupPackageName (packageList state) (packageName pkg)
-
-requirePackageAuth :: (MonadIO m, Package pkg) => pkg -> ServerPartT m Users.UserId
-requirePackageAuth pkg = do
-    userDb  <- query $ GetUserDb
-    pkgm    <- query $ GetPackageMaintainers (packageName pkg)
-    trustee <- query $ GetHackageTrustees
-    let groupSum = Groups.unions [trustee, pkgm]
-    Auth.requireHackageAuth userDb (Just groupSum) Nothing
 
 buildReports :: BlobStorage -> [ServerPart Response]
 buildReports store =

@@ -39,7 +39,7 @@ serveLegacyRedirects = msum
       , simpleMove "hackage.html"    "/"
       , postedMove "upload"          "/upload"
       , postedMove "check"           "/check"
-      , simpleMove "00-index.tar.gz" "/00-index.tar.gz"
+      , simpleMove "00-index.tar.gz" "/packages/index.tar.gz"
         --also search.html, advancedsearch.html, accounts.html, and admin.html
       ]
   , dir "cgi-bin" $ dir "hackage-scripts" $ msum
@@ -69,7 +69,7 @@ serveArchiveTree = msum
           _ -> mzero
        _ -> mzero
     _ -> mzero
-  , dir "00-index.tar.gz" $ methodSP GET $ movedPermanently "/00-index.tar.gz" (toResponse "")
+  , dir "00-index.tar.gz" $ methodSP GET $ movedPermanently "/packages/index.tar.gz" (toResponse "")
   , path $ \nameStr -> do
      let Just name = simpleParse nameStr
      msum
@@ -93,10 +93,9 @@ serveArchiveTree = msum
   ]
   where
     packageTarball :: PackageId -> String
-    packageTarball pkgid = "/package/" ++ display pkgid ++ ".tar.gz"
+    packageTarball pkgid = "/package/" ++ display pkgid ++ "/" ++ display pkgid ++ ".tar.gz"
 
-    docPath pkgid file = "/package/" ++ display pkgid ++ "/"
-                      ++ "documentation/" ++ file
+    docPath pkgid file = "/package/" ++ display pkgid ++ "/" ++ "doc/" ++ file
 
     cabalPath pkgid = "/package/" ++ display pkgid ++ "/"
                    ++ display (packageName pkgid) ++ ".cabal"

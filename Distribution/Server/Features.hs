@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, TypeOperators #-}
+{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, TypeOperators, ExistentialQuantification #-}
 module Distribution.Server.Features where
 
 --TODO: decrease the code/comments ratio
@@ -7,7 +7,7 @@ import Distribution.Server.Features.Core (initCoreFeature)
 --import Distribution.Server.Features.Json (initJsonFeature)
 --import Distribution.Server.Features.Html (initHtmlFeature)
 --import Distribution.Server.Features.Check (initCheckFeature)
---import Distribution.Server.Features.Upload (initUploadFeature)
+import Distribution.Server.Features.Upload (initUploadFeature)
 import Distribution.Server.Features.Packages (initPackagesFeature)
 import Distribution.Server.Features.Users (initUsersFeature)
 --import Distribution.Server.Features.Mirror (initMirrorFeature)
@@ -27,28 +27,22 @@ hackageFeatures = do
 
     -- > and for richer content...
     usersFeature <- initUsersFeature coreFeature
-    --uploadFeature <- initUploadFeature coreFeature
+    uploadFeature <- initUploadFeature coreFeature
     packagesFeature <- initPackagesFeature coreFeature
     --checkFeature <- initCheckFeature coreFeature uploadFeature
     --htmlFeature <- initHtmlFeature packagesFeature usersFeature uploadFeature checkFeature
     --jsonFeature <- initJsonFeature packagesFeature usersFeature uploadFeature checkFeature
-    return [ getFeature coreFeature, getFeature usersFeature, legacyRedirectsFeature ]
+    let allFeatures = [HF coreFeature, HF usersFeature, HF packagesFeature, HF uploadFeature, HF legacyRedirectsFeature]
+    -- Run all initial hooks, now that everyone's gotten a chance to register for them
+    -- This solution does work too well for special initial hook arguments
+    sequence . concat $ map initHooks allFeatures
+    return (map getFeature allFeatures)
+
+data HF = forall a. HackageFeature a => HF a
+instance HackageFeature HF where
+    getFeature (HF a) = getFeature a
+    initHooks  (HF a) = initHooks a
 
 -- Still using Distribution.Server.State.HackageEntryPoint for the moment, it seems
-{-
--- For the sake of the happstack state system we need to give the list
--- of all data components used by each hackage feature.
-data HackageOverallState = HackageOverallState
-  deriving Typeable
+-- otherwise, a HackageOverallState could be defined that works more closely with HackageFeature
 
-instance Component HackageOverallState where
-    type Dependencies HackageOverallState = End -- :+:
-    initialValue = HackageOverallState
-
-instance Version HackageOverallState
-instance Serialize HackageOverallState where
-    putCopy HackageOverallState = contain (return ())
-    getCopy = contain (return HackageOverallState)
-
-$(mkMethods ''HackageOverallState [])
--}

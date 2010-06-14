@@ -6,14 +6,17 @@ module Distribution.Server.Cache (
     put,
     GenCache(..),
     newCache,
+    newCacheable,
     getCache,
-    putCache
+    putCache,
+    Cacheable(..),
+    respondCache
   ) where
 
 import qualified Distribution.Server.Util.AsyncVar as AsyncVar
 import Distribution.Server.Util.AsyncVar (AsyncVar)
 
-import Happstack.Server (Response(rsBody))
+import Happstack.Server (ServerPart, Response(rsBody), ToMessage, toResponse, result, ok)
 
 import qualified Data.ByteString.Lazy as ByteString
 import Data.ByteString.Lazy (ByteString)
@@ -54,9 +57,33 @@ newtype GenCache a = GenCache {
 newCache :: a -> (a -> b) -> IO (GenCache a)
 newCache state force = GenCache `fmap` AsyncVar.new (\a -> force a `seq` ()) state
 
+newCacheable :: Cacheable a => IO (GenCache a)
+newCacheable = newCache emptyValue forceValue
+
 getCache :: MonadIO m => GenCache a -> m a
 getCache (GenCache avar) = liftIO $ AsyncVar.read avar
 
 putCache :: MonadIO m => GenCache a -> a -> m ()
 putCache (GenCache avar) state = liftIO $ AsyncVar.write avar state
+
+-----------------------------------------------------------------------
+class Cacheable x where
+    forceValue :: x -> ()  --aka NFData, but less rigorous
+    emptyValue :: x
+
+instance Cacheable Response where
+    forceValue res = ByteString.length (rsBody res) `seq` ()
+    emptyValue = result 404 ""
+
+instance Cacheable ByteString where
+    forceValue res = ByteString.length res `seq` ()
+    emptyValue = ByteString.empty
+
+instance (Cacheable a, Cacheable b) => Cacheable (a, b) where
+    forceValue (a, b) = forceValue a `seq` forceValue b
+    emptyValue = (emptyValue, emptyValue)
+
+-- usually b = Config and c = DynamicPath. This saves on code nodes (elsewhere) and imports (here)
+respondCache :: ToMessage r => GenCache a -> (a -> r) -> b -> c -> ServerPart Response
+respondCache cache func _ _ = return . toResponse . func =<< getCache cache
 

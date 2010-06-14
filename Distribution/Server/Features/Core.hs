@@ -41,6 +41,7 @@ data CoreFeature = CoreFeature {
     cacheIndexTarball :: Cache.GenCache BS.ByteString,
     cachePackagesPage :: Cache.GenCache Response,
     -- Updating top-level packages
+    -- A Maybe PkgInfo argument might also be desirable.
     packageIndexChange :: HookList (IO ()),
     -- For download counters, although an update for every download doesn't scale well
     tarballDownload    :: HookList (IO ()),
@@ -67,6 +68,7 @@ instance HackageFeature CoreFeature where
             return $ [csvToBackup ["users.csv"] $ usersToCSV users, csvToBackup ["admins.csv"] $ groupToCSV admins] ++ packageEntries packages
       , restoreBackup = Just (mconcat [userBackup, packagesBackup]) -- [adminBackup]
       }
+    initHooks core = [runZeroHook (packageIndexChange core)]
 
 csvToBackup :: [String] -> CSV -> BackupEntry
 csvToBackup fpath csv = (fpath, BS.pack (printCSV csv))
@@ -81,11 +83,6 @@ initCoreFeature = do
     downHook <- newHookList
     changeHook <- newHookList
     registerHook changeHook $ computeCache thePackages indexTar
-    -- Create initial pages here by running the changeHook.
-    -- Might want to do this after other features have registered to it,
-    -- maybe by adding a runInitialHooks function to the HackageFeature typeclass.
-    -- A Maybe PkgInfo argument might also be desirable.
-    runZeroHook changeHook
 
     return CoreFeature
       { coreResource = let resource = CoreResource {

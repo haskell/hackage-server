@@ -25,6 +25,9 @@ data HackageModule = HackageModule {
 class HackageFeature a where
     getFeature :: a -> HackageModule
 
+    initHooks  :: a -> [IO ()]
+    initHooks _ = []
+
 -- degenerate
 instance HackageFeature HackageModule where
     getFeature = id

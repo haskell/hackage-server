@@ -57,7 +57,7 @@ instance Monoid Resource where
       where ccombine list list' = foldr insertType list' list
             insertType conres list = case break ((fst conres==) . fst) list of
                 (absent, []) -> conres:absent
-                (prefix, (_:suffix)) -> prefix ++ (conres:suffix)
+                (prefix, (_:suffix)) -> conres:(prefix ++ suffix) --associative, right?
             -- two resources that are being combined will generally have the same path
             -- nonetheless this is a monoid-friendly attempt to combine two separate ones
             -- should BranchPath be part of resource in the first place?
@@ -79,6 +79,8 @@ defaultResource bpath = Resource bpath [] [] [] [] Nothing
 
 extendResource :: Resource -> Resource
 extendResource resource = defaultResource (resourceLocation resource)
+
+-- other combinatoresque methods here - e.g. addGet :: Content -> ServerResponse -> Resource -> Resource
 
 -- | A path element of a URI. Unstable data structure. Possible to-be-removed current and to-be-added future components include:
 --
