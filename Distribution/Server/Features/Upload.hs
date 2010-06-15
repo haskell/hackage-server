@@ -15,6 +15,7 @@ import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Group as Group
+import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import qualified Distribution.Server.Auth.Basic as Auth
 import qualified Distribution.Server.Packages.Unpack as Upload
@@ -26,10 +27,15 @@ import Data.Maybe (fromMaybe)
 import Data.Time.Clock (getCurrentTime)
 import Control.Monad (msum, unless)
 import Control.Monad.Trans (MonadIO(..))
+import Data.List (maximumBy)
+import Data.Ord (comparing)
 import Distribution.Package
+import Distribution.PackageDescription (packageDescription, synopsis)
+import Distribution.Text (display, simpleParse)
 
 data UploadFeature = UploadFeature {
-    uploadResource :: UploadResource
+    uploadResource   :: UploadResource,
+    maintainersGroup :: DynamicPath -> IO (Maybe UserGroup)
 }
 
 data UploadResource = UploadResource {
@@ -50,7 +56,42 @@ initUploadFeature core = do
       { uploadResource = UploadResource
           { uploadIndexPage = (resourceAt "/packages/") { resourcePost = [("", uploadPackage (packageIndexChange core))] }
           }
+      , maintainersGroup = getMaintainersGroup
       }
+
+getMaintainersGroup :: DynamicPath -> IO (Maybe UserGroup)
+getMaintainersGroup dpath = case fmap pkgName (simpleParse =<< lookup "package" dpath) of
+  Nothing -> return Nothing
+  Just name -> do 
+    pkgstate <- query GetPackagesState
+    case PackageIndex.lookupPackageName (packageList pkgstate) name of
+      []   -> return Nothing
+      pkgs -> do
+        let pkgInfo = maximumBy (comparing packageVersion) pkgs -- is this really needed?
+        return . Just $ UserGroup {
+            groupDesc = maintainerDescription pkgInfo,
+            queryUserList = query $ GetPackageMaintainers name,
+            addUserList = update . AddPackageMaintainer name,
+            removeUserList = update . RemovePackageMaintainer name
+        }
+
+maintainerDescription :: PkgInfo -> GroupDescription
+maintainerDescription pkgInfo = GroupDescription
+  { groupTitle = "Maintainers for " ++ pname
+  , groupShort = short
+  , groupEntityURL = "/package/" ++ pname
+  , groupPrologue  = [] --prologue (desciption pkg)?
+  }
+  where
+    pkg = packageDescription (pkgDesc pkgInfo)
+    short = synopsis pkg
+    pname = display (packageName pkgInfo)
+
+trusteeDescription :: GroupDescription
+trusteeDescription = nullDescription
+  { groupTitle = "Package trustees"
+  , groupEntityURL = "/packages"
+  }
 
 requirePackageAuth :: (MonadIO m, Package pkg) => pkg -> ServerPartT m Users.UserId
 requirePackageAuth pkg = do

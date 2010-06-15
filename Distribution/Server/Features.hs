@@ -5,7 +5,7 @@ module Distribution.Server.Features where
 import Distribution.Server.Feature
 import Distribution.Server.Features.Core (initCoreFeature)
 --import Distribution.Server.Features.Json (initJsonFeature)
---import Distribution.Server.Features.Html (initHtmlFeature)
+import Distribution.Server.Features.Html (initHtmlFeature)
 --import Distribution.Server.Features.Check (initCheckFeature)
 import Distribution.Server.Features.Upload (initUploadFeature)
 import Distribution.Server.Features.Packages (initPackagesFeature)
@@ -30,11 +30,11 @@ hackageFeatures = do
     uploadFeature <- initUploadFeature coreFeature
     packagesFeature <- initPackagesFeature coreFeature
     --checkFeature <- initCheckFeature coreFeature uploadFeature
-    --htmlFeature <- initHtmlFeature packagesFeature usersFeature uploadFeature checkFeature
-    --jsonFeature <- initJsonFeature packagesFeature usersFeature uploadFeature checkFeature
-    let allFeatures = [HF coreFeature, HF usersFeature, HF packagesFeature, HF uploadFeature, HF legacyRedirectsFeature]
+    htmlFeature <- initHtmlFeature coreFeature packagesFeature --usersFeature uploadFeature checkFeature
+    --jsonFeature <- initJsonFeature
+    let allFeatures = [HF coreFeature, HF usersFeature, HF packagesFeature, HF uploadFeature, HF legacyRedirectsFeature, HF htmlFeature]
     -- Run all initial hooks, now that everyone's gotten a chance to register for them
-    -- This solution does work too well for special initial hook arguments
+    -- This solution does not work too well for special initial hook arguments
     sequence . concat $ map initHooks allFeatures
     return (map getFeature allFeatures)
 

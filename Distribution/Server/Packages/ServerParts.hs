@@ -36,7 +36,7 @@ import qualified Distribution.Server.Auth.Basic as Auth
 import Distribution.Server.Packages.Types (PkgInfo(..), pkgUploadTime)
 import qualified Distribution.Server.ResourceTypes as Resource
 import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)
-import qualified Distribution.Server.Pages.Package as Pages
+--import qualified Distribution.Server.Pages.Package as Pages
 import qualified Distribution.Server.Pages.Recent  as Pages
 import qualified Distribution.Server.Pages.BuildReports as Pages
 import qualified Distribution.Server.Packages.Index as Packages.Index (write)
@@ -87,24 +87,7 @@ packagePagesFeature = HackageModule {
 }
 -- "/package/:package/candidate", "/package/:package/candidate/:cabal", "/package/:package/candidate/:tarball"
 
-maintainersGroup :: DynamicPath -> IO (Maybe UserGroup)
-maintainersGroup dpath = case fmap pkgName (simpleParse =<< lookup "package" dpath) of
-  Nothing -> return Nothing
-  Just name -> do 
-    pkgstate <- query GetPackagesState
-    case PackageIndex.lookupPackageName (packageList pkgstate) name of
-      []   -> return Nothing
-      pkgs -> do
-        let pkgInfo = maximumBy (comparing packageVersion) pkgs
-        return . Just $ UserGroup {
-            groupDesc = Pages.maintainerDescription pkgInfo,
-            queryUserList = query $ GetPackageMaintainers name,
-            addUserList = update . AddPackageMaintainer name,
-            removeUserList = update . RemovePackageMaintainer name
-        }
-
-serveBuildReports, serveIndexPage, serveIndexTarball, servePackageTarball,
-    servePackagePage, serveCabalFile :: Config -> DynamicPath -> ServerPart Response
+serveBuildReports, serveIndexPage, serveIndexTarball, servePackageTarball, serveCabalFile :: Config -> DynamicPath -> ServerPart Response
 
 serveBuildReports config dpath = withPackageId dpath $ \pkgid -> do
     state <- query GetPackagesState
@@ -132,16 +115,6 @@ servePackageTarball config dpath = withPackageId dpath $ \pkgid ->
            require (return $ lookup "tarball" dpath) $ \tarball -> do
     -- FIXME: more accurate versioning. currently /package/foo-1.2/bar-3.14.tar.gz is possible
     servePackage (serverStore config) tarball
-   
-servePackagePage config dpath = withPackagePath dpath $ \state pkg pkgs -> do
-    let pkgid = pkgInfoId pkg
-    distributions <- query $ State.PackageStatus (packageName pkg)
-    hasDocs       <- query $ State.HasDocumentation (packageId pkg)
-    let docURL | hasDocs   = Just $ "/package" </> display pkgid </> "documentation"
-               | otherwise = Nothing
-    userDb <- query $ GetUserDb
-    ok $ toResponse $ Resource.XHtml $
-      Pages.packagePage userDb (packageList state) pkg pkgs distributions docURL
 
 serveCabalFile config dpath = withPackagePath dpath $ \_ pkg _ -> do
     guard (lookup "cabal" dpath == Just (display (packageName pkg) ++ ".cabal"))

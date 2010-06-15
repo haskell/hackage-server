@@ -14,6 +14,7 @@ module Distribution.Server.Resource (
     renderLink,
     resourceAt,
     defaultResource,
+    extendResource,
     serveResource,
     renderServerTree,
     addServerNode
@@ -96,7 +97,7 @@ extendResource resource = defaultResource (resourceLocation resource)
 -- e.g. "\/package\/:package\/doc\/...", "\/logs\/upload\/:page.:format\/!", more complicated to parse - ReadP probably not sufficient -
 -- and more difficult to handle server-side in the renderServerTree method. e.g. retaining formats on redirection.
 -- We could make '.' a separator like in Ruby, so there could be "\/package\/:package\/:tarball.tar.gz"
-data BranchComponent = StaticBranch String | DynamicBranch String  | DynamicFormat String | StaticFormat String deriving (Show, Eq, Ord)
+data BranchComponent = StaticBranch String | DynamicBranch String deriving (Show, Eq, Ord)
 type BranchPath = [BranchComponent]
 
 type URIGen = DynamicPath -> Maybe String
