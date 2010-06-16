@@ -58,6 +58,7 @@ executable hackage-server
     Distribution.Server.Features
     Distribution.Server.Features.Check
     Distribution.Server.Features.Core
+    Distribution.Server.Features.Distro
     Distribution.Server.Features.Html
     Distribution.Server.Features.Json
     Distribution.Server.Features.LegacyRedirects
@@ -139,4 +140,4 @@ executable hackage-server
   else
      includes: unistd.h
   ghc-options: -Wall -fno-warn-orphans
----fwarn-unused-matches
+-- -Werror -fno-warn-warnings-deprecations

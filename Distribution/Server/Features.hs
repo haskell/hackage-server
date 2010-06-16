@@ -30,10 +30,11 @@ hackageFeatures = do
     usersFeature <- initUsersFeature coreFeature
     uploadFeature <- initUploadFeature coreFeature
     packagesFeature <- initPackagesFeature coreFeature
+    distroFeature <- initDistroFeature coreFeature packagesFeature
     --checkFeature <- initCheckFeature coreFeature uploadFeature
     htmlFeature <- initHtmlFeature coreFeature packagesFeature --usersFeature uploadFeature checkFeature
     --jsonFeature <- initJsonFeature
-    let allFeatures = [HF coreFeature, HF usersFeature, HF packagesFeature, HF uploadFeature, HF legacyRedirectsFeature, HF htmlFeature]
+    let allFeatures = [HF coreFeature, HF usersFeature, HF packagesFeature, HF uploadFeature, HF distroFeature, HF legacyRedirectsFeature, HF htmlFeature]
     -- Run all initial hooks, now that everyone's gotten a chance to register for them
     -- This solution does not work too well for special initial hook arguments
     sequence . concat $ map initHooks allFeatures

@@ -51,7 +51,7 @@ distroListing distro packages adminLink
          ]
 
    packageHtml pName pInfo
-       = li << (display pName ++ " " ++ display (distro_version pInfo))
+       = li << (display pName ++ " " ++ display (distroVersion pInfo))
 
    adminLinkHtml
        = [ h3 << "Admin Tasks"

@@ -19,21 +19,6 @@ import Data.List (intercalate, unlines)
 import Distribution.Text (display, simpleParse)
 import Control.Monad
 import Distribution.Package
-{-import Distribution.Server.Packages.State
-import Distribution.Server.Users.State
-import qualified Distribution.Server.Users.Types as Users
-import qualified Distribution.Server.Users.Group as Group
-import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
-import qualified Distribution.Server.Util.BlobStorage as BlobStorage
-import qualified Distribution.Server.Auth.Basic as Auth
-import qualified Distribution.Server.Packages.Unpack as Upload
-import qualified Distribution.Server.PackageIndex as PackageIndex
-import Data.Maybe (fromMaybe)
-import Data.Time.Clock (getCurrentTime)
-import Control.Monad.Trans (MonadIO(..))
-import Data.Ord (comparing)
-import Distribution.PackageDescription (packageDescription, synopsis)
--}
 
 data DistroFeature = DistroFeature {
     distroResource   :: DistroResource,
