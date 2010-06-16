@@ -1,8 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveDataTypeable, TemplateHaskell #-}
 
-#define TESTS
-
 module Data.IntTrie (
   
   IntTrie(..),
@@ -20,7 +18,7 @@ module Data.IntTrie (
 
 import Prelude hiding (lookup)
 
-import Data.Typeable
+import Data.Typeable ()
 
 import qualified Data.Array.Unboxed as A
 import qualified Data.Array.IArray  as A

@@ -61,8 +61,7 @@ newPkgInfo :: PackageIdentifier
            -> UploadLog.Entry -> [UploadLog.Entry]
            -> Users.Users
            -> Either String PkgInfo
-newPkgInfo pkgid (cabalFilePath, cabalFile) (UploadLog.Entry time user _)
-           others users =
+newPkgInfo pkgid (cabalFilePath, cabalFile) (UploadLog.Entry time user _) _ users =
   case parse cabalFile of
       ParseFailed err -> fail $ cabalFilePath
                              ++ maybe "" (\n -> ":" ++ show n) lineno

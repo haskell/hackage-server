@@ -18,6 +18,7 @@ module Distribution.Server.Distributions.Distributions
     , removeDistroVersions
     , distroStatus
     , packageStatus
+    , distroPackageStatus
     , getDistroMaintainers
     , modifyDistroMaintainers
     ) where
@@ -43,30 +44,29 @@ emptyDistroVersions = DistroVersions Map.empty Map.empty
 --- Distribution updating
 
 isDistribution :: DistroName -> Distributions -> Bool
-isDistribution distro Distributions{..}
-    = Map.member distro name_map
+isDistribution distro distros
+    = Map.member distro (nameMap distros)
 
 -- | Add a distribution. Returns 'Nothing' if the
 -- name is already in use.
 addDistro :: DistroName -> Distributions -> Maybe Distributions
-addDistro name d@Distributions{..}
-    | isDistribution name d = Nothing
-    | otherwise = Just . Distributions $ Map.insert name Group.empty name_map
+addDistro name distros
+    | isDistribution name distros = Nothing
+    | otherwise = Just . Distributions $ Map.insert name Group.empty (nameMap distros)
 
 
 -- | List all known distributions
 enumerate :: Distributions -> [DistroName]
-enumerate Distributions{..}
-    = Map.keys name_map
+enumerate distros = Map.keys (nameMap distros)
 
 --- Queries
 
 -- | For a particular distribution, which packages do they have, and
 -- at which version.
 distroStatus :: DistroName -> DistroVersions -> [(PackageName, DistroPackageInfo)]
-distroStatus  distro DistroVersions{..}
-    = let packageNames = maybe [] Set.toList (Map.lookup distro distroMap)
-          f package = let infoMap = fromJust $ Map.lookup package packageDistroMap
+distroStatus distro distros
+    = let packageNames = maybe [] Set.toList (Map.lookup distro $ distroMap distros)
+          f package = let infoMap = fromJust $ Map.lookup package (packageDistroMap distros)
                           info = fromJust $ Map.lookup distro infoMap
                       in (package, info)
       in map f packageNames
@@ -74,18 +74,21 @@ distroStatus  distro DistroVersions{..}
 -- | For a particular package, which distributions contain it and at which
 -- version.
 packageStatus :: PackageName -> DistroVersions -> [(DistroName, DistroPackageInfo)]
-packageStatus package DistroVersions{..} = maybe [] Map.toList (Map.lookup package packageDistroMap)
+packageStatus package dv = maybe [] Map.toList (Map.lookup package $ packageDistroMap dv)
+
+distroPackageStatus :: DistroName -> PackageName -> DistroVersions -> Maybe DistroPackageInfo
+distroPackageStatus distro package dv = Map.lookup distro =<< Map.lookup package (packageDistroMap dv)
 
 --- Removing
 
 -- | Remove a distirbution from the list of known distirbutions
 removeDistro :: DistroName -> Distributions -> Distributions
-removeDistro distro distros@Distributions{..} = distros { name_map = Map.delete distro name_map }
+removeDistro distro distros = distros { nameMap = Map.delete distro (nameMap distros) }
 
 -- | Drop all packages for a distribution.
 removeDistroVersions :: DistroName -> DistroVersions -> DistroVersions
-removeDistroVersions distro dv@DistroVersions{..}
-    = let packageNames = maybe [] Set.toList (Map.lookup distro distroMap)
+removeDistroVersions distro dv
+    = let packageNames = maybe [] Set.toList (Map.lookup distro $ distroMap dv)
       in foldl' (flip $ dropPackage distro) dv packageNames
 
 --- Updating
@@ -131,9 +134,9 @@ addPackage distro package info dv@DistroVersions{..}
       }
 
 getDistroMaintainers :: DistroName -> Distributions -> Maybe UserList
-getDistroMaintainers name = Map.lookup name . name_map
+getDistroMaintainers name = Map.lookup name . nameMap
 
 modifyDistroMaintainers :: DistroName -> (UserList -> UserList) -> Distributions -> Distributions
-modifyDistroMaintainers name func dists = dists {name_map = Map.update (Just . func) name (name_map dists) }
+modifyDistroMaintainers name func dists = dists {nameMap = Map.update (Just . func) name (nameMap dists) }
 
 

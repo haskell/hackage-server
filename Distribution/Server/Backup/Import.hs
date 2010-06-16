@@ -112,13 +112,13 @@ importTar storage tar featureMap = do
              decompress $ tar
     case res of
       Left err -> return . Just $ err
-      Right IS{..} -> do
-        update $ ReplaceDocumentation isDocs
-        update $ TarIndexMap.ReplaceTarIndexMap isTarIndex
-        update $ ReplacePackagesState $ PackagesState isPackages
-        update $ ReplaceBuildReports $ isBuildReps
-        update $ ReplaceDistributions isDistributions isDistVersions
-        mapM_ restoreComplete (Map.elems isFeatureMap)
+      Right is -> do
+        update $ ReplaceDocumentation $ isDocs is
+        update $ TarIndexMap.ReplaceTarIndexMap $ isTarIndex is
+        update $ ReplacePackagesState $ PackagesState $ isPackages is
+        update $ ReplaceBuildReports $ isBuildReps is
+        update $ ReplaceDistributions (isDistributions is) (isDistVersions is)
+        mapM_ restoreComplete (Map.elems $ isFeatureMap is)
         return Nothing
 
   where initState = IS

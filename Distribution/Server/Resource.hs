@@ -29,7 +29,8 @@ import qualified Data.Map as Map
 import Control.Applicative ((<*>), (<$>))
 import Control.Monad (msum)
 import Data.Maybe (maybeToList)
-import Data.List (intercalate, find)
+import Data.Function (on)
+import Data.List (intercalate, find, unionBy)
 import qualified Text.ParserCombinators.ReadP as Parse
 
 import qualified Happstack.Server.SURI as SURI
@@ -55,18 +56,7 @@ instance Monoid Resource where
     mappend (Resource bpath rget rput rpost rdelete run) (Resource bpath' rget' rput' rpost' rdelete' run') =
         Resource (simpleCombine bpath bpath') (ccombine rget rget') (ccombine rput rput')
                    (ccombine rpost rpost') (ccombine rdelete rdelete') (mappend run run')
-      where ccombine list list' = foldr insertType list' list
-            insertType conres list = case break ((fst conres==) . fst) list of
-                (absent, []) -> conres:absent
-                (prefix, (_:suffix)) -> conres:(prefix ++ suffix) --associative, right?
-            -- two resources that are being combined will generally have the same path
-            -- nonetheless this is a monoid-friendly attempt to combine two separate ones
-            -- should BranchPath be part of resource in the first place?
-            zipCombine (x:xs) (y:ys) | x == y    = x:zipCombine xs ys
-                                     | otherwise = x:xs
-            zipCombine []     (y:ys) = y:ys
-            zipCombine xs     []     = xs
-            -- easier, if not hackier, way to do it - like Monoid instance of Last
+      where ccombine list list' = unionBy ((==) `on` fst) list list'
             simpleCombine xs ys = if null ys then xs else ys
 
 type Content = String
@@ -107,7 +97,7 @@ type URIGen = DynamicPath -> Maybe String
 -- Each feature should probably provide its own typed generating functions.
 -- This method might support Maybe Content too, if .format extensions are put in place.
 renderURI :: BranchPath -> URIGen
-renderURI path dpath = ("/" </>) <$> go (reverse path)
+renderURI bpath dpath = ("/" </>) <$> go (reverse bpath)
     where go (StaticBranch  sdir:rest) = (SURI.escape sdir </>) <$> go rest
           go (DynamicBranch sdir:rest) = ((</>) . SURI.escape) <$> lookup sdir dpath <*> go rest
           go [] = Just ""
@@ -119,7 +109,6 @@ renderLink :: URIGen -> DynamicPath -> String -> Html
 renderLink gen dpath text = case gen dpath of
     Nothing  -> toHtml text
     Just uri -> anchor ! [href uri] << text
-
 
 data ServerTree a = ServerTree {
     nodeResponse :: Maybe a,

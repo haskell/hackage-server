@@ -107,7 +107,7 @@ data PackageRender = PackageRender {
     rendOther :: PackageDescription
 }
 doPackageRender :: PackageIndex PkgInfo -> Users.Users -> PackageId -> Maybe PackageRender
-doPackageRender pkgIndex users pkgid@(PackageIdentifier name version) = do
+doPackageRender pkgIndex users (PackageIdentifier name version) = do
     let infos = PackageIndex.lookupPackageName pkgIndex name
     guard (not . null $ infos)
     info <- if version == Version [] [] then Just $ maximumBy (comparing packageVersion) infos

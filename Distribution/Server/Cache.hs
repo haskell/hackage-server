@@ -16,7 +16,7 @@ module Distribution.Server.Cache (
 import qualified Distribution.Server.Util.AsyncVar as AsyncVar
 import Distribution.Server.Util.AsyncVar (AsyncVar)
 
-import Happstack.Server (ServerPart, Response(rsBody), ToMessage, toResponse, result, ok)
+import Happstack.Server (ServerPart, Response(rsBody), ToMessage, toResponse, result)
 
 import qualified Data.ByteString.Lazy as ByteString
 import Data.ByteString.Lazy (ByteString)
@@ -55,7 +55,7 @@ newtype GenCache a = GenCache {
 }
 
 newCache :: a -> (a -> b) -> IO (GenCache a)
-newCache state force = GenCache `fmap` AsyncVar.new (\a -> force a `seq` ()) state
+newCache state forceFunc = GenCache `fmap` AsyncVar.new (\a -> forceFunc a `seq` ()) state
 
 newCacheable :: Cacheable a => IO (GenCache a)
 newCacheable = newCache emptyValue forceValue

@@ -33,6 +33,7 @@ data GroupDescription = GroupDescription {
     groupEntityURL :: String,
     groupPrologue  :: [Html]
 }
+nullDescription :: GroupDescription
 nullDescription = GroupDescription { groupTitle = "", groupShort = "",
                                      groupEntityURL = "", groupPrologue = [] }
 

@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, DeriveDataTypeable, TemplateHaskell #-}
 
 module Data.TarIndex {-(
@@ -13,14 +14,13 @@ module Data.TarIndex {-(
 
   )-} where
 
-import Data.Typeable
+import Data.Typeable ()
 
 import qualified Data.StringTable as StringTable
 import Data.StringTable (StringTable)
 import qualified Data.IntTrie as IntTrie
 
 import Data.IntTrie (IntTrie)
-import qualified Data.List as List
 import qualified System.FilePath as FilePath
 import Prelude hiding (lookup)
 
@@ -86,13 +86,11 @@ $(deriveSerializeFor
 lookup :: TarIndex -> FilePath -> Maybe TarIndexEntry
 lookup (TarIndex pathTable pathTrie) path =
     case toComponentIds pathTable path of
-      Nothing   -> Nothing
-      Just path -> fmap (mkIndexEntry path) (IntTrie.lookup pathTrie path)
+      Nothing    -> Nothing
+      Just fpath -> fmap (mkIndexEntry fpath) (IntTrie.lookup pathTrie fpath)
   where
-    pathComponentIds = toComponentIds pathTable path
-
-    mkIndexEntry path (IntTrie.Entry offset)        = TarFileEntry offset
-    mkIndexEntry path (IntTrie.Completions entries) =
+    mkIndexEntry _ (IntTrie.Entry offset)        = TarFileEntry offset
+    mkIndexEntry _ (IntTrie.Completions entries) =
       TarDir [ fromComponentIds pathTable [entry]
              | entry <- entries ]
 
@@ -119,11 +117,13 @@ toComponentIds table = lookupComponents [] . FilePath.splitDirectories
 fromComponentIds :: StringTable PathComponentId -> [PathComponentId] -> FilePath
 fromComponentIds table = FilePath.joinPath . map (StringTable.index table)
 
+#if TESTS
+
 -- properties of a finite mapping...
 
 prop_lookup :: [(FilePath, TarEntryOffset)] -> FilePath -> Bool
 prop_lookup xs x =
-  case (lookup (construct xs) x, List.lookup x xs) of
+  case (lookup (construct xs) x, Prelude.lookup x xs) of
     (Nothing,                    Nothing)      -> True
     (Just (TarFileEntry offset), Just offset') -> offset == offset'
     _                                          -> False
@@ -153,3 +153,5 @@ example0 =
   [("foo-1.0/foo-1.0.cabal", 512)   -- tar block 1
   ,("foo-1.0/LICENSE",       2048)  -- tar block 4
   ,("foo-1.0/Data/Foo.hs",   4096)] -- tar block 8
+
+#endif

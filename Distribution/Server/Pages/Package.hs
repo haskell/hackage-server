@@ -3,41 +3,26 @@ module Distribution.Server.Pages.Package (
     packagePage
   ) where
 
-import Distribution.Server.Features.Packages -- !!
+import Distribution.Server.Features.Packages
 
-import Distribution.Server.Pages.Package.HaddockParse        ( parseHaddockParagraphs )
-import Distribution.Server.Pages.Package.HaddockLex        ( tokenise )
+import Distribution.Server.Pages.Package.HaddockParse (parseHaddockParagraphs)
+import Distribution.Server.Pages.Package.HaddockLex  (tokenise)
 import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Packages.ModuleForest
-import Distribution.Server.Pages.Template                ( hackagePage )
-import Distribution.Server.Packages.Types (PkgInfo(..))
-import Distribution.Server.Distributions.Distributions
-    (DistroPackageInfo(..), DistroName)
-import qualified Distribution.Server.Users.Users as Users
-import Distribution.Server.Users.Group (GroupDescription(..), nullDescription)
+import Distribution.Server.Pages.Template (hackagePage)
+import Distribution.Server.Distributions.Distributions (DistroPackageInfo(..), DistroName)
 
-import qualified Distribution.Server.PackageIndex as PackageIndex
-import Distribution.Server.PackageIndex (PackageIndex)
-
-import Distribution.PackageDescription.Configuration (flattenPackageDescription)
 import Distribution.Package
 import Distribution.PackageDescription as P
-import Distribution.Version (Version (..), VersionRange (..), withinRange)
-import Distribution.Text        ( display )
-import Text.XHtml.Strict hiding ( p, name )
+import Distribution.Version (Version (..), VersionRange (..))
+import Distribution.Text        (display)
+import Text.XHtml.Strict hiding (p, name)
 
-import Control.Monad                ( liftM2 )
-import qualified Data.Foldable as Foldable
-import Data.Char                ( toLower, toUpper )
-import Data.List                ( intersperse, intercalate, partition, sort, sortBy )
-import Data.Maybe   ( listToMaybe )
-import Data.Monoid  ( mempty )
-import Data.Map                        ( Map )
-import qualified Data.Map as Map
-import Data.Ord                        ( comparing )
-import System.FilePath.Posix    ( (</>), (<.>) )
-import System.Locale            ( defaultTimeLocale )
-import Data.Time.Format         ( formatTime )
+import Data.Char                (toUpper)
+import Data.List                (intersperse, intercalate)
+import System.FilePath.Posix    ((</>), (<.>))
+import System.Locale            (defaultTimeLocale)
+import Data.Time.Format         (formatTime)
 
 packagePage :: PackageRender -> [(DistroName, DistroPackageInfo)] -> Maybe URL -> Html
 packagePage render distributions docURL = hackagePage (display $ rendPkgId render) (pkgBody render distributions docURL)
@@ -152,8 +137,8 @@ propertySection render distributions = [
         dispTagVal "superseded by" v = anchor ! [href (packageURL (PackageIdentifier (PackageName v) (Version [] [])))] << v
         dispTagVal _ v = toHtml v
         showDist (name, info)
-            = let version = distro_version info
-                  url = distro_url info
+            = let version = distroVersion info
+                  url = distroUrl info
               in toHtml (display name ++ ":") +++
                  anchor ! [href url] << toHtml (display version)
 
@@ -230,11 +215,6 @@ renderModuleForest mb_url = renderForest []
       myUnordList = unordList ! [theclass "modules"]
 
 ------------------------------------------------------------------------------
-
--- UTILS:
-
-maybeLast :: [a] -> Maybe a
-maybeLast = listToMaybe . reverse
 
 -- | URL describing a package.
 packageURL :: PackageIdentifier -> URL

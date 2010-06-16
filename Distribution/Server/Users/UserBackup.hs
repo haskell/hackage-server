@@ -23,26 +23,18 @@ import Control.Monad.State (get, put)
 import Text.CSV
 import qualified Data.IntSet as IntSet
 
-{-importUsers :: [BackupEntry] -> IO (Maybe String)
-importUsers (entry:entries) = case entry of
-    [("auth.csv", bs)] -> do
-        res <- runImport Users.empty (importAuth bs)
-        case res of
-            Right users -> update (ReplaceUserDb users) >> importUsers entries
-            Left  e     -> return (Just e)
-    _ -> importUsers entries-}
-
 importGroup :: BackupEntry -> Import s UserList
-importGroup (file, contents) = importCSV (last file) contents $ \csv ->
-    fmap (UserList . IntSet.fromList) $ mapM parseUserId (concat csv)
+importGroup (file, contents) = importCSV (last file) contents $ \vals ->
+    fmap (UserList . IntSet.fromList) $ mapM parseUserId (concat vals)
   where
-    parseUserId id = case reads id of
+    parseUserId uid = case reads uid of
         [(num, "")] -> return num
-        _ -> fail $ "Unable to parse user id : " ++ show id
+        _ -> fail $ "Unable to parse user id : " ++ show uid
 
 --constructImportMap :: [HackageFeature] -> Map String RestoreBackup
 --constructImportMap = Map.fromList . concatMap (\f -> [(featureName f, restoreBackup f)])
 
+userBackup :: RestoreBackup
 userBackup = updateUserBackup Users.empty
 
 updateUserBackup :: Users -> RestoreBackup
@@ -58,8 +50,7 @@ doUserImport users (["auth.csv"], bs) = runImport users (importAuth bs)
 doUserImport users _                  = return . Right $ users
 
 importAuth :: ByteString -> Import Users ()
-importAuth contents = importCSV "auth.csv" contents
-                        $ \csv -> mapM_ fromRecord (drop 2 csv)
+importAuth contents = importCSV "auth.csv" contents $ mapM_ fromRecord . drop 2
 
   where 
     fromRecord [nameStr, idStr, "deleted", "none", ""] = do
@@ -88,8 +79,8 @@ insertUser :: UserId -> UserInfo -> Import Users ()
 insertUser user info = do
     users <- get
     case Users.insert user info users of
-        Nothing     -> fail $ "Duplicate user id for user: " ++ display user
-        Just users' -> put users
+        Nothing -> fail $ "Duplicate user id for user: " ++ display user
+        Just _  -> put users
 
 ---------------- Exporting
 -- group.csv

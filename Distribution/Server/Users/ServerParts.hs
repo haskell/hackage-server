@@ -8,7 +8,6 @@ import Happstack.Server hiding (port)
 import Happstack.State hiding (Version)
 
 import Distribution.Server.Users.State as State
-import Distribution.Server.Packages.State as State
 import qualified Distribution.Server.Auth.Basic as Auth
 import qualified Distribution.Server.Auth.Types as Auth
 import qualified Distribution.Server.Auth.Crypt as Auth
@@ -17,9 +16,7 @@ import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Types
 import Distribution.Server.Feature
-import Distribution.Server.Resource
 import Distribution.Server.Types
-import Distribution.Server.Hook
 import qualified Distribution.Server.Auth.Types as Auth
 import qualified Distribution.Server.Auth.Crypt as Auth
 import qualified Distribution.Server.Auth.Basic as Auth
@@ -49,24 +46,17 @@ instance FromData ChangePassword where
 	fromData = liftM3 ChangePassword (look "password" `mplus` return "") (look "repeat-password" `mplus` return "")
                                      (fmap (maybe Auth.BasicAuth (const Auth.DigestAuth) . lookup "auth") lookPairs) --checked: digest auth
 
-serveUserList :: Config -> DynamicPath -> ServerPart Response
-serveUserList config dpath = do
-    users <- query GetUserDb
-    return . toResponse $ "Calling all users: " ++ show users
-
-serveUserPage :: Config -> DynamicPath -> ServerPart Response
-serveUserPage config dpath = return . toResponse $ "Welcome to the illustrious user page of (" ++ show (lookup "username" dpath) ++ "), wherein you may view basic information and toggle settings and change passwords."
-
 changePassword :: Config -> DynamicPath -> ServerPart Response
-changePassword config dpath = do
+changePassword _ dpath = do
     users  <- query State.GetUserDb
     admins <- query State.GetHackageAdmins
     uid <- Auth.requireHackageAuth users Nothing Nothing
-    let muserIdName = userName `fmap` Users.lookupId uid users
+    let -- maybe the name specified in the path here
         muserPathName = simpleParse =<< lookup "username" dpath
+        -- maybe the id of that name
         muserPathId = flip Users.lookupName users =<< muserPathName
-    case (muserPathId, muserPathName, muserIdName) of
-      (Just userPathId, Just userPathName, Just userIdName) ->
+    case (muserPathId, muserPathName) of
+      (Just userPathId, Just userPathName) ->
         -- if this user's id corresponds to the one in the path, or is an admin
         if uid == userPathId || (uid `Group.member` admins)
           then do
@@ -83,8 +73,8 @@ changePassword config dpath = do
                     else ok $ toResponse "Error changing password"
               else forbidden $ toResponse "Copies of new password do not match or is an invalid password (ex: blank)"
           else forbidden . toResponse $ "Cannot change password for " ++ display userPathName
-      (Nothing, Just userPathName, _) -> notFound . toResponse $ "User " ++ display userPathName ++ " doesn't exist"
-      _ -> internalServerError . toResponse $ "Error in changePassword"
+      (Nothing, Just userPathName) -> notFound . toResponse $ "User " ++ display userPathName ++ " doesn't exist"
+      _ -> notFound . toResponse $ "Invalid user name - doesn't exist"
 
 newBasicPass :: MonadIO m => Auth.PasswdPlain -> m UserAuth
 newBasicPass pwd = do

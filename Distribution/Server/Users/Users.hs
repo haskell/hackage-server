@@ -28,7 +28,6 @@ module Distribution.Server.Users.Users (
   ) where
 
 import Distribution.Server.Users.Types
-import qualified Distribution.Server.Users.Group as Group
 
 import Data.Typeable (Typeable)
 import qualified Data.Map as Map

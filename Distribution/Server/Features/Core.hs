@@ -1,7 +1,10 @@
 module Distribution.Server.Features.Core (
     CoreFeature(..),
     CoreResource(..),
-    initCoreFeature
+    initCoreFeature,
+    withPackage,
+    withPackageId,
+    withPackagePath
   ) where
 
 --import Distribution.Server.Users.Resource (makeGroupResources)
@@ -19,21 +22,25 @@ import Text.CSV (printCSV, CSV)
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.State
 import Distribution.Server.Users.State
-import Distribution.Server.Packages.ServerParts (withPackageId, withPackage, servePackageTarball, serveCabalFile)
 import qualified Distribution.Server.Packages.Index as Packages.Index
 import qualified Distribution.Server.Pages.Index as Pages
 import qualified Codec.Compression.GZip as GZip
 import qualified Distribution.Server.ResourceTypes as Resource
+import qualified Distribution.Server.PackageIndex as PackageIndex
+import qualified Distribution.Server.Util.BlobStorage as BlobStorage
+import Distribution.Server.Util.BlobStorage (BlobStorage)
 
 import Distribution.Text (display)
 import Control.Monad
+import Control.Monad.Trans
 import Data.Monoid (mconcat)
 import Happstack.Server
 import Happstack.State (update, query)
 import Text.XHtml.Strict
 import Data.Ord (comparing)
-import Data.List (sortBy)
+import Data.List (sortBy, maximumBy, find)
 import Distribution.Package
+import Distribution.Version (Version(..))
 import qualified Data.ByteString.Lazy.Char8 as BS
 
 data CoreFeature = CoreFeature {
@@ -77,8 +84,8 @@ initCoreFeature :: IO CoreFeature
 initCoreFeature = do
     let indexPage config _ = fileServe ["hackage.html"] (serverStaticDir config) -- perhaps have a less 'spritzy' index page
     -- Caches
-    thePackages <- Cache.newCache (toResponse ()) (BS.length . rsBody)
-    indexTar    <- Cache.newCache (BS.empty) (BS.length)
+    thePackages <- Cache.newCacheable
+    indexTar    <- Cache.newCacheable
     -- Hooks
     downHook <- newHookList
     changeHook <- newHookList
@@ -117,7 +124,7 @@ initCoreFeature = do
 
 -- Should probably look more like an Apache index page (Name / Last modified / Size / Content-type)
 basicPackagePage :: URIGen -> URIGen -> Config -> DynamicPath -> ServerPart Response
-basicPackagePage cabalUrl tarUrl config dpath = withPackageId dpath $ \pkgid -> withPackage pkgid $ \_ pkg pkgs ->
+basicPackagePage cabalUrl tarUrl _ dpath = withPackagePath dpath $ \_ _ pkgs ->
   ok . toResponse $ Resource.XHtml $ showAllP $ sortBy (flip $ comparing packageVersion) pkgs
   where
     showAllP :: [PkgInfo] -> Html
@@ -137,3 +144,52 @@ basicPackagePage cabalUrl tarUrl config dpath = withPackageId dpath $ \pkgid -> 
                        toHtml " (Cabal source package)"]
         ]
      ]
+
+withPackage :: PackageId -> (PackagesState -> PkgInfo -> [PkgInfo] -> ServerPart Response) -> ServerPart Response
+withPackage pkgid func = do
+  state <- query GetPackagesState
+  let index = packageList state
+  case PackageIndex.lookupPackageName index (packageName pkgid) of
+    []   -> anyRequest $ notFound $ toResponse "No such package in package index"
+    pkgs  | pkgVersion pkgid == Version [] []
+         -> func state pkg pkgs
+      where pkg = maximumBy (comparing packageVersion) pkgs
+    pkgs -> case find ((== packageVersion pkgid) . packageVersion) pkgs of
+      Nothing  -> anyRequest $ notFound $ toResponse "No such package version"
+      Just pkg -> func state pkg pkgs
+
+withPackagePath :: DynamicPath -> (PackagesState -> PkgInfo -> [PkgInfo] -> ServerPart Response) -> ServerPart Response
+withPackagePath dpath func = withPackageId dpath $ \pkgid -> withPackage pkgid func
+
+withPackageId :: DynamicPath -> (PackageId -> ServerPart Response) -> ServerPart Response
+withPackageId dpath = require (return $ lookup "package" dpath >>= fromReqURI)
+
+---------------------------------------------
+
+servePackage :: BlobStorage -> String -> ServerPart Response
+servePackage store pkgIdStr = do
+    let (pkgVer, t) = splitAt (length pkgIdStr - length ext) pkgIdStr
+    case fromReqURI pkgVer of
+        Just pid -> serve pid t
+        Nothing  -> notFound $ toResponse "Not a valid package-version format"
+  where
+    ext = ".tar.gz"
+    serve pkgId t | t /= ext = notFound $ toResponse "No such package in store"
+                  | otherwise = withPackage pkgId $ \_ pkg _ ->
+        case pkgTarball pkg of
+            [] -> notFound $ toResponse "No tarball available"
+            ((blobId, _):_) -> do
+                  file <- liftIO $ BlobStorage.fetch store blobId
+                  ok $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)
+
+servePackageTarball :: Config -> DynamicPath -> ServerPart Response
+servePackageTarball config dpath = withPackageId dpath $ \_ ->
+           require (return $ lookup "tarball" dpath) $ \tarball -> do
+    -- FIXME: more accurate versioning. currently /package/foo-1.2/bar-3.14.tar.gz is possible
+    servePackage (serverStore config) tarball
+
+serveCabalFile :: Config -> DynamicPath -> ServerPart Response
+serveCabalFile _ dpath = withPackagePath dpath $ \_ pkg _ -> do
+    guard (lookup "cabal" dpath == Just (display (packageName pkg) ++ ".cabal"))
+    ok $ toResponse (Resource.CabalFile (pkgData pkg))
+

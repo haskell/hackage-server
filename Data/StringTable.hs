@@ -15,7 +15,7 @@ import Prelude hiding (lookup)
 import qualified Data.List as List
 import qualified Data.Array.Unboxed as A
 import Data.Array.Unboxed ((!))
-import Data.Typeable
+import Data.Typeable ()
 import qualified Data.ByteString.Char8 as BS
 import Data.Word (Word32)
 

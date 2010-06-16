@@ -35,6 +35,8 @@ import Control.Monad (MonadPlus(..))
 
 -- | A feature to allow manipulation of the database of users.
 --
+
+-- FIXME: require authentication here
 data UserFeature = UserFeature {
     userResource  :: UserResource,
     userAdded :: HookList (IO ())
@@ -79,7 +81,6 @@ initUsersFeature _ = do
         -- token of this unpossibility
         info <- maybe mzero return $ Users.lookupId uid users
         seeOther ("/user/" ++ display (userName info)) $ toResponse ()
-    -- the two below should probably require authentication. just saying.
     deleteAccount _ dpath = withUserPath dpath $ \uid _ -> do
         update (DeleteUser uid)
         return (result 204 "")

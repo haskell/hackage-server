@@ -1,6 +1,7 @@
 module Distribution.Server.Features.Upload (
     UploadFeature(..),
-    initUploadFeature
+    initUploadFeature,
+    requirePackageAuth
   ) where
 
 import Distribution.Server.Feature
@@ -12,7 +13,6 @@ import Distribution.Server.Types
 import Distribution.Server.Packages.State
 import Distribution.Server.Users.State
 import Distribution.Server.Packages.Types
-import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
@@ -35,7 +35,8 @@ import Distribution.Text (display, simpleParse)
 
 data UploadFeature = UploadFeature {
     uploadResource   :: UploadResource,
-    maintainersGroup :: DynamicPath -> IO (Maybe UserGroup)
+    maintainersGroup :: DynamicPath -> IO (Maybe UserGroup),
+    trusteeGroup :: UserGroup
 }
 
 data UploadResource = UploadResource {
@@ -57,6 +58,12 @@ initUploadFeature core = do
           { uploadIndexPage = (resourceAt "/packages/") { resourcePost = [("", uploadPackage (packageIndexChange core))] }
           }
       , maintainersGroup = getMaintainersGroup
+      , trusteeGroup = UserGroup {
+            groupDesc = trusteeDescription,
+            queryUserList = query $ GetHackageTrustees,
+            addUserList = update . AddHackageTrustee,
+            removeUserList = update . RemoveHackageTrustee
+        }
       }
 
 getMaintainersGroup :: DynamicPath -> IO (Maybe UserGroup)

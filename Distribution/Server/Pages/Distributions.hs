@@ -14,6 +14,7 @@ import Distribution.Server.Users.Types
 import Distribution.Text
 
 import Distribution.Package
+import qualified Happstack.Server.SURI as SURI
 
 import System.FilePath.Posix
 import Text.XHtml.Strict
@@ -70,7 +71,7 @@ distroPage distro users
 addPackageForm :: DistroName -> [Html]
 addPackageForm distro  =
     let actionUri =
-            "/distro" </> displayDir distro </> "admin" </> "addPackage"
+            "/distro" </> SURI.escape distro </> "admin" </> "addPackage"
     in [ h3 << "Add a package"
        , gui actionUri ! [theclass "box"] <<
          [ p << [stringToHtml "Package: ", textfield "packageName"]
@@ -79,6 +80,21 @@ addPackageForm distro  =
          , submit "submit" "Add package"
          ]
        ]
+
+addDistroForm :: [Html]
+addDistroForm =
+    [ h3 << "Add Distribution"
+    , gui "/admin/createDistro" ! [theclass "box"] <<
+        [ p << [stringToHtml "Name: ", textfield "distroName"]
+        , submit "submit" "Add distribution"
+        ]
+    ]
+
+{-
+displayDir :: Text a => a -> String
+displayDir = escapeString f . display
+ where f c = okInPath c && c /= '/'
+
 
 -- | Admin form for a distribution. Includes a list
 -- of the maintainers, a form to add maintainers and
@@ -91,15 +107,6 @@ adminDistroPage distro users
       , deleteDistro distro
       ]
 
-addDistroForm :: [Html]
-addDistroForm =
-    [ h3 << "Add Distribution"
-    , gui "/admin/createDistro" ! [theclass "box"] <<
-        [ p << [stringToHtml "Name: ", textfield "distroName"]
-        , submit "submit" "Add distribution"
-        ]
-    ]
-
 addUserForm :: DistroName -> [Html]
 addUserForm distro =
     [ h3 << "Add a maintainer"
@@ -108,10 +115,6 @@ addUserForm distro =
          , submit "submit" "Add user"
          ]
     ]
-
-displayDir :: Text a => a -> String
-displayDir = escapeString f . display
- where f c = okInPath c && c /= '/'
 
 deleteDistro :: DistroName -> [Html]
 deleteDistro distro
@@ -137,7 +140,7 @@ removeUser user distro
     = gui ("/distro" </> displayDir distro </> "admin" </> "removeMember")
       << [ hidden "userName" $ display user
          , submit "submit" "Remove"
-         ]
+         ]-}
 
 listing :: FilePath -> [DistroName] -> [Html]
 listing rootPath distros
@@ -147,5 +150,5 @@ listing rootPath distros
 
 distroHtml :: FilePath -> DistroName -> Html
 distroHtml rootPath distro
-    = li << anchor ! [href $ rootPath </> displayDir distro ]
+    = li << anchor ! [href $ rootPath </> SURI.escape distro ]
       << display distro

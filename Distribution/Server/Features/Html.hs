@@ -4,7 +4,6 @@ module Distribution.Server.Features.Html (
   ) where
 
 
-import Distribution.Server.Packages.ServerParts (withPackageId)
 import Distribution.Server.Feature
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages
@@ -45,7 +44,7 @@ initHtmlFeature core pkg = do
   --  packageRender :: PackageId -> IO (Maybe PackageRender)
 
 servePackagePage :: PackagesFeature -> Config -> DynamicPath -> ServerPart Response
-servePackagePage pkg config dpath = withPackageId dpath $ \pkgid -> require (packageRender pkg pkgid) $ \render -> do
+servePackagePage pkg _ dpath = withPackageId dpath $ \pkgid -> require (packageRender pkg pkgid) $ \render -> do
     distributions <- query $ State.PackageStatus (packageName pkgid)
     hasDocs       <- query $ State.HasDocumentation (packageId pkgid)
     let docURL | hasDocs   = Just $ "/package" </> display pkgid </> "documentation"

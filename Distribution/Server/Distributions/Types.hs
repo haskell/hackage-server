@@ -42,7 +42,7 @@ instance Text DistroName where
 
 -- | Listing of known distirbutions 
 data Distributions = Distributions {
-    name_map :: !(Map.Map DistroName UserList)
+    nameMap :: !(Map.Map DistroName UserList)
 }
  deriving (Typeable, Show)
 instance Version Distributions
@@ -57,8 +57,8 @@ instance Version DistroVersions
 
 data DistroPackageInfo
     = DistroPackageInfo
-      { distro_version :: Version.Version
-      , distro_url     :: String
+      { distroVersion :: Version.Version
+      , distroUrl     :: String
       }
  deriving (Typeable, Show)
 instance Version DistroPackageInfo

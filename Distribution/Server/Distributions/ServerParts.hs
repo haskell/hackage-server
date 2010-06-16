@@ -34,15 +34,15 @@ import System.FilePath.Posix ((</>))
 
 import Text.URI (escapeString, okInPath)
 
-maintainersGroup :: DynamicPath -> Maybe (UserGroup GetDistroMaintainers AddDistroMaintainer RemoveDistroMaintainer)
-maintainersGroup dpath = do
+maintainersGroup :: DynamicPath -> IO (Maybe UserGroup)
+maintainersGroup dpath = return $ do
     distroStr <- lookup "distro" dpath
     let distroName = DistroName distroStr
     return $ UserGroup {
         groupName = "Maintainers for " ++ distroStr,
-        queryUserList = Dist.GetDistroMaintainers distroName,
-        addUserList = Dist.AddDistroMaintainer distroName,
-        removeUserList = Dist.RemoveDistroMaintainer distroName
+        queryUserList = query (Dist.GetDistroMaintainers distroName),
+        addUserList = update . Dist.AddDistroMaintainer distroName,
+        removeUserList = update . Dist.RemoveDistroMaintainer distroName
     }
 
 {-| Administrator entry points. Assumes that permissions

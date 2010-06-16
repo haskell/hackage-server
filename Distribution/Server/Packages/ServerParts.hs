@@ -1,21 +1,16 @@
 module Distribution.Server.Packages.ServerParts (
-    withPackageId,
-    withPackagePath,
-    withPackage,
-    servePackageTarball,
-    serveCabalFile,
+    serveBuildReports,
 
     packagePagesFeature,
     updateCache,
     stateToCache,
     handlePackageById,
-    servePackage,
     checkPackage,
     buildReports,
   ) where
 
-import Distribution.Package (PackageIdentifier(..), PackageId, packageName, packageVersion , Package(packageId))
-import Distribution.Text    (simpleParse, display)
+import Distribution.Package (PackageId)
+import Distribution.Text (simpleParse, display)
 import Happstack.Server hiding (port, host)
 import Happstack.State hiding (Version)
 
@@ -25,15 +20,12 @@ import Distribution.Server.Instances ()
 import Distribution.Server.Packages.State as State
 import Distribution.Server.Users.State as State
 
-import qualified Distribution.Server.Util.TarIndex as TarIndex
-import qualified Distribution.Server.Util.Serve as TarIndex
+--import qualified Distribution.Server.Util.TarIndex as TarIndex
+--import qualified Distribution.Server.Util.Serve as TarIndex
 
-import qualified  Distribution.Server.Packages.State as State
-import qualified  Distribution.Server.Distributions.State as State
 import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.Server.PackageIndex as PackageIndex
-import qualified Distribution.Server.Auth.Basic as Auth
-import Distribution.Server.Packages.Types (PkgInfo(..), pkgUploadTime)
+import Distribution.Server.Packages.Types (PkgInfo(..))
 import qualified Distribution.Server.ResourceTypes as Resource
 import qualified Distribution.Server.Pages.Index   as Pages (packageIndex)
 --import qualified Distribution.Server.Pages.Package as Pages
@@ -43,29 +35,24 @@ import qualified Distribution.Server.Packages.Index as Packages.Index (write)
 import qualified Distribution.Server.Packages.Unpack as Upload (unpackPackage)
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
-import Distribution.Server.Util.Serve (serveTarball)
+--import Distribution.Server.Util.Serve (serveTarball)
 import qualified Distribution.Server.BuildReport.BuildReport as BuildReport
 import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
 
---import Distribution.Server.Resource
 import Distribution.Server.Feature
 import Distribution.Server.Types
---import Distribution.Server.Hook
 
 import qualified Distribution.Server.Users.Users as Users
-import qualified Distribution.Server.Users.Types as Users
-import qualified Distribution.Server.Users.Group as Groups
-import Distribution.Server.Users.Group (UserGroup(..))
+
+import Distribution.Server.Features.Core (withPackageId)
 
 import Data.Maybe
-import Data.Version
 import Control.Monad.Trans
-import Control.Monad (msum, mzero, guard, unless)
-import Data.List (maximumBy, sortBy)
+import Control.Monad (msum, mzero)
+import Data.List (sortBy)
 import Data.Ord (comparing)
 import Data.Time.Clock
 import Network.URI (URIAuth)
-import System.FilePath.Posix ((</>))
 
 import qualified Data.ByteString.Lazy.Char8 as BS.Char8
 import qualified Codec.Compression.GZip as GZip
@@ -87,44 +74,17 @@ packagePagesFeature = HackageModule {
 }
 -- "/package/:package/candidate", "/package/:package/candidate/:cabal", "/package/:package/candidate/:tarball"
 
-serveBuildReports, serveIndexPage, serveIndexTarball, servePackageTarball, serveCabalFile :: Config -> DynamicPath -> ServerPart Response
+serveBuildReports :: Config -> DynamicPath -> ServerPart Response
 
-serveBuildReports config dpath = withPackageId dpath $ \pkgid -> do
+serveBuildReports _ dpath = withPackageId dpath $ \pkgid -> do
     state <- query GetPackagesState
-    buildReports <- query GetBuildReports
+    reports <- query GetBuildReports
     case PackageIndex.lookupPackageId (packageList state) pkgid of
         Nothing -> notFound $ toResponse "No such package"
         Just _  -> do
-            let reports = BuildReports.lookupPackageReports
-                            buildReports pkgid
-            ok $ toResponse $ Resource.XHtml $
-                   Pages.buildReportSummary pkgid reports
+            let pkgReports = BuildReports.lookupPackageReports reports pkgid
+            ok $ toResponse $ Resource.XHtml $ Pages.buildReportSummary pkgid pkgReports
 
-serveIndexPage config dpath = do
-    cacheState <- Cache.get (serverCache config)
-    ok $ Cache.packagesPage cacheState
-
---uploadPackageTarball :: Config -> DynamicPath -> ServerPart Response
---uploadPackageTarball config dpath = uploadPackage config
-
-serveIndexTarball config dpath = do
-    cacheState <- Cache.get (serverCache config)
-    ok $ toResponse $ Resource.IndexTarball (Cache.indexTarball cacheState)
-
-servePackageTarball config dpath = withPackageId dpath $ \pkgid ->
-           require (return $ lookup "tarball" dpath) $ \tarball -> do
-    -- FIXME: more accurate versioning. currently /package/foo-1.2/bar-3.14.tar.gz is possible
-    servePackage (serverStore config) tarball
-
-serveCabalFile config dpath = withPackagePath dpath $ \_ pkg _ -> do
-    guard (lookup "cabal" dpath == Just (display (packageName pkg) ++ ".cabal"))
-    ok $ toResponse (Resource.CabalFile (pkgData pkg))
-
-withPackagePath :: DynamicPath -> (PackagesState -> PkgInfo -> [PkgInfo] -> ServerPart Response) -> ServerPart Response
-withPackagePath dpath func = withPackageId dpath $ \pkgid -> withPackage pkgid func
-
-withPackageId :: DynamicPath -> (PackageId -> ServerPart Response) -> ServerPart Response
-withPackageId dpath = require (return $ lookup "package" dpath >>= fromReqURI)
 
 --TODO: switch to new cache mechanism: ??
 updateCache :: MonadIO m => Config -> m ()
@@ -149,8 +109,9 @@ stateToCache host state users = getCurrentTime >>= \now -> return
         recentChanges = reverse $ sortBy (comparing (fst . pkgUploadData)) (PackageIndex.allPackages index)
 
 handlePackageById :: BlobStorage -> PackageId -> [ServerPart Response]
-handlePackageById store pkgid = 
-  [] {-dir "documentation" $ msum
+handlePackageById _ _ = []
+{-handlePackageById store pkgid = 
+  [ dir "documentation" $ msum
     [ withPackage pkgid $ \state pkg _ ->
         let resolvedPkgId = packageId pkg in msum
 
@@ -187,38 +148,6 @@ handlePackageById store pkgid =
            Just blob -> do
                update $ TarIndex.DropIndex blob-}
 
-withPackage :: PackageId -> (PackagesState -> PkgInfo -> [PkgInfo] -> ServerPart Response) -> ServerPart Response
-withPackage pkgid action = do
-  state <- query GetPackagesState
-  let index = packageList state
-  case PackageIndex.lookupPackageName index (packageName pkgid) of
-    []   -> anyRequest $ notFound $ toResponse "No such package in package index"
-    pkgs  | pkgVersion pkgid == Version [] []
-         -> action state pkg pkgs
-      where pkg = maximumBy (comparing packageVersion) pkgs
-
-    pkgs -> case listToMaybe [ pkg | pkg <- pkgs, packageVersion pkg
-                                           == packageVersion pkgid ] of
-      Nothing  -> anyRequest $ notFound $ toResponse "No such package version"
-      Just pkg -> action state pkg pkgs
-
-
-servePackage :: BlobStorage -> String -> ServerPart Response
-servePackage store pkgIdStr = methodSP GET $ do
-    let (pkgVer,t) = splitAt (length pkgIdStr - length ext) pkgIdStr
-        pkgid = fromReqURI pkgVer
-    case pkgid of
-        Just p  -> serve p t
-        Nothing -> notFound $ toResponse "Not a valid package-version format"
-  where
-    ext = ".tar.gz"
-    serve pkgId t | t /= ext = notFound $ toResponse "No such package in store"
-                  | otherwise = withPackage pkgId $ \_ pkg _ ->
-        case pkgTarball pkg of
-            [] -> notFound $ toResponse "No tarball available"
-            ((blobId, _):_) -> do
-                  file <- liftIO $ BlobStorage.fetch store blobId
-                  ok $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)
 
 checkPackage :: ServerPart Response
 checkPackage = methodSP POST $ do
