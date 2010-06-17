@@ -24,8 +24,8 @@ import Control.Monad (msum, mzero)
 legacyRedirectsFeature :: HackageModule
 legacyRedirectsFeature = HackageModule {
     featureName = "legacy",
-    -- get rid of untyped resource and manually create a mapping?
-    resources   = [(resourceAt "") { resourceUntyped = Just $ \_ _ -> serveLegacyRedirects }],
+    -- get rid of trailing resource and manually create a mapping?
+    resources   = [(resourceAt "/...") { resourceGet = [("", \_ _ -> serveLegacyRedirects)] }],
     dumpBackup    = return [],
     restoreBackup = Nothing
 }

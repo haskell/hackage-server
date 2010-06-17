@@ -4,6 +4,8 @@ module Distribution.Server.Features.Mirror (
   ) where
 
 import Distribution.Server.Feature
+import Distribution.Server.Features.Core
+import Distribution.Server.Resource
 
 data MirrorFeature = MirrorFeature
 

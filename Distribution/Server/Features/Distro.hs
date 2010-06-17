@@ -43,9 +43,9 @@ initDistroFeature :: CoreFeature -> PackagesFeature -> IO DistroFeature
 initDistroFeature _ _ = do
     return $ DistroFeature
       { distroResource = DistroResource
-          { distroIndexPage = (resourceAt "/distros/") { resourceGet = [("text", textEnumDistros)], resourcePost = [("", distroNew)] }
-          , distroAllPage = (resourceAt "/distro/:distro/") { resourceGet = [("text", textDistroPkgs)], resourceDelete = [("", distroDelete)] }
-          , distroPackage = (resourceAt "/distro/:distro/:package") { resourceGet = [("text", textDistroPkg)], resourcePut = [("", distroPackagePut)], resourceDelete = [("", distroPackageDelete)] }
+          { distroIndexPage = (resourceAt "/distros/.:format") { resourceGet = [("txt", textEnumDistros)], resourcePost = [("", distroNew)] }
+          , distroAllPage = (resourceAt "/distro/:distro/.:format") { resourceGet = [("txt", textDistroPkgs)], resourceDelete = [("", distroDelete)] }
+          , distroPackage = (resourceAt "/distro/:distro/:package.:format") { resourceGet = [("txt", textDistroPkg)], resourcePut = [("", distroPackagePut)], resourceDelete = [("", distroPackageDelete)] }
           }
       , maintainersGroup = getMaintainersGroup
       }

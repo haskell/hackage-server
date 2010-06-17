@@ -262,10 +262,7 @@ impl server =
     . foldl' (\acc res -> addServerNode (resourceLocation res) res acc) serverTreeEmpty
     -- [Resource]
     $ concatMap Feature.resources (serverFeatures server)
-
---showServerTree tree = trace (showServerTree' tree) tree 
---  where showServerTree' (ServerTree resp for) = printf "[%s: %s]" (case resp of Just _ -> "resp"; _ -> "X") (concatMap (\(comp, serv) -> printf "%s/%s" (show comp) (showServerTree' serv) :: String) $ Map.toList for)
-
+--where showServerTree tree = trace (drawServerTree tree) tree
 
 {-core :: Server -> ServerPart Response
 core server = msum []

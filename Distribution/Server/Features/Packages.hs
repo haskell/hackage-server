@@ -76,7 +76,7 @@ initPackagesFeature core = do
                                 toResponse $ Pages.recentFeed users (fromJust $ URI.uriAuthority =<< URI.parseURI "http://hackage.haskell.org") now recentChanges)
     return PackagesFeature
       { packagesResource = PackagesResource
-          { packagesRecent = (resourceAt "/recent") { resourceGet = [("html", Cache.respondCache recents fst), ("rss", Cache.respondCache recents snd)] }
+          { packagesRecent = (resourceAt "/recent.:format") { resourceGet = [("html", Cache.respondCache recents fst), ("rss", Cache.respondCache recents snd)] }
           }
       , cacheRecent   = recents
       , packageRender = \pkg -> do

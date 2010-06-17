@@ -63,8 +63,8 @@ initUsersFeature _ = do
     addHook <- newHookList
     return UserFeature
       { userResource = UserResource
-          { userList = (resourceAt "/users/") { resourceGet = [("text", textUserList)], resourcePost = [("", adminAddUser)] }
-          , userPage = (resourceAt "/user/:username/") { resourceGet = [("text", textUserPage)], resourceDelete = [("", deleteAccount)] }
+          { userList = (resourceAt "/users/") { resourceGet = [("txt", textUserList)], resourcePost = [("", adminAddUser)] }
+          , userPage = (resourceAt "/user/:username/") { resourceGet = [("txt", textUserPage)], resourceDelete = [("", deleteAccount)] }
           , passwordResource = (resourceAt "/user/:username/password") { resourcePut = [("", changePassword)] }
           , enabledResource = (resourceAt "/user/:username/enabled") { resourcePut = [("", enabledAccount)] }
           , loginResource = (resourceAt "/users/login") { resourceGet = [("", requireAuth)] } -- also split into basic/digest

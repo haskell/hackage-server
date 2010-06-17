@@ -118,6 +118,7 @@ executable hackage-server
     array >= 0.1,
     containers >= 0.1,
     pretty >= 1.0,
+    parsec == 3.1.*,
     network >= 2.1,
     unix < 2.5,
     mtl >= 1.1,

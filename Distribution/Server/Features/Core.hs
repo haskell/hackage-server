@@ -82,7 +82,6 @@ csvToBackup fpath csv = (fpath, BS.pack (printCSV csv))
 
 initCoreFeature :: IO CoreFeature
 initCoreFeature = do
-    let indexPage config _ = fileServe ["hackage.html"] (serverStaticDir config) -- perhaps have a less 'spritzy' index page
     -- Caches
     thePackages <- Cache.newCacheable
     indexTar    <- Cache.newCacheable
@@ -94,12 +93,12 @@ initCoreFeature = do
     return CoreFeature
       { coreResource = let resource = CoreResource {
             -- the rudimentary HTML resources are for when we don't want an additional HTML feature
-            coreIndexPage = (resourceAt "") { resourceGet = [("html", indexPage)] }
-          , coreIndexTarball = (resourceAt "/packages/index.tar.gz") { resourceGet = [("tarball", respondCache indexTar Resource.IndexTarball)] }
-          , corePackagesPage = (resourceAt "/packages/") { resourceGet = [("html", respondCache thePackages id)] }
-          , corePackagePage = (resourceAt "/package/:package") { resourceGet = [("html", basicPackagePage (renderResource $ coreCabalFile resource) (renderResource $ corePackageTarball resource))] }
-          , corePackageTarball = (resourceAt "/package/:package/:tarball") { resourceGet = [("tarball", servePackageTarball)] }
-          , coreCabalFile  = (resourceAt "/package/:package/:cabal") { resourceGet = [("cabal", serveCabalFile)] }
+            coreIndexPage = (resourceAt "/.:format") { resourceGet = [("html", indexPage), ("txt", \_ _ -> return . toResponse $ "Welcome to Hackage")] } -- .:format
+          , coreIndexTarball = (resourceAt "/packages/index.tar.gz") { resourceGet = [("tarball", Cache.respondCache indexTar Resource.IndexTarball)] }
+          , corePackagesPage = (resourceAt "/packages/.:format") { resourceGet = [("html", Cache.respondCache thePackages id)] }
+          , corePackagePage = (resourceAt "/package/:package.:format") { resourceGet = [("html", basicPackagePage (renderResource $ coreCabalFile resource) (renderResource $ corePackageTarball resource))] }
+          , corePackageTarball = (resourceAt "/package/:package/:tarball.tar.gz") { resourceGet = [("tarball", servePackageTarball)] }
+          , coreCabalFile  = (resourceAt "/package/:package/:cabal.cabal") { resourceGet = [("cabal", serveCabalFile)] }
           } in resource
       , cacheIndexTarball  = indexTar
       , cachePackagesPage  = thePackages
@@ -113,8 +112,7 @@ initCoreFeature = do
         }
     }
   where
-    respondCache :: ToMessage r => Cache.GenCache a -> (a -> r) -> Config -> DynamicPath -> ServerPart Response
-    respondCache cache func _ _ = ok . toResponse . func =<< Cache.getCache cache
+    indexPage config _ = serveFile (const $ return "text/html") (serverStaticDir config ++ "/hackage.html")
     computeCache thePackages indexTar = do
         users <- query GetUserDb
         index <- fmap packageList $ query GetPackagesState
@@ -133,14 +131,14 @@ basicPackagePage cabalUrl tarUrl _ dpath = withPackagePath dpath $ \_ _ pkgs ->
     	unordList (map showP pkgs)
      ]
     showP :: PkgInfo -> [Html]
-    showP pkgInfo = let pkgId = packageId pkgInfo; pkgStr = display pkgId; tarName = display pkgId ++ ".tar.gz" in [
+    showP pkgInfo = let pkgId = packageId pkgInfo; pkgStr = display pkgId in [
         toHtml pkgStr,
         unordList $ [
-            [renderLink cabalUrl [("package", pkgStr), ("cabal", display (packageName pkgId) ++ ".cabal")] "Package description",
+            [renderLink cabalUrl [("package", pkgStr), ("cabal", display (packageName pkgId))] "Package description",
              toHtml " (included in the package)"],
             case pkgTarball pkgInfo of
                 [] -> [toHtml "Package not available"];
-                _ ->  [renderLink tarUrl [("package", display pkgId), ("tarball", tarName)] tarName,
+                _ ->  [renderLink tarUrl [("package", display pkgId), ("tarball", pkgStr)] (pkgStr ++ ".tar.gz"),
                        toHtml " (Cabal source package)"]
         ]
      ]
@@ -167,20 +165,15 @@ withPackageId dpath = require (return $ lookup "package" dpath >>= fromReqURI)
 ---------------------------------------------
 
 servePackage :: BlobStorage -> String -> ServerPart Response
-servePackage store pkgIdStr = do
-    let (pkgVer, t) = splitAt (length pkgIdStr - length ext) pkgIdStr
-    case fromReqURI pkgVer of
-        Just pid -> serve pid t
-        Nothing  -> notFound $ toResponse "Not a valid package-version format"
+servePackage store pkgIdStr = case fromReqURI pkgIdStr of
+    Just pid -> serve pid
+    Nothing  -> notFound $ toResponse "Not a valid package-version format"
   where
-    ext = ".tar.gz"
-    serve pkgId t | t /= ext = notFound $ toResponse "No such package in store"
-                  | otherwise = withPackage pkgId $ \_ pkg _ ->
-        case pkgTarball pkg of
-            [] -> notFound $ toResponse "No tarball available"
-            ((blobId, _):_) -> do
-                  file <- liftIO $ BlobStorage.fetch store blobId
-                  ok $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)
+    serve pkgId = withPackage pkgId $ \_ pkg _ -> case pkgTarball pkg of
+        [] -> notFound $ toResponse "No tarball available"
+        ((blobId, _):_) -> do --should check that versions match here
+              file <- liftIO $ BlobStorage.fetch store blobId
+              ok $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)
 
 servePackageTarball :: Config -> DynamicPath -> ServerPart Response
 servePackageTarball config dpath = withPackageId dpath $ \_ ->
@@ -190,6 +183,6 @@ servePackageTarball config dpath = withPackageId dpath $ \_ ->
 
 serveCabalFile :: Config -> DynamicPath -> ServerPart Response
 serveCabalFile _ dpath = withPackagePath dpath $ \_ pkg _ -> do
-    guard (lookup "cabal" dpath == Just (display (packageName pkg) ++ ".cabal"))
+    guard (lookup "cabal" dpath == Just (display $ packageName pkg))
     ok $ toResponse (Resource.CabalFile (pkgData pkg))
 

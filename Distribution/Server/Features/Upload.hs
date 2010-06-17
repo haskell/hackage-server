@@ -55,7 +55,7 @@ initUploadFeature :: CoreFeature -> IO UploadFeature
 initUploadFeature core = do
     return $ UploadFeature
       { uploadResource = UploadResource
-          { uploadIndexPage = (resourceAt "/packages/") { resourcePost = [("", uploadPackage (packageIndexChange core))] }
+          { uploadIndexPage = (extendResource . corePackagesPage $ coreResource core) { resourcePost = [("", uploadPackage (packageIndexChange core))] }
           }
       , maintainersGroup = getMaintainersGroup
       , trusteeGroup = UserGroup {
