@@ -1,22 +1,35 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, StandaloneDeriving, FlexibleContexts, FlexibleInstances #-}
 
 module Distribution.Server.Resource (
-    Resource (..),
+    -- | Paths
     BranchComponent(..),
     BranchPath,
-    Content,
-    ServerTree(..),
-    URIGen,
-    serverTreeEmpty,
     trunkAt,
-    renderURI,
-    renderResource,
-    renderLink,
+
+    -- | Resources
+    Resource(..),
+    ResourceFormat(..),
+    BranchFormat(..),
+    BranchEnd(..),
+    Content,
     resourceAt,
     extendResource,
+    extendResourcePath,
     serveResource,
-    renderServerTree,
+
+    -- | URI generation
+    URIGen,
+    renderURI,
+    renderLink,
+    RURIGen,
+    renderResource,
+    renderRLink,
+
+    -- | ServerTree
+    ServerTree(..),
+    serverTreeEmpty,
     addServerNode,
+    renderServerTree,
     drawServerTree
   ) where
 
@@ -48,16 +61,18 @@ data Resource = Resource {
     resourcePost   :: [(Content, ServerResponse)],
     resourceDelete :: [(Content, ServerResponse)],
     resourceFormat  :: ResourceFormat,
-    resourcePathEnd :: BranchEnd
+    resourcePathEnd :: BranchEnd,
+    resourceURI :: DynamicPath -> (String -> Maybe String)
 }
 -- favors first
 instance Monoid Resource where
-    mempty = Resource [] [] [] [] [] noFormat NoSlash
-    mappend (Resource bpath rget rput rpost rdelete rformat rend)
-            (Resource bpath' rget' rput' rpost' rdelete' rformat' rend') =
+    mempty = Resource [] [] [] [] [] noFormat NoSlash (flip lookup)
+    mappend (Resource bpath rget rput rpost rdelete rformat rend ruri)
+            (Resource bpath' rget' rput' rpost' rdelete' rformat' rend' ruri') =
         Resource (simpleCombine bpath bpath') (ccombine rget rget') (ccombine rput rput')
                    (ccombine rpost rpost') (ccombine rdelete rdelete')
                    (simpleCombine rformat rformat') (simpleCombine rend rend')
+                   (simpleCombine ruri ruri')
       where ccombine = unionBy ((==) `on` fst)
             simpleCombine xs ys = if null bpath then ys else xs
 
@@ -98,36 +113,88 @@ resourceAt arg = mempty
   , resourcePathEnd = slash
   }
   where
-    branch = either trunkError id $ Parse.parse parseFormatTrunkAt "Distribution.Server.Resource.trunkAt" arg
+    branch = either trunkError id $ Parse.parse parseFormatTrunkAt "Distribution.Server.Resource.parseFormatTrunkAt" arg
     trunkError pe = error $ "Distribution.Server.Resource.resourceAt: Could not parse trunk literal " ++ show arg ++ ". Parsec error: " ++ show pe
     (loc, slash, format) = trunkToResource branch
 
 extendResource :: Resource -> Resource
 extendResource resource = resource { resourceGet = [], resourcePut = [], resourcePost = [], resourceDelete = [] }
 
+extendResourcePath :: String -> Resource -> Resource
+extendResourcePath arg resource =
+  let endLoc = case resourceFormat resource of
+        ResourceFormat (StaticFormat _) Nothing -> case loc of
+            (DynamicBranch "format":rest) -> rest
+            _ -> funcError "Static ending format must have dynamic 'format' branch"
+        ResourceFormat (StaticFormat _) (Just (StaticBranch sdir)) -> case loc of
+            (DynamicBranch sdir':rest) | sdir == sdir' -> rest
+            _ -> funcError "Static branch and format must match stated location"
+        ResourceFormat (StaticFormat _) (Just (DynamicBranch sdir)) -> case loc of
+            (DynamicBranch sdir':_) | sdir == sdir' -> loc
+            _ -> funcError "Dynamic branch with static format must match stated location"
+        ResourceFormat DynamicFormat Nothing -> loc
+        ResourceFormat DynamicFormat (Just (StaticBranch sdir)) -> case loc of
+            (DynamicBranch sdir':rest) | sdir == sdir' -> StaticBranch sdir:rest
+            _ -> funcError "Dynamic format with static branch must match stated location"
+        ResourceFormat DynamicFormat (Just (DynamicBranch sdir)) -> case loc of
+            (DynamicBranch sdir':_) | sdir == sdir' -> loc
+            _ -> funcError "Dynamic branch and format must match stated location"
+        -- For a URI like /resource/.format: since it is encoded as NoFormat in trunkToResource,
+        -- this branch will incorrectly be taken. this isn't too big a handicap though
+        ResourceFormat NoFormat Nothing -> case loc of
+            (TrailingBranch:rest) -> rest
+            _ -> loc
+        _ -> funcError $ "invalid resource format in argument 2"
+  in
+    extendResource resource { resourceLocation = reverse loc' ++ endLoc, resourceFormat = format', resourcePathEnd = slash' }
+  where
+    branch = either trunkError id $ Parse.parse parseFormatTrunkAt "Distribution.Server.Resource.parseFormatTrunkAt" arg
+    trunkError pe = funcError $ "Could not parse trunk literal " ++ show arg ++ ". Parsec error: " ++ show pe
+    funcError reason = error $ "Distribution.Server.Resource.extendResourcePath :" ++ reason
+    loc = resourceLocation resource
+    (loc', slash', format') = trunkToResource branch
+
 -- other combinatoresque methods here - e.g. addGet :: Content -> ServerResponse -> Resource -> Resource
 
-type URIGen = DynamicPath -> Maybe String
+type URIGen = (String -> Maybe String) -> Maybe String
+type RURIGen = DynamicPath -> Maybe String
 
 -- Allows the formation of a URI from a URI specification (BranchPath).
 -- Unfortunately, URIs may need to be obey additional constraints not checked here.
 -- Each feature should probably provide its own typed generating functions.
 -- This method might support Maybe Content too, if .format extensions are put in place.
 renderURI :: BranchPath -> URIGen
-renderURI bpath dpath = ("/" </>) <$> go (reverse bpath)
+renderURI bpath pathFunc = ("/" </>) <$> go (reverse bpath)
     where go (StaticBranch  sdir:rest) = (SURI.escape sdir </>) <$> go rest
-          go (DynamicBranch sdir:rest) = ((</>) . SURI.escape) <$> lookup sdir dpath <*> go rest
-          go (TrailingBranch:_) = Just ""
+          go (DynamicBranch sdir:rest) = ((</>) . SURI.escape) <$> pathFunc sdir <*> go rest
+          go (TrailingBranch:_) = pathFunc ".."
           go [] = Just ""
 
--- TODO: take advantage of the metadata, including adding formats
--- The formats are particularly needed if redirecting from a POST request to a different URL
--- e.g. POST to /packages/.json with foo-0.1.tar.gz, be redirected to /package/foo-0.1.json
-renderResource :: Resource -> URIGen
-renderResource = renderURI . resourceLocation
+
+renderResource :: Resource -> DynamicPath -> Maybe String
+renderResource resource dpath = case renderURI (resourceLocation resource) (resourceURI resource dpath) of
+    Nothing  -> Nothing
+    Just str -> case (resourcePathEnd resource, resourceFormat resource) of
+        (NoSlash, ResourceFormat NoFormat _) -> Just $ str
+        (Slash, ResourceFormat NoFormat _) -> Just $ case str of "/" -> "/"; _ -> str ++ "/"
+        (NoSlash, ResourceFormat (StaticFormat format) branch) -> case branch of
+            Just {} -> Just $ str ++ "." ++ format
+            Nothing -> Just $ str ++ "/." ++ format
+        (Slash, ResourceFormat DynamicFormat Nothing) -> case lookup "format" dpath of
+            Nothing -> Just $ str ++ "/"
+            Just format -> Just $ str ++ "/." ++ format
+        (NoSlash, ResourceFormat DynamicFormat _) -> case lookup "format" dpath of
+            Nothing -> Just $ str
+            Just format -> Just $ str ++ "." ++ format
+        _ -> Nothing
+
+renderRLink :: RURIGen -> DynamicPath -> String -> Html
+renderRLink gen dpath text = case gen dpath of
+    Nothing  -> toHtml text
+    Just uri -> anchor ! [href uri] << text
 
 renderLink :: URIGen -> DynamicPath -> String -> Html
-renderLink gen dpath text = case gen dpath of
+renderLink gen dpath text = case gen (flip lookup dpath) of
     Nothing  -> toHtml text
     Just uri -> anchor ! [href uri] << text
 
@@ -163,7 +230,7 @@ trunkToResource' [(branch, format)] = pathFormat branch format
 trunkToResource' _ = error "Format only allowed at end of path"
 
 trunkAt :: String -> BranchPath
-trunkAt arg = either trunkError reverse $ Parse.parse parseTrunkAt "Distribution.Server.Resource.trunkAt" arg
+trunkAt arg = either trunkError reverse $ Parse.parse parseTrunkAt "Distribution.Server.Resource.parseTrunkAt" arg
     where trunkError pe = error $ "Distribution.Server.Resource.trunkAt: Could not parse trunk literal " ++ show arg ++ ". Parsec error: " ++ show pe
 
 parseTrunkAt :: Parse.Parser [BranchComponent]
@@ -217,8 +284,8 @@ parseFormatTrunkAt = do
 -- For a small curl-based test suite of [Resource]:
 -- [res "/foo" ["json"], res "/foo/:bar.:format" ["html", "json"], res "/baz/test/.:format" ["html", "text", "json"], res "/package/:package/:tarball.tar.gz" ["tarball"], res "/a/:a/:b/" ["html", "json"], res "/mon/..." [""], res "/wiki/path.:format" [], res "/hi.:format" ["yaml", "mofo"]]
 --     where res field formats = (resourceAt field) { resourceGet = map (\format -> (format, \_ -> return . toResponse . (++"\n") . ((show format++" - ")++) . show)) formats }
-serveResource :: Resource -> (BranchPath, ServerResponse)
-serveResource (Resource trunk rget rput rpost rdelete rformat rend) = (,) trunk $ \config dpath -> msum $
+serveResource :: Resource -> ServerResponse
+serveResource (Resource _ rget rput rpost rdelete rformat rend _) = \config dpath -> msum $
     map (\func -> func config dpath) $ methodPart ++ [optionPart]
   where
     optionPart = makeOptions $ concat [ met | ((_:_), met) <- zip methods methodsList]

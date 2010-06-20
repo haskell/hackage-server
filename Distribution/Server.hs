@@ -257,7 +257,7 @@ impl server =
     -- ServerPart Response
     . renderServerTree (serverConfig server) []
     -- ServerTree ServerResponse
-    . fmap (snd . serveResource)
+    . fmap serveResource
     -- ServerTree Resource
     . foldl' (\acc res -> addServerNode (resourceLocation res) res acc) serverTreeEmpty
     -- [Resource]
