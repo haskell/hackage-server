@@ -18,7 +18,6 @@ import qualified Data.IntSet as IntSet
 import Data.Monoid (Monoid)
 import Data.Binary (Binary)
 import Data.Typeable (Typeable)
-import Text.XHtml.Strict (Html)
 
 import Prelude hiding (id)
 
@@ -31,11 +30,11 @@ data GroupDescription = GroupDescription {
     groupTitle :: String,
     groupShort :: String,
     groupEntityURL :: String,
-    groupPrologue  :: [Html]
+    groupPrologue  :: String
 }
 nullDescription :: GroupDescription
 nullDescription = GroupDescription { groupTitle = "", groupShort = "",
-                                     groupEntityURL = "", groupPrologue = [] }
+                                     groupEntityURL = "", groupPrologue = "" }
 
 --used to require: forall a b c. QueryEvent a (Maybe UserList), UpdateEvent b (), UpdateEvent c ()
 data UserGroup = UserGroup {

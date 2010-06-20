@@ -25,6 +25,8 @@ import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import Data.Monoid
 import Data.Maybe (fromMaybe)
+import Data.List (sortBy)
+import Data.Ord (comparing)
 
 import qualified Data.Map as Map
 
@@ -59,13 +61,26 @@ instance Serialize PkgInfo where
   putCopy = contain . Binary.put
   getCopy = contain Binary.get
 
-insert :: PkgInfo -> Update PackagesState Bool
-insert pkg
-    = do pkgsState <- State.get
-         case PackageIndex.lookupPackageId (packageList pkgsState) (packageId pkg) of
-           Nothing -> do State.put $ pkgsState { packageList = PackageIndex.insert pkg (packageList pkgsState) }
-                         return True
-           Just{}  -> do return False
+insertPkgIfAbsent :: PkgInfo -> Update PackagesState Bool
+insertPkgIfAbsent pkg = do
+    pkgsState <- State.get
+    case PackageIndex.lookupPackageId (packageList pkgsState) (packageId pkg) of   
+        Nothing -> do State.put $ pkgsState { packageList = PackageIndex.insert pkg (packageList pkgsState) }
+                      return True
+        Just{}  -> do return False
+
+-- could also return something to indicate existence
+mergePkg :: PkgInfo -> Update PackagesState ()
+mergePkg pkg = State.modify $ \pkgsState -> pkgsState { packageList = PackageIndex.insertWith mergeFunc pkg (packageList pkgsState) }
+  where
+    mergeFunc newPkg oldPkg = oldPkg {
+        pkgDesc = pkgDesc newPkg,
+        pkgData = pkgData newPkg,
+        pkgTarball = sortByDate $ pkgTarball newPkg ++ pkgTarball oldPkg,
+        -- the old package data paired with when and by whom it was replaced
+        pkgDataOld = sortByDate $ (pkgData oldPkg, pkgUploadData newPkg):(pkgDataOld oldPkg ++ pkgDataOld newPkg)
+      }
+    sortByDate xs = sortBy (comparing (fst . snd)) xs
 
 -- NOTE! overwrites any existing data
 bulkImport :: [PkgInfo] -> Update PackagesState ()
@@ -86,7 +101,8 @@ getPackagesState = ask
 $(mkMethods ''PackagesState ['getPackagesState
                             ,'bulkImport
                             ,'replacePackagesState
-                            ,'insert
+                            ,'insertPkgIfAbsent
+                            ,'mergePkg
                             ])
 ---------------------------------- Documentation
 data Documentation = Documentation {

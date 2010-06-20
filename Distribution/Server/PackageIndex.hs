@@ -12,34 +12,34 @@
 -- An index of packages.
 --
 module Distribution.Server.PackageIndex (
-  -- * Package index data type
-  PackageIndex,
+    -- * Package index data type
+    PackageIndex,
 
-  -- * Creating an index
-  fromList,
+    -- * Creating an index
+    fromList,
 
-  -- * Updates
-  merge,
-  insert,
-  deletePackageName,
-  deletePackageId,
+    -- * Updates
+    merge,
+    insert,
+    insertWith,
+    deletePackageName,
+    deletePackageId,
 
-  -- * Queries
+    -- * Queries
 
-  -- ** Precise lookups
-  lookupPackageName,
-  lookupPackageId,
-  lookupDependency,
+    -- ** Precise lookups
+    lookupPackageName,
+    lookupPackageId,
+    lookupDependency,
 
-  -- ** Case-insensitive searches
-  searchByName,
-  SearchResult(..),
-  searchByNameSubstring,
+    -- ** Case-insensitive searches
+    searchByName,
+    SearchResult(..),
+    searchByNameSubstring,
 
-  -- ** Bulk queries
-  allPackages,
-  allPackagesByName,
-
+    -- ** Bulk queries
+    allPackages,
+    allPackagesByName
   ) where
 
 import Prelude hiding (lookup)
@@ -171,8 +171,26 @@ insert pkg (PackageIndex index) = mkPackageIndex $
     insertNoDup []                = [pkg]
     insertNoDup pkgs@(pkg':pkgs') = case compare pkgid (packageId pkg') of
       LT -> pkg  : pkgs
-      EQ -> pkg  : pkgs'
+      EQ -> pkg  : pkgs'  -- this replaces the package
       GT -> pkg' : insertNoDup pkgs'
+
+-- | Inserts a single package into the index, combining an old and new value with a function.
+--
+-- The merge function is called as (f newPkg oldPkg). Ensure that the result has the same
+-- package id as the two arguments; otherwise newPkg is used.
+--
+insertWith :: Package pkg => (pkg -> pkg -> pkg) -> pkg -> PackageIndex pkg -> PackageIndex pkg
+insertWith mergeFunc pkg (PackageIndex index) = mkPackageIndex $
+    Map.insertWith (\_ -> insertMerge) (packageName pkg) [pkg] index
+  where
+    pkgid = packageId pkg
+    insertMerge [] = [pkg]
+    insertMerge pkgs@(pkg':pkgs') = case compare pkgid (packageId pkg') of
+        LT -> pkg : pkgs
+        EQ -> let merged = mergeFunc pkg pkg' in
+              if packageId merged == pkgid then merged : pkgs'
+                                           else pkg : pkgs'
+        GT -> pkg' : insertMerge pkgs'
 
 -- | Internal delete helper.
 --

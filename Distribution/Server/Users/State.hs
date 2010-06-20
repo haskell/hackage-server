@@ -131,7 +131,6 @@ instance Version HackageAdmins where
 getHackageAdmins :: Query HackageAdmins UserList
 getHackageAdmins = asks adminList
 
-
 modifyHackageAdmins :: (UserList -> UserList) -> Update HackageAdmins ()
 modifyHackageAdmins func = State.modify (\users -> users { adminList = func (adminList users) })
 
@@ -150,25 +149,32 @@ $(mkMethods ''HackageAdmins
                     ,'addHackageAdmin
                     ,'removeHackageAdmin])
 
-{--- |overwrites existing permissions
-bulkImportPermissions :: [(UserId, GroupName)] -> Update Permissions ()
-bulkImportPermissions perms = do
+--------------------------------------------------------------------------
 
-  State.put Permissions.empty
-  mapM_ (\(user, group) -> addToGroup group user) perms
+data MirrorClients = MirrorClients {
+    mirrorClients :: !Group.UserList
+} deriving (Typeable)
+$(deriveSerialize ''MirrorClients)
+instance Version MirrorClients where
+    mode = Versioned 0 Nothing
 
--- |overwrites existing permissions
-replacePermissions :: Permissions -> Update Permissions ()
-replacePermissions = State.put
-         
-$(mkMethods ''Permissions ['lookupUserGroup
-                          ,'lookupUserGroups
-                          ,'addToGroup
-                          ,'removeFromGroup
-                          ,'removeGroup
-                          ,'getPermissions
+getMirrorClients :: Query MirrorClients UserList
+getMirrorClients = asks mirrorClients
 
-                          -- Import
-                          ,'bulkImportPermissions
-                          ,'replacePermissions
-                          ])-}
+modifyMirrorClients :: (UserList -> UserList) -> Update MirrorClients ()
+modifyMirrorClients func = State.modify (\users -> users { mirrorClients = func (mirrorClients users) })
+
+addMirrorClient :: UserId -> Update MirrorClients ()
+addMirrorClient uid = modifyMirrorClients (Group.add uid)
+
+removeMirrorClient :: UserId -> Update MirrorClients ()
+removeMirrorClient uid = modifyMirrorClients (Group.remove uid)
+
+instance Component MirrorClients where
+    type Dependencies MirrorClients = End
+    initialValue = MirrorClients Group.empty
+
+$(mkMethods ''MirrorClients
+                    ['getMirrorClients
+                    ,'addMirrorClient
+                    ,'removeMirrorClient])

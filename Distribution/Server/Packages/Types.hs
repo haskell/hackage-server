@@ -46,8 +46,12 @@ data PkgInfo = PkgInfo {
     -- | The actual package .tar.gz file. It is optional for making an incomplete
     -- mirror, e.g. using archives of just the latest packages, or perhaps for a
     -- multipart upload process.
+    --
+    -- The canonical tarball URL points to the most recently uploaded package.
     pkgTarball :: ![(BlobId, UploadInfo)],
-    -- | Previous data
+    -- | Previous data. The UploadInfo does *not* indicate when the ByteString was
+    -- uploaded, but rather when it was replaced. This way, pkgUploadData won't change
+    -- even if a cabal file is changed.
     pkgDataOld :: ![(ByteString, UploadInfo)],
     -- | When the package was created. Imports will override this with time in their logs.
     pkgUploadData :: !UploadInfo
