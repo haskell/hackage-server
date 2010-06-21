@@ -20,10 +20,8 @@ module Distribution.Server.Resource (
     -- | URI generation
     URIGen,
     renderURI,
-    renderLink,
-    RURIGen,
     renderResource,
-    renderRLink,
+    renderLink,
 
     -- | ServerTree
     ServerTree(..),
@@ -54,14 +52,27 @@ import qualified Data.Tree as Tree (Tree(..), drawTree)
 
 type Content = String
 
+-- | A resource is an object that handles requests at a given URI. Best practice
+-- is to construct it by calling resourceAt and then setting the method fields
+-- using record update syntax. You can also extend an existing resource with
+-- extendResource, which can be mappended to the original to combine their
+-- functionality, or with extendResourcePath.
 data Resource = Resource {
+    -- | The location in a form which can be added to a ServerTree.
     resourceLocation :: BranchPath,
+    -- | Handlers for GET requests for different content-types
     resourceGet    :: [(Content, ServerResponse)],
+    -- | Handlers for PUT requests
     resourcePut    :: [(Content, ServerResponse)],
+    -- | Handlers for POST requests
     resourcePost   :: [(Content, ServerResponse)],
+    -- | Handlers for DELETE requests
     resourceDelete :: [(Content, ServerResponse)],
+    -- | The format conventions held by the resource.
     resourceFormat  :: ResourceFormat,
+    -- | The trailing slash conventions held by the resource.
     resourcePathEnd :: BranchEnd,
+    -- | Given a DynamicPath, produce a lookup function, by default (flip lookup). This is for resources with special conventions.
     resourceURI :: DynamicPath -> (String -> Maybe String)
 }
 -- favors first
@@ -76,25 +87,25 @@ instance Monoid Resource where
       where ccombine = unionBy ((==) `on` fst)
             simpleCombine xs ys = if null bpath then ys else xs
 
--- | A path element of a URI. Unstable data structure. Possible to-be-removed current and to-be-added future components include:
+-- | A path element of a URI.
 --
 -- * StaticBranch dirName - \/dirName
 -- * DynamicBranch dynamicName - \/anyName (mapping created dynamicName -> anyName)
 -- * TrailingBranch - doesn't consume any path; it's here to prevent e.g. conflict between \/.:format and \/...
 --
--- trunkAt yields a simple list of BranchComponents
--- resourceAt yields the same, and some complex metadata for processing formats and the like
+-- trunkAt yields a simple list of BranchComponents.
+-- resourceAt yields the same, and some complex metadata for processing formats and the like.
 data BranchComponent = StaticBranch String | DynamicBranch String | TrailingBranch deriving (Show, Eq, Ord)
 type BranchPath = [BranchComponent]
 
--- this type dictates the preprocessing we must do on extensions (foo.json) when serving Resources
+-- | This type dictates the preprocessing we must do on extensions (foo.json) when serving Resources
 -- For BranchFormat, we need to do:
 -- 1. for NoFormat - don't do any preprocessing. The second field is ignored here.
 -- 1. for StaticFormat  - look for a specific format, and guard against that
 -- 2. for DynamicFormat - strip off any extension (starting from the right end, so no periods allowed)
 -- Under either of the above cases, the component might need to be preprocessed as well.
--- 1. for Nothing - this means a standalone format, like /.json (as in /distro/arch/.json)
---                  either accept /distro/arch/ or read /distro/arch/.format and pass it along
+-- 1. for Nothing - this means a standalone format, like \/.json (as in \/distro\/arch\/.json)
+--                  either accept \/distro\/arch\/ or read \/distro\/arch\/.format and pass it along
 -- 2. for Just (StaticBranch sdir) - strip off the pre-format part and make sure it equals sdir
 -- 3. for Just (DynamicBranch sdir) - strip off the pre-format part and pass it with the DynamicPath as sdir
 -- DynamicFormat also has the property that it is optional, and defaulting is allowed.
@@ -106,6 +117,9 @@ noFormat = ResourceFormat NoFormat Nothing
 data BranchFormat = NoFormat | DynamicFormat | StaticFormat String deriving (Show, Eq, Ord)
 data BranchEnd  = Slash | NoSlash | Trailing deriving (Show, Eq, Ord)
 
+-- | Creates an empty resource from a string specifying its location and format conventions.
+--
+-- (Explain path literal syntax.)
 resourceAt :: String -> Resource
 resourceAt arg = mempty
   { resourceLocation = reverse loc
@@ -117,9 +131,21 @@ resourceAt arg = mempty
     trunkError pe = error $ "Distribution.Server.Resource.resourceAt: Could not parse trunk literal " ++ show arg ++ ". Parsec error: " ++ show pe
     (loc, slash, format) = trunkToResource branch
 
+-- | Creates a new resource at the same location, but without any of the request
+-- handlers of the original. When mappend'd to the original, its methods and content-types
+-- will be combined. This can be useful for extending an existing resource with new representations and new
+-- functionality.
 extendResource :: Resource -> Resource
 extendResource resource = resource { resourceGet = [], resourcePut = [], resourcePost = [], resourceDelete = [] }
 
+-- | Creates a new resource that is at a subdirectory of an existing resource. This function takes care of formats
+-- as best as it can.
+--
+-- extendResourcePath "\/bar\/.:format" (resourceAt "\/data\/:foo.:format") == resourceAt "\/data\/:foo\/bar\/:.format"
+--
+-- Extending static formats with this method is not recommended. (extending "\/:tarball.tar.gz"
+-- with "\/data" will give "\/:tarball\/data", with the format stripped, and extending
+-- "\/help\/.json" with "\/tree" will give "\/help\/.json\/tree")
 extendResourcePath :: String -> Resource -> Resource
 extendResourcePath arg resource =
   let endLoc = case resourceFormat resource of
@@ -156,23 +182,41 @@ extendResourcePath arg resource =
 
 -- other combinatoresque methods here - e.g. addGet :: Content -> ServerResponse -> Resource -> Resource
 
-type URIGen = (String -> Maybe String) -> Maybe String
-type RURIGen = DynamicPath -> Maybe String
+type URIGen = DynamicPath -> Maybe String
 
 -- Allows the formation of a URI from a URI specification (BranchPath).
--- Unfortunately, URIs may need to be obey additional constraints not checked here.
--- Each feature should probably provide its own typed generating functions.
--- This method might support Maybe Content too, if .format extensions are put in place.
+-- URIs may obey additional constraints and have special rules (e.g., formats).
+-- To accomodate these, insteaduse renderResource to get a URI.
+--
+-- ".." is a special argument that fills in a TrailingBranch. Make sure it's
+-- properly escaped (see Happstack.Server.SURI)
+--
+-- renderURI (trunkAt "/home/:user/..")
+--    [("user", "mgruen"), ("..", "docs/todo.txt")]
+--    == Just "/home/mgruen/docs/todo.txt"
 renderURI :: BranchPath -> URIGen
-renderURI bpath pathFunc = ("/" </>) <$> go (reverse bpath)
+renderURI bpath dpath = renderGenURI bpath (flip lookup dpath)
+
+-- Render a URI generally using a function of one's choosing (usually flip lookup)
+renderGenURI :: BranchPath -> (String -> Maybe String) -> Maybe String
+renderGenURI bpath pathFunc = ("/" </>) <$> go (reverse bpath)
     where go (StaticBranch  sdir:rest) = (SURI.escape sdir </>) <$> go rest
           go (DynamicBranch sdir:rest) = ((</>) . SURI.escape) <$> pathFunc sdir <*> go rest
           go (TrailingBranch:_) = pathFunc ".."
           go [] = Just ""
 
 
-renderResource :: Resource -> DynamicPath -> Maybe String
-renderResource resource dpath = case renderURI (resourceLocation resource) (resourceURI resource dpath) of
+-- Given a Resource, construct a URIGen. If the Resource uses a dynamic format, it can
+-- be passed in the DynamicPath as "format". Trailing slash conventions are obeyed.
+--
+-- See documentation for the Resource to see the conventions in interpreting the DynamicPath.
+-- As in renderURI, ".." is interpreted as the trailing branch.
+--
+-- renderURI (resourceAt "/home/:user/docs/:doc.:format")
+--     [("user", "mgruen"), ("doc", "todo"), ("format", "json")]
+--     == Just "/home/mgruen/docs/todo.txt"
+renderResource :: Resource -> URIGen
+renderResource resource dpath = case renderGenURI (resourceLocation resource) (resourceURI resource dpath) of
     Nothing  -> Nothing
     Just str -> case (resourcePathEnd resource, resourceFormat resource) of
         (NoSlash, ResourceFormat NoFormat _) -> Just $ str
@@ -188,17 +232,20 @@ renderResource resource dpath = case renderURI (resourceLocation resource) (reso
             Just format -> Just $ str ++ "." ++ format
         _ -> Nothing
 
-renderRLink :: RURIGen -> DynamicPath -> String -> Html
-renderRLink gen dpath text = case gen dpath of
-    Nothing  -> toHtml text
-    Just uri -> anchor ! [href uri] << text
-
+-- Given a URIGen, a DynamicPath, and a String for the text, construct an HTML
+-- node that is just the text if the URI generation fails, and a link with the
+-- text inside otherwise. A convenience function.
 renderLink :: URIGen -> DynamicPath -> String -> Html
-renderLink gen dpath text = case gen (flip lookup dpath) of
+renderLink gen dpath text = case gen dpath of
     Nothing  -> toHtml text
     Just uri -> anchor ! [href uri] << text
 
--- top-level call to weed out cases that don't make sense recursively
+-- Converts the output of parseTrunkFormatAt to something consumable by a Resource
+-- It forbids many things that parse correctly, most notably using formats in the middle of a path.
+-- It's possible in theory to allow such things, but complicated.
+-- Directories are really format-less things.
+--
+-- trunkToResource is a top-level call to weed out cases that don't make sense recursively in trunkToResource'
 trunkToResource  :: [(BranchComponent, BranchFormat)] -> ([BranchComponent], BranchEnd, ResourceFormat)
 trunkToResource [] = ([], Slash, noFormat) -- ""
 trunkToResource [(StaticBranch "", format)] = ([], Slash, ResourceFormat format Nothing) -- "/" or "/.format"

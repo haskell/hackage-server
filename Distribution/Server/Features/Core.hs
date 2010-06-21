@@ -121,7 +121,7 @@ initCoreFeature = do
         Cache.putCache indexTar (GZip.compress $ Packages.Index.write users index)
 
 -- Should probably look more like an Apache index page (Name / Last modified / Size / Content-type)
-basicPackagePage :: RURIGen -> RURIGen -> Config -> DynamicPath -> ServerPart Response
+basicPackagePage :: URIGen -> URIGen -> Config -> DynamicPath -> ServerPart Response
 basicPackagePage cabalUrl tarUrl _ dpath = withPackagePath dpath $ \_ _ pkgs ->
   ok . toResponse $ Resource.XHtml $ showAllP $ sortBy (flip $ comparing packageVersion) pkgs
   where
@@ -134,11 +134,11 @@ basicPackagePage cabalUrl tarUrl _ dpath = withPackagePath dpath $ \_ _ pkgs ->
     showP pkgInfo = let pkgId = packageId pkgInfo; pkgStr = display pkgId in [
         toHtml pkgStr,
         unordList $ [
-            [renderRLink cabalUrl [("package", pkgStr), ("cabal", display (packageName pkgId))] "Package description",
+            [renderLink cabalUrl [("package", pkgStr), ("cabal", display (packageName pkgId))] "Package description",
              toHtml " (included in the package)"],
             case pkgTarball pkgInfo of
                 [] -> [toHtml "Package not available"];
-                _ ->  [renderRLink tarUrl [("package", display pkgId), ("tarball", pkgStr)] (pkgStr ++ ".tar.gz"),
+                _ ->  [renderLink tarUrl [("package", display pkgId), ("tarball", pkgStr)] (pkgStr ++ ".tar.gz"),
                        toHtml " (Cabal source package)"]
         ]
      ]
