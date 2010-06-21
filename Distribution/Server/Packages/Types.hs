@@ -1,5 +1,4 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, DeriveDataTypeable, StandaloneDeriving #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Server.Packages.Types
@@ -32,6 +31,8 @@ import qualified Data.ByteString.Lazy.Char8 as BS (unpack)
 import Data.ByteString.Lazy (ByteString)
 import Data.Time.Clock (UTCTime)
 import Data.Typeable (Typeable)
+import Data.List (sortBy)
+import Data.Ord (comparing)
 
 -- | The information we keep about a particular version of a package.
 -- 
@@ -64,6 +65,10 @@ pkgUploadTime = fst . pkgUploadData
 
 pkgUploadUser :: PkgInfo -> UserId
 pkgUploadUser = snd . pkgUploadData
+
+-- a small utility
+descendUploadTimes :: [(a, UploadInfo)] -> [(a, UploadInfo)]
+descendUploadTimes = sortBy (flip $ comparing (fst . snd))
 
 instance Package PkgInfo where packageId = pkgInfoId
 

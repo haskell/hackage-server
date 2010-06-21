@@ -1,6 +1,7 @@
 module Distribution.Server.Feature where
 
-import Distribution.Server.Backup.Import (RestoreBackup, BackupEntry)
+import Distribution.Server.Backup.Import (RestoreBackup, ExportEntry)
+import Distribution.Server.Util.BlobStorage (BlobStorage)
 import Distribution.Server.Resource
 
 -- This module defines a plugin interface for hackage features.
@@ -11,8 +12,8 @@ import Distribution.Server.Resource
 data HackageModule = HackageModule {
     featureName   :: String,
     resources     :: [Resource],
-    dumpBackup    :: IO [BackupEntry],
-    restoreBackup :: Maybe RestoreBackup
+    dumpBackup    :: IO [ExportEntry],
+    restoreBackup :: Maybe (BlobStorage -> RestoreBackup)
 }
 
 -- A type belonging to the HackageFeature class is a data structure from which
@@ -23,8 +24,9 @@ data HackageModule = HackageModule {
 -- With this class, they are combined into homogenous list of HackageModules
 -- used by the Server data structure.
 class HackageFeature a where
+    -- currently the config arugment is only used for its BlobStorage argument
+    -- for restoreBackup which need to put files into the blob store
     getFeature :: a -> HackageModule
-
     initHooks  :: a -> [IO ()]
     initHooks _ = []
 

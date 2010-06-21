@@ -56,7 +56,6 @@ import Network.URI (URIAuth(URIAuth))
 import Network.BSD (getHostName)
 import Data.Char (toUpper)
 import Data.List (foldl')
-import qualified Data.Map as Map
 
 import qualified Data.ByteString.Lazy.Char8 as BS
 
@@ -224,7 +223,8 @@ bulkImport server  indexFile logFile archiveFile htPasswdFile adminsFile = do
 importTar :: Server -> ByteString -> IO (Maybe String)
 importTar server tar = do
     let config = serverConfig server
-    let featureMap = Map.fromList . concatMap (\f -> maybe [] (\r -> [(Feature.featureName f, r)]) $ Feature.restoreBackup f) $ serverFeatures server
+        store  = serverStore config
+    let featureMap = concatMap (\f -> maybe [] (\r -> [(Feature.featureName f, r store)]) $ Feature.restoreBackup f) $ serverFeatures server
     res <- Import.importTar (serverStore config) tar featureMap
     case res of
         Nothing -> updateCache config

@@ -61,6 +61,8 @@ data Users = Users {
   -- it also allows us to track historical info, like name of uploader
   -- even if that user name has been recycled, the user ids will be distinct.
 
+
+
 empty :: Users
 empty = Users {
     userIdMap   = IntMap.empty,
@@ -168,12 +170,13 @@ lookupId (UserId userId) users = IntMap.lookup userId (userIdMap users)
 lookupName :: UserName -> Users -> Maybe UserId
 lookupName name users = Map.lookup name (userNameMap users)
 
--- | Convert a 'UserId' to a 'UserName'. The user id must exist.
+-- | Convert a 'UserId' to a 'UserName'. If the user id doesn't exist,
+-- an ugly placeholder is used instead.
 --
 idToName :: Users -> UserId -> UserName
-idToName users userId = case lookupId userId users of
+idToName users userId@(UserId idNum) = case lookupId userId users of
   Just user -> userName user
-  Nothing   -> error $ "Users.idToName: no such user id " ++ show userId
+  Nothing   -> UserName $ "~id#" ++ show idNum
 
 -- | Convert a 'UserName' to a 'UserId'. The user name must exist.
 --

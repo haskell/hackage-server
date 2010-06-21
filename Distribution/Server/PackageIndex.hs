@@ -98,8 +98,7 @@ invariant (PackageIndex m) = all (uncurry goodBucket) (Map.toList m)
 --
 
 mkPackageIndex :: Package pkg => Map PackageName [pkg] -> PackageIndex pkg
-mkPackageIndex index = assert (invariant (PackageIndex index))
-                                         (PackageIndex index)
+mkPackageIndex index = assert (invariant (PackageIndex index)) (PackageIndex index)
 
 internalError :: String -> a
 internalError name = error ("PackageIndex." ++ name ++ ": internal error")
@@ -164,7 +163,7 @@ mergeBuckets xs@(x:xs') ys@(y:ys') =
 -- 'merge' with a singleton index.
 --
 insert :: Package pkg => pkg -> PackageIndex pkg -> PackageIndex pkg
-insert pkg (PackageIndex index) = mkPackageIndex $
+insert pkg (PackageIndex index) = mkPackageIndex $ -- or insertWith const
   Map.insertWith (\_ -> insertNoDup) (packageName pkg) [pkg] index
   where
     pkgid = packageId pkg

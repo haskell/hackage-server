@@ -23,7 +23,7 @@ import Control.Monad.State (get, put)
 import Text.CSV
 import qualified Data.IntSet as IntSet
 
-importGroup :: BackupEntry -> Import s UserList
+importGroup :: ImportEntry -> Import s UserList
 importGroup (file, contents) = importCSV (last file) contents $ \vals ->
     fmap (UserList . IntSet.fromList) $ mapM parseUserId (concat vals)
   where
@@ -31,8 +31,7 @@ importGroup (file, contents) = importCSV (last file) contents $ \vals ->
         [(num, "")] -> return num
         _ -> fail $ "Unable to parse user id : " ++ show uid
 
---constructImportMap :: [HackageFeature] -> Map String RestoreBackup
---constructImportMap = Map.fromList . concatMap (\f -> [(featureName f, restoreBackup f)])
+-------------------------------------------------------------------------
 
 userBackup :: RestoreBackup
 userBackup = updateUserBackup Users.empty
@@ -41,11 +40,12 @@ updateUserBackup :: Users -> RestoreBackup
 updateUserBackup users = RestoreBackup
   { restoreEntry    = \entry -> do
         res <- doUserImport users entry
-        return $ fmap updateUserBackup res
+        return $ fmap (updateUserBackup) res
+  , restoreFinalize = return . Right $ updateUserBackup users
   , restoreComplete = update $ ReplaceUserDb users
   }
 
-doUserImport :: Users -> BackupEntry -> IO (Either String Users)
+doUserImport :: Users -> ImportEntry -> IO (Either String Users)
 doUserImport users (["auth.csv"], bs) = runImport users (importAuth bs)
 doUserImport users _                  = return . Right $ users
 
@@ -54,13 +54,13 @@ importAuth contents = importCSV "auth.csv" contents $ mapM_ fromRecord . drop 2
 
   where 
     fromRecord [nameStr, idStr, "deleted", "none", ""] = do
-        name <- parse "user name" nameStr
-        user <- parse "user id" idStr
+        name <- parseText "user name" nameStr
+        user <- parseText "user id" idStr
         insertUser user $ UserInfo name Deleted
 
     fromRecord [nameStr, idStr, isEnabled, authType, auth] = do
-        name <- parse "user name" nameStr
-        user <- parse "user id" idStr
+        name <- parseText "user name" nameStr
+        user <- parseText "user id" idStr
         authEn <- parseEnabled isEnabled
         atype <- parseAuth authType
         insertUser user $ UserInfo name (Active authEn $ UserAuth (PasswdHash auth) atype)

@@ -2,12 +2,21 @@
 
 module Distribution.Server.Backup.Import (
     RestoreBackup(..),
-    BackupEntry,
-    importTar,
-    importCSV,
+    ImportEntry,
+    ExportEntry,
     Import,
+    importTar,
+
+    importCSV,
     runImport,
-    parse
+    parseText,
+    parseTime,
+    parseRead,
+    MergeResult(..),
+    mergeBy,
+
+    csvToExport,
+    blobToExport
   ) where
 
 import Happstack.State (update)
@@ -16,6 +25,8 @@ import qualified Codec.Archive.Tar as Tar
 import Codec.Compression.GZip (decompress)
 import Control.Monad
 import Control.Monad.State.Class
+import Control.Monad.Trans
+import Control.Monad.Writer
 import Data.Time (UTCTime)
 import qualified Data.Time as Time
 import System.Locale
@@ -24,11 +35,13 @@ import Distribution.Simple.Utils (fromUTF8)
 import qualified Data.ByteString.Lazy.Char8 as BS8
 
 import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Data.Map as Map
 import System.FilePath (splitDirectories, splitExtension, takeExtension)
 import Data.List (isPrefixOf, isSuffixOf)
 import Text.CSV hiding (csv)
 
+import qualified Control.Exception as Exception
 import Distribution.PackageDescription (GenericPackageDescription)
 import Distribution.PackageDescription.Parse
     ( parsePackageDescription
@@ -71,24 +84,33 @@ import qualified Distribution.Server.PackageIndex as PackageIndex
 import Distribution.Server.PackageIndex (PackageIndex)
 import Distribution.Package
 
-import Distribution.Text hiding (parse)
+import Distribution.Text
 
 import Data.Monoid
 import qualified Data.Map as Map
 import Data.Map (Map)
 
-type BackupEntry = ([FilePath], ByteString)
+type ImportEntry = ([FilePath], ByteString)
+
+type ExportEntry = ([FilePath], Either ByteString BlobId)
 
 data RestoreBackup = RestoreBackup {
-    restoreEntry :: BackupEntry -> IO (Either String RestoreBackup),
+    -- might want to change the Right type here to (RestoreBackup, [BlobId])
+    -- in the case of import, it is a check that the packed blob folder contains everything specified in 
+    -- in the case of export, it is also a check that everything necessary is being packed
+    -- However, few features need to use blob storage
+    restoreEntry :: ImportEntry -> IO (Either String RestoreBackup),
+    -- final checks and transformations on the accumulated data. This is called once before restoreComplete.
+    restoreFinalize :: IO (Either String RestoreBackup),
     restoreComplete :: IO ()
 }
 instance Monoid RestoreBackup where
     mempty = RestoreBackup
         { restoreEntry    = \_ -> return . Right $ mempty
+        , restoreFinalize = return . Right $ mempty
         , restoreComplete = return ()
         }
-    mappend (RestoreBackup run comp) (RestoreBackup run' comp') = RestoreBackup
+    mappend (RestoreBackup run fin comp) (RestoreBackup run' fin' comp') = RestoreBackup
         { restoreEntry = \entry -> do
               res <- run entry
               case res of
@@ -96,20 +118,45 @@ instance Monoid RestoreBackup where
                       res' <- run' entry
                       return $ fmap (mappend backup) res'
                   bad -> return bad
+        , restoreFinalize = do
+              res <- fin
+              case res of
+                  Right backup -> do
+                      res' <- fin'
+                      return $ fmap (mappend backup) res'
+                  bad -> return bad
         , restoreComplete = comp >> comp'
         }
 
--- | Takes apart the import tarball. If there are any errors,
+csvToExport :: [String] -> CSV -> ExportEntry
+csvToExport fpath csv = (fpath, Left $ BS.pack (printCSV csv))
+
+blobToExport :: [String] -> BlobId -> ExportEntry
+blobToExport fpath blob = (fpath, Right blob)
+
+mergeBy :: (a -> b -> Ordering) -> [a] -> [b] -> [MergeResult a b]
+mergeBy cmp = merge
+  where
+    merge []     ys     = [ OnlyInRight y | y <- ys]
+    merge xs     []     = [ OnlyInLeft  x | x <- xs]
+    merge (x:xs) (y:ys) =
+      case x `cmp` y of
+        GT -> OnlyInRight   y : merge (x:xs) ys
+        EQ -> InBoth      x y : merge xs     ys
+        LT -> OnlyInLeft  x   : merge xs  (y:ys)
+data MergeResult a b = OnlyInLeft a | InBoth a b | OnlyInRight b deriving (Show)
+
+importTar :: BlobStorage -> ByteString -> [(String, RestoreBackup)] -> IO (Maybe String)
+importTar storage tar featureMap = return $ Just "failure"
+
+{- -- | Takes apart the import tarball. If there are any errors,
 -- the first error encounter is returned.
 -- Otherwise the result of the import is injected into the running
 -- happs state.
 -- The format of the input is assumed to be tar.gz
 importTar :: BlobStorage -> ByteString -> Map String RestoreBackup -> IO (Maybe String)
 importTar storage tar featureMap = do
-    res <- runImport initState .
-             fromEntries .
-             Tar.read .
-             decompress $ tar
+    res <- runImport initState . fromEntries . Tar.read . decompress $ tar
     case res of
       Left err -> return . Just $ err
       Right is -> do
@@ -183,7 +230,7 @@ fromFile path contents
 impPackage :: [String] -> ByteString -> Import IS ()
 impPackage [_, pkgIdStr, "documentation.tar"] contents
     = do
-  pkgId <- parse "package id" pkgIdStr
+  pkgId <- parseText "package id" pkgIdStr
   blobId <- addFile contents
   addDocumentation pkgId blobId
   addTarIndex blobId
@@ -194,7 +241,7 @@ impPackage [pkgName, pkgTarName] contents
     = let (pkgIdStr,_) = splitExtension pkgTarName
       in do
 
-        pkgId <- parse "package id" pkgIdStr
+        pkgId <- parseText "package id" pkgIdStr
         parts <- packageParts . Tar.read $ contents
         validateParts pkgIdStr parts
         let (source, Just cabalContents, Just uploadsContents) = parts
@@ -233,15 +280,10 @@ impPackage [pkgName, pkgTarName] contents
 
        fromRecord [userStr, timeStr]
            = do
-         user <- parse "user id" userStr
+         user <- parseText "user id" userStr
          utcTime <- parseTime timeStr
          return (utcTime, user)
        fromRecord x = fail $ "Error handling upload record: " ++ show x
-
-       parseTime str
-           = case Time.parseTime defaultTimeLocale timeFormatSpec str of
-               Nothing -> fail $ "Unable to parse time: " ++ str
-               Just x  -> return x
 
        parsePackageDesc :: ByteString -> Import IS GenericPackageDescription
        parsePackageDesc file
@@ -283,7 +325,7 @@ packageParts entries
 importReport :: String -> ByteString -> Import IS ()
 importReport repIdStr contents
     = do
-  repId <- parse "report id" repIdStr
+  repId <- parseText "report id" repIdStr
   case Reports.parse (bytesToString contents) of
     Left err -> fail err
     Right report -> insertBuildReport repId report
@@ -291,7 +333,7 @@ importReport repIdStr contents
 importLog :: String -> ByteString -> Import IS ()
 importLog repIdStr contents
     = do
-  repId <- parse "report id" repIdStr
+  repId <- parseText "report id" repIdStr
   blobId <- addFile contents
   insertBuildLog repId (Reports.BuildLog blobId)
 
@@ -301,7 +343,7 @@ importDistro filename contents
         Left e -> fail e
         Right csv -> do
           let [[distroStr]] = take 1 $ drop 1 csv
-          distro <- parse "distribution name" distroStr
+          distro <- parseText "distribution name" distroStr
           addDistribution distro
           mapM_ (fromRecord distro) (drop 3 csv)
 
@@ -310,23 +352,12 @@ importDistro filename contents
         , versionStr
         , uri
         ] = do
-         package <- parse "package name" packageStr
-         version <- parse "version" versionStr
+         package <- parseText "package name" packageStr
+         version <- parseText "version" versionStr
          addDistroPackage distro package $ Distros.DistroPackageInfo version uri
        fromRecord _ x
            = fail $
              "Invalid distribution record in " ++ filename ++ " : " ++ show x
-
--- Parse a string, throw an error if it's bad
-parse :: Text a => String -> String -> Import s a
-parse label text
-    = case simpleParse text of
-        Nothing
-            -> fail $ "Unable to parse " ++ label ++ " : " ++ show text
-        Just a -> return a
-                            
-bytesToString :: ByteString -> String
-bytesToString = fromUTF8 . BS8.unpack
 
 -- Import is a state monad over the IS data type
 
@@ -407,35 +438,46 @@ addDistroPackage distro package info
     = do
   is <- get
   put is{isDistVersions = Distros.addPackage distro package info (isDistVersions is)}
-
+-}
 
 -- implementation of the Import data type
 
 newtype Import s a
     = Imp 
-      {unImp :: forall r .
-          (String -> IO r)   -- error
-       -> (a -> s -> IO r)  -- success
-       -> s                  -- state
+      {unImp :: forall r.
+          (String -> IO r) -- error
+       -> (a -> s -> IO r) -- success
+       -> s -- state
        -> IO r
       }
 
+type BlobImport s a = WriterT [BlobId] (Import s) a
+
+runBlobImport :: s -> BlobImport s a -> IO (Either String (s, [BlobId]))
+runBlobImport initState imp = let imp' = runWriterT imp in unImp imp' err k initState
+  where k (_, w) s = return $ Right (s, w)
+        err        = return . Left
+
+runImport' :: s -> Import s a -> IO (Either String (s, [BlobId]))
+runImport' initState imp = do
+    val <- runImport initState imp
+    case val of
+        Right s -> return $ Right (s, [])
+        Left e  -> return $ Left e
+
 runImport :: s -> Import s a -> IO (Either String s)
 runImport initState imp = unImp imp err k initState
- where k _ s = return $ Right s
-       err   = return . Left
-
+  where k _ s = return $ Right s
+        err   = return . Left
 
 instance Functor (Import s) where
-    f `fmap` g = Imp $ \err k -> unImp g err (k . f)
+    f `fmap` g = Imp $ \err k st -> unImp g err (k . f) st
 
 instance Monad (Import s) where
-    return a = Imp $ \_ k -> k a
+    return a = Imp $ \_ k st -> k a st
 
     m >>= f
-      = Imp $ \err k ->
-        unImp m err $ \a ->
-        unImp (f a) err k
+      = Imp $ \err k -> unImp m err $ \a -> unImp (f a) err k
 
     m >> n
       = Imp $ \err k ->
@@ -443,8 +485,7 @@ instance Monad (Import s) where
         unImp n err k
 
     fail str
-        = Imp $ \err _k _s ->
-          err str
+        = Imp $ \err _k _s -> err str
 
 instance MonadState s (Import s) where
     get   = Imp $ \_ k s -> k s s
@@ -455,10 +496,11 @@ instance MonadState s (Import s) where
 -- to unwrap x
 --
 -- todo: catch IO errors and re-throw as Import errors?
-io2imp :: IO a -> Import s a
-io2imp x
-    = Imp $ \_ k s ->
-      x >>= \v -> k v s
+instance MonadIO (Import s) where
+  --liftIO x = Imp $ \_ k s -> x >>= \v -> k v s
+    liftIO x = Imp $ \err k s -> do
+        Exception.catch (x >>= \v -> k v s)
+                        (\e -> let msg = "Caught exception: " ++ show (e :: Exception.SomeException) in err msg)
 
 -- |Chops off the last entry if it's null.
 -- I'm not sure why parseCSV does this, but it's
@@ -478,23 +520,22 @@ importCSV filename inp comb = case customParseCSV filename (bytesToString inp) o
     Left  err -> fail err
     Right csv -> comb csv
 
-{-importPermissions :: ByteString -> Import ()
-importPermissions contents
-    = case customParseCSV "permissions.csv" (bytesToString contents) of
-        Left e -> fail e
-        Right csv -> mapM_ fromRecord (drop 1 csv)
+parseRead :: Read a => String -> String -> Import s a
+parseRead label str = case reads str of
+    [(value, "")] -> return value
+    _ -> fail $ "Unable to parse " ++ label ++ ": " ++ show str
 
- where fromRecord
-        (groupStr:users)
-            = do
-          groupName <- parse "group name" groupStr
-          forM_ users $ \userStr ->
-              parse "user id" userStr >>= addPermission groupName
-       fromRecord x = fail $ "Error handling permissions record: " ++ show x
+parseTime :: String -> Import s UTCTime
+parseTime str = case Time.parseTime defaultTimeLocale timeFormatSpec str of
+    Nothing -> fail $ "Unable to parse time: " ++ str
+    Just x  -> return x
 
-addPermission :: GroupName -> UserId -> Import ()
-addPermission group user
-    = modify $ \is ->
-      is {isPerms = Permissions.addToGroup group user (isPerms is)}
--}
+-- Parse a string, throw an error if it's bad
+parseText :: Text a => String -> String -> Import s a
+parseText label text = case simpleParse text of
+    Nothing -> fail $ "Unable to parse " ++ label ++ ": " ++ show text
+    Just a -> return a
+                            
+bytesToString :: ByteString -> String
+bytesToString = fromUTF8 . BS8.unpack
 

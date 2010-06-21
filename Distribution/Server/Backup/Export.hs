@@ -26,9 +26,10 @@ backup-timestamp/
 
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Distribution.Server.Backup.Export
-    ( export
-    ) where
+module Distribution.Server.Backup.Export (
+    export,
+    unsafeInterleaveConcatMap
+  ) where
 
 import Distribution.Simple.Utils (toUTF8)
 import qualified Data.ByteString.Lazy.Char8 as BS8
@@ -132,12 +133,12 @@ mkPackageEntries baseDir pkgs docs reports storage
 -}
 unsafeInterleaveConcatMap :: (a -> IO [b]) -> [a] -> IO [b]
 unsafeInterleaveConcatMap f = go 
-
- where go [] = return []
-       go (x:xs) = do
-         ys <- f x
-         yss <- unsafeInterleaveIO $ go xs
-         return (ys++yss)
+  where
+    go [] = return []
+    go (x:xs) = do
+        ys <- f x
+        yss <- unsafeInterleaveIO $ go xs
+        return (ys++yss)
 
 mkPackageEntry :: FilePath
                -> BlobStorage
@@ -291,3 +292,4 @@ concatM x = concat `fmap` sequence x
 
 concatMapM :: (Monad m, Functor m) => (a -> m [b]) -> [a] -> m [b]
 concatMapM f xs = concatM $ map f xs
+

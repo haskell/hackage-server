@@ -16,8 +16,7 @@ import Distribution.Server.Feature
 import Distribution.Server.Resource
 import Distribution.Server.Types
 import Distribution.Server.Hook
-import Distribution.Server.Backup.Import (BackupEntry)
-import Text.CSV (printCSV, CSV)
+import Distribution.Server.Backup.Import (csvToExport)
 
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.State
@@ -72,13 +71,10 @@ instance HackageFeature CoreFeature where
             users    <- query GetUserDb
             packages <- query GetPackagesState
             admins   <- query GetHackageAdmins
-            return $ [csvToBackup ["users.csv"] $ usersToCSV users, csvToBackup ["admins.csv"] $ groupToCSV admins] ++ packageEntries packages
-      , restoreBackup = Just (mconcat [userBackup, packagesBackup]) -- [adminBackup]
+            return $ [csvToExport ["users.csv"] $ usersToCSV users, csvToExport ["admins.csv"] $ groupToCSV admins] ++ indexToAllVersions packages
+      , restoreBackup = Just $ \store -> mconcat [userBackup, packagesBackup store] -- [adminBackup]
       }
     initHooks core = [runZeroHook (packageIndexChange core)]
-
-csvToBackup :: [String] -> CSV -> BackupEntry
-csvToBackup fpath csv = (fpath, BS.pack (printCSV csv))
 
 initCoreFeature :: IO CoreFeature
 initCoreFeature = do
