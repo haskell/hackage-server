@@ -11,7 +11,7 @@ instance HackageFeature CheckFeature where
     getFeature _ = HackageModule
       { featureName = "check"
       , resources   = []
-      , dumpBackup    = return []
+      , dumpBackup    = Nothing
       , restoreBackup = Nothing
       }
 

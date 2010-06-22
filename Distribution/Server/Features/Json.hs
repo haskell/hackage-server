@@ -11,7 +11,7 @@ instance HackageFeature JsonFeature where
     getFeature _ = HackageModule
       { featureName = "json"
       , resources   = []
-      , dumpBackup    = return []
+      , dumpBackup    = Nothing
       , restoreBackup = Nothing
       }
 

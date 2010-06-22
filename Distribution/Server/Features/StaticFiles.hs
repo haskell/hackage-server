@@ -18,8 +18,8 @@ staticFilesFeature = HackageFeature {
 
     -- There is no persistent state for this feature,
     -- so nothing needs to be backed up.
-    dumpBackup    = return [],
-    restoreBackup = \_ -> return ()
+    dumpBackup    = Nothing,
+    restoreBackup = Nothing
 }
 
 serveStaticFiles :: Config -> Happs.ServerPart Happs.Response

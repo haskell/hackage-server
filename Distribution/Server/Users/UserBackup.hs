@@ -1,7 +1,9 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Distribution.Server.Users.UserBackup (
     -- Importing user data
     userBackup,
     importGroup,
+    groupBackup,
     -- Exporting user data
     usersToCSV,
     groupToCSV
@@ -10,20 +12,35 @@ module Distribution.Server.Users.UserBackup (
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users(..))
 import Distribution.Server.Users.Group (UserList(..))
+import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Types
 import Distribution.Server.Auth.Types
 import Distribution.Server.Users.State (ReplaceUserDb(..))
 
-import Happstack.State (update)
+import Happstack.State (update, UpdateEvent)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Distribution.Server.Backup.Import
 import Distribution.Text (display)
 import Data.Version
+import Data.Function (fix)
 import Control.Monad.State (get, put)
 import Text.CSV
 import qualified Data.IntSet as IntSet
 
-importGroup :: ImportEntry -> Import s UserList
+groupBackup :: UpdateEvent a () => [FilePath] -> (UserList -> a) -> RestoreBackup
+groupBackup csvPath updateFunc = updateGroupBackup Group.empty
+  where
+    updateGroupBackup group = fix $ \restorer -> RestoreBackup
+              { restoreEntry = \entry -> do
+                    if fst entry == csvPath
+                        then fmap (fmap updateGroupBackup) $ runImport group (importGroup entry >>= put)
+                        else return . Right $ restorer
+              , restoreFinalize = return . Right $ restorer
+              , restoreComplete = update (updateFunc group)
+              }
+
+-- parses a rather lax format. Any layout of integer ids separated by commas.
+importGroup :: BackupEntry -> Import s UserList
 importGroup (file, contents) = importCSV (last file) contents $ \vals ->
     fmap (UserList . IntSet.fromList) $ mapM parseUserId (concat vals)
   where
@@ -45,14 +62,13 @@ updateUserBackup users = RestoreBackup
   , restoreComplete = update $ ReplaceUserDb users
   }
 
-doUserImport :: Users -> ImportEntry -> IO (Either String Users)
-doUserImport users (["auth.csv"], bs) = runImport users (importAuth bs)
+doUserImport :: Users -> BackupEntry -> IO (Either String Users)
+doUserImport users (["users.csv"], bs) = runImport users (importAuth bs)
 doUserImport users _                  = return . Right $ users
 
 importAuth :: ByteString -> Import Users ()
-importAuth contents = importCSV "auth.csv" contents $ mapM_ fromRecord . drop 2
-
-  where 
+importAuth contents = importCSV "users.csv" contents $ mapM_ fromRecord . drop 2
+  where
     fromRecord [nameStr, idStr, "deleted", "none", ""] = do
         name <- parseText "user name" nameStr
         user <- parseText "user id" idStr
@@ -82,7 +98,7 @@ insertUser user info = do
         Nothing -> fail $ "Duplicate user id for user: " ++ display user
         Just _  -> put users
 
----------------- Exporting
+-------------------------------------------------- Exporting
 -- group.csv
 groupToCSV :: UserList -> CSV
 groupToCSV (UserList list) = [map show (IntSet.toList list)]

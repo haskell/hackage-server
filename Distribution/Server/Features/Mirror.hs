@@ -52,9 +52,13 @@ instance HackageFeature MirrorFeature where
     getFeature _ = HackageModule
       { featureName = "mirror"
       , resources   = []
-      , dumpBackup    = return []
-      , restoreBackup = Nothing
+      , dumpBackup    = Just $ \_ -> do
+            clients <- query GetMirrorClients
+            return [csvToBackup ["clients.csv"] $ groupToCSV clients]
+      , restoreBackup = Just $ \_-> [groupBackup ["clients.csv"] ReplaceMirrorClients]
       }
+-------------------------------------------------------------------------
+
 
 initMirrorFeature :: CoreFeature -> IO MirrorFeature
 initMirrorFeature core = do
@@ -126,4 +130,6 @@ initMirrorFeature core = do
                 -- right now just use a dummy uid
                 func input (udate, UserId 0)
             _ -> badRequest $ toResponse ()
+
+-------------------------------------------------------------------------
 

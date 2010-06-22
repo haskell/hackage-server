@@ -140,6 +140,9 @@ addHackageAdmin uid = modifyHackageAdmins (Group.add uid)
 removeHackageAdmin :: UserId -> Update HackageAdmins ()
 removeHackageAdmin uid = modifyHackageAdmins (Group.remove uid)
 
+replaceHackageAdmins :: UserList -> Update HackageAdmins ()
+replaceHackageAdmins ulist = modifyHackageAdmins (const ulist)
+
 instance Component HackageAdmins where
     type Dependencies HackageAdmins = End
     initialValue = HackageAdmins Group.empty
@@ -147,7 +150,8 @@ instance Component HackageAdmins where
 $(mkMethods ''HackageAdmins
                     ['getHackageAdmins
                     ,'addHackageAdmin
-                    ,'removeHackageAdmin])
+                    ,'removeHackageAdmin
+                    ,'replaceHackageAdmins])
 
 --------------------------------------------------------------------------
 
@@ -170,6 +174,9 @@ addMirrorClient uid = modifyMirrorClients (Group.add uid)
 removeMirrorClient :: UserId -> Update MirrorClients ()
 removeMirrorClient uid = modifyMirrorClients (Group.remove uid)
 
+replaceMirrorClients :: UserList -> Update MirrorClients ()
+replaceMirrorClients ulist = modifyMirrorClients (const ulist)
+
 instance Component MirrorClients where
     type Dependencies MirrorClients = End
     initialValue = MirrorClients Group.empty
@@ -177,4 +184,5 @@ instance Component MirrorClients where
 $(mkMethods ''MirrorClients
                     ['getMirrorClients
                     ,'addMirrorClient
-                    ,'removeMirrorClient])
+                    ,'removeMirrorClient
+                    ,'replaceMirrorClients])

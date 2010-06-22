@@ -11,7 +11,9 @@ import Distribution.Server.Features.Upload (initUploadFeature)
 import Distribution.Server.Features.Packages (initPackagesFeature)
 import Distribution.Server.Features.Users (initUsersFeature)
 import Distribution.Server.Features.Distro (initDistroFeature)
-import Distribution.Server.Features.Mirror (initMirrorFeature)
+--import Distribution.Server.Features.Documentation (initDocumentationFeature)
+--import Distribution.Server.Features.Reports (initReportsFeature)
+--import Distribution.Server.Features.Mirror (initMirrorFeature)
 import Distribution.Server.Features.LegacyRedirects (legacyRedirectsFeature)
 
 -- This module ties together all the hackage features that we will use.
@@ -22,7 +24,7 @@ hackageFeatures = do
     coreFeature <- initCoreFeature
 --    mirrorFeature <- initMirrorFeature undefined --coreFeature
 
-    -- > and for richer content...
+    -- > and additional content...
     usersFeature <- initUsersFeature coreFeature
     uploadFeature <- initUploadFeature coreFeature
     packagesFeature <- initPackagesFeature coreFeature

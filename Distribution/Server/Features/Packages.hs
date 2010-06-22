@@ -60,7 +60,7 @@ instance HackageFeature PackagesFeature where
     getFeature pkgsf = HackageModule
       { featureName = "packages"
       , resources   = map ($packagesResource pkgsf) [packagesRecent]
-      , dumpBackup    = return []
+      , dumpBackup    = Nothing
       , restoreBackup = Nothing
       }
 

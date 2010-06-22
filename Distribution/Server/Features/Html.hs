@@ -28,7 +28,7 @@ instance HackageFeature HtmlFeature where
     getFeature html = HackageModule
       { featureName = "html"
       , resources   = htmlResources html
-      , dumpBackup    = return []
+      , dumpBackup    = Nothing
       , restoreBackup = Nothing
       }
 

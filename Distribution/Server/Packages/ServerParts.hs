@@ -1,7 +1,6 @@
 module Distribution.Server.Packages.ServerParts (
     serveBuildReports,
 
-    packagePagesFeature,
     updateCache,
     stateToCache,
     handlePackageById,
@@ -39,7 +38,7 @@ import Distribution.Server.Util.BlobStorage (BlobStorage)
 import qualified Distribution.Server.BuildReport.BuildReport as BuildReport
 import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
 
-import Distribution.Server.Feature
+--import Distribution.Server.Feature
 import Distribution.Server.Types
 
 import qualified Distribution.Server.Users.Users as Users
@@ -57,7 +56,7 @@ import Network.URI (URIAuth)
 import qualified Data.ByteString.Lazy.Char8 as BS.Char8
 import qualified Codec.Compression.GZip as GZip
 
-packagePagesFeature :: HackageModule
+{-packagePagesFeature :: HackageModule
 packagePagesFeature = HackageModule {
     featureName = "pkgpage",
     -- todo: add checking
@@ -71,7 +70,7 @@ packagePagesFeature = HackageModule {
                   ] ++ makeGroupResources (trunkAt "/package/:package/maintainers") maintainersGroup -},
     dumpBackup    = return [],
     restoreBackup = Nothing
-}
+}-}
 -- "/package/:package/candidate", "/package/:package/candidate/:cabal", "/package/:package/candidate/:tarball"
 
 serveBuildReports :: Config -> DynamicPath -> ServerPart Response

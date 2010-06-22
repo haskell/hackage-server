@@ -12,6 +12,7 @@ module Distribution.Server.Packages.PackageBackup (
 import Distribution.Server.Packages.State
 import Distribution.Server.Packages.Types
 import Distribution.Server.Backup.Import
+import Distribution.Server.Backup.Export
 import Distribution.Server.Backup.Utils
 import Distribution.Server.Util.BlobStorage (BlobStorage, BlobId)
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
@@ -128,7 +129,10 @@ data1 - upload2
 data2 - upload0 (upload time of earliest version is at top)
 -}
 
-doPackageImport :: BlobStorage -> PartialIndex -> ImportEntry -> IO (Either String PartialIndex)
+-- instead of keeping the PartialPkgs around for a long time, there could be package data
+-- tarballs within the backup tarball, which are read one at a time (and so we can see if
+-- import fails /during/ import rather than during restoreFinalize)
+doPackageImport :: BlobStorage -> PartialIndex -> BackupEntry -> IO (Either String PartialIndex)
 doPackageImport storage packages (("package":pkgStr:rest), bs) = runImport packages $ case simpleParse pkgStr of
     Nothing    -> fail $ "Package directory " ++ show pkgStr ++ " isn't a valid package id"
     Just pkgId -> do

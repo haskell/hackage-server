@@ -4,7 +4,8 @@ module Distribution.Server.Features.Core (
     initCoreFeature,
     withPackage,
     withPackageId,
-    withPackagePath
+    withPackagePath,
+    withPackageName
   ) where
 
 --import Distribution.Server.Users.Resource (makeGroupResources)
@@ -16,7 +17,7 @@ import Distribution.Server.Feature
 import Distribution.Server.Resource
 import Distribution.Server.Types
 import Distribution.Server.Hook
-import Distribution.Server.Backup.Import (csvToExport)
+import Distribution.Server.Backup.Export
 
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.State
@@ -67,12 +68,13 @@ instance HackageFeature CoreFeature where
       { featureName = "core"
       , resources   = map ($coreResource core) [coreIndexPage, coreIndexTarball, corePackagesPage, corePackagePage, corePackageTarball, coreCabalFile]
                       -- maybe: makeGroupResources (trunkAt "/users/admins") (adminGroup core)
-      , dumpBackup = do
+      , dumpBackup = Just $ \store -> do
             users    <- query GetUserDb
             packages <- query GetPackagesState
             admins   <- query GetHackageAdmins
-            return $ [csvToExport ["users.csv"] $ usersToCSV users, csvToExport ["admins.csv"] $ groupToCSV admins] ++ indexToAllVersions packages
-      , restoreBackup = Just $ \store -> mconcat [userBackup, packagesBackup store] -- [adminBackup]
+            packageEntries <- readExportBlobs store $ indexToAllVersions packages
+            return $ packageEntries ++ [csvToBackup ["users.csv"] $ usersToCSV users, csvToBackup ["admins.csv"] $ groupToCSV admins]
+      , restoreBackup = Just $ \store -> mconcat [packagesBackup store, userBackup, groupBackup ["admins.csv"] ReplaceHackageAdmins]
       }
     initHooks core = [runZeroHook (packageIndexChange core)]
 
@@ -157,6 +159,9 @@ withPackagePath dpath func = withPackageId dpath $ \pkgid -> withPackage pkgid f
 
 withPackageId :: DynamicPath -> (PackageId -> ServerPart Response) -> ServerPart Response
 withPackageId dpath = require (return $ lookup "package" dpath >>= fromReqURI)
+
+withPackageName :: DynamicPath -> (PackageName -> ServerPart Response) -> ServerPart Response
+withPackageName dpath = require (return $ lookup "package" dpath >>= fromReqURI)
 
 ---------------------------------------------
 

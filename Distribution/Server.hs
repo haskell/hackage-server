@@ -224,8 +224,8 @@ importTar :: Server -> ByteString -> IO (Maybe String)
 importTar server tar = do
     let config = serverConfig server
         store  = serverStore config
-    let featureMap = concatMap (\f -> maybe [] (\r -> [(Feature.featureName f, r store)]) $ Feature.restoreBackup f) $ serverFeatures server
-    res <- Import.importTar (serverStore config) tar featureMap
+        featureMap = concatMap (\f -> maybe [] (\r -> [(Feature.featureName f, r store)]) $ Feature.restoreBackup f) $ serverFeatures server
+    res <- Import.importTar tar featureMap
     case res of
         Nothing -> updateCache config
         Just _err -> return ()

@@ -218,9 +218,13 @@ addPackageMaintainer name uid = modifyPackageMaintainers name (Group.add uid)
 removePackageMaintainer :: PackageName -> UserId -> Update PackageMaintainers ()
 removePackageMaintainer name uid = modifyPackageMaintainers name (Group.remove uid)
 
+replacePackageMaintainers :: PackageName -> UserList -> Update PackageMaintainers ()
+replacePackageMaintainers name ulist = modifyPackageMaintainers name (const ulist)
+
 $(mkMethods ''PackageMaintainers ['getPackageMaintainers
                                  ,'addPackageMaintainer
                                  ,'removePackageMaintainer
+                                 ,'replacePackageMaintainers
                                  ])
 
 -------------------------------- Trustee list
@@ -249,9 +253,13 @@ addHackageTrustee uid = modifyHackageTrustees (Group.add uid)
 removeHackageTrustee :: UserId -> Update HackageTrustees ()
 removeHackageTrustee uid = modifyHackageTrustees (Group.remove uid)
 
+replaceHackageTrustees :: UserList -> Update HackageTrustees ()
+replaceHackageTrustees ulist = modifyHackageTrustees (const ulist)
+
 $(mkMethods ''HackageTrustees ['getHackageTrustees
                               ,'addHackageTrustee
                               ,'removeHackageTrustee
+                              ,'replaceHackageTrustees
                               ])
 
 ---------------------------------------------

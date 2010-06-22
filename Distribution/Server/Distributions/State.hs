@@ -108,6 +108,9 @@ addDistroMaintainer name uid = modifyDistroMaintainers name (Group.add uid)
 removeDistroMaintainer :: DistroName -> UserId -> Update Distros ()
 removeDistroMaintainer name uid = modifyDistroMaintainers name (Group.remove uid)
 
+replaceDistroMaintainers :: DistroName -> UserList -> Update Distros ()
+replaceDistroMaintainers name ulist = modifyDistroMaintainers name (const ulist)
+
 $(mkMethods
   ''Distros
   [ -- update collection of distributions
@@ -133,6 +136,7 @@ $(mkMethods
 
   -- distro maintainers
   , 'getDistroMaintainers
+  , 'replaceDistroMaintainers
   , 'addDistroMaintainer
   , 'removeDistroMaintainer
   ]

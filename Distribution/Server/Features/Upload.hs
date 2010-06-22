@@ -47,7 +47,7 @@ instance HackageFeature UploadFeature where
     getFeature upload = HackageModule
       { featureName = "upload"
       , resources   = map ($uploadResource upload) [uploadIndexPage]
-      , dumpBackup    = return []
+      , dumpBackup    = Nothing
       , restoreBackup = Nothing
       }
 

@@ -1,6 +1,6 @@
 module Distribution.Server.Feature where
 
-import Distribution.Server.Backup.Import (RestoreBackup, ExportEntry)
+import Distribution.Server.Backup.Import (RestoreBackup, BackupEntry)
 import Distribution.Server.Util.BlobStorage (BlobStorage)
 import Distribution.Server.Resource
 
@@ -12,7 +12,8 @@ import Distribution.Server.Resource
 data HackageModule = HackageModule {
     featureName   :: String,
     resources     :: [Resource],
-    dumpBackup    :: IO [ExportEntry],
+    -- BlobStorage args can be moved elsewhere, e.g. the getFeature function
+    dumpBackup    :: Maybe (BlobStorage -> IO [BackupEntry]),
     restoreBackup :: Maybe (BlobStorage -> RestoreBackup)
 }
 

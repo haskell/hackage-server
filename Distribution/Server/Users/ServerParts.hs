@@ -28,7 +28,7 @@ import Data.Maybe
 import Control.Monad.Trans
 import Control.Monad (msum, liftM3, mplus)
 
-usersFeature :: HackageModule
+{-usersFeature :: HackageModule
 usersFeature = HackageModule {
     featureName = "users",
     -- todo: add checking
@@ -39,50 +39,7 @@ usersFeature = HackageModule {
                   ], -- ++ makeGroupResources (trunkAt "/users/admins") (Group.UserGroup "Site administrators" GetJustHackageAdmins AddHackageAdmin RemoveHackageAdmin),
     dumpBackup    = return [],  
     restoreBackup = Nothing
-}
-
-data ChangePassword = ChangePassword { first :: String, second :: String, newAuthType :: Auth.AuthType } deriving (Eq, Show)
-instance FromData ChangePassword where
-	fromData = liftM3 ChangePassword (look "password" `mplus` return "") (look "repeat-password" `mplus` return "")
-                                     (fmap (maybe Auth.BasicAuth (const Auth.DigestAuth) . lookup "auth") lookPairs) --checked: digest auth
-
-changePassword :: Config -> DynamicPath -> ServerPart Response
-changePassword _ dpath = do
-    users  <- query State.GetUserDb
-    admins <- query State.GetHackageAdmins
-    uid <- Auth.requireHackageAuth users Nothing Nothing
-    let -- maybe the name specified in the path here
-        muserPathName = simpleParse =<< lookup "username" dpath
-        -- maybe the id of that name
-        muserPathId = flip Users.lookupName users =<< muserPathName
-    case (muserPathId, muserPathName) of
-      (Just userPathId, Just userPathName) ->
-        -- if this user's id corresponds to the one in the path, or is an admin
-        if uid == userPathId || (uid `Group.member` admins)
-          then do
-            pwd <- maybe (return $ ChangePassword "not" "valid" Auth.BasicAuth) return =<< getData
-            if (first pwd == second pwd && first pwd /= "")
-              then do
-                let passwd = PasswdPlain (first pwd)
-                auth <- case newAuthType pwd of 
-                    Auth.BasicAuth  -> newBasicPass passwd
-                    Auth.DigestAuth -> return $ newDigestPass userPathName passwd
-                res <- update $ ReplaceUserAuth userPathId auth
-                if res
-                    then ok $ toResponse "Password Changed"
-                    else ok $ toResponse "Error changing password"
-              else forbidden $ toResponse "Copies of new password do not match or is an invalid password (ex: blank)"
-          else forbidden . toResponse $ "Cannot change password for " ++ display userPathName
-      (Nothing, Just userPathName) -> notFound . toResponse $ "User " ++ display userPathName ++ " doesn't exist"
-      _ -> notFound . toResponse $ "Invalid user name - doesn't exist"
-
-newBasicPass :: MonadIO m => Auth.PasswdPlain -> m UserAuth
-newBasicPass pwd = do
-    gen <- liftIO newStdGen
-    return $ UserAuth (Auth.newBasicPass gen pwd) Auth.BasicAuth
-
-newDigestPass :: UserName -> PasswdPlain -> UserAuth
-newDigestPass name pwd = UserAuth (Auth.newDigestPass name pwd "hackage") Auth.DigestAuth
+}-}
 
 -- Assumes that the user has already been autheniticated
 -- and has proper permissions
