@@ -1,11 +1,8 @@
 module Distribution.Server.Packages.ServerParts (
-    serveBuildReports,
-
     updateCache,
     stateToCache,
     handlePackageById,
     checkPackage,
-    buildReports,
   ) where
 
 import Distribution.Package (PackageId)
@@ -73,8 +70,8 @@ packagePagesFeature = HackageModule {
 }-}
 -- "/package/:package/candidate", "/package/:package/candidate/:cabal", "/package/:package/candidate/:tarball"
 
+{-
 serveBuildReports :: Config -> DynamicPath -> ServerPart Response
-
 serveBuildReports _ dpath = withPackageId dpath $ \pkgid -> do
     state <- query GetPackagesState
     reports <- query GetBuildReports
@@ -83,7 +80,7 @@ serveBuildReports _ dpath = withPackageId dpath $ \pkgid -> do
         Just _  -> do
             let pkgReports = BuildReports.lookupPackageReports reports pkgid
             ok $ toResponse $ Resource.XHtml $ Pages.buildReportSummary pkgid pkgReports
-
+-}
 
 --TODO: switch to new cache mechanism: ??
 updateCache :: MonadIO m => Config -> m ()
@@ -158,6 +155,7 @@ checkPackage = methodSP POST $ do
          Right (_,warn) -> return . toResponse . unlines $ "Check succeeded with warnings.\n" : warn
 
 
+{-
 buildReports :: BlobStorage -> [ServerPart Response]
 buildReports store =
   [ path $ \reportId -> msum
@@ -202,4 +200,4 @@ buildReports store =
   ]
 
 instance FromReqURI BuildReports.BuildReportId where
-    fromReqURI = simpleParse
+    fromReqURI = simpleParse -}

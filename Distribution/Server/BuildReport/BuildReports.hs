@@ -1,14 +1,16 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
 module Distribution.Server.BuildReport.BuildReports (
-    BuildReports,
-    BuildReportId,
+    BuildReport(..),
+    BuildReports(..),
+    BuildReportId(..),
+    PkgBuildReports(..),
     BuildLog(..),
-    empty,
+    emptyReports,
+    emptyPkgReports,
     addReport,
-    insertReport,
-    addBuildLog,
+    deleteReport,
+    setBuildLog,
     lookupReport,
-    lookupBuildLog,
     lookupPackageReports,
   ) where
 
@@ -16,13 +18,13 @@ import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import qualified Distribution.Server.BuildReport.BuildReport as BuildReport
 import Distribution.Server.BuildReport.BuildReport (BuildReport)
 
-import Distribution.Package
-         ( PackageIdentifier )
-import Distribution.Text
-         ( Text(..) )
+import Distribution.Package (PackageId)
+import Distribution.Text (Text(..))
 
 import Happstack.Data.Serialize
+import Distribution.Server.Instances ()
 
+import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.ByteString.Char8 as BS.Char8
 import qualified Data.Binary as Binary
@@ -36,12 +38,8 @@ import qualified Text.PrettyPrint          as Disp
 newtype BuildReportId = BuildReportId Int
   deriving (Eq, Ord, Binary, Typeable, Show)
 
-instance Version BuildReportId where
-    mode = Versioned 0 Nothing
-
-instance Serialize BuildReportId where
-    putCopy = contain . Binary.put
-    getCopy = contain Binary.get
+incrementReportId :: BuildReportId -> BuildReportId
+incrementReportId (BuildReportId n) = BuildReportId (n+1)
 
 instance Text BuildReportId where
   disp (BuildReportId n) = Disp.int n
@@ -50,88 +48,61 @@ instance Text BuildReportId where
 newtype BuildLog = BuildLog BlobStorage.BlobId
   deriving (Eq, Binary, Typeable, Show)
 
-instance Version BuildLog where
-    mode = Versioned 0 Nothing
-
-instance Serialize BuildLog where
-    putCopy = contain . Binary.put
-    getCopy = contain Binary.get
+data PkgBuildReports = PkgBuildReports {
+    -- for each report, other useful information: Maybe UserId, UTCTime
+    -- perhaps deserving its own data structure (SubmittedReport?)
+    reports      :: !(Map BuildReportId (BuildReport, Maybe BuildLog)),
+    nextReportId :: !BuildReportId
+} deriving (Typeable, Show)
 
 data BuildReports = BuildReports {
-    reports :: !(Map.Map BuildReportId BuildReport),
-    logs    :: !(Map.Map BuildReportId BuildLog),
-    index   :: !(Map.Map PackageIdentifier [(BuildReportId, BuildReport)]),
-    nextId  :: !BuildReportId
-  }
-  deriving (Typeable, Show)
+    reportsIndex :: !(Map.Map PackageId PkgBuildReports)
+} deriving (Typeable, Show)
 
-empty :: BuildReports
-empty = BuildReports {
+emptyPkgReports :: PkgBuildReports
+emptyPkgReports = PkgBuildReports {
     reports = Map.empty,
-    logs    = Map.empty,
-    index   = Map.empty,
-    nextId  = BuildReportId 0
-  }
+    nextReportId = BuildReportId 0
+}
 
-addReport :: BuildReports -> BuildReport -> (BuildReports, BuildReportId)
-addReport buildReports report = (buildReports', curid)
-  where
-    curid         = nextId buildReports
-    nextRepId     = case curid of BuildReportId n -> BuildReportId (n + 1)
-    buildReports' = unsafeInsertReport buildReports curid report nextRepId
+emptyReports :: BuildReports
+emptyReports = BuildReports {
+    reportsIndex = Map.empty
+}
 
+lookupReport :: BuildReports -> PackageId -> BuildReportId -> Maybe (BuildReport, Maybe BuildLog)
+lookupReport buildReports pkgid reportId = Map.lookup reportId . reports =<< Map.lookup pkgid (reportsIndex buildReports)
 
-insertReport :: BuildReports -> BuildReportId -> BuildReport -> Maybe BuildReports
-insertReport buildReports repId report
-    = case lookupReport buildReports repId of
-        Just{} -> Nothing
-        _ -> Just $
-             unsafeInsertReport buildReports repId report nextRepId
-
- where nextRepId
-           | repId >= nextIdent
-               = case repId of BuildReportId n -> BuildReportId (n + 1)
-           | otherwise = nextIdent
-
-       nextIdent = nextId buildReports
-
--- No checks are made that we're not re-using an id
-unsafeInsertReport
-    :: BuildReports -> BuildReportId -> BuildReport -> BuildReportId -> BuildReports
-unsafeInsertReport buildReports repId report nextRepId
-    = buildReports'
- where
-   pkgid = BuildReport.package report
-   buildReports' = buildReports {
-     reports = Map.insert repId report (reports buildReports),
-     index   = prepend pkgid (repId, report) (index buildReports),
-     nextId  = nextRepId
-   }
-   prepend k v = Map.insertWith (\_ vs -> v:vs) k [v]
-
-addBuildLog :: BuildReports -> BuildReportId -> BuildLog -> Maybe BuildReports
-addBuildLog buildReports reportId buildLog =
-  case Map.lookup reportId (reports buildReports) of
-    Nothing -> Nothing
-    Just _  -> Just buildReports {
-                 logs = Map.insert reportId buildLog (logs buildReports)
-               }
-
-lookupReport :: BuildReports -> BuildReportId -> Maybe BuildReport
-lookupReport buildReports reportId =
-  Map.lookup reportId (reports buildReports)
-
-lookupBuildLog :: BuildReports -> BuildReportId -> Maybe BuildLog
-lookupBuildLog buildReports reportId =
-  Map.lookup reportId (logs buildReports)
-
-lookupPackageReports :: BuildReports -> PackageIdentifier
-                     -> [(BuildReportId, BuildReport)]
-lookupPackageReports buildReports pkgid =
-  case Map.lookup pkgid (index buildReports) of
+lookupPackageReports :: BuildReports -> PackageId -> [(BuildReportId, (BuildReport, Maybe BuildLog))]
+lookupPackageReports buildReports pkgid = case Map.lookup pkgid (reportsIndex buildReports) of
     Nothing -> []
-    Just rs -> rs
+    Just rs -> Map.toList (reports rs)
 
+-------------------------
+
+addReport :: BuildReports -> PackageId -> (BuildReport, Maybe BuildLog) -> (BuildReports, BuildReportId)
+addReport buildReports pkgid report = 
+    let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
+        reportId    = nextReportId pkgReports
+        pkgReports' = PkgBuildReports { reports = Map.insert reportId report (reports pkgReports)
+                                      , nextReportId = incrementReportId reportId }
+    in (buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }, reportId)
+
+deleteReport :: BuildReports -> PackageId -> BuildReportId -> Maybe BuildReports
+deleteReport buildReports pkgid reportId = case Map.lookup pkgid (reportsIndex buildReports) of
+    Nothing -> Nothing
+    Just pkgReports -> case Map.lookup reportId (reports pkgReports) of
+        Nothing -> Nothing
+        Just {} -> let pkgReports' = pkgReports { reports = Map.delete reportId (reports pkgReports) }
+                   in Just $ buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
+
+setBuildLog :: BuildReports -> PackageId -> BuildReportId -> Maybe BuildLog -> Maybe BuildReports
+setBuildLog buildReports pkgid reportId buildLog = case Map.lookup pkgid (reportsIndex buildReports) of
+    Nothing -> Nothing
+    Just pkgReports -> case Map.lookup reportId (reports pkgReports) of
+        Nothing -> Nothing
+        Just (rlog, _) -> let pkgReports' = pkgReports { reports = Map.insert reportId (rlog, buildLog) (reports pkgReports) }
+                         in Just $ buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
 
 -------------------
 -- Binary instances
@@ -141,28 +112,22 @@ instance Binary BuildReport where
   put = Binary.put . BS.Char8.pack . BuildReport.show
   get = (BuildReport.read . BS.Char8.unpack) `fmap` Binary.get
 
-instance Version BuildReport where
-    mode = Versioned 0 Nothing
-
-instance Serialize BuildReport where
-    putCopy = contain . Binary.put
-    getCopy = contain Binary.get
-
 instance Binary BuildReports where
-  put (BuildReports rs ls _ _) = do
-    Binary.put rs
-    Binary.put ls
+  put (BuildReports index) = Binary.put index
   get = do
     rs <- Binary.get
-    ls <- Binary.get
     return BuildReports {
-      reports = rs,
-      logs    = ls,
-      index   = Map.fromListWith (++)
-                  [ (BuildReport.package r, [e])
-                  | e@(_, r) <- Map.toList rs ],
-      nextId  = if Map.null rs
-                  then BuildReportId 0
-                  else case maximum (Map.keys rs) of
-                         BuildReportId n -> BuildReportId (n + 1)
+      reportsIndex = rs
     }
+
+instance Binary PkgBuildReports where
+    put (PkgBuildReports listing _) = Binary.put listing
+    get = do
+        listing <- Binary.get
+        return PkgBuildReports {
+            reports = listing,
+            nextReportId = if Map.null listing
+                              then BuildReportId 0
+                              else incrementReportId (fst $ Map.findMax listing)
+        } 
+

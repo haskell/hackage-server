@@ -12,7 +12,7 @@ import Distribution.Server.Features.Packages (initPackagesFeature)
 import Distribution.Server.Features.Users (initUsersFeature)
 import Distribution.Server.Features.Distro (initDistroFeature)
 --import Distribution.Server.Features.Documentation (initDocumentationFeature)
---import Distribution.Server.Features.Reports (initReportsFeature)
+import Distribution.Server.Features.Reports (initReportsFeature)
 --import Distribution.Server.Features.Mirror (initMirrorFeature)
 import Distribution.Server.Features.LegacyRedirects (legacyRedirectsFeature)
 
@@ -30,9 +30,10 @@ hackageFeatures = do
     packagesFeature <- initPackagesFeature coreFeature
     distroFeature <- initDistroFeature coreFeature packagesFeature
     --checkFeature <- initCheckFeature coreFeature uploadFeature
+    reportsFeature <- initReportsFeature coreFeature
     htmlFeature <- initHtmlFeature coreFeature packagesFeature --usersFeature uploadFeature checkFeature
     --jsonFeature <- initJsonFeature
-    let allFeatures = [HF coreFeature, HF usersFeature, HF packagesFeature, HF uploadFeature, HF distroFeature, HF legacyRedirectsFeature, HF htmlFeature]
+    let allFeatures = [HF coreFeature, HF usersFeature, HF packagesFeature, HF uploadFeature, HF distroFeature, HF reportsFeature, HF legacyRedirectsFeature, HF htmlFeature]
 --    let allFeatures = [HF mirrorFeature]
     -- Run all initial hooks, now that everyone's gotten a chance to register for them
     -- This solution does not work too well for special initial hook arguments

@@ -6,16 +6,13 @@ module Distribution.Server.Packages.State where
 import Distribution.Server.Instances ()
 import Distribution.Server.Users.State ()
 
-import Distribution.Package (PackageIdentifier,PackageName,Package(packageId))
+import Distribution.Package
 import qualified Distribution.Server.PackageIndex as PackageIndex
 import Distribution.Server.Packages.Types (PkgInfo(..))
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserList)
 import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Util.BlobStorage (BlobId)
-import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
-import Distribution.Server.BuildReport.BuildReports (BuildReports,BuildReportId,BuildLog)
-import Distribution.Server.BuildReport.BuildReport (BuildReport)
 
 import Happstack.State
 import qualified Data.Binary as Binary
@@ -155,43 +152,6 @@ $(mkMethods ''Documentation ['insertDocumentation
                             ,'getDocumentation
                             ,'replaceDocumentation
                             ])
--------------------------------- Build reports
-instance Version BuildReports where
-  mode = Versioned 0 Nothing
-
-instance Serialize BuildReports where
-  putCopy = contain . Binary.put
-  getCopy = contain Binary.get
-
-instance Component BuildReports where
-  type Dependencies BuildReports = End
-  initialValue = BuildReports.empty
-
-addReport :: BuildReport -> Update BuildReports BuildReportId
-addReport report
-    = do buildReports <- State.get
-         let (reports, reportId) = BuildReports.addReport buildReports report
-         State.put reports
-         return reportId
-
-addBuildLog :: BuildReportId -> BuildLog -> Update BuildReports Bool
-addBuildLog reportId buildLog
-    = do buildReports <- State.get
-         case BuildReports.addBuildLog buildReports reportId buildLog of
-           Nothing -> return False
-           Just reports -> State.put reports >> return True
-
-getBuildReports :: Query BuildReports BuildReports
-getBuildReports = ask
-
-replaceBuildReports :: BuildReports -> Update BuildReports ()
-replaceBuildReports = State.put
-
-$(mkMethods ''BuildReports ['addReport
-                           ,'addBuildLog
-                           ,'getBuildReports
-                           ,'replaceBuildReports
-                           ])
 
 -------------------------------- Maintainer list
 data PackageMaintainers = PackageMaintainers {
