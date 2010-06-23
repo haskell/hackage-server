@@ -3,14 +3,14 @@
   #-}
 
 module Distribution.Server.Distributions.Distributions
-    ( DistroName
-    , Distributions
+    ( DistroName(..)
+    , Distributions(..)
     , emptyDistributions
     , addDistro
     , removeDistro
     , enumerate
     , isDistribution
-    , DistroVersions
+    , DistroVersions(..)
     , emptyDistroVersions
     , DistroPackageInfo(..)
     , addPackage

@@ -40,7 +40,7 @@ instance Text DistroName where
   parse = DistroName <$> Parse.munch1 (\c -> Char.isAlphaNum c || c `elem` "-_()[]{}=$,;")
 
 
--- | Listing of known distirbutions 
+-- | Listing of known distirbutions and their maintainers
 data Distributions = Distributions {
     nameMap :: !(Map.Map DistroName UserList)
 }

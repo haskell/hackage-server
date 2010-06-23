@@ -44,13 +44,12 @@ instance Component Distros where
     initialValue = Distros Dist.emptyDistributions Dist.emptyDistroVersions
 
 addDistro :: DistroName -> Update Distros Bool
-addDistro name
-    = do
-  state <- get
-  let distros = distDistros state
-  case Dist.addDistro name distros of
-    Nothing -> return False
-    Just distros' -> put state{distDistros = distros'} >> return True
+addDistro name = do
+    state <- get
+    let distros = distDistros state
+    case Dist.addDistro name distros of
+        Nothing -> return False
+        Just distros' -> put state{distDistros = distros'} >> return True
 
 -- DELETES a distribution. The name may then be re-used.
 -- You should also clean up the permissions DB as well.
@@ -65,15 +64,13 @@ enumerate :: Query Distros [DistroName]
 enumerate = asks $ Dist.enumerate . distDistros
 
 isDistribution :: DistroName -> Query Distros Bool
-isDistribution distro
-    = asks $ Dist.isDistribution distro . distDistros
+isDistribution distro = asks $ Dist.isDistribution distro . distDistros
 
 getDistributions :: Query Distros Distros
 getDistributions = ask
 
 replaceDistributions :: Distributions -> DistroVersions -> Update Distros ()
-replaceDistributions distributions distroVersions
-    = put $ Distros distributions distroVersions
+replaceDistributions distributions distroVersions = put $ Distros distributions distroVersions
 
 addPackage :: DistroName -> PackageName -> DistroPackageInfo -> Update Distros ()
 addPackage distro package info

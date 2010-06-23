@@ -2,8 +2,7 @@
 
 module Distribution.Server.Backup.Import (
     RestoreBackup(..),
-    ImportEntry,
-    ExportEntry,
+    BackupEntry,
     Import,
     importTar,
 
@@ -14,9 +13,6 @@ module Distribution.Server.Backup.Import (
     parseRead,
     MergeResult(..),
     mergeBy,
-
-    csvToExport,
-    blobToExport
   ) where
 
 import Happstack.State (update)
@@ -62,20 +58,8 @@ import Distribution.Server.Distributions.Distributions
 import Distribution.Server.Distributions.State (ReplaceDistributions(..))
 
 import Distribution.Server.Packages.State
-    ( Documentation(..)
-    , PackagesState(..)
-    , ReplacePackagesState(..)
-    , ReplaceDocumentation(..)
-    , ReplaceBuildReports(..)
-    )
 import qualified Distribution.Server.Util.TarIndex as TarIndexMap
 import qualified Distribution.Server.Util.Serve as TarIndex
-
-import Distribution.Server.BuildReport.BuildReport (BuildReport)
-import qualified Distribution.Server.BuildReport.BuildReport as Reports
-
-import Distribution.Server.BuildReport.BuildReports (BuildReports, BuildReportId, BuildLog)
-import qualified Distribution.Server.BuildReport.BuildReports as Reports
 
 import Distribution.Server.Users.Types
 import Distribution.Server.Packages.Types
@@ -90,18 +74,19 @@ import Data.Monoid
 import qualified Data.Map as Map
 import Data.Map (Map)
 
-type ImportEntry = ([FilePath], ByteString)
-
-type ExportEntry = ([FilePath], Either ByteString BlobId)
+type BackupEntry = ([FilePath], ByteString)
 
 data RestoreBackup = RestoreBackup {
     -- might want to change the Right type here to (RestoreBackup, [BlobId])
     -- in the case of import, it is a check that the packed blob folder contains everything specified in 
     -- in the case of export, it is also a check that everything necessary is being packed
     -- However, few features need to use blob storage
-    restoreEntry :: ImportEntry -> IO (Either String RestoreBackup),
-    -- final checks and transformations on the accumulated data. This is called once before restoreComplete.
+    restoreEntry :: BackupEntry -> IO (Either String RestoreBackup),
+    -- Final checks and transformations on the accumulated data that may fail.
+    -- This is called once before restoreComplete.
     restoreFinalize :: IO (Either String RestoreBackup),
+    -- This is where Happstack updating and any additional state manipulating should happen.
+    -- This should \*not\* fail.
     restoreComplete :: IO ()
 }
 instance Monoid RestoreBackup where
@@ -128,12 +113,6 @@ instance Monoid RestoreBackup where
         , restoreComplete = comp >> comp'
         }
 
-csvToExport :: [String] -> CSV -> ExportEntry
-csvToExport fpath csv = (fpath, Left $ BS.pack (printCSV csv))
-
-blobToExport :: [String] -> BlobId -> ExportEntry
-blobToExport fpath blob = (fpath, Right blob)
-
 mergeBy :: (a -> b -> Ordering) -> [a] -> [b] -> [MergeResult a b]
 mergeBy cmp = merge
   where
@@ -146,8 +125,52 @@ mergeBy cmp = merge
         LT -> OnlyInLeft  x   : merge xs  (y:ys)
 data MergeResult a b = OnlyInLeft a | InBoth a b | OnlyInRight b deriving (Show)
 
-importTar :: BlobStorage -> ByteString -> [(String, RestoreBackup)] -> IO (Maybe String)
-importTar storage tar featureMap = return $ Just "failure"
+importTar :: ByteString -> [(String, RestoreBackup)] -> IO (Maybe String)
+importTar tar featureBackups = do
+    res <- runImport (Map.fromList featureBackups) $ do
+        fromEntries . Tar.read . decompress $ tar
+        forM_ (map fst featureBackups) $ \name -> do
+            featureMap <- get
+            mbackup <- liftIO $ restoreFinalize (featureMap Map.! name)
+            case mbackup of
+                Left err      -> fail err
+                Right backup' -> put (Map.insert name backup' featureMap)
+    case res of
+        Left err -> return $ Just err
+        Right featureMap -> do
+            mapM_ restoreComplete (Map.elems featureMap)
+            return Nothing
+
+-- internal import utils
+type FeatureMap = Map String RestoreBackup
+
+fromEntries :: Tar.Entries -> Import FeatureMap ()
+fromEntries Tar.Done = return ()
+fromEntries (Tar.Fail err) = fail err
+fromEntries (Tar.Next x xs) = fromEntry x >> fromEntries xs
+
+fromEntry :: Tar.Entry -> Import FeatureMap ()
+fromEntry entry = case Tar.entryContent entry of
+        Tar.NormalFile bytes _ -> fromFile (Tar.entryPath entry) bytes
+        Tar.Directory {} -> return () -- ignore directory entries
+        _ -> fail $ "Unexpected entry: " ++ Tar.entryPath entry
+
+fromFile :: FilePath -> ByteString -> Import FeatureMap ()
+fromFile path contents
+    = let paths = splitDirectories path
+      in case paths of
+           baseDir:rest | "export-" `isPrefixOf` baseDir -> go rest
+           _ -> return () -- ignore unknown files
+ where
+    go (pathFront:pathEnd) = do
+        featureMap <- get
+        case Map.lookup pathFront featureMap of
+            Just restorer -> do
+                res <- liftIO $ restoreEntry restorer (pathEnd, contents)
+                case res of Left e          -> fail e
+                            Right restorer' -> restorer' `seq` put (Map.insert pathFront restorer' featureMap)
+            Nothing -> return ()
+    go _ = return ()
 
 {- -- | Takes apart the import tarball. If there are any errors,
 -- the first error encounter is returned.
@@ -442,28 +465,10 @@ addDistroPackage distro package info
 
 -- implementation of the Import data type
 
-newtype Import s a
-    = Imp 
-      {unImp :: forall r.
-          (String -> IO r) -- error
-       -> (a -> s -> IO r) -- success
-       -> s -- state
-       -> IO r
-      }
-
-type BlobImport s a = WriterT [BlobId] (Import s) a
-
-runBlobImport :: s -> BlobImport s a -> IO (Either String (s, [BlobId]))
-runBlobImport initState imp = let imp' = runWriterT imp in unImp imp' err k initState
-  where k (_, w) s = return $ Right (s, w)
-        err        = return . Left
-
-runImport' :: s -> Import s a -> IO (Either String (s, [BlobId]))
-runImport' initState imp = do
-    val <- runImport initState imp
-    case val of
-        Right s -> return $ Right (s, [])
-        Left e  -> return $ Left e
+newtype Import s a = Imp {unImp :: forall r. (String -> IO r) -- error
+                                          -> (a -> s -> IO r) -- success
+                                          -> s -- state
+                                          -> IO r }
 
 runImport :: s -> Import s a -> IO (Either String s)
 runImport initState imp = unImp imp err k initState
@@ -494,8 +499,6 @@ instance MonadState s (Import s) where
 -- not sure if this is as good as it could be,
 -- but it seems that k must be fully applied if I want
 -- to unwrap x
---
--- todo: catch IO errors and re-throw as Import errors?
 instance MonadIO (Import s) where
   --liftIO x = Imp $ \_ k s -> x >>= \v -> k v s
     liftIO x = Imp $ \err k s -> do

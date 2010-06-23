@@ -27,90 +27,123 @@ backup-timestamp/
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Distribution.Server.Backup.Export (
-    export,
-    unsafeInterleaveConcatMap
+    exportTar,
+    ExportEntry,
+    readExportBlobs,
+    csvToBackup,
+    csvToExport,
+    blobToExport,
   ) where
 
-import Distribution.Simple.Utils (toUTF8)
+--import Distribution.Simple.Utils (toUTF8)
 import qualified Data.ByteString.Lazy.Char8 as BS8
 
 import Text.CSV hiding (csv)
+--import qualified Data.Map as Map
+--import Data.Maybe (catMaybes)
 
-import qualified Data.Map as Map
-import Data.Maybe (catMaybes)
-
-import Distribution.Server.Backup.FlatFiles
-
+import Distribution.Server.Backup.Import (BackupEntry)
+--import Distribution.Server.Backup.FlatFiles
 import qualified Distribution.Server.Util.BlobStorage as Blob
 
-import Distribution.Server.BuildReport.BuildReports (BuildReports)
-import qualified Distribution.Server.BuildReport.BuildReports as Build
-import qualified Distribution.Server.BuildReport.BuildReport as Build
+--import Distribution.Server.BuildReport.BuildReports (BuildReports)
+--import qualified Distribution.Server.BuildReport.BuildReports as Build
+--import qualified Distribution.Server.BuildReport.BuildReport as Build
 
-import Distribution.Server.Distributions.Distributions
-    (DistroName, Distributions, DistroVersions)
-import qualified Distribution.Server.Distributions.Distributions as Distros
+--import Distribution.Server.Distributions.Distributions (DistroName, Distributions, DistroVersions)
+--import qualified Distribution.Server.Distributions.Distributions as Distros
 
-import Distribution.Server.Users.Users (Users)
-import Distribution.Server.Users.UserBackup
+--import Distribution.Server.Users.Users (Users)
+--import Distribution.Server.Users.UserBackup
 
-import Distribution.Server.Packages.Types
-import Distribution.Server.Packages.State
-import Distribution.Server.PackageIndex
-import Distribution.Package
+--import Distribution.Server.Packages.Types
+--import Distribution.Server.Packages.State
+--import Distribution.Server.PackageIndex
+--import Distribution.Package
 
 import Distribution.Server.Util.BlobStorage
 
-import Distribution.Text
+--import Distribution.Text
 
-import qualified Data.ByteString.Lazy as BSL
+import qualified Data.ByteString.Lazy.Char8 as BS
 import Codec.Compression.GZip (compress)
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
 
+import Control.Monad (forM)
 import System.FilePath
 import System.Locale
 import System.IO.Unsafe (unsafeInterleaveIO)
 import Data.Time
 
+exportTar :: [(String, IO [BackupEntry])] -> IO BS.ByteString
+exportTar = fmap (compress . Tar.write) . toEntries
+
+-- this is probably insufficiently lazy. use unsafeInterleaveIO to avoid loading /everything/ into memory
+toEntries :: [(String, IO [BackupEntry])] -> IO [Tar.Entry]
+toEntries featureMap = do
+    baseDir <- mkBaseDir `fmap` getCurrentTime
+    let exportEntries (name, ioEntries) = do
+            entries <- ioEntries
+            return $ flip map entries $ \(path, export) -> bsToEntry export (joinPath $ baseDir:name:path)
+    unsafeInterleaveConcatMap exportEntries featureMap
+
+type ExportEntry = ([FilePath], Either BS.ByteString BlobId)
+
+readExportBlobs :: BlobStorage -> [ExportEntry] -> IO [BackupEntry]
+readExportBlobs storage entries = forM entries $ \(path, export) ->
+    case export of
+        Left bs -> return (path, bs)
+        Right blobId -> do 
+            contents <- unsafeInterleaveIO $ Blob.fetch storage blobId
+            return (path, contents)
+
+-- | Convert a ByteString to a tar entry
+bsToEntry :: BS.ByteString -> FilePath -> Tar.Entry
+bsToEntry chunk path = case Tar.toTarPath False path of
+    Right tarPath -> Tar.fileEntry tarPath chunk
+    Left err -> error $ "Error in export: " ++ err
+
+csvToBackup :: [String] -> CSV -> BackupEntry
+csvToBackup fpath csv = (fpath, BS.pack (printCSV csv))
+
+csvToExport :: [String] -> CSV -> ExportEntry
+csvToExport fpath csv = (fpath, Left $ BS.pack (printCSV csv))
+
+blobToExport :: [String] -> BlobId -> ExportEntry
+blobToExport fpath blob = (fpath, Right blob)
+
+mkBaseDir :: UTCTime -> FilePath
+mkBaseDir time = "export-" ++ formatTime defaultTimeLocale (iso8601DateFormat Nothing) time
+
+{-- | Create a tar entry for an entry
+-- in the blob store
+mkBlobEntry :: BlobStorage -> BlobId -> FilePath -> IO Tar.Entry
+mkBlobEntry storage blob path
+    = do
+  contents <- Blob.fetch storage blob
+  return $ bsToEntry contents path
 
 export :: Users
        -> PackageIndex PkgInfo
        -> Documentation
        -> BuildReports
        -> BlobStorage
-       -> Distributions
-       -> DistroVersions
        -> IO BSL.ByteString
-export users pkgs docs reports storage dists distInfo
+export users pkgs docs reports storage
     = (compress . Tar.write) `fmap` tarball
  where
    tarball :: IO [Tar.Entry]
-       = mkExportEntries users pkgs docs reports storage dists distInfo
+       = mkExportEntries users pkgs docs reports storage
 
-mkExportEntries :: Users
-                -> PackageIndex PkgInfo
+mkExportEntries :: PackageIndex PkgInfo
                 -> Documentation
                 -> BuildReports
                 -> BlobStorage
-                -> Distributions
-                -> DistroVersions
                 -> IO [Tar.Entry]
-mkExportEntries users pkgs docs reports storage dists distInfo
-    = do
-
-  baseDir <- mkBaseDir `fmap` getCurrentTime
-  packageEntries <- mkPackageEntries baseDir pkgs docs reports storage
-  
-  return $ concat
-    [ mkUserEntries baseDir users
-    , mkDistroEntries baseDir dists distInfo
-    , packageEntries
-    ]
-
-mkBaseDir :: UTCTime -> FilePath
-mkBaseDir time = "export-" ++ formatTime defaultTimeLocale (iso8601DateFormat Nothing) time
-
+mkExportEntries users pkgs docs reports storage = do
+    baseDir <- mkBaseDir `fmap` getCurrentTime
+    mkPackageEntries baseDir pkgs docs reports storage
 
 mkPackageEntries :: FilePath
                  -> PackageIndex PkgInfo
@@ -120,25 +153,7 @@ mkPackageEntries :: FilePath
                  -> IO [Tar.Entry]
 mkPackageEntries baseDir pkgs docs reports storage
     = let pkgList = allPackages pkgs
-      in unsafeInterleaveConcatMap
-             (mkPackageEntry baseDir storage docs reports) pkgList
-
-{- let's be crazy lazy
-
-   The only non-pure operations we do are reading files
-   from the blob-storage, which is already lazy IO.
-
-   So we may as well not force the spine of the tar-ball
-   before we need to.
--}
-unsafeInterleaveConcatMap :: (a -> IO [b]) -> [a] -> IO [b]
-unsafeInterleaveConcatMap f = go 
-  where
-    go [] = return []
-    go (x:xs) = do
-        ys <- f x
-        yss <- unsafeInterleaveIO $ go xs
-        return (ys++yss)
+      in unsafeInterleaveConcatMap (mkPackageEntry baseDir storage docs reports) pkgList
 
 mkPackageEntry :: FilePath
                -> BlobStorage
@@ -146,38 +161,12 @@ mkPackageEntry :: FilePath
                -> BuildReports
                -> PkgInfo
                -> IO [Tar.Entry]
-mkPackageEntry baseDir storage docs reports pkgInfo
-    = do
-
+mkPackageEntry baseDir storage docs reports pkgInfo = do
   -- docs and build reports each ship separate
   docsEntry <- mkDocumentationEntry baseDir pkgInfo docs storage
   buildReportEntries <- mkBuildReportEntries baseDir pkgInfo reports storage
 
-  -- the source, uploads, and cabal files get lumped together in their
-  -- own tar file
-  sourceEntry <- mkSourceEntry pkgInfo storage
-  let uploadsEntry = csvToEntry (uploadsToCSV pkgInfo) $
-                     "uploads" <.> "csv"
-      cabalEntry = mkCabalEntry pkgInfo
-
-      pkgTar = Tar.write $ catMaybes
-               [ sourceEntry
-               , Just cabalEntry
-               , Just uploadsEntry
-               ]
-      pkgEntry
-          = bsToEntry pkgTar $
-            pkgEntryPath baseDir pkgInfo <.> "tar"
-  return $ pkgEntry : maybe [] return docsEntry ++ buildReportEntries
-
-
--- | Tar entry for the source tarball
-mkSourceEntry :: PkgInfo -> BlobStorage -> IO (Maybe Tar.Entry)
-mkSourceEntry pkgInfo storage
-    = case pkgTarball pkgInfo of
-        []        -> return Nothing
-        ((blob, _):_) -> Just `fmap` (mkBlobEntry storage blob $
-                         display (packageName pkgInfo) <.> "tar" <.> "gz")
+  return $ maybe [] return docsEntry ++ buildReportEntries
 
 -- | Tar entry for the documentation for this package
 mkDocumentationEntry
@@ -227,58 +216,11 @@ reportBasePath :: FilePath -> Build.BuildReportId -> FilePath
 reportBasePath baseDir reportId
     = baseDir </> "build-reports" </> display reportId
 
-
--- | Tar entry for the .cabal file
-mkCabalEntry :: PkgInfo -> Tar.Entry
-mkCabalEntry pkgInfo
-    = bsToEntry (pkgData pkgInfo) $
-      (display $ packageName pkgInfo)  <.> "cabal"
-
-
-pkgEntryPath :: Package a => FilePath -> a -> FilePath
-pkgEntryPath baseDir pkgInfo
-    = baseDir
-      </> "package"
-      </> (display . packageName $ pkgInfo)
-      </> (display . packageId $ pkgInfo)
-
-
--- | Tar entry for the users db
-mkUserEntries :: FilePath -> Users -> [Tar.Entry]
-mkUserEntries baseDir users
-    = return $ csvToEntry (usersToCSV users) $
-      baseDir </> "users" </> "auth" <.> "csv"
-
--- | Tar entries fr distribution packaging information.
-mkDistroEntries :: FilePath -> Distributions -> DistroVersions -> [Tar.Entry]
-mkDistroEntries baseDir dists distInfo
-    = flip map (Distros.enumerate dists) $ \distro ->
-      csvToEntry (distroToCSV distro distInfo) (distroPath baseDir distro)
-
-distroPath :: FilePath -> DistroName -> FilePath
-distroPath baseDir distro
-    = baseDir </> "distros" </> display distro <.> "csv"
-
--- | Create a tar entry for an entry
--- in the blob store
-mkBlobEntry :: BlobStorage -> BlobId -> FilePath -> IO Tar.Entry
-mkBlobEntry storage blob path
-    = do
-  contents <- Blob.fetch storage blob
-  return $ bsToEntry contents path
-
 -- | Convert a CSV to a tar entry (UTF8)
 csvToEntry :: CSV -> FilePath -> Tar.Entry
 csvToEntry csv path
     = let chunk = csvToBytes csv
       in bsToEntry chunk path
-
--- | Convert a ByteString to a tar entry
-bsToEntry :: BSL.ByteString -> FilePath -> Tar.Entry
-bsToEntry chunk path
-    = case Tar.toTarPath False path of
-        Right tarPath -> Tar.fileEntry tarPath chunk
-        Left err -> error $ "Error in export: " ++ err
 
 -- via UTF8 conversion.
 stringToBytes :: String -> BSL.ByteString
@@ -292,4 +234,20 @@ concatM x = concat `fmap` sequence x
 
 concatMapM :: (Monad m, Functor m) => (a -> m [b]) -> [a] -> m [b]
 concatMapM f xs = concatM $ map f xs
+-}
+{- let's be crazy lazy
 
+   The only non-pure operations we do are reading files
+   from the blob-storage, which is already lazy IO.
+
+   So we may as well not force the spine of the tar-ball
+   before we need to.
+-}
+unsafeInterleaveConcatMap :: (a -> IO [b]) -> [a] -> IO [b]
+unsafeInterleaveConcatMap f = go 
+  where
+    go [] = return []
+    go (x:xs) = do
+        ys <- f x
+        yss <- unsafeInterleaveIO $ go xs
+        return (ys++yss)

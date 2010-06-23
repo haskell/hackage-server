@@ -12,6 +12,7 @@ import Distribution.Server.Types
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..))
 import Distribution.Server.Distributions.State
 import Distribution.Server.Distributions.Types
+import Distribution.Server.Distributions.DistroBackup
 
 import Happstack.Server
 import Happstack.State
@@ -35,9 +36,14 @@ instance HackageFeature DistroFeature where
     getFeature distro = HackageModule
       { featureName = "Distro"
       , resources   = map ($distroResource distro) [distroIndexPage, distroAllPage, distroPackage]
-      , dumpBackup    = Nothing
-      , restoreBackup = Nothing
+      , dumpBackup    = Just $ \_ -> do
+            allDist <- query GetDistributions
+            let distros  = distDistros allDist
+                versions = distVersions allDist
+            return $ distroUsersToExport distros:distrosToExport distros versions
+      , restoreBackup = Just $ \_ -> distroBackup
       }
+
 
 initDistroFeature :: CoreFeature -> PackagesFeature -> IO DistroFeature
 initDistroFeature _ _ = do
