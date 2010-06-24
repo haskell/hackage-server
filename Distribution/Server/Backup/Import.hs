@@ -8,11 +8,15 @@ module Distribution.Server.Backup.Import (
 
     importCSV,
     runImport,
+    getImport,
+    withSubImport,
     parseText,
     parseTime,
     parseRead,
     MergeResult(..),
     mergeBy,
+
+    bytesToString
   ) where
 
 import Happstack.State (update)
@@ -474,6 +478,20 @@ runImport :: s -> Import s a -> IO (Either String s)
 runImport initState imp = unImp imp err k initState
   where k _ s = return $ Right s
         err   = return . Left
+
+getImport :: s -> Import s a -> IO (Either String (s, a))
+getImport initState imp = unImp imp err k initState
+  where k a s = return $ Right (s, a)
+        err   = return . Left
+
+withSubImport :: (s -> s') -> (s' -> s -> s) -> Import s' a -> Import s a
+withSubImport extractState returnState subImport = do
+    initState <- get
+    let subState = extractState initState
+    mresult <- liftIO $ getImport subState subImport
+    case mresult of
+        Right (subState', result) -> put (returnState subState' initState) >> return result
+        Left  err -> fail err
 
 instance Functor (Import s) where
     f `fmap` g = Imp $ \err k st -> unImp g err (k . f) st

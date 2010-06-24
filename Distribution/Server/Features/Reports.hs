@@ -11,7 +11,7 @@ import Distribution.Server.Types
 --import Distribution.Server.Backup.Import
 --import Distribution.Server.Backup.Export
 
-import Distribution.Server.BuildReport.ReportsBackup ()
+import Distribution.Server.BuildReport.ReportsBackup
 import Distribution.Server.BuildReport.State
 import qualified Distribution.Server.BuildReport.BuildReport as BuildReport
 import Distribution.Server.BuildReport.BuildReport (BuildReport(..))
@@ -20,6 +20,7 @@ import Distribution.Server.BuildReport.BuildReports (BuildReportId(..), BuildLog
 
 import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
+import Distribution.Server.Backup.Export
 --import Distribution.Server.Util.BlobStorage (BlobStorage)
 
 import Distribution.Text
@@ -44,8 +45,11 @@ instance HackageFeature ReportsFeature where
     getFeature reports = HackageModule
       { featureName = "packages"
       , resources   = map ($reportsResource reports) [reportsList, reportsPage, reportsLog]
-      , dumpBackup    = Nothing
-      , restoreBackup = Nothing
+      , dumpBackup    = Just $ \storage -> do
+            buildReps <- query GetBuildReports
+            exports <- readExportBlobs storage (buildReportsToExport buildReps)
+            return exports
+      , restoreBackup = Just $ \storage -> reportsBackup storage
       }
 
 initReportsFeature :: CoreFeature -> IO ReportsFeature
@@ -72,8 +76,9 @@ initReportsFeature _ = do
 
     submitBuildReport config dpath = withPackagePath dpath $ \_ pkg _ -> do
         let pkgid = pkgInfoId pkg
-        let report = undefined
-        reportId <- update $ AddReport pkgid (report, Nothing)
+            report = undefined
+            mbuildLog = Just $ undefined (serverStore config)
+        reportId <- update $ AddReport pkgid (report, mbuildLog)
         goToReport pkgid reportId
 
     deleteBuildReport _ dpath = withPackagePath dpath $ \_ pkg _ -> withReportId dpath $ \reportId -> do
@@ -85,8 +90,8 @@ initReportsFeature _ = do
 
     putBuildLog config dpath = withPackagePath dpath $ \_ pkg _ -> withReportId dpath $ \reportId -> do
         let pkgid = pkgInfoId pkg
-        let blobId = undefined
-        update $ SetBuildLog pkgid reportId (Just blobId)
+            buildLog = undefined (serverStore config)
+        update $ SetBuildLog pkgid reportId (Just buildLog)
         goToReport pkgid reportId
 
     deleteBuildLog _ dpath = withPackagePath dpath $ \_ pkg _ -> withReportId dpath $ \reportId -> do
@@ -108,14 +113,4 @@ withPackageReport dpath pkgid func = withReportId dpath $ \reportId -> do
     case mreport of
         Nothing -> notFound $ toResponse "Build report does not exist"
         Just report -> func reportId report
-
-{-addReport :: PackageId -> (BuildReport, Maybe BuildLog) -> Update BuildReports BuildReportId
-setBuildLog :: PackageId -> BuildReportId -> Maybe BuildLog -> Update BuildReports Bool
-deleteReport :: PackageId -> BuildReportId -> Update BuildReports Bool --Maybe BuildReports
-lookupReport :: PackageId -> BuildReportId -> Query BuildReports (Maybe (BuildReport, Maybe BuildLog))
-lookupPackageReports :: PackageId -> Query BuildReports 
-getBuildReports :: Query BuildReports BuildReports
-replaceBuildReports :: BuildReports -> Update BuildReports ()-}
-
-
 

@@ -12,6 +12,7 @@ module Distribution.Server.BuildReport.BuildReports (
     setBuildLog,
     lookupReport,
     lookupPackageReports,
+    unsafeSetReport
   ) where
 
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
@@ -21,7 +22,6 @@ import Distribution.Server.BuildReport.BuildReport (BuildReport)
 import Distribution.Package (PackageId)
 import Distribution.Text (Text(..))
 
-import Happstack.Data.Serialize
 import Distribution.Server.Instances ()
 
 import Data.Map (Map)
@@ -51,7 +51,9 @@ newtype BuildLog = BuildLog BlobStorage.BlobId
 data PkgBuildReports = PkgBuildReports {
     -- for each report, other useful information: Maybe UserId, UTCTime
     -- perhaps deserving its own data structure (SubmittedReport?)
+    -- also, use IntMap (though with the public interface using BuildReportId)?
     reports      :: !(Map BuildReportId (BuildReport, Maybe BuildLog)),
+    -- one more than the maximum report id used
     nextReportId :: !BuildReportId
 } deriving (Typeable, Show)
 
@@ -62,7 +64,7 @@ data BuildReports = BuildReports {
 emptyPkgReports :: PkgBuildReports
 emptyPkgReports = PkgBuildReports {
     reports = Map.empty,
-    nextReportId = BuildReportId 0
+    nextReportId = BuildReportId 1
 }
 
 emptyReports :: BuildReports
@@ -70,34 +72,41 @@ emptyReports = BuildReports {
     reportsIndex = Map.empty
 }
 
-lookupReport :: BuildReports -> PackageId -> BuildReportId -> Maybe (BuildReport, Maybe BuildLog)
-lookupReport buildReports pkgid reportId = Map.lookup reportId . reports =<< Map.lookup pkgid (reportsIndex buildReports)
+lookupReport :: PackageId -> BuildReportId -> BuildReports -> Maybe (BuildReport, Maybe BuildLog)
+lookupReport pkgid reportId buildReports = Map.lookup reportId . reports =<< Map.lookup pkgid (reportsIndex buildReports)
 
-lookupPackageReports :: BuildReports -> PackageId -> [(BuildReportId, (BuildReport, Maybe BuildLog))]
-lookupPackageReports buildReports pkgid = case Map.lookup pkgid (reportsIndex buildReports) of
+lookupPackageReports :: PackageId -> BuildReports -> [(BuildReportId, (BuildReport, Maybe BuildLog))]
+lookupPackageReports pkgid buildReports = case Map.lookup pkgid (reportsIndex buildReports) of
     Nothing -> []
     Just rs -> Map.toList (reports rs)
 
 -------------------------
-
-addReport :: BuildReports -> PackageId -> (BuildReport, Maybe BuildLog) -> (BuildReports, BuildReportId)
-addReport buildReports pkgid report = 
+-- PackageIds should /not/ have empty versions. Caller should ensure this somehow.
+addReport :: PackageId -> (BuildReport, Maybe BuildLog) -> BuildReports -> (BuildReports, BuildReportId)
+addReport pkgid report buildReports = 
     let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
         reportId    = nextReportId pkgReports
         pkgReports' = PkgBuildReports { reports = Map.insert reportId report (reports pkgReports)
                                       , nextReportId = incrementReportId reportId }
     in (buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }, reportId)
 
-deleteReport :: BuildReports -> PackageId -> BuildReportId -> Maybe BuildReports
-deleteReport buildReports pkgid reportId = case Map.lookup pkgid (reportsIndex buildReports) of
+unsafeSetReport :: PackageId -> BuildReportId -> (BuildReport, Maybe BuildLog) -> BuildReports -> BuildReports
+unsafeSetReport pkgid reportId report buildReports =
+    let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
+        pkgReports' = PkgBuildReports { reports = Map.insert reportId report (reports pkgReports)
+                                      , nextReportId = max (incrementReportId reportId) (nextReportId pkgReports) }
+    in buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
+
+deleteReport :: PackageId -> BuildReportId -> BuildReports -> Maybe BuildReports
+deleteReport pkgid reportId buildReports = case Map.lookup pkgid (reportsIndex buildReports) of
     Nothing -> Nothing
     Just pkgReports -> case Map.lookup reportId (reports pkgReports) of
         Nothing -> Nothing
         Just {} -> let pkgReports' = pkgReports { reports = Map.delete reportId (reports pkgReports) }
                    in Just $ buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
 
-setBuildLog :: BuildReports -> PackageId -> BuildReportId -> Maybe BuildLog -> Maybe BuildReports
-setBuildLog buildReports pkgid reportId buildLog = case Map.lookup pkgid (reportsIndex buildReports) of
+setBuildLog :: PackageId -> BuildReportId -> Maybe BuildLog -> BuildReports -> Maybe BuildReports
+setBuildLog pkgid reportId buildLog buildReports = case Map.lookup pkgid (reportsIndex buildReports) of
     Nothing -> Nothing
     Just pkgReports -> case Map.lookup reportId (reports pkgReports) of
         Nothing -> Nothing
@@ -120,6 +129,10 @@ instance Binary BuildReports where
       reportsIndex = rs
     }
 
+-- note: if the set of report ids is [1, 2, 3], then nextReportId = 4
+-- after calling deleteReport for 3, the set is [1, 2] and nextReportId is still 4.
+-- however, upon importing, nextReportId will = 3, one more than the maximum present
+-- this is also a problem in ReportsBackup.hs. but it's not a major issue I think.
 instance Binary PkgBuildReports where
     put (PkgBuildReports listing _) = Binary.put listing
     get = do
@@ -127,7 +140,7 @@ instance Binary PkgBuildReports where
         return PkgBuildReports {
             reports = listing,
             nextReportId = if Map.null listing
-                              then BuildReportId 0
+                              then BuildReportId 1
                               else incrementReportId (fst $ Map.findMax listing)
         } 
 

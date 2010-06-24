@@ -33,10 +33,12 @@ module Distribution.Server.Backup.Export (
     csvToBackup,
     csvToExport,
     blobToExport,
+
+    stringToBytes
   ) where
 
---import Distribution.Simple.Utils (toUTF8)
-import qualified Data.ByteString.Lazy.Char8 as BS8
+import Distribution.Simple.Utils (toUTF8)
+import qualified Data.ByteString.Lazy.Char8 as BSL
 
 import Text.CSV hiding (csv)
 --import qualified Data.Map as Map
@@ -222,10 +224,6 @@ csvToEntry csv path
     = let chunk = csvToBytes csv
       in bsToEntry chunk path
 
--- via UTF8 conversion.
-stringToBytes :: String -> BSL.ByteString
-stringToBytes = BS8.pack . toUTF8
-
 csvToBytes :: CSV -> BSL.ByteString
 csvToBytes = stringToBytes . printCSV
 
@@ -251,3 +249,8 @@ unsafeInterleaveConcatMap f = go
         ys <- f x
         yss <- unsafeInterleaveIO $ go xs
         return (ys++yss)
+
+-- via UTF8 conversion.
+stringToBytes :: String -> BSL.ByteString
+stringToBytes = BSL.pack . toUTF8
+
