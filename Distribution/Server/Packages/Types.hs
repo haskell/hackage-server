@@ -37,8 +37,7 @@ import Data.Ord (comparing)
 -- | The information we keep about a particular version of a package.
 -- 
 -- Previous versions of this package name and version may exist as well.
--- We normally disallow re-uploading but may make occasional exceptions,
--- such as , and there are some such old packages.
+-- We normally disallow re-uploading but may make occasional exceptions.
 data PkgInfo = PkgInfo {
     pkgInfoId :: !PackageIdentifier,
     pkgDesc   :: !GenericPackageDescription,
@@ -53,6 +52,7 @@ data PkgInfo = PkgInfo {
     -- | Previous data. The UploadInfo does *not* indicate when the ByteString was
     -- uploaded, but rather when it was replaced. This way, pkgUploadData won't change
     -- even if a cabal file is changed.
+    -- Should be updated whenever a tarball is uploaded (see mergePkg state function)
     pkgDataOld :: ![(ByteString, UploadInfo)],
     -- | When the package was created. Imports will override this with time in their logs.
     pkgUploadData :: !UploadInfo
@@ -75,26 +75,71 @@ instance Package PkgInfo where packageId = pkgInfoId
 instance Binary PkgInfo where
   put pkgInfo = do
     Binary.put (pkgInfoId pkgInfo)
-    Binary.put (pkgUploadData pkgInfo)
-    Binary.put (pkgDataOld pkgInfo)
-    Binary.put (pkgTarball pkgInfo)
     Binary.put (pkgData pkgInfo)
+    Binary.put (pkgTarball pkgInfo)
+    Binary.put (pkgDataOld pkgInfo)
+    Binary.put (pkgUploadData pkgInfo)
 
   get = do
     infoId  <- Binary.get
-    updata  <- Binary.get
-    old     <- Binary.get
-    tarball <- Binary.get
     bstring <- Binary.get
+    desc <- case parsePackageDescription . fromUTF8 . BS.unpack $ bstring of
+        ParseFailed e -> fail $ "Internal error: " ++ show e
+        ParseOk _ x   -> return x
+    tarball <- Binary.get
+    old     <- Binary.get
+    updata  <- Binary.get
     return PkgInfo {
-      pkgInfoId = infoId,
-      pkgDesc   = case parse bstring of
-                    -- XXX: Better error message?
-                    ParseFailed e -> error $ "Internal error: " ++ show e
-                    ParseOk _ x   -> x,
-      pkgUploadData = updata,
-      pkgDataOld    = old,
-      pkgTarball    = tarball,
-      pkgData       = bstring
+        pkgInfoId = infoId,
+        pkgDesc   = desc,
+        pkgUploadData = updata,
+        pkgDataOld    = old,
+        pkgTarball    = tarball,
+        pkgData       = bstring
     }
-    where parse = parsePackageDescription . fromUTF8 . BS.unpack
+
+------------------------------------------------------
+-- | The information we keep about a candidate package.
+-- 
+-- Only one candidate should exist per package name. This restriction seems
+-- reasonable; it makes coordinating between live packages and candidates easier.
+-- Also, the candidate can have any version, but can be published only if
+-- it's later than the latest indexed one.
+--
+-- It's currently possible to have candidates for packages which don't exist yet.
+--
+-- This data structure is modelled after 'PkgInfo'.
+data CandPkgInfo = CandPkgInfo {
+    candInfoId  :: !PackageIdentifier,
+    -- there should be one ByteString and one BlobId per candidate.
+    -- this was enforced in the types.. but it's easier to just
+    -- reuse PkgInfo for the task.
+    candPkgInfo :: !PkgInfo,
+    -- | Warnings to display at the top of the package page.
+    candWarnings   :: ![String],
+    -- | Whether to allow non-maintainers to view the page or not.
+    candPublic :: !Bool
+} deriving (Show, Typeable)
+
+instance Package CandPkgInfo where packageId = candInfoId
+
+instance Binary CandPkgInfo where
+  put pkgInfo = do
+    Binary.put (candInfoId pkgInfo)
+    Binary.put (candPkgInfo pkgInfo)
+    Binary.put (candWarnings pkgInfo)
+    Binary.put (candPublic pkgInfo)
+
+  get = do
+    infoId  <- Binary.get
+    pkgInfo <- Binary.get
+    warning <- Binary.get
+    public  <- Binary.get
+    return CandPkgInfo {
+        candInfoId  = infoId,
+        candPkgInfo = pkgInfo,
+        candWarnings = warning,
+        candPublic = public
+    }
+
+

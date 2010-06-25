@@ -8,7 +8,7 @@ import Distribution.Server.Users.State ()
 
 import Distribution.Package
 import qualified Distribution.Server.PackageIndex as PackageIndex
-import Distribution.Server.Packages.Types (PkgInfo(..))
+import Distribution.Server.Packages.Types (PkgInfo(..), CandPkgInfo(..))
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserList)
 import Distribution.Server.Users.Types (UserId)
@@ -36,7 +36,7 @@ data PackagesState = PackagesState {
 instance Component PackagesState where
   type Dependencies PackagesState = End
   initialValue = PackagesState {
-    packageList  = mempty
+    packageList = mempty
   }
 
 instance Version PackagesState where
@@ -48,7 +48,7 @@ instance Serialize PackagesState where
   getCopy = contain $ do
     packages <- safeGet
     return PackagesState {
-      packageList  = PackageIndex.fromList packages
+      packageList = PackageIndex.fromList packages
     }
 
 instance Version PkgInfo where
@@ -79,7 +79,12 @@ mergePkg pkg = State.modify $ \pkgsState -> pkgsState { packageList = PackageInd
       }
     sortByDate xs = sortBy (comparing (fst . snd)) xs
 
+deletePkg :: PackageId -> Update PackagesState ()
+deletePkg pkg = State.modify $ \pkgsState -> pkgsState { packageList = deleteVersion (packageList pkgsState) }
+    where deleteVersion = PackageIndex.deletePackageId (packageId pkg)
+
 -- NOTE! overwrites any existing data
+-- TODO: get rid of this, now that PackagesState is just packages (not userdb etc.)
 bulkImport :: [PkgInfo] -> Update PackagesState ()
 bulkImport newIndex = do
   pkgsState <- State.get
@@ -100,7 +105,63 @@ $(mkMethods ''PackagesState ['getPackagesState
                             ,'replacePackagesState
                             ,'insertPkgIfAbsent
                             ,'mergePkg
+                            ,'deletePkg
                             ])
+
+---------------------------------- Index of candidate tarballs and metadata
+-- boilerplate code based on PackagesState
+data CandidatePackages = CandidatePackages {
+    candidateList :: !(PackageIndex.PackageIndex CandPkgInfo)
+} deriving (Typeable, Show)
+
+instance Component CandidatePackages where
+  type Dependencies CandidatePackages = End
+  initialValue = CandidatePackages {
+    candidateList = mempty
+  }
+
+instance Version CandidatePackages where
+    mode = Versioned 0 Nothing
+
+instance Serialize CandidatePackages where
+  putCopy (CandidatePackages idx) = contain $ do
+    safePut $ PackageIndex.allPackages idx
+  getCopy = contain $ do
+    packages <- safeGet
+    return CandidatePackages {
+      candidateList  = PackageIndex.fromList packages
+    }
+
+instance Version CandPkgInfo where
+  mode = Versioned 0 Nothing
+
+instance Serialize CandPkgInfo where
+  putCopy = contain . Binary.put
+  getCopy = contain Binary.get
+
+setCandidate :: CandPkgInfo -> Update CandidatePackages ()
+setCandidate pkg = State.modify $ \candidates -> candidates { candidateList = replaceVersions (candidateList candidates) }
+    where replaceVersions = PackageIndex.insert pkg . PackageIndex.deletePackageName (packageName pkg)
+
+deleteCandidate :: PackageName -> Update CandidatePackages ()
+deleteCandidate pkg = State.modify $ \candidates -> candidates { candidateList = deleteVersions (candidateList candidates) }
+    where deleteVersions = PackageIndex.deletePackageName pkg
+
+-- |Replace all existing packages and reports
+replaceCandidatePackages :: CandidatePackages -> Update CandidatePackages ()
+replaceCandidatePackages = State.put
+
+getCandidatePackages :: Query CandidatePackages CandidatePackages
+getCandidatePackages = ask
+
+
+$(mkMethods ''CandidatePackages ['getCandidatePackages
+                                ,'replaceCandidatePackages
+                                ,'setCandidate
+                                ,'deleteCandidate
+                                ])
+
+
 ---------------------------------- Documentation
 data Documentation = Documentation {
      documentation :: Map.Map PackageIdentifier BlobId
@@ -170,7 +231,8 @@ getPackageMaintainers :: PackageName -> Query PackageMaintainers UserList
 getPackageMaintainers name = fmap (fromMaybe Group.empty . Map.lookup name) (asks maintainers)
 
 modifyPackageMaintainers :: PackageName -> (UserList -> UserList) -> Update PackageMaintainers ()
-modifyPackageMaintainers name func = State.modify (\pm -> pm {maintainers = Map.update (Just . func) name (maintainers pm) })
+modifyPackageMaintainers name func = State.modify (\pm -> pm {maintainers = alterFunc (maintainers pm) })
+    where alterFunc = Map.alter (Just . func . fromMaybe Group.empty) name
 
 addPackageMaintainer :: PackageName -> UserId -> Update PackageMaintainers ()
 addPackageMaintainer name uid = modifyPackageMaintainers name (Group.add uid)

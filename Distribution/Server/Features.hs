@@ -6,7 +6,7 @@ import Distribution.Server.Feature
 import Distribution.Server.Features.Core (initCoreFeature)
 --import Distribution.Server.Features.Json (initJsonFeature)
 import Distribution.Server.Features.Html (initHtmlFeature)
---import Distribution.Server.Features.Check (initCheckFeature)
+import Distribution.Server.Features.Check (initCheckFeature)
 import Distribution.Server.Features.Upload (initUploadFeature)
 import Distribution.Server.Features.Packages (initPackagesFeature)
 import Distribution.Server.Features.Users (initUsersFeature)
@@ -29,11 +29,11 @@ hackageFeatures = do
     uploadFeature <- initUploadFeature coreFeature
     packagesFeature <- initPackagesFeature coreFeature
     distroFeature <- initDistroFeature coreFeature packagesFeature
-    --checkFeature <- initCheckFeature coreFeature uploadFeature
+    checkFeature <- initCheckFeature coreFeature packagesFeature uploadFeature
     reportsFeature <- initReportsFeature coreFeature
     htmlFeature <- initHtmlFeature coreFeature packagesFeature --usersFeature uploadFeature checkFeature
     --jsonFeature <- initJsonFeature
-    let allFeatures = [HF coreFeature, HF usersFeature, HF packagesFeature, HF uploadFeature, HF distroFeature, HF reportsFeature, HF legacyRedirectsFeature, HF htmlFeature]
+    let allFeatures = [HF coreFeature, HF usersFeature, HF packagesFeature, HF uploadFeature, HF distroFeature, HF checkFeature, HF reportsFeature, HF legacyRedirectsFeature, HF htmlFeature]
 --    let allFeatures = [HF mirrorFeature]
     -- Run all initial hooks, now that everyone's gotten a chance to register for them
     -- This solution does not work too well for special initial hook arguments

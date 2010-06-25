@@ -37,7 +37,7 @@ instance Component HackageEntryPoint where
     type Dependencies HackageEntryPoint
         = Core :+: Documentation :+:
           BuildReports :+: Distros :+: TarIndexMap :+:
-          PackageUpload :+: End
+          PackageUpload :+: CandidatePackages :+: End
     initialValue = HackageEntryPoint
 
 $(mkMethods ''HackageEntryPoint [])
