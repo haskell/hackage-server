@@ -76,11 +76,7 @@ initUsersFeature _ = do
     textUserList _ _ = fmap (toResponse . intercalate ", " . map display . Map.keys . Users.userNameMap) (query GetUserDb)
     textUserPage _ dpath = withUserPath dpath $ \_ info -> return . toResponse $ "User page for " ++ display (userName info) ++ ", and your secret information is " ++ show info
     requireAuth _ _ = query GetUserDb >>= \users -> do
-        uid <- Auth.requireHackageAuth users Nothing Nothing
-        -- below would return a 404 if the user wasn't found, which is impossible if xe was
-        -- just authenticated. perhaps requireHackageAuth should return UserInfo as a type-level
-        -- token of this unpossibility
-        info <- maybe mzero return $ Users.lookupId uid users
+        (_, info) <- Auth.requireHackageAuth users Nothing Nothing
         seeOther ("/user/" ++ display (userName info)) $ toResponse ()
     deleteAccount _ dpath = withUserPath dpath $ \uid _ -> do
         update (DeleteUser uid)
@@ -156,10 +152,10 @@ changePassword :: Config -> DynamicPath -> ServerPart Response
 changePassword _ dpath = do
     users  <- query State.GetUserDb
     admins <- query State.GetHackageAdmins
-    uid <- Auth.requireHackageAuth users Nothing Nothing
-    let -- maybe the name specified in the path here
+    (uid, _) <- Auth.requireHackageAuth users Nothing Nothing
+    let -- the name specified in the path here
         muserPathName = simpleParse =<< lookup "username" dpath
-        -- maybe the id of that name
+        -- the id of that name
         muserPathId = flip Users.lookupName users =<< muserPathName
     case (muserPathId, muserPathName) of
       (Just userPathId, Just userPathName) ->

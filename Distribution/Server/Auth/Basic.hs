@@ -4,7 +4,7 @@ module Distribution.Server.Auth.Basic (
   ) where
 
 import Distribution.Server.Users.Types
-         ( UserId, UserName(..), PasswdPlain(..) )
+         ( UserId, UserName(..), UserInfo, PasswdPlain(..) )
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
@@ -28,7 +28,7 @@ import Data.Maybe (maybe)
 import Data.List (find, intercalate)
 import Data.Digest.Pure.MD5 (md5)
 
-getHackageAuth :: Monad m => Users.Users -> ServerPartT m (Either AuthError UserId)
+getHackageAuth :: Monad m => Users.Users -> ServerPartT m (Either AuthError (UserId, UserInfo))
 getHackageAuth users = askRq >>= \req -> return $ case getAuthType req of
     Just BasicAuth  -> genericBasicAuth req "hackage" (getPasswdInfo users)
     Just DigestAuth -> genericDigestAuth req (getPasswdInfo users) --realm hashed in user database
@@ -42,15 +42,15 @@ getAuthType req = case getHeader "authorization" req of
 
 -- semantic ambiguity: does Nothing mean allow everyone, or only allow enabled? Currently, the former.
 -- disabled users might want to perform some authorized action, like login or change their password
-requireHackageAuth :: MonadIO m => Users.Users -> Maybe Group.UserList -> Maybe AuthType -> ServerPartT m UserId
+requireHackageAuth :: MonadIO m => Users.Users -> Maybe Group.UserList -> Maybe AuthType -> ServerPartT m (UserId, UserInfo)
 requireHackageAuth users authorisedGroup forceType = getHackageAuth users >>= \res -> case res of
-    Right userId -> do
+    Right (userId, info) -> do
         let forbid = escape $ forbidden $ toResponse "No access for this page."
         case Users.userStatus `fmap` Users.lookupId userId users of
             Just (Users.Active Users.Disabled _) -> forbid
             _ -> return ()
         unless (maybe True (Group.member userId) authorisedGroup) $ forbid
-        return userId
+        return (userId, info)
     Left NoAuthError -> makeAuthPage "No authorization provided."
     Left UnrecognizedAuthError -> makeAuthPage "Authorization scheme not recognized."
     Left NoSuchUserError -> makeAuthPage "Username or password incorrect."
@@ -67,14 +67,14 @@ requireHackageAuth users authorisedGroup forceType = getHackageAuth users >>= \r
                 Nothing -> askBasicAuth -- for now?
         theAsk "hackage" response
 
-getPasswdInfo :: Users.Users -> UserName -> Maybe (UserId, Users.UserAuth)
+getPasswdInfo :: Users.Users -> UserName -> Maybe ((UserId, UserInfo), Users.UserAuth)
 getPasswdInfo users userName = do
     userId   <- Users.lookupName userName users
     userInfo <- Users.lookupId userId users
     auth <- case Users.userStatus userInfo of
         Users.Active _ auth -> Just auth
         _                   -> Nothing
-    return (userId, auth)
+    return ((userId, userInfo), auth)
 
 (<?) :: a -> Maybe b -> Either a b
 e <? mb = maybe (Left e) Right mb

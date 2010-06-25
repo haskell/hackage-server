@@ -21,6 +21,9 @@ import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nul
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import qualified Distribution.Server.Auth.Basic as Auth
 import qualified Distribution.Server.Packages.Unpack as Upload
+import Distribution.Server.Backup.Export
+import Distribution.Server.Backup.Import
+import Distribution.Server.Users.UserBackup
 
 import Distribution.Simple.Utils (fromUTF8)
 import Distribution.PackageDescription.Parse (parsePackageDescription)
@@ -55,7 +58,7 @@ instance HackageFeature MirrorFeature where
       , dumpBackup    = Just $ \_ -> do
             clients <- query GetMirrorClients
             return [csvToBackup ["clients.csv"] $ groupToCSV clients]
-      , restoreBackup = Just $ \_-> [groupBackup ["clients.csv"] ReplaceMirrorClients]
+      , restoreBackup = Just $ \_-> groupBackup ["clients.csv"] ReplaceMirrorClients
       }
 -------------------------------------------------------------------------
 

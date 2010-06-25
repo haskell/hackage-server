@@ -33,7 +33,7 @@ import Distribution.Server.Users.Group (UserList)
 import Distribution.Package
 
 import Data.List (foldl')
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, fromMaybe)
 
 emptyDistributions :: Distributions
 emptyDistributions = Distributions Map.empty
@@ -62,7 +62,7 @@ enumerate distros = Map.keys (nameMap distros)
 --- Queries
 
 -- | For a particular distribution, which packages do they have, and
--- at which version.
+-- at which version. This function isn't very total.
 distroStatus :: DistroName -> DistroVersions -> [(PackageName, DistroPackageInfo)]
 distroStatus distro distros
     = let packageNames = maybe [] Set.toList (Map.lookup distro $ distroMap distros)
@@ -137,6 +137,5 @@ getDistroMaintainers :: DistroName -> Distributions -> Maybe UserList
 getDistroMaintainers name = Map.lookup name . nameMap
 
 modifyDistroMaintainers :: DistroName -> (UserList -> UserList) -> Distributions -> Distributions
-modifyDistroMaintainers name func dists = dists {nameMap = Map.update (Just . func) name (nameMap dists) }
-
+modifyDistroMaintainers name func dists = dists {nameMap = Map.alter (Just . func . fromMaybe Group.empty) name (nameMap dists) }
 

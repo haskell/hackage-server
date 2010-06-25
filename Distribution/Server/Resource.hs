@@ -216,7 +216,7 @@ renderGenURI bpath pathFunc = ("/" </>) <$> go (reverse bpath)
 --     [("user", "mgruen"), ("doc", "todo"), ("format", "json")]
 --     == Just "/home/mgruen/docs/todo.txt"
 renderResource :: Resource -> URIGen
-renderResource resource dpath = case renderGenURI (resourceLocation resource) (resourceURI resource dpath) of
+renderResource resource dpath = case renderGenURI normalizedLocation (resourceURI resource dpath) of
     Nothing  -> Nothing
     Just str -> case (resourcePathEnd resource, resourceFormat resource) of
         (NoSlash, ResourceFormat NoFormat _) -> Just $ str
@@ -225,13 +225,19 @@ renderResource resource dpath = case renderGenURI (resourceLocation resource) (r
             Just {} -> Just $ str ++ "." ++ format
             Nothing -> Just $ str ++ "/." ++ format
         (Slash, ResourceFormat DynamicFormat Nothing) -> case lookup "format" dpath of
-            Nothing -> Just $ str ++ "/"
-            Just format -> Just $ str ++ "/." ++ format
+            Just format@(_:_) -> Just $ str ++ "/." ++ format
+            _ -> Just $ str ++ "/"
         (NoSlash, ResourceFormat DynamicFormat _) -> case lookup "format" dpath of
-            Nothing -> Just $ str
-            Just format -> Just $ str ++ "." ++ format
+            Just format@(_:_) -> Just $ str ++ "." ++ format
+            _ -> Just $ str
         _ -> Nothing
-
+  where
+    -- in some cases, DynamicBranches are used to accomodate formats for StaticBranches.
+    -- this returns them to their pre-format state so renderGenURI can handle them
+    normalizedLocation = case (resourceFormat resource, resourceLocation resource) of
+        (ResourceFormat _ (Just (StaticBranch sdir)), DynamicBranch sdir':xs) | sdir == sdir' -> StaticBranch sdir:xs
+        (_, loc) -> loc
+        
 -- Given a URIGen, a DynamicPath, and a String for the text, construct an HTML
 -- node that is just the text if the URI generation fails, and a link with the
 -- text inside otherwise. A convenience function.
@@ -350,11 +356,13 @@ serveResource (Resource _ rget rput rpost rdelete rformat rend _) = \config dpat
         _ -> \config dpath -> serveFormat res met config dpath
     serveFormat :: [(Content, ServerResponse)] -> [Method] -> ServerResponse
     serveFormat res met = case rformat of
-        ResourceFormat (StaticFormat format) Nothing -> \config dpath -> methodSP met $ do
+        ResourceFormat NoFormat Nothing -> \config dpath -> methodSP met $ serveContent res config dpath
+        ResourceFormat (StaticFormat format) Nothing -> \config dpath -> path $ \format' -> methodSP met $ do
             -- this branch shouldn't happen - /foo/.json would instead be stored as two static dirs
-            guard (lookup "format" dpath == Just ('.':format))
+            guard (format' == ('.':format))
             serveContent res config dpath
         ResourceFormat (StaticFormat format) (Just (StaticBranch sdir)) -> \config dpath -> methodSP met $
+            -- likewise, foo.json should be stored as a single static dir
             if lookup sdir dpath == Just (sdir ++ "." ++ format) then mzero
                                                                  else serveContent res config dpath
         ResourceFormat (StaticFormat format) (Just (DynamicBranch sdir)) -> \config dpath -> methodSP met $
@@ -381,9 +389,9 @@ serveResource (Resource _ rget rput rpost rdelete rformat rend _) = \config dpat
                         fullOption  = serveContent res config ((sdir, full):dpath)
                     case guard (not $ null format) >> lookup format res of
                         Nothing -> fullOption
-                        Just {} -> msum [splitOption, fullOption]
+                        Just {} -> splitOption
                 _ -> mzero
-        -- ResourceFormat NoFormat Nothing
+        -- some invalid combination
         _ -> \config dpath -> methodSP met $ serveContent res config dpath
     serveContent :: [(Content, ServerResponse)] -> ServerResponse
     serveContent res config dpath = do

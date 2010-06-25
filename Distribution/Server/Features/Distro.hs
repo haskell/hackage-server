@@ -34,7 +34,7 @@ data DistroResource = DistroResource {
 
 instance HackageFeature DistroFeature where
     getFeature distro = HackageModule
-      { featureName = "Distro"
+      { featureName = "distro"
       , resources   = map ($distroResource distro) [distroIndexPage, distroAllPage, distroPackage]
       , dumpBackup    = Just $ \_ -> do
             allDist <- query GetDistributions
