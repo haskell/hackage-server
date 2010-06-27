@@ -13,42 +13,9 @@ import Data.Typeable (Typeable)
 import Data.Maybe (isJust)
 
 import Happstack.State
-import qualified Data.Binary as Binary
 
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
-
---TODO: substitute equivalent deriveSerializes
-instance Version Users where
-  mode = Versioned 0 Nothing
-
-instance Serialize Users where
-  putCopy = contain . Binary.put
-  getCopy = contain Binary.get
-
-instance Version UserList where
-  mode = Versioned 0 Nothing
-instance Serialize UserList where
-  putCopy = contain . Binary.put
-  getCopy = contain Binary.get
-
-instance Version UserId where
-  mode = Versioned 0 Nothing
-instance Serialize UserId where
-  putCopy = contain . Binary.put
-  getCopy = contain Binary.get
-
-instance Version UserName where
-  mode = Versioned 0 Nothing
-instance Serialize UserName where
-  putCopy = contain . Binary.put
-  getCopy = contain Binary.get
-
-instance Version UserAuth where
-  mode = Versioned 0 Nothing
-instance Serialize UserAuth where
-  putCopy = contain . Binary.put
-  getCopy = contain Binary.get
 
 instance Component Users where
   type Dependencies Users = End

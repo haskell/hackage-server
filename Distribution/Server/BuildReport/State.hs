@@ -12,7 +12,6 @@ import Happstack.State
 import Happstack.Data.Serialize
 
 import qualified Data.Binary as Binary
-import Data.Typeable
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
 

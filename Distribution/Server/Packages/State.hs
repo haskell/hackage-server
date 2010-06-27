@@ -135,9 +135,7 @@ instance Serialize CandidatePackages where
 instance Version CandPkgInfo where
   mode = Versioned 0 Nothing
 
-instance Serialize CandPkgInfo where
-  putCopy = contain . Binary.put
-  getCopy = contain Binary.get
+$(deriveSerialize ''CandPkgInfo)
 
 setCandidate :: CandPkgInfo -> Update CandidatePackages ()
 setCandidate pkg = State.modify $ \candidates -> candidates { candidateList = replaceVersions (candidateList candidates) }

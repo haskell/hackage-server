@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, TemplateHaskell #-}
 module Distribution.Server.Users.Users (
     -- * Users type
     Users(..),
@@ -29,12 +29,10 @@ module Distribution.Server.Users.Users (
 
 import Distribution.Server.Users.Types
 
-import Data.Typeable (Typeable)
 import qualified Data.Map as Map
 import qualified Data.IntMap as IntMap
-import qualified Data.Binary as Binary
-import Data.Binary (Binary)
-import Control.Applicative ((<$>), (<*>))
+
+import Happstack.Data
 
 -- | The entrie collection of users. Manages the mapping between 'UserName'
 -- and 'UserId'.
@@ -231,6 +229,6 @@ intInsertMaybe k a m
         (Nothing, m') -> Just m'
         _ -> Nothing
 
-instance Binary Users where
-  put (Users a b c) = Binary.put a >> Binary.put b >> Binary.put c
-  get = Users <$> Binary.get <*> Binary.get <*> Binary.get
+instance Version Users where
+$(deriveSerialize ''Users)
+

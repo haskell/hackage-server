@@ -23,9 +23,7 @@ instance Version Core
 $(deriveSerialize ''Core)
 
 instance Version HackageEntryPoint
-instance Serialize HackageEntryPoint where
-    putCopy HackageEntryPoint = contain $ return ()
-    getCopy = contain $ return HackageEntryPoint
+$(deriveSerialize ''HackageEntryPoint)
 
 -- Core: PackagesState, Users, TarIndexMap
 instance Component Core where

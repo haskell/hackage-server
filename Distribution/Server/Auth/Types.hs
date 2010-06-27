@@ -1,10 +1,9 @@
-{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, TemplateHaskell #-}
 module Distribution.Server.Auth.Types where
 
-import qualified Data.Binary as Binary
 import Data.Binary (Binary)
-import Data.Typeable (Typeable)
 import Control.Monad.Error.Class (Error, noMsg)
+import Happstack.Data
 
 newtype PasswdPlain = PasswdPlain String
   deriving (Eq, Ord, Show, Binary, Typeable)
@@ -19,9 +18,13 @@ data AuthError = NoAuthError | UnrecognizedAuthError | NoSuchUserError
                | PasswordMismatchError | AuthTypeMismatchError
   deriving (Enum, Eq, Show, Typeable)
 
-instance Binary AuthType where
-  put t = Binary.put (t == DigestAuth)
-  get   = fmap (\b -> if b then DigestAuth else BasicAuth) Binary.get
+instance Version AuthType where
+instance Version PasswdPlain where
+instance Version PasswdHash where
+
+$(deriveSerialize ''AuthType)
+$(deriveSerialize ''PasswdPlain)
+$(deriveSerialize ''PasswdHash)
 
 instance Error AuthError where
     noMsg = NoAuthError

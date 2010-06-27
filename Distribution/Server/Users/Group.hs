@@ -17,7 +17,8 @@ import Distribution.Server.Users.Types
 import qualified Data.IntSet as IntSet
 import Data.Monoid (Monoid)
 import Data.Binary (Binary)
-import Data.Typeable (Typeable)
+import qualified Data.Binary as Binary
+import Happstack.Data
 
 import Prelude hiding (id)
 
@@ -25,6 +26,12 @@ import Prelude hiding (id)
 --
 newtype UserList = UserList IntSet.IntSet
   deriving (Eq, Monoid, Binary, Typeable, Show)
+
+instance Version UserList where
+  mode = Versioned 0 Nothing
+instance Serialize UserList where
+  putCopy = contain . Binary.put
+  getCopy = contain Binary.get
 
 data GroupDescription = GroupDescription {
     groupTitle :: String,
