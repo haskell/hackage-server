@@ -76,7 +76,7 @@ instance HackageFeature CoreFeature where
             admins   <- query GetHackageAdmins
             packageEntries <- readExportBlobs store $ indexToAllVersions packages
             return $ packageEntries ++ [csvToBackup ["users.csv"] $ usersToCSV users, csvToBackup ["admins.csv"] $ groupToCSV admins]
-      , restoreBackup = Just $ \store -> mconcat [packagesBackup store, userBackup, groupBackup ["admins.csv"] ReplaceHackageAdmins]
+      , restoreBackup = Just $ \store -> mconcat [userBackup, packagesBackup store, groupBackup ["admins.csv"] ReplaceHackageAdmins]
       }
     initHooks core = [runZeroHook (packageIndexChange core)]
 

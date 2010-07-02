@@ -10,8 +10,7 @@ import qualified Distribution.Server.Cache as Cache
 data Config = Config {
     serverStore     :: BlobStorage,
     serverStaticDir :: FilePath,
-    serverURI       :: URI.URIAuth,
-    serverCache     :: Cache.Cache
+    serverURI       :: URI.URIAuth
 }
 
 type DynamicPath = [(String, String)]

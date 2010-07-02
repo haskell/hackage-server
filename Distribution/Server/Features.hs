@@ -13,11 +13,12 @@ import Distribution.Server.Features.Users (initUsersFeature)
 import Distribution.Server.Features.Distro (initDistroFeature)
 --import Distribution.Server.Features.Documentation (initDocumentationFeature)
 import Distribution.Server.Features.Reports (initReportsFeature)
---import Distribution.Server.Features.Mirror (initMirrorFeature)
 import Distribution.Server.Features.LegacyRedirects (legacyRedirectsFeature)
+--for a mirror, import Distribution.Server.Features.Mirror (initMirrorFeature)
 
 -- This module ties together all the hackage features that we will use.
 
+-- TODO: Documentation, DownloadCount, PreferredVersions, ReverseDependencies, update Candidates
 hackageFeatures :: IO [HackageModule]
 hackageFeatures = do
     -- > these can get along by themselves

@@ -1,40 +1,41 @@
 module Distribution.Server (
-   -- * Server control
-   Server,
-   initialise,
-   run,
-   shutdown,
-   checkpoint,
+    -- * Server control
+    Server,
+    initialise,
+    run,
+    shutdown,
+    checkpoint,
 
-   -- * Server configuration
-   ServerConfig(..),
-   defaultServerConfig,
-   hasSavedState,
+    -- * Server configuration
+    ServerConfig(..),
+    defaultServerConfig,
+    hasSavedState,
 
-   -- * First time initialisation of the database
-   bulkImport,
-   importTar,
-   initState,
+    -- * First time initialisation of the database
+    bulkImport,
+    importServerTar,
+    exportServerTar,
+    initState,
  ) where
 
 import Happstack.Server hiding (port, host)
 import qualified Happstack.Server
 import Happstack.State hiding (Version)
 
-import qualified Distribution.Server.Backup.Import as Import (importTar)
-
---import Distribution.Server.Users.ServerParts
-import Distribution.Server.Packages.ServerParts (stateToCache, updateCache) -- for the centralized caches
---import Distribution.Server.Distributions.ServerParts -- this will take some effort to revamp
+import qualified Distribution.Server.Backup.Import as Import
+import Distribution.Server.Backup.Export
+-- TODO: move this to BulkImport module
+import Distribution.Server.Packages.PackageBackup (infoToCurrentEntries)
+import Distribution.Server.Users.UserBackup (usersToCSV, groupToCSV)
+import qualified Distribution.Server.Users.Group as Group
 
 import qualified Distribution.Server.Feature as Feature
 import qualified Distribution.Server.Features as Features
 
 import Distribution.Server.State as State
-import Distribution.Server.Packages.State as State hiding (bulkImport)
 import Distribution.Server.Users.State as State
-import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
+import Distribution.Server.Util.BlobStorage (BlobStorage)
 import qualified Distribution.Server.Backup.BulkImport as BulkImport
 import qualified Distribution.Server.Backup.UploadLog as UploadLog
 
@@ -49,7 +50,6 @@ import Distribution.Server.Types
 import System.FilePath ((</>))
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist)
 import Control.Concurrent.MVar (MVar)
-import Control.Monad.Trans
 import Control.Monad (when, mplus)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Network.URI (URIAuth(URIAuth))
@@ -107,32 +107,27 @@ hasSavedState = doesDirectoryExist . confHappsStateDir
 --
 initialise :: ServerConfig -> IO Server
 initialise config@(ServerConfig hostName portNum stateDir staticDir) = do
-  exists <- doesDirectoryExist staticDir
-  when (not exists) $
-    fail $ "The static files directory " ++ staticDir ++ " does not exist."
+    exists <- doesDirectoryExist staticDir
+    when (not exists) $ fail $ "The static files directory " ++ staticDir ++ " does not exist."
 
-  createDirectoryIfMissing False stateDir
-  store   <- BlobStorage.open blobStoreDir
+    createDirectoryIfMissing False stateDir
+    store   <- BlobStorage.open blobStoreDir
 
-  txCtl   <- runTxSystem (Queue (FileSaver happsStateDir)) hackageEntryPoint
-  cache   <- do
-      packages <- query GetPackagesState
-      users    <- query GetUserDb
-      Cache.new =<< stateToCache hostURI packages users
+    txCtl   <- runTxSystem (Queue (FileSaver happsStateDir)) hackageEntryPoint
 
-  features <- Features.hackageFeatures
+    -- do feature initialization
+    features <- Features.hackageFeatures
 
-  return Server {
-    serverTxControl  = txCtl,
-    serverFeatures   = features,
-    serverPort       = portNum,
-    serverConfig = Config {
-      serverStore      = store,
-      serverStaticDir  = staticDir,
-      serverURI        = hostURI,
-      serverCache      = cache
+    return Server {
+        serverTxControl  = txCtl,
+        serverFeatures   = features,
+        serverPort       = portNum,
+        serverConfig = Config {
+            serverStore      = store,
+            serverStaticDir  = staticDir,
+            serverURI        = hostURI
+        }
     }
-  }
 
   where
     happsStateDir = confHappsStateDir config
@@ -158,8 +153,8 @@ run server = simpleHTTP conf $ mungeRequest $ impl server
             [(newMethod, "")] -> req { rqMethod = newMethod }
             _ -> req
         _ -> req
-    -- todo: given a .json or .html suffix, munge it into an Accept header
-    -- can use MessageWrap.pathEls to reparse rqPath
+    -- todo: given a .json or .html suffix, munge it into an Accept header, can use MessageWrap.pathEls to reparse rqPath
+    -- .. never mind, see enhanced Resource.hs
     {- considered but discarded for PUTs: case lookup "_patharg" (rqInputs req) of
                 Just param -> req' { rqUri = rqUri req </> SURI.escape param, rqPath = rqPath req ++ [param] }
                 _ -> req'
@@ -176,79 +171,98 @@ shutdown server = shutdownSystem (serverTxControl server)
 checkpoint :: Server -> IO ()
 checkpoint server = createCheckpoint (serverTxControl server)
 
-bulkImport :: Server
+-- Convert a set of old data into a new export tarball.
+-- This also populates the blob database, which is then
+-- repopulated upon import of the new export tarball.
+--
+-- However, it does not need happstack-state to function.
+bulkImport :: FilePath -- path to blob storage, get rid of this
            -> ByteString  -- Index
            -> String      -- Log
            -> Maybe ByteString -- archive
            -> Maybe String -- users
            -> Maybe String -- admin users
-           -> IO [UploadLog.Entry]
-bulkImport server  indexFile logFile archiveFile htPasswdFile adminsFile = do
-    let config = serverConfig server
-    pkgIndex  <- either fail return (BulkImport.importPkgIndex indexFile)
-    uploadLog <- either fail return (BulkImport.importUploadLog logFile)
-    tarballs  <- BulkImport.importTarballs (serverStore config) archiveFile
-    accounts  <- either fail return (BulkImport.importUsers htPasswdFile)
+           -> IO ([UploadLog.Entry], ByteString)
+
+bulkImport storageDir indexFile logFile archiveFile htPasswdFile adminsFile = do
+    storage <- BlobStorage.open storageDir
+
+    putStrLn "Reading index file"
+    -- [(PackageIdentifier, Tar.Entry)]
+    pkgIndex  <- either fail return $ BulkImport.importPkgIndex indexFile
+    putStrLn "Reading log file"
+    -- [UploadLog.Entry].
+    uploadLog <- either fail return $ BulkImport.importUploadLog logFile
+    -- [(PackageIdentifier, BlobId)]
+    -- needs IO to store the blobs. with enough craftiness, the blob storage
+    -- needn't be involved at all, merging on-the-fly
+    putStrLn "Reading archive file"
+    tarballs  <- BulkImport.importTarballs storage archiveFile
+    -- Users
+    putStrLn "Reading user accounts"
+    accounts  <- either fail return $ BulkImport.importUsers htPasswdFile
     let admins = importAdminsList adminsFile
 
-    (pkgsInfo, users, badLogEntries) <- either fail return
-        (BulkImport.mergePkgInfo pkgIndex uploadLog tarballs accounts)
+    -- [PkgInfo], Users, [UploadLog.Entry]
+    -- it might be possible to export by skipping PkgInfo entirely, exporting
+    -- the files along with versionListToCSV
+    putStrLn "Merging package info"
+    (pkgsInfo, users, badLogEntries) <- either fail return $ BulkImport.mergePkgInfo pkgIndex uploadLog tarballs accounts
 
-    update $ BulkImport pkgsInfo
-    update $ ReplaceUserDb users
+    putStrLn "Done merging"
+    adminUids <- case admins of
+        Nothing -> return []
+        Just adminUsers -> either fail return $ lookupUsers users adminUsers
 
-    case admins of
-      Nothing -> return ()
-      Just adminUsers -> do
-        userDb <- query GetUserDb
-        uids <- either fail return $ lookupUsers userDb adminUsers
-        mapM_ (\uid -> update $ AddHackageAdmin uid) uids
-    --let uploadPerms = map (\pkg -> (pkgUploadUser pkg, PackageMaintainer (packageName pkg))) pkgsInfo 
-    --update $ BulkImportPermissions (admPerms ++ uploadPerms)
+    let getEntries = do
+            putStrLn "Creating package entries"
+            currentPackageEntries <- readExportBlobs storage (concatMap infoToCurrentEntries pkgsInfo)
+            putStrLn "Creating user entries"
+            let userEntry  = csvToBackup ["users.csv"] . usersToCSV $ users
+                adminEntry = csvToBackup ["admins.csv"] . groupToCSV $ Group.fromList adminUids
+            return $ currentPackageEntries ++ [userEntry, adminEntry]
 
-    updateCache config
-
-    return badLogEntries
-
+    putStrLn "Actually creating tarball"
+    tarBytes <- exportTar [("core", getEntries)]
+    return (badLogEntries, tarBytes)
  where
-   importAdminsList :: Maybe String -> Maybe [Users.UserName]
-   importAdminsList
-       = maybe Nothing (Just . map Users.UserName . lines)
+    importAdminsList :: Maybe String -> Maybe [Users.UserName]
+    importAdminsList = fmap (map Users.UserName . lines)
 
-   lookupUsers users names = mapM lookupUser names
-    where lookupUser name = case Users.lookupName name users of
-           Nothing -> Left $ "User " ++ show name ++ " not found"
-           Just uid -> Right uid
+    lookupUsers users names = mapM lookupUser names
+      where lookupUser name = case Users.lookupName name users of
+                Nothing -> Left $ "User " ++ show name ++ " not found"
+                Just uid -> Right uid
 
-importTar :: Server -> ByteString -> IO (Maybe String)
-importTar server tar = do
-    let config = serverConfig server
-        store  = serverStore config
-        featureMap = concatMap (\f -> maybe [] (\r -> [(Feature.featureName f, r store)]) $ Feature.restoreBackup f) $ serverFeatures server
-    res <- Import.importTar tar featureMap
-    case res of
-        Nothing -> updateCache config
-        Just _err -> return ()
-    return res
+exportServerTar :: Server -> IO ByteString
+exportServerTar server = exportTar (makeFeatureMap server Feature.dumpBackup)
 
--- An alternative to an import.
--- Starts the server off to a sane initial state.
-initState ::  MonadIO m => Server -> m ()
+importServerTar :: Server -> ByteString -> IO (Maybe String)
+importServerTar server tar = Import.importTar tar (makeFeatureMap server Feature.restoreBackup)
+
+makeFeatureMap :: Server -> (Feature.HackageModule -> Maybe (BlobStorage -> a)) -> [(String, a)]
+makeFeatureMap server mkBackup = concatMap makeEntry $ serverFeatures server
+  where 
+    store = serverStore (serverConfig server)
+    makeEntry feature = case mkBackup feature of
+        Nothing  -> []
+        Just runTask -> [(Feature.featureName feature, runTask store)]
+
+
+-- An alternative to an import: starts the server off to a sane initial state.
+-- To accomplish this, we import a 'null' tarball, finalizing immediately after initializing import
+initState ::  Server -> IO ()
 initState server = do
-  -- clear off existing state
-  update $ BulkImport []
-  update $ ReplaceUserDb Users.empty
+    Import.importBlank (makeFeatureMap server Feature.restoreBackup)
 
-  -- create default admin user
-  let userName = Users.UserName "admin"
-      userAuth = Auth.newDigestPass userName (Auth.PasswdPlain "admin") "hackage"
-  res <- update $ AddUser userName (Users.UserAuth userAuth Auth.DigestAuth)
+    -- create default admin user
+    let userName = Users.UserName "admin"
+        userAuth = Auth.newDigestPass userName (Auth.PasswdPlain "admin") "hackage"
+    res <- update $ AddUser userName (Users.UserAuth userAuth Auth.DigestAuth)
 
-  case res of
-    Just user -> update $ State.AddHackageAdmin user
-    _ -> fail "Failed to create admin user!"
-
-  updateCache (serverConfig server)
+    case res of
+        Just user -> update $ State.AddHackageAdmin user
+        _ -> fail "Failed to create admin user!"
 
 
 impl :: Server -> ServerPart Response

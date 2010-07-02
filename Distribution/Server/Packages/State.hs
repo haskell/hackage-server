@@ -83,15 +83,6 @@ deletePkg :: PackageId -> Update PackagesState ()
 deletePkg pkg = State.modify $ \pkgsState -> pkgsState { packageList = deleteVersion (packageList pkgsState) }
     where deleteVersion = PackageIndex.deletePackageId (packageId pkg)
 
--- NOTE! overwrites any existing data
--- TODO: get rid of this, now that PackagesState is just packages (not userdb etc.)
-bulkImport :: [PkgInfo] -> Update PackagesState ()
-bulkImport newIndex = do
-  pkgsState <- State.get
-  State.put pkgsState {
-    packageList = PackageIndex.fromList newIndex
-  }
-
 -- |Replace all existing packages and reports
 replacePackagesState :: PackagesState -> Update PackagesState ()
 replacePackagesState = State.put
@@ -101,7 +92,6 @@ getPackagesState = ask
 
 
 $(mkMethods ''PackagesState ['getPackagesState
-                            ,'bulkImport
                             ,'replacePackagesState
                             ,'insertPkgIfAbsent
                             ,'mergePkg

@@ -19,12 +19,13 @@ import Distribution.Server.Users.State (ReplaceUserDb(..))
 
 import Happstack.State (update, UpdateEvent)
 import Data.ByteString.Lazy.Char8 (ByteString)
+import qualified Data.ByteString.Lazy.Char8 as BS
 import Distribution.Server.Backup.Import
 import Distribution.Text (display)
 import Data.Version
 import Data.Function (fix)
 import Control.Monad.State (get, put)
-import Text.CSV
+import Text.CSV (CSV)
 import qualified Data.IntSet as IntSet
 
 groupBackup :: UpdateEvent a () => [FilePath] -> (UserList -> a) -> RestoreBackup
@@ -57,17 +58,17 @@ updateUserBackup :: Users -> RestoreBackup
 updateUserBackup users = RestoreBackup
   { restoreEntry    = \entry -> do
         res <- doUserImport users entry
-        return $ fmap (updateUserBackup) res
+        return $ fmap updateUserBackup res
   , restoreFinalize = return . Right $ updateUserBackup users
   , restoreComplete = update $ ReplaceUserDb users
   }
 
 doUserImport :: Users -> BackupEntry -> IO (Either String Users)
 doUserImport users (["users.csv"], bs) = runImport users (importAuth bs)
-doUserImport users _                  = return . Right $ users
+doUserImport users _ = return . Right $ users
 
 importAuth :: ByteString -> Import Users ()
-importAuth contents = importCSV "users.csv" contents $ mapM_ fromRecord . drop 2
+importAuth contents = importCSV "users.csv" contents $ \csv -> mapM_ fromRecord (drop 2 csv)
   where
     fromRecord [nameStr, idStr, "deleted", "none", ""] = do
         name <- parseText "user name" nameStr
@@ -95,8 +96,8 @@ insertUser :: UserId -> UserInfo -> Import Users ()
 insertUser user info = do
     users <- get
     case Users.insert user info users of
-        Nothing -> fail $ "Duplicate user id for user: " ++ display user
-        Just _  -> put users
+        Nothing     -> fail $ "Duplicate user id for user: " ++ display user
+        Just users' -> put users'
 
 -------------------------------------------------- Exporting
 -- group.csv

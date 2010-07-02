@@ -9,6 +9,7 @@ module Distribution.Server.Users.Group (
     remove,
     member,
     enumerate,
+    fromList,
     unions,
   ) where
 
@@ -65,6 +66,9 @@ member (UserId id) (UserList group) = IntSet.member id group
 
 enumerate :: UserList -> [UserId]
 enumerate (UserList group) = map UserId (IntSet.toList group)
+
+fromList :: [UserId] -> UserList
+fromList ids = UserList $ IntSet.fromList (map (\(UserId uid) -> uid) ids)
 
 unions :: [UserList] -> UserList
 unions groups = UserList (IntSet.unions [ group | UserList group <- groups ])

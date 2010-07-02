@@ -1,10 +1,9 @@
-module Distribution.Server.Packages.ServerParts (
-    updateCache,
-    stateToCache,
-    handlePackageById,
-    checkPackage,
-  ) where
+module Distribution.Server.Packages.ServerParts where
 
+-- ghost town of a module
+-- what's left to be recovered is the documentation upload
+
+{-
 import Distribution.Package (PackageId)
 import Distribution.Text (simpleParse, display)
 import Happstack.Server hiding (port, host)
@@ -53,7 +52,7 @@ import Network.URI (URIAuth)
 import qualified Data.ByteString.Lazy.Char8 as BS.Char8
 import qualified Codec.Compression.GZip as GZip
 
-{-packagePagesFeature :: HackageModule
+packagePagesFeature :: HackageModule
 packagePagesFeature = HackageModule {
     featureName = "pkgpage",
     -- todo: add checking
@@ -67,10 +66,9 @@ packagePagesFeature = HackageModule {
                   ] ++ makeGroupResources (trunkAt "/package/:package/maintainers") maintainersGroup -},
     dumpBackup    = return [],
     restoreBackup = Nothing
-}-}
+}
 -- "/package/:package/candidate", "/package/:package/candidate/:cabal", "/package/:package/candidate/:tarball"
 
-{-
 serveBuildReports :: Config -> DynamicPath -> ServerPart Response
 serveBuildReports _ dpath = withPackageId dpath $ \pkgid -> do
     state <- query GetPackagesState
@@ -80,9 +78,7 @@ serveBuildReports _ dpath = withPackageId dpath $ \pkgid -> do
         Just _  -> do
             let pkgReports = BuildReports.lookupPackageReports reports pkgid
             ok $ toResponse $ Resource.XHtml $ Pages.buildReportSummary pkgid pkgReports
--}
 
---TODO: switch to new cache mechanism: ??
 updateCache :: MonadIO m => Config -> m ()
 updateCache config = liftIO $ do
     state  <- query GetPackagesState
@@ -105,8 +101,7 @@ stateToCache host state users = getCurrentTime >>= \now -> return
         recentChanges = reverse $ sortBy (comparing (fst . pkgUploadData)) (PackageIndex.allPackages index)
 
 handlePackageById :: BlobStorage -> PackageId -> [ServerPart Response]
-handlePackageById _ _ = []
-{-handlePackageById store pkgid = 
+handlePackageById _ _ = handlePackageById store pkgid = 
   [ dir "documentation" $ msum
     [ withPackage pkgid $ \state pkg _ ->
         let resolvedPkgId = packageId pkg in msum
@@ -142,7 +137,7 @@ handlePackageById _ _ = []
          case mBlob of
            Nothing -> return ()
            Just blob -> do
-               update $ TarIndex.DropIndex blob-}
+               update $ TarIndex.DropIndex blob
 
 
 checkPackage :: ServerPart Response
@@ -154,8 +149,6 @@ checkPackage = methodSP POST $ do
          Right (_,[]) -> return $ toResponse "Check succeeded, no warnings."
          Right (_,warn) -> return . toResponse . unlines $ "Check succeeded with warnings.\n" : warn
 
-
-{-
 buildReports :: BlobStorage -> [ServerPart Response]
 buildReports store =
   [ path $ \reportId -> msum

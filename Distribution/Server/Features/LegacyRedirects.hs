@@ -25,20 +25,43 @@ legacyRedirectsFeature :: HackageModule
 legacyRedirectsFeature = HackageModule {
     featureName = "legacy",
     -- get rid of trailing resource and manually create a mapping?
-    resources   = [(resourceAt "/...") { resourceGet = [("", \_ _ -> serveLegacyRedirects)] }],
+    resources   = [(resourceAt "/...") { resourceGet = [("", \_ _ -> serveLegacyGets)], resourcePost = [("", \_ _ -> serveLegacyPosts)] }],
     dumpBackup    = Nothing,
     restoreBackup = Nothing
 }
 
 -- | Support for the old URL scheme from the first version of hackage.
 --
-serveLegacyRedirects :: ServerPart Response
-serveLegacyRedirects = msum
+
+-- | POST for package upload, particularly for cabal-install compatibility.
+--
+-- "check" no longer exists; it's now "candidates", and probably
+-- provides too different functionality to redirect
+serveLegacyPosts :: ServerPart Response
+serveLegacyPosts = msum
+  [ dir "packages" $ msum
+      [ postedMove "upload"          "/packages/"
+    --, postedMove "check"           "/check"
+      ]
+  , dir "cgi-bin" $ dir "hackage-scripts" $ msum
+      [ dir "protected" $ postedMove "upload"  "/upload"
+    --, postedMove "check"  "/check"
+      ]
+  ]
+  where
+    -- HTTP 307 makes the client resubmit the post request to a different URL,
+    -- something particular to this status code, although 301 *should* do this,
+    -- web browsers are again non-compliant here
+    postedMove from to = dir from $ nullDir >> tempRedirect to (toResponse "")
+
+-- | GETs, both for cabal-install to use, and for links scattered throughout the web.
+--
+-- method is already guarded against, but methodSP is a nicer combinator than nullDir.
+serveLegacyGets :: ServerPart Response
+serveLegacyGets = msum
   [ dir "packages" $ msum
       [ dir "archive" $ serveArchiveTree
       , simpleMove "hackage.html"    "/"
-      , postedMove "upload"          "/upload"
-      , postedMove "check"           "/check"
       , simpleMove "00-index.tar.gz" "/packages/index.tar.gz"
         --also search.html, advancedsearch.html, accounts.html, and admin.html
       ]
@@ -46,16 +69,11 @@ serveLegacyRedirects = msum
       [ dir "package" $ path $ \packageId -> methodSP GET $
           movedPermanently ("/package/" ++ display (packageId :: PackageId)) $
           toResponse ""
-      , dir "protected" $ postedMove "upload"  "/upload"
-      , postedMove "check"  "/check"
       ]
   ]
   where
     -- HTTP 301 is suitable for permanently redirecting pages
     simpleMove from to = dir from $ methodSP GET $ movedPermanently to (toResponse "")
-    -- HTTP 307 makes the client resubmit the post request to a different URL,
-    -- something particular to this status code
-    postedMove from to = dir from $ methodSP POST $ tempRedirect to (toResponse "")
 
 serveArchiveTree :: ServerPart Response
 serveArchiveTree = msum

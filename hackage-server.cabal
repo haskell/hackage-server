@@ -140,5 +140,5 @@ executable hackage-server
      includes: crypt.h
   else
      includes: unistd.h
-  ghc-options: -Wall -fno-warn-orphans
+  ghc-options: -Wall -fno-warn-orphans -threaded
 -- -Werror -fno-warn-warnings-deprecations

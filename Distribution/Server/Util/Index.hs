@@ -22,8 +22,7 @@ import qualified Codec.Archive.Tar.Entry as Tar
          ( Entry(..), entryPath, fileEntry, toTarPath )
 
 import Distribution.Package
-         ( PackageIdentifier(..), Package(..), packageName, packageVersion
-         , PackageName(..))
+import Distribution.Version
 import Distribution.Server.PackageIndex (PackageIndex)
 import qualified Distribution.Server.PackageIndex as PackageIndex
 import Distribution.Text
@@ -53,7 +52,8 @@ read mkPackage indexFileContent = collect [] entries
     entry e
       | [pkgname,versionStr,_] <- splitDirectories (normalise (Tar.entryPath e))
       , Just version <- simpleParse versionStr
-      = let pkgid  = PackageIdentifier (PackageName pkgname) version
+      , [] <- versionTags version
+      = let pkgid = PackageIdentifier (PackageName pkgname) version
          in Just (mkPackage pkgid e)
     entry _ = Nothing
 

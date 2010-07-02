@@ -1,6 +1,8 @@
-module Main (main) where
+{-# LANGUAGE PatternGuards #-}
 
-import qualified Distribution.Server
+module Main where
+
+import qualified Distribution.Server as Server
 import Distribution.Server (ServerConfig(..), Server)
 
 import Distribution.Text
@@ -25,84 +27,147 @@ import System.Directory
 import System.Console.GetOpt
          ( OptDescr(..), ArgDescr(..), ArgOrder(..), getOpt, usageInfo )
 import Data.List
-         ( sort, intersperse )
+         ( sort )
 import Data.Maybe
-         ( fromMaybe, isJust )
+         ( fromMaybe, isJust, listToMaybe )
+import Data.Traversable
+         ( traverse )
 import Control.Monad
          ( unless, when )
+import Text.Printf (printf)
 import qualified Data.ByteString.Lazy as BS
-import Data.ByteString.Lazy (ByteString)
 
-import Paths_hackage_server (version)
+import Paths_hackage_server as Paths (version)
 
 -- | Handle the command line args and hand off to "Distribution.Server"
 --
 main :: IO ()
-main = topHandler $ do
-  opts <- getOpts
+main = topHandler $ getOpts >>= \options -> case options of
+    -- Help, version, or error parsing options
+    ExitMode str -> putStrLn str
+    -- Running the server with pre-existing data
+    RunMode opts -> do
+        defaults <- Server.defaultServerConfig
 
-  imports <- checkImportOpts
-    (optImport opts)         (optImportIndex   opts)
-    (optImportLog opts)      (optImportArchive opts)
-    (optImportHtPasswd opts) (optImportAdmins opts)
+        port <- checkPortOpt defaults (optPort opts)
+        let hostname  = fromMaybe (confHostName  defaults) (optHost      opts)
+            stateDir  = fromMaybe (confStateDir  defaults) (optStateDir  opts)
+            staticDir = fromMaybe (confStaticDir defaults) (optStaticDir opts)
+            config = defaults {
+                confHostName  = hostname,
+                confPortNum   = port,
+                confStateDir  = stateDir,
+                confStaticDir = staticDir
+            }
+        -- Be helpful to people running from the build tree
+        exists <- doesDirectoryExist staticDir
+        when (not exists) $
+          if isJust (optStaticDir opts)
+            then fail $ "The given static files directory " ++ staticDir
+                  ++ " does not exist."
+            else fail $ "It looks like you are running the server without installing "
+                  ++ "it. That is fine but you will have to give the location of "
+                  ++ "the static html files with the --static-dir flag."
 
-  defaults <- Distribution.Server.defaultServerConfig
+        checkBlankServerState =<< Server.hasSavedState config
 
-  port <- checkPortOpt defaults (optPort opts)
-  let hostname  = fromMaybe (confHostName  defaults) (optHost      opts)
-      stateDir  = fromMaybe (confStateDir  defaults) (optStateDir  opts)
-      staticDir = fromMaybe (confStaticDir defaults) (optStaticDir opts)
+        withServer config $ \server -> withCheckpointHandler server $ do
+            info $ "Ready, serving on '" ++ hostname ++ "' port " ++ show port
+            Server.run server
 
-      config = defaults {
-        confHostName  = hostname,
-        confPortNum   = port,
-        confStateDir  = stateDir,
-        confStaticDir = staticDir
-      }
+    -- Initializing the server on a blank-slate        
+    NewMode opts -> do
+        defaults <- Server.defaultServerConfig
 
-  -- Be helpful to people running from the build tree
-  exists <- doesDirectoryExist staticDir
-  when (not exists) $
-    if isJust (optStaticDir opts)
-      then fail $ "The given static files directory " ++ staticDir
-               ++ " does not exist."
-      else fail $ "It looks like you are running the server without installing "
-               ++ "it. That is fine but you will have to give the location of "
-               ++ "the static html files with the --static-dir flag."
+        let stateDir = fromMaybe (confStateDir defaults) (optNewDir opts)
+            config = defaults { confStateDir  = stateDir }
+          --adminList = reverse (optNewAdmin opts)
 
-  -- Do some pre-init sanity checks
-  hasSavedState <- Distribution.Server.hasSavedState config
-  checkAccidentalDataLoss hasSavedState imports opts
-  checkBlankServerState   hasSavedState imports opts
+        checkAccidentalDataLoss =<< Server.hasSavedState config
 
-  -- Startup the server, including the data store
-  withServer config $ \server -> do
+        withServer config $ \server -> do
+            info "Creating initial state..."
+            Server.initState server
+            info "Done"
 
-    -- Import data or set initial data (ie. admin user account) if requested
-    handleInitialDbstate server imports opts
+    RestoreMode opts -> case optRestore opts of
+      Nothing -> fail "No restore tarball given"
+      Just tarFile -> do
+        defaults <- Server.defaultServerConfig
 
-    -- setup a Unix signal handler so we can checkpoint the server state
-    withCheckpointHandler server $ do
+        let stateDir = fromMaybe (confStateDir defaults) (optRestoreDir opts)
+            config = defaults { confStateDir  = stateDir }
 
-      -- Go!
-      info $ "ready, serving on '" ++ hostname ++ "' port " ++ show port
-      Distribution.Server.run server
+        checkAccidentalDataLoss =<< Server.hasSavedState config
+
+        withServer config $ \server -> do
+            tar <- BS.readFile tarFile
+            info "Parsing import tarball..."
+            res <- Server.importServerTar server tar
+            case res of
+                Just err -> fail err
+                _ -> info "Successly imported."
+
+    BackupMode opts -> do
+        defaults <- Server.defaultServerConfig
+
+        let stateDir = fromMaybe (confStateDir defaults) (optBackupDir opts)
+            config = defaults { confStateDir = stateDir }
+            exportPath = fromMaybe "export.tar" (optBackupDir opts)
+
+        withServer config $ \server -> do
+            info "Preparing export tarball"
+            tar <- Server.exportServerTar server            
+            info "Saving export tarball"
+            BS.writeFile exportPath tar
+            info "Done"
+
+    ConvertMode opts -> case opts of
+        ConvertOpts _ _ _ Nothing Just{} _ -> fail "Cannot import administrators without users"
+
+        ConvertOpts (Just indexFileName) (Just logFileName)
+                  archiveFile htpasswdFile adminsFile exportFile -> do
+
+            indexFile <- BS.readFile indexFileName
+            logFile   <- readFile logFileName
+            tarballs  <- traverse BS.readFile archiveFile
+            htpasswd  <- traverse readFile htpasswdFile
+            admins    <- traverse readFile adminsFile
+            let exportPath = fromMaybe "export.tar" exportFile
+
+            -- todo: get rid of using blob storage for conversion
+            defaults <- Server.defaultServerConfig
+            let stateDir  = confStateDir defaults ++ "/blobs"
+
+            info "Creating export tarball..."
+            (badLogEntries, bulkTar) <- Server.bulkImport stateDir indexFile logFile tarballs htpasswd admins
+            BS.writeFile exportPath bulkTar
+            info "Done"
+            unless (null badLogEntries) $ putStr $
+                "Warning: Upload log entries for non-existant packages:\n"
+                ++ unlines (map display (sort badLogEntries))
+
+        ConvertOpts Nothing Nothing Just{} _ _ _ -> fail "An archive tar should be imported along with an index tarball."
+        ConvertOpts Nothing Nothing _ Just{} _ _ -> fail "An htpasswd file should be imported along with an index."
+        ConvertOpts {} -> fail "A package index and log file must be supplied together."
 
   where
     withServer :: ServerConfig -> (Server -> IO ()) -> IO ()
     withServer config = bracket initialise shutdown
       where
         initialise = do
-          info "initialising..."
-          Distribution.Server.initialise config
+          info "Initializing happstack-state..."
+          server <- Server.initialise config
+          info "Server data loaded into memory"
+          return server
 
         shutdown server = do
           -- TODO: we probably do not want to write a checkpint every time,
           -- perhaps only after a certain amount of time or number of updates.
           -- info "writing checkpoint..."
-          -- Distribution.Server.checkpoint server
-          info "shutting down..."
-          Distribution.Server.shutdown server
+          -- Server.checkpoint server
+          info "Shutting down..."
+          Server.shutdown server
 
     -- Set a Unix signal handler for SIG USR1 to create a state checkpoint.
     -- Useage:
@@ -113,8 +178,8 @@ main = topHandler $ do
         bracket (setHandler handler) setHandler (\_ -> action)
       where
         handler = Signal.Catch $ do
-          info "writing checkpoint..."
-          Distribution.Server.checkpoint server
+          info "Writing checkpoint..."
+          Server.checkpoint server
         setHandler h =
           Signal.installHandler Signal.userDefinedSignal1 h Nothing
 
@@ -126,90 +191,19 @@ main = topHandler $ do
                -> return n
       _        -> fail $ "bad port number " ++ show str
 
-    checkImportOpts
-       Nothing Nothing Nothing Nothing Nothing Nothing = return ImportNone
-    checkImportOpts
-       Just{} a b c d e | any isJust [a, b, c, d, e] =
-         fail "Importing from a tarball is not supported with any other import options"
-    checkImportOpts
-       (Just tarFile) _ _ _ _ _ = fmap ImportTarball (BS.readFile tarFile)
-    checkImportOpts _ _ _ _ Nothing Just{} =
-        fail "Currently cannot import administrators witout users"
-    checkImportOpts _ (Just indexFileName) (Just logFileName)
-                    archiveFile htpasswdFile adminsFile = do
-      indexFile <- BS.readFile indexFileName
-      logFile   <-    readFile logFileName
-      tarballs  <- maybe (return Nothing) (fmap Just . BS.readFile) archiveFile
-      htpasswd  <- maybe (return Nothing) (fmap Just . readFile) htpasswdFile
-      admins    <- maybe (return Nothing) (fmap Just . readFile) adminsFile
-      return $ ImportBulk indexFile logFile tarballs htpasswd admins
-
-    checkImportOpts _ Nothing Nothing (Just _) _ _ =
-      fail "Currently an archive file is only imported along with an index"
-    checkImportOpts _ Nothing Nothing _ (Just _) _ =
-      fail "Currently an htpasswd file is only imported along with an index"
-    checkImportOpts _ _ _ _ _ _ =
-      fail "A package index and log file must be supplied together."
-
-    -- Sanity checking
-    --
-    checkAccidentalDataLoss hasSavedState imports opts
-      | (optInitialise opts || imports /= ImportNone)
-     && hasSavedState = die $
+    -- Import utilities
+    checkAccidentalDataLoss hasSavedState = when hasSavedState . die $
             "The server already has an initialised database!!\n"
          ++ "If you really *really* intend to completely reset the "
          ++ "whole database then use the additional flag "
          ++ "--obliterate-all-existing-data"
-      | otherwise = return ()
 
-    checkBlankServerState   hasSavedState imports opts
-      | not (optInitialise opts || imports /= ImportNone)
-     && not hasSavedState = die $
+    checkBlankServerState  hasSavedState = when (not hasSavedState) . die $
             "There is no existing server state.\nYou can either import "
          ++ "existing data using the various --import-* flags, or start with "
          ++ "an empty state using --initialise. Either way, we have to make "
          ++ "sure that there is at least one admin user account, otherwise "
          ++ "you'll not be able to administer your shiny new hackage server!"
-      | otherwise = return ()
-
-
-    -- Importing
-    --
-    handleInitialDbstate server _imports opts | optInitialise opts = do
-      info "creating initial state..."
-      Distribution.Server.initState server
-
-    handleInitialDbstate server
-      (ImportBulk indexFile logFile tarballs htpasswd admins) _opts = do
-      info "importing..."
-      badLogEntries <- Distribution.Server.bulkImport server
-                         indexFile logFile tarballs htpasswd admins
-      info "done"
-      unless (null badLogEntries) $ putStr $
-           "Warning: Upload log entries for non-existant packages:\n"
-        ++ unlines (map display (sort badLogEntries))
-
-    handleInitialDbstate server
-      (ImportTarball tar) _opts = do
-      info "importing ..."
-      res <- Distribution.Server.importTar server tar
-      case res of
-        Just err -> fail err
-        _ -> return ()
-
-    handleInitialDbstate _ _ _ = return ()
-
-data Import
-    = ImportNone
-    | ImportBulk
-       ByteString -- ^Index
-       String     -- ^Log
-       (Maybe ByteString)  -- ^Archive
-       (Maybe String) -- ^HtPasswd
-       (Maybe String)  -- ^Admins
-    | ImportTarball
-       ByteString
- deriving Eq
 
 topHandler :: IO a -> IO a
 topHandler prog = catch prog handle
@@ -230,75 +224,116 @@ info msg = do
   putStrLn (pname ++ ": " ++ msg)
   hFlush stdout
 
--- GetOpt
+getOpts :: IO HackageModes
+getOpts = do
+    args <- getArgs
+    return $ case accumOpts defaultGlobalOpts $ getOpt RequireOrder globalDescriptions args of
+        -- version
+        (opts, _, _) | optVersion opts -> ExitMode $ "hackage-server " ++ display version
+        -- help
+        (opts, others, _) | optHelp opts -> case others of
+            -- help for a specific command (this is `--help command', not `command --help', currently)
+            (modeStr:_) | Just mode <- lookup modeStr theModes -> ExitMode $ modeUsageInfo mode (modeHeader mode)
+            -- the general help for run mode and listing of commands
+            _ -> ExitMode $ usageInfo topHeader globalDescriptions ++
+                            modeUsageInfo (snd $ head theModes) "\nServer run configuration:" ++ availableCommands
+        -- run it - select the correct mode
+        (_, others, []) -> let (mmode, args') = case others of [] -> (fmap snd $ listToMaybe theModes, args)
+                                                               (str:strs) -> (lookup str theModes, strs)
+                              in case mmode of
+            -- no mode under the command name found
+            Nothing   -> ExitMode $ "Not a valid command. Available commands are:\n" ++ availableCommands
+            -- mode found, parse the options, and run it if it works
+            Just mode -> case parseHackageMode mode args' of
+                Left errs -> ExitMode $ concat errs ++ "\n" ++ modeUsageInfo mode (modeHeader mode)
+                Right modeOpts -> modeOpts
+        -- none of the above worked
+        (_, _, errs) -> ExitMode $ unlines errs ++ "Try --help."
+  where
+    availableCommands = "\nAvailable commands:\n" ++
+        concatMap (\(name, mode) -> printf "    %-9s %s\n" name (modeOneLiner mode)) theModes ++
+        "\nUse `hackage-server --help COMMAND' to see options for each mode." ++
+        "\nNote: happstack-state's data lock prevents two state-accessing modes from being run simultaneously.\n"
+    -- global usage header
+    topHeader = "Usage: hackage-server [COMMAND] [OPTIONS...]\n" ++
+                "If the command is excluded, run mode will be assumed.\n\nGlobal options:"
+    -- per-mode usage header
+    modeHeader mode = "usage: hackage-server " ++ modeCommandName mode ++ " [OPTIONS...]: " ++ modeOneLiner mode
+    theModes = -- commands. head is the default.
+      [ make $ ModeOptions "run" "Run an already-initialized Hackage server."
+                    runDescriptions defaultRunOpts RunMode
+      , make $ ModeOptions "new" "Initialize the server state to a useful default."
+                    newDescriptions defaultNewOpts NewMode
+      , make $ ModeOptions "restore" "Import server state from a backup tarball."
+                    restoreDescriptions defaultRestoreOpts RestoreMode
+      , make $ ModeOptions "backup" "Export a backup tarball from server state."
+                    backupDescriptions defaultBackupOpts BackupMode
+      , make $ ModeOptions "convert" "Convert legacy data to a newer backup tarball."
+                    convertDescriptions defaultConvertOpts ConvertMode
+      ]
 
-data Options = Options {
-    optPort          :: Maybe String,
-    optHost          :: Maybe String,
-    optStateDir      :: Maybe FilePath,
-    optStaticDir     :: Maybe FilePath,
-    optImport        :: Maybe FilePath,
-    optImportIndex   :: Maybe FilePath,
-    optImportLog     :: Maybe FilePath,
-    optImportArchive :: Maybe FilePath,
-    optImportHtPasswd:: Maybe FilePath,
-    optImportAdmins  :: Maybe FilePath,
-    optInitialise    :: Bool,
+accumOpts :: a -> ([a -> a], [String], [String]) -> (a, [String], [String])
+accumOpts defaults (opts, args, errs) = (foldr (flip (.)) id opts defaults, args, errs)
+
+make :: ModeOptions a -> (String, ModeCommand)
+make (ModeOptions short long accum empty convert) = (,) short $ ModeCommand short (flip usageInfo accum) long $ \args ->
+    case accumOpts empty $ getOpt RequireOrder accum args of
+        (opts, [], [])  -> Right $ convert opts
+        -- it would be nice to specify if --help was included without making it part
+        -- of the accum list, but this seems difficult with GetOpt presently.
+        -- using getOpt' instead lets other unrecognized-command errors escape
+        (_, _, err) -> Left err
+
+
+data ModeCommand = ModeCommand {
+    modeCommandName :: String,
+    modeUsageInfo :: String -> String,
+    modeOneLiner  :: String,
+    parseHackageMode :: [String] -> Either [String] HackageModes
+}
+
+data ModeOptions a = ModeOptions {
+    modeName :: String,
+    modeDesc :: String,
+    accumOptions :: [OptDescr (a -> a)],
+    emptyOption  :: a,
+    -- this could be replaced by an explicit action
+    toHackageMode :: a -> HackageModes
+}
+
+--instead of having a mode to case on, each mode could be associated with an action, like cabal does
+data HackageModes = RunMode RunOpts | NewMode NewOpts
+                  | RestoreMode RestoreOpts | BackupMode BackupOpts
+                  | ConvertMode ConvertOpts | ExitMode String deriving (Show)
+
+
+data GlobalOpts = GlobalOpts {
     optVersion       :: Bool,
     optHelp          :: Bool
-  }
-
-defaultOptions :: Options
-defaultOptions = Options {
-    optPort          = Nothing,
-    optHost          = Nothing,
-    optStateDir      = Nothing,
-    optStaticDir     = Nothing,
-    optImport        = Nothing,
-    optImportIndex   = Nothing,
-    optImportLog     = Nothing,
-    optImportArchive = Nothing,
-    optImportHtPasswd= Nothing,
-    optImportAdmins  = Nothing,
-    optInitialise    = False,
-    optVersion       = False,
-    optHelp          = False
-  }
-
-getOpts :: IO Options
-getOpts = do
-  args <- getArgs
-  case accumOpts $ getOpt RequireOrder optionDescriptions args of
-    (opts, _,    _)
-      | optHelp opts    -> printUsage
-    (opts, [],  [])
-      | optVersion opts -> printVersion
-      | otherwise       -> return opts
-    (_,     _, errs)    -> printErrors errs
-  where
-    printErrors errs = fail (concat (intersperse "\n" errs))
-    printUsage = do
-      putStrLn (usageInfo usageHeader optionDescriptions)
-      exitWith ExitSuccess
-    usageHeader  = "hackage web server\n\nusage: hackage-server [OPTION ...]"
-    printVersion = do
-      putStrLn $ "hackage-server version " ++ display version
-      exitWith ExitSuccess
-    accumOpts (opts, args, errs) =
-      (foldr (flip (.)) id opts defaultOptions, args, errs)
-
-optionDescriptions :: [OptDescr (Options -> Options)]
-optionDescriptions =
+} deriving (Show)
+defaultGlobalOpts :: GlobalOpts
+defaultGlobalOpts = GlobalOpts False False
+globalDescriptions :: [OptDescr (GlobalOpts -> GlobalOpts)]
+globalDescriptions =
   [ Option ['h'] ["help"]
       (NoArg (\opts -> opts { optHelp = True }))
       "Show this help text"
   , Option ['V'] ["version"]
       (NoArg (\opts -> opts { optVersion = True }))
       "Print version information"
-  , Option [] ["initialise"]
-      (NoArg (\opts -> opts { optInitialise = True }))
-      "Initialize the server state to a useful default"
-  , Option [] ["port"]
+  ]
+
+data RunOpts = RunOpts {
+    optPort      :: Maybe String,
+    optHost      :: Maybe String,
+    optStateDir  :: Maybe FilePath,
+    optStaticDir :: Maybe FilePath
+} deriving (Show)
+defaultRunOpts :: RunOpts
+defaultRunOpts = RunOpts Nothing Nothing Nothing Nothing
+runDescriptions :: [OptDescr (RunOpts -> RunOpts)]
+runDescriptions =
+  [ Option [] ["port"]
       (ReqArg (\port opts -> opts { optPort = Just port }) "PORT")
       "Port number to serve on (default 8080)"
   , Option [] ["host"]
@@ -306,26 +341,97 @@ optionDescriptions =
       "Server's host name (defaults to machine name)"
   , Option [] ["state-dir"]
       (ReqArg (\file opts -> opts { optStateDir = Just file }) "DIR")
-      "Directory in which to store the persistent state of the server"
+      "Directory in which to store the persistent state of the server (default state/)"
   , Option [] ["static-dir"]
       (ReqArg (\file opts -> opts { optStaticDir = Just file }) "DIR")
-      "Directory in which to find the html and other static files"
-  , Option [] ["import-tarball"]
-      (ReqArg (\file opts -> opts { optImport = Just file }) "TARBALL")
-      "Complete import tarball. Not compatable with other import options"
-  , Option [] ["import-index"]
+      "Directory in which to find the html and other static files (default: cabal location)"
+  ]
+
+data NewOpts = NewOpts {
+    optNewAdmin :: [String],
+    optNewDir :: Maybe FilePath
+} deriving (Show)
+
+defaultNewOpts :: NewOpts
+defaultNewOpts = NewOpts [] Nothing
+
+newDescriptions :: [OptDescr (NewOpts -> NewOpts)]
+newDescriptions =
+  [ Option [] ["admin"]
+      (ReqArg (\name opts -> opts { optNewAdmin = name:optNewAdmin opts }) "NAME")
+      "New server's administrator (default: admin, password admin)"
+  , Option [] ["state-dir"]
+      (ReqArg (\file opts -> opts { optNewDir = Just file }) "DIR")
+      "Directory in which to store the persistent state of the server (default state/)"
+  ]
+
+data RestoreOpts = RestoreOpts {
+    optRestore :: Maybe FilePath,
+    optRestoreDir :: Maybe FilePath
+} deriving (Show)
+
+defaultRestoreOpts :: RestoreOpts
+defaultRestoreOpts = RestoreOpts Nothing Nothing
+
+restoreDescriptions :: [OptDescr (RestoreOpts -> RestoreOpts)]
+restoreDescriptions = 
+   [ Option [] ["tarball"]
+      (ReqArg (\file opts -> opts { optRestore = Just file }) "TARBALL")
+      "Backup tarball produced by the server."
+  , Option [] ["state-dir"]
+      (ReqArg (\file opts -> opts { optRestoreDir = Just file }) "DIR")
+      "Directory in which to store the persistent state of the server (default state/)"
+   ]
+
+
+data BackupOpts = BackupOpts {
+    optBackup :: Maybe FilePath,
+    optBackupDir :: Maybe FilePath
+} deriving (Show)
+
+defaultBackupOpts :: BackupOpts
+defaultBackupOpts = BackupOpts Nothing Nothing
+
+backupDescriptions :: [OptDescr (BackupOpts -> BackupOpts)]
+backupDescriptions = 
+  [ Option ['o'] ["output"]
+      (ReqArg (\file opts -> opts { optBackup = Just file }) "TARBALL")
+      "The path to write the backup tarball (default export.tar)"
+  , Option [] ["state-dir"]
+      (ReqArg (\file opts -> opts { optBackupDir = Just file }) "DIR")
+      "Directory from which to read persistent state of the server (default state/)"
+   ]
+
+
+data ConvertOpts = ConvertOpts {
+    optImportIndex    :: Maybe FilePath,
+    optImportLog      :: Maybe FilePath,
+    optImportArchive  :: Maybe FilePath,
+    optImportHtPasswd :: Maybe FilePath,
+    optImportAdmins   :: Maybe FilePath,
+    optConvertTarball :: Maybe FilePath
+} deriving (Show)
+defaultConvertOpts :: ConvertOpts
+defaultConvertOpts = ConvertOpts Nothing Nothing Nothing Nothing Nothing Nothing
+convertDescriptions :: [OptDescr (ConvertOpts -> ConvertOpts)]
+convertDescriptions =
+  [ Option [] ["index"]
       (ReqArg (\file opts -> opts { optImportIndex = Just file }) "TARBALL")
       "Import an existing hackage index file (00-index.tar.gz)"
-  , Option [] ["import-log"]
+  , Option [] ["log"]
       (ReqArg (\file opts -> opts { optImportLog = Just file }) "LOG")
       "Import an existing hackage upload log file"
-  , Option [] ["import-archive"]
+  , Option [] ["archive"]
       (ReqArg (\file opts -> opts { optImportArchive = Just file }) "LOG")
       "Import an existing hackage package tarball archive file (archive.tar)"
-  , Option [] ["import-accounts"]
+  , Option [] ["accounts"]
       (ReqArg (\file opts -> opts { optImportHtPasswd = Just file }) "HTPASSWD")
       "Import an existing apache 'htpasswd' user account database file"
-  , Option [] ["import-admins"]
+  , Option [] ["admins"]
       (ReqArg (\file opts -> opts { optImportAdmins = Just file}) "ADMINS")
       "Import a text file containing a list a users which should be administrators"
+  , Option ['o'] ["output"]
+      (ReqArg (\file opts -> opts { optConvertTarball = Just file }) "TARBALL")
+      "The path to write the backup tarball (default export.tar)"
   ]
+

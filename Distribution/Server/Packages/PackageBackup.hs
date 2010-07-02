@@ -121,9 +121,10 @@ unshiftUploadTimes times@((_, info'):_) = go times
           go [(cabal', _)] = [(cabal', info')]
           go [] = undefined
 {-
+How data is stored in PkgInfo:
 [(data1, upload1), (data2, upload2)]
 current: (data0, upload0)
-match:
+How it is correlated in the tarball:
 data0 - upload1 (upload time of data0 is stored with the data that replaced it, in this case data1)
 data1 - upload2
 data2 - upload0 (upload time of earliest version is at top)
@@ -142,17 +143,21 @@ doPackageImport storage packages (("package":pkgStr:rest), bs) = runImport packa
                         return $ partial { partialCabalUpload = list }
             ["tarball.csv"] -> importVersionList "tarball.csv" bs >>= \list -> 
                         return $ partial {  partialTarballUpload = list }
-            [other] | Just version <- extractVersion other pkgId ".cabal" ->
+            [other] | Just version <- extractVersion other (packageName pkgId) ".cabal" ->
                         return $ partial { partialCabal = (version, bs):partialCabal partial }
                     | Just version <- extractVersion other pkgId ".tar.gz" -> do
                         blobId <- liftIO $ BlobStorage.add storage bs
                         return $ partial { partialTarball = (version, blobId):partialTarball partial }
             _ -> return partial
+        -- TODO: if we have both uploads.csv and tarball.csv, it should be possible to convert to PkgInfo
+        -- before the finalization, reducing total memory usage -- the PkgInfos will still be in memory when
+        -- we're done, but the PartialPkgs will need to be garbage collected. Doing it along the way will
+        -- make GHC less heap-hungry.
         modify (Map.insert pkgId partial')
   where stripPrefix [] ys = Just ys   -- from Data.List, GHC 6.12
         stripPrefix (x:xs) (y:ys) | x == y = stripPrefix xs ys
         stripPrefix _ _ = Nothing
-        extractVersion name pkgId ext = case stripPrefix (display (packageName pkgId) ++ ext) name of
+        extractVersion name text ext = case stripPrefix (display text ++ ext) name of
             Just "" -> Just 0
             Just ('-':num) -> case reads num of
                 [(version, "")] -> Just version
