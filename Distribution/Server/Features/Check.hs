@@ -13,6 +13,7 @@ import Distribution.Server.Features.Upload
 import Distribution.Server.Packages.State
 import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Users.Types as Users
+import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
@@ -27,7 +28,7 @@ import Happstack.Server
 import Happstack.State
 import Text.XHtml.Strict (unordList, h3, (<<), toHtml)
 import Data.Function (fix)
-import Data.List (find)
+import Data.List (find, sort)
 import Control.Monad (guard, unless)
 import Control.Monad.Trans (liftIO)
 import Data.Maybe (maybe, listToMaybe, fromJust)
@@ -41,11 +42,19 @@ data CheckFeature = CheckFeature {
 data CheckResource = CheckResource {
     candidatesPage :: Resource,
     candidatePage :: Resource,
+    packageCandidatesPage :: Resource,
     publishPage :: Resource,
     candidateCabal :: Resource,
-    candidateTarball :: Resource
+    candidateTarball :: Resource,
     -- there can also be build reports - can use the same package id index
+    candidatesUri :: String -> String,
+    candidateUri :: String -> PackageId -> String,
+    packageCandidatesUri :: String -> PackageId -> String,
+    publishUri   :: String -> PackageId -> String,
+    candidateTarballUri :: PackageId -> String,
+    candidateCabalUri :: PackageId -> String
 }
+
 
 -- candidates can be published at any time. there is one candidate per package.
 -- they can be deleted, but it's not required
@@ -62,45 +71,65 @@ instance HackageFeature CheckFeature where
 initCheckFeature :: CoreFeature -> PackagesFeature -> UploadFeature -> IO CheckFeature
 initCheckFeature _ _ _ = return CheckFeature
       { checkResource = fix $ \r -> CheckResource
-          { candidatesPage = (resourceAt "/packages/candidates/") { resourceGet = [("txt", textCandidatesPage)], resourcePost = [("", postCandidate r)] }
-          , candidatePage = (resourceAt "/package/:package/candidate.:format") { resourceGet = [("html", basicCandidatePage r)], resourcePut = [("html", putCandidate r)], resourceDelete = [("", doDeleteCandidate)] }
+          { candidatesPage = (resourceAt "/packages/candidates/.:format") { resourceGet = [("txt", textCandidatesPage)], resourcePost = [("", postCandidate r)] }
+          , candidatePage = (resourceAt "/package/:package/candidate.:format") { resourceGet = [("html", basicCandidatePage r)], resourcePut = [("html", putPackageCandidate r)], resourceDelete = [("", doDeleteCandidate)] }
+          , packageCandidatesPage = (resourceAt "/package/:package/candidates/.:format") { resourceGet = [("txt", textPkgCandidatesPage r)], resourcePost = [("", postPackageCandidate r)] }
           , publishPage = (resourceAt "/package/:package/candidate/publish.:format") { resourceGet = [("txt", textPublishForm)], resourcePost = [("", postPublish)] }
           , candidateCabal = (resourceAt "/package/:package/candidate/:cabal.cabal") { resourceGet = [("cabal", serveCandidateCabal)] }
           , candidateTarball = (resourceAt "/package/:package/candidate/:tarball.tar.gz") { resourceGet = [("tarball", serveCandidateTarball)] }
+          , candidatesUri = \format -> renderResource (candidatesPage r) [format]
+          , candidateUri  = \format pkgid -> renderResource (candidatePage r) [display pkgid, format]
+          , packageCandidatesUri = \format pkgid -> renderResource (packageCandidatesPage r) [display pkgid, format]
+          , publishUri = \format pkgid -> renderResource (publishPage r) [display pkgid, format]
+          , candidateTarballUri = \pkgid -> renderResource (candidateTarball r) [display pkgid, display pkgid]
+          , candidateCabalUri = \pkgid -> renderResource (candidateCabal r) [display pkgid, display (packageName pkgid)]
           }
       }
   where
     basicCandidatePage :: CheckResource -> Config -> DynamicPath -> ServerPart Response
-    basicCandidatePage r _ dpath = redirectCandidatePath self dpath $ \_ mpkg -> case mpkg of
-        Left name -> ok . toResponse $ "Insert submission form here for " ++ display name
-        Right pkg -> ok . toResponse $ Resource.XHtml $ toHtml
+    basicCandidatePage r _ dpath = withPackageId dpath $ \pkgid ->
+                                   withCandidate pkgid $ \_ mpkg _ -> case mpkg of
+        Nothing -> ok . toResponse $ "Insert submission form here for " ++ display (packageName pkgid)
+        Just pkg -> ok . toResponse $ Resource.XHtml $ toHtml
                       [ h3 << "Downloads"
                       , toHtml (section pkg)
                       , h3 << "Warnings"
                       , unordList (candWarnings pkg)
                       ]
-      where self = renderResource $ candidatePage r
+      where self = candidateUri r ""
             -- FIXME: reusing code is nice, but this creates links incorrectly (:package is versioned when it should just be a name)
             -- either change the URI function for the resources or have a more typed way to create URIs
-            section cand = basicPackageSection (renderResource $ candidateCabal r) (renderResource $ candidateTarball r) (candPkgInfo cand)
+            section cand = basicPackageSection (candidateCabalUri r) (candidateTarballUri r) (candPkgInfo cand)
 
     textCandidatesPage _ _ = return . toResponse $ "Insert list of candidate packages here"
 
-    postCandidate r config _ = do
-        res <- uploadCandidate Nothing (serverStore config)
-        case res of
-            Left (UploadFailed code err) -> resp code $ toResponse err
-            Right pkgInfo -> seeOther (fromJust $ renderResource (candidatePage r) [("package", display $ packageName pkgInfo)]) (toResponse ())
+    textPkgCandidatesPage r _ dpath = withPackageName dpath $ \name ->
+                                      withCandidates name $ \_ pkgs -> do
+        return . toResponse $ "Insert list of candidate packages here"
 
-    putCandidate r config dpath = withPackageName dpath $ \name -> do
-        res <- uploadCandidate (Just name) (serverStore config)
-        case res of
-            Left (UploadFailed code err) -> resp code $ toResponse err
-            Right _ -> basicCandidatePage r config dpath
+    postCandidate r config _ = do
+        res <- uploadCandidate (const True) (serverStore config)
+        respondToResult r res
+
+    -- POST to /:package/candidates/
+    postPackageCandidate r config dpath = withPackageName dpath $ \name -> do
+        res <- uploadCandidate ((==name) . packageName) (serverStore config)
+        respondToResult r res
+
+    -- PUT to /:package-version/candidate
+    putPackageCandidate r config dpath = withPackageId dpath $ \pkgid -> do
+        guard (packageVersion pkgid /= Version [] [])
+        res <- uploadCandidate (==pkgid) (serverStore config)
+        respondToResult r res
+
+    respondToResult :: CheckResource -> Either UploadFailed CandPkgInfo -> ServerPart Response
+    respondToResult r res = case res of
+        Left (UploadFailed code err) -> resp code $ toResponse err
+        Right pkgInfo -> seeOther (candidateUri r "" $ packageId pkgInfo) (toResponse ())
 
     doDeleteCandidate _ dpath = withCandidatePath dpath $ \_ candidate -> do
         requirePackageAuth candidate
-        update $ DeleteCandidate (packageName candidate)
+        update $ DeleteCandidate (packageId candidate)
         seeOther "/packages/candidates/" $ toResponse ()
 
     textPublishForm _ dpath = withCandidatePath dpath $ \_ candidate -> do
@@ -119,7 +148,7 @@ initCheckFeature _ _ _ = return CheckFeature
 
 serveCandidateTarball :: Config -> DynamicPath -> ServerPart Response
 serveCandidateTarball config dpath = withPackageTarball dpath $ \pkgid ->
-                                     withCandidate (packageName pkgid) $ \_ mpkg -> case mpkg of
+                                     withCandidate pkgid $ \_ mpkg _ -> case mpkg of
     Nothing -> notFound $ toResponse "Candidate package does not exist"
     Just pkg -> case pkgTarball (candPkgInfo pkg) of
         [] -> notFound $ toResponse "No tarball available"
@@ -132,11 +161,11 @@ serveCandidateCabal _ dpath = withCandidatePath dpath $ \_ pkg -> do
     guard (lookup "cabal" dpath == Just (display $ packageName pkg))
     ok $ toResponse (Resource.CabalFile (pkgData $ candPkgInfo pkg))
 
-uploadCandidate :: Maybe PackageName -> BlobStorage -> ServerPart (Either UploadFailed CandPkgInfo)
-uploadCandidate name storage = do
+uploadCandidate :: (PackageId -> Bool) -> BlobStorage -> ServerPart (Either UploadFailed CandPkgInfo)
+uploadCandidate isRight storage = do
     regularIndex <- fmap packageList $ query GetPackagesState
     -- ensure that the user has proper auth if the package exists
-    res <- extractPackage (processCandidate name regularIndex) storage
+    res <- extractPackage (processCandidate isRight regularIndex) storage
     case res of
         Left failed -> return $ Left failed
         Right (pkgInfo, uresult) -> do
@@ -146,16 +175,16 @@ uploadCandidate name storage = do
                     candWarnings = uploadWarnings uresult,
                     candPublic = True -- do withDataFn
                 }
-            update $ SetCandidate candidate
+            update $ AddCandidate candidate
             unless (packageExists regularIndex pkgInfo) $ update $ AddPackageMaintainer (packageName pkgInfo) (pkgUploadUser pkgInfo)
             return . Right $ candidate
 
 -- | Helper function for uploadCandidate.
-processCandidate :: Maybe PackageName -> PackageIndex PkgInfo -> Users.UserId -> UploadResult -> IO (Maybe UploadFailed)
-processCandidate mpkgName state uid res = do
+processCandidate :: (PackageId -> Bool) -> PackageIndex PkgInfo -> Users.UserId -> UploadResult -> IO (Maybe UploadFailed)
+processCandidate isRight state uid res = do
     let pkg = packageId (uploadDesc res)
-    if maybe False (/= packageName pkg) mpkgName
-      then return . Just $ UploadFailed 403 $ "Name of package does not match"
+    if not (isRight pkg)
+      then return . Just $ UploadFailed 403 $ "Name of package or package version does not match"
       else do
         pkgGroup <- getPackageGroup pkg
         if packageExists state pkg && not (uid `Group.member` pkgGroup)
@@ -198,26 +227,45 @@ checkPublish packages candidate = do
         candVersion = packageVersion candidate
     case find ((== candVersion) . packageVersion) pkgs of
         Just {} -> Just $ UploadFailed 403 "Package name and version already exist in the database"
-        Nothing -> case find ((> candVersion) . packageVersion) pkgs of
-            Just pkg -> Just $ UploadFailed 403  $ "Later versions exist in the database than the candidate ("
-                                                   ++display (packageVersion pkg)++" > "++display candVersion++ ")"
-            Nothing  -> Nothing
+        Nothing  -> Nothing
+--      Nothing -> case find ((> candVersion) . packageVersion) pkgs of
+--          Just pkg -> Just $ UploadFailed 403  $ "Later versions exist in the database than the candidate ("
+--                                                 ++display (packageVersion pkg)++" > "++display candVersion++ ")"
+--          Nothing -> Nothing
+
+------------------------------------------------------------------------------
+data CandidateRender = CandidateRender {
+    candPackageRender :: PackageRender,
+    renderWarnings :: [String],
+    hasIndexedPackage :: Bool
+}
+
+doCandidateRender :: PackageIndex CandPkgInfo -> PackageIndex PkgInfo
+                  -> Users.Users -> PackageId -> Maybe CandidateRender
+doCandidateRender candIndex pkgIndex users pkgid@(PackageIdentifier name version) = do
+    cand <- PackageIndex.lookupPackageId candIndex pkgid
+    let infos = PackageIndex.lookupPackageName pkgIndex name
+        versions = sort (version:map packageVersion infos)
+        render = (doPackageRender users (candPkgInfo cand)) { rendAllVersions = versions }
+    return CandidateRender {
+        candPackageRender = render,
+        renderWarnings = candWarnings cand,
+        hasIndexedPackage = not (null infos)
+    }
+
 
 ------------------------------------------------------------------------------
 withCandidatePath :: DynamicPath -> (CandidatePackages -> CandPkgInfo -> ServerPart Response) -> ServerPart Response
-withCandidatePath dpath func = withPackageName dpath $ \name -> withCandidate name $ \state mpkg -> case mpkg of
-    Nothing  -> notFound . toResponse $ "Candidate for " ++ display name ++ " does not exist"
+withCandidatePath dpath func = withPackageId dpath $ \pkgid -> withCandidate pkgid $ \state mpkg _ -> case mpkg of
+    Nothing  -> notFound . toResponse $ "Candidate for " ++ display pkgid ++ " does not exist"
     Just pkg -> func state pkg
 
--- For the main candidate page -- redirect to non-versioned name if necessary,
--- and continue even if package doesn't exist.
-redirectCandidatePath :: URIGen -> DynamicPath -> (CandidatePackages -> Either PackageName CandPkgInfo -> ServerPart Response) -> ServerPart Response
-redirectCandidatePath gen dpath func = withPackageId dpath $ \(PackageIdentifier name version) -> case version of
-    Version [] [] -> withCandidate name $ \state -> func state . maybe (Left name) Right
-    _ -> seeOther (fromJust $ gen $ ("package", display name):dpath) (toResponse ())
-
-withCandidate :: PackageName -> (CandidatePackages -> Maybe CandPkgInfo -> ServerPart Response) -> ServerPart Response
-withCandidate name func = do 
+withCandidate :: PackageId -> (CandidatePackages -> Maybe CandPkgInfo -> [CandPkgInfo] -> ServerPart Response) -> ServerPart Response
+withCandidate pkgid func = do
     state <- query GetCandidatePackages
-    func state $ listToMaybe $ PackageIndex.lookupPackageName (candidateList state) name
+    let pkgs = PackageIndex.lookupPackageName (candidateList state) (packageName pkgid)
+    func state (find ((==pkgid) . packageId) pkgs) pkgs
+
+withCandidates :: PackageName -> (CandidatePackages -> [CandPkgInfo] -> ServerPart Response) -> ServerPart Response
+withCandidates name func = withCandidate (PackageIdentifier name $ Version [] []) $ \state _ infos -> func state infos
 

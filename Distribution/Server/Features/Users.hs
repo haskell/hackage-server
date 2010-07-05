@@ -27,6 +27,7 @@ import Happstack.Server hiding (port)
 import Happstack.State hiding (Version)
 import Data.List (intercalate)
 import qualified Data.Map as Map
+import Data.Function (fix)
 import System.Random (newStdGen)
 
 import Distribution.Text (display, simpleParse)
@@ -48,7 +49,12 @@ data UserResource = UserResource {
     userPage :: Resource,
     passwordResource :: Resource,
     enabledResource  :: Resource,
-    loginResource :: Resource
+    loginResource :: Resource,
+    userListUri :: String -> String,
+    userPageUri :: String -> UserName -> String,
+    userPasswordUri :: UserName -> String,
+    userEnabledUri  :: UserName -> String,
+    userLoginUri :: Maybe AuthType -> String
 }
 
 instance HackageFeature UserFeature where
@@ -63,12 +69,17 @@ initUsersFeature :: CoreFeature -> IO UserFeature
 initUsersFeature _ = do
     addHook <- newHookList
     return UserFeature
-      { userResource = UserResource
-          { userList = (resourceAt "/users/") { resourceGet = [("txt", textUserList)], resourcePost = [("", adminAddUser)] }
-          , userPage = (resourceAt "/user/:username/") { resourceGet = [("txt", textUserPage)], resourceDelete = [("", deleteAccount)] }
+      { userResource = fix $ \r -> UserResource
+          { userList = (resourceAt "/users/.:format") { resourceGet = [("txt", textUserList)], resourcePost = [("", adminAddUser)] }
+          , userPage = (resourceAt "/user/:username.:format") { resourceGet = [("txt", textUserPage)], resourceDelete = [("", deleteAccount)] }
           , passwordResource = (resourceAt "/user/:username/password") { resourcePut = [("", changePassword)] }
           , enabledResource = (resourceAt "/user/:username/enabled") { resourcePut = [("", enabledAccount)] }
           , loginResource = (resourceAt "/users/login") { resourceGet = [("", requireAuth)] } -- also split into basic/digest
+          , userListUri = \format -> renderResource (userList r) [format]
+          , userPageUri = \format uname -> renderResource (userPage r) [display uname, format]
+          , userPasswordUri = \uname -> renderResource (passwordResource r) [display uname]
+          , userEnabledUri  = \uname -> renderResource (enabledResource  r) [display uname]
+          , userLoginUri = \_ -> renderResource (loginResource r) []
           }
       , userAdded = addHook
       }

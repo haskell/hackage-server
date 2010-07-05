@@ -184,6 +184,19 @@ addDocumentation :: PackageIdentifier -> BlobId -> Import IS ()
 addDocumentation pkgId blob
     = modify $ \is ->
       is { isDocs = Documentation (Map.insert pkgId blob (documentation (isDocs is)))}
+
+addFile :: ByteString -> Import BlobId
+addFile file = do
+  store <- gets isStorage
+  io2imp $ BlobStorage.add store file
+
+addTarIndex :: BlobId -> Import ()
+addTarIndex blob
+    = do
+  store <- gets isStorage
+  let tarFile = BlobStorage.filepath store blob
+  index <- io2imp $ TarIndex.readTarIndex tarFile
+  modify $ \is -> is { isTarIndex = TarIndexMap.insertTarIndex blob index (isTarIndex is) }
 -}
 
 -- implementation of the Import data type

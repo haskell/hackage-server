@@ -38,7 +38,7 @@ import Data.Monoid (mconcat)
 import Data.Function (fix)
 import Happstack.Server
 import Happstack.State (update, query)
-import Text.XHtml.Strict (Html, toHtml, unordList, h3, (<<))
+import Text.XHtml.Strict (Html, toHtml, unordList, h3, (<<), anchor, href, (!))
 import Data.Ord (comparing)
 import Data.List (sortBy, maximumBy, find)
 import Distribution.Package
@@ -53,7 +53,7 @@ data CoreFeature = CoreFeature {
     -- A Maybe PkgInfo argument might also be desirable.
     packageIndexChange :: HookList (IO ()),
     -- For download counters, although an update for every download doesn't scale well
-    tarballDownload    :: HookList (IO ()),
+    tarballDownload    :: HookList (PackageId -> IO ()),
     adminGroup :: UserGroup
 }
 data CoreResource = CoreResource {
@@ -62,7 +62,12 @@ data CoreResource = CoreResource {
     corePackagesPage :: Resource,
     corePackagePage  :: Resource,
     coreCabalFile    :: Resource,
-    corePackageTarball :: Resource
+    corePackageTarball :: Resource,
+    indexTarballUri   :: String,
+    indexPackageUri   :: String -> String,
+    corePackageUri :: String -> PackageId -> String,
+    coreCabalUri   :: PackageId -> String,
+    coreTarballUri :: PackageId -> String
 }
 
 instance HackageFeature CoreFeature where
@@ -93,12 +98,17 @@ initCoreFeature = do
     return CoreFeature
       { coreResource = fix $ \r -> CoreResource {
             -- the rudimentary HTML resources are for when we don't want an additional HTML feature
-            coreIndexPage = (resourceAt "/.:format") { resourceGet = [("html", indexPage), ("txt", \_ _ -> return . toResponse $ "Welcome to Hackage")] } -- .:format
+            coreIndexPage = (resourceAt "/.:format") { resourceGet = [("html", indexPage)] }
           , coreIndexTarball = (resourceAt "/packages/index.tar.gz") { resourceGet = [("tarball", Cache.respondCache indexTar Resource.IndexTarball)] }
           , corePackagesPage = (resourceAt "/packages/.:format") { resourceGet = [("html", Cache.respondCache thePackages id)] }
           , corePackagePage = (resourceAt "/package/:package.:format") { resourceGet = [("html", basicPackagePage r)] }
-          , corePackageTarball = (resourceAt "/package/:package/:tarball.tar.gz") { resourceGet = [("tarball", servePackageTarball)] }
+          , corePackageTarball = (resourceAt "/package/:package/:tarball.tar.gz") { resourceGet = [("tarball", servePackageTarball downHook)] }
           , coreCabalFile  = (resourceAt "/package/:package/:cabal.cabal") { resourceGet = [("cabal", serveCabalFile)] }
+          , indexTarballUri = renderResource (coreIndexTarball r) []
+          , indexPackageUri = \format -> renderResource (corePackagesPage r) [format]
+          , corePackageUri  = \format pkgid -> renderResource (corePackagePage r) [display pkgid, format]
+          , coreCabalUri   = \pkgid -> renderResource (coreCabalFile r) [display pkgid, display (packageName pkgid)]
+          , coreTarballUri = \pkgid -> renderResource (corePackageTarball r) [display pkgid, display pkgid]
           }
       , cacheIndexTarball  = indexTar
       , cachePackagesPage  = thePackages
@@ -128,18 +138,18 @@ basicPackagePage r _ dpath = withPackagePath dpath $ \_ _ pkgs ->
     showAllP :: [PkgInfo] -> Html
     showAllP pkgs = toHtml [
     	h3 << "Downloads",
-    	unordList $ map (basicPackageSection (renderResource $ coreCabalFile r) (renderResource $ corePackageTarball r)) pkgs
+    	unordList $ map (basicPackageSection (coreCabalUri r) (coreTarballUri r)) pkgs
      ]
 
-basicPackageSection :: URIGen -> URIGen -> PkgInfo -> [Html]
+basicPackageSection :: (PackageId -> String) -> (PackageId -> String) -> PkgInfo -> [Html]
 basicPackageSection cabalUrl tarUrl pkgInfo = let pkgId = packageId pkgInfo; pkgStr = display pkgId in [
     toHtml pkgStr,
     unordList $ [
-        [renderLink cabalUrl [("package", pkgStr), ("cabal", display (packageName pkgId))] "Package description",
+        [anchor ! [href (cabalUrl pkgId)] << "Package description",
          toHtml " (included in the package)"],
         case pkgTarball pkgInfo of
             [] -> [toHtml "Package not available"];
-            _ ->  [renderLink tarUrl [("package", display pkgId), ("tarball", pkgStr)] (pkgStr ++ ".tar.gz"),
+            _ ->  [anchor ! [href (tarUrl pkgId)] << (pkgStr ++ ".tar.gz"),
                    toHtml " (Cabal source package)"]
     ]
  ]
@@ -170,12 +180,13 @@ withPackageTarball dpath func = withPackageId dpath $ \(PackageIdentifier name v
     func pkgid
 ---------------------------------------------
 
-servePackageTarball :: Config -> DynamicPath -> ServerPart Response
-servePackageTarball config dpath = withPackageTarball dpath $ \pkgid -> withPackage pkgid $ \_ pkg _ -> case pkgTarball pkg of
+servePackageTarball :: HookList (PackageId -> IO ()) -> Config -> DynamicPath -> ServerPart Response
+servePackageTarball hook config dpath = withPackageTarball dpath $ \pkgid -> withPackage pkgid $ \_ pkg _ -> case pkgTarball pkg of
     [] -> notFound $ toResponse "No tarball available"
     ((blobId, _):_) -> do
         file <- liftIO $ BlobStorage.fetch (serverStore config) blobId
-        ok $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)    
+        liftIO $ runOneHook hook pkgid
+        ok $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)
 
 serveCabalFile :: Config -> DynamicPath -> ServerPart Response
 serveCabalFile _ dpath = withPackagePath dpath $ \_ pkg _ -> do

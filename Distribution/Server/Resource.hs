@@ -198,6 +198,7 @@ renderURI :: BranchPath -> URIGen
 renderURI bpath dpath = renderGenURI bpath (flip lookup dpath)
 
 -- Render a URI generally using a function of one's choosing (usually flip lookup)
+-- Stops when a requested field is needed.
 renderGenURI :: BranchPath -> (String -> Maybe String) -> Maybe String
 renderGenURI bpath pathFunc = ("/" </>) <$> go (reverse bpath)
     where go (StaticBranch  sdir:rest) = (SURI.escape sdir </>) <$> go rest
@@ -205,6 +206,19 @@ renderGenURI bpath pathFunc = ("/" </>) <$> go (reverse bpath)
           go (TrailingBranch:_) = pathFunc ".."
           go [] = Just ""
 
+-- Doesn't use a DynamicPath - rather, munches path components from a list
+-- it stops if there aren't enough, and returns the extras if there's more than enough.
+--
+-- This approach makes it a bit easier to be type-safe, but nonetheless it's
+-- less flexible (general) than renderGenURI.
+--
+-- Trailing branches currently are assumed to be complete escaped URI paths.
+renderListURI :: BranchPath -> [String] -> (String, [String])
+renderListURI bpath list = let (res, extra) = go (reverse bpath) list in ("/" </> res, extra)
+    where go (StaticBranch  sdir:rest) xs  = let (res, extra) = go rest xs in (SURI.escape sdir </> res, extra)
+          go (DynamicBranch _:rest) (x:xs) = let (res, extra) = go rest xs in (SURI.escape x </> res, extra)
+          go (TrailingBranch:_) xs = case xs of [] -> ("", []); (x:rest) -> (x, rest)
+          go _ rest = ("", rest)
 
 -- Given a Resource, construct a URIGen. If the Resource uses a dynamic format, it can
 -- be passed in the DynamicPath as "format". Trailing slash conventions are obeyed.
@@ -215,29 +229,38 @@ renderGenURI bpath pathFunc = ("/" </>) <$> go (reverse bpath)
 -- renderURI (resourceAt "/home/:user/docs/:doc.:format")
 --     [("user", "mgruen"), ("doc", "todo"), ("format", "json")]
 --     == Just "/home/mgruen/docs/todo.txt"
-renderResource :: Resource -> URIGen
-renderResource resource dpath = case renderGenURI normalizedLocation (resourceURI resource dpath) of
+renderMaybeResource :: Resource -> URIGen
+renderMaybeResource resource dpath = case renderGenURI (normalizeResourceLocation resource) (resourceURI resource dpath) of
     Nothing  -> Nothing
-    Just str -> case (resourcePathEnd resource, resourceFormat resource) of
-        (NoSlash, ResourceFormat NoFormat _) -> Just $ str
-        (Slash, ResourceFormat NoFormat _) -> Just $ case str of "/" -> "/"; _ -> str ++ "/"
-        (NoSlash, ResourceFormat (StaticFormat format) branch) -> case branch of
-            Just {} -> Just $ str ++ "." ++ format
-            Nothing -> Just $ str ++ "/." ++ format
-        (Slash, ResourceFormat DynamicFormat Nothing) -> case lookup "format" dpath of
-            Just format@(_:_) -> Just $ str ++ "/." ++ format
-            _ -> Just $ str ++ "/"
-        (NoSlash, ResourceFormat DynamicFormat _) -> case lookup "format" dpath of
-            Just format@(_:_) -> Just $ str ++ "." ++ format
-            _ -> Just $ str
-        _ -> Nothing
-  where
-    -- in some cases, DynamicBranches are used to accomodate formats for StaticBranches.
-    -- this returns them to their pre-format state so renderGenURI can handle them
-    normalizedLocation = case (resourceFormat resource, resourceLocation resource) of
-        (ResourceFormat _ (Just (StaticBranch sdir)), DynamicBranch sdir':xs) | sdir == sdir' -> StaticBranch sdir:xs
-        (_, loc) -> loc
-        
+    Just str -> Just $ renderResourceFormat resource (lookup "format" dpath) str
+
+renderResource :: Resource -> [String] -> String
+renderResource resource list = case renderListURI (normalizeResourceLocation resource) list of
+    (str, format:_) -> renderResourceFormat resource (Just format) str
+    (str, []) -> renderResourceFormat resource Nothing str
+
+-- in some cases, DynamicBranches are used to accomodate formats for StaticBranches.
+-- this returns them to their pre-format state so renderGenURI can handle them
+normalizeResourceLocation resource = case (resourceFormat resource, resourceLocation resource) of
+    (ResourceFormat _ (Just (StaticBranch sdir)), DynamicBranch sdir':xs) | sdir == sdir' -> StaticBranch sdir:xs
+    (_, loc) -> loc
+
+renderResourceFormat :: Resource -> Maybe String -> String -> String
+renderResourceFormat resource dformat str = case (resourcePathEnd resource, resourceFormat resource) of
+    (NoSlash, ResourceFormat NoFormat _) -> str
+    (Slash, ResourceFormat NoFormat _) -> case str of "/" -> "/"; _ -> str ++ "/"
+    (NoSlash, ResourceFormat (StaticFormat format) branch) -> case branch of
+        Just {} -> str ++ "." ++ format
+        Nothing -> str ++ "/." ++ format
+    (Slash, ResourceFormat DynamicFormat Nothing) -> case dformat of
+        Just format@(_:_) -> str ++ "/." ++ format
+        _ -> str ++ "/"
+    (NoSlash, ResourceFormat DynamicFormat _) -> case dformat of
+        Just format@(_:_) -> str ++ "." ++ format
+        _ -> str
+    -- This case might be taken by TrailingBranch
+    _ -> str
+
 -- Given a URIGen, a DynamicPath, and a String for the text, construct an HTML
 -- node that is just the text if the URI generation fails, and a link with the
 -- text inside otherwise. A convenience function.

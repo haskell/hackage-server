@@ -30,6 +30,7 @@ module Distribution.Server.PackageIndex (
     -- ** Precise lookups
     lookupPackageName,
     lookupPackageId,
+    lookupPackageForId,
     lookupDependency,
 
     -- ** Case-insensitive searches
@@ -253,6 +254,13 @@ lookupPackageName :: Package pkg => PackageIndex pkg -> PackageName -> [pkg]
 lookupPackageName index name =
   [ pkg | pkg <- lookup index name
         , packageName pkg == name ]
+
+-- | Search by name of a package identifier, and further select a version if possible.
+--
+lookupPackageForId :: Package pkg => PackageIndex pkg -> PackageIdentifier -> ([pkg], Maybe pkg)
+lookupPackageForId index pkgid =
+  let pkgs = lookupPackageName index (packageName pkgid)
+  in (,) pkgs $ find ((==pkgid) . packageId) pkgs
 
 -- | Does a case-sensitive search by package name and a range of versions.
 --

@@ -3,7 +3,9 @@ module Distribution.Server.Features.Packages (
     PackagesResource(..),
     PackageRender(..),
     initPackagesFeature,
-    doPackageRender
+    doPackageRender,
+    SimpleCondTree(..),
+    doMakeCondTree
   ) where
 
 import Distribution.Server.Feature
@@ -28,7 +30,7 @@ import Distribution.PackageDescription.Configuration (flattenPackageDescription)
 import Distribution.Version (Version(..), VersionRange(..))
 import Distribution.Server.Packages.ModuleForest
 import Distribution.Text
-import Data.Maybe (catMaybes, fromJust)
+import Data.Maybe (catMaybes, fromJust, maybeToList)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.Foldable as Foldable
@@ -45,7 +47,8 @@ import qualified Distribution.Server.Pages.Recent as Pages
 data PackagesFeature = PackagesFeature {
     packagesResource :: PackagesResource,
     -- recent caches. in lieu of a log feature
-    cacheRecent :: Cache.GenCache (Response, Response), -- (html, rss)
+    cacheRecent :: Cache.GenCache (Response, Response), -- rss
+--  recentUpdated :: HookList ([PkgInfo] -> IO ())
     -- necessary information for the representation of a package resource
     packageRender :: PackageId -> IO (Maybe PackageRender)
     -- other informational hooks: perhaps a simplified CondTree so a browser script can dynamically change the package page based on flags
@@ -57,9 +60,9 @@ data PackagesResource = PackagesResource {
 }
 
 instance HackageFeature PackagesFeature where
-    getFeature pkgsf = HackageModule
+    getFeature pkgs = HackageModule
       { featureName = "packages"
-      , resources   = map ($packagesResource pkgsf) [packagesRecent]
+      , resources   = map ($packagesResource pkgs) [packagesRecent]
       , dumpBackup    = Nothing
       , restoreBackup = Nothing
       }
@@ -68,6 +71,7 @@ initPackagesFeature :: CoreFeature -> IO PackagesFeature
 initPackagesFeature core = do
     recents <- Cache.newCacheable
     registerHook (packageIndexChange core) $ do
+        -- this should likely be moved to HTML/RSS features
         state <- query State.GetPackagesState
         users <- query State.GetUserDb
         now   <- getCurrentTime
@@ -82,7 +86,7 @@ initPackagesFeature core = do
       , packageRender = \pkg -> do
             state <- query State.GetPackagesState
             users <- query State.GetUserDb
-            return $ doPackageRender (State.packageList state) users pkg
+            return $ doPackagesRender (State.packageList state) users pkg
       }
 
 -- This should provide the caller enough information to encode the package information
@@ -106,21 +110,38 @@ data PackageRender = PackageRender {
     -- instead be fields of PackageRender?
     rendOther :: PackageDescription
 }
-doPackageRender :: PackageIndex PkgInfo -> Users.Users -> PackageId -> Maybe PackageRender
-doPackageRender pkgIndex users (PackageIdentifier name version) = do
+
+data SimpleCondTree = SimpleCondNode [Dependency] [(Condition ConfVar, SimpleCondTree, SimpleCondTree)]
+                    | SimpleCondLeaf
+
+doMakeCondTree :: GenericPackageDescription -> [(String, SimpleCondTree)]
+doMakeCondTree desc = map (\lib -> ("library", makeCondTree lib)) (maybeToList $ condLibrary desc)
+                   ++ map (\(exec, tree) -> (exec, makeCondTree tree)) (condExecutables desc)
+  where
+    makeCondTree (CondNode _ deps comps) = case deps of
+        [] -> SimpleCondLeaf
+        _  -> SimpleCondNode deps $ map makeCondComponents comps
+    makeCondComponents (cond, tree, mtree) = (cond, makeCondTree tree, maybe SimpleCondLeaf makeCondTree mtree)
+
+doPackagesRender :: PackageIndex PkgInfo -> Users.Users -> PackageId -> Maybe PackageRender
+doPackagesRender pkgIndex users (PackageIdentifier name version) = do
     let infos = PackageIndex.lookupPackageName pkgIndex name
     guard (not . null $ infos)
     info <- if version == Version [] [] then Just $ maximumBy (comparing packageVersion) infos
                                         else find ((==version) . packageVersion) infos
+    return $ (doPackageRender users info) { rendAllVersions = sort $ map packageVersion infos }
+
+doPackageRender :: Users.Users -> PkgInfo -> PackageRender
+doPackageRender users info =
     let genDesc  = pkgDesc info
         flatDesc = flattenPackageDescription genDesc
         desc     = packageDescription genDesc
-    return $ PackageRender
+    in PackageRender
       { rendPkgId = pkgInfoId info
-      , rendAllVersions = sort $ map packageVersion infos
+      , rendAllVersions = [] --let the caller fill this in
       , rendDepends   = flatDependencies genDesc
       , rendExecNames = map exeName (executables flatDesc)
-      , rendLicenseName = display (license desc) -- maybe make this a bit more human-readable (sans camel case)
+      , rendLicenseName = display (license desc) -- maybe make this a bit more human-readable
       , rendMaintainer  = case maintainer desc of "None" -> Nothing; "none" -> Nothing; "" -> Nothing; person -> Just person
       , rendCategory = case category desc of [] -> []; str -> [str] -- TODO: split on commas and whatnot
       , rendRepoHeads = catMaybes (map rendRepo $ sourceRepos desc)

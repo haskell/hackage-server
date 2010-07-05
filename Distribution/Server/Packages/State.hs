@@ -13,6 +13,7 @@ import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserList)
 import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Util.BlobStorage (BlobId)
+import Data.TarIndex (TarIndex)
 
 import Happstack.State
 import qualified Data.Binary as Binary
@@ -127,12 +128,20 @@ instance Version CandPkgInfo where
 
 $(deriveSerialize ''CandPkgInfo)
 
-setCandidate :: CandPkgInfo -> Update CandidatePackages ()
-setCandidate pkg = State.modify $ \candidates -> candidates { candidateList = replaceVersions (candidateList candidates) }
+replaceCandidate :: CandPkgInfo -> Update CandidatePackages ()
+replaceCandidate pkg = State.modify $ \candidates -> candidates { candidateList = replaceVersions (candidateList candidates) }
     where replaceVersions = PackageIndex.insert pkg . PackageIndex.deletePackageName (packageName pkg)
 
-deleteCandidate :: PackageName -> Update CandidatePackages ()
-deleteCandidate pkg = State.modify $ \candidates -> candidates { candidateList = deleteVersions (candidateList candidates) }
+addCandidate :: CandPkgInfo -> Update CandidatePackages ()
+addCandidate pkg = State.modify $ \candidates -> candidates { candidateList = addVersion (candidateList candidates) }
+    where addVersion = PackageIndex.insert pkg
+
+deleteCandidate :: PackageId -> Update CandidatePackages ()
+deleteCandidate pkg = State.modify $ \candidates -> candidates { candidateList = deleteVersion (candidateList candidates) }
+    where deleteVersion = PackageIndex.deletePackageId pkg
+
+deleteCandidates :: PackageName -> Update CandidatePackages ()
+deleteCandidates pkg = State.modify $ \candidates -> candidates { candidateList = deleteVersions (candidateList candidates) }
     where deleteVersions = PackageIndex.deletePackageName pkg
 
 -- |Replace all existing packages and reports
@@ -145,15 +154,17 @@ getCandidatePackages = ask
 
 $(mkMethods ''CandidatePackages ['getCandidatePackages
                                 ,'replaceCandidatePackages
-                                ,'setCandidate
+                                ,'replaceCandidate
+                                ,'addCandidate
                                 ,'deleteCandidate
+                                ,'deleteCandidates
                                 ])
 
 
 ---------------------------------- Documentation
 data Documentation = Documentation {
-     documentation :: Map.Map PackageIdentifier BlobId
-     } deriving (Typeable, Show)
+     documentation :: Map.Map PackageIdentifier (BlobId, TarIndex)
+   } deriving (Typeable, Show)
 
 instance Component Documentation where
     type Dependencies Documentation = End
@@ -173,7 +184,7 @@ instance Serialize BlobId where
   putCopy = contain . Binary.put
   getCopy = contain Binary.get
 
-lookupDocumentation :: PackageIdentifier -> Query Documentation (Maybe BlobId)
+lookupDocumentation :: PackageIdentifier -> Query Documentation (Maybe (BlobId, TarIndex))
 lookupDocumentation pkgId
     = do m <- asks documentation
          return $ Map.lookup pkgId m
@@ -184,9 +195,9 @@ hasDocumentation pkgId
          Just{} -> return True
          _      -> return False
 
-insertDocumentation :: PackageIdentifier -> BlobId -> Update Documentation ()
-insertDocumentation pkgId blob
-    = State.modify $ \doc -> doc {documentation = Map.insert pkgId blob (documentation doc)}
+insertDocumentation :: PackageIdentifier -> BlobId -> TarIndex -> Update Documentation ()
+insertDocumentation pkgId blob index
+    = State.modify $ \doc -> doc {documentation = Map.insert pkgId (blob, index) (documentation doc)}
 
 getDocumentation :: Query Documentation Documentation
 getDocumentation = ask
