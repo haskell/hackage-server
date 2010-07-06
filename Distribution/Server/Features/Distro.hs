@@ -45,8 +45,8 @@ instance HackageFeature DistroFeature where
       }
 
 
-initDistroFeature :: CoreFeature -> PackagesFeature -> IO DistroFeature
-initDistroFeature _ _ = do
+initDistroFeature :: Config -> CoreFeature -> PackagesFeature -> IO DistroFeature
+initDistroFeature _ _ _ = do
     return $ DistroFeature
       { distroResource = DistroResource
           { distroIndexPage = (resourceAt "/distros/.:format") { resourceGet = [("txt", textEnumDistros)], resourcePost = [("", distroNew)] }
@@ -56,19 +56,19 @@ initDistroFeature _ _ = do
       , maintainersGroup = getMaintainersGroup
       }
   where
-    textEnumDistros _ _ = fmap (toResponse . intercalate ", " . map display) (query Enumerate)
-    textDistroPkgs _ dpath = withDistroPath dpath $ \dname pkgs -> do
+    textEnumDistros _ = fmap (toResponse . intercalate ", " . map display) (query EnumerateDistros)
+    textDistroPkgs dpath = withDistroPath dpath $ \dname pkgs -> do
         let pkglines = map (\(name, info) -> display name ++ " at " ++ display (distroVersion info) ++ ": " ++ distroUrl info) $ pkgs
         return $ toResponse (unlines $ ("Packages for " ++ display dname):pkglines)
-    textDistroPkg _ dpath = withDistroPackagePath dpath $ \_ _ info -> return . toResponse $ show info
+    textDistroPkg dpath = withDistroPackagePath dpath $ \_ _ info -> return . toResponse $ show info
 
-    distroDelete _ dpath = withDistroNamePath dpath $ \distro -> do
+    distroDelete dpath = withDistroNamePath dpath $ \distro -> do
         -- authenticate Hackage admins
         -- should also check for existence here..
         update $ RemoveDistro distro
         seeOther ("/distros/") (toResponse ())
 
-    distroPackageDelete _ dpath = withDistroPackagePath dpath $ \dname pkgname info -> do
+    distroPackageDelete dpath = withDistroPackagePath dpath $ \dname pkgname info -> do
         -- authenticate distro maintainer
         case info of
             Nothing -> notFound . toResponse $ "Package not found for " ++ display pkgname
@@ -77,21 +77,19 @@ initDistroFeature _ _ = do
                 ok $ toResponse "Ok!"
 
     -- should probably substituted the badRequests with something more specific
-    distroPackagePut _ dpath = withDistroPackagePath dpath $ \dname pkgname _ -> lookPackageInfo $ \newPkgInfo -> do
+    distroPackagePut dpath = withDistroPackagePath dpath $ \dname pkgname _ -> lookPackageInfo $ \newPkgInfo -> do
         -- authenticate distro maintainer
         update $ AddPackage dname pkgname newPkgInfo
         seeOther ("/distro/" ++ display dname ++ "/" ++ display pkgname) $ toResponse "Ok!"
 
-    distroNew _ _ = lookDistroName $ \dname -> do
+    distroNew _ = lookDistroName $ \dname -> do
         success <- update $ AddDistro dname
         if success
             then seeOther ("/distro/" ++ display dname) $ toResponse "Ok!"
             else badRequest $ toResponse "Selected distribution name is already in use"
 
 withDistroNamePath :: DynamicPath -> (DistroName -> ServerPart Response) -> ServerPart Response
-withDistroNamePath dpath func = case simpleParse =<< lookup "distro" dpath of
-    Nothing    -> notFound $ toResponse "Could not find distro: not a valid distro name"
-    Just dname -> func dname
+withDistroNamePath dpath = require (return $ simpleParse =<< lookup "distro" dpath)
 
 withDistroPath :: DynamicPath -> (DistroName -> [(PackageName, DistroPackageInfo)] -> ServerPart Response) -> ServerPart Response
 withDistroPath dpath func = withDistroNamePath dpath $ \dname -> do

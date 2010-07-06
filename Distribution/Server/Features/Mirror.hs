@@ -63,13 +63,14 @@ instance HackageFeature MirrorFeature where
 -------------------------------------------------------------------------
 
 
-initMirrorFeature :: CoreFeature -> IO MirrorFeature
-initMirrorFeature core = do
+initMirrorFeature :: Config -> CoreFeature -> IO MirrorFeature
+initMirrorFeature config core = do
     let coreR  = coreResource core
-        change = packageIndexChange core
+        change = packageIndexChange core -- hook
+        store  = serverStore config
     return MirrorFeature
       { mirrorResource = MirrorResource
-          { mirrorPackageTarball = (extendResource $ corePackageTarball coreR) { resourcePut = [("", packagePut change)] }
+          { mirrorPackageTarball = (extendResource $ corePackageTarball coreR) { resourcePut = [("", packagePut change store)] }
           , mirrorCabalFile = (extendResource $ coreCabalFile coreR) { resourcePut = [("", cabalPut change)] }
           }
       , mirrorGroup = UserGroup {
@@ -80,13 +81,13 @@ initMirrorFeature core = do
         }
       }
   where
-    packagePut hook config _ = do
+    packagePut hook store _ = do
         requireMirrorAuth
         withUploadInfo "tarball" $ \input uploadData -> do
             let fileName = (fromMaybe "noname" $ inputFilename input)
                 fileContent = inputValue input
             -- augment unpackPackage to ensure that dpath matches it...
-            res <- liftIO $ BlobStorage.addWith (serverStore config) fileContent (return . Upload.unpackPackage fileName)
+            res <- liftIO $ BlobStorage.addWith store fileContent (return . Upload.unpackPackage fileName)
             case res of
                 Left err -> return . toResponse $ err
                 Right (((pkg, pkgStr), warnings), blobId) -> do
@@ -101,7 +102,7 @@ initMirrorFeature core = do
                     liftIO $ runZeroHook hook
                     return . toResponse $ unlines warnings
 
-    cabalPut hook _ _ = do
+    cabalPut hook _ = do
         requireMirrorAuth
         withUploadInfo "cabal" $ \input uploadData -> do
             let fileName = (fromMaybe "noname" $ inputFilename input)

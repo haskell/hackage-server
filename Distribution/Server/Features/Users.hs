@@ -65,8 +65,8 @@ instance HackageFeature UserFeature where
       , restoreBackup = Nothing
       }
 
-initUsersFeature :: CoreFeature -> IO UserFeature
-initUsersFeature _ = do
+initUsersFeature :: Config -> CoreFeature -> IO UserFeature
+initUsersFeature _ _ = do
     addHook <- newHookList
     return UserFeature
       { userResource = fix $ \r -> UserResource
@@ -84,15 +84,15 @@ initUsersFeature _ = do
       , userAdded = addHook
       }
   where
-    textUserList _ _ = fmap (toResponse . intercalate ", " . map display . Map.keys . Users.userNameMap) (query GetUserDb)
-    textUserPage _ dpath = withUserPath dpath $ \_ info -> return . toResponse $ "User page for " ++ display (userName info) ++ ", and your secret information is " ++ show info
-    requireAuth _ _ = query GetUserDb >>= \users -> do
+    textUserList _ = fmap (toResponse . intercalate ", " . map display . Map.keys . Users.userNameMap) (query GetUserDb)
+    textUserPage dpath = withUserPath dpath $ \_ info -> return . toResponse $ "User page for " ++ display (userName info) ++ ", and your secret information is " ++ show info
+    requireAuth _ = query GetUserDb >>= \users -> do
         (_, info) <- Auth.requireHackageAuth users Nothing Nothing
         seeOther ("/user/" ++ display (userName info)) $ toResponse ()
-    deleteAccount _ dpath = withUserPath dpath $ \uid _ -> do
+    deleteAccount dpath = withUserPath dpath $ \uid _ -> do
         update (DeleteUser uid)
         return (result 204 "")
-    enabledAccount _ dpath = withUserPath dpath $ \uid _ -> do
+    enabledAccount dpath = withUserPath dpath $ \uid _ -> do
         enabled <- getDataFn (look "enabled")
         -- for a checkbox, prescence in data string means 'checked'
         case enabled of
@@ -111,9 +111,7 @@ initUsersFeature _ = do
 --
 
 withUserNamePath :: DynamicPath -> (UserName -> ServerPart Response) -> ServerPart Response
-withUserNamePath dpath func = case simpleParse =<< lookup "username" dpath of
-    Nothing    -> notFound $ toResponse "Could not find user: not a valid username"
-    Just uname -> func uname
+withUserNamePath dpath = require (return $ simpleParse =<< lookup "username" dpath)
 
 withUserName :: UserName -> (UserId -> UserInfo -> ServerPart Response) -> ServerPart Response
 withUserName uname func = do
@@ -130,8 +128,8 @@ withUserPath dpath func = withUserNamePath dpath $ \name -> withUserName name fu
 instance FromReqURI UserName where
   fromReqURI = simpleParse
 
-adminAddUser :: Config -> DynamicPath -> ServerPart Response
-adminAddUser _ _ = do
+adminAddUser :: DynamicPath -> ServerPart Response
+adminAddUser _ = do
     reqData <- getDataFn lookUserNamePasswords
     case reqData of
         Nothing -> ok $ toResponse "try to fill out all the fields"
@@ -159,8 +157,8 @@ instance FromData ChangePassword where
 	fromData = liftM3 ChangePassword (look "password" `mplus` return "") (look "repeat-password" `mplus` return "")
                                      (fmap (maybe Auth.BasicAuth (const Auth.DigestAuth) . lookup "auth") lookPairs) --checked: digest auth
 
-changePassword :: Config -> DynamicPath -> ServerPart Response
-changePassword _ dpath = do
+changePassword :: DynamicPath -> ServerPart Response
+changePassword dpath = do
     users  <- query State.GetUserDb
     admins <- query State.GetHackageAdmins
     (uid, _) <- Auth.requireHackageAuth users Nothing Nothing

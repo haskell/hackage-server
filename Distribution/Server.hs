@@ -106,7 +106,7 @@ hasSavedState = doesDirectoryExist . confHappsStateDir
 -- with stale lock files.
 --
 initialise :: ServerConfig -> IO Server
-initialise config@(ServerConfig hostName portNum stateDir staticDir) = do
+initialise initConfig@(ServerConfig hostName portNum stateDir staticDir) = do
     exists <- doesDirectoryExist staticDir
     when (not exists) $ fail $ "The static files directory " ++ staticDir ++ " does not exist."
 
@@ -115,26 +115,27 @@ initialise config@(ServerConfig hostName portNum stateDir staticDir) = do
 
     txCtl   <- runTxSystem (Queue (FileSaver happsStateDir)) hackageEntryPoint
 
+    let config = Config {
+            serverStore     = store,
+            serverStaticDir = staticDir,
+            serverURI       = hostURI
+         }
     -- do feature initialization
-    features <- Features.hackageFeatures
+    features <- Features.hackageFeatures config
 
     return Server {
-        serverTxControl  = txCtl,
-        serverFeatures   = features,
-        serverPort       = portNum,
-        serverConfig = Config {
-            serverStore      = store,
-            serverStaticDir  = staticDir,
-            serverURI        = hostURI
-        }
+        serverTxControl = txCtl,
+        serverFeatures  = features,
+        serverPort      = portNum,
+        serverConfig    = config
     }
 
   where
-    happsStateDir = confHappsStateDir config
-    blobStoreDir  = confBlobStoreDir  config
+    happsStateDir = confHappsStateDir initConfig
+    blobStoreDir  = confBlobStoreDir  initConfig
     hostURI       = URIAuth "" hostName portStr
       where portStr | portNum == 80 = ""
-                    | otherwise     = ':' : show portNum
+                    | otherwise     = ':':show portNum
 
 hackageEntryPoint :: Proxy HackageEntryPoint
 hackageEntryPoint = Proxy
@@ -267,9 +268,9 @@ initState server = do
 
 impl :: Server -> ServerPart Response
 impl server =
-      flip mplus (fileServe ["hackage.html"] . serverStaticDir . serverConfig $ server)
+      flip mplus (fileServe ["hackage.html"] . serverStaticDir $ serverConfig server)
     -- ServerPart Response
-    . renderServerTree (serverConfig server) []
+    . renderServerTree []
     -- ServerTree ServerResponse
     . fmap serveResource
     -- ServerTree Resource

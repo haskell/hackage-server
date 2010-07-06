@@ -68,15 +68,17 @@ instance HackageFeature CheckFeature where
       }
 
 -- URI generation (string-based), using maps; user groups
-initCheckFeature :: CoreFeature -> PackagesFeature -> UploadFeature -> IO CheckFeature
-initCheckFeature _ _ _ = return CheckFeature
+initCheckFeature :: Config -> CoreFeature -> PackagesFeature -> UploadFeature -> IO CheckFeature
+initCheckFeature config _ _ _ = do
+    let store = serverStore config
+    return CheckFeature
       { checkResource = fix $ \r -> CheckResource
-          { candidatesPage = (resourceAt "/packages/candidates/.:format") { resourceGet = [("txt", textCandidatesPage)], resourcePost = [("", postCandidate r)] }
-          , candidatePage = (resourceAt "/package/:package/candidate.:format") { resourceGet = [("html", basicCandidatePage r)], resourcePut = [("html", putPackageCandidate r)], resourceDelete = [("", doDeleteCandidate)] }
-          , packageCandidatesPage = (resourceAt "/package/:package/candidates/.:format") { resourceGet = [("txt", textPkgCandidatesPage r)], resourcePost = [("", postPackageCandidate r)] }
+          { candidatesPage = (resourceAt "/packages/candidates/.:format") { resourceGet = [("txt", textCandidatesPage)], resourcePost = [("", postCandidate r store)] }
+          , candidatePage = (resourceAt "/package/:package/candidate.:format") { resourceGet = [("html", basicCandidatePage r)], resourcePut = [("html", putPackageCandidate r store)], resourceDelete = [("", doDeleteCandidate)] }
+          , packageCandidatesPage = (resourceAt "/package/:package/candidates/.:format") { resourceGet = [("txt", textPkgCandidatesPage r)], resourcePost = [("", postPackageCandidate r store)] }
           , publishPage = (resourceAt "/package/:package/candidate/publish.:format") { resourceGet = [("txt", textPublishForm)], resourcePost = [("", postPublish)] }
           , candidateCabal = (resourceAt "/package/:package/candidate/:cabal.cabal") { resourceGet = [("cabal", serveCandidateCabal)] }
-          , candidateTarball = (resourceAt "/package/:package/candidate/:tarball.tar.gz") { resourceGet = [("tarball", serveCandidateTarball)] }
+          , candidateTarball = (resourceAt "/package/:package/candidate/:tarball.tar.gz") { resourceGet = [("tarball", serveCandidateTarball store)] }
           , candidatesUri = \format -> renderResource (candidatesPage r) [format]
           , candidateUri  = \format pkgid -> renderResource (candidatePage r) [display pkgid, format]
           , packageCandidatesUri = \format pkgid -> renderResource (packageCandidatesPage r) [display pkgid, format]
@@ -86,8 +88,8 @@ initCheckFeature _ _ _ = return CheckFeature
           }
       }
   where
-    basicCandidatePage :: CheckResource -> Config -> DynamicPath -> ServerPart Response
-    basicCandidatePage r _ dpath = withPackageId dpath $ \pkgid ->
+    basicCandidatePage :: CheckResource -> DynamicPath -> ServerPart Response
+    basicCandidatePage r dpath = withPackageId dpath $ \pkgid ->
                                    withCandidate pkgid $ \_ mpkg _ -> case mpkg of
         Nothing -> ok . toResponse $ "Insert submission form here for " ++ display (packageName pkgid)
         Just pkg -> ok . toResponse $ Resource.XHtml $ toHtml
@@ -101,25 +103,25 @@ initCheckFeature _ _ _ = return CheckFeature
             -- either change the URI function for the resources or have a more typed way to create URIs
             section cand = basicPackageSection (candidateCabalUri r) (candidateTarballUri r) (candPkgInfo cand)
 
-    textCandidatesPage _ _ = return . toResponse $ "Insert list of candidate packages here"
+    textCandidatesPage _ = return . toResponse $ "Insert list of candidate packages here"
 
-    textPkgCandidatesPage r _ dpath = withPackageName dpath $ \name ->
+    textPkgCandidatesPage r dpath = withPackageName dpath $ \name ->
                                       withCandidates name $ \_ pkgs -> do
         return . toResponse $ "Insert list of candidate packages here"
 
-    postCandidate r config _ = do
-        res <- uploadCandidate (const True) (serverStore config)
+    postCandidate r store _ = do
+        res <- uploadCandidate (const True) store
         respondToResult r res
 
     -- POST to /:package/candidates/
-    postPackageCandidate r config dpath = withPackageName dpath $ \name -> do
-        res <- uploadCandidate ((==name) . packageName) (serverStore config)
+    postPackageCandidate r store dpath = withPackageName dpath $ \name -> do
+        res <- uploadCandidate ((==name) . packageName) store
         respondToResult r res
 
     -- PUT to /:package-version/candidate
-    putPackageCandidate r config dpath = withPackageId dpath $ \pkgid -> do
+    putPackageCandidate r store dpath = withPackageId dpath $ \pkgid -> do
         guard (packageVersion pkgid /= Version [] [])
-        res <- uploadCandidate (==pkgid) (serverStore config)
+        res <- uploadCandidate (==pkgid) store
         respondToResult r res
 
     respondToResult :: CheckResource -> Either UploadFailed CandPkgInfo -> ServerPart Response
@@ -127,37 +129,37 @@ initCheckFeature _ _ _ = return CheckFeature
         Left (UploadFailed code err) -> resp code $ toResponse err
         Right pkgInfo -> seeOther (candidateUri r "" $ packageId pkgInfo) (toResponse ())
 
-    doDeleteCandidate _ dpath = withCandidatePath dpath $ \_ candidate -> do
+    doDeleteCandidate dpath = withCandidatePath dpath $ \_ candidate -> do
         requirePackageAuth candidate
         update $ DeleteCandidate (packageId candidate)
         seeOther "/packages/candidates/" $ toResponse ()
 
-    textPublishForm _ dpath = withCandidatePath dpath $ \_ candidate -> do
+    textPublishForm dpath = withCandidatePath dpath $ \_ candidate -> do
         requirePackageAuth candidate
         packages <- fmap packageList $ query GetPackagesState
         case checkPublish packages candidate of
             Just (UploadFailed _ err) -> ok $ toResponse err
             Nothing -> ok . toResponse $ "Post here to publish the package"
 
-    postPublish _ dpath = withCandidatePath dpath $ \_ candidate -> do
+    postPublish dpath = withCandidatePath dpath $ \_ candidate -> do
         requirePackageAuth candidate
         res <- publishCandidate (packageName candidate) False
         case res of
             Left (UploadFailed code err) -> resp code $ toResponse err
             Right uresult -> ok $ toResponse $ unlines (uploadWarnings uresult)
 
-serveCandidateTarball :: Config -> DynamicPath -> ServerPart Response
-serveCandidateTarball config dpath = withPackageTarball dpath $ \pkgid ->
+serveCandidateTarball :: BlobStorage -> DynamicPath -> ServerPart Response
+serveCandidateTarball store dpath = withPackageTarball dpath $ \pkgid ->
                                      withCandidate pkgid $ \_ mpkg _ -> case mpkg of
     Nothing -> notFound $ toResponse "Candidate package does not exist"
     Just pkg -> case pkgTarball (candPkgInfo pkg) of
         [] -> notFound $ toResponse "No tarball available"
         ((blobId, _):_) -> do
-            file <- liftIO $ BlobStorage.fetch (serverStore config) blobId
+            file <- liftIO $ BlobStorage.fetch store blobId
             ok $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime $ candPkgInfo pkg)
 
-serveCandidateCabal :: Config -> DynamicPath -> ServerPart Response
-serveCandidateCabal _ dpath = withCandidatePath dpath $ \_ pkg -> do
+serveCandidateCabal :: DynamicPath -> ServerPart Response
+serveCandidateCabal dpath = withCandidatePath dpath $ \_ pkg -> do
     guard (lookup "cabal" dpath == Just (display $ packageName pkg))
     ok $ toResponse (Resource.CabalFile (pkgData $ candPkgInfo pkg))
 

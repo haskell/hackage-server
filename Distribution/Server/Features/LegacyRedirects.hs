@@ -25,7 +25,7 @@ legacyRedirectsFeature :: HackageModule
 legacyRedirectsFeature = HackageModule {
     featureName = "legacy",
     -- get rid of trailing resource and manually create a mapping?
-    resources   = [(resourceAt "/...") { resourceGet = [("", \_ _ -> serveLegacyGets)], resourcePost = [("", \_ _ -> serveLegacyPosts)] }],
+    resources   = [(resourceAt "/...") { resourceGet = [("", \_ -> serveLegacyGets)], resourcePost = [("", \_ -> serveLegacyPosts)] }],
     dumpBackup    = Nothing,
     restoreBackup = Nothing
 }

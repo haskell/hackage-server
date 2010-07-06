@@ -69,8 +69,8 @@ instance HackageFeature UploadFeature where
       , restoreBackup = Nothing
       }
 
-initUploadFeature :: CoreFeature -> IO UploadFeature
-initUploadFeature core = do
+initUploadFeature :: Config -> CoreFeature -> IO UploadFeature
+initUploadFeature config core = do
     return $ UploadFeature
       { uploadResource = UploadResource
           { uploadIndexPage = (extendResource . corePackagesPage $ coreResource core) { resourcePost = [("txt", textUploadPackage)] }
@@ -91,7 +91,7 @@ initUploadFeature core = do
         }
       }
   where
-    textUploadPackage config _ = do
+    textUploadPackage _ = do
         res <- doUploadPackage (packageIndexChange core) (serverStore config)
         case res of
             Left (UploadFailed code err) -> resp code $ toResponse err

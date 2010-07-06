@@ -1,8 +1,8 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, TypeOperators, ExistentialQuantification #-}
 module Distribution.Server.Features where
 
---TODO: decrease the code/comments ratio
 import Distribution.Server.Feature
+import Distribution.Server.Types (Config)
 import Distribution.Server.Features.Core (initCoreFeature)
 --import Distribution.Server.Features.Json (initJsonFeature)
 import Distribution.Server.Features.Html (initHtmlFeature)
@@ -18,24 +18,24 @@ import Distribution.Server.Features.LegacyRedirects (legacyRedirectsFeature)
 
 -- This module ties together all the hackage features that we will use.
 
--- TODO: Documentation, DownloadCount, PreferredVersions, ReverseDependencies, update Candidates
-hackageFeatures :: IO [HackageModule]
-hackageFeatures = do
+-- TODO: DownloadCount, PreferredVersions, ReverseDependencies
+hackageFeatures :: Config -> IO [HackageModule]
+hackageFeatures config = do
     -- > these can get along by themselves
-    coreFeature <- initCoreFeature
+    coreFeature <- initCoreFeature config
 --    mirrorFeature <- initMirrorFeature coreFeature
 
     -- > and additional content...
     -- arguments denote data dependencies: even if the feature objects are themselves unused
     -- what follows is a topological sort along those lines
-    usersFeature <- initUsersFeature coreFeature
-    uploadFeature <- initUploadFeature coreFeature
-    packagesFeature <- initPackagesFeature coreFeature
-    distroFeature <- initDistroFeature coreFeature packagesFeature
-    checkFeature <- initCheckFeature coreFeature packagesFeature uploadFeature
-    reportsFeature <- initReportsFeature coreFeature
-    documentationFeature <- initDocumentationFeature coreFeature uploadFeature
-    htmlFeature <- initHtmlFeature coreFeature packagesFeature  uploadFeature
+    usersFeature <- initUsersFeature config coreFeature
+    uploadFeature <- initUploadFeature config coreFeature
+    packagesFeature <- initPackagesFeature config coreFeature
+    distroFeature <- initDistroFeature config coreFeature packagesFeature
+    checkFeature <- initCheckFeature config coreFeature packagesFeature uploadFeature
+    reportsFeature <- initReportsFeature config coreFeature
+    documentationFeature <- initDocumentationFeature config coreFeature uploadFeature
+    htmlFeature <- initHtmlFeature config coreFeature packagesFeature uploadFeature
                                    checkFeature usersFeature
     --jsonFeature <- initJsonFeature
     let allFeatures =

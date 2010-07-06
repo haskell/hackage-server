@@ -10,6 +10,7 @@ module Distribution.Server.Features.Packages (
 
 import Distribution.Server.Feature
 import Distribution.Server.Resource
+import Distribution.Server.Types
 import Distribution.Server.Hook
 import Distribution.Server.Features.Core
 import Distribution.Server.Packages.Types
@@ -67,8 +68,8 @@ instance HackageFeature PackagesFeature where
       , restoreBackup = Nothing
       }
 
-initPackagesFeature :: CoreFeature -> IO PackagesFeature
-initPackagesFeature core = do
+initPackagesFeature :: Config -> CoreFeature -> IO PackagesFeature
+initPackagesFeature _ core = do
     recents <- Cache.newCacheable
     registerHook (packageIndexChange core) $ do
         -- this should likely be moved to HTML/RSS features

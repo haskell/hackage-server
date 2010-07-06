@@ -71,19 +71,16 @@ data Resource = Resource {
     -- | The format conventions held by the resource.
     resourceFormat  :: ResourceFormat,
     -- | The trailing slash conventions held by the resource.
-    resourcePathEnd :: BranchEnd,
-    -- | Given a DynamicPath, produce a lookup function, by default (flip lookup). This is for resources with special conventions.
-    resourceURI :: DynamicPath -> (String -> Maybe String)
+    resourcePathEnd :: BranchEnd
 }
 -- favors first
 instance Monoid Resource where
-    mempty = Resource [] [] [] [] [] noFormat NoSlash (flip lookup)
-    mappend (Resource bpath rget rput rpost rdelete rformat rend ruri)
-            (Resource bpath' rget' rput' rpost' rdelete' rformat' rend' ruri') =
+    mempty = Resource [] [] [] [] [] noFormat NoSlash
+    mappend (Resource bpath rget rput rpost rdelete rformat rend)
+            (Resource bpath' rget' rput' rpost' rdelete' rformat' rend') =
         Resource (simpleCombine bpath bpath') (ccombine rget rget') (ccombine rput rput')
                    (ccombine rpost rpost') (ccombine rdelete rdelete')
                    (simpleCombine rformat rformat') (simpleCombine rend rend')
-                   (simpleCombine ruri ruri')
       where ccombine = unionBy ((==) `on` fst)
             simpleCombine xs ys = if null bpath then ys else xs
 
@@ -230,7 +227,7 @@ renderListURI bpath list = let (res, extra) = go (reverse bpath) list in ("/" </
 --     [("user", "mgruen"), ("doc", "todo"), ("format", "json")]
 --     == Just "/home/mgruen/docs/todo.txt"
 renderMaybeResource :: Resource -> URIGen
-renderMaybeResource resource dpath = case renderGenURI (normalizeResourceLocation resource) (resourceURI resource dpath) of
+renderMaybeResource resource dpath = case renderGenURI (normalizeResourceLocation resource) (flip lookup dpath) of
     Nothing  -> Nothing
     Just str -> Just $ renderResourceFormat resource (lookup "format" dpath) str
 
@@ -241,6 +238,7 @@ renderResource resource list = case renderListURI (normalizeResourceLocation res
 
 -- in some cases, DynamicBranches are used to accomodate formats for StaticBranches.
 -- this returns them to their pre-format state so renderGenURI can handle them
+normalizeResourceLocation :: Resource -> BranchPath
 normalizeResourceLocation resource = case (resourceFormat resource, resourceLocation resource) of
     (ResourceFormat _ (Just (StaticBranch sdir)), DynamicBranch sdir':xs) | sdir == sdir' -> StaticBranch sdir:xs
     (_, loc) -> loc
@@ -361,8 +359,8 @@ parseFormatTrunkAt = do
 -- [res "/foo" ["json"], res "/foo/:bar.:format" ["html", "json"], res "/baz/test/.:format" ["html", "text", "json"], res "/package/:package/:tarball.tar.gz" ["tarball"], res "/a/:a/:b/" ["html", "json"], res "/mon/..." [""], res "/wiki/path.:format" [], res "/hi.:format" ["yaml", "mofo"]]
 --     where res field formats = (resourceAt field) { resourceGet = map (\format -> (format, \_ -> return . toResponse . (++"\n") . ((show format++" - ")++) . show)) formats }
 serveResource :: Resource -> ServerResponse
-serveResource (Resource _ rget rput rpost rdelete rformat rend _) = \config dpath -> msum $
-    map (\func -> func config dpath) $ methodPart ++ [optionPart]
+serveResource (Resource _ rget rput rpost rdelete rformat rend) = \dpath -> msum $
+    map (\func -> func dpath) $ methodPart ++ [optionPart]
   where
     optionPart = makeOptions $ concat [ met | ((_:_), met) <- zip methods methodsList]
     methodPart = [ serveResources met res | (res@(_:_), met) <- zip methods methodsList]
@@ -375,49 +373,49 @@ serveResource (Resource _ rget rput rpost rdelete rformat rend _) = \config dpat
     -- > Go from format/content-type to ServerResponse to serve-}
     serveResources :: [Method] -> [(Content, ServerResponse)] -> ServerResponse
     serveResources met res = case rend of
-        Trailing -> \config dpath -> methodOnly met >> serveContent res config dpath
-        _ -> \config dpath -> serveFormat res met config dpath
+        Trailing -> \dpath -> methodOnly met >> serveContent res dpath
+        _ -> \dpath -> serveFormat res met dpath
     serveFormat :: [(Content, ServerResponse)] -> [Method] -> ServerResponse
     serveFormat res met = case rformat of
-        ResourceFormat NoFormat Nothing -> \config dpath -> methodSP met $ serveContent res config dpath
-        ResourceFormat (StaticFormat format) Nothing -> \config dpath -> path $ \format' -> methodSP met $ do
+        ResourceFormat NoFormat Nothing -> \dpath -> methodSP met $ serveContent res dpath
+        ResourceFormat (StaticFormat format) Nothing -> \dpath -> path $ \format' -> methodSP met $ do
             -- this branch shouldn't happen - /foo/.json would instead be stored as two static dirs
             guard (format' == ('.':format))
-            serveContent res config dpath
-        ResourceFormat (StaticFormat format) (Just (StaticBranch sdir)) -> \config dpath -> methodSP met $
+            serveContent res dpath
+        ResourceFormat (StaticFormat format) (Just (StaticBranch sdir)) -> \dpath -> methodSP met $
             -- likewise, foo.json should be stored as a single static dir
             if lookup sdir dpath == Just (sdir ++ "." ++ format) then mzero
-                                                                 else serveContent res config dpath
-        ResourceFormat (StaticFormat format) (Just (DynamicBranch sdir)) -> \config dpath -> methodSP met $
+                                                                 else serveContent res dpath
+        ResourceFormat (StaticFormat format) (Just (DynamicBranch sdir)) -> \dpath -> methodSP met $
             case matchExt format =<< lookup sdir dpath of
-                Just pname -> serveContent res config ((sdir, pname):dpath)
+                Just pname -> serveContent res ((sdir, pname):dpath)
                 Nothing -> mzero
-        ResourceFormat DynamicFormat Nothing -> \config dpath ->
-            msum [ methodSP met $ serveContent res config dpath
+        ResourceFormat DynamicFormat Nothing -> \dpath ->
+            msum [ methodSP met $ serveContent res dpath
                  , path $ \pname -> case pname of
-                       ('.':format) -> methodSP met $ serveContent res config (("format", format):dpath)
+                       ('.':format) -> methodSP met $ serveContent res (("format", format):dpath)
                        _ -> mzero
                  ]
-        ResourceFormat DynamicFormat (Just (StaticBranch sdir)) -> \config dpath -> methodSP met $
+        ResourceFormat DynamicFormat (Just (StaticBranch sdir)) -> \dpath -> methodSP met $
             case fmap extractExt (lookup sdir dpath) of
-                Just (pname, format) | pname == sdir -> serveContent res config (("format", format):dpath)
+                Just (pname, format) | pname == sdir -> serveContent res (("format", format):dpath)
                 _ -> mzero
-        ResourceFormat DynamicFormat (Just (DynamicBranch sdir)) -> \config dpath -> methodSP met $
+        ResourceFormat DynamicFormat (Just (DynamicBranch sdir)) -> \dpath -> methodSP met $
             -- this is somewhat complicated. consider /pkg-0.1 and /pkg-0.1.html. If the format is optional, where to split?
             -- the solution is to manually check the available formats to see if something matches
             -- if this situation comes up in practice, try to require a trailing slash, e.g. /pkg-0.1/.html
             case fmap (\sd -> (,) sd $ extractExt sd) (lookup sdir dpath) of
                 Just (full, (pname, format)) -> do
-                    let splitOption = serveContent res config (("format", format):(sdir, pname):dpath)
-                        fullOption  = serveContent res config ((sdir, full):dpath)
+                    let splitOption = serveContent res (("format", format):(sdir, pname):dpath)
+                        fullOption  = serveContent res ((sdir, full):dpath)
                     case guard (not $ null format) >> lookup format res of
                         Nothing -> fullOption
                         Just {} -> splitOption
                 _ -> mzero
         -- some invalid combination
-        _ -> \config dpath -> methodSP met $ serveContent res config dpath
+        _ -> \dpath -> methodSP met $ serveContent res dpath
     serveContent :: [(Content, ServerResponse)] -> ServerResponse
-    serveContent res config dpath = do
+    serveContent res dpath = do
         -- there should be no remaining path segments at this point, now check page redirection
         met <- fmap rqMethod askRq
         -- we don't check if the page exists before redirecting!
@@ -429,10 +427,10 @@ serveResource (Resource _ rget rput rpost rdelete rformat rend _) = \config dpat
         case lookup "format" dpath of
             Just format@(_:_) -> case lookup format res of
                                -- return a specific format if it is found
-                Just answer -> answer config dpath
+                Just answer -> answer dpath
                 Nothing -> mzero -- return 404 if the specific format is not found
                   -- return default response when format is empty or non-existent
-            _ -> (snd $ head res) config dpath
+            _ -> (snd $ head res) dpath
     redirCanonicalSlash :: DynamicPath -> ServerPart Response -> ServerPart Response
     redirCanonicalSlash dpath trueRes = case rformat of
         ResourceFormat format Nothing | format /= NoFormat -> case lookup "format" dpath of
@@ -462,7 +460,7 @@ serveResource (Resource _ rget rput rpost rdelete rformat rend _) = \config dpat
     methods = [rget, rput, rpost, rdelete]
     methodsList = [[GET, HEAD], [PUT], [POST], [DELETE]]
     makeOptions :: [Method] -> ServerResponse
-    makeOptions methodList = \_ _ -> methodSP OPTIONS $ do
+    makeOptions methodList = \_ -> methodSP OPTIONS $ do
         setHeaderM "Allow" (intercalate ", " . map show $ methodList)
         return $ toResponse ()
 
@@ -485,15 +483,15 @@ drawServerTree tree = Tree.drawTree (transformTree tree Nothing)
 serverTreeEmpty :: ServerTree a
 serverTreeEmpty = ServerTree Nothing Map.empty
 
--- essentially a ReaderT (Config, DynamicPath) ServerPart Response
+-- essentially a ReaderT DynamicPath ServerPart Response
 -- this always renders parent URIs, but usually we guard against remaining path segments, so it's fine
-renderServerTree :: Config -> DynamicPath -> ServerTree ServerResponse -> ServerPart Response
-renderServerTree config dpath (ServerTree func forest) = msum $ maybeToList (fmap (\fun -> fun config dpath) func) ++ map (uncurry renderBranch) (Map.toList forest)
+renderServerTree :: DynamicPath -> ServerTree ServerResponse -> ServerPart Response
+renderServerTree dpath (ServerTree func forest) = msum $ maybeToList (fmap (\fun -> fun dpath) func) ++ map (uncurry renderBranch) (Map.toList forest)
   where
     renderBranch :: BranchComponent -> ServerTree ServerResponse -> ServerPart Response
-    renderBranch (StaticBranch  sdir) tree = dir sdir $ renderServerTree config dpath tree
-    renderBranch (DynamicBranch sdir) tree = path $ \pname -> renderServerTree config ((sdir, pname):dpath) tree
-    renderBranch TrailingBranch tree = renderServerTree config dpath tree
+    renderBranch (StaticBranch  sdir) tree = dir sdir $ renderServerTree dpath tree
+    renderBranch (DynamicBranch sdir) tree = path $ \pname -> renderServerTree ((sdir, pname):dpath) tree
+    renderBranch TrailingBranch tree = renderServerTree dpath tree
 
 reinsert :: Monoid a => BranchComponent -> ServerTree a -> Map BranchComponent (ServerTree a) -> Map BranchComponent (ServerTree a)
 -- combine will only be called if branchMap already contains the key

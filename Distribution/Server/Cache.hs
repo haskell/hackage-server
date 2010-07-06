@@ -83,7 +83,7 @@ instance (Cacheable a, Cacheable b) => Cacheable (a, b) where
     forceValue (a, b) = forceValue a `seq` forceValue b
     emptyValue = (emptyValue, emptyValue)
 
--- usually b = Config and c = DynamicPath. This saves on code nodes (elsewhere) and imports (here)
-respondCache :: ToMessage r => GenCache a -> (a -> r) -> b -> c -> ServerPart Response
-respondCache cache func _ _ = return . toResponse . func =<< getCache cache
+-- usually b = DynamicPath. This saves on code nodes (elsewhere) and imports (here)
+respondCache :: ToMessage r => GenCache a -> (a -> r) -> b -> ServerPart Response
+respondCache cache func _ = return . toResponse . func =<< getCache cache
 

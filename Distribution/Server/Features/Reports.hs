@@ -29,6 +29,7 @@ import Distribution.Package
 import Happstack.Server
 import Happstack.State (update, query)
 import Control.Monad.Trans
+import Control.Monad (mzero)
 import qualified Data.ByteString.Lazy.Char8 as BS
 
 data ReportsFeature = ReportsFeature {
@@ -52,49 +53,51 @@ instance HackageFeature ReportsFeature where
       , restoreBackup = Just $ \storage -> reportsBackup storage
       }
 
-initReportsFeature :: CoreFeature -> IO ReportsFeature
-initReportsFeature _ = do
+initReportsFeature :: Config -> CoreFeature -> IO ReportsFeature
+initReportsFeature config _ = do
+    let store = serverStore config
     return ReportsFeature
       { reportsResource = ReportsResource
-          { reportsList = (resourceAt "/package/:package/reports/.:format") { resourceGet = [("txt", textPackageReports)], resourcePost = [("", submitBuildReport)] }
+          { reportsList = (resourceAt "/package/:package/reports/.:format") { resourceGet = [("txt", textPackageReports)], resourcePost = [("", submitBuildReport store)] }
           , reportsPage = (resourceAt "/package/:package/reports/:id.:format") { resourceGet = [("txt", textPackageReport)], resourceDelete = [("", deleteBuildReport)] }
-          , reportsLog  = (resourceAt "/package/:package/reports/:id/log") { resourceGet = [("txt", serveBuildLog)], resourceDelete = [("", deleteBuildLog)], resourcePut = [("", putBuildLog)] }
+          , reportsLog  = (resourceAt "/package/:package/reports/:id/log") { resourceGet = [("txt", serveBuildLog store)], resourceDelete = [("", deleteBuildLog)], resourcePut = [("", putBuildLog store)] }
           }
       }
   where
-    textPackageReports _ dpath = withPackagePath dpath $ \_ pkg _ -> do
+    textPackageReports dpath = withPackagePath dpath $ \_ pkg _ -> do
         reportList <- query $ LookupPackageReports (pkgInfoId pkg)
         return . toResponse $ show reportList
-    textPackageReport _ dpath = withPackagePath dpath $ \_ pkg _ -> withPackageReport dpath (pkgInfoId pkg) $ \reportId (report, mlog) -> do
+    textPackageReport dpath = withPackagePath dpath $ \_ pkg _ -> withPackageReport dpath (pkgInfoId pkg) $ \reportId (report, mlog) -> do
         return . toResponse $ unlines ["Report #" ++ display reportId, show report, maybe "No build log" (const "Build log exists") mlog]
 
-    serveBuildLog config dpath = withPackagePath dpath $ \_ pkg _ -> withPackageReport dpath (pkgInfoId pkg) $ \_ (_, mlog) -> case mlog of
+    serveBuildLog store dpath = withPackagePath dpath $ \_ pkg _ -> withPackageReport dpath (pkgInfoId pkg) $ \_ (_, mlog) -> case mlog of
         Nothing -> notFound $ toResponse ""
         Just (BuildLog blobId) -> do
-            file <- liftIO $ BlobStorage.fetch (serverStore config) blobId
+            file <- liftIO $ BlobStorage.fetch store blobId
             return . toResponse $ BS.unpack file
 
-    submitBuildReport config dpath = withPackagePath dpath $ \_ pkg _ -> do
+    -- TODO: replace undefineds with lookups for fields of multipart-formdata
+    submitBuildReport store dpath = withPackagePath dpath $ \_ pkg _ -> do
         let pkgid = pkgInfoId pkg
             report = undefined
-            mbuildLog = Just $ undefined (serverStore config)
+            mbuildLog = Just $ undefined store
         reportId <- update $ AddReport pkgid (report, mbuildLog)
         goToReport pkgid reportId
 
-    deleteBuildReport _ dpath = withPackagePath dpath $ \_ pkg _ -> withReportId dpath $ \reportId -> do
+    deleteBuildReport dpath = withPackagePath dpath $ \_ pkg _ -> withReportId dpath $ \reportId -> do
         let pkgid = pkgInfoId pkg
         success <- update $ DeleteReport pkgid reportId
         if success
             then seeOther ("/package/" ++ display pkgid ++ "/reports/") $ toResponse ()
             else notFound $ toResponse $ "Build report #" ++ display reportId ++ " not found"
 
-    putBuildLog config dpath = withPackagePath dpath $ \_ pkg _ -> withReportId dpath $ \reportId -> do
+    putBuildLog store dpath = withPackagePath dpath $ \_ pkg _ -> withReportId dpath $ \reportId -> do
         let pkgid = pkgInfoId pkg
-            buildLog = undefined (serverStore config)
+            buildLog = undefined store
         update $ SetBuildLog pkgid reportId (Just buildLog)
         goToReport pkgid reportId
 
-    deleteBuildLog _ dpath = withPackagePath dpath $ \_ pkg _ -> withReportId dpath $ \reportId -> do
+    deleteBuildLog dpath = withPackagePath dpath $ \_ pkg _ -> withReportId dpath $ \reportId -> do
         let pkgid = pkgInfoId pkg
         update $ SetBuildLog pkgid reportId Nothing
         goToReport pkgid reportId
@@ -104,7 +107,7 @@ initReportsFeature _ = do
 
 withReportId :: DynamicPath -> (BuildReportId -> ServerPart Response) -> ServerPart Response
 withReportId dpath func = case simpleParse =<< lookup "id" dpath of
-    Nothing -> notFound $ toResponse "Not a valid report id"
+    Nothing -> mzero
     Just reportId -> func reportId
 
 withPackageReport :: DynamicPath -> PackageId -> (BuildReportId -> (BuildReport, Maybe BuildLog) -> ServerPart Response) -> ServerPart Response

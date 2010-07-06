@@ -43,8 +43,8 @@ instance HackageFeature HtmlFeature where
 --hackagePageWith :: [Html] -> String -> [Html] -> Html
 --hackagePageWith links heading docs = toHtml [header << docHead, body << docBody]
 
-initHtmlFeature :: CoreFeature -> PackagesFeature -> UploadFeature -> CheckFeature -> UserFeature -> IO HtmlFeature
-initHtmlFeature core pkg upload check user = do
+initHtmlFeature :: Config -> CoreFeature -> PackagesFeature -> UploadFeature -> CheckFeature -> UserFeature -> IO HtmlFeature
+initHtmlFeature _ core pkg upload check user = do
     let cores = coreResource core
         users = userResource user
         uploads = uploadResource upload
@@ -94,8 +94,8 @@ initHtmlFeature core pkg upload check user = do
      }
 
 
-servePackagePage :: PackagesFeature -> Config -> DynamicPath -> ServerPart Response
-servePackagePage pkg _ dpath = withPackageId dpath $ \pkgid -> require (packageRender pkg pkgid) $ \render -> do
+servePackagePage :: PackagesFeature -> DynamicPath -> ServerPart Response
+servePackagePage pkg dpath = withPackageId dpath $ \pkgid -> require (packageRender pkg pkgid) $ \render -> do
     distributions <- query $ State.PackageStatus (packageName pkgid)
     hasDocs       <- query $ State.HasDocumentation (packageId pkgid)
     let docURL | hasDocs   = Just $ "/package" </> display pkgid </> "documentation"

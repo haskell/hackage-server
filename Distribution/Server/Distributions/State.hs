@@ -60,8 +60,8 @@ removeDistro distro
             , distVersions = Dist.removeDistroVersions distro distVersions
             }
 
-enumerate :: Query Distros [DistroName]
-enumerate = asks $ Dist.enumerate . distDistros
+enumerateDistros :: Query Distros [DistroName]
+enumerateDistros = asks $ Dist.enumerate . distDistros
 
 isDistribution :: DistroName -> Query Distros Bool
 isDistribution distro = asks $ Dist.isDistribution distro . distDistros
@@ -115,7 +115,7 @@ $(mkMethods
   , 'removeDistro
 
   -- query collection of distributions
-  , 'enumerate
+  , 'enumerateDistros
   , 'isDistribution
 
   -- update package versions in distros

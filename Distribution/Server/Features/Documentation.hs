@@ -13,7 +13,7 @@ import Distribution.Server.Types
 import Distribution.Server.Packages.State
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Backup.Export
-import Distribution.Server.Util.BlobStorage (BlobId)
+import Distribution.Server.Util.BlobStorage (BlobId, BlobStorage)
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import qualified Distribution.Server.Util.Serve as TarIndex
 import Data.TarIndex (TarIndex)
@@ -26,6 +26,7 @@ import Happstack.Server
 import Happstack.State (update, query)
 import Data.Function
 import Control.Monad.Trans
+import Control.Monad (mzero)
 import qualified Data.Map as Map
 import qualified Codec.Compression.GZip as GZip
 
@@ -50,24 +51,25 @@ instance HackageFeature DocumentationFeature where
       , restoreBackup = Nothing {-Just $ \storage -> reportsBackup storage-}
       }
 
-initDocumentationFeature :: CoreFeature -> UploadFeature -> IO DocumentationFeature
-initDocumentationFeature _ _ = do
+initDocumentationFeature :: Config -> CoreFeature -> UploadFeature -> IO DocumentationFeature
+initDocumentationFeature config _ _ = do
+    let store = serverStore config
     return DocumentationFeature
       { documentationResource = fix $ \r -> DocumentationResource
-          { packageDocs = (resourceAt "/package/:package/doc/..") { resourceGet = [("", serveDocumentation)] }
-          , packageDocsUpload = (resourceAt "/package/:package/doc/.:format") { resourcePost = [("", uploadDocumentation)] }
+          { packageDocs = (resourceAt "/package/:package/doc/..") { resourceGet = [("", serveDocumentation store)] }
+          , packageDocsUpload = (resourceAt "/package/:package/doc/.:format") { resourcePost = [("", uploadDocumentation store)] }
           , packageDocUri = \pkgid str -> renderResource (packageDocs r) [display pkgid, str]
           }
       }
   where
 
-serveDocumentation :: Config -> DynamicPath -> ServerPart Response
-serveDocumentation config dpath = withDocumentation dpath $ \pkgid blob index -> do
-    let tarball = BlobStorage.filepath (serverStore config) blob
+serveDocumentation :: BlobStorage -> DynamicPath -> ServerPart Response
+serveDocumentation store dpath = withDocumentation dpath $ \pkgid blob index -> do
+    let tarball = BlobStorage.filepath store blob
     TarIndex.serveTarball ["index.html"] (display $ packageName pkgid) tarball index
 
-uploadDocumentation :: Config -> DynamicPath -> ServerPart Response
-uploadDocumentation config dpath = withPackageId dpath $ \pkgid -> do
+uploadDocumentation :: BlobStorage -> DynamicPath -> ServerPart Response
+uploadDocumentation store dpath = withPackageId dpath $ \pkgid -> do
     requirePackageAuth pkgid
     withRequest $ \req -> do
         {-
@@ -77,8 +79,7 @@ uploadDocumentation config dpath = withPackageId dpath $ \pkgid -> do
           - Drop the index for the old tar-file
           - Link the new documentation to the package
         -}
-        let store = serverStore config
-            Body fileContents = rqBody req
+        let Body fileContents = rqBody req
         blob <- liftIO $ BlobStorage.add store (GZip.decompress fileContents)
         tarIndex <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blob)
         update $ InsertDocumentation pkgid blob tarIndex
@@ -88,6 +89,6 @@ withDocumentation :: DynamicPath -> (PackageId -> BlobId -> TarIndex -> ServerPa
 withDocumentation dpath func = withPackageId dpath $ \pkgid -> do
     mdocs <- query $ LookupDocumentation pkgid
     case mdocs of
-        Nothing -> notFound $ toResponse "No such documentation exists"
+        Nothing -> mzero
         Just (blob, index) -> func pkgid blob index
 

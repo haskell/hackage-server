@@ -30,8 +30,9 @@ import qualified Codec.Compression.GZip as GZip
 import qualified Distribution.Server.ResourceTypes as Resource
 import qualified Distribution.Server.PackageIndex as PackageIndex
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
+import Distribution.Server.Util.BlobStorage (BlobStorage)
 
-import Distribution.Text (display)
+
 import Control.Monad (guard)
 import Control.Monad.Trans (liftIO)
 import Data.Monoid (mconcat)
@@ -41,9 +42,11 @@ import Happstack.State (update, query)
 import Text.XHtml.Strict (Html, toHtml, unordList, h3, (<<), anchor, href, (!))
 import Data.Ord (comparing)
 import Data.List (sortBy, maximumBy, find)
+import qualified Data.ByteString.Lazy.Char8 as BS
+
+import Distribution.Text (display)
 import Distribution.Package
 import Distribution.Version (Version(..))
-import qualified Data.ByteString.Lazy.Char8 as BS
 
 data CoreFeature = CoreFeature {
     coreResource :: CoreResource,
@@ -85,8 +88,8 @@ instance HackageFeature CoreFeature where
       }
     initHooks core = [runZeroHook (packageIndexChange core)]
 
-initCoreFeature :: IO CoreFeature
-initCoreFeature = do
+initCoreFeature :: Config -> IO CoreFeature
+initCoreFeature config = do
     -- Caches
     thePackages <- Cache.newCacheable
     indexTar    <- Cache.newCacheable
@@ -98,11 +101,11 @@ initCoreFeature = do
     return CoreFeature
       { coreResource = fix $ \r -> CoreResource {
             -- the rudimentary HTML resources are for when we don't want an additional HTML feature
-            coreIndexPage = (resourceAt "/.:format") { resourceGet = [("html", indexPage)] }
+            coreIndexPage = (resourceAt "/.:format") { resourceGet = [("html", indexPage $ serverStaticDir config)] }
           , coreIndexTarball = (resourceAt "/packages/index.tar.gz") { resourceGet = [("tarball", Cache.respondCache indexTar Resource.IndexTarball)] }
           , corePackagesPage = (resourceAt "/packages/.:format") { resourceGet = [("html", Cache.respondCache thePackages id)] }
           , corePackagePage = (resourceAt "/package/:package.:format") { resourceGet = [("html", basicPackagePage r)] }
-          , corePackageTarball = (resourceAt "/package/:package/:tarball.tar.gz") { resourceGet = [("tarball", servePackageTarball downHook)] }
+          , corePackageTarball = (resourceAt "/package/:package/:tarball.tar.gz") { resourceGet = [("tarball", servePackageTarball downHook $ serverStore config)] }
           , coreCabalFile  = (resourceAt "/package/:package/:cabal.cabal") { resourceGet = [("cabal", serveCabalFile)] }
           , indexTarballUri = renderResource (coreIndexTarball r) []
           , indexPackageUri = \format -> renderResource (corePackagesPage r) [format]
@@ -122,7 +125,7 @@ initCoreFeature = do
         }
     }
   where
-    indexPage config _ = serveFile (const $ return "text/html") (serverStaticDir config ++ "/hackage.html")
+    indexPage staticDir _ = serveFile (const $ return "text/html") (staticDir ++ "/hackage.html")
     computeCache thePackages indexTar = do
         users <- query GetUserDb
         index <- fmap packageList $ query GetPackagesState
@@ -131,8 +134,8 @@ initCoreFeature = do
         Cache.putCache indexTar (GZip.compress $ Packages.Index.write users index)
 
 -- Should probably look more like an Apache index page (Name / Last modified / Size / Content-type)
-basicPackagePage :: CoreResource -> Config -> DynamicPath -> ServerPart Response
-basicPackagePage r _ dpath = withPackagePath dpath $ \_ _ pkgs ->
+basicPackagePage :: CoreResource -> DynamicPath -> ServerPart Response
+basicPackagePage r dpath = withPackagePath dpath $ \_ _ pkgs ->
   ok . toResponse $ Resource.XHtml $ showAllP $ sortBy (flip $ comparing packageVersion) pkgs
   where
     showAllP :: [PkgInfo] -> Html
@@ -153,6 +156,8 @@ basicPackageSection cabalUrl tarUrl pkgInfo = let pkgId = packageId pkgInfo; pkg
                    toHtml " (Cabal source package)"]
     ]
  ]
+
+------------------------------------------------------------------------------
 
 withPackage :: PackageId -> (PackagesState -> PkgInfo -> [PkgInfo] -> ServerPart Response) -> ServerPart Response
 withPackage pkgid func = do
@@ -178,18 +183,19 @@ withPackageTarball dpath func = withPackageId dpath $ \(PackageIdentifier name v
     require (return $ lookup "tarball" dpath >>= fromReqURI) $ \pkgid@(PackageIdentifier name' version') -> do
     guard $ name == name' && version' /= Version [] [] && (version == version' || version == Version [] [])
     func pkgid
----------------------------------------------
+------------------------------------------------------------------------
 
-servePackageTarball :: HookList (PackageId -> IO ()) -> Config -> DynamicPath -> ServerPart Response
-servePackageTarball hook config dpath = withPackageTarball dpath $ \pkgid -> withPackage pkgid $ \_ pkg _ -> case pkgTarball pkg of
+servePackageTarball :: HookList (PackageId -> IO ()) -> BlobStorage -> DynamicPath -> ServerPart Response
+servePackageTarball hook store dpath = withPackageTarball dpath $ \pkgid -> withPackage pkgid $ \_ pkg _ -> case pkgTarball pkg of
     [] -> notFound $ toResponse "No tarball available"
     ((blobId, _):_) -> do
-        file <- liftIO $ BlobStorage.fetch (serverStore config) blobId
+        file <- liftIO $ BlobStorage.fetch store blobId
         liftIO $ runOneHook hook pkgid
         ok $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)
 
-serveCabalFile :: Config -> DynamicPath -> ServerPart Response
-serveCabalFile _ dpath = withPackagePath dpath $ \_ pkg _ -> do
+serveCabalFile :: DynamicPath -> ServerPart Response
+serveCabalFile dpath = withPackagePath dpath $ \_ pkg _ -> do
     guard (lookup "cabal" dpath == Just (display $ packageName pkg))
     ok $ toResponse (Resource.CabalFile (pkgData pkg))
 
+------------------------------------------------------------------------
