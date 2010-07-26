@@ -61,3 +61,12 @@ form.box {
 	margin: 1.5ex 0;
 }
 strong.warning { color: red; }
+
+a:link    { color: #0000e0; text-decoration: none }
+a:visited { color: #0000a0; text-decoration: none }
+a:hover   { background-color: #e0e0ff; text-decoration: none }
+
+.unpreferred { color: green !important; }
+.deprecated { color: gray !important; }
+
+

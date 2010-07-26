@@ -18,10 +18,11 @@ groupPage users addUri removeUri desc = hackagePage (groupTitle desc) (groupBody
 
 -- | Body of the page
 groupBody :: [Users.UserName] -> Maybe String -> Maybe String -> GroupDescription -> [Html]
-groupBody users addUri removeUri desc = concat
-        [ return (h2 << docTitle)
-        , groupPrologue desc
-        , listGroup users removeUri
+groupBody users addUri removeUri desc =
+        [ h2 << docTitle
+        , toHtml $ groupPrologue desc
+        ] ++ concat
+        [ listGroup users removeUri
         , forms addUri
         ]
   where	docTitle = groupTitle desc ++ case groupShort desc of
@@ -42,15 +43,15 @@ addUser uri =
     ]
 
 removeUser :: Users.UserName -> String -> [Html]
-removeUser name uri =
-    [ gui (uri </> display name) <<
+removeUser uname uri =
+    [ gui (uri </> "user" </> display uname) <<
        [ hidden "_method" "DELETE"
        , submit "submit" "Remove"
        ]
     ]
 
 listGroup :: [Users.UserName] -> Maybe String -> [Html]
-listGroup [] _ = []
+listGroup [] _ = [ toHtml $ "No maintainers exist presently" ]
 listGroup users muri =
     [ p << unordList (map displayName users)
     ]

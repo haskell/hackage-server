@@ -1,16 +1,19 @@
 -- Body of the HTML page for a package
 module Distribution.Server.Pages.Package (
-    packagePage
+    packagePage,
+    renderDependencies,
+    renderVersion,
+    renderFields
   ) where
 
 import Distribution.Server.Features.Packages
+import Distribution.Server.Packages.Preferred
 
 import Distribution.Server.Pages.Package.HaddockParse (parseHaddockParagraphs)
 import Distribution.Server.Pages.Package.HaddockLex  (tokenise)
 import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Packages.ModuleForest
 import Distribution.Server.Pages.Template (hackagePage)
-import Distribution.Server.Distributions.Distributions (DistroPackageInfo(..), DistroName)
 
 import Distribution.Package
 import Distribution.PackageDescription as P
@@ -18,34 +21,34 @@ import Distribution.Version (Version (..), VersionRange (..))
 import Distribution.Text        (display)
 import Text.XHtml.Strict hiding (p, name)
 
-import Data.Char                (toUpper)
+import Data.Maybe               (maybeToList)
 import Data.List                (intersperse, intercalate)
 import System.FilePath.Posix    ((</>), (<.>))
 import System.Locale            (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
 
-packagePage :: PackageRender -> [(DistroName, DistroPackageInfo)] -> Maybe URL -> Html
-packagePage render distributions docURL = hackagePage (display $ rendPkgId render) (pkgBody render distributions docURL)
-
--- | Body of the package page
-pkgBody :: PackageRender -> [(DistroName, DistroPackageInfo)] -> Maybe URL -> [Html]
-pkgBody render distributions docURL =
-    (thediv ! [theclass "floatright"] << cabalLink) :
-    (h2 << docTitle) :
-    prologue (description desc) ++
-    propertySection render distributions ++
-    moduleSection render docURL ++
-    downloadSection render ++
-    reportsSection pkgid ++
-    adminSection pkgid
+packagePage :: PackageRender -> [Html] -> [(String, Html)] -> [(String, Html)] -> Maybe URL -> Html
+packagePage render top sections bottom docURL = hackagePage (display pkgid) $
+    [thediv ! [theclass "floatright"] << cabalLink,
+     h2 << docTitle]
+  ++ top
+  ++ pkgBody render sections
+  ++ concatMap (\(s, p) -> [h3 << s, p])
+     (maybeToList (moduleSection render docURL) ++ [downloadSection render] ++ bottom)
   where
-    desc  = rendOther render
     pkgid = rendPkgId render
-    docTitle = display (packageName pkgid) ++ case synopsis desc of
+    docTitle = display (packageName pkgid) ++ case synopsis (rendOther render) of
         "" -> ""
         short  -> ": " ++ short
     cabalLink = anchor ! [href cabalHomeURL] <<
-        (image ! [alt "Built with Cabal", src cabalLogoURL])
+                (image ! [alt "Built with Cabal", src cabalLogoURL])
+
+
+-- | Body of the package page
+pkgBody :: PackageRender -> [(String, Html)] -> [Html]
+pkgBody render sections =
+    prologue (description $ rendOther render) ++
+    propertySection sections
 
 prologue :: String -> [Html]
 prologue [] = []
@@ -61,11 +64,9 @@ paragraphs = map unlines . paras . lines
                 xs' -> case break null xs' of
                         (para, xs'') -> para : paras xs''
 
-downloadSection :: PackageRender -> [Html]
-downloadSection render = [
-        h3 << "Downloads",
-        ulist << [li << i | i <- download_items]]
-  where download_items =
+downloadSection :: PackageRender -> (String, Html)
+downloadSection render = ("Downloads", ulist << map (li <<) downloadItems)
+  where downloadItems =
             [if tarExists then [anchor ! [href downloadURL] << (display pkgId ++ ".tar.gz"),
                                 toHtml << " (Cabal source package)"]
                           else [toHtml << "Package tarball not uploaded"],
@@ -76,71 +77,12 @@ downloadSection render = [
         tarExists = rendHasTarball render
         pkgId = rendPkgId render
 
-moduleSection :: PackageRender -> Maybe URL -> [Html]
-moduleSection render docURL = maybe [] msect (rendModules render)
-  where msect lib = [h3 << "Modules", renderModuleForest docURL lib]
+moduleSection :: PackageRender -> Maybe URL -> Maybe (String, Html)
+moduleSection render docURL = fmap msect (rendModules render)
+  where msect lib = ("Modules", renderModuleForest docURL lib)
 
-reportsSection :: PackageId -> [Html]
-reportsSection pkgid =
-  [ h3 << "Reports"
-  , ulist << [li << buildReports ] ]
-  where
-    buildReports = [anchor ! [href (packageURL pkgid </> "buildreports")] << "Build reports"]
-
-adminSection :: PackageId -> [Html]
-adminSection pkgid =
-  [ h3 << "Administration"
-  , ulist << [li << admin]
-  ]
-  where
-    admin = [anchor ! [href (packageNameURL pkgid </> "admin")] << "Administration"]
-
-
-propertySection :: PackageRender -> [(DistroName, DistroPackageInfo)] -> [Html]
-propertySection render distributions = [
-        -- h3 << "Package properties",
-        tabulate $
-                [(if null earlierVersions && null laterVersions then "Version" else "Versions",
-                 commaList (map versionedLink earlierVersions ++
-                            (bold << display pversion) :
-                            map versionedLink laterVersions))] ++
-                [("Dependencies", htmlDepsList)] ++
-                [(fname, fvalue) |
-                        (fname, fvalue) <- showFields render,
-                        not (isNoHtml fvalue)] ++
-                [(capitalize fname, dispTagVal fname fvalue) | (fname, fvalue) <- []] ++ -- for additional (String, String) tags
-                distHtml
-        ]
-  where allVersions = rendAllVersions render
-        earlierVersions = takeWhile  (< pversion) allVersions
-        laterVersions   = dropWhile (<= pversion) allVersions
-        versionedLink v = anchor ! [href (packageURL (PackageIdentifier pname v))] << display v
-        PackageIdentifier pname pversion = rendPkgId render
-        htmlDepsList = foldr (+++) noHtml $
-                intersperse (toHtml " " +++ bold (toHtml "or") +++ br) $
-                map showDependencies (rendDepends render)
-        distHtml = case distributions of
-            [] -> []
-            _  -> [("Distributions:", commaList $ map showDist distributions )]
-        {-(if null successes then []
-         else [("Built on", commaList (map toHtml successes))]) ++
-        (if null failures then []
-         else [("Build failure", commaList (map showLog failures))])
-        successes = Map.keys (pdBuilds pd)
-        failures = Map.toList (Map.difference (pdBuildFailures pd) (pdBuilds pd))
-        showLog (desc, url) =
-                toHtml (desc ++ " (") +++
-                (anchor ! [href url] << "log") +++
-                toHtml ")"-}
-        capitalize (c:cs) = toUpper c : cs
-        capitalize "" = ""
-        dispTagVal "superseded by" v = anchor ! [href (packageURL (PackageIdentifier (PackageName v) (Version [] [])))] << v
-        dispTagVal _ v = toHtml v
-        showDist (name, info)
-            = let version = distroVersion info
-                  url = distroUrl info
-              in toHtml (display name ++ ":") +++
-                 anchor ! [href url] << toHtml (display version)
+propertySection :: [(String, Html)] -> [Html]
+propertySection sections = return . tabulate $ filter (not . isNoHtml . snd) sections
 
 tabulate :: [(String, Html)] -> Html
 -- tabulate items = dlist << concat [[dterm << t, ddef << d] | (t, d) <- items]
@@ -148,6 +90,14 @@ tabulate items = table ! [theclass "properties"] <<
         [tr ! [theclass (if odd n then "odd" else "even")] <<
                 [th ! [theclass "horizontal"] << t, td << d] |
                 (n, (t, d)) <- zip [(1::Int)..] items]
+
+renderDependencies :: PackageRender -> (String, Html)
+renderDependencies render = ("Dependencies", case htmlDepsList of
+    [] -> toHtml "None"
+    _  -> foldr (+++) noHtml htmlDepsList)
+  where htmlDepsList = 
+            intersperse (toHtml " " +++ bold (toHtml "or") +++ br) $
+            map showDependencies (rendDepends render)
 
 showDependencies :: [Dependency] -> Html
 showDependencies deps = commaList (map showDependency deps)
@@ -164,8 +114,24 @@ showDependency (Dependency (PackageName pname) vs) = showPkg +++ showVersion vs
         -- passing along the PackageRender, which is not the case here
         showPkg = anchor ! [href . packageURL $ PackageIdentifier (PackageName pname) (Version [] [])] << pname
 
-showFields :: PackageRender -> [(String, Html)]
-showFields render = [
+renderVersion :: PackageId -> [(Version, VersionStatus)] -> (String, Html)
+renderVersion (PackageIdentifier pname pversion) allVersions =
+    (if null earlierVersions && null laterVersions then "Version" else "Versions", versionList)
+  where (earlierVersions, laterVersionsInc) = span ((<pversion) . fst) allVersions
+        (thisVersion, laterVersions) = case laterVersionsInc of
+            (v:later) | fst v == pversion -> (Just v, later)
+            later -> (Nothing, later)
+        versionList = commaList $ map versionedLink earlierVersions
+                               ++ [strong ! (maybe [] (status . snd) thisVersion) << display pversion]
+                               ++ map versionedLink laterVersions
+        versionedLink (v, s) = anchor ! (status s ++ [href $ packageURL $ PackageIdentifier pname v]) << display v
+        status st = case st of
+            NormalVersion -> []
+            DeprecatedVersion  -> [theclass "deprecated"]
+            UnpreferredVersion -> [theclass "unpreferred"]
+
+renderFields :: PackageRender -> [(String, Html)]
+renderFields render = [
         -- Cabal-Version
         ("License",     toHtml $ rendLicenseName render),
         ("Copyright",   toHtml $ P.copyright desc),
@@ -215,13 +181,12 @@ renderModuleForest mb_url = renderForest []
       myUnordList = unordList ! [theclass "modules"]
 
 ------------------------------------------------------------------------------
+-- TODO: most of these should be available from the CoreFeature
+-- so pass it in to this module
 
 -- | URL describing a package.
 packageURL :: PackageIdentifier -> URL
 packageURL pkgId = "/package" </> display pkgId
-
-packageNameURL :: PackageIdentifier -> URL
-packageNameURL pkgId = "/package" </> display (pkgName pkgId)
 
 -- | The name of the package file for a given package identifier
 packageFile :: PackageIdentifier -> URL
