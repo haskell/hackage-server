@@ -81,13 +81,21 @@ main = topHandler $ getOpts >>= \options -> case options of
 
         let stateDir = fromMaybe (confStateDir defaults) (optNewDir opts)
             config = defaults { confStateDir  = stateDir }
-          --adminList = reverse (optNewAdmin opts)
+            parseAdmin adminStr = case break (==':') adminStr of
+                (uname, ':':pass) -> Just (uname, pass)
+                _ -> Nothing
+
+        admin <- case optNewAdmin opts of
+            Nothing  -> return ("admin", "admin")
+            Just str -> case parseAdmin str of
+                Just arg -> return arg
+                Nothing -> fail $ "Couldn't parse username:password in " ++ show str
 
         checkAccidentalDataLoss =<< Server.hasSavedState config
 
         withServer config $ \server -> do
             info "Creating initial state..."
-            Server.initState server
+            Server.initState server admin
             info "Done"
 
     RestoreMode opts -> case optRestore opts of
@@ -200,10 +208,11 @@ main = topHandler $ getOpts >>= \options -> case options of
 
     checkBlankServerState  hasSavedState = when (not hasSavedState) . die $
             "There is no existing server state.\nYou can either import "
-         ++ "existing data using the various --import-* flags, or start with "
-         ++ "an empty state using --initialise. Either way, we have to make "
+         ++ "existing data using the various import modes, or start with"
+         ++ "an empty state using the new mode. Either way, we have to make "
          ++ "sure that there is at least one admin user account, otherwise "
-         ++ "you'll not be able to administer your shiny new hackage server!"
+         ++ "you'll not be able to administer your shiny new hackage server!\n"
+         ++ "Use --help for more information."
 
 topHandler :: IO a -> IO a
 topHandler prog = catch prog handle
@@ -238,8 +247,10 @@ getOpts = do
             _ -> ExitMode $ usageInfo topHeader globalDescriptions ++
                             modeUsageInfo (snd $ head theModes) "\nServer run configuration:" ++ availableCommands
         -- run it - select the correct mode
-        (_, others, []) -> let (mmode, args') = case others of [] -> (fmap snd $ listToMaybe theModes, args)
-                                                               (str:strs) -> (lookup str theModes, strs)
+        -- ignore errors for now, as they might just be arguments from other modes
+        (_, others, _) -> let (mmode, args') = case others of
+                                                   [] -> (fmap snd $ listToMaybe theModes, args)
+                                                   (str:strs) -> (lookup str theModes, strs)
                               in case mmode of
             -- no mode under the command name found
             Nothing   -> ExitMode $ "Not a valid command. Available commands are:\n" ++ availableCommands
@@ -247,8 +258,8 @@ getOpts = do
             Just mode -> case parseHackageMode mode args' of
                 Left errs -> ExitMode $ concat errs ++ "\n" ++ modeUsageInfo mode (modeHeader mode)
                 Right modeOpts -> modeOpts
-        -- none of the above worked
-        (_, _, errs) -> ExitMode $ unlines errs ++ "Try --help."
+        -- none of the above worked.. at the moment, try to assume run mode
+        -- (_, _, errs) -> ExitMode $ unlines errs ++ "Try --help."
   where
     availableCommands = "\nAvailable commands:\n" ++
         concatMap (\(name, mode) -> printf "    %-9s %s\n" name (modeOneLiner mode)) theModes ++
@@ -348,18 +359,18 @@ runDescriptions =
   ]
 
 data NewOpts = NewOpts {
-    optNewAdmin :: [String],
+    optNewAdmin :: Maybe String,
     optNewDir :: Maybe FilePath
 } deriving (Show)
 
 defaultNewOpts :: NewOpts
-defaultNewOpts = NewOpts [] Nothing
+defaultNewOpts = NewOpts Nothing Nothing
 
 newDescriptions :: [OptDescr (NewOpts -> NewOpts)]
 newDescriptions =
   [ Option [] ["admin"]
-      (ReqArg (\name opts -> opts { optNewAdmin = name:optNewAdmin opts }) "NAME")
-      "New server's administrator (default: admin, password admin)"
+      (ReqArg (\name opts -> opts { optNewAdmin = Just name }) "NAME:PASS")
+      "New server's administrator, name:password (default: admin:admin)"
   , Option [] ["state-dir"]
       (ReqArg (\file opts -> opts { optNewDir = Just file }) "DIR")
       "Directory in which to store the persistent state of the server (default state/)"

@@ -11,6 +11,7 @@ module Distribution.Server.Users.Group (
     enumerate,
     fromList,
     unions,
+    queryGroups
   ) where
 
 import Distribution.Server.Users.Types
@@ -49,7 +50,9 @@ data UserGroup = UserGroup {
     groupDesc :: GroupDescription,
     queryUserList :: IO UserList,
     addUserList :: UserId -> IO (),
-    removeUserList :: UserId -> IO ()
+    removeUserList :: UserId -> IO (),
+    canRemoveGroup :: [UserGroup],
+    canAddGroup :: [UserGroup]
 }
 
 empty :: UserList
@@ -72,3 +75,6 @@ fromList ids = UserList $ IntSet.fromList (map (\(UserId uid) -> uid) ids)
 
 unions :: [UserList] -> UserList
 unions groups = UserList (IntSet.unions [ group | UserList group <- groups ])
+
+queryGroups :: [UserGroup] -> IO UserList
+queryGroups = fmap unions . mapM queryUserList

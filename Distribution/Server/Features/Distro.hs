@@ -16,7 +16,7 @@ import Distribution.Server.Distributions.DistroBackup
 
 import Happstack.Server
 import Happstack.State
-import Data.List (intercalate, unlines)
+import Data.List (intercalate)
 import Distribution.Text (display, simpleParse)
 import Control.Monad
 import Distribution.Package
@@ -44,16 +44,18 @@ instance HackageFeature DistroFeature where
       , restoreBackup = Just $ \_ -> distroBackup
       }
 
-
 initDistroFeature :: Config -> CoreFeature -> PackagesFeature -> IO DistroFeature
-initDistroFeature _ _ _ = do
+initDistroFeature _ core _ = do
+    let admins = adminGroup core
     return $ DistroFeature
       { distroResource = DistroResource
           { distroIndexPage = (resourceAt "/distros/.:format") { resourceGet = [("txt", textEnumDistros)], resourcePost = [("", distroNew)] }
           , distroAllPage = (resourceAt "/distro/:distro/.:format") { resourceGet = [("txt", textDistroPkgs)], resourceDelete = [("", distroDelete)] }
-          , distroPackage = (resourceAt "/distro/:distro/:package.:format") { resourceGet = [("txt", textDistroPkg)], resourcePut = [("", distroPackagePut)], resourceDelete = [("", distroPackageDelete)] }
+          , distroPackage = (resourceAt "/distro/:distro/package/:package.:format") { resourceGet = [("txt", textDistroPkg)], resourcePut = [("", distroPackagePut)], resourceDelete = [("", distroPackageDelete)] }
           }
-      , maintainersGroup = getMaintainersGroup
+      , maintainersGroup = \dpath -> case simpleParse =<< lookup "distro" dpath of
+            Nothing -> return Nothing
+            Just dname -> getMaintainersGroup admins dname
       }
   where
     textEnumDistros _ = fmap (toResponse . intercalate ", " . map display) (query EnumerateDistros)
@@ -62,12 +64,14 @@ initDistroFeature _ _ _ = do
         return $ toResponse (unlines $ ("Packages for " ++ display dname):pkglines)
     textDistroPkg dpath = withDistroPackagePath dpath $ \_ _ info -> return . toResponse $ show info
 
+    -- result: see-other uri, or an error: not authenticated or not found (todo)
     distroDelete dpath = withDistroNamePath dpath $ \distro -> do
         -- authenticate Hackage admins
-        -- should also check for existence here..
+        -- should also check for existence here of distro here
         update $ RemoveDistro distro
         seeOther ("/distros/") (toResponse ())
 
+    -- result: ok response or not-found error
     distroPackageDelete dpath = withDistroPackagePath dpath $ \dname pkgname info -> do
         -- authenticate distro maintainer
         case info of
@@ -76,12 +80,13 @@ initDistroFeature _ _ _ = do
                 update $ DropPackage dname pkgname
                 ok $ toResponse "Ok!"
 
-    -- should probably substituted the badRequests with something more specific
+    -- result: see-other response, or an error: not authenticated or not found (todo)
     distroPackagePut dpath = withDistroPackagePath dpath $ \dname pkgname _ -> lookPackageInfo $ \newPkgInfo -> do
         -- authenticate distro maintainer
         update $ AddPackage dname pkgname newPkgInfo
         seeOther ("/distro/" ++ display dname ++ "/" ++ display pkgname) $ toResponse "Ok!"
 
+    -- result: see-other response, or an error: not authentcated or bad request
     distroNew _ = lookDistroName $ \dname -> do
         success <- update $ AddDistro dname
         if success
@@ -127,10 +132,8 @@ lookDistroName func = withDataFn (look "distro") $ \dname -> case simpleParse dn
     Just distro -> func distro
     _ -> badRequest $ toResponse "Not a valid distro name"
 
-getMaintainersGroup :: DynamicPath -> IO (Maybe UserGroup)
-getMaintainersGroup dpath = case simpleParse =<< lookup "distro" dpath of
-  Nothing -> return Nothing
-  Just dname -> do
+getMaintainersGroup :: UserGroup -> DistroName -> IO (Maybe UserGroup)
+getMaintainersGroup admins dname = do
     isDist <- query (IsDistribution dname)
     case isDist of
       False -> return Nothing
@@ -139,13 +142,16 @@ getMaintainersGroup dpath = case simpleParse =<< lookup "distro" dpath of
         , queryUserList = query $ GetDistroMaintainers dname
         , addUserList = update . AddDistroMaintainer dname
         , removeUserList = update . RemoveDistroMaintainer dname
+        , canAddGroup = [admins]
+        , canRemoveGroup = [admins]
         }
+
 
 maintainerDescription :: DistroName -> GroupDescription
 maintainerDescription dname = GroupDescription
   { groupTitle = "Maintainers for " ++ display dname
   , groupShort = ""
   , groupEntityURL = "/distro/" ++ display dname
-  , groupPrologue  = [] --prologue (desciption pkg)?
+  , groupPrologue  = ""
   }
 

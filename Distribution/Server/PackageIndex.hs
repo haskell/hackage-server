@@ -26,6 +26,7 @@ module Distribution.Server.PackageIndex (
     deletePackageId,
 
     -- * Queries
+    indexSize,
 
     -- ** Precise lookups
     lookupPackageName,
@@ -175,6 +176,7 @@ insert pkg (PackageIndex index) = mkPackageIndex $ -- or insertWith const
       GT -> pkg' : insertNoDup pkgs'
 
 -- | Inserts a single package into the index, combining an old and new value with a function.
+-- This isn't in cabal's version of PackageIndex.
 --
 -- The merge function is called as (f newPkg oldPkg). Ensure that the result has the same
 -- package id as the two arguments; otherwise newPkg is used.
@@ -249,6 +251,7 @@ lookupPackageId index pkgid =
     _     -> internalError "lookupPackageIdentifier"
 
 -- | Does a case-sensitive search by package name.
+-- The returned list should be ordered (strictly ascending) by version number.
 --
 lookupPackageName :: Package pkg => PackageIndex pkg -> PackageName -> [pkg]
 lookupPackageName index name =
@@ -313,4 +316,8 @@ searchByNameSubstring (PackageIndex m) searchterm =
   , lsearchterm `isInfixOf` lowercase name
   , pkg <- pkgs ]
   where lsearchterm = lowercase searchterm
+
+-- | Gets the number of packages in the index (number of names).
+indexSize :: Package pkg => PackageIndex pkg -> Int
+indexSize (PackageIndex m) = Map.size m
 

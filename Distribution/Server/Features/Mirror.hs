@@ -44,6 +44,8 @@ import Distribution.Text (simpleParse)
 
 data MirrorFeature = MirrorFeature {
     mirrorResource :: MirrorResource,
+    -- group for mirror uploads. should this be deleted and replaced with admins?
+    -- it's not like the admins are used for anything else in a simple core/mirror setup
     mirrorGroup :: UserGroup
 }
 data MirrorResource = MirrorResource {
@@ -81,6 +83,7 @@ initMirrorFeature config core = do
         }
       }
   where
+    -- result: error from unpacking, bad request error, or warning lines
     packagePut hook store _ = do
         requireMirrorAuth
         withUploadInfo "tarball" $ \input uploadData -> do
@@ -102,6 +105,7 @@ initMirrorFeature config core = do
                     liftIO $ runZeroHook hook
                     return . toResponse $ unlines warnings
 
+    -- return: error from parsing, bad request error, or warning lines
     cabalPut hook _ = do
         requireMirrorAuth
         withUploadInfo "cabal" $ \input uploadData -> do

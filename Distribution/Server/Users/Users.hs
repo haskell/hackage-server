@@ -12,6 +12,7 @@ module Distribution.Server.Users.Users (
     delete,
     setEnabled,
     replaceAuth,
+    rename,
 
     -- * Lookup
     lookupId,
@@ -197,7 +198,7 @@ replaceAuth users userId newAuth
         Deleted    -> userInfo 
 
 -- | Modify a single user. Returns 'Nothing' if the user does not
---   exist.
+--   exist. This function isn't exported.
 modifyUser :: Users -> UserId -> (UserInfo -> UserInfo) -> Maybe Users
 modifyUser users (UserId userId) fn =
     -- I'm using 'updateLookupWithKey' so I can tell if the lookup succeded
@@ -205,11 +206,21 @@ modifyUser users (UserId userId) fn =
       (Nothing,_) -> Nothing
       (_,newMap)  -> Just $ users { userIdMap = newMap }
 
-enumerateAll :: Users -> [(UserId, UserInfo)]
-enumerateAll
-    = mapFst UserId . IntMap.assocs . userIdMap
+-- | Rename a single user, regardless of account status. Returns either the
+-- successfully altered Users structure or a `Maybe UserId` to indicate an
+-- error: `Nothing` if the user does not exist and `Just uid` if there is
+-- already a user by that name.
+rename :: Users -> UserId -> UserName -> Either (Maybe UserId) Users
+rename users uid uname = 
+    case Map.lookup uname (userNameMap users) of
+        Nothing   -> case modifyUser users uid (\user -> user { userName = uname }) of
+            Nothing  -> Left Nothing
+            Just new -> Right new
+        Just uid' -> Left $ Just uid'
 
- where mapFst f = map $ \(x,y) -> (f x, y)
+enumerateAll :: Users -> [(UserId, UserInfo)]
+enumerateAll = mapFst UserId . IntMap.assocs . userIdMap
+  where mapFst f = map $ \(x,y) -> (f x, y)
 
 enumerateEnabled :: Users -> [(UserId, UserInfo)]
 enumerateEnabled users = [ x | x@(_, UserInfo { userStatus = Active Enabled _ }) <- enumerateAll users ]

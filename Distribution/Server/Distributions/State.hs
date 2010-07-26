@@ -19,7 +19,6 @@ import Distribution.Server.Distributions.Distributions
 import Distribution.Server.Users.Group (UserList)
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Types (UserId)
-import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.State ()
 
 import Data.Typeable

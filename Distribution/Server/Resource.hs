@@ -18,10 +18,9 @@ module Distribution.Server.Resource (
     serveResource,
 
     -- | URI generation
-    URIGen,
     renderURI,
     renderResource,
-    renderLink,
+    renderResource',
 
     -- | ServerTree
     ServerTree(..),
@@ -32,22 +31,20 @@ module Distribution.Server.Resource (
   ) where
 
 import Happstack.Server
+import Distribution.Server.Util.Happstack (remainingPathString)
 import Distribution.Server.Types
 
 import Data.Monoid
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Control.Applicative ((<*>), (<$>))
 import Control.Monad
-import Data.Maybe (maybeToList)
+import Data.Maybe
 import Data.Function (on)
 import Data.List (intercalate, unionBy, findIndices)
 import qualified Text.ParserCombinators.Parsec as Parse
 
 import qualified Happstack.Server.SURI as SURI
 import System.FilePath.Posix ((</>))
---for basic link creating
-import Text.XHtml.Strict (anchor, href, (!), (<<), toHtml, Html)
 import qualified Data.Tree as Tree (Tree(..), drawTree)
 
 type Content = String
@@ -177,10 +174,6 @@ extendResourcePath arg resource =
     loc = resourceLocation resource
     (loc', slash', format') = trunkToResource branch
 
--- other combinatoresque methods here - e.g. addGet :: Content -> ServerResponse -> Resource -> Resource
-
-type URIGen = DynamicPath -> Maybe String
-
 -- Allows the formation of a URI from a URI specification (BranchPath).
 -- URIs may obey additional constraints and have special rules (e.g., formats).
 -- To accomodate these, insteaduse renderResource to get a URI.
@@ -190,24 +183,24 @@ type URIGen = DynamicPath -> Maybe String
 --
 -- renderURI (trunkAt "/home/:user/..")
 --    [("user", "mgruen"), ("..", "docs/todo.txt")]
---    == Just "/home/mgruen/docs/todo.txt"
-renderURI :: BranchPath -> URIGen
+--    == "/home/mgruen/docs/todo.txt"
+renderURI :: BranchPath -> DynamicPath -> String
 renderURI bpath dpath = renderGenURI bpath (flip lookup dpath)
 
--- Render a URI generally using a function of one's choosing (usually flip lookup)
--- Stops when a requested field is needed.
-renderGenURI :: BranchPath -> (String -> Maybe String) -> Maybe String
-renderGenURI bpath pathFunc = ("/" </>) <$> go (reverse bpath)
-    where go (StaticBranch  sdir:rest) = (SURI.escape sdir </>) <$> go rest
-          go (DynamicBranch sdir:rest) = ((</>) . SURI.escape) <$> pathFunc sdir <*> go rest
-          go (TrailingBranch:_) = pathFunc ".."
-          go [] = Just ""
+-- Render a URI generally using a function of one's choosing (usually flip lookup dpath)
+-- Stops when a requested field is not found, yielding an incomplete URI. I think
+-- this is better than having a function that doesn't return *some* result.
+renderGenURI :: BranchPath -> (String -> Maybe String) -> String
+renderGenURI bpath pathFunc = "/" </> go (reverse bpath)
+  where go (StaticBranch  sdir:rest) = SURI.escape sdir </> go rest
+        go (DynamicBranch sdir:rest) = case pathFunc sdir of
+            Nothing  -> ""
+            Just str -> SURI.escape str </> go rest
+        go (TrailingBranch:_) = fromMaybe "" $ pathFunc ".."
+        go [] = ""
 
 -- Doesn't use a DynamicPath - rather, munches path components from a list
 -- it stops if there aren't enough, and returns the extras if there's more than enough.
---
--- This approach makes it a bit easier to be type-safe, but nonetheless it's
--- less flexible (general) than renderGenURI.
 --
 -- Trailing branches currently are assumed to be complete escaped URI paths.
 renderListURI :: BranchPath -> [String] -> (String, [String])
@@ -217,20 +210,31 @@ renderListURI bpath list = let (res, extra) = go (reverse bpath) list in ("/" </
           go (TrailingBranch:_) xs = case xs of [] -> ("", []); (x:rest) -> (x, rest)
           go _ rest = ("", rest)
 
--- Given a Resource, construct a URIGen. If the Resource uses a dynamic format, it can
+-- Given a Resource, construct a URI generator. If the Resource uses a dynamic format, it can
 -- be passed in the DynamicPath as "format". Trailing slash conventions are obeyed.
 --
 -- See documentation for the Resource to see the conventions in interpreting the DynamicPath.
--- As in renderURI, ".." is interpreted as the trailing branch.
+-- As in renderURI, ".." is interpreted as the trailing branch. It should be the case that
+--
+-- > fix $ \r -> (resourceAt uri) { resourceGet = [("txt", ok . toResponse . renderResource' r)] }
+--
+-- will print the URI that was used to request the page.
 --
 -- renderURI (resourceAt "/home/:user/docs/:doc.:format")
---     [("user", "mgruen"), ("doc", "todo"), ("format", "json")]
---     == Just "/home/mgruen/docs/todo.txt"
-renderMaybeResource :: Resource -> URIGen
-renderMaybeResource resource dpath = case renderGenURI (normalizeResourceLocation resource) (flip lookup dpath) of
-    Nothing  -> Nothing
-    Just str -> Just $ renderResourceFormat resource (lookup "format" dpath) str
+--     [("user", "mgruen"), ("doc", "todo"), ("format", "txt")]
+--     == "/home/mgruen/docs/todo.txt"
+renderResource' :: Resource -> DynamicPath -> String
+renderResource' resource dpath = renderResourceFormat resource (lookup "format" dpath)
+               $ renderGenURI (normalizeResourceLocation resource) (flip lookup dpath)
 
+
+-- A more convenient form of renderResource'. Used when you know the path structure.
+-- The first argument unused in the path, if any, will be used as a dynamic format,
+-- if any.
+--
+-- renderResource (resourceAt "/home/:user/docs/:doc.:format")
+--     ["mgruen", "todo", "txt"]
+--     == "/home/mgruen/docs/todo.txt"
 renderResource :: Resource -> [String] -> String
 renderResource resource list = case renderListURI (normalizeResourceLocation resource) list of
     (str, format:_) -> renderResourceFormat resource (Just format) str
@@ -259,14 +263,7 @@ renderResourceFormat resource dformat str = case (resourcePathEnd resource, reso
     -- This case might be taken by TrailingBranch
     _ -> str
 
--- Given a URIGen, a DynamicPath, and a String for the text, construct an HTML
--- node that is just the text if the URI generation fails, and a link with the
--- text inside otherwise. A convenience function.
-renderLink :: URIGen -> DynamicPath -> String -> Html
-renderLink gen dpath text = case gen dpath of
-    Nothing  -> toHtml text
-    Just uri -> anchor ! [href uri] << text
-
+-----------------------
 -- Converts the output of parseTrunkFormatAt to something consumable by a Resource
 -- It forbids many things that parse correctly, most notably using formats in the middle of a path.
 -- It's possible in theory to allow such things, but complicated.
@@ -355,8 +352,8 @@ parseFormatTrunkAt = do
 
 -- serveResource does all the path format and HTTP method preprocessing for a Resource
 --
--- For a small curl-based test suite of [Resource]:
--- [res "/foo" ["json"], res "/foo/:bar.:format" ["html", "json"], res "/baz/test/.:format" ["html", "text", "json"], res "/package/:package/:tarball.tar.gz" ["tarball"], res "/a/:a/:b/" ["html", "json"], res "/mon/..." [""], res "/wiki/path.:format" [], res "/hi.:format" ["yaml", "mofo"]]
+-- For a small curl-based testing mini-suite of [Resource]:
+-- [res "/foo" ["json"], res "/foo/:bar.:format" ["html", "json"], res "/baz/test/.:format" ["html", "text", "json"], res "/package/:package/:tarball.tar.gz" ["tarball"], res "/a/:a/:b/" ["html", "json"], res "/mon/..." [""], res "/wiki/path.:format" [], res "/hi.:format" ["yaml", "blah"]]
 --     where res field formats = (resourceAt field) { resourceGet = map (\format -> (format, \_ -> return . toResponse . (++"\n") . ((show format++" - ")++) . show)) formats }
 serveResource :: Resource -> ServerResponse
 serveResource (Resource _ rget rput rpost rdelete rformat rend) = \dpath -> msum $
@@ -372,9 +369,10 @@ serveResource (Resource _ rget rput rpost rdelete rformat rend) = \dpath -> msum
     -- > Potentially redirect to canonical slash form
     -- > Go from format/content-type to ServerResponse to serve-}
     serveResources :: [Method] -> [(Content, ServerResponse)] -> ServerResponse
-    serveResources met res = case rend of
-        Trailing -> \dpath -> methodOnly met >> serveContent res dpath
-        _ -> \dpath -> serveFormat res met dpath
+    serveResources met res dpath = case rend of
+        Trailing -> methodOnly met >> (remainingPathString >>= \str ->
+                                       serveContent res (("..", str):dpath))
+        _ -> serveFormat res met dpath
     serveFormat :: [(Content, ServerResponse)] -> [Method] -> ServerResponse
     serveFormat res met = case rformat of
         ResourceFormat NoFormat Nothing -> \dpath -> methodSP met $ serveContent res dpath
@@ -474,10 +472,10 @@ data ServerTree a = ServerTree {
 instance Functor ServerTree where
     fmap func (ServerTree value forest) = ServerTree (fmap func value) (Map.map (fmap func) forest)
 
-drawServerTree :: ServerTree a -> String
-drawServerTree tree = Tree.drawTree (transformTree tree Nothing)
+drawServerTree :: ServerTree a -> Maybe (a -> String) -> String
+drawServerTree tree func = Tree.drawTree (transformTree tree Nothing)
   where transformTree (ServerTree res for) mlink = Tree.Node (drawLink mlink res) (map transformForest $ Map.toList for)
-        drawLink mlink res = maybe "" ((++": ") . show) mlink ++ maybe "(nothing)" (const "response") res
+        drawLink mlink res = maybe "" ((++": ") . show) mlink ++ maybe "(nothing)" (fromMaybe (const "node") func) res
         transformForest (link, tree') = transformTree tree' (Just link)
 
 serverTreeEmpty :: ServerTree a

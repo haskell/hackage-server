@@ -80,9 +80,9 @@ mergePkg pkg = State.modify $ \pkgsState -> pkgsState { packageList = PackageInd
       }
     sortByDate xs = sortBy (comparing (fst . snd)) xs
 
-deletePkg :: PackageId -> Update PackagesState ()
-deletePkg pkg = State.modify $ \pkgsState -> pkgsState { packageList = deleteVersion (packageList pkgsState) }
-    where deleteVersion = PackageIndex.deletePackageId (packageId pkg)
+deletePackageVersion :: PackageId -> Update PackagesState ()
+deletePackageVersion pkg = State.modify $ \pkgsState -> pkgsState { packageList = deleteVersion (packageList pkgsState) }
+    where deleteVersion = PackageIndex.deletePackageId pkg
 
 -- |Replace all existing packages and reports
 replacePackagesState :: PackagesState -> Update PackagesState ()
@@ -96,7 +96,7 @@ $(mkMethods ''PackagesState ['getPackagesState
                             ,'replacePackagesState
                             ,'insertPkgIfAbsent
                             ,'mergePkg
-                            ,'deletePkg
+                            ,'deletePackageVersion
                             ])
 
 ---------------------------------- Index of candidate tarballs and metadata
@@ -251,7 +251,7 @@ $(mkMethods ''PackageMaintainers ['getPackageMaintainers
 -------------------------------- Trustee list
 -- this could be reasonably merged into the above, as a PackageGroups data structure
 data HackageTrustees = HackageTrustees {
-    trustees :: UserList
+    trusteeList :: UserList
 } deriving (Show, Typeable)
 
 instance Version HackageTrustees where
@@ -263,10 +263,10 @@ instance Component HackageTrustees where
   initialValue = HackageTrustees Group.empty
 
 getHackageTrustees :: Query HackageTrustees UserList
-getHackageTrustees = asks trustees
+getHackageTrustees = asks trusteeList
 
 modifyHackageTrustees :: (UserList -> UserList) -> Update HackageTrustees ()
-modifyHackageTrustees func = State.modify (\ht -> ht {trustees = func (trustees ht) })
+modifyHackageTrustees func = State.modify (\ht -> ht {trusteeList = func (trusteeList ht) })
 
 addHackageTrustee :: UserId -> Update HackageTrustees ()
 addHackageTrustee uid = modifyHackageTrustees (Group.add uid)

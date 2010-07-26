@@ -43,6 +43,15 @@ replaceUserAuth :: UserId -> UserAuth -> Update Users Bool
 replaceUserAuth userId auth
     = updateUsers $ \users -> Users.replaceAuth users userId auth
 
+renameUser :: UserId -> UserName -> Update Users (Maybe (Maybe UserId))
+renameUser uid uname = do
+  users <- State.get
+  case Users.rename users uid uname of
+    Left err -> return $ Just err
+    Right users' -> do
+      State.put users'
+      return Nothing
+
 -- updates the user db with a simpler function
 updateUsers :: (Users -> Maybe Users) -> Update Users Bool
 updateUsers f = updateUsers' updateFn isJust
@@ -80,6 +89,7 @@ $(mkMethods ''Users ['addUser
                     ,'setEnabledUser
                     ,'deleteUser
                     ,'replaceUserAuth
+                    ,'renameUser
                     ,'lookupUserName
                     ,'getUserDb
                     ,'replaceUserDb

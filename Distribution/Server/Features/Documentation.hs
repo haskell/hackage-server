@@ -9,15 +9,14 @@ import Distribution.Server.Resource
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
 import Distribution.Server.Types
+import Distribution.Server.Error
 
 import Distribution.Server.Packages.State
-import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Backup.Export
 import Distribution.Server.Util.BlobStorage (BlobId, BlobStorage)
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import qualified Distribution.Server.Util.Serve as TarIndex
 import Data.TarIndex (TarIndex)
-import qualified Data.TarIndex as TarIndex
 
 import Distribution.Text
 import Distribution.Package
@@ -57,21 +56,23 @@ initDocumentationFeature config _ _ = do
     return DocumentationFeature
       { documentationResource = fix $ \r -> DocumentationResource
           { packageDocs = (resourceAt "/package/:package/doc/..") { resourceGet = [("", serveDocumentation store)] }
-          , packageDocsUpload = (resourceAt "/package/:package/doc/.:format") { resourcePost = [("", uploadDocumentation store)] }
+          , packageDocsUpload = (resourceAt "/package/:package/doc/.:format") { resourcePost = [("txt", textResponse . uploadDocumentation store)] }
           , packageDocUri = \pkgid str -> renderResource (packageDocs r) [display pkgid, str]
           }
       }
   where
 
+-- return: not-found error or tarball
 serveDocumentation :: BlobStorage -> DynamicPath -> ServerPart Response
 serveDocumentation store dpath = withDocumentation dpath $ \pkgid blob index -> do
     let tarball = BlobStorage.filepath store blob
     TarIndex.serveTarball ["index.html"] (display $ packageName pkgid) tarball index
 
-uploadDocumentation :: BlobStorage -> DynamicPath -> ServerPart Response
-uploadDocumentation store dpath = withPackageId dpath $ \pkgid -> do
-    requirePackageAuth pkgid
-    withRequest $ \req -> do
+-- return: not-found error (parsing) or see other uri
+uploadDocumentation :: BlobStorage -> DynamicPath -> MServerPart Response
+uploadDocumentation store dpath = withPackageId dpath $ \pkgid ->
+                                  withPackageAuth pkgid $ \_ _ ->
+                                  withRequest $ \req -> do
         {-
           The order of operations:
           - Insert new documentation into blob store
@@ -83,9 +84,9 @@ uploadDocumentation store dpath = withPackageId dpath $ \pkgid -> do
         blob <- liftIO $ BlobStorage.add store (GZip.decompress fileContents)
         tarIndex <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blob)
         update $ InsertDocumentation pkgid blob tarIndex
-        seeOther ("/package/" ++ display pkgid) (toResponse ())
+        fmap Right $ seeOther ("/package/" ++ display pkgid) (toResponse ())
 
-withDocumentation :: DynamicPath -> (PackageId -> BlobId -> TarIndex -> ServerPart Response) -> ServerPart Response
+withDocumentation :: DynamicPath -> (PackageId -> BlobId -> TarIndex -> ServerPart a) -> ServerPart a
 withDocumentation dpath func = withPackageId dpath $ \pkgid -> do
     mdocs <- query $ LookupDocumentation pkgid
     case mdocs of

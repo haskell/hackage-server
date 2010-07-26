@@ -23,14 +23,14 @@ import System.FilePath.Posix (takeExtension, (</>))
 -- handler fails. 
 remainingPath :: ([String] -> ServerPart a) -> ServerPart a
 remainingPath handle = do
-  rq <- askRq
-  localRq (\newRq -> newRq{rqPaths=[]}) $ handle (rqPaths rq)
+    rq <- askRq
+    localRq (\newRq -> newRq{rqPaths=[]}) $ handle (rqPaths rq)
 
--- |Passes the concatenated remaining path segments in the URL. Does not
--- include the query string. This call only fails if the passed in
--- handler fails.
-remainingPathString :: (String -> ServerPart a) -> ServerPart a
-remainingPathString handle = remainingPath $ \strs -> handle $ if null strs then "" else foldr1 (</>) . map SURI.escape $ strs
+-- | Gets the string without altering the request.
+remainingPathString :: ServerPart String
+remainingPathString = do
+    strs <- fmap rqPaths $ askRq
+    return $ if null strs then "" else foldr1 (</>) . map SURI.escape $ strs
 
 -- |Returns a mime-type string based on the extension of the passed in
 -- file.

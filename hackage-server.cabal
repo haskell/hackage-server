@@ -41,38 +41,51 @@ executable hackage-server
     Distribution.Server.Auth.Crypt
     Distribution.Server.Auth.HtPasswdDb
     Distribution.Server.Auth.Types
-    Distribution.Server.BuildReport.BuildReport
-    Distribution.Server.BuildReport.BuildReports
     Distribution.Server.Backup.BulkImport
+    Distribution.Server.Backup.Export
     Distribution.Server.Backup.FlatFiles
     Distribution.Server.Backup.Import
-    Distribution.Server.Backup.ServerParts
     Distribution.Server.Backup.UploadLog
     Distribution.Server.Backup.Utils
+    Distribution.Server.BuildReport.BuildReport
+    Distribution.Server.BuildReport.BuildReports
+    Distribution.Server.BuildReport.ReportsBackup
+    Distribution.Server.BuildReport.State
     Distribution.Server.Cache
     Distribution.Server.Distributions.Distributions
-    Distribution.Server.Distributions.ServerParts
+    Distribution.Server.Distributions.DistroBackup
     Distribution.Server.Distributions.State
     Distribution.Server.Distributions.Types
+    Distribution.Server.Error
     Distribution.Server.Feature
     Distribution.Server.Features
     Distribution.Server.Features.Check
     Distribution.Server.Features.Core
     Distribution.Server.Features.Distro
+    Distribution.Server.Features.Documentation
+    Distribution.Server.Features.DownloadCount
     Distribution.Server.Features.Html
     Distribution.Server.Features.Json
     Distribution.Server.Features.LegacyRedirects
     Distribution.Server.Features.Mirror
     Distribution.Server.Features.Packages
-    Distribution.Server.Features.StaticFiles
+    Distribution.Server.Features.PreferredVersions
+    Distribution.Server.Features.Reports
+    Distribution.Server.Features.ReverseDependencies
+    Distribution.Server.Features.Tags
     Distribution.Server.Features.Upload
     Distribution.Server.Features.Users
+    Distribution.Server.Hook
     Distribution.Server.Instances
     Distribution.Server.PackageIndex
+    Distribution.Server.Packages.Downloads
     Distribution.Server.Packages.Index
     Distribution.Server.Packages.ModuleForest
-    Distribution.Server.Packages.ServerParts
+    Distribution.Server.Packages.PackageBackup
+    Distribution.Server.Packages.Preferred
+    Distribution.Server.Packages.Reverse
     Distribution.Server.Packages.State
+    Distribution.Server.Packages.Tag
     Distribution.Server.Packages.Types
     Distribution.Server.Packages.Unpack
     Distribution.Server.Pages.BuildReports
@@ -84,21 +97,21 @@ executable hackage-server
     Distribution.Server.Pages.Package.HaddockLex
     Distribution.Server.Pages.Package.HaddockParse
     Distribution.Server.Pages.Recent
+    Distribution.Server.Pages.Reverse
     Distribution.Server.Pages.Template
     Distribution.Server.Pages.Util
     Distribution.Server.Resource
     Distribution.Server.ResourceTypes
-    Distribution.Server.ServerParts
     Distribution.Server.State
     Distribution.Server.Users.Group
-    Distribution.Server.Users.ServerParts
     Distribution.Server.Users.State
     Distribution.Server.Users.Types
+    Distribution.Server.Users.UserBackup
     Distribution.Server.Users.Users
     Distribution.Server.Util.AsyncVar
     Distribution.Server.Util.BlobStorage
-    Distribution.Server.Util.Index
     Distribution.Server.Util.Happstack
+    Distribution.Server.Util.Index
     Distribution.Server.Util.Parse
     Distribution.Server.Util.Serve
     Distribution.Server.Util.TarIndex
@@ -112,6 +125,7 @@ executable hackage-server
     old-time >= 1.0,
     -- we'd like to use just the new time library howerer
     -- the rss packages uses old-time in it's public api :-(
+    parallel == 2.2.0.*,
     old-locale >= 1.0,
     directory >= 1.0,
     random >= 1.0,
@@ -133,6 +147,9 @@ executable hackage-server
     happstack-state  == 0.5.*,
     happstack-server == 0.5.*,
     uri == 0.1.*
+  build-tools:
+    alex == 2.3.*,
+    happy == 1.18.*
 
   if os(linux)
      extra-libraries: crypt
@@ -140,5 +157,5 @@ executable hackage-server
      includes: crypt.h
   else
      includes: unistd.h
-  ghc-options: -Wall -fno-warn-orphans -threaded
--- -Werror -fno-warn-warnings-deprecations
+  ghc-options: -Wall -fno-warn-orphans -fno-warn-unused-do-bind -fno-warn-warnings-deprecations
+-- others: -Werror, -threaded

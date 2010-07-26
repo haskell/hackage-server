@@ -8,7 +8,8 @@ import qualified Happstack.Server as Happs
 
 -- | The feature to serve the static html files.
 --
--- Don't think this is going to be used that much.
+-- Don't think this is going to be used that much, as it's not too modular, and
+-- must be last in order. Top-level handling seems more appropriate.
 staticFilesFeature :: HackageFeature
 staticFilesFeature = HackageFeature {
 

@@ -2,12 +2,19 @@ module Distribution.Server.Features.Core (
     CoreFeature(..),
     CoreResource(..),
     initCoreFeature,
-    withPackage,
+    basicPackageSection,
+
     withPackageId,
-    withPackagePath,
     withPackageName,
+    withPackage,
+    withPackagePath,
+    withPackageAll,
+    withPackageAllPath,
+    withPackageVersion,
+    withPackageVersionPath,
     withPackageTarball,
-    basicPackageSection
+
+    doDeletePackage
   ) where
 
 --import Distribution.Server.Users.Resource (makeGroupResources)
@@ -19,6 +26,7 @@ import Distribution.Server.Feature
 import Distribution.Server.Resource
 import Distribution.Server.Types
 import Distribution.Server.Hook
+import Distribution.Server.Error
 import Distribution.Server.Backup.Export
 
 import Distribution.Server.Packages.Types
@@ -32,16 +40,17 @@ import qualified Distribution.Server.PackageIndex as PackageIndex
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
 
-
-import Control.Monad (guard)
+import Control.Monad (guard, mzero)
 import Control.Monad.Trans (liftIO)
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Monoid (mconcat)
 import Data.Function (fix)
 import Happstack.Server
 import Happstack.State (update, query)
 import Text.XHtml.Strict (Html, toHtml, unordList, h3, (<<), anchor, href, (!))
 import Data.Ord (comparing)
-import Data.List (sortBy, maximumBy, find)
+import Data.List (sortBy, find)
 import qualified Data.ByteString.Lazy.Char8 as BS
 
 import Distribution.Text (display)
@@ -50,13 +59,19 @@ import Distribution.Version (Version(..))
 
 data CoreFeature = CoreFeature {
     coreResource :: CoreResource,
-    cacheIndexTarball :: Cache.GenCache BS.ByteString,
-    cachePackagesPage :: Cache.GenCache Response,
+    cacheIndexTarball :: Cache.Cache BS.ByteString,
+    -- this is HTML and doesn't belong here D:
+    cachePackagesPage :: Cache.Cache Response,
+    -- other files to put in the index tarball like preferred-versions
+    indexExtras :: Cache.Cache (Map String BS.ByteString),
     -- Updating top-level packages
-    -- A Maybe PkgInfo argument might also be desirable.
-    packageIndexChange :: HookList (IO ()),
-    -- For download counters, although an update for every download doesn't scale well
-    tarballDownload    :: HookList (PackageId -> IO ()),
+    packageAddHook    :: Hook (PkgInfo -> IO ()),
+    packageRemoveHook :: Hook (PkgInfo -> IO ()),
+    packageChangeHook :: Hook (PkgInfo -> PkgInfo -> IO ()),
+    packageIndexChange :: Hook (IO ()),
+
+    -- For download counters
+    tarballDownload    :: Hook (PackageId -> IO ()),
     adminGroup :: UserGroup
 }
 data CoreResource = CoreResource {
@@ -66,9 +81,11 @@ data CoreResource = CoreResource {
     corePackagePage  :: Resource,
     coreCabalFile    :: Resource,
     corePackageTarball :: Resource,
+
     indexTarballUri   :: String,
     indexPackageUri   :: String -> String,
-    corePackageUri :: String -> PackageId -> String,
+    corePackageUri  :: String -> PackageId -> String,
+    corePackageName :: String -> PackageName -> String,
     coreCabalUri   :: PackageId -> String,
     coreTarballUri :: PackageId -> String
 }
@@ -77,7 +94,6 @@ instance HackageFeature CoreFeature where
     getFeature core = HackageModule
       { featureName = "core"
       , resources   = map ($coreResource core) [coreIndexPage, coreIndexTarball, corePackagesPage, corePackagePage, corePackageTarball, coreCabalFile]
-                      -- maybe: makeGroupResources (trunkAt "/users/admins") (adminGroup core)
       , dumpBackup = Just $ \store -> do
             users    <- query GetUserDb
             packages <- query GetPackagesState
@@ -86,17 +102,21 @@ instance HackageFeature CoreFeature where
             return $ packageEntries ++ [csvToBackup ["users.csv"] $ usersToCSV users, csvToBackup ["admins.csv"] $ groupToCSV admins]
       , restoreBackup = Just $ \store -> mconcat [userBackup, packagesBackup store, groupBackup ["admins.csv"] ReplaceHackageAdmins]
       }
-    initHooks core = [runZeroHook (packageIndexChange core)]
+    initHooks core = [runHook (packageIndexChange core)]
 
 initCoreFeature :: Config -> IO CoreFeature
 initCoreFeature config = do
     -- Caches
-    thePackages <- Cache.newCacheable
-    indexTar    <- Cache.newCacheable
-    -- Hooks
-    downHook <- newHookList
-    changeHook <- newHookList
-    registerHook changeHook $ computeCache thePackages indexTar
+    thePackages <- Cache.newCacheable $ toResponse ()
+    indexTar <- Cache.newCacheable BS.empty
+    extraMap <- Cache.newCacheable Map.empty
+
+    downHook <- newHook
+    addHook  <- newHook
+    removeHook <- newHook
+    changeHook <- newHook
+    indexHook <- newHook
+    registerHook indexHook $ computeCache thePackages indexTar
 
     return CoreFeature
       { coreResource = fix $ \r -> CoreResource {
@@ -107,21 +127,29 @@ initCoreFeature config = do
           , corePackagePage = (resourceAt "/package/:package.:format") { resourceGet = [("html", basicPackagePage r)] }
           , corePackageTarball = (resourceAt "/package/:package/:tarball.tar.gz") { resourceGet = [("tarball", servePackageTarball downHook $ serverStore config)] }
           , coreCabalFile  = (resourceAt "/package/:package/:cabal.cabal") { resourceGet = [("cabal", serveCabalFile)] }
+
           , indexTarballUri = renderResource (coreIndexTarball r) []
           , indexPackageUri = \format -> renderResource (corePackagesPage r) [format]
           , corePackageUri  = \format pkgid -> renderResource (corePackagePage r) [display pkgid, format]
+          , corePackageName = \format pkgname -> renderResource (corePackagePage r) [display pkgname, format]
           , coreCabalUri   = \pkgid -> renderResource (coreCabalFile r) [display pkgid, display (packageName pkgid)]
           , coreTarballUri = \pkgid -> renderResource (corePackageTarball r) [display pkgid, display pkgid]
           }
       , cacheIndexTarball  = indexTar
       , cachePackagesPage  = thePackages
-      , packageIndexChange = changeHook
+      , indexExtras = extraMap
+      , packageAddHook = addHook
+      , packageRemoveHook = removeHook
+      , packageChangeHook = changeHook
+      , packageIndexChange = indexHook
       , tarballDownload = downHook
       , adminGroup = UserGroup {
             groupDesc = nullDescription { groupTitle = "Hackage admins", groupEntityURL = "/" },
             queryUserList = query GetHackageAdmins,
             addUserList = update . AddHackageAdmin,
-            removeUserList = update . RemoveHackageAdmin
+            removeUserList = update . RemoveHackageAdmin,
+            canAddGroup = [],
+            canRemoveGroup = []
         }
     }
   where
@@ -129,19 +157,19 @@ initCoreFeature config = do
     computeCache thePackages indexTar = do
         users <- query GetUserDb
         index <- fmap packageList $ query GetPackagesState
-        -- TODO: instead of using the complicated pages feature, make a basicPackageIndex function
+        -- TODO: instead of using a complicated pages module, make a basicPackageIndex function
         Cache.putCache thePackages (toResponse $ Resource.XHtml $ Pages.packageIndex index)
         Cache.putCache indexTar (GZip.compress $ Packages.Index.write users index)
 
 -- Should probably look more like an Apache index page (Name / Last modified / Size / Content-type)
 basicPackagePage :: CoreResource -> DynamicPath -> ServerPart Response
-basicPackagePage r dpath = withPackagePath dpath $ \_ _ pkgs ->
-  ok . toResponse $ Resource.XHtml $ showAllP $ sortBy (flip $ comparing packageVersion) pkgs
+basicPackagePage r dpath = textResponse $ withPackagePath dpath $ \_ pkgs ->
+  returnOk $ toResponse $ Resource.XHtml $ showAllP $ sortBy (flip $ comparing packageVersion) pkgs
   where
     showAllP :: [PkgInfo] -> Html
     showAllP pkgs = toHtml [
-    	h3 << "Downloads",
-    	unordList $ map (basicPackageSection (coreCabalUri r) (coreTarballUri r)) pkgs
+        h3 << "Downloads",
+        unordList $ map (basicPackageSection (coreCabalUri r) (coreTarballUri r)) pkgs
      ]
 
 basicPackageSection :: (PackageId -> String) -> (PackageId -> String) -> PkgInfo -> [Html]
@@ -158,44 +186,83 @@ basicPackageSection cabalUrl tarUrl pkgInfo = let pkgId = packageId pkgInfo; pkg
  ]
 
 ------------------------------------------------------------------------------
-
-withPackage :: PackageId -> (PackagesState -> PkgInfo -> [PkgInfo] -> ServerPart Response) -> ServerPart Response
-withPackage pkgid func = do
-    state <- query GetPackagesState
-    case PackageIndex.lookupPackageName (packageList state) (packageName pkgid) of
-        []   -> notFound $ toResponse "No such package in package index"
-        pkgs  | pkgVersion pkgid == Version [] [] -> func state (maximumBy (comparing packageVersion) pkgs) pkgs
-        pkgs -> case find ((== packageVersion pkgid) . packageVersion) pkgs of
-            Nothing  -> notFound $ toResponse "No such package version"
-            Just pkg -> func state pkg pkgs
-
-withPackagePath :: DynamicPath -> (PackagesState -> PkgInfo -> [PkgInfo] -> ServerPart Response) -> ServerPart Response
-withPackagePath dpath func = withPackageId dpath $ \pkgid -> withPackage pkgid func
-
-withPackageId :: DynamicPath -> (PackageId -> ServerPart Response) -> ServerPart Response
+-- 1. explosive growth 2. quality assurance 3. encouraging people to share code
+withPackageId :: DynamicPath -> (PackageId -> ServerPart a) -> ServerPart a
 withPackageId dpath = require (return $ lookup "package" dpath >>= fromReqURI)
 
-withPackageName :: DynamicPath -> (PackageName -> ServerPart Response) -> ServerPart Response
+withPackageName :: DynamicPath -> (PackageName -> ServerPart a) -> ServerPart a
 withPackageName dpath = require (return $ lookup "package" dpath >>= fromReqURI)
 
-withPackageTarball :: DynamicPath -> (PackageId -> ServerPart Response) -> ServerPart Response
+packageError :: [Message] -> MServerPart a
+packageError = returnError 404 "Package not found"
+
+withPackage :: PackageId -> (PkgInfo -> [PkgInfo] -> MServerPart a) -> MServerPart a
+withPackage pkgid func = query GetPackagesState >>= \state ->
+    case PackageIndex.lookupPackageName (packageList state) (packageName pkgid) of
+        []   ->  packageError [MText "No such package in package index"]
+        pkgs  | pkgVersion pkgid == Version [] [] ->
+            -- pkgs is sorted by version number and non-empty
+            func (last pkgs) pkgs
+        pkgs -> case find ((== packageVersion pkgid) . packageVersion) pkgs of
+            Nothing  -> packageError [MText $ "No such package version for " ++ display (packageName pkgid)]
+            Just pkg -> func pkg pkgs
+
+withPackagePath :: DynamicPath -> (PkgInfo -> [PkgInfo] -> MServerPart a) -> MServerPart a
+withPackagePath dpath func = withPackageId dpath $ \pkgid -> withPackage pkgid func
+
+withPackageAll :: PackageName -> ([PkgInfo] -> MServerPart a) -> MServerPart a
+withPackageAll pkgname func = query GetPackagesState >>= \state ->
+    case PackageIndex.lookupPackageName (packageList state) pkgname of
+        []   -> packageError [MText "No such package in package index"]
+        pkgs -> func pkgs
+
+withPackageAllPath :: DynamicPath -> (PackageName -> [PkgInfo] -> MServerPart a) -> MServerPart a
+withPackageAllPath dpath func = withPackageName dpath $ \pkgname -> withPackageAll pkgname (func pkgname)
+
+withPackageVersion :: PackageId -> (PkgInfo -> MServerPart a) -> MServerPart a
+withPackageVersion pkgid func = do
+    guard (packageVersion pkgid /= Version [] [])
+    query GetPackagesState >>= \state -> case PackageIndex.lookupPackageId (packageList state) pkgid of
+        Nothing -> packageError [MText $ "No such package version for " ++ display (packageName pkgid)]
+        Just pkg -> func pkg
+
+withPackageVersionPath :: DynamicPath -> (PkgInfo -> MServerPart a) -> MServerPart a
+withPackageVersionPath dpath func = withPackageId dpath $ \pkgid -> withPackageVersion pkgid func
+
+withPackageTarball :: DynamicPath -> (PackageId -> ServerPart a) -> ServerPart a
 withPackageTarball dpath func = withPackageId dpath $ \(PackageIdentifier name version) ->
     require (return $ lookup "tarball" dpath >>= fromReqURI) $ \pkgid@(PackageIdentifier name' version') -> do
+    -- rules:
+    -- * the package name and tarball name must be the same
+    -- * the tarball must specify a version
+    -- * the package must either have no version or the same version as the tarball
     guard $ name == name' && version' /= Version [] [] && (version == version' || version == Version [] [])
     func pkgid
+
 ------------------------------------------------------------------------
+-- result: tarball or not-found error
+servePackageTarball :: Hook (PackageId -> IO ()) -> BlobStorage -> DynamicPath -> ServerPart Response
+servePackageTarball hook store dpath = textResponse $
+                                       withPackageTarball dpath $ \pkgid ->
+                                       withPackage pkgid $ \pkg _ ->
+    case pkgTarball pkg of
+        [] -> mzero
+        ((blobId, _):_) -> do
+            file <- liftIO $ BlobStorage.fetch store blobId
+            liftIO $ runHook' hook pkgid
+            returnOk $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)
 
-servePackageTarball :: HookList (PackageId -> IO ()) -> BlobStorage -> DynamicPath -> ServerPart Response
-servePackageTarball hook store dpath = withPackageTarball dpath $ \pkgid -> withPackage pkgid $ \_ pkg _ -> case pkgTarball pkg of
-    [] -> notFound $ toResponse "No tarball available"
-    ((blobId, _):_) -> do
-        file <- liftIO $ BlobStorage.fetch store blobId
-        liftIO $ runOneHook hook pkgid
-        ok $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)
-
+-- result: cabal file or not-found error
 serveCabalFile :: DynamicPath -> ServerPart Response
-serveCabalFile dpath = withPackagePath dpath $ \_ pkg _ -> do
+serveCabalFile dpath = textResponse $ withPackagePath dpath $ \pkg _ -> do
     guard (lookup "cabal" dpath == Just (display $ packageName pkg))
-    ok $ toResponse (Resource.CabalFile (pkgData pkg))
+    returnOk $ toResponse (Resource.CabalFile (pkgData pkg))
 
-------------------------------------------------------------------------
+-- very important: get some sort of authentication before calling this function
+doDeletePackage :: CoreFeature -> DynamicPath -> MServerPart ()
+doDeletePackage core dpath = withPackageId dpath $ \pkgid -> withPackageVersion pkgid $ \pkg -> do
+    update $ DeletePackageVersion pkgid
+    runHook' (packageRemoveHook core) pkg
+    runHook (packageIndexChange core)
+    returnOk ()
+

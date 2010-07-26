@@ -1,38 +1,57 @@
 module Distribution.Server.Hook (
-    HookList,
-    newHookList,
+    Hook,
+    newHook,
     registerHook,
     registerHooks,
+
     runHooks,
-    runZeroHook,
-    runOneHook,
-    runTwoHook
+    runHook,
+    runHook',
+    runHook'',
+
+    runFilters,
+    runFilter,
+    runFilter',
+    runFilter''
   ) where
 
 import Data.IORef
-import Control.Monad
+import Control.Monad.Trans (MonadIO, liftIO)
 
 -- local IORef, nicer than MVar for this task
-data HookList a = HookList (IORef [a])
+data Hook a = Hook (IORef [a])
 
-newHookList :: IO (HookList a)
-newHookList = fmap HookList $ newIORef []
+newHook :: IO (Hook a)
+newHook = fmap Hook $ newIORef []
 
-registerHook :: HookList a -> a -> IO ()
-registerHook (HookList list) hook = modifyIORef list (hook:)
+registerHook :: Hook a -> a -> IO ()
+registerHook (Hook list) hook = modifyIORef list (hook:)
 
-registerHooks :: HookList a -> [a] -> IO ()
+registerHooks :: Hook a -> [a] -> IO ()
 registerHooks hlist hooks = mapM_ (registerHook hlist) hooks
 
-runHooks :: HookList a -> (a -> IO ()) -> IO ()
-runHooks (HookList vlist) func = readIORef vlist >>= mapM_ func
+runHooks :: MonadIO m => Hook a -> (a -> IO b) -> m ()
+runHooks (Hook vlist) func = liftIO $ readIORef vlist >>= mapM_ func
+
+runFilters :: MonadIO m => Hook a -> (a -> IO b) -> m [b]
+runFilters (Hook vlist) func = liftIO $ readIORef vlist >>= mapM func
 
 -- boilerplate code, maybe replaceable by insane typeclass magic
-runZeroHook :: HookList (IO ()) -> IO ()
-runZeroHook list = runHooks list id
+runHook :: MonadIO m => Hook (IO ()) -> m ()
+runHook list = runHooks list id
 
-runOneHook :: HookList (a -> IO ()) -> a -> IO ()
-runOneHook list a = runHooks list (\f -> f a)
+runHook' :: MonadIO m => Hook (a -> IO ()) -> a -> m ()
+runHook' list a = runHooks list (\f -> f a)
 
-runTwoHook :: HookList (a -> b -> IO ()) -> a -> b -> IO ()
-runTwoHook list a b = runHooks list (\f -> f a b)
+runHook'' :: MonadIO m => Hook (a -> b -> IO ()) -> a -> b -> m ()
+runHook'' list a b = runHooks list (\f -> f a b)
+
+runFilter :: MonadIO m => Hook (IO a) -> m [a]
+runFilter list = runFilters list id
+
+runFilter' :: MonadIO m => Hook (a -> IO b) -> a -> m [b]
+runFilter' list a = runFilters list (\f -> f a)
+
+runFilter'' :: MonadIO m => Hook (a -> b -> IO c) -> a -> b -> m [c]
+runFilter'' list a b = runFilters list (\f -> f a b)
+
