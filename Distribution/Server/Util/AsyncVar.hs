@@ -20,7 +20,7 @@ new force initial = do
   outVar <- newMVar initial
   let loop = do
         value <- readChan inChan
-        evaluate (force value) -- TODO: catch exceptions.. also accept 'poison' pills
+        evaluate (force value) -- TODO: catch exceptions.. perhaps..
         _ <- takeMVar outVar
         putMVar outVar value
         loop

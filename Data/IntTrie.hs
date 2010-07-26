@@ -21,7 +21,6 @@ import Prelude hiding (lookup)
 import Data.Typeable ()
 
 import qualified Data.Array.Unboxed as A
-import qualified Data.Array.IArray  as A
 import Data.Array.IArray  ((!))
 import qualified Data.Bits as Bits
 import Data.Word (Word16)

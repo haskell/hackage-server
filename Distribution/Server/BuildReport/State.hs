@@ -9,7 +9,6 @@ import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
 
 import Distribution.Package
 import Happstack.State
-import Happstack.Data.Serialize
 
 import qualified Data.Binary as Binary
 import Control.Monad.Reader

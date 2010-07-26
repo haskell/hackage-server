@@ -10,7 +10,7 @@ import Distribution.Text
 
 import Distribution.Package (PackageIdentifier(..), PackageName(..))
 import Distribution.PackageDescription (GenericPackageDescription(..))
-import Distribution.Version (Version)
+import Distribution.Version (Version(..), VersionRange(..))
 
 import qualified Data.Array.Unboxed as UA
 
@@ -30,6 +30,7 @@ import Data.Maybe (fromJust)
 deriving instance Typeable PackageIdentifier
 deriving instance Typeable GenericPackageDescription
 deriving instance Typeable PackageName
+deriving instance Typeable VersionRange
 
 instance Binary PackageIdentifier where
   put = Binary.put . show
@@ -47,6 +48,11 @@ instance Serialize PackageName where
 
 instance Happs.Version Version
 instance Serialize Version where
+    getCopy = contain textGet
+    putCopy = contain . textPut
+
+instance Happs.Version VersionRange
+instance Serialize VersionRange where
     getCopy = contain textGet
     putCopy = contain . textPut
 

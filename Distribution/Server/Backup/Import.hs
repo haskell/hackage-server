@@ -20,6 +20,8 @@ module Distribution.Server.Backup.Import (
     bytesToString
   ) where
 
+import Distribution.Server.Backup.Utils
+
 import qualified Codec.Archive.Tar as Tar
 import Codec.Compression.GZip (decompress)
 import Control.Monad.State.Class
@@ -35,15 +37,8 @@ import qualified Data.Map as Map
 import System.FilePath (splitDirectories)
 import Data.List (isPrefixOf)
 import Text.CSV hiding (csv)
-
 import qualified Control.Exception as Exception
-
-import Distribution.Server.Backup.Utils
-
 import Distribution.Text
-
-import Data.Monoid
-import qualified Data.Map as Map
 import Data.Map (Map)
 
 type BackupEntry = ([FilePath], ByteString)

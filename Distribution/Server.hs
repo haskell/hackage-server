@@ -46,18 +46,18 @@ import qualified Distribution.Server.Auth.Crypt as Auth
 
 import Distribution.Server.Resource
 import Distribution.Server.Types
+import Distribution.Text
 
 import System.FilePath ((</>))
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist)
 import Control.Concurrent.MVar (MVar)
 import Control.Monad (when, mplus)
+import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Network.URI (URIAuth(URIAuth))
 import Network.BSD (getHostName)
 import Data.Char (toUpper)
 import Data.List (foldl')
-
-import qualified Data.ByteString.Lazy.Char8 as BS
 
 import Paths_hackage_server (getDataDir)
 
@@ -252,20 +252,22 @@ makeFeatureMap server mkBackup = concatMap makeEntry $ serverFeatures server
 
 -- An alternative to an import: starts the server off to a sane initial state.
 -- To accomplish this, we import a 'null' tarball, finalizing immediately after initializing import
-initState ::  Server -> IO ()
-initState server = do
+initState ::  Server -> (String, String) -> IO ()
+initState server (admin, pass) = do
     Import.importBlank (makeFeatureMap server Feature.restoreBackup)
-
     -- create default admin user
-    let userName = Users.UserName "admin"
-        userAuth = Auth.newDigestPass userName (Auth.PasswdPlain "admin") "hackage"
-    res <- update $ AddUser userName (Users.UserAuth userAuth Auth.DigestAuth)
+    muid <- case simpleParse admin of
+        Just uname -> do
+            let userAuth = Auth.newDigestPass uname (Auth.PasswdPlain pass) "hackage"
+            update $ AddUser uname (Users.UserAuth userAuth Auth.DigestAuth)
+        Nothing -> fail "Couldn't parse admin name (should be alphanumeric)"
+    case muid of
+        Just uid -> update $ State.AddHackageAdmin uid
+        Nothing  -> fail "Failed to create admin user"
 
-    case res of
-        Just user -> update $ State.AddHackageAdmin user
-        _ -> fail "Failed to create admin user!"
-
-
+-- The top-level server part.
+-- It collects resources from Distribution.Server.Features, collects
+-- them into a path hierarchy, and serves them.
 impl :: Server -> ServerPart Response
 impl server =
       flip mplus (fileServe ["hackage.html"] . serverStaticDir $ serverConfig server)
@@ -277,9 +279,12 @@ impl server =
     . foldl' (\acc res -> addServerNode (resourceLocation res) res acc) serverTreeEmpty
     -- [Resource]
     $ concatMap Feature.resources (serverFeatures server)
---where showServerTree tree = trace (drawServerTree tree) tree
+--where showServerTree tree = trace (drawServerTree tree Nothing) tree
 
-{-core :: Server -> ServerPart Response
+{-
+Old server:
+
+core :: Server -> ServerPart Response
 core server = msum []
   [ dir "package" $ msum
       [ path $ msum . handlePackageById store

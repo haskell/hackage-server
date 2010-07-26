@@ -14,7 +14,7 @@ import qualified Text.PrettyPrint          as Disp
 import qualified Data.Char as Char
 
 import Data.Binary (Binary)
-import Control.Applicative ((<$>), (<*>), pure)
+import Control.Applicative ((<$>))
 
 import Happstack.Data
 

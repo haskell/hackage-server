@@ -14,12 +14,10 @@ import Distribution.Server.Users.Users (Users(..))
 import Distribution.Server.Users.Group (UserList(..))
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Types
-import Distribution.Server.Auth.Types
 import Distribution.Server.Users.State (ReplaceUserDb(..))
 
 import Happstack.State (update, UpdateEvent)
 import Data.ByteString.Lazy.Char8 (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as BS
 import Distribution.Server.Backup.Import
 import Distribution.Text (display)
 import Data.Version

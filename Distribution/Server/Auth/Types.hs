@@ -28,4 +28,3 @@ $(deriveSerialize ''PasswdHash)
 
 instance Error AuthError where
     noMsg = NoAuthError
-
