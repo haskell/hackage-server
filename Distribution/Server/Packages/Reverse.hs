@@ -29,8 +29,23 @@ import Control.Monad.Reader (ask, asks)
 import Happstack.State hiding (Version)
 import qualified Happstack.State as State (Version)
 
--- The main reverse dependencies map is a drawn-out Map PackageId PackageId.
-type RevDeps = Map PackageName (Map Version (Map PackageName (Set Version)))
+-- The main reverse dependencies map is a drawn-out Map PackageId PackageId,
+-- with an extra component to store ranges (all ranges that *could* be revdeps,
+-- even if no packages in the index currently satisfy those ranges).
+type RevDeps = Map PackageName (Map Version (Map PackageName (Set Version)), Map PackageName (Map Version VersionRange))
+{-
+For selected entries of a map (foo, (2.0, (bar, [1.0]), (bar, (1.0, <3)))):
+This means that bar-1.0 depends on a version of foo <3, and foo 2.0 meets this criterion.
+To convert from one format to another, use:
+inSet (pkgname, version, pkgname', version') = case Map.lookup pkgname' =<< Map.lookup pkgname revs of
+    Nothing -> Set.empty
+    Just m -> maybe (withinRange version) . Map.lookup version' m
+-}
+
+-- TODO: should this be (Maybe (Version, Maybe VersionStatus))?
+-- it should be possible, albeit with a bit more work, to determine all revdeps 
+-- of a package which don't have any versions presently satisfying them.
+-- (for an entry (a, b) of RevDeps, take (union a \ b))
 type ReverseDisplay = Map PackageName (Version, Maybe VersionStatus)
 
 data ReverseIndex = ReverseIndex {
@@ -38,6 +53,7 @@ data ReverseIndex = ReverseIndex {
     flattenedReverse :: Map PackageName (Set PackageName),
     reverseCount :: Map PackageName ReverseCount
 } deriving (Show, Eq, Typeable)
+
 emptyReverseIndex :: ReverseIndex
 emptyReverseIndex = ReverseIndex Map.empty Map.empty Map.empty
 
@@ -62,7 +78,7 @@ updateReverseCount index =
     let deps = reverseDependencies index
         flat = flattenedReverse index
     in index {
-        reverseCount = flip Map.mapWithKey deps $ \pkg versions -> ReverseCount {
+        reverseCount = flip Map.mapWithKey deps $ \pkg (versions, _) -> ReverseCount {
             directReverseCount = Map.size . Map.unions $ Map.elems versions,
             flattenedReverseCount = maybe 0 Set.size $ Map.lookup pkg flat,
             versionReverseCount = Map.map Map.size versions
@@ -94,69 +110,95 @@ constructRevDeps index = foldl' (\revs pkg -> fst $ registerPackage (getAllVersi
 getAllVersions :: PackageIndex PkgInfo -> PackageName -> [Version]
 getAllVersions index = map packageVersion . PackageIndex.lookupPackageName index
 
--- FIXME: this is somewhat broken when a new version of a package is uploaded. The
--- reason is that packages that are registered earlier have dependencies on versions
--- that might not be added to the index later on. This is one of the pains of incremental
--- updates.
--- One possible fix:
--- type RevDeps = Map PackageName (Map PackageName (Map Version VersionRange))
--- An entry (pkgname, (pkgname', (version, range))) means that pkgname'-version
--- depends on all versions of pkgname within range. Just another way of organizing
--- the data. The resulting structure is less fragile though.
-
 -- | Given a package id, modify the entries of the package's dependencies in
 -- the reverse dependencies mapping to include it.
 registerPackage :: (PackageName -> [Version]) -> PkgInfo -> RevDeps -> (RevDeps, Map PackageName [Version])
-registerPackage getVersions pkg revs = (,) =<< (foldl' goRegister revs . Map.toList) $ deps
+registerPackage getVersions pkg revs =
+    let ranges = getAllDependencies pkg
+        deps = getLinkedNodes getVersions ranges
+        revs'  = foldl' goRegister revs $ Map.toList $ Map.intersectionWith (,) ranges deps
+        revs'' = backtrace revs'
+    in (revs'', deps)
   where
     PackageIdentifier name version = packageId pkg
-    deps = getLinkedNodes getVersions pkg
-    goRegister prev (pkgname, versions) =
-        let revPackage = Map.fromList $ map (\v -> (v, Map.singleton name $ Set.singleton version)) versions
-        in  Map.insertWith (\new old -> Map.unionWith (Map.unionWith Set.union) old new) pkgname revPackage prev
-    -- docs: Hedge-union is more efficient on (bigset `union` smallset). 
+    pkgMap = Map.singleton name $ Set.singleton version
+    -- this takes each of the registered packages dependencies and puts an entry of it there
+    -- e.g. a new version of base would not have much work to do here because it has no dependencies
+    goRegister prev (pkgname, (range, versions)) =
+        -- revPackage encodes the dependency (name -> pkgname) in a way that can be inserted into
+        -- pkgname's reverse dependency mapping
+        let revPackage = Map.fromList $ map (\v -> (v, pkgMap)) versions
+            revRange   = Map.singleton name (Map.singleton version range) -- (Map.fromList $ map (\v -> (v, range)) versions)
+        in  Map.insertWith (\(small, small') (big, big') -> (Map.unionWith (Map.unionWith Set.union) big small, Map.unionWith (flip const) big' small')) pkgname (revPackage, revRange) prev
+    -- this uses the package's existing reverse dependencies, regardless of version, to find reverse dependencies for this version in particular
+    -- e.g. a new version of base would have to recalculate the dependencies of nearly all of the packages in the index
+    backtrace prev = case Map.lookup name prev of
+        Nothing -> prev
+        Just (vs, rs) ->
+            let revVersion = Map.map (Set.fromList . map fst . filter (withinRange version . snd) . Map.toList) rs
+            in  Map.insert name (Map.insertWith (\new old -> Map.unionWith Set.union old new) version revVersion vs, rs) prev
 
 -- | Given a package id, modify the entries of the package's dependencies in
 -- the reverse dependencies mapping to exclude it.
 unregisterPackage :: (PackageName -> [Version]) -> PkgInfo -> RevDeps -> (RevDeps, Map PackageName [Version])
-unregisterPackage getVersions pkg revs = (,) =<< (foldl' goUnregister revs . Map.toList) $ deps
+unregisterPackage getVersions pkg revs = -- (,) =<< (foldl' goUnregister revs . Map.toList) $ deps
+    let ranges = getAllDependencies pkg
+        deps = getLinkedNodes getVersions ranges
+        revs'  = foldl' goUnregister revs $ Map.toList $ Map.intersectionWith (,) ranges deps
+        revs'' = backtrace revs'
+    in (revs'', deps)
   where
     PackageIdentifier name version = packageId pkg
-    deps = getLinkedNodes getVersions pkg
-    goUnregister prev (pkgname, versions) =
-        let revPackage = Map.fromList $ map (\v -> (v, Map.singleton name $ Set.singleton version)) versions
-        in  Map.differenceWith (\a b ->
-                keepMap $ Map.differenceWith (\c d ->
-                    keepMap $ Map.differenceWith (\e f ->
-                        keepSet $ Set.difference e f)
-                    c d)
-                a b) prev (Map.singleton pkgname revPackage)
+    pkgMap = Map.singleton name $ Set.singleton version
+    goUnregister prev (pkgname, (range, versions)) =
+        let revPackage = Map.fromList $ map (\v -> (v, pkgMap)) versions
+            revRange   = Map.singleton pkgname (Map.fromList $ map (\v -> (v, range)) versions)
+        -- there are possibly better ways to about this
+        in  Map.differenceWith (\(a, b) (c, d) -> keepMaps $
+              ( Map.differenceWith (\e f ->
+                    keepMap $ Map.differenceWith (\g h ->
+                        keepSet $ Set.difference g h)
+                    e f)
+                a c
+              , Map.differenceWith (\e f -> 
+                    keepMap $ Map.difference e f)
+                b d
+              )) prev (Map.singleton pkgname (revPackage, revRange))
+    backtrace prev = Map.update (\(vs, rs) -> keepMaps (Map.delete version vs, rs)) name prev
 
 --------------------------------------------------------------------------------
 -- Calculating dependencies and selecting versions
 
--- | Given a package id, return all packages in the index that depend on it.
+-- | Given a package, determine the packages on which it depends.
 -- For all such packages, return the specific versions that satisfy the
 -- dependency as indicated in the cabal file.
-getLinkedNodes :: (PackageName -> [Version]) -> PkgInfo -> Map PackageName [Version]
-getLinkedNodes getVersions pkg =
-    Map.mapWithKey (selectVersions . getVersions)
-  $ getAllDependencies pkg
+getLinkedNodes :: (PackageName -> [Version]) -> Map PackageName VersionRange -> Map PackageName [Version]
+getLinkedNodes getVersions pkgs = Map.mapWithKey (\pkg range -> selectVersions range $ getVersions pkg) pkgs
 
 -- | Given a dependency (a package name and a version range), find all versions
 -- in the current package index that satisfy it.
-selectVersions :: [Version] -> VersionRange -> [Version]
-selectVersions versions range = filter (flip withinRange range) versions
+selectVersions :: VersionRange -> [Version] -> [Version]
+selectVersions range versions= filter (flip withinRange range) versions
 
 -- | Collect all dependencies specified in a package's cabal file, considering
 -- all alternatives and unioning them together.
 getAllDependencies :: PkgInfo -> Map PackageName VersionRange
 getAllDependencies pkg = 
-    let desc  = pkgDesc pkg
+    let desc = pkgDesc pkg
     in Map.fromListWith unionVersionRanges $ toDepsList (maybeToList $ condLibrary desc)
                                           ++ toDepsList (map snd $ condExecutables desc)
   where toDepsList :: [CondTree v [Dependency] a] -> [(PackageName, VersionRange)]
-        toDepsList = map (\(Dependency p v) -> (p, v)) . concatMap harvestDependencies
+        toDepsList l = [ (p, v) | Dependency p v <- concatMap harvestDependencies l ]
+
+-- | Collect all dependencies specified in a package's cabal file for a specific package.
+getSingleDependency :: PkgInfo -> PackageName -> VersionRange
+getSingleDependency pkg pkgname = 
+    let desc = pkgDesc pkg
+    in simplifyVersionRange $ foldl unionVersionRanges noVersion $
+                toDepsList (maybeToList $ condLibrary desc)
+             ++ toDepsList (map snd $ condExecutables desc)
+  where toDepsList :: [CondTree v [Dependency] a] -> [VersionRange]
+        toDepsList l = [ v | Dependency p v <- concatMap harvestDependencies l, p == pkgname ]
 
 -- | Collect all dependencies from all branches of a condition tree.
 harvestDependencies :: CondTree v [Dependency] a -> [Dependency]
@@ -174,13 +216,15 @@ harvestDependencies (CondNode _ deps comps) = deps ++ concatMap forComponent com
 -- tx <- ctrl
 type VersionIndex = (PackageName -> (PreferredInfo, [Version]))
 
+-- TODO: this should use the secondary PackageName -> VersionRange mapping in RevDeps,
+-- so it gets all versions...
 perPackageReverse :: VersionIndex -> RevDeps -> PackageName -> ReverseDisplay
 perPackageReverse indexFunc revs pkg = case Map.lookup pkg revs of
     Nothing   -> Map.empty
-    Just dict -> constructReverseDisplay indexFunc (Map.unionsWith Set.union $ Map.elems dict)
+    Just (dict, _) -> constructReverseDisplay indexFunc (Map.unionsWith Set.union $ Map.elems dict)
 
 perVersionReverse :: VersionIndex -> RevDeps -> PackageId -> ReverseDisplay
-perVersionReverse indexFunc revs pkg = case Map.lookup (packageVersion pkg) =<< Map.lookup (packageName pkg) revs of
+perVersionReverse indexFunc revs pkg = case Map.lookup (packageVersion pkg) . fst =<< Map.lookup (packageName pkg) revs of
     Nothing   -> Map.empty
     Just dict -> constructReverseDisplay indexFunc dict
 
@@ -221,8 +265,8 @@ constructVersionReverse indexFunc revs =
         rev <- maybeToList . keepMap $ perVersionReverse indexFunc revs pkg
         return (pkg, rev)
   where
-    getNodes :: (PackageName, Map Version a) -> [PackageId]
-    getNodes (name, versions) = map (PackageIdentifier name) $ Map.keys versions
+    getNodes :: (PackageName, (Map Version a, b)) -> [PackageId]
+    getNodes (name, (versions, _)) = map (PackageIdentifier name) $ Map.keys versions
 
 -- | With a package which has just been updated, make sure the version displayed
 -- in its reverse display is the most recent. To do this, each of its dependencies
@@ -248,7 +292,7 @@ updatePackageReverse indexFunc updated deps revs nameMap =
     foldl' (\revd pkg -> Map.alter (alterRevDisplay pkg . fromMaybe Map.empty) pkg revd) nameMap deps
   where
     lookupVersions :: PackageName -> Set Version
-    lookupVersions pkgname = maybe Set.empty (Set.unions . map (Map.findWithDefault Set.empty $ updated) . Map.elems) $ Map.lookup pkgname revs
+    lookupVersions pkgname = maybe Set.empty (Set.unions . map (Map.findWithDefault Set.empty $ updated) . Map.elems . fst) $ Map.lookup pkgname revs
     alterRevDisplay :: PackageName -> ReverseDisplay -> Maybe ReverseDisplay
     alterRevDisplay pkgname rev = keepMap $ updateReverseDisplay indexFunc updated (lookupVersions pkgname) rev
 
@@ -257,7 +301,7 @@ updateVersionReverse indexFunc updated deps revs pkgMap =
     foldl' (\revd pkg -> Map.alter (alterRevDisplay pkg . fromMaybe Map.empty) pkg revd) pkgMap deps
   where
     lookupVersions :: PackageId -> Set Version
-    lookupVersions pkgid = maybe Set.empty (Map.findWithDefault Set.empty updated) $ Map.lookup (packageVersion pkgid) =<< Map.lookup (packageName pkgid) revs
+    lookupVersions pkgid = maybe Set.empty (Map.findWithDefault Set.empty updated) $ Map.lookup (packageVersion pkgid) . fst =<< Map.lookup (packageName pkgid) revs
     alterRevDisplay :: PackageId -> ReverseDisplay -> Maybe ReverseDisplay
     alterRevDisplay pkgid rev = keepMap $ updateReverseDisplay indexFunc updated (lookupVersions pkgid) rev
 
@@ -270,10 +314,10 @@ packageIdClosure :: RevDeps -> Map PackageId (Set PackageId)
 packageIdClosure revs = Map.fromDistinctAscList $ transitiveClosure
     (concatMap getNodes $ Map.toList revs)
     (\pkg -> maybe [] (concatMap getEdges . Map.toList)
-           $ Map.lookup (packageVersion pkg) =<< Map.lookup (packageName pkg) revs)
+           $ Map.lookup (packageVersion pkg) . fst =<< Map.lookup (packageName pkg) revs)
   where
-    getNodes :: (PackageName, Map Version a) -> [PackageId]
-    getNodes (name, versions) = map (PackageIdentifier name) $ Map.keys versions
+    getNodes :: (PackageName, (Map Version a, b)) -> [PackageId]
+    getNodes (name, (versions, _)) = map (PackageIdentifier name) $ Map.keys versions
 
     getEdges :: (PackageName, Set Version) -> [PackageId]
     getEdges (name, versions) = map (PackageIdentifier name) $ Set.toList versions
@@ -285,7 +329,7 @@ packageIdClosure revs = Map.fromDistinctAscList $ transitiveClosure
 packageNameClosure :: RevDeps -> Map PackageName (Set PackageName)
 packageNameClosure revs = Map.fromDistinctAscList $ transitiveClosure
     (Map.keys revs)
-    (\pkg -> maybe [] (concatMap Map.keys . Map.elems)
+    (\pkg -> maybe [] (concatMap Map.keys . Map.elems . fst)
            $ Map.lookup pkg revs)
 
 -- Get the transitive closure of a graph from the set of nodes and a neighbor
@@ -330,6 +374,9 @@ transitiveClosure core edges = runST $ do
 -- For cases when, if a Map or Set is empty, it's as good as nothing at all.
 keepMap :: Ord k => Map k a -> Maybe (Map k a)
 keepMap con = if Map.null con then Nothing else Just con
+
+keepMaps :: (Ord k, Ord k') => (Map k a, Map k' b) -> Maybe (Map k a, Map k' b)
+keepMaps con@(c, c') = if Map.null c && Map.null c' then Nothing else Just con
 
 keepSet :: Ord a => Set a -> Maybe (Set a)
 keepSet con = if Set.null con then Nothing else Just con

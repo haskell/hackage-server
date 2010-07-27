@@ -183,7 +183,7 @@ servePackagePage core pkgr revr maintain dpath =
     -- extra features like tags and downloads
     let maintainLink = paragraph ! [thestyle "font-size: small"] <<
             [ toHtml "["
-            , anchor ! [href $ renderResource' maintain dpath] << toHtml "maintain"
+            , anchor ! [href $ renderResource maintain [display pkgname]] << toHtml "maintain"
             , toHtml "]"]
     (totalDown, versionDown) <- perVersionDownloads pkg
     deprs <- query $ GetDeprecatedFor pkgname

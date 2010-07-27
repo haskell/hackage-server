@@ -78,7 +78,6 @@ instance Component PreferredVersions where
     type Dependencies PreferredVersions = End
     initialValue = emptyPreferredVersions
 
-
 setPreferredRanges :: PackageName -> [VersionRange] -> Update PreferredVersions ()
 setPreferredRanges name ranges = alterPreferredInfo name $ \p ->
     p { preferredRanges = ranges }
@@ -122,7 +121,7 @@ $(mkMethods ''PreferredVersions ['setPreferredRanges
 
 ---------------
 maybeBestVersion :: PreferredInfo -> [Version] -> Set Version -> Maybe (Version, Maybe VersionStatus)
-maybeBestVersion info allVersions versions = if null allVersions && Set.null versions then Nothing else Just $ findBestVersion info allVersions versions
+maybeBestVersion info allVersions versions = if null allVersions || Set.null versions then Nothing else Just $ findBestVersion info allVersions versions
 
 {-
 findBestVersion attempts to find the best version to display out of a set
