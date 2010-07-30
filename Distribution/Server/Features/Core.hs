@@ -18,7 +18,6 @@ module Distribution.Server.Features.Core (
   ) where
 
 --import Distribution.Server.Users.Resource (makeGroupResources)
-import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
 import qualified Distribution.Server.Cache as Cache
 import Distribution.Server.Packages.PackageBackup
 import Distribution.Server.Users.UserBackup
@@ -52,28 +51,39 @@ import Text.XHtml.Strict (Html, toHtml, unordList, h3, (<<), anchor, href, (!))
 import Data.Ord (comparing)
 import Data.List (sortBy, find)
 import qualified Data.ByteString.Lazy.Char8 as BS
+import Data.ByteString.Lazy.Char8 (ByteString)
 
 import Distribution.Text (display)
 import Distribution.Package
 import Distribution.Version (Version(..))
 
+
 data CoreFeature = CoreFeature {
     coreResource :: CoreResource,
-    cacheIndexTarball :: Cache.Cache BS.ByteString,
-    -- this is HTML and doesn't belong here D:
+
+    cacheIndexTarball :: Cache.Cache ByteString,
+    -- FIXME: this is HTML and doesn't belong here
     cachePackagesPage :: Cache.Cache Response,
     -- other files to put in the index tarball like preferred-versions
-    indexExtras :: Cache.Cache (Map String BS.ByteString),
-    -- Updating top-level packages
-    packageAddHook    :: Hook (PkgInfo -> IO ()),
-    packageRemoveHook :: Hook (PkgInfo -> IO ()),
-    packageChangeHook :: Hook (PkgInfo -> PkgInfo -> IO ()),
-    packageIndexChange :: Hook (IO ()),
+    indexExtras :: Cache.Cache (Map String ByteString),
 
+    -- Updating top-level packages
+    -- This is run after a package is added
+    packageAddHook    :: Hook (PkgInfo -> IO ()),
+    -- This is run after a package is removed (but the PkgInfo is retained just for the hook)
+    packageRemoveHook :: Hook (PkgInfo -> IO ()),
+    -- This is run after a package is changed in some way (essentially added, then removed)
+    packageChangeHook :: Hook (PkgInfo -> PkgInfo -> IO ()),
+    -- This should be run whenever the index tarball needs to be updated, such as when
+    -- indexExtras is updated, or when a package is added/removed/changed.
+    -- FIXME: it's also conflated with updating the HTML index page, which should be
+    -- regulated by the HTML feature signing up for other hooks
+    packageIndexChange :: Hook (IO ()),
     -- For download counters
-    tarballDownload    :: Hook (PackageId -> IO ()),
-    adminGroup :: UserGroup
+    tarballDownload :: Hook (PackageId -> IO ())
 }
+
+
 data CoreResource = CoreResource {
     coreIndexPage    :: Resource,
     coreIndexTarball :: Resource,
@@ -143,14 +153,6 @@ initCoreFeature config = do
       , packageChangeHook = changeHook
       , packageIndexChange = indexHook
       , tarballDownload = downHook
-      , adminGroup = UserGroup {
-            groupDesc = nullDescription { groupTitle = "Hackage admins", groupEntityURL = "/" },
-            queryUserList = query GetHackageAdmins,
-            addUserList = update . AddHackageAdmin,
-            removeUserList = update . RemoveHackageAdmin,
-            canAddGroup = [],
-            canRemoveGroup = []
-        }
     }
   where
     indexPage staticDir _ = serveFile (const $ return "text/html") (staticDir ++ "/hackage.html")

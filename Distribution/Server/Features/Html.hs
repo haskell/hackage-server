@@ -44,7 +44,7 @@ import Happstack.State (query)
 import Distribution.Package
 import Distribution.Version
 import Distribution.Text (display)
-import Data.List (intersperse, insert)
+import Data.List (intercalate, intersperse, insert)
 import Control.Monad.Trans (liftIO)
 import qualified Data.Map as Map
 import System.FilePath.Posix ((</>))
@@ -92,19 +92,20 @@ initHtmlFeature _ core pkg upload check user version reversef = do
          --, (extendResource $ corePackagesPage cores) { resourceGet = [("html", servePackageIndex)] }, currently in 'packages' feature
          , maintainPackage
         -- users
+        -- TODO: registration and whatnot
          , (extendResource $ userList users) { resourceGet = [("html", serveUserList users)] }
             -- list of users with user links; if admin, a link to add user page
          , (resourceAt "/users/register") { resourceGet = [("html", addUserForm users)] }
             -- form to post to /users/
-         , (extendResource $ userPage users) { resourceGet = [("html", serveUserPage users)] }
+         , (extendResource $ userPage users) { resourceGet = [("html", serveUserPage user)], resourceDelete = [("html", serveDeleteUser)] }
             -- user page with link to password form and list of groups (how to do this?)
-         , (extendResource $ passwordResource users) { resourceGet = [("html", servePasswordForm users)] }
+         , (extendResource $ passwordResource users) { resourceGet = [("html", servePasswordForm users)], resourcePut = [("html", servePutPassword users)] }
             -- form to PUT password
-         --, (extendResource $ enabledResource users) { resourceGet = [("html", serveEnabledForm)] }
+         , (extendResource $ enabledResource users) { resourceGet = [("html", serveEnabledForm users)], resourcePut = [("html", servePutEnabled users)] }
             -- form to enable or disable users (admin only)
 
         -- uploads
-         --, (extendResource $ uploadIndexPage uploads) { resourcePost = [("html", serveUploadResult)] }
+         , (extendResource $ uploadIndexPage uploads) { resourcePost = [("html", serveUploadResult upload cores)] }
             -- serve upload result as HTML.. er
          , (resourceAt "/packages/upload") { resourceGet = [("html", serveUploadForm)] }
             -- form for uploading
@@ -132,10 +133,10 @@ initHtmlFeature _ core pkg upload check user version reversef = do
         -- preferred versions
           , editDeprecated
           , editPreferred
-          , (extendResource $ preferredResource versions) { resourceGet = [("html", servePreferredSummary versions)] }
-          , (extendResource $ preferredPackageResource versions) { resourceGet = [("html", servePackagePreferred versions)] }
-          , (extendResource $ deprecatedResource versions) { resourceGet = [("html", serveDeprecatedSummary versions)] }
-          , (extendResource $ deprecatedPackageResource versions) { resourceGet = [("html", servePackageDeprecated versions)] }
+          , (extendResource $ preferredResource versions) { resourceGet = [("html", servePreferredSummary cores)] }
+          , (extendResource $ preferredPackageResource versions) { resourceGet = [("html", servePackagePreferred cores versions editPreferred)], resourcePut = [("html", servePutPreferred cores version)] }
+          , (extendResource $ deprecatedResource versions) { resourceGet = [("html", serveDeprecatedSummary cores)]  }
+          , (extendResource $ deprecatedPackageResource versions) { resourceGet = [("html", servePackageDeprecated cores editDeprecated)], resourcePut = [("html", servePutDeprecated cores version)] }
         -- reverse
           , (extendResource $ reversePackage reverses) { resourceGet = [("html", serveReverse cores reverses True)] }
           , (extendResource $ reversePackageOld reverses) { resourceGet = [("html", serveReverse cores reverses False)] }
@@ -155,8 +156,9 @@ initHtmlFeature _ core pkg upload check user version reversef = do
 -- reorganizing to look aesthetic, as opposed to the sleek and simple current
 -- design that takes the 1990s school of web design.
 servePackagePage :: CoreResource -> PackagesFeature -> ReverseResource
-                 -> Resource -> DynamicPath -> ServerPart Response
-servePackagePage core pkgr revr maintain dpath =
+                 -> VersionsResource -> Resource -> DynamicPath
+                 -> ServerPart Response
+servePackagePage core pkgr revr versions maintain dpath =
                         htmlResponse $
                         withPackageId dpath $ \pkgid  ->
                         withPackagePreferred pkgid $ \pkg pkgs -> do
@@ -167,7 +169,8 @@ servePackagePage core pkgr revr maintain dpath =
         middleHtml = Pages.renderFields render
     -- get additional information from other features
     prefInfo <- query $ GetPreferredInfo pkgname
-    let beforeHtml = [Pages.renderVersion realpkg (classifyVersions prefInfo $ map packageVersion pkgs),
+    let infoUrl = fmap (\_ -> preferredPackageUri versions "" pkgname) $ sumRange prefInfo
+        beforeHtml = [Pages.renderVersion realpkg (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl,
                       Pages.renderDependencies render]
     -- and other package indices
     distributions <- query $ State.PackageStatus pkgname
@@ -218,10 +221,19 @@ serveUserList users _ = do
     let hlist = unordList $ map (\uname -> anchor ! [href $ userPageUri users "" uname] << display uname) userlist
     ok $ toResponse $ Resource.XHtml $ hackagePage "Hackage users" [h3 << "Hackage users", hlist]
 
-serveUserPage :: UserResource -> DynamicPath -> ServerPart Response
-serveUserPage _ dpath = htmlResponse $ withUserPath dpath $ \_ info -> do
+serveUserPage :: UserFeature -> DynamicPath -> ServerPart Response
+serveUserPage users dpath = htmlResponse $ withUserPath dpath $ \uid info -> do
     let uname = userName info
-    returnOk $ toResponse $ Resource.XHtml $ hackagePage (display uname) [ h3 << display uname, toHtml "[User groups, links to pages for configuring user options]" ]
+    strs <- getGroupIndex (groupIndex users) uid
+    returnOk $ toResponse $ Resource.XHtml $ hackagePage (display uname)
+      [ h3 << display uname
+      , case strs of
+            [] -> noHtml
+            _  -> toHtml
+              [ toHtml $ display uname ++ " is part of the following groups:"
+              , unordList $ map (\str -> anchor ! [href str] << str) strs
+              ]
+      ]
 
 --username, password, repeat-password
 addUserForm :: UserResource -> DynamicPath -> ServerPart Response
@@ -241,13 +253,13 @@ addUserForm r _ = htmlResponse $ do
 --field password, repeat-password, checkbox auth
 servePasswordForm :: UserResource -> DynamicPath -> ServerPart Response
 servePasswordForm r dpath = htmlResponse $
-                            withUserPath dpath $ \_ userinfo -> do
-    let uname = userName userinfo
+                            withUserPath dpath $ \_ userInfo -> do
+    let uname = userName userInfo
     returnOk $ toResponse $ Resource.XHtml $ hackagePage "Change password"
     -- TODO: expose some of the functionality in changePassword function to determine if permissions are correct
     -- before serving this form (either admin or user)
       [ toHtml "Change your password. You'll be prompted for authentication upon submission, if you haven't logged in already."
-      , form ! [theclass "box", XHtml.method "POST", action $ userPasswordUri r uname] <<
+      , form ! [theclass "box", XHtml.method "POST", action $ userPasswordUri r "" uname] <<
             [ simpleTable [] []
                 [ makeInput [thetype "password"] "password" "Password"
                 , makeInput [thetype "password"] "repeat-password" "Confirm password"
@@ -258,6 +270,45 @@ servePasswordForm r dpath = htmlResponse $
             ]
       ]
 
+serveEnabledForm :: UserResource -> DynamicPath -> ServerPart Response
+serveEnabledForm r dpath = htmlResponse $
+                           withUserPath dpath $ \_ userInfo -> do
+    let uname = userName userInfo
+    returnOk $ toResponse $ Resource.XHtml $ hackagePage "Change user status"
+    -- TODO: expose some of the functionality in changePassword function to determine if permissions are correct
+    -- before serving this form (either admin or user)
+      [ toHtml "Change the account status here."
+      , form ! [theclass "box", XHtml.method "POST", action $ userEnabledUri r "" uname] <<
+            [ toHtml $ makeCheckbox (isEnabled userInfo) "enabled" "on" "Enable user account"
+            , hidden "_method" "PUT" --method override
+            , paragraph << input ! [thetype "submit", value "Change status"]
+            ]
+      ]
+  where isEnabled userInfo = case userStatus userInfo of
+            Active Enabled _ -> True
+            _ -> False
+
+servePutEnabled :: UserResource -> DynamicPath -> ServerPart Response
+servePutEnabled users dpath = htmlResponse $
+                              withUserNamePath dpath $ \uname ->
+                              responseWith (enabledAccount uname) $ \_ -> do
+    returnOk $ toResponse $ Resource.XHtml $ hackagePage "Account status set"
+        [toHtml "Account status set for ", anchor ! [href $ userPageUri users "" uname] << display uname]
+
+serveDeleteUser :: DynamicPath -> ServerPart Response
+serveDeleteUser dpath = htmlResponse $
+                        withUserNamePath dpath $ \uname ->
+                        responseWith (deleteAccount uname) $ \_ -> do
+    let ntitle = "Deleted user"
+    returnOk $ toResponse $ Resource.XHtml $ hackagePage ntitle [toHtml ntitle]
+
+servePutPassword :: UserResource -> DynamicPath -> ServerPart Response
+servePutPassword users dpath = htmlResponse $
+                               withUserNamePath dpath $ \uname ->
+                               responseWith (changePassword uname) $ \_ -> do
+    returnOk $ toResponse $ Resource.XHtml $ hackagePage "Changed password"
+        [toHtml "Changed password for ", anchor ! [href $ userPageUri users "" uname] << display uname]
+
 htmlGroupResource :: UserFeature -> GroupResource -> [Resource]
 htmlGroupResource users r@(GroupResource groupR userR groupGen) =
   [ (extendResource groupR) { resourceGet = [("html", htmlResponse . getList)], resourcePost = [("html", htmlResponse . postUser)] }
@@ -265,12 +316,12 @@ htmlGroupResource users r@(GroupResource groupR userR groupGen) =
   , (extendResourcePath "/edit" groupR) { resourceGet = [("html", htmlResponse . getEditList)] }
   ]
   where
-    getList dpath = withGroup (groupGen dpath) $ \group -> do
+    getList dpath = withGroup (liftIO $ groupGen dpath) $ \group -> do
         uidlist <- liftIO . queryUserList $ group
         unames <- query $ State.ListGroupMembers uidlist
         returnOk . toResponse . Resource.XHtml $ Pages.groupPage
             unames Nothing Nothing (groupDesc group)
-    getEditList dpath = withGroup (groupGen dpath) $ \group ->
+    getEditList dpath = withGroup (liftIO $ groupGen dpath) $ \group ->
                         withGroupEditAuth group $ \canAdd canDelete -> do
         userlist <- liftIO . queryUserList $ group
         unames <- query $ State.ListGroupMembers userlist
@@ -278,12 +329,12 @@ htmlGroupResource users r@(GroupResource groupR userR groupGen) =
             maybeUri b = if b then Just baseUri else Nothing
         returnOk . toResponse . Resource.XHtml $ Pages.groupPage
             unames (maybeUri canAdd) (maybeUri canDelete) (groupDesc group)
-    postUser dpath = withGroup (groupGen dpath) $ \group -> do
+    postUser dpath = withGroup (liftIO $ groupGen dpath) $ \group -> do
         res <- groupAddUser users group dpath
         case res of
             Left err -> returnError' err
             Right {} -> goToList dpath
-    deleteFromGroup dpath = withGroup (groupGen dpath) $ \group -> do
+    deleteFromGroup dpath = withGroup (liftIO $ groupGen dpath) $ \group -> do
         res <- groupDeleteUser users group dpath
         case res of
             Left err -> returnError' err
@@ -318,6 +369,17 @@ serveUploadForm _ = htmlResponse $ do
             , input ! [thetype "submit", value "Upload package"]
             ]
       ]
+
+serveUploadResult :: UploadFeature -> CoreResource -> DynamicPath -> ServerPart Response
+serveUploadResult pkgf core _ = htmlResponse $
+                                responseWith (uploadPackage pkgf) $ \res -> do
+    let warns = uploadWarnings res
+        pkgid = packageId (uploadDesc res)
+    returnOk $ toResponse $ Resource.XHtml $ hackagePage "Upload successful" $
+      [ paragraph << [toHtml "Successfully uploaded ", anchor ! [href $ corePackageUri core "" pkgid] << display pkgid, toHtml "!"]
+      ] ++ case warns of
+        [] -> []
+        _  -> [paragraph << "There were some warnings:", unordList warns]
 
 ---- Candidates
 serveCandidateUploadForm :: DynamicPath -> ServerPart Response

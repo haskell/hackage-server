@@ -6,6 +6,7 @@ module Distribution.Server.Features.Distro (
 import Distribution.Server.Feature
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages
+import Distribution.Server.Features.Users
 import Distribution.Server.Resource
 import Distribution.Server.Types
 
@@ -44,9 +45,9 @@ instance HackageFeature DistroFeature where
       , restoreBackup = Just $ \_ -> distroBackup
       }
 
-initDistroFeature :: Config -> CoreFeature -> PackagesFeature -> IO DistroFeature
-initDistroFeature _ core _ = do
-    let admins = adminGroup core
+initDistroFeature :: Config -> CoreFeature -> UserFeature -> PackagesFeature -> IO DistroFeature
+initDistroFeature _ _ users _ = do
+    let admins = adminGroup users
     return $ DistroFeature
       { distroResource = DistroResource
           { distroIndexPage = (resourceAt "/distros/.:format") { resourceGet = [("txt", textEnumDistros)], resourcePost = [("", distroNew)] }

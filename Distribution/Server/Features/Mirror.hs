@@ -41,7 +41,7 @@ import Control.Monad.Trans (MonadIO(..))
 import Distribution.Package
 import Distribution.Text (simpleParse)
 
-
+-- FIXME: update this
 data MirrorFeature = MirrorFeature {
     mirrorResource :: MirrorResource,
     -- group for mirror uploads. should this be deleted and replaced with admins?

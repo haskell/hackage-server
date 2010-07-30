@@ -54,9 +54,9 @@ hackageFeatures config = do
     --   functions from their modules are.
     -- What follows is a topological sort along those lines
     usersFeature <- initUsersFeature config coreFeature
-    uploadFeature <- initUploadFeature config coreFeature
+    uploadFeature <- initUploadFeature config coreFeature usersFeature
     packagesFeature <- initPackagesFeature config coreFeature
-    distroFeature <- initDistroFeature config coreFeature packagesFeature
+    distroFeature <- initDistroFeature config coreFeature usersFeature packagesFeature
     checkFeature <- initCheckFeature config coreFeature packagesFeature uploadFeature
     reportsFeature <- initReportsFeature config coreFeature
     versionsFeature <- initVersionsFeature config coreFeature uploadFeature

@@ -32,12 +32,12 @@ unzipMessage = foldr go ("", [])
 instance Error ErrorResponse where 
     strMsg str = ErrorResponse 400 "Server error" [MText str]
 
+-- | Creates a monadic value with an OK response code.
+returnOk :: Monad m => a -> m (Either ErrorResponse a)
+returnOk = return . Right
+
 -- | Simple synonym to indicate possible format-generic failure.
 type MServerPart a = ServerPart (Either ErrorResponse a)
-
--- | Creates a server part with an OK response code.
-returnOk :: a -> MServerPart a
-returnOk = ok . Right
 
 -- | Creates a server part with the error and sets the HTTP response code.
 returnError :: Int -> String -> [Message] -> MServerPart a
@@ -46,6 +46,14 @@ returnError errCode title message = returnError' $ ErrorResponse errCode title m
 -- | Creates an error ServerPart directly from an ErrorResponse object.
 returnError' :: ErrorResponse -> MServerPart a
 returnError' res = resp (errorCode res) $ Left res
+
+type MIO a = IO (Either ErrorResponse a)
+
+returnErrorIo :: Int -> String -> [Message] -> MIO a
+returnErrorIo errCode title message = returnErrorIo' $ ErrorResponse errCode title message
+
+returnErrorIo' :: ErrorResponse -> MIO a
+returnErrorIo' = return . Left
 ------------------------------------------------------------------------
 textResponse :: MServerPart Response -> ServerPart Response
 textResponse mpart = mpart >>= \mres -> case mres of

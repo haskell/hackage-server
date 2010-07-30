@@ -6,11 +6,19 @@ module Distribution.Server.Features.Users (
     withUserPath,
     withUserName,
 
-    textDisplayUsers,
+    changePassword,
+    canChangePassword,
+    newUserWithAuth,
+    adminAddUser,
+    enabledAccount,
+    deleteAccount,
+
     GroupResource(..),
     groupResourceAt,
+    groupResourcesAt,
     withGroup,
-    withGroupEditAuth
+    withGroupEditAuth,
+    getGroupIndex
   ) where
 
 import Distribution.Server.Feature
@@ -19,12 +27,13 @@ import Distribution.Server.Resource
 import Distribution.Server.Hook
 import Distribution.Server.Error
 import Distribution.Server.Types
+import qualified Distribution.Server.Cache as Cache
 
 import Distribution.Server.Users.State as State
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
-import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..))
+import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), UserList, nullDescription)
 
 import qualified Distribution.Server.Auth.Basic as Auth
 import qualified Distribution.Server.Auth.Types as Auth
@@ -32,8 +41,10 @@ import qualified Distribution.Server.Auth.Crypt as Auth
 
 import Happstack.Server hiding (port)
 import Happstack.State hiding (Version)
-import Data.List (intercalate)
-import qualified Data.Map as Map
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Function (fix)
 import System.Random (newStdGen)
 
@@ -45,12 +56,16 @@ import Control.Monad.Trans (MonadIO(..))
 -- | A feature to allow manipulation of the database of users.
 --
 
--- FIXME: require authentication here
 data UserFeature = UserFeature {
     userResource  :: UserResource,
     userAdded :: Hook (IO ()),
     groupAddUser :: UserGroup -> DynamicPath -> MServerPart (),
-    groupDeleteUser :: UserGroup -> DynamicPath -> MServerPart ()
+    groupDeleteUser :: UserGroup -> DynamicPath -> MServerPart (),
+    groupIndex :: Cache.Cache GroupIndex,
+    adminGroup :: UserGroup
+    -- This group allows users to upload packages, as opposed to merely use social features
+    -- It's here because it should either be set on signing up or not
+  --uploadGroup :: UserGroup
 }
 
 data UserResource = UserResource {
@@ -58,14 +73,12 @@ data UserResource = UserResource {
     userPage :: Resource,
     passwordResource :: Resource,
     enabledResource  :: Resource,
-    loginResource :: Resource,
     adminResource :: GroupResource,
 
     userListUri :: String -> String,
     userPageUri :: String -> UserName -> String,
-    userPasswordUri :: UserName -> String,
-    userEnabledUri  :: UserName -> String,
-    userLoginUri :: Maybe AuthType -> String,
+    userPasswordUri :: String -> UserName -> String,
+    userEnabledUri  :: String -> UserName -> String,
     adminPageUri :: String -> String
 }
 
@@ -73,61 +86,50 @@ instance HackageFeature UserFeature where
     getFeature userf = HackageModule
       { featureName = "users"
       , resources   = map ($userResource userf)
-            [userList, userPage, passwordResource, enabledResource, loginResource,
+            [userList, userPage, passwordResource, enabledResource,
              groupResource . adminResource, groupUserResource . adminResource]
       , dumpBackup    = Nothing
       , restoreBackup = Nothing
       }
 
+-- TODO: add renaming
 initUsersFeature :: Config -> CoreFeature -> IO UserFeature
-initUsersFeature _ core = do
+initUsersFeature _ _ = do
     addHook <- newHook
-    return UserFeature
+    groupCache <- Cache.newCacheable IntMap.empty
+    (adminG, adminR) <- groupResourceAt groupCache "/users/admins/" adminGroupDesc
+    return $ UserFeature
       { userResource = fix $ \r -> UserResource
-          { userList = (resourceAt "/users/.:format") { resourceGet = [("txt", textUserList)], resourcePost = [("txt", textResponse . adminAddUser)] }
-          , userPage = (resourceAt "/user/:username.:format") { resourceGet = [("txt", textUserPage)], resourceDelete = [("txt", textDeleteAccount)] }
-          , passwordResource = (resourceAt "/user/:username/password") { resourcePut = [("txt", textChangePassword)] }
-          , enabledResource = (resourceAt "/user/:username/enabled") { resourcePut = [("txt", textEnabledAccount)] }
-          , loginResource = (resourceAt "/users/login") { resourceGet = [("txt", \_ -> textResponse requireAuth)] } -- also split into basic/digest
-          , adminResource = groupResourceAt "/users/admins/" (\_ -> returnOk $ adminGroup core)
+          { userList = resourceAt "/users/.:format"
+          , userPage = resourceAt "/user/:username.:format"
+          , passwordResource = resourceAt "/user/:username/password.:format"
+          , enabledResource = resourceAt "/user/:username/enabled.:format"
+          , adminResource = adminR
 
           , userListUri = \format -> renderResource (userList r) [format]
           , userPageUri = \format uname -> renderResource (userPage r) [display uname, format]
-          , userPasswordUri = \uname -> renderResource (passwordResource r) [display uname]
-          , userEnabledUri  = \uname -> renderResource (enabledResource  r) [display uname]
-          , userLoginUri = \_ -> renderResource (loginResource r) []
+          , userPasswordUri = \format uname -> renderResource (passwordResource r) [display uname, format]
+          , userEnabledUri  = \format uname -> renderResource (enabledResource  r) [display uname, format]
           , adminPageUri = \format -> renderResource (groupResource $ adminResource r) [format]
           }
       , userAdded = addHook
       , groupAddUser = doGroupAddUser
       , groupDeleteUser = doGroupDeleteUser
+      , groupIndex = groupCache
+      , adminGroup = adminG
       }
 
-  where
-    -- result: list of users
-    textUserList _ = fmap (toResponse . intercalate ", " . map display . Map.keys . Users.userNameMap) (query GetUserDb)
-    -- result: either not-found error or user info, with links to account management if logged in
-    textUserPage dpath = textResponse $
-                         withUserPath dpath $ \_ info ->
-        returnOk . toResponse $ "User page for " ++ display (userName info)
-    textChangePassword = textTransaction changePassword "Password changed"
-    textDeleteAccount = textTransaction deleteAccount "Account deleted"
-    textEnabledAccount = textTransaction enabledAccount "Account status set"
-    textTransaction :: (DynamicPath -> MServerPart a) -> String -> DynamicPath -> ServerPart Response
-    textTransaction func success dpath = func dpath >>= \res -> case res of
-        Left err -> makeTextError err
-        Right {} -> ok . toResponse $ success
-
--- result: see-other for user page or authentication error
+{- result: see-other for user page or authentication error
 requireAuth :: MServerPart Response
 requireAuth = do
     users <- query GetUserDb
     Auth.withHackageAuth users Nothing Nothing $ \_ info -> do
         fmap Right $ seeOther ("/user/" ++ display (userName info)) $ toResponse ()
+-}
 
 -- result: either not-found, not-authenticated, or 204 (success)
-deleteAccount :: DynamicPath -> MServerPart ()
-deleteAccount dpath = withUserPath dpath $ \uid _ -> do
+deleteAccount :: UserName -> MServerPart ()
+deleteAccount uname = withUserName uname $ \uid _ -> do
     users <- query GetUserDb
     admins <- query State.GetHackageAdmins
     Auth.withHackageAuth users (Just admins) Nothing $ \_ _ -> do
@@ -135,8 +137,8 @@ deleteAccount dpath = withUserPath dpath $ \uid _ -> do
         return $ Right ()
 
 -- result: not-found, not authenticated, or ok (success)
-enabledAccount :: DynamicPath -> MServerPart ()
-enabledAccount dpath = withUserPath dpath $ \uid _ -> do
+enabledAccount :: UserName -> MServerPart ()
+enabledAccount uname = withUserName uname $ \uid _ -> do
     users <- query GetUserDb
     admins <- query State.GetHackageAdmins
     Auth.withHackageAuth users (Just admins) Nothing $ \_ _ -> do
@@ -176,50 +178,52 @@ withUserPath dpath func = withUserNamePath dpath $ \name -> withUserName name fu
 instance FromReqURI UserName where
   fromReqURI = simpleParse
 
-adminAddUser :: DynamicPath -> MServerPart Response
-adminAddUser _ = do
+adminAddUser :: MServerPart Response
+adminAddUser = do
     reqData <- getDataFn lookUserNamePasswords
     case reqData of
         Nothing -> returnError 400 "Error registering user"
                    [MText "Username, password, or repeated password invalid."]
-        Just (uname, pwd1, pwd2) -> doAdminAddUser uname (PasswdPlain pwd1) (PasswdPlain pwd2)
+        Just (ustr, pwd1, pwd2) ->
+            responseWith (newUserWithAuth ustr (PasswdPlain pwd1) (PasswdPlain pwd2)) $ \uname ->
+            fmap Right $ seeOther ("/user/" ++ display uname) (toResponse ())
    where lookUserNamePasswords = do
              uname <- look "username"
              pwd1 <- look "password"
              pwd2 <- look "repeat-password"
              return (uname, pwd1, pwd2)
 
-
-doAdminAddUser :: String -> PasswdPlain -> PasswdPlain -> MServerPart Response
-doAdminAddUser _ pwd1 pwd2 | pwd1 /= pwd2 = returnError 400 "Error registering user" [MText "Entered passwords do not match"]
-doAdminAddUser userNameStr password _ | userNameStr /= "edit" = case simpleParse userNameStr of
+newUserWithAuth :: String -> PasswdPlain -> PasswdPlain -> MServerPart UserName
+newUserWithAuth _ pwd1 pwd2 | pwd1 /= pwd2 = returnError 400 "Error registering user" [MText "Entered passwords do not match"]
+newUserWithAuth userNameStr password _ = case simpleParse userNameStr of
     Nothing -> returnError 400 "Error registering user" [MText "Not a valid user name!"]
     Just uname -> do
       let userAuth = Auth.newDigestPass uname password "hackage"
       muid <- update $ AddUser uname (UserAuth userAuth DigestAuth)
       case muid of
         Nothing  -> returnError 403 "Error registering user" [MText "User already exists"]
-        Just _   -> fmap Right $ seeOther ("/user/" ++ userNameStr) (toResponse ())
-doAdminAddUser _ _ _ = returnError 400 "Error registering user" [MText "Users can't be named 'edit' at the moment (used by group URI)"]
+        Just _   -> returnOk uname
 
 data ChangePassword = ChangePassword { first :: String, second :: String, newAuthType :: Auth.AuthType } deriving (Eq, Show)
 instance FromData ChangePassword where
 	fromData = liftM3 ChangePassword (look "password" `mplus` return "") (look "repeat-password" `mplus` return "")
                                      (fmap (maybe Auth.BasicAuth (const Auth.DigestAuth) . lookup "auth") lookPairs) --checked: digest auth
 
-changePassword :: DynamicPath -> MServerPart ()
-changePassword dpath = do
-    users  <- query State.GetUserDb
+-- Arguments: the auth'd user id, the user path id (derived from the :username)
+canChangePassword :: MonadIO m => UserId -> UserId -> m Bool
+canChangePassword uid userPathId = do
     admins <- query State.GetHackageAdmins
+    return $ uid == userPathId || (uid `Group.member` admins)
+
+changePassword :: UserName -> MServerPart ()
+changePassword userPathName = do
+    users  <- query State.GetUserDb
     Auth.withHackageAuth users Nothing Nothing $ \uid _ ->
-        let muserPathName = simpleParse =<< lookup "username" dpath
-            -- ^ the name specified in the dynamic path
-            muserPathId = flip Users.lookupName users =<< muserPathName
-            -- ^ the id of that name
-        in case (muserPathId, muserPathName) of
-          (Just userPathId, Just userPathName) ->
+        case Users.lookupName userPathName users of
+          Just userPathId -> do
             -- if this user's id corresponds to the one in the path, or is an admin
-            if uid == userPathId || (uid `Group.member` admins)
+            canChange <- canChangePassword uid userPathId
+            if canChange
               then do
                 pwd <- maybe (return $ ChangePassword "not" "valid" Auth.BasicAuth) return =<< getData
                 if (first pwd == second pwd && first pwd /= "")
@@ -234,9 +238,8 @@ changePassword dpath = do
                         else forbidChange "Error changing password"
                   else forbidChange "Copies of new password do not match or is an invalid password (ex: blank)"
               else forbidChange $ "Not authorized to change password for " ++ display userPathName
-          (Nothing, Just userPathName) -> returnError 403 "Error changing password" 
-                                          [MText $ "User " ++ display userPathName ++ " doesn't exist"]
-          _ -> mzero
+          Nothing -> returnError 403 "Error changing password" 
+                         [MText $ "User " ++ display userPathName ++ " doesn't exist"]
   where
     forbidChange = returnError 403 "Error changing password" . return . MText
 
@@ -249,6 +252,16 @@ newDigestPass :: UserName -> PasswdPlain -> UserAuth
 newDigestPass name pwd = UserAuth (Auth.newDigestPass name pwd "hackage") Auth.DigestAuth
 
 ------ User group management
+adminGroupDesc :: UserGroup
+adminGroupDesc = UserGroup {
+    groupDesc = nullDescription { groupTitle = "Hackage admins", groupEntityURL = "/" },
+    queryUserList = query GetHackageAdmins,
+    addUserList = update . AddHackageAdmin,
+    removeUserList = update . RemoveHackageAdmin,
+    canAddGroup = [],
+    canRemoveGroup = []
+}
+
 withGroup :: MServerPart UserGroup -> (UserGroup -> MServerPart a) -> MServerPart a
 withGroup groupGen func = groupGen >>= \mgroup -> case mgroup of
     Left err -> returnError' err
@@ -289,38 +302,72 @@ withGroupEditAuth group func = do
             else func canAdd canDelete
 
 ---- Encapsulation of resources related to editing a user group.
+type GroupIndex = IntMap (Set String)
+
 data GroupResource = GroupResource {
     groupResource :: Resource,
     groupUserResource :: Resource,
-    getGroup :: DynamicPath -> MServerPart UserGroup
+    getGroup :: DynamicPath -> MIO UserGroup
 }
 
-groupResourceAt :: String -> (DynamicPath -> MServerPart UserGroup) -> GroupResource
-groupResourceAt uri groupGen = let mainr = resourceAt uri in GroupResource
-  { groupResource = (extendResourcePath "/.:format" mainr) { resourceGet = [("txt", textResponse . getList)], resourcePost = [("txt", textResponse . postUser)] }
-  , groupUserResource = (extendResourcePath "/user/:username.:format" mainr) { resourceDelete = [("txt", textResponse . deleteFromGroup)] }
-  , getGroup = groupGen
-  }
-  where
-    getList dpath = withGroup (groupGen dpath) $ \group -> do
-        fmap Right $ textDisplayUsers group
-    postUser dpath = withGroup (groupGen dpath) $ \group -> do
-        res <- doGroupAddUser group dpath
-        case res of
-            Left err -> returnError' err
-            Right {} -> returnOk . toResponse $ "Added user"
-    deleteFromGroup dpath = withGroup (groupGen dpath) $ \group -> do
-        res <- doGroupDeleteUser group dpath
-        case res of
-            Left err -> returnError' err
-            Right {} -> returnOk . toResponse $ "Deleted user"
+groupResourceAt :: Cache.Cache GroupIndex -> String -> UserGroup -> IO (UserGroup, GroupResource)
+groupResourceAt users uri group = do
+    let mainr = resourceAt uri
+        groupUri = renderResource mainr []
+        group' = group
+          { addUserList = \uid -> do
+                addGroupIndex users uid groupUri
+                addUserList group uid
+          , removeUserList = \uid -> do
+                removeGroupIndex users uid groupUri
+                addUserList group uid
+          }
+    ulist <- queryUserList group
+    initGroupIndex users ulist groupUri
+    return $ (,) group' $ GroupResource
+      { groupResource = extendResourcePath "/.:format" mainr
+      , groupUserResource = extendResourcePath "/user/:username.:format" mainr
+      , getGroup = \_ -> returnOk group'
+      }
 
-textDisplayUsers :: UserGroup -> ServerPart Response
-textDisplayUsers group = do
-    ulist <- liftIO . queryUserList $ group
-    unames <- query $ ListGroupMembers ulist
-    ok . toResponse $ groupTitle (groupDesc group) ++
-        if null unames then "\nThis group has no members.\n"
-                       else "\nThis group has " ++ memberAmount (length unames) ++ ":" ++
-                                intercalate ", " (map display unames) ++ "\n"
-  where memberAmount n = if n == 1 then "1 member" else show n ++ " members"
+groupResourcesAt :: Cache.Cache GroupIndex -> String -> (DynamicPath -> MIO UserGroup) -> [DynamicPath] -> IO GroupResource
+groupResourcesAt users uri groupGen dpaths = do
+    let mainr = resourceAt uri
+        collectUserList genpath =
+            groupGen genpath >>=
+            either (\_ -> return Group.empty) (liftIO . queryUserList) >>= \ulist ->
+            initGroupIndex users ulist (renderResource' mainr genpath)
+    mapM_ collectUserList dpaths
+    return $ GroupResource
+      { groupResource = extendResourcePath "/.:format" mainr
+      , groupUserResource = extendResourcePath "/user/:username.:format" mainr
+      , getGroup = \dpath -> do
+          mgroup <- groupGen dpath
+          return $ fmap (\group -> group
+              { addUserList = \uid -> do
+                    addGroupIndex users uid (renderResource' mainr dpath)
+                    addUserList group uid
+              , removeUserList = \uid -> do
+                    removeGroupIndex users uid (renderResource' mainr dpath)
+                    addUserList group uid
+              }) mgroup
+      }
+
+---------------------------------------------------------------
+addGroupIndex :: MonadIO m => Cache.Cache GroupIndex -> UserId -> String -> m ()
+addGroupIndex users (UserId uid) uri =
+    Cache.modifyCache users (IntMap.insertWith Set.union uid (Set.singleton uri))
+
+removeGroupIndex :: MonadIO m => Cache.Cache GroupIndex -> UserId -> String -> m ()
+removeGroupIndex users (UserId uid) uri =
+    Cache.modifyCache users (IntMap.update (keepSet . Set.delete uri) uid)
+  where keepSet m = if Set.null m then Nothing else Just m
+
+initGroupIndex :: MonadIO m => Cache.Cache GroupIndex -> UserList -> String -> m ()
+initGroupIndex users ulist uri =
+    Cache.modifyCache users (IntMap.unionWith Set.union (IntMap.fromList . map mkEntry $ Group.enumerate ulist))
+  where mkEntry (UserId uid) = (uid, Set.singleton uri)
+
+getGroupIndex :: (Functor m, MonadIO m) => Cache.Cache GroupIndex -> UserId -> m [String]
+getGroupIndex users (UserId uid) = fmap (maybe [] Set.toList . IntMap.lookup uid) $ Cache.getCache users
+

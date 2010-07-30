@@ -51,7 +51,7 @@ import Distribution.Text (display, simpleParse)
 data UploadFeature = UploadFeature {
     uploadResource   :: UploadResource,
     uploadPackage    :: MServerPart UploadResult,
-    packageMaintainers :: DynamicPath -> MServerPart UserGroup,
+    packageMaintainers :: DynamicPath -> MIO UserGroup,
     trusteeGroup :: UserGroup
     -- uploadGroup :: UserGroup
 }
@@ -78,38 +78,35 @@ instance HackageFeature UploadFeature where
       , restoreBackup = Nothing
       }
 
-initUploadFeature :: Config -> CoreFeature -> IO UploadFeature
-initUploadFeature config core = do
+initUploadFeature :: Config -> CoreFeature -> UserFeature -> IO UploadFeature
+initUploadFeature config core users = do
     -- some shared tasks
     let store = serverStore config
-        admins = adminGroup core
+        admins = adminGroup users
         trustees = getTrusteesGroup [admins]
-        getPkgMaintainers dpath = case simpleParse =<< lookup "package" dpath of --no versions allowed
+        getPkgMaintainers dpath = case simpleParse =<< lookup "package" dpath :: Maybe PackageName of
             Nothing   -> mzero
             Just name -> getMaintainersGroup [admins, trustees] name
+    -- packages
+    pkgResource  <- groupResourcesAt (groupIndex users) "/package/:package/maintainers" getPkgMaintainers []
+    (trustGroup, trustResource) <- groupResourceAt  (groupIndex users) "/package/trustees" trustees
     return $ UploadFeature
-      { uploadResource = fix $ \r -> UploadResource
-          { uploadIndexPage = (extendResource . corePackagesPage $ coreResource core) { resourcePost = [("txt", textUploadPackage)] }
+      { uploadResource = UploadResource
+          { uploadIndexPage = (extendResource . corePackagesPage $ coreResource core)
           , deletePackagePage = (extendResource . corePackagePage $ coreResource core)
-          , packageGroupResource = groupResourceAt "/package/:package/maintainers" getPkgMaintainers
-          , trusteeResource = groupResourceAt "/packages/trustees" (\_ -> returnOk trustees)
+          , packageGroupResource = pkgResource
+          , trusteeResource = trustResource
 
-          , packageMaintainerUri = \format pkgname -> renderResource (groupResource $ packageGroupResource r) [display pkgname, format]
-          , trusteeUri = \format -> renderResource (groupResource $ trusteeResource r) [format]
+          , packageMaintainerUri = \format pkgname -> renderResource (groupResource pkgResource) [display pkgname, format]
+          , trusteeUri = \format -> renderResource (groupResource trustResource) [format]
           }
       , uploadPackage = doUploadPackage core store
-      , packageMaintainers = getPkgMaintainers
-      , trusteeGroup = trustees
+      , packageMaintainers = getGroup pkgResource
+      , trusteeGroup = trustGroup
       }
   where
-    -- response: either a variety of response codes, or warnings (should contain
-    -- a link to the upload page, and see-other if no warnings)
-    textUploadPackage _ = textResponse $ do
-        res <- doUploadPackage core (serverStore config)
-        case res of
-            Left err -> returnError' err
-            Right uresult -> returnOk $ toResponse $ unlines (uploadWarnings uresult)
 
+--------------------------------------------------------------------------------
 -- User groups and authentication
 getTrusteesGroup :: [UserGroup] -> UserGroup
 getTrusteesGroup canModify = fix $ \u -> UserGroup {
@@ -121,11 +118,11 @@ getTrusteesGroup canModify = fix $ \u -> UserGroup {
     canRemoveGroup = canModify
 }
 
-getMaintainersGroup :: [UserGroup] -> PackageName -> MServerPart UserGroup
+getMaintainersGroup :: [UserGroup] -> PackageName -> MIO UserGroup
 getMaintainersGroup canModify name = do
     pkgstate <- query GetPackagesState
     case PackageIndex.lookupPackageName (packageList pkgstate) name of
-      []   -> returnError 404 "Not found" [MText $ "No package with the name " ++ display name ++ " found"]
+      []   -> returnErrorIo 404 "Not found" [MText $ "No package with the name " ++ display name ++ " found"]
       pkgs -> do
         let pkgInfo = maximumBy (comparing packageVersion) pkgs -- is this really needed?
         returnOk . fix $ \u -> UserGroup {
