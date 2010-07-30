@@ -114,21 +114,25 @@ showDependency (Dependency (PackageName pname) vs) = showPkg +++ showVersion vs
         -- passing along the PackageRender, which is not the case here
         showPkg = anchor ! [href . packageURL $ PackageIdentifier (PackageName pname) (Version [] [])] << pname
 
-renderVersion :: PackageId -> [(Version, VersionStatus)] -> (String, Html)
-renderVersion (PackageIdentifier pname pversion) allVersions =
-    (if null earlierVersions && null laterVersions then "Version" else "Versions", versionList)
+renderVersion :: PackageId -> [(Version, VersionStatus)] -> Maybe String -> (String, Html)
+renderVersion (PackageIdentifier pname pversion) allVersions info =
+    (if null earlierVersions && null laterVersions then "Version" else "Versions", versionList +++ infoHtml)
   where (earlierVersions, laterVersionsInc) = span ((<pversion) . fst) allVersions
         (thisVersion, laterVersions) = case laterVersionsInc of
             (v:later) | fst v == pversion -> (Just v, later)
             later -> (Nothing, later)
         versionList = commaList $ map versionedLink earlierVersions
-                               ++ [strong ! (maybe [] (status . snd) thisVersion) << display pversion]
+                               ++ (case pversion of
+                                      Version [] [] -> []
+                                      _ -> [strong ! (maybe [] (status . snd) thisVersion) << display pversion]
+                                  )
                                ++ map versionedLink laterVersions
         versionedLink (v, s) = anchor ! (status s ++ [href $ packageURL $ PackageIdentifier pname v]) << display v
         status st = case st of
             NormalVersion -> []
             DeprecatedVersion  -> [theclass "deprecated"]
             UnpreferredVersion -> [theclass "unpreferred"]
+        infoHtml = case info of Nothing -> noHtml; Just str -> " (" +++ (anchor ! [href str] << "info") +++ ")"
 
 renderFields :: PackageRender -> [(String, Html)]
 renderFields render = [

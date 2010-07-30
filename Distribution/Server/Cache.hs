@@ -4,6 +4,7 @@ module Distribution.Server.Cache (
     newCacheable,
     getCache,
     putCache,
+    modifyCache,
     respondCache
   ) where
 
@@ -35,6 +36,9 @@ getCache (Cache avar) = liftIO $ AsyncVar.read avar
 
 putCache :: MonadIO m => Cache a -> a -> m ()
 putCache (Cache avar) state = liftIO $ AsyncVar.write avar state
+
+modifyCache :: MonadIO m => Cache a -> (a -> a) -> m ()
+modifyCache (Cache avar) func = liftIO $ AsyncVar.modify avar func
 
 -----------------------------------------------------------------------
 -- usually b = DynamicPath. This saves on code nodes (elsewhere) and imports (here)

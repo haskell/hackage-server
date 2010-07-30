@@ -44,7 +44,7 @@ import Happstack.State (query, update)
 
 data ReverseFeature = ReverseFeature {
     reverseResource :: ReverseResource,
-    reverseStream :: Chan ReverseIndex
+    reverseStream :: Chan (ReverseIndex -> ReverseIndex)
 }
 
 data ReverseResource = ReverseResource {
@@ -82,24 +82,22 @@ instance HackageFeature ReverseFeature where
       }
     initHooks down = [forkIO transferReverse >> return ()]
       where transferReverse = forever $ do
-                revs <- readChan (reverseStream down)
-                update $ ReplaceReverseIndex revs
+                revFunc <- readChan (reverseStream down)
+                revs <- query GetReverseIndex
+                update $ ReplaceReverseIndex (revFunc revs)
 
 initReverseFeature :: Config -> CoreFeature -> VersionsFeature -> IO ReverseFeature
 initReverseFeature _ core _ = do
     revChan <- newChan
     registerHook (packageAddHook core) $ \pkg -> do
         index <- fmap packageList $ query GetPackagesState
-        revs  <- query GetReverseIndex
-        writeChan revChan $ addPackage index pkg revs
+        writeChan revChan $ addPackage index pkg
     registerHook (packageRemoveHook core) $ \pkg -> do
         index <- fmap packageList $ query GetPackagesState
-        revs  <- query GetReverseIndex
-        writeChan revChan $ removePackage index pkg revs
+        writeChan revChan $ removePackage index pkg
     registerHook (packageChangeHook core) $ \pkg pkg' -> do
         index <- fmap packageList $ query GetPackagesState
-        revs  <- query GetReverseIndex
-        writeChan revChan $ addPackage index pkg' $ removePackage index pkg revs
+        writeChan revChan $ addPackage index pkg' . removePackage index pkg
     return ReverseFeature
       { reverseResource = fix $ \r -> ReverseResource
           { reversePackage = resourceAt ("/package/:package/reverse.:format")

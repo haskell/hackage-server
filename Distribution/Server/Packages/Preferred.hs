@@ -28,14 +28,12 @@ data PreferredVersions = PreferredVersions {
 emptyPreferredVersions :: PreferredVersions
 emptyPreferredVersions = PreferredVersions Map.empty Map.empty
 
---instance Version  where mode = Versioned 0 Nothing
--- $(deriveSerialize '')
-
 data PreferredInfo = PreferredInfo {
     preferredRanges :: [VersionRange],
     deprecatedVersions :: [Version],
     sumRange :: Maybe VersionRange
 } deriving (Typeable, Show, Eq)
+
 emptyPreferredInfo :: PreferredInfo
 emptyPreferredInfo = PreferredInfo [] [] Nothing
 

@@ -81,13 +81,13 @@ initHtmlFeature _ core pkg upload check user version reversef = do
         versions = versionsResource version
         reverses = reverseResource reversef
     -- pages defined for the HTML feature in particular
-    let editDeprecated  = (resourceAt "/package/:package/deprecated/edit") { resourceGet = [("html", serveDeprecateForm versions)] }
-        editPreferred   = (resourceAt "/package/:package/preferred/edit") { resourceGet = [("html", servePreferForm versions)] }
+    let editDeprecated  = (resourceAt "/package/:package/deprecated/edit") { resourceGet = [("html", serveDeprecateForm cores versions)] }
+        editPreferred   = (resourceAt "/package/:package/preferred/edit") { resourceGet = [("html", servePreferForm cores versions)] }
         maintainPackage = (resourceAt "/package/:package/maintain") { resourceGet = [("html", serveMaintainLinks editDeprecated editPreferred)] }
     return HtmlFeature
      { htmlResources =
         -- core
-         [ (extendResource $ corePackagePage cores) { resourceGet = [("html", servePackagePage cores pkg reverses maintainPackage)] }
+         [ (extendResource $ corePackagePage cores) { resourceGet = [("html", servePackagePage cores pkg reverses versions maintainPackage)] }
          --, (extendResource $ coreIndexPage cores) { resourceGet = [("html", serveIndexPage)] }, currently in 'core' feature
          --, (extendResource $ corePackagesPage cores) { resourceGet = [("html", servePackageIndex)] }, currently in 'packages' feature
          , maintainPackage
@@ -339,7 +339,7 @@ serveCandidatePage pkg dpath = htmlResponse $
                            flip PackageIndex.lookupPackageName pkgname .
                            State.packageList) $ query State.GetPackagesState
     prefInfo <- query $ GetPreferredInfo pkgname
-    let sectionHtml = [Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions),
+    let sectionHtml = [Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing,
                        Pages.renderDependencies render] ++ Pages.renderFields render
     -- also utilize renderWarnings :: [String] and hasIndexedPackage :: Bool
     let warningBox = case renderWarnings candRender of
@@ -361,47 +361,149 @@ servePublishForm r dpath = htmlResponse $
                     << input ! [thetype "submit", value "Publish package"]]
 
 -- Preferred
--- TODO: use HTML, not text
-serveDeprecatedSummary :: VersionsResource -> DynamicPath -> ServerPart Response
-serveDeprecatedSummary r _ = doDeprecatedsRender >>=
-    return . toResponse . unlines . map (\(pkg, pkgs) -> display pkg ++ ": " ++ case pkgs of
-        [] -> "deprecated"
-        _  -> show pkgs)
+serveDeprecatedSummary :: CoreResource -> DynamicPath -> ServerPart Response
+serveDeprecatedSummary core _ = doDeprecatedsRender >>= \renders -> do
+    return $ toResponse $ Resource.XHtml $ hackagePage "Deprecated packages"
+      [ h3 << "Deprecated packages"
+      , toHtml $ flip map renders $ \(pkg, pkgs) -> [ packageNameLink core pkg, toHtml ": ", deprecatedText core pkgs ]
+      ]
 
-servePackageDeprecated :: VersionsResource -> DynamicPath -> ServerPart Response
-servePackageDeprecated r dpath = htmlResponse $
-                                 withPackageName dpath $ \pkgname ->
-                                 responseWith (doDeprecatedRender pkgname) $ \mpkg ->
-    returnOk . toResponse $ case mpkg of
-        Nothing   -> display pkgname ++ " is not deprecated"
-        Just pkgs -> display pkgname ++ " is " ++ show pkgs
+deprecatedText :: CoreResource -> [PackageName] -> Html
+deprecatedText _ [] = toHtml "deprecated"
+deprecatedText core pkgs = toHtml
+  [ toHtml "deprecated in favor of "
+  , concatHtml $ intersperse (toHtml ", ") (map (packageNameLink core) pkgs)
+  ]
 
-servePreferredSummary :: VersionsResource -> DynamicPath -> ServerPart Response
-servePreferredSummary r _ = doPreferredsRender >>= return . toResponse . show
+servePackageDeprecated :: CoreResource -> Resource -> DynamicPath -> ServerPart Response
+servePackageDeprecated core deprEdit dpath =
+        htmlResponse $
+        withPackageName dpath $ \pkgname ->
+        responseWith (doDeprecatedRender pkgname) $ \mpkg ->
+    returnOk $ toResponse $ Resource.XHtml $ hackagePage "Deprecated status"
+      [ h3 << "Deprecated status"
+      , paragraph <<
+          [ toHtml $ case mpkg of
+                Nothing   -> [packageNameLink core pkgname, toHtml " is not deprecated"]
+                Just pkgs -> [packageNameLink core pkgname, toHtml " is ", deprecatedText core pkgs]
+          , thespan ! [thestyle "color: gray"] <<
+              [ toHtml " [maintainers: "
+              , anchor ! [href $ renderResource deprEdit [display pkgname]] << "edit"
+              , toHtml "]" ]
+          ]
+      ]
 
-servePackagePreferred :: VersionsResource -> DynamicPath -> ServerPart Response
-servePackagePreferred r dpath = htmlResponse $
-                                withPackageName dpath $ \pkgname ->
-                                responseWith (doPreferredRender pkgname) $ \pref ->
-    returnOk . toResponse . unlines $
-        (case rendRanges pref of
-            [] -> ["No preferred versions"]
-            prefs -> "Preferred versions:":map (" * "++) prefs)
-          ++
-        (case rendVersions pref of
-            []   -> ["No deprecated versions"]
-            deprs -> ["Deprecated versions: " ++ show (map display deprs)])
+servePreferredSummary :: CoreResource -> DynamicPath -> ServerPart Response
+servePreferredSummary core _ = doPreferredsRender >>= \renders -> do
+    return $ toResponse $ Resource.XHtml $ hackagePage "Preferred versions"
+      [ h3 << "Preferred versions"
+      , case renders of
+            [] -> paragraph << "There are no global preferred versions."
+            _  -> unordList $ flip map renders $ \(pkgname, pref) ->
+                [ packageNameLink core pkgname
+                ,  unordList [varList "Preferred ranges" (rendRanges pref),
+                              varList "Deprecated versions" (map display $ rendVersions pref),
+                              toHtml ["Calculated range: ", rendSumRange pref]]
+                ]
+      , paragraph <<
+          [ anchor ! [href "/packages/preferred-versions"] << "preferred-versions"
+          , toHtml " is the text file served with every index tarball that contains this information."
+          ]
+      ]
+  where varList _    [] = toHtml "none"
+        varList summ xs = toHtml $ summ ++ ": " ++ intercalate ", " xs
+
+packagePrefAbout :: CoreResource -> VersionsResource -> Maybe Resource -> PackageName -> [Html]
+packagePrefAbout core versions maybeEdit pkgname =
+  [ paragraph <<
+      [ anchor ! [href $ preferredUri versions ""] << "Preferred and deprecated versions"
+      , toHtml $ " can be used to influence Cabal's decisions about which versions of "
+      , packageNameLink core pkgname
+      , toHtml " to install. If a range of versions is preferred, it means that the installer won't install a non-preferred package version unless it is explicitly specified or if it's the only choice the installer has. Deprecating a version adds a range which excludes just that version. All of this information is collected in the "
+      , anchor ! [href "/packages/preferred-versions"] << "preferred-versions"
+      , toHtml " file that's included in the index tarball."
+      , flip (maybe noHtml) maybeEdit $ \prefEdit -> thespan ! [thestyle "color: gray"] <<
+          [ toHtml " [maintainers: "
+          , anchor ! [href $ renderResource prefEdit [display pkgname]] << "edit"
+          , toHtml "]" ]
+      ]
+  , paragraph <<
+      [ toHtml "If all the available versions of a package are non-preferred or deprecated, cabal-install will treat this the same as if none of them are. This feature doesn't affect whether or not to install a package, only for selecting versions after a given package has decided to be installed. "
+      , anchor ! [href $ deprecatedPackageUri versions "" pkgname] << "Entire-package deprecation"
+      , toHtml " is also available, but it's separate from preferred versions."
+      ]
+  ]
+
+servePackagePreferred :: CoreResource -> VersionsResource -> Resource -> DynamicPath -> ServerPart Response
+servePackagePreferred core versions prefEdit dpath =
+        htmlResponse $
+        withPackageAllPath dpath $ \pkgname pkgs ->
+        responseWith (doPreferredRender pkgname) $ \pref -> do
+    let dtitle = display pkgname ++ ": preferred and deprecated versions"
+    prefInfo <- query $ GetPreferredInfo pkgname
+    returnOk $ toResponse $ Resource.XHtml $ hackagePage dtitle --needs core, preferredVersions, pkgname
+      [ h3 << dtitle
+      , concatHtml $ packagePrefAbout core versions (Just prefEdit) pkgname
+      , h4 << "Stored information"
+      , case rendRanges pref of
+            [] -> paragraph << [display pkgname ++ " has no preferred version ranges."]
+            prefs -> paragraph << ["Preferred versions for " ++ display pkgname ++ ":"]
+                         +++ unordList prefs
+      , case rendVersions pref of
+            [] -> paragraph << ["It has no deprecated versions."]
+            deprs -> paragraph <<
+                [ "Explicitly deprecated versions for " ++ display pkgname ++ " include: "
+                , intercalate ", " (map display deprs)]
+      , toHtml "The version range given to this package, therefore, is " +++ strong (toHtml $ rendSumRange pref)
+      , h4 << "Versions affected"
+      , paragraph << "Blue versions are normal versions. Green are those out of any preferred version ranges. Gray are deprecated."
+      , paragraph << (snd $ Pages.renderVersion
+                                (PackageIdentifier pkgname $ Version [] [])
+                                (classifyVersions prefInfo $ map packageVersion pkgs) Nothing)
+      ]
+
+servePutPreferred :: CoreResource -> VersionsFeature -> DynamicPath -> ServerPart Response
+servePutPreferred core versions dpath =
+        htmlResponse $
+        withPackageName dpath $ \pkgname ->
+        responseWith (putPreferred versions pkgname) $ \_ ->
+    returnOk $ toResponse $ Resource.XHtml $ hackagePage "Set preferred versions"
+       [ h3 << "Set preferred versions"
+       , paragraph <<
+          [ toHtml "Set the "
+          , anchor ! [href $ preferredPackageUri (versionsResource versions) "" pkgname] << "preferred versions"
+          , toHtml " for "
+          , packageNameLink core pkgname
+          , toHtml "."]
+       ]
+
+servePutDeprecated :: CoreResource -> VersionsFeature -> DynamicPath -> ServerPart Response
+servePutDeprecated core versions dpath = 
+        htmlResponse $
+        withPackageName dpath $ \pkgname ->
+        responseWith (putDeprecated versions pkgname) $ \wasDepr -> do
+    let dtitle = if wasDepr then "Package deprecated" else "Package undeprecated"
+    returnOk $ toResponse $ Resource.XHtml $ hackagePage dtitle
+       [ h3 << dtitle
+       , paragraph <<
+          [ toHtml "Set the "
+          , anchor ! [href $ deprecatedPackageUri (versionsResource versions) "" pkgname] << "deprecated status"
+          , toHtml " for "
+          , packageNameLink core pkgname
+          , toHtml "."]
+       ]
 
 -- deprecated: checkbox, by: text field, space-separated list of packagenames
-serveDeprecateForm :: VersionsResource -> DynamicPath -> ServerPart Response
-serveDeprecateForm r dpath = htmlResponse $
+serveDeprecateForm :: CoreResource -> VersionsResource -> DynamicPath -> ServerPart Response
+serveDeprecateForm core r dpath = htmlResponse $
                              withPackageName dpath $ \pkgname ->
                              responseWith (doDeprecatedRender pkgname) $ \mpkg -> do
     let (isDepr, mfield) = case mpkg of
             Just pkgs -> (True, unwords $ map display pkgs)
             Nothing -> (False, "")
     returnOk $ toResponse $ Resource.XHtml $ hackagePage "Deprecate package"
-        [form ! [theclass "box", XHtml.method "POST", action $ deprecatedPackageUri r "" pkgname] <<
+        [paragraph << [toHtml "Configure deprecation for ", packageNameLink core pkgname],
+         form ! [theclass "box", XHtml.method "POST", action $ deprecatedPackageUri r "" pkgname] <<
           [ hidden "_method" "PUT"
           , toHtml $ makeCheckbox isDepr "deprecated" "on" "Deprecate package"
           , dlist . ddef . toHtml $ makeInput [thetype "text", value mfield] "by" "in favor of "
@@ -409,16 +511,18 @@ serveDeprecateForm r dpath = htmlResponse $
           ]]
 
 -- preferred: text box (one version range per line). deprecated: list of text boxes with same name
-servePreferForm :: VersionsResource -> DynamicPath -> ServerPart Response
-servePreferForm r dpath = htmlResponse $
-                          withPackageName dpath $ \pkgname ->
-                          withPackageAll pkgname $ \pkgs ->
-                          responseWith (doPreferredRender pkgname) $ \pref -> do
+servePreferForm :: CoreResource -> VersionsResource -> DynamicPath -> ServerPart Response
+servePreferForm core r dpath =
+        htmlResponse $
+        withPackageName dpath $ \pkgname ->
+        withPackageAll pkgname $ \pkgs ->
+        responseWith (doPreferredRender pkgname) $ \pref -> do
     let allVersions = map packageVersion pkgs
         rangesList  = rendRanges pref
         deprVersions = rendVersions pref
     returnOk $ toResponse $ Resource.XHtml $ hackagePage "Adjust preferred versions"
-        [form ! [theclass "box", XHtml.method "POST", action $ preferredPackageUri r "" pkgname] <<
+        [concatHtml $ packagePrefAbout core r Nothing pkgname,
+         form ! [theclass "box", XHtml.method "POST", action $ preferredPackageUri r "" pkgname] <<
           [ hidden "_method" "PUT"
           , paragraph << "Preferred version ranges."
           , paragraph << textarea ! [name "preferred", rows $ show (4::Int), cols $ show (80::Int)] << unlines rangesList
@@ -483,6 +587,12 @@ errorToHtml :: [Message] -> [Html]
 errorToHtml [] = []
 errorToHtml (MLink x url:xs) = (anchor ! [href url] << x): errorToHtml xs
 errorToHtml (MText x    :xs) = toHtml x: errorToHtml xs
+
+packageLink :: CoreResource -> PackageId -> Html
+packageLink core pkgid = anchor ! [href $ corePackageUri core "" pkgid] << display pkgid
+
+packageNameLink :: CoreResource -> PackageName -> Html
+packageNameLink core pkgname = anchor ! [href $ corePackageName core "" pkgname] << display pkgname
 
 makeInput :: [HtmlAttr] -> String -> String -> [Html]
 makeInput attrs fname labelName = [label ! [thefor fname] << labelName,
