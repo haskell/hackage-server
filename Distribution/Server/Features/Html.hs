@@ -93,7 +93,7 @@ initHtmlFeature _ core pkg upload check user version reversef = do
          , maintainPackage
         -- users
         -- TODO: registration and whatnot
-         , (extendResource $ userList users) { resourceGet = [("html", serveUserList users)] }
+         , (extendResource $ userList users) { resourceGet = [("html", serveUserList users)] } --resourcePost: admin add user
             -- list of users with user links; if admin, a link to add user page
          , (resourceAt "/users/register") { resourceGet = [("html", addUserForm users)] }
             -- form to post to /users/

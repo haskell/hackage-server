@@ -89,7 +89,7 @@ initUploadFeature config core users = do
             Just name -> getMaintainersGroup [admins, trustees] name
     -- packages
     pkgResource  <- groupResourcesAt (groupIndex users) "/package/:package/maintainers" getPkgMaintainers []
-    (trustGroup, trustResource) <- groupResourceAt  (groupIndex users) "/package/trustees" trustees
+    (trustGroup, trustResource) <- groupResourceAt  (groupIndex users) "/packages/trustees" trustees
     return $ UploadFeature
       { uploadResource = UploadResource
           { uploadIndexPage = (extendResource . corePackagesPage $ coreResource core)

@@ -12,7 +12,6 @@ import Distribution.Server.Resource
 data HackageModule = HackageModule {
     featureName   :: String,
     resources     :: [Resource],
-    -- BlobStorage args can be moved elsewhere, e.g. the getFeature function
     dumpBackup    :: Maybe (BlobStorage -> IO [BackupEntry]),
     restoreBackup :: Maybe (BlobStorage -> RestoreBackup)
 }
@@ -25,8 +24,6 @@ data HackageModule = HackageModule {
 -- With this class, they are combined into homogenous list of HackageModules
 -- used by the Server data structure.
 class HackageFeature a where
-    -- currently the config arugment is only used for its BlobStorage argument
-    -- for restoreBackup which need to put files into the blob store
     getFeature :: a -> HackageModule
     initHooks  :: a -> [IO ()]
     initHooks _ = []
