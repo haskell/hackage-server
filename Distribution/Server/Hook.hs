@@ -1,5 +1,6 @@
 module Distribution.Server.Hook (
     Hook,
+    Filter,
     newHook,
     registerHook,
     registerHooks,
@@ -21,6 +22,9 @@ import Control.Monad.Trans (MonadIO, liftIO)
 -- local IORef, nicer than MVar for this task
 data Hook a = Hook (IORef [a])
 
+-- another name for Hook, used when the result is important
+type Filter a = Hook a
+
 newHook :: IO (Hook a)
 newHook = fmap Hook $ newIORef []
 
@@ -33,7 +37,7 @@ registerHooks hlist hooks = mapM_ (registerHook hlist) hooks
 runHooks :: MonadIO m => Hook a -> (a -> IO b) -> m ()
 runHooks (Hook vlist) func = liftIO $ readIORef vlist >>= mapM_ func
 
-runFilters :: MonadIO m => Hook a -> (a -> IO b) -> m [b]
+runFilters :: MonadIO m => Filter a -> (a -> IO b) -> m [b]
 runFilters (Hook vlist) func = liftIO $ readIORef vlist >>= mapM func
 
 -- boilerplate code, maybe replaceable by insane typeclass magic
@@ -46,12 +50,12 @@ runHook' list a = runHooks list (\f -> f a)
 runHook'' :: MonadIO m => Hook (a -> b -> IO ()) -> a -> b -> m ()
 runHook'' list a b = runHooks list (\f -> f a b)
 
-runFilter :: MonadIO m => Hook (IO a) -> m [a]
+runFilter :: MonadIO m => Filter (IO a) -> m [a]
 runFilter list = runFilters list id
 
-runFilter' :: MonadIO m => Hook (a -> IO b) -> a -> m [b]
+runFilter' :: MonadIO m => Filter (a -> IO b) -> a -> m [b]
 runFilter' list a = runFilters list (\f -> f a)
 
-runFilter'' :: MonadIO m => Hook (a -> b -> IO c) -> a -> b -> m [c]
+runFilter'' :: MonadIO m => Filter (a -> b -> IO c) -> a -> b -> m [c]
 runFilter'' list a b = runFilters list (\f -> f a b)
 

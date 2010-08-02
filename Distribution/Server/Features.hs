@@ -34,7 +34,6 @@ import Distribution.Server.Features.Tags (initTagsFeature)
 --     themselves, there could be some kind of way to hook onto them and expose
 --     useful activity information. This would be a good home for recent.rss.
 -- * Anonymous build reports should work, as well as candidate build reports
--- * fix ReverseDependencies to deal with uploads
 -- * alter Users to be more in line with the current way registering is handled,
 --     with email addresses available to maintainers, etc.
 -- * find a better interface for UserGroups (again), that effectively combine
@@ -67,7 +66,7 @@ hackageFeatures config = do
     --jsonFeature <- initJsonFeature
     htmlFeature <- initHtmlFeature config coreFeature packagesFeature
                         uploadFeature checkFeature usersFeature versionsFeature
-                        reverseFeature
+                        reverseFeature tagsFeature
     let allFeatures =
          [ HF coreFeature
          , HF usersFeature

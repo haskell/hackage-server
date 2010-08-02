@@ -4,6 +4,7 @@ module Distribution.Server.Users.Group (
     UserGroup(..),
     GroupDescription(..),
     nullDescription,
+    groupName,
     empty,
     add,
     remove,
@@ -16,11 +17,13 @@ module Distribution.Server.Users.Group (
 
 import Distribution.Server.Users.Types
 
+import Data.Maybe (maybe)
 import qualified Data.IntSet as IntSet
 import Data.Monoid (Monoid)
 import Data.Binary (Binary)
 import qualified Data.Binary as Binary
 import Happstack.Data
+import Control.Parallel.Strategies
 
 import Prelude hiding (id)
 
@@ -35,17 +38,20 @@ instance Serialize UserList where
   putCopy = contain . Binary.put
   getCopy = contain Binary.get
 
+-- Given a groupTitle of A, the group will be called "A"; given a groupTitle 
+-- of "A" and a groupEntity of Just ("B", Just "C"), the title will be displayed
+-- as "A for <a href=C>B</a>"; e.g., one can have "Maintainers for Parsec".
 data GroupDescription = GroupDescription {
     groupTitle :: String,
-    groupShort :: String,
-    groupEntityURL :: String,
+    groupEntity :: Maybe (String, Maybe String),
     groupPrologue  :: String
 }
 nullDescription :: GroupDescription
-nullDescription = GroupDescription { groupTitle = "", groupShort = "",
-                                     groupEntityURL = "", groupPrologue = "" }
+nullDescription = GroupDescription { groupTitle = "", groupEntity = Nothing, groupPrologue = "" }
 
---used to require: forall a b c. QueryEvent a (Maybe UserList), UpdateEvent b (), UpdateEvent c ()
+groupName :: GroupDescription -> String
+groupName desc = groupTitle desc ++ maybe "" (\(for, _) -> " for " ++ for) (groupEntity desc)
+
 data UserGroup = UserGroup {
     groupDesc :: GroupDescription,
     queryUserList :: IO UserList,
@@ -78,3 +84,7 @@ unions groups = UserList (IntSet.unions [ group | UserList group <- groups ])
 
 queryGroups :: [UserGroup] -> IO UserList
 queryGroups = fmap unions . mapM queryUserList
+
+-- for use in Caches, really...
+instance NFData GroupDescription where
+    rnf (GroupDescription a b c) = rnf a `seq` rnf b `seq` rnf c

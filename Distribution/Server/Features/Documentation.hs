@@ -13,6 +13,7 @@ import Distribution.Server.Error
 
 import Distribution.Server.Packages.State
 import Distribution.Server.Backup.Export
+import qualified Distribution.Server.ResourceTypes as Resource
 import Distribution.Server.Util.BlobStorage (BlobId, BlobStorage)
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import qualified Distribution.Server.Util.Serve as TarIndex
@@ -36,6 +37,7 @@ data DocumentationFeature = DocumentationFeature {
 data DocumentationResource = DocumentationResource {
     packageDocs :: Resource,
     packageDocsUpload :: Resource,
+    packageDocTar :: Resource,
     packageDocUri :: PackageId -> String -> String
 }
 
@@ -57,10 +59,17 @@ initDocumentationFeature config _ _ = do
       { documentationResource = fix $ \r -> DocumentationResource
           { packageDocs = (resourceAt "/package/:package/doc/..") { resourceGet = [("", serveDocumentation store)] }
           , packageDocsUpload = (resourceAt "/package/:package/doc/.:format") { resourcePost = [("txt", textResponse . uploadDocumentation store)] }
+          , packageDocTar = (resourceAt "/package/:package/:doc.tar")
           , packageDocUri = \pkgid str -> renderResource (packageDocs r) [display pkgid, str]
           }
       }
   where
+
+serveDocumentationTar :: BlobStorage -> DynamicPath -> ServerPart Response
+serveDocumentationTar store dpath = withDocumentation dpath $ \_ blob _ -> do
+    file <- liftIO $ BlobStorage.fetch store blob
+    return $ toResponse $ Resource.DocTarball file blob
+
 
 -- return: not-found error or tarball
 serveDocumentation :: BlobStorage -> DynamicPath -> ServerPart Response

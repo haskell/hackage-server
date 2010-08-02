@@ -44,6 +44,7 @@ module Distribution.Server.PackageIndex (
     allPackagesByName
   ) where
 
+
 import Prelude hiding (lookup)
 import Control.Exception (assert)
 import qualified Data.Map as Map
@@ -58,7 +59,6 @@ import Distribution.Package
          , Dependency(Dependency) )
 import Distribution.Version ( withinRange )
 import Distribution.Simple.Utils (lowercase, comparing)
-
 
 -- | The collection of information about packages from one or more 'PackageDB's.
 --

@@ -6,6 +6,7 @@ module Distribution.Server.Features.Upload (
     getPackageGroup,
     withPackageAuth,
     withPackageNameAuth,
+    withTrusteeAuth,
     UploadResult(..),
     extractPackage,
     packageExists,
@@ -52,8 +53,8 @@ data UploadFeature = UploadFeature {
     uploadResource   :: UploadResource,
     uploadPackage    :: MServerPart UploadResult,
     packageMaintainers :: DynamicPath -> MIO UserGroup,
-    trusteeGroup :: UserGroup
-    -- uploadGroup :: UserGroup
+    trusteeGroup :: UserGroup,
+    canUploadPackage :: Filter (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse))
 }
 
 data UploadResource = UploadResource {
@@ -83,13 +84,12 @@ initUploadFeature config core users = do
     -- some shared tasks
     let store = serverStore config
         admins = adminGroup users
-        trustees = getTrusteesGroup [admins]
-        getPkgMaintainers dpath = case simpleParse =<< lookup "package" dpath :: Maybe PackageName of
+    (trustees, trustResource) <- groupResourceAt  (groupIndex users) "/packages/trustees" (getTrusteesGroup [admins])
+    let getPkgMaintainers dpath = case simpleParse =<< lookup "package" dpath :: Maybe PackageName of
             Nothing   -> mzero
             Just name -> getMaintainersGroup [admins, trustees] name
-    -- packages
-    pkgResource  <- groupResourcesAt (groupIndex users) "/package/:package/maintainers" getPkgMaintainers []
-    (trustGroup, trustResource) <- groupResourceAt  (groupIndex users) "/packages/trustees" trustees
+    -- FIXME: get the entire package list
+    (pkgGroup, pkgResource) <- groupResourcesAt (groupIndex users) "/package/:package/maintainers" getPkgMaintainers []
     return $ UploadFeature
       { uploadResource = UploadResource
           { uploadIndexPage = (extendResource . corePackagesPage $ coreResource core)
@@ -101,8 +101,8 @@ initUploadFeature config core users = do
           , trusteeUri = \format -> renderResource (groupResource trustResource) [format]
           }
       , uploadPackage = doUploadPackage core store
-      , packageMaintainers = getGroup pkgResource
-      , trusteeGroup = trustGroup
+      , packageMaintainers = pkgGroup
+      , trusteeGroup = trustees
       }
   where
 
@@ -136,21 +136,16 @@ getMaintainersGroup canModify name = do
 
 maintainerDescription :: PkgInfo -> GroupDescription
 maintainerDescription pkgInfo = GroupDescription
-  { groupTitle = "Maintainers for " ++ pname
-  , groupShort = short
-  , groupEntityURL = "/package/" ++ pname
-  , groupPrologue  = []
+  { groupTitle = "Maintainers"
+  , groupEntity = Just (pname, Just $ "/package/" ++ pname)
+  , groupPrologue  = "Maintainers for a package can upload new versions and adjust other attributes in the package database."
   }
   where
     pkg = packageDescription (pkgDesc pkgInfo)
-    short = synopsis pkg
     pname = display (packageName pkgInfo)
 
 trusteeDescription :: GroupDescription
-trusteeDescription = nullDescription
-  { groupTitle = "Package trustees"
-  , groupEntityURL = "/packages"
-  }
+trusteeDescription = nullDescription { groupTitle = "Package trustees" }
 
 withPackageAuth :: Package pkg => pkg -> (Users.UserId -> Users.UserInfo -> MServerPart a) -> MServerPart a
 withPackageAuth pkg func = withPackageNameAuth (packageName pkg) func
@@ -160,6 +155,12 @@ withPackageNameAuth pkgname func = do
     userDb <- query $ GetUserDb
     groupSum <- getPackageGroup pkgname
     Auth.withHackageAuth userDb (Just groupSum) Nothing func
+
+withTrusteeAuth :: (Users.UserId -> Users.UserInfo -> MServerPart a) -> MServerPart a
+withTrusteeAuth func = do
+    userDb <- query $ GetUserDb
+    trustee <- query $ GetHackageTrustees
+    Auth.withHackageAuth userDb (Just trustee) Nothing func
 
 getPackageGroup :: MonadIO m => PackageName -> m Group.UserList
 getPackageGroup pkg = do

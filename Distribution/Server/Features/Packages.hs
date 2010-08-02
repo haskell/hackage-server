@@ -5,7 +5,8 @@ module Distribution.Server.Features.Packages {-(
     initPackagesFeature,
     doPackageRender,
     SimpleCondTree(..),
-    doMakeCondTree
+    doMakeCondTree,
+    categorySplit
   )-} where
 
 import Distribution.Server.Feature
@@ -38,7 +39,7 @@ import qualified Data.Traversable as Traversable
 import Control.Monad (guard, liftM2)
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import Data.List (sort, sortBy, partition)
-import Data.Char (toLower)
+import Data.Char (toLower, isSpace)
 import Data.Ord (comparing)
 import qualified Network.URI as URI
 
@@ -135,7 +136,7 @@ doPackageRender users info =
       , rendExecNames = map exeName (executables flatDesc)
       , rendLicenseName = display (license desc) -- maybe make this a bit more human-readable
       , rendMaintainer  = case maintainer desc of "None" -> Nothing; "none" -> Nothing; "" -> Nothing; person -> Just person
-      , rendCategory = case category desc of [] -> []; str -> [str] -- TODO: split on commas and whatnot
+      , rendCategory = case category desc of [] -> []; str -> categorySplit str -- TODO: split on commas and whatnot
       , rendRepoHeads = catMaybes (map rendRepo $ sourceRepos desc)
       , rendModules = fmap (moduleForest . exposedModules) (library flatDesc)
       , rendHasTarball = not . null $ pkgTarball info
@@ -148,6 +149,16 @@ doPackageRender users info =
         ty <- repoType r
         loc <- repoLocation r
         return (ty, loc, r)
+
+categorySplit :: String -> [String]
+categorySplit xs | all isSpace xs = []
+categorySplit xs = map (dropWhile isSpace) $ splitOn ',' xs
+  where
+    splitOn x ys = front : case back of
+	    [] -> []
+	    (_:ys') -> splitOn x ys'
+      where (front, back) = break (== x) ys
+
 
 -----------------------------------------------------------------------
 -- Flatten the dependencies of a GenericPackageDescription into

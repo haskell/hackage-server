@@ -153,7 +153,7 @@ unregisterPackage getVersions pkg revs = -- (,) =<< (foldl' goUnregister revs . 
     goUnregister prev (pkgname, (range, versions)) =
         let revPackage = Map.fromList $ map (\v -> (v, pkgMap)) versions
             revRange   = Map.singleton pkgname (Map.fromList $ map (\v -> (v, range)) versions)
-        -- there are possibly better ways to about this
+        -- there are possibly better ways to go about this
         in  Map.differenceWith (\(a, b) (c, d) -> keepMaps $
               ( Map.differenceWith (\e f ->
                     keepMap $ Map.differenceWith (\g h ->
@@ -208,16 +208,10 @@ harvestDependencies (CondNode _ deps comps) = deps ++ concatMap forComponent com
 
 --------------------------------------------------------------------------------
 -- Calculating ReverseDisplays
-
--- putStrLn $ showRevDisplay $ perVersionReverse (PackageIdentifier (PackageName "monoids") (Version [0,9] [])) ps (emptyPreferredVersions) u
--- u Map.! (PackageName "happstack-server") Map.! (Version [0,4,1] [])
--- let u = constructRevDeps ps
--- ps <- getPs
--- tx <- ctrl
 type VersionIndex = (PackageName -> (PreferredInfo, [Version]))
 
--- TODO: this should use the secondary PackageName -> VersionRange mapping in RevDeps,
--- so it gets all versions...
+-- TODO: this should use the secondary PackageId -> VersionRange mapping in RevDeps,
+-- so it gets all possible versions, not just those currently in the index...
 perPackageReverse :: VersionIndex -> RevDeps -> PackageName -> ReverseDisplay
 perPackageReverse indexFunc revs pkg = case Map.lookup pkg revs of
     Nothing   -> Map.empty
@@ -241,7 +235,8 @@ getDisplayInfo preferred index pkgname = (,)
 -- Keeping a cached map of selected versions.
 --
 -- Currently it's rather quick to calculate each, and the majority of processing
--- will probably go towards rendering it in HTML/JSON/whathaveyou.
+-- will probably go towards rendering it in HTML/JSON/whathaveyou anyway. So this
+-- is not used.
 --
 -- Still, in a future Hackage where preferred-versions and deprecated versions
 -- are *very* widely used, incremental updates of an display index might become
@@ -307,6 +302,8 @@ updateVersionReverse indexFunc updated deps revs pkgMap =
 
 --------------------------------------------------------------------------------
 -- Flattening the graph
+-- TODO: exposing indirect dependencies is as simple as taking the set difference
+-- of the edges of a node in the dependency graph G and its closure G+.
 
 -- Collect all indirect versioned dependencies. This takes around 45 seconds
 -- on the current package index (well, in ghci). It probably isn't worth exposing.
@@ -384,7 +381,8 @@ keepSet con = if Set.null con then Nothing else Just con
 --------------------------------------------------------------------------------
 -- State
 --
--- Last but not least, methods for manipulating the global state.
+-- Last but agnostic of other ranking schemes,
+-- methods for manipulating the global state.
 
 instance State.Version ReverseIndex where mode = Versioned 0 Nothing
 $(deriveSerialize ''ReverseIndex)

@@ -18,6 +18,8 @@ import Data.Typeable
 import Data.Time.Clock (UTCTime(..))
 import Data.Time.Calendar (Day(..))
 
+import Control.Parallel.Strategies
+
 import qualified Data.Binary as Binary
 import Data.Binary (Binary)
 
@@ -25,6 +27,8 @@ import Happstack.State hiding (Version)
 import qualified Happstack.State as Happs
 import Happstack.Server
 
+import qualified Data.ByteString.Lazy.Char8 as BS
+import Data.ByteString.Lazy.Char8 (ByteString)
 import Data.Maybe (fromJust)
 
 deriving instance Typeable PackageIdentifier
@@ -94,3 +98,24 @@ instance Binary UTCTime where
     day  <- Binary.get
     secs <- Binary.get
     return (UTCTime (ModifiedJulianDay day) (fromRational secs))
+
+-- rough versions of RNF for these
+instance NFData ByteString where
+    rnf bs = BS.length bs `seq` ()
+
+instance NFData Response where
+    rnf = rnf . rsBody --ByteString
+
+instance NFData PackageName where
+    rnf (PackageName pkg) = rnf pkg
+
+instance NFData Version where
+    rnf (Version cont tags) = rnf cont `seq` rnf tags
+
+instance NFData PackageIdentifier where
+    rnf (PackageIdentifier name version) = rnf name `seq` rnf version
+
+instance NFData Day where
+    rnf (ModifiedJulianDay day) = rnf day
+
+

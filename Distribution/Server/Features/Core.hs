@@ -39,7 +39,7 @@ import qualified Distribution.Server.PackageIndex as PackageIndex
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
 
-import Control.Monad (guard, mzero)
+import Control.Monad (guard, mzero, when)
 import Control.Monad.Trans (liftIO)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -79,10 +79,13 @@ data CoreFeature = CoreFeature {
     -- FIXME: it's also conflated with updating the HTML index page, which should be
     -- regulated by the HTML feature signing up for other hooks
     packageIndexChange :: Hook (IO ()),
+    -- A package is added where no package by that name existed previously.
+    newPackageHook :: Hook (PkgInfo -> IO ()),
+    -- A package is removed such that no more versions of that package exists.
+    noPackageHook :: Hook (PkgInfo -> IO ()),
     -- For download counters
     tarballDownload :: Hook (PackageId -> IO ())
 }
-
 
 data CoreResource = CoreResource {
     coreIndexPage    :: Resource,
@@ -126,6 +129,8 @@ initCoreFeature config = do
     removeHook <- newHook
     changeHook <- newHook
     indexHook <- newHook
+    newPkgHook <- newHook
+    noPkgHook <- newHook
     registerHook indexHook $ computeCache thePackages indexTar
 
     return CoreFeature
@@ -152,6 +157,8 @@ initCoreFeature config = do
       , packageRemoveHook = removeHook
       , packageChangeHook = changeHook
       , packageIndexChange = indexHook
+      , newPackageHook = newPkgHook
+      , noPackageHook = noPkgHook
       , tarballDownload = downHook
     }
   where
@@ -264,7 +271,10 @@ serveCabalFile dpath = textResponse $ withPackagePath dpath $ \pkg _ -> do
 doDeletePackage :: CoreFeature -> DynamicPath -> MServerPart ()
 doDeletePackage core dpath = withPackageId dpath $ \pkgid -> withPackageVersion pkgid $ \pkg -> do
     update $ DeletePackageVersion pkgid
+    nowPkgs <- fmap (flip PackageIndex.lookupPackageName (packageName pkgid) . packageList) $ query GetPackagesState
     runHook' (packageRemoveHook core) pkg
     runHook (packageIndexChange core)
+    when (null nowPkgs) $ runHook' (noPackageHook core) pkg
     returnOk ()
+
 

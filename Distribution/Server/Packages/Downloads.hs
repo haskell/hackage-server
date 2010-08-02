@@ -8,16 +8,14 @@ import Distribution.Server.Instances ()
 import Distribution.Package
 import Distribution.Version
 
+import Control.Parallel.Strategies
 import qualified Happstack.State as State (Version)
 import Happstack.State hiding (Version)
 import Data.Time.Calendar
 import Data.Typeable (Typeable)
 import Data.Map (Map)
-import Data.List (delete)
 import Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
-import Data.IntMap (IntMap)
-import qualified Data.IntMap as IntMap
 import Control.Monad.State (put, get)
 import Control.Monad.Reader (ask, asks)
 
@@ -26,12 +24,10 @@ import Control.Monad.Reader (ask, asks)
 -- format at leisure
 data DownloadCounts = DownloadCounts {
     totalDownloads :: Int,
-    -- TODO: combine downloadHistogram and downloadMap into a single PSQueue?
-    downloadHistogram :: IntMap [PackageName],
     downloadMap :: Map PackageName DownloadInfo
 } deriving (Show, Typeable)
 emptyDownloadCounts :: DownloadCounts
-emptyDownloadCounts = DownloadCounts 0 IntMap.empty Map.empty
+emptyDownloadCounts = DownloadCounts 0 Map.empty
 
 data DownloadInfo = DownloadInfo {
     monthDownloads :: Map (Int, Int) PackageDownloads,
@@ -47,6 +43,9 @@ data PackageDownloads = PackageDownloads {
 } deriving (Show, Typeable)
 emptyPackageDownloads :: PackageDownloads
 emptyPackageDownloads = PackageDownloads 0 Map.empty
+
+packageDowns :: DownloadInfo -> Int
+packageDowns = allDownloads . packageDownloads
 
 incrementInfo :: Day -> Version -> Int -> DownloadInfo -> DownloadInfo
 incrementInfo day version count (DownloadInfo perMonth perDay total) = 
@@ -65,46 +64,45 @@ adjustFrom :: Ord k => (a -> a) -> k -> a -> Map k a -> Map k a
 adjustFrom func key value = Map.alter (Just . func . fromMaybe value) key
 
 ----
-registerDownload :: Day -> PackageId -> Int -> Update DownloadCounts ()
+registerDownload :: Day -> PackageId -> Int -> Update DownloadCounts (Int, Int)
 registerDownload day pkgid count = do
     dc <- get
     let infoMap = downloadMap dc
+        pkgname = packageName pkgid
         info = Map.findWithDefault emptyDownloadInfo pkgname infoMap
+        oldCount = packageDowns info
     if count <= 0
-      then put $ dc { downloadMap = Map.insert pkgname info infoMap }
+      then do
+        put $ dc { downloadMap = Map.insert pkgname info infoMap }
+        return (oldCount, oldCount)
       else do
-        let prevCount = allDownloads . packageDownloads $ info
-            info' = incrementInfo day (packageVersion pkgid) count info
-            newCount  = allDownloads . packageDownloads $ info'
-            histogram' = IntMap.alter putInPackage newCount
-                       . IntMap.alter takeOutPackage prevCount
-                       $ downloadHistogram dc
+        let info' = incrementInfo day (packageVersion pkgid) count info
+            newCount = packageDowns info'
         put $ dc { downloadMap = Map.insert pkgname info' infoMap 
-                 , downloadHistogram = histogram'
-                 , totalDownloads = (+count) $ totalDownloads dc }
-  where
-    pkgname = packageName pkgid
-    takeOutPackage Nothing = Nothing
-    takeOutPackage (Just l) = case delete (packageName pkgid) l of
-        [] -> Nothing
-        l' -> Just l'
-    putInPackage Nothing  = Just [pkgname]
-    putInPackage (Just l) = Just (pkgname:l)
+                 , totalDownloads = totalDownloads dc + count }
+        return (oldCount, newCount)
 
 getDownloadCounts :: Query DownloadCounts DownloadCounts
 getDownloadCounts = ask
 
+getDownloadInfo :: PackageName -> Query DownloadCounts DownloadInfo
 getDownloadInfo pkgname = asks (Map.findWithDefault emptyDownloadInfo pkgname . downloadMap)
 
 --------------------------------------------------------------------------------
 
 instance State.Version DownloadCounts where mode = Versioned 0 Nothing
-getDownloadInfo :: PackageName -> Query DownloadCounts DownloadInfo
 $(deriveSerialize ''DownloadCounts)
 instance State.Version DownloadInfo where mode = Versioned 0 Nothing
 $(deriveSerialize ''DownloadInfo)
 instance State.Version PackageDownloads where mode = Versioned 0 Nothing
 $(deriveSerialize ''PackageDownloads)
+
+instance NFData PackageDownloads where
+    rnf (PackageDownloads a b) = rnf a `seq` rnf b
+instance NFData DownloadInfo where
+    rnf (DownloadInfo a b c) = rnf a `seq` rnf b `seq` rnf c
+instance NFData DownloadCounts where
+    rnf (DownloadCounts a b) = rnf a `seq` rnf b
 
 instance Component DownloadCounts where
     type Dependencies DownloadCounts = End

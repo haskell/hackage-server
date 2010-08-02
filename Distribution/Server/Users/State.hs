@@ -131,7 +131,6 @@ $(mkMethods ''HackageAdmins
                     ,'replaceHackageAdmins])
 
 --------------------------------------------------------------------------
-
 data MirrorClients = MirrorClients {
     mirrorClients :: !Group.UserList
 } deriving (Typeable)
@@ -163,3 +162,36 @@ $(mkMethods ''MirrorClients
                     ,'addMirrorClient
                     ,'removeMirrorClient
                     ,'replaceMirrorClients])
+
+--------------------------------------------------------------------------
+data IndexUsers = IndexUsers {
+    indexUsers :: !Group.UserList
+} deriving (Typeable)
+$(deriveSerialize ''IndexUsers)
+instance Version IndexUsers where
+    mode = Versioned 0 Nothing
+
+getIndexUsers :: Query IndexUsers UserList
+getIndexUsers = asks indexUsers
+
+modifyIndexUsers :: (UserList -> UserList) -> Update IndexUsers ()
+modifyIndexUsers func = State.modify (\users -> users { indexUsers = func (indexUsers users) })
+
+addIndexUser :: UserId -> Update IndexUsers ()
+addIndexUser uid = modifyIndexUsers (Group.add uid)
+
+removeIndexUser :: UserId -> Update IndexUsers ()
+removeIndexUser uid = modifyIndexUsers (Group.remove uid)
+
+replaceIndexUsers :: UserList -> Update IndexUsers ()
+replaceIndexUsers ulist = modifyIndexUsers (const ulist)
+
+instance Component IndexUsers where
+    type Dependencies IndexUsers = End
+    initialValue = IndexUsers Group.empty
+
+$(mkMethods ''IndexUsers
+                    ['getIndexUsers
+                    ,'addIndexUser
+                    ,'removeIndexUser
+                    ,'replaceIndexUsers])

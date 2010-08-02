@@ -13,6 +13,7 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.PreferredVersions
 import Distribution.Server.Features.ReverseDependencies
+import Distribution.Server.Features.Tags
 import Distribution.Server.Types
 import Distribution.Server.Error
 import Distribution.Server.Resource
@@ -31,6 +32,7 @@ import Distribution.Server.Users.Group (UserGroup(..))
 import Distribution.Server.Distributions.Distributions (DistroPackageInfo(..))
 import Distribution.Server.Packages.Preferred
 import Distribution.Server.Packages.Reverse
+import Distribution.Server.Packages.Tag
 
 import Distribution.Server.Pages.Template (hackagePage)
 import qualified Distribution.Server.Pages.Group as Pages
@@ -45,10 +47,12 @@ import Distribution.Package
 import Distribution.Version
 import Distribution.Text (display)
 import Data.List (intercalate, intersperse, insert)
+import Control.Monad (forM)
 import Control.Monad.Trans (liftIO)
 import qualified Data.Map as Map
 import System.FilePath.Posix ((</>))
 
+-- TODO: move more of the below to Distribution.Server.Pages.*
 data HtmlFeature = HtmlFeature {
     htmlResources :: [Resource]
 }
@@ -61,18 +65,14 @@ instance HackageFeature HtmlFeature where
       , restoreBackup = Nothing
       }
 
--- useful functions:
---hackagePage = hackagePageWith []
---hackagePageWith :: [Html] -> String -> [Html] -> Html
---hackagePageWith links heading docs = toHtml [header << docHead, body << docBody]
 
--- this feature provides the HTML view to the models of other features
+-- This feature provides the HTML view to the models of other features
 -- currently it uses the xhtml package to render HTML (Text.XHtml.Strict)
 --
--- This module is somewhat temporary, in that a more advanced (and better-looking)
--- HTML scheme should come about later on.
-initHtmlFeature :: Config -> CoreFeature -> PackagesFeature -> UploadFeature -> CheckFeature -> UserFeature -> VersionsFeature -> ReverseFeature -> IO HtmlFeature
-initHtmlFeature _ core pkg upload check user version reversef = do
+-- This means of generating HTML is somewhat temporary, in that a more advanced
+-- (and better-looking) HTML scheme should come about later on.
+initHtmlFeature :: Config -> CoreFeature -> PackagesFeature -> UploadFeature -> CheckFeature -> UserFeature -> VersionsFeature -> ReverseFeature -> TagsFeature -> IO HtmlFeature
+initHtmlFeature _ core pkg upload check user version reversef tagf = do
     -- resources to extend
     let cores = coreResource core
         users = userResource user
@@ -80,10 +80,11 @@ initHtmlFeature _ core pkg upload check user version reversef = do
         checks  = checkResource check
         versions = versionsResource version
         reverses = reverseResource reversef
+        tags = tagsResource tagf
     -- pages defined for the HTML feature in particular
     let editDeprecated  = (resourceAt "/package/:package/deprecated/edit") { resourceGet = [("html", serveDeprecateForm cores versions)] }
         editPreferred   = (resourceAt "/package/:package/preferred/edit") { resourceGet = [("html", servePreferForm cores versions)] }
-        maintainPackage = (resourceAt "/package/:package/maintain") { resourceGet = [("html", serveMaintainLinks editDeprecated editPreferred)] }
+        maintainPackage = (resourceAt "/package/:package/maintain") { resourceGet = [("html", serveMaintainLinks editDeprecated editPreferred $ packageGroupResource uploads)] }
     return HtmlFeature
      { htmlResources =
         -- core
@@ -143,12 +144,15 @@ initHtmlFeature _ core pkg upload check user version reversef = do
           , (extendResource $ reversePackageAll reverses) { resourceGet = [("html", serveReverseFlat cores reverses)] }
           , (extendResource $ reversePackageStats reverses) { resourceGet = [("html", serveReverseStats cores reverses)] }
           , (extendResource $ reversePackages reverses) { resourceGet = [("html", serveReverseList cores reverses)] }
+        -- downloads
+        -- tags  
          ]
         -- and user groups. package maintainers, trustees, admins
         ++ htmlGroupResource user (packageGroupResource uploads)
         ++ htmlGroupResource user (trusteeResource uploads)
         ++ htmlGroupResource user (adminResource users)
      }
+
 
 ---- Core
 -- Currently the main package page is thrown together by querying a bunch
@@ -197,22 +201,31 @@ servePackagePage core pkgr revr versions maintain dpath =
         deprHtml = case deprs of
           Just fors -> paragraph ! [thestyle "color: red"] << [toHtml "Deprecated", case fors of
             [] -> noHtml
-            _  -> concatHtml . (toHtml "in favor of ":) . intersperse (toHtml ", ") .
+            _  -> concatHtml . (toHtml " in favor of ":) . intersperse (toHtml ", ") .
                   map (\for -> anchor ! [href $ corePackageName core "" for] << display for) $ fors]
           Nothing -> noHtml
     -- and put it all together
-    returnOk $ toResponse $ Resource.XHtml $
+    returnOk $ toResponse $ Resource.XHtml $ hackagePage (display pkgid) $
         Pages.packagePage render [downBox, deprHtml, maintainLink] (beforeHtml ++ middleHtml ++ afterHtml) [] docURL
   where
     showDist (dname, info) = toHtml (display dname ++ ":") +++
         anchor ! [href $ distroUrl info] << toHtml (display $ distroVersion info)
 
 -- TODO
-serveMaintainLinks :: Resource -> Resource -> DynamicPath -> ServerPart Response
-serveMaintainLinks _ _ dpath = htmlResponse $
+serveMaintainLinks :: Resource -> Resource -> GroupResource
+                   -> DynamicPath -> ServerPart Response
+serveMaintainLinks editDepr editPref mgroup dpath = htmlResponse $
                                withPackageAllPath dpath $ \pkgname _ ->
                                withPackageNameAuth pkgname $ \_ _ -> do
-    returnOk $ toResponse $ Resource.XHtml $ hackagePage "Maintain package" [h3 << "Various links to form pages here"]
+    let dpath' = [("package", display pkgname)]
+    returnOk $ toResponse $ Resource.XHtml $ hackagePage "Maintain package" 
+      [ unordList $
+          [ anchor ! [href $ renderResource' editPref dpath'] << "Edit preferred versions"
+          , anchor ! [href $ renderResource' editDepr dpath'] << "Edit deprecation"
+          , anchor ! [href $ renderResource' (groupResource mgroup) dpath'] << "Maintainer list"
+          ]
+      ]
+    -- upload documentation
 
 ---- Users
 serveUserList :: UserResource -> DynamicPath -> ServerPart Response
@@ -224,14 +237,17 @@ serveUserList users _ = do
 serveUserPage :: UserFeature -> DynamicPath -> ServerPart Response
 serveUserPage users dpath = htmlResponse $ withUserPath dpath $ \uid info -> do
     let uname = userName info
-    strs <- getGroupIndex (groupIndex users) uid
+    uris <- getGroupIndex (groupIndex users) uid
+    uriPairs <- forM uris $ \uri -> do
+        desc <- getIndexDesc (groupIndex users) uri
+        return $ Pages.renderGroupName desc (Just uri)
     returnOk $ toResponse $ Resource.XHtml $ hackagePage (display uname)
       [ h3 << display uname
-      , case strs of
+      , case uriPairs of
             [] -> noHtml
             _  -> toHtml
               [ toHtml $ display uname ++ " is part of the following groups:"
-              , unordList $ map (\str -> anchor ! [href str] << str) strs
+              , unordList uriPairs
               ]
       ]
 
@@ -319,16 +335,16 @@ htmlGroupResource users r@(GroupResource groupR userR groupGen) =
     getList dpath = withGroup (liftIO $ groupGen dpath) $ \group -> do
         uidlist <- liftIO . queryUserList $ group
         unames <- query $ State.ListGroupMembers uidlist
+        let baseUri = renderResource' groupR dpath
         returnOk . toResponse . Resource.XHtml $ Pages.groupPage
-            unames Nothing Nothing (groupDesc group)
+            unames baseUri (False, False) (groupDesc group)
     getEditList dpath = withGroup (liftIO $ groupGen dpath) $ \group ->
                         withGroupEditAuth group $ \canAdd canDelete -> do
         userlist <- liftIO . queryUserList $ group
         unames <- query $ State.ListGroupMembers userlist
         let baseUri = renderResource' groupR dpath
-            maybeUri b = if b then Just baseUri else Nothing
         returnOk . toResponse . Resource.XHtml $ Pages.groupPage
-            unames (maybeUri canAdd) (maybeUri canDelete) (groupDesc group)
+            unames baseUri (canAdd, canDelete) (groupDesc group)
     postUser dpath = withGroup (liftIO $ groupGen dpath) $ \group -> do
         res <- groupAddUser users group dpath
         case res of
@@ -407,7 +423,8 @@ serveCandidatePage pkg dpath = htmlResponse $
     let warningBox = case renderWarnings candRender of
             [] -> []
             warn -> [thediv ! [theclass "box"] << [toHtml "Warnings:", unordList warn]]
-    returnOk $ toResponse $ Resource.XHtml $ Pages.packagePage render warningBox sectionHtml [] Nothing
+    returnOk $ toResponse $ Resource.XHtml $ hackagePage (display $ packageId cand) $
+        Pages.packagePage render warningBox sectionHtml [] Nothing
 
 servePublishForm :: CheckResource -> DynamicPath -> ServerPart Response
 servePublishForm r dpath = htmlResponse $

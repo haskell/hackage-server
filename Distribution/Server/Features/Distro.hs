@@ -10,7 +10,7 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Resource
 import Distribution.Server.Types
 
-import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..))
+import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
 import Distribution.Server.Distributions.State
 import Distribution.Server.Distributions.Types
 import Distribution.Server.Distributions.DistroBackup
@@ -149,10 +149,10 @@ getMaintainersGroup admins dname = do
 
 
 maintainerDescription :: DistroName -> GroupDescription
-maintainerDescription dname = GroupDescription
-  { groupTitle = "Maintainers for " ++ display dname
-  , groupShort = ""
-  , groupEntityURL = "/distro/" ++ display dname
-  , groupPrologue  = ""
+maintainerDescription dname = nullDescription
+  { groupTitle = "Maintainers"
+  , groupEntity = Just (str, Just $ "/distro/" ++ display dname)
+  , groupPrologue = "Maintainers for a distribution can map packages to it."
   }
+  where str = display dname
 

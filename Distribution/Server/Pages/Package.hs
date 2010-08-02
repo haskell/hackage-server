@@ -8,12 +8,12 @@ module Distribution.Server.Pages.Package (
 
 import Distribution.Server.Features.Packages
 import Distribution.Server.Packages.Preferred
+--import Distribution.Server.Packages.Tag
 
 import Distribution.Server.Pages.Package.HaddockParse (parseHaddockParagraphs)
 import Distribution.Server.Pages.Package.HaddockLex  (tokenise)
 import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Packages.ModuleForest
-import Distribution.Server.Pages.Template (hackagePage)
 
 import Distribution.Package
 import Distribution.PackageDescription as P
@@ -27,10 +27,9 @@ import System.FilePath.Posix    ((</>), (<.>))
 import System.Locale            (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
 
-packagePage :: PackageRender -> [Html] -> [(String, Html)] -> [(String, Html)] -> Maybe URL -> Html
-packagePage render top sections bottom docURL = hackagePage (display pkgid) $
-    [thediv ! [theclass "floatright"] << cabalLink,
-     h2 << docTitle]
+packagePage :: PackageRender -> [Html] -> [(String, Html)] -> [(String, Html)] -> Maybe URL -> [Html]
+packagePage render top sections bottom docURL =
+    [h2 << docTitle]
   ++ top
   ++ pkgBody render sections
   ++ concatMap (\(s, p) -> [h3 << s, p])

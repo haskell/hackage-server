@@ -13,7 +13,7 @@ import Distribution.Server.Packages.Tag (PackageTags)
 import Distribution.Server.BuildReport.BuildReports (BuildReports)
 import Distribution.Server.BuildReport.State ()
 import Distribution.Server.Users.Users (Users)
-import Distribution.Server.Users.State (HackageAdmins)
+import Distribution.Server.Users.State (HackageAdmins, IndexUsers)
 import Distribution.Server.Distributions.State (Distros)
 import Distribution.Server.Util.TarIndex (TarIndexMap)
 
@@ -41,7 +41,8 @@ instance Component HackageEntryPoint where
           BuildReports :+: Distros :+: TarIndexMap :+:
           PackageUpload :+: CandidatePackages :+: 
           PreferredVersions :+: ReverseIndex :+:
-          DownloadCounts :+: PackageTags :+: End
+          DownloadCounts :+: PackageTags :+:
+          IndexUsers :+: End
     initialValue = HackageEntryPoint
 
 $(mkMethods ''HackageEntryPoint [])

@@ -5,7 +5,8 @@ module Distribution.Server.Features.HaskellPlatform (
 
 import Distribution.Server.Feature
 
--- some boilerplate-y code follows
+import Data.List (nub, sort)
+
 data PlatformFeature = PlatformFeature {
     platformResource :: PlatformResource
 }
@@ -46,6 +47,9 @@ getPlatformPackages = ask
 setPlatformPackage :: PackageName -> [Version] -> Update PlatformPackages ()
 setPlatformPackage pkgname versions = modify $ \p -> case versions of
     [] -> p { blessedPackages = Map.delete pkgname $ blessedPackages p }
-    _  -> p { blessedPackages = Map.insert version pkgname $ blessedPackages p }
+    _  -> p { blessedPackages = Map.insert (sort $ nub versions) pkgname $ blessedPackages p }
+
+instance Version PlatformPackages
+$(deriveSerialize ''PlatformPackages)
 
 

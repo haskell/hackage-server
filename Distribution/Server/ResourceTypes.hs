@@ -54,6 +54,15 @@ instance ToMessage PackageTarball where
     , ("Last-modified", formatTime time)
     ]
 
+data DocTarball = DocTarball BS.Lazy.ByteString BlobId
+
+instance ToMessage DocTarball where
+  toResponse (DocTarball bs blobid) = mkResponse bs
+    [ ("Content-Type",  "application/gzip")
+    , ("Content-MD5",   show blobid)
+    , ("ETag",          '"' : show blobid ++ ['"'])
+    ]
+
 formatTime :: UTCTime -> String
 formatTime = Time.formatTime defaultTimeLocale rfc822DateFormat
   where
