@@ -18,6 +18,7 @@ import Distribution.Server.Features.PreferredVersions (initVersionsFeature)
 import Distribution.Server.Features.ReverseDependencies (initReverseFeature)
 import Distribution.Server.Features.DownloadCount (initDownloadFeature)
 import Distribution.Server.Features.Tags (initTagsFeature)
+import Distribution.Server.Features.NameSearch (initNamesFeature)
 --for a mirror, import Distribution.Server.Features.Mirror (initMirrorFeature)
 
 -- This module ties together all the hackage features that we will use.
@@ -56,17 +57,18 @@ hackageFeatures config = do
     uploadFeature <- initUploadFeature config coreFeature usersFeature
     packagesFeature <- initPackagesFeature config coreFeature
     distroFeature <- initDistroFeature config coreFeature usersFeature packagesFeature
-    checkFeature <- initCheckFeature config coreFeature packagesFeature uploadFeature
+    checkFeature <- initCheckFeature config coreFeature usersFeature packagesFeature uploadFeature
     reportsFeature <- initReportsFeature config coreFeature
     versionsFeature <- initVersionsFeature config coreFeature uploadFeature
     reverseFeature <- initReverseFeature config coreFeature versionsFeature
     documentationFeature <- initDocumentationFeature config coreFeature uploadFeature
     downloadFeature <- initDownloadFeature config coreFeature
     tagsFeature <- initTagsFeature config coreFeature
+    namesFeature <- initNamesFeature config coreFeature
     --jsonFeature <- initJsonFeature
     htmlFeature <- initHtmlFeature config coreFeature packagesFeature
                         uploadFeature checkFeature usersFeature versionsFeature
-                        reverseFeature tagsFeature
+                        reverseFeature tagsFeature downloadFeature
     let allFeatures =
          [ HF coreFeature
          , HF usersFeature
@@ -80,6 +82,7 @@ hackageFeatures config = do
          , HF documentationFeature
          , HF downloadFeature
          , HF tagsFeature
+         , HF namesFeature
          , HF htmlFeature
          , HF legacyRedirectsFeature
          ]

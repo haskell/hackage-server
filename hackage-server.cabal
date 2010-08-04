@@ -68,6 +68,7 @@ executable hackage-server
     Distribution.Server.Features.Json
     Distribution.Server.Features.LegacyRedirects
     Distribution.Server.Features.Mirror
+import Distribution.Server.Features.NameSearch
     Distribution.Server.Features.Packages
     Distribution.Server.Features.PreferredVersions
     Distribution.Server.Features.Reports
@@ -111,10 +112,13 @@ executable hackage-server
     Distribution.Server.Util.AsyncVar
     Distribution.Server.Util.BlobStorage
     Distribution.Server.Util.Happstack
+    Distribution.Server.Util.Histogram
     Distribution.Server.Util.Index
+    Distribution.Server.Util.NameIndex
     Distribution.Server.Util.Parse
     Distribution.Server.Util.Serve
     Distribution.Server.Util.TarIndex
+    Distribution.Server.Util.TextSearch
   build-depends:
     base == 4.*,
     filepath >= 1.1,
@@ -139,6 +143,7 @@ executable hackage-server
     binary >= 0.4,
     pureMD5 >= 0.2,
     xhtml >= 3000.1,
+    json == 0.4.*,
     rss == 3000.0.*,
     Cabal == 1.8.*,
     csv == 0.1.*,
