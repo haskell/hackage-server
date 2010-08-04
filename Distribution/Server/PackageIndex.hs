@@ -27,6 +27,7 @@ module Distribution.Server.PackageIndex (
 
     -- * Queries
     indexSize,
+    packageNames,
 
     -- ** Precise lookups
     lookupPackageName,
@@ -320,4 +321,8 @@ searchByNameSubstring (PackageIndex m) searchterm =
 -- | Gets the number of packages in the index (number of names).
 indexSize :: Package pkg => PackageIndex pkg -> Int
 indexSize (PackageIndex m) = Map.size m
+
+-- | Get an ascending list of package names in the index.
+packageNames :: Package pkg => PackageIndex pkg -> [PackageName]
+packageNames (PackageIndex m) = Map.keys m
 

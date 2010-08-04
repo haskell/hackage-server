@@ -14,11 +14,13 @@ import qualified Text.PrettyPrint as Disp
 
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Control.Monad (liftM2)
 import Data.Typeable (Typeable)
 import qualified Data.Char as Char
 import Data.Maybe (fromMaybe)
-import Data.List (insert, delete, union, nub, foldl')
+import Data.List (foldl')
 import Control.Monad.State (get, put, modify)
 import Control.Monad.Reader (ask, asks)
 import Control.Parallel.Strategies
@@ -51,75 +53,89 @@ tagLaterChar   c = Char.isAlphaNum c || c `elem` "-+#*."
 tagify :: String -> Tag
 tagify (x:xs) = Tag $ (if tagInitialChar x then (x:) else id) $ tagify' xs
   where tagify' (c:cs) | tagLaterChar c = c:tagify' cs
-        tagify' (c:cs) | c `elem` " /\\" = '-':tagify' cs -- dash is the preferred separation tag?
+        tagify' (c:cs) | c `elem` " /\\" = '-':tagify' cs -- dash is the preferred word separator?
         tagify' (_:cs) = tagify' cs
         tagify' [] = []
 tagify [] = Tag ""
 
--- TODO: use Set
 data PackageTags = PackageTags {
     -- the primary index
-    packageTags :: Map PackageName [Tag],
+    packageTags :: Map PackageName (Set Tag),
     -- a secondary reverse mapping
-    tagPackages :: Map Tag [PackageName]
+    tagPackages :: Map Tag (Set PackageName)
 } deriving (Show, Typeable)
 
 emptyPackageTags :: PackageTags
 emptyPackageTags = PackageTags Map.empty Map.empty
 
-setTags :: PackageName -> [Tag] -> PackageTags -> PackageTags
-setTags name tagList (PackageTags tags packages) =
-    let oldTags  = Map.findWithDefault [] name tags
-        allTagList = union (nub tagList) oldTags
-        packages'  = foldl' (adjustTags oldTags) packages allTagList
-    in PackageTags (Map.insert name tagList tags) packages'
-  where
-    adjustTags :: [Tag] -> Map Tag [PackageName] -> Tag -> Map Tag [PackageName]
-    adjustTags oldTags pkgMap tagExamine = case tagExamine `elem` tagList of
-        True -> case tagExamine `elem` oldTags of
-            True  -> pkgMap
-            False -> Map.alter (Just . insert name . fromMaybe []) tagExamine pkgMap
-        False -> deletePackageFromTag name tagExamine pkgMap
+tagToPackages :: Tag -> PackageTags -> Set PackageName
+tagToPackages tag = Map.findWithDefault Set.empty tag . tagPackages
+
+packageToTags :: PackageName -> PackageTags -> Set Tag
+packageToTags pkg = Map.findWithDefault Set.empty pkg . packageTags
+
+alterTags :: PackageName -> Maybe (Set Tag) -> PackageTags -> PackageTags
+alterTags name mtagList (PackageTags tags packages) =
+    let tagList = fromMaybe Set.empty mtagList
+        oldTags = Map.findWithDefault Set.empty name tags
+        adjustPlusTags pkgMap tag' = addSetMap tag' name pkgMap
+        adjustMinusTags pkgMap tag' = removeSetMap tag' name pkgMap
+        packages' = flip (foldl' adjustPlusTags) (Set.toList $ Set.difference tagList oldTags)
+                  $ foldl' adjustMinusTags packages (Set.toList $ Set.difference oldTags tagList)
+    in PackageTags (Map.alter (const mtagList) name tags) packages'
+
+setTags :: PackageName -> Set Tag -> PackageTags -> PackageTags
+setTags pkgname tagList = alterTags pkgname (Just tagList)
+
+deletePackageTags :: PackageName -> PackageTags -> PackageTags
+deletePackageTags name = alterTags name Nothing
 
 addTag :: PackageName -> Tag -> PackageTags -> Maybe PackageTags
 addTag name tag (PackageTags tags packages) =
-    let existing = Map.findWithDefault [] name tags
-    in case tag `elem` existing of
-        True -> Nothing
-        False -> Just $ PackageTags (Map.insert name (insert tag existing) tags)
-                         (Map.adjust (insert name) tag packages)
+    let existing = Map.findWithDefault Set.empty name tags
+    in case tag `Set.member` existing of
+        True  -> Nothing
+        False -> Just $ PackageTags (addSetMap name tag tags)
+                                    (addSetMap tag name packages)
 
 removeTag :: PackageName -> Tag -> PackageTags -> Maybe PackageTags
 removeTag name tag (PackageTags tags packages) =
-    let existing = Map.findWithDefault [] name tags
-    in case tag `elem` existing of
-        True ->
-            let existing' = delete tag existing
-            in Just $  PackageTags (Map.insert name existing' tags)
-                                   (deletePackageFromTag name tag packages)
+    let existing = Map.findWithDefault Set.empty name tags
+    in case tag `Set.member` existing of
+        True -> Just $ PackageTags (removeSetMap name tag tags)
+                                   (removeSetMap tag name packages)
         False -> Nothing
 
-{-
-setTag :: Tag -> [PackageName] -> PackageTags -> PackageTags
-setTag tag pkgList (PackageTags tags packages) =
-    let oldPkgs = Map.findWithDefault [] tag packages
-        allPackageList = union (nub pkgList) oldPkgs
-        tags' = foldl' (adjustPkgs oldPkgs) tags allPackageList
-    in PackageTags tags' (Map.insert tag pkgList packages)
-  where
-    adjustPkgs oldPkgs tagMap pkg = case pkg `elem` pkgList of
-        ...
--}
+addSetMap :: (Ord k, Ord a) => k -> a -> Map k (Set a) -> Map k (Set a)
+addSetMap key val = Map.alter (Just . Set.insert val . fromMaybe Set.empty) key
 
--- Deletes a (tag, package) mapping from the (tag -> package) map, deleting the
--- tag if no other package names have it.
-deletePackageFromTag :: PackageName -> Tag -> Map Tag [PackageName] -> Map Tag [PackageName]
-deletePackageFromTag name tag packages = Map.update deleteUpdate tag packages
-  where
-    deleteUpdate pkgs = case delete name pkgs of
-        []    -> Nothing
-        pkgs' -> Just pkgs'
+removeSetMap :: (Ord k, Ord a) => k -> a -> Map k (Set a) -> Map k (Set a)
+removeSetMap key val = Map.update (keepSet . Set.delete val) key
 
+alterTag :: Tag -> Maybe (Set PackageName) -> PackageTags -> PackageTags
+alterTag tag mpkgList (PackageTags tags packages) =
+    let pkgList = fromMaybe Set.empty mpkgList
+        oldPkgs = Map.findWithDefault Set.empty tag packages
+        adjustPlusPkgs tagMap name' = addSetMap name' tag tagMap
+        adjustMinusPkgs tagMap name' = removeSetMap name' tag tagMap
+        tags' = flip (foldl' adjustPlusPkgs) (Set.toList $ Set.difference pkgList oldPkgs)
+              $ foldl' adjustMinusPkgs tags (Set.toList $ Set.difference oldPkgs pkgList)
+    in PackageTags tags' (Map.alter (const mpkgList) tag packages)
+
+keepSet :: Ord a => Set a -> Maybe (Set a)
+keepSet s = if Set.null s then Nothing else Just s
+
+-- these three are not currently exposed as happstack-state functions
+setTag :: Tag -> Set PackageName -> PackageTags -> PackageTags
+setTag tag pkgs = alterTag tag (Just pkgs)
+
+deleteTag :: Tag -> PackageTags -> PackageTags
+deleteTag tag = alterTag tag Nothing
+
+renameTag :: Tag -> Tag -> PackageTags -> PackageTags
+renameTag tag tag' pkgTags@(PackageTags _ packages) = 
+    let oldPkgs = Map.findWithDefault Set.empty tag packages
+    in setTag tag' oldPkgs . deleteTag tag $ pkgTags
 -------------------------------------------------------------------------------
 
 instance Version Tag where mode = Versioned 0 Nothing
@@ -134,13 +150,13 @@ instance Component PackageTags where
     type Dependencies PackageTags = End
     initialValue = emptyPackageTags
 
-tagsForPackage :: PackageName -> Query PackageTags [Tag]
-tagsForPackage name = asks $ Map.findWithDefault [] name . packageTags
+tagsForPackage :: PackageName -> Query PackageTags (Set Tag)
+tagsForPackage name = asks $ Map.findWithDefault Set.empty name . packageTags
 
-packagesForTag :: Tag -> Query PackageTags [PackageName]
-packagesForTag tag = asks $ Map.findWithDefault [] tag . tagPackages
+packagesForTag :: Tag -> Query PackageTags (Set PackageName)
+packagesForTag tag = asks $ Map.findWithDefault Set.empty tag . tagPackages
 
-getTagList :: Query PackageTags [(Tag, [PackageName])]
+getTagList :: Query PackageTags [(Tag, Set PackageName)]
 getTagList = asks $ Map.toList . tagPackages
 
 getPackageTags :: Query PackageTags PackageTags
@@ -149,8 +165,11 @@ getPackageTags = ask
 replacePackageTags :: PackageTags -> Update PackageTags ()
 replacePackageTags = put
 
-setPackageTags :: PackageName -> [Tag] -> Update PackageTags ()
+setPackageTags :: PackageName -> Set Tag -> Update PackageTags ()
 setPackageTags name tagList = modify $ setTags name tagList
+
+setTagPackages :: Tag -> Set PackageName -> Update PackageTags ()
+setTagPackages tag pkgList = modify $ setTag tag pkgList
 
 -- | Tag a package. Returns True if the element was inserted, and False if
 -- the tag as already present (same result though)
@@ -170,16 +189,13 @@ removePackageTag name tag = do
         Nothing -> return False
         Just pkgTags' -> put pkgTags' >> return True
 
--- May also be useful, but more complicated (result = packages affected):
--- renameTag :: Tag -> Tag -> Update PackageTags [PackageName]
--- deleteTag :: Tag -> Update PackageTags [PackageName]
-
 $(mkMethods ''PackageTags ['tagsForPackage
                           ,'packagesForTag
                           ,'getTagList
                           ,'getPackageTags
                           ,'replacePackageTags
                           ,'setPackageTags
+                          ,'setTagPackages
                           ,'addPackageTag
                           ,'removePackageTag
                           ])

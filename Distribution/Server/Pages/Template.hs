@@ -14,6 +14,9 @@ hackagePageWith links heading docs = toHtml [header << docHead, body << docBody]
         thetitle << ("HackageDB: " ++ heading) :
         thelink ! [rel "stylesheet", href stylesheetURL,
             thetype "text/css"] << noHtml :
+        -- if NameSearch is enabled
+        thelink ! [rel "search", href "/opensearch.xml", title "Hackage",
+           thetype "application/opensearchdescription+xml"] << noHtml :
         links
     docBody = [thediv ! [theclass "header"] << docHeader,
         thediv ! [theclass "content"] << docs]

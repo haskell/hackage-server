@@ -24,18 +24,13 @@ import Happstack.Server
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
-import Text.RSS
-         ( RSS )
-import qualified Text.RSS as RSS
-         ( rssToXML, showXML )
-import qualified Text.XHtml.Strict as XHtml
-         ( Html, renderHtml )
-import Data.Time.Clock
-         ( UTCTime )
-import qualified Data.Time.Format as Time
-         ( formatTime )
-import System.Locale
-         ( defaultTimeLocale )
+import Text.RSS (RSS)
+import qualified Text.RSS as RSS (rssToXML, showXML)
+import qualified Text.XHtml.Strict as XHtml (Html, renderHtml)
+import qualified Text.JSON as JSON (JSValue, encode)
+import Data.Time.Clock (UTCTime)
+import qualified Data.Time.Format as Time (formatTime)
+import System.Locale (defaultTimeLocale)
 
 data IndexTarball = IndexTarball BS.Lazy.ByteString
 
@@ -70,6 +65,17 @@ formatTime = Time.formatTime defaultTimeLocale rfc822DateFormat
     -- hopefully it's ok to just say it's GMT
     rfc822DateFormat = "%a, %d %b %Y %H:%M:%S GMT"
 
+newtype OpenSearchXml = OpenSearchXml BS.Lazy.ByteString
+
+instance ToMessage OpenSearchXml where
+    toContentType _ = BS.pack "application/opensearchdescription+xml"
+    toMessage (OpenSearchXml bs) = bs
+
+newtype SuggestJson = SuggestJson JSON.JSValue
+instance ToMessage SuggestJson where
+    toContentType _ = BS.pack "application/x-suggestions+json"
+    toMessage (SuggestJson val) = BS.Lazy.pack $ JSON.encode val
+
 newtype CabalFile = CabalFile BS.Lazy.ByteString
 
 instance ToMessage CabalFile where
@@ -99,7 +105,6 @@ instance ToMessage ExportTarball where
         = noContentLength $ mkResponse bs
           [("Content-Type",  "application/gzip")]
 
-
 mkResponse :: BS.Lazy.ByteString -> [(String, String)] -> Response
 mkResponse bs headers = Response {
     rsCode    = 200,
@@ -117,3 +122,4 @@ mkResponseLen bs len headers = Response {
     rsBody    = bs,
     rsValidator = Nothing
   }
+

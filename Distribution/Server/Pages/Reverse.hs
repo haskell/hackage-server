@@ -150,19 +150,18 @@ num' n plural singular = if n == 1 then singular else plural
 reversePackagesRender :: (PackageName -> String) -> ReverseResource -> Int -> [(PackageName, Int, Int)] -> [Html]
 reversePackagesRender packageLink r pkgCount triples =
         h3 << ("Reverse dependencies") :
-      [ paragraph << [ "Hackage has " ++ show pkgCount ++ " packages. Here are all the packages that have package that depend on them (soon to be served fresh in sorted form):"]
+      [ paragraph << [ "Hackage has " ++ show pkgCount ++ " packages. Here are all the packages that have package that depend on them:"]
       , reverseTable ]
   where
     reverseTable = thediv << table << reverseTableRows
     reverseTableRows =
-        [ tr << [ th << "Package name", th << "Direct", th << "Indirect", th << "Total" ] ] ++
+        [ tr << [ th << "Package name", th << "Total", th << "Direct" ] ] ++
         [ tr ! [theclass (if odd n then "odd" else "even")] <<
             [ td << anchor ! [href $ packageLink pkgname ] << display pkgname
-            , td << [ toHtml . show $ total ]
-            , td << [ toHtml . show $ flat-total ]
             , td << [ toHtml $ show flat ++ " (", anchor ! [href $ reverseStatsUri r "" pkgname ] << "view", toHtml ")" ]
-            ]
-        | ((pkgname, total, flat), n) <- zip triples [(1::Int)..] ]
+            , td << [ toHtml $ show total ++ " (", anchor ! [href $ reverseNameUri r "" pkgname ] << "view", toHtml ")" ]
+            ] -- and, indirect is flat-total, if those are ever explicitly served
+        | ((pkgname, total, flat), n) <- zip triples [(1::Int)..], flat /= 0 ]
 
 reversePackageSummary :: PackageId -> ReverseResource -> (Int, Int) -> (String, Html)
 reversePackageSummary pkgid r (direct, version) = (,) "Reverse dependencies" $

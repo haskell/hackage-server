@@ -49,14 +49,14 @@ instance HackageFeature DownloadFeature where
             transferDownloads = forever $ do
                 pkg <- readChan (downloadStream down)
                 time <- getCurrentTime
-                (old, new) <- update $ RegisterDownload (utctDay time) pkg 1
+                (_, new) <- update $ RegisterDownload (utctDay time) pkg 1
                 Cache.modifyCache (downloadHistogram down)
-                    (updateHistogram (packageName pkg) old new)
+                    (updateHistogram (packageName pkg) new)
 
 initDownloadFeature :: Config -> CoreFeature -> IO DownloadFeature
 initDownloadFeature _ core = do
     downChan <- newChan
-    downHist <- Cache.newCacheable Map.empty
+    downHist <- Cache.newCacheable emptyHistogram
     registerHook (tarballDownload core) $ writeChan downChan
     return DownloadFeature
       { downloadResource = fix $ \_ -> DownloadResource
@@ -78,6 +78,7 @@ sortedPackages downs = fmap topCounts $ Cache.getCache (downloadHistogram downs)
 
 -- Sorts a list of package-y items by their download count.
 -- Use sortedPackages to get an entire list.
+-- TODO: use the Histogram's sortByCounts for this
 sortByDownloads :: MonadIO m => (a -> PackageName) -> [a] -> m [(a, Int)]
 sortByDownloads nameFunc pkgs = query GetDownloadCounts >>= \counts -> do
     let downMap = downloadMap counts

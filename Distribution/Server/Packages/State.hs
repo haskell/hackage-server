@@ -226,8 +226,11 @@ instance Component PackageMaintainers where
   type Dependencies PackageMaintainers = End
   initialValue = PackageMaintainers Map.empty
 
+packageMaintainersExist :: PackageName -> Query PackageMaintainers Bool
+packageMaintainersExist name = asks $ Map.member name . maintainers
+
 getPackageMaintainers :: PackageName -> Query PackageMaintainers UserList
-getPackageMaintainers name = fmap (fromMaybe Group.empty . Map.lookup name) (asks maintainers)
+getPackageMaintainers name = asks $ fromMaybe Group.empty . Map.lookup name . maintainers
 
 modifyPackageMaintainers :: PackageName -> (UserList -> UserList) -> Update PackageMaintainers ()
 modifyPackageMaintainers name func = State.modify (\pm -> pm {maintainers = alterFunc (maintainers pm) })
@@ -246,6 +249,7 @@ $(mkMethods ''PackageMaintainers ['getPackageMaintainers
                                  ,'addPackageMaintainer
                                  ,'removePackageMaintainer
                                  ,'replacePackageMaintainers
+                                 ,'packageMaintainersExist
                                  ])
 
 -------------------------------- Trustee list

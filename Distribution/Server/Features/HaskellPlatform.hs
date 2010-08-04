@@ -4,9 +4,13 @@ module Distribution.Server.Features.HaskellPlatform (
   ) where
 
 import Distribution.Server.Feature
-
+import Distribution.Server.Resource
 import Data.List (nub, sort)
 
+-- Note: this can be generalized into dividing Hackage up into however many
+-- subsets of packages are desired. One could implement a Debian-esque system
+-- with this sort of feature. (Of course, the goal is to work alongside
+-- distributions, not replace them, since some users prefer not to use Hackage.)
 data PlatformFeature = PlatformFeature {
     platformResource :: PlatformResource
 }
@@ -38,16 +42,16 @@ initPlatformFeature _ _ = do
 
 ------------------------------------------
 newtype PlatformPackages = PlatformPackages {
-    blessedPackages :: Map PackageName [Version]
+    blessedPackages :: Map PackageName (Set Version)
 } deriving (Show, Typeable)
 
 getPlatformPackages :: Query PlatformPackages PlatformPackages
 getPlatformPackages = ask
 
-setPlatformPackage :: PackageName -> [Version] -> Update PlatformPackages ()
+setPlatformPackage :: PackageName -> Set Version -> Update PlatformPackages ()
 setPlatformPackage pkgname versions = modify $ \p -> case versions of
     [] -> p { blessedPackages = Map.delete pkgname $ blessedPackages p }
-    _  -> p { blessedPackages = Map.insert (sort $ nub versions) pkgname $ blessedPackages p }
+    _  -> p { blessedPackages = Map.insert versions pkgname $ blessedPackages p }
 
 instance Version PlatformPackages
 $(deriveSerialize ''PlatformPackages)

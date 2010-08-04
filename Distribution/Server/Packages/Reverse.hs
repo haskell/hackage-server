@@ -13,7 +13,7 @@ import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.Version
 
-import Data.List (foldl')
+import Data.List (foldl', union)
 import Data.Maybe (maybeToList, fromMaybe)
 import Data.Typeable (Typeable)
 import Data.Map (Map)
@@ -85,22 +85,31 @@ updateReverseCount index =
         }
     }
 
-addPackage :: PackageIndex PkgInfo -> PkgInfo -> ReverseIndex -> ReverseIndex
+addPackage :: PackageIndex PkgInfo -> PkgInfo -> ReverseIndex -> (ReverseIndex, Map PackageName [Version])
 addPackage index pkg revs =
-    let (deps, _) = registerPackage (getAllVersions index) pkg (reverseDependencies revs)
-    in updateReverseCount $ revs {
+    let (deps, rec) = registerPackage (getAllVersions index) pkg (reverseDependencies revs)
+    in (updateReverseCount $ revs {
         reverseDependencies = deps,
         flattenedReverse = packageNameClosure deps
-    }
+    }, rec)
 
-removePackage :: PackageIndex PkgInfo -> PkgInfo -> ReverseIndex -> ReverseIndex
+removePackage :: PackageIndex PkgInfo -> PkgInfo -> ReverseIndex -> (ReverseIndex, Map PackageName [Version])
 removePackage index pkg revs =
-    let (deps, _) = unregisterPackage (getAllVersions index) pkg (reverseDependencies revs)
-    in updateReverseCount $ revs {
+    let (deps, rec) = unregisterPackage (getAllVersions index) pkg (reverseDependencies revs)
+    in (updateReverseCount $ revs {
         reverseDependencies = deps,
         flattenedReverse = packageNameClosure deps
-    }
+    }, rec)
 
+changePackage :: PackageIndex PkgInfo -> PkgInfo -> PkgInfo -> ReverseIndex -> (ReverseIndex, Map PackageName [Version])
+changePackage index pkg pkg' revs = 
+    let allVersions = getAllVersions index
+        (deps, rec)   = unregisterPackage allVersions pkg (reverseDependencies revs)
+        (deps', rec') = registerPackage allVersions pkg' deps
+    in (updateReverseCount $ revs {
+        reverseDependencies = deps',
+        flattenedReverse = packageNameClosure deps'
+    }, Map.unionWith union rec rec')
 --------------------------------------------------------------------------------
 -- Managing the RevDeps index.
 

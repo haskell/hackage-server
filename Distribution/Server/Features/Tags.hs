@@ -1,6 +1,10 @@
 module Distribution.Server.Features.Tags (
     TagsFeature(..),
-    initTagsFeature
+    TagsResource(..),
+    initTagsFeature,
+
+    withTagPath,
+    putTags
   ) where
 
 import Distribution.Server.Feature
@@ -22,7 +26,11 @@ import qualified Distribution.Server.Cache as Cache
 import Distribution.Text
 import Distribution.Package
 import Distribution.PackageDescription
+import Distribution.PackageDescription.Configuration
+import Distribution.License
 
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Function (fix)
 import Data.List (intercalate, foldl')
 import Data.Char (toLower)
@@ -33,13 +41,19 @@ import Happstack.Server
 
 data TagsFeature = TagsFeature {
     tagsResource :: TagsResource,
-    -- TODO: arguments
-    tagsUpdated :: Hook (IO ()),
-    -- This is used so that other features can reserve a
-    -- tag for their own use. It is a subset of the
-    -- other mapping.
-    specialTags :: Cache.Cache PackageTags,
-    setSpecialTags :: Tag -> [PackageName] -> IO ()
+    -- All package names that were modified, and all tags that were modified
+    -- In almost all cases, one of these will be a singleton. Happstack
+    -- functions should be used to query the resultant state.
+    tagsUpdated :: Hook (Set PackageName -> Set Tag -> IO ()),
+    -- Calculated tags are used so that other features can reserve a
+    -- tag for their own use (a calculated, rather than freely
+    -- assignable, tag). It is a subset of the main mapping.
+    --
+    -- This feature itself defines a few such tags: libary, executable,
+    -- and license tags, as well as package categories on
+    -- initial import.
+    calculatedTags :: Cache.Cache PackageTags,
+    setCalculatedTag :: Tag -> Set PackageName -> IO ()
 }
 
 -- TODO: registry for calculated tags
@@ -73,6 +87,10 @@ instance HackageFeature TagsFeature where
                     update $ ReplacePackageTags tagIndex
               }
       }
+    initHooks tags = [initImmutableTags]
+      where initImmutableTags = do
+                index <- fmap packageList $ query GetPackagesState
+                Cache.putCache (calculatedTags tags) (constructImmutableTagIndex index)
 
 initTagsFeature :: Config -> CoreFeature -> IO TagsFeature
 initTagsFeature _ _ = do
@@ -80,10 +98,9 @@ initTagsFeature _ _ = do
     updateTag <- newHook
     return TagsFeature
       { tagsResource = fix $ \r -> TagsResource
-          { tagsListing = (resourceAt "/packages/tags/.:format") { resourceGet = [("txt", \_ -> textAllTags)] }
-          , tagListing = (resourceAt "/packages/tag/:tag.:format") { resourceGet = [("txt", textATag)] }
-          , packageTagsListing = (resourceAt "/package/:package/tags.:format") { resourceGet = [("txt", textPackageTags)], resourcePut = [("txt", textPutTags)] }
-
+          { tagsListing = resourceAt "/packages/tags/.:format"
+          , tagListing = resourceAt "/packages/tag/:tag.:format"
+          , packageTagsListing = resourceAt "/package/:package/tags.:format"
           , tagUri = \format tag -> renderResource (tagListing r) [display tag, format]
           , tagsUri = \format -> renderResource (tagsListing r) [format]
           , packageTagsUri = \format pkgname -> renderResource (packageTagsListing r) [display pkgname, format]
@@ -92,50 +109,80 @@ initTagsFeature _ _ = do
             -- * POST /package/:package\/tags (add single tag)
           }
       , tagsUpdated = updateTag
-      , specialTags = specials
-      , setSpecialTags = \_ _ -> return ()
+      , calculatedTags = specials
+      , setCalculatedTag = \tag pkgs -> do
+            Cache.modifyCache specials (setTag tag pkgs)
+            update $ SetTagPackages tag pkgs
+            runHook'' updateTag pkgs (Set.singleton tag)
       }
-  where
+-- { resourceGet = [("txt", textPackageTags)], resourcePut = [("txt", textPutTags)] }
+{-  
     textPutTags dpath = textResponse $ withPackageName dpath $ \pkgname ->
                         responseWith (putTags pkgname) $ \_ ->
         returnOk . toResponse $ "Set the tags for " ++ display pkgname
-    textAllTags = do
-        tags <- query GetTagList  
-        return . toResponse $ intercalate ", " $ map (display . fst) tags
-    textATag dpath = withTagPath dpath $ \_ pkgnames -> do
-        return . toResponse $ intercalate ", " $ map display pkgnames
     textPackageTags dpath = textResponse $ withPackageAllPath dpath $ \pkgname _ -> do
         tags <- query $ TagsForPackage pkgname
-        returnOk . toResponse $ display (TagList tags)
+        returnOk . toResponse $ display (TagList $ Set.toList tags)-}
 
-withTagPath :: DynamicPath -> (Tag -> [PackageName] -> ServerPart a) -> ServerPart a
+withTagPath :: DynamicPath -> (Tag -> Set PackageName -> ServerPart a) -> ServerPart a
 withTagPath dpath func = case simpleParse =<< lookup "tag" dpath of
     Nothing -> mzero
     Just tag -> do
         pkgs <- query $ PackagesForTag tag
         func tag pkgs
 
-putTags :: PackageName -> MServerPart ()
-putTags pkgname = withPackageAll pkgname $ \_ -> do
+putTags :: TagsFeature -> PackageName -> MServerPart ()
+putTags tagf pkgname = withPackageAll pkgname $ \_ -> do
     -- let anyone edit tags for the moment. otherwise, we can do:
     -- users <- query GetUserDb; withHackageAuth users Nothing Nothing $ \_ _ -> do
     mtags <- getDataFn $ look "tags"
     case simpleParse =<< mtags of
         Just (TagList tags) -> do
-            update $ SetPackageTags pkgname tags
+            let tagSet = Set.fromList tags
+            calcTags <- fmap (packageToTags pkgname) $ Cache.getCache $ calculatedTags tagf
+            update $ SetPackageTags pkgname (tagSet `Set.union` calcTags)
+            runHook'' (tagsUpdated tagf) (Set.singleton pkgname) tagSet
             returnOk ()
         Nothing -> returnError 400 "Tags not recognized" [MText "Couldn't parse your tag list. It should be comma separated with any number of alphanumerical tags. Tags can also also have -+#*."]
 
--- initial tags
+-- initial tags, on import
 constructTagIndex :: PackageIndex PkgInfo -> PackageTags
 constructTagIndex = foldl' addToTags emptyPackageTags . PackageIndex.allPackagesByName
   where addToTags pkgTags pkgList =
-            let info = last pkgList
-            in setTags (packageName info) (constructTags . packageDescription . pkgDesc $ info) pkgTags
+            let info = pkgDesc $ last pkgList
+                pkgname = packageName info
+                categoryTags = Set.fromList . constructCategoryTags . packageDescription $ info
+                immutableTags = Set.fromList . constructImmutableTags $ info
+            in setTags pkgname (Set.union categoryTags immutableTags) pkgTags
 
-constructTags :: PackageDescription -> [Tag]
-constructTags = map (tagify . map toLower) . fillMe . categorySplit . category
+-- tags on startup
+constructImmutableTagIndex :: PackageIndex PkgInfo -> PackageTags
+constructImmutableTagIndex = foldl' addToTags emptyPackageTags . PackageIndex.allPackagesByName
+  where addToTags calcTags pkgList =
+            let info = pkgDesc $ last pkgList
+            in setTags (packageName info) (Set.fromList $ constructImmutableTags info) calcTags
+
+constructCategoryTags :: PackageDescription -> [Tag]
+constructCategoryTags = map (tagify . map toLower) . fillMe . categorySplit . category
   where
     fillMe [] = ["unclassified"]
     fillMe xs = xs
+
+constructImmutableTags :: GenericPackageDescription -> [Tag]
+constructImmutableTags genDesc =
+    let desc = flattenPackageDescription genDesc
+    in licenseToTag (license desc)
+    ++ (if hasLibs desc then [Tag "library"] else [])
+    ++ (if hasExes desc then [Tag "program"] else [])
+  where
+    licenseToTag :: License -> [Tag]
+    licenseToTag l = case l of
+        GPL  _ -> [Tag "gpl"]
+        LGPL _ -> [Tag "lgpl"]
+        BSD3 -> [Tag "bsd3"]
+        BSD4 -> [Tag "bsd4"]
+        MIT  -> [Tag "mit"]
+        PublicDomain -> [Tag "public-domain"]
+        AllRightsReserved -> [Tag "all-rights-reserved"]
+        _ -> []
 

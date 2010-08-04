@@ -12,6 +12,7 @@ module Distribution.Server.Features.ReverseDependencies (
     revPackageStats,
     revPackageSummary,
     revSummary,
+    sortedRevSummary
   ) where
 
 import Distribution.Server.Feature
@@ -25,26 +26,30 @@ import Distribution.Server.Features.PreferredVersions
 import Distribution.Server.Packages.State
 import Distribution.Server.Packages.Reverse
 import Distribution.Server.Packages.Preferred
+import qualified Distribution.Server.Cache as Cache
 --import Distribution.Server.PackageIndex (PackageIndex)
 
 import Distribution.Package
 import Distribution.Text (display)
+import Distribution.Version
 
-import Data.List (mapAccumL)
+import Data.List (mapAccumL, sortBy)
 import Data.Maybe (catMaybes)
-import Data.Function (fix)
+import Data.Function (fix, on)
+import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Control.Monad (liftM, forever)
 import Control.Monad.Trans (MonadIO)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.Chan
-
 import Happstack.State (query, update)
 
 data ReverseFeature = ReverseFeature {
     reverseResource :: ReverseResource,
-    reverseStream :: Chan (ReverseIndex -> ReverseIndex)
+    reverseStream :: Chan (ReverseIndex -> (ReverseIndex, Map PackageName [Version])),
+    reverseUpdateHook :: Hook (Map PackageName [Version] -> IO ()),
+    reverseTopCache :: Cache.Cache [(PackageName, Int, Int)]
 }
 
 data ReverseResource = ReverseResource {
@@ -84,7 +89,9 @@ instance HackageFeature ReverseFeature where
       where transferReverse = forever $ do
                 revFunc <- readChan (reverseStream down)
                 revs <- query GetReverseIndex
-                update $ ReplaceReverseIndex (revFunc revs)
+                let (revs', modded) = revFunc revs
+                update $ ReplaceReverseIndex revs'
+                runHook' (reverseUpdateHook down) modded
 
 initReverseFeature :: Config -> CoreFeature -> VersionsFeature -> IO ReverseFeature
 initReverseFeature _ core _ = do
@@ -97,7 +104,12 @@ initReverseFeature _ core _ = do
         writeChan revChan $ removePackage index pkg
     registerHook (packageChangeHook core) $ \pkg pkg' -> do
         index <- fmap packageList $ query GetPackagesState
-        writeChan revChan $ addPackage index pkg' . removePackage index pkg
+        writeChan revChan $ changePackage index pkg pkg'
+    revHook <- newHook
+    let select (_, b, _) = b
+        sortedRevs = fmap (sortBy $ on (flip compare) select) revSummary
+    revTopCache <- Cache.newCacheable =<< sortedRevs
+    registerHook revHook $ \_ -> Cache.putCache revTopCache =<< sortedRevs
     return ReverseFeature
       { reverseResource = fix $ \r -> ReverseResource
           { reversePackage = resourceAt ("/package/:package/reverse.:format")
@@ -117,6 +129,8 @@ initReverseFeature _ core _ = do
           , reversesAllUri = \format -> renderResource (reversePackagesAll r) [format]
           }
       , reverseStream = revChan
+      , reverseUpdateHook = revHook
+      , reverseTopCache = revTopCache
       }
   where
     --textRevDisplay :: ReverseDisplay -> String
@@ -196,10 +210,19 @@ revPackageSummary (PackageIdentifier pkgname version) = do
     ReverseCount direct _ versions <- revPackageStats pkgname
     return (direct, Map.findWithDefault 0 version versions)
 
+-- This returns a list of (package name, direct dependencies, flat dependencies)
+-- for all packages. An interesting fact: it even does so for packages which
+-- don't exist in the index, except the latter two fields are always zero. This is
+-- because no versions of these packages exist, so the union of no versions is
+-- still no versions. TODO: use this fact to make an index of dependencies which
+-- are not in Hackage at all, which might be useful for fixing accidentally
+-- broken packages.
 revSummary :: MonadIO m => m [(PackageName, Int, Int)]
 revSummary = do
     counts <- liftM reverseCount $ query GetReverseIndex
     return $ map (\(pkg, ReverseCount direct flat _) -> (pkg, direct, flat)) $ Map.toList counts
 
+sortedRevSummary :: MonadIO m => ReverseFeature -> m [(PackageName, Int, Int)]
+sortedRevSummary revs = Cache.getCache $ reverseTopCache revs
 
 
