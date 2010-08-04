@@ -27,6 +27,7 @@ import Distribution.Server.Hook
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages
 import Distribution.Server.Features.Upload
+import Distribution.Server.Features.Users
 
 import Distribution.Server.Packages.State
 import Distribution.Server.Packages.Types
@@ -48,6 +49,7 @@ import Happstack.State
 import Text.XHtml.Strict (unordList, h3, (<<), toHtml)
 import Data.Function (fix)
 import Data.List (find)
+import Data.Maybe (listToMaybe, catMaybes)
 import Control.Monad (guard, unless, when, mzero)
 import Control.Monad.Trans (liftIO)
 import Data.Time.Clock (getCurrentTime)
@@ -65,17 +67,26 @@ data CheckResource = CheckResource {
     publishPage :: Resource,
     candidateCabal :: Resource,
     candidateTarball :: Resource,
-    -- there can also be build reports - can use the same package id index
+    -- There can also be build reports as well as documentation for proposed
+    -- versions.
+    -- These features check for existence of a package in the *main* index,
+    -- but it should be possible to hijack their indices to support candidates,
+    -- perhaps by them having a Filter for whether a package-version exists
+    -- (since they don't need any other info than the PackageId).
+    -- Unfortunately, some problems exist when both a candidate and actual version
+    -- of the same package exist simultaneously, so may want to hook into
+    -- UploadFeature's canUploadPackage to ensure this won't happen, and to
+    -- force deletion on publication.
     candidatesUri :: String -> String,
     candidateUri :: String -> PackageId -> String,
-    packageCandidatesUri :: String -> PackageId -> String,
-    publishUri   :: String -> PackageId -> String,
+    packageCandidatesUri :: String -> PackageName -> String,
+    publishUri :: String -> PackageId -> String,
     candidateTarballUri :: PackageId -> String,
     candidateCabalUri :: PackageId -> String
 }
 
 
--- candidates can be published at any time. there is one candidate per package.
+-- candidates can be published at any time; there can be multiple candidates per package
 -- they can be deleted, but it's not required
 
 instance HackageFeature CheckFeature where
@@ -87,21 +98,21 @@ instance HackageFeature CheckFeature where
       }
 
 -- URI generation (string-based), using maps; user groups
-initCheckFeature :: Config -> CoreFeature -> PackagesFeature -> UploadFeature -> IO CheckFeature
-initCheckFeature config core _ _ = do
+initCheckFeature :: Config -> CoreFeature -> UserFeature -> PackagesFeature -> UploadFeature -> IO CheckFeature
+initCheckFeature config core _ _ _ = do
     let store = serverStore config
     return CheckFeature
       { checkResource = fix $ \r -> CheckResource
-          { candidatesPage = (resourceAt "/packages/candidates/.:format") { resourceGet = [("txt", textCandidatesPage)], resourcePost = [("txt", \_ -> textResponse $ postCandidate r store)] }
-          , candidatePage = (resourceAt "/package/:package/candidate.:format") { resourceGet = [("html", basicCandidatePage r)], resourcePut = [("html", textResponse . putPackageCandidate r store)], resourceDelete = [("", textResponse . doDeleteCandidate r)] }
-          , packageCandidatesPage = (resourceAt "/package/:package/candidates/.:format") { resourceGet = [("txt", textPkgCandidatesPage r)], resourcePost = [("", textResponse . postPackageCandidate r store)] }
-          , publishPage = (resourceAt "/package/:package/candidate/publish.:format") { resourceGet = [("txt", textPublishForm)], resourcePost = [("", textPostPublish)] }
+          { candidatesPage = resourceAt "/packages/candidates/.:format"
+          , candidatePage = (resourceAt "/package/:package/candidate.:format") { resourceGet = [("html", basicCandidatePage r)] }
+          , packageCandidatesPage = resourceAt "/package/:package/candidates/.:format"
+          , publishPage = resourceAt "/package/:package/candidate/publish.:format"
           , candidateCabal = (resourceAt "/package/:package/candidate/:cabal.cabal") { resourceGet = [("cabal", serveCandidateCabal)] }
           , candidateTarball = (resourceAt "/package/:package/candidate/:tarball.tar.gz") { resourceGet = [("tarball", serveCandidateTarball store)] }
 
           , candidatesUri = \format -> renderResource (candidatesPage r) [format]
           , candidateUri  = \format pkgid -> renderResource (candidatePage r) [display pkgid, format]
-          , packageCandidatesUri = \format pkgid -> renderResource (packageCandidatesPage r) [display pkgid, format]
+          , packageCandidatesUri = \format pkgname -> renderResource (packageCandidatesPage r) [display pkgname, format]
           , publishUri = \format pkgid -> renderResource (publishPage r) [display pkgid, format]
           , candidateTarballUri = \pkgid -> renderResource (candidateTarball r) [display pkgid, display pkgid]
           , candidateCabalUri = \pkgid -> renderResource (candidateCabal r) [display pkgid, display (packageName pkgid)]
@@ -127,43 +138,22 @@ initCheckFeature config core _ _ = do
                            ]
       where section cand = basicPackageSection (candidateCabalUri r) (candidateTarballUri r) (candPkgInfo cand)
 
-    textCandidatesPage _ = return . toResponse $ "Insert list of candidate packages here"
-
-    textPkgCandidatesPage _ dpath = withPackageName dpath $ \name ->
-                                    withCandidates name $ \_ _ -> do
-        return . toResponse $ "Insert list of candidate packages here"
-    textPublishForm :: DynamicPath -> ServerPart Response
-    textPublishForm dpath = textResponse $
-                            withCandidatePath dpath $ \_ candidate -> do
-        withPackageAuth candidate $ \_ _ -> do
-        packages <- fmap packageList $ query GetPackagesState
-        case checkPublish packages candidate of
-            Just err -> returnError' err
-            Nothing  -> returnOk $ toResponse "Post here to publish the package"
-
-    textPostPublish :: DynamicPath -> ServerPart Response
-    textPostPublish dpath = do
-        res <- publishCandidate core dpath False
-        case res of
-            Left err -> makeTextError err
-            Right uresult -> ok $ toResponse $ unlines (uploadWarnings uresult)
-
-postCandidate :: CheckResource -> BlobStorage -> MServerPart Response
-postCandidate r store = do
-    res <- uploadCandidate (const True) store
+postCandidate :: CheckResource -> UserFeature -> BlobStorage -> MServerPart Response
+postCandidate r users store = do
+    res <- uploadCandidate (const True) users store
     respondToResult r res
 
 -- POST to /:package/candidates/
-postPackageCandidate :: CheckResource -> BlobStorage -> DynamicPath -> MServerPart Response
-postPackageCandidate r store dpath = withPackageName dpath $ \name -> do
-    res <- uploadCandidate ((==name) . packageName) store
+postPackageCandidate :: CheckResource -> UserFeature -> BlobStorage -> DynamicPath -> MServerPart Response
+postPackageCandidate r users store dpath = withPackageName dpath $ \name -> do
+    res <- uploadCandidate ((==name) . packageName) users store
     respondToResult r res
 
 -- PUT to /:package-version/candidate
-putPackageCandidate :: CheckResource -> BlobStorage -> DynamicPath -> MServerPart Response
-putPackageCandidate r store dpath = withPackageId dpath $ \pkgid -> do
+putPackageCandidate :: CheckResource -> UserFeature -> BlobStorage -> DynamicPath -> MServerPart Response
+putPackageCandidate r users store dpath = withPackageId dpath $ \pkgid -> do
     guard (packageVersion pkgid /= Version [] [])
-    res <- uploadCandidate (==pkgid) store
+    res <- uploadCandidate (==pkgid) users store
     respondToResult r res
 
 respondToResult :: CheckResource -> Either ErrorResponse CandPkgInfo -> MServerPart Response
@@ -171,11 +161,12 @@ respondToResult r res = case res of
     Left err -> returnError' err
     Right pkgInfo -> fmap Right $ seeOther (candidateUri r "" $ packageId pkgInfo) (toResponse ())
 
+-- FIXME: delete should not redirect, but rather return MServerPart ()
 doDeleteCandidate :: CheckResource -> DynamicPath -> MServerPart Response
 doDeleteCandidate r dpath = withCandidatePath dpath $ \_ candidate -> do
     withPackageAuth candidate $ \_ _ -> do
     update $ DeleteCandidate (packageId candidate)
-    fmap Right $ seeOther (packageCandidatesUri r "" $ packageId candidate) $ toResponse ()
+    fmap Right $ seeOther (packageCandidatesUri r "" $ packageName candidate) $ toResponse ()
 
 serveCandidateTarball :: BlobStorage -> DynamicPath -> ServerPart Response
 serveCandidateTarball store dpath = withPackageTarball dpath $ \pkgid ->
@@ -197,11 +188,13 @@ serveCandidateCabal dpath = do
         Right res -> return res
         Left {}   -> mzero
 
-uploadCandidate :: (PackageId -> Bool) -> BlobStorage -> MServerPart CandPkgInfo
-uploadCandidate isRight storage = do
+uploadCandidate :: (PackageId -> Bool) -> UserFeature -> BlobStorage -> MServerPart CandPkgInfo
+uploadCandidate isRight users storage = do
     regularIndex <- fmap packageList $ query GetPackagesState
     -- ensure that the user has proper auth if the package exists
-    res <- extractPackage (processCandidate isRight regularIndex) storage
+    res <- extractPackage (\uid info -> combineErrors $ sequence
+      [ processCandidate isRight regularIndex uid info
+      , runUserFilter users uid]) storage
     case res of
         Left failed -> returnError' failed
         Right (pkgInfo, uresult) -> do
@@ -214,6 +207,7 @@ uploadCandidate isRight storage = do
             update $ AddCandidate candidate
             unless (packageExists regularIndex pkgInfo) $ update $ AddPackageMaintainer (packageName pkgInfo) (pkgUploadUser pkgInfo)
             returnOk candidate
+  where combineErrors = fmap (listToMaybe . catMaybes)
 
 -- | Helper function for uploadCandidate.
 processCandidate :: (PackageId -> Bool) -> PackageIndex PkgInfo -> Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)
@@ -228,36 +222,48 @@ processCandidate isRight state uid res = do
           else return Nothing
   where uploadFailed = return . Just . ErrorResponse 403 "Upload failed" . return . MText
 
-publishCandidate :: CoreFeature -> DynamicPath -> Bool -> MServerPart UploadResult
-publishCandidate core dpath doDelete = do
+publishCandidate :: CoreFeature -> UserFeature -> UploadFeature -> DynamicPath -> Bool -> MServerPart UploadResult
+publishCandidate core users upload dpath doDelete = do
     packages <- fmap packageList $ query GetPackagesState
     withCandidatePath dpath $ \_ candidate -> do
     -- check authorization to upload - must already be a maintainer
     withPackageAuth candidate $ \uid _ -> do
     -- check if package or later already exists
     case checkPublish packages candidate of
-        Just failed -> returnError' failed
-        Nothing -> do
+      Just failed -> returnError' failed
+      Nothing -> do
+        -- now, hook checks
+        let pkgInfo = candPkgInfo candidate
+            uresult = UploadResult (pkgDesc pkgInfo) (pkgData pkgInfo) (candWarnings candidate)
+            uploadFilter = combineErrors $ runFilter'' (canUploadPackage upload) uid uresult
+        merror <- liftIO $ combineErrors $ sequence [runUserFilter users uid, uploadFilter]
+        case merror of
+          Just failed -> returnError' failed
+          Nothing -> do
             uploadData <- fmap (flip (,) uid) (liftIO getCurrentTime)
-            let pkgInfo = candPkgInfo candidate
-            success <- update $ InsertPkgIfAbsent PkgInfo {
-                pkgInfoId     = packageId candidate,
-                pkgDesc       = pkgDesc pkgInfo,
-                pkgData       = pkgData pkgInfo,
-                pkgTarball    = case pkgTarball pkgInfo of
-                    ((blobId, _):_) -> [(blobId, uploadData)]
-                    [] -> [], -- this shouldn't happen, but let's keep this part total anyway
-                pkgUploadData = uploadData,
-                pkgDataOld    = []
-            }
+            let pkgInfo' = PkgInfo {
+                    pkgInfoId     = packageId candidate,
+                    pkgDesc       = pkgDesc pkgInfo,
+                    pkgData       = pkgData pkgInfo,
+                    pkgTarball    = case pkgTarball pkgInfo of
+                        ((blobId, _):_) -> [(blobId, uploadData)]
+                        [] -> [], -- this shouldn't happen, but let's keep this part total anyway
+                    pkgUploadData = uploadData,
+                    pkgDataOld    = []
+                }
+            success <- update $ InsertPkgIfAbsent pkgInfo'
             if success
               then do
                 -- delete when requested ("moving" the resource)
+                -- note: should this be required?
                 when doDelete $ update $ DeleteCandidate (packageId candidate)
-                liftIO $ runHook' (packageAddHook core) pkgInfo
+                when (not $ packageExists packages $ packageId candidate) $ do
+                    liftIO $ runHook' (newPackageHook core) pkgInfo'
+                liftIO $ runHook' (packageAddHook core) pkgInfo'
                 liftIO $ runHook (packageIndexChange core)
-                returnOk $ UploadResult (pkgDesc pkgInfo) (pkgData pkgInfo) (candWarnings candidate)
+                returnOk uresult
               else returnError 403 "Upload failed" [MText "Package already exists."]
+  where combineErrors = fmap (listToMaybe . catMaybes)
 
 
 -- | Helper function for publishCandidate that ensures it's safe to insert into the main index.

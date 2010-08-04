@@ -19,7 +19,7 @@ module Distribution.Server.Hook (
 import Data.IORef
 import Control.Monad.Trans (MonadIO, liftIO)
 
--- local IORef, nicer than MVar for this task
+-- local IORef, nicer than MVar for this task, although TVar might be even nicer
 data Hook a = Hook (IORef [a])
 
 -- another name for Hook, used when the result is important
@@ -28,6 +28,9 @@ type Filter a = Hook a
 newHook :: IO (Hook a)
 newHook = fmap Hook $ newIORef []
 
+-- registers a hook to be run *before* all of the previously registered hooks.
+-- is this the best strategy? relying on ordering rules of any kind can introduce
+-- nasty bugs.
 registerHook :: Hook a -> a -> IO ()
 registerHook (Hook list) hook = modifyIORef list (hook:)
 

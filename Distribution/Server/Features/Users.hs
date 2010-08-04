@@ -12,8 +12,10 @@ module Distribution.Server.Features.Users (
     adminAddUser,
     enabledAccount,
     deleteAccount,
+    runUserFilter,
 
     GroupResource(..),
+    GroupGen,
     groupResourceAt,
     groupResourcesAt,
     withGroup,
@@ -259,6 +261,12 @@ newBasicPass pwd = do
 newDigestPass :: UserName -> PasswdPlain -> UserAuth
 newDigestPass name pwd = UserAuth (Auth.newDigestPass name pwd "hackage") Auth.DigestAuth
 
+--
+runUserFilter :: UserFeature -> UserId -> IO (Maybe ErrorResponse)
+runUserFilter userf uid = runFilter' (packageMutate userf) uid >>= \bs -> case or bs of
+    True  -> return . Just $ ErrorResponse 403 "Upload failed" [MText "Your account can't upload packages."]
+    False -> return Nothing
+
 ------ User group management
 adminGroupDesc :: UserGroup
 adminGroupDesc = UserGroup {
@@ -313,8 +321,10 @@ withGroupEditAuth group func = do
 data GroupResource = GroupResource {
     groupResource :: Resource,
     groupUserResource :: Resource,
-    getGroup :: DynamicPath -> MIO UserGroup
+    getGroup :: GroupGen
 }
+
+type GroupGen = DynamicPath -> MIO UserGroup
 
 -- This is a mapping of UserId -> group URI and group URI -> description.
 -- Like many reverse mappings, it is probably rather volatile. Still, it is
@@ -362,8 +372,8 @@ groupResourceAt users uri group = do
 -- list of DynamicPaths to build the initial group index. Like groupResourceAt,
 -- this function returns an adaptor function that keeps the index updated.
 groupResourcesAt :: Cache.Cache GroupIndex -> String
-                 -> (DynamicPath -> MIO UserGroup) -> [DynamicPath]
-                 -> IO (DynamicPath -> MIO UserGroup, GroupResource)
+                 -> GroupGen -> [DynamicPath]
+                 -> IO (GroupGen, GroupResource)
 groupResourcesAt users uri groupGen dpaths = do
     let mainr = resourceAt uri
         collectUserList genpath = do

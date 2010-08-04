@@ -36,23 +36,22 @@ import Distribution.Server.PackageIndex (PackageIndex)
 
 import Happstack.Server
 import Happstack.State
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, listToMaybe, catMaybes)
 import Data.Time.Clock (getCurrentTime)
-import Control.Monad (unless, mzero)
+import Control.Monad (when, mzero)
 import Control.Monad.Trans (MonadIO(..))
 import Data.List (maximumBy)
 import Data.Ord (comparing)
 import Data.Function (fix)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Distribution.Package
-import Distribution.PackageDescription (GenericPackageDescription, 
-                                        packageDescription, synopsis)
+import Distribution.PackageDescription (GenericPackageDescription)
 import Distribution.Text (display, simpleParse)
 
 data UploadFeature = UploadFeature {
     uploadResource   :: UploadResource,
     uploadPackage    :: MServerPart UploadResult,
-    packageMaintainers :: DynamicPath -> MIO UserGroup,
+    packageMaintainers :: GroupGen,
     trusteeGroup :: UserGroup,
     canUploadPackage :: Filter (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse))
 }
@@ -90,7 +89,8 @@ initUploadFeature config core users = do
             Just name -> getMaintainersGroup [admins, trustees] name
     -- FIXME: get the entire package list
     (pkgGroup, pkgResource) <- groupResourcesAt (groupIndex users) "/package/:package/maintainers" getPkgMaintainers []
-    return $ UploadFeature
+    uploadFilter <- newHook
+    return $ fix $ \f -> UploadFeature
       { uploadResource = UploadResource
           { uploadIndexPage = (extendResource . corePackagesPage $ coreResource core)
           , deletePackagePage = (extendResource . corePackagePage $ coreResource core)
@@ -100,11 +100,11 @@ initUploadFeature config core users = do
           , packageMaintainerUri = \format pkgname -> renderResource (groupResource pkgResource) [display pkgname, format]
           , trusteeUri = \format -> renderResource (groupResource trustResource) [format]
           }
-      , uploadPackage = doUploadPackage core store
+      , uploadPackage = doUploadPackage core users f store
       , packageMaintainers = pkgGroup
       , trusteeGroup = trustees
+      , canUploadPackage = uploadFilter
       }
-  where
 
 --------------------------------------------------------------------------------
 -- User groups and authentication
@@ -140,9 +140,7 @@ maintainerDescription pkgInfo = GroupDescription
   , groupEntity = Just (pname, Just $ "/package/" ++ pname)
   , groupPrologue  = "Maintainers for a package can upload new versions and adjust other attributes in the package database."
   }
-  where
-    pkg = packageDescription (pkgDesc pkgInfo)
-    pname = display (packageName pkgInfo)
+  where pname = display (packageName pkgInfo)
 
 trusteeDescription :: GroupDescription
 trusteeDescription = nullDescription { groupTitle = "Package trustees" }
@@ -170,10 +168,14 @@ getPackageGroup pkg = do
 
 ----------------------------------------------------
 -- This is the upload function. It returns a generic result for multiple formats.
-doUploadPackage :: CoreFeature -> BlobStorage -> MServerPart UploadResult
-doUploadPackage core store = do
+doUploadPackage :: CoreFeature -> UserFeature -> UploadFeature -> BlobStorage -> MServerPart UploadResult
+doUploadPackage core userf upf store = do
     state <- fmap packageList $ query GetPackagesState
-    res <- extractPackage (processUpload state) store
+    let uploadFilter uid info = combineErrors $ runFilter'' (canUploadPackage upf) uid info
+    res <- extractPackage (\uid info -> combineErrors $ sequence
+       [ processUpload state uid info
+       , uploadFilter uid info
+       , runUserFilter userf uid ]) store
     case res of
         Left failed -> return $ Left failed
         Right (pkgInfo, uresult) -> do
@@ -181,12 +183,16 @@ doUploadPackage core store = do
             if success
               then do
                  -- make package maintainers group for new package
-                unless (packageExists state pkgInfo) $ update $ AddPackageMaintainer (packageName pkgInfo) (pkgUploadUser pkgInfo)
+                let existedBefore = packageExists state pkgInfo
+                when (not existedBefore) $ do
+                    update $ AddPackageMaintainer (packageName pkgInfo) (pkgUploadUser pkgInfo)
+                    runHook' (newPackageHook core) pkgInfo
                 liftIO $ runHook' (packageAddHook core) pkgInfo
                 liftIO $ runHook (packageIndexChange core)
                 returnOk uresult
               -- this is already checked in processUpload, and race conditions are highly unlikely but imaginable
               else returnError 403 "Upload failed" [MText "Package already exists."]
+  where combineErrors = fmap (listToMaybe . catMaybes)
 
 -- This is a processing funtion for extractPackage that checks upload-specific requirements.
 -- Does authentication, though not with requirePackageAuth, because it has to be IO.
