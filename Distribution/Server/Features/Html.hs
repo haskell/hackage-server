@@ -11,8 +11,10 @@ import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Check
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.DownloadCount
+import Distribution.Server.Features.NameSearch
 import Distribution.Server.Features.PreferredVersions
 import Distribution.Server.Features.ReverseDependencies
+import Distribution.Server.Features.PackageList
 import Distribution.Server.Features.Tags
 import Distribution.Server.Types
 import Distribution.Server.Error
@@ -23,7 +25,7 @@ import qualified Distribution.Server.Pages.Package as Pages
 import qualified Distribution.Server.Packages.State as State
 import qualified Distribution.Server.Users.State as State
 import qualified Distribution.Server.Distributions.State as State
---import qualified Distribution.Server.Auth.Basic as Auth
+import qualified Distribution.Server.Auth.Basic as Auth
 
 import Distribution.Server.Users.Types
 import Distribution.Server.Packages.Types
@@ -35,7 +37,7 @@ import Distribution.Server.Packages.Preferred
 import Distribution.Server.Packages.Reverse
 import Distribution.Server.Packages.Tag
 
-import Distribution.Server.Pages.Template (hackagePage)
+import Distribution.Server.Pages.Template (hackagePage, hackagePageWith)
 import qualified Distribution.Server.Pages.Group as Pages
 import qualified Distribution.Server.Pages.Reverse as Pages
 import Text.XHtml.Strict
@@ -49,15 +51,19 @@ import Distribution.Version
 import Distribution.Text (display)
 import Distribution.PackageDescription
 import Data.List (intercalate, intersperse, insert, sortBy)
---import Data.Ord (comparing)
+import Data.Char (isAlpha, isAlphaNum)
 import Data.Function (on)
 import Control.Monad (forM)
 import Control.Monad.Trans (liftIO)
 import qualified Data.Map as Map
+import Data.Set (Set)
 import qualified Data.Set as Set
 import System.FilePath.Posix ((</>))
+import Data.Maybe (fromMaybe)
 
--- TODO: move more of the below to Distribution.Server.Pages.*, it's getting close to 1K lines
+-- TODO: move more of the below to Distribution.Server.Pages.*, it's getting
+-- close to 1K lines... it's okay to keep data-querying in here, but pure HTML
+-- generation mostly needlessly clutters up the module. Refactor time.
 data HtmlFeature = HtmlFeature {
     htmlResources :: [Resource]
 }
@@ -70,17 +76,17 @@ instance HackageFeature HtmlFeature where
       , restoreBackup = Nothing
       }
 
-
 -- This feature provides the HTML view to the models of other features
 -- currently it uses the xhtml package to render HTML (Text.XHtml.Strict)
 --
 -- This means of generating HTML is somewhat temporary, in that a more advanced
--- (and better-looking) HTML scheme should come about later on.
+-- (and better-looking) HTML ajaxy scheme should come about later on.
 initHtmlFeature :: Config -> CoreFeature -> PackagesFeature -> UploadFeature
                 -> CheckFeature -> UserFeature -> VersionsFeature
                 -> ReverseFeature -> TagsFeature -> DownloadFeature
-                -> IO HtmlFeature
-initHtmlFeature config core pkg upload check user version reversef tagf down = do
+                -> ListFeature -> NamesFeature -> IO HtmlFeature
+initHtmlFeature config core pkg upload check user version reversef tagf
+                down list namef = do
     -- resources to extend
     let cores = coreResource core
         users = userResource user
@@ -90,6 +96,7 @@ initHtmlFeature config core pkg upload check user version reversef tagf down = d
         reverses = reverseResource reversef
         tags = tagsResource tagf
         downs = downloadResource down
+        names = namesResource namef
     let store = serverStore config
     -- pages defined for the HTML feature in particular
     let editDeprecated  = (resourceAt "/package/:package/deprecated/edit") { resourceGet = [("html", serveDeprecateForm cores versions)] }
@@ -98,16 +105,17 @@ initHtmlFeature config core pkg upload check user version reversef tagf down = d
  packageGroupResource uploads)] }
         pkgCandUploadForm = (resourceAt "/package/:package/candidate/upload") { resourceGet = [("html", servePackageCandidateUpload cores checks)] }
         candMaintainForm = (resourceAt "/package/:package/candidate/maintain") { resourceGet = [("html", serveCandidateMaintain cores checks)] }
+        tagEdit = (resourceAt "/package/:package/tags/edit")
     return HtmlFeature
      { htmlResources =
         -- core
-         [ (extendResource $ corePackagePage cores) { resourceGet = [("html", servePackagePage cores pkg reverses versions maintainPackage)] }
+         [ (extendResource $ corePackagePage cores) { resourceGet = [("html", servePackagePage cores pkg reverses versions tags maintainPackage tagEdit)] }
          --, (extendResource $ coreIndexPage cores) { resourceGet = [("html", serveIndexPage)] }, currently in 'core' feature
+         , (resourceAt "/packages/names" ) { resourceGet = [("html", packagesPage cores list tags)] }
          --, (extendResource $ corePackagesPage cores) { resourceGet = [("html", servePackageIndex)] }, currently in 'packages' feature
          , maintainPackage
         -- users
-        -- TODO: registration and whatnot
-         , (extendResource $ userList users) { resourceGet = [("html", serveUserList users)] } --resourcePost: admin add user
+         , (extendResource $ userList users) { resourceGet = [("html", serveUserList users)], resourcePost = [("html", \_ -> htmlResponse $ adminAddUser)] }
             -- list of users with user links; if admin, a link to add user page
          , (resourceAt "/users/register") { resourceGet = [("html", addUserForm users)] }
             -- form to post to /users/
@@ -128,7 +136,8 @@ initHtmlFeature config core pkg upload check user version reversef tagf down = d
          , (extendResource $ candidatesPage checks) { resourceGet = [("html", serveCandidatesPage cores checks)], resourcePost = [("html", \_ -> htmlResponse $ postCandidate checks user store)] }
             -- list of all packages which have candidates
          , (extendResource $ packageCandidatesPage checks) { resourceGet = [("html", servePackageCandidates cores checks pkgCandUploadForm)], resourcePost = [("", htmlResponse . postPackageCandidate checks user store)] }
-         , (extendResource $ candidatePage checks) { resourceGet = [("html", serveCandidatePage check)], resourcePut = [("html", htmlResponse . putPackageCandidate checks user store)], resourceDelete = [("html", htmlResponse . doDeleteCandidate checks)] }
+            -- TODO: use custom functions, not htmlResponse
+         , (extendResource $ candidatePage checks) { resourceGet = [("html", serveCandidatePage check candMaintainForm)], resourcePut = [("html", htmlResponse . putPackageCandidate checks user store)], resourceDelete = [("html", htmlResponse . doDeleteCandidate checks)] }
             -- package page for a candidate
          , (resourceAt "/packages/candidates/upload") { resourceGet = [("html", serveCandidateUploadForm)] }
             -- form for uploading candidate
@@ -138,11 +147,6 @@ initHtmlFeature config core pkg upload check user version reversef tagf down = d
             -- maintenance for candidate packages
          , (extendResource $ publishPage checks) { resourceGet = [("html", servePublishForm checks)], resourcePost = [("html", servePostPublish core user upload)] }
             -- form for publishing package
-
-{-candidateUri check "" pkgid
-packageCandidatesUri check "" pkgid
-publishUri check "" pkgid-}
-
         -- reports
          --, (extendResource $ reportsList reports) { resourceGet = [("html", serveReportsList)] }
          --, (extendResource $ reportsPage reports) { resourceGet = [("html", serveReportsPage)] }
@@ -168,38 +172,10 @@ publishUri check "" pkgid-}
           , (extendResource $ topDownloads downs) { resourceGet = [("html", serveDownloadTop cores down)] }
         -- tags
           , (extendResource $ tagsListing tags) { resourceGet = [("html", serveTagsListing tags)] }
-          , (extendResource $ tagListing tags) { resourceGet = [("html", serveTagListing cores)] }
-{-
-          , (extendResource $ packageTagsListing tags) { resourcePut = [("html", serveTagListing)], resourceGet = [] }
-          , (resourceAt "/package/:package/tags/edit")
-    
-
-    textATag dpath = withTagPath dpath $ \_ pkgnames -> do
-        return . toResponse $ intercalate ", " $ map display pkgnames
-
-
-    textPutTags dpath = textResponse $ withPackageName dpath $ \pkgname ->
-                        responseWith (putTags pkgname) $ \_ ->
-        returnOk . toResponse $ "Set the tags for " ++ display pkgname
-    textPackageTags dpath = textResponse $ withPackageAllPath dpath $ \pkgname _ -> do
-        tags <- query $ TagsForPackage pkgname
-        returnOk . toResponse $ display (TagList tags)
-
-    return TagsFeature
-      { tagsResource = fix $ \r -> TagsResource
-          { tagsListing = (resourceAt "/packages/tags/.:format") { resourceGet = [("txt", \_ -> textAllTags)] }
-          , tagListing = (resourceAt "/packages/tag/:tag.:format") { resourceGet = [("txt", textATag)] }
-          , packageTagsListing = (resourceAt "/package/:package/tags.:format") { resourceGet = [("txt", textPackageTags)], resourcePut = [("txt", textPutTags)] }
-
-          , tagUri = \format tag -> renderResource (tagListing r) [display tag, format]
-          , tagsUri = \format -> renderResource (tagsListing r) [format]
-          , packageTagsUri = \format pkgname -> renderResource (packageTagsListing r) [display pkgname, format]
-            -- for more fine-tuned tag manipulation, could also define:
-            -- * DELETE /package/:package/tag/:tag (remove single tag)
-            -- * POST /package/:package\/tags (add single tag)
-          }
-      }-}
-  
+          , (extendResource $ tagListing tags) { resourceGet = [("html", serveTagListing cores list tags)] }
+          , (extendResource $ packageTagsListing tags) { resourcePut = [("html", putPackageTags cores tagf)], resourceGet = [] }
+        -- search
+          , (extendResource $ findPackageResource names) { resourceGet = [("html", servePackageFind cores list namef tags)] }
          ]
         -- and user groups. package maintainers, trustees, admins
         ++ htmlGroupResource user (packageGroupResource uploads)
@@ -214,9 +190,9 @@ publishUri check "" pkgid-}
 -- reorganizing to look aesthetic, as opposed to the sleek and simple current
 -- design that takes the 1990s school of web design.
 servePackagePage :: CoreResource -> PackagesFeature -> ReverseResource
-                 -> VersionsResource -> Resource -> DynamicPath
-                 -> ServerPart Response
-servePackagePage core pkgr revr versions maintain dpath =
+                 -> VersionsResource -> TagsResource -> Resource -> Resource
+                 -> DynamicPath -> ServerPart Response
+servePackagePage core pkgr revr versions tagf maintain tagEdit dpath =
                         htmlResponse $
                         withPackageId dpath $ \pkgid  ->
                         withPackagePreferred pkgid $ \pkg pkgs -> do
@@ -233,26 +209,27 @@ servePackagePage core pkgr revr versions maintain dpath =
     -- and other package indices
     distributions <- query $ State.PackageStatus pkgname
     revCount <- revPackageSummary realpkg
+    (totalDown, versionDown) <- perVersionDownloads pkg
     let distHtml = case distributions of
             [] -> []
             _  -> [("Distributions", concatHtml . intersperse (toHtml ", ") $ map showDist distributions)]
-        afterHtml  = distHtml ++ [Pages.reversePackageSummary realpkg revr revCount]
+        afterHtml  = distHtml ++ [Pages.renderDownloads totalDown versionDown $ packageVersion realpkg,
+                                  Pages.reversePackageSummary realpkg revr revCount]
     -- bottom sections, currently only documentation
     hasDocs  <- query $ State.HasDocumentation realpkg
-    let docURL | hasDocs   = Just $ "/package" </> display pkgid </> "documentation"
+    let docURL | hasDocs   = Just $ "/package" </> display pkgid </> "doc"
                | otherwise = Nothing
     -- extra features like tags and downloads
-    let maintainLink = paragraph ! [thestyle "font-size: small"] <<
-            [ toHtml "["
-            , anchor ! [href $ renderResource maintain [display pkgname]] << toHtml "maintain"
-            , toHtml "]"]
-    (totalDown, versionDown) <- perVersionDownloads pkg
+    tags <- query $ TagsForPackage pkgname
+
+
+    let maintainLink = anchor ! [href $ renderResource maintain [display pkgname]] << toHtml "maintain"
+        tagLinks = toHtml [anchor ! [href "/packages/tags"] << "Tags", toHtml ": ",
+                           toHtml (renderTags tagf tags), toHtml " | ",
+                           anchor ! [href $ renderResource tagEdit [display pkgname]] << "edit"]
+        backHackage = anchor ! [href $ "http://hackage.haskell.org/package/" ++ display pkgid] << "on hackage"
     deprs <- query $ GetDeprecatedFor pkgname
-    let downBox = thediv ! [theclass "floatright"] <<
-           [paragraph ! [thestyle "color: gray"] << "Downloads",
-            paragraph << [show totalDown, " total"],
-            paragraph << [show versionDown, " for ", display (packageVersion pkg)]]
-        deprHtml = case deprs of
+    let deprHtml = case deprs of
           Just fors -> paragraph ! [thestyle "color: red"] << [toHtml "Deprecated", case fors of
             [] -> noHtml
             _  -> concatHtml . (toHtml " in favor of ":) . intersperse (toHtml ", ") .
@@ -260,7 +237,7 @@ servePackagePage core pkgr revr versions maintain dpath =
           Nothing -> noHtml
     -- and put it all together
     returnOk $ toResponse $ Resource.XHtml $ hackagePage (display pkgid) $
-        Pages.packagePage render [downBox, deprHtml, maintainLink] (beforeHtml ++ middleHtml ++ afterHtml) [] docURL
+        Pages.packagePage render [tagLinks, maintainLink, backHackage] [deprHtml] (beforeHtml ++ middleHtml ++ afterHtml) [] docURL
   where
     showDist (dname, info) = toHtml (display dname ++ ":") +++
         anchor ! [href $ distroUrl info] << toHtml (display $ distroVersion info)
@@ -286,7 +263,7 @@ serveUserList :: UserResource -> DynamicPath -> ServerPart Response
 serveUserList users _ = do
     userlist <- fmap (Map.keys . Users.userNameMap) $ query State.GetUserDb
     let hlist = unordList $ map (\uname -> anchor ! [href $ userPageUri users "" uname] << display uname) userlist
-    ok $ toResponse $ Resource.XHtml $ hackagePage "Hackage users" [h3 << "Hackage users", hlist]
+    ok $ toResponse $ Resource.XHtml $ hackagePage "Hackage users" [h2 << "Hackage users", hlist]
 
 serveUserPage :: UserFeature -> DynamicPath -> ServerPart Response
 serveUserPage users dpath = htmlResponse $ withUserPath dpath $ \uid info -> do
@@ -296,7 +273,8 @@ serveUserPage users dpath = htmlResponse $ withUserPath dpath $ \uid info -> do
         desc <- getIndexDesc (groupIndex users) uri
         return $ Pages.renderGroupName desc (Just uri)
     returnOk $ toResponse $ Resource.XHtml $ hackagePage (display uname)
-      [ h3 << display uname
+      [ h2 << display uname
+    --, paragraph << [toHtml "[", anchor << [href $ userPasswordUri r "" uname] settings, toHtml "]"]
       , case uriPairs of
             [] -> noHtml
             _  -> toHtml
@@ -305,11 +283,10 @@ serveUserPage users dpath = htmlResponse $ withUserPath dpath $ \uid info -> do
               ]
       ]
 
---username, password, repeat-password
 addUserForm :: UserResource -> DynamicPath -> ServerPart Response
 addUserForm r _ = htmlResponse $ do
     returnOk $ toResponse $ Resource.XHtml $ hackagePage "Register account"
-      [ paragraph << "Register a user account here."
+      [ paragraph << "Register a user account here. At present only admins can register accounts."
       , form ! [theclass "box", XHtml.method "POST", action $ userListUri r ""] <<
             [ simpleTable [] []
                 [ makeInput [thetype "text"] "username" "User name"
@@ -320,25 +297,27 @@ addUserForm r _ = htmlResponse $ do
             ]
       ]
 
---field password, repeat-password, checkbox auth
 servePasswordForm :: UserResource -> DynamicPath -> ServerPart Response
 servePasswordForm r dpath = htmlResponse $
-                            withUserPath dpath $ \_ userInfo -> do
+                            withUserPath dpath $ \pathUid userInfo -> do
+    users <- query State.GetUserDb
+    Auth.withHackageAuth users Nothing Nothing $ \uid _ -> do
     let uname = userName userInfo
-    returnOk $ toResponse $ Resource.XHtml $ hackagePage "Change password"
-    -- TODO: expose some of the functionality in changePassword function to determine if permissions are correct
-    -- before serving this form (either admin or user)
-      [ toHtml "Change your password. You'll be prompted for authentication upon submission, if you haven't logged in already."
-      , form ! [theclass "box", XHtml.method "POST", action $ userPasswordUri r "" uname] <<
-            [ simpleTable [] []
-                [ makeInput [thetype "password"] "password" "Password"
-                , makeInput [thetype "password"] "repeat-password" "Confirm password"
+    canChange <- canChangePassword uid pathUid
+    case canChange of
+        False -> returnError 403 "Can't change password" [MText "You're neither this user nor an admin."]
+        True -> returnOk $ toResponse $ Resource.XHtml $ hackagePage "Change password"
+          [ toHtml "Change your password. You'll be prompted for authentication upon submission, if you haven't logged in already."
+          , form ! [theclass "box", XHtml.method "POST", action $ userPasswordUri r "" uname] <<
+                [ simpleTable [] []
+                    [ makeInput [thetype "password"] "password" "Password"
+                    , makeInput [thetype "password"] "repeat-password" "Confirm password"
+                    ]
+                , toHtml $ makeCheckbox True "auth" "on" "Use digest auth"
+                , hidden "_method" "PUT" --method override
+                , paragraph << input ! [thetype "submit", value "Change password"]
                 ]
-            , toHtml $ makeCheckbox True "auth" "on" "Use digest auth"
-            , hidden "_method" "PUT" --method override
-            , paragraph << input ! [thetype "submit", value "Change password"]
-            ]
-      ]
+          ]
 
 serveEnabledForm :: UserResource -> DynamicPath -> ServerPart Response
 serveEnabledForm r dpath = htmlResponse $
@@ -432,8 +411,9 @@ makeLoginWidget user mname = case mname of
 ---- Upload
 serveUploadForm :: DynamicPath -> ServerPart Response
 serveUploadForm _ = htmlResponse $ do
-    returnOk $ toResponse $ Resource.XHtml $ hackagePage "Upload packages"
-      [ paragraph << "Insert paragraphs of instructions here"
+    returnOk $ toResponse $ Resource.XHtml $ hackagePage "Upload package"
+      [ h2 << "Upload package"
+      , paragraph << [toHtml "See also the ", anchor ! [href "/upload.html"] << "upload help page", toHtml "."]
       , form ! [theclass "box", XHtml.method "POST", action "/packages/", enctype "multipart/form-data"] <<
             [ input ! [thetype "file", name "package"]
             , input ! [thetype "submit", value "Upload package"]
@@ -455,7 +435,9 @@ serveUploadResult pkgf core _ = htmlResponse $
 serveCandidateUploadForm :: DynamicPath -> ServerPart Response
 serveCandidateUploadForm _ = htmlResponse $ do
     returnOk $ toResponse $ Resource.XHtml $ hackagePage "Checking and uploading candidates"
-      [ form ! [theclass "box", XHtml.method "POST", action "/packages/candidates/", enctype "multipart/form-data"] <<
+      [ h2 << "Checking and uploading candidates"
+      , paragraph << [toHtml "See also the ", anchor ! [href "/upload.html"] << "upload help page", toHtml "."]
+      , form ! [theclass "box", XHtml.method "POST", action "/packages/candidates/", enctype "multipart/form-data"] <<
             [ input ! [thetype "file", name "package"]
             , input ! [thetype "submit", value "Upload candidate"]
             ]
@@ -471,10 +453,14 @@ servePackageCandidateUpload _ _ _ = htmlResponse $ do
       ]
 
 serveCandidateMaintain :: CoreResource -> CheckResource -> DynamicPath -> ServerPart Response
-serveCandidateMaintain _ _ _ = return $ toResponse ()
+serveCandidateMaintain _ _ _ = do
+    return $ toResponse $ Resource.XHtml $ hackagePage "Maintain candidate"
+        [toHtml "Here, you can delete a candidate, publish it, upload a new one, and edit the maintainer group."]
+{-some useful URIs here: candidateUri check "" pkgid, packageCandidatesUri check "" pkgid, publishUri check "" pkgid-}
 
-serveCandidatePage :: CheckFeature -> DynamicPath -> ServerPart Response
-serveCandidatePage pkg dpath = htmlResponse $
+
+serveCandidatePage :: CheckFeature -> Resource -> DynamicPath -> ServerPart Response
+serveCandidatePage pkg maintain dpath = htmlResponse $
                                withCandidatePath dpath $ \_ cand -> do
     candRender <- liftIO $ candidateRender pkg cand
     let PackageIdentifier pkgname version = packageId cand
@@ -485,12 +471,13 @@ serveCandidatePage pkg dpath = htmlResponse $
     prefInfo <- query $ GetPreferredInfo pkgname
     let sectionHtml = [Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing,
                        Pages.renderDependencies render] ++ Pages.renderFields render
-    -- also utilize renderWarnings :: [String] and hasIndexedPackage :: Bool
+        maintainHtml = anchor ! [href $ renderResource maintain [display pkgname]] << "maintain"
+    -- also utilize hasIndexedPackage :: Bool
     let warningBox = case renderWarnings candRender of
             [] -> []
-            warn -> [thediv ! [theclass "box"] << [toHtml "Warnings:", unordList warn]]
+            warn -> [thediv ! [theclass "notification"] << [toHtml "Warnings:", unordList warn]]
     returnOk $ toResponse $ Resource.XHtml $ hackagePage (display $ packageId cand) $
-        Pages.packagePage render warningBox sectionHtml [] Nothing
+        Pages.packagePage render [maintainHtml] warningBox sectionHtml [] Nothing
 
 servePublishForm :: CheckResource -> DynamicPath -> ServerPart Response
 servePublishForm r dpath = htmlResponse $
@@ -509,7 +496,7 @@ serveCandidatesPage :: CoreResource -> CheckResource -> DynamicPath -> ServerPar
 serveCandidatesPage _ check _ = do
     cands <- fmap State.candidateList $ query State.GetCandidatePackages
     return $ toResponse $ Resource.XHtml $ hackagePage "Package candidates"
-      [ h3 << "Package candidates"
+      [ h2 << "Package candidates"
       , paragraph <<
           [ toHtml "Here follow all the candidate package versions on Hackage. "
           , thespan ! [thestyle "color: gray"] <<
@@ -556,7 +543,7 @@ servePostPublish core users upload dpath = do
 serveDeprecatedSummary :: CoreResource -> DynamicPath -> ServerPart Response
 serveDeprecatedSummary core _ = doDeprecatedsRender >>= \renders -> do
     return $ toResponse $ Resource.XHtml $ hackagePage "Deprecated packages"
-      [ h3 << "Deprecated packages"
+      [ h2 << "Deprecated packages"
       , toHtml $ flip map renders $ \(pkg, pkgs) -> [ packageNameLink core pkg, toHtml ": ", deprecatedText core pkgs ]
       ]
 
@@ -573,7 +560,7 @@ servePackageDeprecated core deprEdit dpath =
         withPackageName dpath $ \pkgname ->
         responseWith (doDeprecatedRender pkgname) $ \mpkg ->
     returnOk $ toResponse $ Resource.XHtml $ hackagePage "Deprecated status"
-      [ h3 << "Deprecated status"
+      [ h2 << "Deprecated status"
       , paragraph <<
           [ toHtml $ case mpkg of
                 Nothing   -> [packageNameLink core pkgname, toHtml " is not deprecated"]
@@ -588,7 +575,7 @@ servePackageDeprecated core deprEdit dpath =
 servePreferredSummary :: CoreResource -> DynamicPath -> ServerPart Response
 servePreferredSummary core _ = doPreferredsRender >>= \renders -> do
     return $ toResponse $ Resource.XHtml $ hackagePage "Preferred versions"
-      [ h3 << "Preferred versions"
+      [ h2 << "Preferred versions"
       , case renders of
             [] -> paragraph << "There are no global preferred versions."
             _  -> unordList $ flip map renders $ \(pkgname, pref) ->
@@ -634,7 +621,7 @@ servePackagePreferred core versions prefEdit dpath =
     let dtitle = display pkgname ++ ": preferred and deprecated versions"
     prefInfo <- query $ GetPreferredInfo pkgname
     returnOk $ toResponse $ Resource.XHtml $ hackagePage dtitle --needs core, preferredVersions, pkgname
-      [ h3 << dtitle
+      [ h2 << dtitle
       , concatHtml $ packagePrefAbout core versions (Just prefEdit) pkgname
       , h4 << "Stored information"
       , case rendRanges pref of
@@ -660,14 +647,14 @@ servePutPreferred core versions dpath =
         withPackageName dpath $ \pkgname ->
         responseWith (putPreferred versions pkgname) $ \_ ->
     returnOk $ toResponse $ Resource.XHtml $ hackagePage "Set preferred versions"
-       [ h3 << "Set preferred versions"
-       , paragraph <<
+      [ h2 << "Set preferred versions"
+      , paragraph <<
           [ toHtml "Set the "
           , anchor ! [href $ preferredPackageUri (versionsResource versions) "" pkgname] << "preferred versions"
           , toHtml " for "
           , packageNameLink core pkgname
           , toHtml "."]
-       ]
+      ]
 
 servePutDeprecated :: CoreResource -> VersionsFeature -> DynamicPath -> ServerPart Response
 servePutDeprecated core versions dpath = 
@@ -676,7 +663,7 @@ servePutDeprecated core versions dpath =
         responseWith (putDeprecated versions pkgname) $ \wasDepr -> do
     let dtitle = if wasDepr then "Package deprecated" else "Package undeprecated"
     returnOk $ toResponse $ Resource.XHtml $ hackagePage dtitle
-       [ h3 << dtitle
+       [ h2 << dtitle
        , paragraph <<
           [ toHtml "Set the "
           , anchor ! [href $ deprecatedPackageUri (versionsResource versions) "" pkgname] << "deprecated status"
@@ -723,9 +710,8 @@ servePreferForm core r dpath =
           , paragraph << input ! [thetype "submit", value "Set status"]
           ]]
 
-
+--------------------------------------
 -- Reverse
-
 serveReverse :: CoreResource -> ReverseResource -> Bool -> DynamicPath -> ServerPart Response
 serveReverse core revr isRecent dpath = htmlResponse $
                                        withPackageId dpath $ \pkgid -> do
@@ -766,7 +752,7 @@ serveDownloadTop :: CoreResource -> DownloadFeature -> DynamicPath -> ServerPart
 serveDownloadTop core downs _ = do
     pkgList <- liftIO $ sortedPackages downs
     return $ toResponse $ Resource.XHtml $ hackagePage "Total downloads" $
-      [ h3 << "Downloaded packages"
+      [ h2 << "Downloaded packages"
       , thediv << table << downTableRows pkgList
       ]
   where
@@ -777,29 +763,106 @@ serveDownloadTop core downs _ = do
             , td << [ toHtml $ (show count) ] ]
         | ((pkgname, count), n) <- zip pkgList [(1::Int)..] ]
 
+------------------------- All packages by name
+packagesPage :: CoreResource -> ListFeature -> TagsResource
+             -> DynamicPath -> ServerPart Response
+packagesPage core listf tagf _ = do
+    let itemFunc = renderItem core (Just tagf)
+    items <- liftIO $ getAllLists listf
+    return $ toResponse $ Resource.XHtml $ hackagePage "All packages by name" $
+      [ h2 << "All packages by name"
+      , ulist ! [theclass "packages"] << map itemFunc (Map.elems items)
+      ]
+
 ------------------------------------------- Tags
 serveTagsListing :: TagsResource -> DynamicPath -> ServerPart Response
 serveTagsListing tags _ = do
     tagList <- query GetTagList
-    let withCounts = sortBy (flip compare `on` snd) . filter ((>0) . snd)
-                   . map (\(tg, pkgs) -> (tg, Set.size pkgs)) $ tagList
+    let withCounts = filter ((>0) . snd) . map (\(tg, pkgs) -> (tg, Set.size pkgs)) $ tagList
+        countSort = sortBy (flip compare `on` snd) withCounts
     return $ toResponse $ Resource.XHtml $ hackagePage "Hackage tags" $
-      [ h3 << "Hackage tags"
-      , unordList $ flip map withCounts $ \(tg, count) -> 
-          [ anchor ! [href $ tagUri tags "" tg] << display tg
+      [ h2 << "Hackage tags"
+      , h4 << "By name"
+      , paragraph ! [theclass "toc"] << (intersperse (toHtml ", ") $ map (tagItem . fst) withCounts)
+      , h4 << "By frequency"
+      , paragraph ! [theclass "toc"] << (intersperse (toHtml ", ") $ map (toHtml . tagCountItem) countSort)
+      ]
+  where tagCountItem (tg, count) =
+          [ tagItem tg
           , toHtml $ " (" ++ show count ++ ")"
           ]
-      ]
+        tagItem tg = anchor ! [href $ tagUri tags "" tg] << display tg
 
-serveTagListing :: CoreResource -> DynamicPath -> ServerPart Response
-serveTagListing core dpath = withTagPath dpath $ \tg pkgnames -> do
+serveTagListing :: CoreResource -> ListFeature -> TagsResource
+                -> DynamicPath -> ServerPart Response
+serveTagListing core listf tagf dpath = withTagPath dpath $ \tg pkgnames -> do
     let tagd = "Packages tagged " ++ display tg
+        itemFunc = renderItem core (Just tagf)
+        pkgs = Set.toList pkgnames
+    items <- liftIO $ makeItemList listf pkgs
+    let (mtag, histogram) = Map.updateLookupWithKey (\_ _ -> Nothing) tg $ tagHistogram items
+        -- make a 'related tags' section, so exclude this tag from the histogram
+        count = fromMaybe 0 mtag
     return $ toResponse $ Resource.XHtml $ hackagePage tagd $
-      [ h3 << tagd
-      , case Set.toList pkgnames of
-            []   -> toHtml "No packages have this tag."
-            pkgs -> unordList $ map (packageNameLink core) pkgs
+      [ h2 << tagd
+      , case items of
+            [] -> toHtml "No packages have this tag."
+            _  -> toHtml
+              [ paragraph << [if count==1 then "1 package has" else show count ++ " packages have", " this tag."]
+              , paragraph ! [theclass "toc"] << [toHtml "Related tags: ", toHtml $ showHistogram histogram]
+              , ulist ! [theclass "packages"] << map itemFunc items ]
       ]
+ where
+  showHistogram hist = (++takeHtml) . intersperse (toHtml ", ") $
+        map histogramEntry $ take takeAmount sortHist
+    where hsize = Map.size hist
+          takeAmount = max (div (hsize*2) 3) 12
+          takeHtml = if takeAmount >= hsize then [] else [toHtml ", ..."]
+          sortHist = sortBy (flip compare `on` snd) $ Map.toList hist
+  histogramEntry (tg', count) = anchor ! [href $ tagUri tagf "" tg'] << display tg' +++ (" (" ++ show count ++ ")")
+
+putPackageTags :: CoreResource -> TagsFeature -> DynamicPath -> ServerPart Response
+putPackageTags core tags dpath =
+        htmlResponse $
+        withPackageAllPath dpath $ \pkgname _ ->
+        responseWith (putTags tags pkgname) $ \_ -> do
+    returnOk $ toResponse $ Resource.XHtml $ hackagePage "Set tags"
+        [toHtml "Put tags for ", packageNameLink core pkgname]
+
+------ Searching
+servePackageFind :: CoreResource -> ListFeature -> NamesFeature
+                 -> TagsResource -> DynamicPath -> ServerPart Response
+servePackageFind core listf names tagf _ = packageFindWith $ \mstr -> case mstr of
+    Nothing -> return $ toResponse $ Resource.XHtml $
+                        hackagePage "Text search" $ searchForm ""
+    Just (str, texts) -> do
+        let itemFunc = renderItem core (Just tagf)
+        (exact, text) <- searchFindPackage names str texts
+        exactItems <- liftIO $ makeItemList listf exact
+        textItems <- liftIO $ makeItemList listf text
+        return $ toResponse $ Resource.XHtml $ hackagePageWith [noIndex] "Text search" $
+          [ toHtml $ searchForm str
+          , h2 << "Exact matches"
+          , case exact of [] -> toHtml "None";
+                          _ -> ulist ! [theclass "packages"] << map itemFunc exactItems
+          , h2 << "Text matches"
+          , case texts of
+                False -> toHtml "Try a longer word."
+                True  -> ulist ! [theclass "packages"] << map itemFunc textItems
+          ]
+  where searchForm str =             
+          [ h2 << "Text search"
+          , paragraph << "Search for all package descriptions containing a given string. This looks for the search text anywhere it can find it, ignoring punctuation and letter case."
+          , form ! [theclass "box", XHtml.method "GET", action "/packages/find"] <<
+                [ toHtml $ makeInput [value str] "name" "Look for "
+                , input ! [thetype "submit", value "Go!"]
+                ]
+          , paragraph <<
+              [ toHtml "Use ", anchor ! [href "http://holumbus.fh-wedel.de/hayoo/hayoo.html"] << "Hayoo"
+              , toHtml " to search module and function names and "
+              , anchor ! [href "http://www.haskell.org/hoogle/"] << "Hoogle"
+              , toHtml " to fuzzily search type signatures and function names."]
+          ]
 
 ----------------------------------------------------
 -- HTML utilities
@@ -813,7 +876,7 @@ htmlResponseWith mpart func = mpart >>= \mres -> case mres of
 
 htmlError :: ErrorResponse -> ServerPart Response
 htmlError (ErrorResponse errCode errTitle message) = resp errCode $ toResponse
-        $ Resource.XHtml $ hackagePage errorStr [h3 << errorStr, paragraph << errorToHtml message]
+        $ Resource.XHtml $ hackagePage errorStr [h2 << errorStr, paragraph << errorToHtml message]
   where errorStr = "Error: " ++ errTitle
 
 errorToHtml :: [Message] -> [Html]
@@ -836,4 +899,34 @@ makeCheckbox isChecked fname fvalue labelName = [input ! ([thetype "checkbox", n
                                                  ++ if isChecked then [checked] else []),
                                         toHtml " ",
                                         label ! [thefor fname] << labelName]
+
+renderItem :: CoreResource -> Maybe TagsResource -> PackageItem -> Html
+renderItem core mtagf item = li ! classes <<
+      [ packageNameLink core pkgname
+      , toHtml $ " " ++ ptype (itemHasLibrary item) (itemNumExecutables item)
+                     ++ ": " ++ itemDesc item
+      , case mtagf of
+            Nothing -> noHtml
+            Just tagf -> " (" +++ renderTags tagf (itemTags item) +++ ")"
+      ]
+  where pkgname = itemName item
+        ptype _ 0 = "library"
+        ptype lib num = (if lib then "library and " else "")
+                     ++ (case num of 1 -> "program"; _ -> "programs")
+        classes = case classList of [] -> []; _ -> [theclass $ unwords classList]
+        classList = (case itemDeprecated item of Nothing -> []; _ -> ["deprecated"])
+
+renderTags :: TagsResource -> Set Tag -> [Html]
+renderTags tagf tags = intersperse (toHtml ", ")
+    (map (\tg -> anchor ! [href $ tagUri tagf "" tg] << display tg)
+      $ Set.toList tags)
+
+toClassString :: String -> String
+toClassString "" = ""
+toClassString xs = filter classLater $ dropWhile (not . classFirst) xs
+  where classFirst c = isAlpha c || c == '_'
+        classLater c = isAlphaNum c || c == '_' || c == '-'
+
+noIndex :: Html
+noIndex = meta ! [name "robots", content "noindex"]
 

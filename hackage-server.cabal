@@ -68,7 +68,7 @@ executable hackage-server
     Distribution.Server.Features.Json
     Distribution.Server.Features.LegacyRedirects
     Distribution.Server.Features.Mirror
-import Distribution.Server.Features.NameSearch
+    Distribution.Server.Features.NameSearch
     Distribution.Server.Features.Packages
     Distribution.Server.Features.PreferredVersions
     Distribution.Server.Features.Reports
@@ -144,6 +144,7 @@ import Distribution.Server.Features.NameSearch
     pureMD5 >= 0.2,
     xhtml >= 3000.1,
     json == 0.4.*,
+    stringsearch == 0.3.*,
     rss == 3000.0.*,
     Cabal == 1.8.*,
     csv == 0.1.*,

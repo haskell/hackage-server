@@ -92,6 +92,7 @@ data CoreResource = CoreResource {
     coreIndexTarball :: Resource,
     corePackagesPage :: Resource,
     corePackagePage  :: Resource,
+    corePackageRedirect :: Resource,
     coreCabalFile    :: Resource,
     corePackageTarball :: Resource,
 
@@ -106,7 +107,9 @@ data CoreResource = CoreResource {
 instance HackageFeature CoreFeature where
     getFeature core = HackageModule
       { featureName = "core"
-      , resources   = map ($coreResource core) [coreIndexPage, coreIndexTarball, corePackagesPage, corePackagePage, corePackageTarball, coreCabalFile]
+      , resources   = map ($coreResource core)
+          [ coreIndexPage, coreIndexTarball, corePackagesPage, corePackagePage
+          , corePackageRedirect, corePackageTarball, coreCabalFile ]
       , dumpBackup = Just $ \store -> do
             users    <- query GetUserDb
             packages <- query GetPackagesState
@@ -140,6 +143,7 @@ initCoreFeature config = do
           , coreIndexTarball = (resourceAt "/packages/index.tar.gz") { resourceGet = [("tarball", Cache.respondCache indexTar Resource.IndexTarball)] }
           , corePackagesPage = (resourceAt "/packages/.:format") { resourceGet = [("html", Cache.respondCache thePackages id)] }
           , corePackagePage = (resourceAt "/package/:package.:format") { resourceGet = [("html", basicPackagePage r)] }
+          , corePackageRedirect = (resourceAt "/package/") { resourceGet = [("", \_ -> seeOther "/packages/" $ toResponse ())] }
           , corePackageTarball = (resourceAt "/package/:package/:tarball.tar.gz") { resourceGet = [("tarball", servePackageTarball downHook $ serverStore config)] }
           , coreCabalFile  = (resourceAt "/package/:package/:cabal.cabal") { resourceGet = [("cabal", serveCabalFile)] }
 

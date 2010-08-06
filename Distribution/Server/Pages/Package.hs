@@ -3,12 +3,12 @@ module Distribution.Server.Pages.Package (
     packagePage,
     renderDependencies,
     renderVersion,
-    renderFields
+    renderFields,
+    renderDownloads
   ) where
 
 import Distribution.Server.Features.Packages
 import Distribution.Server.Packages.Preferred
---import Distribution.Server.Packages.Tag
 
 import Distribution.Server.Pages.Package.HaddockParse (parseHaddockParagraphs)
 import Distribution.Server.Pages.Package.HaddockLex  (tokenise)
@@ -27,9 +27,10 @@ import System.FilePath.Posix    ((</>), (<.>))
 import System.Locale            (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
 
-packagePage :: PackageRender -> [Html] -> [(String, Html)] -> [(String, Html)] -> Maybe URL -> [Html]
-packagePage render top sections bottom docURL =
+packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)] -> [(String, Html)] -> Maybe URL -> [Html]
+packagePage render headLinks top sections bottom docURL =
     [h2 << docTitle]
+  ++ renderHeads
   ++ top
   ++ pkgBody render sections
   ++ concatMap (\(s, p) -> [h3 << s, p])
@@ -39,6 +40,10 @@ packagePage render top sections bottom docURL =
     docTitle = display (packageName pkgid) ++ case synopsis (rendOther render) of
         "" -> ""
         short  -> ": " ++ short
+    renderHeads = case headLinks of
+        [] -> []
+        items -> [thediv ! [thestyle "font-size: small"] <<
+            (map (\item -> "[" +++ item +++ "] ") items)]
     cabalLink = anchor ! [href cabalHomeURL] <<
                 (image ! [alt "Built with Cabal", src cabalLogoURL])
 
@@ -132,6 +137,11 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
             DeprecatedVersion  -> [theclass "deprecated"]
             UnpreferredVersion -> [theclass "unpreferred"]
         infoHtml = case info of Nothing -> noHtml; Just str -> " (" +++ (anchor ! [href str] << "info") +++ ")"
+
+renderDownloads :: Int -> Int -> Version -> (String, Html)
+renderDownloads totalDown versionDown version =
+    ("Downloads", toHtml $ show versionDown ++ " for " ++ display version ++
+                      " and " ++ show totalDown ++ " total")
 
 renderFields :: PackageRender -> [(String, Html)]
 renderFields render = [

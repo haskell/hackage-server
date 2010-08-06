@@ -17,7 +17,6 @@ module Distribution.Server.Users.Group (
 
 import Distribution.Server.Users.Types
 
-import Data.Maybe (maybe)
 import qualified Data.IntSet as IntSet
 import Data.Monoid (Monoid)
 import Data.Binary (Binary)

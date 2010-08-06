@@ -63,7 +63,7 @@ import Control.Monad.Trans (MonadIO(..))
 --
 
 data UserFeature = UserFeature {
-    userResource  :: UserResource,
+    userResource :: UserResource,
     userAdded :: Hook (IO ()),
     groupAddUser :: UserGroup -> DynamicPath -> MServerPart (),
     groupDeleteUser :: UserGroup -> DynamicPath -> MServerPart (),
@@ -185,11 +185,12 @@ withUserPath dpath func = withUserNamePath dpath $ \name -> withUserName name fu
 instance FromReqURI UserName where
   fromReqURI = simpleParse
 
--- resourceAt "/users/register" { resourcePost = }
--- resourceGet = adminAddUser :: MServerPart Response
-
+-- TODO: this should be separated off into an AdminRegister feature
 adminAddUser :: MServerPart Response
 adminAddUser = do
+    admins <- query State.GetHackageAdmins
+    users <- query State.GetUserDb
+    Auth.withHackageAuth users (Just admins) Nothing $ \_ _ -> do
     reqData <- getDataFn lookUserNamePasswords
     case reqData of
         Nothing -> returnError 400 "Error registering user"

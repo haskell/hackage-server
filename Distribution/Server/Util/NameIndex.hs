@@ -59,6 +59,15 @@ addName caseName (NameIndex index stored gen' gen) =
     in NameIndex (Map.unionWith Set.union index forName)
                  (Set.insert caseName stored) gen' gen
 
+deleteName :: String -> NameIndex -> NameIndex
+deleteName caseName (NameIndex index stored gen' gen) =
+    let name = map toLower caseName
+        nameSet = Set.singleton caseName
+        forName = Map.fromList $ map (\term -> (term, nameSet)) (gen name)
+    in NameIndex (Map.differenceWith (\a b -> keepSet $ Set.difference a b) index forName)
+                 (Set.delete caseName stored) gen' gen
+  where keepSet s = if Set.null s then Nothing else Just s
+
 lookupName :: String -> NameIndex -> Set String
 lookupName caseName (NameIndex index _ _ _) =
     Map.findWithDefault Set.empty (map toLower caseName) index
@@ -84,15 +93,6 @@ mapLast :: (a -> a) -> [a] -> [a]
 mapLast f (x:[]) = f x:[]
 mapLast f (x:xs) = x:mapLast f xs
 mapLast _ [] = []
-
-deleteName :: String -> NameIndex -> NameIndex
-deleteName caseName (NameIndex index stored gen' gen) =
-    let name = map toLower name
-        nameSet = Set.singleton caseName
-        forName = Map.fromList $ map (\term -> (term, nameSet)) (gen name)
-        keepSet s = if Set.null s then Nothing else Just s
-    in NameIndex (Map.differenceWith (\a b -> keepSet $ Set.difference a b) index forName)
-                 (Set.delete caseName stored) gen' gen
 
 -- $(deriveSerialize ''NameIndex)
 -- store arguments which can be sent to constructIndex :: [String] -> Maybe [Char] -> NameIndex

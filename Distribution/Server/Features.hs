@@ -19,37 +19,28 @@ import Distribution.Server.Features.ReverseDependencies (initReverseFeature)
 import Distribution.Server.Features.DownloadCount (initDownloadFeature)
 import Distribution.Server.Features.Tags (initTagsFeature)
 import Distribution.Server.Features.NameSearch (initNamesFeature)
+import Distribution.Server.Features.PackageList (initListFeature)
 --for a mirror, import Distribution.Server.Features.Mirror (initMirrorFeature)
 
 -- This module ties together all the hackage features that we will use.
+-- To add a feature:
+-- 1. Import its initialization function
+-- 2. Call its initialization function with all of its required arguments
+-- 3. Add it to the allFeatures list
 
--- TODO, soon or later.
+-- TODO:
 -- * PackageServe: serving from tarballs (most of the work is setting it up on import)
 -- * Snippet: code samples, pastebin for 'getting started' code
--- * NameSearch: searching just by name (possibly sorted by hotness), useful
---     for suggest in textfields and in-browser OpenSearch
 -- * LibraryRank: http://hackage.haskell.org/trac/hackage/ticket/183
 -- * HaskellPlatform: mark off packages in the haskell platform.
--- * ActionLog: or some way to log actions by user, date, and target(s), which
---     is easily searchable. If this is not built directly into the features
---     themselves, there could be some kind of way to hook onto them and expose
---     useful activity information. This would be a good home for recent.rss.
 -- * Anonymous build reports should work, as well as candidate build reports
 -- * alter Users to be more in line with the current way registering is handled,
 --     with email addresses available to maintainers, etc.
--- * find a better interface for UserGroups (again), that effectively combine
---     such as aspects as IO functions for modification, resources which list
---     group members, serving information about groups, and keeping track of
---     which groups a given user belongs to
--- * backups, backups, backups
--- * use more <$> and less fmap. (admittedly minor)
-
+-- * UserNotify: email users and let them email each other
 hackageFeatures :: Config -> IO [HackageModule]
 hackageFeatures config = do
-    -- > these can get along by themselves
     coreFeature <- initCoreFeature config
 
-    -- > and additional content...
     -- Arguments denote data dependencies, even if the feature objects are themselves unused,
     --   functions from their modules are.
     -- What follows is a topological sort along those lines
@@ -59,16 +50,21 @@ hackageFeatures config = do
     distroFeature <- initDistroFeature config coreFeature usersFeature packagesFeature
     checkFeature <- initCheckFeature config coreFeature usersFeature packagesFeature uploadFeature
     reportsFeature <- initReportsFeature config coreFeature
-    versionsFeature <- initVersionsFeature config coreFeature uploadFeature
-    reverseFeature <- initReverseFeature config coreFeature versionsFeature
     documentationFeature <- initDocumentationFeature config coreFeature uploadFeature
     downloadFeature <- initDownloadFeature config coreFeature
     tagsFeature <- initTagsFeature config coreFeature
+    versionsFeature <- initVersionsFeature config coreFeature uploadFeature tagsFeature
+    reverseFeature <- initReverseFeature config coreFeature versionsFeature
     namesFeature <- initNamesFeature config coreFeature
+    listFeature <- initListFeature config coreFeature reverseFeature
+                        downloadFeature tagsFeature versionsFeature
     --jsonFeature <- initJsonFeature
     htmlFeature <- initHtmlFeature config coreFeature packagesFeature
                         uploadFeature checkFeature usersFeature versionsFeature
-                        reverseFeature tagsFeature downloadFeature
+                        reverseFeature tagsFeature downloadFeature listFeature
+                        namesFeature
+    -- The order of initialization above should be the same as
+    -- the order of this list.
     let allFeatures =
          [ HF coreFeature
          , HF usersFeature
@@ -77,12 +73,13 @@ hackageFeatures config = do
          , HF distroFeature
          , HF checkFeature
          , HF reportsFeature
-         , HF versionsFeature
-         , HF reverseFeature
          , HF documentationFeature
          , HF downloadFeature
          , HF tagsFeature
+         , HF versionsFeature
+         , HF reverseFeature
          , HF namesFeature
+         , HF listFeature
          , HF htmlFeature
          , HF legacyRedirectsFeature
          ]

@@ -33,14 +33,16 @@ reversePackageRender pkgid packageLink r isRecent (ReversePageRender renders cou
           , anchor ! [href $ reverseStatsUri r "" pkgname] << "statistics for specific versions"
           , toHtml $ " of " ++ display pkgid ++ " and its "
           , anchor ! [href $ reverseAllUri r "" pkgname] << "indirect dependencies", toHtml "." ]
+        versionBox = if hasVersion && total /= allCounts
+            then thediv ! [theclass "notification"] << [toHtml $ "These statistics only apply to this version of " ++ display pkgname ++ ". See also ",  anchor ! [href $ reverseNameUri r "" pkgname] << [toHtml "packages which depend on ", emphasize << "any", toHtml " version"], toHtml $ " (all " ++ show total ++ " of them)."]
+            else noHtml
         allCounts = fst counts + snd counts
         otherCount = case total - allCounts of
             diff | diff > 0 -> paragraph << [show diff ++ " packages depend on versions of " ++ display pkgid ++ " other than this one."]
             _ -> noHtml
         (pageText, nonPageText) = (if isRecent then id else uncurry $ flip (,)) (recentText, nonRecentText)
         otherLink = if isRecent then reverseOldUri r "" pkgid else reverseUri r "" pkgid
-
-    in h3 << (display pkgid ++ ": " ++ num allCounts "reverse dependencies" "reverse dependency"):case counts of
+    in h2 << (display pkgid ++ ": " ++ num allCounts "reverse dependencies" "reverse dependency"):versionBox:case counts of
     (0, 0) ->
       [ paragraph << [toHtml "No packages depend on ",
                       packageAnchor, toHtml "."]
@@ -89,7 +91,7 @@ reversePackageRender pkgid packageLink r isRecent (ReversePageRender renders cou
 
 reverseFlatRender :: PackageName -> (PackageName -> String) -> ReverseResource -> ReverseCount -> [(PackageName, Int)] -> [Html]
 reverseFlatRender pkgname packageLink r (ReverseCount total flat _) pairs =
-  h3 << (display pkgname ++ ": " ++ num flat "total reverse dependencies" "reverse dependency"):case (total, flat) of
+  h2 << (display pkgname ++ ": " ++ num flat "total reverse dependencies" "reverse dependency"):case (total, flat) of
     (0, 0) -> [paragraph << [toHtml "No packages depend on ", toPackage pkgname]]
     _ ->
       [ paragraph << if total == flat
@@ -115,7 +117,7 @@ reverseFlatRender pkgname packageLink r (ReverseCount total flat _) pairs =
 -- /package/:package/reverse/summary
 reverseStatsRender :: PackageName -> [Version] -> (PackageId -> String) -> ReverseResource -> ReverseCount -> [Html]
 reverseStatsRender pkgname allVersions packageLink r (ReverseCount total flat versions) = 
-    h3 << (display pkgname ++ ": reverse dependency statistics"):
+    h2 << (display pkgname ++ ": reverse dependency statistics"):
   [ case total of
         0 -> paragraph << [ toHtml "No packages depend on ", thisPackage, toHtml "." ]
         _ -> toHtml
@@ -149,7 +151,7 @@ num' n plural singular = if n == 1 then singular else plural
 -- /packages/reverse
 reversePackagesRender :: (PackageName -> String) -> ReverseResource -> Int -> [(PackageName, Int, Int)] -> [Html]
 reversePackagesRender packageLink r pkgCount triples =
-        h3 << ("Reverse dependencies") :
+        h2 << ("Reverse dependencies") :
       [ paragraph << [ "Hackage has " ++ show pkgCount ++ " packages. Here are all the packages that have package that depend on them:"]
       , reverseTable ]
   where

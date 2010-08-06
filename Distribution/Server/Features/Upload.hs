@@ -143,7 +143,7 @@ maintainerDescription pkgInfo = GroupDescription
   where pname = display (packageName pkgInfo)
 
 trusteeDescription :: GroupDescription
-trusteeDescription = nullDescription { groupTitle = "Package trustees" }
+trusteeDescription = nullDescription { groupTitle = "Package trustees", groupPrologue = "Package trustees are essential maintainers for the entire package database. They can edit package maintainer groups and upload any package." }
 
 withPackageAuth :: Package pkg => pkg -> (Users.UserId -> Users.UserInfo -> MServerPart a) -> MServerPart a
 withPackageAuth pkg func = withPackageNameAuth (packageName pkg) func

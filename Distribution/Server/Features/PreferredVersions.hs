@@ -17,6 +17,7 @@ module Distribution.Server.Features.PreferredVersions (
 import Distribution.Server.Feature
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Upload
+import Distribution.Server.Features.Tags
 import Distribution.Server.Types
 import Distribution.Server.Error
 import Distribution.Server.Hook
@@ -25,6 +26,7 @@ import qualified Distribution.Server.Cache as Cache
 
 import qualified Distribution.Server.PackageIndex as PackageIndex
 import Distribution.Server.Packages.Preferred
+import Distribution.Server.Packages.Tag
 import Distribution.Server.Packages.State
 import Distribution.Server.Packages.Types
 
@@ -35,19 +37,21 @@ import Distribution.Text
 import Data.Function (fix)
 import Data.List (intercalate, find)
 import Control.Arrow (second)
-import Control.Monad.Trans (MonadIO)
+import Control.Monad.Trans (MonadIO, liftIO)
 import Happstack.Server
 import Happstack.State hiding (Version)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Data.ByteString.Lazy.Char8 as BS
 -- import Data.ByteString.Lazy.Char8 (ByteString)
 
 data VersionsFeature = VersionsFeature {
     versionsResource :: VersionsResource,
     preferredHook  :: Hook (PackageName -> PreferredInfo -> IO ()),
-    deprecatedHook :: Hook (PackageName -> [PackageName] -> IO ()),
+    deprecatedHook :: Hook (PackageName -> Maybe [PackageName] -> IO ()),
     putDeprecated :: PackageName -> MServerPart Bool,
-    putPreferred  :: PackageName -> MServerPart ()
+    putPreferred  :: PackageName -> MServerPart (),
+    updateDeprecatedTags :: IO ()
 }
 
 data VersionsResource = VersionsResource {
@@ -79,19 +83,19 @@ instance HackageFeature VersionsFeature where
       , dumpBackup    = Nothing
       , restoreBackup = Nothing
       }
+    initHooks versions = [updateDeprecatedTags versions]
 
-initVersionsFeature :: Config -> CoreFeature -> UploadFeature -> IO VersionsFeature
-initVersionsFeature _ core _ = do
+initVersionsFeature :: Config -> CoreFeature -> UploadFeature -> TagsFeature -> IO VersionsFeature
+initVersionsFeature _ core _ tags = do
     prefHook <- newHook
     deprHook <- newHook
-
-    return VersionsFeature
+    return $ fix $ \f -> VersionsFeature
       { versionsResource = fix $ \r -> VersionsResource
-          { preferredResource = (resourceAt "/packages/preferred.:format") { resourceGet = [("txt", \_ -> textPreferredSummary)] }
-          , preferredText = (resourceAt "/packages/preferred-versions") { resourceGet = [("txt", \_ -> textPreferred)] }
-          , preferredPackageResource = (resourceAt "/package/:package/preferred.:format") { resourceGet = [("txt", textPackagePreferred)], resourcePut = [("txt", textPutPreferred prefHook)] }
-          , deprecatedResource = (resourceAt "/packages/deprecated.:format") { resourceGet = [("txt", \_ -> textDeprecatedSummary)] }
-          , deprecatedPackageResource = (resourceAt "/package/:package/deprecated.:format") { resourceGet = [("txt", textPackageDeprecated)], resourcePut = [("txt", textPutDeprecated deprHook)] }
+          { preferredResource = resourceAt "/packages/preferred.:format"
+          , preferredText = resourceAt "/packages/preferred-versions"
+          , preferredPackageResource = resourceAt "/package/:package/preferred.:format"
+          , deprecatedResource = resourceAt "/packages/deprecated.:format"
+          , deprecatedPackageResource = resourceAt "/package/:package/deprecated.:format"
 
           , preferredUri = \format -> renderResource (preferredResource r) [format]
           , preferredPackageUri = \format pkgid -> renderResource (preferredPackageResource r) [display pkgid, format]
@@ -100,52 +104,12 @@ initVersionsFeature _ core _ = do
           }
       , preferredHook  = prefHook
       , deprecatedHook = deprHook
-      , putPreferred  = doPutPreferred prefHook core
-      , putDeprecated = doPutDeprecated deprHook
+      , putPreferred  = doPutPreferred f core
+      , putDeprecated = doPutDeprecated f
+      , updateDeprecatedTags = do
+            pkgs <- fmap (Map.keys . deprecatedMap) $ query GetPreferredVersions
+            setCalculatedTag tags (Tag "deprecated") (Set.fromDistinctAscList pkgs)
       }
-  where
-    textPreferredSummary = doPreferredsRender >>= return . toResponse . show
-
-    textPreferred = fmap toResponse makePreferredVersions
-
-    textPackagePreferred dpath = textResponse $
-                                 withPackageName dpath $ \pkgname ->
-                                 responseWith (doPreferredRender pkgname) $ \pref ->
-        returnOk . toResponse . unlines $
-            (case rendRanges pref of
-                [] -> ["No preferred versions"]
-                prefs -> "Preferred versions:":map (" * "++) prefs)
-              ++
-            (case rendVersions pref of
-                []   -> ["No deprecated versions"]
-                deprs -> ["Deprecated versions: " ++ intercalate ", " (map display deprs)])
-
-    textDeprecatedSummary = doDeprecatedsRender >>=
-        return . toResponse . unlines . map (\(pkg, pkgs) -> display pkg ++ ": " ++ case pkgs of
-            [] -> "deprecated"
-            _  -> inFavorOf pkgs)
-
-    textPackageDeprecated dpath = textResponse $
-                                  withPackageName dpath $ \pkgname ->
-                                  responseWith (doDeprecatedRender pkgname) $ \mpkg ->
-        returnOk . toResponse $ case mpkg of
-            Nothing   -> display pkgname ++ " is not deprecated"
-            Just pkgs -> display pkgname ++ " is " ++ inFavorOf pkgs
-
-    textPutPreferred prefHook dpath = textResponse $
-                                      withPackageName dpath $ \pkgname ->
-                                      responseWith (doPutPreferred prefHook core pkgname) $ \_ ->
-        returnOk . toResponse $ "Set preferred versions"
-
-    textPutDeprecated deprHook dpath = textResponse $ -- putDeprecated versions dpath
-                                       withPackageName dpath $ \pkgname ->
-                                       responseWith (doPutDeprecated deprHook pkgname) $ \wasDepr ->
-        returnOk . toResponse $ case wasDepr of
-            True  -> "Package deprecated"
-            False -> "Package undeprecated"
-
-    inFavorOf :: [PackageName] -> String
-    inFavorOf pkgs = "deprecated in favor of " ++ intercalate ", " (map display pkgs)
 
 ---------------------------
 withPackagePreferred :: PackageId -> (PkgInfo -> [PkgInfo] -> MServerPart a) -> MServerPart a
@@ -167,8 +131,8 @@ withPackagePreferred pkgid func = query GetPackagesState >>= \state ->
 withPackagePreferredPath :: DynamicPath -> (PkgInfo -> [PkgInfo] -> MServerPart a) -> MServerPart a
 withPackagePreferredPath dpath func = withPackageId dpath $ \pkgid -> withPackagePreferred pkgid func
 
-doPutPreferred :: Hook (PackageName -> PreferredInfo -> IO ()) -> CoreFeature -> PackageName -> MServerPart ()
-doPutPreferred hook core pkgname =
+doPutPreferred :: VersionsFeature -> CoreFeature -> PackageName -> MServerPart ()
+doPutPreferred f core pkgname =
         withPackageAll pkgname $ \pkgs ->
         withPackageNameAuth pkgname $ \_ _ -> do
     pref <- getDataFn $ fmap lines $ look "preferred"
@@ -182,7 +146,7 @@ doPutPreferred hook core pkgname =
                     newInfo <- query $ GetPreferredInfo pkgname
                     prefVersions <- makePreferredVersions
                     Cache.modifyCache (indexExtras core) $ Map.insert "preferred-versions" (BS.pack prefVersions)
-                    runHook'' hook pkgname newInfo
+                    runHook'' (preferredHook f) pkgname newInfo
                     runHook (packageIndexChange core)
                     returnOk ()
                 False -> preferredError "Not all of the selected versions are in the main index."
@@ -191,8 +155,8 @@ doPutPreferred hook core pkgname =
   where
     preferredError = returnError 400 "Preferred ranges failed" . return . MText
 
-doPutDeprecated :: Hook (PackageName -> [PackageName] -> IO ()) -> PackageName -> MServerPart Bool
-doPutDeprecated hook pkgname =
+doPutDeprecated :: VersionsFeature -> PackageName -> MServerPart Bool
+doPutDeprecated f pkgname =
         withPackageAll pkgname $ \_ ->
         withPackageNameAuth pkgname $ \_ _ -> do
     index  <- fmap packageList $ query GetPackagesState
@@ -203,16 +167,19 @@ doPutDeprecated hook pkgname =
             case sequence . map simpleParse =<< depr of
                 Just deprs -> case filter (null . PackageIndex.lookupPackageName index) deprs of
                     [] -> do
-                        update $ SetDeprecatedFor pkgname (Just deprs)
-                        runHook'' hook pkgname deprs
+                        doUpdates (Just deprs)
                         returnOk True
                     pkgs -> deprecatedError $ "Some superseding packages aren't in the main index: " ++ intercalate ", " (map display pkgs)
                 Nothing -> deprecatedError "Expected format of the 'superseded by' field is a list of package names separated by spaces."
         Nothing -> do
-            update $ SetDeprecatedFor pkgname Nothing
+            doUpdates Nothing
             returnOk False
   where
     deprecatedError = returnError 400 "Deprecation failed" . return . MText
+    doUpdates deprs = do
+        update $ SetDeprecatedFor pkgname deprs
+        runHook'' (deprecatedHook f) pkgname deprs
+        liftIO $ updateDeprecatedTags f
 
 data PreferredRender = PreferredRender {
     rendSumRange :: String,

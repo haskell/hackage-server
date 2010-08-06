@@ -4,6 +4,7 @@ module Distribution.Server.Features.Tags (
     initTagsFeature,
 
     withTagPath,
+    collectTags,
     putTags
   ) where
 
@@ -31,10 +32,13 @@ import Distribution.License
 
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Function (fix)
-import Data.List (intercalate, foldl')
+import Data.List (foldl')
 import Data.Char (toLower)
-import Control.Monad (mzero)
+import Control.Monad (mzero, forM_, liftM)
+import Control.Monad.Trans (MonadIO)
 
 import Happstack.State
 import Happstack.Server
@@ -90,7 +94,8 @@ instance HackageFeature TagsFeature where
     initHooks tags = [initImmutableTags]
       where initImmutableTags = do
                 index <- fmap packageList $ query GetPackagesState
-                Cache.putCache (calculatedTags tags) (constructImmutableTagIndex index)
+                let calcTags = tagPackages $ constructImmutableTagIndex index
+                forM_ (Map.toList calcTags) $ uncurry $ setCalculatedTag tags
 
 initTagsFeature :: Config -> CoreFeature -> IO TagsFeature
 initTagsFeature _ _ = do
@@ -130,6 +135,11 @@ withTagPath dpath func = case simpleParse =<< lookup "tag" dpath of
     Just tag -> do
         pkgs <- query $ PackagesForTag tag
         func tag pkgs
+
+collectTags :: MonadIO m => Set PackageName -> m (Map PackageName (Set Tag))
+collectTags pkgs = do
+    pkgMap <- liftM packageTags $ query GetPackageTags
+    return $ Map.fromDistinctAscList . map (\pkg -> (pkg, Map.findWithDefault Set.empty pkg pkgMap)) $ Set.toList pkgs
 
 putTags :: TagsFeature -> PackageName -> MServerPart ()
 putTags tagf pkgname = withPackageAll pkgname $ \_ -> do

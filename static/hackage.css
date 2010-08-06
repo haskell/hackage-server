@@ -12,6 +12,10 @@ h1 {
 	font-weight: normal;
 	color: #888;
 }
+h2 {
+    margin: 0.83em 0px 0.2em 0px;
+    border-bottom: thin gray solid
+}
 table.navigation {
 	background: #f1f1f1;
 	border-top: thin solid black;
@@ -31,6 +35,12 @@ table.navigation td {
 	font-size: smaller;
 	padding: 3px;
 	background: #f1f1f1;
+	border: thin solid black;
+}
+.notification {
+	font-size: smaller;
+	padding: 3px;
+	background: #cccccc;
 	border: thin solid black;
 }
 h3.category {
@@ -67,6 +77,6 @@ a:visited { color: #0000a0; text-decoration: none }
 a:hover   { background-color: #e0e0ff; text-decoration: none }
 
 .unpreferred { color: green !important; }
-.deprecated { color: gray !important; }
+.deprecated { color: gray !important; text-decoration: line-through; }
 
 
