@@ -105,6 +105,7 @@ data PackageRender = PackageRender {
     rendModules :: Maybe ModuleForest,
     rendHasTarball :: Bool,
     rendUploadInfo :: (UTCTime, String),
+    rendPkgUri :: String,
     -- rendOther contains other useful fields which are merely strings, possibly empty
     --     for example: description, home page, copyright, author, stability
     -- If PackageRender is the One True Resource Representation, should they
@@ -141,6 +142,7 @@ doPackageRender users info =
       , rendModules = fmap (moduleForest . exposedModules) (library flatDesc)
       , rendHasTarball = not . null $ pkgTarball info
       , rendUploadInfo = let (utime, uid) = pkgUploadData info in (utime, maybe "Unknown" (display . userName) $ Users.lookupId uid users)
+      , rendPkgUri = "/package/" ++ display (pkgInfoId info)
       , rendOther = desc
       }
   where

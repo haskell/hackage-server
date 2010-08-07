@@ -76,8 +76,8 @@ downloadSection render = ("Downloads", ulist << map (li <<) downloadItems)
                           else [toHtml << "Package tarball not uploaded"],
              [anchor ! [href cabalURL] << "Package description",
              toHtml $ if tarExists then " (included in the package)" else ""]]
-        downloadURL = packageFile pkgId
-        cabalURL = cabalFile pkgId
+        downloadURL = rendPkgUri render </> display pkgId <.> "tar.gz"
+        cabalURL = rendPkgUri render </> display (packageName pkgId) <.> "cabal"
         tarExists = rendHasTarball render
         pkgId = rendPkgId render
 
@@ -200,14 +200,6 @@ renderModuleForest mb_url = renderForest []
 -- | URL describing a package.
 packageURL :: PackageIdentifier -> URL
 packageURL pkgId = "/package" </> display pkgId
-
--- | The name of the package file for a given package identifier
-packageFile :: PackageIdentifier -> URL
-packageFile pkgId = "/package" </> display pkgId </> display pkgId <.> "tar.gz"
-
--- | The name of the Cabal file for a given package identifier
-cabalFile :: PackageIdentifier -> URL
-cabalFile pkgId = packageURL pkgId </> display (pkgName pkgId) <.> "cabal"
 
 cabalLogoURL :: URL
 cabalLogoURL = "/built-with-cabal.png"

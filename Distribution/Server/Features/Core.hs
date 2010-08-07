@@ -62,7 +62,8 @@ data CoreFeature = CoreFeature {
     coreResource :: CoreResource,
 
     cacheIndexTarball :: Cache.Cache ByteString,
-    -- FIXME: this is HTML and doesn't belong here
+    -- FIXME: this is HTML and doesn't belong here. Instead, the HTML feature
+    -- should sign up for its own hooks
     cachePackagesPage :: Cache.Cache Response,
     -- other files to put in the index tarball like preferred-versions
     indexExtras :: Cache.Cache (Map String ByteString),
@@ -253,6 +254,9 @@ withPackageTarball dpath func = withPackageId dpath $ \(PackageIdentifier name v
     func pkgid
 
 ------------------------------------------------------------------------
+-- TODO: return MServerPart instead of using textResponse so that we can have
+-- HTML not-found response pages?
+
 -- result: tarball or not-found error
 servePackageTarball :: Hook (PackageId -> IO ()) -> BlobStorage -> DynamicPath -> ServerPart Response
 servePackageTarball hook store dpath = textResponse $
@@ -271,7 +275,7 @@ serveCabalFile dpath = textResponse $ withPackagePath dpath $ \pkg _ -> do
     guard (lookup "cabal" dpath == Just (display $ packageName pkg))
     returnOk $ toResponse (Resource.CabalFile (pkgData pkg))
 
--- very important: get some sort of authentication before calling this function
+-- very important: get some sort of authentication before calling this function!
 doDeletePackage :: CoreFeature -> DynamicPath -> MServerPart ()
 doDeletePackage core dpath = withPackageId dpath $ \pkgid -> withPackageVersion pkgid $ \pkg -> do
     update $ DeletePackageVersion pkgid
@@ -280,5 +284,4 @@ doDeletePackage core dpath = withPackageId dpath $ \pkgid -> withPackageVersion 
     runHook (packageIndexChange core)
     when (null nowPkgs) $ runHook' (noPackageHook core) pkg
     returnOk ()
-
 

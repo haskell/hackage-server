@@ -98,6 +98,14 @@ instance ToMessage XHtml where
     toContentType _ = BS.pack "application/xhtml+xml"
     toMessage (XHtml xhtml) = BS.Lazy.pack (XHtml.renderHtml xhtml)
 
+-- Like XHtml, but don't bother calculating length
+newtype LongXHtml = LongXHtml XHtml.Html
+
+instance ToMessage LongXHtml where
+    toResponse (LongXHtml xhtml) = noContentLength $ mkResponse
+        (BS.Lazy.pack (XHtml.renderHtml xhtml))
+        [("Content-Type", "application/xhtml+xml")]
+
 newtype ExportTarball = ExportTarball BS.Lazy.ByteString
 
 instance ToMessage ExportTarball where

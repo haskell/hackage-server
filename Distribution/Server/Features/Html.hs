@@ -426,7 +426,7 @@ serveUploadResult pkgf core _ = htmlResponse $
     let warns = uploadWarnings res
         pkgid = packageId (uploadDesc res)
     returnOk $ toResponse $ Resource.XHtml $ hackagePage "Upload successful" $
-      [ paragraph << [toHtml "Successfully uploaded ", anchor ! [href $ corePackageUri core "" pkgid] << display pkgid, toHtml "!"]
+      [ paragraph << [toHtml "Successfully uploaded ", packageLink core pkgid, toHtml "!"]
       ] ++ case warns of
         [] -> []
         _  -> [paragraph << "There were some warnings:", unordList warns]
@@ -453,8 +453,11 @@ servePackageCandidateUpload _ _ _ = htmlResponse $ do
       ]
 
 serveCandidateMaintain :: CoreResource -> CheckResource -> DynamicPath -> ServerPart Response
-serveCandidateMaintain _ _ _ = do
-    return $ toResponse $ Resource.XHtml $ hackagePage "Maintain candidate"
+serveCandidateMaintain _ _ dpath =
+        htmlResponse $
+        withCandidatePath dpath $ \_ candidate ->
+        withPackageAuth candidate $ \_ _ -> do
+    returnOk $ toResponse $ Resource.XHtml $ hackagePage "Maintain candidate"
         [toHtml "Here, you can delete a candidate, publish it, upload a new one, and edit the maintainer group."]
 {-some useful URIs here: candidateUri check "" pkgid, packageCandidatesUri check "" pkgid, publishUri check "" pkgid-}
 
@@ -471,7 +474,7 @@ serveCandidatePage pkg maintain dpath = htmlResponse $
     prefInfo <- query $ GetPreferredInfo pkgname
     let sectionHtml = [Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing,
                        Pages.renderDependencies render] ++ Pages.renderFields render
-        maintainHtml = anchor ! [href $ renderResource maintain [display pkgname]] << "maintain"
+        maintainHtml = anchor ! [href $ renderResource maintain [display $ packageId cand]] << "maintain"
     -- also utilize hasIndexedPackage :: Bool
     let warningBox = case renderWarnings candRender of
             [] -> []
@@ -522,6 +525,7 @@ servePackageCandidates core check candPkgUp dpath =
         withPackageName dpath $ \pkgname ->
         withCandidates pkgname $ \_ pkgs -> do
     return $ toResponse $ Resource.XHtml $ hackagePage "Package candidates" $
+      [ h3 << ("Candidates for " ++ display pkgname) ] ++
       case pkgs of
         [] -> [ toHtml "No candidates exist for ", packageNameLink core pkgname, toHtml ". Upload one for "
               , anchor ! [href $ renderResource candPkgUp [display pkgname]] << "this"
@@ -531,20 +535,24 @@ servePackageCandidates core check candPkgUp dpath =
               ]
         _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ candidateUri check "" $ packageId pkg] << display (packageVersion pkg) ]
 
+-- TODO: make publishCandidate a member of the Check feature, just like 
+-- putDeprecated and putPreferred are for the Versions feature.
 servePostPublish :: CoreFeature -> UserFeature -> UploadFeature
                  -> DynamicPath -> ServerPart Response
-servePostPublish core users upload dpath = do
-    res <- publishCandidate core users upload dpath False
-    case res of
-        Left err -> makeTextError err
-        Right uresult -> ok $ toResponse $ unlines (uploadWarnings uresult)
+servePostPublish core users upload dpath = htmlResponse $
+    responseWith (publishCandidate core users upload dpath False) $ \uresult ->
+        returnOk $ toResponse $ Resource.XHtml $ hackagePage "Publish successful" $
+          [ paragraph << [toHtml "Successfully published ", packageLink (coreResource core) (packageId $ uploadDesc uresult), toHtml "!"]
+          ] ++ case uploadWarnings uresult of
+            [] -> []
+            warns -> [paragraph << "There were some warnings:", unordList warns]
 
 -- Preferred
 serveDeprecatedSummary :: CoreResource -> DynamicPath -> ServerPart Response
 serveDeprecatedSummary core _ = doDeprecatedsRender >>= \renders -> do
     return $ toResponse $ Resource.XHtml $ hackagePage "Deprecated packages"
       [ h2 << "Deprecated packages"
-      , toHtml $ flip map renders $ \(pkg, pkgs) -> [ packageNameLink core pkg, toHtml ": ", deprecatedText core pkgs ]
+      , unordList $ flip map renders $ \(pkg, pkgs) -> [ packageNameLink core pkg, toHtml ": ", deprecatedText core pkgs ]
       ]
 
 deprecatedText :: CoreResource -> [PackageName] -> Html
@@ -852,7 +860,7 @@ servePackageFind core listf names tagf _ = packageFindWith $ \mstr -> case mstr 
           ]
   where searchForm str =             
           [ h2 << "Text search"
-          , paragraph << "Search for all package descriptions containing a given string. This looks for the search text anywhere it can find it, ignoring punctuation and letter case."
+          , paragraph << "Search for all package descriptions containing a given string. This looks for the search text anywhere it can find it, ignoring punctuation and letter case. It is mainly a replacement for Ctrl+F on the main packages page presently."
           , form ! [theclass "box", XHtml.method "GET", action "/packages/find"] <<
                 [ toHtml $ makeInput [value str] "name" "Look for "
                 , input ! [thetype "submit", value "Go!"]

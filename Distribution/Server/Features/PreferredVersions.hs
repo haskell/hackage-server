@@ -92,7 +92,7 @@ initVersionsFeature _ core _ tags = do
     return $ fix $ \f -> VersionsFeature
       { versionsResource = fix $ \r -> VersionsResource
           { preferredResource = resourceAt "/packages/preferred.:format"
-          , preferredText = resourceAt "/packages/preferred-versions"
+          , preferredText = (resourceAt "/packages/preferred-versions") { resourceGet = [("txt", \_ -> textPreferred)] }
           , preferredPackageResource = resourceAt "/package/:package/preferred.:format"
           , deprecatedResource = resourceAt "/packages/deprecated.:format"
           , deprecatedPackageResource = resourceAt "/package/:package/deprecated.:format"
@@ -110,6 +110,8 @@ initVersionsFeature _ core _ tags = do
             pkgs <- fmap (Map.keys . deprecatedMap) $ query GetPreferredVersions
             setCalculatedTag tags (Tag "deprecated") (Set.fromDistinctAscList pkgs)
       }
+  where
+    textPreferred = fmap toResponse makePreferredVersions
 
 ---------------------------
 withPackagePreferred :: PackageId -> (PkgInfo -> [PkgInfo] -> MServerPart a) -> MServerPart a

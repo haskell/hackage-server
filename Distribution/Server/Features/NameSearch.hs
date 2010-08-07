@@ -8,6 +8,7 @@ module Distribution.Server.Features.NameSearch (
 
 import Distribution.Server.Feature
 import Distribution.Server.Types
+import Distribution.Server.Hook
 import Distribution.Server.Resource
 import Distribution.Server.Features.Core
 
@@ -37,7 +38,8 @@ data NamesFeature = NamesFeature {
     namesResource :: NamesResource,
     packageNameIndex :: Cache.Cache NameIndex,
     packageTextIndex :: Cache.Cache TextSearch,
-    openSearchCache :: Cache.Cache Response
+    openSearchCache :: Cache.Cache Response,
+    regenerateIndices :: IO ()
 }
 
 data NamesResource = NamesResource {
@@ -53,18 +55,25 @@ instance HackageFeature NamesFeature where
       , dumpBackup    = Nothing
       , restoreBackup = Nothing
       }
+    initHooks names = [regenerateIndices names]
 
 -- Currently only prefix-searching of package names is supported, as well as a
 -- text search of package descriptions using Bayer-Moore. The results could also
 -- be ordered by download (see DownloadCount.hs sortByDownloads).
 initNamesFeature :: Config -> CoreFeature -> IO NamesFeature
-initNamesFeature config _ = do
+initNamesFeature config core = do
     let hostStr = uriToString id (URI "http:" (Just $ serverURI config) "" "" "") ""
-    index <- fmap packageList $ query GetPackagesState
-    -- TODO: register hooks to update search indices on package add/remove
-    pkgCache <- Cache.newCacheable (constructIndex (map display $ PackageIndex.packageNames index) Nothing)
+    pkgCache <- Cache.newCacheable (emptyNameIndex Nothing)
+    textCache <- Cache.newCache (constructTextIndex []) id
     osdCache <- Cache.newCacheable (toResponse $ Resource.OpenSearchXml $ BS.pack $ mungeSearchXml hostStr)
-    textCache <- Cache.newCache (constructPackageText index) id
+    let regen = do
+            index <- fmap packageList $ query GetPackagesState            
+            -- asynchronously update indices
+            Cache.putCache pkgCache (constructIndex (map display $ PackageIndex.packageNames index) Nothing)
+            Cache.putCache textCache (constructPackageText index)
+    registerHook (packageAddHook core) $ \_ -> regen
+    registerHook (packageRemoveHook core) $ \_ -> regen
+    registerHook (packageChangeHook core) $ \_ _ -> regen
     return NamesFeature
       { namesResource = fix $ \_ -> NamesResource
           { openSearchXml = (resourceAt "/opensearch.xml") { resourceGet = [("xml", Cache.respondCache osdCache id)] }
@@ -75,8 +84,8 @@ initNamesFeature config _ = do
       , packageNameIndex = pkgCache
       , packageTextIndex = textCache
       , openSearchCache = osdCache
+      , regenerateIndices = regen
       }
-    --search pages should have meta ! [name "robots", content="noindex"]
 
 constructPackageText :: PackageIndex PkgInfo -> TextSearch
 constructPackageText = constructTextIndex . map makeEntry . PackageIndex.allPackagesByName
@@ -85,6 +94,8 @@ constructPackageText = constructTextIndex . map makeEntry . PackageIndex.allPack
                          in (pkgStr, pkgStr ++ " " ++ synopsis (packageDescription desc))
 
 
+-- Returns (list of exact matches, list of text matches)
+-- HTML search pages should have meta ! [name "robots", content "noindex"]
 searchFindPackage :: MonadIO m => NamesFeature -> String -> Bool -> m ([PackageName], [PackageName])
 searchFindPackage names str doTextSearch = do
     nmIndex <- Cache.getCache $ packageNameIndex names

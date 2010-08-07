@@ -99,7 +99,7 @@ instance HackageFeature CheckFeature where
 
 -- URI generation (string-based), using maps; user groups
 initCheckFeature :: Config -> CoreFeature -> UserFeature -> PackagesFeature -> UploadFeature -> IO CheckFeature
-initCheckFeature config core _ _ _ = do
+initCheckFeature config _ _ _ _ = do
     let store = serverStore config
     return CheckFeature
       { checkResource = fix $ \r -> CheckResource
@@ -289,7 +289,7 @@ doCandidateRender :: PackageIndex PkgInfo -> Users.Users -> CandPkgInfo -> Candi
 doCandidateRender index users cand =
     let render = doPackageRender users (candPkgInfo cand)
     in CandidateRender {
-        candPackageRender = render,
+        candPackageRender = render { rendPkgUri = rendPkgUri render ++ "/candidate" },
         renderWarnings = candWarnings cand,
         hasIndexedPackage = not . null $ PackageIndex.lookupPackageName index (packageName cand)
     }

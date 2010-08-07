@@ -203,8 +203,7 @@ main = topHandler $ getOpts >>= \options -> case options of
     checkAccidentalDataLoss hasSavedState = when hasSavedState . die $
             "The server already has an initialised database!!\n"
          ++ "If you really *really* intend to completely reset the "
-         ++ "whole database then use the additional flag "
-         ++ "--obliterate-all-existing-data"
+         ++ "whole database you should remove the state/ directory."
 
     checkBlankServerState  hasSavedState = when (not hasSavedState) . die $
             "There is no existing server state.\nYou can either import "
