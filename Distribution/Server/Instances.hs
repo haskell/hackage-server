@@ -104,7 +104,8 @@ instance NFData ByteString where
     rnf bs = BS.length bs `seq` ()
 
 instance NFData Response where
-    rnf = rnf . rsBody --ByteString
+    rnf res@(Response{}) = rnf $ rsBody res
+    rnf _ = ()
 
 instance NFData PackageName where
     rnf (PackageName pkg) = rnf pkg

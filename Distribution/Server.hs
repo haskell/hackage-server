@@ -175,6 +175,7 @@ checkpoint server = createCheckpoint (serverTxControl server)
 -- Convert a set of old data into a new export tarball.
 -- This also populates the blob database, which is then
 -- repopulated upon import of the new export tarball.
+-- This is not really a good thing.
 --
 -- However, it does not need happstack-state to function.
 bulkImport :: FilePath -- path to blob storage, get rid of this
@@ -184,8 +185,8 @@ bulkImport :: FilePath -- path to blob storage, get rid of this
            -> Maybe String -- users
            -> Maybe String -- admin users
            -> IO ([UploadLog.Entry], ByteString)
-
 bulkImport storageDir indexFile logFile archiveFile htPasswdFile adminsFile = do
+    createDirectoryIfMissing True storageDir
     storage <- BlobStorage.open storageDir
 
     putStrLn "Reading index file"
