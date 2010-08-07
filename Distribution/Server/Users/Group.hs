@@ -22,7 +22,7 @@ import Data.Monoid (Monoid)
 import Data.Binary (Binary)
 import qualified Data.Binary as Binary
 import Happstack.Data
-import Control.Parallel.Strategies
+import Control.DeepSeq
 
 import Prelude hiding (id)
 

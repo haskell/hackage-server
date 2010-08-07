@@ -8,7 +8,6 @@ import Distribution.Server.Instances ()
 import Distribution.Package
 import Distribution.Version
 
-import Control.Parallel.Strategies
 import qualified Happstack.State as State (Version)
 import Happstack.State hiding (Version)
 import Data.Time.Calendar
@@ -18,6 +17,7 @@ import Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
 import Control.Monad.State (put, get)
 import Control.Monad.Reader (ask, asks)
+import Control.DeepSeq
 
 -----------------------------------------
 -- DownloadCounts is where the download records are converted to an historical

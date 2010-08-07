@@ -12,7 +12,7 @@ import qualified Data.Set as Set
 import Data.Char (toLower)
 import Data.List (unfoldr, foldl')
 import Data.Maybe (maybeToList)
-import Control.Parallel.Strategies
+import Control.DeepSeq
 
 import Happstack.State
 

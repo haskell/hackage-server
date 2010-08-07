@@ -6,7 +6,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.List (delete, sortBy)
 import Data.Ord (comparing)
-import Control.Parallel.Strategies
+import Control.DeepSeq
 
 -- | Histograms are intended to keep track of an integer attribute related
 -- to a collection of objects.

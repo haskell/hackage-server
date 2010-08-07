@@ -129,7 +129,7 @@ executable hackage-server
     old-time >= 1.0,
     -- we'd like to use just the new time library howerer
     -- the rss packages uses old-time in it's public api :-(
-    parallel == 2.2.0.*,
+    deepseq == 1.1.*,
     old-locale >= 1.0,
     directory >= 1.0,
     random >= 1.0,

@@ -18,7 +18,7 @@ import Data.Typeable
 import Data.Time.Clock (UTCTime(..))
 import Data.Time.Calendar (Day(..))
 
-import Control.Parallel.Strategies
+import Control.DeepSeq
 
 import qualified Data.Binary as Binary
 import Data.Binary (Binary)

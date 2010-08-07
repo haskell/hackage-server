@@ -14,15 +14,14 @@ import Distribution.Server.Util.AsyncVar (AsyncVar)
 import Happstack.Server
 
 import Control.Monad.Trans (MonadIO(liftIO))
-import Control.Parallel.Strategies
+import Control.DeepSeq
 
--------------------------- this should replace Cache eventually
--- though it's an extremely loose wrapper around AsyncVar, so why not use that directly?
 newtype Cache a = Cache { cacheState :: AsyncVar a }
 
 newCache :: a -> (a -> b) -> IO (Cache a)
 newCache state forceFunc = Cache `fmap` AsyncVar.new (\a -> forceFunc a `seq` ()) state
 
+-- How necessary is it to use deepseq to fully evaluate the cache? Too low-level?
 newCacheable :: NFData a => a -> IO (Cache a)
 newCacheable emptyValue = newCache emptyValue rnf
 

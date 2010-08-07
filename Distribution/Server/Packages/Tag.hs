@@ -23,7 +23,7 @@ import Data.Maybe (fromMaybe)
 import Data.List (foldl')
 import Control.Monad.State (get, put, modify)
 import Control.Monad.Reader (ask, asks)
-import Control.Parallel.Strategies
+import Control.DeepSeq
 
 import Happstack.State
 
