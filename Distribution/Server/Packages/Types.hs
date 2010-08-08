@@ -101,14 +101,8 @@ instance Binary PkgInfo where
 ------------------------------------------------------
 -- | The information we keep about a candidate package.
 -- 
--- Only one candidate should exist per package name. This restriction seems
--- reasonable; it makes coordinating between live packages and candidates easier.
--- Also, the candidate can have any version, but can be published only if
--- it's later than the latest indexed one.
---
 -- It's currently possible to have candidates for packages which don't exist yet.
 --
--- This data structure is modelled after 'PkgInfo'.
 data CandPkgInfo = CandPkgInfo {
     candInfoId  :: !PackageIdentifier,
     -- there should be one ByteString and one BlobId per candidate.

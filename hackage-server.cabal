@@ -25,6 +25,7 @@ data-files:
   static/favicon.ico
   static/built-with-cabal.png
   static/cabal-tiny.png
+  static/503.html
 
 source-repository head
   type: darcs

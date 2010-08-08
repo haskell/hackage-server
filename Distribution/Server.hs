@@ -16,11 +16,17 @@ module Distribution.Server (
     importServerTar,
     exportServerTar,
     initState,
+
+    -- * Temporary server while loading data
+    setUpTemp,
+    tearDownTemp
  ) where
 
 import Happstack.Server hiding (port, host)
 import qualified Happstack.Server
 import Happstack.State hiding (Version)
+-- for resetting the temporary 'loading' server
+import qualified Happstack.Util.Concurrent as HappsLoad
 
 import qualified Distribution.Server.Backup.Import as Import
 import Distribution.Server.Backup.Export
@@ -50,7 +56,7 @@ import Distribution.Text
 
 import System.FilePath ((</>))
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist)
-import Control.Concurrent.MVar (MVar)
+import Control.Concurrent
 import Control.Monad (when, mplus)
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.ByteString.Lazy.Char8 (ByteString)
@@ -278,38 +284,25 @@ impl server =
     $ concatMap Feature.resources (serverFeatures server)
 --where showServerTree tree = trace (drawServerTree tree Nothing) tree
 
-{-
-Old server:
+data TempServer = TempServer ThreadId
 
-core :: Server -> ServerPart Response
-core server = msum []
-  [ dir "package" $ msum
-      [ path $ msum . handlePackageById store
-      , path $ servePackage store
-      ]
-  [ dir "buildreports" $ msum (buildReports store)
---  , dir "groups" (groupInterface)
-  , dir "recent.rss" $ msum
-      [ methodSP GET $ ok . Cache.packagesFeed =<< Cache.get cache ]
-  , dir "recent.html" $ msum
-      [ methodSP GET $ ok . Cache.recentChanges =<< Cache.get cache ]
-  , dir "admin" $ admin static store
-  , dir "check" checkPackage
---  , dir "htpasswd" $ msum [ changePassword ]
---  , dir "distro" distros
-  , fileServe ["hackage.html"] static
-  ]
+setUpTemp :: ServerConfig -> Int -> IO TempServer
+setUpTemp sconf secs = do
+    -- HappsLoad.fork would record the ThreadId into a global MVar
+    -- in which case HappsLoad.reset would kill it for us.
+    -- Better to have explicit control over it, though.
+    tid <- forkIO $ do
+        -- wait a certain amount of time before setting it up, because sometimes
+        -- happstack-state is very fast, and switching the servers has a time
+        -- cost to it
+        threadDelay $ secs*1000000
+        simpleHTTP conf $ (resp 503 =<< serveFile (\_ -> return "text/html") (confStaticDir sconf </> "503.html"))
+    return (TempServer tid)
+  where
+    conf = nullConf { Happstack.Server.port = confPortNum sconf }
 
--- Top level server part for administrative actions under the "admin"
--- directory
-admin :: FilePath -> BlobStorage -> ServerPart Response
-admin static storage = do
-    userDb <- query State.GetUserDb
-    admins <- query State.GetHackageAdmins
-    Auth.requireHackageAuth userDb (Just admins) Nothing
-    msum
-        [ dir "users" userAdmin
-        , dir "export.tar.gz" (export storage)
---        , adminDist
-        , fileServe ["admin.html"] static
-        ]-}
+tearDownTemp :: TempServer -> IO ()
+tearDownTemp (TempServer tid) = do
+    killThread tid
+    HappsLoad.reset
+    threadDelay $ 1000000

@@ -71,7 +71,7 @@ main = topHandler $ getOpts >>= \options -> case options of
 
         checkBlankServerState =<< Server.hasSavedState config
 
-        withServer config $ \server -> withCheckpointHandler server $ do
+        withServer config (optTemp opts) $ \server -> withCheckpointHandler server $ do
             info $ "Ready, serving on '" ++ hostname ++ "' port " ++ show port
             Server.run server
 
@@ -93,7 +93,7 @@ main = topHandler $ getOpts >>= \options -> case options of
 
         checkAccidentalDataLoss =<< Server.hasSavedState config
 
-        withServer config $ \server -> do
+        withServer config False $ \server -> do
             info "Creating initial state..."
             Server.initState server admin
             info "Done"
@@ -108,7 +108,7 @@ main = topHandler $ getOpts >>= \options -> case options of
 
         checkAccidentalDataLoss =<< Server.hasSavedState config
 
-        withServer config $ \server -> do
+        withServer config False $ \server -> do
             tar <- BS.readFile tarFile
             info "Parsing import tarball..."
             res <- Server.importServerTar server tar
@@ -123,7 +123,7 @@ main = topHandler $ getOpts >>= \options -> case options of
             config = defaults { confStateDir = stateDir }
             exportPath = fromMaybe "export.tar" (optBackupDir opts)
 
-        withServer config $ \server -> do
+        withServer config False $ \server -> do
             info "Preparing export tarball"
             tar <- Server.exportServerTar server            
             info "Saving export tarball"
@@ -160,20 +160,24 @@ main = topHandler $ getOpts >>= \options -> case options of
         ConvertOpts {} -> fail "A package index and log file must be supplied together."
 
   where
-    withServer :: ServerConfig -> (Server -> IO ()) -> IO ()
-    withServer config = bracket initialise shutdown
+    withServer :: ServerConfig -> Bool -> (Server -> IO ()) -> IO ()
+    withServer config doTemp = bracket initialise shutdown
       where
         initialise = do
+          mtemp <- case doTemp of
+              True  -> do
+                info "Setting up temp sever"
+                fmap Just $ Server.setUpTemp config 1
+              False -> return Nothing
           info "Initializing happstack-state..."
           server <- Server.initialise config
           info "Server data loaded into memory"
+          traverse ((info "Tearing down temp server" >>) . Server.tearDownTemp) mtemp
           return server
 
         shutdown server = do
-          -- TODO: we probably do not want to write a checkpint every time,
-          -- perhaps only after a certain amount of time or number of updates.
-          -- info "writing checkpoint..."
-          -- Server.checkpoint server
+          -- This only shuts down happstack-state and writes a checkpoint;
+          -- the HTTP part takes care of itself
           info "Shutting down..."
           Server.shutdown server
 
@@ -337,10 +341,11 @@ data RunOpts = RunOpts {
     optPort      :: Maybe String,
     optHost      :: Maybe String,
     optStateDir  :: Maybe FilePath,
-    optStaticDir :: Maybe FilePath
+    optStaticDir :: Maybe FilePath,
+    optTemp :: Bool
 } deriving (Show)
 defaultRunOpts :: RunOpts
-defaultRunOpts = RunOpts Nothing Nothing Nothing Nothing
+defaultRunOpts = RunOpts Nothing Nothing Nothing Nothing False
 runDescriptions :: [OptDescr (RunOpts -> RunOpts)]
 runDescriptions =
   [ Option [] ["port"]
@@ -355,6 +360,9 @@ runDescriptions =
   , Option [] ["static-dir"]
       (ReqArg (\file opts -> opts { optStaticDir = Just file }) "DIR")
       "Directory in which to find the html and other static files (default: cabal location)"
+  , Option [] ["temp-run"]
+      (NoArg (\opts -> opts { optTemp = True }))
+      "Set up a temporary server while initializing state for maintenance restarts"
   ]
 
 data NewOpts = NewOpts {
