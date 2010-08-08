@@ -156,10 +156,6 @@ run server = simpleHTTP conf $ mungeRequest $ impl server
         _ -> req
     -- todo: given a .json or .html suffix, munge it into an Accept header, can use MessageWrap.pathEls to reparse rqPath
     -- .. never mind, see enhanced Resource.hs
-    {- considered but discarded for PUTs: case lookup "_patharg" (rqInputs req) of
-                Just param -> req' { rqUri = rqUri req </> SURI.escape param, rqPath = rqPath req ++ [param] }
-                _ -> req'
-              where req' = -}
 
 -- | Perform a clean shutdown of the server.
 --
