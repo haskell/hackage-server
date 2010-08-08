@@ -288,21 +288,29 @@ data TempServer = TempServer ThreadId
 
 setUpTemp :: ServerConfig -> Int -> IO TempServer
 setUpTemp sconf secs = do
-    -- HappsLoad.fork would record the ThreadId into a global MVar
-    -- in which case HappsLoad.reset would kill it for us.
-    -- Better to have explicit control over it, though.
     tid <- forkIO $ do
         -- wait a certain amount of time before setting it up, because sometimes
         -- happstack-state is very fast, and switching the servers has a time
         -- cost to it
         threadDelay $ secs*1000000
-        simpleHTTP conf $ (resp 503 =<< serveFile (\_ -> return "text/html") (confStaticDir sconf </> "503.html"))
+        -- could likewise specify a mirror to redirect to for tarballs, and 503 for everything else
+        simpleHTTP conf $ (resp 503 $ setHeader "Content-Type" "text/html" $ toResponse html503)
     return (TempServer tid)
   where
     conf = nullConf { Happstack.Server.port = confPortNum sconf }
+
+        
+html503 :: String
+html503 =
+    "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\" \"http://www.w3.org/TR/html4/strict.dtd\">" ++
+    "<html><head><title>503 Service Unavailable</title></head><body><h1>" ++
+    "503 Service Unavailable</h1><p>The server is loading data into memory" ++
+    "<br>Probably because it was just restarted<br>It'll be back soon" ++
+    "</p></body></html>"
 
 tearDownTemp :: TempServer -> IO ()
 tearDownTemp (TempServer tid) = do
     killThread tid
     HappsLoad.reset
+    -- apparently reset doesn't give the server enough time to release the bind
     threadDelay $ 1000000

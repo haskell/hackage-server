@@ -47,6 +47,7 @@ data MirrorFeature = MirrorFeature {
     -- group for mirror uploads. should this be deleted and replaced with admins?
     -- it's not like the admins are used for anything else in a simple core/mirror setup
     mirrorGroup :: UserGroup
+    -- TODO: add group for user accounts which should be automatically merged, if possible
 }
 data MirrorResource = MirrorResource {
     mirrorPackageTarball :: Resource,
