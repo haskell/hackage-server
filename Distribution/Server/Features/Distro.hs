@@ -143,6 +143,7 @@ getMaintainersGroup admins dname = do
         , queryUserList = query $ GetDistroMaintainers dname
         , addUserList = update . AddDistroMaintainer dname
         , removeUserList = update . RemoveDistroMaintainer dname
+        , groupExists = query (IsDistribution dname)
         , canAddGroup = [admins]
         , canRemoveGroup = [admins]
         }

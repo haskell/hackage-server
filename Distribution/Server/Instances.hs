@@ -30,6 +30,7 @@ import Happstack.Server
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Data.Maybe (fromJust)
+import Data.IntSet (IntSet)
 
 deriving instance Typeable PackageIdentifier
 deriving instance Typeable GenericPackageDescription
@@ -80,6 +81,11 @@ textPut = Binary.put . display
 instance Happs.Version (UA.UArray ix e) where
     mode = Primitive
 
+instance Happs.Version IntSet
+instance Serialize IntSet where
+    putCopy = contain . Binary.put
+    getCopy = contain Binary.get
+
 instance (Serialize ix, Serialize e, UA.Ix ix,
           UA.IArray UA.UArray e) => Serialize (UA.UArray ix e) where
     getCopy = contain $ do
@@ -119,4 +125,6 @@ instance NFData PackageIdentifier where
 instance NFData Day where
     rnf (ModifiedJulianDay day) = rnf day
 
+instance NFData UTCTime where
+    rnf time = rnf (utctDay time) `seq` rnf (toRational $ utctDayTime time)
 

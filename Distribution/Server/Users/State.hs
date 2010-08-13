@@ -5,12 +5,12 @@ module Distribution.Server.Users.State where
 
 import Distribution.Server.Instances ()
 
-import Distribution.Server.Users.Types (UserId,UserName,UserAuth)
+import Distribution.Server.Users.Types
 import Distribution.Server.Users.Group as Group (UserList(..), enumerate, add, remove, empty)
 import Distribution.Server.Users.Users as Users
 
 import Data.Typeable (Typeable)
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, maybeToList)
 
 import Happstack.State
 
@@ -28,6 +28,15 @@ addUser :: UserName -> UserAuth -> Update Users (Maybe UserId)
 addUser userName auth = updateUsers' updateFn formatFn
   where updateFn = Users.add userName auth
         formatFn = id
+
+requireUserName :: UserName -> Update Users UserId
+requireUserName uname = do
+    users <- State.get
+    let (musers, uid) = Users.requireName uname users
+    case musers of
+        Just users' -> State.put users'
+        Nothing -> return ()
+    return uid
 
 -- Disables the indicated user
 setEnabledUser :: UserId -> Bool -> Update Users Bool
@@ -81,11 +90,15 @@ replaceUserDb :: Users -> Update Users ()
 replaceUserDb = State.put
 
 listGroupMembers :: UserList -> Query Users [UserName]
-listGroupMembers userList
-    = do users <- ask
-         return [ Users.idToName users uid | uid <- Group.enumerate userList ]
+listGroupMembers userList = do
+    users <- ask
+    return $ do
+        uid <- Group.enumerate userList
+        uinfo <- maybeToList $ Users.lookupId uid users
+        return $ userName uinfo
 
 $(mkMethods ''Users ['addUser
+                    ,'requireUserName
                     ,'setEnabledUser
                     ,'deleteUser
                     ,'replaceUserAuth

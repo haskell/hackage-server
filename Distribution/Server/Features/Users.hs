@@ -18,7 +18,6 @@ module Distribution.Server.Features.Users (
     GroupGen,
     groupResourceAt,
     groupResourcesAt,
-    withGroup,
     withGroupEditAuth,
     getGroupIndex,
     getIndexDesc
@@ -275,14 +274,10 @@ adminGroupDesc = UserGroup {
     queryUserList = query GetHackageAdmins,
     addUserList = update . AddHackageAdmin,
     removeUserList = update . RemoveHackageAdmin,
+    groupExists = return True,
     canAddGroup = [],
     canRemoveGroup = []
 }
-
-withGroup :: MServerPart UserGroup -> (UserGroup -> MServerPart a) -> MServerPart a
-withGroup groupGen func = groupGen >>= \mgroup -> case mgroup of
-    Left err -> returnError' err
-    Right group -> func group
 
 doGroupAddUser :: UserGroup -> DynamicPath -> MServerPart ()
 doGroupAddUser group _ = do
@@ -322,10 +317,10 @@ withGroupEditAuth group func = do
 data GroupResource = GroupResource {
     groupResource :: Resource,
     groupUserResource :: Resource,
-    getGroup :: GroupGen
+    getGroup :: DynamicPath -> UserGroup
 }
 
-type GroupGen = DynamicPath -> MIO UserGroup
+type GroupGen = DynamicPath -> UserGroup
 
 -- This is a mapping of UserId -> group URI and group URI -> description.
 -- Like many reverse mappings, it is probably rather volatile. Still, it is
@@ -362,7 +357,7 @@ groupResourceAt users uri group = do
     return $ (,) group' $ GroupResource
       { groupResource = extendResourcePath "/.:format" mainr
       , groupUserResource = extendResourcePath "/user/:username.:format" mainr
-      , getGroup = \_ -> returnOk group'
+      , getGroup = \_ -> group'
       }
 
 -- | Registers a collection of user groups for external display. These groups
@@ -378,21 +373,22 @@ groupResourcesAt :: Cache.Cache GroupIndex -> String
 groupResourcesAt users uri groupGen dpaths = do
     let mainr = resourceAt uri
         collectUserList genpath = do
-            mgroup <- groupGen genpath
-            case mgroup of
-                Left _ -> return ()
-                Right group -> queryUserList group >>= \ulist ->
+            let group = groupGen genpath
+            exists <- groupExists group
+            case exists of
+                False -> return ()
+                True  -> queryUserList group >>= \ulist ->
                     initGroupIndex users ulist (renderResource' mainr genpath) (groupDesc group)
-        getGroupFunc = \dpath -> do
-            mgroup <- groupGen dpath
-            return $ fmap (\group -> group
+        getGroupFunc dpath =
+            let group = groupGen dpath
+            in  group
               { addUserList = \uid -> do
                     addGroupIndex users uid (renderResource' mainr dpath) (groupDesc group)
                     addUserList group uid
               , removeUserList = \uid -> do
                     removeGroupIndex users uid (renderResource' mainr dpath)
                     addUserList group uid
-              }) mgroup
+              }
     mapM_ collectUserList dpaths
     return $ (,) getGroupFunc $ GroupResource
       { groupResource = extendResourcePath "/.:format" mainr

@@ -7,6 +7,7 @@ module Distribution.Server.Users.Users (
     empty,
     add,
     insert,
+    requireName,
 
     -- * Modification
     delete,
@@ -29,9 +30,13 @@ module Distribution.Server.Users.Users (
   ) where
 
 import Distribution.Server.Users.Types
+import Distribution.Server.Instances ()
 
+import Data.Maybe (maybeToList)
+import Data.List (find)
 import qualified Data.Map as Map
 import qualified Data.IntMap as IntMap
+import qualified Data.IntSet as IntSet
 
 import Happstack.Data
 
@@ -41,6 +46,7 @@ import Happstack.Data
 data Users = Users {
     userIdMap   :: !(IntMap.IntMap UserInfo),
     userNameMap :: !(Map.Map UserName UserId),
+    totalNameMap :: !(Map.Map UserName IntSet.IntSet),
     nextId      :: !UserId
   }
   deriving (Typeable, Show)
@@ -66,6 +72,7 @@ empty :: Users
 empty = Users {
     userIdMap   = IntMap.empty,
     userNameMap = Map.empty,
+    totalNameMap = Map.empty,
     nextId      = UserId 0
   }
 
@@ -80,17 +87,18 @@ add name auth users =
   case Map.lookup name (userNameMap users) of
     Just _  -> Nothing -- user name already exists
     Nothing -> users' `seq` Just (users', UserId userId)
-      where
-        UserId userId = nextId users
-        userInfo = UserInfo {
-          userName   = name,
-          userStatus = Active Enabled auth
-        }
-        users'   = users {
-          userIdMap   = IntMap.insert userId userInfo (userIdMap users),
-          userNameMap =    Map.insert name (UserId userId) (userNameMap users),
-          nextId      = UserId (userId + 1)
-        }
+  where
+    UserId userId = nextId users
+    userInfo = UserInfo {
+      userName   = name,
+      userStatus = Active Enabled auth
+    }
+    users'   = users {
+      userIdMap   = IntMap.insert userId userInfo (userIdMap users),
+      userNameMap = Map.insert name (UserId userId) (userNameMap users),
+      totalNameMap = Map.insertWith IntSet.union name (IntSet.singleton userId) (totalNameMap users),
+      nextId      = UserId (userId + 1)
+    }
 
 -- | Inserts the given info with the given id.
 -- If a user is already present with the passed in
@@ -100,22 +108,57 @@ add name auth users =
 -- deleted user and the user name is already in use,
 -- 'Nothing' will be returned.
 insert :: UserId -> UserInfo -> Users -> Maybe Users
-insert user@(UserId ident) info users =
+insert user@(UserId ident) info users = do
     let name = userName info
         isDeleted = case userStatus info of
-            Deleted -> True
-            _ -> False
+            Active {} -> False
+            _ -> True
         idMap' = intInsertMaybe ident info (userIdMap users)
         nameMap' = insertMaybe name user (userNameMap users)
+        totalMap = Map.insertWith IntSet.union name (IntSet.singleton ident) (totalNameMap users)
         nextIdent | user >= nextId users = UserId (ident + 1)
                   | otherwise = nextId users
-    in case idMap' of
-        Nothing -> Nothing -- Id clash, always fatal
-        Just idMap -> if isDeleted
-             then Just $ Users idMap (userNameMap users) nextIdent
-             else case nameMap' of
-                    Nothing -> Nothing -- name clash, fatal if non-deleted user
-                    Just nameMap -> Just $ Users idMap nameMap nextIdent
+    -- Nothing on id clash, always fatal
+    idMap <- idMap'
+    if isDeleted
+      then return $ Users idMap (userNameMap users) totalMap nextIdent
+      else do
+        -- Nothing on name clash only fatal if non-deleted user
+        nameMap <- nameMap'
+        return $ Users idMap nameMap totalMap nextIdent
+
+-- | Try to find an id for a given user name (either active or historical),
+-- and if one doesn't exist, make one as an historical account.
+requireName :: UserName -> Users -> (Maybe Users, UserId)
+requireName name users =
+    case findGoodId =<< Map.lookup name (totalNameMap users) of
+        Just uid -> (Nothing, UserId uid)
+        Nothing  -> (Just users', UserId userId)
+  where
+    -- bit of a complicated way to say: preferred existing accounts,
+    -- but historical accounts are fine as a second option
+    findGoodId iset =
+        let infos = do
+                uid <- IntSet.toList iset
+                info <- maybeToList $ IntMap.lookup uid (userIdMap users)
+                return (uid, userStatus info)
+        in case fmap fst $ find (isActive . snd) infos of
+            Just uid -> Just uid
+            Nothing  -> fmap fst $ find (isHistorical . snd) infos
+    isActive (Active{}) = True
+    isActive _ = False
+    isHistorical Historical = True
+    isHistorical _ = False
+    UserId userId = nextId users
+    userInfo = UserInfo {
+      userName   = name,
+      userStatus = Historical
+    }
+    users'   = users {
+      userIdMap   = IntMap.insert userId userInfo (userIdMap users),
+      totalNameMap = Map.insertWith IntSet.union name (IntSet.singleton userId) (totalNameMap users),
+      nextId      = UserId (userId + 1)
+    }
 
 -- | Delete a user account.
 --
@@ -138,6 +181,7 @@ delete (UserId userId) users = do
   return $! users {
     userIdMap   = IntMap.insert userId userInfo' (userIdMap users),
     userNameMap = Map.delete (userName userInfo) (userNameMap users)
+    -- but total name map remains the same
   }
 
 -- | Change the status of a user account to enabled or disabled.
@@ -160,8 +204,8 @@ setEnabled newStatus (UserId userId) users = do
     }
   where
     changeStatus userInfo = case userStatus userInfo of
-        Deleted       -> Nothing
         Active _ auth -> Just userInfo { userStatus = Active (if newStatus then Enabled else Disabled) auth }
+        _ -> Nothing
 
 lookupId :: UserId -> Users -> Maybe UserInfo
 lookupId (UserId userId) users = IntMap.lookup userId (userIdMap users)
@@ -195,7 +239,7 @@ replaceAuth users userId newAuth
     = modifyUser users userId $ \userInfo ->
       case userStatus userInfo of
         Active status _ -> userInfo { userStatus = Active status newAuth }
-        Deleted    -> userInfo 
+        _ -> userInfo 
 
 -- | Modify a single user. Returns 'Nothing' if the user does not
 --   exist. This function isn't exported.
@@ -242,4 +286,5 @@ intInsertMaybe k a m
 
 instance Version Users where
 $(deriveSerialize ''Users)
+
 

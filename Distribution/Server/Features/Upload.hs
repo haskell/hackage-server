@@ -9,8 +9,6 @@ module Distribution.Server.Features.Upload (
     withTrusteeAuth,
     UploadResult(..),
     extractPackage,
-    packageExists,
-    packageIdExists,
   ) where
 
 import Distribution.Server.Feature
@@ -31,17 +29,15 @@ import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
 import qualified Distribution.Server.Auth.Basic as Auth
 import qualified Distribution.Server.Packages.Unpack as Upload
-import qualified Distribution.Server.PackageIndex as PackageIndex
 import Distribution.Server.PackageIndex (PackageIndex)
 
 import Happstack.Server
 import Happstack.State
 import Data.Maybe (fromMaybe, listToMaybe, catMaybes)
+import qualified Data.Map as Map
 import Data.Time.Clock (getCurrentTime)
-import Control.Monad (when, mzero)
+import Control.Monad (when)
 import Control.Monad.Trans (MonadIO(..))
-import Data.List (maximumBy)
-import Data.Ord (comparing)
 import Data.Function (fix)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Distribution.Package
@@ -74,6 +70,7 @@ instance HackageFeature UploadFeature where
             [uploadIndexPage,
              groupResource . packageGroupResource, groupUserResource . packageGroupResource,
              groupResource . trusteeResource, groupUserResource . trusteeResource]
+        -- TODO: backup maintainer groups
       , dumpBackup    = Nothing
       , restoreBackup = Nothing
       }
@@ -84,16 +81,27 @@ initUploadFeature config core users = do
     let store = serverStore config
         admins = adminGroup users
     (trustees, trustResource) <- groupResourceAt  (groupIndex users) "/packages/trustees" (getTrusteesGroup [admins])
-    let getPkgMaintainers dpath = case simpleParse =<< lookup "package" dpath :: Maybe PackageName of
-            Nothing   -> mzero
-            Just name -> getMaintainersGroup [admins, trustees] name
-    -- FIXME: get the entire package list
-    (pkgGroup, pkgResource) <- groupResourcesAt (groupIndex users) "/package/:package/maintainers" getPkgMaintainers []
+
+    groupPkgs <- fmap (Map.keys . maintainers) $ query AllPackageMaintainers
+    let getPkgMaintainers dpath =
+            let pkgname = case simpleParse =<< lookup "package" dpath of
+                    Just name -> name
+                    Nothing   -> error "Invalid package name"
+            in  makeMaintainersGroup [admins, trustees] pkgname
+        groupPaths = map (\pkgname -> [("package", display pkgname)]) groupPkgs
+    (pkgGroup, pkgResource) <- groupResourcesAt (groupIndex users)
+        "/package/:package/maintainers" getPkgMaintainers groupPaths
     uploadFilter <- newHook
+    registerHook (newPackageHook core) $ \pkg -> do
+        let group = pkgGroup [("package", display $ packageName pkg)]
+        exists <- groupExists group 
+        -- create a maintainer group with the uploader if one didn't exist previously
+        -- 
+        when (not exists) $ addUserList group (pkgUploadUser pkg)
     return $ fix $ \f -> UploadFeature
       { uploadResource = UploadResource
-          { uploadIndexPage = (extendResource . corePackagesPage $ coreResource core)
-          , deletePackagePage = (extendResource . corePackagePage $ coreResource core)
+          { uploadIndexPage = (extendResource . corePackagesPage $ coreResource core) { resourcePost = [] }
+          , deletePackagePage = (extendResource . corePackagePage $ coreResource core) { resourceDelete = [] }
           , packageGroupResource = pkgResource
           , trusteeResource = trustResource
 
@@ -114,36 +122,32 @@ getTrusteesGroup canModify = fix $ \u -> UserGroup {
     queryUserList = query $ GetHackageTrustees,
     addUserList = update . AddHackageTrustee,
     removeUserList = update . RemoveHackageTrustee,
+    groupExists = return True,
     canAddGroup = [u] ++ canModify,
     canRemoveGroup = canModify
 }
 
-getMaintainersGroup :: [UserGroup] -> PackageName -> MIO UserGroup
-getMaintainersGroup canModify name = do
-    pkgstate <- query GetPackagesState
-    case PackageIndex.lookupPackageName (packageList pkgstate) name of
-      []   -> returnErrorIo 404 "Not found" [MText $ "No package with the name " ++ display name ++ " found"]
-      pkgs -> do
-        let pkgInfo = maximumBy (comparing packageVersion) pkgs -- is this really needed?
-        returnOk . fix $ \u -> UserGroup {
-            groupDesc = maintainerDescription pkgInfo,
-            queryUserList = query $ GetPackageMaintainers name,
-            addUserList = update . AddPackageMaintainer name,
-            removeUserList = update . RemovePackageMaintainer name,
-            canAddGroup = [u] ++ canModify,
-            canRemoveGroup = canModify
-        }
+makeMaintainersGroup :: [UserGroup] -> PackageName -> UserGroup
+makeMaintainersGroup canModify name = fix $ \u -> UserGroup {
+    groupDesc = maintainerDescription name,
+    queryUserList = query $ GetPackageMaintainers name,
+    addUserList = update . AddPackageMaintainer name,
+    removeUserList = update . RemovePackageMaintainer name,
+    groupExists = fmap (Map.member name . maintainers) $ query AllPackageMaintainers,
+    canAddGroup = [u] ++ canModify,
+    canRemoveGroup = canModify
+  }
 
-maintainerDescription :: PkgInfo -> GroupDescription
-maintainerDescription pkgInfo = GroupDescription
+maintainerDescription :: PackageName -> GroupDescription
+maintainerDescription pkgname = GroupDescription
   { groupTitle = "Maintainers"
   , groupEntity = Just (pname, Just $ "/package/" ++ pname)
   , groupPrologue  = "Maintainers for a package can upload new versions and adjust other attributes in the package database."
   }
-  where pname = display (packageName pkgInfo)
+  where pname = display pkgname
 
 trusteeDescription :: GroupDescription
-trusteeDescription = nullDescription { groupTitle = "Package trustees", groupPrologue = "Package trustees are essential maintainers for the entire package database. They can edit package maintainer groups and upload any package." }
+trusteeDescription = nullDescription { groupTitle = "Package trustees", groupPrologue = "Package trustees are essentially maintainers for the entire package database. They can edit package maintainer groups and upload any package." }
 
 withPackageAuth :: Package pkg => pkg -> (Users.UserId -> Users.UserInfo -> MServerPart a) -> MServerPart a
 withPackageAuth pkg func = withPackageNameAuth (packageName pkg) func
@@ -167,6 +171,7 @@ getPackageGroup pkg = do
     return $ Group.unions [trustee, pkgm]
 
 ----------------------------------------------------
+
 -- This is the upload function. It returns a generic result for multiple formats.
 doUploadPackage :: CoreFeature -> UserFeature -> UploadFeature -> BlobStorage -> MServerPart UploadResult
 doUploadPackage core userf upf store = do
@@ -179,16 +184,13 @@ doUploadPackage core userf upf store = do
     case res of
         Left failed -> return $ Left failed
         Right (pkgInfo, uresult) -> do
-            success <- update $ InsertPkgIfAbsent pkgInfo
+            success <- liftIO $ doAddPackage core pkgInfo
             if success
               then do
                  -- make package maintainers group for new package
                 let existedBefore = packageExists state pkgInfo
                 when (not existedBefore) $ do
                     update $ AddPackageMaintainer (packageName pkgInfo) (pkgUploadUser pkgInfo)
-                    runHook' (newPackageHook core) pkgInfo
-                liftIO $ runHook' (packageAddHook core) pkgInfo
-                liftIO $ runHook (packageIndexChange core)
                 returnOk uresult
               -- this is already checked in processUpload, and race conditions are highly unlikely but imaginable
               else returnError 403 "Upload failed" [MText "Package already exists."]
@@ -207,10 +209,6 @@ processUpload state uid res = do
             then uploadError "Not authorized to upload a new version of this package"
             else return Nothing
   where uploadError = return . Just . ErrorResponse 403 "Upload failed" . return . MText
-
-packageExists, packageIdExists :: (Package pkg, Package pkg') => PackageIndex pkg -> pkg' -> Bool
-packageExists   state pkg = not . null $ PackageIndex.lookupPackageName state (packageName pkg)
-packageIdExists state pkg = maybe False (const True) $ PackageIndex.lookupPackageId state (packageId pkg)
 
 -- This function generically extracts a package, useful for uploading, checking,
 -- and anything else in the standard user-upload pipeline.

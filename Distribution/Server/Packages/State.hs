@@ -226,9 +226,6 @@ instance Component PackageMaintainers where
   type Dependencies PackageMaintainers = End
   initialValue = PackageMaintainers Map.empty
 
-packageMaintainersExist :: PackageName -> Query PackageMaintainers Bool
-packageMaintainersExist name = asks $ Map.member name . maintainers
-
 getPackageMaintainers :: PackageName -> Query PackageMaintainers UserList
 getPackageMaintainers name = asks $ fromMaybe Group.empty . Map.lookup name . maintainers
 
@@ -242,14 +239,21 @@ addPackageMaintainer name uid = modifyPackageMaintainers name (Group.add uid)
 removePackageMaintainer :: PackageName -> UserId -> Update PackageMaintainers ()
 removePackageMaintainer name uid = modifyPackageMaintainers name (Group.remove uid)
 
-replacePackageMaintainers :: PackageName -> UserList -> Update PackageMaintainers ()
-replacePackageMaintainers name ulist = modifyPackageMaintainers name (const ulist)
+setPackageMaintainers :: PackageName -> UserList -> Update PackageMaintainers ()
+setPackageMaintainers name ulist = modifyPackageMaintainers name (const ulist)
+
+allPackageMaintainers :: Query PackageMaintainers PackageMaintainers
+allPackageMaintainers = ask
+
+replacePackageMaintainers :: PackageMaintainers -> Update PackageMaintainers ()
+replacePackageMaintainers = State.put
 
 $(mkMethods ''PackageMaintainers ['getPackageMaintainers
                                  ,'addPackageMaintainer
                                  ,'removePackageMaintainer
+                                 ,'setPackageMaintainers
                                  ,'replacePackageMaintainers
-                                 ,'packageMaintainersExist
+                                 ,'allPackageMaintainers
                                  ])
 
 -------------------------------- Trustee list

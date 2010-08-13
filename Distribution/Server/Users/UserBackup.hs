@@ -72,7 +72,10 @@ importAuth contents = importCSV "users.csv" contents $ \csv -> mapM_ fromRecord 
         name <- parseText "user name" nameStr
         user <- parseText "user id" idStr
         insertUser user $ UserInfo name Deleted
-
+    fromRecord [nameStr, idStr, "historical", "none", ""] = do
+        name <- parseText "user name" nameStr
+        user <- parseText "user id" idStr
+        insertUser user $ UserInfo name Historical
     fromRecord [nameStr, idStr, isEnabled, authType, auth] = do
         name <- parseText "user name" nameStr
         user <- parseText "user id" idStr
@@ -138,20 +141,21 @@ usersToCSV users
     infoToStatus :: UserInfo -> String
     infoToStatus userInfo = case userStatus userInfo of
         Deleted  -> "deleted"
+        Historical -> "historical"
         Active Disabled _ -> "disabled"
         Active Enabled  _ -> "enabled"
 
     -- one of "none", "basic", or "digest"
     infoToAuthType :: UserInfo -> String
     infoToAuthType userInfo = case userStatus userInfo of
-        Deleted -> "none"
         Active _ (UserAuth _ atype)-> case atype of
             BasicAuth -> "basic"
             DigestAuth -> "digest"
+        _ -> "none"
 
     -- may be null
     infoToAuth :: UserInfo -> String
     infoToAuth userInfo = case userStatus userInfo of
-        Deleted{} -> ""
         Active _ (UserAuth (PasswdHash hash) _) -> hash
+        _ -> ""
 

@@ -37,29 +37,6 @@ instance Serialize UserList where
   putCopy = contain . Binary.put
   getCopy = contain Binary.get
 
--- Given a groupTitle of A, the group will be called "A"; given a groupTitle 
--- of "A" and a groupEntity of Just ("B", Just "C"), the title will be displayed
--- as "A for <a href=C>B</a>"; e.g., one can have "Maintainers for Parsec".
-data GroupDescription = GroupDescription {
-    groupTitle :: String,
-    groupEntity :: Maybe (String, Maybe String),
-    groupPrologue  :: String
-}
-nullDescription :: GroupDescription
-nullDescription = GroupDescription { groupTitle = "", groupEntity = Nothing, groupPrologue = "" }
-
-groupName :: GroupDescription -> String
-groupName desc = groupTitle desc ++ maybe "" (\(for, _) -> " for " ++ for) (groupEntity desc)
-
-data UserGroup = UserGroup {
-    groupDesc :: GroupDescription,
-    queryUserList :: IO UserList,
-    addUserList :: UserId -> IO (),
-    removeUserList :: UserId -> IO (),
-    canRemoveGroup :: [UserGroup],
-    canAddGroup :: [UserGroup]
-}
-
 empty :: UserList
 empty = UserList IntSet.empty
 
@@ -81,9 +58,53 @@ fromList ids = UserList $ IntSet.fromList (map (\(UserId uid) -> uid) ids)
 unions :: [UserList] -> UserList
 unions groups = UserList (IntSet.unions [ group | UserList group <- groups ])
 
+-- | An abstraction over a UserList for dynamically querying and modifying
+-- a user group.
+--
+-- This structure is not only meant for singleton user groups, but also collections
+-- of groups. Some features may provide a UserGroup parametrized by an argument.
+--
+data UserGroup = UserGroup {
+    -- a description of the group for display
+    groupDesc :: GroupDescription,
+    -- dynamic querying for its members
+    queryUserList :: IO UserList,
+    -- dynamically add a member (does nothing if already exists)
+    -- creates the group if it didn't exist previously
+    addUserList :: UserId -> IO (),
+    -- dynamically remove a member (does nothing if not present)
+    -- creates the group if it didn't exist previously
+    removeUserList :: UserId -> IO (),
+    -- is the user group actually stored in server data? it's possible for
+    -- a group to exist even if it's empty, and likewise to get a UserGroup
+    -- that does't exisit *yet*
+    groupExists :: IO Bool,
+    -- user groups which can remove from one
+    canRemoveGroup :: [UserGroup],
+    -- user groups which can add to this one  (use 'fix' to add to self)
+    canAddGroup :: [UserGroup]
+}
+
+-- | A displayable description for a user group.
+-- 
+-- Given a groupTitle of A and a group entity of Nothing, the group will be
+-- called "A"; given a groupTitle  of "A" and a groupEntity of Just ("B",
+-- Just "C"), the title will be displayed as "A for <a href=C>B</a>".
+data GroupDescription = GroupDescription {
+    groupTitle :: String,
+    groupEntity :: Maybe (String, Maybe String),
+    groupPrologue  :: String
+}
+nullDescription :: GroupDescription
+nullDescription = GroupDescription { groupTitle = "", groupEntity = Nothing, groupPrologue = "" }
+
+groupName :: GroupDescription -> String
+groupName desc = groupTitle desc ++ maybe "" (\(for, _) -> " for " ++ for) (groupEntity desc)
+
 queryGroups :: [UserGroup] -> IO UserList
 queryGroups = fmap unions . mapM queryUserList
 
 -- for use in Caches, really...
 instance NFData GroupDescription where
     rnf (GroupDescription a b c) = rnf a `seq` rnf b `seq` rnf c
+

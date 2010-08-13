@@ -50,7 +50,7 @@ import Text.XHtml.Strict (unordList, h3, (<<), toHtml)
 import Data.Function (fix)
 import Data.List (find)
 import Data.Maybe (listToMaybe, catMaybes)
-import Control.Monad (guard, unless, when, mzero)
+import Control.Monad (guard, when, mzero)
 import Control.Monad.Trans (liftIO)
 import Data.Time.Clock (getCurrentTime)
 
@@ -138,22 +138,22 @@ initCheckFeature config _ _ _ _ = do
                            ]
       where section cand = basicPackageSection (candidateCabalUri r) (candidateTarballUri r) (candPkgInfo cand)
 
-postCandidate :: CheckResource -> UserFeature -> BlobStorage -> MServerPart Response
-postCandidate r users store = do
-    res <- uploadCandidate (const True) users store
+postCandidate :: CheckResource -> UserFeature -> UploadFeature -> BlobStorage -> MServerPart Response
+postCandidate r users upload store = do
+    res <- uploadCandidate (const True) users upload store
     respondToResult r res
 
 -- POST to /:package/candidates/
-postPackageCandidate :: CheckResource -> UserFeature -> BlobStorage -> DynamicPath -> MServerPart Response
-postPackageCandidate r users store dpath = withPackageName dpath $ \name -> do
-    res <- uploadCandidate ((==name) . packageName) users store
+postPackageCandidate :: CheckResource -> UserFeature -> UploadFeature -> BlobStorage -> DynamicPath -> MServerPart Response
+postPackageCandidate r users upload store dpath = withPackageName dpath $ \name -> do
+    res <- uploadCandidate ((==name) . packageName) users upload store
     respondToResult r res
 
 -- PUT to /:package-version/candidate
-putPackageCandidate :: CheckResource -> UserFeature -> BlobStorage -> DynamicPath -> MServerPart Response
-putPackageCandidate r users store dpath = withPackageId dpath $ \pkgid -> do
+putPackageCandidate :: CheckResource -> UserFeature -> UploadFeature -> BlobStorage -> DynamicPath -> MServerPart Response
+putPackageCandidate r users upload store dpath = withPackageId dpath $ \pkgid -> do
     guard (packageVersion pkgid /= Version [] [])
-    res <- uploadCandidate (==pkgid) users store
+    res <- uploadCandidate (==pkgid) users upload store
     respondToResult r res
 
 respondToResult :: CheckResource -> Either ErrorResponse CandPkgInfo -> MServerPart Response
@@ -188,8 +188,8 @@ serveCandidateCabal dpath = do
         Right res -> return res
         Left {}   -> mzero
 
-uploadCandidate :: (PackageId -> Bool) -> UserFeature -> BlobStorage -> MServerPart CandPkgInfo
-uploadCandidate isRight users storage = do
+uploadCandidate :: (PackageId -> Bool) -> UserFeature -> UploadFeature -> BlobStorage -> MServerPart CandPkgInfo
+uploadCandidate isRight users upload storage = do
     regularIndex <- fmap packageList $ query GetPackagesState
     -- ensure that the user has proper auth if the package exists
     res <- extractPackage (\uid info -> combineErrors $ sequence
@@ -204,8 +204,10 @@ uploadCandidate isRight users storage = do
                     candWarnings = uploadWarnings uresult,
                     candPublic = True -- do withDataFn
                 }
-            update $ AddCandidate candidate
-            unless (packageExists regularIndex pkgInfo) $ update $ AddPackageMaintainer (packageName pkgInfo) (pkgUploadUser pkgInfo)
+            update $ AddCandidate candidate        
+            let group = packageMaintainers upload [("package", display $ packageName pkgInfo)]
+            exists <- liftIO $ Group.groupExists group 
+            when (not exists) $ liftIO $ Group.addUserList group (pkgUploadUser pkgInfo)
             returnOk candidate
   where combineErrors = fmap (listToMaybe . catMaybes)
 
@@ -232,7 +234,7 @@ publishCandidate core users upload dpath doDelete = do
     case checkPublish packages candidate of
       Just failed -> returnError' failed
       Nothing -> do
-        -- now, hook checks
+        -- run filters
         let pkgInfo = candPkgInfo candidate
             uresult = UploadResult (pkgDesc pkgInfo) (pkgData pkgInfo) (candWarnings candidate)
             uploadFilter = combineErrors $ runFilter'' (canUploadPackage upload) uid uresult
@@ -251,16 +253,12 @@ publishCandidate core users upload dpath doDelete = do
                     pkgUploadData = uploadData,
                     pkgDataOld    = []
                 }
-            success <- update $ InsertPkgIfAbsent pkgInfo'
+            success <- liftIO $ doAddPackage core pkgInfo'
             if success
               then do
-                -- delete when requested ("moving" the resource)
-                -- note: should this be required?
+                -- delete when requested: "moving" the resource
+                -- should this be required? (see notes in CheckResource)
                 when doDelete $ update $ DeleteCandidate (packageId candidate)
-                when (not $ packageExists packages $ packageId candidate) $ do
-                    liftIO $ runHook' (newPackageHook core) pkgInfo'
-                liftIO $ runHook' (packageAddHook core) pkgInfo'
-                liftIO $ runHook (packageIndexChange core)
                 returnOk uresult
               else returnError 403 "Upload failed" [MText "Package already exists."]
   where combineErrors = fmap (listToMaybe . catMaybes)
@@ -274,9 +272,6 @@ checkPublish packages candidate = do
     case find ((== candVersion) . packageVersion) pkgs of
         Just {} -> Just $ ErrorResponse 403 "Publish failed" [MText "Package name and version already exist in the database"]
         Nothing  -> Nothing
---      Nothing -> case find ((> candVersion) . packageVersion) pkgs of
---          Just pkg -> forbidden error here: "Later versions exist in the database than the candidate ("
---                                             ++display (packageVersion pkg)++" > "++display candVersion++ ")"
 
 ------------------------------------------------------------------------------
 data CandidateRender = CandidateRender {

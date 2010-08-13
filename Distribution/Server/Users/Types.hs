@@ -30,6 +30,7 @@ data UserInfo = UserInfo {
   } deriving (Show, Typeable)
 
 data UserStatus = Deleted
+                | Historical
                 | Active !AccountEnabled UserAuth
     deriving (Show, Typeable)
 data AccountEnabled = Enabled | Disabled deriving (Show, Enum, Eq, Typeable)

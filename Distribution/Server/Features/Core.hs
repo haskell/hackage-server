@@ -14,7 +14,11 @@ module Distribution.Server.Features.Core (
     withPackageVersionPath,
     withPackageTarball,
 
-    doDeletePackage
+    packageExists,
+    packageIdExists,
+    doDeletePackage,
+    doAddPackage,
+    doMergePackage
   ) where
 
 --import Distribution.Server.Users.Resource (makeGroupResources)
@@ -27,6 +31,7 @@ import Distribution.Server.Types
 import Distribution.Server.Hook
 import Distribution.Server.Error
 import Distribution.Server.Backup.Export
+import Distribution.Server.Instances ()
 
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.State
@@ -200,7 +205,10 @@ basicPackageSection cabalUrl tarUrl pkgInfo = let pkgId = packageId pkgInfo; pkg
  ]
 
 ------------------------------------------------------------------------------
--- 1. explosive growth 2. quality assurance 3. encouraging people to share code
+packageExists, packageIdExists :: (Package pkg, Package pkg') => PackageIndex pkg -> pkg' -> Bool
+packageExists   state pkg = not . null $ PackageIndex.lookupPackageName state (packageName pkg)
+packageIdExists state pkg = maybe False (const True) $ PackageIndex.lookupPackageId state (packageId pkg)
+
 withPackageId :: DynamicPath -> (PackageId -> ServerPart a) -> ServerPart a
 withPackageId dpath = require (return $ lookup "package" dpath >>= fromReqURI)
 
@@ -254,34 +262,61 @@ withPackageTarball dpath func = withPackageId dpath $ \(PackageIdentifier name v
     func pkgid
 
 ------------------------------------------------------------------------
--- TODO: return MServerPart instead of using textResponse so that we can have
--- HTML not-found response pages?
-
 -- result: tarball or not-found error
-servePackageTarball :: Hook (PackageId -> IO ()) -> BlobStorage -> DynamicPath -> ServerPart Response
-servePackageTarball hook store dpath = textResponse $
-                                       withPackageTarball dpath $ \pkgid ->
-                                       withPackage pkgid $ \pkg _ ->
+servePackageTarball :: Hook (PackageId -> IO ()) -> BlobStorage -> DynamicPath -> MServerPart Response
+servePackageTarball hook store dpath = withPackageTarball dpath $ \pkgid ->
+                                       withPackageVersion pkgid $ \pkg ->
     case pkgTarball pkg of
-        [] -> mzero
+        [] -> returnError 404 "Tarball not found" [MText "No tarball exists for this package version."]
         ((blobId, _):_) -> do
             file <- liftIO $ BlobStorage.fetch store blobId
             liftIO $ runHook' hook pkgid
             returnOk $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)
 
 -- result: cabal file or not-found error
-serveCabalFile :: DynamicPath -> ServerPart Response
-serveCabalFile dpath = textResponse $ withPackagePath dpath $ \pkg _ -> do
-    guard (lookup "cabal" dpath == Just (display $ packageName pkg))
-    returnOk $ toResponse (Resource.CabalFile (pkgData pkg))
+serveCabalFile :: DynamicPath -> MServerPart Response
+serveCabalFile dpath = withPackagePath dpath $ \pkg _ -> do
+    -- check that the cabal name matches the package
+    case lookup "cabal" dpath == Just (display $ packageName pkg) of
+        True  -> returnOk $ toResponse (Resource.CabalFile (pkgData pkg))
+        False -> mzero
 
--- very important: get some sort of authentication before calling this function!
-doDeletePackage :: CoreFeature -> DynamicPath -> MServerPart ()
-doDeletePackage core dpath = withPackageId dpath $ \pkgid -> withPackageVersion pkgid $ \pkg -> do
+-- A wrapper around DeletePackageVersion that runs the proper hooks.
+-- (no authentication though)
+doDeletePackage :: CoreFeature -> PackageId -> MServerPart ()
+doDeletePackage core pkgid = withPackageVersion pkgid $ \pkg -> do
     update $ DeletePackageVersion pkgid
     nowPkgs <- fmap (flip PackageIndex.lookupPackageName (packageName pkgid) . packageList) $ query GetPackagesState
     runHook' (packageRemoveHook core) pkg
     runHook (packageIndexChange core)
     when (null nowPkgs) $ runHook' (noPackageHook core) pkg
     returnOk ()
+
+-- This is a wrapper around InsertPkgIfAbsent that runs the necessary hooks in core.
+doAddPackage :: CoreFeature -> PkgInfo -> IO Bool
+doAddPackage core pkgInfo = do
+    state <- fmap packageList $ query GetPackagesState
+    success <- update $ InsertPkgIfAbsent pkgInfo
+    when success $ do
+        let existedBefore = packageExists state pkgInfo
+        when (not existedBefore) $ do
+            runHook' (newPackageHook core) pkgInfo
+        runHook' (packageAddHook core) pkgInfo
+        runHook (packageIndexChange core)
+    return success
+
+-- A wrapper around MergePkg.
+doMergePackage :: CoreFeature -> PkgInfo -> IO ()
+doMergePackage core pkgInfo = do
+    state <- fmap packageList $ query GetPackagesState
+    let mprev = PackageIndex.lookupPackageId state (packageId pkgInfo)
+        nameExists = packageExists state pkgInfo
+    update $ MergePkg pkgInfo
+    when (not nameExists) $ do
+        runHook' (newPackageHook core) pkgInfo
+    case mprev of
+        -- TODO: modify MergePkg to get the newly merged package info, not the pre-merge argument
+        Just prev -> runHook'' (packageChangeHook core) prev pkgInfo
+        Nothing -> runHook' (packageAddHook core) pkgInfo
+    runHook (packageIndexChange core)
 

@@ -56,6 +56,10 @@ import Data.Ord
 
 import Prelude hiding (read)
 
+-- TODO:
+-- * import for other features: package maintainers, tags, distro data
+-- * make "deleted" users historical instead of deleted
+
 newPkgInfo :: PackageIdentifier
            -> (FilePath, ByteString)
            -> UploadLog.Entry -> [UploadLog.Entry]
@@ -74,8 +78,7 @@ newPkgInfo pkgid (cabalFilePath, cabalFile) (UploadLog.Entry time user _) _ user
         pkgData       = cabalFile,
         pkgTarball    = [],
         pkgUploadData = (time, Users.nameToId users user),
-        pkgDataOld    = []--[ (time', Users.nameToId users user')
-                        -- | UploadLog.Entry time' user' _ <- others]
+        pkgDataOld    = []
       }
   where parse = parsePackageDescription . fromUTF8 . BS.unpack
 
