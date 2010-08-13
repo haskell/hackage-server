@@ -37,6 +37,7 @@ registerHook (Hook list) hook = modifyIORef list (hook:)
 registerHooks :: Hook a -> [a] -> IO ()
 registerHooks hlist hooks = mapM_ (registerHook hlist) hooks
 
+-- TODO: catch errors
 runHooks :: MonadIO m => Hook a -> (a -> IO b) -> m ()
 runHooks (Hook vlist) func = liftIO $ readIORef vlist >>= mapM_ func
 

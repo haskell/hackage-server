@@ -6,23 +6,19 @@ module Distribution.Server.Features.Mirror (
 
 import Distribution.Server.Feature
 import Distribution.Server.Features.Core
+import Distribution.Server.Features.Users
 import Distribution.Server.Resource
 import Distribution.Server.Types
-import Distribution.Server.Hook
 
-import Distribution.Server.Packages.State
 import Distribution.Server.Users.State
 import Distribution.Server.Packages.Types
 --import Distribution.Server.Auth.Types
 import Distribution.Server.Users.Types
-import qualified Distribution.Server.Users.Types as Users
-import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import qualified Distribution.Server.Auth.Basic as Auth
 import qualified Distribution.Server.Packages.Unpack as Upload
 import Distribution.Server.Backup.Export
-import Distribution.Server.Backup.Import
 import Distribution.Server.Users.UserBackup
 
 import Distribution.Simple.Utils (fromUTF8)
@@ -41,53 +37,54 @@ import Control.Monad.Trans (MonadIO(..))
 import Distribution.Package
 import Distribution.Text (simpleParse)
 
--- FIXME: update this
 data MirrorFeature = MirrorFeature {
     mirrorResource :: MirrorResource,
-    -- group for mirror uploads. should this be deleted and replaced with admins?
-    -- it's not like the admins are used for anything else in a simple core/mirror setup
     mirrorGroup :: UserGroup
-    -- TODO: add group for user accounts which should be automatically merged, if possible
 }
 data MirrorResource = MirrorResource {
     mirrorPackageTarball :: Resource,
-    mirrorCabalFile :: Resource
+    mirrorCabalFile :: Resource,
+    mirrorGroupResource :: GroupResource
 }
 
 instance HackageFeature MirrorFeature where
-    getFeature _ = HackageModule
+    getFeature mirror = HackageModule
       { featureName = "mirror"
-      , resources   = []
+      , resources   = map ($mirrorResource mirror) [mirrorPackageTarball, mirrorCabalFile]
       , dumpBackup    = Just $ \_ -> do
             clients <- query GetMirrorClients
             return [csvToBackup ["clients.csv"] $ groupToCSV clients]
       , restoreBackup = Just $ \_-> groupBackup ["clients.csv"] ReplaceMirrorClients
       }
+
 -------------------------------------------------------------------------
-
-
-initMirrorFeature :: Config -> CoreFeature -> IO MirrorFeature
-initMirrorFeature config core = do
+initMirrorFeature :: Config -> CoreFeature -> UserFeature -> IO MirrorFeature
+initMirrorFeature config core users = do
     let coreR  = coreResource core
-        change = packageIndexChange core -- hook
         store  = serverStore config
-    return MirrorFeature
-      { mirrorResource = MirrorResource
-          { mirrorPackageTarball = (extendResource $ corePackageTarball coreR) { resourcePut = [("", packagePut change store)] }
-          , mirrorCabalFile = (extendResource $ coreCabalFile coreR) { resourcePut = [("", cabalPut change)] }
-          }
-      , mirrorGroup = UserGroup {
-            groupDesc = nullDescription { groupTitle = "Mirror clients", groupEntityURL = "" },
+        mirrorers = UserGroup {
+            groupDesc = nullDescription { groupTitle = "Mirror clients" },
             queryUserList = query GetMirrorClients,
             addUserList = update . AddMirrorClient,
-            removeUserList = update . RemoveMirrorClient
+            removeUserList = update . RemoveMirrorClient,
+            groupExists = return True,
+            canRemoveGroup = [adminGroup users],
+            canAddGroup = [adminGroup users]
         }
+    (mirrorers', mirrorR) <- groupResourceAt (groupIndex users) "/packages/mirrorers" mirrorers
+    return MirrorFeature
+      { mirrorResource = MirrorResource
+          { mirrorPackageTarball = (extendResource $ corePackageTarball coreR) { resourcePut = [("", packagePut core store)] }
+          , mirrorCabalFile = (extendResource $ coreCabalFile coreR) { resourcePut = [("", cabalPut core)] }
+          , mirrorGroupResource = mirrorR
+          }
+      , mirrorGroup = mirrorers'
       }
   where
     -- result: error from unpacking, bad request error, or warning lines
-    packagePut hook store _ = do
+    packagePut _ store _ = do
         requireMirrorAuth
-        withUploadInfo "tarball" $ \input uploadData -> do
+        withUploadInfo "package" $ \input uploadData -> do
             let fileName = (fromMaybe "noname" $ inputFilename input)
                 fileContent = inputValue input
             -- augment unpackPackage to ensure that dpath matches it...
@@ -95,7 +92,12 @@ initMirrorFeature config core = do
             case res of
                 Left err -> return . toResponse $ err
                 Right (((pkg, pkgStr), warnings), blobId) -> do
-                    update $ MergePkg PkgInfo {
+                    -- doMergePackage runs the package hooks
+                    -- if the upload feature is enabled, it adds
+                    -- the user to the package's maintainer group
+                    -- the mirror client should probably do this itself,
+                    -- if it's able (if it's a trustee).
+                    liftIO $ doMergePackage core $ PkgInfo {
                         pkgInfoId     = packageId pkg,
                         pkgDesc       = pkg,
                         pkgData       = pkgStr,
@@ -103,11 +105,10 @@ initMirrorFeature config core = do
                         pkgUploadData = uploadData,
                         pkgDataOld    = []
                     }
-                    liftIO $ runZeroHook hook
                     return . toResponse $ unlines warnings
 
     -- return: error from parsing, bad request error, or warning lines
-    cabalPut hook _ = do
+    cabalPut _ _ = do
         requireMirrorAuth
         withUploadInfo "cabal" $ \input uploadData -> do
             let fileName = (fromMaybe "noname" $ inputFilename input)
@@ -115,7 +116,7 @@ initMirrorFeature config core = do
             case parsePackageDescription (fromUTF8 . BS.unpack $ fileContent) of
                 ParseFailed err -> return . toResponse $ show (locatedErrorMsg err)
                 ParseOk warnings pkg -> do
-                    update $ MergePkg PkgInfo {
+                    liftIO $ doMergePackage core $ PkgInfo {
                         pkgInfoId     = packageId pkg,
                         pkgDesc       = pkg,
                         pkgData       = fileContent,
@@ -123,22 +124,34 @@ initMirrorFeature config core = do
                         pkgUploadData = uploadData,
                         pkgDataOld    = []
                     }
-                    liftIO $ runZeroHook hook
                     return . toResponse $ unlines $ map (showPWarning fileName) warnings
 
     requireMirrorAuth = do
         ulist <- query GetMirrorClients
-        users <- query GetUserDb
-        Auth.requireHackageAuth users (Just ulist) (Just DigestAuth) --force digest here
+        userdb <- query GetUserDb
+        Auth.requireHackageAuth userdb (Just ulist) (Just DigestAuth)
 
     withUploadInfo :: String -> (Input -> UploadInfo -> ServerPart Response) -> ServerPart Response
-    withUploadInfo fileField func = withDataFn (liftM3 (,,) (lookInput fileField) (look "date") (look "user")) $ \(input, mdate, muser) ->
-        case (readsTime defaultTimeLocale "%c" mdate, simpleParse muser :: Maybe UserName) of
-            ([(udate, "")], Just _) -> do
-                -- TODO: create a deleted user here if necessary, and pass it to the func
-                -- right now just use a dummy uid
-                func input (udate, UserId 0)
+    withUploadInfo fileField func = do
+        mres <- getDataFn (liftM3 (,,) (lookInput fileField) (look "date") (look "user"))
+        case mres of
+          Nothing -> badRequest $ toResponse $ "Invalid input"
+          Just (input, mdate, muser) -> case (readsTime defaultTimeLocale "%c" mdate, simpleParse muser :: Maybe UserName) of
+            ([(udate, "")], Just uname) -> do
+                -- This is a lot for a simple PUT to be doing. Ideally, with a more
+                -- advanced mirror client, it would find the user id itself,
+                -- create an historical account if one didn't exist, add it to
+                -- the necessary user groups (if a package trustee), then PUT
+                -- the package or cabal file.
+                -- This would require the server to expose:
+                -- 1. id data (/users/ids and /users/id/:id)
+                -- 2. historical account registration
+                -- 
+                -- Presently, it creates a deleted user if necessary, and passes
+                -- it to func
+                uid <- update $ RequireUserName uname
+                func input (udate, uid)
             _ -> badRequest $ toResponse ()
 
--------------------------------------------------------------------------
+
 

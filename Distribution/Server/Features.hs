@@ -20,7 +20,7 @@ import Distribution.Server.Features.DownloadCount (initDownloadFeature)
 import Distribution.Server.Features.Tags (initTagsFeature)
 import Distribution.Server.Features.NameSearch (initNamesFeature)
 import Distribution.Server.Features.PackageList (initListFeature)
---for a mirror, import Distribution.Server.Features.Mirror (initMirrorFeature)
+import Distribution.Server.Features.Mirror (initMirrorFeature)
 
 -- This module ties together all the hackage features that we will use.
 -- To add a feature:
@@ -45,6 +45,7 @@ hackageFeatures config = do
     --   functions from their modules are.
     -- What follows is a topological sort along those lines
     usersFeature <- initUsersFeature config coreFeature
+    mirrorFeature <- initMirrorFeature config coreFeature usersFeature
     uploadFeature <- initUploadFeature config coreFeature usersFeature
     packagesFeature <- initPackagesFeature config coreFeature
     distroFeature <- initDistroFeature config coreFeature usersFeature packagesFeature
@@ -62,12 +63,13 @@ hackageFeatures config = do
     htmlFeature <- initHtmlFeature config coreFeature packagesFeature
                         uploadFeature checkFeature usersFeature versionsFeature
                         reverseFeature tagsFeature downloadFeature listFeature
-                        namesFeature
+                        namesFeature mirrorFeature
     -- The order of initialization above should be the same as
     -- the order of this list.
     let allFeatures =
          [ HF coreFeature
          , HF usersFeature
+         , HF mirrorFeature
          , HF packagesFeature
          , HF uploadFeature
          , HF distroFeature

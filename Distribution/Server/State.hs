@@ -5,7 +5,7 @@ module Distribution.Server.State where
 
 import Distribution.Server.Instances ()
 
-import Distribution.Server.Packages.State
+import Distribution.Server.Packages.State (PackagesState, CandidatePackages, Documentation, PackageUpload)
 import Distribution.Server.Packages.Preferred (PreferredVersions)
 import Distribution.Server.Packages.Reverse (ReverseIndex)
 import Distribution.Server.Packages.Downloads (DownloadCounts)
@@ -13,7 +13,7 @@ import Distribution.Server.Packages.Tag (PackageTags)
 import Distribution.Server.BuildReport.BuildReports (BuildReports)
 import Distribution.Server.BuildReport.State ()
 import Distribution.Server.Users.Users (Users)
-import Distribution.Server.Users.State (HackageAdmins, IndexUsers)
+import Distribution.Server.Users.State (HackageAdmins, IndexUsers, MirrorClients)
 import Distribution.Server.Distributions.State (Distros)
 import Distribution.Server.Util.TarIndex (TarIndexMap)
 
@@ -42,7 +42,7 @@ instance Component HackageEntryPoint where
           PackageUpload :+: CandidatePackages :+: 
           PreferredVersions :+: ReverseIndex :+:
           DownloadCounts :+: PackageTags :+:
-          IndexUsers :+: End
+          IndexUsers :+: MirrorClients :+: End
     initialValue = HackageEntryPoint
 
 $(mkMethods ''HackageEntryPoint [])

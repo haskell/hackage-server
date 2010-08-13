@@ -16,6 +16,7 @@ module Distribution.Server.Resource (
     extendResource,
     extendResourcePath,
     serveResource,
+    resourceMethods,
 
     -- | URI generation
     renderURI,
@@ -361,6 +362,12 @@ serveResource (Resource _ rget rput rpost rdelete rformat rend) = \dpath -> msum
   where
     optionPart = makeOptions $ concat [ met | ((_:_), met) <- zip methods methodsList]
     methodPart = [ serveResources met res | (res@(_:_), met) <- zip methods methodsList]
+    methods = [rget, rput, rpost, rdelete]
+    methodsList = [[GET, HEAD], [PUT], [POST], [DELETE]]
+    makeOptions :: [Method] -> ServerResponse
+    makeOptions methodList = \_ -> methodSP OPTIONS $ do
+        setHeaderM "Allow" (intercalate ", " . map show $ methodList)
+        return $ toResponse ()
     -- some of the dpath lookup calls can be replaced by pattern matching the head/replacing
     -- at the moment, duplicate entries tend to be inserted in dpath, because old ones are not replaced
     -- Procedure:
@@ -455,12 +462,11 @@ serveResource (Resource _ rget rput rpost rdelete rformat rend) = \dpath -> msum
         [] -> (pname, "")
         xs -> case splitAt (last xs) pname of (pname', _:format) -> (pname', format)
                                               _ -> (pname, "") -- this shouldn't happen
-    methods = [rget, rput, rpost, rdelete]
-    methodsList = [[GET, HEAD], [PUT], [POST], [DELETE]]
-    makeOptions :: [Method] -> ServerResponse
-    makeOptions methodList = \_ -> methodSP OPTIONS $ do
-        setHeaderM "Allow" (intercalate ", " . map show $ methodList)
-        return $ toResponse ()
+
+resourceMethods :: Resource -> [Method]
+resourceMethods (Resource _ rget rput rpost rdelete _ _) = [ met | ((_:_), met) <- zip methods methodsList]
+  where methods = [rget, rput, rpost, rdelete]
+        methodsList = [GET, PUT, POST, DELETE]
 
 ----------------------------------------------------------------------------
 

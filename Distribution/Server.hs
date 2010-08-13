@@ -282,7 +282,7 @@ impl server =
     . foldl' (\acc res -> addServerNode (resourceLocation res) res acc) serverTreeEmpty
     -- [Resource]
     $ concatMap Feature.resources (serverFeatures server)
---where showServerTree tree = trace (drawServerTree tree Nothing) tree
+-- where showServerTree tree = trace (drawServerTree tree (Just $ show . resourceMethods)) tree
 
 data TempServer = TempServer ThreadId
 
@@ -314,3 +314,4 @@ tearDownTemp (TempServer tid) = do
     HappsLoad.reset
     -- apparently reset doesn't give the server enough time to release the bind
     threadDelay $ 1000000
+
