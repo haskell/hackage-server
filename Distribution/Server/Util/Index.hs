@@ -37,6 +37,9 @@ import Prelude hiding (read)
 --
 -- Takes a function to turn a tar entry into a package
 --
+-- This fails only if the tar is corrupted. Any entries not recognized as
+-- belonging to a package are ignored.
+--
 read :: (PackageIdentifier -> Tar.Entry -> pkg)
      -> ByteString
      -> Either String [pkg]
@@ -59,15 +62,17 @@ read mkPackage indexFileContent = collect [] entries
 
 -- | Create an uncompressed tar repository index file as a 'ByteString'.
 --
--- Takes a couple functions to turn a package into a tar entry
+-- Takes a couple functions to turn a package into a tar entry. Extra
+-- entries are also accepted.
 --
 write :: Package pkg
       => (pkg -> ByteString)
       -> (pkg -> Tar.Entry -> Tar.Entry)
+      -> [Tar.Entry]
       -> PackageIndex pkg
       -> ByteString
-write externalPackageRep updateEntry =
-  Tar.write . map entry . PackageIndex.allPackages
+write externalPackageRep updateEntry extras =
+  Tar.write . (extras++) . map entry . PackageIndex.allPackages
   where
     entry pkg = updateEntry pkg
               . Tar.fileEntry tarPath
@@ -77,3 +82,4 @@ write externalPackageRep updateEntry =
         PackageName name = packageName pkg
         fileName = name </> display (packageVersion pkg)
                         </> name <.> "cabal"
+

@@ -37,15 +37,16 @@ import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.State
 import Distribution.Server.Users.State
 import qualified Distribution.Server.Packages.Index as Packages.Index
-import qualified Distribution.Server.Pages.Index as Pages
 import qualified Codec.Compression.GZip as GZip
 import qualified Distribution.Server.ResourceTypes as Resource
 import qualified Distribution.Server.PackageIndex as PackageIndex
+import Distribution.Server.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
 
 import Control.Monad (guard, mzero, when)
 import Control.Monad.Trans (liftIO)
+import Data.Time.Clock (UTCTime)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Monoid (mconcat)
@@ -67,11 +68,8 @@ data CoreFeature = CoreFeature {
     coreResource :: CoreResource,
 
     cacheIndexTarball :: Cache.Cache ByteString,
-    -- FIXME: this is HTML and doesn't belong here. Instead, the HTML feature
-    -- should sign up for its own hooks
-    cachePackagesPage :: Cache.Cache Response,
     -- other files to put in the index tarball like preferred-versions
-    indexExtras :: Cache.Cache (Map String ByteString),
+    indexExtras :: Cache.Cache (Map String (ByteString, UTCTime)),
 
     -- Updating top-level packages
     -- This is run after a package is added
@@ -80,10 +78,8 @@ data CoreFeature = CoreFeature {
     packageRemoveHook :: Hook (PkgInfo -> IO ()),
     -- This is run after a package is changed in some way (essentially added, then removed)
     packageChangeHook :: Hook (PkgInfo -> PkgInfo -> IO ()),
-    -- This should be run whenever the index tarball needs to be updated, such as when
-    -- indexExtras is updated, or when a package is added/removed/changed.
-    -- FIXME: it's also conflated with updating the HTML index page, which should be
-    -- regulated by the HTML feature signing up for other hooks
+    -- This is called whenever any of the above three hooks is called, but
+    -- also for other updates of the index tarball  (e.g. when indexExtras is updated)
     packageIndexChange :: Hook (IO ()),
     -- A package is added where no package by that name existed previously.
     newPackageHook :: Hook (PkgInfo -> IO ()),
@@ -102,8 +98,8 @@ data CoreResource = CoreResource {
     coreCabalFile    :: Resource,
     corePackageTarball :: Resource,
 
-    indexTarballUri   :: String,
-    indexPackageUri   :: String -> String,
+    indexTarballUri :: String,
+    indexPackageUri :: String -> String,
     corePackageUri  :: String -> PackageId -> String,
     corePackageName :: String -> PackageName -> String,
     coreCabalUri   :: PackageId -> String,
@@ -129,29 +125,35 @@ instance HackageFeature CoreFeature where
 initCoreFeature :: Config -> IO CoreFeature
 initCoreFeature config = do
     -- Caches
-    thePackages <- Cache.newCacheable $ toResponse ()
     indexTar <- Cache.newCacheable BS.empty
     extraMap <- Cache.newCacheable Map.empty
+
+    let computeCache = do
+            users <- query GetUserDb
+            index <- fmap packageList $ query GetPackagesState
+            extras <- Cache.getCache extraMap
+            Cache.putCache indexTar (GZip.compress $ Packages.Index.write users extras index)
 
     downHook <- newHook
     addHook  <- newHook
     removeHook <- newHook
     changeHook <- newHook
-    indexHook <- newHook
+    indexHook  <- newHook
     newPkgHook <- newHook
     noPkgHook <- newHook
-    registerHook indexHook $ computeCache thePackages indexTar
+    registerHook indexHook computeCache
 
+    let store = serverStore config
     return CoreFeature
       { coreResource = fix $ \r -> CoreResource {
             -- the rudimentary HTML resources are for when we don't want an additional HTML feature
             coreIndexPage = (resourceAt "/.:format") { resourceGet = [("html", indexPage $ serverStaticDir config)] }
           , coreIndexTarball = (resourceAt "/packages/index.tar.gz") { resourceGet = [("tarball", Cache.respondCache indexTar Resource.IndexTarball)] }
-          , corePackagesPage = (resourceAt "/packages/.:format") { resourceGet = [("html", Cache.respondCache thePackages id)] }
+          , corePackagesPage = (resourceAt "/packages/.:format") { resourceGet = [] } -- -- have basic packages listing?
           , corePackagePage = (resourceAt "/package/:package.:format") { resourceGet = [("html", basicPackagePage r)] }
           , corePackageRedirect = (resourceAt "/package/") { resourceGet = [("", \_ -> seeOther "/packages/" $ toResponse ())] }
-          , corePackageTarball = (resourceAt "/package/:package/:tarball.tar.gz") { resourceGet = [("tarball", servePackageTarball downHook $ serverStore config)] }
-          , coreCabalFile  = (resourceAt "/package/:package/:cabal.cabal") { resourceGet = [("cabal", serveCabalFile)] }
+          , corePackageTarball = (resourceAt "/package/:package/:tarball.tar.gz") { resourceGet = [("tarball", textResponse . servePackageTarball downHook store)] }
+          , coreCabalFile  = (resourceAt "/package/:package/:cabal.cabal") { resourceGet = [("cabal", textResponse . serveCabalFile)] }
 
           , indexTarballUri = renderResource (coreIndexTarball r) []
           , indexPackageUri = \format -> renderResource (corePackagesPage r) [format]
@@ -161,7 +163,6 @@ initCoreFeature config = do
           , coreTarballUri = \pkgid -> renderResource (corePackageTarball r) [display pkgid, display pkgid]
           }
       , cacheIndexTarball  = indexTar
-      , cachePackagesPage  = thePackages
       , indexExtras = extraMap
       , packageAddHook = addHook
       , packageRemoveHook = removeHook
@@ -173,12 +174,6 @@ initCoreFeature config = do
     }
   where
     indexPage staticDir _ = serveFile (const $ return "text/html") (staticDir ++ "/hackage.html")
-    computeCache thePackages indexTar = do
-        users <- query GetUserDb
-        index <- fmap packageList $ query GetPackagesState
-        -- TODO: instead of using a complicated pages module, make a basicPackageIndex function
-        Cache.putCache thePackages (toResponse $ Resource.XHtml $ Pages.packageIndex index)
-        Cache.putCache indexTar (GZip.compress $ Packages.Index.write users index)
 
 -- Should probably look more like an Apache index page (Name / Last modified / Size / Content-type)
 basicPackagePage :: CoreResource -> DynamicPath -> ServerPart Response

@@ -36,6 +36,7 @@ import Distribution.Text
 
 import Data.Function (fix)
 import Data.List (intercalate, find)
+import Data.Time.Clock (getCurrentTime)
 import Control.Arrow (second)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Happstack.Server
@@ -147,7 +148,8 @@ doPutPreferred f core pkgname =
                     update $ SetDeprecatedVersions pkgname deprs
                     newInfo <- query $ GetPreferredInfo pkgname
                     prefVersions <- makePreferredVersions
-                    Cache.modifyCache (indexExtras core) $ Map.insert "preferred-versions" (BS.pack prefVersions)
+                    now <- liftIO getCurrentTime
+                    Cache.modifyCache (indexExtras core) $ Map.insert "preferred-versions" (BS.pack prefVersions, now)
                     runHook'' (preferredHook f) pkgname newInfo
                     runHook (packageIndexChange core)
                     returnOk ()

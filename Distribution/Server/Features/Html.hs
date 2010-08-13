@@ -16,7 +16,9 @@ import Distribution.Server.Features.PreferredVersions
 import Distribution.Server.Features.ReverseDependencies
 import Distribution.Server.Features.PackageList
 import Distribution.Server.Features.Tags
+import Distribution.Server.Features.Mirror
 import Distribution.Server.Types
+import Distribution.Server.Hook
 import Distribution.Server.Error
 import Distribution.Server.Resource
 
@@ -26,6 +28,7 @@ import qualified Distribution.Server.Packages.State as State
 import qualified Distribution.Server.Users.State as State
 import qualified Distribution.Server.Distributions.State as State
 import qualified Distribution.Server.Auth.Basic as Auth
+import qualified Distribution.Server.Cache as Cache
 
 import Distribution.Server.Users.Types
 import Distribution.Server.Packages.Types
@@ -40,6 +43,7 @@ import Distribution.Server.Packages.Tag
 import Distribution.Server.Pages.Template (hackagePage, hackagePageWith)
 import qualified Distribution.Server.Pages.Group as Pages
 import qualified Distribution.Server.Pages.Reverse as Pages
+import qualified Distribution.Server.Pages.Index as Pages
 import Text.XHtml.Strict
 import qualified Text.XHtml.Strict as XHtml
 import Text.XHtml.Table (simpleTable)
@@ -54,7 +58,7 @@ import Data.List (intercalate, intersperse, insert, sortBy)
 import Data.Char (isAlpha, isAlphaNum)
 import Data.Function (on)
 import Control.Monad (forM)
-import Control.Monad.Trans (liftIO)
+import Control.Monad.Trans (MonadIO, liftIO)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -62,10 +66,13 @@ import System.FilePath.Posix ((</>))
 import Data.Maybe (fromMaybe)
 
 -- TODO: move more of the below to Distribution.Server.Pages.*, it's getting
--- close to 1K lines... it's okay to keep data-querying in here, but pure HTML
--- generation mostly needlessly clutters up the module. Refactor time.
+-- close to 1K lines, way too much... it's okay to keep data-querying in here,
+-- but pure HTML generation mostly needlessly clutters up the module. Refactor time.
 data HtmlFeature = HtmlFeature {
-    htmlResources :: [Resource]
+    htmlResources :: [Resource],
+    cachePackagesPage :: Cache.Cache Response,
+    cacheNamesPage :: Cache.Cache Response,
+    generateCaches :: IO ()
 }
 
 instance HackageFeature HtmlFeature where
@@ -75,6 +82,7 @@ instance HackageFeature HtmlFeature where
       , dumpBackup    = Nothing
       , restoreBackup = Nothing
       }
+    initHooks html = [generateCaches html]
 
 -- This feature provides the HTML view to the models of other features
 -- currently it uses the xhtml package to render HTML (Text.XHtml.Strict)
@@ -84,9 +92,10 @@ instance HackageFeature HtmlFeature where
 initHtmlFeature :: Config -> CoreFeature -> PackagesFeature -> UploadFeature
                 -> CheckFeature -> UserFeature -> VersionsFeature
                 -> ReverseFeature -> TagsFeature -> DownloadFeature
-                -> ListFeature -> NamesFeature -> IO HtmlFeature
+                -> ListFeature -> NamesFeature -> MirrorFeature
+                -> IO HtmlFeature
 initHtmlFeature config core pkg upload check user version reversef tagf
-                down list namef = do
+                down list namef mirror = do
     -- resources to extend
     let cores = coreResource core
         users = userResource user
@@ -106,13 +115,27 @@ initHtmlFeature config core pkg upload check user version reversef tagf
         pkgCandUploadForm = (resourceAt "/package/:package/candidate/upload") { resourceGet = [("html", servePackageCandidateUpload cores checks)] }
         candMaintainForm = (resourceAt "/package/:package/candidate/maintain") { resourceGet = [("html", serveCandidateMaintain cores checks)] }
         tagEdit = (resourceAt "/package/:package/tags/edit")
+
+    -- Index page caches
+    namesCache <- Cache.newCacheable $ toResponse ()
+    mainCache <- Cache.newCacheable $ toResponse ()
+    let computePackages = do
+            index <- fmap State.packageList $ query State.GetPackagesState
+            Cache.putCache mainCache (toResponse $ Resource.XHtml $ Pages.packageIndex index)
+        computeNames = Cache.putCache namesCache =<< packagesPage cores list tags
+    registerHook (itemUpdate list) $ \_ -> computeNames
+    registerHook (packageIndexChange core) $ computePackages
+
     return HtmlFeature
-     { htmlResources =
+      { cachePackagesPage = mainCache
+      , cacheNamesPage = namesCache
+      , generateCaches = computePackages >> computeNames
+      , htmlResources =
         -- core
          [ (extendResource $ corePackagePage cores) { resourceGet = [("html", servePackagePage cores pkg reverses versions tags maintainPackage tagEdit)] }
          --, (extendResource $ coreIndexPage cores) { resourceGet = [("html", serveIndexPage)] }, currently in 'core' feature
-         , (resourceAt "/packages/names" ) { resourceGet = [("html", packagesPage cores list tags)] }
-         --, (extendResource $ corePackagesPage cores) { resourceGet = [("html", servePackageIndex)] }, currently in 'packages' feature
+         , (resourceAt "/packages/names" ) { resourceGet = [("html", Cache.respondCache namesCache id)] }
+         , (extendResource $ corePackagesPage cores) { resourceGet = [("html", Cache.respondCache mainCache id)] }
          , maintainPackage
         -- users
          , (extendResource $ userList users) { resourceGet = [("html", serveUserList users)], resourcePost = [("html", \_ -> htmlResponse $ adminAddUser)] }
@@ -128,16 +151,16 @@ initHtmlFeature config core pkg upload check user version reversef tagf
 
         -- uploads
          , (extendResource $ uploadIndexPage uploads) { resourcePost = [("html", serveUploadResult upload cores)] }
-            -- serve upload result as HTML.. er
+            -- serve upload result as HTML
          , (resourceAt "/packages/upload") { resourceGet = [("html", serveUploadForm)] }
             -- form for uploading
 
         -- checks
-         , (extendResource $ candidatesPage checks) { resourceGet = [("html", serveCandidatesPage cores checks)], resourcePost = [("html", \_ -> htmlResponse $ postCandidate checks user store)] }
+         , (extendResource $ candidatesPage checks) { resourceGet = [("html", serveCandidatesPage cores checks)], resourcePost = [("html", \_ -> htmlResponse $ postCandidate checks user upload store)] }
             -- list of all packages which have candidates
-         , (extendResource $ packageCandidatesPage checks) { resourceGet = [("html", servePackageCandidates cores checks pkgCandUploadForm)], resourcePost = [("", htmlResponse . postPackageCandidate checks user store)] }
+         , (extendResource $ packageCandidatesPage checks) { resourceGet = [("html", servePackageCandidates cores checks pkgCandUploadForm)], resourcePost = [("", htmlResponse . postPackageCandidate checks user upload store)] }
             -- TODO: use custom functions, not htmlResponse
-         , (extendResource $ candidatePage checks) { resourceGet = [("html", serveCandidatePage check candMaintainForm)], resourcePut = [("html", htmlResponse . putPackageCandidate checks user store)], resourceDelete = [("html", htmlResponse . doDeleteCandidate checks)] }
+         , (extendResource $ candidatePage checks) { resourceGet = [("html", serveCandidatePage check candMaintainForm)], resourcePut = [("html", htmlResponse . putPackageCandidate checks user upload store)], resourceDelete = [("html", htmlResponse . doDeleteCandidate checks)] }
             -- package page for a candidate
          , (resourceAt "/packages/candidates/upload") { resourceGet = [("html", serveCandidateUploadForm)] }
             -- form for uploading candidate
@@ -181,6 +204,7 @@ initHtmlFeature config core pkg upload check user version reversef tagf
         ++ htmlGroupResource user (packageGroupResource uploads)
         ++ htmlGroupResource user (trusteeResource uploads)
         ++ htmlGroupResource user (adminResource users)
+        ++ htmlGroupResource user (mirrorGroupResource $ mirrorResource mirror)
      }
 
 
@@ -365,29 +389,32 @@ htmlGroupResource users r@(GroupResource groupR userR groupGen) =
   , (extendResourcePath "/edit" groupR) { resourceGet = [("html", htmlResponse . getEditList)] }
   ]
   where
-    getList dpath = withGroup (liftIO $ groupGen dpath) $ \group -> do
+    getList dpath = withGroup (groupGen dpath) $ \group -> do
         uidlist <- liftIO . queryUserList $ group
         unames <- query $ State.ListGroupMembers uidlist
         let baseUri = renderResource' groupR dpath
         returnOk . toResponse . Resource.XHtml $ Pages.groupPage
             unames baseUri (False, False) (groupDesc group)
-    getEditList dpath = withGroup (liftIO $ groupGen dpath) $ \group ->
+    getEditList dpath = withGroup (groupGen dpath) $ \group ->
                         withGroupEditAuth group $ \canAdd canDelete -> do
         userlist <- liftIO . queryUserList $ group
         unames <- query $ State.ListGroupMembers userlist
         let baseUri = renderResource' groupR dpath
         returnOk . toResponse . Resource.XHtml $ Pages.groupPage
             unames baseUri (canAdd, canDelete) (groupDesc group)
-    postUser dpath = withGroup (liftIO $ groupGen dpath) $ \group -> do
+    postUser dpath = withGroup (groupGen dpath) $ \group -> do
         res <- groupAddUser users group dpath
         case res of
             Left err -> returnError' err
             Right {} -> goToList dpath
-    deleteFromGroup dpath = withGroup (liftIO $ groupGen dpath) $ \group -> do
+    deleteFromGroup dpath = withGroup (groupGen dpath) $ \group -> do
         res <- groupDeleteUser users group dpath
         case res of
             Left err -> returnError' err
             Right {} -> goToList dpath
+    withGroup group func = liftIO (groupExists group) >>= \exists -> case exists of
+        False -> returnError 404 "User group doesn't exist" [MText "User group doesn't exist"]
+        True  -> func group
     goToList dpath = fmap Right $ seeOther (renderResource' (groupResource r) dpath) (toResponse ())
 
 {-
@@ -772,9 +799,9 @@ serveDownloadTop core downs _ = do
         | ((pkgname, count), n) <- zip pkgList [(1::Int)..] ]
 
 ------------------------- All packages by name
-packagesPage :: CoreResource -> ListFeature -> TagsResource
-             -> DynamicPath -> ServerPart Response
-packagesPage core listf tagf _ = do
+packagesPage :: MonadIO m => CoreResource -> ListFeature
+                          -> TagsResource -> m Response
+packagesPage core listf tagf = do
     let itemFunc = renderItem core (Just tagf)
     items <- liftIO $ getAllLists listf
     return $ toResponse $ Resource.XHtml $ hackagePage "All packages by name" $
