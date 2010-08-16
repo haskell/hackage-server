@@ -90,7 +90,7 @@ initMirrorFeature config core users = do
             -- augment unpackPackage to ensure that dpath matches it...
             res <- liftIO $ BlobStorage.addWith store fileContent (return . Upload.unpackPackage fileName)
             case res of
-                Left err -> return . toResponse $ err
+                Left err -> badRequest . toResponse $ err
                 Right (((pkg, pkgStr), warnings), blobId) -> do
                     -- doMergePackage runs the package hooks
                     -- if the upload feature is enabled, it adds
@@ -114,7 +114,7 @@ initMirrorFeature config core users = do
             let fileName = (fromMaybe "noname" $ inputFilename input)
                 fileContent = inputValue input
             case parsePackageDescription (fromUTF8 . BS.unpack $ fileContent) of
-                ParseFailed err -> return . toResponse $ show (locatedErrorMsg err)
+                ParseFailed err -> badRequest . toResponse $ show (locatedErrorMsg err)
                 ParseOk warnings pkg -> do
                     liftIO $ doMergePackage core $ PkgInfo {
                         pkgInfoId     = packageId pkg,
@@ -129,14 +129,15 @@ initMirrorFeature config core users = do
     requireMirrorAuth = do
         ulist <- query GetMirrorClients
         userdb <- query GetUserDb
-        Auth.requireHackageAuth userdb (Just ulist) (Just DigestAuth)
+        Auth.requireHackageAuth userdb (Just ulist) Nothing
 
     withUploadInfo :: String -> (Input -> UploadInfo -> ServerPart Response) -> ServerPart Response
     withUploadInfo fileField func = do
         mres <- getDataFn (liftM3 (,,) (lookInput fileField) (look "date") (look "user"))
         case mres of
           Nothing -> badRequest $ toResponse $ "Invalid input"
-          Just (input, mdate, muser) -> case (readsTime defaultTimeLocale "%c" mdate, simpleParse muser :: Maybe UserName) of
+          Just (input, mdate, muser) -> do
+           case (readsTime defaultTimeLocale "%c" mdate, simpleParse muser :: Maybe UserName) of
             ([(udate, "")], Just uname) -> do
                 -- This is a lot for a simple PUT to be doing. Ideally, with a more
                 -- advanced mirror client, it would find the user id itself,
@@ -152,6 +153,4 @@ initMirrorFeature config core users = do
                 uid <- update $ RequireUserName uname
                 func input (udate, uid)
             _ -> badRequest $ toResponse ()
-
-
 

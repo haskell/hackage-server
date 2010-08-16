@@ -40,11 +40,11 @@ legacyRedirectsFeature = HackageModule {
 serveLegacyPosts :: ServerPart Response
 serveLegacyPosts = msum
   [ dir "packages" $ msum
-      [ postedMove "upload"          "/packages/"
-    --, postedMove "check"           "/check"
+      [ postedMove "upload" "/packages/"
+    --, postedMove "check"  "/check"
       ]
   , dir "cgi-bin" $ dir "hackage-scripts" $ msum
-      [ dir "protected" $ postedMove "upload"  "/upload"
+      [ dir "protected" $ postedMove "upload"  "/packages/"
     --, postedMove "check"  "/check"
       ]
   ]

@@ -51,7 +51,8 @@ newtype BuildLog = BuildLog BlobStorage.BlobId
 data PkgBuildReports = PkgBuildReports {
     -- for each report, other useful information: Maybe UserId, UTCTime
     -- perhaps deserving its own data structure (SubmittedReport?)
-    -- also, use IntMap (though with the public interface using BuildReportId)?
+    -- When a report was submitted is very useful information.
+    -- also, use IntMap instead of Map BuildReportId?
     reports      :: !(Map BuildReportId (BuildReport, Maybe BuildLog)),
     -- one more than the maximum report id used
     nextReportId :: !BuildReportId
@@ -81,7 +82,7 @@ lookupPackageReports pkgid buildReports = case Map.lookup pkgid (reportsIndex bu
     Just rs -> Map.toList (reports rs)
 
 -------------------------
--- PackageIds should /not/ have empty versions. Caller should ensure this somehow.
+-- PackageIds should /not/ have empty Versions. Caller should ensure this.
 addReport :: PackageId -> (BuildReport, Maybe BuildLog) -> BuildReports -> (BuildReports, BuildReportId)
 addReport pkgid report buildReports = 
     let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)

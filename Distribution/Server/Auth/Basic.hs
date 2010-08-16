@@ -92,7 +92,7 @@ getPasswdInfo users userName = do
 (<?) :: a -> Maybe b -> Either a b
 e <? mb = maybe (Left e) Right mb
 
--- TODO: s/String/[ErrorMessage]/
+-- TODO: s/String/[ErrorMessage]/ for appropriate links
 showAuthError :: AuthError -> String
 showAuthError err = case err of
     NoAuthError -> "No authorization provided."

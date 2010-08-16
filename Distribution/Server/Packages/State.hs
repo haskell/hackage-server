@@ -91,6 +91,8 @@ replacePackagesState = State.put
 getPackagesState :: Query PackagesState PackagesState
 getPackagesState = ask
 
+-- TODO: add more querying functions; there are too many
+-- `fmap packageList $ query GetPackagesState' throughout code
 
 $(mkMethods ''PackagesState ['getPackagesState
                             ,'replacePackagesState

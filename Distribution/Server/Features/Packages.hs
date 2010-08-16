@@ -1,13 +1,4 @@
-module Distribution.Server.Features.Packages {-(
-    PackagesFeature(..),
-    PackagesResource(..),
-    PackageRender(..),
-    initPackagesFeature,
-    doPackageRender,
-    SimpleCondTree(..),
-    doMakeCondTree,
-    categorySplit
-  )-} where
+module Distribution.Server.Features.Packages where
 
 import Distribution.Server.Feature
 import Distribution.Server.Resource
@@ -48,17 +39,17 @@ import qualified Distribution.Server.Pages.Recent as Pages
 
 data PackagesFeature = PackagesFeature {
     packagesResource :: PackagesResource,
-    -- recent caches. in lieu of a log feature
+    -- recent caches. in lieu of an ActionLog
     cacheRecent :: Cache.Cache (Response, Response), -- rss
---  recentUpdated :: HookList ([PkgInfo] -> IO ())
+    -- TODO: perhaps a hook, recentUpdated :: HookList ([PkgInfo] -> IO ())
+
     -- necessary information for the representation of a package resource
-    -- TODO: use MServerPart
     packageRender :: PkgInfo -> IO PackageRender
     -- other informational hooks: perhaps a simplified CondTree so a browser script can dynamically change the package page based on flags
 }
 
 data PackagesResource = PackagesResource {
-    -- replace with log feature
+    -- replace with log resource
     packagesRecent :: Resource
 }
 
@@ -74,7 +65,7 @@ initPackagesFeature :: Config -> CoreFeature -> IO PackagesFeature
 initPackagesFeature _ core = do
     recents <- Cache.newCacheable (toResponse (), toResponse ())
     registerHook (packageIndexChange core) $ do
-        -- this should likely be moved to HTML/RSS features
+        -- TODO: this should be moved to HTML/RSS features
         state <- query State.GetPackagesState
         users <- query State.GetUserDb
         now   <- getCurrentTime
@@ -137,7 +128,7 @@ doPackageRender users info =
       , rendExecNames = map exeName (executables flatDesc)
       , rendLicenseName = display (license desc) -- maybe make this a bit more human-readable
       , rendMaintainer  = case maintainer desc of "None" -> Nothing; "none" -> Nothing; "" -> Nothing; person -> Just person
-      , rendCategory = case category desc of [] -> []; str -> categorySplit str -- TODO: split on commas and whatnot
+      , rendCategory = case category desc of [] -> []; str -> categorySplit str
       , rendRepoHeads = catMaybes (map rendRepo $ sourceRepos desc)
       , rendModules = fmap (moduleForest . exposedModules) (library flatDesc)
       , rendHasTarball = not . null $ pkgTarball info

@@ -37,6 +37,9 @@ import Data.Function (fix)
 import Control.Monad.Trans
 import Control.Monad (mzero)
 
+-- TODO: 
+-- 1. Put the HTML view for this module in the HTML feature; get rid of the text view
+-- 2. Decide build report upload policy (anonymous and authenticated)
 data ReportsFeature = ReportsFeature {
     reportsResource :: ReportsResource
 }

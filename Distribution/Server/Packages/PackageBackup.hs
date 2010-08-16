@@ -34,7 +34,6 @@ import Data.Map (Map)
 import Data.List (sortBy, maximumBy)
 import Data.Ord (comparing)
 import Data.Monoid (mempty)
---import Control.Monad (liftM2)
 import Control.Monad.State
 import qualified Data.Map as Map
 

@@ -32,11 +32,14 @@ instance Text TagList where
     disp (TagList tags) = Disp.hsep . Disp.punctuate Disp.comma $ map disp tags
     parse = fmap TagList $ Parse.skipSpaces >> Parse.parseCommaList parse
 
+-- A tag is a string describing a package; presently the preferred word-separation
+-- character is the dash.
 newtype Tag = Tag String deriving (Show, Typeable, Ord, Eq, NFData)
 instance Text Tag where
     disp (Tag tag) = Disp.text tag
     parse = do
-        -- adding many1 here would allow multiword tags. dashes should suffice though, and they're more aesthetic in URIs.
+        -- adding 'many1 $ do' here would allow multiword tags.
+        -- spaces aren't very aesthetic in URIs, though.
         strs <- do
             t <- liftM2 (:) (Parse.satisfy tagInitialChar)
                $ Parse.munch1 tagLaterChar
@@ -49,7 +52,7 @@ tagInitialChar, tagLaterChar :: Char -> Bool
 tagInitialChar c = Char.isAlphaNum c || c `elem` ".#*"
 tagLaterChar   c = Char.isAlphaNum c || c `elem` "-+#*."
 
--- a forcefully forgiving version of the parser
+-- mutilates a string to appease the parser
 tagify :: String -> Tag
 tagify (x:xs) = Tag $ (if tagInitialChar x then (x:) else id) $ tagify' xs
   where tagify' (c:cs) | tagLaterChar c = c:tagify' cs

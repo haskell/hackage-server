@@ -60,7 +60,6 @@ import Control.Monad.Trans (MonadIO(..))
 
 -- | A feature to allow manipulation of the database of users.
 --
-
 data UserFeature = UserFeature {
     userResource :: UserResource,
     userAdded :: Hook (IO ()),
@@ -184,7 +183,8 @@ withUserPath dpath func = withUserNamePath dpath $ \name -> withUserName name fu
 instance FromReqURI UserName where
   fromReqURI = simpleParse
 
--- TODO: this should be separated off into an AdminRegister feature
+-- TODO: this should be separated off into an AdminRegister feature, as well as
+-- a SelfRegister feature (also using newUserWithAuth) for self-registration
 adminAddUser :: MServerPart Response
 adminAddUser = do
     admins <- query State.GetHackageAdmins
@@ -317,7 +317,7 @@ withGroupEditAuth group func = do
 data GroupResource = GroupResource {
     groupResource :: Resource,
     groupUserResource :: Resource,
-    getGroup :: DynamicPath -> UserGroup
+    getGroup :: GroupGen
 }
 
 type GroupGen = DynamicPath -> UserGroup

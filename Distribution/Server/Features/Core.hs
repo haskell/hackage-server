@@ -21,8 +21,6 @@ module Distribution.Server.Features.Core (
     doMergePackage
   ) where
 
---import Distribution.Server.Users.Resource (makeGroupResources)
-import qualified Distribution.Server.Cache as Cache
 import Distribution.Server.Packages.PackageBackup
 import Distribution.Server.Users.UserBackup
 import Distribution.Server.Feature
@@ -36,6 +34,7 @@ import Distribution.Server.Instances ()
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.State
 import Distribution.Server.Users.State
+import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.Server.Packages.Index as Packages.Index
 import qualified Codec.Compression.GZip as GZip
 import qualified Distribution.Server.ResourceTypes as Resource
@@ -67,6 +66,7 @@ import Distribution.Version (Version(..))
 data CoreFeature = CoreFeature {
     coreResource :: CoreResource,
 
+    -- index.tar.gz
     cacheIndexTarball :: Cache.Cache ByteString,
     -- other files to put in the index tarball like preferred-versions
     indexExtras :: Cache.Cache (Map String (ByteString, UTCTime)),

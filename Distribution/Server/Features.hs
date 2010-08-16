@@ -37,6 +37,9 @@ import Distribution.Server.Features.Mirror (initMirrorFeature)
 -- * alter Users to be more in line with the current way registering is handled,
 --     with email addresses available to maintainers, etc.
 -- * UserNotify: email users and let them email each other
+-- * Backup: would need a [HackageModule] to backup, though a HackageModule itself.
+--     best approach is probably to write backup tarball to disk and transfer
+--     it away through non-HTTP means (somewhat more secure)
 hackageFeatures :: Config -> IO [HackageModule]
 hackageFeatures config = do
     coreFeature <- initCoreFeature config
@@ -86,15 +89,18 @@ hackageFeatures config = do
          , HF legacyRedirectsFeature
          ]
     -- Run all initial hooks, now that everyone's gotten a chance to register for them
-    -- This solution does not work too well for special initial hook arguments
+    -- This solution is iffy for initial feature hooks that rely on other features
+    -- It also happens even in the backup/restore modes.
     sequence_ . concat $ map initHooks allFeatures
-    return (map getFeature allFeatures)
+    let allModules = map getFeature allFeatures
+    -- backupFeature <- initBackupFeature config allModules
+    return allModules
 
 data HF = forall a. HackageFeature a => HF a
 instance HackageFeature HF where
     getFeature (HF a) = getFeature a
     initHooks  (HF a) = initHooks a
 
--- Still using Distribution.Server.State.HackageEntryPoint for the moment, it seems
+-- Still using Distribution.Server.State.HackageEntryPoint for the moment for feature state
 -- otherwise, a HackageOverallState could be defined that works more closely with HackageFeature
 

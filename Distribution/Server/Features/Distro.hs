@@ -22,6 +22,10 @@ import Distribution.Text (display, simpleParse)
 import Control.Monad
 import Distribution.Package
 
+-- TODO: 
+-- 1. write an HTML view for this module, and delete the text
+-- 2. use GroupResource from the Users feature
+-- 3. use MServerPart to support multiple views
 data DistroFeature = DistroFeature {
     distroResource   :: DistroResource,
     maintainersGroup :: DynamicPath -> IO (Maybe UserGroup)

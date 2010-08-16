@@ -32,4 +32,3 @@ class HackageFeature a where
 instance HackageFeature HackageModule where
     getFeature = id
 
---core, package pages, upload, docs, buildreports, revdeps/graph

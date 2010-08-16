@@ -156,29 +156,8 @@ fromFile path contents
     go _ = return ()
 
 {-
-impPackage :: [String] -> ByteString -> Import IS ()
-impPackage [_, pkgIdStr, "documentation.tar"] contents
-    = do
-  pkgId <- parseText "package id" pkgIdStr
-  blobId <- addFile contents
-  addDocumentation pkgId blobId
-  addTarIndex blobId
-
-{-
-
-The import tar-ball is read in and we update the import-state.
-That way, if we mess up half-way through, we aren't left with
-an inconsistent server-state.
-
-NOTE the blob-storage is updated, but since it's a quasi-functional
-strucuture, I'm okay with this.
-
--}
-
-addDocumentation :: PackageIdentifier -> BlobId -> Import IS ()
-addDocumentation pkgId blob
-    = modify $ \is ->
-      is { isDocs = Documentation (Map.insert pkgId blob (documentation (isDocs is)))}
+Some utilities worth recreating for the newer Import scheme, mostly
+to import documentation:
 
 addFile :: ByteString -> Import BlobId
 addFile file = do
@@ -211,6 +190,7 @@ getImport initState imp = unImp imp err k initState
   where k a s = return $ Right (s, a)
         err   = return . Left
 
+-- For nested import. Not as useful in practice.
 withSubImport :: (s -> s') -> (s' -> s -> s) -> Import s' a -> Import s a
 withSubImport extractState returnState subImport = do
     initState <- get
@@ -250,7 +230,7 @@ instance MonadIO (Import s) where
         Exception.catch (x >>= \v -> k v s)
                         (\e -> let msg = "Caught exception: " ++ show (e :: Exception.SomeException) in err msg)
 
--- |Chops off the last entry if it's null.
+-- | Chops off the last entry if it's null.
 -- I'm not sure why parseCSV does this, but it's
 -- irritating.
 customParseCSV :: String -> String -> Either String CSV
@@ -262,7 +242,7 @@ customParseCSV filename inp = case parseCSV filename inp of
    chopLastRecord ([""]:[]) = []
    chopLastRecord (x:xs) = x : chopLastRecord xs
 
--- | Made this into a nifty combinator.
+-- | Made customParseCSV into a nifty combinator.
 importCSV :: String -> ByteString -> (CSV -> Import s a) -> Import s a
 importCSV filename inp comb = case customParseCSV filename (bytesToString inp) of
     Left  err -> fail err

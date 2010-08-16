@@ -58,7 +58,9 @@ import Prelude hiding (read)
 
 -- TODO:
 -- * import for other features: package maintainers, tags, distro data
--- * make "deleted" users historical instead of deleted
+--   otherwise these are initially empty, and a pain to manually populate
+-- * make "deleted" users historical instead of deleted (Users.requireName)
+-- * don't require BlobStorage to function, or use a temporary one
 
 newPkgInfo :: PackageIdentifier
            -> (FilePath, ByteString)

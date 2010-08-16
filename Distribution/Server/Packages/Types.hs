@@ -40,6 +40,9 @@ import Data.Ord (comparing)
 -- We normally disallow re-uploading but may make occasional exceptions.
 data PkgInfo = PkgInfo {
     pkgInfoId :: !PackageIdentifier,
+    -- | The information held in a parsed .cabal file (used by cabal-install)
+    -- If this takes up too much space, it might be possible to wrap it in
+    -- Maybe and let the server parse the data on the fly.
     pkgDesc   :: !GenericPackageDescription,
     -- | The .cabal file text.
     pkgData   :: !ByteString,

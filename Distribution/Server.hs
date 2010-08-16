@@ -106,7 +106,8 @@ hasSavedState = doesDirectoryExist . confHappsStateDir
 -- | Make a server instance from the server configuration.
 --
 -- This does not yet run the server (see 'run') but it does setup the server
--- state system, making it possible to import data.
+-- state system, making it possible to import data, and initializes the
+-- features.
 --
 -- Note: the server instance must eventually be 'shutdown' or you'll end up
 -- with stale lock files.
@@ -177,7 +178,7 @@ checkpoint server = createCheckpoint (serverTxControl server)
 -- Convert a set of old data into a new export tarball.
 -- This also populates the blob database, which is then
 -- repopulated upon import of the new export tarball.
--- This is not really a good thing.
+-- This is not really a good thing. (FIXME)
 --
 -- However, it does not need happstack-state to function.
 bulkImport :: FilePath -- path to blob storage, get rid of this
@@ -299,14 +300,13 @@ setUpTemp sconf secs = do
   where
     conf = nullConf { Happstack.Server.port = confPortNum sconf }
 
-        
+-- | Static 503 page, based on Happstack's 404 page.
 html503 :: String
 html503 =
     "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\" \"http://www.w3.org/TR/html4/strict.dtd\">" ++
     "<html><head><title>503 Service Unavailable</title></head><body><h1>" ++
-    "503 Service Unavailable</h1><p>The server is loading data into memory" ++
-    "<br>Probably because it was just restarted<br>It'll be back soon" ++
-    "</p></body></html>"
+    "503 Service Unavailable</h1><p>The server is undergoing maintenance" ++
+    "<br>It'll be back soon</p></body></html>"
 
 tearDownTemp :: TempServer -> IO ()
 tearDownTemp (TempServer tid) = do

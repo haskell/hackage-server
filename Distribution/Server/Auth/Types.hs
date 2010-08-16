@@ -18,9 +18,9 @@ data AuthError = NoAuthError | UnrecognizedAuthError | NoSuchUserError
                | PasswordMismatchError | AuthTypeMismatchError
   deriving (Enum, Eq, Show, Typeable)
 
-instance Version AuthType where
-instance Version PasswdPlain where
-instance Version PasswdHash where
+instance Version AuthType
+instance Version PasswdPlain
+instance Version PasswdHash
 
 $(deriveSerialize ''AuthType)
 $(deriveSerialize ''PasswdPlain)

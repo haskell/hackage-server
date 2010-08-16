@@ -32,15 +32,11 @@ import qualified Happstack.State as State (Version)
 -- The main reverse dependencies map is a drawn-out Map PackageId PackageId,
 -- with an extra component to store ranges (all ranges that *could* be revdeps,
 -- even if no packages in the index currently satisfy those ranges).
+--
+-- For selected entries of the map (foo, (2.0, (bar, [1.0]), (bar, (1.0, <3)))):
+-- This means that bar-1.0 depends on a version of foo <3, and foo 2.0 meets this criterion.
 type RevDeps = Map PackageName (Map Version (Map PackageName (Set Version)), Map PackageName (Map Version VersionRange))
-{-
-For selected entries of a map (foo, (2.0, (bar, [1.0]), (bar, (1.0, <3)))):
-This means that bar-1.0 depends on a version of foo <3, and foo 2.0 meets this criterion.
-To convert from one format to another, use:
-inSet (pkgname, version, pkgname', version') = case Map.lookup pkgname' =<< Map.lookup pkgname revs of
-    Nothing -> Set.empty
-    Just m -> maybe (withinRange version) . Map.lookup version' m
--}
+
 
 -- TODO: should this be (Maybe (Version, Maybe VersionStatus))?
 -- it should be possible, albeit with a bit more work, to determine all revdeps 
@@ -49,8 +45,18 @@ inSet (pkgname, version, pkgname', version') = case Map.lookup pkgname' =<< Map.
 type ReverseDisplay = Map PackageName (Version, Maybe VersionStatus)
 
 data ReverseIndex = ReverseIndex {
+    -- this field would be a duplication of PackageIndex, so updates don't have
+    -- to use much information outside of this component, and the FIXME in
+    -- the revdeps feature can be fixed.
+    -- duplicatedIndex :: Map PackageName [Version],
+
+    -- The main reverse dependencies map
     reverseDependencies :: RevDeps,
+
+    -- Generated from packageNameClosure.
     flattenedReverse :: Map PackageName (Set PackageName),
+
+    -- Cached counts for reverse dependencies.
     reverseCount :: Map PackageName ReverseCount
 } deriving (Show, Eq, Typeable)
 
@@ -190,7 +196,11 @@ selectVersions :: VersionRange -> [Version] -> [Version]
 selectVersions range versions= filter (flip withinRange range) versions
 
 -- | Collect all dependencies specified in a package's cabal file, considering
--- all alternatives and unioning them together.
+-- all alternatives.
+--
+-- This unions all version ranges together from different branches, which is
+-- imprecise but mostly good enough (a slightly better heuristic might be
+-- intersecting within a block, but unioning blocks together).
 getAllDependencies :: PkgInfo -> Map PackageName VersionRange
 getAllDependencies pkg = 
     let desc = pkgDesc pkg
@@ -220,7 +230,7 @@ harvestDependencies (CondNode _ deps comps) = deps ++ concatMap forComponent com
 type VersionIndex = (PackageName -> (PreferredInfo, [Version]))
 
 -- TODO: this should use the secondary PackageId -> VersionRange mapping in RevDeps,
--- so it gets all possible versions, not just those currently in the index...
+-- so it gets all possible versions, not just those currently in the index.
 perPackageReverse :: VersionIndex -> RevDeps -> PackageName -> ReverseDisplay
 perPackageReverse indexFunc revs pkg = case Map.lookup pkg revs of
     Nothing   -> Map.empty
@@ -311,11 +321,11 @@ updateVersionReverse indexFunc updated deps revs pkgMap =
 
 --------------------------------------------------------------------------------
 -- Flattening the graph
--- TODO: exposing indirect dependencies is as simple as taking the set difference
+-- Exposing indirect dependencies is as simple as taking the set difference
 -- of the edges of a node in the dependency graph G and its closure G+.
 
 -- Collect all indirect versioned dependencies. This takes around 45 seconds
--- on the current package index (well, in ghci). It probably isn't worth exposing.
+-- on the current package index (in ghci). It probably isn't worth exposing.
 packageIdClosure :: RevDeps -> Map PackageId (Set PackageId)
 packageIdClosure revs = Map.fromDistinctAscList $ transitiveClosure
     (concatMap getNodes $ Map.toList revs)

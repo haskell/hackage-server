@@ -67,7 +67,10 @@ import Data.Maybe (fromMaybe)
 
 -- TODO: move more of the below to Distribution.Server.Pages.*, it's getting
 -- close to 1K lines, way too much... it's okay to keep data-querying in here,
--- but pure HTML generation mostly needlessly clutters up the module. Refactor time.
+-- but pure HTML generation mostly needlessly clutters up the module.
+-- Try to make it so no HTML combinators need to be imported.
+--
+-- See the TODO file for more ways to improve the HTML.
 data HtmlFeature = HtmlFeature {
     htmlResources :: [Resource],
     cachePackagesPage :: Cache.Cache Response,
@@ -114,8 +117,7 @@ initHtmlFeature config core pkg upload check user version reversef tagf
  packageGroupResource uploads)] }
         pkgCandUploadForm = (resourceAt "/package/:package/candidate/upload") { resourceGet = [("html", servePackageCandidateUpload cores checks)] }
         candMaintainForm = (resourceAt "/package/:package/candidate/maintain") { resourceGet = [("html", serveCandidateMaintain cores checks)] }
-        tagEdit = (resourceAt "/package/:package/tags/edit")
-
+        tagEdit = (resourceAt "/package/:package/tags/edit") { resourceGet = [("html", serveTagsEdit cores tags)] }
     -- Index page caches
     namesCache <- Cache.newCacheable $ toResponse ()
     mainCache <- Cache.newCacheable $ toResponse ()
@@ -170,6 +172,7 @@ initHtmlFeature config core pkg upload check user version reversef tagf
             -- maintenance for candidate packages
          , (extendResource $ publishPage checks) { resourceGet = [("html", servePublishForm checks)], resourcePost = [("html", servePostPublish core user upload)] }
             -- form for publishing package
+        -- TODO: write HTML for reports and distros to display the information effectively
         -- reports
          --, (extendResource $ reportsList reports) { resourceGet = [("html", serveReportsList)] }
          --, (extendResource $ reportsPage reports) { resourceGet = [("html", serveReportsPage)] }
@@ -207,7 +210,7 @@ initHtmlFeature config core pkg upload check user version reversef tagf
         ++ htmlGroupResource user (mirrorGroupResource $ mirrorResource mirror)
      }
 
-
+--------------------------------------------------------------------------------
 ---- Core
 -- Currently the main package page is thrown together by querying a bunch
 -- of features about their attributes for the given package. It'll need
@@ -246,7 +249,6 @@ servePackagePage core pkgr revr versions tagf maintain tagEdit dpath =
     -- extra features like tags and downloads
     tags <- query $ TagsForPackage pkgname
 
-
     let maintainLink = anchor ! [href $ renderResource maintain [display pkgname]] << toHtml "maintain"
         tagLinks = toHtml [anchor ! [href "/packages/tags"] << "Tags", toHtml ": ",
                            toHtml (renderTags tagf tags), toHtml " | ",
@@ -282,6 +284,7 @@ serveMaintainLinks editDepr editPref mgroup dpath = htmlResponse $
       ]
     -- upload documentation
 
+--------------------------------------------------------------------------------
 ---- Users
 serveUserList :: UserResource -> DynamicPath -> ServerPart Response
 serveUserList users _ = do
@@ -420,7 +423,7 @@ htmlGroupResource users r@(GroupResource groupR userR groupGen) =
 {-
 -- Currently unused, mainly because not all web browsers use eager authentication-sending
 -- Setting a cookie might work here, albeit one that's stateless for the server, is not
--- used securely and only causes GUI changes, not permission overriding
+-- used for auth and only causes GUI changes, not permission overriding
 loginWidget :: UserResource -> ServerPart Html
 loginWidget user = do
     users <- query State.GetUserDb
@@ -435,6 +438,7 @@ makeLoginWidget user mname = case mname of
     Just uname -> anchor ! [href $ userPageUri user "" uname] << display uname
 -}
 
+--------------------------------------------------------------------------------
 ---- Upload
 serveUploadForm :: DynamicPath -> ServerPart Response
 serveUploadForm _ = htmlResponse $ do
@@ -458,6 +462,7 @@ serveUploadResult pkgf core _ = htmlResponse $
         [] -> []
         _  -> [paragraph << "There were some warnings:", unordList warns]
 
+--------------------------------------------------------------------------------
 ---- Candidates
 serveCandidateUploadForm :: DynamicPath -> ServerPart Response
 serveCandidateUploadForm _ = htmlResponse $ do
@@ -574,7 +579,9 @@ servePostPublish core users upload dpath = htmlResponse $
             [] -> []
             warns -> [paragraph << "There were some warnings:", unordList warns]
 
+--------------------------------------------------------------------------------
 -- Preferred
+-- This feature is in great need of a Pages module
 serveDeprecatedSummary :: CoreResource -> DynamicPath -> ServerPart Response
 serveDeprecatedSummary core _ = doDeprecatedsRender >>= \renders -> do
     return $ toResponse $ Resource.XHtml $ hackagePage "Deprecated packages"
@@ -745,7 +752,7 @@ servePreferForm core r dpath =
           , paragraph << input ! [thetype "submit", value "Set status"]
           ]]
 
---------------------------------------
+--------------------------------------------------------------------------------
 -- Reverse
 serveReverse :: CoreResource -> ReverseResource -> Bool -> DynamicPath -> ServerPart Response
 serveReverse core revr isRecent dpath = htmlResponse $
@@ -782,7 +789,9 @@ serveReverseList core revs _ = do
     return $ toResponse $ Resource.XHtml $ hackagePage "Reverse dependencies" $
         Pages.reversePackagesRender (corePackageName core "") revr hackCount triple
 
------------------------------- Downloads
+--------------------------------------------------------------------------------
+-- Downloads
+-- presently just a dumb listing
 serveDownloadTop :: CoreResource -> DownloadFeature -> DynamicPath -> ServerPart Response
 serveDownloadTop core downs _ = do
     pkgList <- liftIO $ sortedPackages downs
@@ -798,7 +807,8 @@ serveDownloadTop core downs _ = do
             , td << [ toHtml $ (show count) ] ]
         | ((pkgname, count), n) <- zip pkgList [(1::Int)..] ]
 
-------------------------- All packages by name
+--------------------------------------------------------------------------------
+-- Additional package indices
 packagesPage :: MonadIO m => CoreResource -> ListFeature
                           -> TagsResource -> m Response
 packagesPage core listf tagf = do
@@ -809,7 +819,8 @@ packagesPage core listf tagf = do
       , ulist ! [theclass "packages"] << map itemFunc (Map.elems items)
       ]
 
-------------------------------------------- Tags
+--------------------------------------------------------------------------------
+-- Tags
 serveTagsListing :: TagsResource -> DynamicPath -> ServerPart Response
 serveTagsListing tags _ = do
     tagList <- query GetTagList
@@ -864,7 +875,12 @@ putPackageTags core tags dpath =
     returnOk $ toResponse $ Resource.XHtml $ hackagePage "Set tags"
         [toHtml "Put tags for ", packageNameLink core pkgname]
 
------- Searching
+-- TODO: serve form for editing, to be received by putTags
+serveTagsEdit :: CoreResource -> TagsResource -> DynamicPath -> ServerPart Response
+serveTagsEdit _ _ _ = return $ toResponse ()
+
+--------------------------------------------------------------------------------
+-- Searching
 servePackageFind :: CoreResource -> ListFeature -> NamesFeature
                  -> TagsResource -> DynamicPath -> ServerPart Response
 servePackageFind core listf names tagf _ = packageFindWith $ \mstr -> case mstr of
@@ -956,12 +972,14 @@ renderTags tagf tags = intersperse (toHtml ", ")
     (map (\tg -> anchor ! [href $ tagUri tagf "" tg] << display tg)
       $ Set.toList tags)
 
+-- Produces a valid class string.
 toClassString :: String -> String
 toClassString "" = ""
 toClassString xs = filter classLater $ dropWhile (not . classFirst) xs
   where classFirst c = isAlpha c || c == '_'
         classLater c = isAlphaNum c || c == '_' || c == '-'
 
+-- Prevents page indexing (e.g. for search pages).
 noIndex :: Html
 noIndex = meta ! [name "robots", content "noindex"]
 

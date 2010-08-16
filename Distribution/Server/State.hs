@@ -15,7 +15,6 @@ import Distribution.Server.BuildReport.State ()
 import Distribution.Server.Users.Users (Users)
 import Distribution.Server.Users.State (HackageAdmins, IndexUsers, MirrorClients)
 import Distribution.Server.Distributions.State (Distros)
-import Distribution.Server.Util.TarIndex (TarIndexMap)
 
 import Happstack.State
 
@@ -29,7 +28,7 @@ $(deriveSerialize ''Core)
 instance Version HackageEntryPoint
 $(deriveSerialize ''HackageEntryPoint)
 
--- Core: PackagesState, Users, TarIndexMap
+-- Core: PackagesState, Users, Admins
 instance Component Core where
     type Dependencies Core = PackagesState :+: Users :+: HackageAdmins :+: End
     initialValue = Core
@@ -38,7 +37,7 @@ $(mkMethods ''Core [])
 instance Component HackageEntryPoint where
     type Dependencies HackageEntryPoint
         = Core :+: Documentation :+:
-          BuildReports :+: Distros :+: TarIndexMap :+:
+          BuildReports :+: Distros :+:
           PackageUpload :+: CandidatePackages :+: 
           PreferredVersions :+: ReverseIndex :+:
           DownloadCounts :+: PackageTags :+:

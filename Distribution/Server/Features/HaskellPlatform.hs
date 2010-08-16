@@ -9,8 +9,9 @@ import Data.List (nub, sort)
 
 -- Note: this can be generalized into dividing Hackage up into however many
 -- subsets of packages are desired. One could implement a Debian-esque system
--- with this sort of feature. (Of course, the goal is to work alongside
--- distributions, not replace them, since some users prefer not to use Hackage.)
+-- with this sort of feature.
+--
+-- TODO: finish
 data PlatformFeature = PlatformFeature {
     platformResource :: PlatformResource
 }
@@ -41,6 +42,7 @@ initPlatformFeature _ _ = do
       }
 
 ------------------------------------------
+-- TODO: split these off into a Distribution.Server.Packages.* module
 newtype PlatformPackages = PlatformPackages {
     blessedPackages :: Map PackageName (Set Version)
 } deriving (Show, Typeable)

@@ -70,7 +70,7 @@ instance HackageFeature UploadFeature where
             [uploadIndexPage,
              groupResource . packageGroupResource, groupUserResource . packageGroupResource,
              groupResource . trusteeResource, groupUserResource . trusteeResource]
-        -- TODO: backup maintainer groups
+        -- TODO: backup maintainer groups, trustees
       , dumpBackup    = Nothing
       , restoreBackup = Nothing
       }

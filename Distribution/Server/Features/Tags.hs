@@ -60,7 +60,6 @@ data TagsFeature = TagsFeature {
     setCalculatedTag :: Tag -> Set PackageName -> IO ()
 }
 
--- TODO: registry for calculated tags
 data TagsResource = TagsResource {
     tagsListing :: Resource,
     tagListing :: Resource,
@@ -69,10 +68,6 @@ data TagsResource = TagsResource {
     tagUri :: String -> Tag -> String,
     tagsUri :: String -> String,
     packageTagsUri :: String -> PackageName -> String
-    -- /packages/tags/.:format
-    -- /packages/tag/:tag.:format
-    -- /package/:package/tags.:format
-    -- /package/:package/tags/edit (HTML)
 }
 
 instance HackageFeature TagsFeature where
@@ -86,7 +81,9 @@ instance HackageFeature TagsFeature where
               , restoreComplete = do
                     putStrLn "Creating tag index"
                     index <- fmap packageList $ query GetPackagesState
-                    -- TODO: move this to a separate feature for calculated tags
+                    -- TODO: import should only rely on BackupEntries from the
+                    -- tarball, not create a calculated tags index from the
+                    -- central package index (this could be done in convert mode)
                     let tagIndex = constructTagIndex index
                     update $ ReplacePackageTags tagIndex
               }
@@ -112,6 +109,8 @@ initTagsFeature _ _ = do
             -- for more fine-tuned tag manipulation, could also define:
             -- * DELETE /package/:package/tag/:tag (remove single tag)
             -- * POST /package/:package\/tags (add single tag)
+            -- renaming tags and deleting them are also supported as happstack-state
+            -- operations, but make sure this wouldn't circumvent calculated tags.
           }
       , tagsUpdated = updateTag
       , calculatedTags = specials
@@ -120,14 +119,6 @@ initTagsFeature _ _ = do
             update $ SetTagPackages tag pkgs
             runHook'' updateTag pkgs (Set.singleton tag)
       }
--- { resourceGet = [("txt", textPackageTags)], resourcePut = [("txt", textPutTags)] }
-{-  
-    textPutTags dpath = textResponse $ withPackageName dpath $ \pkgname ->
-                        responseWith (putTags pkgname) $ \_ ->
-        returnOk . toResponse $ "Set the tags for " ++ display pkgname
-    textPackageTags dpath = textResponse $ withPackageAllPath dpath $ \pkgname _ -> do
-        tags <- query $ TagsForPackage pkgname
-        returnOk . toResponse $ display (TagList $ Set.toList tags)-}
 
 withTagPath :: DynamicPath -> (Tag -> Set PackageName -> ServerPart a) -> ServerPart a
 withTagPath dpath func = case simpleParse =<< lookup "tag" dpath of
@@ -172,12 +163,14 @@ constructImmutableTagIndex = foldl' addToTags emptyPackageTags . PackageIndex.al
             let info = pkgDesc $ last pkgList
             in setTags (packageName info) (Set.fromList $ constructImmutableTags info) calcTags
 
+-- These are constructed when a package is uploaded/on startup
 constructCategoryTags :: PackageDescription -> [Tag]
 constructCategoryTags = map (tagify . map toLower) . fillMe . categorySplit . category
   where
     fillMe [] = ["unclassified"]
     fillMe xs = xs
 
+-- These are reassigned as immutable tags
 constructImmutableTags :: GenericPackageDescription -> [Tag]
 constructImmutableTags genDesc =
     let desc = flattenPackageDescription genDesc

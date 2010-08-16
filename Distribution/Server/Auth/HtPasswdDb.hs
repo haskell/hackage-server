@@ -6,6 +6,7 @@ module Distribution.Server.Auth.HtPasswdDb (
 import Distribution.Server.Users.Types
          ( UserName(..), PasswdHash(..) )
 
+-- Parsing .htpasswd files
 type HtPasswdDb = [(UserName, PasswdHash)]
 
 parse :: String -> Either String HtPasswdDb

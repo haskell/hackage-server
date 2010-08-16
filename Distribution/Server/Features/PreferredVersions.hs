@@ -44,7 +44,6 @@ import Happstack.State hiding (Version)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.ByteString.Lazy.Char8 as BS
--- import Data.ByteString.Lazy.Char8 (ByteString)
 
 data VersionsFeature = VersionsFeature {
     versionsResource :: VersionsResource,
@@ -66,12 +65,6 @@ data VersionsResource = VersionsResource {
     preferredPackageUri :: String -> PackageName -> String,
     deprecatedUri :: String -> String,
     deprecatedPackageUri :: String -> PackageName -> String
-    -- /packages/preferred
-    -- /package/:package/preferred
-    -- /package/:package/preferred/edit
-    -- /packages/deprecated
-    -- /package/:package/deprecated
-    -- /package/:package/deprecated/edit
 }
 
 instance HackageFeature VersionsFeature where
@@ -115,6 +108,9 @@ initVersionsFeature _ core _ tags = do
     textPreferred = fmap toResponse makePreferredVersions
 
 ---------------------------
+-- This is a function used by the HTML feature to select the version to display.
+-- It could be enhanced by displaying a search page in the case of failure,
+-- which is outside of the scope of this feature.
 withPackagePreferred :: PackageId -> (PkgInfo -> [PkgInfo] -> MServerPart a) -> MServerPart a
 withPackagePreferred pkgid func = query GetPackagesState >>= \state ->
     case PackageIndex.lookupPackageName (packageList state) (packageName pkgid) of

@@ -1,6 +1,8 @@
 {-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, FlexibleContexts #-}
 
--- | 'Typeable' and 'Binary' instances for various types from Cabal
+-- | 'Typeable', 'Binary', 'Serialize', and 'NFData' instances for various
+-- types from Cabal, and other standard libraries.
+--
 -- Major version changes may break this module.
 --
 

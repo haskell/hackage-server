@@ -1,6 +1,9 @@
 {-# LANGUAGE TemplateHaskell, DeriveDataTypeable, TypeFamilies, TemplateHaskell,
       MultiParamTypeClasses, FlexibleInstances, FlexibleContexts #-}
 
+-- This is presently unused: features provide their own BlobId-to-TarIndex
+-- mappings.
+
 module Distribution.Server.Util.TarIndex
     where
 

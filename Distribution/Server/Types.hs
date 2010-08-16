@@ -14,3 +14,4 @@ data Config = Config {
 type DynamicPath = [(String, String)]
 
 type ServerResponse = DynamicPath -> ServerPart Response
+

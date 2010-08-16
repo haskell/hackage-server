@@ -91,10 +91,11 @@ addDistroForm =
     ]
 
 {-
+This should be updated to match the current URI scheme in the Distro feature.
+
 displayDir :: Text a => a -> String
 displayDir = escapeString f . display
  where f c = okInPath c && c /= '/'
-
 
 -- | Admin form for a distribution. Includes a list
 -- of the maintainers, a form to add maintainers and

@@ -16,6 +16,7 @@ import Happstack.Server
 import Control.Monad.Trans (MonadIO(liftIO))
 import Control.DeepSeq
 
+-- | A general-purpose in-memory cache.
 newtype Cache a = Cache { cacheState :: AsyncVar a }
 
 newCache :: a -> (a -> b) -> IO (Cache a)

@@ -30,6 +30,9 @@ import Control.Monad (mzero)
 import qualified Data.Map as Map
 import qualified Codec.Compression.GZip as GZip
 
+-- TODO:
+-- 1. Write an HTML view for organizing uploads
+-- 2. Have cabal generate a standard doc tarball, and serve that here
 data DocumentationFeature = DocumentationFeature {
     documentationResource :: DocumentationResource
 }
@@ -44,12 +47,12 @@ data DocumentationResource = DocumentationResource {
 instance HackageFeature DocumentationFeature where
     getFeature docs = HackageModule
       { featureName = "documentation"
-      , resources   = map ($documentationResource docs) [packageDocs]
+      , resources   = map ($documentationResource docs) [packageDocs, packageDocTar] --and packageDocsUpload
       , dumpBackup    = Just $ \storage -> do
             doc <- query GetDocumentation
             let exportFunc (pkgid, (blob, _)) = ([display pkgid, "documentation.tar"], Right blob)
             readExportBlobs storage . map exportFunc . Map.toList $ documentation doc
-      , restoreBackup = Nothing {-Just $ \storage -> reportsBackup storage-}
+      , restoreBackup = Nothing --TODO: import package-id/documentation.tar
       }
 
 initDocumentationFeature :: Config -> CoreFeature -> UploadFeature -> IO DocumentationFeature
@@ -58,7 +61,7 @@ initDocumentationFeature config _ _ = do
     return DocumentationFeature
       { documentationResource = fix $ \r -> DocumentationResource
           { packageDocs = (resourceAt "/package/:package/doc/..") { resourceGet = [("", serveDocumentation store)] }
-          , packageDocsUpload = (resourceAt "/package/:package/doc/.:format") { resourcePost = [("txt", textResponse . uploadDocumentation store)] }
+          , packageDocsUpload = (resourceAt "/package/:package/doc/.:format") { resourcePut = [("txt", textResponse . uploadDocumentation store)] }
           , packageDocTar = (resourceAt "/package/:package/:doc.tar") { resourceGet = [("tar", serveDocumentationTar store)] }
           , packageDocUri = \pkgid str -> renderResource (packageDocs r) [display pkgid, str]
           }
@@ -71,11 +74,12 @@ serveDocumentationTar store dpath = withDocumentation dpath $ \_ blob _ -> do
     return $ toResponse $ Resource.DocTarball file blob
 
 
--- FIXME: does this actually serve the requested URI?
 -- return: not-found error or tarball
 serveDocumentation :: BlobStorage -> DynamicPath -> ServerPart Response
 serveDocumentation store dpath = withDocumentation dpath $ \pkgid blob index -> do
     let tarball = BlobStorage.filepath store blob
+    -- if given a directory, the default page is index.html
+    -- the default directory prefix is the package name itself
     TarIndex.serveTarball ["index.html"] (display $ packageName pkgid) tarball index
 
 -- return: not-found error (parsing) or see other uri
@@ -83,13 +87,11 @@ uploadDocumentation :: BlobStorage -> DynamicPath -> MServerPart Response
 uploadDocumentation store dpath = withPackageId dpath $ \pkgid ->
                                   withPackageAuth pkgid $ \_ _ ->
                                   withRequest $ \req -> do
-        {-
-          The order of operations:
-          - Insert new documentation into blob store
-          - Generate the new index
-          - Drop the index for the old tar-file
-          - Link the new documentation to the package
-        -}
+        -- The order of operations:
+        -- * Insert new documentation into blob store
+        -- * Generate the new index
+        -- * Drop the index for the old tar-file
+        -- * Link the new documentation to the package
         let Body fileContents = rqBody req
         blob <- liftIO $ BlobStorage.add store (GZip.decompress fileContents)
         tarIndex <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blob)

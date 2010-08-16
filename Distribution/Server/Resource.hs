@@ -228,7 +228,6 @@ renderResource' :: Resource -> DynamicPath -> String
 renderResource' resource dpath = renderResourceFormat resource (lookup "format" dpath)
                $ renderGenURI (normalizeResourceLocation resource) (flip lookup dpath)
 
-
 -- A more convenient form of renderResource'. Used when you know the path structure.
 -- The first argument unused in the path, if any, will be used as a dynamic format,
 -- if any.

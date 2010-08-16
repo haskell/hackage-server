@@ -90,6 +90,7 @@ instance HackageFeature ReverseFeature where
                 revFunc <- readChan (reverseStream down)
                 revs <- query GetReverseIndex
                 let (revs', modded) = revFunc revs
+                -- FIXME!! - this results in huge happstack-state files
                 update $ ReplaceReverseIndex revs'
                 runHook' (reverseUpdateHook down) modded
 
@@ -194,6 +195,8 @@ renderReverseOld pkg rev = renderReverseWith pkg rev $ \status -> case status of
     Nothing -> True
     _ -> False
 
+-- This could also differentiate between direct and indirect dependencies
+-- with a bit more calculation.
 revPackageFlat :: MonadIO m => PackageName -> m [(PackageName, Int)]
 revPackageFlat pkgname = do
     index <- query GetReverseIndex

@@ -19,7 +19,9 @@ module Distribution.Server.Hook (
 import Data.IORef
 import Control.Monad.Trans (MonadIO, liftIO)
 
--- local IORef, nicer than MVar for this task, although TVar might be even nicer
+-- | A list of hooks, usually IO actions.
+--
+-- A local IORef is nicer than MVar for this task, although TVar might be even nicer
 data Hook a = Hook (IORef [a])
 
 -- another name for Hook, used when the result is important

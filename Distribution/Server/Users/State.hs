@@ -25,10 +25,14 @@ instance Component Users where
 
 -- Returns 'Nothing' if the user name is in use
 addUser :: UserName -> UserAuth -> Update Users (Maybe UserId)
-addUser userName auth = updateUsers' updateFn formatFn
-  where updateFn = Users.add userName auth
+addUser uname auth = updateUsers' updateFn formatFn
+  where updateFn = Users.add uname auth
         formatFn = id
 
+-- Requires that a user name exists, either by returning
+-- a reference to an active one, returning a reference to
+-- an historical one, or creating an historical one,
+-- in order of precedence.
 requireUserName :: UserName -> Update Users UserId
 requireUserName uname = do
     users <- State.get

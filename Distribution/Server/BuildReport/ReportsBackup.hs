@@ -51,7 +51,7 @@ updateReports storage reports = RestoreBackup
   , restoreFinalize = do
         let insertLog buildReps ((pkgid, reportId), buildLog) = case Reports.setBuildLog pkgid reportId (Just buildLog) buildReps of
                 Just buildReps' -> Right buildReps'
-                Nothing -> Left $ "Build log #" ++ display reportId ++ " exists for " ++ display pkgid ++ " but report itself is not"
+                Nothing -> Left $ "Build log #" ++ display reportId ++ " exists for " ++ display pkgid ++ " but report itself does not"
         case foldM insertLog (fst reports) (Map.toList $ snd reports) of
             Right theReports -> return . Right $ finalizeReports theReports
             Left err -> return . Left $ err

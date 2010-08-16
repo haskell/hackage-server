@@ -42,7 +42,6 @@ emptyDistroVersions :: DistroVersions
 emptyDistroVersions = DistroVersions Map.empty Map.empty
 
 --- Distribution updating
-
 isDistribution :: DistroName -> Distributions -> Bool
 isDistribution distro distros
     = Map.member distro (nameMap distros)

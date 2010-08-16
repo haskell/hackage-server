@@ -37,6 +37,9 @@ import qualified Data.Map as Map
 import Data.ByteString.Lazy (ByteString)
 import Prelude hiding (read)
 
+-- Construct, with the specified user database, extra top-level files, and
+-- a package index, an index tarball. This tarball has the modification times
+-- and uploading users built-in.
 write :: Users.Users -> Map String (ByteString, UTCTime) -> PackageIndex PkgInfo -> ByteString
 write users = PackageIndex.write pkgData setModTime . extraEntries
   where

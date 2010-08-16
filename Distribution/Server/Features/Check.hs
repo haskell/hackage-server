@@ -150,6 +150,7 @@ postPackageCandidate r users upload store dpath = withPackageName dpath $ \name 
     respondToResult r res
 
 -- PUT to /:package-version/candidate
+-- FIXME: like delete, PUT shouldn't redirect
 putPackageCandidate :: CheckResource -> UserFeature -> UploadFeature -> BlobStorage -> DynamicPath -> MServerPart Response
 putPackageCandidate r users upload store dpath = withPackageId dpath $ \pkgid -> do
     guard (packageVersion pkgid /= Version [] [])
@@ -161,7 +162,7 @@ respondToResult r res = case res of
     Left err -> returnError' err
     Right pkgInfo -> fmap Right $ seeOther (candidateUri r "" $ packageId pkgInfo) (toResponse ())
 
--- FIXME: delete should not redirect, but rather return MServerPart ()
+-- FIXME: DELETE should not redirect, but rather return MServerPart ()
 doDeleteCandidate :: CheckResource -> DynamicPath -> MServerPart Response
 doDeleteCandidate r dpath = withCandidatePath dpath $ \_ candidate -> do
     withPackageAuth candidate $ \_ _ -> do

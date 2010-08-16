@@ -44,9 +44,13 @@ import Happstack.Data
 -- and 'UserId'.
 --
 data Users = Users {
+    -- | A map from UserId to UserInfo
     userIdMap   :: !(IntMap.IntMap UserInfo),
+    -- | A map from active UserNames to the UserId for that name
     userNameMap :: !(Map.Map UserName UserId),
+    -- | A map from a UserName to all UserIds which ever used that name
     totalNameMap :: !(Map.Map UserName IntSet.IntSet),
+    -- | The next available UserId
     nextId      :: !UserId
   }
   deriving (Typeable, Show)
@@ -65,7 +69,6 @@ data Users = Users {
   -- need to be adjusted when an account is enabled/disabled/deleted
   -- it also allows us to track historical info, like name of uploader
   -- even if that user name has been recycled, the user ids will be distinct.
-
 
 
 empty :: Users

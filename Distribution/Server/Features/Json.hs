@@ -3,6 +3,7 @@ module Distribution.Server.Features.Json (
     initJsonFeature
   ) where
 
+-- This feature will be the basis of an API with non-human user agents.
 import Distribution.Server.Feature
 
 data JsonFeature = JsonFeature
