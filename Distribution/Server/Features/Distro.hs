@@ -13,7 +13,7 @@ import Distribution.Server.Types
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
 import Distribution.Server.Distributions.State
 import Distribution.Server.Distributions.Types
-import Distribution.Server.Distributions.DistroBackup
+import Distribution.Server.Distributions.Backup
 
 import Happstack.Server
 import Happstack.State

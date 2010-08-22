@@ -1,5 +1,5 @@
 {-# LANGUAGE PatternGuards #-}
-module Distribution.Server.BuildReport.ReportsBackup (
+module Distribution.Server.BuildReport.Backup (
     reportsBackup,
     buildReportsToExport,
     packageReportsToExport

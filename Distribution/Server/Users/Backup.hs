@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
-module Distribution.Server.Users.UserBackup (
+module Distribution.Server.Users.Backup (
     -- Importing user data
     userBackup,
     importGroup,
@@ -26,29 +26,7 @@ import Control.Monad.State (get, put)
 import Text.CSV (CSV)
 import qualified Data.IntSet as IntSet
 
-groupBackup :: UpdateEvent a () => [FilePath] -> (UserList -> a) -> RestoreBackup
-groupBackup csvPath updateFunc = updateGroupBackup Group.empty
-  where
-    updateGroupBackup group = fix $ \restorer -> RestoreBackup
-              { restoreEntry = \entry -> do
-                    if fst entry == csvPath
-                        then fmap (fmap updateGroupBackup) $ runImport group (importGroup entry >>= put)
-                        else return . Right $ restorer
-              , restoreFinalize = return . Right $ restorer
-              , restoreComplete = update (updateFunc group)
-              }
-
--- parses a rather lax format. Any layout of integer ids separated by commas.
-importGroup :: BackupEntry -> Import s UserList
-importGroup (file, contents) = importCSV (last file) contents $ \vals ->
-    fmap (UserList . IntSet.fromList) $ mapM parseUserId (concat vals)
-  where
-    parseUserId uid = case reads uid of
-        [(num, "")] -> return num
-        _ -> fail $ "Unable to parse user id : " ++ show uid
-
--------------------------------------------------------------------------
-
+-- Import for the user database
 userBackup :: RestoreBackup
 userBackup = updateUserBackup Users.empty
 
@@ -99,6 +77,30 @@ insertUser user info = do
     case Users.insert user info users of
         Nothing     -> fail $ "Duplicate user id for user: " ++ display user
         Just users' -> put users'
+
+-- Import for a single group
+groupBackup :: UpdateEvent a () => [FilePath] -> (UserList -> a)
+                                -> RestoreBackup
+groupBackup csvPath updateFunc = updateGroupBackup Group.empty
+  where
+    updateGroupBackup group = fix $ \restorer -> RestoreBackup
+              { restoreEntry = \entry -> do
+                    if fst entry == csvPath
+                        then fmap (fmap updateGroupBackup) $ runImport group (importGroup entry >>= put)
+                        else return . Right $ restorer
+              , restoreFinalize = return . Right $ restorer
+              , restoreComplete = update (updateFunc group)
+              }
+
+-- parses a rather lax format. Any layout of integer ids separated by commas.
+importGroup :: BackupEntry -> Import s UserList
+importGroup (file, contents) = importCSV (last file) contents $ \vals ->
+    fmap (UserList . IntSet.fromList) $ mapM parseUserId (concat vals)
+  where
+    parseUserId uid = case reads uid of
+        [(num, "")] -> return num
+        _ -> fail $ "Unable to parse user id : " ++ show uid
+
 
 -------------------------------------------------- Exporting
 -- group.csv

@@ -1,6 +1,6 @@
 {-# LANGUAGE PatternGuards #-}
 
-module Distribution.Server.Packages.PackageBackup (
+module Distribution.Server.Packages.Backup (
     packagesBackup,
     indexToAllVersions,
     indexToAllVersions',
@@ -11,6 +11,7 @@ module Distribution.Server.Packages.PackageBackup (
 
 import Distribution.Server.Packages.State
 import Distribution.Server.Packages.Types
+import Distribution.Server.Users.Group (UserList(..))
 import Distribution.Server.Backup.Import
 import Distribution.Server.Backup.Export
 import Distribution.Server.Backup.Utils
@@ -31,11 +32,12 @@ import Text.CSV
 import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Map (Map)
+import qualified Data.Map as Map
+import qualified Data.IntSet as IntSet
 import Data.List (sortBy, maximumBy)
 import Data.Ord (comparing)
 import Data.Monoid (mempty)
 import Control.Monad.State
-import qualified Data.Map as Map
 
 import Happstack.State
 
@@ -240,4 +242,28 @@ versionListToCSV infos = [showVersion versionCSVVer]:versionCSVKey:
   where
     versionCSVVer = Version [0,1] ["unstable"]
     versionCSVKey = ["index", "time", "user-id"]
+
+-------------------------------------------------------------------------------
+-- Maintainer groups backup
+importMaintainers :: ByteString -> Import (Map PackageName UserList) ()
+importMaintainers contents = importCSV "maintainers.csv" contents $ \csv -> do
+    mapM_ fromRecord (drop 2 csv)
+  where
+    fromRecord (packageStr:idStr) = do
+        pkgname <- parseText "package name" packageStr
+        ids <- mapM (parseRead "user id") idStr
+        modify $ Map.insert pkgname (UserList $ IntSet.fromList ids)
+    fromRecord x = fail $ "Invalid package maintainer record: " ++ show x
+
+maintToExport :: Map PackageName UserList -> BackupEntry
+maintToExport pkgmap = csvToBackup ["maintainers.csv"] (maintToCSV assocUsers)
+  where assocUsers = map (\(name, UserList ul) -> (name, IntSet.toList ul))
+                   $ Map.toList pkgmap
+
+maintToCSV :: [(PackageName, [Int])] -> CSV
+maintToCSV users = [showVersion pkgCSVVer]:pkgCSVKey:
+    map (\(name, ids) -> display name:map show ids) users
+  where
+    pkgCSVKey = ["package", "maintainers"]
+    pkgCSVVer = Version [0,1] ["unstable"]
 

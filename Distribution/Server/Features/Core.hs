@@ -21,8 +21,6 @@ module Distribution.Server.Features.Core (
     doMergePackage
   ) where
 
-import Distribution.Server.Packages.PackageBackup
-import Distribution.Server.Users.UserBackup
 import Distribution.Server.Feature
 import Distribution.Server.Resource
 import Distribution.Server.Types
@@ -31,8 +29,10 @@ import Distribution.Server.Error
 import Distribution.Server.Backup.Export
 import Distribution.Server.Instances ()
 
+import Distribution.Server.Packages.Backup
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.State
+import Distribution.Server.Users.Backup
 import Distribution.Server.Users.State
 import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.Server.Packages.Index as Packages.Index

@@ -13,6 +13,7 @@ import Distribution.Server.Error
 
 import Distribution.Server.Packages.State
 import Distribution.Server.Backup.Export
+import Distribution.Server.Backup.Import
 import qualified Distribution.Server.ResourceTypes as Resource
 import Distribution.Server.Util.BlobStorage (BlobId, BlobStorage)
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
@@ -29,6 +30,8 @@ import Control.Monad.Trans
 import Control.Monad (mzero)
 import qualified Data.Map as Map
 import qualified Codec.Compression.GZip as GZip
+import Data.ByteString.Lazy.Char8 (ByteString)
+import Control.Monad.State (modify)
 
 -- TODO:
 -- 1. Write an HTML view for organizing uploads
@@ -52,7 +55,7 @@ instance HackageFeature DocumentationFeature where
             doc <- query GetDocumentation
             let exportFunc (pkgid, (blob, _)) = ([display pkgid, "documentation.tar"], Right blob)
             readExportBlobs storage . map exportFunc . Map.toList $ documentation doc
-      , restoreBackup = Nothing --TODO: import package-id/documentation.tar
+      , restoreBackup = Just $ \storage -> updateDocumentation storage (Documentation Map.empty)
       }
 
 initDocumentationFeature :: Config -> CoreFeature -> UploadFeature -> IO DocumentationFeature
@@ -104,4 +107,25 @@ withDocumentation dpath func = withPackageId dpath $ \pkgid -> do
     case mdocs of
         Nothing -> mzero
         Just (blob, index) -> func pkgid blob index
+
+---- Import 
+updateDocumentation :: BlobStorage -> Documentation -> RestoreBackup
+updateDocumentation store docs = fix $ \r -> RestoreBackup
+  { restoreEntry = \(path, bs) ->
+        case path of
+            [str, "documentation.tar"] | Just pkgid <- simpleParse str -> do
+                res <- runImport docs (importDocumentation store pkgid bs)
+                return $ fmap (updateDocumentation store) res
+            _ -> return . Right $ r
+  , restoreFinalize = return . Right $ r
+  , restoreComplete = update $ ReplaceDocumentation docs
+  }
+
+importDocumentation :: BlobStorage -> PackageId
+                    -> ByteString -> Import Documentation ()
+importDocumentation store pkgid doc = do
+    blobId <- liftIO $ BlobStorage.add store doc
+    -- this may fail for a bad tarball
+    tarred <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blobId)
+    modify $ Documentation . Map.insert pkgid (blobId, tarred) . documentation
 

@@ -1,4 +1,4 @@
-module Distribution.Server.Distributions.DistroBackup (
+module Distribution.Server.Distributions.Backup (
     distroBackup,
 
     distroUsersToExport,

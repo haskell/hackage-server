@@ -43,17 +43,16 @@ executable hackage-server
     Distribution.Server.Auth.Types
     Distribution.Server.Backup.BulkImport
     Distribution.Server.Backup.Export
-    Distribution.Server.Backup.FlatFiles
     Distribution.Server.Backup.Import
     Distribution.Server.Backup.UploadLog
     Distribution.Server.Backup.Utils
     Distribution.Server.BuildReport.BuildReport
     Distribution.Server.BuildReport.BuildReports
-    Distribution.Server.BuildReport.ReportsBackup
+    Distribution.Server.BuildReport.Backup
     Distribution.Server.BuildReport.State
     Distribution.Server.Cache
     Distribution.Server.Distributions.Distributions
-    Distribution.Server.Distributions.DistroBackup
+    Distribution.Server.Distributions.Backup
     Distribution.Server.Distributions.State
     Distribution.Server.Distributions.Types
     Distribution.Server.Error
@@ -82,7 +81,7 @@ executable hackage-server
     Distribution.Server.Packages.Downloads
     Distribution.Server.Packages.Index
     Distribution.Server.Packages.ModuleForest
-    Distribution.Server.Packages.PackageBackup
+    Distribution.Server.Packages.Backup
     Distribution.Server.Packages.Preferred
     Distribution.Server.Packages.Reverse
     Distribution.Server.Packages.State
@@ -107,7 +106,7 @@ executable hackage-server
     Distribution.Server.Users.Group
     Distribution.Server.Users.State
     Distribution.Server.Users.Types
-    Distribution.Server.Users.UserBackup
+    Distribution.Server.Users.Backup
     Distribution.Server.Users.Users
     Distribution.Server.Util.AsyncVar
     Distribution.Server.Util.BlobStorage

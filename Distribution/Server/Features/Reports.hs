@@ -9,10 +9,8 @@ import Distribution.Server.Resource
 import Distribution.Server.Features.Core
 import Distribution.Server.Types
 import Distribution.Server.Error
---import Distribution.Server.Backup.Import
---import Distribution.Server.Backup.Export
 
-import Distribution.Server.BuildReport.ReportsBackup
+import Distribution.Server.BuildReport.Backup
 import Distribution.Server.BuildReport.State
 import qualified Distribution.Server.BuildReport.BuildReport as BuildReport
 import Distribution.Server.BuildReport.BuildReport (BuildReport(..))
@@ -20,8 +18,6 @@ import Distribution.Server.BuildReport.BuildReports (BuildReportId(..), BuildLog
 import Distribution.Server.Users.State (GetUserDb(..))
 import qualified Distribution.Server.ResourceTypes as Resource
 import qualified Distribution.Server.Auth.Basic as Auth
-
---import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
 
 import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage

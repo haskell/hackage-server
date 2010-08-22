@@ -31,8 +31,8 @@ import qualified Happstack.Util.Concurrent as HappsLoad
 import qualified Distribution.Server.Backup.Import as Import
 import Distribution.Server.Backup.Export
 -- TODO: move this to BulkImport module
-import Distribution.Server.Packages.PackageBackup (infoToCurrentEntries)
-import Distribution.Server.Users.UserBackup (usersToCSV, groupToCSV)
+import Distribution.Server.Packages.Backup (infoToCurrentEntries)
+import Distribution.Server.Users.Backup (usersToCSV, groupToCSV)
 import qualified Distribution.Server.Users.Group as Group
 
 import qualified Distribution.Server.Feature as Feature

@@ -13,13 +13,13 @@ import Distribution.Server.Types
 import Distribution.Server.Users.State
 import Distribution.Server.Packages.Types
 --import Distribution.Server.Auth.Types
+import Distribution.Server.Users.Backup
 import Distribution.Server.Users.Types
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import qualified Distribution.Server.Auth.Basic as Auth
 import qualified Distribution.Server.Packages.Unpack as Upload
 import Distribution.Server.Backup.Export
-import Distribution.Server.Users.UserBackup
 
 import Distribution.Simple.Utils (fromUTF8)
 import Distribution.PackageDescription.Parse (parsePackageDescription)
