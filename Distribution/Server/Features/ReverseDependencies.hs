@@ -47,7 +47,7 @@ import Happstack.State (query, update)
 
 data ReverseFeature = ReverseFeature {
     reverseResource :: ReverseResource,
-    reverseStream :: Chan (ReverseIndex -> (ReverseIndex, Map PackageName [Version])),
+    reverseStream :: Chan (IO (Map PackageName [Version])),
     reverseUpdateHook :: Hook (Map PackageName [Version] -> IO ()),
     reverseTopCache :: Cache.Cache [(PackageName, Int, Int)]
 }
@@ -88,24 +88,20 @@ instance HackageFeature ReverseFeature where
     initHooks down = [forkIO transferReverse >> return ()]
       where transferReverse = forever $ do
                 revFunc <- readChan (reverseStream down)
-                revs <- query GetReverseIndex
-                let (revs', modded) = revFunc revs
-                -- FIXME!! - this results in huge happstack-state files
-                update $ ReplaceReverseIndex revs'
+                modded  <- revFunc
                 runHook' (reverseUpdateHook down) modded
 
 initReverseFeature :: Config -> CoreFeature -> VersionsFeature -> IO ReverseFeature
 initReverseFeature _ core _ = do
     revChan <- newChan
-    registerHook (packageAddHook core) $ \pkg -> do
-        index <- fmap packageList $ query GetPackagesState
-        writeChan revChan $ addPackage index pkg
-    registerHook (packageRemoveHook core) $ \pkg -> do
-        index <- fmap packageList $ query GetPackagesState
-        writeChan revChan $ removePackage index pkg
-    registerHook (packageChangeHook core) $ \pkg pkg' -> do
-        index <- fmap packageList $ query GetPackagesState
-        writeChan revChan $ changePackage index pkg pkg'
+    registerHook (packageAddHook core) $ \pkg -> writeChan revChan $
+        update $ AddReversePackage (packageId pkg) (getAllDependencies pkg)
+    registerHook (packageRemoveHook core) $ \pkg -> writeChan revChan $
+        update $ RemoveReversePackage (packageId pkg) (getAllDependencies pkg)
+    registerHook (packageChangeHook core) $ \pkg pkg' -> writeChan revChan $
+        update $ ChangeReversePackage (packageId pkg)
+                    (getAllDependencies pkg) (getAllDependencies pkg')
+
     revHook <- newHook
     let select (_, b, _) = b
         sortedRevs = fmap (sortBy $ on (flip compare) select) revSummary

@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP, DeriveDataTypeable #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Server.PackageIndex
@@ -53,6 +53,7 @@ import Data.Map (Map)
 import Data.List (groupBy, sortBy, find, isInfixOf)
 import Data.Monoid (Monoid(..))
 import Data.Maybe (fromMaybe)
+import Data.Typeable
 
 import Distribution.Package
          ( PackageName(..), PackageIdentifier(..)
@@ -74,7 +75,7 @@ newtype Package pkg => PackageIndex pkg = PackageIndex
   --
   (Map PackageName [pkg])
 
-  deriving (Show, Read)
+  deriving (Show, Read, Typeable)
 
 
 instance Package pkg => Monoid (PackageIndex pkg) where

@@ -7,6 +7,7 @@ import Distribution.Server.Instances ()
 import Distribution.Server.Users.State ()
 
 import Distribution.Package
+import Distribution.Server.PackageIndex (PackageIndex)
 import qualified Distribution.Server.PackageIndex as PackageIndex
 import Distribution.Server.Packages.Types (PkgInfo(..), CandPkgInfo(..))
 import qualified Distribution.Server.Users.Group as Group
@@ -28,29 +29,31 @@ import Data.Ord (comparing)
 
 import qualified Data.Map as Map
 
+---------------------------------- State for PackageIndex
+instance Version (PackageIndex pkg)
+instance (Package pkg, Serialize pkg) => Serialize (PackageIndex pkg) where
+  putCopy index = contain $ do
+    safePut $ PackageIndex.allPackages index
+  getCopy = contain $ do
+    packages <- safeGet
+    return $ PackageIndex.fromList packages
+
 ---------------------------------- Index of metadata and tarballs
 data PackagesState = PackagesState {
-    packageList  :: !(PackageIndex.PackageIndex PkgInfo)
+    packageList  :: !(PackageIndex PkgInfo)
   }
   deriving (Typeable, Show)
+
+instance Version PackagesState where
+    mode = Versioned 0 Nothing
+
+$(deriveSerialize ''PackagesState)
 
 instance Component PackagesState where
   type Dependencies PackagesState = End
   initialValue = PackagesState {
     packageList = mempty
   }
-
-instance Version PackagesState where
-    mode = Versioned 0 Nothing
-
-instance Serialize PackagesState where
-  putCopy (PackagesState idx) = contain $ do
-    safePut $ PackageIndex.allPackages idx
-  getCopy = contain $ do
-    packages <- safeGet
-    return PackagesState {
-      packageList = PackageIndex.fromList packages
-    }
 
 instance Version PkgInfo where
   mode = Versioned 0 Nothing
@@ -107,23 +110,16 @@ data CandidatePackages = CandidatePackages {
     candidateList :: !(PackageIndex.PackageIndex CandPkgInfo)
 } deriving (Typeable, Show)
 
+instance Version CandidatePackages where
+    mode = Versioned 0 Nothing
+
+$(deriveSerialize ''CandidatePackages)
+
 instance Component CandidatePackages where
   type Dependencies CandidatePackages = End
   initialValue = CandidatePackages {
     candidateList = mempty
   }
-
-instance Version CandidatePackages where
-    mode = Versioned 0 Nothing
-
-instance Serialize CandidatePackages where
-  putCopy (CandidatePackages idx) = contain $ do
-    safePut $ PackageIndex.allPackages idx
-  getCopy = contain $ do
-    packages <- safeGet
-    return CandidatePackages {
-      candidateList  = PackageIndex.fromList packages
-    }
 
 instance Version CandPkgInfo where
   mode = Versioned 0 Nothing

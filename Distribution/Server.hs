@@ -213,12 +213,10 @@ bulkImport storageDir indexFile logFile archiveFile htPasswdFile adminsFile = do
     -- the files along with versionListToCSV
     putStrLn "Merging package info"
     (pkgsInfo, users, badLogEntries) <- either fail return $ BulkImport.mergePkgInfo pkgIndex uploadLog tarballs accounts
-
     putStrLn "Done merging"
     adminUids <- case admins of
         Nothing -> return []
         Just adminUsers -> either fail return $ lookupUsers users adminUsers
-
     let getEntries = do
             putStrLn "Creating package entries"
             currentPackageEntries <- readExportBlobs storage (concatMap infoToCurrentEntries pkgsInfo)
@@ -226,7 +224,6 @@ bulkImport storageDir indexFile logFile archiveFile htPasswdFile adminsFile = do
             let userEntry  = csvToBackup ["users.csv"] . usersToCSV $ users
                 adminEntry = csvToBackup ["admins.csv"] . groupToCSV $ Group.fromList adminUids
             return $ currentPackageEntries ++ [userEntry, adminEntry]
-
     putStrLn "Actually creating tarball"
     tarBytes <- exportTar [("core", getEntries)]
     return (badLogEntries, tarBytes)
@@ -252,7 +249,6 @@ makeFeatureMap server mkBackup = concatMap makeEntry $ serverFeatures server
     makeEntry feature = case mkBackup feature of
         Nothing  -> []
         Just runTask -> [(Feature.featureName feature, runTask store)]
-
 
 -- An alternative to an import: starts the server off to a sane initial state.
 -- To accomplish this, we import a 'null' tarball, finalizing immediately after initializing import

@@ -1,7 +1,3 @@
-Most important:
- * Duplicate main index in reverse dependencies so it doesn't produce 600MB
-     of happstack-state files after a few dozen uploads.
-
 Backup:
  * Implement backup for Tags
  * Implement backup for Upload (just user groups)
@@ -35,7 +31,7 @@ Feature views:
 
 HTTP principles:
  * DELETE, PUT, and (in some cases) POST should not redirect, but rather return
-     A document indicating the location of the new resource, if necessary, or other
+     a document indicating the location of the new resource, if necessary, or other
      cues to continue browsing. 
 
 Miscellaneous
