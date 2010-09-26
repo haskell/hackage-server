@@ -81,6 +81,8 @@ mergePkg pkg = State.modify $ \pkgsState -> pkgsState { packageList = PackageInd
         -- the old package data paired with when and by whom it was replaced
         pkgDataOld = sortByDate $ (pkgData oldPkg, pkgUploadData newPkg):(pkgDataOld oldPkg ++ pkgDataOld newPkg)
       }
+
+    sortByDate :: Ord a => [(a1, (a, b))] -> [(a1, (a, b))]
     sortByDate xs = sortBy (comparing (fst . snd)) xs
 
 deletePackageVersion :: PackageId -> Update PackagesState ()
