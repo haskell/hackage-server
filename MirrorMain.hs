@@ -77,7 +77,13 @@ main = withArgs $ \source dest -> do
         sleepSec = threadDelay (1*1000000)
         withArgs func = getArgs >>= \args -> case args of
             [a, b] -> func a b
-            _ -> putStrLn "Usage: hackage-mirror [source host] [destination host]"
+            _ -> mapM_ putStrLn
+              [ "Usage: hackage-mirror [source host] [destination host]"
+              , "- hackage-mirror copies from hackage-script to a hackage-server instance."
+              , "- You will be prompted for your name and password at the destination server."
+              , "- The current behavior of this client is to copy all tarballs for which"
+              , "  no cabal file exists in the destination (it will not overwrite cabal"
+              , "  files without tarballs)." ]
         
 
 data MirrorConfig = MirrorConfig {

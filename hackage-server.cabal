@@ -163,4 +163,24 @@ executable hackage-server
   else
      includes: unistd.h
   ghc-options: -Wall -threaded -fno-warn-orphans -fno-warn-unused-do-bind -fno-warn-warnings-deprecations
--- others: -Werror,
+-- others: -Werror
+
+executable hackage-mirror
+  main-is: MirrorMain.hs
+  other-modules:
+    Distribution.Server.Backup.UploadLog
+    Distribution.Server.Users.Types
+    Distribution.Server.Util.Index
+  build-depends:
+    base == 4.*,
+    bytestring >= 0.9,
+    zlib >= 0.4 && < 0.6,
+    HTTP == 4000.0.*,
+    time == 1.1.4.*,
+    old-locale >= 1.0,
+    containers >= 0.1,
+    network >= 2.1,
+    Cabal == 1.8.*,
+    happstack-server == 0.5.*,
+    uri == 0.1.*
+
