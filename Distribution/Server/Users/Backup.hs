@@ -32,7 +32,7 @@ userBackup = updateUserBackup Users.empty
 
 updateUserBackup :: Users -> RestoreBackup
 updateUserBackup users = RestoreBackup
-  { restoreEntry    = \entry -> do
+  { restoreEntry = \entry -> do
         res <- doUserImport users entry
         return $ fmap updateUserBackup res
   , restoreFinalize = return . Right $ updateUserBackup users
@@ -95,8 +95,9 @@ groupBackup csvPath updateFunc = updateGroupBackup Group.empty
 -- parses a rather lax format. Any layout of integer ids separated by commas.
 importGroup :: BackupEntry -> Import s UserList
 importGroup (file, contents) = importCSV (last file) contents $ \vals ->
-    fmap (UserList . IntSet.fromList) $ mapM parseUserId (concat vals)
+    fmap (UserList . IntSet.fromList) $ mapM parseUserId (concat $ clean vals)
   where
+    clean xs = if all null xs then [] else xs
     parseUserId uid = case reads uid of
         [(num, "")] -> return num
         _ -> fail $ "Unable to parse user id : " ++ show uid

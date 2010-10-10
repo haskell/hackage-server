@@ -244,7 +244,7 @@ servePackagePage core pkgr revr versions tagf maintain tagEdit dpath =
                                   Pages.reversePackageSummary realpkg revr revCount]
     -- bottom sections, currently only documentation
     hasDocs  <- query $ State.HasDocumentation realpkg
-    let docURL | hasDocs   = Just $ "/package" </> display pkgid </> "doc"
+    let docURL | hasDocs   = Just $ "/package" </> display realpkg </> "doc"
                | otherwise = Nothing
     -- extra features like tags and downloads
     tags <- query $ TagsForPackage pkgname
@@ -313,7 +313,7 @@ serveUserPage users dpath = htmlResponse $ withUserPath dpath $ \uid info -> do
 addUserForm :: UserResource -> DynamicPath -> ServerPart Response
 addUserForm r _ = htmlResponse $ do
     returnOk $ toResponse $ Resource.XHtml $ hackagePage "Register account"
-      [ paragraph << "Register a user account here. At present only admins can register accounts."
+      [ paragraph << "Register a user account here!"
       , form ! [theclass "box", XHtml.method "POST", action $ userListUri r ""] <<
             [ simpleTable [] []
                 [ makeInput [thetype "text"] "username" "User name"

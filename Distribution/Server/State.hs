@@ -10,6 +10,7 @@ import Distribution.Server.Packages.Preferred (PreferredVersions)
 import Distribution.Server.Packages.Reverse (ReverseIndex)
 import Distribution.Server.Packages.Downloads (DownloadCounts)
 import Distribution.Server.Packages.Tag (PackageTags)
+import Distribution.Server.Packages.Platform (PlatformPackages)
 import Distribution.Server.BuildReport.BuildReports (BuildReports)
 import Distribution.Server.BuildReport.State ()
 import Distribution.Server.Users.Users (Users)
@@ -41,7 +42,8 @@ instance Component HackageEntryPoint where
           PackageUpload :+: CandidatePackages :+: 
           PreferredVersions :+: ReverseIndex :+:
           DownloadCounts :+: PackageTags :+:
-          IndexUsers :+: MirrorClients :+: End
+          IndexUsers :+: MirrorClients :+:
+          PlatformPackages :+: End
     initialValue = HackageEntryPoint
 
 $(mkMethods ''HackageEntryPoint [])

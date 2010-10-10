@@ -21,6 +21,7 @@ import Distribution.Server.Features.Tags (initTagsFeature)
 import Distribution.Server.Features.NameSearch (initNamesFeature)
 import Distribution.Server.Features.PackageList (initListFeature)
 import Distribution.Server.Features.Mirror (initMirrorFeature)
+import Distribution.Server.Features.HaskellPlatform (initPlatformFeature)
 
 -- This module ties together all the hackage features that we will use.
 -- To add a feature:
@@ -62,6 +63,7 @@ hackageFeatures config = do
     namesFeature <- initNamesFeature config coreFeature
     listFeature <- initListFeature config coreFeature reverseFeature
                         downloadFeature tagsFeature versionsFeature
+    platformFeature <- initPlatformFeature config coreFeature
     --jsonFeature <- initJsonFeature
     htmlFeature <- initHtmlFeature config coreFeature packagesFeature
                         uploadFeature checkFeature usersFeature versionsFeature
@@ -85,6 +87,7 @@ hackageFeatures config = do
          , HF reverseFeature
          , HF namesFeature
          , HF listFeature
+         , HF platformFeature
          , HF htmlFeature
          , HF legacyRedirectsFeature
          ]
@@ -93,7 +96,7 @@ hackageFeatures config = do
     -- It also happens even in the backup/restore modes.
     sequence_ . concat $ map initHooks allFeatures
     let allModules = map getFeature allFeatures
-    -- backupFeature <- initBackupFeature config allModules
+    -- backupFeature <- initBackupFeature config allModules [special modules..]
     return allModules
 
 data HF = forall a. HackageFeature a => HF a

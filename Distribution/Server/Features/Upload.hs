@@ -19,8 +19,11 @@ import Distribution.Server.Hook
 import Distribution.Server.Error
 import Distribution.Server.Types
 
+import Distribution.Server.Backup.Export
+import Distribution.Server.Packages.Backup
 import Distribution.Server.Packages.State
 import Distribution.Server.Users.State
+import Distribution.Server.Users.Backup
 import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Group as Group
@@ -33,6 +36,7 @@ import Distribution.Server.PackageIndex (PackageIndex)
 
 import Happstack.Server
 import Happstack.State
+import Data.Monoid (mconcat)
 import Data.Maybe (fromMaybe, listToMaybe, catMaybes)
 import qualified Data.Map as Map
 import Data.Time.Clock (getCurrentTime)
@@ -61,7 +65,11 @@ data UploadResource = UploadResource {
     trusteeUri :: String -> String
 }
 
-data UploadResult = UploadResult { uploadDesc :: !GenericPackageDescription, uploadCabal :: !ByteString, uploadWarnings :: ![String] }
+data UploadResult = UploadResult {
+    uploadDesc :: !GenericPackageDescription,
+    uploadCabal :: !ByteString,
+    uploadWarnings :: ![String]
+}
 
 instance HackageFeature UploadFeature where
     getFeature upload = HackageModule
@@ -71,8 +79,12 @@ instance HackageFeature UploadFeature where
              groupResource . packageGroupResource, groupUserResource . packageGroupResource,
              groupResource . trusteeResource, groupUserResource . trusteeResource]
         -- TODO: backup maintainer groups, trustees
-      , dumpBackup    = Nothing
-      , restoreBackup = Nothing
+      , dumpBackup    = Just $ \_ -> do
+            trustees <- query GetHackageTrustees
+            PackageMaintainers mains <- query AllPackageMaintainers
+            return [ csvToBackup ["trustees.csv"] $ groupToCSV trustees
+                   , maintToExport mains ]
+      , restoreBackup = Just $ \_ -> mconcat [maintainerBackup, groupBackup ["trustees.csv"] ReplaceHackageTrustees]
       }
 
 initUploadFeature :: Config -> CoreFeature -> UserFeature -> IO UploadFeature

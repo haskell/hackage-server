@@ -16,57 +16,51 @@ module Distribution.Server.Backup.BulkImport (
   importTarballs,
   importUsers,
   mergePkgInfo,
+  mergeMaintainers
   ) where
 
 import qualified Distribution.Server.Util.Index as PackageIndex (read)
 import qualified Distribution.Server.Users.Users as Users
-import           Distribution.Server.Users.Users   (Users)
+import           Distribution.Server.Users.Users  (Users)
 import qualified Distribution.Server.Users.Types as Users
-import qualified Codec.Archive.Tar.Entry as Tar
-         ( Entry(..), entryPath, EntryContent(..) )
+import qualified Distribution.Server.Users.Group as Group
+import qualified Codec.Archive.Tar.Entry as Tar (Entry(..), entryPath, EntryContent(..))
 import qualified Distribution.Server.Backup.UploadLog as UploadLog
 import qualified Distribution.Server.Auth.HtPasswdDb as HtPasswdDb
 import qualified Distribution.Server.Auth.Types as Auth
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
-import Distribution.Server.Packages.Types (PkgInfo(..))
+import Distribution.Server.Packages.Types (PkgInfo(..), pkgUploadUser)
 
 import Distribution.Package
-         ( PackageIdentifier, Package(packageId) )
-import Distribution.PackageDescription.Parse
-         ( parsePackageDescription )
-import Distribution.ParseUtils
-         ( ParseResult(..), locatedErrorMsg )
-import Distribution.Text
-         ( display )
-import Distribution.Simple.Utils
-         ( fromUTF8 )
+import Distribution.PackageDescription.Parse (parsePackageDescription)
+import Distribution.ParseUtils (ParseResult(..), locatedErrorMsg)
+import Distribution.Text (display)
+import Distribution.Simple.Utils (fromUTF8)
 
-import System.FilePath
-         ( takeExtension )
+import Data.Maybe
+import System.FilePath (takeExtension)
 import Data.ByteString.Lazy.Char8 (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as BS
-         (  unpack )
+import qualified Data.ByteString.Lazy.Char8 as BS (unpack)
 import qualified Codec.Compression.GZip as GZip
 import Control.Monad.Error () --intance Monad (Either String)
-import Data.List
-         ( sortBy, foldl' )
-import Data.Ord
-         ( comparing )
+import qualified Data.Map as Map
+import Data.Map (Map)
+import Data.List (sortBy)
+import Data.Ord (comparing)
 
 import Prelude hiding (read)
 
--- TODO:
--- * import for other features: package maintainers, tags, distro data
---   otherwise these are initially empty, and a pain to manually populate
--- * make "deleted" users historical instead of deleted (Users.requireName)
--- * don't require BlobStorage to function, or use a temporary one
+mergeMaintainers :: [PkgInfo] -> Map PackageName Group.UserList
+mergeMaintainers infos = Map.map Group.fromList $ Map.fromListWith (++) $ map assocUpload infos
+  where assocUpload info = (packageName info, [pkgUploadUser info])
+
 
 newPkgInfo :: PackageIdentifier
            -> (FilePath, ByteString)
            -> UploadLog.Entry -> [UploadLog.Entry]
-           -> Users.Users
-           -> Either String PkgInfo
+           -> Users
+           -> Either String (PkgInfo, Users)
 newPkgInfo pkgid (cabalFilePath, cabalFile) (UploadLog.Entry time user _) _ users =
   case parse cabalFile of
       ParseFailed err -> fail $ cabalFilePath
@@ -74,15 +68,17 @@ newPkgInfo pkgid (cabalFilePath, cabalFile) (UploadLog.Entry time user _) _ user
                              ++ ": " ++ message
         where (lineno, message) = locatedErrorMsg err
 
-      ParseOk _ pkg   -> return PkgInfo {
+      ParseOk _ pkg   -> return (PkgInfo {
         pkgInfoId     = pkgid,
         pkgDesc       = pkg,
         pkgData       = cabalFile,
         pkgTarball    = [],
-        pkgUploadData = (time, Users.nameToId users user),
+        pkgUploadData = (time, uid),
         pkgDataOld    = []
-      }
+      }, fromMaybe users musers)
+
   where parse = parsePackageDescription . fromUTF8 . BS.unpack
+        (musers, uid) = Users.requireName user users
 
 importPkgIndex :: ByteString -> Either String [(PackageIdentifier, Tar.Entry)]
 importPkgIndex = PackageIndex.read (,) . GZip.decompress
@@ -111,7 +107,7 @@ importTarballs store (Just archiveFile) =
 
 -- | The active users are simply all those listed in the current htpasswd file.
 --
-importUsers :: Maybe String -> Either String Users.Users
+importUsers :: Maybe String -> Either String Users
 importUsers Nothing             = Right Users.empty
 importUsers (Just htpasswdFile) = importUsers' Users.empty
                               =<< HtPasswdDb.parse htpasswdFile
@@ -124,45 +120,18 @@ importUsers (Just htpasswdFile) = importUsers' Users.empty
 
     alreadyPresent name = "User " ++ show name ++ " is already present"
 
--- | All users who have ever uploaded a package must have been a user at some
--- point however it may be that some users who uploaded packages are not
--- current users. However We still need a 'UserId' for these package uploaders
--- so we must create a bunch of historical deleted users.
---
--- Note that we do make the potentially false assumption that if there is a
--- upload log entry from a named user and there is currently such a named user
--- that they are in fact one and the same.
---
-mergeDeletedUsers :: [UploadLog.Entry] -> Users -> (Users, Users)
-mergeDeletedUsers logEntries users0 =
-  let (users1, toDelete) = foldl' addUser (users0, []) logEntries
-      users2             = foldl' deleteUser users1 toDelete
-   in (users1, users2)
-
-  where
-    addUser (users, added) (UploadLog.Entry _ userName _) =
-      case Users.add userName dummyAuth users of
-        Nothing               -> (users ,        added) -- are already present
-        Just (users', userId) -> (users', userId:added) -- shall not be spared from the delete-fold
-
-    dummyAuth = Users.UserAuth (Auth.PasswdHash "") (Auth.BasicAuth)
-
-    deleteUser users userId = users'
-      where Just users' = Users.delete userId users
-
 -- | Merge all the package and user info together
 --
 mergePkgInfo :: [(PackageIdentifier, Tar.Entry)]
              -> [UploadLog.Entry]
              -> [(PackageIdentifier, BlobStorage.BlobId)]
-             -> Users.Users
-             -> Either String ([PkgInfo], Users.Users, [UploadLog.Entry])
+             -> Users
+             -> Either String ([PkgInfo], Users, [UploadLog.Entry])
 mergePkgInfo pkgDescs logEntries tarballInfo users = do
-  let (users', users'') = mergeDeletedUsers logEntries users
-      logEntries'       = UploadLog.group logEntries
-  (pkgs, extraLogEntries) <- mergeIndexWithUploadLog pkgDescs logEntries' users'
+  let logEntries'       = UploadLog.group logEntries
+  (pkgs, extraLogEntries, users') <- mergeIndexWithUploadLog pkgDescs logEntries' users
   pkgs' <- mergeTarballs tarballInfo pkgs
-  return (pkgs', users'', extraLogEntries)
+  return (pkgs', users', extraLogEntries)
 
 -- | Merge the package index meta data with the upload log to make initial
 --   'PkgInfo' records, but without tarballs.
@@ -172,10 +141,10 @@ mergePkgInfo pkgDescs logEntries tarballInfo users = do
 --
 mergeIndexWithUploadLog :: [(PackageIdentifier, Tar.Entry)]
                         -> [(UploadLog.Entry, [UploadLog.Entry])]
-                        -> Users.Users
-                        -> Either String ([PkgInfo], [UploadLog.Entry])
-mergeIndexWithUploadLog pkgs entries users =
-  mergePkgs [] [] $
+                        -> Users
+                        -> Either String ([PkgInfo], [UploadLog.Entry], Users)
+mergeIndexWithUploadLog pkgs entries usersInit =
+  mergePkgs usersInit [] [] $
     mergeBy comparingPackageId
       (sortBy (comparing fst)
               [ (pkgid, (path, cabalFile))
@@ -189,15 +158,15 @@ mergeIndexWithUploadLog pkgs entries users =
     comparingPackageId (pkgid, _) (UploadLog.Entry _ _ pkgid', _) =
       compare pkgid pkgid'
 
-    mergePkgs merged nonexistant []  = Right (reverse merged, nonexistant)
-    mergePkgs merged nonexistant (next:remaining) = case next of
+    mergePkgs users merged nonexistant []  = Right (reverse merged, nonexistant, users)
+    mergePkgs users merged nonexistant (next:remaining) = case next of
       InBoth (pkgid, cabalFile) (logEntry, logEntries) ->
         case newPkgInfo pkgid cabalFile logEntry logEntries users of
-          Left problem  -> Left problem
-          Right ok      -> mergePkgs (ok:merged) nonexistant remaining
+          Left problem       -> Left problem
+          Right (ok, users') -> mergePkgs users' (ok:merged) nonexistant remaining
       OnlyInLeft (pkgid, _) ->
         Left $ "Package with no upload log " ++ display pkgid
-      OnlyInRight (entry,_) -> mergePkgs merged (entry:nonexistant) remaining
+      OnlyInRight (entry,_) -> mergePkgs users merged (entry:nonexistant) remaining
 
 -- | The tarball info with the existing 'PkgInfo' records.
 --
@@ -215,7 +184,6 @@ mergeTarballs tarballInfo pkgs =
   where
     comparingPackageId (pkgid, _) pkginfo =
       compare pkgid (packageId pkginfo)
-
     mergePkgs merged []  = Right merged
     mergePkgs merged (next:remaining) = case next of
       InBoth (_, blobid) pkginfo -> mergePkgs (pkginfo':merged) remaining

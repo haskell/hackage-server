@@ -444,6 +444,7 @@ serveResource (Resource _ rget rput rpost rdelete rformat rend) = \dpath -> msum
             Slash    -> requireSlash `mplus` trueRes
             NoSlash  -> requireNoSlash `mplus` trueRes
             Trailing -> mplus (nullDir >> requireSlash) trueRes
+
     requireSlash = do
         theUri <- fmap rqUri askRq
         guard $ last theUri /= '/'

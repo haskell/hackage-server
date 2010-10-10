@@ -5,7 +5,8 @@ module Distribution.Server.Features.Tags (
 
     withTagPath,
     collectTags,
-    putTags
+    putTags,
+    constructTagIndex
   ) where
 
 import Distribution.Server.Feature
@@ -21,7 +22,8 @@ import qualified Distribution.Server.PackageIndex as PackageIndex
 import Distribution.Server.PackageIndex (PackageIndex)
 import Distribution.Server.Packages.State (GetPackagesState(..), packageList)
 import Distribution.Server.Packages.Types
-import Distribution.Server.Backup.Import
+import Distribution.Server.Backup.Export
+import Distribution.Server.Packages.Backup.Tags
 import qualified Distribution.Server.Cache as Cache
 
 import Distribution.Text
@@ -74,19 +76,10 @@ instance HackageFeature TagsFeature where
     getFeature tags = HackageModule
       { featureName = "tags"
       , resources   = map ($tagsResource tags) [tagsListing, tagListing, packageTagsListing]
-      , dumpBackup    = Nothing
-      , restoreBackup = Just $ \_ -> fix $ \r -> RestoreBackup
-              { restoreEntry    = \_ -> return $ Right r
-              , restoreFinalize = return $ Right r
-              , restoreComplete = do
-                    putStrLn "Creating tag index"
-                    index <- fmap packageList $ query GetPackagesState
-                    -- TODO: import should only rely on BackupEntries from the
-                    -- tarball, not create a calculated tags index from the
-                    -- central package index (this could be done in convert mode)
-                    let tagIndex = constructTagIndex index
-                    update $ ReplacePackageTags tagIndex
-              }
+      , dumpBackup    = Just $ \_ -> do
+            pkgTags <- query GetPackageTags
+            return [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]
+      , restoreBackup = Just $ \_ -> tagsBackup
       }
     initHooks tags = [initImmutableTags]
       where initImmutableTags = do

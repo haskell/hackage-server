@@ -183,13 +183,12 @@ withUserPath dpath func = withUserNamePath dpath $ \name -> withUserName name fu
 instance FromReqURI UserName where
   fromReqURI = simpleParse
 
--- TODO: this should be separated off into an AdminRegister feature, as well as
--- a SelfRegister feature (also using newUserWithAuth) for self-registration
 adminAddUser :: MServerPart Response
 adminAddUser = do
-    admins <- query State.GetHackageAdmins
-    users <- query State.GetUserDb
-    Auth.withHackageAuth users (Just admins) Nothing $ \_ _ -> do
+    -- with these lines commented out, self-registration is allowed
+  --admins <- query State.GetHackageAdmins
+  --users <- query State.GetUserDb
+  --Auth.withHackageAuth users (Just admins) Nothing $ \_ _ -> do
     reqData <- getDataFn lookUserNamePasswords
     case reqData of
         Nothing -> returnError 400 "Error registering user"

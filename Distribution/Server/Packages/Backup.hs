@@ -6,7 +6,11 @@ module Distribution.Server.Packages.Backup (
     indexToAllVersions',
     indexToCurrentVersions,
     infoToAllEntries,
-    infoToCurrentEntries
+    infoToCurrentEntries,
+
+    maintainerBackup,
+    maintToExport,
+    maintToCSV
   ) where
 
 import Distribution.Server.Packages.State
@@ -245,9 +249,23 @@ versionListToCSV infos = [showVersion versionCSVVer]:versionCSVKey:
 
 -------------------------------------------------------------------------------
 -- Maintainer groups backup
+maintainerBackup :: RestoreBackup
+maintainerBackup = updateMaintainers Map.empty
+
+updateMaintainers :: Map PackageName UserList -> RestoreBackup
+updateMaintainers mains = fix $ \r -> RestoreBackup
+  { restoreEntry = \(entry, bs) -> do
+        res <- runImport mains $ case entry of
+            ["maintainers.csv"] -> importMaintainers bs
+            _ -> return ()
+        return $ fmap updateMaintainers res
+  , restoreFinalize = return . Right $ r
+  , restoreComplete = update $ ReplacePackageMaintainers (PackageMaintainers mains)
+  }
+
 importMaintainers :: ByteString -> Import (Map PackageName UserList) ()
-importMaintainers contents = importCSV "maintainers.csv" contents $ \csv -> do
-    mapM_ fromRecord (drop 2 csv)
+importMaintainers contents = importCSV "maintainers.csv" contents $ \csvs -> do
+    mapM_ fromRecord (drop 2 csvs)
   where
     fromRecord (packageStr:idStr) = do
         pkgname <- parseText "package name" packageStr

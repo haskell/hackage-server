@@ -31,8 +31,10 @@ import qualified Happstack.Util.Concurrent as HappsLoad
 import qualified Distribution.Server.Backup.Import as Import
 import Distribution.Server.Backup.Export
 -- TODO: move this to BulkImport module
-import Distribution.Server.Packages.Backup (infoToCurrentEntries)
 import Distribution.Server.Users.Backup (usersToCSV, groupToCSV)
+import Distribution.Server.Packages.Backup (infoToCurrentEntries, maintToExport)
+import Distribution.Server.Packages.Backup.Tags (tagsToCSV)
+import Distribution.Server.Features.Tags (constructTagIndex)
 import qualified Distribution.Server.Users.Group as Group
 
 import qualified Distribution.Server.Feature as Feature
@@ -44,6 +46,7 @@ import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
 import qualified Distribution.Server.Backup.BulkImport as BulkImport
 import qualified Distribution.Server.Backup.UploadLog as UploadLog
+import qualified Distribution.Server.PackageIndex as PackageIndex
 
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
@@ -213,19 +216,26 @@ bulkImport storageDir indexFile logFile archiveFile htPasswdFile adminsFile = do
     -- the files along with versionListToCSV
     putStrLn "Merging package info"
     (pkgsInfo, users, badLogEntries) <- either fail return $ BulkImport.mergePkgInfo pkgIndex uploadLog tarballs accounts
+    let pkgsIndex = PackageIndex.fromList pkgsInfo
+        maint = BulkImport.mergeMaintainers pkgsInfo
     putStrLn "Done merging"
     adminUids <- case admins of
         Nothing -> return []
         Just adminUsers -> either fail return $ lookupUsers users adminUsers
-    let getEntries = do
+    let adminFile = groupToCSV $ Group.fromList adminUids
+        getEntries = do
             putStrLn "Creating package entries"
             currentPackageEntries <- readExportBlobs storage (concatMap infoToCurrentEntries pkgsInfo)
             putStrLn "Creating user entries"
             let userEntry  = csvToBackup ["users.csv"] . usersToCSV $ users
-                adminEntry = csvToBackup ["admins.csv"] . groupToCSV $ Group.fromList adminUids
+                adminEntry = csvToBackup ["admins.csv"] adminFile
             return $ currentPackageEntries ++ [userEntry, adminEntry]
+        getTags = return [csvToBackup ["tags.csv"] . tagsToCSV . constructTagIndex $ pkgsIndex]
+        getGroups = return [maintToExport maint, csvToBackup ["trustees.csv"] adminFile]
     putStrLn "Actually creating tarball"
-    tarBytes <- exportTar [("core", getEntries)]
+    tarBytes <- exportTar [("core", getEntries),
+                           ("tags", getTags),
+                           ("upload", getGroups)]
     return (badLogEntries, tarBytes)
  where
     importAdminsList :: Maybe String -> Maybe [Users.UserName]

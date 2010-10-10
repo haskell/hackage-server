@@ -50,7 +50,7 @@ data DocumentationResource = DocumentationResource {
 instance HackageFeature DocumentationFeature where
     getFeature docs = HackageModule
       { featureName = "documentation"
-      , resources   = map ($documentationResource docs) [packageDocs, packageDocTar] --and packageDocsUpload
+      , resources   = map ($documentationResource docs) [packageDocs, packageDocTar, packageDocsUpload]
       , dumpBackup    = Just $ \storage -> do
             doc <- query GetDocumentation
             let exportFunc (pkgid, (blob, _)) = ([display pkgid, "documentation.tar"], Right blob)
@@ -100,6 +100,8 @@ uploadDocumentation store dpath = withPackageId dpath $ \pkgid ->
         tarIndex <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blob)
         update $ InsertDocumentation pkgid blob tarIndex
         fmap Right $ seeOther ("/package/" ++ display pkgid) (toResponse ())
+
+-- curl -u mgruen:admin -X PUT --data-binary @gtk.tar.gz http://localhost:8080/package/gtk-0.11.0
 
 withDocumentation :: DynamicPath -> (PackageId -> BlobId -> TarIndex -> ServerPart a) -> ServerPart a
 withDocumentation dpath func = withPackageId dpath $ \pkgid -> do
