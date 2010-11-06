@@ -89,7 +89,7 @@ hackageFeatures config = do
          , HF listFeature
          , HF platformFeature
          , HF htmlFeature
-         , HF legacyRedirectsFeature
+         , HF $ legacyRedirectsFeature uploadFeature
          ]
     -- Run all initial hooks, now that everyone's gotten a chance to register for them
     -- This solution is iffy for initial feature hooks that rely on other features

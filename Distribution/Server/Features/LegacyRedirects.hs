@@ -2,7 +2,9 @@ module Distribution.Server.Features.LegacyRedirects (
     legacyRedirectsFeature
   ) where
 
+import Distribution.Server.Error (makeTextError)
 import Distribution.Server.Feature
+import Distribution.Server.Features.Upload
 import Distribution.Server.Resource
 import Distribution.Server.Instances ()
 
@@ -21,11 +23,11 @@ import Control.Monad (msum, mzero)
 -- | A feature to provide redirection for URLs that existed in the first
 -- incarnation of the hackage server.
 --
-legacyRedirectsFeature :: HackageModule
-legacyRedirectsFeature = HackageModule {
+legacyRedirectsFeature :: UploadFeature -> HackageModule
+legacyRedirectsFeature upload = HackageModule {
     featureName = "legacy",
     -- get rid of trailing resource and manually create a mapping?
-    resources   = [(resourceAt "/..") { resourceGet = [("", \_ -> serveLegacyGets)], resourcePost = [("", \_ -> serveLegacyPosts)] }],
+    resources   = [(resourceAt "/..") { resourceGet = [("", \_ -> serveLegacyGets)], resourcePost = [("", \_ -> serveLegacyPosts upload)] }],
     dumpBackup    = Nothing,
     restoreBackup = Nothing
 }
@@ -37,23 +39,30 @@ legacyRedirectsFeature = HackageModule {
 --
 -- "check" no longer exists; it's now "candidates", and probably
 -- provides too different functionality to redirect
-serveLegacyPosts :: ServerPart Response
-serveLegacyPosts = msum
+serveLegacyPosts :: UploadFeature -> ServerPart Response
+serveLegacyPosts upload = msum
   [ dir "packages" $ msum
-      [ postedMove "upload" "/packages/"
+      [ dir "upload" $ movedUpload
     --, postedMove "check"  "/check"
       ]
   , dir "cgi-bin" $ dir "hackage-scripts" $ msum
-      [ dir "protected" $ postedMove "upload"  "/packages/"
+      [ dir "protected" $ dir "upload" $ movedUpload
     --, postedMove "check"  "/check"
       ]
-  , postedMove "upload" "/packages/"
+  , dir "upload" movedUpload
   ]
   where
-    -- HTTP 307 makes the client resubmit the post request to a different URL,
-    -- something particular to this status code, although 301 *should* do this,
-    -- web browsers are again non-compliant here
-    postedMove from to = dir from $ nullDir >> tempRedirect to (toResponse "")
+
+    -- We assume we don't need to serve a fancy HTML response
+    movedUpload :: ServerPart Response
+    movedUpload = nullDir >> do
+      result <- uploadPackage upload
+      case result of
+        Left err -> makeTextError err
+        Right upResult ->
+          ok $ toResponse $ unlines $ uploadWarnings upResult
+
+
 
 -- | GETs, both for cabal-install to use, and for links scattered throughout the web.
 --
