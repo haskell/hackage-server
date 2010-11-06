@@ -85,6 +85,11 @@ distroStatus :: DistroName -> Query Distros [(PackageName, DistroPackageInfo)]
 distroStatus distro
     = asks $ Dist.distroStatus distro . distVersions
 
+putDistroPackageList :: DistroName -> [(PackageName, DistroPackageInfo)] -> Update Distros ()
+putDistroPackageList distro list
+    = modify $ \state->
+      state{ distVersions = Dist.updatePackageList distro list $ distVersions state }
+
 packageStatus :: PackageName -> Query Distros [(DistroName, DistroPackageInfo)]
 packageStatus package
     = asks $ Dist.packageStatus package . distVersions
@@ -125,6 +130,9 @@ $(mkMethods
   , 'distroStatus
   , 'packageStatus
   , 'distroPackageStatus
+
+  -- bulk update
+  , 'putDistroPackageList
 
   -- import/export
   , 'getDistributions

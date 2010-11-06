@@ -8,6 +8,7 @@ module Distribution.Server.Distributions.Distributions
     , emptyDistributions
     , addDistro
     , removeDistro
+    , updatePackageList
     , enumerate
     , isDistribution
     , DistroVersions(..)
@@ -91,6 +92,10 @@ removeDistroVersions distro dv
       in foldl' (flip $ dropPackage distro) dv packageNames
 
 --- Updating
+
+-- | Bulk update of all information for one specific distribution
+updatePackageList :: DistroName -> [(PackageName, DistroPackageInfo)] -> DistroVersions -> DistroVersions
+updatePackageList distro list dv = foldr (\(pn,pi) -> addPackage distro pn pi) (removeDistroVersions distro dv) list
 
 -- | Flag a package as no longer being distributed
 dropPackage :: DistroName -> PackageName -> DistroVersions -> DistroVersions

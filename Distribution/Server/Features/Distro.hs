@@ -9,18 +9,24 @@ import Distribution.Server.Features.Packages
 import Distribution.Server.Features.Users
 import Distribution.Server.Resource
 import Distribution.Server.Types
+import Distribution.Server.ResourceTypes
 
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
 import Distribution.Server.Distributions.State
 import Distribution.Server.Distributions.Types
 import Distribution.Server.Distributions.Backup
+import Distribution.Simple.Utils (fromUTF8)
 
 import Happstack.Server
 import Happstack.State
+import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.List (intercalate)
 import Distribution.Text (display, simpleParse)
 import Control.Monad
 import Distribution.Package
+import Text.CSV (parseCSV)
+import Data.Version (showVersion)
+
 
 -- TODO: 
 -- 1. write an HTML view for this module, and delete the text
@@ -55,7 +61,7 @@ initDistroFeature _ _ users _ = do
     return $ DistroFeature
       { distroResource = DistroResource
           { distroIndexPage = (resourceAt "/distros/.:format") { resourceGet = [("txt", textEnumDistros)], resourcePost = [("", distroNew)] }
-          , distroAllPage = (resourceAt "/distro/:distro/.:format") { resourceGet = [("txt", textDistroPkgs)], resourceDelete = [("", distroDelete)] }
+          , distroAllPage = (resourceAt "/distro/:distro/.:format") { resourceGet = [("txt", textDistroPkgs), ("csv",csvDistroPackageList)], resourcePut = [("",distroPackageListPut)], resourceDelete = [("", distroDelete)] }
           , distroPackage = (resourceAt "/distro/:distro/package/:package.:format") { resourceGet = [("txt", textDistroPkg)], resourcePut = [("", distroPackagePut)], resourceDelete = [("", distroPackageDelete)] }
           }
       , maintainersGroup = \dpath -> case simpleParse =<< lookup "distro" dpath of
@@ -67,6 +73,8 @@ initDistroFeature _ _ users _ = do
     textDistroPkgs dpath = withDistroPath dpath $ \dname pkgs -> do
         let pkglines = map (\(name, info) -> display name ++ " at " ++ display (distroVersion info) ++ ": " ++ distroUrl info) $ pkgs
         return $ toResponse (unlines $ ("Packages for " ++ display dname):pkglines)
+    csvDistroPackageList dpath = withDistroPath dpath $ \_dname pkgs -> do
+        return $ toResponse $ packageListToCSV $ pkgs
     textDistroPkg dpath = withDistroPackagePath dpath $ \_ _ info -> return . toResponse $ show info
 
     -- result: see-other uri, or an error: not authenticated or not found (todo)
@@ -97,6 +105,16 @@ initDistroFeature _ _ users _ = do
         if success
             then seeOther ("/distro/" ++ display dname) $ toResponse "Ok!"
             else badRequest $ toResponse "Selected distribution name is already in use"
+
+    -- result: ok repsonse or not-found error
+    distroPackageListPut dpath = withDistroPath dpath $ \dname _pkgs -> do
+        -- authenticate distro maintainer
+        lookCSVFile $ \csv ->
+            case csvToPackageList csv of
+                Nothing -> fail $ "Could not parse CSV File to a distro package list"
+                Just list -> do
+                    update $ PutDistroPackageList dname list
+                    ok $ toResponse "Ok!"
 
 withDistroNamePath :: DynamicPath -> (DistroName -> ServerPart Response) -> ServerPart Response
 withDistroNamePath dpath = require (return $ simpleParse =<< lookup "distro" dpath)
@@ -161,3 +179,23 @@ maintainerDescription dname = nullDescription
   }
   where str = display dname
 
+lookCSVFile :: (CSVFile -> Web Response) -> ServerPart Response
+lookCSVFile func = withRequest $ \req -> do
+    let Body fileContents = rqBody req
+    case parseCSV "PUT input" (fromUTF8 (BS.unpack (fileContents))) of
+        Left err -> badRequest $ toResponse $ "Could not parse CSV File: " ++ show err
+        Right csv -> func (CSVFile csv)
+
+packageListToCSV :: [(PackageName, DistroPackageInfo)] -> CSVFile
+packageListToCSV entries
+    = CSVFile $ map (\(pn,DistroPackageInfo version url) -> [display pn, showVersion version, url]) entries
+
+csvToPackageList :: CSVFile -> Maybe [(PackageName, DistroPackageInfo)]
+csvToPackageList (CSVFile records)
+    = mapM fromRecord records
+ where
+    fromRecord [packageStr, versionStr, uri] = do
+        package <- simpleParse packageStr
+        version <- simpleParse versionStr
+        return (package, DistroPackageInfo version uri)
+    fromRecord _ = fail $ "Invalid distribution record"
