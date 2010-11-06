@@ -26,6 +26,7 @@ import Network.HTTP.Headers (HeaderName(..), replaceHeader)
 import Distribution.Server.Backup.UploadLog as UploadLog (read, Entry(..))
 import Distribution.Server.Users.Types (UserName)
 import Distribution.Server.Util.Index as PackageIndex (read)
+import Distribution.Server.Auth.Basic as Auth
 import Distribution.Package
 import Distribution.Text
 import Data.Version
@@ -109,7 +110,7 @@ putPackage config (UploadLog.Entry time uname pkgid) pkgData = do
     (_, rsp) <- Browser.browse $ do
         Browser.setOutHandler $ \_ -> return ()
         Browser.setAllowRedirects True -- handle HTTP redirects
-        Browser.setAuthorityGen $ \uri realm -> return $ if isHackage uri pkgUri' && realm=="hackage" then Just userData else Nothing
+        Browser.setAuthorityGen $ \uri realm -> return $ if isHackage uri pkgUri' && realm==authorizationRealm then Just userData else Nothing
         let req = HTTP.mkRequest HTTP.PUT pkgUri' :: HTTP.Request String
         Browser.request
             $ replaceHeader HdrContentLength (show $ BS.length reqStr)

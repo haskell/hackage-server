@@ -258,7 +258,7 @@ newBasicPass pwd = do
     return $ UserAuth (Auth.newBasicPass gen pwd) Auth.BasicAuth
 
 newDigestPass :: UserName -> PasswdPlain -> UserAuth
-newDigestPass name pwd = UserAuth (Auth.newDigestPass name pwd "hackage") Auth.DigestAuth
+newDigestPass name pwd = UserAuth (Auth.newDigestPass name pwd Auth.authorizationRealm) Auth.DigestAuth
 
 --
 runUserFilter :: UserFeature -> UserId -> IO (Maybe ErrorResponse)

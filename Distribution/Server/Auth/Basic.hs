@@ -1,7 +1,8 @@
 module Distribution.Server.Auth.Basic (
     getHackageAuth,
     withHackageAuth,
-    requireHackageAuth
+    requireHackageAuth,
+    authorizationRealm
   ) where
 
 import Distribution.Server.Users.Types (UserId, UserName(..), UserInfo)
@@ -28,9 +29,14 @@ import qualified Text.ParserCombinators.ReadP as Parse
 import Data.List (find, intercalate)
 import Data.Digest.Pure.MD5 (md5)
 
+import Debug.Trace (trace)
+
+authorizationRealm :: String
+authorizationRealm = "Hackage"
+
 getHackageAuth :: Users.Users -> ServerPart (Either AuthError (UserId, UserInfo))
 getHackageAuth users = askRq >>= \req -> return $ case getAuthType req of
-    Just BasicAuth  -> genericBasicAuth req "hackage" (getPasswdInfo users)
+    Just BasicAuth  -> genericBasicAuth req authorizationRealm (getPasswdInfo users)
     Just DigestAuth -> genericDigestAuth req (getPasswdInfo users) --realm hashed in user database
     Nothing -> Left NoAuthError
 
@@ -56,14 +62,13 @@ withHackageAuth users authorizedGroup forceType func = getHackageAuth users >>= 
 setHackageAuth :: Maybe AuthType -> ServerPart ()
 setHackageAuth forceType = do
     req <- askRq
-    let realm = "hackage"
     case forceType `mplus` getAuthType req of
-        Just BasicAuth  -> askBasicAuth realm
-        Just DigestAuth -> askDigestAuth realm
+        Just BasicAuth  -> askBasicAuth authorizationRealm
+        Just DigestAuth -> askDigestAuth authorizationRealm
         -- the below means that, upon logging in, basic auth will be
         -- required by default. Changing this means migrating (which is
         -- just fine).
-        Nothing -> askBasicAuth realm
+        Nothing -> askBasicAuth authorizationRealm
         
 
 -- the UserInfo should belong to the UserId

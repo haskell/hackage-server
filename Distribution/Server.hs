@@ -52,6 +52,7 @@ import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Auth.Types as Auth
 import qualified Distribution.Server.Auth.Crypt as Auth
+import qualified Distribution.Server.Auth.Basic as Auth
 
 import Distribution.Server.Resource
 import Distribution.Server.Types
@@ -268,7 +269,7 @@ initState server (admin, pass) = do
     -- create default admin user
     muid <- case simpleParse admin of
         Just uname -> do
-            let userAuth = Auth.newDigestPass uname (Auth.PasswdPlain pass) "hackage"
+            let userAuth = Auth.newDigestPass uname (Auth.PasswdPlain pass) Auth.authorizationRealm
             update $ AddUser uname (Users.UserAuth userAuth Auth.DigestAuth)
         Nothing -> fail "Couldn't parse admin name (should be alphanumeric)"
     case muid of
