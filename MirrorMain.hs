@@ -14,6 +14,7 @@ import Data.Time.Format (formatTime)
 import System.Environment
 import System.Locale (defaultTimeLocale)
 import System.IO (hSetBuffering, stdout, BufferMode(..))
+import System.FilePath.Posix
 
 import Happstack.Server.HTTP.FileServe (mimeTypes, guessContentType)
 import qualified Network.HTTP as HTTP
@@ -35,18 +36,12 @@ main = withArgs $ \source dest -> do
     passStr <- prompt "Password"
     let conf = MirrorConfig userStr passStr source dest
 
-    putStr "Getting source log... "
     entries <- downloadLogOld conf
-    putStrLn $ show (length entries) ++ " entries"
-    sleepSec
 
     -- The destination index may include cabal entries for packages which
     -- don't have tarballs. More inspection would be needed to mirror all
     -- of the tarballs.
-    putStr "Getting destination index... "
     index <- downloadIndexNew conf
-    putStrLn $ show (length index) ++ " entries"
-    sleepSec
 
     let diffed = diffAllEntries (makeEntryMap entries) (makeIndexMap index)
         diffNum = Map.size diffed
@@ -94,9 +89,9 @@ data MirrorConfig = MirrorConfig {
     -- can add additional config options, including behavior
 }
 
-srcUri, dstUri :: MirrorConfig -> [String] -> String
-srcUri config strs = concat $ ["http://", hackageSrc config] ++ strs
-dstUri config strs = concat $ ["http://", hackageDst config] ++ strs
+srcUri, dstUri :: MirrorConfig -> String
+srcUri = hackageSrc
+dstUri = hackageDst
 
 --------------------------------------------------------------------------------
 -- Upload a package to the new server
@@ -105,7 +100,8 @@ putPackage config (UploadLog.Entry time uname pkgid) pkgData = do
     let timeStr = formatTime defaultTimeLocale "%c" time
         nameStr = display uname
         userData = (mirrorName config, mirrorPass config)
-        pkgUri = dstUri config ["/package/", display pkgid, "/", display pkgid, ".tar.gz"]
+        pkgUri  = dstUri config </> "package" </> display pkgid
+                                </> display pkgid <.> "tar.gz"
         pkgUri' = fromJust $ parseURI pkgUri
     (ctype, reqStr) <- makeMultipart
         [("date", timeStr), ("user", nameStr)]
@@ -145,30 +141,42 @@ makeMultipart fields files = do
 --------------------------------------------------------------------------------
 -- Download individual packages. If one fails, the mirror client keeps on going.
 downloadPackageOld :: MirrorConfig -> PackageId -> IO (Either String ByteString)
-downloadPackageOld config pkgid = downloadPackage $ srcUri config
-  [ "/packages/archive/"
-  , display $ packageName pkgid, "/"
-  , display $ packageVersion pkgid, "/"
-  , display pkgid, ".tar.gz" ]
+downloadPackageOld config pkgid =
+    downloadPackage $
+        srcUri config
+    </> "packages/archive"
+    </> (display $ packageName pkgid)
+    </> (display $ packageVersion pkgid)
+    </> display pkgid <.> "tar.gz"
 -- /packages/archive/<package>/<version>/<package>-<version>.tar.gz
 
 downloadPackageNew :: MirrorConfig -> PackageId -> IO (Either String ByteString)
-downloadPackageNew config pkgid = downloadPackage $ srcUri config
-  [ "/package/", pkgStr, "/", pkgStr, ".tar.gz" ]
-  where pkgStr = display pkgid
+downloadPackageNew config pkgid =
+    downloadPackage $
+        srcUri config
+    </> "package"
+    </> display pkgid
+    </> display pkgid <.> ".tar.gz"
 -- /package/<package>-<version>/<package>-<version>.tar.gz
 
 downloadPackage :: String -> IO (Either String ByteString)
 downloadPackage uri = do
     res <- HTTP.simpleHTTP (HTTP.getRequest uri)
     return $ case res of
-        Left err -> Left (show err)
-        Right r -> Right . BS.pack $ HTTP.rspBody r
+        Left err                                        -> Left  (show err)
+        Right r@HTTP.Response{ HTTP.rspCode = (2,0,0) } -> Right (BS.pack $ HTTP.rspBody r)
+        Right r                                         -> Left  (HTTP.rspReason r)
 
 --------------------------------------------------------------------------------
 -- Downloading logs: get package list and upload information from source Hackage
 downloadLogOld :: MirrorConfig -> IO [UploadLog.Entry]
-downloadLogOld config = downloadLog $ srcUri config ["/packages/archive/log"]
+downloadLogOld config = do
+    putStrLn $ "Getting source log " ++ logURI
+    entries <- downloadLog logURI
+    putStrLn $ show (length entries) ++ " entries"
+    return entries
+  where
+    logURI = srcUri config </> "packages/archive/log"
 
 -- presently, there is no downloadLogNew
 -- it could use the fact that users/times are stored in the metadata
@@ -184,10 +192,17 @@ downloadLog uri = do
 --------------------------------------------------------------------------------
 -- Downloading indices: get package list from destination Hackage, to diff with source
 downloadIndexOld :: MirrorConfig -> IO [PackageId]
-downloadIndexOld config = downloadIndex $ srcUri config ["/packages/archive/00-index.tar.gz"]
+downloadIndexOld config =
+    downloadIndex $ srcUri config </> "/packages/archive/00-index.tar.gz"
 
 downloadIndexNew :: MirrorConfig -> IO [PackageId]
-downloadIndexNew config = downloadIndex $ dstUri config ["/packages/index.tar.gz"]
+downloadIndexNew config = do
+    putStrLn $ "Getting destination index " ++ indexURI
+    index <- downloadIndex indexURI
+    putStrLn $ show (length index) ++ " entries"
+    return index
+  where
+    indexURI = dstUri config </> "packages/index.tar.gz"
 
 downloadIndex :: String -> IO [PackageId]
 downloadIndex uri = do

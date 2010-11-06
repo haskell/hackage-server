@@ -40,3 +40,10 @@ Miscellaneous
  * Decide how to coordinate a switchover basic to digest auth
  * Send etag and last modified times, if possible
 
+Mirror client:
+ * Use HTTP properly:
+   - use the browser module to handle redirects
+   - check response codes
+   - keep cached copy and ETag, use conditional download
+ * Allow username & passwd to be specified on command line, or in URI
+ * Handle URIs correctly, using right types
