@@ -47,6 +47,7 @@ serveLegacyPosts = msum
       [ dir "protected" $ postedMove "upload"  "/packages/"
     --, postedMove "check"  "/check"
       ]
+  , postedMove "upload" "/packages/"
   ]
   where
     -- HTTP 307 makes the client resubmit the post request to a different URL,
