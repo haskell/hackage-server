@@ -79,11 +79,25 @@ main = topHandler $ getOpts >>= \options -> case options of
     NewMode opts -> do
         defaults <- Server.defaultServerConfig
 
-        let stateDir = fromMaybe (confStateDir defaults) (optNewDir opts)
-            config = defaults { confStateDir  = stateDir }
+        let stateDir  = fromMaybe (confStateDir defaults)  (optNewStateDir opts)
+            staticDir = fromMaybe (confStaticDir defaults) (optNewStaticDir opts)
+            config = defaults {
+                confStateDir  = stateDir,
+                confStaticDir = staticDir
+            }
             parseAdmin adminStr = case break (==':') adminStr of
                 (uname, ':':pass) -> Just (uname, pass)
                 _ -> Nothing
+
+        -- Be helpful to people running from the build tree
+        exists <- doesDirectoryExist staticDir
+        when (not exists) $
+          if isJust (optNewStaticDir opts)
+            then fail $ "The given static files directory " ++ staticDir
+                  ++ " does not exist."
+            else fail $ "It looks like you are running the server without installing "
+                  ++ "it. That is fine but you will have to give the location of "
+                  ++ "the static html files with the --static-dir flag."
 
         admin <- case optNewAdmin opts of
             Nothing  -> return ("admin", "admin")
@@ -366,12 +380,13 @@ runDescriptions =
   ]
 
 data NewOpts = NewOpts {
-    optNewAdmin :: Maybe String,
-    optNewDir :: Maybe FilePath
+    optNewAdmin     :: Maybe String,
+    optNewStateDir  :: Maybe FilePath,
+    optNewStaticDir :: Maybe FilePath
 } deriving (Show)
 
 defaultNewOpts :: NewOpts
-defaultNewOpts = NewOpts Nothing Nothing
+defaultNewOpts = NewOpts Nothing Nothing Nothing
 
 newDescriptions :: [OptDescr (NewOpts -> NewOpts)]
 newDescriptions =
@@ -379,8 +394,11 @@ newDescriptions =
       (ReqArg (\name opts -> opts { optNewAdmin = Just name }) "NAME:PASS")
       "New server's administrator, name:password (default: admin:admin)"
   , Option [] ["state-dir"]
-      (ReqArg (\file opts -> opts { optNewDir = Just file }) "DIR")
+      (ReqArg (\file opts -> opts { optNewStateDir = Just file }) "DIR")
       "Directory in which to store the persistent state of the server (default state/)"
+  , Option [] ["static-dir"]
+      (ReqArg (\file opts -> opts { optNewStaticDir = Just file }) "DIR")
+      "Directory in which to find the html and other static files (default: cabal location)"
   ]
 
 data RestoreOpts = RestoreOpts {
@@ -429,8 +447,10 @@ data ConvertOpts = ConvertOpts {
     optImportAdmins   :: Maybe FilePath,
     optConvertTarball :: Maybe FilePath
 } deriving (Show)
+
 defaultConvertOpts :: ConvertOpts
 defaultConvertOpts = ConvertOpts Nothing Nothing Nothing Nothing Nothing Nothing
+
 convertDescriptions :: [OptDescr (ConvertOpts -> ConvertOpts)]
 convertDescriptions =
   [ Option [] ["index"]
