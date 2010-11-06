@@ -31,6 +31,7 @@ import qualified Text.JSON as JSON (JSValue, encode)
 import Data.Time.Clock (UTCTime)
 import qualified Data.Time.Format as Time (formatTime)
 import System.Locale (defaultTimeLocale)
+import Text.CSV (parseCSV, printCSV, CSV)
 
 data IndexTarball = IndexTarball BS.Lazy.ByteString
 
@@ -112,6 +113,12 @@ instance ToMessage ExportTarball where
     toResponse (ExportTarball bs)
         = noContentLength $ mkResponse bs
           [("Content-Type",  "application/gzip")]
+
+newtype CSVFile = CSVFile CSV
+
+instance ToMessage CSVFile where
+    toContentType _ = BS.pack "text/csv"
+    toMessage (CSVFile csv) = BS.Lazy.pack (printCSV csv)
 
 mkResponse :: BS.Lazy.ByteString -> [(String, String)] -> Response
 mkResponse bs headers = Response {
