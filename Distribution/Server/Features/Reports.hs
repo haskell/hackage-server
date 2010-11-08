@@ -33,6 +33,7 @@ import Data.Function (fix)
 import Control.Applicative (optional)
 import Control.Monad.Trans
 import Control.Monad (mzero)
+import Data.ByteString.Lazy.Char8 (unpack)
 
 -- TODO: 
 -- 1. Put the HTML view for this module in the HTML feature; get rid of the text view
@@ -100,16 +101,11 @@ submitBuildReport r store dpath = withPackageVersionPath dpath $ \pkg -> do
     -- require logged-in user
     Auth.withHackageAuth users Nothing Nothing $ \_ _ -> do
         let pkgid = pkgInfoId pkg
-        -- allow submission of the report and log at the same time (use multipart for this, preferrably)
-        reportStr <- optional (look "report")
-        case maybe (Left "Could not find report input") Right reportStr >>= BuildReport.parse of
+        Body body <- rqBody `fmap` askRq
+        case BuildReport.parse $ unpack body of
             Left err -> returnError 400 "Error submitting report" [MText err]
             Right report -> do
-                mbuildLog <- optional (lookBS "log")
-                mblob <- case mbuildLog of
-                    Nothing  -> return Nothing
-                    Just blog -> fmap (Just . BuildLog) $ liftIO $ BlobStorage.add store blog
-                reportId <- update $ AddReport pkgid (report, mblob)
+                reportId <- update $ AddReport pkgid (report, Nothing)
                 -- redirect to new reports page
                 fmap Right $ seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
 
