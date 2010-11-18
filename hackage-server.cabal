@@ -124,7 +124,7 @@ executable hackage-server
     bytestring >= 0.9,
     zlib >= 0.4 && < 0.6,
     tar  == 0.3.*,
-    time == 1.1.4.*,
+    time == 1.2.*,
     old-time >= 1.0,
     -- we'd like to use just the new time library howerer
     -- the rss packages uses old-time in it's public api :-(
@@ -145,7 +145,7 @@ executable hackage-server
     json == 0.4.*,
     stringsearch == 0.3.*,
     rss == 3000.0.*,
-    Cabal == 1.8.*,
+    Cabal == 1.8.* || == 1.10.*,
     csv == 0.1.*,
     happstack-data   == 0.5.*,
     happstack-util   == 0.5.*,
@@ -175,12 +175,12 @@ executable hackage-mirror
     base == 4.*,
     bytestring >= 0.9,
     zlib >= 0.4 && < 0.6,
-    HTTP == 4000.0.*,
-    time == 1.1.4.*,
+    HTTP == 4000.*,
+    time == 1.2.*,
     old-locale >= 1.0,
     containers >= 0.1,
     network >= 2.1,
-    Cabal == 1.8.*,
+    Cabal == 1.8.* || == 1.10.*,
     happstack-server == 0.5.*,
     uri == 0.1.*
 
