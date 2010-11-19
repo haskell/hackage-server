@@ -63,27 +63,27 @@ initDocumentationFeature config _ _ = do
     let store = serverStore config
     return DocumentationFeature
       { documentationResource = fix $ \r -> DocumentationResource
-          { packageDocs = (resourceAt "/package/:package/doc/..") { resourceGet = [("", serveDocumentation store)] }
+          { packageDocs = (resourceAt "/package/:package/doc/..") { resourceGet = [("", textResponse . serveDocumentation store)] }
           , packageDocsUpload = (resourceAt "/package/:package/doc/.:format") { resourcePut = [("txt", textResponse . uploadDocumentation store)] }
-          , packageDocTar = (resourceAt "/package/:package/:doc.tar") { resourceGet = [("tar", serveDocumentationTar store)] }
+          , packageDocTar = (resourceAt "/package/:package/:doc.tar") { resourceGet = [("tar", textResponse . serveDocumentationTar store)] }
           , packageDocUri = \pkgid str -> renderResource (packageDocs r) [display pkgid, str]
           }
       }
   where
 
-serveDocumentationTar :: BlobStorage -> DynamicPath -> ServerPart Response
+serveDocumentationTar :: BlobStorage -> DynamicPath -> MServerPart Response
 serveDocumentationTar store dpath = withDocumentation dpath $ \_ blob _ -> do
     file <- liftIO $ BlobStorage.fetch store blob
-    return $ toResponse $ Resource.DocTarball file blob
+    returnOk $ toResponse $ Resource.DocTarball file blob
 
 
 -- return: not-found error or tarball
-serveDocumentation :: BlobStorage -> DynamicPath -> ServerPart Response
+serveDocumentation :: BlobStorage -> DynamicPath -> MServerPart Response
 serveDocumentation store dpath = withDocumentation dpath $ \pkgid blob index -> do
     let tarball = BlobStorage.filepath store blob
     -- if given a directory, the default page is index.html
     -- the default directory prefix is the package name itself
-    TarIndex.serveTarball ["index.html"] (display $ packageName pkgid) tarball index
+    Right `fmap` TarIndex.serveTarball ["index.html"] (display $ packageName pkgid) tarball index
 
 -- return: not-found error (parsing) or see other uri
 uploadDocumentation :: BlobStorage -> DynamicPath -> MServerPart Response
@@ -103,12 +103,14 @@ uploadDocumentation store dpath = withPackageId dpath $ \pkgid ->
 
 -- curl -u mgruen:admin -X PUT --data-binary @gtk.tar.gz http://localhost:8080/package/gtk-0.11.0
 
-withDocumentation :: DynamicPath -> (PackageId -> BlobId -> TarIndex -> ServerPart a) -> ServerPart a
-withDocumentation dpath func = withPackageId dpath $ \pkgid -> do
+withDocumentation :: DynamicPath -> (PackageId -> BlobId -> TarIndex -> MServerPart a) -> MServerPart a
+withDocumentation dpath func =
+    withPackagePath dpath $ \pkg _ -> do
+    let pkgid = packageId pkg
     mdocs <- query $ LookupDocumentation pkgid
     case mdocs of
-        Nothing -> mzero
-        Just (blob, index) -> func pkgid blob index
+      Nothing -> returnError 404 "Not Found" [MText $ "There is no documentation for " ++ display pkgid]
+      Just (blob, index) -> func pkgid blob index
 
 ---- Import 
 updateDocumentation :: BlobStorage -> Documentation -> RestoreBackup
