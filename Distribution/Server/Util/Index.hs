@@ -29,7 +29,7 @@ import Distribution.Text
          ( display, simpleParse )
 
 import Data.ByteString.Lazy (ByteString)
-import System.FilePath
+import System.FilePath.Posix
          ( (</>), (<.>), splitDirectories, normalise )
 import Prelude hiding (read)
 
@@ -80,6 +80,6 @@ write externalPackageRep updateEntry extras =
       where
         Right tarPath = Tar.toTarPath False fileName
         PackageName name = packageName pkg
-        fileName = name </> display (packageVersion pkg)
-                        </> name <.> "cabal"
+        fileName = "." </> name </> display (packageVersion pkg)
+                       </> name <.> "cabal"
 
