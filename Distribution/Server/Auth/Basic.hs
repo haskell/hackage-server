@@ -29,8 +29,6 @@ import qualified Text.ParserCombinators.ReadP as Parse
 import Data.List (find, intercalate)
 import Data.Digest.Pure.MD5 (md5)
 
-import Debug.Trace (trace)
-
 authorizationRealm :: String
 authorizationRealm = "Hackage"
 

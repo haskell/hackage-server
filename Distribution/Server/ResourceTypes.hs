@@ -31,7 +31,7 @@ import qualified Text.JSON as JSON (JSValue, encode)
 import Data.Time.Clock (UTCTime)
 import qualified Data.Time.Format as Time (formatTime)
 import System.Locale (defaultTimeLocale)
-import Text.CSV (parseCSV, printCSV, CSV)
+import Text.CSV (printCSV, CSV)
 
 data IndexTarball = IndexTarball BS.Lazy.ByteString
 

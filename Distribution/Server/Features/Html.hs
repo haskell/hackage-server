@@ -55,7 +55,6 @@ import Distribution.Version
 import Distribution.Text (display)
 import Distribution.PackageDescription
 import Data.List (intercalate, intersperse, insert, sortBy)
-import Data.Char (isAlpha, isAlphaNum)
 import Data.Function (on)
 import Control.Monad (forM)
 import Control.Monad.Trans (MonadIO, liftIO)
@@ -971,13 +970,6 @@ renderTags :: TagsResource -> Set Tag -> [Html]
 renderTags tagf tags = intersperse (toHtml ", ")
     (map (\tg -> anchor ! [href $ tagUri tagf "" tg] << display tg)
       $ Set.toList tags)
-
--- Produces a valid class string.
-toClassString :: String -> String
-toClassString "" = ""
-toClassString xs = filter classLater $ dropWhile (not . classFirst) xs
-  where classFirst c = isAlpha c || c == '_'
-        classLater c = isAlphaNum c || c == '_' || c == '-'
 
 -- Prevents page indexing (e.g. for search pages).
 noIndex :: Html

@@ -95,7 +95,7 @@ removeDistroVersions distro dv
 
 -- | Bulk update of all information for one specific distribution
 updatePackageList :: DistroName -> [(PackageName, DistroPackageInfo)] -> DistroVersions -> DistroVersions
-updatePackageList distro list dv = foldr (\(pn,pi) -> addPackage distro pn pi) (removeDistroVersions distro dv) list
+updatePackageList distro list dv = foldr (\(pn,dpi) -> addPackage distro pn dpi) (removeDistroVersions distro dv) list
 
 -- | Flag a package as no longer being distributed
 dropPackage :: DistroName -> PackageName -> DistroVersions -> DistroVersions

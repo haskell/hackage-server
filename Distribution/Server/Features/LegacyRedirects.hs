@@ -60,8 +60,8 @@ serveLegacyPosts upload = msum
     -- We assume we don't need to serve a fancy HTML response
     movedUpload :: ServerPart Response
     movedUpload = nullDir >> do
-      result <- uploadPackage upload
-      case result of
+      res <- uploadPackage upload
+      case res of
         Left err -> makeTextError err
         Right upResult ->
           ok $ toResponse $ unlines $ uploadWarnings upResult

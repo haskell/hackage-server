@@ -183,20 +183,20 @@ importVersionList name contents = importCSV name contents $ mapM fromRecord . dr
 --------------------------------------------------------------------------------
 -- Every tarball and cabal file ever uploaded for every single package name and version
 indexToAllVersions :: PackagesState -> [ExportEntry]
-indexToAllVersions state =
-    let pkgList = PackageIndex.allPackages . packageList $ state
+indexToAllVersions st =
+    let pkgList = PackageIndex.allPackages . packageList $ st
     in concatMap infoToAllEntries pkgList
 
 -- The most recent tarball and cabal file for every single package name and version
 indexToAllVersions' :: PackagesState -> [ExportEntry]
-indexToAllVersions' state =
-    let pkgList = PackageIndex.allPackages . packageList $ state
+indexToAllVersions' st =
+    let pkgList = PackageIndex.allPackages . packageList $ st
     in concatMap infoToCurrentEntries pkgList
 
 -- The most recent tarball and cabal file for the most recent version of every package
 indexToCurrentVersions :: PackagesState -> [ExportEntry]
-indexToCurrentVersions state =
-    let pkgList = PackageIndex.allPackagesByName . packageList $ state
+indexToCurrentVersions st =
+    let pkgList = PackageIndex.allPackagesByName . packageList $ st
         pkgList' = map (maximumBy (comparing pkgUploadTime)) pkgList
     in concatMap infoToCurrentEntries pkgList'
 

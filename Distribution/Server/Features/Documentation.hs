@@ -1,3 +1,5 @@
+{-# LANGUAGE PatternGuards #-}
+
 module Distribution.Server.Features.Documentation (
     DocumentationFeature(..),
     DocumentationResource(..),
@@ -27,7 +29,6 @@ import Happstack.Server
 import Happstack.State (update, query)
 import Data.Function
 import Control.Monad.Trans
-import Control.Monad (mzero)
 import qualified Data.Map as Map
 import qualified Codec.Compression.GZip as GZip
 import Data.ByteString.Lazy.Char8 (ByteString)
@@ -115,8 +116,8 @@ withDocumentation dpath func =
 ---- Import 
 updateDocumentation :: BlobStorage -> Documentation -> RestoreBackup
 updateDocumentation store docs = fix $ \r -> RestoreBackup
-  { restoreEntry = \(path, bs) ->
-        case path of
+  { restoreEntry = \(entryPath, bs) ->
+        case entryPath of
             [str, "documentation.tar"] | Just pkgid <- simpleParse str -> do
                 res <- runImport docs (importDocumentation store pkgid bs)
                 return $ fmap (updateDocumentation store) res

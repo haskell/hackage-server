@@ -37,9 +37,9 @@ importTags :: ByteString -> Import PackageTags ()
 importTags contents = importCSV "tags.csv" contents $ \csv ->
     mapM_ fromRecord (drop 2 csv)
   where
-    fromRecord (package:tags) | not (null tags) = do
-        pkgname <- parseText "package name" package
-        tags <- mapM (parseText "tag") tags
+    fromRecord (packageField:tagFields) | not (null tagFields) = do
+        pkgname <- parseText "package name" packageField
+        tags <- mapM (parseText "tag") tagFields
         modify $ setTags pkgname (Set.fromList tags)
     fromRecord x = fail $ "Invalid tags record: " ++ show x
 
