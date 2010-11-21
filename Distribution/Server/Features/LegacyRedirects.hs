@@ -16,7 +16,11 @@ import Distribution.Package
 import Distribution.Text
          ( display, simpleParse )
 
+import Data.Version ( Version (..) )
+
 import qualified System.FilePath.Posix as Posix (joinPath, splitExtension)
+
+import Control.Applicative ( (<$>) )
 import Control.Monad (msum, mzero)
 
 
@@ -85,6 +89,22 @@ serveLegacyGets = msum
     -- HTTP 301 is suitable for permanently redirecting pages
     simpleMove from to = dir from $ methodSP GET $ movedPermanently to (toResponse "")
 
+-- Some of the old-style paths may contain a version number
+-- or the text 'latest'. We represent the path '$pkgName/latest'
+-- as a package id of '$pkgName' in the new url schemes.
+
+data VersionOrLatest
+    = V Version
+    | Latest
+
+instance FromReqURI VersionOrLatest where
+    fromReqURI "latest" = Just Latest
+    fromReqURI str = V <$> fromReqURI str
+
+volToVersion :: VersionOrLatest -> Version
+volToVersion Latest = Version [] []
+volToVersion (V v)  = v
+
 serveArchiveTree :: ServerPart Response
 serveArchiveTree = msum
   [ dir "pkg-list.html" $ methodSP GET $ movedPermanently "/packages/" (toResponse "")
@@ -98,11 +118,10 @@ serveArchiveTree = msum
        _ -> mzero
     _ -> mzero
   , dir "00-index.tar.gz" $ methodSP GET $ movedPermanently "/packages/index.tar.gz" (toResponse "")
-  , path $ \nameStr -> do
-     let Just name = simpleParse nameStr
+  , path $ \name -> do
      msum
       [ path $ \version ->
-        let pkgid = PackageIdentifier {pkgName = name, pkgVersion = version}
+        let pkgid = PackageIdentifier {pkgName = name, pkgVersion = volToVersion version}
         in msum
          [ let dirName = display pkgid ++ ".tar.gz"
            in dir dirName $ methodSP GET $
