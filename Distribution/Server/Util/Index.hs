@@ -80,6 +80,6 @@ write externalPackageRep updateEntry extras =
       where
         Right tarPath = Tar.toTarPath False fileName
         PackageName name = packageName pkg
-        fileName = "." </> name </> display (packageVersion pkg)
-                       </> name <.> "cabal"
+        fileName = name </> display (packageVersion pkg)
+                        </> name <.> "cabal"
 
