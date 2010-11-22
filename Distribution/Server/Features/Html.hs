@@ -40,7 +40,7 @@ import Distribution.Server.Packages.Preferred
 import Distribution.Server.Packages.Reverse
 import Distribution.Server.Packages.Tag
 
-import Distribution.Server.Pages.Template (hackagePage, hackagePageWith)
+import Distribution.Server.Pages.Template (hackagePage, hackagePageWith, haddockPage)
 import qualified Distribution.Server.Pages.Group as Pages
 import qualified Distribution.Server.Pages.Reverse as Pages
 import qualified Distribution.Server.Pages.Index as Pages
@@ -261,7 +261,7 @@ servePackagePage core pkgr revr versions tagf maintain tagEdit dpath =
                   map (\for -> anchor ! [href $ corePackageName core "" for] << display for) $ fors]
           Nothing -> noHtml
     -- and put it all together
-    returnOk $ toResponse $ Resource.XHtml $ hackagePage (display pkgid) $
+    returnOk $ toResponse $ Resource.XHtml $ haddockPage (display pkgid) $
         Pages.packagePage render [tagLinks, maintainLink, backHackage] [deprHtml] (beforeHtml ++ middleHtml ++ afterHtml) [] docURL
   where
     showDist (dname, info) = toHtml (display dname ++ ":") +++
@@ -510,7 +510,7 @@ serveCandidatePage pkg maintain dpath = htmlResponse $
     let warningBox = case renderWarnings candRender of
             [] -> []
             warn -> [thediv ! [theclass "notification"] << [toHtml "Warnings:", unordList warn]]
-    returnOk $ toResponse $ Resource.XHtml $ hackagePage (display $ packageId cand) $
+    returnOk $ toResponse $ Resource.XHtml $ haddockPage (display $ packageId cand) $
         Pages.packagePage render [maintainHtml] warningBox sectionHtml [] Nothing
 
 servePublishForm :: CheckResource -> DynamicPath -> ServerPart Response

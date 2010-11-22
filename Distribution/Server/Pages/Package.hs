@@ -17,6 +17,7 @@ import Distribution.Server.Packages.ModuleForest
 
 import Distribution.Package
 import Distribution.PackageDescription as P
+import Distribution.Simple.Utils ( cabalVersion )
 import Distribution.Version (Version (..), VersionRange (..))
 import Distribution.Text        (display)
 import Text.XHtml.Strict hiding (p, name)
@@ -29,24 +30,49 @@ import Data.Time.Format         (formatTime)
 
 packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)] -> [(String, Html)] -> Maybe URL -> [Html]
 packagePage render headLinks top sections bottom docURL =
-    [h2 << docTitle]
-  ++ renderHeads
-  ++ top
-  ++ pkgBody render sections
-  ++ concatMap (\(s, p) -> [h3 << s, p])
-     (maybeToList (moduleSection render docURL) ++ [downloadSection render] ++ bottom)
+    [ thediv ! [identifier "package-header"] << docHeader
+    , thediv ! [identifier "content"] << docBody
+    , thediv ! [identifier "footer"] << docFooter
+    ]
   where
     pkgid = rendPkgId render
+
+    docHeader = [
+		ulist ! [theclass "links", identifier "page-menu"] <<
+			li << anchor ! [href "/"] << "hackageDB",
+		paragraph ! [theclass "caption"] << docTitle]
+
     docTitle = display (packageName pkgid) ++ case synopsis (rendOther render) of
         "" -> ""
         short  -> ": " ++ short
+
+    docBody =
+        h1 <<
+           bodyTitle :
+            concat [
+             renderHeads,
+             top,
+             pkgBody render sections,
+             moduleSection render docURL,
+             downloadSection render,
+             map pair bottom
+           ]
+    bodyTitle = "The " ++ display (pkgName pkgid) ++ " package"
+
     renderHeads = case headLinks of
         [] -> []
         items -> [thediv ! [thestyle "font-size: small"] <<
             (map (\item -> "[" +++ item +++ "] ") items)]
-    cabalLink = anchor ! [href cabalHomeURL] <<
-                (image ! [alt "Built with Cabal", src cabalLogoURL])
 
+    docFooter = paragraph << [
+		toHtml "Produced by ",
+		anchor ! [href "/"] << "hackageDB",
+		toHtml " and ",
+		anchor ! [href cabalHomeURL] << "Cabal",
+		toHtml (" " ++ display cabalVersion)]
+
+    pair (title, content) =
+        toHtml [ h2 << title, content ]
 
 -- | Body of the package page
 pkgBody :: PackageRender -> [(String, Html)] -> [Html]
@@ -68,8 +94,11 @@ paragraphs = map unlines . paras . lines
                 xs' -> case break null xs' of
                         (para, xs'') -> para : paras xs''
 
-downloadSection :: PackageRender -> (String, Html)
-downloadSection render = ("Downloads", ulist << map (li <<) downloadItems)
+downloadSection :: PackageRender -> [Html]
+downloadSection render =
+    [ h2 << "Downloads"
+    , ulist << map (li <<) downloadItems
+    ]
   where downloadItems =
             [if tarExists then [anchor ! [href downloadURL] << (display pkgId ++ ".tar.gz"),
                                 toHtml << " (Cabal source package)"]
@@ -81,19 +110,23 @@ downloadSection render = ("Downloads", ulist << map (li <<) downloadItems)
         tarExists = rendHasTarball render
         pkgId = rendPkgId render
 
-moduleSection :: PackageRender -> Maybe URL -> Maybe (String, Html)
-moduleSection render docURL = fmap msect (rendModules render)
-  where msect lib = ("Modules", renderModuleForest docURL lib)
+moduleSection :: PackageRender -> Maybe URL -> [Html]
+moduleSection render docURL = maybeToList $ fmap msect (rendModules render)
+  where msect lib = toHtml
+            [ h2 << "Modules"
+            , renderModuleForest docURL lib
+            ]
 
 propertySection :: [(String, Html)] -> [Html]
-propertySection sections = return . tabulate $ filter (not . isNoHtml . snd) sections
+propertySection sections =
+    [ h2 << "Properties"
+    , tabulate $ filter (not . isNoHtml . snd) sections
+    ]
 
 tabulate :: [(String, Html)] -> Html
--- tabulate items = dlist << concat [[dterm << t, ddef << d] | (t, d) <- items]
-tabulate items = table ! [theclass "properties"] <<
-        [tr ! [theclass (if odd n then "odd" else "even")] <<
-                [th ! [theclass "horizontal"] << t, td << d] |
-                (n, (t, d)) <- zip [(1::Int)..] items]
+tabulate items = table <<
+	[tr << [th ! [align "left", valign "top"] << t, td << d] | (t, d) <- items]
+
 
 renderDependencies :: PackageRender -> (String, Html)
 renderDependencies render = ("Dependencies", case htmlDepsList of
@@ -173,7 +206,8 @@ commaList = concatHtml . intersperse (toHtml ", ")
 -----------------------------------------------------------------------------
 
 renderModuleForest :: Maybe URL -> ModuleForest -> Html
-renderModuleForest mb_url = renderForest []
+renderModuleForest mb_url forest =
+    thediv ! [identifier "module-list"] << renderForest [] forest
     where
       renderForest _       [] = noHtml
       renderForest pathRev ts = myUnordList $ map renderTree ts
@@ -185,7 +219,8 @@ renderModuleForest mb_url = renderForest []
                   newPathRev = s:pathRev
                   newPath = reverse newPathRev
 
-      moduleEntry = maybe modName linkedName mb_url
+      moduleEntry path =
+          thespan ! [theclass "module"] << maybe modName linkedName mb_url path
       modName path = toHtml (intercalate "." path)
       linkedName url path = anchor ! [href modUrl] << modName path
           where

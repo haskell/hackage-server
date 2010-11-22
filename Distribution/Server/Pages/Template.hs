@@ -1,5 +1,12 @@
 -- Common wrapper for HTML pages
-module Distribution.Server.Pages.Template (hackagePage, hackagePageWith) where
+module Distribution.Server.Pages.Template
+    ( hackagePage
+    , hackagePageWith
+    , haddockPage
+    ) where
+
+import Data.Monoid
+import System.FilePath.Posix ( (</>) )
 
 import Text.XHtml.Strict    hiding ( p )
 
@@ -25,6 +32,35 @@ hackagePageWith links heading docs = toHtml [header << docHead, body << docBody]
     hackageTitle = "hackageDB :: [Package]"
     navigation = tr << [td << (anchor ! [href url] << lab) |
                 (lab, url) <- navigationBar]
+
+-- | Wrapper for pages with haddock styling
+haddockPage :: HTML doc => String -> doc -> Html
+haddockPage pkgname doc = toHtml [header << docHead, body << doc]
+  where docHead = [
+		meta ! [httpequiv "Content-type",
+			content "text/html; charset=ISO-8859-1"],
+		thetitle << ("HackageDB: " ++ pkgname),
+                haddockThemesLinks,
+		script ! [thetype "text/javascript",
+			src haddockJSURL] << noHtml,
+		script ! [thetype "text/javascript"] <<
+			"window.onload = function() {pageLoad();};"]
+
+haddockThemesLinks :: Html
+haddockThemesLinks =
+    case haddockThemes of
+      [] -> mempty
+      (x:xs) ->
+          first x `mappend` rest xs
+
+ where
+   first (name, url) =
+       thelink ! [rel "stylesheet", thetype "text/css",
+                      href url, title name] << noHtml
+   rest xs =
+       mconcat $ flip map xs $ \(name, url) ->
+           thelink ! [rel "alternate stylesheet", thetype "text/css",
+                          href url, title name] << noHtml
 
 navigationBar :: [(String, URL)]
 navigationBar =
@@ -58,3 +94,18 @@ accountsURL = "/accounts.html"
 -- URL of the list of recent additions to the database
 recentAdditionsURL :: URL
 recentAdditionsURL = "/recent"
+
+-- URL of haddock specifgic HTML
+haddockJSURL :: URL
+haddockJSURL = "/haddock/haddock-util.js"
+
+-- | Haddock themes we have avaliable, name and path
+haddockThemes :: [(String, String)]
+haddockThemes =
+    [ ("Ocean", haddockThemesDir </> "ocean.css")
+    , ("Classic", haddockThemesDir </> "xhaddock.css")
+    ]
+
+-- | URL directory of haddock theme CSS files
+haddockThemesDir :: URL
+haddockThemesDir = "/haddock"
