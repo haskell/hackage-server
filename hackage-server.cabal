@@ -184,3 +184,10 @@ executable hackage-mirror
     happstack-server == 0.5.*,
     uri == 0.1.*
 
+  if os(linux)
+     extra-libraries: crypt
+  if os(linux) || os(solaris)
+     includes: crypt.h
+  else
+     includes: unistd.h
+
