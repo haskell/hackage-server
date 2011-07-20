@@ -89,18 +89,20 @@ serveDocumentation store dpath = withDocumentation dpath $ \pkgid blob index -> 
 -- return: not-found error (parsing) or see other uri
 uploadDocumentation :: BlobStorage -> DynamicPath -> MServerPart Response
 uploadDocumentation store dpath = withPackageId dpath $ \pkgid ->
-                                  withPackageAuth pkgid $ \_ _ ->
-                                  withRequest $ \req -> do
+                                  withPackageAuth pkgid $ \_ _ -> do
         -- The order of operations:
         -- * Insert new documentation into blob store
         -- * Generate the new index
         -- * Drop the index for the old tar-file
         -- * Link the new documentation to the package
-        let Body fileContents = rqBody req
-        blob <- liftIO $ BlobStorage.add store (GZip.decompress fileContents)
-        tarIndex <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blob)
-        update $ InsertDocumentation pkgid blob tarIndex
-        fmap Right $ seeOther ("/package/" ++ display pkgid) (toResponse ())
+        mRqBody <- takeRequestBody =<< askRq
+        case mRqBody of
+          Nothing -> returnError 500 "Missing body" [MText "uploadDocumentation could not be completed because the request body was already consumed."]
+          (Just (Body fileContents)) -> do
+              blob <- liftIO $ BlobStorage.add store (GZip.decompress fileContents)
+              tarIndex <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blob)
+              update $ InsertDocumentation pkgid blob tarIndex
+              fmap Right $ seeOther ("/package/" ++ display pkgid) (toResponse ())
 
 -- curl -u mgruen:admin -X PUT --data-binary @gtk.tar.gz http://localhost:8080/package/gtk-0.11.0
 

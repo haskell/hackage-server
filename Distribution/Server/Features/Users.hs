@@ -23,6 +23,8 @@ module Distribution.Server.Features.Users (
     getIndexDesc
   ) where
 
+import Control.Applicative ((<$>), (<*>), optional)
+
 import Distribution.Server.Feature
 import Distribution.Server.Features.Core
 import Distribution.Server.Resource
@@ -147,7 +149,7 @@ enabledAccount uname = withUserName uname $ \uid _ -> do
     users <- query GetUserDb
     admins <- query State.GetHackageAdmins
     Auth.withHackageAuth users (Just admins) Nothing $ \_ _ -> do
-        enabled <- getDataFn (look "enabled")
+        enabled <- optional $ look "enabled"
         -- for a checkbox, prescence in data string means 'checked'
         case enabled of
             Nothing -> update (SetEnabledUser uid False)
@@ -191,16 +193,15 @@ adminAddUser = do
   --Auth.withHackageAuth users (Just admins) Nothing $ \_ _ -> do
     reqData <- getDataFn lookUserNamePasswords
     case reqData of
-        Nothing -> returnError 400 "Error registering user"
-                   [MText "Username, password, or repeated password invalid."]
-        Just (ustr, pwd1, pwd2) ->
+        (Left errs) -> returnError 400 "Error registering user"
+                   ((MText "Username, password, or repeated password invalid.") : map MText errs)
+        (Right (ustr, pwd1, pwd2)) ->
             responseWith (newUserWithAuth ustr (PasswdPlain pwd1) (PasswdPlain pwd2)) $ \uname ->
             fmap Right $ seeOther ("/user/" ++ display uname) (toResponse ())
    where lookUserNamePasswords = do
-             uname <- look "username"
-             pwd1 <- look "password"
-             pwd2 <- look "repeat-password"
-             return (uname, pwd1, pwd2)
+             (,,) <$> look "username" 
+                  <*> look "password"
+                  <*> look "repeat-password"
 
 newUserWithAuth :: String -> PasswdPlain -> PasswdPlain -> MServerPart UserName
 newUserWithAuth _ pwd1 pwd2 | pwd1 /= pwd2 = returnError 400 "Error registering user" [MText "Entered passwords do not match"]
@@ -234,7 +235,7 @@ changePassword userPathName = do
             canChange <- canChangePassword uid userPathId
             if canChange
               then do
-                pwd <- maybe (return $ ChangePassword "not" "valid" Auth.BasicAuth) return =<< getData
+                pwd <- either (const $ return $ ChangePassword "not" "valid" Auth.BasicAuth) return =<< getData
                 if (first pwd == second pwd && first pwd /= "")
                   then do
                     let passwd = PasswdPlain (first pwd)
@@ -281,7 +282,7 @@ adminGroupDesc = UserGroup {
 doGroupAddUser :: UserGroup -> DynamicPath -> MServerPart ()
 doGroupAddUser group _ = do
     users <- query GetUserDb
-    muser <- getDataFn $ look "user"
+    muser <- optional $ look "user"
     case muser of
         Nothing -> addError "Bad request (could not find 'user' argument)"
         Just ustr -> case simpleParse ustr >>= \uname -> Users.lookupName uname users of

@@ -16,7 +16,7 @@ import System.Locale (defaultTimeLocale)
 import System.IO (hSetBuffering, stdout, BufferMode(..))
 import System.FilePath.Posix
 
-import Happstack.Server.HTTP.FileServe (mimeTypes, guessContentType)
+import Happstack.Server.FileServe.BuildingBlocks (mimeTypes, guessContentType)
 import qualified Network.HTTP as HTTP
 import qualified Network.HTTP.Base as HTTP
 import qualified Network.Browser as Browser

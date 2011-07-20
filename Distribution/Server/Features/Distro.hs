@@ -147,8 +147,8 @@ lookPackageInfo func = do
             Nothing -> mzero
             Just pVer -> return $ DistroPackageInfo pVer pUriStr
     case mInfo of
-        Nothing -> ok $ toResponse "Sorry, something went wrong there"
-        Just pInfo -> func pInfo
+        (Left errs) -> ok $ toResponse $ unlines $ "Sorry, something went wrong there." : errs
+        (Right pInfo) -> func pInfo
 
 lookDistroName :: (DistroName -> ServerPart Response) -> ServerPart Response
 lookDistroName func = withDataFn (look "distro") $ \dname -> case simpleParse dname of
@@ -179,12 +179,15 @@ maintainerDescription dname = nullDescription
   }
   where str = display dname
 
-lookCSVFile :: (CSVFile -> Web Response) -> ServerPart Response
-lookCSVFile func = withRequest $ \req -> do
-    let Body fileContents = rqBody req
-    case parseCSV "PUT input" (fromUTF8 (BS.unpack (fileContents))) of
-        Left err -> badRequest $ toResponse $ "Could not parse CSV File: " ++ show err
-        Right csv -> func (CSVFile csv)
+lookCSVFile :: (CSVFile -> ServerPart Response) -> ServerPart Response
+lookCSVFile func = do
+    mRqBody <- takeRequestBody =<< askRq
+    case mRqBody of
+      Nothing -> internalServerError $ toResponse ("lookCVSFile: attempted to takeRequestBody, but it was already consumed.")
+      (Just (Body fileContents)) ->
+          case parseCSV "PUT input" (fromUTF8 (BS.unpack (fileContents))) of
+            Left err -> badRequest $ toResponse $ "Could not parse CSV File: " ++ show err
+            Right csv -> func (CSVFile csv)
 
 packageListToCSV :: [(PackageName, DistroPackageInfo)] -> CSVFile
 packageListToCSV entries

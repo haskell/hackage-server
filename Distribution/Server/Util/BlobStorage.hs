@@ -16,6 +16,7 @@ module Distribution.Server.Util.BlobStorage (
     open,
     add,
     addWith,
+    addFileWith,
     fetch,
     filepath,
   ) where
@@ -78,6 +79,27 @@ addWith store content check =
       Left  err -> return (Left  err,          False)
       Right res -> return (Right (res, blobId), True)
 
+addFileWith :: BlobStorage -> FilePath
+        -> (ByteString -> IO (Either error result))
+        -> IO (Either error (result, BlobId))
+addFileWith store filePath check =
+  withIncomingFile store filePath $ \file blobId -> do
+    content' <- BS.readFile file
+    result <- check content'
+    case result of
+      Left  err -> return (Left  err,          False)
+      Right res -> return (Right (res, blobId), True)
+
+hBlobId :: Handle -> IO BlobId
+hBlobId hnd = evaluate . BlobId . md5 =<< BS.hGetContents hnd
+
+fpBlobId :: FilePath -> IO BlobId
+fpBlobId file =
+    do hnd <- openBinaryFile file ReadMode 
+       blobId <- hBlobId hnd
+       hClose hnd
+       return blobId 
+
 withIncoming :: BlobStorage -> ByteString
               -> (FilePath -> BlobId -> IO (a, Bool))
               -> IO a
@@ -87,8 +109,26 @@ withIncoming store content action = do
         -- TODO: calculate the md5 and write to the temp file in one pass:
         BS.hPut hnd content
         hSeek hnd AbsoluteSeek 0
-        blobId <- evaluate . BlobId . md5 =<< BS.hGetContents hnd
+        blobId <- hBlobId hnd
         hClose hnd
+        withIncoming' store file blobId action
+  where
+    handleExceptions tmpFile tmpHandle =
+      handle $ \err -> do
+        hClose tmpHandle
+        removeFile tmpFile
+        throwIO (err :: IOError)
+
+withIncomingFile :: BlobStorage 
+                     -> FilePath
+                     -> (FilePath -> BlobId -> IO (a, Bool))
+                     -> IO a
+withIncomingFile store file action =
+    do blobId <- fpBlobId file
+       withIncoming' store file blobId action
+
+withIncoming' :: BlobStorage -> FilePath -> BlobId -> (FilePath -> BlobId -> IO (a, Bool)) -> IO a
+withIncoming' store file blobId action = do
         -- open a new Handle since the old one is closed by hGetContents
         (res, commit) <- action file blobId
         if commit
@@ -100,12 +140,6 @@ withIncoming store content action = do
             else removeFile file
         return res
 
-  where
-    handleExceptions tmpFile tmpHandle =
-      handle $ \err -> do
-        hClose tmpHandle
-        removeFile tmpFile
-        throwIO (err :: IOError)
 
 -- | Retrieve a blob from the store given its 'BlobId'.
 --

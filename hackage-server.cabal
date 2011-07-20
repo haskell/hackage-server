@@ -144,13 +144,13 @@ executable hackage-server
     xhtml >= 3000.1,
     json == 0.4.*,
     stringsearch == 0.3.*,
-    rss == 3000.0.*,
+    rss == 3000.1.*,
     Cabal == 1.8.* || == 1.10.*,
     csv == 0.1.*,
-    happstack-data   == 0.5.*,
-    happstack-util   == 0.5.*,
-    happstack-state  == 0.5.*,
-    happstack-server == 0.5.*,
+    happstack-data   == 6.0.*,
+    happstack-util   == 6.0.*,
+    happstack-state  == 6.0.*,
+    happstack-server == 6.1.*,
     uri == 0.1.*
   build-tools:
     alex == 2.3.*,
@@ -181,7 +181,7 @@ executable hackage-mirror
     containers >= 0.1,
     network >= 2.1,
     Cabal == 1.8.* || == 1.10.*,
-    happstack-server == 0.5.*,
+    happstack-server == 6.1.*,
     uri == 0.1.*
 
   if os(linux)

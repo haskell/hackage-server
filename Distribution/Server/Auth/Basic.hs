@@ -16,6 +16,7 @@ import Distribution.Server.Error
 import Happstack.Server
 import qualified Happstack.Crypto.Base64 as Base64
 
+import Control.Concurrent.MVar (tryPutMVar)
 import Control.Monad.Trans (MonadIO, liftIO)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
@@ -31,12 +32,29 @@ import Data.Digest.Pure.MD5 (md5)
 
 authorizationRealm :: String
 authorizationRealm = "Hackage"
-
+{-
 getHackageAuth :: Users.Users -> ServerPart (Either AuthError (UserId, UserInfo))
 getHackageAuth users = askRq >>= \req -> return $ case getAuthType req of
     Just BasicAuth  -> genericBasicAuth req authorizationRealm (getPasswdInfo users)
     Just DigestAuth -> genericDigestAuth req (getPasswdInfo users) --realm hashed in user database
     Nothing -> Left NoAuthError
+-}
+
+getHackageAuth :: Users.Users -> MServerPart (Either AuthError (UserId, UserInfo))
+getHackageAuth users = 
+    do req <- askRq
+       case getAuthType req of
+         Just BasicAuth  -> return $ Right $ genericBasicAuth req authorizationRealm (getPasswdInfo users)
+         -- HS6 -- this implementation is troublesome because it requires the entire request body to be read into RAM to run genericDigestAuth.. the request body could include large file uploads
+         Just DigestAuth -> do rq <- askRq
+                               mRqBody <- takeRequestBody rq -- HS6 - this will probably fail, because decodeBody in Distribution.Server.run already consumed it
+                               case mRqBody of
+                                 Nothing -> returnError 500 "Missing body" [MText "Authorization could not be completed because the request body was already consumed."]
+                                 (Just reqBody) -> 
+                                     do liftIO $ tryPutMVar (rqBody rq) reqBody
+                                        return $ Right $ genericDigestAuth req reqBody (getPasswdInfo users) --realm hashed in user database
+         Nothing         -> return $ Right $ Left NoAuthError
+
 
 getAuthType :: Request -> Maybe AuthType
 getAuthType req = case getHeader "authorization" req of
@@ -49,13 +67,14 @@ getAuthType req = case getHeader "authorization" req of
 withHackageAuth :: Users.Users -> Maybe Group.UserList -> Maybe AuthType ->
                    (UserId -> UserInfo -> MServerPart a) -> MServerPart a
 withHackageAuth users authorizedGroup forceType func = getHackageAuth users >>= \res -> case res of
-    Right (userId, info) -> do
+    Right (Right (userId, info)) -> do
         if isAuthorizedFor userId info authorizedGroup
             then func userId info
             else returnError 403 "Forbidden" [MText "No access for this page."]
-    Left err -> do
+    Right (Left authError) -> do
         setHackageAuth forceType
-        returnError 401 "Not authorized" [MText $ showAuthError err]
+        returnError 401 "Not authorized" [MText $ showAuthError authError]
+    Left err -> return (Left err)
 
 setHackageAuth :: Maybe AuthType -> ServerPart ()
 setHackageAuth forceType = do
@@ -127,8 +146,8 @@ askBasicAuth realmName = setHeaderM headerName headerValue >> setResponseCode 40
     headerValue = "Basic realm=\"" ++ realmName ++ "\""
 
 --------------------------------------------------------------------------------
-digestPasswdCheck :: Request -> Map String String -> PasswdHash -> Maybe Bool
-digestPasswdCheck req authMap (PasswdHash hash1) = do
+digestPasswdCheck :: Request -> RqBody -> Map String String -> PasswdHash -> Maybe Bool
+digestPasswdCheck req (Body bdy) authMap (PasswdHash hash1) = do
     nonce <- Map.lookup "nonce" authMap
     response <- Map.lookup "response" authMap
     uri <- Map.lookup "uri" authMap
@@ -136,7 +155,7 @@ digestPasswdCheck req authMap (PasswdHash hash1) = do
         nonceCount = Map.lookup "nc" authMap
         cnonce = Map.lookup "cnonce" authMap --insert (join traceShow) before intercalates to debug
         hash2 = show . md5 . BS.Lazy.pack $ intercalate ":" [show (rqMethod req), uri] ++ case qop of
-            Just "auth-int" -> (':':) . show . md5 $ case rqBody req of Body body -> body
+            Just "auth-int" -> (':':) . show . md5 $ bdy
             _ -> ""
         responseString = show . md5 . BS.Lazy.pack . intercalate ":" $ case (qop, nonceCount, cnonce) of
             (Just qop', Just nonceCount', Just cnonce')
@@ -150,8 +169,8 @@ digestPasswdCheck req authMap (PasswdHash hash1) = do
 -- To use both systems at the same time, determine at the start of a client
 -- "session" whether to request Basic or Digest authentication, and then
 -- demultiplex when the client sends the Authorization header.
-genericDigestAuth :: Request -> (UserName -> Maybe (a, Users.UserAuth)) -> Either AuthError a
-genericDigestAuth req userDetails = do
+genericDigestAuth :: Request -> RqBody -> (UserName -> Maybe (a, Users.UserAuth)) -> Either AuthError a
+genericDigestAuth req reqBody userDetails = do
     authHeader <- NoAuthError <? getHeader "authorization" req
     authMap <- UnrecognizedAuthError <? parseDigestResponse (BS.unpack authHeader)
     nameStr <- UnrecognizedAuthError <? Map.lookup "username" authMap
@@ -159,7 +178,7 @@ genericDigestAuth req userDetails = do
     case atype of
       BasicAuth  -> Left AuthTypeMismatchError
       DigestAuth -> do
-        matches <- UnrecognizedAuthError <? digestPasswdCheck req authMap hash
+        matches <- UnrecognizedAuthError <? digestPasswdCheck req reqBody authMap hash
         if matches then Right var else Left PasswordMismatchError
 
 -- Parser derived straight from RFCs 2616 and 2617

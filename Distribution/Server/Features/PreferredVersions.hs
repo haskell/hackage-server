@@ -14,6 +14,8 @@ module Distribution.Server.Features.PreferredVersions (
     withPackagePreferredPath
   ) where
 
+import Control.Applicative (optional)
+
 import Distribution.Server.Feature
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Upload
@@ -34,6 +36,7 @@ import Distribution.Package
 import Distribution.Version
 import Distribution.Text
 
+import Data.Either   (rights)
 import Data.Function (fix)
 import Data.List (intercalate, find)
 import Data.Time.Clock (getCurrentTime)
@@ -134,8 +137,8 @@ doPutPreferred :: VersionsFeature -> CoreFeature -> PackageName -> MServerPart (
 doPutPreferred f core pkgname =
         withPackageAll pkgname $ \pkgs ->
         withPackageNameAuth pkgname $ \_ _ -> do
-    pref <- getDataFn $ fmap lines $ look "preferred"
-    depr <- getDataFn $ fmap (map snd . filter ((=="deprecated") . fst)) lookPairs
+    pref <- optional $ fmap lines $ look "preferred"
+    depr <- optional $ fmap (rights . map snd . filter ((=="deprecated") . fst)) $ lookPairs
     case sequence . map simpleParse =<< pref of
         Just prefs -> case sequence . map simpleParse =<< depr of
             Just deprs -> case all (`elem` map packageVersion pkgs) deprs of
@@ -160,10 +163,10 @@ doPutDeprecated f pkgname =
         withPackageAll pkgname $ \_ ->
         withPackageNameAuth pkgname $ \_ _ -> do
     index  <- fmap packageList $ query GetPackagesState
-    isDepr <- getDataFn $ look "deprecated"
+    isDepr <- optional $ look "deprecated"
     case isDepr of
         Just {} -> do
-            depr <- getDataFn $ fmap words $ look "by"
+            depr <- optional $ fmap words $ look "by"
             case sequence . map simpleParse =<< depr of
                 Just deprs -> case filter (null . PackageIndex.lookupPackageName index) deprs of
                     [] -> do

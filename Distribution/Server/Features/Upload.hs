@@ -227,11 +227,13 @@ processUpload state uid res = do
 extractPackage :: (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)) -> BlobStorage -> MServerPart (PkgInfo, UploadResult)
 extractPackage processFunc storage =
     withDataFn (lookInput "package") $ \input ->
-          let fileName    = (fromMaybe "noname" $ inputFilename input)
-              fileContent = inputValue input
-          in upload fileName fileContent
+        case inputValue input of -- HS6 this has been updated to use the new file upload support in HS6, but has not been tested at all
+          (Right _) -> returnError 400 "Upload failed" [MText "package field in form data is not a file."]
+          (Left file) -> 
+              let fileName    = (fromMaybe "noname" $ inputFilename input)
+              in upload fileName file
   where
-    upload name content = query GetUserDb >>= \users -> 
+    upload name file = query GetUserDb >>= \users -> 
                           -- initial check to ensure logged in.
                           Auth.withHackageAuth users Nothing Nothing $ \uid _ -> do
         let processPackage :: ByteString -> IO (Either ErrorResponse UploadResult)
@@ -246,7 +248,7 @@ extractPackage processFunc storage =
                     case res of
                         Nothing -> return . Right $ uresult
                         Just err -> return . Left $ err
-        mres <- liftIO $ BlobStorage.addWith storage content processPackage
+        mres <- liftIO $ BlobStorage.addFileWith storage file processPackage
         case mres of
             Left  err -> returnError' err
             Right (res@(UploadResult pkg pkgStr _), blobId) -> do

@@ -23,7 +23,10 @@ import System.IO
 import System.IO.Error
          ( ioeGetErrorString )
 import System.Directory
-         ( doesDirectoryExist )
+         ( Permissions(..)
+         , doesDirectoryExist
+         , getPermissions
+          )
 import System.Console.GetOpt
          ( OptDescr(..), ArgDescr(..), ArgOrder(..), getOpt, usageInfo )
 import Data.List
@@ -53,21 +56,33 @@ main = topHandler $ getOpts >>= \options -> case options of
         let hostname  = fromMaybe (confHostName  defaults) (optHost      opts)
             stateDir  = fromMaybe (confStateDir  defaults) (optStateDir  opts)
             staticDir = fromMaybe (confStaticDir defaults) (optStaticDir opts)
+            tmpDir    = fromMaybe (confStaticDir defaults) (optTmpDir    opts)
             config = defaults {
                 confHostName  = hostname,
                 confPortNum   = port,
                 confStateDir  = stateDir,
-                confStaticDir = staticDir
+                confStaticDir = staticDir,
+                confTmpDir    = tmpDir
             }
         -- Be helpful to people running from the build tree
-        exists <- doesDirectoryExist staticDir
-        when (not exists) $
-          if isJust (optStaticDir opts)
-            then fail $ "The given static files directory " ++ staticDir
-                  ++ " does not exist."
-            else fail $ "It looks like you are running the server without installing "
-                  ++ "it. That is fine but you will have to give the location of "
-                  ++ "the static html files with the --static-dir flag."
+        -- check that staticDir exists and is readable
+        do exists <- doesDirectoryExist staticDir
+           when (not exists) $
+             if isJust (optStaticDir opts)
+               then fail $ "The given static files directory " ++ staticDir
+                     ++ " does not exist."
+               else fail $ "It looks like you are running the server without installing "
+                     ++ "it. That is fine but you will have to give the location of "
+                     ++ "the static html files with the --static-dir flag."
+           perms <- getPermissions staticDir
+           when (not $ readable perms) $ fail $ "The static files directory " ++ staticDir ++ " exists but is not readable by the server."
+
+        -- check that tmpDir exists and is readable & writable
+        do exists <- doesDirectoryExist tmpDir
+           when (not exists) $ fail $ "The temporary directory " ++ tmpDir ++ " does not exist. Create the directory or use --tmp-dir to specify an alternate location."
+           perms <- getPermissions tmpDir
+           when (not $ readable perms) $ fail $ "The temporary directory " ++ tmpDir ++ " is not readable by the server. Fix the permissions or use --tmp-dir to specify an alternate location."
+           when (not $ writable perms) $ fail $ "The temporary directory " ++ tmpDir ++ " is not writable by the server. Fix the permissions or use --tmp-dir to specify an alternate location."
 
         checkBlankServerState =<< Server.hasSavedState config
 
@@ -356,10 +371,11 @@ data RunOpts = RunOpts {
     optHost      :: Maybe String,
     optStateDir  :: Maybe FilePath,
     optStaticDir :: Maybe FilePath,
+    optTmpDir    :: Maybe FilePath,
     optTemp :: Bool
 } deriving (Show)
 defaultRunOpts :: RunOpts
-defaultRunOpts = RunOpts Nothing Nothing Nothing Nothing False
+defaultRunOpts = RunOpts Nothing Nothing Nothing Nothing Nothing False
 runDescriptions :: [OptDescr (RunOpts -> RunOpts)]
 runDescriptions =
   [ Option [] ["port"]
@@ -374,6 +390,9 @@ runDescriptions =
   , Option [] ["static-dir"]
       (ReqArg (\file opts -> opts { optStaticDir = Just file }) "DIR")
       "Directory in which to find the html and other static files (default: cabal location)"
+  , Option [] ["tmp-dir"]
+      (ReqArg (\file opts -> opts { optTmpDir = Just file }) "DIR")
+      "Temporary directory in which to store file uploads until they are moved to a permanent location."
   , Option [] ["temp-run"]
       (NoArg (\opts -> opts { optTemp = True }))
       "Set up a temporary server while initializing state for maintenance restarts"

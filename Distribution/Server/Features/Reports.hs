@@ -30,6 +30,7 @@ import Distribution.Package
 import Happstack.Server
 import Happstack.State (update, query)
 import Data.Function (fix)
+import Control.Applicative (optional)
 import Control.Monad.Trans
 import Control.Monad (mzero)
 
@@ -100,11 +101,11 @@ submitBuildReport r store dpath = withPackageVersionPath dpath $ \pkg -> do
     Auth.withHackageAuth users Nothing Nothing $ \_ _ -> do
         let pkgid = pkgInfoId pkg
         -- allow submission of the report and log at the same time (use multipart for this, preferrably)
-        reportStr <- getDataFn (look "report")
+        reportStr <- optional (look "report")
         case maybe (Left "Could not find report input") Right reportStr >>= BuildReport.parse of
             Left err -> returnError 400 "Error submitting report" [MText err]
             Right report -> do
-                mbuildLog <- getDataFn (lookBS "log")
+                mbuildLog <- optional (lookBS "log")
                 mblob <- case mbuildLog of
                     Nothing  -> return Nothing
                     Just blog -> fmap (Just . BuildLog) $ liftIO $ BlobStorage.add store blog
@@ -131,11 +132,14 @@ putBuildLog r store dpath = withPackageVersionPath dpath $ \pkg -> withReportId 
     -- logged in users
     Auth.withHackageAuth users Nothing Nothing $ \_ _ -> do
         let pkgid = pkgInfoId pkg
-        blog <- fmap (\req -> case rqBody req of Body body -> body) askRq
-        buildLog <- liftIO $ BlobStorage.add store blog
-        update $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
-        -- go to report page (linking the log)
-        fmap Right $ seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
+        mRqBody <- takeRequestBody =<< askRq
+        case mRqBody of
+          Nothing -> returnError 500 "Missing body" [MText "putBuildLog could not be completed because the request body was already consumed."]
+          (Just (Body blog)) -> do
+                       buildLog <- liftIO $ BlobStorage.add store blog
+                       update $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
+                       -- go to report page (linking the log)
+                       fmap Right $ seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
 
 -- result: auth error, not-found error or redirect
 deleteBuildLog :: ReportsResource -> DynamicPath -> MServerPart Response

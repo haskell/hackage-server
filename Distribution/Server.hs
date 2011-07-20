@@ -60,8 +60,9 @@ import Distribution.Text
 
 import System.FilePath ((</>))
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist)
+import Control.Applicative ((<$>), optional)
 import Control.Concurrent
-import Control.Monad (when, mplus)
+import Control.Monad (when, mplus, msum)
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Network.URI (URIAuth(URIAuth))
@@ -75,7 +76,8 @@ data ServerConfig = ServerConfig {
   confHostName  :: String,
   confPortNum   :: Int,
   confStateDir  :: FilePath,
-  confStaticDir :: FilePath
+  confStaticDir :: FilePath,
+  confTmpDir    :: FilePath
 } deriving (Show)
 
 confHappsStateDir, confBlobStoreDir :: ServerConfig -> FilePath
@@ -90,9 +92,10 @@ defaultServerConfig = do
     confHostName  = hostName,
     confPortNum   = 8080,
     confStateDir  = "state",
-    confStaticDir = dataDir </> "static"
-  }
-
+    confStaticDir = dataDir </> "static",
+    confTmpDir    = "upload-tmp"
+  
+}
 data Server = Server {
   serverTxControl :: MVar TxControl,
   serverFeatures  :: [Feature.HackageModule],
@@ -117,7 +120,7 @@ hasSavedState = doesDirectoryExist . confHappsStateDir
 -- with stale lock files.
 --
 initialise :: ServerConfig -> IO Server
-initialise initConfig@(ServerConfig hostName portNum stateDir staticDir) = do
+initialise initConfig@(ServerConfig hostName portNum stateDir staticDir tmpDir) = do
     exists <- doesDirectoryExist staticDir
     when (not exists) $ fail $ "The static files directory " ++ staticDir ++ " does not exist."
 
@@ -129,6 +132,7 @@ initialise initConfig@(ServerConfig hostName portNum stateDir staticDir) = do
     let config = Config {
             serverStore     = store,
             serverStaticDir = staticDir,
+            serverTmpDir    = tmpDir,
             serverURI       = hostURI
          }
     -- do feature initialization
@@ -157,14 +161,20 @@ run :: Server -> IO ()
 run server = simpleHTTP conf $ mungeRequest $ impl server
   where
     conf = nullConf { Happstack.Server.port = serverPort server }
-    mungeRequest :: ServerPart Response -> ServerPart Response
-    mungeRequest = localRq mungeMethod
-    -- like HTTP methods, but.. less so.
-    mungeMethod req = case (rqMethod req, lookup "_method" (rqInputs req)) of
-        (POST, Just input) -> case reads . map toUpper . BS.unpack $ inputValue input of
-            [(newMethod, "")] -> req { rqMethod = newMethod }
-            _ -> req
-        _ -> req
+
+    mungeRequest part =
+        do decodeBody (defaultBodyPolicy "/tmp/" (1*10^6) (1*10^6) (1*10^6)) -- HS6 - "/tmp/" should come from ServerConfig.tmpDir, and the quotas should be configurable as well. Also there are places in the code that want to work with the request body directly but maybe fail if the request body has already been consumed. The body will only be consumed if it is a POST/PUT request *and* the content-type is multipart/form-data. If this does happen, you should get a clear error message saying what happened.
+           msum [ -- like HTTP methods, but.. less so. Since browsers do not support PUT, DELETE, etc, we fake it.
+                  do methodM POST
+                     mMethod <- optional $ look "_method" `checkRq` (\str -> readRq "_method" (map toUpper str))
+                     case mMethod of
+                       Nothing -> part
+                       (Just mthd) -> localRq (mungeMethod mthd) part
+                 -- or just do things the normal way
+                , part
+                ]
+        where
+    mungeMethod newMethod req = req { rqMethod = newMethod }
     -- todo: given a .json or .html suffix, munge it into an Accept header, can use MessageWrap.pathEls to reparse rqPath
     -- .. never mind, see enhanced Resource.hs
 

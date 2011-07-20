@@ -9,6 +9,8 @@ module Distribution.Server.Features.Tags (
     constructTagIndex
   ) where
 
+import Control.Applicative (optional)
+
 import Distribution.Server.Feature
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages (categorySplit)
@@ -129,7 +131,7 @@ putTags :: TagsFeature -> PackageName -> MServerPart ()
 putTags tagf pkgname = withPackageAll pkgname $ \_ -> do
     -- let anyone edit tags for the moment. otherwise, we can do:
     -- users <- query GetUserDb; withHackageAuth users Nothing Nothing $ \_ _ -> do
-    mtags <- getDataFn $ look "tags"
+    mtags <- optional $ look "tags"
     case simpleParse =<< mtags of
         Just (TagList tags) -> do
             let tagSet = Set.fromList tags

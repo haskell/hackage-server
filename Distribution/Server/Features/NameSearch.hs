@@ -24,7 +24,7 @@ import Distribution.Text
 import Distribution.Package
 import Distribution.PackageDescription
 
-import Data.Maybe
+import Control.Applicative ((<|>), optional, pure)
 import Data.Function (fix)
 import qualified Data.Set as Set
 import qualified Data.ByteString.Lazy.Char8 as BS
@@ -106,12 +106,12 @@ searchFindPackage names str doTextSearch = do
 
 packageFindWith :: (Maybe (String, Bool) -> ServerPart a) -> ServerPart a
 packageFindWith func = do
-    mname <- getDataFn (look "name")
+    mname <- optional (look "name")
     func $ fmap (\n -> (n, length n >= 3)) mname
 
 suggestJson :: String -> Cache.Cache NameIndex -> ServerPart Response
 suggestJson hostStr cache = do
-    queryStr <- fmap (fromMaybe "") $ getDataFn (look "name")
+    queryStr <- look "name" <|> pure ""
     -- There are a few ways to improve this.
     -- 1. Group similarly prefixed items, so user can see more breadth and less depth
     -- 2. Sort by revdeps, downloads, etc. (create a general "hotness" index)

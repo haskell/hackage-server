@@ -25,6 +25,7 @@ import Distribution.Simple.Utils (fromUTF8)
 import Distribution.PackageDescription.Parse (parsePackageDescription)
 import Distribution.ParseUtils (ParseResult(..), locatedErrorMsg, showPWarning)
 
+import Control.Applicative ((<$>), (<*>))
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Time.Format (readsTime)
 import System.Locale (defaultTimeLocale)
@@ -86,7 +87,7 @@ initMirrorFeature config core users = do
         requireMirrorAuth
         withUploadInfo "package" $ \input uploadData -> do
             let fileName = (fromMaybe "noname" $ inputFilename input)
-                fileContent = inputValue input
+                fileContent = undefined -- inputValue input -- HS6 - this needs to be updated to use the new file upload support in HS6
             -- augment unpackPackage to ensure that dpath matches it...
             res <- liftIO $ BlobStorage.addWith store fileContent (return . Upload.unpackPackage fileName)
             case res of
@@ -112,7 +113,7 @@ initMirrorFeature config core users = do
         requireMirrorAuth
         withUploadInfo "cabal" $ \input uploadData -> do
             let fileName = (fromMaybe "noname" $ inputFilename input)
-                fileContent = inputValue input
+                fileContent = undefined -- inputValue input -- HS6 - this needs to be updated to use the new file upload support in HS6
             case parsePackageDescription (fromUTF8 . BS.unpack $ fileContent) of
                 ParseFailed err -> badRequest . toResponse $ show (locatedErrorMsg err)
                 ParseOk warnings pkg -> do
@@ -133,10 +134,10 @@ initMirrorFeature config core users = do
 
     withUploadInfo :: String -> (Input -> UploadInfo -> ServerPart Response) -> ServerPart Response
     withUploadInfo fileField func = do
-        mres <- getDataFn (liftM3 (,,) (lookInput fileField) (look "date") (look "user"))
+        mres <- getDataFn ((,,) <$> (lookInput fileField) <*> (look "date") <*> (look "user"))
         case mres of
-          Nothing -> badRequest $ toResponse $ "Invalid input"
-          Just (input, mdate, muser) -> do
+          (Left errs) -> badRequest $ toResponse $ unlines ("Invalid input." : errs)
+          Right (input, mdate, muser) -> do
            case (readsTime defaultTimeLocale "%c" mdate, simpleParse muser :: Maybe UserName) of
             ([(udate, "")], Just uname) -> do
                 -- This is a lot for a simple PUT to be doing. Ideally, with a more

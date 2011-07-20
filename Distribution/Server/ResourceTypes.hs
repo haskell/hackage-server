@@ -19,7 +19,7 @@ import Distribution.Server.Util.BlobStorage
          ( BlobId )
 
 import Happstack.Server
-         ( ToMessage(..), Response(..), RsFlags(..), nullRsFlags, mkHeaders
+         ( ToMessage(..), Response(..), RsFlags(..), Length(NoContentLength), nullRsFlags, mkHeaders
          , noContentLength )
 
 import qualified Data.ByteString.Char8 as BS
@@ -133,7 +133,7 @@ mkResponseLen :: BS.Lazy.ByteString -> Int -> [(String, String)] -> Response
 mkResponseLen bs len headers = Response {
     rsCode    = 200,
     rsHeaders = mkHeaders (("Content-Length", show len) : headers),
-    rsFlags   = nullRsFlags { rsfContentLength = False },
+    rsFlags   = nullRsFlags { rsfLength = NoContentLength },
     rsBody    = bs,
     rsValidator = Nothing
   }

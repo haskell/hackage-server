@@ -8,6 +8,7 @@ import qualified Network.URI as URI
 data Config = Config {
     serverStore     :: BlobStorage,
     serverStaticDir :: FilePath,
+    serverTmpDir    :: FilePath,
     serverURI       :: URI.URIAuth
 }
 
