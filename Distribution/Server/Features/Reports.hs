@@ -101,13 +101,16 @@ submitBuildReport r store dpath = withPackageVersionPath dpath $ \pkg -> do
     -- require logged-in user
     Auth.withHackageAuth users Nothing Nothing $ \_ _ -> do
         let pkgid = pkgInfoId pkg
-        Body body <- rqBody `fmap` askRq
-        case BuildReport.parse $ unpack body of
-            Left err -> returnError 400 "Error submitting report" [MText err]
-            Right report -> do
-                reportId <- update $ AddReport pkgid (report, Nothing)
-                -- redirect to new reports page
-                fmap Right $ seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
+        mRqBody <- takeRequestBody =<< askRq
+        case mRqBody of
+          Nothing -> internalServerError $ toResponse $ "takeRequestBody can only be called once."
+          (Just (Body body)) ->
+            case BuildReport.parse $ unpack body of
+                Left err -> returnError 400 "Error submitting report" [MText err]
+                Right report -> do
+                    reportId <- update $ AddReport pkgid (report, Nothing)
+                    -- redirect to new reports page
+                    fmap Right $ seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
 
 -- result: auth error, not-found error or redirect
 deleteBuildReport :: ReportsResource -> DynamicPath -> MServerPart Response
@@ -130,7 +133,7 @@ putBuildLog r store dpath = withPackageVersionPath dpath $ \pkg -> withReportId 
         let pkgid = pkgInfoId pkg
         mRqBody <- takeRequestBody =<< askRq
         case mRqBody of
-          Nothing -> returnError 500 "Missing body" [MText "putBuildLog could not be completed because the request body was already consumed."]
+          Nothing -> internalServerError $ toResponse $ "takeRequestBody can only be called once."
           (Just (Body blog)) -> do
                        buildLog <- liftIO $ BlobStorage.add store blog
                        update $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
