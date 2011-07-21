@@ -17,14 +17,10 @@ license-file: LICENSE
 build-type: Simple
 cabal-version: >=1.6
 data-files:
-  static/hackage.css
-  static/accounts.html
-  static/hackage.html
-  static/upload.html
-  static/admin.html
-  static/favicon.ico
-  static/built-with-cabal.png
-  static/cabal-tiny.png
+  static/*.html
+  static/*.css
+  static/*.ico
+  static/*.png
 
 source-repository head
   type: darcs
