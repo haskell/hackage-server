@@ -171,6 +171,7 @@ executable hackage-mirror
     Distribution.Server.Backup.UploadLog
     Distribution.Server.Users.Types
     Distribution.Server.Util.Index
+    Distribution.Server.Util.Merge
   build-depends:
     base == 4.*,
     bytestring >= 0.9,

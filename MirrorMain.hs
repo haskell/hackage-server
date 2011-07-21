@@ -1,235 +1,392 @@
+{-# LANGUAGE PatternGuards #-}
 module Main where
 
-import qualified Codec.Compression.GZip as GZip
-import Control.Concurrent (threadDelay)
-import Control.Monad (foldM)
-import Data.ByteString.Lazy.Char8 (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as BS
-import Data.List (intercalate)
-import Data.Map (Map)
-import qualified Data.Map as Map
-import Data.Maybe (fromMaybe, fromJust)
-import Data.Time.Clock (UTCTime)
-import Data.Time.Format (formatTime)
-import System.Environment
-import System.Locale (defaultTimeLocale)
-import System.IO (hSetBuffering, stdout, BufferMode(..))
-import System.FilePath.Posix
-
-import Happstack.Server.FileServe.BuildingBlocks (mimeTypes, guessContentType)
-import qualified Network.HTTP as HTTP
-import qualified Network.HTTP.Base as HTTP
-import qualified Network.Browser as Browser
-import Network.URI (URI(..), URIAuth(..), parseURI)
-import Network.HTTP.Headers (HeaderName(..), replaceHeader)
+import Network.HTTP
+import Network.Browser
+import Network.URI (URI(..), URIAuth(..), parseURI, escapeURIString)
 
 import Distribution.Server.Backup.UploadLog as UploadLog (read, Entry(..))
-import Distribution.Server.Users.Types (UserName)
+import Distribution.Server.Users.Types (UserId(..), UserName(UserName))
 import Distribution.Server.Util.Index as PackageIndex (read)
-import Distribution.Server.Auth.Basic as Auth
+import Distribution.Server.Util.Merge
 import Distribution.Package
 import Distribution.Text
-import Data.Version
+import Distribution.Verbosity
+import Distribution.Simple.Utils
 
-main = withArgs $ \source dest -> do
-    hSetBuffering stdout NoBuffering
-    userStr <- prompt "User name"
-    passStr <- prompt "Password"
-    let conf = MirrorConfig userStr passStr source dest
+import Data.List
+import Data.Maybe
+import Control.Monad
+import Data.Time
+import Data.Time.Clock.POSIX
+import Data.ByteString.Lazy.Char8 (ByteString)
+import qualified Data.ByteString.Lazy.Char8 as BS
+import qualified Codec.Compression.GZip  as GZip
+import qualified Codec.Archive.Tar       as Tar
+import qualified Codec.Archive.Tar.Entry as Tar
 
-    entries <- downloadLogOld conf
+import System.Environment
+import System.IO
+import System.Exit
+import System.FilePath
+import System.Directory
+import System.Console.GetOpt
+import qualified System.FilePath.Posix as Posix
 
-    -- The destination index may include cabal entries for packages which
-    -- don't have tarballs. More inspection would be needed to mirror all
-    -- of the tarballs.
-    index <- downloadIndexNew conf
+import Debug.Trace
 
-    let diffed = diffAllEntries (makeEntryMap entries) (makeIndexMap index)
-        diffNum = Map.size diffed
-    putStrLn $ concat ["... Packages to mirror (", show diffNum, "): "]
-    putStrLn $ "> " ++ intercalate ", " (map display $ Map.keys diffed)
-    forFold (Map.toList diffed) 1 $ \index (pkgid, entry) -> do
-        putStr $ show index ++ ". Downloading " ++ display pkgid ++ "... "
-        res <- downloadPackageOld conf pkgid
-        case res of
-            Left err -> do
-                putError $ "could not find package with upload entry " ++ show (display entry) ++ " on source server."
-            Right bstr -> do
-                putStr $ "mirroring... "
-                res' <- putPackage conf entry bstr
-                case res' of
-                    Nothing  -> putStrLn "success"
-                    Just err -> putError $ "unsuccessful putting " ++ display pkgid ++ ": " ++ show err
-        sleepSec
-        return (index+1)
-    putStrLn "All done"
-  where prompt str = do
-            putStr $ str ++ ": "
-            getLine
-        putError str = do
-            putStrLn ""
-            putStrLn $ "*** Error: " ++ str
-        forFold list init func = foldM func init list
-        sleepSec = threadDelay (1*1000000)
-        withArgs func = getArgs >>= \args -> case args of
-            [a, b] -> func a b
-            _ -> mapM_ putStrLn
-              [ "Usage: hackage-mirror [source host] [destination host]"
-              , "- hackage-mirror copies from hackage-script to a hackage-server instance."
-              , "- You will be prompted for your name and password at the destination server."
-              , "- The current behavior of this client is to copy all tarballs for which"
-              , "  no cabal file exists in the destination (it will not overwrite cabal"
-              , "  files without tarballs)." ]
-        
 
-data MirrorConfig = MirrorConfig {
-    mirrorName :: String,
-    mirrorPass :: String,
-    hackageSrc :: String,
-    hackageDst :: String
-    -- can add additional config options, including behavior
-}
+data MirrorOpts = MirrorOpts {
+                    srcURI   :: URI,
+                    dstURI   :: URI,
+                    stateDir :: FilePath
+                  }
 
-srcUri, dstUri :: MirrorConfig -> String
-srcUri = hackageSrc
-dstUri = hackageDst
+data PkgMirrorInfo = PkgMirrorInfo
+                       PackageId
+                       (Maybe UTCTime)
+                       (Maybe UserName)
+                       (Maybe UserId)
+  deriving Show
 
---------------------------------------------------------------------------------
--- Upload a package to the new server
-putPackage :: MirrorConfig -> UploadLog.Entry -> ByteString -> IO (Maybe String)
-putPackage config (UploadLog.Entry time uname pkgid) pkgData = do
-    let timeStr = formatTime defaultTimeLocale "%c" time
+main :: IO ()
+main = topHandler $ do
+  args <- getArgs
+  (verbosity, opts) <- validateOpts args
+
+  mirrorOnce verbosity opts
+
+
+mirrorOnce :: Verbosity -> MirrorOpts -> IO ()
+mirrorOnce verbosity opts = do
+
+    let srcCacheFile = stateDir opts </> mkCacheFileName (srcURI opts)
+        dstCacheFile = stateDir opts </> mkCacheFileName (dstURI opts)
+    when (srcCacheFile == dstCacheFile) $
+      die "source and destination cache files clash"
+
+    createDirectoryIfMissing False (stateDir opts)
+
+    httpSession verbosity $ do
+
+      srcIndex <- downloadIndex (srcURI opts) srcCacheFile
+      dstIndex <- downloadIndex (dstURI opts) dstCacheFile
+
+      let pkgsToMirror = diffIndex srcIndex dstIndex
+      ioAction $ notice verbosity $ show (length pkgsToMirror) ++ " packages to mirror."
+
+      mirrorPackages verbosity opts pkgsToMirror
+
+  where
+    mkCacheFileName :: URI -> FilePath
+    mkCacheFileName URI { uriAuthority = Just auth }
+                        = makeValid (uriRegName auth ++ uriPort auth)
+    mkCacheFileName uri = error $ "unexpected URI " ++ show uri
+
+
+diffIndex :: [PkgMirrorInfo] -> [PkgMirrorInfo] -> [PkgMirrorInfo]
+diffIndex as bs =
+    [ pkg | OnlyInLeft pkg <- mergeBy (comparing mirrorPkgId)
+                                       (sortBy (comparing mirrorPkgId) as)
+                                       (sortBy (comparing mirrorPkgId) bs) ]
+  where
+    mirrorPkgId (PkgMirrorInfo pkgid _ _ _) = pkgid
+
+mirrorPackages :: Verbosity -> MirrorOpts -> [PkgMirrorInfo] -> HttpSession ()
+mirrorPackages verbosity opts pkgsToMirror = do
+
+    let credentials = extractCredentials (dstURI opts)
+    setAuthorityGen (provideAuthInfo credentials)
+
+    sequence_
+      [ do let src     = srcURI   opts <//> "packages" </> display (packageName pkgid) </>
+                                            display (packageVersion pkgid) </>  display pkgid <.> "tar.gz"
+               dst     = dstURI   opts <//> "package" </> display pkgid
+               pkgfile = stateDir opts </>  display pkgid <.> "tar.gz"
+
+           ioAction $ notice verbosity $ "\nmirroring " ++ display pkgid
+           ok <-     downloadFile' src         pkgfile
+           when ok $ putPackage    dst pkginfo pkgfile
+
+      | pkginfo@(PkgMirrorInfo pkgid _ _ _) <- pkgsToMirror ]
+
+  where
+    provideAuthInfo :: Maybe (String, String) -> URI -> String -> IO (Maybe (String, String))
+    provideAuthInfo credentials = \uri _realm -> do
+      if hostName uri == hostName (dstURI opts) then return credentials
+                                                else return Nothing
+
+    hostName = fmap uriRegName . uriAuthority
+
+    extractCredentials uri
+      | Just authority <- uriAuthority uri
+      , (username, ':':passwd0) <- break (==':') (uriUserInfo authority)
+      , let passwd = takeWhile (/='@') passwd0
+      , not (null username)
+      , not (null passwd)
+      = Just (username, passwd)
+    extractCredentials _ = Nothing
+
+putPackage :: URI -> PkgMirrorInfo -> FilePath -> HttpSession ()
+putPackage baseURI (PkgMirrorInfo pkgid mtime muname muid) pkgFile = do
+    putPackageTarball
+
+{-  case mtime of
+      Nothing   -> return ()
+      Just time -> putPackageUploadTime -}
+  where
+    putPackageTarball = do
+      pkgContent <- ioAction $ BS.readFile pkgFile
+      let pkgURI = baseURI <//> display pkgid <.> "tar.gz"
+      requestPUT pkgURI "application/x-gzip" pkgContent
+{-
+    putPackageUploadTime time = do
+      (_, rsp) <- request (requestPUT pkgURI "text/plain" timeStr)
+      where
+        timeStr = formatTime defaultTimeLocale "%c" time
+    putPackageUploadUser = do
+      where
         nameStr = display uname
-        userData = (mirrorName config, mirrorPass config)
-        pkgUri  = dstUri config </> "package" </> display pkgid
-                                </> display pkgid <.> "tar.gz"
-        pkgUri' = fromJust $ parseURI pkgUri
-    (ctype, reqStr) <- makeMultipart
-        [("date", timeStr), ("user", nameStr)]
-        [("package", display pkgid ++ ".tar.gz", pkgData)]
-    (_, rsp) <- Browser.browse $ do
-        Browser.setOutHandler $ \_ -> return ()
-        Browser.setAllowRedirects True -- handle HTTP redirects
-        Browser.setAuthorityGen $ \uri realm -> return $ if isHackage uri pkgUri' && realm==authorizationRealm then Just userData else Nothing
-        let req = HTTP.mkRequest HTTP.PUT pkgUri' :: HTTP.Request String
-        Browser.request
-            $ replaceHeader HdrContentLength (show $ BS.length reqStr)
-            $ replaceHeader HdrContentType ctype
-            $ req { HTTP.rqBody = BS.unpack reqStr }
-    return $ case HTTP.rspCode rsp of
-        (2, _, _) -> Nothing
-        _ -> Just (HTTP.rspReason rsp)
-  where isHackage test real = fmap uriRegName (uriAuthority test) == fmap uriRegName (uriAuthority real)
+-}
 
-makeMultipart :: [(String, String)] -> [(String, String, ByteString)]
-              -> IO (String, ByteString)
-makeMultipart fields files = do
-    -- or rather randomly generate a boundary
-    let boundary = "4369867349876958439243289738"
-        boundaryStr = "--" ++ boundary
-        fieldString name value =
-            unlines [boundaryStr, "Content-Disposition: form-data; name=\"" ++ name ++ "\"", "", value]
-        fileString name filename = 
-            let mime = fromMaybe "application/octet-stream" (guessContentType mimeTypes filename)
-            in unlines [boundaryStr, "Content-Disposition: form-data; name=\"" ++ name ++ "\"; filename=\"" ++ filename ++ "\"",
-                        "Content-Type: " ++ mime, ""]
-    return $ (,) ("multipart/form-data; boundary=" ++ boundary) $ BS.concat
-      [ BS.pack $ concatMap (uncurry fieldString) fields
-      , BS.concat $ map (\(name, filename, value) -> BS.concat [BS.pack $ fileString name filename, value, BS.pack "\n"]) files
-      , BS.pack $ boundaryStr ++ "--\n\n"
-      ]
 
---------------------------------------------------------------------------------
--- Download individual packages. If one fails, the mirror client keeps on going.
-downloadPackageOld :: MirrorConfig -> PackageId -> IO (Either String ByteString)
-downloadPackageOld config pkgid =
-    downloadPackage $
-        srcUri config
-    </> "packages/archive"
-    </> (display $ packageName pkgid)
-    </> (display $ packageVersion pkgid)
-    </> display pkgid <.> "tar.gz"
--- /packages/archive/<package>/<version>/<package>-<version>.tar.gz
+----------------------------------------------------
+-- Fetching info from source and destination servers
+----------------------------------------------------
 
-downloadPackageNew :: MirrorConfig -> PackageId -> IO (Either String ByteString)
-downloadPackageNew config pkgid =
-    downloadPackage $
-        srcUri config
-    </> "package"
-    </> display pkgid
-    </> display pkgid <.> ".tar.gz"
--- /package/<package>-<version>/<package>-<version>.tar.gz
-
-downloadPackage :: String -> IO (Either String ByteString)
-downloadPackage uri = do
-    res <- HTTP.simpleHTTP (HTTP.getRequest uri)
-    return $ case res of
-        Left err                                        -> Left  (show err)
-        Right r@HTTP.Response{ HTTP.rspCode = (2,0,0) } -> Right (BS.pack $ HTTP.rspBody r)
-        Right r                                         -> Left  (HTTP.rspReason r)
-
---------------------------------------------------------------------------------
--- Downloading logs: get package list and upload information from source Hackage
-downloadLogOld :: MirrorConfig -> IO [UploadLog.Entry]
-downloadLogOld config = do
-    putStrLn $ "Getting source log " ++ logURI
-    entries <- downloadLog logURI
-    putStrLn $ show (length entries) ++ " entries"
-    return entries
+downloadIndex :: URI -> FilePath -> HttpSession [PkgMirrorInfo]
+downloadIndex uri | isOldHackageURI uri = downloadOldIndex uri
+                  | otherwise           = downloadNewIndex uri
   where
-    logURI = srcUri config </> "packages/archive/log"
+    isOldHackageURI uri
+      | Just auth <- uriAuthority uri = uriRegName auth == "hackage.haskell.org"
+      | otherwise                     = False
 
--- presently, there is no downloadLogNew
--- it could use the fact that users/times are stored in the metadata
--- of the index tarball, assuming it's not been tampered with
 
-downloadLog :: String -> IO [UploadLog.Entry]
-downloadLog uri = do
-    rstr <- HTTP.getResponseBody =<< HTTP.simpleHTTP (HTTP.getRequest uri)
-    case UploadLog.read rstr of
-        Right elist -> return elist
-        Left  err -> error $ "Error parsing log at " ++ uri ++ ": " ++ err
+downloadOldIndex :: URI -> FilePath -> HttpSession [PkgMirrorInfo]
+downloadOldIndex uri cacheFile = do
 
---------------------------------------------------------------------------------
--- Downloading indices: get package list from destination Hackage, to diff with source
-downloadIndexOld :: MirrorConfig -> IO [PackageId]
-downloadIndexOld config =
-    downloadIndex $ srcUri config </> "/packages/archive/00-index.tar.gz"
+    downloadFile indexURI indexFile
+    downloadFile logURI logFile
 
-downloadIndexNew :: MirrorConfig -> IO [PackageId]
-downloadIndexNew config = do
-    putStrLn $ "Getting destination index " ++ indexURI
-    index <- downloadIndex indexURI
-    putStrLn $ show (length index) ++ " entries"
-    return index
+    ioAction $ do
+
+      pkgids <- withFile indexFile ReadMode $ \hnd -> do
+        content <- BS.hGetContents hnd
+        case PackageIndex.read (\pkgid _ -> pkgid) (GZip.decompress content) of
+          Left  err  -> die $ "Error parsing index at " ++ show uri ++ ": " ++ err
+          Right pkgs -> return pkgs
+
+      log <- withFile logFile ReadMode $ \hnd -> do
+        content <- hGetContents hnd
+        case UploadLog.read content of
+          Right log -> return log
+          Left  err -> die $ "Error parsing log at " ++ show uri ++ ": " ++ err
+
+      return (mergeLogInfo pkgids log)
+
   where
-    indexURI = dstUri config </> "packages/index.tar.gz"
+    indexURI  = uri <//> "00-index.tar.gz"
+    indexFile = cacheFile <.> "tar.gz"
 
-downloadIndex :: String -> IO [PackageId]
-downloadIndex uri = do
-    rstr <- HTTP.getResponseBody =<< HTTP.simpleHTTP (HTTP.getRequest uri)
-    case PackageIndex.read const (GZip.decompress $ BS.pack rstr) of
-        Left err   -> error $ "Error parsing index at " ++ uri ++ ": " ++ err
+    logURI    = uri <//> "log"
+    logFile   = cacheFile <.> "log"
+
+    mergeLogInfo pkgids log =
+        catMaybes
+      . map selectDetails
+      $ mergeBy (\pkgid entry -> compare pkgid (entryPkgId entry))
+                (sort pkgids)
+                ( map (maximumBy (comparing entryTime))
+                . groupBy (equating  entryPkgId)
+                . sortBy  (comparing entryPkgId)
+                $ log )
+
+    selectDetails (OnlyInRight _)     = Nothing
+    selectDetails (OnlyInLeft  pkgid) =
+      Just $ PkgMirrorInfo pkgid Nothing Nothing Nothing
+    selectDetails (InBoth pkgid (UploadLog.Entry time uname _)) =
+      Just $ PkgMirrorInfo pkgid (Just time) (Just uname) Nothing
+
+    entryPkgId (Entry _ _ pkgid) = pkgid
+    entryTime  (Entry time _ _)  = time
+
+
+downloadNewIndex :: URI -> FilePath -> HttpSession [PkgMirrorInfo]
+downloadNewIndex uri cacheFile = do
+    downloadFile indexURI indexFile
+    ioAction $ withFile indexFile ReadMode $ \hnd -> do
+      content <- BS.hGetContents hnd
+      case PackageIndex.read selectDetails (GZip.decompress content) of
+        Left err   -> error $ "Error parsing index at " ++ show uri ++ ": " ++ err
         Right pkgs -> return pkgs
 
---------------------------------------------------------------------------------
--- Diffing between entries and indices.
-makeEntryMap :: [UploadLog.Entry] -> Map PackageId (UTCTime, UserName)
-makeEntryMap entries =
-  Map.fromList
-    [ (pkg, (time, uname))
-        | UploadLog.Entry time uname pkg <- entries
-        , null . versionTags $ packageVersion pkg ]
+  where
+    indexURI  = uri <//> "packages/00-index.tar.gz"
+    indexFile = cacheFile <.> "tar.gz"
 
-makeIndexMap :: [PackageId] -> Map PackageId ()
-makeIndexMap = Map.fromList . map (flip (,) ())
+    selectDetails :: PackageId -> Tar.Entry -> PkgMirrorInfo
+    selectDetails pkgid entry =
+        PkgMirrorInfo
+          pkgid
+          (Just time)
+          (if null username then Nothing else Just (UserName username))
+          (if userid == 0   then Nothing else Just (UserId userid))
+      where
+        time     = epochTimeToUTC (Tar.entryTime entry)
+        username = Tar.ownerName (Tar.entryOwnership entry)
+        userid   = Tar.ownerId   (Tar.entryOwnership entry)
 
--- This is one of many possible diff functions. Another approach would be
--- to order entries by upload time and mirror the most recent until an
--- already-seen one is found.
-diffAllEntries :: Map PackageId (UTCTime, UserName) -> Map PackageId () -> Map PackageId UploadLog.Entry
-diffAllEntries entryMap indexMap =
-      Map.mapWithKey remakeEntry
-    $ Map.difference entryMap indexMap
-  where remakeEntry pkg (time, uname) = UploadLog.Entry time uname pkg
+        epochTimeToUTC :: Tar.EpochTime -> UTCTime
+        epochTimeToUTC = posixSecondsToUTCTime . realToFrac
 
+
+-------------------------
+-- HTTP utilities
+-------------------------
+
+infixr 5 <//>
+
+(<//>) :: URI -> FilePath -> URI
+uri <//> path = uri { uriPath = Posix.addTrailingPathSeparator (uriPath uri)
+                                Posix.</> path }
+
+
+type HttpSession a = BrowserAction (HandleStream ByteString) a
+
+httpSession :: Verbosity -> HttpSession a -> IO a
+httpSession verbosity action =
+    browse $ do
+      setUserAgent "hackage-mirror"
+      setErrHandler die
+      setOutHandler (debug verbosity)
+      setAllowBasicAuth True
+      action
+
+downloadFile :: URI -> FilePath -> HttpSession ()
+downloadFile uri file = do
+  out $ "downloading " ++ show uri ++ " to " ++ file
+  content <- requestGET uri
+  ioAction $ BS.writeFile file content
+
+-- AAARG! total lack of exception handling in HTTP monad!
+downloadFile' :: URI -> FilePath -> HttpSession Bool
+downloadFile' uri file = do
+  out $ "downloading " ++ show uri ++ " to " ++ file
+  mcontent <- requestGET' uri
+  case mcontent of
+    Nothing      -> do out $ "404 " ++ show uri
+                       return False
+
+    Just content -> do ioAction $ BS.writeFile file content
+                       return True
+
+requestGET :: URI -> HttpSession ByteString
+requestGET uri = do
+    (_, rsp) <- request (Request uri GET headers BS.empty)
+    checkStatus uri rsp
+    return (rspBody rsp)
+  where
+    headers = []
+
+-- Really annoying!
+requestGET' :: URI -> HttpSession (Maybe ByteString)
+requestGET' uri = do
+    (_, rsp) <- request (Request uri GET headers BS.empty)
+    case rspCode rsp of
+      (4,0,4) -> return Nothing
+      _       -> do checkStatus uri rsp
+                    return (Just (rspBody rsp))
+  where
+    headers = []
+
+
+requestPUT :: URI -> String -> ByteString -> HttpSession ()
+requestPUT uri mimetype body = do
+    (_, rsp) <- request (Request uri PUT headers body)
+    checkStatus uri rsp
+  where
+    headers = [ Header HdrContentLength (show (BS.length body))
+              , Header HdrContentType mimetype ]
+
+
+checkStatus :: URI -> Response ByteString -> HttpSession ()
+checkStatus uri rsp = case rspCode rsp of
+  (2,0,0) -> return ()
+  code    -> err (showFailure uri rsp)
+
+showFailure uri rsp =
+    show (rspCode rsp) ++ " " ++ rspReason rsp ++ show uri
+ ++ case lookupHeader HdrContentType (rspHeaders rsp) of
+      Just mimetype | "text/plain" `isPrefixOf` mimetype
+                   -> '\n' : BS.unpack (rspBody rsp)
+      _            -> ""
+
+-------------------------
+-- Command line handling
+-------------------------
+
+data MirrorFlags = MirrorFlags {
+    flagCacheDir  :: Maybe FilePath,
+    flagVerbosity :: Verbosity,
+    flagHelp      :: Bool
+}
+
+emptyMirrorFlags :: MirrorFlags
+emptyMirrorFlags = MirrorFlags Nothing normal False
+
+mirrorFlagDescrs :: [OptDescr (MirrorFlags -> MirrorFlags)]
+mirrorFlagDescrs =
+  [ Option ['h'] ["help"]
+      (NoArg (\opts -> opts { flagHelp = True }))
+      "Show this help text"
+
+  , Option ['v'] []
+      (NoArg (\opts -> opts { flagVerbosity = moreVerbose (flagVerbosity opts) }))
+      "Verbose mode"
+
+  , Option [] ["cache-dir"]
+      (ReqArg (\dir opts -> opts { flagCacheDir = Just dir }) "DIR")
+      "Where to put files during mirroring"
+  ]
+
+validateURI :: String -> Either String URI
+validateURI str = case parseURI str of
+  Nothing                          -> Left ("invalid URL " ++ str)
+  Just uri
+    | uriScheme uri /= "http:"     -> Left ("only http URLs are supported " ++ str)
+    | isNothing (uriAuthority uri) -> Left ("server name required in URL " ++ str)
+    | otherwise                    -> Right uri
+
+validateOpts :: [String] -> IO (Verbosity, MirrorOpts)
+validateOpts args = do
+    let (flags0, args', errs) = getOpt Permute mirrorFlagDescrs args
+        flags = accum flags0 emptyMirrorFlags
+
+    when (flagHelp flags) printUsage
+    when (not (null errs)) (printErrors errs)
+
+    case args' of
+      [from, to] -> case (validateURI from, validateURI to) of
+        (Left err, _) -> die err
+        (_, Left err) -> die err
+        (Right fromURI, Right toURI) ->
+          return $ (,) (flagVerbosity flags) MirrorOpts {
+            srcURI   = fromURI,
+            dstURI   = toURI,
+            stateDir = fromMaybe "mirror-cache" (flagCacheDir flags)
+          }
+
+      _ -> do putStrLn "expected two URLs, a source and destination"
+              printUsage
+
+  where
+    printUsage  = do
+      putStrLn $ usageInfo usageHeader mirrorFlagDescrs
+      exitSuccess
+    usageHeader = "Usage: hackage-mirror fromURL toURL [options]\nOptions:"
+    printErrors errs = do
+      putStrLn $ concat errs ++ "Try --help."
+      exitFailure
+
+    accum flags = foldr (flip (.)) id flags
