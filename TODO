@@ -1,3 +1,9 @@
+General:
+ * Error handling style is horribly verbose.
+     We need a nice monadic style where we can fail with e.g. internal server
+     errors without propagating Either blah blah all over the place.
+     See for example how we cannot currently abstract over takeRequestBody.
+
 Backup:
  * Implement backup for Tags
  * Implement backup for Upload (just user groups)
