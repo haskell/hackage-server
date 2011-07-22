@@ -103,7 +103,7 @@ submitBuildReport r store dpath = withPackageVersionPath dpath $ \pkg -> do
         let pkgid = pkgInfoId pkg
         mRqBody <- takeRequestBody =<< askRq
         case mRqBody of
-          Nothing -> internalServerError $ toResponse $ "takeRequestBody can only be called once."
+          Nothing -> fmap Right $ internalServerError $ toResponse $ "takeRequestBody can only be called once."
           (Just (Body body)) ->
             case BuildReport.parse $ unpack body of
                 Left err -> returnError 400 "Error submitting report" [MText err]
@@ -133,7 +133,7 @@ putBuildLog r store dpath = withPackageVersionPath dpath $ \pkg -> withReportId 
         let pkgid = pkgInfoId pkg
         mRqBody <- takeRequestBody =<< askRq
         case mRqBody of
-          Nothing -> internalServerError $ toResponse $ "takeRequestBody can only be called once."
+          Nothing -> fmap Right $ internalServerError $ toResponse $ "takeRequestBody can only be called once."
           (Just (Body blog)) -> do
                        buildLog <- liftIO $ BlobStorage.add store blog
                        update $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
