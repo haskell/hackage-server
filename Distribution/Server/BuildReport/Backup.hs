@@ -5,6 +5,7 @@ module Distribution.Server.BuildReport.Backup (
     packageReportsToExport
   ) where
 
+import Distribution.Server.Acid (update)
 import Distribution.Server.BuildReport.BuildReport (BuildReport)
 import qualified Distribution.Server.BuildReport.BuildReport as Report
 import Distribution.Server.BuildReport.BuildReports (BuildReports, PkgBuildReports, BuildReportId(..), BuildLog(..))
@@ -28,7 +29,6 @@ import Control.Monad.State (get, put)
 import Data.Monoid (mempty)
 import System.FilePath (splitExtension)
 import Data.ByteString.Lazy.Char8 (ByteString)
-import Happstack.State
 
 reportsBackup :: BlobStorage -> RestoreBackup
 reportsBackup storage = updateReports storage (Reports.emptyReports, Map.empty)

@@ -4,8 +4,10 @@
 
 module Distribution.Server.Packages.Platform where
 
+import Data.Acid (Query, Update, makeAcidic)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Typeable
@@ -16,8 +18,6 @@ import Distribution.Version
 
 import Control.Monad.Reader (ask, asks)
 import Control.Monad.State (put, modify)
-import Happstack.State hiding (Version)
-import qualified Happstack.State as Happstack (Version)
 
 newtype PlatformPackages = PlatformPackages {
     blessedPackages :: Map PackageName (Set Version)
@@ -39,16 +39,14 @@ setPlatformPackage pkgname versions = modify $ \p -> case Set.null versions of
 replacePlatformPackages :: PlatformPackages -> Update PlatformPackages ()
 replacePlatformPackages = put
 
-instance Happstack.Version PlatformPackages
-$(deriveSerialize ''PlatformPackages)
+$(deriveSafeCopy 0 'base ''PlatformPackages)
 
-instance Component PlatformPackages where
-    type Dependencies PlatformPackages = End
-    initialValue = emptyPlatformPackages
+initialPlatformPackages :: PlatformPackages
+initialPlatformPackages = emptyPlatformPackages
 
-$(mkMethods ''PlatformPackages ['getPlatformPackages
-                               ,'getPlatformPackage
-                               ,'setPlatformPackage
-                               ,'replacePlatformPackages
-                               ])
+$(makeAcidic ''PlatformPackages ['getPlatformPackages
+                                ,'getPlatformPackage
+                                ,'setPlatformPackage
+                                ,'replacePlatformPackages
+                                ])
 

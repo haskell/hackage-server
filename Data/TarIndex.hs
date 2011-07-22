@@ -14,7 +14,8 @@ module Data.TarIndex {-(
 
   )-} where
 
-import Data.Typeable ()
+import Data.SafeCopy (base, deriveSafeCopy)
+import Data.Typeable (Typeable)
 
 import qualified Data.StringTable as StringTable
 import Data.StringTable (StringTable)
@@ -23,8 +24,6 @@ import qualified Data.IntTrie as IntTrie
 import Data.IntTrie (IntTrie)
 import qualified System.FilePath as FilePath
 import Prelude hiding (lookup)
-
-import Happstack.Data
 
 -- | An index of the entries in a tar file. This lets us look up a filename
 -- within the tar file and find out where in the tar file (ie the file offset)
@@ -54,29 +53,20 @@ data TarIndex = TarIndex
   !(IntTrie PathComponentId TarEntryOffset)
   deriving (Show, Typeable)
 
-instance Version TarIndex where
 
 data TarIndexEntry = TarFileEntry !TarEntryOffset
                    | TarDir [FilePath]
   deriving (Show, Typeable)
 
-instance Version TarIndexEntry where
-
 
 newtype PathComponentId = PathComponentId Int
   deriving (Eq, Ord, Enum, Show, Typeable)
 
-instance Version PathComponentId where
-    mode = Primitive
-
 type TarEntryOffset = Int
 
-$(deriveSerializeFor
-  [ ''TarIndex
-  , ''PathComponentId
-  , ''TarIndexEntry
-  ]
- )
+$(deriveSafeCopy 0 'base ''TarIndex)
+$(deriveSafeCopy 0 'base ''PathComponentId)
+$(deriveSafeCopy 0 'base ''TarIndexEntry)
 
 -- | Look up a given filepath in the index. It may return a 'TarFileEntry'
 -- containing the offset and length of the file within the tar file, or if

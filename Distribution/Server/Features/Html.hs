@@ -4,6 +4,7 @@ module Distribution.Server.Features.Html (
   ) where
 
 
+import Distribution.Server.Acid (query)
 import Distribution.Server.Feature
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages
@@ -49,7 +50,6 @@ import qualified Text.XHtml.Strict as XHtml
 import Text.XHtml.Table (simpleTable)
 
 import Happstack.Server
-import Happstack.State (query)
 import Distribution.Package
 import Distribution.Version
 import Distribution.Text (display)

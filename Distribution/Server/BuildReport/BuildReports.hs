@@ -27,8 +27,8 @@ import Distribution.Server.Instances ()
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.ByteString.Char8 as BS.Char8
-import qualified Data.Binary as Binary
-import Data.Binary (Binary)
+import qualified Data.Serialize as Serialize
+import Data.Serialize (Serialize)
 import Data.Typeable (Typeable)
 import Control.Applicative ((<$>))
 
@@ -36,7 +36,7 @@ import qualified Distribution.Server.Util.Parse as Parse
 import qualified Text.PrettyPrint          as Disp
 
 newtype BuildReportId = BuildReportId Int
-  deriving (Eq, Ord, Binary, Typeable, Show)
+  deriving (Eq, Ord, Serialize, Typeable, Show)
 
 incrementReportId :: BuildReportId -> BuildReportId
 incrementReportId (BuildReportId n) = BuildReportId (n+1)
@@ -46,7 +46,7 @@ instance Text BuildReportId where
   parse = BuildReportId <$> Parse.int
 
 newtype BuildLog = BuildLog BlobStorage.BlobId
-  deriving (Eq, Binary, Typeable, Show)
+  deriving (Eq, Serialize, Typeable, Show)
 
 data PkgBuildReports = PkgBuildReports {
     -- for each report, other useful information: Maybe UserId, UTCTime
@@ -115,17 +115,17 @@ setBuildLog pkgid reportId buildLog buildReports = case Map.lookup pkgid (report
                          in Just $ buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
 
 -------------------
--- Binary instances
+-- Serialize instances
 --
 
-instance Binary BuildReport where
-  put = Binary.put . BS.Char8.pack . BuildReport.show
-  get = (BuildReport.read . BS.Char8.unpack) `fmap` Binary.get
+instance Serialize BuildReport where
+  put = Serialize.put . BS.Char8.pack . BuildReport.show
+  get = (BuildReport.read . BS.Char8.unpack) `fmap` Serialize.get
 
-instance Binary BuildReports where
-  put (BuildReports index) = Binary.put index
+instance Serialize BuildReports where
+  put (BuildReports index) = Serialize.put index
   get = do
-    rs <- Binary.get
+    rs <- Serialize.get
     return BuildReports {
       reportsIndex = rs
     }
@@ -134,10 +134,10 @@ instance Binary BuildReports where
 -- after calling deleteReport for 3, the set is [1, 2] and nextReportId is still 4.
 -- however, upon importing, nextReportId will = 3, one more than the maximum present
 -- this is also a problem in ReportsBackup.hs. but it's not a major issue I think.
-instance Binary PkgBuildReports where
-    put (PkgBuildReports listing _) = Binary.put listing
+instance Serialize PkgBuildReports where
+    put (PkgBuildReports listing _) = Serialize.put listing
     get = do
-        listing <- Binary.get
+        listing <- Serialize.get
         return PkgBuildReports {
             reports = listing,
             nextReportId = if Map.null listing

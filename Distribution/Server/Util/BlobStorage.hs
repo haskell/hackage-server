@@ -25,7 +25,7 @@ import qualified Data.ByteString.Lazy as BS
 import Data.ByteString.Lazy (ByteString)
 import Data.Digest.Pure.MD5 (MD5Digest, md5)
 import Data.Typeable (Typeable)
-import Data.Binary (Binary)
+import Data.Serialize (Serialize)
 import System.FilePath ((</>))
 import Control.Exception (handle, throwIO, evaluate)
 import System.Directory
@@ -34,7 +34,7 @@ import System.IO
 -- | An id for a blob. The content of the blob is stable.
 --
 newtype BlobId = BlobId MD5Digest
-  deriving (Eq, Ord, Binary, Typeable)
+  deriving (Eq, Ord, Serialize, Typeable)
 
 instance Show BlobId where show (BlobId digest) = show digest
 

@@ -13,16 +13,17 @@ import qualified Distribution.Compat.ReadP as Parse
 import qualified Text.PrettyPrint          as Disp
 import qualified Data.Char as Char
 
-import Data.Binary (Binary)
+import Data.Serialize (Serialize)
 import Control.Applicative ((<$>))
 
-import Happstack.Data
+import Data.SafeCopy (base, deriveSafeCopy)
+import Data.Typeable (Typeable)
 
 newtype UserId = UserId Int
-  deriving (Eq, Ord, Show, Binary, Typeable)
+  deriving (Eq, Ord, Show, Serialize, Typeable)
 
 newtype UserName  = UserName String
-  deriving (Eq, Ord, Show, Binary, Typeable)
+  deriving (Eq, Ord, Show, Serialize, Typeable)
 
 data UserInfo = UserInfo {
     userName   :: UserName,
@@ -45,17 +46,9 @@ instance Text UserName where
     disp (UserName name) = Disp.text name
     parse = UserName <$> Parse.munch1 Char.isAlphaNum
 
--- the default implementation is version 0
-instance Version UserId where
-instance Version UserName where
-instance Version AccountEnabled where
-instance Version UserAuth where
-instance Version UserStatus where
-instance Version UserInfo where
-
-$(deriveSerialize ''UserId)
-$(deriveSerialize ''UserName)
-$(deriveSerialize ''AccountEnabled)
-$(deriveSerialize ''UserAuth)
-$(deriveSerialize ''UserStatus)
-$(deriveSerialize ''UserInfo)
+$(deriveSafeCopy 0 'base ''UserId)
+$(deriveSafeCopy 0 'base ''UserName)
+$(deriveSafeCopy 0 'base ''AccountEnabled)
+$(deriveSafeCopy 0 'base ''UserAuth)
+$(deriveSafeCopy 0 'base ''UserStatus)
+$(deriveSafeCopy 0 'base ''UserInfo)

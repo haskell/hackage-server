@@ -21,6 +21,7 @@ module Distribution.Server.Features.Core (
     doMergePackage
   ) where
 
+import Distribution.Server.Acid (query, update)
 import Distribution.Server.Feature
 import Distribution.Server.Resource
 import Distribution.Server.Types
@@ -51,7 +52,6 @@ import qualified Data.Map as Map
 import Data.Monoid (mconcat)
 import Data.Function (fix)
 import Happstack.Server
-import Happstack.State (update, query)
 import Text.XHtml.Strict (Html, toHtml, unordList, h3, (<<), anchor, href, (!))
 import Data.Ord (comparing)
 import Data.List (sortBy, find)

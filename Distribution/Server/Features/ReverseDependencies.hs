@@ -15,6 +15,7 @@ module Distribution.Server.Features.ReverseDependencies (
     sortedRevSummary
   ) where
 
+import Distribution.Server.Acid (query, update)
 import Distribution.Server.Feature
 import Distribution.Server.Resource
 import Distribution.Server.Hook
@@ -43,7 +44,6 @@ import Control.Monad (liftM, forever)
 import Control.Monad.Trans (MonadIO)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.Chan
-import Happstack.State (query, update)
 
 data ReverseFeature = ReverseFeature {
     reverseResource :: ReverseResource,

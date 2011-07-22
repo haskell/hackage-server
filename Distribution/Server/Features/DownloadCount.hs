@@ -1,5 +1,6 @@
 module Distribution.Server.Features.DownloadCount where
 
+import Distribution.Server.Acid (query, update)
 import Distribution.Server.Feature
 import Distribution.Server.Resource
 import Distribution.Server.Features.Core
@@ -12,7 +13,6 @@ import qualified Distribution.Server.Cache as Cache
 
 import Distribution.Package
 
-import Happstack.State hiding (Version)
 import Data.Time.Clock
 import Control.Arrow (second)
 import Control.Monad (liftM, forever)

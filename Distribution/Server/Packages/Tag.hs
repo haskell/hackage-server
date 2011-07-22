@@ -12,11 +12,13 @@ import Distribution.Text
 import Distribution.Package
 import qualified Text.PrettyPrint as Disp
 
+import Data.Acid (Query, Update, makeAcidic)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Control.Monad (liftM2)
+import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable (Typeable)
 import qualified Data.Char as Char
 import Data.Maybe (fromMaybe)
@@ -24,8 +26,6 @@ import Data.List (foldl')
 import Control.Monad.State (get, put, modify)
 import Control.Monad.Reader (ask, asks)
 import Control.DeepSeq
-
-import Happstack.State
 
 newtype TagList = TagList [Tag] deriving (Show, Typeable)
 instance Text TagList where
@@ -141,17 +141,14 @@ renameTag tag tag' pkgTags@(PackageTags _ packages) =
     in setTag tag' oldPkgs . deleteTag tag $ pkgTags
 -------------------------------------------------------------------------------
 
-instance Version Tag where mode = Versioned 0 Nothing
-$(deriveSerialize ''Tag)
-instance Version PackageTags where mode = Versioned 0 Nothing
-$(deriveSerialize ''PackageTags)
+$(deriveSafeCopy 0 'base ''Tag)
+$(deriveSafeCopy 0 'base ''PackageTags)
 
 instance NFData PackageTags where
     rnf (PackageTags a b) = rnf a `seq` rnf b
-
-instance Component PackageTags where
-    type Dependencies PackageTags = End
-    initialValue = emptyPackageTags
+ 
+initialPackageTags :: PackageTags
+initialPackageTags = emptyPackageTags
 
 tagsForPackage :: PackageName -> Query PackageTags (Set Tag)
 tagsForPackage name = asks $ Map.findWithDefault Set.empty name . packageTags
@@ -192,14 +189,14 @@ removePackageTag name tag = do
         Nothing -> return False
         Just pkgTags' -> put pkgTags' >> return True
 
-$(mkMethods ''PackageTags ['tagsForPackage
-                          ,'packagesForTag
-                          ,'getTagList
-                          ,'getPackageTags
-                          ,'replacePackageTags
-                          ,'setPackageTags
-                          ,'setTagPackages
-                          ,'addPackageTag
-                          ,'removePackageTag
-                          ])
+$(makeAcidic ''PackageTags ['tagsForPackage
+                           ,'packagesForTag
+                           ,'getTagList
+                           ,'getPackageTags
+                           ,'replacePackageTags
+                           ,'setPackageTags
+                           ,'setTagPackages
+                           ,'addPackageTag
+                           ,'removePackageTag
+                           ])
 

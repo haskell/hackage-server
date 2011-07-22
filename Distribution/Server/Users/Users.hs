@@ -37,8 +37,9 @@ import Data.List (find)
 import qualified Data.Map as Map
 import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
+import Data.SafeCopy (base, deriveSafeCopy)
+import Data.Typeable (Typeable)
 
-import Happstack.Data
 
 -- | The entrie collection of users. Manages the mapping between 'UserName'
 -- and 'UserId'.
@@ -287,7 +288,6 @@ intInsertMaybe k a m
         (Nothing, m') -> Just m'
         _ -> Nothing
 
-instance Version Users where
-$(deriveSerialize ''Users)
+$(deriveSafeCopy 0 'base ''Users)
 
 

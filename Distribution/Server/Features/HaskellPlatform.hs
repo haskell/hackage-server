@@ -8,6 +8,7 @@ module Distribution.Server.Features.HaskellPlatform (
     removePlatform
   ) where
 
+import Distribution.Server.Acid (query, update)
 import Distribution.Server.Types
 import Distribution.Server.Feature
 import Distribution.Server.Features.Core
@@ -23,8 +24,6 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Control.Monad (liftM)
 import Control.Monad.Trans (MonadIO)
-
-import Happstack.State (query, update)
 
 -- Note: this can be generalized into dividing Hackage up into however many
 -- subsets of packages are desired. One could implement a Debian-esque system

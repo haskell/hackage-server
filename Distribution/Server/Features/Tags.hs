@@ -11,6 +11,7 @@ module Distribution.Server.Features.Tags (
 
 import Control.Applicative (optional)
 
+import Distribution.Server.Acid
 import Distribution.Server.Feature
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages (categorySplit)
@@ -44,7 +45,6 @@ import Data.Char (toLower)
 import Control.Monad (mzero, forM_, liftM)
 import Control.Monad.Trans (MonadIO)
 
-import Happstack.State
 import Happstack.Server
 
 data TagsFeature = TagsFeature {

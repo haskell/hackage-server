@@ -21,11 +21,12 @@ import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Users.State ()
 
+import Data.Acid     (Query, Update, makeAcidic)
+import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable
 
-import Happstack.State
-
 import Data.Maybe (fromMaybe)
+import Control.Monad (liftM)
 import Control.Monad.State.Class (get, put, modify)
 import Control.Monad.Reader.Class (ask, asks)
 
@@ -35,12 +36,10 @@ data Distros = Distros {
 }
  deriving (Typeable, Show)
 
-instance Version Distros
-$(deriveSerialize ''Distros)
+$(deriveSafeCopy 0 'base ''Distros)
 
-instance Component Distros where
-    type Dependencies Distros = End
-    initialValue = Distros Dist.emptyDistributions Dist.emptyDistroVersions
+initialDistros :: Distros
+initialDistros = Distros Dist.emptyDistributions Dist.emptyDistroVersions
 
 addDistro :: DistroName -> Update Distros Bool
 addDistro name = do
@@ -98,7 +97,7 @@ distroPackageStatus :: DistroName -> PackageName -> Query Distros (Maybe DistroP
 distroPackageStatus distro package = asks $ Dist.distroPackageStatus distro package . distVersions
 
 getDistroMaintainers :: DistroName -> Query Distros UserList
-getDistroMaintainers name = fmap (fromMaybe Group.empty . Dist.getDistroMaintainers name) (asks distDistros)
+getDistroMaintainers name = liftM (fromMaybe Group.empty . Dist.getDistroMaintainers name) (asks distDistros)
 
 modifyDistroMaintainers :: DistroName -> (UserList -> UserList) -> Update Distros ()
 modifyDistroMaintainers name func = modify (\distros -> distros {distDistros = Dist.modifyDistroMaintainers name func (distDistros distros) })
@@ -112,7 +111,7 @@ removeDistroMaintainer name uid = modifyDistroMaintainers name (Group.remove uid
 replaceDistroMaintainers :: DistroName -> UserList -> Update Distros ()
 replaceDistroMaintainers name ulist = modifyDistroMaintainers name (const ulist)
 
-$(mkMethods
+$(makeAcidic
   ''Distros
   [ -- update collection of distributions
     'addDistro

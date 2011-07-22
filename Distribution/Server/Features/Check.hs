@@ -19,6 +19,7 @@ module Distribution.Server.Features.Check (
     withCandidates
   ) where
 
+import Distribution.Server.Acid (query, update)
 import Distribution.Server.Feature
 import Distribution.Server.Resource
 import Distribution.Server.Types
@@ -45,7 +46,6 @@ import Distribution.Text
 import Distribution.Package
 import Data.Version
 import Happstack.Server
-import Happstack.State
 import Text.XHtml.Strict (unordList, h3, (<<), toHtml)
 import Data.Function (fix)
 import Data.List (find)

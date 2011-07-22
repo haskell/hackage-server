@@ -6,6 +6,7 @@ module Distribution.Server.Features.NameSearch (
     searchFindPackage
   ) where
 
+import Distribution.Server.Acid (query)
 import Distribution.Server.Feature
 import Distribution.Server.Types
 import Distribution.Server.Hook
@@ -32,7 +33,6 @@ import Network.URI (URI(..), uriToString)
 import Control.Monad.Trans (MonadIO)
 import Text.JSON
 import Happstack.Server
-import Happstack.State
 
 data NamesFeature = NamesFeature {
     namesResource :: NamesResource,

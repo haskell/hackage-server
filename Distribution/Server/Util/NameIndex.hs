@@ -13,9 +13,7 @@ import Data.Char (toLower)
 import Data.List (unfoldr, foldl')
 import Data.Maybe (maybeToList)
 import Control.DeepSeq
-
-import Happstack.State
-
+import Data.SafeCopy
 -- | Case-insensitive name search. This is meant to be an enhanced set of
 -- names, not a full text search. It's also meant to be a sort of a short-term
 -- solution for name suggestion searches; e.g., package searches should also
@@ -94,16 +92,13 @@ mapLast f (x:[]) = f x:[]
 mapLast f (x:xs) = x:mapLast f xs
 mapLast _ [] = []
 
--- $(deriveSerialize ''NameIndex)
 -- store arguments which can be sent to constructIndex :: [String] -> Maybe [Char] -> NameIndex
-instance Serialize NameIndex where
+instance SafeCopy NameIndex where
     putCopy index = contain $ safePut (nameGenType index) >> safePut (storedNamesIndex index)
     getCopy = contain $ do
         gen <- safeGet
         index <- safeGet
         return $ constructIndex (Set.toList index) gen
-
-instance Version NameIndex where mode = Versioned 0 Nothing
 
 instance NFData NameIndex where
     rnf (NameIndex a b _ _) = rnf a `seq` rnf b

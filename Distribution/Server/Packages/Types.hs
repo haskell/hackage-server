@@ -25,8 +25,8 @@ import Distribution.PackageDescription.Parse
          ( parsePackageDescription, ParseResult(..) )
 import Distribution.Simple.Utils (fromUTF8)
 
-import qualified Data.Binary as Binary
-import Data.Binary (Binary)
+import qualified Data.Serialize as Serialize
+import Data.Serialize (Serialize)
 import qualified Data.ByteString.Lazy.Char8 as BS (unpack)
 import Data.ByteString.Lazy (ByteString)
 import Data.Time.Clock (UTCTime)
@@ -75,23 +75,23 @@ descendUploadTimes = sortBy (flip $ comparing (fst . snd))
 
 instance Package PkgInfo where packageId = pkgInfoId
 
-instance Binary PkgInfo where
+instance Serialize PkgInfo where
   put pkgInfo = do
-    Binary.put (pkgInfoId pkgInfo)
-    Binary.put (pkgData pkgInfo)
-    Binary.put (pkgTarball pkgInfo)
-    Binary.put (pkgDataOld pkgInfo)
-    Binary.put (pkgUploadData pkgInfo)
+    Serialize.put (pkgInfoId pkgInfo)
+    Serialize.put (pkgData pkgInfo)
+    Serialize.put (pkgTarball pkgInfo)
+    Serialize.put (pkgDataOld pkgInfo)
+    Serialize.put (pkgUploadData pkgInfo)
 
   get = do
-    infoId  <- Binary.get
-    bstring <- Binary.get
+    infoId  <- Serialize.get
+    bstring <- Serialize.get
     desc <- case parsePackageDescription . fromUTF8 . BS.unpack $ bstring of
         ParseFailed e -> fail $ "Internal error: " ++ show e
         ParseOk _ x   -> return x
-    tarball <- Binary.get
-    old     <- Binary.get
-    updata  <- Binary.get
+    tarball <- Serialize.get
+    old     <- Serialize.get
+    updata  <- Serialize.get
     return PkgInfo {
         pkgInfoId = infoId,
         pkgDesc   = desc,
@@ -120,18 +120,18 @@ data CandPkgInfo = CandPkgInfo {
 
 instance Package CandPkgInfo where packageId = candInfoId
 
-instance Binary CandPkgInfo where
+instance Serialize CandPkgInfo where
   put pkgInfo = do
-    Binary.put (candInfoId pkgInfo)
-    Binary.put (candPkgInfo pkgInfo)
-    Binary.put (candWarnings pkgInfo)
-    Binary.put (candPublic pkgInfo)
+    Serialize.put (candInfoId pkgInfo)
+    Serialize.put (candPkgInfo pkgInfo)
+    Serialize.put (candWarnings pkgInfo)
+    Serialize.put (candPublic pkgInfo)
 
   get = do
-    infoId  <- Binary.get
-    pkgInfo <- Binary.get
-    warning <- Binary.get
-    public  <- Binary.get
+    infoId  <- Serialize.get
+    pkgInfo <- Serialize.get
+    warning <- Serialize.get
+    public  <- Serialize.get
     return CandPkgInfo {
         candInfoId  = infoId,
         candPkgInfo = pkgInfo,

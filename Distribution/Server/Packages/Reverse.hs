@@ -14,8 +14,10 @@ import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.Version
 
+import Data.Acid (Query, Update, makeAcidic)
 import Data.List (foldl', union)
 import Data.Maybe (maybeToList, fromMaybe)
+import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable (Typeable)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -26,9 +28,6 @@ import Data.STRef
 import Control.Monad.ST
 import Control.Monad.State (put, get)
 import Control.Monad.Reader (ask, asks)
-
-import Happstack.State hiding (Version)
-import qualified Happstack.State as State (Version)
 
 -- The main reverse dependencies map is a drawn-out Map PackageId PackageId,
 -- with an extra component to store ranges (all ranges that *could* be revdeps,
@@ -414,14 +413,11 @@ keepSet con = if Set.null con then Nothing else Just con
 -- Last but agnostic of other ranking schemes,
 -- methods for manipulating the global state.
 
-instance State.Version ReverseIndex where mode = Versioned 0 Nothing
-$(deriveSerialize ''ReverseIndex)
-instance State.Version ReverseCount where mode = Versioned 0 Nothing
-$(deriveSerialize ''ReverseCount)
+$(deriveSafeCopy 0 'base ''ReverseIndex)
+$(deriveSafeCopy 0 'base ''ReverseCount)
 
-instance Component ReverseIndex where
-    type Dependencies ReverseIndex = End
-    initialValue = emptyReverseIndex
+initialReverseIndex :: ReverseIndex
+initialReverseIndex = emptyReverseIndex
 
 getReverseIndex :: Query ReverseIndex ReverseIndex
 getReverseIndex = ask
@@ -450,12 +446,12 @@ getReverseCount pkg = asks $ Map.findWithDefault emptyReverseCount pkg . reverse
 getFlattenedReverse :: PackageName -> Query ReverseIndex (Set PackageName)
 getFlattenedReverse pkg = asks $ Map.findWithDefault Set.empty pkg . flattenedReverse
 
-$(mkMethods ''ReverseIndex ['getReverseIndex
-                           ,'replaceReverseIndex
-                           ,'addReversePackage
-                           ,'removeReversePackage
-                           ,'changeReversePackage
-                           ,'getReverseCount
-                           ,'getFlattenedReverse
-                           ])
+$(makeAcidic ''ReverseIndex ['getReverseIndex
+                            ,'replaceReverseIndex
+                            ,'addReversePackage
+                            ,'removeReversePackage
+                            ,'changeReversePackage
+                            ,'getReverseCount
+                            ,'getFlattenedReverse
+                            ])
 

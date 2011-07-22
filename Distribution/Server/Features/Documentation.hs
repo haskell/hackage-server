@@ -6,6 +6,7 @@ module Distribution.Server.Features.Documentation (
     initDocumentationFeature
   ) where
 
+import Distribution.Server.Acid (query, update)
 import Distribution.Server.Feature
 import Distribution.Server.Resource
 import Distribution.Server.Features.Upload
@@ -26,7 +27,6 @@ import Distribution.Text
 import Distribution.Package
 
 import Happstack.Server
-import Happstack.State (update, query)
 import Data.Function
 import Control.Monad.Trans
 import qualified Data.Map as Map

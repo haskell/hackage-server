@@ -1,5 +1,6 @@
 module Distribution.Server.Features.Packages where
 
+import Distribution.Server.Acid (query)
 import Distribution.Server.Feature
 import Distribution.Server.Resource
 import Distribution.Server.Types
@@ -15,7 +16,6 @@ import qualified Distribution.Server.Cache as Cache
 import qualified Distribution.Server.ResourceTypes as Resource
 
 import Happstack.Server
-import Happstack.State (query)
 import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration (flattenPackageDescription)

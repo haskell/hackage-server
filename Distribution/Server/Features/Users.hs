@@ -25,6 +25,7 @@ module Distribution.Server.Features.Users (
 
 import Control.Applicative ((<$>), (<*>), optional)
 
+import Distribution.Server.Acid (query, update)
 import Distribution.Server.Feature
 import Distribution.Server.Features.Core
 import Distribution.Server.Resource
@@ -44,7 +45,6 @@ import qualified Distribution.Server.Auth.Types as Auth
 import qualified Distribution.Server.Auth.Crypt as Auth
 
 import Happstack.Server hiding (port)
-import Happstack.State hiding (Version)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Map (Map)

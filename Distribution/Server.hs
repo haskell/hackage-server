@@ -24,10 +24,10 @@ module Distribution.Server (
 
 import Happstack.Server hiding (port, host)
 import qualified Happstack.Server
-import Happstack.State hiding (Version)
 -- for resetting the temporary 'loading' server
 import qualified Happstack.Util.Concurrent as HappsLoad
 
+import Distribution.Server.Acid (Acid, checkpointAcid, startAcid, stopAcid, update)
 import qualified Distribution.Server.Backup.Import as Import
 import Distribution.Server.Backup.Export
 -- TODO: move this to BulkImport module
@@ -40,7 +40,6 @@ import qualified Distribution.Server.Users.Group as Group
 import qualified Distribution.Server.Feature as Feature
 import qualified Distribution.Server.Features as Features
 
-import Distribution.Server.State as State
 import Distribution.Server.Users.State as State
 import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
@@ -80,8 +79,8 @@ data ServerConfig = ServerConfig {
   confTmpDir    :: FilePath
 } deriving (Show)
 
-confHappsStateDir, confBlobStoreDir :: ServerConfig -> FilePath
-confHappsStateDir config = confStateDir config </> "db"
+confAcidStateDir, confBlobStoreDir :: ServerConfig -> FilePath
+confAcidStateDir config = confStateDir config </> "db"
 confBlobStoreDir  config = confStateDir config </> "blobs"
 
 defaultServerConfig :: IO ServerConfig
@@ -97,7 +96,7 @@ defaultServerConfig = do
   }
 
 data Server = Server {
-  serverTxControl :: MVar TxControl,
+  serverAcid      :: Acid,
   serverFeatures  :: [Feature.HackageModule],
   serverPort      :: Int,
   serverConfig    :: Config
@@ -108,7 +107,7 @@ data Server = Server {
 -- existing state.
 --
 hasSavedState :: ServerConfig -> IO Bool
-hasSavedState = doesDirectoryExist . confHappsStateDir
+hasSavedState = doesDirectoryExist . confAcidStateDir
 
 -- | Make a server instance from the server configuration.
 --
@@ -127,7 +126,8 @@ initialise initConfig@(ServerConfig hostName portNum stateDir staticDir tmpDir) 
     createDirectoryIfMissing False stateDir
     store   <- BlobStorage.open blobStoreDir
 
-    txCtl   <- runTxSystem (Queue (FileSaver happsStateDir)) hackageEntryPoint
+--    txCtl   <- runTxSystem (Queue (FileSaver happsStateDir)) hackageEntryPoint
+    acid <- startAcid acidStateDir
 
     let config = Config {
             serverStore     = store,
@@ -139,21 +139,18 @@ initialise initConfig@(ServerConfig hostName portNum stateDir staticDir tmpDir) 
     features <- Features.hackageFeatures config
 
     return Server {
-        serverTxControl = txCtl,
+        serverAcid      = acid,
         serverFeatures  = features,
         serverPort      = portNum,
         serverConfig    = config
     }
 
   where
-    happsStateDir = confHappsStateDir initConfig
+    acidStateDir = confAcidStateDir initConfig
     blobStoreDir  = confBlobStoreDir  initConfig
     hostURI       = URIAuth "" hostName portStr
       where portStr | portNum == 80 = ""
                     | otherwise     = ':':show portNum
-
-hackageEntryPoint :: Proxy HackageEntryPoint
-hackageEntryPoint = Proxy
 
 -- | Actually run the server, i.e. start accepting client http connections.
 --
@@ -182,13 +179,13 @@ run server = simpleHTTP conf $ mungeRequest $ impl server
 -- | Perform a clean shutdown of the server.
 --
 shutdown :: Server -> IO ()
-shutdown server = shutdownSystem (serverTxControl server)
+shutdown server = stopAcid (serverAcid server)
 
 -- | Write out a checkpoint of the server state. This makes recovery quicker
 -- because fewer logged transactions have to be replayed.
 --
 checkpoint :: Server -> IO ()
-checkpoint server = createCheckpoint (serverTxControl server)
+checkpoint server = checkpointAcid (serverAcid server)
 
 -- Convert a set of old data into a new export tarball.
 -- This also populates the blob database, which is then

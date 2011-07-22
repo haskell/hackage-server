@@ -4,6 +4,7 @@ module Distribution.Server.Packages.Backup.Tags (
     tagsToRecord
   ) where
 
+import Distribution.Server.Acid (update)
 import Distribution.Server.Packages.Tag
 import Distribution.Server.Backup.Import
 
@@ -17,7 +18,6 @@ import qualified Data.Set as Set
 import Control.Monad.State (modify)
 import Data.Function (fix)
 import Data.ByteString.Lazy.Char8 (ByteString)
-import Happstack.State (update)
 
 tagsBackup :: RestoreBackup
 tagsBackup = updateTags emptyPackageTags

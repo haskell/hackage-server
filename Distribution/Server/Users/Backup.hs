@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, TypeFamilies #-}
 module Distribution.Server.Users.Backup (
     -- Importing user data
     userBackup,
@@ -9,6 +9,7 @@ module Distribution.Server.Users.Backup (
     groupToCSV
   ) where
 
+import Distribution.Server.Acid (AcidComponent, update)
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users(..))
 import Distribution.Server.Users.Group (UserList(..))
@@ -16,7 +17,8 @@ import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Types
 import Distribution.Server.Users.State (ReplaceUserDb(..))
 
-import Happstack.State (update, UpdateEvent)
+import Data.Acid (UpdateEvent)
+import Data.Acid.Core (MethodResult, MethodState)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Distribution.Server.Backup.Import
 import Distribution.Text (display)
@@ -79,8 +81,11 @@ insertUser user info = do
         Just users' -> put users'
 
 -- Import for a single group
-groupBackup :: UpdateEvent a () => [FilePath] -> (UserList -> a)
-                                -> RestoreBackup
+groupBackup :: ( UpdateEvent event
+               , MethodResult event ~ ()
+               , AcidComponent (MethodState event)
+               ) => [FilePath] -> (UserList -> event)
+            -> RestoreBackup
 groupBackup csvPath updateFunc = updateGroupBackup Group.empty
   where
     updateGroupBackup group = fix $ \restorer -> RestoreBackup

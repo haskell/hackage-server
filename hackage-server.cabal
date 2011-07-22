@@ -33,6 +33,7 @@ executable hackage-server
     Data.StringTable
     Data.TarIndex
     Distribution.Server
+    Distribution.Server.Acid
     Distribution.Server.Auth.Basic
     Distribution.Server.Auth.Crypt
     Distribution.Server.Auth.HtPasswdDb
@@ -98,7 +99,6 @@ executable hackage-server
     Distribution.Server.Pages.Util
     Distribution.Server.Resource
     Distribution.Server.ResourceTypes
-    Distribution.Server.State
     Distribution.Server.Users.Group
     Distribution.Server.Users.State
     Distribution.Server.Users.Types
@@ -116,6 +116,7 @@ executable hackage-server
     Distribution.Server.Util.TextSearch
   build-depends:
     base == 4.*,
+    acid-state == 0.4.*,
     filepath >= 1.1,
     bytestring >= 0.9,
     zlib >= 0.4 && < 0.6,
@@ -135,17 +136,17 @@ executable hackage-server
     network >= 2.1,
     unix < 2.5,
     mtl >= 1.1,
-    binary >= 0.4,
+    binary == 0.5.*,
+    cereal == 0.3.*,
     pureMD5 >= 0.2,
     xhtml >= 3000.1,
     json == 0.4.*,
     stringsearch == 0.3.*,
     rss == 3000.1.*,
+    safecopy == 0.5.*,
     Cabal == 1.10.*,
     csv == 0.1.*,
-    happstack-data   == 6.0.*,
     happstack-util   == 6.0.*,
-    happstack-state  == 6.0.*,
     happstack-server == 6.1.*,
     uri == 0.1.*
   build-tools:

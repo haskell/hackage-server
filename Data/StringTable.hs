@@ -15,11 +15,10 @@ import Prelude hiding (lookup)
 import qualified Data.List as List
 import qualified Data.Array.Unboxed as A
 import Data.Array.Unboxed ((!))
-import Data.Typeable ()
+import Data.SafeCopy (base, deriveSafeCopy)
+import Data.Typeable (Typeable)
 import qualified Data.ByteString.Char8 as BS
 import Data.Word (Word32)
-
-import Happstack.Data
 
 import Distribution.Server.Instances()
 
@@ -31,9 +30,7 @@ data Enum id => StringTable id
                   !(A.UArray Int Word32)  -- offset table
   deriving (Show, Typeable)
 
-instance Version (StringTable id) where
-
-$(deriveSerialize ''StringTable)
+$(deriveSafeCopy 0 'base ''StringTable)
 
 -- | Look up a string in the token table. If the string is present, return
 -- its corresponding index.

@@ -16,6 +16,7 @@ module Distribution.Server.Features.PreferredVersions (
 
 import Control.Applicative (optional)
 
+import Distribution.Server.Acid (query, update)
 import Distribution.Server.Feature
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Upload
@@ -43,7 +44,6 @@ import Data.Time.Clock (getCurrentTime)
 import Control.Arrow (second)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Happstack.Server
-import Happstack.State hiding (Version)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.ByteString.Lazy.Char8 as BS

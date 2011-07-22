@@ -18,7 +18,7 @@ module Data.IntTrie (
 
 import Prelude hiding (lookup)
 
-import Data.Typeable ()
+import Data.Typeable (Typeable)
 
 import qualified Data.Array.Unboxed as A
 import Data.Array.IArray  ((!))
@@ -27,8 +27,7 @@ import Data.Word (Word16)
 
 import Data.List hiding (lookup)
 import Data.Function (on)
-
-import Happstack.Data
+import Data.SafeCopy (base, deriveSafeCopy)
 
 import Distribution.Server.Instances()
 
@@ -37,9 +36,7 @@ import Distribution.Server.Instances()
 newtype (Enum k, Enum v) => IntTrie k v = IntTrie (A.UArray Word16 Word16)
     deriving (Show, Typeable)
 
-instance Version (IntTrie k v) where
-
-$(deriveSerialize ''IntTrie)
+$(deriveSafeCopy 0 'base ''IntTrie)
 
 -- Compact, read-only implementation of a trie. It's intended for use with file
 -- paths, but we do that via string ids.

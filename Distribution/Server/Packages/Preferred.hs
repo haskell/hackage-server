@@ -8,16 +8,16 @@ import Distribution.Server.Instances ()
 import Distribution.Package
 import Distribution.Version
 
+import Data.Acid  (Query, Update, makeAcidic)
 import Data.Maybe (isJust, fromMaybe)
 import Data.Typeable (Typeable)
 import Control.Arrow (second)
 import Control.Monad (ap)
 import Control.Monad.State (put, modify)
 import Control.Monad.Reader (ask, asks)
-import Happstack.State hiding (Version)
-import qualified Happstack.State as State (Version)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Set (Set)
 import qualified Data.Set as Set
 
@@ -66,15 +66,12 @@ partitionVersions info versions = if (not . isJust $ sumRange info) then (versio
             UnpreferredVersion -> (norm, depr, v:unpref)
         go [] = ([], [], [])
 ------------------------------------------
-instance State.Version PreferredVersions where mode = Versioned 0 Nothing
-$(deriveSerialize ''PreferredVersions)
-instance State.Version PreferredInfo where mode = Versioned 0 Nothing
-$(deriveSerialize ''PreferredInfo)
-instance State.Version VersionStatus where mode = Versioned 0 Nothing
-$(deriveSerialize ''VersionStatus)
-instance Component PreferredVersions where
-    type Dependencies PreferredVersions = End
-    initialValue = emptyPreferredVersions
+$(deriveSafeCopy 0 'base ''PreferredVersions)
+$(deriveSafeCopy 0 'base ''PreferredInfo)
+$(deriveSafeCopy 0 'base ''VersionStatus)
+
+initialPreferredVersions :: PreferredVersions
+initialPreferredVersions = emptyPreferredVersions
 
 setPreferredRanges :: PackageName -> [VersionRange] -> Update PreferredVersions ()
 setPreferredRanges name ranges = alterPreferredInfo name $ \p ->
@@ -107,15 +104,15 @@ getPreferredVersions = ask
 replacePreferredVersions :: PreferredVersions -> Update PreferredVersions ()
 replacePreferredVersions = put
 
-$(mkMethods ''PreferredVersions ['setPreferredRanges
-                                ,'setDeprecatedVersions
-                                ,'getPreferredInfo
-                                ,'setDeprecatedFor
-                                ,'getDeprecatedFor
-                                ,'isDeprecated
-                                ,'getPreferredVersions
-                                ,'replacePreferredVersions
-                                ])
+$(makeAcidic ''PreferredVersions ['setPreferredRanges
+                                 ,'setDeprecatedVersions
+                                 ,'getPreferredInfo
+                                 ,'setDeprecatedFor
+                                 ,'getDeprecatedFor
+                                 ,'isDeprecated
+                                 ,'getPreferredVersions
+                                 ,'replacePreferredVersions
+                                 ])
 
 ---------------
 maybeBestVersion :: PreferredInfo -> [Version] -> Set Version -> Maybe (Version, Maybe VersionStatus)

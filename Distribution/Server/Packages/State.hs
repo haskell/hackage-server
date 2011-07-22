@@ -16,9 +16,10 @@ import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Util.BlobStorage (BlobId)
 import Data.TarIndex (TarIndex)
 
-import Happstack.State
-import qualified Data.Binary as Binary
+import qualified Data.Serialize as Serialize
 
+import Data.Acid     (Query, Update, makeAcidic)
+import Data.SafeCopy (SafeCopy(..), base, contain, deriveSafeCopy, safeGet, safePut)
 import Data.Typeable
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
@@ -30,8 +31,7 @@ import Data.Ord (comparing)
 import qualified Data.Map as Map
 
 ---------------------------------- State for PackageIndex
-instance Version (PackageIndex pkg)
-instance (Package pkg, Serialize pkg) => Serialize (PackageIndex pkg) where
+instance (Package pkg, SafeCopy pkg) => SafeCopy (PackageIndex pkg) where
   putCopy index = contain $ do
     safePut $ PackageIndex.allPackages index
   getCopy = contain $ do
@@ -44,23 +44,16 @@ data PackagesState = PackagesState {
   }
   deriving (Typeable, Show)
 
-instance Version PackagesState where
-    mode = Versioned 0 Nothing
+$(deriveSafeCopy 0 'base ''PackagesState)
 
-$(deriveSerialize ''PackagesState)
-
-instance Component PackagesState where
-  type Dependencies PackagesState = End
-  initialValue = PackagesState {
+initialPackagesState :: PackagesState
+initialPackagesState = PackagesState {
     packageList = mempty
   }
 
-instance Version PkgInfo where
-  mode = Versioned 0 Nothing
-
-instance Serialize PkgInfo where
-  putCopy = contain . Binary.put
-  getCopy = contain Binary.get
+instance SafeCopy PkgInfo where
+  putCopy = contain . Serialize.put
+  getCopy = contain Serialize.get
 
 insertPkgIfAbsent :: PkgInfo -> Update PackagesState Bool
 insertPkgIfAbsent pkg = do
@@ -99,12 +92,12 @@ getPackagesState = ask
 -- TODO: add more querying functions; there are too many
 -- `fmap packageList $ query GetPackagesState' throughout code
 
-$(mkMethods ''PackagesState ['getPackagesState
-                            ,'replacePackagesState
-                            ,'insertPkgIfAbsent
-                            ,'mergePkg
-                            ,'deletePackageVersion
-                            ])
+$(makeAcidic ''PackagesState ['getPackagesState
+                             ,'replacePackagesState
+                             ,'insertPkgIfAbsent
+                             ,'mergePkg
+                             ,'deletePackageVersion
+                             ])
 
 ---------------------------------- Index of candidate tarballs and metadata
 -- boilerplate code based on PackagesState
@@ -112,21 +105,14 @@ data CandidatePackages = CandidatePackages {
     candidateList :: !(PackageIndex.PackageIndex CandPkgInfo)
 } deriving (Typeable, Show)
 
-instance Version CandidatePackages where
-    mode = Versioned 0 Nothing
+$(deriveSafeCopy 0 'base ''CandidatePackages)
 
-$(deriveSerialize ''CandidatePackages)
-
-instance Component CandidatePackages where
-  type Dependencies CandidatePackages = End
-  initialValue = CandidatePackages {
+initialCandidatePackages :: CandidatePackages
+initialCandidatePackages = CandidatePackages {
     candidateList = mempty
   }
 
-instance Version CandPkgInfo where
-  mode = Versioned 0 Nothing
-
-$(deriveSerialize ''CandPkgInfo)
+$(deriveSafeCopy 0 'base ''CandPkgInfo)
 
 replaceCandidate :: CandPkgInfo -> Update CandidatePackages ()
 replaceCandidate pkg = State.modify $ \candidates -> candidates { candidateList = replaceVersions (candidateList candidates) }
@@ -152,13 +138,13 @@ getCandidatePackages :: Query CandidatePackages CandidatePackages
 getCandidatePackages = ask
 
 
-$(mkMethods ''CandidatePackages ['getCandidatePackages
-                                ,'replaceCandidatePackages
-                                ,'replaceCandidate
-                                ,'addCandidate
-                                ,'deleteCandidate
-                                ,'deleteCandidates
-                                ])
+$(makeAcidic ''CandidatePackages ['getCandidatePackages
+                                 ,'replaceCandidatePackages
+                                 ,'replaceCandidate
+                                 ,'addCandidate
+                                 ,'deleteCandidate
+                                 ,'deleteCandidates
+                                 ])
 
 
 ---------------------------------- Documentation
@@ -166,23 +152,16 @@ data Documentation = Documentation {
      documentation :: Map.Map PackageIdentifier (BlobId, TarIndex)
    } deriving (Typeable, Show)
 
-instance Component Documentation where
-    type Dependencies Documentation = End
-    initialValue = Documentation Map.empty
+initialDocumentation :: Documentation
+initialDocumentation = Documentation Map.empty
 
-instance Version Documentation where
-    mode = Versioned 0 Nothing -- Version 0, no previous types
-
-instance Serialize Documentation where
+instance SafeCopy Documentation where
     putCopy (Documentation m) = contain $ safePut m
     getCopy = contain $ liftM Documentation safeGet
 
-instance Version BlobId where
-  mode = Versioned 0 Nothing
-
-instance Serialize BlobId where
-  putCopy = contain . Binary.put
-  getCopy = contain Binary.get
+instance SafeCopy BlobId where
+  putCopy = contain . Serialize.put
+  getCopy = contain Serialize.get
 
 lookupDocumentation :: PackageIdentifier -> Query Documentation (Maybe (BlobId, TarIndex))
 lookupDocumentation pkgId
@@ -206,25 +185,22 @@ getDocumentation = ask
 replaceDocumentation :: Documentation -> Update Documentation ()
 replaceDocumentation = State.put
 
-$(mkMethods ''Documentation ['insertDocumentation
-                            ,'lookupDocumentation
-                            ,'hasDocumentation
-                            ,'getDocumentation
-                            ,'replaceDocumentation
-                            ])
+$(makeAcidic ''Documentation ['insertDocumentation
+                             ,'lookupDocumentation
+                             ,'hasDocumentation
+                             ,'getDocumentation
+                             ,'replaceDocumentation
+                             ])
 
 -------------------------------- Maintainer list
 data PackageMaintainers = PackageMaintainers {
     maintainers :: Map.Map PackageName UserList
 } deriving (Show, Typeable)
 
-instance Version PackageMaintainers where
-  mode = Versioned 0 Nothing
-$(deriveSerialize ''PackageMaintainers)
+$(deriveSafeCopy 0 'base ''PackageMaintainers)
 
-instance Component PackageMaintainers where
-  type Dependencies PackageMaintainers = End
-  initialValue = PackageMaintainers Map.empty
+initialPackageMaintainers :: PackageMaintainers
+initialPackageMaintainers = PackageMaintainers Map.empty
 
 getPackageMaintainers :: PackageName -> Query PackageMaintainers UserList
 getPackageMaintainers name = asks $ fromMaybe Group.empty . Map.lookup name . maintainers
@@ -248,13 +224,13 @@ allPackageMaintainers = ask
 replacePackageMaintainers :: PackageMaintainers -> Update PackageMaintainers ()
 replacePackageMaintainers = State.put
 
-$(mkMethods ''PackageMaintainers ['getPackageMaintainers
-                                 ,'addPackageMaintainer
-                                 ,'removePackageMaintainer
-                                 ,'setPackageMaintainers
-                                 ,'replacePackageMaintainers
-                                 ,'allPackageMaintainers
-                                 ])
+$(makeAcidic ''PackageMaintainers ['getPackageMaintainers
+                                  ,'addPackageMaintainer
+                                  ,'removePackageMaintainer
+                                  ,'setPackageMaintainers
+                                  ,'replacePackageMaintainers
+                                  ,'allPackageMaintainers
+                                  ])
 
 -------------------------------- Trustee list
 -- this could be reasonably merged into the above, as a PackageGroups data structure
@@ -262,13 +238,10 @@ data HackageTrustees = HackageTrustees {
     trusteeList :: UserList
 } deriving (Show, Typeable)
 
-instance Version HackageTrustees where
-  mode = Versioned 0 Nothing
-$(deriveSerialize ''HackageTrustees)
+$(deriveSafeCopy 0 'base ''HackageTrustees)
 
-instance Component HackageTrustees where
-  type Dependencies HackageTrustees = End
-  initialValue = HackageTrustees Group.empty
+initialHackageTrustees :: HackageTrustees
+initialHackageTrustees = HackageTrustees Group.empty
 
 getHackageTrustees :: Query HackageTrustees UserList
 getHackageTrustees = asks trusteeList
@@ -285,20 +258,8 @@ removeHackageTrustee uid = modifyHackageTrustees (Group.remove uid)
 replaceHackageTrustees :: UserList -> Update HackageTrustees ()
 replaceHackageTrustees ulist = modifyHackageTrustees (const ulist)
 
-$(mkMethods ''HackageTrustees ['getHackageTrustees
-                              ,'addHackageTrustee
-                              ,'removeHackageTrustee
-                              ,'replaceHackageTrustees
-                              ])
-
----------------------------------------------
-data PackageUpload = PackageUpload deriving (Typeable)
-instance Version PackageUpload where
-  mode = Versioned 0 Nothing
-$(deriveSerialize ''PackageUpload)
-
-instance Component PackageUpload where
-    type Dependencies PackageUpload = PackageMaintainers :+: HackageTrustees :+: End
-    initialValue = PackageUpload
-
-$(mkMethods ''PackageUpload [])
+$(makeAcidic ''HackageTrustees ['getHackageTrustees
+                               ,'addHackageTrustee
+                               ,'removeHackageTrustee
+                               ,'replaceHackageTrustees
+                               ])

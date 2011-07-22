@@ -11,6 +11,7 @@ module Distribution.Server.Features.Upload (
     extractPackage,
   ) where
 
+import Distribution.Server.Acid (query, update)
 import Distribution.Server.Feature
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
@@ -35,7 +36,6 @@ import qualified Distribution.Server.Packages.Unpack as Upload
 import Distribution.Server.PackageIndex (PackageIndex)
 
 import Happstack.Server
-import Happstack.State
 import Data.Monoid (mconcat)
 import Data.Maybe (fromMaybe, listToMaybe, catMaybes)
 import qualified Data.Map as Map

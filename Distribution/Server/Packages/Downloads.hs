@@ -8,8 +8,8 @@ import Distribution.Server.Instances ()
 import Distribution.Package
 import Distribution.Version
 
-import qualified Happstack.State as State (Version)
-import Happstack.State hiding (Version)
+import Data.Acid
+import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Time.Calendar
 import Data.Typeable (Typeable)
 import Data.Map (Map)
@@ -90,12 +90,9 @@ getDownloadInfo pkgname = asks (Map.findWithDefault emptyDownloadInfo pkgname . 
 
 --------------------------------------------------------------------------------
 
-instance State.Version DownloadCounts where mode = Versioned 0 Nothing
-$(deriveSerialize ''DownloadCounts)
-instance State.Version DownloadInfo where mode = Versioned 0 Nothing
-$(deriveSerialize ''DownloadInfo)
-instance State.Version PackageDownloads where mode = Versioned 0 Nothing
-$(deriveSerialize ''PackageDownloads)
+$(deriveSafeCopy 0 'base ''DownloadCounts)
+$(deriveSafeCopy 0 'base ''DownloadInfo)
+$(deriveSafeCopy 0 'base ''PackageDownloads)
 
 instance NFData PackageDownloads where
     rnf (PackageDownloads a b) = rnf a `seq` rnf b
@@ -104,12 +101,11 @@ instance NFData DownloadInfo where
 instance NFData DownloadCounts where
     rnf (DownloadCounts a b) = rnf a `seq` rnf b
 
-instance Component DownloadCounts where
-    type Dependencies DownloadCounts = End
-    initialValue = emptyDownloadCounts
+initialDownloadCounts :: DownloadCounts
+initialDownloadCounts = emptyDownloadCounts
 
-$(mkMethods ''DownloadCounts ['registerDownload
-                             ,'getDownloadCounts
-                             ,'getDownloadInfo
-                             ])
+$(makeAcidic ''DownloadCounts ['registerDownload
+                              ,'getDownloadCounts
+                              ,'getDownloadInfo
+                              ])
 

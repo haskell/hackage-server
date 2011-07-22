@@ -7,6 +7,7 @@ module Distribution.Server.Distributions.Backup (
     distroToCSV
   ) where
 
+import Distribution.Server.Acid (update)
 import qualified Distribution.Server.Distributions.Distributions as Distros
 import Distribution.Server.Distributions.Distributions (DistroName, Distributions(..), DistroVersions(..), DistroPackageInfo(..))
 import Distribution.Server.Distributions.State
@@ -20,7 +21,6 @@ import Data.Version
 import Text.CSV (CSV)
 
 import Data.ByteString.Lazy.Char8 (ByteString)
-import Happstack.State (update)
 import Control.Monad.State
 import qualified Data.Map as Map
 import Data.Map (Map)

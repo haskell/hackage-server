@@ -8,55 +8,41 @@ import Distribution.Server.BuildReport.BuildReports (BuildReportId, BuildLog, Bu
 import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
 
 import Distribution.Package
-import Happstack.State
 
-import qualified Data.Binary as Binary
+import qualified Data.Serialize as Serialize
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
+import Data.Acid     (Query, Update, makeAcidic)
+import Data.SafeCopy (SafeCopy(..), contain)
+import qualified Data.Serialize as Serialize
 
 -- BuildReportId
-instance Version BuildReportId where
-    mode = Versioned 0 Nothing
-
-instance Serialize BuildReportId where
-    putCopy = contain . Binary.put
-    getCopy = contain Binary.get
+instance SafeCopy BuildReportId where
+    putCopy = contain . Serialize.put
+    getCopy = contain Serialize.get
 
 -- BuildLog
-instance Version BuildLog where
-    mode = Versioned 0 Nothing
-
-instance Serialize BuildLog where
-    putCopy = contain . Binary.put
-    getCopy = contain Binary.get
+instance SafeCopy BuildLog where
+    putCopy = contain . Serialize.put
+    getCopy = contain Serialize.get
 
 -- BuildReport
-instance Version BuildReport where
-    mode = Versioned 0 Nothing
-
-instance Serialize BuildReport where
-    putCopy = contain . Binary.put
-    getCopy = contain Binary.get
+instance SafeCopy BuildReport where
+    putCopy = contain . Serialize.put
+    getCopy = contain Serialize.get
 
 -- PkgBuildReports
-instance Version PkgBuildReports where
-    mode = Versioned 0 Nothing
-
-instance Serialize PkgBuildReports where
-    putCopy = contain . Binary.put
-    getCopy = contain Binary.get
+instance SafeCopy PkgBuildReports where
+    putCopy = contain . Serialize.put
+    getCopy = contain Serialize.get
 
 -- BuildReports
-instance Version BuildReports where
-  mode = Versioned 0 Nothing
+instance SafeCopy BuildReports where
+  putCopy = contain . Serialize.put
+  getCopy = contain Serialize.get
 
-instance Serialize BuildReports where
-  putCopy = contain . Binary.put
-  getCopy = contain Binary.get
-
-instance Component BuildReports where
-  type Dependencies BuildReports = End
-  initialValue = BuildReports.emptyReports
+initialBuildReports :: BuildReports
+initialBuildReports = BuildReports.emptyReports
 
 -- and defined methods
 addReport :: PackageId -> (BuildReport, Maybe BuildLog) -> Update BuildReports BuildReportId
@@ -92,12 +78,12 @@ getBuildReports = ask
 replaceBuildReports :: BuildReports -> Update BuildReports ()
 replaceBuildReports = State.put
 
-$(mkMethods ''BuildReports ['addReport
-                           ,'setBuildLog
-                           ,'deleteReport
-                           ,'lookupReport
-                           ,'lookupPackageReports
-                           ,'getBuildReports
-                           ,'replaceBuildReports
-                           ])
+$(makeAcidic ''BuildReports ['addReport
+                            ,'setBuildLog
+                            ,'deleteReport
+                            ,'lookupReport
+                            ,'lookupPackageReports
+                            ,'getBuildReports
+                            ,'replaceBuildReports
+                            ])
 

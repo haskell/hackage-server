@@ -19,9 +19,10 @@ import Distribution.Server.Users.Types
 
 import qualified Data.IntSet as IntSet
 import Data.Monoid (Monoid)
-import Data.Binary (Binary)
-import qualified Data.Binary as Binary
-import Happstack.Data
+import Data.SafeCopy (SafeCopy(..), contain)
+import Data.Serialize (Serialize)
+import qualified Data.Serialize as Serialize
+import Data.Typeable (Typeable)
 import Control.DeepSeq
 
 import Prelude hiding (id)
@@ -29,13 +30,11 @@ import Prelude hiding (id)
 -- | Some subset of users, eg those allowed to perform some action.
 --
 newtype UserList = UserList IntSet.IntSet
-  deriving (Eq, Monoid, Binary, Typeable, Show)
+  deriving (Eq, Monoid, Serialize, Typeable, Show)
 
-instance Version UserList where
-  mode = Versioned 0 Nothing
-instance Serialize UserList where
-  putCopy = contain . Binary.put
-  getCopy = contain Binary.get
+instance SafeCopy UserList where
+  putCopy = contain . Serialize.put
+  getCopy = contain Serialize.get
 
 empty :: UserList
 empty = UserList IntSet.empty

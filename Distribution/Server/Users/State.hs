@@ -9,17 +9,16 @@ import Distribution.Server.Users.Types
 import Distribution.Server.Users.Group as Group (UserList(..), enumerate, add, remove, empty)
 import Distribution.Server.Users.Users as Users
 
+import Data.Acid     (Query, Update, makeAcidic)
+import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable (Typeable)
 import Data.Maybe (isJust, maybeToList)
-
-import Happstack.State
 
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
 
-instance Component Users where
-  type Dependencies Users = End
-  initialValue = Users.empty
+initialUsers :: Users
+initialUsers = Users.empty
 
 --------------------------------------------
 
@@ -101,26 +100,25 @@ listGroupMembers userList = do
         uinfo <- maybeToList $ Users.lookupId uid users
         return $ userName uinfo
 
-$(mkMethods ''Users ['addUser
-                    ,'requireUserName
-                    ,'setEnabledUser
-                    ,'deleteUser
-                    ,'replaceUserAuth
-                    ,'renameUser
-                    ,'lookupUserName
-                    ,'getUserDb
-                    ,'replaceUserDb
-                    ,'listGroupMembers
-                    ])
+$(makeAcidic ''Users ['addUser
+                     ,'requireUserName
+                     ,'setEnabledUser
+                     ,'deleteUser
+                     ,'replaceUserAuth
+                     ,'renameUser
+                     ,'lookupUserName
+                     ,'getUserDb
+                     ,'replaceUserDb
+                     ,'listGroupMembers
+                     ])
 
 -----------------------------------------------------
 
 data HackageAdmins = HackageAdmins {
     adminList :: !Group.UserList
 } deriving (Typeable)
-$(deriveSerialize ''HackageAdmins)
-instance Version HackageAdmins where
-    mode = Versioned 0 Nothing
+
+$(deriveSafeCopy 0 'base ''HackageAdmins)
 
 getHackageAdmins :: Query HackageAdmins UserList
 getHackageAdmins = asks adminList
@@ -137,23 +135,20 @@ removeHackageAdmin uid = modifyHackageAdmins (Group.remove uid)
 replaceHackageAdmins :: UserList -> Update HackageAdmins ()
 replaceHackageAdmins ulist = modifyHackageAdmins (const ulist)
 
-instance Component HackageAdmins where
-    type Dependencies HackageAdmins = End
-    initialValue = HackageAdmins Group.empty
+initialHackageAdmins :: HackageAdmins
+initialHackageAdmins = HackageAdmins Group.empty
 
-$(mkMethods ''HackageAdmins
-                    ['getHackageAdmins
-                    ,'addHackageAdmin
-                    ,'removeHackageAdmin
-                    ,'replaceHackageAdmins])
+$(makeAcidic ''HackageAdmins
+                 ['getHackageAdmins
+                 ,'addHackageAdmin
+                 ,'removeHackageAdmin
+                 ,'replaceHackageAdmins])
 
 --------------------------------------------------------------------------
 data MirrorClients = MirrorClients {
     mirrorClients :: !Group.UserList
 } deriving (Typeable)
-$(deriveSerialize ''MirrorClients)
-instance Version MirrorClients where
-    mode = Versioned 0 Nothing
+$(deriveSafeCopy 0 'base ''MirrorClients)
 
 getMirrorClients :: Query MirrorClients UserList
 getMirrorClients = asks mirrorClients
@@ -169,12 +164,11 @@ removeMirrorClient uid = modifyMirrorClients (Group.remove uid)
 
 replaceMirrorClients :: UserList -> Update MirrorClients ()
 replaceMirrorClients ulist = modifyMirrorClients (const ulist)
+     
+initialMirrorClients :: MirrorClients
+initialMirrorClients = MirrorClients Group.empty
 
-instance Component MirrorClients where
-    type Dependencies MirrorClients = End
-    initialValue = MirrorClients Group.empty
-
-$(mkMethods ''MirrorClients
+$(makeAcidic ''MirrorClients
                     ['getMirrorClients
                     ,'addMirrorClient
                     ,'removeMirrorClient
@@ -184,9 +178,7 @@ $(mkMethods ''MirrorClients
 data IndexUsers = IndexUsers {
     indexUsers :: !Group.UserList
 } deriving (Typeable)
-$(deriveSerialize ''IndexUsers)
-instance Version IndexUsers where
-    mode = Versioned 0 Nothing
+$(deriveSafeCopy 0 'base ''IndexUsers)
 
 getIndexUsers :: Query IndexUsers UserList
 getIndexUsers = asks indexUsers
@@ -203,11 +195,10 @@ removeIndexUser uid = modifyIndexUsers (Group.remove uid)
 replaceIndexUsers :: UserList -> Update IndexUsers ()
 replaceIndexUsers ulist = modifyIndexUsers (const ulist)
 
-instance Component IndexUsers where
-    type Dependencies IndexUsers = End
-    initialValue = IndexUsers Group.empty
+initialIndexUsers :: IndexUsers
+initialIndexUsers = IndexUsers Group.empty
 
-$(mkMethods ''IndexUsers
+$(makeAcidic ''IndexUsers
                     ['getIndexUsers
                     ,'addIndexUser
                     ,'removeIndexUser

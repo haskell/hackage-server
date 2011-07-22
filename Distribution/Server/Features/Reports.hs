@@ -4,6 +4,7 @@ module Distribution.Server.Features.Reports (
     initReportsFeature
   ) where
 
+import Distribution.Server.Acid (update, query)
 import Distribution.Server.Feature
 import Distribution.Server.Resource
 import Distribution.Server.Features.Core
@@ -28,7 +29,6 @@ import Distribution.Text
 import Distribution.Package
 
 import Happstack.Server
-import Happstack.State (update, query)
 import Data.Function (fix)
 import Control.Applicative (optional)
 import Control.Monad.Trans

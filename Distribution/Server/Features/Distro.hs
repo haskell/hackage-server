@@ -3,6 +3,7 @@ module Distribution.Server.Features.Distro (
     initDistroFeature
   ) where
 
+import Distribution.Server.Acid (query, update)
 import Distribution.Server.Feature
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages
@@ -18,7 +19,6 @@ import Distribution.Server.Distributions.Backup
 import Distribution.Simple.Utils (fromUTF8)
 
 import Happstack.Server
-import Happstack.State
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.List (intercalate)
 import Distribution.Text (display, simpleParse)

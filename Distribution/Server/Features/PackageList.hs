@@ -8,6 +8,7 @@ module Distribution.Server.Features.PackageList (
     tagHistogram
   ) where
 
+import Distribution.Server.Acid (query)
 import Distribution.Server.Feature
 import Distribution.Server.Types
 import Distribution.Server.Hook
@@ -38,8 +39,6 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-
-import Happstack.State (query)
 
 data ListFeature = ListFeature {
     itemCache :: Cache.Cache (Map PackageName PackageItem),

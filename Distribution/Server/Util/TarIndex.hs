@@ -12,9 +12,8 @@ import Control.Monad.Reader.Class (asks)
 import Control.Monad.State.Class (put, modify)
 import qualified Data.Map as Map
 
-import Happstack.Data
-import Happstack.State
-
+import Data.Acid     (makeAcidic)
+import Data.SafeCopy (base, deriveSafeCopy)
 import Data.TarIndex (TarIndex)
 
 import Distribution.Server.Packages.State()
@@ -38,19 +37,16 @@ lookupIndex blob =  Map.lookup blob <$> asks indexMap
 replaceTarIndexMap :: TarIndexMap -> Update TarIndexMap ()
 replaceTarIndexMap = put
 
-instance Version TarIndexMap where
+$(deriveSafeCopy 0 'base ''TarIndexMap)
 
-$(deriveSerialize ''TarIndexMap)
-
-instance Component TarIndexMap where
-    type Dependencies TarIndexMap = End
-    initialValue = emptyTarIndex
+initialTarIndexMap :: TarIndexMap
+initialTarIndexMap = emptyTarIndex
 
 emptyTarIndex :: TarIndexMap
 emptyTarIndex = M Map.empty
 
 
-$(mkMethods ''TarIndexMap
+$(makeAcidic ''TarIndexMap
                 [ 'addIndex
                 , 'dropIndex
                 , 'lookupIndex

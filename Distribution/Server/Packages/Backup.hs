@@ -13,6 +13,7 @@ module Distribution.Server.Packages.Backup (
     maintToCSV
   ) where
 
+import Distribution.Server.Acid (update)
 import Distribution.Server.Packages.State
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Group (UserList(..))
@@ -42,8 +43,6 @@ import Data.List (sortBy, maximumBy)
 import Data.Ord (comparing)
 import Data.Monoid (mempty)
 import Control.Monad.State
-
-import Happstack.State
 
 packagesBackup :: BlobStorage -> RestoreBackup
 packagesBackup blobs = updatePackageBackup blobs Map.empty
