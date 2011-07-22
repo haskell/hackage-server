@@ -163,7 +163,8 @@ run server = simpleHTTP conf $ mungeRequest $ impl server
     conf = nullConf { Happstack.Server.port = serverPort server }
 
     mungeRequest part =
-        do decodeBody (defaultBodyPolicy "/tmp/" (1*10^6) (1*10^6) (1*10^6)) -- HS6 - "/tmp/" should come from ServerConfig.tmpDir, and the quotas should be configurable as well. Also there are places in the code that want to work with the request body directly but maybe fail if the request body has already been consumed. The body will only be consumed if it is a POST/PUT request *and* the content-type is multipart/form-data. If this does happen, you should get a clear error message saying what happened.
+        do let config = serverConfig server
+           decodeBody (defaultBodyPolicy (serverTmpDir config) (1*10^6) (1*10^6) (1*10^6)) -- HS6 - "/tmp/" should come from ServerConfig.tmpDir, and the quotas should be configurable as well. Also there are places in the code that want to work with the request body directly but maybe fail if the request body has already been consumed. The body will only be consumed if it is a POST/PUT request *and* the content-type is multipart/form-data. If this does happen, you should get a clear error message saying what happened.
            msum [ -- like HTTP methods, but.. less so. Since browsers do not support PUT, DELETE, etc, we fake it.
                   do methodM POST
                      mMethod <- optional $ look "_method" `checkRq` (\str -> readRq "_method" (map toUpper str))
