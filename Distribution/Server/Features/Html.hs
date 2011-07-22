@@ -56,7 +56,7 @@ import Distribution.Text (display)
 import Distribution.PackageDescription
 import Data.List (intercalate, intersperse, insert, sortBy)
 import Data.Function (on)
-import Control.Monad (forM)
+import Control.Monad (forM, liftM)
 import Control.Monad.Trans (MonadIO, liftIO)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -116,7 +116,7 @@ initHtmlFeature config core pkg upload check user version reversef tagf
  packageGroupResource uploads)] }
         pkgCandUploadForm = (resourceAt "/package/:package/candidate/upload") { resourceGet = [("html", servePackageCandidateUpload cores checks)] }
         candMaintainForm = (resourceAt "/package/:package/candidate/maintain") { resourceGet = [("html", serveCandidateMaintain cores checks)] }
-        tagEdit = (resourceAt "/package/:package/tags/edit") { resourceGet = [("html", serveTagsEdit cores tags)] }
+        tagEdit = (resourceAt "/package/:package/tags/edit") { resourceGet = [("html", serveTagsForm cores tags)] }
     -- Index page caches
     namesCache <- Cache.newCacheable $ toResponse ()
     mainCache <- Cache.newCacheable $ toResponse ()
@@ -199,6 +199,7 @@ initHtmlFeature config core pkg upload check user version reversef tagf
           , (extendResource $ tagsListing tags) { resourceGet = [("html", serveTagsListing tags)] }
           , (extendResource $ tagListing tags) { resourceGet = [("html", serveTagListing cores list tags)] }
           , (extendResource $ packageTagsListing tags) { resourcePut = [("html", putPackageTags cores tagf)], resourceGet = [] }
+          , tagEdit -- (extendResource $ packageTagsEdit tags) { resourceGet = [("html", serveTagsForm cores tagf)] }
         -- search
           , (extendResource $ findPackageResource names) { resourceGet = [("html", servePackageFind cores list namef tags)] }
          ]
@@ -874,9 +875,23 @@ putPackageTags core tags dpath =
     returnOk $ toResponse $ Resource.XHtml $ hackagePage "Set tags"
         [toHtml "Put tags for ", packageNameLink core pkgname]
 
--- TODO: serve form for editing, to be received by putTags
-serveTagsEdit :: CoreResource -> TagsResource -> DynamicPath -> ServerPart Response
-serveTagsEdit _ _ _ = return $ toResponse ()
+-- serve form for editing, to be received by putTags
+serveTagsForm :: CoreResource -> TagsResource -> DynamicPath -> ServerPart Response
+serveTagsForm core tags dpath =
+  htmlResponse $
+  withPackageName dpath $ \pkgname -> do
+    currTags <- liftM (  fromMaybe [] 
+                       . fmap Set.toList 
+                       . Map.lookup pkgname 
+                       . packageTags) $ query GetPackageTags
+    let tagsStr = concat . intersperse ", " . map display $ currTags
+    returnOk $ toResponse $ Resource.XHtml $ hackagePage "Edit package tags"
+      [paragraph << [toHtml "Set tags for ", packageNameLink core pkgname],
+       form ! [theclass "box", XHtml.method "POST", action $ packageTagsUri tags "" pkgname] <<
+        [ hidden "_method" "PUT"
+        , dlist . ddef . toHtml $ makeInput [thetype "text", value tagsStr] "tags" "Set tags to "
+        , paragraph << input ! [thetype "submit", value "Set tags"]
+        ]]
 
 --------------------------------------------------------------------------------
 -- Searching

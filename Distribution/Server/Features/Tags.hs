@@ -68,6 +68,7 @@ data TagsResource = TagsResource {
     tagsListing :: Resource,
     tagListing :: Resource,
     packageTagsListing :: Resource,
+    packageTagsEdit :: Resource,
 
     tagUri :: String -> Tag -> String,
     tagsUri :: String -> String,
@@ -98,6 +99,7 @@ initTagsFeature _ _ = do
           { tagsListing = resourceAt "/packages/tags/.:format"
           , tagListing = resourceAt "/packages/tag/:tag.:format"
           , packageTagsListing = resourceAt "/package/:package/tags.:format"
+          , packageTagsEdit    = resourceAt "/package/:package/tags/edit"
           , tagUri = \format tag -> renderResource (tagListing r) [display tag, format]
           , tagsUri = \format -> renderResource (tagsListing r) [format]
           , packageTagsUri = \format pkgname -> renderResource (packageTagsListing r) [display pkgname, format]
