@@ -94,8 +94,8 @@ defaultServerConfig = do
     confStateDir  = "state",
     confStaticDir = dataDir </> "static",
     confTmpDir    = "upload-tmp"
-  
-}
+  }
+
 data Server = Server {
   serverTxControl :: MVar TxControl,
   serverFeatures  :: [Feature.HackageModule],
