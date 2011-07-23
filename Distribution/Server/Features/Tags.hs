@@ -91,31 +91,41 @@ instance HackageFeature TagsFeature where
                 forM_ (Map.toList calcTags) $ uncurry $ setCalculatedTag tags
 
 initTagsFeature :: Config -> CoreFeature -> IO TagsFeature
-initTagsFeature _ _ = do
+initTagsFeature _ cf = do
     specials <- Cache.newCacheable emptyPackageTags
     updateTag <- newHook
-    return TagsFeature
-      { tagsResource = fix $ \r -> TagsResource
-          { tagsListing = resourceAt "/packages/tags/.:format"
-          , tagListing = resourceAt "/packages/tag/:tag.:format"
-          , packageTagsListing = resourceAt "/package/:package/tags.:format"
-          , packageTagsEdit    = resourceAt "/package/:package/tags/edit"
-          , tagUri = \format tag -> renderResource (tagListing r) [display tag, format]
-          , tagsUri = \format -> renderResource (tagsListing r) [format]
-          , packageTagsUri = \format pkgname -> renderResource (packageTagsListing r) [display pkgname, format]
+--    tf <- return TagsFeature
+    let tf = 
+          TagsFeature 
+            { tagsResource = fix $ \r -> TagsResource
+              { tagsListing = resourceAt "/packages/tags/.:format"
+              , tagListing = resourceAt "/packages/tag/:tag.:format"
+              , packageTagsListing = resourceAt "/package/:package/tags.:format"
+              , packageTagsEdit    = resourceAt "/package/:package/tags/edit"
+              , tagUri = \format tag -> renderResource (tagListing r) [display tag, format]
+              , tagsUri = \format -> renderResource (tagsListing r) [format]
+              , packageTagsUri = \format pkgname -> renderResource (packageTagsListing r) [display pkgname, format]
             -- for more fine-tuned tag manipulation, could also define:
             -- * DELETE /package/:package/tag/:tag (remove single tag)
             -- * POST /package/:package\/tags (add single tag)
             -- renaming tags and deleting them are also supported as happstack-state
             -- operations, but make sure this wouldn't circumvent calculated tags.
-          }
-      , tagsUpdated = updateTag
-      , calculatedTags = specials
-      , setCalculatedTag = \tag pkgs -> do
-            Cache.modifyCache specials (setTag tag pkgs)
-            update $ SetTagPackages tag pkgs
-            runHook'' updateTag pkgs (Set.singleton tag)
-      }
+              }
+            , tagsUpdated = updateTag
+            , calculatedTags = specials
+            , setCalculatedTag = \tag pkgs -> do
+              Cache.modifyCache specials (setTag tag pkgs)
+              update $ SetTagPackages tag pkgs
+              runHook'' updateTag pkgs (Set.singleton tag)
+            }
+    registerHook (packageAddHook cf) addTags
+    return tf
+
+addTags :: PkgInfo -> IO ()
+addTags pkginfo = do
+  let pkgname = packageName . packageDescription . pkgDesc $ pkginfo
+      tags = Set.fromList . constructImmutableTags . pkgDesc $ pkginfo
+  update . SetPackageTags pkgname $ tags
 
 withTagPath :: DynamicPath -> (Tag -> Set PackageName -> ServerPart a) -> ServerPart a
 withTagPath dpath func = case simpleParse =<< lookup "tag" dpath of

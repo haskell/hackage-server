@@ -56,7 +56,7 @@ import Distribution.Text (display)
 import Distribution.PackageDescription
 import Data.List (intercalate, intersperse, insert, sortBy)
 import Data.Function (on)
-import Control.Monad (forM, liftM)
+import Control.Monad (forM)
 import Control.Monad.Trans (MonadIO, liftIO)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -879,11 +879,8 @@ serveTagsForm :: CoreResource -> TagsResource -> DynamicPath -> ServerPart Respo
 serveTagsForm core tags dpath =
   htmlResponse $
   withPackageName dpath $ \pkgname -> do
-    currTags <- liftM (  fromMaybe [] 
-                       . fmap Set.toList 
-                       . Map.lookup pkgname 
-                       . packageTags) $ query GetPackageTags
-    let tagsStr = concat . intersperse ", " . map display $ currTags
+    currTags <- query (TagsForPackage pkgname)
+    let tagsStr = concat . intersperse ", " . map display . Set.toList $ currTags
     return $ toResponse $ Resource.XHtml $ hackagePage "Edit package tags"
       [paragraph << [toHtml "Set tags for ", packageNameLink core pkgname],
        form ! [theclass "box", XHtml.method "POST", action $ packageTagsUri tags "" pkgname] <<
