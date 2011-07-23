@@ -10,6 +10,7 @@ import Distribution.Server.Resource
 import Distribution.Server.Features.Core
 import Distribution.Server.Types
 import Distribution.Server.Error
+import Distribution.Server.Util.Happstack
 
 import Distribution.Server.BuildReport.Backup
 import Distribution.Server.BuildReport.State
@@ -119,16 +120,13 @@ submitBuildReport r store dpath =
     -- require logged-in user
     Auth.withHackageAuth users Nothing Nothing $ \_ _ -> do
         let pkgid = pkgInfoId pkg
-        mRqBody <- takeRequestBody =<< askRq
-        case mRqBody of
-          Nothing -> internalServerError $ toResponse $ "takeRequestBody can only be called once."
-          (Just (Body body)) ->
-            case BuildReport.parse $ unpack body of
-                Left err -> errBadRequest "Error submitting report" [MText err]
-                Right report -> do
-                    reportId <- update $ AddReport pkgid (report, Nothing)
-                    -- redirect to new reports page
-                    seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
+        Body reportbody <- consumeRequestBody
+        case BuildReport.parse $ unpack reportbody of
+            Left err -> errBadRequest "Error submitting report" [MText err]
+            Right report -> do
+                reportId <- update $ AddReport pkgid (report, Nothing)
+                -- redirect to new reports page
+                seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
 
 -- result: auth error, not-found error or redirect
 deleteBuildReport :: ReportsResource -> DynamicPath -> ServerPart Response
@@ -155,14 +153,11 @@ putBuildLog r store dpath =
     -- logged in users
     Auth.withHackageAuth users Nothing Nothing $ \_ _ -> do
         let pkgid = pkgInfoId pkg
-        mRqBody <- takeRequestBody =<< askRq
-        case mRqBody of
-          Nothing -> internalServerError $ toResponse $ "takeRequestBody can only be called once."
-          (Just (Body blog)) -> do
-                       buildLog <- liftIO $ BlobStorage.add store blog
-                       update $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
-                       -- go to report page (linking the log)
-                       seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
+        Body blogbody <- consumeRequestBody
+        buildLog <- liftIO $ BlobStorage.add store blogbody
+        update $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
+        -- go to report page (linking the log)
+        seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
 
 -- result: auth error, not-found error or redirect
 deleteBuildLog :: ReportsResource -> DynamicPath -> ServerPart Response

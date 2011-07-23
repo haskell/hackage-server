@@ -11,6 +11,7 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Resource
 import Distribution.Server.Types
 import Distribution.Server.ResourceTypes
+import Distribution.Server.Util.Happstack
 
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
 import Distribution.Server.Distributions.State
@@ -181,13 +182,10 @@ maintainerDescription dname = nullDescription
 
 lookCSVFile :: (CSVFile -> ServerPart Response) -> ServerPart Response
 lookCSVFile func = do
-    mRqBody <- takeRequestBody =<< askRq
-    case mRqBody of
-      Nothing -> internalServerError $ toResponse ("lookCVSFile: attempted to takeRequestBody, but it was already consumed.")
-      (Just (Body fileContents)) ->
-          case parseCSV "PUT input" (fromUTF8 (BS.unpack (fileContents))) of
-            Left err -> badRequest $ toResponse $ "Could not parse CSV File: " ++ show err
-            Right csv -> func (CSVFile csv)
+    Body fileContents <- consumeRequestBody
+    case parseCSV "PUT input" (fromUTF8 (BS.unpack (fileContents))) of
+      Left err -> badRequest $ toResponse $ "Could not parse CSV File: " ++ show err
+      Right csv -> func (CSVFile csv)
 
 packageListToCSV :: [(PackageName, DistroPackageInfo)] -> CSVFile
 packageListToCSV entries

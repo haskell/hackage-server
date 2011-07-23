@@ -10,7 +10,8 @@ of Hackage.
 module Distribution.Server.Util.Happstack (
     remainingPath,
     remainingPathString,
-    mime
+    mime,
+    consumeRequestBody
   ) where
 
 import Happstack.Server
@@ -37,3 +38,17 @@ remainingPathString = do
 -- file.
 mime :: FilePath -> String
 mime x  = Map.findWithDefault "text/plain" (drop 1 (takeExtension x)) mimeTypes
+
+
+-- | Get the raw body of a PUT or POST request.
+--
+-- Note that for performance reasons, this consumes the data and it cannot be
+-- called twice.
+--
+consumeRequestBody :: Happstack m => m RqBody
+consumeRequestBody = do
+    mRq <- takeRequestBody =<< askRq
+    case mRq of
+      Nothing -> escape $ internalServerError $ toResponse
+                   "consumeRequestBody cannot be called more than once."
+      Just rq -> return rq

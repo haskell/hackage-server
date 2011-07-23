@@ -13,6 +13,7 @@ import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
 import Distribution.Server.Types
 import Distribution.Server.Error
+import Distribution.Server.Util.Happstack
 
 import Distribution.Server.Packages.State
 import Distribution.Server.Backup.Export
@@ -96,14 +97,11 @@ uploadDocumentation store dpath = runServerPartE $
         -- * Generate the new index
         -- * Drop the index for the old tar-file
         -- * Link the new documentation to the package
-        mRqBody <- takeRequestBody =<< askRq
-        case mRqBody of
-          Nothing -> errInternalError [MText "takeRequestBody can only be called once."]
-          (Just (Body fileContents)) -> do
-              blob <- liftIO $ BlobStorage.add store (GZip.decompress fileContents)
-              tarIndex <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blob)
-              update $ InsertDocumentation pkgid blob tarIndex
-              seeOther ("/package/" ++ display pkgid) (toResponse ())
+        Body fileContents <- consumeRequestBody
+        blob <- liftIO $ BlobStorage.add store (GZip.decompress fileContents)
+        tarIndex <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blob)
+        update $ InsertDocumentation pkgid blob tarIndex
+        seeOther ("/package/" ++ display pkgid) (toResponse ())
 
 -- curl -u mgruen:admin -X PUT --data-binary @gtk.tar.gz http://localhost:8080/package/gtk-0.11.0
 
