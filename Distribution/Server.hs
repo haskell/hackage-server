@@ -59,15 +59,13 @@ import Distribution.Text
 
 import System.FilePath ((</>))
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist)
-import Control.Applicative ((<$>), optional)
 import Control.Concurrent
 import Control.Monad (when, mplus, msum)
-import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Network.URI (URIAuth(URIAuth))
 import Network.BSD (getHostName)
-import Data.Char (toUpper)
 import Data.List (foldl')
+import Data.Int  (Int64)
 
 import Paths_hackage_server (getDataDir)
 
@@ -155,26 +153,44 @@ initialise initConfig@(ServerConfig hostName portNum stateDir staticDir tmpDir) 
 -- | Actually run the server, i.e. start accepting client http connections.
 --
 run :: Server -> IO ()
-run server = simpleHTTP conf $ mungeRequest $ impl server
+run server =
+    simpleHTTP conf $ do
+
+      handlePutPostQuotas
+
+      fakeBrowserHttpMethods (impl server)
+
   where
     conf = nullConf { Happstack.Server.port = serverPort server }
 
-    mungeRequest part =
-        do let config = serverConfig server
-           decodeBody (defaultBodyPolicy (serverTmpDir config) (1*10^6) (1*10^6) (1*10^6)) -- HS6 - Quotas should be configurable as well. Also there are places in the code that want to work with the request body directly but maybe fail if the request body has already been consumed. The body will only be consumed if it is a POST/PUT request *and* the content-type is multipart/form-data. If this does happen, you should get a clear error message saying what happened.
-           msum [ -- like HTTP methods, but.. less so. Since browsers do not support PUT, DELETE, etc, we fake it.
-                  do methodOnly POST
-                     mMethod <- optional $ look "_method" `checkRq` (\str -> readRq "_method" (map toUpper str))
-                     case mMethod of
-                       Nothing -> part
-                       (Just mthd) -> localRq (mungeMethod mthd) part
-                 -- or just do things the normal way
-                , part
-                ]
-        where
-    mungeMethod newMethod req = req { rqMethod = newMethod }
-    -- todo: given a .json or .html suffix, munge it into an Accept header, can use MessageWrap.pathEls to reparse rqPath
-    -- .. never mind, see enhanced Resource.hs
+    -- HS6 - Quotas should be configurable as well. Also there are places in
+    -- the code that want to work with the request body directly but maybe
+    -- fail if the request body has already been consumed. The body will only
+    -- be consumed if it is a POST/PUT request *and* the content-type is
+    -- multipart/form-data. If this does happen, you should get a clear error
+    -- message saying what happened.
+    handlePutPostQuotas = decodeBody bodyPolicy
+      where
+        tmpdir = serverTmpDir (serverConfig server)
+        quota  = 10 ^ (6 :: Int64)
+        bodyPolicy = defaultBodyPolicy tmpdir quota quota quota
+
+
+    -- This is a cunning hack to solve the problem that current web browsers
+    -- (non-HTML5 forms) do not support PUT, DELETE, etc, they only support GET
+    -- and POST. We don't want to compromise the design of the whole server
+    -- just because of browsers not supporting HTTP properly, so we allow
+    -- browsers to PUT/DELETE etc by POSTing with a query or body paramater of
+    -- _method=PUT/DELETE.
+    fakeBrowserHttpMethods part =
+      msum [ do methodOnly POST
+                withDataFn (lookRead "_method") $ \mthd ->
+                  localRq (\req -> req { rqMethod = mthd}) part
+
+             -- or just do things the normal way
+           , part
+           ]
+
 
 -- | Perform a clean shutdown of the server.
 --
