@@ -163,7 +163,7 @@ executable hackage-server
 -- others: -Werror
 
 executable hackage-mirror
-  main-is: MirrorMain.hs
+  main-is: MirrorClient.hs
   other-modules:
     Distribution.Server.Backup.UploadLog
     Distribution.Server.Users.Types
