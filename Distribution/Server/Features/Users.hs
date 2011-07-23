@@ -208,7 +208,7 @@ newUserWithAuth _ pwd1 pwd2 | pwd1 /= pwd2 = errBadRequest "Error registering us
 newUserWithAuth userNameStr password _ = case simpleParse userNameStr of
     Nothing -> errBadRequest "Error registering user" [MText "Not a valid user name!"]
     Just uname -> do
-      let userAuth = Auth.newDigestPass uname password "hackage"
+      let userAuth = Auth.newDigestPass uname password "Hackage"
       muid <- update $ AddUser uname (UserAuth userAuth DigestAuth)
       case muid of
         Nothing  -> errForbidden "Error registering user" [MText "User already exists"]
