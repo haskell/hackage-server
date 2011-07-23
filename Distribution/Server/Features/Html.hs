@@ -724,10 +724,10 @@ serveDeprecateForm core r dpath = htmlResponse $
             Nothing -> (False, "")
     returnOk $ toResponse $ Resource.XHtml $ hackagePage "Deprecate package"
         [paragraph << [toHtml "Configure deprecation for ", packageNameLink core pkgname],
-         form ! [theclass "box", XHtml.method "POST", action $ deprecatedPackageUri r "" pkgname] <<
+         form . ulist ! [theclass "box", XHtml.method "POST", action $ deprecatedPackageUri r "" pkgname] <<
           [ hidden "_method" "PUT"
-          , toHtml $ makeCheckbox isDepr "deprecated" "on" "Deprecate package"
-          , dlist . ddef . toHtml $ makeInput [thetype "text", value mfield] "by" "in favor of "
+          , li . toHtml $ makeCheckbox isDepr "deprecated" "on" "Deprecate package"
+          , li . toHtml $ makeInput [thetype "text", value mfield] "by" "Superseded by: " ++ [br, toHtml "(Optional; space-separated list of package names)"]
           , paragraph << input ! [thetype "submit", value "Set status"]
           ]]
 
