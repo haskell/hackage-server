@@ -350,7 +350,7 @@ groupResourceAt users uri group = do
                 addUserList group uid
           , removeUserList = \uid -> do
                 removeGroupIndex users uid groupUri
-                addUserList group uid
+                removeUserList group uid
           }
     ulist <- queryUserList group
     initGroupIndex users ulist groupUri descr
