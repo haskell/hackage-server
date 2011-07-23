@@ -169,9 +169,11 @@ doPutDeprecated f pkgname =
             depr <- optional $ fmap words $ look "by"
             case sequence . map simpleParse =<< depr of
                 Just deprs -> case filter (null . PackageIndex.lookupPackageName index) deprs of
-                    [] -> do
-                        doUpdates (Just deprs)
-                        return True
+                    [] -> case any (== pkgname) deprs of
+                            True -> deprecatedError $ "You can not deprecate a package in favor of itself!"
+                            _ -> do
+                              doUpdates (Just deprs)
+                              return True
                     pkgs -> deprecatedError $ "Some superseding packages aren't in the main index: " ++ intercalate ", " (map display pkgs)
                 Nothing -> deprecatedError "Expected format of the 'superseded by' field is a list of package names separated by spaces."
         Nothing -> do
