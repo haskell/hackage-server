@@ -1,5 +1,8 @@
 -- Unpack a tarball containing a Cabal package
-module Distribution.Server.Packages.Unpack (unpackPackage) where
+module Distribution.Server.Packages.Unpack (
+    unpackPackage,
+    unpackPackageBasic,
+  ) where
 
 import qualified Codec.Archive.Tar as Tar
 
@@ -47,7 +50,21 @@ import qualified System.FilePath.Windows
 unpackPackage :: FilePath -> ByteString
               -> Either String
                         ((GenericPackageDescription, ByteString), [String])
-unpackPackage tarGzFile contents = runUploadMonad $ do
+unpackPackage tarGzFile contents =
+  runUploadMonad $ do
+    (pkgDesc, cabalEntry) <- basicChecks tarGzFile contents
+    extraChecks pkgDesc
+    return (pkgDesc, cabalEntry)
+
+unpackPackageBasic :: FilePath -> ByteString
+                   -> Either String
+                             ((GenericPackageDescription, ByteString), [String])
+unpackPackageBasic tarGzFile contents =
+  runUploadMonad $ do
+    basicChecks tarGzFile contents
+
+basicChecks :: FilePath -> ByteString -> UploadMonad (GenericPackageDescription, ByteString)
+basicChecks tarGzFile contents = do
   let (pkgidStr, ext) = (base, tar ++ gz)
         where (tarFile, gz) = splitExtension (portableTakeFileName tarGzFile)
               (base,   tar) = splitExtension tarFile
@@ -95,8 +112,6 @@ unpackPackage tarGzFile contents = runUploadMonad $ do
     fail "Package name in the cabal file does not match the file name."
   when (packageVersion pkgDesc /= packageVersion pkgid) $
     fail "Package version in the cabal file does not match the file name."
-
-  extraChecks pkgDesc
 
   return (pkgDesc, cabalEntry)
 
