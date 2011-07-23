@@ -2,7 +2,7 @@ module Distribution.Server.Features.LegacyRedirects (
     legacyRedirectsFeature
   ) where
 
-import Distribution.Server.Error (makeTextError)
+import Distribution.Server.Error
 import Distribution.Server.Feature
 import Distribution.Server.Features.Upload
 import Distribution.Server.Resource
@@ -60,11 +60,8 @@ serveLegacyPosts upload = msum
     -- We assume we don't need to serve a fancy HTML response
     movedUpload :: ServerPart Response
     movedUpload = nullDir >> do
-      res <- uploadPackage upload
-      case res of
-        Left err -> makeTextError err
-        Right upResult ->
-          ok $ toResponse $ unlines $ uploadWarnings upResult
+      upResult <- runServerPartE (uploadPackage upload)
+      ok $ toResponse $ unlines $ uploadWarnings upResult
 
 
 

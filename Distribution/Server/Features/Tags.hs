@@ -129,7 +129,7 @@ collectTags pkgs = do
     pkgMap <- liftM packageTags $ query GetPackageTags
     return $ Map.fromDistinctAscList . map (\pkg -> (pkg, Map.findWithDefault Set.empty pkg pkgMap)) $ Set.toList pkgs
 
-putTags :: TagsFeature -> PackageName -> MServerPart ()
+putTags :: TagsFeature -> PackageName -> ServerPartE ()
 putTags tagf pkgname = withPackageAll pkgname $ \_ -> do
     -- let anyone edit tags for the moment. otherwise, we can do:
     -- users <- query GetUserDb; withHackageAuth users Nothing Nothing $ \_ _ -> do
@@ -140,8 +140,8 @@ putTags tagf pkgname = withPackageAll pkgname $ \_ -> do
             calcTags <- fmap (packageToTags pkgname) $ Cache.getCache $ calculatedTags tagf
             update $ SetPackageTags pkgname (tagSet `Set.union` calcTags)
             runHook'' (tagsUpdated tagf) (Set.singleton pkgname) tagSet
-            returnOk ()
-        Nothing -> returnError 400 "Tags not recognized" [MText "Couldn't parse your tag list. It should be comma separated with any number of alphanumerical tags. Tags can also also have -+#*."]
+            return ()
+        Nothing -> errBadRequest "Tags not recognized" [MText "Couldn't parse your tag list. It should be comma separated with any number of alphanumerical tags. Tags can also also have -+#*."]
 
 -- initial tags, on import
 constructTagIndex :: PackageIndex PkgInfo -> PackageTags

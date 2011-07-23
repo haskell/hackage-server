@@ -50,7 +50,7 @@ import Distribution.Text (display, simpleParse)
 
 data UploadFeature = UploadFeature {
     uploadResource   :: UploadResource,
-    uploadPackage    :: MServerPart UploadResult,
+    uploadPackage    :: ServerPartE UploadResult,
     packageMaintainers :: GroupGen,
     trusteeGroup :: UserGroup,
     canUploadPackage :: Filter (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse))
@@ -161,16 +161,16 @@ maintainerDescription pkgname = GroupDescription
 trusteeDescription :: GroupDescription
 trusteeDescription = nullDescription { groupTitle = "Package trustees", groupPrologue = "Package trustees are essentially maintainers for the entire package database. They can edit package maintainer groups and upload any package." }
 
-withPackageAuth :: Package pkg => pkg -> (Users.UserId -> Users.UserInfo -> MServerPart a) -> MServerPart a
+withPackageAuth :: Package pkg => pkg -> (Users.UserId -> Users.UserInfo -> ServerPartE a) -> ServerPartE a
 withPackageAuth pkg func = withPackageNameAuth (packageName pkg) func
 
-withPackageNameAuth :: PackageName -> (Users.UserId -> Users.UserInfo -> MServerPart a) -> MServerPart a
+withPackageNameAuth :: PackageName -> (Users.UserId -> Users.UserInfo -> ServerPartE a) -> ServerPartE a
 withPackageNameAuth pkgname func = do
     userDb <- query $ GetUserDb
     groupSum <- getPackageGroup pkgname
     Auth.withHackageAuth userDb (Just groupSum) Nothing func
 
-withTrusteeAuth :: (Users.UserId -> Users.UserInfo -> MServerPart a) -> MServerPart a
+withTrusteeAuth :: (Users.UserId -> Users.UserInfo -> ServerPartE a) -> ServerPartE a
 withTrusteeAuth func = do
     userDb <- query $ GetUserDb
     trustee <- query $ GetHackageTrustees
@@ -185,27 +185,24 @@ getPackageGroup pkg = do
 ----------------------------------------------------
 
 -- This is the upload function. It returns a generic result for multiple formats.
-doUploadPackage :: CoreFeature -> UserFeature -> UploadFeature -> BlobStorage -> MServerPart UploadResult
+doUploadPackage :: CoreFeature -> UserFeature -> UploadFeature -> BlobStorage -> ServerPartE UploadResult
 doUploadPackage core userf upf store = do
     state <- fmap packageList $ query GetPackagesState
     let uploadFilter uid info = combineErrors $ runFilter'' (canUploadPackage upf) uid info
-    res <- extractPackage (\uid info -> combineErrors $ sequence
+    (pkgInfo, uresult) <- extractPackage (\uid info -> combineErrors $ sequence
        [ processUpload state uid info
        , uploadFilter uid info
        , runUserFilter userf uid ]) store
-    case res of
-        Left failed -> return $ Left failed
-        Right (pkgInfo, uresult) -> do
-            success <- liftIO $ doAddPackage core pkgInfo
-            if success
-              then do
-                 -- make package maintainers group for new package
-                let existedBefore = packageExists state pkgInfo
-                when (not existedBefore) $ do
-                    update $ AddPackageMaintainer (packageName pkgInfo) (pkgUploadUser pkgInfo)
-                returnOk uresult
-              -- this is already checked in processUpload, and race conditions are highly unlikely but imaginable
-              else returnError 403 "Upload failed" [MText "Package already exists."]
+    success <- liftIO $ doAddPackage core pkgInfo
+    if success
+      then do
+         -- make package maintainers group for new package
+        let existedBefore = packageExists state pkgInfo
+        when (not existedBefore) $ do
+            update $ AddPackageMaintainer (packageName pkgInfo) (pkgUploadUser pkgInfo)
+        return uresult
+      -- this is already checked in processUpload, and race conditions are highly unlikely but imaginable
+      else errForbidden "Upload failed" [MText "Package already exists."]
   where combineErrors = fmap (listToMaybe . catMaybes)
 
 -- This is a processing funtion for extractPackage that checks upload-specific requirements.
@@ -224,11 +221,11 @@ processUpload state uid res = do
 
 -- This function generically extracts a package, useful for uploading, checking,
 -- and anything else in the standard user-upload pipeline.
-extractPackage :: (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)) -> BlobStorage -> MServerPart (PkgInfo, UploadResult)
+extractPackage :: (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)) -> BlobStorage -> ServerPartE (PkgInfo, UploadResult)
 extractPackage processFunc storage =
     withDataFn (lookInput "package") $ \input ->
         case inputValue input of -- HS6 this has been updated to use the new file upload support in HS6, but has not been tested at all
-          (Right _) -> returnError 400 "Upload failed" [MText "package field in form data is not a file."]
+          (Right _) -> errBadRequest "Upload failed" [MText "package field in form data is not a file."]
           (Left file) -> 
               let fileName    = (fromMaybe "noname" $ inputFilename input)
               in upload fileName file
@@ -250,10 +247,10 @@ extractPackage processFunc storage =
                         Just err -> return . Left $ err
         mres <- liftIO $ BlobStorage.addFileWith storage file processPackage
         case mres of
-            Left  err -> returnError' err
+            Left  err -> throwError err
             Right (res@(UploadResult pkg pkgStr _), blobId) -> do
                 uploadData <- fmap (flip (,) uid) (liftIO getCurrentTime)
-                returnOk $ (PkgInfo {
+                return $ (PkgInfo {
                     pkgInfoId     = packageId pkg,
                     pkgDesc       = pkg,
                     pkgData       = pkgStr,

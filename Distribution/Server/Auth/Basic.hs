@@ -40,20 +40,20 @@ getHackageAuth users = askRq >>= \req -> return $ case getAuthType req of
     Nothing -> Left NoAuthError
 -}
 
-getHackageAuth :: Users.Users -> MServerPart (Either AuthError (UserId, UserInfo))
+getHackageAuth :: Users.Users -> ServerPartE (Either AuthError (UserId, UserInfo))
 getHackageAuth users = 
     do req <- askRq
        case getAuthType req of
-         Just BasicAuth  -> return $ Right $ genericBasicAuth req authorizationRealm (getPasswdInfo users)
+         Just BasicAuth  -> return $ genericBasicAuth req authorizationRealm (getPasswdInfo users)
          -- HS6 -- this implementation is troublesome because it requires the entire request body to be read into RAM to run genericDigestAuth.. the request body could include large file uploads
          Just DigestAuth -> do rq <- askRq
                                mRqBody <- takeRequestBody rq -- HS6 - this will probably fail, because decodeBody in Distribution.Server.run already consumed it
                                case mRqBody of
-                                 Nothing -> returnError 500 "Missing body" [MText "Authorization could not be completed because the request body was already consumed."]
+                                 Nothing -> errInternalError [MText "takeRequestBody cannot be called more than once."]
                                  (Just reqBody) -> 
                                      do liftIO $ tryPutMVar (rqBody rq) reqBody
-                                        return $ Right $ genericDigestAuth req reqBody (getPasswdInfo users) --realm hashed in user database
-         Nothing         -> return $ Right $ Left NoAuthError
+                                        return $ genericDigestAuth req reqBody (getPasswdInfo users) --realm hashed in user database
+         Nothing         -> return $ Left NoAuthError
 
 
 getAuthType :: Request -> Maybe AuthType
@@ -65,18 +65,17 @@ getAuthType req = case getHeader "authorization" req of
 -- semantic ambiguity: does Nothing mean allow everyone, or only allow enabled? Currently, the former.
 -- disabled users might want to perform some authorized action, like login or change their password
 withHackageAuth :: Users.Users -> Maybe Group.UserList -> Maybe AuthType ->
-                   (UserId -> UserInfo -> MServerPart a) -> MServerPart a
+                   (UserId -> UserInfo -> ServerPartE a) -> ServerPartE a
 withHackageAuth users authorizedGroup forceType func = getHackageAuth users >>= \res -> case res of
-    Right (Right (userId, info)) -> do
+    Right (userId, info) -> do
         if isAuthorizedFor userId info authorizedGroup
             then func userId info
-            else returnError 403 "Forbidden" [MText "No access for this page."]
-    Right (Left authError) -> do
+            else errForbidden "Forbidden" [MText "No access for this page."]
+    Left authError -> do
         setHackageAuth forceType
-        returnError 401 "Not authorized" [MText $ showAuthError authError]
-    Left err -> return (Left err)
+        errUnauthorized "Not authorized" [MText $ showAuthError authError]
 
-setHackageAuth :: Maybe AuthType -> ServerPart ()
+setHackageAuth :: Maybe AuthType -> ServerPartE ()
 setHackageAuth forceType = do
     req <- askRq
     case forceType `mplus` getAuthType req of
@@ -96,10 +95,8 @@ isAuthorizedFor userId userInfo authorizedGroup = case Users.userStatus userInfo
 
 requireHackageAuth :: Users.Users -> Maybe Group.UserList -> Maybe AuthType -> ServerPart (UserId, UserInfo)
 requireHackageAuth users authorizedGroup forceType = do
-    res <- withHackageAuth users authorizedGroup forceType $ \uid info -> return $ Right (uid, info)
-    case res of
-        Right (uid, info) -> return (uid, info)
-        Left err -> finishWith =<< makeTextError err
+    runServerPartE $
+      withHackageAuth users authorizedGroup forceType $ \uid info -> return (uid, info)
 
 -- Used by both basic and digest auth functions.
 getPasswdInfo :: Users.Users -> UserName -> Maybe ((UserId, UserInfo), Users.UserAuth)
@@ -139,7 +136,7 @@ genericBasicAuth req realmName userDetails = do
       _                -> Nothing
     splitHeader = break (':'==) . Base64.decode . BS.unpack . BS.drop 6
 
-askBasicAuth :: String -> ServerPart ()
+askBasicAuth :: String -> ServerPartE ()
 askBasicAuth realmName = setHeaderM headerName headerValue >> setResponseCode 401
   where
     headerName  = "WWW-Authenticate"
@@ -195,7 +192,7 @@ parseDigestResponse = fmap (Map.fromList . fst) . find (null . snd) .
     quotedString = join Parse.between (Parse.char '"') (Parse.many $ (Parse.char '\\' >> Parse.get) Parse.<++ Parse.satisfy (/='"'))
                       Parse.<++ (liftM2 (:) (Parse.satisfy (/='"')) (Parse.munch (/=',')))
 
-askDigestAuth :: String -> ServerPart ()
+askDigestAuth :: String -> ServerPartE ()
 askDigestAuth realmName = do
     nonce <- liftIO generateNonce
     setHeaderM headerName (headerValue nonce)

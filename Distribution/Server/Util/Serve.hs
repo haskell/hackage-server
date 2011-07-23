@@ -28,7 +28,7 @@ import qualified Data.ByteString.Lazy as BS
 import qualified Data.Map as Map
 import System.FilePath
 import Control.Exception (evaluate)
-import Control.Monad.Trans (liftIO)
+import Control.Monad.Trans (MonadIO, liftIO)
 import Control.Monad (msum, mzero)
 import System.IO
 
@@ -36,11 +36,12 @@ import System.IO
 -- | Server the contents of a tar file
 -- file. This is not a sustainable implementation,
 -- but it gives us something to test with.
-serveTarball :: [FilePath] -- indices
+serveTarball :: MonadIO m
+             => [FilePath] -- indices
              -> FilePath   -- prefix of paths in tar
              -> FilePath   -- tarball
              -> TarIndex   -- index for tarball
-             -> ServerPart Response
+             -> ServerPartT m Response
 serveTarball indices offset tarball tarIndex = do
     action GET $ remainingPath $ \paths -> do
 

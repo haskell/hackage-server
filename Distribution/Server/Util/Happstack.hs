@@ -21,13 +21,13 @@ import System.FilePath.Posix (takeExtension, (</>))
 -- |Passes a list of remaining path segments in the URL. Does not
 -- include the query string. This call only fails if the passed in
 -- handler fails. 
-remainingPath :: ([String] -> ServerPart a) -> ServerPart a
+remainingPath :: Monad m => ([String] -> ServerPartT m a) -> ServerPartT m a
 remainingPath handle = do
     rq <- askRq
     localRq (\newRq -> newRq{rqPaths=[]}) $ handle (rqPaths rq)
 
 -- | Gets the string without altering the request.
-remainingPathString :: ServerPart String
+remainingPathString :: Monad m => ServerPartT m String
 remainingPathString = do
     strs <- fmap rqPaths $ askRq
     return $ if null strs then "" else foldr1 (</>) . map SURI.escape $ strs

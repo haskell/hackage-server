@@ -52,8 +52,8 @@ data VersionsFeature = VersionsFeature {
     versionsResource :: VersionsResource,
     preferredHook  :: Hook (PackageName -> PreferredInfo -> IO ()),
     deprecatedHook :: Hook (PackageName -> Maybe [PackageName] -> IO ()),
-    putDeprecated :: PackageName -> MServerPart Bool,
-    putPreferred  :: PackageName -> MServerPart (),
+    putDeprecated :: PackageName -> ServerPartE Bool,
+    putPreferred  :: PackageName -> ServerPartE (),
     updateDeprecatedTags :: IO ()
 }
 
@@ -114,7 +114,7 @@ initVersionsFeature _ core _ tags = do
 -- This is a function used by the HTML feature to select the version to display.
 -- It could be enhanced by displaying a search page in the case of failure,
 -- which is outside of the scope of this feature.
-withPackagePreferred :: PackageId -> (PkgInfo -> [PkgInfo] -> MServerPart a) -> MServerPart a
+withPackagePreferred :: PackageId -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a
 withPackagePreferred pkgid func = query GetPackagesState >>= \state ->
     case PackageIndex.lookupPackageName (packageList state) (packageName pkgid) of
         []   ->  packageError [MText "No such package in package index"]
@@ -128,12 +128,12 @@ withPackagePreferred pkgid func = query GetPackagesState >>= \state ->
         pkgs -> case find ((== packageVersion pkgid) . packageVersion) pkgs of
             Nothing  -> packageError [MText $ "No such package version for " ++ display (packageName pkgid)]
             Just pkg -> func pkg pkgs
-  where packageError = returnError 404 "Package not found"
+  where packageError = errNotFound "Package not found"
 
-withPackagePreferredPath :: DynamicPath -> (PkgInfo -> [PkgInfo] -> MServerPart a) -> MServerPart a
+withPackagePreferredPath :: DynamicPath -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a
 withPackagePreferredPath dpath func = withPackageId dpath $ \pkgid -> withPackagePreferred pkgid func
 
-doPutPreferred :: VersionsFeature -> CoreFeature -> PackageName -> MServerPart ()
+doPutPreferred :: VersionsFeature -> CoreFeature -> PackageName -> ServerPartE ()
 doPutPreferred f core pkgname =
         withPackageAll pkgname $ \pkgs ->
         withPackageNameAuth pkgname $ \_ _ -> do
@@ -151,14 +151,14 @@ doPutPreferred f core pkgname =
                     Cache.modifyCache (indexExtras core) $ Map.insert "preferred-versions" (BS.pack prefVersions, now)
                     runHook'' (preferredHook f) pkgname newInfo
                     runHook (packageIndexChange core)
-                    returnOk ()
+                    return ()
                 False -> preferredError "Not all of the selected versions are in the main index."
             Nothing -> preferredError "Version could not be parsed."
         Nothing -> preferredError "Expected format of the preferred ranges field is one version range per line, e.g. '<2.3 || 3.*' (see Cabal documentation for the syntax)."
   where
-    preferredError = returnError 400 "Preferred ranges failed" . return . MText
+    preferredError = errBadRequest "Preferred ranges failed" . return . MText
 
-doPutDeprecated :: VersionsFeature -> PackageName -> MServerPart Bool
+doPutDeprecated :: VersionsFeature -> PackageName -> ServerPartE Bool
 doPutDeprecated f pkgname =
         withPackageAll pkgname $ \_ ->
         withPackageNameAuth pkgname $ \_ _ -> do
@@ -171,14 +171,14 @@ doPutDeprecated f pkgname =
                 Just deprs -> case filter (null . PackageIndex.lookupPackageName index) deprs of
                     [] -> do
                         doUpdates (Just deprs)
-                        returnOk True
+                        return True
                     pkgs -> deprecatedError $ "Some superseding packages aren't in the main index: " ++ intercalate ", " (map display pkgs)
                 Nothing -> deprecatedError "Expected format of the 'superseded by' field is a list of package names separated by spaces."
         Nothing -> do
             doUpdates Nothing
-            returnOk False
+            return False
   where
-    deprecatedError = returnError 400 "Deprecation failed" . return . MText
+    deprecatedError = errBadRequest "Deprecation failed" . return . MText
     doUpdates deprs = do
         update $ SetDeprecatedFor pkgname deprs
         runHook'' (deprecatedHook f) pkgname deprs
@@ -197,13 +197,13 @@ renderPrefInfo pref = PreferredRender {
     rendVersions = deprecatedVersions pref
 }
 
-doPreferredRender :: PackageName -> MServerPart PreferredRender
+doPreferredRender :: PackageName -> ServerPartE PreferredRender
 doPreferredRender pkgname = withPackageAll pkgname $ \_ -> do
     pref <- query $ GetPreferredInfo pkgname
-    returnOk $ renderPrefInfo pref
+    return $ renderPrefInfo pref
 
-doDeprecatedRender :: PackageName -> MServerPart (Maybe [PackageName])
-doDeprecatedRender pkgname = withPackageAll pkgname $ \_ -> fmap Right . query $ GetDeprecatedFor pkgname
+doDeprecatedRender :: PackageName -> ServerPartE (Maybe [PackageName])
+doDeprecatedRender pkgname = withPackageAll pkgname $ \_ -> query $ GetDeprecatedFor pkgname
 
 doPreferredsRender :: MonadIO m => m [(PackageName, PreferredRender)]
 doPreferredsRender = query GetPreferredVersions >>=

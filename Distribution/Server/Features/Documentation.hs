@@ -64,31 +64,32 @@ initDocumentationFeature config _ _ = do
     let store = serverStore config
     return DocumentationFeature
       { documentationResource = fix $ \r -> DocumentationResource
-          { packageDocs = (resourceAt "/package/:package/doc/..") { resourceGet = [("", textResponse . serveDocumentation store)] }
-          , packageDocsUpload = (resourceAt "/package/:package/doc/.:format") { resourcePut = [("txt", textResponse . uploadDocumentation store)] }
-          , packageDocTar = (resourceAt "/package/:package/:doc.tar") { resourceGet = [("tar", textResponse . serveDocumentationTar store)] }
+          { packageDocs = (resourceAt "/package/:package/doc/..") { resourceGet = [("", serveDocumentation store)] }
+          , packageDocsUpload = (resourceAt "/package/:package/doc/.:format") { resourcePut = [("txt", uploadDocumentation store)] }
+          , packageDocTar = (resourceAt "/package/:package/:doc.tar") { resourceGet = [("tar", serveDocumentationTar store)] }
           , packageDocUri = \pkgid str -> renderResource (packageDocs r) [display pkgid, str]
           }
       }
   where
 
-serveDocumentationTar :: BlobStorage -> DynamicPath -> MServerPart Response
-serveDocumentationTar store dpath = withDocumentation dpath $ \_ blob _ -> do
+serveDocumentationTar :: BlobStorage -> DynamicPath -> ServerPart Response
+serveDocumentationTar store dpath = runServerPartE $ withDocumentation dpath $ \_ blob _ -> do
     file <- liftIO $ BlobStorage.fetch store blob
-    returnOk $ toResponse $ Resource.DocTarball file blob
+    return $ toResponse $ Resource.DocTarball file blob
 
 
 -- return: not-found error or tarball
-serveDocumentation :: BlobStorage -> DynamicPath -> MServerPart Response
-serveDocumentation store dpath = withDocumentation dpath $ \pkgid blob index -> do
+serveDocumentation :: BlobStorage -> DynamicPath -> ServerPart Response
+serveDocumentation store dpath = runServerPartE $ withDocumentation dpath $ \pkgid blob index -> do
     let tarball = BlobStorage.filepath store blob
     -- if given a directory, the default page is index.html
     -- the default directory prefix is the package name itself
-    Right `fmap` TarIndex.serveTarball ["index.html"] (display $ packageName pkgid) tarball index
+    TarIndex.serveTarball ["index.html"] (display $ packageName pkgid) tarball index
 
 -- return: not-found error (parsing) or see other uri
-uploadDocumentation :: BlobStorage -> DynamicPath -> MServerPart Response
-uploadDocumentation store dpath = withPackageId dpath $ \pkgid ->
+uploadDocumentation :: BlobStorage -> DynamicPath -> ServerPart Response
+uploadDocumentation store dpath = runServerPartE $
+                                  withPackageId dpath $ \pkgid ->
                                   withPackageAuth pkgid $ \_ _ -> do
         -- The order of operations:
         -- * Insert new documentation into blob store
@@ -97,22 +98,22 @@ uploadDocumentation store dpath = withPackageId dpath $ \pkgid ->
         -- * Link the new documentation to the package
         mRqBody <- takeRequestBody =<< askRq
         case mRqBody of
-          Nothing -> returnError 500 "Missing body" [MText "uploadDocumentation could not be completed because the request body was already consumed."]
+          Nothing -> errInternalError [MText "takeRequestBody can only be called once."]
           (Just (Body fileContents)) -> do
               blob <- liftIO $ BlobStorage.add store (GZip.decompress fileContents)
               tarIndex <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blob)
               update $ InsertDocumentation pkgid blob tarIndex
-              fmap Right $ seeOther ("/package/" ++ display pkgid) (toResponse ())
+              seeOther ("/package/" ++ display pkgid) (toResponse ())
 
 -- curl -u mgruen:admin -X PUT --data-binary @gtk.tar.gz http://localhost:8080/package/gtk-0.11.0
 
-withDocumentation :: DynamicPath -> (PackageId -> BlobId -> TarIndex -> MServerPart a) -> MServerPart a
+withDocumentation :: DynamicPath -> (PackageId -> BlobId -> TarIndex -> ServerPartE a) -> ServerPartE a
 withDocumentation dpath func =
     withPackagePath dpath $ \pkg _ -> do
     let pkgid = packageId pkg
     mdocs <- query $ LookupDocumentation pkgid
     case mdocs of
-      Nothing -> returnError 404 "Not Found" [MText $ "There is no documentation for " ++ display pkgid]
+      Nothing -> errNotFound "Not Found" [MText $ "There is no documentation for " ++ display pkgid]
       Just (blob, index) -> func pkgid blob index
 
 ---- Import 

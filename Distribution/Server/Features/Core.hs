@@ -45,7 +45,7 @@ import qualified Distribution.Server.Util.BlobStorage as BlobStorage
 import Distribution.Server.Util.BlobStorage (BlobStorage)
 
 import Control.Monad (guard, mzero, when)
-import Control.Monad.Trans (liftIO)
+import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Time.Clock (UTCTime)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -152,8 +152,8 @@ initCoreFeature config = do
           , corePackagesPage = (resourceAt "/packages/.:format") { resourceGet = [] } -- -- have basic packages listing?
           , corePackagePage = (resourceAt "/package/:package.:format") { resourceGet = [("html", basicPackagePage r)] }
           , corePackageRedirect = (resourceAt "/package/") { resourceGet = [("", \_ -> seeOther "/packages/" $ toResponse ())] }
-          , corePackageTarball = (resourceAt "/package/:package/:tarball.tar.gz") { resourceGet = [("tarball", textResponse . servePackageTarball downHook store)] }
-          , coreCabalFile  = (resourceAt "/package/:package/:cabal.cabal") { resourceGet = [("cabal", textResponse . serveCabalFile)] }
+          , corePackageTarball = (resourceAt "/package/:package/:tarball.tar.gz") { resourceGet = [("tarball", runServerPartE . servePackageTarball downHook store)] }
+          , coreCabalFile  = (resourceAt "/package/:package/:cabal.cabal") { resourceGet = [("cabal", runServerPartE . serveCabalFile)] }
 
           , indexTarballUri = renderResource (coreIndexTarball r) []
           , indexPackageUri = \format -> renderResource (corePackagesPage r) [format]
@@ -177,8 +177,8 @@ initCoreFeature config = do
 
 -- Should probably look more like an Apache index page (Name / Last modified / Size / Content-type)
 basicPackagePage :: CoreResource -> DynamicPath -> ServerPart Response
-basicPackagePage r dpath = textResponse $ withPackagePath dpath $ \_ pkgs ->
-  returnOk $ toResponse $ Resource.XHtml $ showAllP $ sortBy (flip $ comparing packageVersion) pkgs
+basicPackagePage r dpath = runServerPartE $ withPackagePath dpath $ \_ pkgs ->
+  return $ toResponse $ Resource.XHtml $ showAllP $ sortBy (flip $ comparing packageVersion) pkgs
   where
     showAllP :: [PkgInfo] -> Html
     showAllP pkgs = toHtml [
@@ -204,16 +204,16 @@ packageExists, packageIdExists :: (Package pkg, Package pkg') => PackageIndex pk
 packageExists   state pkg = not . null $ PackageIndex.lookupPackageName state (packageName pkg)
 packageIdExists state pkg = maybe False (const True) $ PackageIndex.lookupPackageId state (packageId pkg)
 
-withPackageId :: DynamicPath -> (PackageId -> ServerPart a) -> ServerPart a
+withPackageId :: DynamicPath -> (PackageId -> ServerPartE a) -> ServerPartE a
 withPackageId dpath = require (return $ lookup "package" dpath >>= fromReqURI)
 
-withPackageName :: DynamicPath -> (PackageName -> ServerPart a) -> ServerPart a
+withPackageName :: MonadIO m => DynamicPath -> (PackageName -> ServerPartT m a) -> ServerPartT m a
 withPackageName dpath = require (return $ lookup "package" dpath >>= fromReqURI)
 
-packageError :: [Message] -> MServerPart a
-packageError = returnError 404 "Package not found"
+packageError :: [MessageSpan] -> ServerPartE a
+packageError = errNotFound "Package not found"
 
-withPackage :: PackageId -> (PkgInfo -> [PkgInfo] -> MServerPart a) -> MServerPart a
+withPackage :: PackageId -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a
 withPackage pkgid func = query GetPackagesState >>= \state ->
     case PackageIndex.lookupPackageName (packageList state) (packageName pkgid) of
         []   ->  packageError [MText "No such package in package index"]
@@ -224,29 +224,29 @@ withPackage pkgid func = query GetPackagesState >>= \state ->
             Nothing  -> packageError [MText $ "No such package version for " ++ display (packageName pkgid)]
             Just pkg -> func pkg pkgs
 
-withPackagePath :: DynamicPath -> (PkgInfo -> [PkgInfo] -> MServerPart a) -> MServerPart a
+withPackagePath :: DynamicPath -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a
 withPackagePath dpath func = withPackageId dpath $ \pkgid -> withPackage pkgid func
 
-withPackageAll :: PackageName -> ([PkgInfo] -> MServerPart a) -> MServerPart a
+withPackageAll :: PackageName -> ([PkgInfo] -> ServerPartE a) -> ServerPartE a
 withPackageAll pkgname func = query GetPackagesState >>= \state ->
     case PackageIndex.lookupPackageName (packageList state) pkgname of
         []   -> packageError [MText "No such package in package index"]
         pkgs -> func pkgs
 
-withPackageAllPath :: DynamicPath -> (PackageName -> [PkgInfo] -> MServerPart a) -> MServerPart a
+withPackageAllPath :: DynamicPath -> (PackageName -> [PkgInfo] -> ServerPartE a) -> ServerPartE a
 withPackageAllPath dpath func = withPackageName dpath $ \pkgname -> withPackageAll pkgname (func pkgname)
 
-withPackageVersion :: PackageId -> (PkgInfo -> MServerPart a) -> MServerPart a
+withPackageVersion :: PackageId -> (PkgInfo -> ServerPartE a) -> ServerPartE a
 withPackageVersion pkgid func = do
     guard (packageVersion pkgid /= Version [] [])
     query GetPackagesState >>= \state -> case PackageIndex.lookupPackageId (packageList state) pkgid of
         Nothing -> packageError [MText $ "No such package version for " ++ display (packageName pkgid)]
         Just pkg -> func pkg
 
-withPackageVersionPath :: DynamicPath -> (PkgInfo -> MServerPart a) -> MServerPart a
+withPackageVersionPath :: DynamicPath -> (PkgInfo -> ServerPartE a) -> ServerPartE a
 withPackageVersionPath dpath func = withPackageId dpath $ \pkgid -> withPackageVersion pkgid func
 
-withPackageTarball :: DynamicPath -> (PackageId -> ServerPart a) -> ServerPart a
+withPackageTarball :: DynamicPath -> (PackageId -> ServerPartE a) -> ServerPartE a
 withPackageTarball dpath func = withPackageId dpath $ \(PackageIdentifier name version) ->
     require (return $ lookup "tarball" dpath >>= fromReqURI) $ \pkgid@(PackageIdentifier name' version') -> do
     -- rules:
@@ -258,34 +258,34 @@ withPackageTarball dpath func = withPackageId dpath $ \(PackageIdentifier name v
 
 ------------------------------------------------------------------------
 -- result: tarball or not-found error
-servePackageTarball :: Hook (PackageId -> IO ()) -> BlobStorage -> DynamicPath -> MServerPart Response
+servePackageTarball :: Hook (PackageId -> IO ()) -> BlobStorage -> DynamicPath -> ServerPartE Response
 servePackageTarball hook store dpath = withPackageTarball dpath $ \pkgid ->
                                        withPackageVersion pkgid $ \pkg ->
     case pkgTarball pkg of
-        [] -> returnError 404 "Tarball not found" [MText "No tarball exists for this package version."]
+        [] -> errNotFound "Tarball not found" [MText "No tarball exists for this package version."]
         ((blobId, _):_) -> do
             file <- liftIO $ BlobStorage.fetch store blobId
             liftIO $ runHook' hook pkgid
-            returnOk $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)
+            return $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)
 
 -- result: cabal file or not-found error
-serveCabalFile :: DynamicPath -> MServerPart Response
+serveCabalFile :: DynamicPath -> ServerPartE Response
 serveCabalFile dpath = withPackagePath dpath $ \pkg _ -> do
     -- check that the cabal name matches the package
     case lookup "cabal" dpath == Just (display $ packageName pkg) of
-        True  -> returnOk $ toResponse (Resource.CabalFile (pkgData pkg))
+        True  -> return $ toResponse (Resource.CabalFile (pkgData pkg))
         False -> mzero
 
 -- A wrapper around DeletePackageVersion that runs the proper hooks.
 -- (no authentication though)
-doDeletePackage :: CoreFeature -> PackageId -> MServerPart ()
+doDeletePackage :: CoreFeature -> PackageId -> ServerPartE ()
 doDeletePackage core pkgid = withPackageVersion pkgid $ \pkg -> do
     update $ DeletePackageVersion pkgid
     nowPkgs <- fmap (flip PackageIndex.lookupPackageName (packageName pkgid) . packageList) $ query GetPackagesState
     runHook' (packageRemoveHook core) pkg
     runHook (packageIndexChange core)
     when (null nowPkgs) $ runHook' (noPackageHook core) pkg
-    returnOk ()
+    return ()
 
 -- This is a wrapper around InsertPkgIfAbsent that runs the necessary hooks in core.
 doAddPackage :: CoreFeature -> PkgInfo -> IO Bool

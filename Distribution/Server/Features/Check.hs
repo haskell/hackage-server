@@ -125,7 +125,8 @@ initCheckFeature config _ _ _ _ = do
 
   where
     basicCandidatePage :: CheckResource -> DynamicPath -> ServerPart Response
-    basicCandidatePage r dpath = withPackageId dpath $ \pkgid ->
+    basicCandidatePage r dpath = runServerPartE $ --TODO: use something else for nice html error pages
+                                 withPackageId dpath $ \pkgid ->
                                  withCandidate pkgid $ \_ mpkg _ ->
                                  ok . toResponse . Resource.XHtml $ case mpkg of
         Nothing  -> toHtml $ "A candidate for " ++ display pkgid ++ " doesn't exist"
@@ -138,39 +139,35 @@ initCheckFeature config _ _ _ _ = do
                            ]
       where section cand = basicPackageSection (candidateCabalUri r) (candidateTarballUri r) (candPkgInfo cand)
 
-postCandidate :: CheckResource -> UserFeature -> UploadFeature -> BlobStorage -> MServerPart Response
+postCandidate :: CheckResource -> UserFeature -> UploadFeature -> BlobStorage -> ServerPartE Response
 postCandidate r users upload store = do
-    res <- uploadCandidate (const True) users upload store
-    respondToResult r res
+    pkgInfo <- uploadCandidate (const True) users upload store
+    seeOther (candidateUri r "" $ packageId pkgInfo) (toResponse ())
 
 -- POST to /:package/candidates/
-postPackageCandidate :: CheckResource -> UserFeature -> UploadFeature -> BlobStorage -> DynamicPath -> MServerPart Response
+postPackageCandidate :: CheckResource -> UserFeature -> UploadFeature -> BlobStorage -> DynamicPath -> ServerPartE Response
 postPackageCandidate r users upload store dpath = withPackageName dpath $ \name -> do
-    res <- uploadCandidate ((==name) . packageName) users upload store
-    respondToResult r res
+    pkgInfo <- uploadCandidate ((==name) . packageName) users upload store
+    seeOther (candidateUri r "" $ packageId pkgInfo) (toResponse ())
 
 -- PUT to /:package-version/candidate
 -- FIXME: like delete, PUT shouldn't redirect
-putPackageCandidate :: CheckResource -> UserFeature -> UploadFeature -> BlobStorage -> DynamicPath -> MServerPart Response
+putPackageCandidate :: CheckResource -> UserFeature -> UploadFeature -> BlobStorage -> DynamicPath -> ServerPartE Response
 putPackageCandidate r users upload store dpath = withPackageId dpath $ \pkgid -> do
     guard (packageVersion pkgid /= Version [] [])
-    res <- uploadCandidate (==pkgid) users upload store
-    respondToResult r res
+    pkgInfo <- uploadCandidate (==pkgid) users upload store
+    seeOther (candidateUri r "" $ packageId pkgInfo) (toResponse ())
 
-respondToResult :: CheckResource -> Either ErrorResponse CandPkgInfo -> MServerPart Response
-respondToResult r res = case res of
-    Left err -> returnError' err
-    Right pkgInfo -> fmap Right $ seeOther (candidateUri r "" $ packageId pkgInfo) (toResponse ())
-
--- FIXME: DELETE should not redirect, but rather return MServerPart ()
-doDeleteCandidate :: CheckResource -> DynamicPath -> MServerPart Response
+-- FIXME: DELETE should not redirect, but rather return ServerPartE ()
+doDeleteCandidate :: CheckResource -> DynamicPath -> ServerPartE Response
 doDeleteCandidate r dpath = withCandidatePath dpath $ \_ candidate -> do
     withPackageAuth candidate $ \_ _ -> do
     update $ DeleteCandidate (packageId candidate)
-    fmap Right $ seeOther (packageCandidatesUri r "" $ packageName candidate) $ toResponse ()
+    seeOther (packageCandidatesUri r "" $ packageName candidate) $ toResponse ()
 
 serveCandidateTarball :: BlobStorage -> DynamicPath -> ServerPart Response
-serveCandidateTarball store dpath = withPackageTarball dpath $ \pkgid ->
+serveCandidateTarball store dpath = runServerPartE $
+                                    withPackageTarball dpath $ \pkgid ->
                                     withCandidate pkgid $ \_ mpkg _ -> case mpkg of
     Nothing -> mzero -- candidate  does not exist
     Just pkg -> case pkgTarball (candPkgInfo pkg) of
@@ -181,35 +178,30 @@ serveCandidateTarball store dpath = withPackageTarball dpath $ \pkgid ->
 
 --withFormat :: DynamicPath -> (String -> a) -> a
 serveCandidateCabal :: DynamicPath -> ServerPart Response
-serveCandidateCabal dpath = do
-    mres <- withCandidatePath dpath $ \_ pkg -> do
+serveCandidateCabal dpath =
+    runServerPartE $ --TODO: use something else for nice html error pages
+    withCandidatePath dpath $ \_ pkg -> do
         guard (lookup "cabal" dpath == Just (display $ packageName pkg))
-        returnOk $ toResponse (Resource.CabalFile (pkgData $ candPkgInfo pkg))
-    case mres of
-        Right res -> return res
-        Left {}   -> mzero
+        return $ toResponse (Resource.CabalFile (pkgData $ candPkgInfo pkg))
 
-uploadCandidate :: (PackageId -> Bool) -> UserFeature -> UploadFeature -> BlobStorage -> MServerPart CandPkgInfo
+uploadCandidate :: (PackageId -> Bool) -> UserFeature -> UploadFeature -> BlobStorage -> ServerPartE CandPkgInfo
 uploadCandidate isRight users upload storage = do
     regularIndex <- fmap packageList $ query GetPackagesState
     -- ensure that the user has proper auth if the package exists
-    res <- extractPackage (\uid info -> combineErrors $ sequence
+    (pkgInfo, uresult) <- extractPackage (\uid info -> combineErrors $ sequence
       [ processCandidate isRight regularIndex uid info
       , runUserFilter users uid]) storage
-    case res of
-        Left failed -> returnError' failed
-        Right (pkgInfo, uresult) -> do
-            let candidate = CandPkgInfo {
-                    candInfoId = packageId pkgInfo,
-                    candPkgInfo = pkgInfo,
-                    candWarnings = uploadWarnings uresult,
-                    candPublic = True -- do withDataFn
-                }
-            update $ AddCandidate candidate        
-            let group = packageMaintainers upload [("package", display $ packageName pkgInfo)]
-            exists <- liftIO $ Group.groupExists group 
-            when (not exists) $ liftIO $ Group.addUserList group (pkgUploadUser pkgInfo)
-            returnOk candidate
+    let candidate = CandPkgInfo {
+            candInfoId = packageId pkgInfo,
+            candPkgInfo = pkgInfo,
+            candWarnings = uploadWarnings uresult,
+            candPublic = True -- do withDataFn
+        }
+    update $ AddCandidate candidate        
+    let group = packageMaintainers upload [("package", display $ packageName pkgInfo)]
+    exists <- liftIO $ Group.groupExists group 
+    when (not exists) $ liftIO $ Group.addUserList group (pkgUploadUser pkgInfo)
+    return candidate
   where combineErrors = fmap (listToMaybe . catMaybes)
 
 -- | Helper function for uploadCandidate.
@@ -225,7 +217,7 @@ processCandidate isRight state uid res = do
           else return Nothing
   where uploadFailed = return . Just . ErrorResponse 403 "Upload failed" . return . MText
 
-publishCandidate :: CoreFeature -> UserFeature -> UploadFeature -> DynamicPath -> Bool -> MServerPart UploadResult
+publishCandidate :: CoreFeature -> UserFeature -> UploadFeature -> DynamicPath -> Bool -> ServerPartE UploadResult
 publishCandidate core users upload dpath doDelete = do
     packages <- fmap packageList $ query GetPackagesState
     withCandidatePath dpath $ \_ candidate -> do
@@ -233,7 +225,7 @@ publishCandidate core users upload dpath doDelete = do
     withPackageAuth candidate $ \uid _ -> do
     -- check if package or later already exists
     case checkPublish packages candidate of
-      Just failed -> returnError' failed
+      Just failed -> throwError failed
       Nothing -> do
         -- run filters
         let pkgInfo = candPkgInfo candidate
@@ -241,7 +233,7 @@ publishCandidate core users upload dpath doDelete = do
             uploadFilter = combineErrors $ runFilter'' (canUploadPackage upload) uid uresult
         merror <- liftIO $ combineErrors $ sequence [runUserFilter users uid, uploadFilter]
         case merror of
-          Just failed -> returnError' failed
+          Just failed -> throwError failed
           Nothing -> do
             uploadData <- fmap (flip (,) uid) (liftIO getCurrentTime)
             let pkgInfo' = PkgInfo {
@@ -260,8 +252,8 @@ publishCandidate core users upload dpath doDelete = do
                 -- delete when requested: "moving" the resource
                 -- should this be required? (see notes in CheckResource)
                 when doDelete $ update $ DeleteCandidate (packageId candidate)
-                returnOk uresult
-              else returnError 403 "Upload failed" [MText "Package already exists."]
+                return uresult
+              else errForbidden "Upload failed" [MText "Package already exists."]
   where combineErrors = fmap (listToMaybe . catMaybes)
 
 
@@ -291,17 +283,17 @@ doCandidateRender index users cand =
     }
 
 ------------------------------------------------------------------------------
-withCandidatePath :: DynamicPath -> (CandidatePackages -> CandPkgInfo -> MServerPart a) -> MServerPart a
+withCandidatePath :: DynamicPath -> (CandidatePackages -> CandPkgInfo -> ServerPartE a) -> ServerPartE a
 withCandidatePath dpath func = withPackageId dpath $ \pkgid -> withCandidate pkgid $ \state mpkg _ -> case mpkg of
-    Nothing  -> returnError 404 "Package not found" [MText $ "Candidate for " ++ display pkgid ++ " does not exist"]
+    Nothing  -> errNotFound "Package not found" [MText $ "Candidate for " ++ display pkgid ++ " does not exist"]
     Just pkg -> func state pkg
 
-withCandidate :: PackageId -> (CandidatePackages -> Maybe CandPkgInfo -> [CandPkgInfo] -> ServerPart a) -> ServerPart a
+withCandidate :: PackageId -> (CandidatePackages -> Maybe CandPkgInfo -> [CandPkgInfo] -> ServerPartE a) -> ServerPartE a
 withCandidate pkgid func = do
     state <- query GetCandidatePackages
     let pkgs = PackageIndex.lookupPackageName (candidateList state) (packageName pkgid)
     func state (find ((==pkgid) . packageId) pkgs) pkgs
 
-withCandidates :: PackageName -> (CandidatePackages -> [CandPkgInfo] -> ServerPart a) -> ServerPart a
+withCandidates :: PackageName -> (CandidatePackages -> [CandPkgInfo] -> ServerPartE a) -> ServerPartE a
 withCandidates name func = withCandidate (PackageIdentifier name $ Version [] []) $ \state _ infos -> func state infos
 

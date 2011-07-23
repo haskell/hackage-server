@@ -1,6 +1,6 @@
 module Distribution.Server.Util.ActionLog where
 
-import Distribution.Server.Error
+import Distribution.Server.Error (MessageSpan)
 import Data.Set (Set)
 import qualified Data.Set as Set
 -- other imports..
@@ -18,7 +18,7 @@ instance Ord (ActionEntry a) where
 
 data SomeLog = forall a. SomeLog {
     someLog :: ActionLog a,
-    displayLog :: a -> [Message]
+    displayLog :: a -> [MessageSpan]
 }
 
 addEntryNow :: UserId -> a -> ActionLog a -> IO (ActionLog a)

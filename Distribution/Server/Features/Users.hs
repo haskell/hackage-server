@@ -65,8 +65,8 @@ import Control.Monad.Trans (MonadIO(..))
 data UserFeature = UserFeature {
     userResource :: UserResource,
     userAdded :: Hook (IO ()),
-    groupAddUser :: UserGroup -> DynamicPath -> MServerPart (),
-    groupDeleteUser :: UserGroup -> DynamicPath -> MServerPart (),
+    groupAddUser :: UserGroup -> DynamicPath -> ServerPartE (),
+    groupDeleteUser :: UserGroup -> DynamicPath -> ServerPartE (),
     groupIndex :: Cache.Cache GroupIndex,
     adminGroup :: UserGroup,
     -- Filters for all features modifying the package index
@@ -127,7 +127,7 @@ initUsersFeature _ _ = do
       }
 
 {- result: see-other for user page or authentication error
-requireAuth :: MServerPart Response
+requireAuth :: ServerPartE Response
 requireAuth = do
     users <- query GetUserDb
     Auth.withHackageAuth users Nothing Nothing $ \_ info -> do
@@ -135,16 +135,16 @@ requireAuth = do
 -}
 
 -- result: either not-found, not-authenticated, or 204 (success)
-deleteAccount :: UserName -> MServerPart ()
+deleteAccount :: UserName -> ServerPartE ()
 deleteAccount uname = withUserName uname $ \uid _ -> do
     users <- query GetUserDb
     admins <- query State.GetHackageAdmins
     Auth.withHackageAuth users (Just admins) Nothing $ \_ _ -> do
         update (DeleteUser uid)
-        return $ Right ()
+        return ()
 
 -- result: not-found, not authenticated, or ok (success)
-enabledAccount :: UserName -> MServerPart ()
+enabledAccount :: UserName -> ServerPartE ()
 enabledAccount uname = withUserName uname $ \uid _ -> do
     users <- query GetUserDb
     admins <- query State.GetHackageAdmins
@@ -154,7 +154,7 @@ enabledAccount uname = withUserName uname $ \uid _ -> do
         case enabled of
             Nothing -> update (SetEnabledUser uid False)
             Just _  -> update (SetEnabledUser uid True)
-        return $ Right ()
+        return ()
 
 -- | Resources representing the collection of known users.
 --
@@ -166,10 +166,10 @@ enabledAccount uname = withUserName uname $ \uid _ -> do
 -- * changing user's name and password
 --
 
-withUserNamePath :: DynamicPath -> (UserName -> ServerPart a) -> ServerPart a
+withUserNamePath :: DynamicPath -> (UserName -> ServerPartE a) -> ServerPartE a
 withUserNamePath dpath = require (return $ simpleParse =<< lookup "username" dpath)
 
-withUserName :: UserName -> (UserId -> UserInfo -> MServerPart a) -> MServerPart a
+withUserName :: UserName -> (UserId -> UserInfo -> ServerPartE a) -> ServerPartE a
 withUserName uname func = do
     users <- query GetUserDb
     case Users.lookupName uname users of
@@ -177,15 +177,15 @@ withUserName uname func = do
       Just uid -> case Users.lookupId uid users of
         Nothing   -> userLost "Could not find user: internal server error"
         Just info -> func uid info
-  where userLost = returnError 404 "User not found" . return . MText
+  where userLost = errNotFound "User not found" . return . MText
 
-withUserPath :: DynamicPath -> (UserId -> UserInfo -> MServerPart a) -> MServerPart a
+withUserPath :: DynamicPath -> (UserId -> UserInfo -> ServerPartE a) -> ServerPartE a
 withUserPath dpath func = withUserNamePath dpath $ \name -> withUserName name func
 
 instance FromReqURI UserName where
   fromReqURI = simpleParse
 
-adminAddUser :: MServerPart Response
+adminAddUser :: ServerPartE Response
 adminAddUser = do
     -- with these lines commented out, self-registration is allowed
   --admins <- query State.GetHackageAdmins
@@ -193,26 +193,26 @@ adminAddUser = do
   --Auth.withHackageAuth users (Just admins) Nothing $ \_ _ -> do
     reqData <- getDataFn lookUserNamePasswords
     case reqData of
-        (Left errs) -> returnError 400 "Error registering user"
+        (Left errs) -> errBadRequest "Error registering user"
                    ((MText "Username, password, or repeated password invalid.") : map MText errs)
-        (Right (ustr, pwd1, pwd2)) ->
-            responseWith (newUserWithAuth ustr (PasswdPlain pwd1) (PasswdPlain pwd2)) $ \uname ->
-            fmap Right $ seeOther ("/user/" ++ display uname) (toResponse ())
+        (Right (ustr, pwd1, pwd2)) -> do
+            uname <- newUserWithAuth ustr (PasswdPlain pwd1) (PasswdPlain pwd2)
+            seeOther ("/user/" ++ display uname) (toResponse ())
    where lookUserNamePasswords = do
              (,,) <$> look "username" 
                   <*> look "password"
                   <*> look "repeat-password"
 
-newUserWithAuth :: String -> PasswdPlain -> PasswdPlain -> MServerPart UserName
-newUserWithAuth _ pwd1 pwd2 | pwd1 /= pwd2 = returnError 400 "Error registering user" [MText "Entered passwords do not match"]
+newUserWithAuth :: String -> PasswdPlain -> PasswdPlain -> ServerPartE UserName
+newUserWithAuth _ pwd1 pwd2 | pwd1 /= pwd2 = errBadRequest "Error registering user" [MText "Entered passwords do not match"]
 newUserWithAuth userNameStr password _ = case simpleParse userNameStr of
-    Nothing -> returnError 400 "Error registering user" [MText "Not a valid user name!"]
+    Nothing -> errBadRequest "Error registering user" [MText "Not a valid user name!"]
     Just uname -> do
       let userAuth = Auth.newDigestPass uname password "hackage"
       muid <- update $ AddUser uname (UserAuth userAuth DigestAuth)
       case muid of
-        Nothing  -> returnError 403 "Error registering user" [MText "User already exists"]
-        Just _   -> returnOk uname
+        Nothing  -> errForbidden "Error registering user" [MText "User already exists"]
+        Just _   -> return uname
 
 data ChangePassword = ChangePassword { first :: String, second :: String, newAuthType :: Auth.AuthType } deriving (Eq, Show)
 instance FromData ChangePassword where
@@ -225,7 +225,7 @@ canChangePassword uid userPathId = do
     admins <- query State.GetHackageAdmins
     return $ uid == userPathId || (uid `Group.member` admins)
 
-changePassword :: UserName -> MServerPart ()
+changePassword :: UserName -> ServerPartE ()
 changePassword userPathName = do
     users  <- query State.GetUserDb
     Auth.withHackageAuth users Nothing Nothing $ \uid _ ->
@@ -244,14 +244,14 @@ changePassword userPathName = do
                         Auth.DigestAuth -> return $ newDigestPass userPathName passwd
                     res <- update $ ReplaceUserAuth userPathId auth
                     if res
-                        then returnOk ()
+                        then return ()
                         else forbidChange "Error changing password"
                   else forbidChange "Copies of new password do not match or is an invalid password (ex: blank)"
               else forbidChange $ "Not authorized to change password for " ++ display userPathName
-          Nothing -> returnError 403 "Error changing password" 
+          Nothing -> errForbidden "Error changing password" 
                          [MText $ "User " ++ display userPathName ++ " doesn't exist"]
   where
-    forbidChange = returnError 403 "Error changing password" . return . MText
+    forbidChange = errForbidden "Error changing password" . return . MText
 
 newBasicPass :: MonadIO m => Auth.PasswdPlain -> m UserAuth
 newBasicPass pwd = do
@@ -279,7 +279,7 @@ adminGroupDesc = UserGroup {
     canRemoveGroup = []
 }
 
-doGroupAddUser :: UserGroup -> DynamicPath -> MServerPart ()
+doGroupAddUser :: UserGroup -> DynamicPath -> ServerPartE ()
 doGroupAddUser group _ = do
     users <- query GetUserDb
     muser <- optional $ look "user"
@@ -291,18 +291,18 @@ doGroupAddUser group _ = do
                 ulist <- liftIO . Group.queryGroups $ canAddGroup group
                 Auth.withHackageAuth users (Just ulist) Nothing $ \_ _ -> do
                     liftIO $ addUserList group uid
-                    returnOk ()
-   where addError = returnError 400 "Failed to add user" . return . MText
+                    return ()
+   where addError = errBadRequest "Failed to add user" . return . MText
 
-doGroupDeleteUser :: UserGroup -> DynamicPath -> MServerPart ()
+doGroupDeleteUser :: UserGroup -> DynamicPath -> ServerPartE ()
 doGroupDeleteUser group dpath = withUserPath dpath $ \uid _ -> do
     users <- query GetUserDb
     ulist <- liftIO . Group.queryGroups $ canRemoveGroup group
     Auth.withHackageAuth users (Just ulist) Nothing $ \_ _ -> do
         liftIO $ removeUserList group uid
-        returnOk ()
+        return ()
 
-withGroupEditAuth :: UserGroup -> (Bool -> Bool -> MServerPart a) -> MServerPart a
+withGroupEditAuth :: UserGroup -> (Bool -> Bool -> ServerPartE a) -> ServerPartE a
 withGroupEditAuth group func = do
     users  <- query GetUserDb
     addList    <- liftIO . Group.queryGroups $ canAddGroup group
@@ -310,7 +310,7 @@ withGroupEditAuth group func = do
     Auth.withHackageAuth users Nothing Nothing $ \uid _ -> do
         let (canAdd, canDelete) = (uid `Group.member` addList, uid `Group.member` removeList)
         if not (canAdd || canDelete)
-            then returnError 403 "Forbidden" [MText "Can't edit permissions for user group"]
+            then errForbidden "Forbidden" [MText "Can't edit permissions for user group"]
             else func canAdd canDelete
 
 ------------ Encapsulation of resources related to editing a user group.

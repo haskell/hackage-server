@@ -67,9 +67,19 @@ initReportsFeature config _ = do
     let store = serverStore config
     return ReportsFeature
       { reportsResource = fix $ \r -> ReportsResource
-          { reportsList = (resourceAt "/package/:package/reports/.:format") { resourceGet = [("txt", textPackageReports)], resourcePost = [("", textResponse . submitBuildReport r store)] }
-          , reportsPage = (resourceAt "/package/:package/reports/:id.:format") { resourceGet = [("txt", textPackageReport)], resourceDelete = [("", textResponse . deleteBuildReport r)] }
-          , reportsLog  = (resourceAt "/package/:package/reports/:id/log") { resourceGet = [("txt", textResponse . serveBuildLog store)], resourceDelete = [("", textResponse . deleteBuildLog r)], resourcePut = [("", textResponse . putBuildLog r store)] }
+          { reportsList = (resourceAt "/package/:package/reports/.:format") {
+                            resourceGet =  [("txt", textPackageReports)],
+                            resourcePost = [("",    submitBuildReport r store)]
+                          }
+          , reportsPage = (resourceAt "/package/:package/reports/:id.:format") {
+                            resourceGet    = [("txt", textPackageReport)],
+                            resourceDelete = [("",    deleteBuildReport r)]
+                          }
+          , reportsLog  = (resourceAt "/package/:package/reports/:id/log") {
+                            resourceGet    = [("txt", serveBuildLog store)],
+                            resourceDelete = [("",    deleteBuildLog r)],
+                            resourcePut    = [("",    putBuildLog r store)]
+                          }
 
           , reportsListUri = \format pkgid -> renderResource (reportsList r) [display pkgid, format]
           , reportsPageUri = \format pkgid repid -> renderResource (reportsPage r) [display pkgid, display repid, format]
@@ -77,91 +87,110 @@ initReportsFeature config _ = do
           }
       }
   where
-    textPackageReports dpath = textResponse $
-                               withPackageVersionPath dpath $ \pkg -> do
+    textPackageReports dpath =
+      runServerPartE $
+      withPackageVersionPath dpath $ \pkg -> do
         reportList <- query $ LookupPackageReports (packageId pkg)
-        returnOk . toResponse $ show reportList
-    textPackageReport dpath = textResponse $
-                              withPackageVersionPath dpath $ \pkg ->
-                              withPackageReport dpath (packageId pkg) $ \reportId (report, mlog) -> do
-        returnOk . toResponse $ unlines ["Report #" ++ display reportId, show report, maybe "No build log" (const "Build log exists") mlog]
+        return . toResponse $ show reportList
+    textPackageReport dpath =
+      runServerPartE $
+      withPackageVersionPath dpath $ \pkg ->
+      withPackageReport dpath (packageId pkg) $ \reportId (report, mlog) ->
+        return . toResponse $ unlines [ "Report #" ++ display reportId, show report
+                                      , maybe "No build log" (const "Build log exists") mlog]
 
 -- result: not-found error or text file
-serveBuildLog :: BlobStorage -> DynamicPath -> MServerPart Response
-serveBuildLog store dpath = withPackageVersionPath dpath $ \pkg -> withPackageReport dpath (pkgInfoId pkg) $ \repid (_, mlog) -> case mlog of
-    Nothing -> returnError 404 "Log not found" [MText $ "Build log for report " ++ display repid ++ " not found"]
+serveBuildLog :: BlobStorage -> DynamicPath -> ServerPart Response
+serveBuildLog store dpath =
+  runServerPartE $
+  withPackageVersionPath dpath $ \pkg -> 
+  withPackageReport dpath (pkgInfoId pkg) $ \repid (_, mlog) -> case mlog of
+    Nothing -> errNotFound "Log not found" [MText $ "Build log for report " ++ display repid ++ " not found"]
     Just (BuildLog blobId) -> do
         file <- liftIO $ BlobStorage.fetch store blobId
-        returnOk . toResponse $ Resource.BuildLog file
+        return . toResponse $ Resource.BuildLog file
 
 -- result: auth error, not-found error, parse error, or redirect
-submitBuildReport :: ReportsResource -> BlobStorage -> DynamicPath -> MServerPart Response
-submitBuildReport r store dpath = withPackageVersionPath dpath $ \pkg -> do
+submitBuildReport :: ReportsResource -> BlobStorage -> DynamicPath -> ServerPart Response
+submitBuildReport r store dpath =
+  runServerPartE $
+  withPackageVersionPath dpath $ \pkg -> do
     users <- query GetUserDb
     -- require logged-in user
     Auth.withHackageAuth users Nothing Nothing $ \_ _ -> do
         let pkgid = pkgInfoId pkg
         mRqBody <- takeRequestBody =<< askRq
         case mRqBody of
-          Nothing -> fmap Right $ internalServerError $ toResponse $ "takeRequestBody can only be called once."
+          Nothing -> internalServerError $ toResponse $ "takeRequestBody can only be called once."
           (Just (Body body)) ->
             case BuildReport.parse $ unpack body of
-                Left err -> returnError 400 "Error submitting report" [MText err]
+                Left err -> errBadRequest "Error submitting report" [MText err]
                 Right report -> do
                     reportId <- update $ AddReport pkgid (report, Nothing)
                     -- redirect to new reports page
-                    fmap Right $ seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
+                    seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
 
 -- result: auth error, not-found error or redirect
-deleteBuildReport :: ReportsResource -> DynamicPath -> MServerPart Response
-deleteBuildReport r dpath = withPackageVersionPath dpath $ \pkg -> withReportId dpath $ \reportId -> do
+deleteBuildReport :: ReportsResource -> DynamicPath -> ServerPart Response
+deleteBuildReport r dpath =
+  runServerPartE $
+  withPackageVersionPath dpath $ \pkg ->
+  withReportId dpath $ \reportId -> do
     users <- query GetUserDb
     -- restrict this to whom? currently logged in users.. a bad idea
     Auth.withHackageAuth users Nothing Nothing $ \_ _ -> do
         let pkgid = pkgInfoId pkg
         success <- update $ DeleteReport pkgid reportId
         if success
-            then fmap Right $ seeOther (reportsListUri r "" pkgid) $ toResponse ()
-            else returnError 404 "Build report not found" [MText $ "Build report #" ++ display reportId ++ " not found"]
+            then seeOther (reportsListUri r "" pkgid) $ toResponse ()
+            else errNotFound "Build report not found" [MText $ "Build report #" ++ display reportId ++ " not found"]
 
 -- result: auth error, not-found error, or redirect
-putBuildLog :: ReportsResource -> BlobStorage -> DynamicPath -> MServerPart Response
-putBuildLog r store dpath = withPackageVersionPath dpath $ \pkg -> withReportId dpath $ \reportId -> do
+putBuildLog :: ReportsResource -> BlobStorage -> DynamicPath -> ServerPart Response
+putBuildLog r store dpath =
+  runServerPartE $
+  withPackageVersionPath dpath $ \pkg ->
+  withReportId dpath $ \reportId -> do
     users <- query GetUserDb
     -- logged in users
     Auth.withHackageAuth users Nothing Nothing $ \_ _ -> do
         let pkgid = pkgInfoId pkg
         mRqBody <- takeRequestBody =<< askRq
         case mRqBody of
-          Nothing -> fmap Right $ internalServerError $ toResponse $ "takeRequestBody can only be called once."
+          Nothing -> internalServerError $ toResponse $ "takeRequestBody can only be called once."
           (Just (Body blog)) -> do
                        buildLog <- liftIO $ BlobStorage.add store blog
                        update $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
                        -- go to report page (linking the log)
-                       fmap Right $ seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
+                       seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
 
 -- result: auth error, not-found error or redirect
-deleteBuildLog :: ReportsResource -> DynamicPath -> MServerPart Response
-deleteBuildLog r dpath = withPackageVersionPath dpath $ \pkg -> withReportId dpath $ \reportId -> do
+deleteBuildLog :: ReportsResource -> DynamicPath -> ServerPart Response
+deleteBuildLog r dpath =
+  runServerPartE $
+  withPackageVersionPath dpath $ \pkg ->
+  withReportId dpath $ \reportId -> do
     users <- query GetUserDb
     -- again, restrict this to whom?
     Auth.withHackageAuth users Nothing Nothing $ \_ _ -> do
         let pkgid = pkgInfoId pkg
         update $ SetBuildLog pkgid reportId Nothing
         -- go to report page (which should no longer link the log)
-        fmap Right $ seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
+        seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
 
 ---------------------------------------------------------------------------
 
-withReportId :: DynamicPath -> (BuildReportId -> ServerPart a) -> ServerPart a
-withReportId dpath func = case simpleParse =<< lookup "id" dpath of
+withReportId :: Monad m => DynamicPath -> (BuildReportId -> ServerPartT m a) -> ServerPartT m a
+withReportId dpath func =
+  case simpleParse =<< lookup "id" dpath of
     Nothing -> mzero
     Just reportId -> func reportId
 
-withPackageReport :: DynamicPath -> PackageId -> (BuildReportId -> (BuildReport, Maybe BuildLog) -> MServerPart a) -> MServerPart a
-withPackageReport dpath pkgid func = withReportId dpath $ \reportId -> do
+withPackageReport :: DynamicPath -> PackageId -> (BuildReportId -> (BuildReport, Maybe BuildLog) -> ServerPartE a) -> ServerPartE a
+withPackageReport dpath pkgid func =
+  withReportId dpath $ \reportId -> do
     mreport <- query $ LookupReport pkgid reportId
     case mreport of
-        Nothing -> returnError 404 "Report not found" [MText "Build report does not exist"]
+        Nothing -> errNotFound "Report not found" [MText "Build report does not exist"]
         Just report -> func reportId report
 

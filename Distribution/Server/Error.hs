@@ -1,74 +1,107 @@
-module Distribution.Server.Error where
+-- | Error handling style for the hackage server.
+--
+-- The point is to be able to abort and return appropriate HTTP errors, plus
+-- human readable messages.
+--
+-- We use a standard error monad / exception style so that we can hide some of
+-- the error checking plumbing.
+--
+-- We use a custom error type that enables us to render the error in an
+-- appropriate way, ie themed html or plain text, depending on the context.
+--
+module Distribution.Server.Error (
 
-import Control.Monad.Error
+    -- * Server error monad
+    ServerPartE,
+
+    -- * Generating errors
+    MessageSpan(..),
+    errBadRequest,
+    errUnauthorized,
+    errForbidden,
+    errNotFound,
+    errInternalError,
+    throwError,
+
+    -- * Handling errors
+    ErrorResponse(..),
+    runServerPartE,
+    handleErrorResponse,
+    messageToText,
+  ) where
+
 import Happstack.Server
+import Control.Monad.Error
+
+-- | A derivative of the 'ServerPartT' monad with an extra error monad layer.
+--
+-- So we can use the standard 'MonadError' methods like 'throwError'.
+--
+type ServerPartE a = ServerPartT (ErrorT ErrorResponse IO) a
 
 -- | A type for generic error reporting that should be sufficient for
 -- most purposes.
+--
 data ErrorResponse = ErrorResponse {
-    errorCode  :: Int,
-    errorTitle :: String,
-    errorMessage :: [Message]
+    errorCode   :: Int,
+    errorTitle  :: String,
+    errorDetail :: [MessageSpan]
 }
 
--- | A message with hypertext. (MLink str href) will be taken
--- as a pointer to a relevant page, and (MText str) merely
--- as text. In formats which don't have hypertext mixed with
--- regular text, the links and text can be obtained separately
--- with unzipError.
-data Message = MLink String String | MText String
+-- | A message possibly including hypertext links.
+--
+-- The point is to be able to render error messages either as text or as html.
+--
+data MessageSpan = MLink String String | MText String
 
-messageToString :: [Message] -> String
-messageToString [] = ""
-messageToString (MLink x _:xs) = x ++ messageToString xs
-messageToString (MText x  :xs) = x ++ messageToString xs
+-- | Format a message as simple text.
+--
+-- For html or other formats you'll have to write your own function!
+--
+messageToText :: [MessageSpan] -> String
+messageToText []             = ""
+messageToText (MLink x _:xs) = x ++ messageToText xs
+messageToText (MText x  :xs) = x ++ messageToText xs
 
-unzipMessage :: [Message] -> (String, [String])
-unzipMessage = foldr go ("", [])
-  where go m ~(text, links) = case m of
-            MLink x k -> (x++text, k:links)
-            MText x   -> (x++text, links)
+-- We don't want to use these methods directly anyway.
+instance Error ErrorResponse where
+    noMsg      = ErrorResponse 500 "Internal server error" []
+    strMsg str = ErrorResponse 500 "Internal server error" [MText str]
 
-instance Error ErrorResponse where 
-    strMsg str = ErrorResponse 400 "Server error" [MText str]
 
--- | Creates a monadic value with an OK response code.
-returnOk :: Monad m => a -> m (Either ErrorResponse a)
-returnOk = return . Right
+errBadRequest    :: String -> [MessageSpan] -> ServerPartE a
+errBadRequest    title message = throwError (ErrorResponse 400 title message)
 
--- | Simple synonym to indicate possible format-generic failure.
-type MServerPart a = ServerPart (Either ErrorResponse a)
+errUnauthorized  :: String -> [MessageSpan] -> ServerPartE a
+errUnauthorized  title message = throwError (ErrorResponse 401 title message)
 
--- | Creates a server part with the error and sets the HTTP response code.
-returnError :: Int -> String -> [Message] -> MServerPart a
-returnError errCode title message = returnError' $ ErrorResponse errCode title message
+errForbidden     :: String -> [MessageSpan] -> ServerPartE a
+errForbidden     title message = throwError (ErrorResponse 403 title message)
 
--- | Creates an error ServerPart directly from an ErrorResponse object.
-returnError' :: ErrorResponse -> MServerPart a
-returnError' res = resp (errorCode res) $ Left res
+errNotFound      :: String -> [MessageSpan] -> ServerPartE a
+errNotFound      title message = throwError (ErrorResponse 404 title message)
 
-type MIO a = IO (Either ErrorResponse a)
+errInternalError :: [MessageSpan] -> ServerPartE a
+errInternalError       message = throwError (ErrorResponse 500 title message)
+  where
+    title = "Internal server error"
 
-returnErrorIo :: Int -> String -> [Message] -> MIO a
-returnErrorIo errCode title message = returnErrorIo' $ ErrorResponse errCode title message
+-- | Run a 'ServerPartE', including a top-level fallback error handler.
+--
+-- Any 'ErrorResponse' exceptions are turned into a simple error response with
+-- a \"text/plain\" formated body.
+--
+-- To use a nicer custom formatted error response, use 'handleErrorResponse'.
+--
+runServerPartE :: ServerPartE a -> ServerPart a
+runServerPartE = mapServerPartT' (spUnwrapErrorT fallbackHandler)
+  where
+    fallbackHandler :: ErrorResponse -> ServerPart a
+    fallbackHandler err = finishWith (result (errorCode err) message)
+      where
+        message = errorTitle err ++ ": " ++ messageToText (errorDetail err)
 
-returnErrorIo' :: ErrorResponse -> MIO a
-returnErrorIo' = return . Left
-------------------------------------------------------------------------
-textResponse :: MServerPart Response -> ServerPart Response
-textResponse mpart = mpart >>= \mres -> case mres of
-    Left  err -> makeTextError err
-    Right res -> return res
-
--- | This is the monadic bind operator for MServerPart. It is still useful to
--- pass an MServerPart a into a function which expects a ServerPart a, but at
--- other times the Either needs to be abstracted over. This function should be
--- useful in a few odd cases.
-responseWith :: MServerPart a -> (a -> MServerPart b) -> MServerPart b
-responseWith mpart func = mpart >>= \mres -> case mres of
-    Left  err -> return $ Left err
-    Right res -> func res
-
-makeTextError :: ErrorResponse -> ServerPart Response
-makeTextError (ErrorResponse errCode _ message) = resp errCode $ toResponse (messageToString message ++ "\n")
-
+handleErrorResponse :: (ErrorResponse -> ServerPartE Response)
+                    -> ServerPartE a -> ServerPartE a
+handleErrorResponse handler action =
+    catchError action (\errResp -> handler errResp >>= finishWith)
