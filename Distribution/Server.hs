@@ -196,6 +196,8 @@ run server =
 --
 shutdown :: Server -> IO ()
 shutdown server = stopAcid (serverAcid server)
+--TODO: stop accepting incomming connections,
+-- wait for connections to be processed.
 
 -- | Write out a checkpoint of the server state. This makes recovery quicker
 -- because fewer logged transactions have to be replayed.
