@@ -17,7 +17,6 @@ module Distribution.Server.Error (
     -- * Generating errors
     MessageSpan(..),
     errBadRequest,
-    errUnauthorized,
     errForbidden,
     errNotFound,
     errInternalError,
@@ -72,8 +71,9 @@ instance Error ErrorResponse where
 errBadRequest    :: String -> [MessageSpan] -> ServerPartE a
 errBadRequest    title message = throwError (ErrorResponse 400 title message)
 
-errUnauthorized  :: String -> [MessageSpan] -> ServerPartE a
-errUnauthorized  title message = throwError (ErrorResponse 401 title message)
+-- note: errUnauthorized is deliberately not provided because exceptions thrown
+-- in this way bypass the FilterMonad stuff and so setHeaderM etc are ignored
+-- but setHeaderM are usually needed for responding to auth errors.
 
 errForbidden     :: String -> [MessageSpan] -> ServerPartE a
 errForbidden     title message = throwError (ErrorResponse 403 title message)

@@ -73,7 +73,7 @@ withHackageAuth users authorizedGroup forceType func = getHackageAuth users >>= 
             else errForbidden "Forbidden" [MText "No access for this page."]
     Left authError -> do
         setHackageAuth forceType
-        errUnauthorized "Not authorized" [MText $ showAuthError authError]
+        finishWith =<< unauthorized (toResponse $ showAuthError authError)
 
 setHackageAuth :: Maybe AuthType -> ServerPartE ()
 setHackageAuth forceType = do
