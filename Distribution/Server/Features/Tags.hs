@@ -94,9 +94,11 @@ initTagsFeature :: Config -> CoreFeature -> IO TagsFeature
 initTagsFeature _ cf = do
     specials <- Cache.newCacheable emptyPackageTags
     updateTag <- newHook
---    tf <- return TagsFeature
-    let tf = 
-          TagsFeature 
+    registerHook (packageAddHook cf) $ \pkginfo -> do 
+      let pkgname = packageName . packageDescription . pkgDesc $ pkginfo
+          tags = Set.fromList . constructImmutableTags . pkgDesc $ pkginfo
+      update . SetPackageTags pkgname $ tags
+    return TagsFeature 
             { tagsResource = fix $ \r -> TagsResource
               { tagsListing = resourceAt "/packages/tags/.:format"
               , tagListing = resourceAt "/packages/tag/:tag.:format"
@@ -118,14 +120,6 @@ initTagsFeature _ cf = do
               update $ SetTagPackages tag pkgs
               runHook'' updateTag pkgs (Set.singleton tag)
             }
-    registerHook (packageAddHook cf) addTags
-    return tf
-
-addTags :: PkgInfo -> IO ()
-addTags pkginfo = do
-  let pkgname = packageName . packageDescription . pkgDesc $ pkginfo
-      tags = Set.fromList . constructImmutableTags . pkgDesc $ pkginfo
-  update . SetPackageTags pkgname $ tags
 
 withTagPath :: DynamicPath -> (Tag -> Set PackageName -> ServerPart a) -> ServerPart a
 withTagPath dpath func = case simpleParse =<< lookup "tag" dpath of
