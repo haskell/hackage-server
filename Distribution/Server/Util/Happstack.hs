@@ -17,6 +17,7 @@ import Happstack.Server
 import qualified Happstack.Server.SURI as SURI
 import qualified Data.Map as Map
 import System.FilePath.Posix (takeExtension, (</>))
+import Control.Monad (liftM)
 
 -- |Passes a list of remaining path segments in the URL. Does not
 -- include the query string. This call only fails if the passed in
@@ -29,7 +30,7 @@ remainingPath handle = do
 -- | Gets the string without altering the request.
 remainingPathString :: Monad m => ServerPartT m String
 remainingPathString = do
-    strs <- fmap rqPaths $ askRq
+    strs <- liftM rqPaths askRq
     return $ if null strs then "" else foldr1 (</>) . map SURI.escape $ strs
 
 -- |Returns a mime-type string based on the extension of the passed in
