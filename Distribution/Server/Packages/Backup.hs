@@ -17,12 +17,11 @@ import Distribution.Server.Acid (update)
 import Distribution.Server.Packages.State
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Group (UserList(..))
-import Distribution.Server.Backup.Import
-import Distribution.Server.Backup.Export
-import Distribution.Server.Backup.Utils
-import Distribution.Server.Util.BlobStorage (BlobStorage, BlobId)
-import qualified Distribution.Server.Util.BlobStorage as BlobStorage
-import qualified Distribution.Server.PackageIndex as PackageIndex
+import Distribution.Server.Framework.BackupRestore
+import Distribution.Server.Framework.BackupDump
+import Distribution.Server.Framework.BlobStorage (BlobStorage, BlobId)
+import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
+import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Distribution.Package
 import Distribution.Simple.Utils (fromUTF8)

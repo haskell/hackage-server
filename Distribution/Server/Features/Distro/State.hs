@@ -8,12 +8,12 @@
   , FlexibleContexts
   #-}
 
-module Distribution.Server.Distributions.State where
+module Distribution.Server.Features.Distro.State where
 
 import Distribution.Package (PackageName)
 
-import qualified Distribution.Server.Distributions.Distributions as Dist
-import Distribution.Server.Distributions.Distributions
+import qualified Distribution.Server.Features.Distro.Distributions as Dist
+import Distribution.Server.Features.Distro.Distributions
     (DistroName, Distributions, DistroVersions, DistroPackageInfo)
 
 import Distribution.Server.Users.Group (UserList)

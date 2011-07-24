@@ -2,7 +2,7 @@
     RecordWildCards
   #-}
 
-module Distribution.Server.Distributions.Distributions
+module Distribution.Server.Features.Distro.Distributions
     ( DistroName(..)
     , Distributions(..)
     , emptyDistributions
@@ -27,7 +27,7 @@ module Distribution.Server.Distributions.Distributions
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
-import Distribution.Server.Distributions.Types
+import Distribution.Server.Features.Distro.Types
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserList)
 

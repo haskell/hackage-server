@@ -1,21 +1,18 @@
 module Distribution.Server.Features.Packages where
 
 import Distribution.Server.Acid (query)
-import Distribution.Server.Feature
-import Distribution.Server.Resource
-import Distribution.Server.Types
-import Distribution.Server.Hook
+import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Types (userName)
+
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.State as State
 import qualified Distribution.Server.Packages.State as State
-import qualified Distribution.Server.PackageIndex as PackageIndex
-import qualified Distribution.Server.Cache as Cache
-import qualified Distribution.Server.ResourceTypes as Resource
+import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
+import qualified Distribution.Server.Framework.Cache as Cache
+import qualified Distribution.Server.Framework.ResourceTypes as Resource
 
-import Happstack.Server
 import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration (flattenPackageDescription)

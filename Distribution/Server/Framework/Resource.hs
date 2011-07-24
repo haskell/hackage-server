@@ -1,6 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, StandaloneDeriving, FlexibleContexts, FlexibleInstances #-}
 
-module Distribution.Server.Resource (
+module Distribution.Server.Framework.Resource (
     -- | Paths
     BranchComponent(..),
     BranchPath,
@@ -33,7 +33,7 @@ module Distribution.Server.Resource (
 
 import Happstack.Server
 import Distribution.Server.Util.Happstack (remainingPathString)
-import Distribution.Server.Types
+import Distribution.Server.Framework.Types
 
 import Data.Monoid
 import Data.Map (Map)

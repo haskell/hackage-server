@@ -9,16 +9,14 @@ module Distribution.Server.Features.PackageList (
   ) where
 
 import Distribution.Server.Acid (query)
-import Distribution.Server.Feature
-import Distribution.Server.Types
-import Distribution.Server.Hook
+import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.ReverseDependencies
 import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.PreferredVersions
-import qualified Distribution.Server.Cache as Cache
-import qualified Distribution.Server.PackageIndex as PackageIndex
+import qualified Distribution.Server.Framework.Cache as Cache
+import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Distribution.Server.Packages.State
 import Distribution.Server.Packages.Types

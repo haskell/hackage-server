@@ -26,13 +26,9 @@ module Distribution.Server.Features.Users (
 import Control.Applicative ((<$>), (<*>), optional)
 
 import Distribution.Server.Acid (query, update)
-import Distribution.Server.Feature
+import Distribution.Server.Framework
 import Distribution.Server.Features.Core
-import Distribution.Server.Resource
-import Distribution.Server.Hook
-import Distribution.Server.Error
-import Distribution.Server.Types
-import qualified Distribution.Server.Cache as Cache
+import qualified Distribution.Server.Framework.Cache as Cache
 
 import Distribution.Server.Users.State as State
 import Distribution.Server.Users.Types

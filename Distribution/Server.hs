@@ -28,8 +28,8 @@ import qualified Happstack.Server
 import qualified Happstack.Util.Concurrent as HappsLoad
 
 import Distribution.Server.Acid (Acid, checkpointAcid, startAcid, stopAcid, update)
-import qualified Distribution.Server.Backup.Import as Import
-import Distribution.Server.Backup.Export
+import qualified Distribution.Server.Framework.BackupRestore as Import
+import Distribution.Server.Framework.BackupDump
 -- TODO: move this to BulkImport module
 import Distribution.Server.Users.Backup (usersToCSV, groupToCSV)
 import Distribution.Server.Packages.Backup (infoToCurrentEntries, maintToExport)
@@ -37,15 +37,16 @@ import Distribution.Server.Packages.Backup.Tags (tagsToCSV)
 import Distribution.Server.Features.Tags (constructTagIndex)
 import qualified Distribution.Server.Users.Group as Group
 
-import qualified Distribution.Server.Feature as Feature
+import Distribution.Server.Framework
+import Distribution.Server.Framework.Feature as Feature
 import qualified Distribution.Server.Features as Features
 
 import Distribution.Server.Users.State as State
-import qualified Distribution.Server.Util.BlobStorage as BlobStorage
-import Distribution.Server.Util.BlobStorage (BlobStorage)
-import qualified Distribution.Server.Backup.BulkImport as BulkImport
-import qualified Distribution.Server.Backup.UploadLog as UploadLog
-import qualified Distribution.Server.PackageIndex as PackageIndex
+import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
+import Distribution.Server.Framework.BlobStorage (BlobStorage)
+import qualified Distribution.Server.LegacyImport.BulkImport as BulkImport
+import qualified Distribution.Server.LegacyImport.UploadLog as UploadLog
+import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
@@ -53,8 +54,6 @@ import qualified Distribution.Server.Auth.Types as Auth
 import qualified Distribution.Server.Auth.Crypt as Auth
 import qualified Distribution.Server.Auth.Basic as Auth
 
-import Distribution.Server.Resource
-import Distribution.Server.Types
 import Distribution.Text
 
 import System.FilePath ((</>))

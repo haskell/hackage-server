@@ -10,7 +10,7 @@
 --
 -- Persistent storage for blobs of data.
 --
-module Distribution.Server.Util.BlobStorage (
+module Distribution.Server.Framework.BlobStorage (
     BlobStorage,
     BlobId,
     open,

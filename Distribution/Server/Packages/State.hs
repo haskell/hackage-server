@@ -3,17 +3,17 @@
              TypeOperators, TypeSynonymInstances #-}
 module Distribution.Server.Packages.State where
 
-import Distribution.Server.Instances ()
+import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Users.State ()
 
 import Distribution.Package
-import Distribution.Server.PackageIndex (PackageIndex)
-import qualified Distribution.Server.PackageIndex as PackageIndex
+import Distribution.Server.Packages.PackageIndex (PackageIndex)
+import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.Types (PkgInfo(..), CandPkgInfo(..))
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserList)
 import Distribution.Server.Users.Types (UserId)
-import Distribution.Server.Util.BlobStorage (BlobId)
+import Distribution.Server.Framework.BlobStorage (BlobId)
 import Data.TarIndex (TarIndex)
 
 import qualified Data.Serialize as Serialize

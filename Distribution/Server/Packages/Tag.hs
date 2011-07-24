@@ -4,7 +4,7 @@
 
 module Distribution.Server.Packages.Tag where
 
-import Distribution.Server.Instances ()
+import Distribution.Server.Framework.Instances ()
 
 import qualified Distribution.ParseUtils   as Parse
 import qualified Distribution.Compat.ReadP as Parse

@@ -1,4 +1,4 @@
-module Distribution.Server.Hook (
+module Distribution.Server.Framework.Hook (
     Hook,
     Filter,
     newHook,

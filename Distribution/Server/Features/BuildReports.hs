@@ -1,35 +1,30 @@
-module Distribution.Server.Features.Reports (
+module Distribution.Server.Features.BuildReports (
     ReportsFeature(..),
     ReportsResource(..),
-    initReportsFeature
+    initBuildReportsFeature
   ) where
 
 import Distribution.Server.Acid (update, query)
-import Distribution.Server.Feature
-import Distribution.Server.Resource
+import Distribution.Server.Framework hiding (BuildLog)
 import Distribution.Server.Features.Core
-import Distribution.Server.Types
-import Distribution.Server.Error
-import Distribution.Server.Util.Happstack
 
-import Distribution.Server.BuildReport.Backup
-import Distribution.Server.BuildReport.State
-import qualified Distribution.Server.BuildReport.BuildReport as BuildReport
-import Distribution.Server.BuildReport.BuildReport (BuildReport(..))
-import Distribution.Server.BuildReport.BuildReports (BuildReportId(..), BuildLog(..))
+import Distribution.Server.Features.BuildReports.Backup
+import Distribution.Server.Features.BuildReports.State
+import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
+import Distribution.Server.Features.BuildReports.BuildReport (BuildReport(..))
+import Distribution.Server.Features.BuildReports.BuildReports (BuildReportId(..), BuildLog(..))
 import Distribution.Server.Users.State (GetUserDb(..))
-import qualified Distribution.Server.ResourceTypes as Resource
+import qualified Distribution.Server.Framework.ResourceTypes as Resource
 import qualified Distribution.Server.Auth.Basic as Auth
 
 import Distribution.Server.Packages.Types
-import qualified Distribution.Server.Util.BlobStorage as BlobStorage
-import Distribution.Server.Backup.Export
-import Distribution.Server.Util.BlobStorage (BlobStorage)
+import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
+import Distribution.Server.Framework.BackupDump
+import Distribution.Server.Framework.BlobStorage (BlobStorage)
 
 import Distribution.Text
 import Distribution.Package
 
-import Happstack.Server
 import Data.Function (fix)
 import Control.Applicative (optional)
 import Control.Monad.Trans
@@ -63,8 +58,8 @@ instance HackageFeature ReportsFeature where
       , restoreBackup = Just $ \storage -> reportsBackup storage
       }
 
-initReportsFeature :: Config -> CoreFeature -> IO ReportsFeature
-initReportsFeature config _ = do
+initBuildReportsFeature :: Config -> CoreFeature -> IO ReportsFeature
+initBuildReportsFeature config _ = do
     let store = serverStore config
     return ReportsFeature
       { reportsResource = fix $ \r -> ReportsResource

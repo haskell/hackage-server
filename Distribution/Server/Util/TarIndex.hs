@@ -17,7 +17,7 @@ import Data.SafeCopy (base, deriveSafeCopy)
 import Data.TarIndex (TarIndex)
 
 import Distribution.Server.Packages.State()
-import Distribution.Server.Util.BlobStorage (BlobId)
+import Distribution.Server.Framework.BlobStorage (BlobId)
 
 data TarIndexMap = M {indexMap :: Map.Map BlobId TarIndex}
  deriving (Typeable, Show)

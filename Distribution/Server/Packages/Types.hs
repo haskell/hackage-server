@@ -14,8 +14,8 @@
 module Distribution.Server.Packages.Types where
 
 import Distribution.Server.Users.Types (UserId)
-import Distribution.Server.Util.BlobStorage (BlobId)
-import Distribution.Server.Instances ()
+import Distribution.Server.Framework.BlobStorage (BlobId)
+import Distribution.Server.Framework.Instances ()
 
 import Distribution.Package
          ( PackageIdentifier(..), Package(..) )

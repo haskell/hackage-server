@@ -6,9 +6,9 @@
 
 
 
-module Distribution.Server.Distributions.Types where
+module Distribution.Server.Features.Distro.Types where
 
-import Distribution.Server.Instances()
+import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Users.State()
 import Distribution.Server.Users.Group (UserList)
 

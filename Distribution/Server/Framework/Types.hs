@@ -1,6 +1,6 @@
-module Distribution.Server.Types where
+module Distribution.Server.Framework.Types where
 
-import Distribution.Server.Util.BlobStorage (BlobStorage)
+import Distribution.Server.Framework.BlobStorage (BlobStorage)
 
 import Happstack.Server
 import qualified Network.URI as URI

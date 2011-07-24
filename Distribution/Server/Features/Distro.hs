@@ -4,22 +4,17 @@ module Distribution.Server.Features.Distro (
   ) where
 
 import Distribution.Server.Acid (query, update)
-import Distribution.Server.Feature
+import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages
 import Distribution.Server.Features.Users
-import Distribution.Server.Resource
-import Distribution.Server.Types
-import Distribution.Server.ResourceTypes
-import Distribution.Server.Util.Happstack
 
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
-import Distribution.Server.Distributions.State
-import Distribution.Server.Distributions.Types
-import Distribution.Server.Distributions.Backup
+import Distribution.Server.Features.Distro.State
+import Distribution.Server.Features.Distro.Types
+import Distribution.Server.Features.Distro.Backup
 import Distribution.Simple.Utils (fromUTF8)
 
-import Happstack.Server
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.List (intercalate)
 import Distribution.Text (display, simpleParse)

@@ -12,15 +12,11 @@ module Distribution.Server.Features.Upload (
   ) where
 
 import Distribution.Server.Acid (query, update)
-import Distribution.Server.Feature
+import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
-import Distribution.Server.Resource
-import Distribution.Server.Hook
-import Distribution.Server.Error
-import Distribution.Server.Types
 
-import Distribution.Server.Backup.Export
+import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Packages.Backup
 import Distribution.Server.Packages.State
 import Distribution.Server.Users.State
@@ -29,13 +25,12 @@ import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
-import qualified Distribution.Server.Util.BlobStorage as BlobStorage
-import Distribution.Server.Util.BlobStorage (BlobStorage)
+import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
+import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import qualified Distribution.Server.Auth.Basic as Auth
 import qualified Distribution.Server.Packages.Unpack as Upload
-import Distribution.Server.PackageIndex (PackageIndex)
+import Distribution.Server.Packages.PackageIndex (PackageIndex)
 
-import Happstack.Server
 import Data.Monoid (mconcat)
 import Data.Maybe (fromMaybe, listToMaybe, catMaybes)
 import qualified Data.Map as Map

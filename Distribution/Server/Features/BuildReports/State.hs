@@ -1,11 +1,10 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell,
              FlexibleInstances, FlexibleContexts, MultiParamTypeClasses,
              TypeOperators, TypeSynonymInstances #-}
-module Distribution.Server.BuildReport.State where
+module Distribution.Server.Features.BuildReports.State where
 
---import qualified Distribution.Server.BuildReport.BuildReport as BuildReport
-import Distribution.Server.BuildReport.BuildReports (BuildReportId, BuildLog, BuildReport, BuildReports, PkgBuildReports)
-import qualified Distribution.Server.BuildReport.BuildReports as BuildReports
+import Distribution.Server.Features.BuildReports.BuildReports (BuildReportId, BuildLog, BuildReport, BuildReports, PkgBuildReports)
+import qualified Distribution.Server.Features.BuildReports.BuildReports as BuildReports
 
 import Distribution.Package
 

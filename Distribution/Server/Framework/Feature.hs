@@ -1,8 +1,8 @@
-module Distribution.Server.Feature where
+module Distribution.Server.Framework.Feature where
 
-import Distribution.Server.Backup.Import (RestoreBackup, BackupEntry)
-import Distribution.Server.Util.BlobStorage (BlobStorage)
-import Distribution.Server.Resource
+import Distribution.Server.Framework.BackupRestore (RestoreBackup, BackupEntry)
+import Distribution.Server.Framework.BlobStorage (BlobStorage)
+import Distribution.Server.Framework.Resource
 
 -- This module defines a plugin interface for hackage features.
 --

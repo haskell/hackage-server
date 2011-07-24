@@ -9,7 +9,7 @@
 -- We use a custom error type that enables us to render the error in an
 -- appropriate way, ie themed html or plain text, depending on the context.
 --
-module Distribution.Server.Error (
+module Distribution.Server.Framework.Error (
 
     -- * Server error monad
     ServerPartE,

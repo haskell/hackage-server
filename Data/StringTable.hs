@@ -20,7 +20,7 @@ import Data.Typeable (Typeable)
 import qualified Data.ByteString.Char8 as BS
 import Data.Word (Word32)
 
-import Distribution.Server.Instances()
+import Distribution.Server.Framework.Instances()
 
 -- | An effecient mapping from strings to a dense set of integers.
 --

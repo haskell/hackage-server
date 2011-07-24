@@ -16,19 +16,15 @@ module Distribution.Server.Features.ReverseDependencies (
   ) where
 
 import Distribution.Server.Acid (query, update)
-import Distribution.Server.Feature
-import Distribution.Server.Resource
-import Distribution.Server.Hook
-import Distribution.Server.Types
-import Distribution.Server.Backup.Import
+import Distribution.Server.Framework
+import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.PreferredVersions
 
 import Distribution.Server.Packages.State
 import Distribution.Server.Packages.Reverse
 import Distribution.Server.Packages.Preferred
-import qualified Distribution.Server.Cache as Cache
---import Distribution.Server.PackageIndex (PackageIndex)
+import qualified Distribution.Server.Framework.Cache as Cache
 
 import Distribution.Package
 import Distribution.Text (display)

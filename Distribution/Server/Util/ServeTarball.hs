@@ -1,6 +1,6 @@
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Distribution.Server.Util.Serve
+-- Module      :  Distribution.Server.Util.ServeTarball
 -- Copyright   :  (c) 2008 David Himmelstrup
 --                (c) 2009 Antoine Latter
 -- License     :  BSD-like
@@ -11,7 +11,7 @@
 --
 --
 -----------------------------------------------------------------------------
-module Distribution.Server.Util.Serve
+module Distribution.Server.Util.ServeTarball
     ( serveTarball
     , readTarIndex
     ) where

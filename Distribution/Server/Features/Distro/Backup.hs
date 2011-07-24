@@ -1,4 +1,4 @@
-module Distribution.Server.Distributions.Backup (
+module Distribution.Server.Features.Distro.Backup (
     distroBackup,
 
     distroUsersToExport,
@@ -8,12 +8,12 @@ module Distribution.Server.Distributions.Backup (
   ) where
 
 import Distribution.Server.Acid (update)
-import qualified Distribution.Server.Distributions.Distributions as Distros
-import Distribution.Server.Distributions.Distributions (DistroName, Distributions(..), DistroVersions(..), DistroPackageInfo(..))
-import Distribution.Server.Distributions.State
+import qualified Distribution.Server.Features.Distro.Distributions as Distros
+import Distribution.Server.Features.Distro.Distributions (DistroName, Distributions(..), DistroVersions(..), DistroPackageInfo(..))
+import Distribution.Server.Features.Distro.State
 import Distribution.Server.Users.Group (UserList(..))
-import Distribution.Server.Backup.Import
-import Distribution.Server.Backup.Export
+import Distribution.Server.Framework.BackupDump
+import Distribution.Server.Framework.BackupRestore
 
 import Distribution.Package
 import Distribution.Text

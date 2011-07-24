@@ -4,7 +4,7 @@
 
 module Distribution.Server.Packages.Downloads where
 
-import Distribution.Server.Instances ()
+import Distribution.Server.Framework.Instances ()
 import Distribution.Package
 import Distribution.Version
 

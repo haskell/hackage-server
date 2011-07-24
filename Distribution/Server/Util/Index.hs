@@ -23,8 +23,8 @@ import qualified Codec.Archive.Tar.Entry as Tar
 
 import Distribution.Package
 import Distribution.Version
-import Distribution.Server.PackageIndex (PackageIndex)
-import qualified Distribution.Server.PackageIndex as PackageIndex
+import Distribution.Server.Packages.PackageIndex (PackageIndex)
+import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Text
          ( display, simpleParse )
 

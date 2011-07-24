@@ -11,7 +11,7 @@ import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
 import qualified Distribution.Server.Auth.Crypt as Crypt
 import Distribution.Server.Auth.Types
-import Distribution.Server.Error
+import Distribution.Server.Framework.Error
 
 import Happstack.Server
 import qualified Happstack.Crypto.Base64 as Base64

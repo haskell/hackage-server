@@ -6,7 +6,7 @@ module Distribution.Server.Packages.Backup.Tags (
 
 import Distribution.Server.Acid (update)
 import Distribution.Server.Packages.Tag
-import Distribution.Server.Backup.Import
+import Distribution.Server.Framework.BackupRestore
 
 import Distribution.Package
 import Distribution.Text (display)

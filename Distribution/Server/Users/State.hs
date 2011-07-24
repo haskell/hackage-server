@@ -3,7 +3,7 @@
              TypeOperators, TypeSynonymInstances #-}
 module Distribution.Server.Users.State where
 
-import Distribution.Server.Instances ()
+import Distribution.Server.Framework.Instances ()
 
 import Distribution.Server.Users.Types
 import Distribution.Server.Users.Group as Group (UserList(..), enumerate, add, remove, empty)

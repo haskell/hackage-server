@@ -1,15 +1,12 @@
 module Distribution.Server.Features.DownloadCount where
 
 import Distribution.Server.Acid (query, update)
-import Distribution.Server.Feature
-import Distribution.Server.Resource
+import Distribution.Server.Framework
 import Distribution.Server.Features.Core
-import Distribution.Server.Types
-import Distribution.Server.Hook
 
 import Distribution.Server.Packages.Downloads
 import Distribution.Server.Util.Histogram
-import qualified Distribution.Server.Cache as Cache
+import qualified Distribution.Server.Framework.Cache as Cache
 
 import Distribution.Package
 

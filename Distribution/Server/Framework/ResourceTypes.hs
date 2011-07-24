@@ -2,7 +2,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Distribution.Server.ResourceTypes
+-- Module      :  Distribution.Server.Framework.ResourceTypes
 -- Copyright   :  (c) David Himmelstrup 2008
 --                    Duncan Coutts 2008
 -- License     :  BSD-like
@@ -13,9 +13,9 @@
 --
 -- Types for various kinds of resources we serve, xml, package tarballs etc.
 -----------------------------------------------------------------------------
-module Distribution.Server.ResourceTypes where
+module Distribution.Server.Framework.ResourceTypes where
 
-import Distribution.Server.Util.BlobStorage
+import Distribution.Server.Framework.BlobStorage
          ( BlobId )
 
 import Happstack.Server

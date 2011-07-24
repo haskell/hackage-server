@@ -1,6 +1,6 @@
 module Distribution.Server.Util.ActionLog where
 
-import Distribution.Server.Error (MessageSpan)
+import Distribution.Server.Framework.Error (MessageSpan)
 import Data.Set (Set)
 import qualified Data.Set as Set
 -- other imports..

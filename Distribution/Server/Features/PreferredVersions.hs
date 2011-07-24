@@ -17,17 +17,13 @@ module Distribution.Server.Features.PreferredVersions (
 import Control.Applicative (optional)
 
 import Distribution.Server.Acid (query, update)
-import Distribution.Server.Feature
+import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Tags
-import Distribution.Server.Types
-import Distribution.Server.Error
-import Distribution.Server.Hook
-import Distribution.Server.Resource
-import qualified Distribution.Server.Cache as Cache
+import qualified Distribution.Server.Framework.Cache as Cache
 
-import qualified Distribution.Server.PackageIndex as PackageIndex
+import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.Preferred
 import Distribution.Server.Packages.Tag
 import Distribution.Server.Packages.State
@@ -43,7 +39,6 @@ import Data.List (intercalate, find)
 import Data.Time.Clock (getCurrentTime)
 import Control.Arrow (second)
 import Control.Monad.Trans (MonadIO, liftIO)
-import Happstack.Server
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.ByteString.Lazy.Char8 as BS

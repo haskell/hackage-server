@@ -2,13 +2,9 @@ module Distribution.Server.Features.LegacyRedirects (
     legacyRedirectsFeature
   ) where
 
-import Distribution.Server.Error
-import Distribution.Server.Feature
+import Distribution.Server.Framework
 import Distribution.Server.Features.Upload
-import Distribution.Server.Resource
-import Distribution.Server.Instances ()
 
-import Happstack.Server as Happs
 import Distribution.Server.Util.Happstack (remainingPath)
 
 import Distribution.Package

@@ -38,26 +38,31 @@ executable hackage-server
     Distribution.Server.Auth.Crypt
     Distribution.Server.Auth.HtPasswdDb
     Distribution.Server.Auth.Types
-    Distribution.Server.Backup.BulkImport
-    Distribution.Server.Backup.Export
-    Distribution.Server.Backup.Import
-    Distribution.Server.Backup.UploadLog
-    Distribution.Server.Backup.Utils
-    Distribution.Server.BuildReport.BuildReport
-    Distribution.Server.BuildReport.BuildReports
-    Distribution.Server.BuildReport.Backup
-    Distribution.Server.BuildReport.State
-    Distribution.Server.Cache
-    Distribution.Server.Distributions.Distributions
-    Distribution.Server.Distributions.Backup
-    Distribution.Server.Distributions.State
-    Distribution.Server.Distributions.Types
-    Distribution.Server.Error
-    Distribution.Server.Feature
+    Distribution.Server.Framework.BlobStorage
+    Distribution.Server.Framework.Cache
+    Distribution.Server.Framework.Error
+    Distribution.Server.Framework.Feature
+    Distribution.Server.Framework.Hook
+    Distribution.Server.Framework.Instances
+    Distribution.Server.Framework.Resource
+    Distribution.Server.Framework.ResourceTypes
+    Distribution.Server.Framework.BackupDump
+    Distribution.Server.Framework.BackupRestore
+    Distribution.Server.LegacyImport.BulkImport
+    Distribution.Server.LegacyImport.UploadLog
     Distribution.Server.Features
+    Distribution.Server.Features.BuildReports
+    Distribution.Server.Features.BuildReports.BuildReport
+    Distribution.Server.Features.BuildReports.BuildReports
+    Distribution.Server.Features.BuildReports.Backup
+    Distribution.Server.Features.BuildReports.State
     Distribution.Server.Features.Check
     Distribution.Server.Features.Core
     Distribution.Server.Features.Distro
+    Distribution.Server.Features.Distro.Distributions
+    Distribution.Server.Features.Distro.Backup
+    Distribution.Server.Features.Distro.State
+    Distribution.Server.Features.Distro.Types
     Distribution.Server.Features.Documentation
     Distribution.Server.Features.DownloadCount
     Distribution.Server.Features.Html
@@ -67,18 +72,15 @@ executable hackage-server
     Distribution.Server.Features.NameSearch
     Distribution.Server.Features.Packages
     Distribution.Server.Features.PreferredVersions
-    Distribution.Server.Features.Reports
     Distribution.Server.Features.ReverseDependencies
     Distribution.Server.Features.Tags
     Distribution.Server.Features.Upload
     Distribution.Server.Features.Users
-    Distribution.Server.Hook
-    Distribution.Server.Instances
-    Distribution.Server.PackageIndex
     Distribution.Server.Packages.Downloads
     Distribution.Server.Packages.Index
     Distribution.Server.Packages.ModuleForest
     Distribution.Server.Packages.Backup
+    Distribution.Server.Packages.PackageIndex
     Distribution.Server.Packages.Preferred
     Distribution.Server.Packages.Reverse
     Distribution.Server.Packages.State
@@ -97,21 +99,18 @@ executable hackage-server
     Distribution.Server.Pages.Reverse
     Distribution.Server.Pages.Template
     Distribution.Server.Pages.Util
-    Distribution.Server.Resource
-    Distribution.Server.ResourceTypes
     Distribution.Server.Users.Group
     Distribution.Server.Users.State
     Distribution.Server.Users.Types
     Distribution.Server.Users.Backup
     Distribution.Server.Users.Users
     Distribution.Server.Util.AsyncVar
-    Distribution.Server.Util.BlobStorage
     Distribution.Server.Util.Happstack
     Distribution.Server.Util.Histogram
     Distribution.Server.Util.Index
     Distribution.Server.Util.NameIndex
     Distribution.Server.Util.Parse
-    Distribution.Server.Util.Serve
+    Distribution.Server.Util.ServeTarball
     Distribution.Server.Util.TarIndex
     Distribution.Server.Util.TextSearch
   build-depends:
@@ -165,7 +164,7 @@ executable hackage-server
 executable hackage-mirror
   main-is: MirrorClient.hs
   other-modules:
-    Distribution.Server.Backup.UploadLog
+    Distribution.Server.LegacyImport.UploadLog
     Distribution.Server.Users.Types
     Distribution.Server.Util.Index
     Distribution.Server.Util.Merge

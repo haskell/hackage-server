@@ -2,9 +2,7 @@ module Distribution.Server.Features.StaticFiles (
     staticFilesFeature
   ) where
 
-import Distribution.Server.Feature
-
-import qualified Happstack.Server as Happs
+import Distribution.Server.Framework
 
 -- | The feature to serve the static html files.
 --
@@ -23,6 +21,6 @@ staticFilesFeature = HackageFeature {
     restoreBackup = Nothing
 }
 
-serveStaticFiles :: Config -> Happs.ServerPart Happs.Response
+serveStaticFiles :: Config -> ServerPart Response
 serveStaticFiles conf =
-  Happs.fileServe ["hackage.html"] (serverStaticDir conf)
+  fileServe ["hackage.html"] (serverStaticDir conf)

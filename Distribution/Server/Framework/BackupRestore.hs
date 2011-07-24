@@ -1,6 +1,6 @@
 {-# LANGUAGE RankNTypes, MultiParamTypeClasses, RecordWildCards, FlexibleInstances  #-}
 
-module Distribution.Server.Backup.Import (
+module Distribution.Server.Framework.BackupRestore (
     RestoreBackup(..),
     BackupEntry,
     Import,
@@ -13,14 +13,13 @@ module Distribution.Server.Backup.Import (
     withSubImport,
     parseText,
     parseTime,
+    timeFormatSpec,
     parseRead,
     MergeResult(..),
     mergeBy,
 
     bytesToString
   ) where
-
-import Distribution.Server.Backup.Utils
 
 import qualified Codec.Archive.Tar as Tar
 import Codec.Compression.GZip (decompress)
@@ -258,6 +257,11 @@ parseTime str = case Time.parseTime defaultTimeLocale timeFormatSpec str of
     Nothing -> fail $ "Unable to parse time: " ++ str
     Just x  -> return x
 
+-- | Time/Date format used in exported files.
+-- Variant on ISO formatted date, with time and time zone.
+timeFormatSpec :: String
+timeFormatSpec = "%Y-%m-%d %H:%M:%S %z"
+
 -- Parse a string, throw an error if it's bad
 parseText :: Text a => String -> String -> Import s a
 parseText label text = case simpleParse text of
@@ -266,4 +270,3 @@ parseText label text = case simpleParse text of
                             
 bytesToString :: ByteString -> String
 bytesToString = fromUTF8 . BS.unpack
-

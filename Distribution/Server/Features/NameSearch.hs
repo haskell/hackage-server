@@ -7,18 +7,15 @@ module Distribution.Server.Features.NameSearch (
   ) where
 
 import Distribution.Server.Acid (query)
-import Distribution.Server.Feature
-import Distribution.Server.Types
-import Distribution.Server.Hook
-import Distribution.Server.Resource
+import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 
 import Distribution.Server.Util.NameIndex
 import Distribution.Server.Util.TextSearch
-import qualified Distribution.Server.Cache as Cache
-import qualified Distribution.Server.ResourceTypes as Resource
-import qualified Distribution.Server.PackageIndex as PackageIndex
-import Distribution.Server.PackageIndex (PackageIndex)
+import qualified Distribution.Server.Framework.Cache as Cache
+import qualified Distribution.Server.Framework.ResourceTypes as Resource
+import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
+import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import Distribution.Server.Packages.State
 import Distribution.Server.Packages.Types
 import Distribution.Text
@@ -32,7 +29,6 @@ import qualified Data.ByteString.Lazy.Char8 as BS
 import Network.URI (URI(..), uriToString)
 import Control.Monad.Trans (MonadIO)
 import Text.JSON
-import Happstack.Server
 
 data NamesFeature = NamesFeature {
     namesResource :: NamesResource,

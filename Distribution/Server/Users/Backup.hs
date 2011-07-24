@@ -20,7 +20,7 @@ import Distribution.Server.Users.State (ReplaceUserDb(..))
 import Data.Acid (UpdateEvent)
 import Data.Acid.Core (MethodResult, MethodState)
 import Data.ByteString.Lazy.Char8 (ByteString)
-import Distribution.Server.Backup.Import
+import Distribution.Server.Framework.BackupRestore
 import Distribution.Text (display)
 import Data.Version
 import Data.Function (fix)

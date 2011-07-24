@@ -9,10 +9,8 @@ module Distribution.Server.Features.HaskellPlatform (
   ) where
 
 import Distribution.Server.Acid (query, update)
-import Distribution.Server.Types
-import Distribution.Server.Feature
+import Distribution.Server.Framework
 import Distribution.Server.Features.Core
-import Distribution.Server.Resource
 import Distribution.Server.Packages.Platform
 import Data.Function
 

@@ -12,22 +12,18 @@ module Distribution.Server.Features.Tags (
 import Control.Applicative (optional)
 
 import Distribution.Server.Acid
-import Distribution.Server.Feature
+import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages (categorySplit)
-import Distribution.Server.Resource
-import Distribution.Server.Types
-import Distribution.Server.Hook
-import Distribution.Server.Error
 import Distribution.Server.Packages.Tag
 
-import qualified Distribution.Server.PackageIndex as PackageIndex
-import Distribution.Server.PackageIndex (PackageIndex)
+import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
+import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import Distribution.Server.Packages.State (GetPackagesState(..), packageList)
 import Distribution.Server.Packages.Types
-import Distribution.Server.Backup.Export
+import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Packages.Backup.Tags
-import qualified Distribution.Server.Cache as Cache
+import qualified Distribution.Server.Framework.Cache as Cache
 
 import Distribution.Text
 import Distribution.Package
@@ -45,7 +41,6 @@ import Data.Char (toLower)
 import Control.Monad (mzero, forM_, liftM)
 import Control.Monad.Trans (MonadIO)
 
-import Happstack.Server
 
 data TagsFeature = TagsFeature {
     tagsResource :: TagsResource,

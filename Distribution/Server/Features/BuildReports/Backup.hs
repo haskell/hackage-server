@@ -1,21 +1,21 @@
 {-# LANGUAGE PatternGuards #-}
-module Distribution.Server.BuildReport.Backup (
+module Distribution.Server.Features.BuildReports.Backup (
     reportsBackup,
     buildReportsToExport,
     packageReportsToExport
   ) where
 
 import Distribution.Server.Acid (update)
-import Distribution.Server.BuildReport.BuildReport (BuildReport)
-import qualified Distribution.Server.BuildReport.BuildReport as Report
-import Distribution.Server.BuildReport.BuildReports (BuildReports, PkgBuildReports, BuildReportId(..), BuildLog(..))
-import qualified Distribution.Server.BuildReport.BuildReports as Reports
-import Distribution.Server.BuildReport.State (ReplaceBuildReports(..))
+import Distribution.Server.Features.BuildReports.BuildReport (BuildReport)
+import qualified Distribution.Server.Features.BuildReports.BuildReport as Report
+import Distribution.Server.Features.BuildReports.BuildReports (BuildReports, PkgBuildReports, BuildReportId(..), BuildLog(..))
+import qualified Distribution.Server.Features.BuildReports.BuildReports as Reports
+import Distribution.Server.Features.BuildReports.State (ReplaceBuildReports(..))
 
-import Distribution.Server.Util.BlobStorage (BlobStorage) --BlobId
-import qualified Distribution.Server.Util.BlobStorage as BlobStorage
-import Distribution.Server.Backup.Export
-import Distribution.Server.Backup.Import
+import Distribution.Server.Framework.BlobStorage (BlobStorage)
+import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
+import Distribution.Server.Framework.BackupDump
+import Distribution.Server.Framework.BackupRestore
 
 import Distribution.Package
 import Distribution.Text (display, simpleParse)

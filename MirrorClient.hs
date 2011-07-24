@@ -5,7 +5,7 @@ import Network.HTTP
 import Network.Browser
 import Network.URI (URI(..), URIAuth(..), parseURI, escapeURIString)
 
-import Distribution.Server.Backup.UploadLog as UploadLog (read, Entry(..))
+import Distribution.Server.LegacyImport.UploadLog as UploadLog (read, Entry(..))
 import Distribution.Server.Users.Types (UserId(..), UserName(UserName))
 import Distribution.Server.Util.Index as PackageIndex (read)
 import Distribution.Server.Util.Merge

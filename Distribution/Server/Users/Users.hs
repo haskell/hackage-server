@@ -30,7 +30,7 @@ module Distribution.Server.Users.Users (
   ) where
 
 import Distribution.Server.Users.Types
-import Distribution.Server.Instances ()
+import Distribution.Server.Framework.Instances ()
 
 import Data.Maybe (maybeToList)
 import Data.List (find)

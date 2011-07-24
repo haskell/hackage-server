@@ -22,27 +22,22 @@ module Distribution.Server.Features.Core (
   ) where
 
 import Distribution.Server.Acid (query, update)
-import Distribution.Server.Feature
-import Distribution.Server.Resource
-import Distribution.Server.Types
-import Distribution.Server.Hook
-import Distribution.Server.Error
-import Distribution.Server.Backup.Export
-import Distribution.Server.Instances ()
+import Distribution.Server.Framework
+import Distribution.Server.Framework.BackupDump
 
 import Distribution.Server.Packages.Backup
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.State
 import Distribution.Server.Users.Backup
 import Distribution.Server.Users.State
-import qualified Distribution.Server.Cache as Cache
+import qualified Distribution.Server.Framework.Cache as Cache
 import qualified Distribution.Server.Packages.Index as Packages.Index
 import qualified Codec.Compression.GZip as GZip
-import qualified Distribution.Server.ResourceTypes as Resource
-import qualified Distribution.Server.PackageIndex as PackageIndex
-import Distribution.Server.PackageIndex (PackageIndex)
-import qualified Distribution.Server.Util.BlobStorage as BlobStorage
-import Distribution.Server.Util.BlobStorage (BlobStorage)
+import qualified Distribution.Server.Framework.ResourceTypes as Resource
+import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
+import Distribution.Server.Packages.PackageIndex (PackageIndex)
+import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
+import Distribution.Server.Framework.BlobStorage (BlobStorage)
 
 import Control.Monad (guard, mzero, when)
 import Control.Monad.Trans (MonadIO, liftIO)
@@ -51,7 +46,6 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Monoid (mconcat)
 import Data.Function (fix)
-import Happstack.Server
 import Text.XHtml.Strict (Html, toHtml, unordList, h3, (<<), anchor, href, (!))
 import Data.Ord (comparing)
 import Data.List (sortBy, find)

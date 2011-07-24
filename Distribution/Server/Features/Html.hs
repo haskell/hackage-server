@@ -5,7 +5,7 @@ module Distribution.Server.Features.Html (
 
 
 import Distribution.Server.Acid (query)
-import Distribution.Server.Feature
+import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages
 import Distribution.Server.Features.Upload
@@ -18,25 +18,21 @@ import Distribution.Server.Features.ReverseDependencies
 import Distribution.Server.Features.PackageList
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Mirror
-import Distribution.Server.Types
-import Distribution.Server.Hook
-import Distribution.Server.Error
-import Distribution.Server.Resource
 
-import qualified Distribution.Server.ResourceTypes as Resource
+import qualified Distribution.Server.Framework.ResourceTypes as Resource
 import qualified Distribution.Server.Pages.Package as Pages
 import qualified Distribution.Server.Packages.State as State
 import qualified Distribution.Server.Users.State as State
-import qualified Distribution.Server.Distributions.State as State
+import qualified Distribution.Server.Features.Distro.State as State
 import qualified Distribution.Server.Auth.Basic as Auth
-import qualified Distribution.Server.Cache as Cache
+import qualified Distribution.Server.Framework.Cache as Cache
 
 import Distribution.Server.Users.Types
 import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Users.Users as Users
-import qualified Distribution.Server.PackageIndex as PackageIndex
+import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Users.Group (UserGroup(..))
-import Distribution.Server.Distributions.Distributions (DistroPackageInfo(..))
+import Distribution.Server.Features.Distro.Distributions (DistroPackageInfo(..))
 import Distribution.Server.Packages.Preferred
 import Distribution.Server.Packages.Reverse
 import Distribution.Server.Packages.Tag
@@ -49,7 +45,6 @@ import Text.XHtml.Strict
 import qualified Text.XHtml.Strict as XHtml
 import Text.XHtml.Table (simpleTable)
 
-import Happstack.Server
 import Distribution.Package
 import Distribution.Version
 import Distribution.Text (display)

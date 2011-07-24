@@ -6,7 +6,7 @@
 -- Major version changes may break this module.
 --
 
-module Distribution.Server.Instances () where
+module Distribution.Server.Framework.Instances () where
 
 import Distribution.Text
 

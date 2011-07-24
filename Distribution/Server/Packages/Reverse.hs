@@ -7,8 +7,8 @@ module Distribution.Server.Packages.Reverse where
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.State ()    
 import Distribution.Server.Packages.Preferred
-import Distribution.Server.PackageIndex (PackageIndex)
-import qualified Distribution.Server.PackageIndex as PackageIndex
+import Distribution.Server.Packages.PackageIndex (PackageIndex)
+import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Distribution.Package
 import Distribution.PackageDescription

@@ -11,7 +11,7 @@
 --
 -- Support for reading the upload log of the old hackage server.
 -----------------------------------------------------------------------------
-module Distribution.Server.Backup.UploadLog (
+module Distribution.Server.LegacyImport.UploadLog (
     Entry(..),
     read,
     group,

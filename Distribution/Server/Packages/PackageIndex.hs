@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP, DeriveDataTypeable #-}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Distribution.Server.PackageIndex
+-- Module      :  Distribution.Server.Packages.PackageIndex
 -- Copyright   :  (c) David Himmelstrup 2005,
 --                    Bjorn Bringert 2007,
 --                    Duncan Coutts 2008
@@ -11,7 +11,7 @@
 --
 -- An index of packages.
 --
-module Distribution.Server.PackageIndex (
+module Distribution.Server.Packages.PackageIndex (
     -- * Package index data type
     PackageIndex,
 

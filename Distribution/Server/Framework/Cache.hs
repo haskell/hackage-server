@@ -1,4 +1,4 @@
-module Distribution.Server.Cache (
+module Distribution.Server.Framework.Cache (
     Cache(..),
     newCache,
     newCacheable,

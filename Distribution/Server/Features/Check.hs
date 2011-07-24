@@ -20,11 +20,7 @@ module Distribution.Server.Features.Check (
   ) where
 
 import Distribution.Server.Acid (query, update)
-import Distribution.Server.Feature
-import Distribution.Server.Resource
-import Distribution.Server.Types
-import Distribution.Server.Error
-import Distribution.Server.Hook
+import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages
 import Distribution.Server.Features.Upload
@@ -36,16 +32,15 @@ import Distribution.Server.Users.State (GetUserDb(..))
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
-import qualified Distribution.Server.Util.BlobStorage as BlobStorage
-import Distribution.Server.Util.BlobStorage (BlobStorage)
-import qualified Distribution.Server.PackageIndex as PackageIndex
-import Distribution.Server.PackageIndex (PackageIndex)
-import qualified Distribution.Server.ResourceTypes as Resource
+import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
+import Distribution.Server.Framework.BlobStorage (BlobStorage)
+import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
+import Distribution.Server.Packages.PackageIndex (PackageIndex)
+import qualified Distribution.Server.Framework.ResourceTypes as Resource
 
 import Distribution.Text
 import Distribution.Package
 import Data.Version
-import Happstack.Server
 import Text.XHtml.Strict (unordList, h3, (<<), toHtml)
 import Data.Function (fix)
 import Data.List (find)

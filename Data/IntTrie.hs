@@ -29,7 +29,7 @@ import Data.List hiding (lookup)
 import Data.Function (on)
 import Data.SafeCopy (base, deriveSafeCopy)
 
-import Distribution.Server.Instances()
+import Distribution.Server.Framework.Instances()
 
 -- | A compact mapping from sequences of small ints to small ints.
 --

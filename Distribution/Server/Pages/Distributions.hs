@@ -9,7 +9,7 @@ module Distribution.Server.Pages.Distributions
     where
 
 import Distribution.Server.Pages.Template (hackagePage)
-import Distribution.Server.Distributions.Distributions
+import Distribution.Server.Features.Distro.Distributions
 import Distribution.Server.Users.Types
 import Distribution.Text
 

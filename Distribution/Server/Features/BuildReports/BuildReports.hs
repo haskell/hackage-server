@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
-module Distribution.Server.BuildReport.BuildReports (
+module Distribution.Server.Features.BuildReports.BuildReports (
     BuildReport(..),
     BuildReports(..),
     BuildReportId(..),
@@ -15,14 +15,14 @@ module Distribution.Server.BuildReport.BuildReports (
     unsafeSetReport
   ) where
 
-import qualified Distribution.Server.Util.BlobStorage as BlobStorage
-import qualified Distribution.Server.BuildReport.BuildReport as BuildReport
-import Distribution.Server.BuildReport.BuildReport (BuildReport)
+import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
+import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
+import Distribution.Server.Features.BuildReports.BuildReport (BuildReport)
 
 import Distribution.Package (PackageId)
 import Distribution.Text (Text(..))
 
-import Distribution.Server.Instances ()
+import Distribution.Server.Framework.Instances ()
 
 import Data.Map (Map)
 import qualified Data.Map as Map

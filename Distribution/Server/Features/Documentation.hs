@@ -7,27 +7,22 @@ module Distribution.Server.Features.Documentation (
   ) where
 
 import Distribution.Server.Acid (query, update)
-import Distribution.Server.Feature
-import Distribution.Server.Resource
+import Distribution.Server.Framework
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
-import Distribution.Server.Types
-import Distribution.Server.Error
-import Distribution.Server.Util.Happstack
 
 import Distribution.Server.Packages.State
-import Distribution.Server.Backup.Export
-import Distribution.Server.Backup.Import
-import qualified Distribution.Server.ResourceTypes as Resource
-import Distribution.Server.Util.BlobStorage (BlobId, BlobStorage)
-import qualified Distribution.Server.Util.BlobStorage as BlobStorage
-import qualified Distribution.Server.Util.Serve as TarIndex
+import Distribution.Server.Framework.BackupDump
+import Distribution.Server.Framework.BackupRestore
+import qualified Distribution.Server.Framework.ResourceTypes as Resource
+import Distribution.Server.Framework.BlobStorage (BlobId, BlobStorage)
+import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
+import qualified Distribution.Server.Util.ServeTarball as TarIndex
 import Data.TarIndex (TarIndex)
 
 import Distribution.Text
 import Distribution.Package
 
-import Happstack.Server
 import Data.Function
 import Control.Monad.Trans
 import qualified Data.Map as Map

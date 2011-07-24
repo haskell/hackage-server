@@ -4,7 +4,7 @@ Create a tarball with the structured defined by each individual feature.
 
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Distribution.Server.Backup.Export (
+module Distribution.Server.Framework.BackupDump (
     exportTar,
     ExportEntry,
     readExportBlobs,
@@ -20,10 +20,10 @@ import qualified Data.ByteString.Lazy.Char8 as BSL
 
 import Text.CSV hiding (csv)
 
-import Distribution.Server.Backup.Import (BackupEntry)
-import qualified Distribution.Server.Util.BlobStorage as Blob
+import Distribution.Server.Framework.BackupRestore (BackupEntry)
+import qualified Distribution.Server.Framework.BlobStorage as Blob
 
-import Distribution.Server.Util.BlobStorage
+import Distribution.Server.Framework.BlobStorage
 
 --import Distribution.Text
 

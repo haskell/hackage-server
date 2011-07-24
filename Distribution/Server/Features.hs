@@ -1,33 +1,38 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, TypeOperators, ExistentialQuantification #-}
+{-# LANGUAGE ExistentialQuantification #-}
+
+-- | This module ties together all the hackage features that we will use.
+--
+-- To add a feature:
+--
+-- * Import its initialization function
+-- * Call its initialization function with all of its required arguments
+-- * Add it to the allFeatures list
+--
 module Distribution.Server.Features where
 
-import Distribution.Server.Feature
-import Distribution.Server.Types (Config)
-import Distribution.Server.Features.Core (initCoreFeature)
---import Distribution.Server.Features.Json (initJsonFeature)
-import Distribution.Server.Features.Html (initHtmlFeature)
-import Distribution.Server.Features.Check (initCheckFeature)
-import Distribution.Server.Features.Upload (initUploadFeature)
+import Distribution.Server.Framework.Feature
+import Distribution.Server.Framework.Types (Config)
+
+import Distribution.Server.Features.Core     (initCoreFeature)
+--import Distribution.Server.Features.Json   (initJsonFeature)
+import Distribution.Server.Features.Html     (initHtmlFeature)
+import Distribution.Server.Features.Check    (initCheckFeature)
+import Distribution.Server.Features.Upload   (initUploadFeature)
 import Distribution.Server.Features.Packages (initPackagesFeature)
-import Distribution.Server.Features.Users (initUsersFeature)
-import Distribution.Server.Features.Distro (initDistroFeature)
-import Distribution.Server.Features.Documentation (initDocumentationFeature)
-import Distribution.Server.Features.Reports (initReportsFeature)
-import Distribution.Server.Features.LegacyRedirects (legacyRedirectsFeature)
-import Distribution.Server.Features.PreferredVersions (initVersionsFeature)
+import Distribution.Server.Features.Users    (initUsersFeature)
+import Distribution.Server.Features.Distro   (initDistroFeature)
+import Distribution.Server.Features.Documentation       (initDocumentationFeature)
+import Distribution.Server.Features.BuildReports        (initBuildReportsFeature)
+import Distribution.Server.Features.LegacyRedirects     (legacyRedirectsFeature)
+import Distribution.Server.Features.PreferredVersions   (initVersionsFeature)
 import Distribution.Server.Features.ReverseDependencies (initReverseFeature)
-import Distribution.Server.Features.DownloadCount (initDownloadFeature)
-import Distribution.Server.Features.Tags (initTagsFeature)
-import Distribution.Server.Features.NameSearch (initNamesFeature)
-import Distribution.Server.Features.PackageList (initListFeature)
-import Distribution.Server.Features.Mirror (initMirrorFeature)
+import Distribution.Server.Features.DownloadCount       (initDownloadFeature)
+import Distribution.Server.Features.Tags            (initTagsFeature)
+import Distribution.Server.Features.NameSearch      (initNamesFeature)
+import Distribution.Server.Features.PackageList     (initListFeature)
+import Distribution.Server.Features.Mirror          (initMirrorFeature)
 import Distribution.Server.Features.HaskellPlatform (initPlatformFeature)
 
--- This module ties together all the hackage features that we will use.
--- To add a feature:
--- 1. Import its initialization function
--- 2. Call its initialization function with all of its required arguments
--- 3. Add it to the allFeatures list
 
 -- TODO:
 -- * PackageServe: serving from tarballs (most of the work is setting it up on import)
@@ -41,34 +46,92 @@ import Distribution.Server.Features.HaskellPlatform (initPlatformFeature)
 -- * Backup: would need a [HackageModule] to backup, though a HackageModule itself.
 --     best approach is probably to write backup tarball to disk and transfer
 --     it away through non-HTTP means (somewhat more secure)
+
 hackageFeatures :: Config -> IO [HackageModule]
 hackageFeatures config = do
-    coreFeature <- initCoreFeature config
 
-    -- Arguments denote data dependencies, even if the feature objects are themselves unused,
-    --   functions from their modules are.
+    -- Arguments denote data dependencies, even if the feature objects are
+    -- themselves unused, functions from their modules are.
     -- What follows is a topological sort along those lines
-    usersFeature <- initUsersFeature config coreFeature
-    mirrorFeature <- initMirrorFeature config coreFeature usersFeature
-    uploadFeature <- initUploadFeature config coreFeature usersFeature
-    packagesFeature <- initPackagesFeature config coreFeature
-    distroFeature <- initDistroFeature config coreFeature usersFeature packagesFeature
-    checkFeature <- initCheckFeature config coreFeature usersFeature packagesFeature uploadFeature
-    reportsFeature <- initReportsFeature config coreFeature
-    documentationFeature <- initDocumentationFeature config coreFeature uploadFeature
-    downloadFeature <- initDownloadFeature config coreFeature
-    tagsFeature <- initTagsFeature config coreFeature
-    versionsFeature <- initVersionsFeature config coreFeature uploadFeature tagsFeature
-    reverseFeature <- initReverseFeature config coreFeature versionsFeature
-    namesFeature <- initNamesFeature config coreFeature
-    listFeature <- initListFeature config coreFeature reverseFeature
-                        downloadFeature tagsFeature versionsFeature
-    platformFeature <- initPlatformFeature config coreFeature
-    --jsonFeature <- initJsonFeature
-    htmlFeature <- initHtmlFeature config coreFeature packagesFeature
-                        uploadFeature checkFeature usersFeature versionsFeature
-                        reverseFeature tagsFeature downloadFeature listFeature
-                        namesFeature mirrorFeature
+
+    coreFeature     <- initCoreFeature config
+
+    usersFeature    <- initUsersFeature config
+                         coreFeature
+
+    mirrorFeature   <- initMirrorFeature config
+                         coreFeature
+                         usersFeature
+
+    uploadFeature   <- initUploadFeature config
+                         coreFeature
+                         usersFeature
+
+    packagesFeature <- initPackagesFeature config
+                         coreFeature
+
+    distroFeature   <- initDistroFeature config
+                         coreFeature
+                         usersFeature
+                         packagesFeature
+
+    checkFeature    <- initCheckFeature config
+                         coreFeature
+                         usersFeature
+                         packagesFeature
+                         uploadFeature
+
+    reportsFeature  <- initBuildReportsFeature config
+                         coreFeature
+
+    documentationFeature <- initDocumentationFeature config
+                         coreFeature
+                         uploadFeature
+
+    downloadFeature <- initDownloadFeature config
+                         coreFeature
+
+    tagsFeature     <- initTagsFeature config
+                         coreFeature
+
+    versionsFeature <- initVersionsFeature config
+                         coreFeature
+                         uploadFeature
+                         tagsFeature
+
+    reverseFeature  <- initReverseFeature config
+                         coreFeature
+                         versionsFeature
+
+    namesFeature    <- initNamesFeature config
+                         coreFeature
+
+    listFeature     <- initListFeature config
+                         coreFeature
+                         reverseFeature
+                         downloadFeature
+                         tagsFeature
+                         versionsFeature
+
+    platformFeature <- initPlatformFeature config
+                         coreFeature
+
+    --jsonFeature   <- initJsonFeature
+
+    htmlFeature     <- initHtmlFeature config
+                         coreFeature
+                         packagesFeature
+                         uploadFeature
+                         checkFeature
+                         usersFeature
+                         versionsFeature
+                         reverseFeature
+                         tagsFeature
+                         downloadFeature
+                         listFeature
+                         namesFeature
+                         mirrorFeature
+
     -- The order of initialization above should be the same as
     -- the order of this list.
     let allFeatures =
@@ -89,12 +152,17 @@ hackageFeatures config = do
          , HF listFeature
          , HF platformFeature
          , HF htmlFeature
-         , HF $ legacyRedirectsFeature uploadFeature
+         , HF (legacyRedirectsFeature uploadFeature)
          ]
-    -- Run all initial hooks, now that everyone's gotten a chance to register for them
-    -- This solution is iffy for initial feature hooks that rely on other features
-    -- It also happens even in the backup/restore modes.
-    sequence_ . concat $ map initHooks allFeatures
+
+    -- Run all initial hooks, now that everyone's gotten a chance to register
+    -- for them. This solution is iffy for initial feature hooks that rely on
+    -- other features It also happens even in the backup/restore modes.
+    sequence_
+      [ initHook
+      | feature  <- allFeatures
+      , initHook <- initHooks feature ]
+
     let allModules = map getFeature allFeatures
     -- backupFeature <- initBackupFeature config allModules [special modules..]
     return allModules
@@ -104,6 +172,6 @@ instance HackageFeature HF where
     getFeature (HF a) = getFeature a
     initHooks  (HF a) = initHooks a
 
--- Still using Distribution.Server.State.HackageEntryPoint for the moment for feature state
--- otherwise, a HackageOverallState could be defined that works more closely with HackageFeature
-
+-- Still using Distribution.Server.State.HackageEntryPoint for the moment for
+-- feature state otherwise, a HackageOverallState could be defined that works
+-- more closely with HackageFeature
