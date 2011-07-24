@@ -84,7 +84,7 @@ setHackageAuth forceType = do
         -- the below means that, upon logging in, basic auth will be
         -- required by default. Changing this means migrating (which is
         -- just fine).
-        Nothing -> askBasicAuth authorizationRealm
+        Nothing -> askDigestAuth authorizationRealm
         
 
 -- the UserInfo should belong to the UserId
