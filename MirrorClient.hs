@@ -34,8 +34,6 @@ import System.Directory
 import System.Console.GetOpt
 import qualified System.FilePath.Posix as Posix
 
-import Debug.Trace
-
 
 data MirrorOpts = MirrorOpts {
                     srcURI       :: URI,
@@ -334,6 +332,7 @@ requestPUT uri mimetype body = do
 checkStatus :: URI -> Response ByteString -> HttpSession ()
 checkStatus uri rsp = case rspCode rsp of
   (2,0,0) -> return ()
+  (4,0,0) -> ioAction (warn normal (showFailure uri rsp)) >> return ()
   code    -> err (showFailure uri rsp)
 
 showFailure uri rsp =
