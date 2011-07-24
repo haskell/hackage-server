@@ -93,7 +93,16 @@ initListFeature :: Config -> CoreFeature -> ReverseFeature -> DownloadFeature
 initListFeature _ core revs downs tagf versions = do
     iCache <- Cache.newCache Map.empty id
     iUpdate <- newHook
-    let modifyItem pkgname token = Cache.modifyCache iCache (Map.adjust token pkgname)
+    let modifyItem pkgname token = do
+            hasItem <- fmap (Map.member pkgname) $ Cache.getCache iCache
+            case hasItem of
+                True  -> Cache.modifyCache iCache $ Map.adjust token pkgname
+                False -> do
+                    index <- fmap packageList $ query GetPackagesState
+                    let pkgs = PackageIndex.lookupPackageName index pkgname
+                    case pkgs of
+                        [] -> return () --this shouldn't happen
+                        _  -> Cache.modifyCache iCache . uncurry Map.insert =<< constructItem (last pkgs)
         updateDesc pkgname = do
             index <- fmap packageList $ query GetPackagesState
             let pkgs = PackageIndex.lookupPackageName index pkgname
@@ -133,23 +142,22 @@ initListFeature _ core revs downs tagf versions = do
 constructItemIndex :: IO (Map PackageName PackageItem)
 constructItemIndex = do
     index <- fmap packageList $ query GetPackagesState
-    items <- mapM constructItem $ PackageIndex.allPackagesByName index
+    items <- mapM (constructItem . last) $ PackageIndex.allPackagesByName index
     return $ Map.fromList items
-  where
-    constructItem :: [PkgInfo] -> IO (PackageName, PackageItem)
-    constructItem pkgs = do
-        let pkg = pkgDesc $ last pkgs
-            pkgname = packageName pkg
-        revCount <- query . GetReverseCount $ pkgname
-        tags <- query . TagsForPackage $ pkgname
-        infos <- query . GetDownloadInfo $ pkgname
-        deprs <- query . GetDeprecatedFor $ pkgname
-        return $ (,) pkgname $ (updateDescriptionItem pkg $ emptyPackageItem pkgname) {
-            itemTags = tags,
-            itemDeprecated = deprs,
-            itemDownloads = packageDowns infos,
-            itemRevDepsCount = directReverseCount revCount
-        }
+
+constructItem :: PkgInfo -> IO (PackageName, PackageItem)
+constructItem pkg = do
+    let pkgname = packageName pkg
+    revCount <- query . GetReverseCount $ pkgname
+    tags <- query . TagsForPackage $ pkgname
+    infos <- query . GetDownloadInfo $ pkgname
+    deprs <- query . GetDeprecatedFor $ pkgname
+    return $ (,) pkgname $ (updateDescriptionItem (pkgDesc pkg) $ emptyPackageItem pkgname) {
+        itemTags = tags,
+        itemDeprecated = deprs,
+        itemDownloads = packageDowns infos,
+        itemRevDepsCount = directReverseCount revCount
+    }
 
 updateDescriptionItem :: GenericPackageDescription -> PackageItem -> PackageItem
 updateDescriptionItem genDesc item = 

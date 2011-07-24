@@ -140,9 +140,9 @@ putTags tagf pkgname = withPackageAll pkgname $ \_ -> do
     mtags <- optional $ look "tags"
     case simpleParse =<< mtags of
         Just (TagList tags) -> do
-            let tagSet = Set.fromList tags
             calcTags <- fmap (packageToTags pkgname) $ Cache.getCache $ calculatedTags tagf
-            update $ SetPackageTags pkgname (tagSet `Set.union` calcTags)
+            let tagSet = Set.fromList tags `Set.union` calcTags
+            update $ SetPackageTags pkgname tagSet
             runHook'' (tagsUpdated tagf) (Set.singleton pkgname) tagSet
             return ()
         Nothing -> errBadRequest "Tags not recognized" [MText "Couldn't parse your tag list. It should be comma separated with any number of alphanumerical tags. Tags can also also have -+#*."]
