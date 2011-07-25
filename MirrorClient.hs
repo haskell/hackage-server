@@ -121,8 +121,13 @@ mirrorPackages verbosity opts pkgsToMirror = do
     setAuthorityGen (provideAuthInfo credentials)
 
     sequence_
-      [ do let src     = srcURI   opts <//> "packages" </> display (packageName pkgid) </>
-                                            display (packageVersion pkgid) </>  display pkgid <.> "tar.gz"
+      [ do let srcBasedir
+                 | isOldHackageURI (srcURI opts) = "packages" </> "archive"
+                 | otherwise                     = "packages"
+               srcPkgFile = display (packageName pkgid) </>
+                            display (packageVersion pkgid) </>
+                            display pkgid <.> "tar.gz"
+               src     = srcURI   opts <//> srcBasedir </> srcPkgFile
                dst     = dstURI   opts <//> "package" </> display pkgid
                pkgfile = stateDir opts </>  display pkgid <.> "tar.gz"
 
@@ -180,9 +185,11 @@ downloadIndex :: URI -> FilePath -> HttpSession [PkgMirrorInfo]
 downloadIndex uri | isOldHackageURI uri = downloadOldIndex uri
                   | otherwise           = downloadNewIndex uri
   where
-    isOldHackageURI uri
-      | Just auth <- uriAuthority uri = uriRegName auth == "hackage.haskell.org"
-      | otherwise                     = False
+
+isOldHackageURI :: URI -> Bool
+isOldHackageURI uri
+  | Just auth <- uriAuthority uri = uriRegName auth == "hackage.haskell.org"
+  | otherwise                     = False
 
 
 downloadOldIndex :: URI -> FilePath -> HttpSession [PkgMirrorInfo]
@@ -208,10 +215,10 @@ downloadOldIndex uri cacheFile = do
       return (mergeLogInfo pkgids log)
 
   where
-    indexURI  = uri <//> "00-index.tar.gz"
+    indexURI  = uri <//> "packages" </> "archive" </> "00-index.tar.gz"
     indexFile = cacheFile <.> "tar.gz"
 
-    logURI    = uri <//> "log"
+    logURI    = uri <//> "packages" </> "archive" </> "log"
     logFile   = cacheFile <.> "log"
 
     mergeLogInfo pkgids log =
