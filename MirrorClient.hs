@@ -18,6 +18,8 @@ import Distribution.Simple.Utils
 import Data.List
 import Data.Maybe
 import Control.Monad
+import Control.Applicative
+import Control.Exception
 import Data.Time
 import Data.Time.Clock.POSIX
 import Data.ByteString.Lazy.Char8 (ByteString)
@@ -28,6 +30,7 @@ import qualified Codec.Archive.Tar.Entry as Tar
 
 import System.Environment
 import System.IO
+import System.IO.Error
 import System.Exit
 import System.FilePath
 import System.Directory
@@ -285,8 +288,53 @@ httpSession verbosity action =
 downloadFile :: URI -> FilePath -> HttpSession ()
 downloadFile uri file = do
   out $ "downloading " ++ show uri ++ " to " ++ file
-  content <- requestGET uri
-  ioAction $ BS.writeFile file content
+  let etagFile = file <.> "etag"
+  metag <- ioAction $ catchJustDoesNotExistError
+                        (Just <$> readFile etagFile)
+                        (\_ -> return Nothing)
+  case metag of
+    Just etag -> do
+      let headers = [mkHeader HdrIfNoneMatch (quote etag)]
+      (_, rsp) <- request (Request uri GET headers BS.empty)
+      case rspCode rsp of
+        (3,0,4) -> out $ file ++ " unchanged with ETag " ++ etag
+        (2,0,0) -> ioAction $ writeDowloadedFileAndEtag rsp
+        _       -> err (showFailure uri rsp)
+
+    Nothing -> do
+      (_, rsp) <- request (Request uri GET [] BS.empty)
+      case rspCode rsp of
+        (2,0,0) -> ioAction $ writeDowloadedFileAndEtag rsp
+        _       -> err (showFailure uri rsp)
+
+  where
+    writeDowloadedFileAndEtag rsp = do
+      BS.writeFile file (rspBody rsp)
+      setETag file (unquote <$> findHeader HdrETag rsp)
+
+getETag :: FilePath -> IO (Maybe String)
+getETag file =
+    catchJustDoesNotExistError
+      (Just <$> readFile (file </> ".etag"))
+      (\_ -> return Nothing)
+
+setETag :: FilePath -> Maybe String -> IO ()
+setETag file Nothing     = catchJustDoesNotExistError
+                             (removeFile (file <.> "etag"))
+                             (\_ -> return ())
+setETag file (Just etag) = writeFile  (file <.> "etag") etag
+
+catchJustDoesNotExistError =
+  catchJust (\e -> if isDoesNotExistError e then Just e else Nothing)
+
+quote   s = '"' : s ++ ['"']
+
+unquote ('"':s) = go s
+  where
+    go []       = []
+    go ('"':[]) = []
+    go (c:cs)   = c : go cs
+unquote     s   = s
 
 -- AAARG! total lack of exception handling in HTTP monad!
 downloadFile' :: URI -> FilePath -> HttpSession Bool
