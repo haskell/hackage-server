@@ -1,6 +1,9 @@
 module Distribution.Server.Features.Tags (
-    TagsFeature(..),
+    TagsFeature,
+    tagsResource,
     TagsResource(..),
+    setCalculatedTag,
+    tagsUpdated,
     initTagsFeature,
 
     withTagPath,

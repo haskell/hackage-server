@@ -1,5 +1,6 @@
 module Distribution.Server.Features.Html (
-    HtmlFeature(..),
+    HtmlFeature,
+    htmlResources,
     initHtmlFeature
   ) where
 
@@ -290,9 +291,9 @@ serveUserList users _ = do
 serveUserPage :: UserFeature -> DynamicPath -> ServerPart Response
 serveUserPage users dpath = htmlResponse $ withUserPath dpath $ \uid info -> do
     let uname = userName info
-    uris <- getGroupIndex (groupIndex users) uid
+    uris <- getGroupIndex users uid
     uriPairs <- forM uris $ \uri -> do
-        desc <- getIndexDesc (groupIndex users) uri
+        desc <- getIndexDesc users uri
         return $ Pages.renderGroupName desc (Just uri)
     return $ toResponse $ Resource.XHtml $ hackagePage (display uname)
       [ h2 << display uname

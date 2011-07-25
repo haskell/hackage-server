@@ -1,5 +1,6 @@
 module Distribution.Server.Features.HaskellPlatform (
-    PlatformFeature(..),
+    PlatformFeature,
+    platformResource,
     PlatformResource(..),
     initPlatformFeature,
     platformVersions,

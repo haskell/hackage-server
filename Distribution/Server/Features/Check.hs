@@ -1,5 +1,6 @@
 module Distribution.Server.Features.Check (
-    CheckFeature(..),
+    CheckFeature,
+    checkResource,
     CheckResource(..),    
     initCheckFeature,
 
@@ -13,6 +14,7 @@ module Distribution.Server.Features.Check (
 
     CandidateRender(..),
     doCandidateRender,
+    candidateRender,
 
     withCandidatePath,
     withCandidate,

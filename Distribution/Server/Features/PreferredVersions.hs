@@ -1,6 +1,10 @@
 module Distribution.Server.Features.PreferredVersions (
-    VersionsFeature(..),
+    VersionsFeature,
+    versionsResource,
     VersionsResource(..),
+    deprecatedHook,
+    putPreferred,
+    putDeprecated,
     initVersionsFeature,
 
     PreferredRender(..),
@@ -143,6 +147,7 @@ doPutPreferred f core pkgname =
                     newInfo <- query $ GetPreferredInfo pkgname
                     prefVersions <- makePreferredVersions
                     now <- liftIO getCurrentTime
+                    --FIXME: this is modifying the cache belonging to the Core feature.
                     Cache.modifyCache (indexExtras core) $ Map.insert "preferred-versions" (BS.pack prefVersions, now)
                     runHook'' (preferredHook f) pkgname newInfo
                     runHook (packageIndexChange core)

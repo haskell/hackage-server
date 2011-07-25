@@ -1,5 +1,5 @@
 module Distribution.Server.Features.Json (
-    JsonFeature(..),
+    JsonFeature,
     initJsonFeature
   ) where
 

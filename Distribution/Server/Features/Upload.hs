@@ -1,6 +1,10 @@
 module Distribution.Server.Features.Upload (
-    UploadFeature(..),
+    UploadFeature,
+    uploadResource,
     UploadResource(..),
+    packageMaintainers,
+    canUploadPackage,
+    uploadPackage,
     initUploadFeature,
 
     getPackageGroup,
@@ -87,7 +91,7 @@ initUploadFeature config core users = do
     -- some shared tasks
     let store = serverStore config
         admins = adminGroup users
-    (trustees, trustResource) <- groupResourceAt  (groupIndex users) "/packages/trustees" (getTrusteesGroup [admins])
+    (trustees, trustResource) <- groupResourceAt users "/packages/trustees" (getTrusteesGroup [admins])
 
     groupPkgs <- fmap (Map.keys . maintainers) $ query AllPackageMaintainers
     let getPkgMaintainers dpath =
@@ -96,7 +100,7 @@ initUploadFeature config core users = do
                     Nothing   -> error "Invalid package name"
             in  makeMaintainersGroup [admins, trustees] pkgname
         groupPaths = map (\pkgname -> [("package", display pkgname)]) groupPkgs
-    (pkgGroup, pkgResource) <- groupResourcesAt (groupIndex users)
+    (pkgGroup, pkgResource) <- groupResourcesAt users
         "/package/:package/maintainers" getPkgMaintainers groupPaths
     uploadFilter <- newHook
     registerHook (newPackageHook core) $ \pkg -> do

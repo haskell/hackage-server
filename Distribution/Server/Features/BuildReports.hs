@@ -1,5 +1,6 @@
 module Distribution.Server.Features.BuildReports (
-    ReportsFeature(..),
+    ReportsFeature,
+    reportsResource,
     ReportsResource(..),
     initBuildReportsFeature
   ) where

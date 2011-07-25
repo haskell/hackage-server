@@ -1,7 +1,7 @@
 {-# LANGUAGE PatternGuards #-}
 
 module Distribution.Server.Features.Documentation (
-    DocumentationFeature(..),
+    DocumentationFeature,
     DocumentationResource(..),
     initDocumentationFeature
   ) where

@@ -1,4 +1,17 @@
-module Distribution.Server.Features.Packages where
+module Distribution.Server.Features.Packages (
+    PackagesFeature,
+    packagesResource,
+    PackagesResource(..),
+    initPackagesFeature,
+
+    -- * Package render
+    PackageRender(..),
+    doPackageRender,
+    packageRender,
+
+    -- * Utils
+    categorySplit,
+  ) where
 
 import Distribution.Server.Acid (query)
 import Distribution.Server.Framework

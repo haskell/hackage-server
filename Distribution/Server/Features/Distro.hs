@@ -1,5 +1,7 @@
 module Distribution.Server.Features.Distro (
-    DistroFeature(..),
+    DistroFeature,
+    distroResource,
+    DistroResource(..),
     initDistroFeature
   ) where
 

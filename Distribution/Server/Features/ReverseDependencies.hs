@@ -1,6 +1,8 @@
 module Distribution.Server.Features.ReverseDependencies (
-    ReverseFeature(..),
+    ReverseFeature,
+    reverseResource,
     ReverseResource(..),
+    reverseUpdateHook,
     initReverseFeature,
     ReverseRender(..),
     ReversePageRender(..),

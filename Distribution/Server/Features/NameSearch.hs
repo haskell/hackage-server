@@ -1,5 +1,6 @@
 module Distribution.Server.Features.NameSearch (
-    NamesFeature(..),
+    NamesFeature,
+    namesResource,
     NamesResource(..),
     initNamesFeature,
     packageFindWith,

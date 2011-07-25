@@ -1,5 +1,10 @@
+{-# LANGUAGE DoRec #-}
 module Distribution.Server.Features.Users (
-    UserFeature(..),
+    UserFeature,
+    userResource,
+    adminGroup,
+    groupAddUser,
+    groupDeleteUser,
     UserResource(..),
     initUsersFeature,
     withUserNamePath,
@@ -99,28 +104,29 @@ initUsersFeature _ _ = do
     addHook <- newHook
     mutateFilter <- newHook
     groupCache <- Cache.newCache emptyGroupIndex id
-    (adminG, adminR) <- groupResourceAt groupCache "/users/admins/" adminGroupDesc
-    return $ UserFeature
-      { userResource = fix $ \r -> UserResource
-          { userList = resourceAt "/users/.:format"
-          , userPage = resourceAt "/user/:username.:format"
-          , passwordResource = resourceAt "/user/:username/password.:format"
-          , enabledResource = resourceAt "/user/:username/enabled.:format"
-          , adminResource = adminR
+    rec (adminG, adminR) <- groupResourceAt users "/users/admins/" adminGroupDesc
+        let users = UserFeature
+              { userResource = fix $ \r -> UserResource
+                  { userList = resourceAt "/users/.:format"
+                  , userPage = resourceAt "/user/:username.:format"
+                  , passwordResource = resourceAt "/user/:username/password.:format"
+                  , enabledResource = resourceAt "/user/:username/enabled.:format"
+                  , adminResource = adminR
 
-          , userListUri = \format -> renderResource (userList r) [format]
-          , userPageUri = \format uname -> renderResource (userPage r) [display uname, format]
-          , userPasswordUri = \format uname -> renderResource (passwordResource r) [display uname, format]
-          , userEnabledUri  = \format uname -> renderResource (enabledResource  r) [display uname, format]
-          , adminPageUri = \format -> renderResource (groupResource $ adminResource r) [format]
-          }
-      , userAdded = addHook
-      , groupAddUser = doGroupAddUser
-      , groupDeleteUser = doGroupDeleteUser
-      , groupIndex = groupCache
-      , adminGroup = adminG
-      , packageMutate = mutateFilter
-      }
+                  , userListUri = \format -> renderResource (userList r) [format]
+                  , userPageUri = \format uname -> renderResource (userPage r) [display uname, format]
+                  , userPasswordUri = \format uname -> renderResource (passwordResource r) [display uname, format]
+                  , userEnabledUri  = \format uname -> renderResource (enabledResource  r) [display uname, format]
+                  , adminPageUri = \format -> renderResource (groupResource $ adminResource r) [format]
+                  }
+              , userAdded = addHook
+              , groupAddUser = doGroupAddUser
+              , groupDeleteUser = doGroupDeleteUser
+              , groupIndex = groupCache
+              , adminGroup = adminG
+              , packageMutate = mutateFilter
+              }
+    return users
 
 {- result: see-other for user page or authentication error
 requireAuth :: ServerPartE Response
@@ -335,21 +341,21 @@ emptyGroupIndex = GroupIndex IntMap.empty Map.empty
 -- contain any dynamic or varying components. It returns the GroupResource
 -- object, and also an adapted UserGroup that updates the cache. You should
 -- use this in order to keep the index updated.
-groupResourceAt :: Cache.Cache GroupIndex -> String -> UserGroup -> IO (UserGroup, GroupResource)
+groupResourceAt :: UserFeature -> String -> UserGroup -> IO (UserGroup, GroupResource)
 groupResourceAt users uri group = do
     let mainr = resourceAt uri
         descr = groupDesc group
         groupUri = renderResource mainr []
         group' = group
           { addUserList = \uid -> do
-                addGroupIndex users uid groupUri descr
+                addGroupIndex (groupIndex users) uid groupUri descr
                 addUserList group uid
           , removeUserList = \uid -> do
-                removeGroupIndex users uid groupUri
+                removeGroupIndex (groupIndex users) uid groupUri
                 removeUserList group uid
           }
     ulist <- queryUserList group
-    initGroupIndex users ulist groupUri descr
+    initGroupIndex (groupIndex users) ulist groupUri descr
     return $ (,) group' $ GroupResource
       { groupResource = extendResourcePath "/.:format" mainr
       , groupUserResource = extendResourcePath "/user/:username.:format" mainr
@@ -363,7 +369,7 @@ groupResourceAt users uri group = do
 -- DynamicPath, yields the proper UserGroup. The final argument is the initial
 -- list of DynamicPaths to build the initial group index. Like groupResourceAt,
 -- this function returns an adaptor function that keeps the index updated.
-groupResourcesAt :: Cache.Cache GroupIndex -> String
+groupResourcesAt :: UserFeature -> String
                  -> GroupGen -> [DynamicPath]
                  -> IO (GroupGen, GroupResource)
 groupResourcesAt users uri groupGen dpaths = do
@@ -374,15 +380,15 @@ groupResourcesAt users uri groupGen dpaths = do
             case exists of
                 False -> return ()
                 True  -> queryUserList group >>= \ulist ->
-                    initGroupIndex users ulist (renderResource' mainr genpath) (groupDesc group)
+                    initGroupIndex (groupIndex users) ulist (renderResource' mainr genpath) (groupDesc group)
         getGroupFunc dpath =
             let group = groupGen dpath
             in  group
               { addUserList = \uid -> do
-                    addGroupIndex users uid (renderResource' mainr dpath) (groupDesc group)
+                    addGroupIndex (groupIndex users) uid (renderResource' mainr dpath) (groupDesc group)
                     addUserList group uid
               , removeUserList = \uid -> do
-                    removeGroupIndex users uid (renderResource' mainr dpath)
+                    removeGroupIndex (groupIndex users) uid (renderResource' mainr dpath)
                     addUserList group uid
               }
     mapM_ collectUserList dpaths
@@ -413,11 +419,11 @@ initGroupIndex users ulist uri desc =
         (Map.insert uri desc)
   where mkEntry (UserId uid) = (uid, Set.singleton uri)
 
-getGroupIndex :: (Functor m, MonadIO m) => Cache.Cache GroupIndex -> UserId -> m [String]
-getGroupIndex users (UserId uid) = liftM (maybe [] Set.toList . IntMap.lookup uid . usersToGroupUri) $ Cache.getCache users
+getGroupIndex :: (Functor m, MonadIO m) => UserFeature -> UserId -> m [String]
+getGroupIndex users (UserId uid) = liftM (maybe [] Set.toList . IntMap.lookup uid . usersToGroupUri) $ Cache.getCache (groupIndex users)
 
-getIndexDesc :: MonadIO m => Cache.Cache GroupIndex -> String -> m GroupDescription
-getIndexDesc users uri = liftM (Map.findWithDefault nullDescription uri . groupUrisToDesc) $ Cache.getCache users
+getIndexDesc :: MonadIO m => UserFeature -> String -> m GroupDescription
+getIndexDesc users uri = liftM (Map.findWithDefault nullDescription uri . groupUrisToDesc) $ Cache.getCache (groupIndex users)
 
 -- partitioning index modifications, a cheap combinator
 adjustGroupIndex :: (IntMap (Set String) -> IntMap (Set String))

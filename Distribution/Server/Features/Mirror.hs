@@ -1,5 +1,6 @@
 module Distribution.Server.Features.Mirror (
-    MirrorFeature(..),
+    MirrorFeature,
+    mirrorResource,
     MirrorResource(..),
     initMirrorFeature
   ) where
@@ -67,7 +68,7 @@ initMirrorFeature config core users = do
             canRemoveGroup = [adminGroup users],
             canAddGroup = [adminGroup users]
         }
-    (mirrorers', mirrorR) <- groupResourceAt (groupIndex users) "/packages/mirrorers" mirrorers
+    (mirrorers', mirrorR) <- groupResourceAt users "/packages/mirrorers" mirrorers
     return MirrorFeature
       { mirrorResource = MirrorResource
           { mirrorPackageTarball = (extendResource $ corePackageTarball coreR) {

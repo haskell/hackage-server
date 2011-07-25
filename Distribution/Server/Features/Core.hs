@@ -1,6 +1,8 @@
 module Distribution.Server.Features.Core (
-    CoreFeature(..),
+    CoreFeature,
+    coreResource,
     CoreResource(..),
+    indexExtras, --FIXME: this is internal state and should not be exported.
     initCoreFeature,
     basicPackageSection,
 
@@ -18,7 +20,16 @@ module Distribution.Server.Features.Core (
     packageIdExists,
     doDeletePackage,
     doAddPackage,
-    doMergePackage
+    doMergePackage,
+
+    -- * Hooks
+    packageAddHook,
+    packageRemoveHook,
+    packageChangeHook,
+    packageIndexChange,
+    newPackageHook,
+    noPackageHook,
+    tarballDownload,
   ) where
 
 import Distribution.Server.Acid (query, update)

@@ -1,5 +1,6 @@
 module Distribution.Server.Features.PackageList (
-    ListFeature(..),
+    ListFeature,
+    itemUpdate,
     initListFeature,
     PackageItem(..),
     makeItemList,
@@ -126,7 +127,7 @@ initListFeature _ core revs downs tagf versions = do
         modifyItem pkgname (updateDeprecation mpkgs)
         runHook' (iUpdate) $ Set.singleton pkgname
     let updateDownloads = do
-            hist <- Cache.getCache $ downloadHistogram downs
+            hist <- getDownloadHistogram downs
             Cache.modifyCache iCache $ Map.mapWithKey (\pkg item -> updateDownload (getCount hist pkg) item)
             -- Say all packages were updated here (detecting this is more laborious)
             mainMap <- Cache.getCache iCache

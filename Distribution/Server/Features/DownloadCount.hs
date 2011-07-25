@@ -1,4 +1,12 @@
-module Distribution.Server.Features.DownloadCount where
+module Distribution.Server.Features.DownloadCount (
+    DownloadFeature,
+    downloadResource,
+    DownloadResource(..),
+    getDownloadHistogram,
+    initDownloadFeature,
+    perVersionDownloads,
+    sortedPackages,
+  ) where
 
 import Distribution.Server.Acid (query, update)
 import Distribution.Server.Framework
@@ -62,6 +70,9 @@ initDownloadFeature _ core = do
       , downloadStream = downChan
       , downloadHistogram = downHist
       }
+
+getDownloadHistogram :: DownloadFeature -> IO (Histogram PackageName)
+getDownloadHistogram = Cache.getCache . downloadHistogram
 
 totalDownloadCount :: MonadIO m => m Int
 totalDownloadCount = liftM totalDownloads $ query GetDownloadCounts
