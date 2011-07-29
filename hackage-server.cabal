@@ -147,7 +147,6 @@ executable hackage-server
     csv == 0.1.*,
     happstack-util   == 6.0.*,
     happstack-server == 6.1.*,
-    uri == 0.1.*
   build-tools:
     alex == 2.3.*,
     happy == 1.18.*
@@ -179,7 +178,6 @@ executable hackage-mirror
     network >= 2.1,
     Cabal == 1.10.*,
     happstack-server == 6.1.*,
-    uri == 0.1.*
 
   if os(linux)
      extra-libraries: crypt

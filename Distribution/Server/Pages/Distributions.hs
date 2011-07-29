@@ -19,8 +19,6 @@ import qualified Happstack.Server.SURI as SURI
 import System.FilePath.Posix
 import Text.XHtml.Strict
 
-import Text.URI (escapeString, okInPath)
-
 -- | List of known distributions
 homePage :: [DistroName] -> Html
 homePage = hackagePage "Distributions" . listing "/distro"
