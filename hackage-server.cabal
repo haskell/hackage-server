@@ -40,6 +40,7 @@ executable hackage-server
     Distribution.Server.Auth.Crypt
     Distribution.Server.Auth.HtPasswdDb
     Distribution.Server.Auth.Types
+    Distribution.Server.Framework
     Distribution.Server.Framework.BlobStorage
     Distribution.Server.Framework.Cache
     Distribution.Server.Framework.Error
