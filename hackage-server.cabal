@@ -28,6 +28,10 @@ source-repository head
   type: darcs
   location: http://code.haskell.org/hackage-server/
 
+flag minimal
+  default: False
+  description: Include only the minimum feature set.
+
 executable hackage-server
   main-is: Main.hs
   other-modules:
@@ -54,31 +58,6 @@ executable hackage-server
     Distribution.Server.LegacyImport.BulkImport
     Distribution.Server.LegacyImport.UploadLog
     Distribution.Server.Features
-    Distribution.Server.Features.BuildReports
-    Distribution.Server.Features.BuildReports.BuildReport
-    Distribution.Server.Features.BuildReports.BuildReports
-    Distribution.Server.Features.BuildReports.Backup
-    Distribution.Server.Features.BuildReports.State
-    Distribution.Server.Features.Check
-    Distribution.Server.Features.Core
-    Distribution.Server.Features.Distro
-    Distribution.Server.Features.Distro.Distributions
-    Distribution.Server.Features.Distro.Backup
-    Distribution.Server.Features.Distro.State
-    Distribution.Server.Features.Distro.Types
-    Distribution.Server.Features.Documentation
-    Distribution.Server.Features.DownloadCount
-    Distribution.Server.Features.Html
-    Distribution.Server.Features.Json
-    Distribution.Server.Features.LegacyRedirects
-    Distribution.Server.Features.Mirror
-    Distribution.Server.Features.NameSearch
-    Distribution.Server.Features.Packages
-    Distribution.Server.Features.PreferredVersions
-    Distribution.Server.Features.ReverseDependencies
-    Distribution.Server.Features.Tags
-    Distribution.Server.Features.Upload
-    Distribution.Server.Features.Users
     Distribution.Server.Packages.Downloads
     Distribution.Server.Packages.Index
     Distribution.Server.Packages.ModuleForest
@@ -117,6 +96,37 @@ executable hackage-server
     Distribution.Server.Util.TarIndex
     Distribution.Server.Util.TextSearch
 
+    Distribution.Server.Features.Core
+    Distribution.Server.Features.Mirror
+    Distribution.Server.Features.Upload
+    Distribution.Server.Features.Users
+
+  if flag(minimal)
+    cpp-options: -DMINIMAL
+  else
+    other-modules:
+      Distribution.Server.Features.LegacyRedirects
+      Distribution.Server.Features.BuildReports
+      Distribution.Server.Features.BuildReports.BuildReport
+      Distribution.Server.Features.BuildReports.BuildReports
+      Distribution.Server.Features.BuildReports.Backup
+      Distribution.Server.Features.BuildReports.State
+      Distribution.Server.Features.Check
+      Distribution.Server.Features.Distro
+      Distribution.Server.Features.Distro.Distributions
+      Distribution.Server.Features.Distro.Backup
+      Distribution.Server.Features.Distro.State
+      Distribution.Server.Features.Distro.Types
+      Distribution.Server.Features.Documentation
+      Distribution.Server.Features.DownloadCount
+      Distribution.Server.Features.Html
+      Distribution.Server.Features.Json
+      Distribution.Server.Features.NameSearch
+      Distribution.Server.Features.Packages
+      Distribution.Server.Features.PreferredVersions
+      Distribution.Server.Features.ReverseDependencies
+      Distribution.Server.Features.Tags
+
   build-depends:
     base       == 4.*,
     filepath   >= 1.1,
@@ -151,6 +161,10 @@ executable hackage-server
     acid-state == 0.4.*,
     happstack-server == 6.1.*,
     happstack-util   == 6.0.*
+
+  if ! flag(minimal)
+    build-depends:
+      stringsearch == 0.3.*
 
   build-tools:
     alex       == 2.2.* || == 2.3.*,

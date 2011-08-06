@@ -1,4 +1,4 @@
-{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE CPP, ExistentialQuantification #-}
 
 -- | This module ties together all the hackage features that we will use.
 --
@@ -14,12 +14,14 @@ import Distribution.Server.Framework.Feature
 import Distribution.Server.Framework.Types (Config)
 
 import Distribution.Server.Features.Core     (initCoreFeature)
---import Distribution.Server.Features.Json   (initJsonFeature)
+import Distribution.Server.Features.Users    (initUsersFeature)
+import Distribution.Server.Features.Upload   (initUploadFeature)
+import Distribution.Server.Features.Mirror   (initMirrorFeature)
+
+#ifndef MINIMAL
 import Distribution.Server.Features.Html     (initHtmlFeature)
 import Distribution.Server.Features.Check    (initCheckFeature)
-import Distribution.Server.Features.Upload   (initUploadFeature)
 import Distribution.Server.Features.Packages (initPackagesFeature)
-import Distribution.Server.Features.Users    (initUsersFeature)
 import Distribution.Server.Features.Distro   (initDistroFeature)
 import Distribution.Server.Features.Documentation       (initDocumentationFeature)
 import Distribution.Server.Features.BuildReports        (initBuildReportsFeature)
@@ -30,9 +32,8 @@ import Distribution.Server.Features.DownloadCount       (initDownloadFeature)
 import Distribution.Server.Features.Tags            (initTagsFeature)
 import Distribution.Server.Features.NameSearch      (initNamesFeature)
 import Distribution.Server.Features.PackageList     (initListFeature)
-import Distribution.Server.Features.Mirror          (initMirrorFeature)
 import Distribution.Server.Features.HaskellPlatform (initPlatformFeature)
-
+#endif
 
 -- TODO:
 -- * PackageServe: serving from tarballs (most of the work is setting it up on import)
@@ -67,6 +68,7 @@ hackageFeatures config = do
                          coreFeature
                          usersFeature
 
+#ifndef MINIMAL
     packagesFeature <- initPackagesFeature config
                          coreFeature
 
@@ -131,6 +133,7 @@ hackageFeatures config = do
                          listFeature
                          namesFeature
                          mirrorFeature
+#endif
 
     -- The order of initialization above should be the same as
     -- the order of this list.
@@ -138,8 +141,9 @@ hackageFeatures config = do
          [ HF coreFeature
          , HF usersFeature
          , HF mirrorFeature
-         , HF packagesFeature
          , HF uploadFeature
+#ifndef MINIMAL
+         , HF packagesFeature
          , HF distroFeature
          , HF checkFeature
          , HF reportsFeature
@@ -153,6 +157,7 @@ hackageFeatures config = do
          , HF platformFeature
          , HF htmlFeature
          , HF (legacyRedirectsFeature uploadFeature)
+#endif
          ]
 
     -- Run all initial hooks, now that everyone's gotten a chance to register
