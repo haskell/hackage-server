@@ -94,7 +94,7 @@ defaultServerConfig = do
 
 data Server = Server {
   serverAcid      :: Acid,
-  serverFeatures  :: [Feature.HackageModule],
+  serverFeatures  :: [HackageFeature],
   serverPort      :: Int,
   serverEnv       :: ServerEnv
 }
@@ -279,7 +279,7 @@ exportServerTar server = exportTar (makeFeatureMap server Feature.dumpBackup)
 importServerTar :: Server -> ByteString -> IO (Maybe String)
 importServerTar server tar = Import.importTar tar (makeFeatureMap server Feature.restoreBackup)
 
-makeFeatureMap :: Server -> (Feature.HackageModule -> Maybe (BlobStorage -> a)) -> [(String, a)]
+makeFeatureMap :: Server -> (HackageFeature -> Maybe (BlobStorage -> a)) -> [(String, a)]
 makeFeatureMap server mkBackup = concatMap makeEntry $ serverFeatures server
   where 
     store = serverBlobStore (serverEnv server)
@@ -315,7 +315,7 @@ impl server =
     -- ServerTree Resource
     . foldl' (\acc res -> addServerNode (resourceLocation res) res acc) serverTreeEmpty
     -- [Resource]
-    $ concatMap Feature.resources (serverFeatures server)
+    $ concatMap Feature.featureResources (serverFeatures server)
 -- where showServerTree tree = trace (drawServerTree tree (Just $ show . resourceMethods)) tree
 
 data TempServer = TempServer ThreadId

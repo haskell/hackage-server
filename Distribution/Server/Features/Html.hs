@@ -73,12 +73,9 @@ data HtmlFeature = HtmlFeature {
     generateCaches :: IO ()
 }
 
-instance HackageFeature HtmlFeature where
-    getFeature html = HackageModule
-      { featureName = "html"
-      , resources   = htmlResources html
-      , dumpBackup    = Nothing
-      , restoreBackup = Nothing
+instance IsHackageFeature HtmlFeature where
+    getFeatureInterface html = (emptyHackageFeature "html") {
+        featureResources = htmlResources html
       }
     initHooks html = [generateCaches html]
 

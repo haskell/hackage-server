@@ -44,10 +44,9 @@ data DocumentationResource = DocumentationResource {
     packageDocUri :: PackageId -> String -> String
 }
 
-instance HackageFeature DocumentationFeature where
-    getFeature docs = HackageModule
-      { featureName = "documentation"
-      , resources   = map ($documentationResource docs) [packageDocs, packageDocTar, packageDocsUpload]
+instance IsHackageFeature DocumentationFeature where
+    getFeatureInterface docs = (emptyHackageFeature "documentation") {
+        featureResources = map ($documentationResource docs) [packageDocs, packageDocTar, packageDocsUpload]
       , dumpBackup    = Just $ \storage -> do
             doc <- query GetDocumentation
             let exportFunc (pkgid, (blob, _)) = ([display pkgid, "documentation.tar"], Right blob)

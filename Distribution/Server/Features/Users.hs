@@ -88,10 +88,9 @@ data UserResource = UserResource {
     adminPageUri :: String -> String
 }
 
-instance HackageFeature UserFeature where
-    getFeature userf = HackageModule
-      { featureName = "users"
-      , resources   = map ($userResource userf)
+instance IsHackageFeature UserFeature where
+    getFeatureInterface userf = (emptyHackageFeature "users") {
+        featureResources = map ($userResource userf)
             [userList, userPage, passwordResource, enabledResource,
              groupResource . adminResource, groupUserResource . adminResource]
       , dumpBackup    = Nothing

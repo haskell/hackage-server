@@ -72,13 +72,8 @@ data PackageItem = PackageItem {
 emptyPackageItem :: PackageName -> PackageItem
 emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" 0 0 False 0
 
-instance HackageFeature ListFeature where
-    getFeature _ = HackageModule
-      { featureName = "list"
-      , resources   = []
-      , dumpBackup    = Nothing
-      , restoreBackup = Nothing
-      }
+instance IsHackageFeature ListFeature where
+    getFeatureInterface _ = emptyHackageFeature "list"
     initHooks listf = [itemsCache, forkIO periodicDownloadRefresh >> return ()]
       where itemsCache = do
                 items <- constructItemIndex

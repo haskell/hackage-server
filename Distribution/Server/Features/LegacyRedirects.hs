@@ -23,13 +23,10 @@ import Control.Monad (msum, mzero)
 -- | A feature to provide redirection for URLs that existed in the first
 -- incarnation of the hackage server.
 --
-legacyRedirectsFeature :: UploadFeature -> HackageModule
-legacyRedirectsFeature upload = HackageModule {
-    featureName = "legacy",
+legacyRedirectsFeature :: UploadFeature -> HackageFeature
+legacyRedirectsFeature upload = (emptyHackageFeature "legacy") {
     -- get rid of trailing resource and manually create a mapping?
-    resources   = [(resourceAt "/..") { resourceGet = [("", \_ -> serveLegacyGets)], resourcePost = [("", \_ -> serveLegacyPosts upload)] }],
-    dumpBackup    = Nothing,
-    restoreBackup = Nothing
+    featureResources = [(resourceAt "/..") { resourceGet = [("", \_ -> serveLegacyGets)], resourcePost = [("", \_ -> serveLegacyPosts upload)] }]
 }
 
 -- | Support for the old URL scheme from the first version of hackage.

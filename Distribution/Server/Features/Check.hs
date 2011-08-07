@@ -86,12 +86,9 @@ data CheckResource = CheckResource {
 -- candidates can be published at any time; there can be multiple candidates per package
 -- they can be deleted, but it's not required
 
-instance HackageFeature CheckFeature where
-    getFeature check = HackageModule
-      { featureName = "check"
-      , resources   = map ($checkResource check) [candidatesPage, candidatePage, publishPage, candidateCabal, candidateTarball]
-      , dumpBackup    = Nothing
-      , restoreBackup = Nothing
+instance IsHackageFeature CheckFeature where
+    getFeatureInterface check = (emptyHackageFeature "check") {
+        featureResources = map ($checkResource check) [candidatesPage, candidatePage, publishPage, candidateCabal, candidateTarball]
       }
 
 -- URI generation (string-based), using maps; user groups

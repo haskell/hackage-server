@@ -70,10 +70,9 @@ data UploadResult = UploadResult {
     uploadWarnings :: ![String]
 }
 
-instance HackageFeature UploadFeature where
-    getFeature upload = HackageModule
-      { featureName = "upload"
-      , resources   = map ($uploadResource upload)
+instance IsHackageFeature UploadFeature where
+    getFeatureInterface upload = (emptyHackageFeature "upload") {
+        featureResources = map ($uploadResource upload)
             [uploadIndexPage,
              groupResource . packageGroupResource, groupUserResource . packageGroupResource,
              groupResource . trusteeResource, groupUserResource . trusteeResource]

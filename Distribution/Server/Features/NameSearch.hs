@@ -45,12 +45,9 @@ data NamesResource = NamesResource {
     suggestPackageResource :: Resource
 }
 
-instance HackageFeature NamesFeature where
-    getFeature names = HackageModule
-      { featureName = "names"
-      , resources   = map ($namesResource names) [openSearchXml, findPackageResource, suggestPackageResource]
-      , dumpBackup    = Nothing
-      , restoreBackup = Nothing
+instance IsHackageFeature NamesFeature where
+    getFeatureInterface names = (emptyHackageFeature "names") {
+        featureResources = map ($namesResource names) [openSearchXml, findPackageResource, suggestPackageResource]
       }
     initHooks names = [regenerateIndices names]
 

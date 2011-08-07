@@ -112,10 +112,9 @@ data CoreResource = CoreResource {
     coreTarballUri :: PackageId -> String
 }
 
-instance HackageFeature CoreFeature where
-    getFeature core = HackageModule
-      { featureName = "core"
-      , resources   = map ($coreResource core)
+instance IsHackageFeature CoreFeature where
+    getFeatureInterface core = (emptyHackageFeature "core") {
+        featureResources = map ($coreResource core)
           [ coreIndexPage, coreIndexTarball, corePackagesPage, corePackagePage
           , corePackageRedirect, corePackageTarball, coreCabalFile ]
       , dumpBackup = Just $ \store -> do

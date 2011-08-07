@@ -63,12 +63,9 @@ data PackagesResource = PackagesResource {
     packagesRecent :: Resource
 }
 
-instance HackageFeature PackagesFeature where
-    getFeature pkgs = HackageModule
-      { featureName = "packages"
-      , resources   = map ($packagesResource pkgs) [packagesRecent]
-      , dumpBackup    = Nothing
-      , restoreBackup = Nothing
+instance IsHackageFeature PackagesFeature where
+    getFeatureInterface pkgs = (emptyHackageFeature "packages") {
+        featureResources = map ($packagesResource pkgs) [packagesRecent]
       }
 
 initPackagesFeature :: ServerEnv -> CoreFeature -> IO PackagesFeature

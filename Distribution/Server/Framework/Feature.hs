@@ -1,34 +1,47 @@
+-- | This module defines a plugin interface for hackage features.
+--
 module Distribution.Server.Framework.Feature where
 
 import Distribution.Server.Framework.BackupRestore (RestoreBackup, BackupEntry)
 import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import Distribution.Server.Framework.Resource
 
--- This module defines a plugin interface for hackage features.
---
--- We compose the overall hackage server featureset from a bunch of these
+-- | We compose the overall hackage server featureset from a bunch of these
 -- features. The intention is to make the hackage server reasonably modular
 -- by allowing distinct features to be designed independently.
-data HackageModule = HackageModule {
-    featureName   :: String,
-    resources     :: [Resource],
+--
+-- Features can hold their own canonical state and caches, and can provide a
+-- set of resources.
+--
+data HackageFeature = HackageFeature {
+    featureName        :: String,
+    featureResources   :: [Resource],
     dumpBackup    :: Maybe (BlobStorage -> IO [BackupEntry]),
     restoreBackup :: Maybe (BlobStorage -> RestoreBackup)
 }
 
--- A type belonging to the HackageFeature class is a data structure from which
--- a HackageModule can be created. These data structures are initialized manually
--- in Features.hs, possibly depending on each other to register for hooks, construct
--- URIs, and (maybe in the future) retrieve or encapsulate TxControl handles.
+-- | A feature with no state and no resources, just a name.
+-- 
+-- Define your new feature by extending this one, e.g.
 --
--- With this class, they are combined into homogenous list of HackageModules
--- used by the Server data structure.
-class HackageFeature a where
-    getFeature :: a -> HackageModule
-    initHooks  :: a -> [IO ()]
+-- > myHackageFeature = emptyHackageFeature "wizzo" {
+-- >     featureResources = [wizzo]
+-- >   }
+--
+emptyHackageFeature :: String -> HackageFeature
+emptyHackageFeature name = HackageFeature {
+    featureName        = name,
+    featureResources   = [],
+
+    dumpBackup    = Nothing,
+    restoreBackup = Nothing
+  }
+
+class IsHackageFeature feature where
+    getFeatureInterface :: feature -> HackageFeature
+    initHooks  :: feature -> [IO ()]
     initHooks _ = []
 
 -- degenerate
-instance HackageFeature HackageModule where
-    getFeature = id
-
+instance IsHackageFeature HackageFeature where
+    getFeatureInterface = id

@@ -39,10 +39,9 @@ data DownloadResource = DownloadResource {
     topDownloads :: Resource
 }
 
-instance HackageFeature DownloadFeature where
-    getFeature download = HackageModule
-      { featureName = "download"
-      , resources   = map (\x -> x $ downloadResource download) [topDownloads]
+instance IsHackageFeature DownloadFeature where
+    getFeatureInterface download = (emptyHackageFeature "download") {
+        featureResources = map (\x -> x $ downloadResource download) [topDownloads]
       , dumpBackup    = Nothing -- TODO
       , restoreBackup = Nothing
       }

@@ -40,10 +40,9 @@ data PlatformResource = PlatformResource {
     platformPackagesUri :: String -> String
 }
 
-instance HackageFeature PlatformFeature where
-    getFeature platform = HackageModule
-      { featureName = "platform"
-      , resources   = map ($platformResource platform) [platformPackage, platformPackages]
+instance IsHackageFeature PlatformFeature where
+    getFeatureInterface platform = (emptyHackageFeature "platform") {
+        featureResources = map ($platformResource platform) [platformPackage, platformPackages]
       , dumpBackup    = Nothing -- TODO
       , restoreBackup = Nothing
       }

@@ -43,11 +43,11 @@ import Distribution.Server.Features.HaskellPlatform (initPlatformFeature)
 -- * alter Users to be more in line with the current way registering is handled,
 --     with email addresses available to maintainers, etc.
 -- * UserNotify: email users and let them email each other
--- * Backup: would need a [HackageModule] to backup, though a HackageModule itself.
+-- * Backup: would need a [HackageFeature] to backup, though a HackageFeature itself.
 --     best approach is probably to write backup tarball to disk and transfer
 --     it away through non-HTTP means (somewhat more secure)
 
-hackageFeatures :: ServerEnv -> IO [HackageModule]
+hackageFeatures :: ServerEnv -> IO [HackageFeature]
 hackageFeatures env = do
 
     -- Arguments denote data dependencies, even if the feature objects are
@@ -167,13 +167,13 @@ hackageFeatures env = do
       | feature  <- allFeatures
       , initHook <- initHooks feature ]
 
-    let allModules = map getFeature allFeatures
+    let allModules = map getFeatureInterface allFeatures
     -- backupFeature <- initBackupFeature config allModules [special modules..]
     return allModules
 
-data HF = forall a. HackageFeature a => HF a
-instance HackageFeature HF where
-    getFeature (HF a) = getFeature a
+data HF = forall a. IsHackageFeature a => HF a
+instance IsHackageFeature HF where
+    getFeatureInterface (HF a) = getFeatureInterface a
     initHooks  (HF a) = initHooks a
 
 -- Still using Distribution.Server.State.HackageEntryPoint for the moment for

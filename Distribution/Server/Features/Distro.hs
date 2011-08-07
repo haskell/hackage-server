@@ -41,10 +41,9 @@ data DistroResource = DistroResource {
     distroPackage   :: Resource
 }
 
-instance HackageFeature DistroFeature where
-    getFeature distro = HackageModule
-      { featureName = "distro"
-      , resources   = map ($distroResource distro) [distroIndexPage, distroAllPage, distroPackage]
+instance IsHackageFeature DistroFeature where
+    getFeatureInterface distro = (emptyHackageFeature "distro") {
+        featureResources = map ($distroResource distro) [distroIndexPage, distroAllPage, distroPackage]
       , dumpBackup    = Just $ \_ -> do
             allDist <- query GetDistributions
             let distros  = distDistros allDist

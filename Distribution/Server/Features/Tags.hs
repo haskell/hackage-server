@@ -73,10 +73,9 @@ data TagsResource = TagsResource {
     packageTagsUri :: String -> PackageName -> String
 }
 
-instance HackageFeature TagsFeature where
-    getFeature tags = HackageModule
-      { featureName = "tags"
-      , resources   = map ($tagsResource tags) [tagsListing, tagListing, packageTagsListing]
+instance IsHackageFeature TagsFeature where
+    getFeatureInterface tags = (emptyHackageFeature "tags") {
+        featureResources = map ($tagsResource tags) [tagsListing, tagListing, packageTagsListing]
       , dumpBackup    = Just $ \_ -> do
             pkgTags <- query GetPackageTags
             return [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]

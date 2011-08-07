@@ -68,10 +68,9 @@ data ReverseResource = ReverseResource {
     reversesAllUri  :: String -> String
 }
 
-instance HackageFeature ReverseFeature where
-    getFeature rev = HackageModule
-      { featureName = "reverse"
-      , resources   = map ($reverseResource rev) []
+instance IsHackageFeature ReverseFeature where
+    getFeatureInterface rev = (emptyHackageFeature "reverse") {
+        featureResources = map ($reverseResource rev) []
       , dumpBackup    = Nothing
       , restoreBackup = Just $ \_ -> fix $ \r -> RestoreBackup
               { restoreEntry    = \_ -> return $ Right r

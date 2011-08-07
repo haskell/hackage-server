@@ -69,15 +69,12 @@ data VersionsResource = VersionsResource {
     deprecatedPackageUri :: String -> PackageName -> String
 }
 
-instance HackageFeature VersionsFeature where
-    getFeature versions = HackageModule
-      { featureName = "versions"
-      , resources   = map ($versionsResource versions)
+instance IsHackageFeature VersionsFeature where
+    getFeatureInterface versions = (emptyHackageFeature "versions") {
+        featureResources = map ($versionsResource versions)
             [preferredResource, preferredPackageResource,
              deprecatedResource, deprecatedPackageResource,
              preferredText]
-      , dumpBackup    = Nothing
-      , restoreBackup = Nothing
       }
     initHooks versions = [updateDeprecatedTags versions]
 

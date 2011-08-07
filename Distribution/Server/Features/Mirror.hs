@@ -44,10 +44,9 @@ data MirrorResource = MirrorResource {
     mirrorGroupResource :: GroupResource
 }
 
-instance HackageFeature MirrorFeature where
-    getFeature mirror = HackageModule
-      { featureName = "mirror"
-      , resources   = map ($mirrorResource mirror) [mirrorPackageTarball, mirrorCabalFile]
+instance IsHackageFeature MirrorFeature where
+    getFeatureInterface mirror = (emptyHackageFeature "mirror") {
+        featureResources = map ($mirrorResource mirror) [mirrorPackageTarball, mirrorCabalFile]
       , dumpBackup    = Just $ \_ -> do
             clients <- query GetMirrorClients
             return [csvToBackup ["clients.csv"] $ groupToCSV clients]

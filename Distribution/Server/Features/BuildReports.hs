@@ -48,10 +48,9 @@ data ReportsResource = ReportsResource {
     reportsLogUri  :: PackageId -> BuildReportId -> String
 }
 
-instance HackageFeature ReportsFeature where
-    getFeature reports = HackageModule
-      { featureName = "packages"
-      , resources   = map ($reportsResource reports) [reportsList, reportsPage, reportsLog]
+instance IsHackageFeature ReportsFeature where
+    getFeatureInterface reports = (emptyHackageFeature "packages") {
+        featureResources = map ($reportsResource reports) [reportsList, reportsPage, reportsLog]
       , dumpBackup    = Just $ \storage -> do
             buildReps <- query GetBuildReports
             exports <- readExportBlobs storage (buildReportsToExport buildReps)

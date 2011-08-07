@@ -8,13 +8,8 @@ import Distribution.Server.Framework.Feature
 
 data JsonFeature = JsonFeature
 
-instance HackageFeature JsonFeature where
-    getFeature _ = HackageModule
-      { featureName = "json"
-      , resources   = []
-      , dumpBackup    = Nothing
-      , restoreBackup = Nothing
-      }
+instance IsHackageFeature JsonFeature where
+    getFeatureInterface _ = empytHackageFeature "json"
 
 initJsonFeature :: CoreFeature -> IO JsonFeature
 initJsonFeature _ = return JsonFeature
