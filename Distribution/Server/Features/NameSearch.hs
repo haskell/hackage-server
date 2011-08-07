@@ -48,8 +48,8 @@ data NamesResource = NamesResource {
 instance IsHackageFeature NamesFeature where
     getFeatureInterface names = (emptyHackageFeature "names") {
         featureResources = map ($namesResource names) [openSearchXml, findPackageResource, suggestPackageResource]
+      , featurePostInit = regenerateIndices names
       }
-    initHooks names = [regenerateIndices names]
 
 -- Currently only prefix-searching of package names is supported, as well as a
 -- text search of package descriptions using Bayer-Moore. The results could also

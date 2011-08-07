@@ -75,8 +75,8 @@ instance IsHackageFeature VersionsFeature where
             [preferredResource, preferredPackageResource,
              deprecatedResource, deprecatedPackageResource,
              preferredText]
+      , featurePostInit = updateDeprecatedTags versions
       }
-    initHooks versions = [updateDeprecatedTags versions]
 
 initVersionsFeature :: ServerEnv -> CoreFeature -> UploadFeature -> TagsFeature -> IO VersionsFeature
 initVersionsFeature _ core _ tags = do

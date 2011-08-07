@@ -4,7 +4,7 @@ module Distribution.Server.Framework.Feature where
 
 import Distribution.Server.Framework.BackupRestore (RestoreBackup, BackupEntry)
 import Distribution.Server.Framework.BlobStorage (BlobStorage)
-import Distribution.Server.Framework.Resource
+import Distribution.Server.Framework.Resource      (Resource)
 
 -- | We compose the overall hackage server featureset from a bunch of these
 -- features. The intention is to make the hackage server reasonably modular
@@ -16,6 +16,9 @@ import Distribution.Server.Framework.Resource
 data HackageFeature = HackageFeature {
     featureName        :: String,
     featureResources   :: [Resource],
+
+    featurePostInit    :: IO (),
+
     dumpBackup    :: Maybe (BlobStorage -> IO [BackupEntry]),
     restoreBackup :: Maybe (BlobStorage -> RestoreBackup)
 }
@@ -33,15 +36,11 @@ emptyHackageFeature name = HackageFeature {
     featureName        = name,
     featureResources   = [],
 
+    featurePostInit    = return (),
+
     dumpBackup    = Nothing,
     restoreBackup = Nothing
   }
 
 class IsHackageFeature feature where
-    getFeatureInterface :: feature -> HackageFeature
-    initHooks  :: feature -> [IO ()]
-    initHooks _ = []
-
--- degenerate
-instance IsHackageFeature HackageFeature where
-    getFeatureInterface = id
+  getFeatureInterface :: feature -> HackageFeature

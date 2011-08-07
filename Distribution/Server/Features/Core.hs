@@ -117,6 +117,7 @@ instance IsHackageFeature CoreFeature where
         featureResources = map ($coreResource core)
           [ coreIndexPage, coreIndexTarball, corePackagesPage, corePackagePage
           , corePackageRedirect, corePackageTarball, coreCabalFile ]
+      , featurePostInit = runHook (packageIndexChange core)
       , dumpBackup = Just $ \store -> do
             users    <- query GetUserDb
             packages <- query GetPackagesState
@@ -125,7 +126,6 @@ instance IsHackageFeature CoreFeature where
             return $ packageEntries ++ [csvToBackup ["users.csv"] $ usersToCSV users, csvToBackup ["admins.csv"] $ groupToCSV admins]
       , restoreBackup = Just $ \store -> mconcat [userBackup, packagesBackup store, groupBackup ["admins.csv"] ReplaceHackageAdmins]
       }
-    initHooks core = [runHook (packageIndexChange core)]
 
 initCoreFeature :: ServerEnv -> IO CoreFeature
 initCoreFeature config = do

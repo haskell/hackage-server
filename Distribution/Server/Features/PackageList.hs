@@ -73,8 +73,11 @@ emptyPackageItem :: PackageName -> PackageItem
 emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" 0 0 False 0
 
 instance IsHackageFeature ListFeature where
-    getFeatureInterface _ = emptyHackageFeature "list"
-    initHooks listf = [itemsCache, forkIO periodicDownloadRefresh >> return ()]
+    getFeatureInterface listf = (emptyHackageFeature "list") {
+        featurePostInit = do itemsCache
+                             forkIO periodicDownloadRefresh
+                             return ()
+      }
       where itemsCache = do
                 items <- constructItemIndex
                 Cache.putCache (itemCache listf) items

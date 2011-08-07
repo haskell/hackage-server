@@ -76,12 +76,12 @@ data TagsResource = TagsResource {
 instance IsHackageFeature TagsFeature where
     getFeatureInterface tags = (emptyHackageFeature "tags") {
         featureResources = map ($tagsResource tags) [tagsListing, tagListing, packageTagsListing]
+      , featurePostInit = initImmutableTags
       , dumpBackup    = Just $ \_ -> do
             pkgTags <- query GetPackageTags
             return [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]
       , restoreBackup = Just $ \_ -> tagsBackup
       }
-    initHooks tags = [initImmutableTags]
       where initImmutableTags = do
                 index <- fmap packageList $ query GetPackagesState
                 let calcTags = tagPackages $ constructImmutableTagIndex index

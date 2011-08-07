@@ -71,6 +71,7 @@ data ReverseResource = ReverseResource {
 instance IsHackageFeature ReverseFeature where
     getFeatureInterface rev = (emptyHackageFeature "reverse") {
         featureResources = map ($reverseResource rev) []
+      , featurePostInit = forkIO transferReverse >> return ()
       , dumpBackup    = Nothing
       , restoreBackup = Just $ \_ -> fix $ \r -> RestoreBackup
               { restoreEntry    = \_ -> return $ Right r
@@ -82,11 +83,10 @@ instance IsHackageFeature ReverseFeature where
                     update $ ReplaceReverseIndex revs
               }
       }
-    initHooks down = [forkIO transferReverse >> return ()]
       where transferReverse = forever $ do
-                revFunc <- readChan (reverseStream down)
+                revFunc <- readChan (reverseStream rev)
                 modded  <- revFunc
-                runHook' (reverseUpdateHook down) modded
+                runHook' (reverseUpdateHook rev) modded
 
 initReverseFeature :: ServerEnv -> CoreFeature -> VersionsFeature -> IO ReverseFeature
 initReverseFeature _ core _ = do

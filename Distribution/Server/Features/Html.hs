@@ -76,8 +76,8 @@ data HtmlFeature = HtmlFeature {
 instance IsHackageFeature HtmlFeature where
     getFeatureInterface html = (emptyHackageFeature "html") {
         featureResources = htmlResources html
+      , featurePostInit  = generateCaches html
       }
-    initHooks html = [generateCaches html]
 
 -- This feature provides the HTML view to the models of other features
 -- currently it uses the xhtml package to render HTML (Text.XHtml.Strict)

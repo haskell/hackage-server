@@ -136,46 +136,33 @@ hackageFeatures env = do
 
     -- The order of initialization above should be the same as
     -- the order of this list.
-    let allFeatures =
-         [ HF coreFeature
-         , HF usersFeature
-         , HF mirrorFeature
-         , HF uploadFeature
+    let allFeatures :: [HackageFeature]
+        allFeatures =
+         [ getFeatureInterface coreFeature
+         , getFeatureInterface usersFeature
+         , getFeatureInterface mirrorFeature
+         , getFeatureInterface uploadFeature
 #ifndef MINIMAL
-         , HF packagesFeature
-         , HF distroFeature
-         , HF checkFeature
-         , HF reportsFeature
-         , HF documentationFeature
-         , HF downloadFeature
-         , HF tagsFeature
-         , HF versionsFeature
-         , HF reverseFeature
-         , HF namesFeature
-         , HF listFeature
-         , HF platformFeature
-         , HF htmlFeature
-         , HF (legacyRedirectsFeature uploadFeature)
+         , getFeatureInterface packagesFeature
+         , getFeatureInterface distroFeature
+         , getFeatureInterface checkFeature
+         , getFeatureInterface reportsFeature
+         , getFeatureInterface documentationFeature
+         , getFeatureInterface downloadFeature
+         , getFeatureInterface tagsFeature
+         , getFeatureInterface versionsFeature
+         , getFeatureInterface reverseFeature
+         , getFeatureInterface namesFeature
+         , getFeatureInterface listFeature
+         , getFeatureInterface platformFeature
+         , getFeatureInterface htmlFeature
+         , legacyRedirectsFeature uploadFeature
 #endif
          ]
 
-    -- Run all initial hooks, now that everyone's gotten a chance to register
+    -- Run all post init hooks, now that everyone's gotten a chance to register
     -- for them. This solution is iffy for initial feature hooks that rely on
     -- other features It also happens even in the backup/restore modes.
-    sequence_
-      [ initHook
-      | feature  <- allFeatures
-      , initHook <- initHooks feature ]
+    mapM_ featurePostInit allFeatures
 
-    let allModules = map getFeatureInterface allFeatures
-    -- backupFeature <- initBackupFeature config allModules [special modules..]
-    return allModules
-
-data HF = forall a. IsHackageFeature a => HF a
-instance IsHackageFeature HF where
-    getFeatureInterface (HF a) = getFeatureInterface a
-    initHooks  (HF a) = initHooks a
-
--- Still using Distribution.Server.State.HackageEntryPoint for the moment for
--- feature state otherwise, a HackageOverallState could be defined that works
--- more closely with HackageFeature
+    return allFeatures

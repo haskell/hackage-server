@@ -42,19 +42,20 @@ data DownloadResource = DownloadResource {
 instance IsHackageFeature DownloadFeature where
     getFeatureInterface download = (emptyHackageFeature "download") {
         featureResources = map (\x -> x $ downloadResource download) [topDownloads]
+      , featurePostInit  = do countCache
+                              forkIO transferDownloads >> return ()
       , dumpBackup    = Nothing -- TODO
       , restoreBackup = Nothing
       }
-    initHooks down = [countCache, forkIO transferDownloads >> return ()]
       where countCache = do
                 dc <- query GetDownloadCounts
                 let dmap = map (second packageDowns) (Map.toList $ downloadMap dc)
-                Cache.putCache (downloadHistogram down) (constructHistogram dmap)
+                Cache.putCache (downloadHistogram download) (constructHistogram dmap)
             transferDownloads = forever $ do
-                pkg <- readChan (downloadStream down)
+                pkg <- readChan (downloadStream download)
                 time <- getCurrentTime
                 (_, new) <- update $ RegisterDownload (utctDay time) pkg 1
-                Cache.modifyCache (downloadHistogram down)
+                Cache.modifyCache (downloadHistogram download)
                     (updateHistogram (packageName pkg) new)
 
 initDownloadFeature :: ServerEnv -> CoreFeature -> IO DownloadFeature
