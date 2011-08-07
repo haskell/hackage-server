@@ -58,7 +58,7 @@ instance HackageFeature DownloadFeature where
                 Cache.modifyCache (downloadHistogram down)
                     (updateHistogram (packageName pkg) new)
 
-initDownloadFeature :: Config -> CoreFeature -> IO DownloadFeature
+initDownloadFeature :: ServerEnv -> CoreFeature -> IO DownloadFeature
 initDownloadFeature _ core = do
     downChan <- newChan
     downHist <- Cache.newCacheable emptyHistogram

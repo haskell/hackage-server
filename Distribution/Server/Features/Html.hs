@@ -87,12 +87,12 @@ instance HackageFeature HtmlFeature where
 --
 -- This means of generating HTML is somewhat temporary, in that a more advanced
 -- (and better-looking) HTML ajaxy scheme should come about later on.
-initHtmlFeature :: Config -> CoreFeature -> PackagesFeature -> UploadFeature
+initHtmlFeature :: ServerEnv -> CoreFeature -> PackagesFeature -> UploadFeature
                 -> CheckFeature -> UserFeature -> VersionsFeature
                 -> ReverseFeature -> TagsFeature -> DownloadFeature
                 -> ListFeature -> NamesFeature -> MirrorFeature
                 -> IO HtmlFeature
-initHtmlFeature config core pkg upload check user version reversef tagf
+initHtmlFeature env core pkg upload check user version reversef tagf
                 down list namef mirror = do
     -- resources to extend
     let cores = coreResource core
@@ -104,7 +104,7 @@ initHtmlFeature config core pkg upload check user version reversef tagf
         tags = tagsResource tagf
         downs = downloadResource down
         names = namesResource namef
-    let store = serverStore config
+    let store = serverBlobStore env
     -- pages defined for the HTML feature in particular
     let editDeprecated  = (resourceAt "/package/:package/deprecated/edit") { resourceGet = [("html", serveDeprecateForm cores versions)] }
         editPreferred   = (resourceAt "/package/:package/preferred/edit") { resourceGet = [("html", servePreferForm cores versions)] }

@@ -55,10 +55,10 @@ instance HackageFeature MirrorFeature where
       }
 
 -------------------------------------------------------------------------
-initMirrorFeature :: Config -> CoreFeature -> UserFeature -> IO MirrorFeature
-initMirrorFeature config core users = do
+initMirrorFeature :: ServerEnv -> CoreFeature -> UserFeature -> IO MirrorFeature
+initMirrorFeature env core users = do
     let coreR  = coreResource core
-        store  = serverStore config
+        store  = serverBlobStore env
         mirrorers = UserGroup {
             groupDesc = nullDescription { groupTitle = "Mirror clients" },
             queryUserList = query GetMirrorClients,

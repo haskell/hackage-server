@@ -95,9 +95,9 @@ instance HackageFeature CheckFeature where
       }
 
 -- URI generation (string-based), using maps; user groups
-initCheckFeature :: Config -> CoreFeature -> UserFeature -> PackagesFeature -> UploadFeature -> IO CheckFeature
-initCheckFeature config _ _ _ _ = do
-    let store = serverStore config
+initCheckFeature :: ServerEnv -> CoreFeature -> UserFeature -> PackagesFeature -> UploadFeature -> IO CheckFeature
+initCheckFeature env _ _ _ _ = do
+    let store = serverBlobStore env
     return CheckFeature
       { checkResource = fix $ \r -> CheckResource
           { candidatesPage = resourceAt "/packages/candidates/.:format"

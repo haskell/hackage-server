@@ -11,8 +11,7 @@
 module Distribution.Server.Features where
 
 import Distribution.Server.Framework.Feature
-import Distribution.Server.Framework.Types (Config)
-
+import Distribution.Server.Framework.Types   (ServerEnv)
 import Distribution.Server.Features.Core     (initCoreFeature)
 import Distribution.Server.Features.Users    (initUsersFeature)
 import Distribution.Server.Features.Upload   (initUploadFeature)
@@ -48,79 +47,79 @@ import Distribution.Server.Features.HaskellPlatform (initPlatformFeature)
 --     best approach is probably to write backup tarball to disk and transfer
 --     it away through non-HTTP means (somewhat more secure)
 
-hackageFeatures :: Config -> IO [HackageModule]
-hackageFeatures config = do
+hackageFeatures :: ServerEnv -> IO [HackageModule]
+hackageFeatures env = do
 
     -- Arguments denote data dependencies, even if the feature objects are
     -- themselves unused, functions from their modules are.
     -- What follows is a topological sort along those lines
 
-    coreFeature     <- initCoreFeature config
+    coreFeature     <- initCoreFeature env
 
-    usersFeature    <- initUsersFeature config
+    usersFeature    <- initUsersFeature env
                          coreFeature
 
-    mirrorFeature   <- initMirrorFeature config
+    mirrorFeature   <- initMirrorFeature env
                          coreFeature
                          usersFeature
 
-    uploadFeature   <- initUploadFeature config
+    uploadFeature   <- initUploadFeature env
                          coreFeature
                          usersFeature
 
 #ifndef MINIMAL
-    packagesFeature <- initPackagesFeature config
+    packagesFeature <- initPackagesFeature env
                          coreFeature
 
-    distroFeature   <- initDistroFeature config
+    distroFeature   <- initDistroFeature env
                          coreFeature
                          usersFeature
                          packagesFeature
 
-    checkFeature    <- initCheckFeature config
+    checkFeature    <- initCheckFeature env
                          coreFeature
                          usersFeature
                          packagesFeature
                          uploadFeature
 
-    reportsFeature  <- initBuildReportsFeature config
+    reportsFeature  <- initBuildReportsFeature env
                          coreFeature
 
-    documentationFeature <- initDocumentationFeature config
+    documentationFeature <- initDocumentationFeature env
                          coreFeature
                          uploadFeature
 
-    downloadFeature <- initDownloadFeature config
+    downloadFeature <- initDownloadFeature env
                          coreFeature
 
-    tagsFeature     <- initTagsFeature config
+    tagsFeature     <- initTagsFeature env
                          coreFeature
 
-    versionsFeature <- initVersionsFeature config
+    versionsFeature <- initVersionsFeature env
                          coreFeature
                          uploadFeature
                          tagsFeature
 
-    reverseFeature  <- initReverseFeature config
+    reverseFeature  <- initReverseFeature env
                          coreFeature
                          versionsFeature
 
-    namesFeature    <- initNamesFeature config
+    namesFeature    <- initNamesFeature env
                          coreFeature
 
-    listFeature     <- initListFeature config
+    listFeature     <- initListFeature env
                          coreFeature
                          reverseFeature
                          downloadFeature
                          tagsFeature
                          versionsFeature
 
-    platformFeature <- initPlatformFeature config
+    platformFeature <- initPlatformFeature env
                          coreFeature
 
     --jsonFeature   <- initJsonFeature
 
-    htmlFeature     <- initHtmlFeature config
+    htmlFeature     <- initHtmlFeature env
                          coreFeature
                          packagesFeature
                          uploadFeature

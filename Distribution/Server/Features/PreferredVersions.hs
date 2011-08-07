@@ -81,7 +81,7 @@ instance HackageFeature VersionsFeature where
       }
     initHooks versions = [updateDeprecatedTags versions]
 
-initVersionsFeature :: Config -> CoreFeature -> UploadFeature -> TagsFeature -> IO VersionsFeature
+initVersionsFeature :: ServerEnv -> CoreFeature -> UploadFeature -> TagsFeature -> IO VersionsFeature
 initVersionsFeature _ core _ tags = do
     prefHook <- newHook
     deprHook <- newHook

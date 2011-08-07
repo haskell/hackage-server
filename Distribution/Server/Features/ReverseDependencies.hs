@@ -89,7 +89,7 @@ instance HackageFeature ReverseFeature where
                 modded  <- revFunc
                 runHook' (reverseUpdateHook down) modded
 
-initReverseFeature :: Config -> CoreFeature -> VersionsFeature -> IO ReverseFeature
+initReverseFeature :: ServerEnv -> CoreFeature -> VersionsFeature -> IO ReverseFeature
 initReverseFeature _ core _ = do
     revChan <- newChan
     registerHook (packageAddHook core) $ \pkg -> writeChan revChan $

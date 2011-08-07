@@ -86,10 +86,10 @@ instance HackageFeature UploadFeature where
       , restoreBackup = Just $ \_ -> mconcat [maintainerBackup, groupBackup ["trustees.csv"] ReplaceHackageTrustees]
       }
 
-initUploadFeature :: Config -> CoreFeature -> UserFeature -> IO UploadFeature
-initUploadFeature config core users = do
+initUploadFeature :: ServerEnv -> CoreFeature -> UserFeature -> IO UploadFeature
+initUploadFeature env core users = do
     -- some shared tasks
-    let store = serverStore config
+    let store = serverBlobStore env
         admins = adminGroup users
     (trustees, trustResource) <- groupResourceAt users "/packages/trustees" (getTrusteesGroup [admins])
 

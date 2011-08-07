@@ -99,7 +99,7 @@ instance HackageFeature UserFeature where
       }
 
 -- TODO: add renaming
-initUsersFeature :: Config -> CoreFeature -> IO UserFeature
+initUsersFeature :: ServerEnv -> CoreFeature -> IO UserFeature
 initUsersFeature _ _ = do
     addHook <- newHook
     mutateFilter <- newHook

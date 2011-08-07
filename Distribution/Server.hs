@@ -96,10 +96,10 @@ data Server = Server {
   serverAcid      :: Acid,
   serverFeatures  :: [Feature.HackageModule],
   serverPort      :: Int,
-  serverConfig    :: Config
+  serverEnv       :: ServerEnv
 }
 
--- | If we made a server instance from this 'Config', would we find some
+-- | If we made a server instance from this 'ServerConfig', would we find some
 -- existing saved state or would it be a totally clean instance with no
 -- existing state.
 --
@@ -126,20 +126,21 @@ initialise initConfig@(ServerConfig hostName portNum stateDir staticDir tmpDir) 
 --    txCtl   <- runTxSystem (Queue (FileSaver happsStateDir)) hackageEntryPoint
     acid <- startAcid acidStateDir
 
-    let config = Config {
-            serverStore     = store,
+    let env = ServerEnv {
             serverStaticDir = staticDir,
+            serverStateDir  = stateDir,
+            serverBlobStore = store,
             serverTmpDir    = tmpDir,
-            serverURI       = hostURI
+            serverHostURI   = hostURI
          }
     -- do feature initialization
-    features <- Features.hackageFeatures config
+    features <- Features.hackageFeatures env
 
     return Server {
         serverAcid      = acid,
         serverFeatures  = features,
         serverPort      = portNum,
-        serverConfig    = config
+        serverEnv       = env
     }
 
   where
@@ -170,7 +171,7 @@ run server =
     -- message saying what happened.
     handlePutPostQuotas = decodeBody bodyPolicy
       where
-        tmpdir = serverTmpDir (serverConfig server)
+        tmpdir = serverTmpDir (serverEnv server)
         quota  = 10 ^ (6 :: Int64)
         bodyPolicy = defaultBodyPolicy tmpdir quota quota quota
 
@@ -281,7 +282,7 @@ importServerTar server tar = Import.importTar tar (makeFeatureMap server Feature
 makeFeatureMap :: Server -> (Feature.HackageModule -> Maybe (BlobStorage -> a)) -> [(String, a)]
 makeFeatureMap server mkBackup = concatMap makeEntry $ serverFeatures server
   where 
-    store = serverStore (serverConfig server)
+    store = serverBlobStore (serverEnv server)
     makeEntry feature = case mkBackup feature of
         Nothing  -> []
         Just runTask -> [(Feature.featureName feature, runTask store)]
@@ -306,7 +307,7 @@ initState server (admin, pass) = do
 -- them into a path hierarchy, and serves them.
 impl :: Server -> ServerPart Response
 impl server =
-      flip mplus (fileServe ["hackage.html"] . serverStaticDir $ serverConfig server)
+      flip mplus (fileServe ["hackage.html"] . serverStaticDir $ serverEnv server)
     -- ServerPart Response
     . renderServerTree []
     -- ServerTree ServerResponse

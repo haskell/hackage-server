@@ -53,7 +53,7 @@ instance HackageFeature DistroFeature where
       , restoreBackup = Just $ \_ -> distroBackup
       }
 
-initDistroFeature :: Config -> CoreFeature -> UserFeature -> PackagesFeature -> IO DistroFeature
+initDistroFeature :: ServerEnv -> CoreFeature -> UserFeature -> PackagesFeature -> IO DistroFeature
 initDistroFeature _ _ users _ = do
     let admins = adminGroup users
     return $ DistroFeature

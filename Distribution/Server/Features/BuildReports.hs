@@ -59,9 +59,9 @@ instance HackageFeature ReportsFeature where
       , restoreBackup = Just $ \storage -> reportsBackup storage
       }
 
-initBuildReportsFeature :: Config -> CoreFeature -> IO ReportsFeature
-initBuildReportsFeature config _ = do
-    let store = serverStore config
+initBuildReportsFeature :: ServerEnv -> CoreFeature -> IO ReportsFeature
+initBuildReportsFeature env _ = do
+    let store = serverBlobStore env
     return ReportsFeature
       { reportsResource = fix $ \r -> ReportsResource
           { reportsList = (resourceAt "/package/:package/reports/.:format") {

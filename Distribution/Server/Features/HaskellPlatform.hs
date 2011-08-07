@@ -48,7 +48,7 @@ instance HackageFeature PlatformFeature where
       , restoreBackup = Nothing
       }
 
-initPlatformFeature :: Config -> CoreFeature -> IO PlatformFeature
+initPlatformFeature :: ServerEnv -> CoreFeature -> IO PlatformFeature
 initPlatformFeature _ _ = do
     return PlatformFeature
       { platformResource = fix $ \r -> PlatformResource

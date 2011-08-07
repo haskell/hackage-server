@@ -88,7 +88,7 @@ instance HackageFeature TagsFeature where
                 let calcTags = tagPackages $ constructImmutableTagIndex index
                 forM_ (Map.toList calcTags) $ uncurry $ setCalculatedTag tags
 
-initTagsFeature :: Config -> CoreFeature -> IO TagsFeature
+initTagsFeature :: ServerEnv -> CoreFeature -> IO TagsFeature
 initTagsFeature _ cf = do
     specials <- Cache.newCacheable emptyPackageTags
     updateTag <- newHook

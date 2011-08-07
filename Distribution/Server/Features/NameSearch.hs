@@ -57,9 +57,9 @@ instance HackageFeature NamesFeature where
 -- Currently only prefix-searching of package names is supported, as well as a
 -- text search of package descriptions using Bayer-Moore. The results could also
 -- be ordered by download (see DownloadCount.hs sortByDownloads).
-initNamesFeature :: Config -> CoreFeature -> IO NamesFeature
-initNamesFeature config core = do
-    let hostStr = uriToString id (URI "http:" (Just $ serverURI config) "" "" "") ""
+initNamesFeature :: ServerEnv -> CoreFeature -> IO NamesFeature
+initNamesFeature env core = do
+    let hostStr = uriToString id (URI "http:" (Just $ serverHostURI env) "" "" "") ""
     pkgCache <- Cache.newCacheable (emptyNameIndex Nothing)
     textCache <- Cache.newCache (constructTextIndex []) id
     osdCache <- Cache.newCacheable (toResponse $ Resource.OpenSearchXml $ BS.pack $ mungeSearchXml hostStr)

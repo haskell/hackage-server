@@ -87,7 +87,7 @@ instance HackageFeature ListFeature where
                 threadDelay (10 * 60 * 1000000) -- 10 minutes
                 refreshDownloads listf
 
-initListFeature :: Config -> CoreFeature -> ReverseFeature -> DownloadFeature
+initListFeature :: ServerEnv -> CoreFeature -> ReverseFeature -> DownloadFeature
                 -> TagsFeature -> VersionsFeature -> IO ListFeature
 initListFeature _ core revs downs tagf versions = do
     iCache <- Cache.newCache Map.empty id

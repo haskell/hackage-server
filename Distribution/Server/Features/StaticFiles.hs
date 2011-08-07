@@ -21,6 +21,6 @@ staticFilesFeature = HackageFeature {
     restoreBackup = Nothing
 }
 
-serveStaticFiles :: Config -> ServerPart Response
-serveStaticFiles conf =
-  fileServe ["hackage.html"] (serverStaticDir conf)
+serveStaticFiles :: ServerEnv -> ServerPart Response
+serveStaticFiles env =
+  fileServe ["hackage.html"] (serverStaticDir env)

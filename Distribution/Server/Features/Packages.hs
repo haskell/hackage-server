@@ -71,7 +71,7 @@ instance HackageFeature PackagesFeature where
       , restoreBackup = Nothing
       }
 
-initPackagesFeature :: Config -> CoreFeature -> IO PackagesFeature
+initPackagesFeature :: ServerEnv -> CoreFeature -> IO PackagesFeature
 initPackagesFeature _ core = do
     recents <- Cache.newCacheable (toResponse (), toResponse ())
     registerHook (packageIndexChange core) $ do

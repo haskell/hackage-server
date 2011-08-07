@@ -55,9 +55,10 @@ instance HackageFeature DocumentationFeature where
       , restoreBackup = Just $ \storage -> updateDocumentation storage (Documentation Map.empty)
       }
 
-initDocumentationFeature :: Config -> CoreFeature -> UploadFeature -> IO DocumentationFeature
-initDocumentationFeature config _ _ = do
-    let store = serverStore config
+
+initDocumentationFeature :: ServerEnv -> CoreFeature -> UploadFeature -> IO DocumentationFeature
+initDocumentationFeature env _ _ = do
+    let store = serverBlobStore env
     return DocumentationFeature
       { documentationResource = fix $ \r -> DocumentationResource
           { packageDocs = (resourceAt "/package/:package/doc/..") { resourceGet = [("", serveDocumentation store)] }

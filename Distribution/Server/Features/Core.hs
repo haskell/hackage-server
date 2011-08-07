@@ -57,6 +57,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Monoid (mconcat)
 import Data.Function (fix)
+--TODO: why are we importing xhtml here!?
 import Text.XHtml.Strict (Html, toHtml, unordList, h3, (<<), anchor, href, (!))
 import Data.Ord (comparing)
 import Data.List (sortBy, find)
@@ -127,7 +128,7 @@ instance HackageFeature CoreFeature where
       }
     initHooks core = [runHook (packageIndexChange core)]
 
-initCoreFeature :: Config -> IO CoreFeature
+initCoreFeature :: ServerEnv -> IO CoreFeature
 initCoreFeature config = do
     -- Caches
     indexTar <- Cache.newCacheable BS.empty
@@ -148,7 +149,7 @@ initCoreFeature config = do
     noPkgHook <- newHook
     registerHook indexHook computeCache
 
-    let store = serverStore config
+    let store = serverBlobStore config
     return CoreFeature
       { coreResource = fix $ \r -> CoreResource {
             -- the rudimentary HTML resources are for when we don't want an additional HTML feature
