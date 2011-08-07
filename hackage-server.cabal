@@ -17,7 +17,7 @@ license:      BSD3
 license-file: LICENSE
 
 build-type: Simple
-cabal-version: >=1.6
+cabal-version: >=1.8
 data-files:
   static/*.html
   static/*.css
@@ -190,19 +190,12 @@ executable hackage-mirror
     Distribution.Server.Util.Merge
   build-depends:
     base,
-    containers,
-    bytestring,
-    time,
-    old-locale,
-    zlib,
-    network,
-    HTTP,
+    containers, bytestring, pretty,
+    filepath, directory,
+    time,     old-locale,
+    tar,      zlib,
+    network,  HTTP,
     Cabal,
-    happstack-server
+    --TODO: eliminate:
+    safecopy, cereal, binary, mtl
 
-  if os(linux)
-     extra-libraries: crypt
-  if os(linux) || os(solaris)
-     includes: crypt.h
-  else
-     includes: unistd.h
