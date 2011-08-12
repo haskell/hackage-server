@@ -104,8 +104,7 @@ initUsersFeature _ _ = do
     addHook <- newHook
     mutateFilter <- newHook
     groupCache <- Cache.newCache emptyGroupIndex id
-    rec (adminG, adminR) <- groupResourceAt users "/users/admins/" adminGroupDesc
-        let users = UserFeature
+    rec let users = UserFeature
               { userResource = fix $ \r -> UserResource
                   { userList = resourceAt "/users/.:format"
                   , userPage = resourceAt "/user/:username.:format"
@@ -126,6 +125,7 @@ initUsersFeature _ _ = do
               , adminGroup = adminG
               , packageMutate = mutateFilter
               }
+        (adminG, adminR) <- groupResourceAt users "/users/admins/" adminGroupDesc
     return users
 
 {- result: see-other for user page or authentication error
