@@ -16,7 +16,6 @@ import Distribution.Server.Framework.Error
 import Happstack.Server
 import qualified Happstack.Crypto.Base64 as Base64
 
-import Control.Concurrent.MVar (tryPutMVar)
 import Control.Monad.Trans (MonadIO, liftIO)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
@@ -46,13 +45,7 @@ getHackageAuth users =
        case getAuthType req of
          Just BasicAuth  -> return $ genericBasicAuth req authorizationRealm (getPasswdInfo users)
          -- HS6 -- this implementation is troublesome because it requires the entire request body to be read into RAM to run genericDigestAuth.. the request body could include large file uploads
-         Just DigestAuth -> do rq <- askRq
-                               mRqBody <- takeRequestBody rq -- HS6 - this will probably fail, because decodeBody in Distribution.Server.run already consumed it
-                               case mRqBody of
-                                 Nothing -> errInternalError [MText "takeRequestBody cannot be called more than once."]
-                                 (Just reqBody) -> 
-                                     do liftIO $ tryPutMVar (rqBody rq) reqBody
-                                        return $ genericDigestAuth req reqBody (getPasswdInfo users) --realm hashed in user database
+         Just DigestAuth -> return $ genericDigestAuth req (getPasswdInfo users) --realm hashed in user database
          Nothing         -> return $ Left NoAuthError
 
 
@@ -143,20 +136,18 @@ askBasicAuth realmName = setHeaderM headerName headerValue >> setResponseCode 40
     headerValue = "Basic realm=\"" ++ realmName ++ "\""
 
 --------------------------------------------------------------------------------
-digestPasswdCheck :: Request -> RqBody -> Map String String -> PasswdHash -> Maybe Bool
-digestPasswdCheck req (Body bdy) authMap (PasswdHash hash1) = do
+digestPasswdCheck :: Request -> Map String String -> PasswdHash -> Maybe Bool
+digestPasswdCheck req authMap (PasswdHash hash1) = do
     nonce <- Map.lookup "nonce" authMap
     response <- Map.lookup "response" authMap
     uri <- Map.lookup "uri" authMap
     let qop = Map.lookup "qop" authMap
         nonceCount = Map.lookup "nc" authMap
         cnonce = Map.lookup "cnonce" authMap --insert (join traceShow) before intercalates to debug
-        hash2 = show . md5 . BS.Lazy.pack $ intercalate ":" [show (rqMethod req), uri] ++ case qop of
-            Just "auth-int" -> (':':) . show . md5 $ bdy
-            _ -> ""
+        hash2 = show . md5 . BS.Lazy.pack $ intercalate ":" [show (rqMethod req), uri]
         responseString = show . md5 . BS.Lazy.pack . intercalate ":" $ case (qop, nonceCount, cnonce) of
             (Just qop', Just nonceCount', Just cnonce')
-                | qop' == "auth" || qop' == "auth-int" -> [hash1, nonce, nonceCount', cnonce', qop', hash2]
+                | qop' == "auth" -> [hash1, nonce, nonceCount', cnonce', qop', hash2]
             _ -> [hash1, nonce, hash2]
     return (responseString == response)
 
@@ -166,8 +157,8 @@ digestPasswdCheck req (Body bdy) authMap (PasswdHash hash1) = do
 -- To use both systems at the same time, determine at the start of a client
 -- "session" whether to request Basic or Digest authentication, and then
 -- demultiplex when the client sends the Authorization header.
-genericDigestAuth :: Request -> RqBody -> (UserName -> Maybe (a, Users.UserAuth)) -> Either AuthError a
-genericDigestAuth req reqBody userDetails = do
+genericDigestAuth :: Request -> (UserName -> Maybe (a, Users.UserAuth)) -> Either AuthError a
+genericDigestAuth req userDetails = do
     authHeader <- NoAuthError <? getHeader "authorization" req
     authMap <- UnrecognizedAuthError <? parseDigestResponse (BS.unpack authHeader)
     nameStr <- UnrecognizedAuthError <? Map.lookup "username" authMap
@@ -175,7 +166,7 @@ genericDigestAuth req reqBody userDetails = do
     case atype of
       BasicAuth  -> Left AuthTypeMismatchError
       DigestAuth -> do
-        matches <- UnrecognizedAuthError <? digestPasswdCheck req reqBody authMap hash
+        matches <- UnrecognizedAuthError <? digestPasswdCheck req authMap hash
         if matches then Right var else Left PasswordMismatchError
 
 -- Parser derived straight from RFCs 2616 and 2617
