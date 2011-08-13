@@ -1,5 +1,3 @@
-{-# LANGUAGE CPP, ExistentialQuantification #-}
-
 -- | This module ties together all the hackage features that we will use.
 --
 -- To add a feature:
@@ -8,6 +6,7 @@
 -- * Call its initialization function with all of its required arguments
 -- * Add it to the allFeatures list
 --
+{-# LANGUAGE CPP #-}
 module Distribution.Server.Features where
 
 import Distribution.Server.Framework.Feature
