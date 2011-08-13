@@ -60,14 +60,16 @@ initDocumentationFeature env _ _ = do
     return DocumentationFeature {
         featureInterface = (emptyHackageFeature "documentation") {
           featureResources = map ($ resources) [packageDocs, packageDocTar, packageDocsUpload]
-        , dumpBackup    = Just $ do
-              doc <- query GetDocumentation
-              let exportFunc (pkgid, (blob, _)) = ([display pkgid, "documentation.tar"], Right blob)
-              readExportBlobs store . map exportFunc . Map.toList $ documentation doc
-        , restoreBackup = Just $ updateDocumentation store (Documentation Map.empty)
+        , featureDumpRestore = Just (dumpBackup store, restoreBackup store)
         }
       , documentationResource = resources
       }
+  where
+    dumpBackup store = do
+        doc <- query GetDocumentation
+        let exportFunc (pkgid, (blob, _)) = ([display pkgid, "documentation.tar"], Right blob)
+        readExportBlobs store . map exportFunc . Map.toList $ documentation doc
+    restoreBackup store = updateDocumentation store (Documentation Map.empty)
 
 serveDocumentationTar :: BlobStorage -> DynamicPath -> ServerPart Response
 serveDocumentationTar store dpath = runServerPartE $ withDocumentation dpath $ \_ blob _ -> do

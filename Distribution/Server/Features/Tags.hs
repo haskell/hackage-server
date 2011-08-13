@@ -77,15 +77,18 @@ instance IsHackageFeature TagsFeature where
     getFeatureInterface tags = (emptyHackageFeature "tags") {
         featureResources = map ($tagsResource tags) [tagsListing, tagListing, packageTagsListing]
       , featurePostInit = initImmutableTags
-      , dumpBackup    = Just $ do
-            pkgTags <- query GetPackageTags
-            return [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]
-      , restoreBackup = Just $ tagsBackup
+      , featureDumpRestore = Just (dumpBackup, restoreBackup)
       }
-      where initImmutableTags = do
+      where
+        initImmutableTags = do
                 index <- fmap packageList $ query GetPackagesState
                 let calcTags = tagPackages $ constructImmutableTagIndex index
                 forM_ (Map.toList calcTags) $ uncurry $ setCalculatedTag tags
+        dumpBackup    = do
+            pkgTags <- query GetPackageTags
+            return [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]
+        restoreBackup = tagsBackup
+
 
 initTagsFeature :: ServerEnv -> CoreFeature -> IO TagsFeature
 initTagsFeature _ cf = do

@@ -72,21 +72,25 @@ instance IsHackageFeature ReverseFeature where
     getFeatureInterface rev = (emptyHackageFeature "reverse") {
         featureResources = map ($reverseResource rev) []
       , featurePostInit = forkIO transferReverse >> return ()
-      , dumpBackup    = Nothing
-      , restoreBackup = Just $ fix $ \r -> RestoreBackup
-              { restoreEntry    = \_ -> return $ Right r
-              , restoreFinalize = return $ Right r
+      , featureDumpRestore = Just (return [], restoreBackup)
+      }
+      where
+        transferReverse = forever $ do
+                revFunc <- readChan (reverseStream rev)
+                modded  <- revFunc
+                runHook' (reverseUpdateHook rev) modded
+
+        --TODO: this isn't a restore!
+        --      do we need a post init/restore hook for initialising caches?
+        restoreBackup = RestoreBackup
+              { restoreEntry    = \_ -> return $ Right restoreBackup
+              , restoreFinalize = return $ Right restoreBackup
               , restoreComplete = do
                     putStrLn "Calculating reverse dependencies"
                     index <- fmap packageList $ query GetPackagesState
                     let revs = constructReverseIndex index
                     update $ ReplaceReverseIndex revs
               }
-      }
-      where transferReverse = forever $ do
-                revFunc <- readChan (reverseStream rev)
-                modded  <- revFunc
-                runHook' (reverseUpdateHook rev) modded
 
 initReverseFeature :: ServerEnv -> CoreFeature -> VersionsFeature -> IO ReverseFeature
 initReverseFeature _ core _ = do

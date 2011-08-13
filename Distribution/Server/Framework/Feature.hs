@@ -12,14 +12,16 @@ import Distribution.Server.Framework.Resource      (Resource)
 -- Features can hold their own canonical state and caches, and can provide a
 -- set of resources.
 --
+-- Features that hold canonical state must support dump/restore by defining
+-- 'featureDumpRestore' appropriately.
+--
 data HackageFeature = HackageFeature {
     featureName        :: String,
     featureResources   :: [Resource],
 
     featurePostInit    :: IO (),
 
-    dumpBackup    :: Maybe (IO [BackupEntry]),
-    restoreBackup :: Maybe (RestoreBackup)
+    featureDumpRestore :: Maybe (IO [BackupEntry], RestoreBackup)
 }
 
 -- | A feature with no state and no resources, just a name.
@@ -37,8 +39,7 @@ emptyHackageFeature name = HackageFeature {
 
     featurePostInit    = return (),
 
-    dumpBackup    = Nothing,
-    restoreBackup = Nothing
+    featureDumpRestore = Nothing
   }
 
 class IsHackageFeature feature where

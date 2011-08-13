@@ -161,13 +161,7 @@ initCoreFeature config = do
               [ coreIndexPage, coreIndexTarball, corePackagesPage, corePackagePage
               , corePackageRedirect, corePackageTarball, coreCabalFile ]
           , featurePostInit = runHook indexHook
-          , dumpBackup = Just $ do
-                users    <- query GetUserDb
-                packages <- query GetPackagesState
-                admins   <- query GetHackageAdmins
-                packageEntries <- readExportBlobs store $ indexToAllVersions packages
-                return $ packageEntries ++ [csvToBackup ["users.csv"] $ usersToCSV users, csvToBackup ["admins.csv"] $ groupToCSV admins]
-          , restoreBackup = Just $ mconcat [userBackup, packagesBackup store, groupBackup ["admins.csv"] ReplaceHackageAdmins]
+          , featureDumpRestore = Just (dumpBackup store, restoreBackup store)
           }
       , coreResource = resources
       , cacheIndexTarball  = indexTar
@@ -182,6 +176,13 @@ initCoreFeature config = do
     }
   where
     indexPage staticDir _ = serveFile (const $ return "text/html") (staticDir ++ "/hackage.html")
+    dumpBackup store = do
+      users    <- query GetUserDb
+      packages <- query GetPackagesState
+      admins   <- query GetHackageAdmins
+      packageEntries <- readExportBlobs store $ indexToAllVersions packages
+      return $ packageEntries ++ [csvToBackup ["users.csv"] $ usersToCSV users, csvToBackup ["admins.csv"] $ groupToCSV admins]
+    restoreBackup store = mconcat [userBackup, packagesBackup store, groupBackup ["admins.csv"] ReplaceHackageAdmins]
 
 -- Should probably look more like an Apache index page (Name / Last modified / Size / Content-type)
 basicPackagePage :: CoreResource -> DynamicPath -> ServerPart Response

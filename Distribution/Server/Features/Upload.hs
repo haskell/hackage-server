@@ -77,13 +77,15 @@ instance IsHackageFeature UploadFeature where
              groupResource . packageGroupResource, groupUserResource . packageGroupResource,
              groupResource . trusteeResource, groupUserResource . trusteeResource]
         -- TODO: backup maintainer groups, trustees
-      , dumpBackup    = Just $ do
+      , featureDumpRestore = Just (dumpBackup, restoreBackup)
+      }
+      where
+        dumpBackup    = do
             trustees <- query GetHackageTrustees
             PackageMaintainers mains <- query AllPackageMaintainers
             return [ csvToBackup ["trustees.csv"] $ groupToCSV trustees
                    , maintToExport mains ]
-      , restoreBackup = Just $ mconcat [maintainerBackup, groupBackup ["trustees.csv"] ReplaceHackageTrustees]
-      }
+        restoreBackup = mconcat [maintainerBackup, groupBackup ["trustees.csv"] ReplaceHackageTrustees]
 
 initUploadFeature :: ServerEnv -> CoreFeature -> UserFeature -> IO UploadFeature
 initUploadFeature env core users = do

@@ -1,16 +1,17 @@
 {-# LANGUAGE PatternGuards #-}
 module Distribution.Server.Features.BuildReports.Backup (
-    reportsBackup,
+    dumpBackup,
+    restoreBackup,
     buildReportsToExport,
     packageReportsToExport
   ) where
 
-import Distribution.Server.Acid (update)
+import Distribution.Server.Acid (update, query)
 import Distribution.Server.Features.BuildReports.BuildReport (BuildReport)
 import qualified Distribution.Server.Features.BuildReports.BuildReport as Report
 import Distribution.Server.Features.BuildReports.BuildReports (BuildReports, PkgBuildReports, BuildReportId(..), BuildLog(..))
 import qualified Distribution.Server.Features.BuildReports.BuildReports as Reports
-import Distribution.Server.Features.BuildReports.State (ReplaceBuildReports(..))
+import Distribution.Server.Features.BuildReports.State
 
 import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
@@ -30,8 +31,15 @@ import Data.Monoid (mempty)
 import System.FilePath (splitExtension)
 import Data.ByteString.Lazy.Char8 (ByteString)
 
-reportsBackup :: BlobStorage -> RestoreBackup
-reportsBackup storage = updateReports storage (Reports.emptyReports, Map.empty)
+
+dumpBackup  :: BlobStorage -> IO [BackupEntry]
+dumpBackup store = do
+  buildReps <- query GetBuildReports
+  exports <- readExportBlobs store (buildReportsToExport buildReps)
+  return exports
+
+restoreBackup :: BlobStorage -> RestoreBackup
+restoreBackup storage = updateReports storage (Reports.emptyReports, Map.empty)
 
 -- when logs are encountered before their corresponding build reports
 type PartialLogs = Map (PackageId, BuildReportId) BuildLog

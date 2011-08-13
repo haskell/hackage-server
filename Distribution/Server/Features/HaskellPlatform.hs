@@ -43,8 +43,7 @@ data PlatformResource = PlatformResource {
 instance IsHackageFeature PlatformFeature where
     getFeatureInterface platform = (emptyHackageFeature "platform") {
         featureResources = map ($platformResource platform) [platformPackage, platformPackages]
-      , dumpBackup    = Nothing -- TODO
-      , restoreBackup = Nothing
+      , featureDumpRestore = Nothing -- TODO
       }
 
 initPlatformFeature :: ServerEnv -> CoreFeature -> IO PlatformFeature

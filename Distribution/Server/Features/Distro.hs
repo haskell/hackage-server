@@ -44,12 +44,7 @@ data DistroResource = DistroResource {
 instance IsHackageFeature DistroFeature where
     getFeatureInterface distro = (emptyHackageFeature "distro") {
         featureResources = map ($distroResource distro) [distroIndexPage, distroAllPage, distroPackage]
-      , dumpBackup    = Just $ do
-            allDist <- query GetDistributions
-            let distros  = distDistros allDist
-                versions = distVersions allDist
-            return $ distroUsersToExport distros:distrosToExport distros versions
-      , restoreBackup = Just $ distroBackup
+      , featureDumpRestore = Just (dumpBackup, restoreBackup)
       }
 
 initDistroFeature :: ServerEnv -> CoreFeature -> UserFeature -> PackagesFeature -> IO DistroFeature

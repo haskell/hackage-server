@@ -93,8 +93,7 @@ instance IsHackageFeature UserFeature where
         featureResources = map ($userResource userf)
             [userList, userPage, passwordResource, enabledResource,
              groupResource . adminResource, groupUserResource . adminResource]
-      , dumpBackup    = Nothing
-      , restoreBackup = Nothing  --ReplaceIndexUsers
+      , featureDumpRestore = Nothing  --ReplaceIndexUsers
       }
 
 -- TODO: add renaming

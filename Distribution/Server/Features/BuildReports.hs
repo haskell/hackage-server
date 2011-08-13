@@ -76,12 +76,8 @@ initBuildReportsFeature env _ = do
           }
     return ReportsFeature {
         featureInterface = (emptyHackageFeature "packages") {
-          featureResources = map ($ resources) [reportsList, reportsPage, reportsLog]
-        , dumpBackup    = Just $ do
-              buildReps <- query GetBuildReports
-              exports <- readExportBlobs store (buildReportsToExport buildReps)
-              return exports
-        , restoreBackup = Just $ reportsBackup store
+          featureResources   = map ($ resources) [reportsList, reportsPage, reportsLog],
+          featureDumpRestore = Just (dumpBackup store, restoreBackup store)
         }
       , reportsResource = resources
       }

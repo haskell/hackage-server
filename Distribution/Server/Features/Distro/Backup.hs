@@ -1,5 +1,6 @@
 module Distribution.Server.Features.Distro.Backup (
-    distroBackup,
+    dumpBackup,
+    restoreBackup,
 
     distroUsersToExport,
     distroUsersToCSV,
@@ -7,7 +8,7 @@ module Distribution.Server.Features.Distro.Backup (
     distroToCSV
   ) where
 
-import Distribution.Server.Acid (update)
+import Distribution.Server.Acid (update, query)
 import qualified Distribution.Server.Features.Distro.Distributions as Distros
 import Distribution.Server.Features.Distro.Distributions (DistroName, Distributions(..), DistroVersions(..), DistroPackageInfo(..))
 import Distribution.Server.Features.Distro.State
@@ -30,8 +31,15 @@ import Data.Monoid (mempty)
 import Control.Arrow (second)
 import System.FilePath (takeExtension)
 
-distroBackup :: RestoreBackup
-distroBackup = updateDistros Distros.emptyDistributions Distros.emptyDistroVersions Map.empty
+dumpBackup  :: IO [BackupEntry]
+dumpBackup = do
+    allDist <- query GetDistributions
+    let distros  = distDistros allDist
+        versions = distVersions allDist
+    return $ distroUsersToExport distros:distrosToExport distros versions
+
+restoreBackup :: RestoreBackup
+restoreBackup = updateDistros Distros.emptyDistributions Distros.emptyDistroVersions Map.empty
 
 updateDistros :: Distributions -> DistroVersions -> Map DistroName UserList -> RestoreBackup
 updateDistros distros versions maintainers = fix $ \restorer -> RestoreBackup

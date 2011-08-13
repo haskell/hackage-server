@@ -273,23 +273,31 @@ bulkImport storageDir indexFile logFile archiveFile htPasswdFile adminsFile = do
                 Just uid -> Right uid
 
 exportServerTar :: Server -> IO ByteString
-exportServerTar server = exportTar (makeFeatureMap server Feature.dumpBackup)
+exportServerTar server =
+    exportTar
+      [ (featureName feature, dump)
+      | feature@HackageFeature {
+          featureDumpRestore = Just (dump, _restore)
+        } <- serverFeatures server ]
 
 importServerTar :: Server -> ByteString -> IO (Maybe String)
-importServerTar server tar = Import.importTar tar (makeFeatureMap server Feature.restoreBackup)
+importServerTar server tar =
+    Import.importTar tar
+      [ (featureName feature, restore)
+      | feature@HackageFeature {
+          featureDumpRestore = Just (_dump, restore)
+        } <- serverFeatures server ]
 
-makeFeatureMap :: Server -> (HackageFeature -> Maybe a) -> [(String, a)]
-makeFeatureMap server mkBackup = concatMap makeEntry $ serverFeatures server
-  where 
-    makeEntry feature = case mkBackup feature of
-        Nothing  -> []
-        Just runTask -> [(Feature.featureName feature, runTask)]
 
 -- An alternative to an import: starts the server off to a sane initial state.
 -- To accomplish this, we import a 'null' tarball, finalizing immediately after initializing import
 initState ::  Server -> (String, String) -> IO ()
 initState server (admin, pass) = do
-    Import.importBlank (makeFeatureMap server Feature.restoreBackup)
+    Import.importBlank
+      [ (featureName feature, restore)
+      | feature@HackageFeature {
+          featureDumpRestore = Just (_dump, restore)
+        } <- serverFeatures server ]
     -- create default admin user
     muid <- case simpleParse admin of
         Just uname -> do

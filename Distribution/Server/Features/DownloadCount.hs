@@ -44,8 +44,7 @@ instance IsHackageFeature DownloadFeature where
         featureResources = map (\x -> x $ downloadResource download) [topDownloads]
       , featurePostInit  = do countCache
                               forkIO transferDownloads >> return ()
-      , dumpBackup    = Nothing -- TODO
-      , restoreBackup = Nothing
+      , featureDumpRestore = Nothing -- TODO
       }
       where countCache = do
                 dc <- query GetDownloadCounts
