@@ -133,7 +133,7 @@ initialise initConfig@(ServerConfig hostName portNum stateDir staticDir tmpDir) 
             serverHostURI   = hostURI
          }
     -- do feature initialization
-    features <- Features.hackageFeatures env
+    features <- Features.initHackageFeatures env
 
     return Server {
         serverAcid      = acid,

@@ -46,8 +46,8 @@ import Distribution.Server.Features.HaskellPlatform (initPlatformFeature)
 --     best approach is probably to write backup tarball to disk and transfer
 --     it away through non-HTTP means (somewhat more secure)
 
-hackageFeatures :: ServerEnv -> IO [HackageFeature]
-hackageFeatures env = do
+initHackageFeatures :: ServerEnv -> IO [HackageFeature]
+initHackageFeatures env = do
 
     -- Arguments denote data dependencies, even if the feature objects are
     -- themselves unused, functions from their modules are.
