@@ -36,6 +36,7 @@ import Data.ByteString.Lazy.Char8 (unpack)
 -- 1. Put the HTML view for this module in the HTML feature; get rid of the text view
 -- 2. Decide build report upload policy (anonymous and authenticated)
 data ReportsFeature = ReportsFeature {
+    featureInterface :: HackageFeature,
     reportsResource :: ReportsResource
 }
 
@@ -49,38 +50,40 @@ data ReportsResource = ReportsResource {
 }
 
 instance IsHackageFeature ReportsFeature where
-    getFeatureInterface reports = (emptyHackageFeature "packages") {
-        featureResources = map ($reportsResource reports) [reportsList, reportsPage, reportsLog]
-      , dumpBackup    = Just $ \storage -> do
-            buildReps <- query GetBuildReports
-            exports <- readExportBlobs storage (buildReportsToExport buildReps)
-            return exports
-      , restoreBackup = Just $ \storage -> reportsBackup storage
-      }
+    getFeatureInterface = featureInterface
 
 initBuildReportsFeature :: ServerEnv -> CoreFeature -> IO ReportsFeature
 initBuildReportsFeature env _ = do
     let store = serverBlobStore env
-    return ReportsFeature
-      { reportsResource = fix $ \r -> ReportsResource
+        resources = ReportsResource
           { reportsList = (resourceAt "/package/:package/reports/.:format") {
                             resourceGet =  [("txt", textPackageReports)],
-                            resourcePost = [("",    submitBuildReport r store)]
+                            resourcePost = [("",    submitBuildReport resources store)]
                           }
           , reportsPage = (resourceAt "/package/:package/reports/:id.:format") {
                             resourceGet    = [("txt", textPackageReport)],
-                            resourceDelete = [("",    deleteBuildReport r)]
+                            resourceDelete = [("",    deleteBuildReport resources)]
                           }
           , reportsLog  = (resourceAt "/package/:package/reports/:id/log") {
                             resourceGet    = [("txt", serveBuildLog store)],
-                            resourceDelete = [("",    deleteBuildLog r)],
-                            resourcePut    = [("",    putBuildLog r store)]
+                            resourceDelete = [("",    deleteBuildLog resources)],
+                            resourcePut    = [("",    putBuildLog resources store)]
                           }
 
-          , reportsListUri = \format pkgid -> renderResource (reportsList r) [display pkgid, format]
-          , reportsPageUri = \format pkgid repid -> renderResource (reportsPage r) [display pkgid, display repid, format]
-          , reportsLogUri  = \pkgid repid -> renderResource (reportsLog r) [display pkgid, display repid]
+          , reportsListUri = \format pkgid -> renderResource (reportsList resources) [display pkgid, format]
+          , reportsPageUri = \format pkgid repid -> renderResource (reportsPage resources) [display pkgid, display repid, format]
+          , reportsLogUri  = \pkgid repid -> renderResource (reportsLog resources) [display pkgid, display repid]
           }
+    return ReportsFeature {
+        featureInterface = (emptyHackageFeature "packages") {
+          featureResources = map ($ resources) [reportsList, reportsPage, reportsLog]
+        , dumpBackup    = Just $ do
+              buildReps <- query GetBuildReports
+              exports <- readExportBlobs store (buildReportsToExport buildReps)
+              return exports
+        , restoreBackup = Just $ reportsBackup store
+        }
+      , reportsResource = resources
       }
   where
     textPackageReports dpath =

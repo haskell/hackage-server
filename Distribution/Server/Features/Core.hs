@@ -70,6 +70,7 @@ import Distribution.Version (Version(..))
 
 
 data CoreFeature = CoreFeature {
+    featureInterface :: HackageFeature,
     coreResource :: CoreResource,
 
     -- index.tar.gz
@@ -113,19 +114,7 @@ data CoreResource = CoreResource {
 }
 
 instance IsHackageFeature CoreFeature where
-    getFeatureInterface core = (emptyHackageFeature "core") {
-        featureResources = map ($coreResource core)
-          [ coreIndexPage, coreIndexTarball, corePackagesPage, corePackagePage
-          , corePackageRedirect, corePackageTarball, coreCabalFile ]
-      , featurePostInit = runHook (packageIndexChange core)
-      , dumpBackup = Just $ \store -> do
-            users    <- query GetUserDb
-            packages <- query GetPackagesState
-            admins   <- query GetHackageAdmins
-            packageEntries <- readExportBlobs store $ indexToAllVersions packages
-            return $ packageEntries ++ [csvToBackup ["users.csv"] $ usersToCSV users, csvToBackup ["admins.csv"] $ groupToCSV admins]
-      , restoreBackup = Just $ \store -> mconcat [userBackup, packagesBackup store, groupBackup ["admins.csv"] ReplaceHackageAdmins]
-      }
+    getFeatureInterface = featureInterface
 
 initCoreFeature :: ServerEnv -> IO CoreFeature
 initCoreFeature config = do
@@ -149,24 +138,38 @@ initCoreFeature config = do
     registerHook indexHook computeCache
 
     let store = serverBlobStore config
-    return CoreFeature
-      { coreResource = fix $ \r -> CoreResource {
+        resources = CoreResource {
             -- the rudimentary HTML resources are for when we don't want an additional HTML feature
             coreIndexPage = (resourceAt "/.:format") { resourceGet = [("html", indexPage $ serverStaticDir config)] }
           , coreIndexTarball = (resourceAt "/packages/index.tar.gz") { resourceGet = [("tarball", Cache.respondCache indexTar Resource.IndexTarball)] }
           , corePackagesPage = (resourceAt "/packages/.:format") { resourceGet = [] } -- -- have basic packages listing?
-          , corePackagePage = (resourceAt "/package/:package.:format") { resourceGet = [("html", basicPackagePage r)] }
+          , corePackagePage = (resourceAt "/package/:package.:format") { resourceGet = [("html", basicPackagePage resources)] }
           , corePackageRedirect = (resourceAt "/package/") { resourceGet = [("", \_ -> seeOther "/packages/" $ toResponse ())] }
           , corePackageTarball = (resourceAt "/package/:package/:tarball.tar.gz") { resourceGet = [("tarball", runServerPartE . servePackageTarball downHook store)] }
           , coreCabalFile  = (resourceAt "/package/:package/:cabal.cabal") { resourceGet = [("cabal", runServerPartE . serveCabalFile)] }
 
-          , indexTarballUri = renderResource (coreIndexTarball r) []
-          , indexPackageUri = \format -> renderResource (corePackagesPage r) [format]
-          , corePackageUri  = \format pkgid -> renderResource (corePackagePage r) [display pkgid, format]
-          , corePackageName = \format pkgname -> renderResource (corePackagePage r) [display pkgname, format]
-          , coreCabalUri   = \pkgid -> renderResource (coreCabalFile r) [display pkgid, display (packageName pkgid)]
-          , coreTarballUri = \pkgid -> renderResource (corePackageTarball r) [display pkgid, display pkgid]
+          , indexTarballUri = renderResource (coreIndexTarball resources) []
+          , indexPackageUri = \format -> renderResource (corePackagesPage resources) [format]
+          , corePackageUri  = \format pkgid -> renderResource (corePackagePage resources) [display pkgid, format]
+          , corePackageName = \format pkgname -> renderResource (corePackagePage resources) [display pkgname, format]
+          , coreCabalUri   = \pkgid -> renderResource (coreCabalFile resources) [display pkgid, display (packageName pkgid)]
+          , coreTarballUri = \pkgid -> renderResource (corePackageTarball resources) [display pkgid, display pkgid]
           }
+    return CoreFeature {
+        featureInterface = (emptyHackageFeature "core") {
+            featureResources = map ($ resources)
+              [ coreIndexPage, coreIndexTarball, corePackagesPage, corePackagePage
+              , corePackageRedirect, corePackageTarball, coreCabalFile ]
+          , featurePostInit = runHook indexHook
+          , dumpBackup = Just $ do
+                users    <- query GetUserDb
+                packages <- query GetPackagesState
+                admins   <- query GetHackageAdmins
+                packageEntries <- readExportBlobs store $ indexToAllVersions packages
+                return $ packageEntries ++ [csvToBackup ["users.csv"] $ usersToCSV users, csvToBackup ["admins.csv"] $ groupToCSV admins]
+          , restoreBackup = Just $ mconcat [userBackup, packagesBackup store, groupBackup ["admins.csv"] ReplaceHackageAdmins]
+          }
+      , coreResource = resources
       , cacheIndexTarball  = indexTar
       , indexExtras = extraMap
       , packageAddHook = addHook

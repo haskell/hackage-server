@@ -3,7 +3,6 @@
 module Distribution.Server.Framework.Feature where
 
 import Distribution.Server.Framework.BackupRestore (RestoreBackup, BackupEntry)
-import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import Distribution.Server.Framework.Resource      (Resource)
 
 -- | We compose the overall hackage server featureset from a bunch of these
@@ -19,8 +18,8 @@ data HackageFeature = HackageFeature {
 
     featurePostInit    :: IO (),
 
-    dumpBackup    :: Maybe (BlobStorage -> IO [BackupEntry]),
-    restoreBackup :: Maybe (BlobStorage -> RestoreBackup)
+    dumpBackup    :: Maybe (IO [BackupEntry]),
+    restoreBackup :: Maybe (RestoreBackup)
 }
 
 -- | A feature with no state and no resources, just a name.

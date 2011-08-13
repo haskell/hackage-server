@@ -34,6 +34,7 @@ import Control.Monad.State (modify)
 -- 1. Write an HTML view for organizing uploads
 -- 2. Have cabal generate a standard doc tarball, and serve that here
 data DocumentationFeature = DocumentationFeature {
+    featureInterface :: HackageFeature,
     documentationResource :: DocumentationResource
 }
 
@@ -45,28 +46,28 @@ data DocumentationResource = DocumentationResource {
 }
 
 instance IsHackageFeature DocumentationFeature where
-    getFeatureInterface docs = (emptyHackageFeature "documentation") {
-        featureResources = map ($documentationResource docs) [packageDocs, packageDocTar, packageDocsUpload]
-      , dumpBackup    = Just $ \storage -> do
-            doc <- query GetDocumentation
-            let exportFunc (pkgid, (blob, _)) = ([display pkgid, "documentation.tar"], Right blob)
-            readExportBlobs storage . map exportFunc . Map.toList $ documentation doc
-      , restoreBackup = Just $ \storage -> updateDocumentation storage (Documentation Map.empty)
-      }
-
+    getFeatureInterface = featureInterface
 
 initDocumentationFeature :: ServerEnv -> CoreFeature -> UploadFeature -> IO DocumentationFeature
 initDocumentationFeature env _ _ = do
     let store = serverBlobStore env
-    return DocumentationFeature
-      { documentationResource = fix $ \r -> DocumentationResource
-          { packageDocs = (resourceAt "/package/:package/doc/..") { resourceGet = [("", serveDocumentation store)] }
+        resources = DocumentationResource {
+            packageDocs = (resourceAt "/package/:package/doc/..") { resourceGet = [("", serveDocumentation store)] }
           , packageDocsUpload = (resourceAt "/package/:package/doc/.:format") { resourcePut = [("txt", uploadDocumentation store)] }
           , packageDocTar = (resourceAt "/package/:package/:doc.tar") { resourceGet = [("tar", serveDocumentationTar store)] }
-          , packageDocUri = \pkgid str -> renderResource (packageDocs r) [display pkgid, str]
+          , packageDocUri = \pkgid str -> renderResource (packageDocs resources) [display pkgid, str]
           }
+    return DocumentationFeature {
+        featureInterface = (emptyHackageFeature "documentation") {
+          featureResources = map ($ resources) [packageDocs, packageDocTar, packageDocsUpload]
+        , dumpBackup    = Just $ do
+              doc <- query GetDocumentation
+              let exportFunc (pkgid, (blob, _)) = ([display pkgid, "documentation.tar"], Right blob)
+              readExportBlobs store . map exportFunc . Map.toList $ documentation doc
+        , restoreBackup = Just $ updateDocumentation store (Documentation Map.empty)
+        }
+      , documentationResource = resources
       }
-  where
 
 serveDocumentationTar :: BlobStorage -> DynamicPath -> ServerPart Response
 serveDocumentationTar store dpath = runServerPartE $ withDocumentation dpath $ \_ blob _ -> do

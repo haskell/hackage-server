@@ -73,7 +73,7 @@ instance IsHackageFeature ReverseFeature where
         featureResources = map ($reverseResource rev) []
       , featurePostInit = forkIO transferReverse >> return ()
       , dumpBackup    = Nothing
-      , restoreBackup = Just $ \_ -> fix $ \r -> RestoreBackup
+      , restoreBackup = Just $ fix $ \r -> RestoreBackup
               { restoreEntry    = \_ -> return $ Right r
               , restoreFinalize = return $ Right r
               , restoreComplete = do

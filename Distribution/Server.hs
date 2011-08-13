@@ -43,7 +43,6 @@ import qualified Distribution.Server.Features as Features
 
 import Distribution.Server.Users.State as State
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
-import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import qualified Distribution.Server.LegacyImport.BulkImport as BulkImport
 import qualified Distribution.Server.LegacyImport.UploadLog as UploadLog
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
@@ -279,13 +278,12 @@ exportServerTar server = exportTar (makeFeatureMap server Feature.dumpBackup)
 importServerTar :: Server -> ByteString -> IO (Maybe String)
 importServerTar server tar = Import.importTar tar (makeFeatureMap server Feature.restoreBackup)
 
-makeFeatureMap :: Server -> (HackageFeature -> Maybe (BlobStorage -> a)) -> [(String, a)]
+makeFeatureMap :: Server -> (HackageFeature -> Maybe a) -> [(String, a)]
 makeFeatureMap server mkBackup = concatMap makeEntry $ serverFeatures server
   where 
-    store = serverBlobStore (serverEnv server)
     makeEntry feature = case mkBackup feature of
         Nothing  -> []
-        Just runTask -> [(Feature.featureName feature, runTask store)]
+        Just runTask -> [(Feature.featureName feature, runTask)]
 
 -- An alternative to an import: starts the server off to a sane initial state.
 -- To accomplish this, we import a 'null' tarball, finalizing immediately after initializing import

@@ -47,10 +47,10 @@ data MirrorResource = MirrorResource {
 instance IsHackageFeature MirrorFeature where
     getFeatureInterface mirror = (emptyHackageFeature "mirror") {
         featureResources = map ($mirrorResource mirror) [mirrorPackageTarball, mirrorCabalFile]
-      , dumpBackup    = Just $ \_ -> do
+      , dumpBackup    = Just $ do
             clients <- query GetMirrorClients
             return [csvToBackup ["clients.csv"] $ groupToCSV clients]
-      , restoreBackup = Just $ \_-> groupBackup ["clients.csv"] ReplaceMirrorClients
+      , restoreBackup = Just $ groupBackup ["clients.csv"] ReplaceMirrorClients
       }
 
 -------------------------------------------------------------------------
