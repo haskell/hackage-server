@@ -448,7 +448,7 @@ restoreAction opts =
           res <- Server.importServerTar server tar
           case res of
               Just err -> fail err
-              _ -> info "Successly imported."
+              _ -> info "Successfully imported."
 
 
 -------------------------------------------------------------------------------
