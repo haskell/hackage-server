@@ -116,9 +116,6 @@ hasSavedState = doesDirectoryExist . confAcidStateDir
 --
 initialise :: ServerConfig -> IO Server
 initialise initConfig@(ServerConfig hostName portNum stateDir staticDir tmpDir) = do
-    exists <- doesDirectoryExist staticDir
-    when (not exists) $ fail $ "The static files directory " ++ staticDir ++ " does not exist."
-
     createDirectoryIfMissing False stateDir
     store   <- BlobStorage.open blobStoreDir
 
@@ -152,7 +149,13 @@ initialise initConfig@(ServerConfig hostName portNum stateDir staticDir tmpDir) 
 -- | Actually run the server, i.e. start accepting client http connections.
 --
 run :: Server -> IO ()
-run server =
+run server = do
+    -- We already check this in Main, so we expect this check to always
+    -- succeed, but just in case...
+    let staticDir = serverStaticDir (serverEnv server)
+    exists <- doesDirectoryExist staticDir
+    when (not exists) $ fail $ "The static files directory " ++ staticDir ++ " does not exist."
+
     simpleHTTP conf $ do
 
       handlePutPostQuotas
