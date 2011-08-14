@@ -70,6 +70,7 @@ navigationBar =
     , ("What's new",    recentAdditionsURL)
     , ("Upload",        uploadURL)
     , ("User accounts", accountsURL)
+    , ("Admin",         adminURL)
     ]
 
 stylesheetURL :: URL
@@ -90,6 +91,10 @@ uploadURL = "/upload.html"
 -- URL about user accounts, including the form to change passwords
 accountsURL :: URL
 accountsURL = "/accounts.html"
+
+-- URL of the admin front end
+adminURL :: URL
+adminURL = "/admin.html"
 
 -- URL of the list of recent additions to the database
 recentAdditionsURL :: URL
