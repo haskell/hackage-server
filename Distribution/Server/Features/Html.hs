@@ -333,7 +333,6 @@ servePasswordForm r dpath = htmlResponse $
                     [ makeInput [thetype "password"] "password" "Password"
                     , makeInput [thetype "password"] "repeat-password" "Confirm password"
                     ]
-                , toHtml $ makeCheckbox True "auth" "on" "Use digest auth"
                 , hidden "_method" "PUT" --method override
                 , paragraph << input ! [thetype "submit", value "Change password"]
                 ]

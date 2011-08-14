@@ -53,11 +53,10 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Function (fix)
-import Control.Monad (liftM)
+import Control.Monad (liftM, liftM2, MonadPlus(..) )
 
 import Distribution.Text (display, simpleParse)
 
-import Control.Monad (MonadPlus(..), liftM3)
 import Control.Monad.Trans (MonadIO(..))
 
 -- | A feature to allow manipulation of the database of users.
@@ -213,10 +212,9 @@ newUserWithAuth userNameStr password _ = case simpleParse userNameStr of
         Nothing  -> errForbidden "Error registering user" [MText "User already exists"]
         Just _   -> return uname
 
-data ChangePassword = ChangePassword { first :: String, second :: String, newAuthType :: Auth.AuthType } deriving (Eq, Show)
+data ChangePassword = ChangePassword { first :: String, second :: String } deriving (Eq, Show)
 instance FromData ChangePassword where
-	fromData = liftM3 ChangePassword (look "password" `mplus` return "") (look "repeat-password" `mplus` return "")
-                                     (fmap (maybe Auth.BasicAuth (const Auth.DigestAuth) . lookup "auth") lookPairs) --checked: digest auth
+	fromData = liftM2 ChangePassword (look "password" `mplus` return "") (look "repeat-password" `mplus` return "")
 
 -- Arguments: the auth'd user id, the user path id (derived from the :username)
 canChangePassword :: MonadIO m => UserId -> UserId -> m Bool
@@ -234,12 +232,11 @@ changePassword userPathName = do
             canChange <- canChangePassword uid userPathId
             if canChange
               then do
-                pwd <- either (const $ return $ ChangePassword "not" "valid" Auth.BasicAuth) return =<< getData
+                pwd <- either (const $ return $ ChangePassword "not" "valid") return =<< getData
                 if (first pwd == second pwd && first pwd /= "")
                   then do
                     let passwd = PasswdPlain (first pwd)
-                    auth <- case newAuthType pwd of 
-                        Auth.DigestAuth -> return $ newDigestPass userPathName passwd
+                        auth   = newDigestPass userPathName passwd
                     res <- update $ ReplaceUserAuth userPathId auth
                     if res
                         then return ()
