@@ -237,7 +237,7 @@ runAction opts = do
 
     checkBlankServerState  hasSavedState = when (not hasSavedState) . die $
             "There is no existing server state.\nYou can either import "
-         ++ "existing data using the various import modes, or start with"
+         ++ "existing data using the various import modes, or start with "
          ++ "an empty state using the new mode. Either way, we have to make "
          ++ "sure that there is at least one admin user account, otherwise "
          ++ "you'll not be able to administer your shiny new hackage server!\n"
