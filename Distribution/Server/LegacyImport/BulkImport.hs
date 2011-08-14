@@ -26,7 +26,7 @@ import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Group as Group
 import qualified Codec.Archive.Tar.Entry as Tar (Entry(..), entryPath, EntryContent(..))
 import qualified Distribution.Server.LegacyImport.UploadLog as UploadLog
-import qualified Distribution.Server.Auth.HtPasswdDb as HtPasswdDb
+import qualified Distribution.Server.LegacyImport.HtPasswdDb as HtPasswdDb
 import qualified Distribution.Server.Auth.Types as Auth
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Framework.BlobStorage (BlobStorage)
@@ -114,11 +114,14 @@ importUsers (Just htpasswdFile) = importUsers' Users.empty
   where
     importUsers' users [] = Right users
     importUsers' users ((userName, userAuth):rest) =
+      error "TODO: need to be able to add old users in special mode with old auth info"
+{-
       case Users.add userName (Users.UserAuth userAuth Auth.BasicAuth) users of
         Nothing                -> Left (alreadyPresent userName)
         Just (users', _userId) -> importUsers' users' rest
 
     alreadyPresent name = "User " ++ show name ++ " is already present"
+-}
 
 -- | Merge all the package and user info together
 --

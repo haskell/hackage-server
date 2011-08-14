@@ -1,4 +1,6 @@
-module Distribution.Server.Auth.HtPasswdDb (
+-- | Parsing @.htpasswd@ files
+--
+module Distribution.Server.LegacyImport.HtPasswdDb (
     HtPasswdDb,
     parse,
   ) where
@@ -6,8 +8,12 @@ module Distribution.Server.Auth.HtPasswdDb (
 import Distribution.Server.Users.Types
          ( UserName(..), PasswdHash(..) )
 
--- Parsing .htpasswd files
-type HtPasswdDb = [(UserName, PasswdHash)]
+type HtPasswdDb = [(UserName, HtPasswdHash)]
+
+-- | These are the crypt format password hashes. Not the same as what hackage stores.
+--
+newtype HtPasswdHash = HtPasswdHash String
+  deriving (Eq, Show)
 
 parse :: String -> Either String HtPasswdDb
 parse = accum 0 [] . map parseLine . lines
@@ -17,7 +23,7 @@ parse = accum 0 [] . map parseLine . lines
     accum n _     (Nothing  :_   ) = Left errmsg
       where errmsg = "parse error in htpasswd file on line " ++ show (n :: Int)
 
-parseLine :: String -> Maybe (UserName, PasswdHash)
+parseLine :: String -> Maybe (UserName, HtPasswdHash)
 parseLine line = case break (==':') line of
-  (user@(_:_), ':' : hash) -> Just (UserName user, PasswdHash hash)
+  (user@(_:_), ':' : hash) -> Just (UserName user, HtPasswdHash hash)
   _                        -> Nothing
