@@ -54,7 +54,6 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Function (fix)
 import Control.Monad (liftM)
-import System.Random (newStdGen)
 
 import Distribution.Text (display, simpleParse)
 
@@ -208,7 +207,7 @@ newUserWithAuth _ pwd1 pwd2 | pwd1 /= pwd2 = errBadRequest "Error registering us
 newUserWithAuth userNameStr password _ = case simpleParse userNameStr of
     Nothing -> errBadRequest "Error registering user" [MText "Not a valid user name!"]
     Just uname -> do
-      let userAuth = Auth.newDigestPass uname password "Hackage"
+      let userAuth = Auth.newPasswdHash "Hackage"uname password
       muid <- update $ AddUser uname (UserAuth userAuth DigestAuth)
       case muid of
         Nothing  -> errForbidden "Error registering user" [MText "User already exists"]
@@ -240,7 +239,6 @@ changePassword userPathName = do
                   then do
                     let passwd = PasswdPlain (first pwd)
                     auth <- case newAuthType pwd of 
-                        Auth.BasicAuth  -> newBasicPass passwd
                         Auth.DigestAuth -> return $ newDigestPass userPathName passwd
                     res <- update $ ReplaceUserAuth userPathId auth
                     if res
@@ -253,13 +251,8 @@ changePassword userPathName = do
   where
     forbidChange = errForbidden "Error changing password" . return . MText
 
-newBasicPass :: MonadIO m => Auth.PasswdPlain -> m UserAuth
-newBasicPass pwd = do
-    gen <- liftIO newStdGen
-    return $ UserAuth (Auth.newBasicPass gen pwd) Auth.BasicAuth
-
 newDigestPass :: UserName -> PasswdPlain -> UserAuth
-newDigestPass name pwd = UserAuth (Auth.newDigestPass name pwd Auth.authorizationRealm) Auth.DigestAuth
+newDigestPass name pwd = UserAuth (Auth.newPasswdHash Auth.authorizationRealm name pwd) Auth.DigestAuth
 
 --
 runUserFilter :: UserFeature -> UserId -> IO (Maybe ErrorResponse)

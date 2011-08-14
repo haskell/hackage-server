@@ -170,13 +170,6 @@ executable hackage-server
     alex       == 2.2.* || == 2.3.*,
     happy      == 1.17.* || == 1.18.*
 
-  if os(linux)
-     extra-libraries: crypt
-  if os(linux) || os(solaris)
-     includes: crypt.h
-  else
-     includes: unistd.h
-
   ghc-options: -Wall -threaded
                -fno-warn-orphans -fno-warn-unused-do-bind
                -fno-warn-warnings-deprecations

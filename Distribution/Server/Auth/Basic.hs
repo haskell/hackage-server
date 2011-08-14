@@ -40,13 +40,12 @@ getHackageAuth users = askRq >>= \req -> return $ case getAuthType req of
 -}
 
 getHackageAuth :: Users.Users -> ServerPartE (Either AuthError (UserId, UserInfo))
-getHackageAuth users = 
-    do req <- askRq
-       case getAuthType req of
-         Just BasicAuth  -> return $ genericBasicAuth req authorizationRealm (getPasswdInfo users)
-         -- HS6 -- this implementation is troublesome because it requires the entire request body to be read into RAM to run genericDigestAuth.. the request body could include large file uploads
-         Just DigestAuth -> return $ genericDigestAuth req (getPasswdInfo users) --realm hashed in user database
-         Nothing         -> return $ Left NoAuthError
+getHackageAuth users = do
+    req <- askRq
+    case getAuthType req of
+      Just BasicAuth  -> return $ genericBasicAuth req authorizationRealm (getPasswdInfo users)
+      Just DigestAuth -> return $ genericDigestAuth req (getPasswdInfo users) --realm hashed in user database
+      Nothing         -> return $ Left NoAuthError
 
 
 getAuthType :: Request -> Maybe AuthType
@@ -119,9 +118,7 @@ genericBasicAuth req realmName userDetails = do
     authHeader <- NoAuthError <? getHeader "authorization" req
     (userName, pass) <- UnrecognizedAuthError <? parseHeader authHeader
     (var, Users.UserAuth hash atype) <- NoSuchUserError <? userDetails userName
-    let matches = case atype of
-            BasicAuth  -> Crypt.checkPasswd pass hash
-            DigestAuth -> Crypt.newDigestPass userName pass realmName == hash
+    let matches = Crypt.checkPasswdBasicAuth realmName userName hash pass
     if matches then Right var else Left PasswordMismatchError
   where
     parseHeader h = case splitHeader h of
