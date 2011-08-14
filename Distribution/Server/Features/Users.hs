@@ -208,7 +208,7 @@ newUserWithAuth userNameStr password _ = case simpleParse userNameStr of
     Nothing -> errBadRequest "Error registering user" [MText "Not a valid user name!"]
     Just uname -> do
       let userAuth = Auth.newPasswdHash "Hackage"uname password
-      muid <- update $ AddUser uname (UserAuth userAuth DigestAuth)
+      muid <- update $ AddUser uname (UserAuth userAuth)
       case muid of
         Nothing  -> errForbidden "Error registering user" [MText "User already exists"]
         Just _   -> return uname
@@ -252,7 +252,7 @@ changePassword userPathName = do
     forbidChange = errForbidden "Error changing password" . return . MText
 
 newDigestPass :: UserName -> PasswdPlain -> UserAuth
-newDigestPass name pwd = UserAuth (Auth.newPasswdHash Auth.authorizationRealm name pwd) Auth.DigestAuth
+newDigestPass name pwd = UserAuth (Auth.newPasswdHash Auth.authorizationRealm name pwd)
 
 --
 runUserFilter :: UserFeature -> UserId -> IO (Maybe ErrorResponse)

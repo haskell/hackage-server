@@ -36,7 +36,7 @@ data UserStatus = Deleted
     deriving (Show, Typeable)
 data AccountEnabled = Enabled | Disabled deriving (Show, Enum, Eq, Typeable)
 
-data UserAuth = UserAuth PasswdHash AuthType deriving (Show, Eq, Typeable)
+data UserAuth = UserAuth PasswdHash deriving (Show, Eq, Typeable)
 
 instance Text UserId where
     disp (UserId uid) = Disp.int uid

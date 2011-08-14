@@ -302,7 +302,7 @@ initState server (admin, pass) = do
     muid <- case simpleParse admin of
         Just uname -> do
             let userAuth = Auth.newPasswdHash Auth.authorizationRealm uname (Auth.PasswdPlain pass)
-            update $ AddUser uname (Users.UserAuth userAuth Auth.DigestAuth)
+            update $ AddUser uname (Users.UserAuth userAuth)
         Nothing -> fail "Couldn't parse admin name (should be alphanumeric)"
     case muid of
         Just uid -> update $ State.AddHackageAdmin uid

@@ -60,8 +60,7 @@ importAuth contents = importCSV "users.csv" contents $ \csv -> mapM_ fromRecord 
         name <- parseText "user name" nameStr
         user <- parseText "user id" idStr
         authEn <- parseEnabled isEnabled
-        atype <- parseAuth authType
-        insertUser user $ UserInfo name (Active authEn $ UserAuth (PasswdHash auth) atype)
+        insertUser user $ UserInfo name (Active authEn $ UserAuth (PasswdHash auth))
 
     fromRecord x = fail $ "Error processing auth record: " ++ show x
 
@@ -131,7 +130,6 @@ usersToCSV users
       [ display . userName $ userInfo
       , display user
       , infoToStatus userInfo
-      , infoToAuthType userInfo
       , infoToAuth userInfo
       ]
 
@@ -153,17 +151,9 @@ usersToCSV users
         Active Disabled _ -> "disabled"
         Active Enabled  _ -> "enabled"
 
-    -- one of "none", "basic", or "digest"
-    infoToAuthType :: UserInfo -> String
-    infoToAuthType userInfo = case userStatus userInfo of
-        Active _ (UserAuth _ atype)-> case atype of
-            BasicAuth -> "basic"
-            DigestAuth -> "digest"
-        _ -> "none"
-
     -- may be null
     infoToAuth :: UserInfo -> String
     infoToAuth userInfo = case userStatus userInfo of
-        Active _ (UserAuth (PasswdHash hash) _) -> hash
+        Active _ (UserAuth (PasswdHash hash)) -> hash
         _ -> ""
 

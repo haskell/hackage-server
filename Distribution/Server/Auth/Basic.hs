@@ -117,7 +117,7 @@ genericBasicAuth :: Request -> String -> (UserName -> Maybe (a, Users.UserAuth))
 genericBasicAuth req realmName userDetails = do
     authHeader <- NoAuthError <? getHeader "authorization" req
     (userName, pass) <- UnrecognizedAuthError <? parseHeader authHeader
-    (var, Users.UserAuth hash atype) <- NoSuchUserError <? userDetails userName
+    (var, Users.UserAuth hash) <- NoSuchUserError <? userDetails userName
     let matches = Crypt.checkPasswdBasicAuth realmName userName hash pass
     if matches then Right var else Left PasswordMismatchError
   where
@@ -159,12 +159,9 @@ genericDigestAuth req userDetails = do
     authHeader <- NoAuthError <? getHeader "authorization" req
     authMap <- UnrecognizedAuthError <? parseDigestResponse (BS.unpack authHeader)
     nameStr <- UnrecognizedAuthError <? Map.lookup "username" authMap
-    (var, Users.UserAuth hash atype) <- NoSuchUserError <? userDetails (UserName nameStr)
-    case atype of
-      BasicAuth  -> Left AuthTypeMismatchError
-      DigestAuth -> do
-        matches <- UnrecognizedAuthError <? digestPasswdCheck req authMap hash
-        if matches then Right var else Left PasswordMismatchError
+    (var, Users.UserAuth hash) <- NoSuchUserError <? userDetails (UserName nameStr)
+    matches <- UnrecognizedAuthError <? digestPasswdCheck req authMap hash
+    if matches then Right var else Left PasswordMismatchError
 
 -- Parser derived straight from RFCs 2616 and 2617
 parseDigestResponse :: String -> Maybe (Map String String)
