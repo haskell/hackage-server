@@ -129,7 +129,7 @@ initUsersFeature _ _ = do
 requireAuth :: ServerPartE Response
 requireAuth = do
     users <- query GetUserDb
-    Auth.withHackageAuth users Nothing Nothing $ \_ info -> do
+    Auth.withHackageAuth users Nothing $ \_ info -> do
         fmap Right $ seeOther ("/user/" ++ display (userName info)) $ toResponse ()
 -}
 
@@ -138,7 +138,7 @@ deleteAccount :: UserName -> ServerPartE ()
 deleteAccount uname = withUserName uname $ \uid _ -> do
     users <- query GetUserDb
     admins <- query State.GetHackageAdmins
-    Auth.withHackageAuth users (Just admins) Nothing $ \_ _ -> do
+    Auth.withHackageAuth users (Just admins) $ \_ _ -> do
         update (DeleteUser uid)
         return ()
 
@@ -147,7 +147,7 @@ enabledAccount :: UserName -> ServerPartE ()
 enabledAccount uname = withUserName uname $ \uid _ -> do
     users <- query GetUserDb
     admins <- query State.GetHackageAdmins
-    Auth.withHackageAuth users (Just admins) Nothing $ \_ _ -> do
+    Auth.withHackageAuth users (Just admins) $ \_ _ -> do
         enabled <- optional $ look "enabled"
         -- for a checkbox, prescence in data string means 'checked'
         case enabled of
@@ -189,7 +189,7 @@ adminAddUser = do
     -- with these lines commented out, self-registration is allowed
   --admins <- query State.GetHackageAdmins
   --users <- query State.GetUserDb
-  --Auth.withHackageAuth users (Just admins) Nothing $ \_ _ -> do
+  --Auth.withHackageAuth users (Just admins) $ \_ _ -> do
     reqData <- getDataFn lookUserNamePasswords
     case reqData of
         (Left errs) -> errBadRequest "Error registering user"
@@ -227,7 +227,7 @@ canChangePassword uid userPathId = do
 changePassword :: UserName -> ServerPartE ()
 changePassword userPathName = do
     users  <- query State.GetUserDb
-    Auth.withHackageAuth users Nothing Nothing $ \uid _ ->
+    Auth.withHackageAuth users Nothing $ \uid _ ->
         case Users.lookupName userPathName users of
           Just userPathId -> do
             -- if this user's id corresponds to the one in the path, or is an admin
@@ -282,7 +282,7 @@ doGroupAddUser group _ = do
             Nothing -> addError $ "No user with name " ++ show ustr ++ " found"
             Just uid -> do                    
                 ulist <- liftIO . Group.queryGroups $ canAddGroup group
-                Auth.withHackageAuth users (Just ulist) Nothing $ \_ _ -> do
+                Auth.withHackageAuth users (Just ulist) $ \_ _ -> do
                     liftIO $ addUserList group uid
                     return ()
    where addError = errBadRequest "Failed to add user" . return . MText
@@ -291,7 +291,7 @@ doGroupDeleteUser :: UserGroup -> DynamicPath -> ServerPartE ()
 doGroupDeleteUser group dpath = withUserPath dpath $ \uid _ -> do
     users <- query GetUserDb
     ulist <- liftIO . Group.queryGroups $ canRemoveGroup group
-    Auth.withHackageAuth users (Just ulist) Nothing $ \_ _ -> do
+    Auth.withHackageAuth users (Just ulist) $ \_ _ -> do
         liftIO $ removeUserList group uid
         return ()
 
@@ -300,7 +300,7 @@ withGroupEditAuth group func = do
     users  <- query GetUserDb
     addList    <- liftIO . Group.queryGroups $ canAddGroup group
     removeList <- liftIO . Group.queryGroups $ canRemoveGroup group
-    Auth.withHackageAuth users Nothing Nothing $ \uid _ -> do
+    Auth.withHackageAuth users Nothing $ \uid _ -> do
         let (canAdd, canDelete) = (uid `Group.member` addList, uid `Group.member` removeList)
         if not (canAdd || canDelete)
             then errForbidden "Forbidden" [MText "Can't edit permissions for user group"]

@@ -140,7 +140,7 @@ initMirrorFeature env core users = do
     requireMirrorAuth = do
         ulist   <- query GetMirrorClients
         userdb  <- query GetUserDb
-        Auth.withHackageAuth userdb (Just ulist) Nothing $ \uid _info ->
+        Auth.withHackageAuth userdb (Just ulist) $ \uid _info ->
           return uid
 
     -- It's silly that these are in continuation style,

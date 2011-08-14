@@ -56,28 +56,18 @@ getAuthType req = case getHeader "authorization" req of
 
 -- semantic ambiguity: does Nothing mean allow everyone, or only allow enabled? Currently, the former.
 -- disabled users might want to perform some authorized action, like login or change their password
-withHackageAuth :: Users.Users -> Maybe Group.UserList -> Maybe AuthType ->
-                   (UserId -> UserInfo -> ServerPartE a) -> ServerPartE a
-withHackageAuth users authorizedGroup forceType func = getHackageAuth users >>= \res -> case res of
+withHackageAuth :: Users.Users -> Maybe Group.UserList
+                -> (UserId -> UserInfo -> ServerPartE a) -> ServerPartE a
+withHackageAuth users authorizedGroup func = getHackageAuth users >>= \res -> case res of
     Right (userId, info) -> do
         if isAuthorizedFor userId info authorizedGroup
             then func userId info
             else errForbidden "Forbidden" [MText "No access for this page."]
     Left authError -> do
-        setHackageAuth forceType
+        setBasicAuth  authorizationRealm
+        setDigestAuth authorizationRealm
         finishWith =<< unauthorized (toResponse $ showAuthError authError)
 
-setHackageAuth :: Maybe AuthType -> ServerPartE ()
-setHackageAuth forceType = do
-    req <- askRq
-    case forceType `mplus` getAuthType req of
-        Just BasicAuth  -> askBasicAuth authorizationRealm
-        Just DigestAuth -> askDigestAuth authorizationRealm
-        -- the below means that, upon logging in, basic auth will be
-        -- required by default. Changing this means migrating (which is
-        -- just fine).
-        Nothing -> askDigestAuth authorizationRealm
-        
 
 -- the UserInfo should belong to the UserId
 isAuthorizedFor :: UserId -> UserInfo -> Maybe Group.UserList -> Bool
@@ -85,10 +75,10 @@ isAuthorizedFor userId userInfo authorizedGroup = case Users.userStatus userInfo
     Users.Active Users.Enabled _ -> maybe True (Group.member userId) authorizedGroup
     _ -> False
 
-requireHackageAuth :: Users.Users -> Maybe Group.UserList -> Maybe AuthType -> ServerPart (UserId, UserInfo)
-requireHackageAuth users authorizedGroup forceType = do
+requireHackageAuth :: Users.Users -> Maybe Group.UserList -> ServerPart (UserId, UserInfo)
+requireHackageAuth users authorizedGroup = do
     runServerPartE $
-      withHackageAuth users authorizedGroup forceType $ \uid info -> return (uid, info)
+      withHackageAuth users authorizedGroup $ \uid info -> return (uid, info)
 
 -- Used by both basic and digest auth functions.
 getPasswdInfo :: Users.Users -> UserName -> Maybe ((UserId, UserInfo), Users.UserAuth)
@@ -126,8 +116,8 @@ genericBasicAuth req realmName userDetails = do
       _                -> Nothing
     splitHeader = break (':'==) . Base64.decode . BS.unpack . BS.drop 6
 
-askBasicAuth :: String -> ServerPartE ()
-askBasicAuth realmName = setHeaderM headerName headerValue >> setResponseCode 401
+setBasicAuth :: String -> ServerPartE ()
+setBasicAuth realmName = setHeaderM headerName headerValue >> setResponseCode 401
   where
     headerName  = "WWW-Authenticate"
     headerValue = "Basic realm=\"" ++ realmName ++ "\""
@@ -177,8 +167,8 @@ parseDigestResponse = fmap (Map.fromList . fst) . find (null . snd) .
     quotedString = join Parse.between (Parse.char '"') (Parse.many $ (Parse.char '\\' >> Parse.get) Parse.<++ Parse.satisfy (/='"'))
                       Parse.<++ (liftM2 (:) (Parse.satisfy (/='"')) (Parse.munch (/=',')))
 
-askDigestAuth :: String -> ServerPartE ()
-askDigestAuth realmName = do
+setDigestAuth :: String -> ServerPartE ()
+setDigestAuth realmName = do
     nonce <- liftIO generateNonce
     setHeaderM headerName (headerValue nonce)
     setResponseCode 401

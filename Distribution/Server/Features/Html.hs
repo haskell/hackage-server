@@ -321,7 +321,7 @@ servePasswordForm :: UserResource -> DynamicPath -> ServerPart Response
 servePasswordForm r dpath = htmlResponse $
                             withUserPath dpath $ \pathUid userInfo -> do
     users <- query State.GetUserDb
-    Auth.withHackageAuth users Nothing Nothing $ \uid _ -> do
+    Auth.withHackageAuth users Nothing $ \uid _ -> do
     let uname = userName userInfo
     canChange <- canChangePassword uid pathUid
     case canChange of
