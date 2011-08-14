@@ -69,7 +69,7 @@ main = topHandler $ do
       [ runCommand     `commandAddActionNoArgs` runAction
       , initCommand    `commandAddActionNoArgs` initAction
       , backupCommand  `commandAddActionNoArgs` backupAction
-      , restoreCommand `commandAddActionNoArgs` restoreAction
+      , restoreCommand `commandAddAction`       restoreAction
       , convertCommand `commandAddActionNoArgs` convertAction
       ]
 
@@ -420,36 +420,30 @@ restoreCommand = makeCommand name shortDesc longDesc defaultRestoreFlags options
                  "Note that this creates a new server state, so for safety "
               ++ "it requires that the\nserver not be initialised already.\n"
     options _  =
-      [ option [] ["tarball"]
-        "Backup tarball produced by the server."
-        flagRestore (\v flags -> flags { flagRestore = v })
-        (reqArgFlag "TARBALL")
-      , option [] ["state-dir"]
+      [ option [] ["state-dir"]
         "Directory in which to store the persistent state of the server (default state/)"
         flagRestoreDir (\v flags -> flags { flagRestoreDir = v })
         (reqArgFlag "DIR")
       ]
 
-restoreAction :: RestoreFlags -> IO ()
-restoreAction opts =
-    case flagRestore opts of
-      NoFlag -> die "No restore tarball given"
-      Flag tarFile -> do
-        defaults <- Server.defaultServerConfig
+restoreAction :: RestoreFlags -> [String] -> IO ()
+restoreAction _ [] = die "No restore tarball given."
+restoreAction opts [tarFile] = do
+    defaults <- Server.defaultServerConfig
 
-        let stateDir = fromFlagOrDefault (confStateDir defaults) (flagRestoreDir opts)
-            config = defaults { confStateDir  = stateDir }
+    let stateDir = fromFlagOrDefault (confStateDir defaults) (flagRestoreDir opts)
+        config = defaults { confStateDir  = stateDir }
 
-        checkAccidentalDataLoss =<< Server.hasSavedState config
+    checkAccidentalDataLoss =<< Server.hasSavedState config
 
-        withServer config False $ \server -> do
-          tar <- BS.readFile tarFile
-          info "Parsing import tarball..."
-          res <- Server.importServerTar server tar
-          case res of
-              Just err -> fail err
-              _ -> info "Successfully imported."
-
+    withServer config False $ \server -> do
+        tar <- BS.readFile tarFile
+        info "Parsing import tarball..."
+        res <- Server.importServerTar server tar
+        case res of
+            Just err -> fail err
+            _ -> info "Successfully imported."
+restoreAction _ _ = die "There should be exactly one argument: the backup tarball."
 
 -------------------------------------------------------------------------------
 -- Convert command
