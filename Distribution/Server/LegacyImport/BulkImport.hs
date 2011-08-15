@@ -29,7 +29,7 @@ import qualified Distribution.Server.LegacyImport.UploadLog as UploadLog
 import qualified Distribution.Server.LegacyImport.HtPasswdDb as HtPasswdDb
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Framework.BlobStorage (BlobStorage)
-import Distribution.Server.Packages.Types (PkgInfo(..), pkgUploadUser)
+import Distribution.Server.Packages.Types (PkgInfo(..), PkgTarball(..), pkgUploadUser)
 
 import Distribution.Package
 import Distribution.PackageDescription.Parse (parsePackageDescription)
@@ -91,14 +91,16 @@ importUploadLog = UploadLog.read
 --
 importTarballs :: BlobStorage
                -> Maybe ByteString
-               -> IO [(PackageIdentifier, BlobStorage.BlobId)]
+               -> IO [(PackageIdentifier, PkgTarball)]
 importTarballs _      Nothing           = return []
 importTarballs store (Just archiveFile) =
   case PackageIndex.read (,) archiveFile of
     Left  problem  -> fail problem
     Right tarballs -> sequence
-      [ do blobid <- BlobStorage.add store fileContent
-           return (pkgid, blobid)
+      [ do blobId <- BlobStorage.add store fileContent
+           blobIdDecompressed <- BlobStorage.add store (GZip.decompress fileContent)
+           return (pkgid, PkgTarball { pkgTarballGz = blobId,
+                                       pkgTarballNoGz = blobIdDecompressed })
       | (pkgid, entry@Tar.Entry {
                   Tar.entryContent = Tar.NormalFile fileContent _
                 }) <- tarballs
@@ -126,7 +128,7 @@ importUsers (Just htpasswdFile) = importUsers' Users.empty
 --
 mergePkgInfo :: [(PackageIdentifier, Tar.Entry)]
              -> [UploadLog.Entry]
-             -> [(PackageIdentifier, BlobStorage.BlobId)]
+             -> [(PackageIdentifier, PkgTarball)]
              -> Users
              -> Either String ([PkgInfo], Users, [UploadLog.Entry])
 mergePkgInfo pkgDescs logEntries tarballInfo users = do
@@ -175,7 +177,7 @@ mergeIndexWithUploadLog pkgs entries usersInit =
 -- It's an errror to find additional tarballs, but we don't mind at the moment
 -- if not all packages have a tarball, as that makes testing easier.
 --
-mergeTarballs :: [(PackageIdentifier, BlobStorage.BlobId)]
+mergeTarballs :: [(PackageIdentifier, PkgTarball)]
               -> [PkgInfo]
               -> Either String [PkgInfo]
 mergeTarballs tarballInfo pkgs =
@@ -188,8 +190,8 @@ mergeTarballs tarballInfo pkgs =
       compare pkgid (packageId pkginfo)
     mergePkgs merged []  = Right merged
     mergePkgs merged (next:remaining) = case next of
-      InBoth (_, blobid) pkginfo -> mergePkgs (pkginfo':merged) remaining
-         where pkginfo' = pkginfo { pkgTarball = (blobid, pkgUploadData pkginfo):pkgTarball pkginfo }
+      InBoth (_, tarball) pkginfo -> mergePkgs (pkginfo':merged) remaining
+         where pkginfo' = pkginfo { pkgTarball = (tarball, pkgUploadData pkginfo):pkgTarball pkginfo }
       OnlyInLeft (pkgid, _)          -> Left missing
          where missing = "Package tarball missing metadata " ++ display pkgid
       OnlyInRight            pkginfo -> mergePkgs (pkginfo:merged) remaining

@@ -95,6 +95,7 @@ executable hackage-server
     Distribution.Server.Util.ServeTarball
     Distribution.Server.Util.TarIndex
     Distribution.Server.Util.TextSearch
+    Distribution.Server.Util.ChangeLog
 
     Distribution.Server.Features.Core
     Distribution.Server.Features.Mirror

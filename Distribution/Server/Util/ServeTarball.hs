@@ -13,6 +13,7 @@
 -----------------------------------------------------------------------------
 module Distribution.Server.Util.ServeTarball
     ( serveTarball
+    , serveTarEntry
     , readTarIndex
     ) where
 

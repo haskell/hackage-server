@@ -51,7 +51,7 @@ data PkgInfo = PkgInfo {
     -- multipart upload process.
     --
     -- The canonical tarball URL points to the most recently uploaded package.
-    pkgTarball :: ![(BlobId, UploadInfo)],
+    pkgTarball :: ![(PkgTarball, UploadInfo)],
     -- | Previous data. The UploadInfo does *not* indicate when the ByteString was
     -- uploaded, but rather when it was replaced. This way, pkgUploadData won't change
     -- even if a cabal file is changed.
@@ -59,6 +59,11 @@ data PkgInfo = PkgInfo {
     pkgDataOld :: ![(ByteString, UploadInfo)],
     -- | When the package was created. Imports will override this with time in their logs.
     pkgUploadData :: !UploadInfo
+} deriving (Typeable, Show)
+
+data PkgTarball = PkgTarball {
+   pkgTarballGz   :: !BlobId,
+   pkgTarballNoGz :: !BlobId
 } deriving (Typeable, Show)
 
 type UploadInfo = (UTCTime, UserId)
@@ -100,6 +105,18 @@ instance Serialize PkgInfo where
         pkgTarball    = tarball,
         pkgData       = bstring
     }
+
+instance Serialize PkgTarball where
+    put tb = do
+      Serialize.put (pkgTarballGz tb)
+      Serialize.put (pkgTarballNoGz tb)
+    get = do
+      gz <- Serialize.get
+      noGz <- Serialize.get
+      return PkgTarball {
+          pkgTarballGz = gz,
+          pkgTarballNoGz = noGz
+      }
 
 ------------------------------------------------------
 -- | The information we keep about a candidate package.

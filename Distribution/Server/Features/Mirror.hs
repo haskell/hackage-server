@@ -31,6 +31,7 @@ import Control.Monad.Trans (MonadIO(..))
 import Distribution.Package
 import Distribution.Text
 import System.FilePath ((<.>))
+import qualified Codec.Compression.GZip as GZip
 
 data MirrorFeature = MirrorFeature {
     mirrorResource :: MirrorResource,
@@ -92,10 +93,15 @@ initMirrorFeature env core users = do
           let uploadData = (time, uid)
           res <- liftIO $ BlobStorage.addWith store fileContent $ \fileContent' ->
                    let filename = display pkgid <.> "tar.gz"
-                   in return (Upload.unpackPackageBasic filename fileContent')
+                   in case Upload.unpackPackageBasic filename fileContent' of
+                        Left err -> return $ Left err
+                        Right x ->
+                            do let decompressedContent = GZip.decompress fileContent'
+                               blobIdDecompressed <- BlobStorage.add store decompressedContent
+                               return $ Right (x, blobIdDecompressed)
           case res of
               Left err -> badRequest (toResponse err)
-              Right (((pkg, pkgStr), warnings), blobId) -> do
+              Right ((((pkg, pkgStr), warnings), blobIdDecompressed), blobId) -> do
                   -- doMergePackage runs the package hooks
                   -- if the upload feature is enabled, it adds
                   -- the user to the package's maintainer group
@@ -105,7 +111,9 @@ initMirrorFeature env core users = do
                       pkgInfoId     = packageId pkg,
                       pkgDesc       = pkg,
                       pkgData       = pkgStr,
-                      pkgTarball    = [(blobId, uploadData)],
+                      pkgTarball    = [(PkgTarball { pkgTarballGz = blobId,
+                                                     pkgTarballNoGz = blobIdDecompressed },
+                                        uploadData)],
                       pkgUploadData = uploadData,
                       pkgDataOld    = []
                   }

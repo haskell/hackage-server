@@ -19,7 +19,7 @@ import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Group (UserList(..))
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Framework.BackupDump
-import Distribution.Server.Framework.BlobStorage (BlobStorage, BlobId)
+import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
@@ -42,6 +42,7 @@ import Data.List (sortBy, maximumBy)
 import Data.Ord (comparing)
 import Data.Monoid (mempty)
 import Control.Monad.State
+import qualified Codec.Compression.GZip as GZip
 
 packagesBackup :: BlobStorage -> RestoreBackup
 packagesBackup blobs = updatePackageBackup blobs Map.empty
@@ -68,7 +69,7 @@ finalPackagesBackup packages = mempty {
 data PartialPkg = PartialPkg {
     partialCabal :: [(Int, ByteString)],
     partialCabalUpload :: [(Int, UploadInfo)],
-    partialTarball :: [(Int, BlobId)],
+    partialTarball :: [(Int, PkgTarball)],
     partialTarballUpload :: [(Int, UploadInfo)]
 }
 emptyPartialPkg :: PartialPkg
@@ -150,7 +151,10 @@ doPackageImport storage packages (("package":pkgStr:rest), bs) = runImport packa
                         return $ partial { partialCabal = (version, bs):partialCabal partial }
                     | Just version <- extractVersion other pkgId ".tar.gz" -> do
                         blobId <- liftIO $ BlobStorage.add storage bs
-                        return $ partial { partialTarball = (version, blobId):partialTarball partial }
+                        blobIdUncompressed <- liftIO $ BlobStorage.add storage (GZip.decompress bs)
+                        let tb = PkgTarball { pkgTarballGz = blobId,
+                                              pkgTarballNoGz = blobIdUncompressed }
+                        return $ partial { partialTarball = (version, tb):partialTarball partial }
             _ -> return partial
         -- TODO: if we have both uploads.csv and tarball.csv, it should be possible to convert to PkgInfo
         -- before the finalization, reducing total memory usage -- the PkgInfos will still be in memory when
@@ -226,14 +230,14 @@ cabalListToExport pkgId cabalInfos = csvToExport (pkgPath ++ ["uploads.csv"]) (v
         cabalToExport (n, bs) = (pkgPath ++ [cabalName ++ "-" ++ show n], Left bs)
         pkgPath = ["package", display pkgId]
 
-tarballListToExport :: PackageId -> [(BlobId, UploadInfo)] -> [ExportEntry]
+tarballListToExport :: PackageId -> [(PkgTarball, UploadInfo)] -> [ExportEntry]
 tarballListToExport pkgId tarballInfos = csvToExport (pkgPath ++ ["tarball.csv"]) (versionListToCSV infos):
     map tarballToExport (zip [0..] tarballs)
   where (tarballs, infos) = unzip tarballInfos
         tarballName = display pkgId ++ ".tar.gz"
-        tarballToExport :: (Int, BlobId) -> ExportEntry
-        tarballToExport (0, blob) = blobToExport (pkgPath ++ [tarballName]) blob
-        tarballToExport (n, blob) = blobToExport (pkgPath ++ [tarballName ++ "-" ++ show n]) blob
+        tarballToExport :: (Int, PkgTarball) -> ExportEntry
+        tarballToExport (0, tb) = blobToExport (pkgPath ++ [tarballName]) (pkgTarballGz tb)
+        tarballToExport (n, tb) = blobToExport (pkgPath ++ [tarballName ++ "-" ++ show n]) (pkgTarballGz tb)
         pkgPath = ["package", display pkgId]
 
 versionListToCSV :: [UploadInfo] -> CSV

@@ -18,6 +18,8 @@ import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Types (userName)
+import Distribution.Server.Framework.BlobStorage (BlobStorage)
+import Distribution.Server.Util.ChangeLog (lookupChangeLog)
 
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.State as State
@@ -69,7 +71,7 @@ instance IsHackageFeature PackagesFeature where
       }
 
 initPackagesFeature :: ServerEnv -> CoreFeature -> IO PackagesFeature
-initPackagesFeature _ core = do
+initPackagesFeature serverEnv core = do
     recents <- Cache.newCacheable (toResponse (), toResponse ())
     registerHook (packageIndexChange core) $ do
         -- TODO: this should be moved to HTML/RSS features
@@ -86,7 +88,7 @@ initPackagesFeature _ core = do
       , cacheRecent   = recents
       , packageRender = \pkg -> do
             users <- query State.GetUserDb
-            return $ doPackageRender users pkg
+            doPackageRender (serverBlobStore serverEnv) users pkg
       }
 
 -- This should provide the caller enough information to encode the package information
@@ -102,6 +104,7 @@ data PackageRender = PackageRender {
     rendRepoHeads :: [(RepoType, String, SourceRepo)],
     rendModules :: Maybe ModuleForest,
     rendHasTarball :: Bool,
+    rendHasChangeLog :: Bool,
     rendUploadInfo :: (UTCTime, String),
     rendPkgUri :: String,
     -- rendOther contains other useful fields which are merely strings, possibly empty
@@ -124,25 +127,29 @@ doMakeCondTree desc = map (\lib -> ("library", makeCondTree lib)) (maybeToList $
         _  -> SimpleCondNode deps $ map makeCondComponents comps
     makeCondComponents (cond, tree, mtree) = (cond, makeCondTree tree, maybe SimpleCondLeaf makeCondTree mtree)
 
-doPackageRender :: Users.Users -> PkgInfo -> PackageRender
-doPackageRender users info =
-    let genDesc  = pkgDesc info
-        flatDesc = flattenPackageDescription genDesc
-        desc     = packageDescription genDesc
-    in PackageRender
-      { rendPkgId = pkgInfoId info
-      , rendDepends   = flatDependencies genDesc
-      , rendExecNames = map exeName (executables flatDesc)
-      , rendLicenseName = display (license desc) -- maybe make this a bit more human-readable
-      , rendMaintainer  = case maintainer desc of "None" -> Nothing; "none" -> Nothing; "" -> Nothing; person -> Just person
-      , rendCategory = case category desc of [] -> []; str -> categorySplit str
-      , rendRepoHeads = catMaybes (map rendRepo $ sourceRepos desc)
-      , rendModules = fmap (moduleForest . exposedModules) (library flatDesc)
-      , rendHasTarball = not . null $ pkgTarball info
-      , rendUploadInfo = let (utime, uid) = pkgUploadData info in (utime, maybe "Unknown" (display . userName) $ Users.lookupId uid users)
-      , rendPkgUri = "/package/" ++ display (pkgInfoId info)
-      , rendOther = desc
-      }
+doPackageRender :: BlobStorage -> Users.Users -> PkgInfo -> IO PackageRender
+doPackageRender store users info =
+    do let genDesc  = pkgDesc info
+           flatDesc = flattenPackageDescription genDesc
+           desc     = packageDescription genDesc
+       changeLogRes <- lookupChangeLog store info
+       return $ PackageRender
+        { rendPkgId = pkgInfoId info
+        , rendDepends   = flatDependencies genDesc
+        , rendExecNames = map exeName (executables flatDesc)
+        , rendLicenseName = display (license desc) -- maybe make this a bit more human-readable
+        , rendMaintainer  = case maintainer desc of "None" -> Nothing; "none" -> Nothing; "" -> Nothing; person -> Just person
+        , rendCategory = case category desc of [] -> []; str -> categorySplit str
+        , rendRepoHeads = catMaybes (map rendRepo $ sourceRepos desc)
+        , rendModules = fmap (moduleForest . exposedModules) (library flatDesc)
+        , rendHasTarball = not . null $ pkgTarball info
+        , rendHasChangeLog = case changeLogRes of
+                               Right _ -> True
+                               _ -> False
+        , rendUploadInfo = let (utime, uid) = pkgUploadData info in (utime, maybe "Unknown" (display . userName) $ Users.lookupId uid users)
+        , rendPkgUri = "/package/" ++ display (pkgInfoId info)
+        , rendOther = desc
+        }
   where
     rendRepo r = do
         guard $ repoKind r == RepoHead

@@ -39,6 +39,8 @@ import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
+import Distribution.Server.Util.ServeTarball (serveTarEntry)
+import Distribution.Server.Util.ChangeLog (lookupChangeLog)
 
 import Distribution.Text
 import Distribution.Package
@@ -64,6 +66,7 @@ data CheckResource = CheckResource {
     publishPage :: Resource,
     candidateCabal :: Resource,
     candidateTarball :: Resource,
+    candidateChangeLog :: Resource,
     -- There can also be build reports as well as documentation for proposed
     -- versions.
     -- These features check for existence of a package in the *main* index,
@@ -79,7 +82,8 @@ data CheckResource = CheckResource {
     packageCandidatesUri :: String -> PackageName -> String,
     publishUri :: String -> PackageId -> String,
     candidateTarballUri :: PackageId -> String,
-    candidateCabalUri :: PackageId -> String
+    candidateCabalUri :: PackageId -> String,
+    candidateChangeLogUri :: PackageId -> String
 }
 
 
@@ -88,7 +92,7 @@ data CheckResource = CheckResource {
 
 instance IsHackageFeature CheckFeature where
     getFeatureInterface check = (emptyHackageFeature "check") {
-        featureResources = map ($checkResource check) [candidatesPage, candidatePage, publishPage, candidateCabal, candidateTarball]
+        featureResources = map ($checkResource check) [candidatesPage, candidatePage, publishPage, candidateCabal, candidateTarball, candidateChangeLog]
       }
 
 -- URI generation (string-based), using maps; user groups
@@ -102,6 +106,7 @@ initCheckFeature env _ _ _ _ = do
           , packageCandidatesPage = resourceAt "/package/:package/candidates/.:format"
           , publishPage = resourceAt "/package/:package/candidate/publish.:format"
           , candidateCabal = (resourceAt "/package/:package/candidate/:cabal.cabal") { resourceGet = [("cabal", serveCandidateCabal)] }
+          , candidateChangeLog = (resourceAt "/package/:package/candidate/changelog") { resourceGet = [("changelog", serveCandidateChangeLog store)] }
           , candidateTarball = (resourceAt "/package/:package/candidate/:tarball.tar.gz") { resourceGet = [("tarball", serveCandidateTarball store)] }
 
           , candidatesUri = \format -> renderResource (candidatesPage r) [format]
@@ -110,11 +115,12 @@ initCheckFeature env _ _ _ _ = do
           , publishUri = \format pkgid -> renderResource (publishPage r) [display pkgid, format]
           , candidateTarballUri = \pkgid -> renderResource (candidateTarball r) [display pkgid, display pkgid]
           , candidateCabalUri = \pkgid -> renderResource (candidateCabal r) [display pkgid, display (packageName pkgid)]
+          , candidateChangeLogUri = \pkgid -> renderResource (candidateChangeLog r) [display pkgid, display (packageName pkgid)]
           }
       , candidateRender = \pkg -> do
             users <- query GetUserDb
             state <- query GetPackagesState
-            return $ doCandidateRender (packageList state) users pkg
+            doCandidateRender (serverBlobStore env) (packageList state) users pkg
       }
 
   where
@@ -131,7 +137,10 @@ initCheckFeature env _ _ _ _ = do
                                 [] -> toHtml "No warnings"
                                 warnings -> unordList warnings
                            ]
-      where section cand = basicPackageSection (candidateCabalUri r) (candidateTarballUri r) (candPkgInfo cand)
+      where section cand = basicPackageSection (candidateCabalUri r)
+                                               (candidateTarballUri r)
+                                               (candidateChangeLogUri r)
+                                               (candPkgInfo cand)
 
 postCandidate :: CheckResource -> UserFeature -> UploadFeature -> BlobStorage -> ServerPartE Response
 postCandidate r users upload store = do
@@ -166,7 +175,8 @@ serveCandidateTarball store dpath = runServerPartE $
     Nothing -> mzero -- candidate  does not exist
     Just pkg -> case pkgTarball (candPkgInfo pkg) of
         [] -> mzero --candidate's tarball does not exist
-        ((blobId, _):_) -> do
+        ((tb, _):_) -> do
+            let blobId = pkgTarballGz tb
             file <- liftIO $ BlobStorage.fetch store blobId
             ok $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime $ candPkgInfo pkg)
 
@@ -177,6 +187,15 @@ serveCandidateCabal dpath =
     withCandidatePath dpath $ \_ pkg -> do
         guard (lookup "cabal" dpath == Just (display $ packageName pkg))
         return $ toResponse (Resource.CabalFile (pkgData $ candPkgInfo pkg))
+
+serveCandidateChangeLog :: BlobStorage -> DynamicPath -> ServerPart Response
+serveCandidateChangeLog store dpath =
+    runServerPartE $ --TODO: use something else for nice html error pages
+    withCandidatePath dpath $ \_ pkg -> do
+          res <- liftIO $ lookupChangeLog store (candPkgInfo pkg)
+          case res of
+            Left err -> errNotFound "Changelog not found" [MText err]
+            Right (fp, offset, name) -> liftIO $ serveTarEntry fp offset name
 
 uploadCandidate :: (PackageId -> Bool) -> UserFeature -> UploadFeature -> BlobStorage -> ServerPartE CandPkgInfo
 uploadCandidate isRight users upload storage = do
@@ -267,14 +286,14 @@ data CandidateRender = CandidateRender {
     hasIndexedPackage :: Bool
 }
 
-doCandidateRender :: PackageIndex PkgInfo -> Users.Users -> CandPkgInfo -> CandidateRender
-doCandidateRender index users cand =
-    let render = doPackageRender users (candPkgInfo cand)
-    in CandidateRender {
-        candPackageRender = render { rendPkgUri = rendPkgUri render ++ "/candidate" },
-        renderWarnings = candWarnings cand,
-        hasIndexedPackage = not . null $ PackageIndex.lookupPackageName index (packageName cand)
-    }
+doCandidateRender :: BlobStorage -> PackageIndex PkgInfo -> Users.Users -> CandPkgInfo -> IO CandidateRender
+doCandidateRender store index users cand =
+    do render <- doPackageRender store users (candPkgInfo cand)
+       return $ CandidateRender {
+         candPackageRender = render { rendPkgUri = rendPkgUri render ++ "/candidate" },
+         renderWarnings = candWarnings cand,
+         hasIndexedPackage = not . null $ PackageIndex.lookupPackageName index (packageName cand)
+       }
 
 ------------------------------------------------------------------------------
 withCandidatePath :: DynamicPath -> (CandidatePackages -> CandPkgInfo -> ServerPartE a) -> ServerPartE a

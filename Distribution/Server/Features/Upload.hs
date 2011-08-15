@@ -45,6 +45,7 @@ import Data.ByteString.Lazy.Char8 (ByteString)
 import Distribution.Package
 import Distribution.PackageDescription (GenericPackageDescription)
 import Distribution.Text (display, simpleParse)
+import qualified Codec.Compression.GZip as GZip
 
 data UploadFeature = UploadFeature {
     uploadResource   :: UploadResource,
@@ -232,7 +233,7 @@ extractPackage processFunc storage =
     upload name file = query GetUserDb >>= \users -> 
                           -- initial check to ensure logged in.
                           withHackageAuth users Nothing $ \uid _ -> do
-        let processPackage :: ByteString -> IO (Either ErrorResponse UploadResult)
+        let processPackage :: ByteString -> IO (Either ErrorResponse (UploadResult, BlobStorage.BlobId))
             processPackage content' = do
                 -- as much as it would be nice to do requirePackageAuth in here,
                 -- processPackage is run in a handle bracket
@@ -242,18 +243,23 @@ extractPackage processFunc storage =
                     let uresult = UploadResult pkg pkgStr warnings
                     res <- processFunc uid uresult
                     case res of
-                        Nothing -> return . Right $ uresult
+                        Nothing ->
+                            do let decompressedContent = GZip.decompress content'
+                               blobIdDecompressed <- BlobStorage.add storage decompressedContent
+                               return . Right $ (uresult, blobIdDecompressed)
                         Just err -> return . Left $ err
         mres <- liftIO $ BlobStorage.addFileWith storage file processPackage
         case mres of
             Left  err -> throwError err
-            Right (res@(UploadResult pkg pkgStr _), blobId) -> do
+            Right ((res@(UploadResult pkg pkgStr _), blobIdDecompressed), blobId) -> do
                 uploadData <- fmap (flip (,) uid) (liftIO getCurrentTime)
                 return $ (PkgInfo {
                     pkgInfoId     = packageId pkg,
                     pkgDesc       = pkg,
                     pkgData       = pkgStr,
-                    pkgTarball    = [(blobId, uploadData)],
+                    pkgTarball    = [(PkgTarball { pkgTarballGz = blobId,
+                                                   pkgTarballNoGz = blobIdDecompressed },
+                                      uploadData)],
                     pkgUploadData = uploadData,
                     pkgDataOld    = []
                 }, res)
