@@ -56,7 +56,7 @@ importAuth contents = importCSV "users.csv" contents $ \csv -> mapM_ fromRecord 
         name <- parseText "user name" nameStr
         user <- parseText "user id" idStr
         insertUser user $ UserInfo name Historical
-    fromRecord [nameStr, idStr, isEnabled, authType, auth] = do
+    fromRecord [nameStr, idStr, isEnabled, auth] = do
         name <- parseText "user name" nameStr
         user <- parseText "user id" idStr
         authEn <- parseEnabled isEnabled
@@ -67,10 +67,6 @@ importAuth contents = importCSV "users.csv" contents $ \csv -> mapM_ fromRecord 
     parseEnabled "enabled"  = return Enabled
     parseEnabled "disabled" = return Disabled
     parseEnabled sts = fail $ "unable to parse whether user enabled: " ++ sts
-
-    parseAuth "digest" = return DigestAuth
-    parseAuth "basic"  = return BasicAuth
-    parseAuth sts = fail $ "unable to parse auth status: " ++ sts
 
 insertUser :: UserId -> UserInfo -> Import Users ()
 insertUser user info = do
@@ -117,7 +113,7 @@ groupToCSV (UserList list) = [map show (IntSet.toList list)]
    .
    Format:
    .
-   User name,User Id,(enabled|disabled|deleted),(none|basic|digest),pwd-hash   
+   User name,User Id,(enabled|disabled|deleted),pwd-hash
  -}
 -- have a "safe" argument to this function that doesn't export password hashes?
 usersToCSV :: Users -> CSV
@@ -138,7 +134,6 @@ usersToCSV users
        [ "name"
        , "id"
        , "status"
-       , "auth-type"
        , "auth-info"
        ]
     userCSVVer = Version [0,1] ["unstable"]
