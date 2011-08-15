@@ -304,7 +304,7 @@ initState server (admin, pass) = do
     -- create default admin user
     muid <- case simpleParse admin of
         Just uname -> do
-            let userAuth = Auth.newPasswdHash Auth.authorizationRealm uname (Auth.PasswdPlain pass)
+            let userAuth = Auth.newPasswdHash Auth.hackageRealm uname (Auth.PasswdPlain pass)
             update $ AddUser uname (Users.UserAuth userAuth)
         Nothing -> fail "Couldn't parse admin name (should be alphanumeric)"
     case muid of

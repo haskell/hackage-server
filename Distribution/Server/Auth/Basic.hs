@@ -1,15 +1,24 @@
+-- | Server methods to do user authentication.
+--
+-- We authenticate clients using HTTP Basic or Digest authentication and we
+-- authorise users based on membership of particular user groups.
+--
+{-# LANGUAGE PatternGuards #-}
 module Distribution.Server.Auth.Basic (
-    getHackageAuth,
-    withHackageAuth,
-    requireHackageAuth,
-    authorizationRealm
+    guardAuthorised,
+    guardAuthenticated,
+    guardPriviledged,
+    hackageRealm, adminRealm,
+
+    -- * deprecatged
+    withHackageAuth
   ) where
 
 import Distribution.Server.Users.Types (UserId, UserName(..), UserInfo)
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
-import qualified Distribution.Server.Auth.Crypt as Crypt
+import Distribution.Server.Auth.Crypt
 import Distribution.Server.Auth.Types
 import Distribution.Server.Framework.Error
 
@@ -20,162 +29,283 @@ import Control.Monad.Trans (MonadIO, liftIO)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
 
-import Control.Monad (join, liftM2, mplus)
+import Control.Monad (guard, join, liftM2, mplus, mzero)
+import Control.Monad.Error.Class (Error, noMsg)
 import Data.Char (intToDigit, isAsciiLower)
 import System.Random (randomRs, newStdGen)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Text.ParserCombinators.ReadP as Parse
-import Data.List (find, intercalate)
-import Data.Digest.Pure.MD5 (md5)
-
-authorizationRealm :: String
-authorizationRealm = "Hackage"
-{-
-getHackageAuth :: Users.Users -> ServerPart (Either AuthError (UserId, UserInfo))
-getHackageAuth users = askRq >>= \req -> return $ case getAuthType req of
-    Just BasicAuth  -> genericBasicAuth req authorizationRealm (getPasswdInfo users)
-    Just DigestAuth -> genericDigestAuth req (getPasswdInfo users) --realm hashed in user database
-    Nothing -> Left NoAuthError
--}
-
-getHackageAuth :: Users.Users -> ServerPartE (Either AuthError (UserId, UserInfo))
-getHackageAuth users = do
-    req <- askRq
-    case getAuthType req of
-      Just BasicAuth  -> return $ genericBasicAuth req authorizationRealm (getPasswdInfo users)
-      Just DigestAuth -> return $ genericDigestAuth req (getPasswdInfo users) --realm hashed in user database
-      Nothing         -> return $ Left NoAuthError
+import Data.Maybe (listToMaybe)
+import Data.List  (find, intercalate)
 
 
-getAuthType :: Request -> Maybe AuthType
-getAuthType req = case getHeader "authorization" req of
-      Just h | BS.isPrefixOf (BS.pack "Digest ") h -> Just DigestAuth
-             | BS.isPrefixOf (BS.pack "Basic ")  h -> Just BasicAuth
-      _ -> Nothing
+------------------------------------------------------------------------
+-- The old deprecated interface
+--
 
--- semantic ambiguity: does Nothing mean allow everyone, or only allow enabled? Currently, the former.
--- disabled users might want to perform some authorized action, like login or change their password
 withHackageAuth :: Users.Users -> Maybe Group.UserList
                 -> (UserId -> UserInfo -> ServerPartE a) -> ServerPartE a
-withHackageAuth users authorizedGroup func = getHackageAuth users >>= \res -> case res of
-    Right (userId, info) -> do
-        if isAuthorizedFor userId info authorizedGroup
-            then func userId info
-            else errForbidden "Forbidden" [MText "No access for this page."]
-    Left authError -> do
-        setBasicAuth  authorizationRealm
-        setDigestAuth authorizationRealm
-        finishWith =<< unauthorized (toResponse $ showAuthError authError)
+withHackageAuth users mgroup action = do
+    (uid, uinfo) <- guardAuthenticated hackageRealm users
+    maybe (return ()) (\group -> guardPriviledged group uid) mgroup
+    action uid uinfo
 
 
--- the UserInfo should belong to the UserId
-isAuthorizedFor :: UserId -> UserInfo -> Maybe Group.UserList -> Bool
-isAuthorizedFor userId userInfo authorizedGroup = case Users.userStatus userInfo of
-    Users.Active Users.Enabled _ -> maybe True (Group.member userId) authorizedGroup
-    _ -> False
+------------------------------------------------------------------------
+-- Main auth methods
+--
 
-requireHackageAuth :: Users.Users -> Maybe Group.UserList -> ServerPart (UserId, UserInfo)
-requireHackageAuth users authorizedGroup = do
-    runServerPartE $
-      withHackageAuth users authorizedGroup $ \uid info -> return (uid, info)
+hackageRealm, adminRealm :: RealmName
+hackageRealm = RealmName "Hackage"
+adminRealm   = RealmName "Hackage admin"
 
--- Used by both basic and digest auth functions.
-getPasswdInfo :: Users.Users -> UserName -> Maybe ((UserId, UserInfo), Users.UserAuth)
-getPasswdInfo users userName = do
-    userId   <- Users.lookupName userName users
-    userInfo <- Users.lookupId userId users
-    auth <- case Users.userStatus userInfo of
-        Users.Active _ auth -> Just auth
-        _                   -> Nothing
-    return ((userId, userInfo), auth)
 
-(<?) :: a -> Maybe b -> Either a b
-e <? mb = maybe (Left e) Right mb
+-- | Check that the client is authenticated and is authorised to perform some
+-- priviledged action.
+--
+-- We check that:
+--
+--   * the client has supplied appropriate authentication credentials for a
+--      known enabled user account;
+--   * is a member of a given group of users who are permitted to perform
+--     certain priviledged actions.
+--
+guardAuthorised :: RealmName -> Users.Users -> Group.UserList
+                -> ServerPartE (UserId, UserInfo)
+guardAuthorised realm users group = do
+    (uid, uinfo) <- guardAuthenticated realm users
+    guardPriviledged group uid
+    return (uid, uinfo)
 
--- TODO: s/String/[ErrorMessage]/ for appropriate links
-showAuthError :: AuthError -> String
-showAuthError err = case err of
-    NoAuthError -> "No authorization provided."
-    UnrecognizedAuthError -> "Authorization scheme not recognized."
-    NoSuchUserError -> "Username or password incorrect."
-    PasswordMismatchError -> "Username or password incorrect."
-    AuthTypeMismatchError -> "You can't use the more secure MD5 digest authentication because the server has already hashed your password in a different format. Try logging in using basic authentication and then submitting a password change request to let the server rehash your password in digest form (recommended)."
 
---------------------------------------------------------------------------------
-genericBasicAuth :: Request -> String -> (UserName -> Maybe (a, Users.UserAuth)) -> Either AuthError a
-genericBasicAuth req realmName userDetails = do
-    authHeader <- NoAuthError <? getHeader "authorization" req
-    (userName, pass) <- UnrecognizedAuthError <? parseHeader authHeader
-    (var, Users.UserAuth hash) <- NoSuchUserError <? userDetails userName
-    let matches = Crypt.checkPasswdBasicAuth realmName userName hash pass
-    if matches then Right var else Left PasswordMismatchError
+-- | Check that the client is authenticated. Returns the information about the
+-- user account that the client authenticates as.
+--
+-- This checks the client has supplied appropriate authentication credentials
+-- for a known enabled user account.
+--
+-- It only checks the user is known, it does not imply that the user is
+-- authorised to do anything in particular, see 'guardAuthorised'.
+--
+guardAuthenticated :: RealmName -> Users.Users -> ServerPartE (UserId, UserInfo)
+guardAuthenticated realm users = do
+    req <- askRq
+    either (authError realm) return $
+      case getHeaderAuth req of
+        Just (BasicAuth,  ahdr) -> checkBasicAuth  users realm ahdr
+        Just (DigestAuth, ahdr) -> checkDigestAuth users       ahdr req
+        Nothing                 -> Left NoAuthError
   where
-    parseHeader h = case splitHeader h of
-      (name, ':':pass) -> Just (UserName name, PasswdPlain pass)
-      _                -> Nothing
-    splitHeader = break (':'==) . Base64.decode . BS.unpack . BS.drop 6
+    getHeaderAuth :: Request -> Maybe (AuthType, BS.ByteString)
+    getHeaderAuth req =
+        case getHeader "authorization" req of
+          Just hdr
+            |  BS.isPrefixOf (BS.pack "Digest ") hdr
+            -> Just (DigestAuth, BS.drop 7 hdr)
 
-setBasicAuth :: String -> ServerPartE ()
-setBasicAuth realmName = setHeaderM headerName headerValue >> setResponseCode 401
+            |  BS.isPrefixOf (BS.pack "Basic ") hdr
+            -> Just (BasicAuth,  BS.drop 6 hdr)
+          _ -> Nothing
+
+data AuthType = BasicAuth | DigestAuth
+
+
+-- | Check that a given user is permitted to perform certain priviledged
+-- actions.
+--
+-- This is based on whether the user is a mamber of a particular group of
+-- priviledged users.
+--
+-- It only checks if the user is in the priviledged user group, it does not
+-- imply that the current client has been authenticated, see 'guardAuthorised'.
+--
+guardPriviledged :: Group.UserList -> UserId -> ServerPartE ()
+guardPriviledged ugroup uid
+  | Group.member uid ugroup = return ()
+  | otherwise = errForbidden "Forbidden" [MText "No access for this page."]
+
+
+------------------------------------------------------------------------
+-- Basic auth method
+--
+
+-- | Use HTTP Basic auth to authenticate the client as an active enabled user.
+--
+checkBasicAuth :: Users.Users -> RealmName -> BS.ByteString
+               -> Either AuthError (UserId, UserInfo)
+checkBasicAuth users realm ahdr = do
+    authInfo   <- getBasicAuthInfo realm ahdr       ?! UnrecognizedAuthError
+    let uname  = basicUsername authInfo
+    uid        <- Users.lookupName uname users      ?! NoSuchUserError
+    uinfo      <- Users.lookupId   uid   users      ?! NoSuchUserError
+    passwdhash <- getUserPasswdHash uinfo           ?! NoSuchUserError
+    guard (checkBasicAuthInfo passwdhash authInfo)  ?! PasswordMismatchError
+    return (uid, uinfo)
+
+getBasicAuthInfo :: RealmName -> BS.ByteString -> Maybe BasicAuthInfo
+getBasicAuthInfo realm authHeader
+  | (name, ':':pass) <- splitHeader authHeader
+  = Just BasicAuthInfo {
+           basicRealm    = realm,
+           basicUsername = UserName name,
+           basicPasswd   = PasswdPlain pass
+         }
+  | otherwise = Nothing
+  where
+    splitHeader = break (':'==) . Base64.decode . BS.unpack
+
+setBasicAuthChallenge :: RealmName -> ServerPartE ()
+setBasicAuthChallenge (RealmName realmName) = do
+    addHeaderM headerName headerValue
   where
     headerName  = "WWW-Authenticate"
     headerValue = "Basic realm=\"" ++ realmName ++ "\""
 
---------------------------------------------------------------------------------
-digestPasswdCheck :: Request -> Map String String -> PasswdHash -> Maybe Bool
-digestPasswdCheck req authMap (PasswdHash hash1) = do
-    nonce <- Map.lookup "nonce" authMap
-    response <- Map.lookup "response" authMap
-    uri <- Map.lookup "uri" authMap
-    let qop = Map.lookup "qop" authMap
-        nonceCount = Map.lookup "nc" authMap
-        cnonce = Map.lookup "cnonce" authMap --insert (join traceShow) before intercalates to debug
-        hash2 = show . md5 . BS.Lazy.pack $ intercalate ":" [show (rqMethod req), uri]
-        responseString = show . md5 . BS.Lazy.pack . intercalate ":" $ case (qop, nonceCount, cnonce) of
-            (Just qop', Just nonceCount', Just cnonce')
-                | qop' == "auth" -> [hash1, nonce, nonceCount', cnonce', qop', hash2]
-            _ -> [hash1, nonce, hash2]
-    return (responseString == response)
 
--- This is the digest version of the above code, utilizing the UserInfo map as
--- though it contained MD5 hashes of the form username:hackage:password.
+------------------------------------------------------------------------
+-- Digest auth method
 --
--- To use both systems at the same time, determine at the start of a client
--- "session" whether to request Basic or Digest authentication, and then
--- demultiplex when the client sends the Authorization header.
-genericDigestAuth :: Request -> (UserName -> Maybe (a, Users.UserAuth)) -> Either AuthError a
-genericDigestAuth req userDetails = do
-    authHeader <- NoAuthError <? getHeader "authorization" req
-    authMap <- UnrecognizedAuthError <? parseDigestResponse (BS.unpack authHeader)
-    nameStr <- UnrecognizedAuthError <? Map.lookup "username" authMap
-    (var, Users.UserAuth hash) <- NoSuchUserError <? userDetails (UserName nameStr)
-    matches <- UnrecognizedAuthError <? digestPasswdCheck req authMap hash
-    if matches then Right var else Left PasswordMismatchError
 
--- Parser derived straight from RFCs 2616 and 2617
-parseDigestResponse :: String -> Maybe (Map String String)
-parseDigestResponse = fmap (Map.fromList . fst) . find (null . snd) .
-                      -- giving ReadS [(String, String)] = [([(String, String)], String)]
-                      Parse.readP_to_S (Parse.string "Digest " >> Parse.skipSpaces >> parser)
+-- See RFC 2617 http://www.ietf.org/rfc/rfc2617
+
+-- Digest auth TODO:
+-- * support domain for the protection space (otherwise defaults to whole server)
+-- * nonce generation is not ideal: consists just of a random number
+-- * nonce is not checked
+-- * opaque is not used
+
+-- | Use HTTP Digest auth to authenticate the client as an active enabled user.
+--
+checkDigestAuth :: Users.Users -> BS.ByteString -> Request
+                -> Either AuthError (UserId, UserInfo)
+checkDigestAuth users ahdr req = do
+    authInfo   <- getDigestAuthInfo ahdr req         ?! UnrecognizedAuthError
+    let uname  = digestUsername authInfo
+    uid        <- Users.lookupName uname users       ?! NoSuchUserError
+    uinfo      <- Users.lookupId uid users           ?! NoSuchUserError
+    passwdhash <- getUserPasswdHash uinfo            ?! NoSuchUserError
+    guard (checkDigestAuthInfo passwdhash authInfo)  ?! PasswordMismatchError
+    -- TODO: if we want to prevent replay attacks, then we must check the
+    -- nonce and nonce count and issue stale=true replies.
+    return (uid, uinfo)
+
+-- | retrieve the Digest auth info from the headers
+--
+getDigestAuthInfo :: BS.ByteString -> Request -> Maybe DigestAuthInfo
+getDigestAuthInfo authHeader req = do
+    authMap    <- parseDigestHeader authHeader
+    username   <- Map.lookup "username" authMap
+    nonce      <- Map.lookup "nonce"    authMap
+    response   <- Map.lookup "response" authMap
+    uri        <- Map.lookup "uri"      authMap
+    let mb_qop  = Map.lookup "qop"      authMap
+    qopInfo    <- case mb_qop of
+                    Just "auth" -> do
+                      nc     <- Map.lookup "nc"     authMap
+                      cnonce <- Map.lookup "cnonce" authMap
+                      return (QopAuth nc cnonce)
+                    Nothing -> return QopNone
+                    _       -> mzero
+    return DigestAuthInfo {
+       digestUsername = UserName username,
+       digestNonce    = nonce,
+       digestResponse = response,
+       digestURI      = uri,
+       digestRqMethod = show (rqMethod req),
+       digestQoP      = qopInfo
+    }
   where
-    parser :: Parse.ReadP [(String, String)]
-    parser = flip Parse.sepBy1 (Parse.char ',') $ do
-        Parse.skipSpaces
-        liftM2 (,) (Parse.munch1 isAsciiLower) (Parse.char '=' >> quotedString)
-    quotedString :: Parse.ReadP String
-    quotedString = join Parse.between (Parse.char '"') (Parse.many $ (Parse.char '\\' >> Parse.get) Parse.<++ Parse.satisfy (/='"'))
-                      Parse.<++ (liftM2 (:) (Parse.satisfy (/='"')) (Parse.munch (/=',')))
+    -- Parser derived from RFCs 2616 and 2617
+    parseDigestHeader :: BS.ByteString -> Maybe (Map String String)
+    parseDigestHeader =
+        fmap Map.fromList . parse . BS.unpack
+      where
+        parse :: String -> Maybe [(String, String)]
+        parse s = listToMaybe [ x | (x, "") <- Parse.readP_to_S parser s ]
 
-setDigestAuth :: String -> ServerPartE ()
-setDigestAuth realmName = do
+        parser :: Parse.ReadP [(String, String)]
+        parser = Parse.skipSpaces
+              >> Parse.sepBy1 nameValuePair
+                       (Parse.skipSpaces >> Parse.char ',' >> Parse.skipSpaces)
+
+        nameValuePair = do
+          name <- Parse.munch1 isAsciiLower
+          Parse.char '='
+          value <- quotedString
+          return (name, value)
+
+        quotedString :: Parse.ReadP String
+        quotedString =
+          join Parse.between
+               (Parse.char '"')
+               (Parse.many $ (Parse.char '\\' >> Parse.get) Parse.<++ Parse.satisfy (/='"'))
+              Parse.<++ (liftM2 (:) (Parse.satisfy (/='"')) (Parse.munch (/=',')))
+
+setDigestAuthChallenge :: RealmName -> ServerPartE ()
+setDigestAuthChallenge (RealmName realmName) = do
     nonce <- liftIO generateNonce
-    setHeaderM headerName (headerValue nonce)
-    setResponseCode 401
+    addHeaderM headerName (headerValue nonce)
   where
     headerName = "WWW-Authenticate"
-    -- I would use qop=\"auth,auth-int\", but Google Chrome seems to have problems choosing one
-    -- http://code.google.com/p/chromium/issues/detail?id=45194
-    headerValue nonce = "Digest realm=\"" ++ realmName ++ "\", qop=\"auth\", nonce=\"" ++ nonce ++ "\", opaque=\"\""
+    -- Note that offering both qop=\"auth,auth-int\" can confuse some browsers
+    -- e.g. see http://code.google.com/p/chromium/issues/detail?id=45194
+    headerValue nonce =
+      "Digest " ++
+      intercalate ", "
+        [ "realm="     ++ quote realmName
+        , "qop="       ++ quote "auth"
+        , "nonce="     ++ quote nonce
+        , "opaque="    ++ quote ""
+        ]
     generateNonce = fmap (take 32 . map intToDigit . randomRs (0, 15)) newStdGen
+    quote s = '"' : s ++ ['"']
 
+
+------------------------------------------------------------------------
+-- Common
+--
+
+getUserPasswdHash :: UserInfo -> Maybe PasswdHash
+getUserPasswdHash userInfo =
+  case Users.userStatus userInfo of
+    Users.Active _ (Users.UserAuth passwdhash) -> Just passwdhash
+    _                                          -> Nothing
+
+-- | The \"oh noes?!\" operator
+--
+(?!) :: Maybe a -> e -> Either e a
+ma ?! e = maybe (Left e) Right ma
+
+
+------------------------------------------------------------------------
+-- Errors
+--
+
+authError :: RealmName -> AuthError -> ServerPartE a
+authError realm err = do
+  -- we want basic first, but addHeaderM makes them come out reversed
+  setDigestAuthChallenge realm
+  setBasicAuthChallenge  realm
+  finishWith (toResponse err)
+
+data AuthError = NoAuthError | UnrecognizedAuthError | NoSuchUserError
+               | PasswordMismatchError
+  deriving Show
+
+instance Error AuthError where
+    noMsg = NoAuthError
+
+instance ToMessage AuthError where
+  toResponse err = (toResponse (showAuthError err)) {
+                     rsCode = case err of
+                                UnrecognizedAuthError -> 400
+                                _                     -> 401
+                   }
+
+showAuthError :: AuthError -> String
+showAuthError err = case err of
+    NoAuthError           -> "No authorization provided."
+    UnrecognizedAuthError -> "Authorization scheme not recognized."
+    NoSuchUserError       -> "Username or password incorrect."
+    PasswordMismatchError -> "Username or password incorrect."
