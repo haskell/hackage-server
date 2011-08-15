@@ -1,4 +1,5 @@
 -- Unpack a tarball containing a Cabal package
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Distribution.Server.Packages.Unpack (
     unpackPackage,
     unpackPackageBasic,
@@ -32,9 +33,12 @@ import Data.List
          ( nub, (\\), partition, intercalate )
 import Control.Monad
          ( unless, when )
-import Control.Monad.Error () --intance Monad (Either String)
+import Control.Monad.Error
+         ( ErrorT(..) )
 import Control.Monad.Writer
-         ( WriterT(..), tell )
+         ( WriterT(..), MonadWriter, tell )
+import Control.Monad.Identity
+         ( Identity(..) )
 import qualified Codec.Compression.GZip as GZip
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.ByteString.Lazy.Char8
@@ -165,13 +169,14 @@ extraChecks genPkgDesc = do
 -- Monad for uploading packages:
 --      WriterT for warning messages
 --      Either for fatal errors
-type UploadMonad = WriterT [String] (Either String)
+newtype UploadMonad a = UploadMonad (WriterT [String] (ErrorT String Identity) a)
+  deriving (Monad, MonadWriter [String])
 
 warn :: String -> UploadMonad ()
 warn msg = tell [msg]
 
 runUploadMonad :: UploadMonad a -> Either String (a, [String])
-runUploadMonad = runWriterT
+runUploadMonad (UploadMonad m) = runIdentity . runErrorT . runWriterT $ m
 
 -- | Registered top-level nodes in the class hierarchy.
 allocatedTopLevelNodes :: [String]
