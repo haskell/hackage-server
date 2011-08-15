@@ -12,12 +12,10 @@ import Distribution.Server.Features.Users
 
 import Distribution.Server.Users.State
 import Distribution.Server.Packages.Types
---import Distribution.Server.Auth.Types
 import Distribution.Server.Users.Backup
 import Distribution.Server.Users.Types
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
-import qualified Distribution.Server.Auth.Basic as Auth
 import qualified Distribution.Server.Packages.Unpack as Upload
 import Distribution.Server.Framework.BackupDump
 
@@ -140,7 +138,7 @@ initMirrorFeature env core users = do
     requireMirrorAuth = do
         ulist   <- query GetMirrorClients
         userdb  <- query GetUserDb
-        Auth.withHackageAuth userdb (Just ulist) $ \uid _info ->
+        withHackageAuth userdb (Just ulist) $ \uid _info ->
           return uid
 
     -- It's silly that these are in continuation style,

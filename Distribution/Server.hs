@@ -40,6 +40,7 @@ import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Framework
 import Distribution.Server.Framework.Feature as Feature
 import qualified Distribution.Server.Features as Features
+import Distribution.Server.Framework.AuthTypes (PasswdPlain(..))
 
 import Distribution.Server.Users.State as State
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
@@ -49,9 +50,7 @@ import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
-import qualified Distribution.Server.Auth.Types as Auth
-import qualified Distribution.Server.Auth.Crypt as Auth
-import qualified Distribution.Server.Auth.Basic as Auth
+
 
 import Distribution.Text
 
@@ -304,7 +303,7 @@ initState server (admin, pass) = do
     -- create default admin user
     muid <- case simpleParse admin of
         Just uname -> do
-            let userAuth = Auth.newPasswdHash Auth.hackageRealm uname (Auth.PasswdPlain pass)
+            let userAuth = newPasswdHash hackageRealm uname (PasswdPlain pass)
             update $ AddUser uname (Users.UserAuth userAuth)
         Nothing -> fail "Couldn't parse admin name (should be alphanumeric)"
     case muid of

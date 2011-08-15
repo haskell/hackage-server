@@ -3,6 +3,7 @@
 module Distribution.Server.Framework (
 
     module Happstack.Server,
+    module Distribution.Server.Framework.Auth,
     module Distribution.Server.Framework.Feature,
     module Distribution.Server.Framework.Types,
     module Distribution.Server.Framework.ResourceTypes,
@@ -14,6 +15,7 @@ module Distribution.Server.Framework (
   ) where
 
 import Happstack.Server
+import Distribution.Server.Framework.Auth
 import Distribution.Server.Framework.Feature
 import Distribution.Server.Framework.Types
 import Distribution.Server.Framework.ResourceTypes

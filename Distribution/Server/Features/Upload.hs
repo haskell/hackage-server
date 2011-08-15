@@ -31,7 +31,6 @@ import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Framework.BlobStorage (BlobStorage)
-import qualified Distribution.Server.Auth.Basic as Auth
 import qualified Distribution.Server.Packages.Unpack as Upload
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 
@@ -168,13 +167,13 @@ withPackageNameAuth :: PackageName -> (Users.UserId -> Users.UserInfo -> ServerP
 withPackageNameAuth pkgname func = do
     userDb <- query $ GetUserDb
     groupSum <- getPackageGroup pkgname
-    Auth.withHackageAuth userDb (Just groupSum) func
+    withHackageAuth userDb (Just groupSum) func
 
 withTrusteeAuth :: (Users.UserId -> Users.UserInfo -> ServerPartE a) -> ServerPartE a
 withTrusteeAuth func = do
     userDb <- query $ GetUserDb
     trustee <- query $ GetHackageTrustees
-    Auth.withHackageAuth userDb (Just trustee) func
+    withHackageAuth userDb (Just trustee) func
 
 getPackageGroup :: MonadIO m => PackageName -> m Group.UserList
 getPackageGroup pkg = do
@@ -232,7 +231,7 @@ extractPackage processFunc storage =
   where
     upload name file = query GetUserDb >>= \users -> 
                           -- initial check to ensure logged in.
-                          Auth.withHackageAuth users Nothing $ \uid _ -> do
+                          withHackageAuth users Nothing $ \uid _ -> do
         let processPackage :: ByteString -> IO (Either ErrorResponse UploadResult)
             processPackage content' = do
                 -- as much as it would be nice to do requirePackageAuth in here,

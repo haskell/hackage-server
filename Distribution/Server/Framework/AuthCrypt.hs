@@ -1,4 +1,4 @@
-module Distribution.Server.Auth.Crypt (
+module Distribution.Server.Framework.AuthCrypt (
    PasswdPlain(..),
    PasswdHash(..),
    newPasswdHash,
@@ -9,7 +9,7 @@ module Distribution.Server.Auth.Crypt (
    checkDigestAuthInfo,
   ) where
 
-import Distribution.Server.Auth.Types
+import Distribution.Server.Framework.AuthTypes
 import Distribution.Server.Users.Types (UserName(..))
 
 import Data.Digest.Pure.MD5 (md5)

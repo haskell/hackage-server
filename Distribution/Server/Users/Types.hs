@@ -1,10 +1,10 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, TemplateHaskell #-}
 module Distribution.Server.Users.Types (
     module Distribution.Server.Users.Types,
-    module Distribution.Server.Auth.Types
+    module Distribution.Server.Framework.AuthTypes
   ) where
 
-import Distribution.Server.Auth.Types
+import Distribution.Server.Framework.AuthTypes
 
 import Distribution.Text
          ( Text(..) )

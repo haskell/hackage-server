@@ -4,11 +4,24 @@
 -- authorise users based on membership of particular user groups.
 --
 {-# LANGUAGE PatternGuards #-}
-module Distribution.Server.Auth.Basic (
+module Distribution.Server.Framework.Auth (
+    -- * Checking authorisation
     guardAuthorised,
+    
+    -- ** Realms
+    RealmName,
+    hackageRealm,
+    adminRealm,
+
+    -- ** Creating password hashes
+    newPasswdHash,
+    UserName,
+    PasswdPlain,
+    PasswdHash,
+
+    -- ** Special cases
     guardAuthenticated,
     guardPriviledged,
-    hackageRealm, adminRealm,
 
     -- * deprecatged
     withHackageAuth
@@ -18,8 +31,8 @@ import Distribution.Server.Users.Types (UserId, UserName(..), UserInfo)
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
-import Distribution.Server.Auth.Crypt
-import Distribution.Server.Auth.Types
+import Distribution.Server.Framework.AuthCrypt
+import Distribution.Server.Framework.AuthTypes
 import Distribution.Server.Framework.Error
 
 import Happstack.Server
@@ -44,6 +57,7 @@ import Data.List  (find, intercalate)
 -- The old deprecated interface
 --
 
+{-# DEPRECATED withHackageAuth "use guardAuthorised instead" #-}
 withHackageAuth :: Users.Users -> Maybe Group.UserList
                 -> (UserId -> UserInfo -> ServerPartE a) -> ServerPartE a
 withHackageAuth users mgroup action = do

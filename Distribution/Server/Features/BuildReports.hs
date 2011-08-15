@@ -16,7 +16,6 @@ import Distribution.Server.Features.BuildReports.BuildReport (BuildReport(..))
 import Distribution.Server.Features.BuildReports.BuildReports (BuildReportId(..), BuildLog(..))
 import Distribution.Server.Users.State (GetUserDb(..))
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
-import qualified Distribution.Server.Auth.Basic as Auth
 
 import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
@@ -112,7 +111,7 @@ submitBuildReport r store dpath =
   withPackageVersionPath dpath $ \pkg -> do
     users <- query GetUserDb
     -- require logged-in user
-    Auth.withHackageAuth users Nothing $ \_ _ -> do
+    withHackageAuth users Nothing $ \_ _ -> do
         let pkgid = pkgInfoId pkg
         Body reportbody <- consumeRequestBody
         case BuildReport.parse $ unpack reportbody of
@@ -130,7 +129,7 @@ deleteBuildReport r dpath =
   withReportId dpath $ \reportId -> do
     users <- query GetUserDb
     -- restrict this to whom? currently logged in users.. a bad idea
-    Auth.withHackageAuth users Nothing $ \_ _ -> do
+    withHackageAuth users Nothing $ \_ _ -> do
         let pkgid = pkgInfoId pkg
         success <- update $ DeleteReport pkgid reportId
         if success
@@ -145,7 +144,7 @@ putBuildLog r store dpath =
   withReportId dpath $ \reportId -> do
     users <- query GetUserDb
     -- logged in users
-    Auth.withHackageAuth users Nothing $ \_ _ -> do
+    withHackageAuth users Nothing $ \_ _ -> do
         let pkgid = pkgInfoId pkg
         Body blogbody <- consumeRequestBody
         buildLog <- liftIO $ BlobStorage.add store blogbody
@@ -161,7 +160,7 @@ deleteBuildLog r dpath =
   withReportId dpath $ \reportId -> do
     users <- query GetUserDb
     -- again, restrict this to whom?
-    Auth.withHackageAuth users Nothing $ \_ _ -> do
+    withHackageAuth users Nothing $ \_ _ -> do
         let pkgid = pkgInfoId pkg
         update $ SetBuildLog pkgid reportId Nothing
         -- go to report page (which should no longer link the log)

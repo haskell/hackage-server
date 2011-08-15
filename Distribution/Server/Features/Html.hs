@@ -25,7 +25,6 @@ import qualified Distribution.Server.Pages.Package as Pages
 import qualified Distribution.Server.Packages.State as State
 import qualified Distribution.Server.Users.State as State
 import qualified Distribution.Server.Features.Distro.State as State
-import qualified Distribution.Server.Auth.Basic as Auth
 import qualified Distribution.Server.Framework.Cache as Cache
 
 import Distribution.Server.Users.Types
@@ -321,7 +320,7 @@ servePasswordForm :: UserResource -> DynamicPath -> ServerPart Response
 servePasswordForm r dpath = htmlResponse $
                             withUserPath dpath $ \pathUid userInfo -> do
     users <- query State.GetUserDb
-    Auth.withHackageAuth users Nothing $ \uid _ -> do
+    withHackageAuth users Nothing $ \uid _ -> do
     let uname = userName userInfo
     canChange <- canChangePassword uid pathUid
     case canChange of

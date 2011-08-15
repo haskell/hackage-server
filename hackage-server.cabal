@@ -40,10 +40,10 @@ executable hackage-server
     Data.TarIndex
     Distribution.Server
     Distribution.Server.Acid
-    Distribution.Server.Auth.Basic
-    Distribution.Server.Auth.Crypt
-    Distribution.Server.Auth.Types
     Distribution.Server.Framework
+    Distribution.Server.Framework.Auth
+    Distribution.Server.Framework.AuthTypes
+    Distribution.Server.Framework.AuthCrypt
     Distribution.Server.Framework.BlobStorage
     Distribution.Server.Framework.Cache
     Distribution.Server.Framework.Error

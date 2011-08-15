@@ -41,9 +41,9 @@ import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), UserList, nullDescription)
 
-import qualified Distribution.Server.Auth.Basic as Auth
-import qualified Distribution.Server.Auth.Types as Auth
-import qualified Distribution.Server.Auth.Crypt as Auth
+import qualified Distribution.Server.Framework.Auth as Auth
+import qualified Distribution.Server.Framework.AuthTypes as Auth
+import qualified Distribution.Server.Framework.AuthCrypt as Auth
 
 import Happstack.Server hiding (port)
 import Data.IntMap (IntMap)
@@ -137,7 +137,7 @@ deleteAccount :: UserName -> ServerPartE ()
 deleteAccount uname = withUserName uname $ \uid _ -> do
     users <- query GetUserDb
     admins <- query State.GetHackageAdmins
-    Auth.withHackageAuth users (Just admins) $ \_ _ -> do
+    withHackageAuth users (Just admins) $ \_ _ -> do
         update (DeleteUser uid)
         return ()
 
@@ -146,7 +146,7 @@ enabledAccount :: UserName -> ServerPartE ()
 enabledAccount uname = withUserName uname $ \uid _ -> do
     users <- query GetUserDb
     admins <- query State.GetHackageAdmins
-    Auth.withHackageAuth users (Just admins) $ \_ _ -> do
+    withHackageAuth users (Just admins) $ \_ _ -> do
         enabled <- optional $ look "enabled"
         -- for a checkbox, prescence in data string means 'checked'
         case enabled of
@@ -188,7 +188,7 @@ adminAddUser = do
     -- with these lines commented out, self-registration is allowed
   --admins <- query State.GetHackageAdmins
   --users <- query State.GetUserDb
-  --Auth.withHackageAuth users (Just admins) $ \_ _ -> do
+  --withHackageAuth users (Just admins) $ \_ _ -> do
     reqData <- getDataFn lookUserNamePasswords
     case reqData of
         (Left errs) -> errBadRequest "Error registering user"
@@ -206,7 +206,7 @@ newUserWithAuth _ pwd1 pwd2 | pwd1 /= pwd2 = errBadRequest "Error registering us
 newUserWithAuth userNameStr password _ = case simpleParse userNameStr of
     Nothing -> errBadRequest "Error registering user" [MText "Not a valid user name!"]
     Just uname -> do
-      let userAuth = Auth.newPasswdHash Auth.hackageRealm uname password
+      let userAuth = newPasswdHash hackageRealm uname password
       muid <- update $ AddUser uname (UserAuth userAuth)
       case muid of
         Nothing  -> errForbidden "Error registering user" [MText "User already exists"]
@@ -225,7 +225,7 @@ canChangePassword uid userPathId = do
 changePassword :: UserName -> ServerPartE ()
 changePassword userPathName = do
     users  <- query State.GetUserDb
-    Auth.withHackageAuth users Nothing $ \uid _ ->
+    withHackageAuth users Nothing $ \uid _ ->
         case Users.lookupName userPathName users of
           Just userPathId -> do
             -- if this user's id corresponds to the one in the path, or is an admin
@@ -249,7 +249,7 @@ changePassword userPathName = do
     forbidChange = errForbidden "Error changing password" . return . MText
 
 newDigestPass :: UserName -> PasswdPlain -> UserAuth
-newDigestPass name pwd = UserAuth (Auth.newPasswdHash Auth.hackageRealm name pwd)
+newDigestPass name pwd = UserAuth (newPasswdHash hackageRealm name pwd)
 
 --
 runUserFilter :: UserFeature -> UserId -> IO (Maybe ErrorResponse)
@@ -279,7 +279,7 @@ doGroupAddUser group _ = do
             Nothing -> addError $ "No user with name " ++ show ustr ++ " found"
             Just uid -> do                    
                 ulist <- liftIO . Group.queryGroups $ canAddGroup group
-                Auth.withHackageAuth users (Just ulist) $ \_ _ -> do
+                withHackageAuth users (Just ulist) $ \_ _ -> do
                     liftIO $ addUserList group uid
                     return ()
    where addError = errBadRequest "Failed to add user" . return . MText
@@ -288,7 +288,7 @@ doGroupDeleteUser :: UserGroup -> DynamicPath -> ServerPartE ()
 doGroupDeleteUser group dpath = withUserPath dpath $ \uid _ -> do
     users <- query GetUserDb
     ulist <- liftIO . Group.queryGroups $ canRemoveGroup group
-    Auth.withHackageAuth users (Just ulist) $ \_ _ -> do
+    withHackageAuth users (Just ulist) $ \_ _ -> do
         liftIO $ removeUserList group uid
         return ()
 
@@ -297,7 +297,7 @@ withGroupEditAuth group func = do
     users  <- query GetUserDb
     addList    <- liftIO . Group.queryGroups $ canAddGroup group
     removeList <- liftIO . Group.queryGroups $ canRemoveGroup group
-    Auth.withHackageAuth users Nothing $ \uid _ -> do
+    withHackageAuth users Nothing $ \uid _ -> do
         let (canAdd, canDelete) = (uid `Group.member` addList, uid `Group.member` removeList)
         if not (canAdd || canDelete)
             then errForbidden "Forbidden" [MText "Can't edit permissions for user group"]

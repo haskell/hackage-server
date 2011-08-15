@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, TemplateHaskell #-}
-module Distribution.Server.Auth.Types where
+module Distribution.Server.Framework.AuthTypes where
 
 import Data.Binary (Binary)
 import Data.SafeCopy (base, deriveSafeCopy)
