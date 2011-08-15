@@ -20,12 +20,12 @@ import Distribution.Package
 
 import Data.Time.Clock
 import Control.Arrow (second)
-import Control.Monad (liftM, forever)
+import Control.Monad (forever)
 import Control.Concurrent.Chan
 import Control.Concurrent (forkIO)
 import Data.Function (fix)
-import Data.List (sortBy)
-import Data.Ord (comparing)
+--import Data.List (sortBy)
+--import Data.Ord (comparing)
 import qualified Data.Map as Map
 import Control.Monad.Trans (MonadIO)
 
@@ -73,8 +73,8 @@ initDownloadFeature _ core = do
 getDownloadHistogram :: DownloadFeature -> IO (Histogram PackageName)
 getDownloadHistogram = Cache.getCache . downloadHistogram
 
-totalDownloadCount :: MonadIO m => m Int
-totalDownloadCount = liftM totalDownloads $ query GetDownloadCounts
+--totalDownloadCount :: MonadIO m => m Int
+--totalDownloadCount = liftM totalDownloads $ query GetDownloadCounts
 
 -- sortedPackages and sortByDownloads both order packages by total downloads without exposing download data
 
@@ -83,6 +83,7 @@ totalDownloadCount = liftM totalDownloads $ query GetDownloadCounts
 sortedPackages :: DownloadFeature -> IO [(PackageName, Int)]
 sortedPackages downs = fmap topCounts $ Cache.getCache (downloadHistogram downs)
 
+{-
 -- Sorts a list of package-y items by their download count.
 -- Use sortedPackages to get an entire list.
 -- TODO: use the Histogram's sortByCounts for this
@@ -91,6 +92,7 @@ sortByDownloads nameFunc pkgs = query GetDownloadCounts >>= \counts -> do
     let downMap = downloadMap counts
         modEntry pkg = (pkg, maybe 0 packageDowns $ Map.lookup (nameFunc pkg) downMap)
     return $ sortBy (comparing snd) $ map modEntry pkgs
+-}
 
 -- For at-a-glance download information.
 perVersionDownloads :: (MonadIO m, Package pkg) => pkg -> m (Int, Int)

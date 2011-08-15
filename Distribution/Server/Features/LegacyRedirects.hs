@@ -5,8 +5,6 @@ module Distribution.Server.Features.LegacyRedirects (
 import Distribution.Server.Framework
 import Distribution.Server.Features.Upload
 
-import Distribution.Server.Util.Happstack (remainingPath)
-
 import Distribution.Package
          ( PackageIdentifier(..), packageName, PackageId )
 import Distribution.Text

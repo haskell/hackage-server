@@ -5,8 +5,7 @@ module Distribution.Server.LegacyImport.HtPasswdDb (
     parse,
   ) where
 
-import Distribution.Server.Users.Types
-         ( UserName(..), PasswdHash(..) )
+import Distribution.Server.Users.Types (UserName(..))
 
 type HtPasswdDb = [(UserName, HtPasswdHash)]
 

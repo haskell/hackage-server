@@ -14,8 +14,6 @@ import Distribution.Package (PackageIdentifier(..), PackageName(..))
 import Distribution.PackageDescription (GenericPackageDescription(..))
 import Distribution.Version (Version(..), VersionRange(..))
 
-import qualified Data.Array.Unboxed as UA
-
 import Data.Typeable
 import Data.Time.Clock (UTCTime(..))
 import Data.Time.Calendar (Day(..))
@@ -24,14 +22,13 @@ import Control.DeepSeq
 
 import qualified Data.Serialize as Serialize
 import Data.Serialize (Serialize)
-import Data.SafeCopy hiding (Version)
+import Data.SafeCopy (SafeCopy(getCopy, putCopy), contain)
 
 import Happstack.Server
 
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Data.Maybe (fromJust)
-import Data.IntSet (IntSet)
 
 deriving instance Typeable PackageIdentifier
 deriving instance Typeable GenericPackageDescription

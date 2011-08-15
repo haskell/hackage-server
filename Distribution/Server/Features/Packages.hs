@@ -34,7 +34,7 @@ import Distribution.PackageDescription.Configuration (flattenPackageDescription)
 import Distribution.Version
 import Distribution.Server.Packages.ModuleForest
 import Distribution.Text
-import Data.Maybe (catMaybes, fromJust, maybeToList)
+import Data.Maybe (catMaybes, fromJust)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.Foldable as Foldable
@@ -118,6 +118,7 @@ data SimpleCondTree = SimpleCondNode [Dependency] [(Condition ConfVar, SimpleCon
                     | SimpleCondLeaf
     deriving (Show, Eq)
 
+{-
 doMakeCondTree :: GenericPackageDescription -> [(String, SimpleCondTree)]
 doMakeCondTree desc = map (\lib -> ("library", makeCondTree lib)) (maybeToList $ condLibrary desc)
                    ++ map (\(exec, tree) -> (exec, makeCondTree tree)) (condExecutables desc)
@@ -126,6 +127,7 @@ doMakeCondTree desc = map (\lib -> ("library", makeCondTree lib)) (maybeToList $
         [] -> SimpleCondLeaf
         _  -> SimpleCondNode deps $ map makeCondComponents comps
     makeCondComponents (cond, tree, mtree) = (cond, makeCondTree tree, maybe SimpleCondLeaf makeCondTree mtree)
+-}
 
 doPackageRender :: BlobStorage -> Users.Users -> PkgInfo -> IO PackageRender
 doPackageRender store users info =
@@ -235,6 +237,7 @@ isMinLowerBound :: LowerBound -> Bool
 isMinLowerBound (LowerBound (Version [0] _) InclusiveBound) = True
 isMinLowerBound _ = False
 
+{-
 isWildcardRange :: Version -> Version -> Bool
 isWildcardRange (Version branch1 _) (Version branch2 _) = check branch1 branch2
   where check (n:[]) (m:[]) | n+1 == m = True
@@ -251,6 +254,7 @@ withinInterval v (lowerBound, upperBound)    = withinLower lowerBound
     withinUpper NoUpperBound                   = True
     withinUpper (UpperBound v' ExclusiveBound) = v' >  v
     withinUpper (UpperBound v' InclusiveBound) = v' >= v
+-}
 
 intersectInterval :: VersionInterval -> VersionInterval -> Maybe VersionInterval
 intersectInterval (l1, u1) (l2, u2)

@@ -8,7 +8,7 @@ module Distribution.Server.Pages.Template
 import Data.Monoid
 import System.FilePath.Posix ( (</>) )
 
-import Text.XHtml.Strict    hiding ( p )
+import Text.XHtml.Strict    hiding ( p, name )
 
 -- | Create top-level HTML document by wrapping the Html with boilerplate.
 hackagePage :: String -> [Html] -> Html

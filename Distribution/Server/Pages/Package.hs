@@ -20,7 +20,7 @@ import Distribution.PackageDescription as P
 import Distribution.Simple.Utils ( cabalVersion )
 import Distribution.Version (Version (..), VersionRange (..))
 import Distribution.Text        (display)
-import Text.XHtml.Strict hiding (p, name)
+import Text.XHtml.Strict hiding (p, name, title, content)
 
 import Data.Maybe               (maybeToList)
 import Data.List                (intersperse, intercalate)
@@ -243,8 +243,8 @@ renderModuleForest mb_url forest =
 packageURL :: PackageIdentifier -> URL
 packageURL pkgId = "/package" </> display pkgId
 
-cabalLogoURL :: URL
-cabalLogoURL = "/built-with-cabal.png"
+--cabalLogoURL :: URL
+--cabalLogoURL = "/built-with-cabal.png"
 
 -- global URLs
 cabalHomeURL :: URL

@@ -19,14 +19,11 @@ import qualified Distribution.Server.Framework.ResourceTypes as Resource
 
 import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
-import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BlobStorage (BlobStorage)
 
 import Distribution.Text
 import Distribution.Package
 
-import Data.Function (fix)
-import Control.Applicative (optional)
 import Control.Monad.Trans
 import Control.Monad (mzero)
 import Data.ByteString.Lazy.Char8 (unpack)
@@ -57,7 +54,7 @@ initBuildReportsFeature env _ = do
         resources = ReportsResource
           { reportsList = (resourceAt "/package/:package/reports/.:format") {
                             resourceGet =  [("txt", textPackageReports)],
-                            resourcePost = [("",    submitBuildReport resources store)]
+                            resourcePost = [("",    submitBuildReport resources)]
                           }
           , reportsPage = (resourceAt "/package/:package/reports/:id.:format") {
                             resourceGet    = [("txt", textPackageReport)],
@@ -105,8 +102,8 @@ serveBuildLog store dpath =
         return . toResponse $ Resource.BuildLog file
 
 -- result: auth error, not-found error, parse error, or redirect
-submitBuildReport :: ReportsResource -> BlobStorage -> DynamicPath -> ServerPart Response
-submitBuildReport r store dpath =
+submitBuildReport :: ReportsResource -> DynamicPath -> ServerPart Response
+submitBuildReport r dpath =
   runServerPartE $
   withPackageVersionPath dpath $ \pkg -> do
     users <- query GetUserDb

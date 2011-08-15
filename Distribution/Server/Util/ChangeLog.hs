@@ -24,8 +24,6 @@ import qualified Data.TarIndex as TarIndex
 import Distribution.Text (disp)
 
 import Control.Monad (msum)
-import Control.Monad.Trans (liftIO)
-import System.IO
 import Text.PrettyPrint.HughesPJ (render)
 import System.FilePath ((</>))
 

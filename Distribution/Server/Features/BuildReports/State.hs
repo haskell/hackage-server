@@ -13,7 +13,6 @@ import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import Data.Acid     (Query, Update, makeAcidic)
 import Data.SafeCopy (SafeCopy(..), contain)
-import qualified Data.Serialize as Serialize
 
 -- BuildReportId
 instance SafeCopy BuildReportId where

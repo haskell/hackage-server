@@ -41,11 +41,6 @@ import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), UserList, nullDescription)
 
-import qualified Distribution.Server.Framework.Auth as Auth
-import qualified Distribution.Server.Framework.AuthTypes as Auth
-import qualified Distribution.Server.Framework.AuthCrypt as Auth
-
-import Happstack.Server hiding (port)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Map (Map)

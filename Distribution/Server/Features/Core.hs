@@ -58,7 +58,6 @@ import Data.Time.Clock (UTCTime)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Monoid (mconcat)
-import Data.Function (fix)
 --TODO: why are we importing xhtml here!?
 import Text.XHtml.Strict (Html, toHtml, unordList, h3, (<<), anchor, href, (!))
 import Data.Ord (comparing)

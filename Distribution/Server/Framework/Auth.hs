@@ -40,9 +40,8 @@ import qualified Happstack.Crypto.Base64 as Base64
 
 import Control.Monad.Trans (MonadIO, liftIO)
 import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
 
-import Control.Monad (guard, join, liftM2, mplus, mzero)
+import Control.Monad (guard, join, liftM2, mzero)
 import Control.Monad.Error.Class (Error, noMsg)
 import Data.Char (intToDigit, isAsciiLower)
 import System.Random (randomRs, newStdGen)
@@ -50,7 +49,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Text.ParserCombinators.ReadP as Parse
 import Data.Maybe (listToMaybe)
-import Data.List  (find, intercalate)
+import Data.List  (intercalate)
 
 
 ------------------------------------------------------------------------

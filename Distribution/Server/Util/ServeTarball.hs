@@ -17,8 +17,12 @@ module Distribution.Server.Util.ServeTarball
     , readTarIndex
     ) where
 
-import Happstack.Server as Happstack hiding (path)
-import Distribution.Server.Util.Happstack
+import Happstack.Server.Types
+import Happstack.Server.Monads
+import Happstack.Server.Routing (methodOnly)
+import Happstack.Server.Response
+import Happstack.Server.FileServe as Happstack (mimeTypes)
+import Distribution.Server.Util.Happstack (remainingPath)
 
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
