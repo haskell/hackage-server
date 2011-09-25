@@ -111,9 +111,9 @@ globalCommand = CommandUI {
     commandDescription  = Just $ \pname ->
          "For more information about a command use\n"
       ++ "  " ++ pname ++ " COMMAND --help\n\n"
-{-TODO      ++ "Steps to create a new server instance:\n"
+      ++ "Steps to create a new empty server instance:\n"
       ++ concat [ "  " ++ pname ++ " " ++ x ++ "\n"
-                | x <- ["new", "run"]]-},
+                | x <- ["init", "run"]],
     commandDefaultFlags = defaultGlobalFlags,
     commandOptions      = \_ ->
       [option ['V'] ["version"]
