@@ -342,6 +342,9 @@ initAction opts = do
         info "Creating initial state..."
         Server.initState server admin
         createDirectory (stateDir </> "tmp")
+        when (flagInitAdmin opts == NoFlag) $
+          info $ "Using default administrator account "
+              ++ "(user admin, passwd admin)"
         info "Done"
 
 
