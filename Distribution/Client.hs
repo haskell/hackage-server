@@ -12,6 +12,7 @@ import Distribution.Server.Util.Merge
 import Distribution.Package
 import Distribution.Verbosity
 import Distribution.Simple.Utils
+import Distribution.Text
 
 import Data.List
 import Data.Maybe
@@ -43,15 +44,24 @@ validateHackageURI str = case parseURI str of
     | isNothing (uriAuthority uri) -> Left ("server name required in URL " ++ str)
     | otherwise                    -> Right uri
 
+validatePackageIds :: [String] -> Either String [PackageId]
+validatePackageIds pkgstrs = case errs of
+            (err:_) -> Left $ "'" ++ err ++ "' is not a valid package name or id"
+            _       -> Right pkgs
+  where
+    pkgstrs' = [ (pkgstr, simpleParse pkgstr) | pkgstr <- pkgstrs ]
+    pkgs     = [ pkgid  | (_, Just pkgid)   <- pkgstrs' ]
+    errs     = [ pkgstr | (pkgstr, Nothing) <- pkgstrs' ]
+
 ----------------------------------------------------
 -- Fetching info from source and destination servers
 ----------------------------------------------------
 
 data PkgIndexInfo = PkgIndexInfo
                        PackageId
-                       (Maybe UTCTime)
-                       (Maybe UserName)
-                       (Maybe UserId)
+                       (Maybe UTCTime)  -- Upload time
+                       (Maybe UserName) -- Name of uploader
+                       (Maybe UserId)   -- Id of uploader
   deriving Show
 
 downloadIndex :: URI -> FilePath -> HttpSession [PkgIndexInfo]
@@ -152,6 +162,23 @@ infixr 5 <//>
 (<//>) :: URI -> FilePath -> URI
 uri <//> path = uri { uriPath = Posix.addTrailingPathSeparator (uriPath uri)
                                 Posix.</> path }
+
+
+extractURICredentials :: URI -> Maybe (String, String)
+extractURICredentials uri
+  | Just authority <- uriAuthority uri
+  , (username, ':':passwd0) <- break (==':') (uriUserInfo authority)
+  , let passwd = takeWhile (/='@') passwd0
+  , not (null username)
+  , not (null passwd)
+  = Just (username, passwd)
+extractURICredentials _ = Nothing
+
+provideAuthInfo :: URI -> Maybe (String, String) -> URI -> String -> IO (Maybe (String, String))
+provideAuthInfo for_uri credentials = \uri _realm -> do
+    if hostName uri == hostName for_uri then return credentials
+                                        else return Nothing
+  where hostName = fmap uriRegName . uriAuthority
 
 
 type HttpSession a = BrowserAction (HandleStream ByteString) a

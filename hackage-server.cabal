@@ -205,3 +205,26 @@ executable hackage-mirror
                -fno-warn-warnings-deprecations
                -fno-warn-name-shadowing
 
+executable hackage-build
+  main-is: BuildClient.hs
+  other-modules:
+    Distribution.Client
+    Distribution.Server.LegacyImport.UploadLog
+    Distribution.Server.Users.Types
+    Distribution.Server.Util.Index
+    Distribution.Server.Util.Merge
+  build-depends:
+    base,
+    containers, bytestring, pretty,
+    filepath, directory,
+    time,     old-locale,
+    tar,      zlib,
+    network,  HTTP,
+    Cabal,
+    --TODO: eliminate:
+    safecopy, cereal, binary, mtl
+
+  ghc-options: -Wall
+               -fno-warn-orphans -fno-warn-unused-do-bind
+               -fno-warn-warnings-deprecations
+               -fno-warn-name-shadowing

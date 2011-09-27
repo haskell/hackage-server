@@ -96,8 +96,8 @@ subsetIndex pkgids =
 mirrorPackages :: Verbosity -> MirrorOpts -> [PkgIndexInfo] -> HttpSession ()
 mirrorPackages verbosity opts pkgsToMirror = do
 
-    let credentials = extractCredentials (dstURI opts)
-    setAuthorityGen (provideAuthInfo credentials)
+    let credentials = extractURICredentials (dstURI opts)
+    setAuthorityGen (provideAuthInfo (dstURI opts) credentials)
 
     sequence_
       [ do let srcBasedir
@@ -115,23 +115,6 @@ mirrorPackages verbosity opts pkgsToMirror = do
            when ok $ putPackage    dst pkginfo pkgfile
 
       | pkginfo@(PkgIndexInfo pkgid _ _ _) <- pkgsToMirror ]
-
-  where
-    provideAuthInfo :: Maybe (String, String) -> URI -> String -> IO (Maybe (String, String))
-    provideAuthInfo credentials = \uri _realm -> do
-      if hostName uri == hostName (dstURI opts) then return credentials
-                                                else return Nothing
-
-    hostName = fmap uriRegName . uriAuthority
-
-    extractCredentials uri
-      | Just authority <- uriAuthority uri
-      , (username, ':':passwd0) <- break (==':') (uriUserInfo authority)
-      , let passwd = takeWhile (/='@') passwd0
-      , not (null username)
-      , not (null passwd)
-      = Just (username, passwd)
-    extractCredentials _ = Nothing
 
 putPackage :: URI -> PkgIndexInfo -> FilePath -> HttpSession ()
 putPackage baseURI (PkgIndexInfo pkgid _mtime _muname _muid) pkgFile = do
@@ -196,12 +179,9 @@ validateOpts args = do
         (Left err, _) -> die err
         (_, Left err) -> die err
         (Right fromURI, Right toURI) -> do
-          let pkgstrs' = [ (pkgstr, simpleParse pkgstr) | pkgstr <- pkgstrs ]
-              pkgs     = [ pkgid  | (_, Just pkgid)   <- pkgstrs' ]
-              errs     = [ pkgstr | (pkgstr, Nothing) <- pkgstrs' ]
-          case errs of
-            (err:_) -> die $ "'" ++ err ++ "' is not a valid package name or id"
-            _       -> return ()
+          pkgs <- case validatePackageIds pkgstrs of
+            Left err   -> die err
+            Right pkgs -> return pkgs
 
           return $ (,) (flagVerbosity flags) MirrorOpts {
             srcURI       = fromURI,
