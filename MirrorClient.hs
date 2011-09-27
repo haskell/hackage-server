@@ -290,6 +290,7 @@ httpSession verbosity action =
       setErrHandler die
       setOutHandler (debug verbosity)
       setAllowBasicAuth True
+      setCheckForProxy True
       action
 
 downloadFile :: URI -> FilePath -> HttpSession ()
