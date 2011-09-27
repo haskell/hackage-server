@@ -205,11 +205,14 @@ setETag file Nothing     = catchJustDoesNotExistError
                              (\_ -> return ())
 setETag file (Just etag) = writeFile  (file <.> "etag") etag
 
+catchJustDoesNotExistError :: IO a -> (IOError -> IO a) -> IO a
 catchJustDoesNotExistError =
   catchJust (\e -> if isDoesNotExistError e then Just e else Nothing)
 
+quote :: String -> String
 quote   s = '"' : s ++ ['"']
 
+unquote :: String -> String
 unquote ('"':s) = go s
   where
     go []       = []
@@ -262,8 +265,9 @@ checkStatus :: URI -> Response ByteString -> HttpSession ()
 checkStatus uri rsp = case rspCode rsp of
   (2,0,0) -> return ()
   (4,0,0) -> ioAction (warn normal (showFailure uri rsp)) >> return ()
-  code    -> err (showFailure uri rsp)
+  _code   -> err (showFailure uri rsp)
 
+showFailure :: URI -> Response ByteString -> String
 showFailure uri rsp =
     show (rspCode rsp) ++ " " ++ rspReason rsp ++ show uri
  ++ case lookupHeader HdrContentType (rspHeaders rsp) of

@@ -200,3 +200,8 @@ executable hackage-mirror
     --TODO: eliminate:
     safecopy, cereal, binary, mtl
 
+  ghc-options: -Wall
+               -fno-warn-orphans -fno-warn-unused-do-bind
+               -fno-warn-warnings-deprecations
+               -fno-warn-name-shadowing
+

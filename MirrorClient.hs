@@ -134,7 +134,7 @@ mirrorPackages verbosity opts pkgsToMirror = do
     extractCredentials _ = Nothing
 
 putPackage :: URI -> PkgIndexInfo -> FilePath -> HttpSession ()
-putPackage baseURI (PkgIndexInfo pkgid mtime muname muid) pkgFile = do
+putPackage baseURI (PkgIndexInfo pkgid _mtime _muname _muid) pkgFile = do
     putPackageTarball
 
 {-  case mtime of
