@@ -15,7 +15,6 @@ import Distribution.Simple.Utils
 import Data.List
 import Data.Maybe
 import Control.Monad
-import qualified Data.ByteString.Lazy.Char8 as BS
 
 import System.Environment
 import System.Exit
@@ -124,10 +123,8 @@ putPackage baseURI (PkgIndexInfo pkgid _mtime _muname _muid) pkgFile = do
       Nothing   -> return ()
       Just time -> putPackageUploadTime -}
   where
-    putPackageTarball = do
-      pkgContent <- ioAction $ BS.readFile pkgFile
-      let pkgURI = baseURI <//> display pkgid <.> "tar.gz"
-      requestPUT pkgURI "application/x-gzip" pkgContent
+    pkgURI = baseURI <//> display pkgid <.> "tar.gz"
+    putPackageTarball = requestPUTFile pkgURI "application/x-gzip" pkgFile
 {-
     putPackageUploadTime time = do
       (_, rsp) <- request (requestPUT pkgURI "text/plain" timeStr)

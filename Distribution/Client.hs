@@ -174,11 +174,16 @@ extractURICredentials uri
   = Just (username, passwd)
 extractURICredentials _ = Nothing
 
+removeURICredentials :: URI -> URI
+removeURICredentials uri = uri { uriAuthority = fmap (\auth -> auth { uriUserInfo = "" }) (uriAuthority uri) }
+
 provideAuthInfo :: URI -> Maybe (String, String) -> URI -> String -> IO (Maybe (String, String))
 provideAuthInfo for_uri credentials = \uri _realm -> do
-    if hostName uri == hostName for_uri then return credentials
-                                        else return Nothing
-  where hostName = fmap uriRegName . uriAuthority
+    if uriHostName uri == uriHostName for_uri then return credentials
+                                              else return Nothing
+
+uriHostName :: URI -> Maybe String
+uriHostName = fmap uriRegName . uriAuthority
 
 
 type HttpSession a = BrowserAction (HandleStream ByteString) a
@@ -279,9 +284,18 @@ requestGET' uri = do
     headers = []
 
 
-requestPUT :: URI -> String -> ByteString -> HttpSession ()
-requestPUT uri mimetype body = do
-    (_, rsp) <- request (Request uri PUT headers body)
+requestPUTFile :: URI -> String -> FilePath -> HttpSession ()
+requestPUTFile uri mime_type file = do
+    content <- ioAction $ BS.readFile file
+    requestPUT uri mime_type content
+
+requestPOST, requestPUT :: URI -> String -> ByteString -> HttpSession ()
+requestPOST = requestPOSTPUT POST
+requestPUT = requestPOSTPUT PUT
+
+requestPOSTPUT :: RequestMethod -> URI -> String -> ByteString -> HttpSession ()
+requestPOSTPUT meth uri mimetype body = do
+    (_, rsp) <- request (Request uri meth headers body)
     checkStatus uri rsp
   where
     headers = [ Header HdrContentLength (show (BS.length body))
