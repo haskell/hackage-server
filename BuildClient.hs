@@ -30,6 +30,10 @@ import System.Process
 import System.IO.Error
 
 
+-- FIXMEs:
+--  * Sandbox user-supplied code (i.e. the whole 'cabal install' invocation)
+
+
 data BuildOpts = BuildOpts {
                     srcURI       :: URI,
                     username     :: String,
@@ -187,10 +191,7 @@ cabal verbosity opts cmd args = do
 
 tarGzDirectory :: FilePath -> IO BS.ByteString
 tarGzDirectory dir = do
-    --print (containing_dir, nested_dir)
     res <- liftM (GZip.compress . Tar.write) $ Tar.pack containing_dir [nested_dir]
-    BS.writeFile "/tmp/foo.tar.gz" res
-    --BS.length res `seq` print "tarGzDirectory"
     return res
   where (containing_dir, nested_dir) = splitFileName dir
 
