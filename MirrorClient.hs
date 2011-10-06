@@ -460,16 +460,46 @@ validateOpts args = do
             selectedPkgs = pkgs
           }
 
-      _ -> do putStrLn "expected two URLs, a source and destination"
-              printUsage
+      _ -> do putStrLn $ "Expected two URLs, a source and destination.\n"
+                      ++ "See hackage-mirror --help for details and an example."
+              exitFailure
 
   where
-    printUsage  = do
-      putStrLn $ usageInfo usageHeader mirrorFlagDescrs
+    printUsage = do
+      putStrLn $ usageInfo usageHeader mirrorFlagDescrs ++ helpExampleStr
       exitSuccess
-    usageHeader = "Usage: hackage-mirror fromURL toURL [packages] [options]\nOptions:"
+    usageHeader = helpDescrStr
+               ++ "Usage: hackage-mirror fromURL toURL [packages] [options]\n"
+               ++ "Options:"
     printErrors errs = do
       putStrLn $ concat errs ++ "Try --help."
       exitFailure
 
     accum flags = foldr (flip (.)) id flags
+
+helpDescrStr :: String
+helpDescrStr = unlines
+  [ "The hackage-mirror client copies packages from one hackage server to another."
+  , "By default it copies over all packages that exist on the source but not on"
+  , "the destination server. You can also select just specific packages to mirror."
+  , "It is also possible to run the mirror in a continuous mode, giving you"
+  , "nearly-live mirroring.\n"
+  ]
+
+helpExampleStr :: String
+helpExampleStr = unlines
+  [ "\nExample:"
+  , "  Suppose we have:"
+  , "  - source server: hackage.haskell.org"
+  , "  - dest server:   localhost:8080"
+  , "  Uploading packages almost always requires authentication, so suppose we have"
+  , "  a user account for our mirror client with username 'foo' and password 'bar'."
+  , "  We include the authentication details into the destination URL:"
+  , "    http://foo:bar@localhost:8080/"
+  , "  To test that it is working without actually syncing a Gb of data from"
+  , "  hackage.haskell.org, we will specify to mirror only the 'zlib' package."
+  , "  So overall we run:"
+  , "    hackage-mirror http://hackage.haskell.org/ \\"
+  , "                   http://foo:bar@localhost:8080/  zlib"
+  , "  This will synchronise all versions of the 'zlib' package and then exit."
+  ]
