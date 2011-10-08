@@ -234,6 +234,7 @@ runAction opts = do
         handler = Signal.Catch $ do
           info "Writing checkpoint..."
           Server.checkpoint server
+          info "Done"
         setHandler h =
           Signal.installHandler Signal.userDefinedSignal1 h Nothing
 
