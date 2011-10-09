@@ -41,17 +41,19 @@ main = topHandler $ do
 mirrorOnce :: Verbosity -> MirrorOpts -> IO ()
 mirrorOnce verbosity opts = do
 
-    let srcCacheFile = stateDir opts </> mkCacheFileName (srcURI opts)
-        dstCacheFile = stateDir opts </> mkCacheFileName (dstURI opts)
-    when (srcCacheFile == dstCacheFile) $
+    let srcCacheDir = stateDir opts </> mkCacheFileName (srcURI opts)
+        dstCacheDir = stateDir opts </> mkCacheFileName (dstURI opts)
+    when (srcCacheDir == dstCacheDir) $
       die "source and destination cache files clash"
 
     createDirectoryIfMissing False (stateDir opts)
+    createDirectoryIfMissing False srcCacheDir
+    createDirectoryIfMissing False dstCacheDir
 
     httpSession verbosity $ do
 
-      srcIndex <- downloadIndex (srcURI opts) srcCacheFile
-      dstIndex <- downloadIndex (dstURI opts) dstCacheFile
+      srcIndex <- downloadIndex (srcURI opts) srcCacheDir
+      dstIndex <- downloadIndex (dstURI opts) dstCacheDir
 
       let pkgsMissingFromDest = diffIndex srcIndex dstIndex
           pkgsToMirror
@@ -124,7 +126,9 @@ putPackage baseURI (PkgIndexInfo pkgid _mtime _muname _muid) pkgFile = do
       Just time -> putPackageUploadTime -}
   where
     pkgURI = baseURI <//> display pkgid <.> "tar.gz"
-    putPackageTarball = requestPUTFile pkgURI "application/x-gzip" pkgFile
+    putPackageTarball = do
+      requestPUTFile pkgURI "application/x-gzip" pkgFile
+      ioAction $ removeFile pkgFile
 {-
     putPackageUploadTime time = do
       (_, rsp) <- request (requestPUT pkgURI "text/plain" timeStr)

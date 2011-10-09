@@ -78,7 +78,7 @@ isOldHackageURI uri
 
 
 downloadOldIndex :: URI -> FilePath -> HttpSession [PkgIndexInfo]
-downloadOldIndex uri cacheFile = do
+downloadOldIndex uri cacheDir = do
 
     downloadFile indexURI indexFile
     downloadFile logURI logFile
@@ -101,10 +101,10 @@ downloadOldIndex uri cacheFile = do
 
   where
     indexURI  = uri <//> "packages" </> "archive" </> "00-index.tar.gz"
-    indexFile = cacheFile <.> "tar.gz"
+    indexFile = cacheDir </> "00-index.tar.gz"
 
     logURI    = uri <//> "packages" </> "archive" </> "log"
-    logFile   = cacheFile <.> "log"
+    logFile   = cacheDir </> "log"
 
     mergeLogInfo pkgids log =
         catMaybes
@@ -127,7 +127,7 @@ downloadOldIndex uri cacheFile = do
 
 
 downloadNewIndex :: URI -> FilePath -> HttpSession [PkgIndexInfo]
-downloadNewIndex uri cacheFile = do
+downloadNewIndex uri cacheDir = do
     downloadFile indexURI indexFile
     ioAction $ withFile indexFile ReadMode $ \hnd -> do
       content <- BS.hGetContents hnd
@@ -137,7 +137,7 @@ downloadNewIndex uri cacheFile = do
 
   where
     indexURI  = uri <//> "packages/00-index.tar.gz"
-    indexFile = cacheFile <.> "tar.gz"
+    indexFile = cacheDir </> "00-index.tar.gz"
 
     selectDetails :: PackageId -> Tar.Entry -> PkgIndexInfo
     selectDetails pkgid entry =
