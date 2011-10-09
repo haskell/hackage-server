@@ -196,7 +196,7 @@ executable hackage-mirror
     filepath, directory,
     time,     old-locale,
     tar,      zlib,
-    network,  HTTP,
+    network,  HTTP >= 4000.1.3,
     Cabal,
     --TODO: eliminate:
     safecopy, cereal, binary, mtl
