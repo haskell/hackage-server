@@ -194,7 +194,7 @@ executable hackage-mirror
     base,
     containers, bytestring, pretty,
     filepath, directory,
-    time,     old-locale,
+    time,     old-locale, random,
     tar,      zlib,
     network,  HTTP >= 4000.1.3,
     Cabal,

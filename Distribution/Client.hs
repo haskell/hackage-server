@@ -47,9 +47,10 @@ validateHackageURI str = case parseURI str of
     | otherwise                    -> Right uri
 
 validatePackageIds :: [String] -> Either String [PackageId]
-validatePackageIds pkgstrs = case errs of
-            (err:_) -> Left $ "'" ++ err ++ "' is not a valid package name or id"
-            _       -> Right pkgs
+validatePackageIds pkgstrs =
+    case errs of
+      (err:_) -> Left $ "'" ++ err ++ "' is not a valid package name or id"
+      _       -> Right pkgs
   where
     pkgstrs' = [ (pkgstr, simpleParse pkgstr) | pkgstr <- pkgstrs ]
     pkgs     = [ pkgid  | (_, Just pkgid)   <- pkgstrs' ]
