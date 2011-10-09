@@ -32,6 +32,8 @@ import System.FilePath
 import System.Directory
 import qualified System.FilePath.Posix as Posix
 
+import Paths_hackage_server (version)
+
 -------------------------
 -- Command line handling
 -------------------------
@@ -191,7 +193,7 @@ type HttpSession a = BrowserAction (HandleStream ByteString) a
 httpSession :: Verbosity -> HttpSession a -> IO a
 httpSession verbosity action =
     browse $ do
-      setUserAgent "hackage-mirror"
+      setUserAgent ("hackage-mirror/" ++ display version)
       setErrHandler die
       setOutHandler (debug verbosity)
       setAllowBasicAuth True
