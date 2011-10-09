@@ -163,6 +163,7 @@ executable hackage-server
     rss        == 3000.1.*,
     Cabal      == 1.11.*,
     csv        == 0.1.*,
+    stm        == 2.2.*,
     acid-state == 0.5.*,
     happstack-server == 6.2.*,
     happstack-util   == 6.0.*
