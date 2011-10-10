@@ -2,7 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Distribution.Server.Packages.Unpack (
     unpackPackage,
-    unpackPackageBasic,
+    unpackPackageRaw,
   ) where
 
 import qualified Codec.Archive.Tar as Tar
@@ -56,18 +56,21 @@ unpackPackage :: FilePath -> ByteString
                         ((GenericPackageDescription, ByteString), [String])
 unpackPackage tarGzFile contents =
   runUploadMonad $ do
-    (pkgDesc, cabalEntry) <- basicChecks tarGzFile contents
+    (pkgDesc, warnings, cabalEntry) <- basicChecks tarGzFile contents
+    mapM_ fail warnings
     extraChecks pkgDesc
     return (pkgDesc, cabalEntry)
 
-unpackPackageBasic :: FilePath -> ByteString
-                   -> Either String
-                             ((GenericPackageDescription, ByteString), [String])
-unpackPackageBasic tarGzFile contents =
+unpackPackageRaw :: FilePath -> ByteString
+                 -> Either String
+                           ((GenericPackageDescription, ByteString), [String])
+unpackPackageRaw tarGzFile contents =
   runUploadMonad $ do
-    basicChecks tarGzFile contents
+    (pkgDesc, _warnings, cabalEntry) <- basicChecks tarGzFile contents
+    return (pkgDesc, cabalEntry)
 
-basicChecks :: FilePath -> ByteString -> UploadMonad (GenericPackageDescription, ByteString)
+basicChecks :: FilePath -> ByteString
+            -> UploadMonad (GenericPackageDescription, [String], ByteString)
 basicChecks tarGzFile contents = do
   let (pkgidStr, ext) = (base, tar ++ gz)
         where (tarFile, gz) = splitExtension (portableTakeFileName tarGzFile)
@@ -102,14 +105,13 @@ basicChecks tarGzFile contents = do
               ++ " file is missing from the package tarball."
     _  -> fail $ "The tarball contains duplicate entries with the name "
               ++ quote cabalFileName ++ "."
-  
+
   -- Parse the Cabal file
   let cabalFileContent = fromUTF8 (BS.unpack cabalEntry)
-  pkgDesc <- case parsePackageDescription cabalFileContent of
+  (pkgDesc, warnings) <- case parsePackageDescription cabalFileContent of
     ParseFailed err -> fail $ showError (locatedErrorMsg err)
-    ParseOk warnings pkgDesc -> do
-      mapM_ (fail . showPWarning cabalFileName) warnings
-      return pkgDesc
+    ParseOk warnings pkgDesc ->
+      return (pkgDesc, map (showPWarning cabalFileName) warnings)
 
   -- Check that the name and version in Cabal file match
   when (packageName pkgDesc /= packageName pkgid) $
@@ -117,7 +119,7 @@ basicChecks tarGzFile contents = do
   when (packageVersion pkgDesc /= packageVersion pkgid) $
     fail "Package version in the cabal file does not match the file name."
 
-  return (pkgDesc, cabalEntry)
+  return (pkgDesc, warnings, cabalEntry)
 
   where
     showError (Nothing, msg) = msg

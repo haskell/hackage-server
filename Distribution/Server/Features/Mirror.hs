@@ -93,7 +93,7 @@ initMirrorFeature env core users = do
           let uploadData = (time, uid)
           res <- liftIO $ BlobStorage.addWith store fileContent $ \fileContent' ->
                    let filename = display pkgid <.> "tar.gz"
-                   in case Upload.unpackPackageBasic filename fileContent' of
+                   in case Upload.unpackPackageRaw filename fileContent' of
                         Left err -> return $ Left err
                         Right x ->
                             do let decompressedContent = GZip.decompress fileContent'
