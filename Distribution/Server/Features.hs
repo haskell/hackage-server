@@ -121,8 +121,6 @@ initHackageFeatures env = do
     platformFeature <- initPlatformFeature env
                          coreFeature
 
-    --jsonFeature   <- initJsonFeature
-
     htmlFeature     <- initHtmlFeature env
                          coreFeature
                          packagesFeature
