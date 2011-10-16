@@ -191,7 +191,7 @@ renderFields render = [
         ("Author",      toHtml $ author desc),
         ("Maintainer",  maintainField $ rendMaintainer render),
         ("Stability",   toHtml $ stability desc),
-        ("Category",    commaList . map toHtml $ rendCategory render), 
+        ("Category",    commaList . map categoryField $ rendCategory render), 
         ("Home page",   linkField $ homepage desc),
         ("Bug tracker", linkField $ bugReports desc),
         ("Executables", commaList . map toHtml $ rendExecNames render),
@@ -203,6 +203,7 @@ renderFields render = [
         linkField url = case url of
             [] -> noHtml
             _  -> anchor ! [href url] << url
+        categoryField cat = anchor ! [href $ "/packages/#cat:" ++ cat] << cat
         maintainField mnt = case mnt of
             Nothing -> strong ! [theclass "warning"] << toHtml "none"
             Just n  -> toHtml n
