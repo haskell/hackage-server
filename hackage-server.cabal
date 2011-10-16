@@ -223,7 +223,9 @@ executable hackage-build
     network,  HTTP,
     Cabal,
     --TODO: eliminate:
-    safecopy, cereal, binary, mtl
+    safecopy, cereal, binary, mtl,
+    -- Runtime dependency only:
+    hscolour >= 1.8
 
   ghc-options: -Wall
                -fno-warn-orphans -fno-warn-unused-do-bind

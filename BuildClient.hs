@@ -58,13 +58,15 @@ buildOnce :: Verbosity -> BuildOpts -> IO ()
 buildOnce verbosity opts = do
     (does_not_have_docs, mark_as_having_docs, persist) <- mkPackageHasDocs opts
 
+    createDirectoryIfMissing False cacheDir
     prepareBuildPackages verbosity opts
+
     flip finally persist $ httpSession verbosity $ do
       -- Make sure we authenticate to Hackage
       setAuthorityGen $ provideAuthInfo (srcURI opts) $ Just (username opts, password opts)
 
       -- Find those files *not* marked as having documentation in our cache
-      index <- downloadIndex (srcURI opts) cacheFile
+      index <- downloadIndex (srcURI opts) cacheDir
       to_build <- filterM does_not_have_docs [pkg_id | PkgIndexInfo pkg_id _ _ _ <- index
                                                      , null (selectedPkgs opts) || pkg_id `elem` selectedPkgs opts]
       ioAction $ notice verbosity $ show (length to_build) ++ " packages to build documentation for."
@@ -77,11 +79,11 @@ buildOnce verbosity opts = do
           buildPackage verbosity opts pkg_id
           ioAction $ mark_as_having_docs pkg_id
   where
-    cacheFile = stateDir opts </> cacheFileName
-    cacheFileName | URI { uriAuthority = Just auth } <- srcURI opts
-                  = makeValid (uriRegName auth ++ uriPort auth)
-                  | otherwise
-                  = error $ "unexpected URI " ++ show (srcURI opts)
+    cacheDir = stateDir opts </> cacheDirName
+    cacheDirName | URI { uriAuthority = Just auth } <- srcURI opts
+                 = makeValid (uriRegName auth ++ uriPort auth)
+                 | otherwise
+                 = error $ "unexpected URI " ++ show (srcURI opts)
 
 -- Builds a little memoised function that can tell us whether a particular package already has documentation
 mkPackageHasDocs :: BuildOpts -> IO (PackageId -> HttpSession Bool, PackageId -> IO (), IO ())
@@ -144,6 +146,7 @@ buildPackage verbosity opts pkg_id = do
     -- The documentation is installed within the stateDir because we set a prefix while installing
     let doc_dir = stateDir opts </> "share" </> "doc" </>  display pkg_id </> "html"
         temp_doc_dir = stateDir opts </> "share" </> "doc" </>  display pkg_id </> display (pkgName pkg_id)
+        pkg_url = srcURI opts <//> "package" </> "$pkg-$version"
 
     mb_docs <- ioAction $ withCurrentDirectory (stateDir opts) $ do
       -- Let's not clean in between installations. This should save us some download/installation time for packages
@@ -154,16 +157,26 @@ buildPackage verbosity opts pkg_id = do
       -- We CANNOT build from an unpacked directory, because Cabal only generates build reports
       -- if you are building from a tarball that was verifiably downloaded from the server
       cabal verbosity opts "install" ["--enable-documentation", "--enable-tests",
-                                      "--html-location=" ++ show (srcURI opts <//> "package" </> "$pkg-$version" </> "doc"),
-                                      "--prefix=" ++ stateDir opts, display pkg_id]
+                                      -- We know where this documentation will eventually be hosted, bake that in:
+                                      "--haddock-html-location=" ++ show (pkg_url <//> "doc"),
+                                      "--haddock-option=--built-in-themes",           -- Give the user a choice between themes
+                                      "--haddock-contents-location=" ++ show pkg_url, -- Link "Contents" to the package page
+                                      "--haddock-hyperlink-source",                   -- Link to colourised source code
+                                      "--prefix=" ++ stateDir opts,
+                                      display pkg_id]
 
       -- Submit a report even if installation/tests failed: all interesting data points!
       report_ec <- cabal verbosity opts "report" ["--username", username opts, "--password", password opts]
 
       -- Delete reports after submission because we don't want to submit them *again* in the future
       when (report_ec == ExitSuccess) $ do
+          -- This seems like a bit of a mess: some data goes into the user directory:
           dotCabal <- getAppUserDataDirectory "cabal"
-          removeDirectoryRecursive (dotCabal </> "reports" </> srcName opts)
+          handleDoesNotExist (return ()) $ removeDirectoryRecursive (dotCabal </> "reports" </> srcName opts)
+          handleDoesNotExist (return ()) $ removeDirectoryRecursive (dotCabal </> "logs")
+          -- Other data goes into a local file storing build reports:
+          let simple_report_log = stateDir opts </> "packages" </> srcName opts </> "build-reports.log"
+          handleDoesNotExist (return ()) $ removeFile simple_report_log
       
       docs_generated <- doesDirectoryExist doc_dir
       if docs_generated
@@ -179,7 +192,8 @@ buildPackage verbosity opts pkg_id = do
     -- Submit the generated docs, if possible
     case mb_docs of
       Nothing       -> return ()
-      Just docs_tgz -> requestPUT (srcURI opts <//> "package" </> display pkg_id </> "doc") "application/x-gzip" docs_tgz
+      Just docs_tgz -> do
+        requestPUT (srcURI opts <//> "package" </> display pkg_id </> "doc") "application/x-gzip" docs_tgz
 
 cabal :: Verbosity -> BuildOpts -> String -> [String] -> IO ExitCode
 cabal verbosity opts cmd args = do
@@ -192,7 +206,9 @@ cabal verbosity opts cmd args = do
 tarGzDirectory :: FilePath -> IO BS.ByteString
 tarGzDirectory dir = do
     res <- liftM (GZip.compress . Tar.write) $ Tar.pack containing_dir [nested_dir]
-    return res
+    -- This seq is extremely important! Tar.pack is lazy, scanning directories as entries are demanded.
+    -- This interacts very badly with the renameDirectory stuff with which tarGzDirectory gets wrapped.
+    BS.length res `seq` return res
   where (containing_dir, nested_dir) = splitFileName dir
 
 withCurrentDirectory :: FilePath -> IO a -> IO a
