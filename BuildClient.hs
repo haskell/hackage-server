@@ -146,6 +146,7 @@ buildPackage verbosity opts pkg_id = do
     -- The documentation is installed within the stateDir because we set a prefix while installing
     let doc_dir = stateDir opts </> "share" </> "doc" </>  display pkg_id </> "html"
         temp_doc_dir = stateDir opts </> "share" </> "doc" </>  display pkg_id </> display (pkgName pkg_id)
+        versionless_pkg_url = srcURI opts <//> "package" </> "$pkg"
         pkg_url = srcURI opts <//> "package" </> "$pkg-$version"
 
     mb_docs <- ioAction $ withCurrentDirectory (stateDir opts) $ do
@@ -158,7 +159,9 @@ buildPackage verbosity opts pkg_id = do
       -- if you are building from a tarball that was verifiably downloaded from the server
       cabal verbosity opts "install" ["--enable-documentation", "--enable-tests",
                                       -- We know where this documentation will eventually be hosted, bake that in:
-                                      "--haddock-html-location=" ++ show (pkg_url <//> "doc"),
+                                      -- Don't include the version in the hyperlinks so we don't have to rehaddock some
+                                      -- package when the dependent packages get updated.
+                                      "--haddock-html-location=" ++ show (versionless_pkg_url <//> "doc"),
                                       "--haddock-option=--built-in-themes",           -- Give the user a choice between themes
                                       "--haddock-contents-location=" ++ show pkg_url, -- Link "Contents" to the package page
                                       "--haddock-hyperlink-source",                   -- Link to colourised source code
