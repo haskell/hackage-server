@@ -5,9 +5,6 @@ General:
      See for example how we cannot currently abstract over takeRequestBody.
 
 Backup:
- * Implement backup for Tags
- * Implement backup for Upload (just user groups)
- * Implement backup for Downloads
  * Implement import for Documentation
  * Reduce space for import (enable garbage collection of more things)
  * Bulk import should create tags and maintainer information automatically
@@ -24,7 +21,6 @@ Users:
 
 Other features:
  * Improve text search, producing more intuitive results in less time
- * Expose more dependency graph information (like revdeps), since the data's all there, as is the basic setup for calculating it
  * Bring BuildReports, Distro up to par with other features
 
 Feature views:
