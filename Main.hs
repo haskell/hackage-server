@@ -466,11 +466,16 @@ testBackupAction opts = do
       test_roundtrip <- Server.testRoundtrip server
       info "Preparing export tarball"
       tar <- Server.exportServerTar server
-      return (tar, test_roundtrip)
+      -- It is EXTREMELY IMPORTANT that we force the tarball to be constructed
+      -- now. If we wait until it is demanded in the next withServer context
+      -- then the tar gets filled with entirely wrong files!
+      BS.length tar `seq` return (tar, test_roundtrip)
+
+    let config' = config { confStateDir = tmpStateDir }
 
     createDirectoryIfMissing True tmpStateDir
 
-    withServer (config { confStateDir = tmpStateDir }) False $ \server -> do
+    withServer config' False $ \server -> do
       info "Parsing import tarball"
       res <- Server.importServerTar server tar
       maybe (return ()) fail res
