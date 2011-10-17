@@ -56,17 +56,19 @@ importAuth contents = importCSV "users.csv" contents $ \csv -> mapM_ fromRecord 
         name <- parseText "user name" nameStr
         user <- parseText "user id" idStr
         insertUser user $ UserInfo name Historical
-    fromRecord [nameStr, idStr, isEnabled, auth] = do
+    fromRecord [nameStr, idStr, statusStr, auth] = do
         name <- parseText "user name" nameStr
         user <- parseText "user id" idStr
-        authEn <- parseEnabled isEnabled
-        insertUser user $ UserInfo name (Active authEn $ UserAuth (PasswdHash auth))
+        status <- parseStatus statusStr auth
+        insertUser user $ UserInfo name status
 
     fromRecord x = fail $ "Error processing auth record: " ++ show x
 
-    parseEnabled "enabled"  = return Enabled
-    parseEnabled "disabled" = return Disabled
-    parseEnabled sts = fail $ "unable to parse whether user enabled: " ++ sts
+    parseStatus "deleted"    _    = return Deleted
+    parseStatus "historical" _    = return Historical
+    parseStatus "enabled"    auth = return $ Active Enabled $ UserAuth (PasswdHash auth)
+    parseStatus "disabled"   auth = return $ Active Disabled $ UserAuth (PasswdHash auth)
+    parseStatus sts _ = fail $ "unable to parse whether user enabled: " ++ sts
 
 insertUser :: UserId -> UserInfo -> Import Users ()
 insertUser user info = do
