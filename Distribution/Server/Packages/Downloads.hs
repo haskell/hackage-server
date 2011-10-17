@@ -47,6 +47,15 @@ emptyPackageDownloads = PackageDownloads 0 Map.empty
 packageDowns :: DownloadInfo -> Int
 packageDowns = allDownloads . packageDownloads
 
+lookupPackageDowns :: DownloadCounts -> PackageName -> Int
+lookupPackageDowns dcs pkgname = maybe 0 packageDowns $ Map.lookup pkgname (downloadMap dcs)
+
+incrementCounts :: Day -> PackageName -> Version -> Int -> DownloadCounts -> DownloadCounts
+incrementCounts day pkgname version count (DownloadCounts total perPackage) =
+    DownloadCounts
+      (total + count)
+      (adjustFrom (incrementInfo day version count) pkgname emptyDownloadInfo perPackage)
+
 incrementInfo :: Day -> Version -> Int -> DownloadInfo -> DownloadInfo
 incrementInfo day version count (DownloadInfo perMonth perDay total) = 
     DownloadInfo
@@ -64,23 +73,16 @@ adjustFrom :: Ord k => (a -> a) -> k -> a -> Map k a -> Map k a
 adjustFrom func key value = Map.alter (Just . func . fromMaybe value) key
 
 ----
+replacePackageDownloads :: DownloadCounts -> Update DownloadCounts ()
+replacePackageDownloads = put
+
 registerDownload :: Day -> PackageId -> Int -> Update DownloadCounts (Int, Int)
 registerDownload day pkgid count = do
     dc <- get
-    let infoMap = downloadMap dc
-        pkgname = packageName pkgid
-        info = Map.findWithDefault emptyDownloadInfo pkgname infoMap
-        oldCount = packageDowns info
-    if count <= 0
-      then do
-        put $ dc { downloadMap = Map.insert pkgname info infoMap }
-        return (oldCount, oldCount)
-      else do
-        let info' = incrementInfo day (packageVersion pkgid) count info
-            newCount = packageDowns info'
-        put $ dc { downloadMap = Map.insert pkgname info' infoMap 
-                 , totalDownloads = totalDownloads dc + count }
-        return (oldCount, newCount)
+    let pkgname = packageName pkgid
+        dc' = incrementCounts day pkgname (packageVersion pkgid) count dc
+    put dc'
+    return (lookupPackageDowns dc pkgname, lookupPackageDowns dc' pkgname)
 
 getDownloadCounts :: Query DownloadCounts DownloadCounts
 getDownloadCounts = ask
@@ -104,7 +106,8 @@ instance NFData DownloadCounts where
 initialDownloadCounts :: DownloadCounts
 initialDownloadCounts = emptyDownloadCounts
 
-$(makeAcidic ''DownloadCounts ['registerDownload
+$(makeAcidic ''DownloadCounts ['replacePackageDownloads
+                              ,'registerDownload
                               ,'getDownloadCounts
                               ,'getDownloadInfo
                               ])

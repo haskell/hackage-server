@@ -13,6 +13,8 @@ import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 
 import Distribution.Server.Packages.Downloads
+import Distribution.Server.Framework.BackupDump
+import Distribution.Server.Packages.Backup.Downloads
 import Distribution.Server.Util.Histogram
 import qualified Distribution.Server.Framework.Cache as Cache
 
@@ -44,7 +46,7 @@ instance IsHackageFeature DownloadFeature where
         featureResources = map (\x -> x $ downloadResource download) [topDownloads]
       , featurePostInit  = do countCache
                               forkIO transferDownloads >> return ()
-      , featureDumpRestore = Nothing -- TODO
+      , featureDumpRestore = Just (dumpBackup, restoreBackup)
       }
       where countCache = do
                 dc <- query GetDownloadCounts
@@ -56,6 +58,10 @@ instance IsHackageFeature DownloadFeature where
                 (_, new) <- update $ RegisterDownload (utctDay time) pkg 1
                 Cache.modifyCache (downloadHistogram download)
                     (updateHistogram (packageName pkg) new)
+            dumpBackup = do
+                dc <- query GetDownloadCounts
+                return [csvToBackup ["downloads.csv"] $ downloadsToCSV dc]
+            restoreBackup = downloadsBackup
 
 initDownloadFeature :: ServerEnv -> CoreFeature -> IO DownloadFeature
 initDownloadFeature _ core = do
@@ -89,8 +95,7 @@ sortedPackages downs = fmap topCounts $ Cache.getCache (downloadHistogram downs)
 -- TODO: use the Histogram's sortByCounts for this
 sortByDownloads :: MonadIO m => (a -> PackageName) -> [a] -> m [(a, Int)]
 sortByDownloads nameFunc pkgs = query GetDownloadCounts >>= \counts -> do
-    let downMap = downloadMap counts
-        modEntry pkg = (pkg, maybe 0 packageDowns $ Map.lookup (nameFunc pkg) downMap)
+    let modEntry pkg = (pkg, lookupPackageDowns (nameFunc pkg) downloadMap)
     return $ sortBy (comparing snd) $ map modEntry pkgs
 -}
 
