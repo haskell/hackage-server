@@ -105,17 +105,27 @@ stringToBytes :: String -> BSL.ByteString
 stringToBytes = BSL.pack . toUTF8
 
 
-testRoundtripByQuery :: Eq a => IO a -> TestRoundtrip
+testRoundtripByQuery :: (Show a, Eq a) => IO a -> TestRoundtrip
 testRoundtripByQuery query = testRoundtripByQuery' query $ \_ -> return []
 
-testRoundtripByQuery' :: Eq a => IO a -> (a -> IO [String]) -> TestRoundtrip
+testRoundtripByQuery' :: (Show a, Eq a) => IO a -> (a -> IO [String]) -> TestRoundtrip
 testRoundtripByQuery' query k = do
     old <- query
     return $ do
       new <- query
       if old == new
-       then return ["Internal state mismatch"]
+       then return ["Internal state mismatch:\n" ++ difference (show old) (show new)]
        else k new
+  where
+    difference old_str new_str
+        -- = indent 2 old_str ++ "Versus:\n" ++ indent 2 new_str
+        = indent 2 (take 80 old_str') ++ "\nVersus:\n" ++ indent 2 (take 80 new_str') ++ "\n(after " ++ show n_common ++ " chars)"
+      where (n_common, old_str', new_str') = dropCommonPrefix (0 :: Int) old_str new_str
+
+    indent n = unlines . map (replicate n ' ' ++) . lines
+    
+    dropCommonPrefix n (x:xs) (y:ys) | x == y = n `seq` dropCommonPrefix (n + 1) xs ys
+    dropCommonPrefix n xs ys = (n, xs, ys)
 
 testBlobsExist :: BlobStorage -> [Blob.BlobId] -> IO [String]
 testBlobsExist store blobs
