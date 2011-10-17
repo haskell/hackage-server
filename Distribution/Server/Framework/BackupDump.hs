@@ -113,7 +113,7 @@ testRoundtripByQuery' query k = do
     old <- query
     return $ do
       new <- query
-      if old == new
+      if old /= new
        then return ["Internal state mismatch:\n" ++ difference (show old) (show new)]
        else k new
   where
