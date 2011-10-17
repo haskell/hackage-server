@@ -256,7 +256,7 @@ extractPackage processFunc storage =
                 return $ (PkgInfo {
                     pkgInfoId     = packageId pkg,
                     pkgDesc       = pkg,
-                    pkgData       = pkgStr,
+                    pkgData       = CabalFileText pkgStr,
                     pkgTarball    = [(PkgTarball { pkgTarballGz = blobId,
                                                    pkgTarballNoGz = blobIdDecompressed },
                                       uploadData)],

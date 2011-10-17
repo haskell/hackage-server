@@ -110,7 +110,7 @@ initMirrorFeature env core users = do
                   liftIO $ doMergePackage core $ PkgInfo {
                       pkgInfoId     = packageId pkg,
                       pkgDesc       = pkg,
-                      pkgData       = pkgStr,
+                      pkgData       = CabalFileText pkgStr,
                       pkgTarball    = [(PkgTarball { pkgTarballGz = blobId,
                                                      pkgTarballNoGz = blobIdDecompressed },
                                         uploadData)],
@@ -134,7 +134,7 @@ initMirrorFeature env core users = do
                   liftIO $ doMergePackage core $ PkgInfo {
                       pkgInfoId     = packageId pkg,
                       pkgDesc       = pkg,
-                      pkgData       = fileContent,
+                      pkgData       = CabalFileText fileContent,
                       pkgTarball    = [],
                       pkgUploadData = uploadData,
                       pkgDataOld    = []

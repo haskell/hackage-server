@@ -24,7 +24,6 @@ import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Distribution.Package
-import Distribution.Simple.Utils (fromUTF8)
 import Distribution.PackageDescription.Parse (parsePackageDescription)
 import Distribution.ParseUtils (ParseResult(..), locatedErrorMsg)
 import Distribution.Text
@@ -34,7 +33,6 @@ import System.Locale (defaultTimeLocale)
 import Text.CSV
 
 import Data.ByteString.Lazy.Char8 (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.IntSet as IntSet
@@ -67,7 +65,7 @@ finalPackagesBackup packages = mempty {
 
 
 data PartialPkg = PartialPkg {
-    partialCabal :: [(Int, ByteString)],
+    partialCabal :: [(Int, CabalFileText)],
     partialCabalUpload :: [(Int, UploadInfo)],
     partialTarball :: [(Int, PkgTarball)],
     partialTarballUpload :: [(Int, UploadInfo)]
@@ -83,7 +81,7 @@ partialToFullPkg (pkgId, partial) = do
                          partialTarball partialTarballUpload partial
     case shiftUploadTimes (descendUploadTimes cabalDex) of
       [] -> Left $ "No cabal files found for " ++ display pkgId
-      ((cabal, info):cabalOld) -> case parsePackageDescription (fromUTF8 . BS.unpack $ cabal) of
+      ((cabal, info):cabalOld) -> case parsePackageDescription (cabalFileString cabal) of
         ParseFailed err -> Left $ show (locatedErrorMsg err)
         ParseOk _ parsePkg -> do
             return $ PkgInfo {
@@ -148,7 +146,7 @@ doPackageImport storage packages (("package":pkgStr:rest), bs) = runImport packa
             ["tarball.csv"] -> importVersionList "tarball.csv" bs >>= \list -> 
                         return $ partial {  partialTarballUpload = list }
             [other] | Just version <- extractVersion other (packageName pkgId) ".cabal" ->
-                        return $ partial { partialCabal = (version, bs):partialCabal partial }
+                        return $ partial { partialCabal = (version, CabalFileText bs):partialCabal partial }
                     | Just version <- extractVersion other pkgId ".tar.gz" -> do
                         blobId <- liftIO $ BlobStorage.add storage bs
                         blobIdUncompressed <- liftIO $ BlobStorage.add storage (GZip.decompress bs)
@@ -220,14 +218,14 @@ infoToCurrentEntries pkg =
     in cabals ++ tarballs
 
 ----------- Converting pieces of PkgInfo to entries
-cabalListToExport :: PackageId -> [(ByteString, UploadInfo)] -> [ExportEntry]
+cabalListToExport :: PackageId -> [(CabalFileText, UploadInfo)] -> [ExportEntry]
 cabalListToExport pkgId cabalInfos = csvToExport (pkgPath ++ ["uploads.csv"]) (versionListToCSV infos):
     map cabalToExport (zip [0..] cabals)
   where (cabals, infos) = unzip cabalInfos
         cabalName = display (packageName pkgId) ++ ".cabal"
-        cabalToExport :: (Int, ByteString) -> ExportEntry
-        cabalToExport (0, bs) = (pkgPath ++ [cabalName], Left bs)
-        cabalToExport (n, bs) = (pkgPath ++ [cabalName ++ "-" ++ show n], Left bs)
+        cabalToExport :: (Int, CabalFileText) -> ExportEntry
+        cabalToExport (0, CabalFileText bs) = (pkgPath ++ [cabalName], Left bs)
+        cabalToExport (n, CabalFileText bs) = (pkgPath ++ [cabalName ++ "-" ++ show n], Left bs)
         pkgPath = ["package", display pkgId]
 
 tarballListToExport :: PackageId -> [(PkgTarball, UploadInfo)] -> [ExportEntry]

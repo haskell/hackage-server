@@ -34,6 +34,15 @@ import Data.Typeable (Typeable)
 import Data.List (sortBy)
 import Data.Ord (comparing)
 
+newtype CabalFileText = CabalFileText { cabalFileByteString :: ByteString }
+  deriving (Eq, Serialize)
+
+cabalFileString :: CabalFileText -> String
+cabalFileString = fromUTF8 . BS.unpack . cabalFileByteString
+
+instance Show CabalFileText where
+    show cft = "CabalFileText (Data.ByteString.Lazy.Char8.pack (Distribution.Simple.Utils.toUTF8 " ++ show (cabalFileString cft) ++ "))"
+
 -- | The information we keep about a particular version of a package.
 -- 
 -- Previous versions of this package name and version may exist as well.
@@ -45,7 +54,7 @@ data PkgInfo = PkgInfo {
     -- Maybe and let the server parse the data on the fly.
     pkgDesc   :: !GenericPackageDescription,
     -- | The .cabal file text.
-    pkgData   :: !ByteString,
+    pkgData   :: !CabalFileText,
     -- | The actual package .tar.gz file. It is optional for making an incomplete
     -- mirror, e.g. using archives of just the latest packages, or perhaps for a
     -- multipart upload process.
@@ -56,7 +65,7 @@ data PkgInfo = PkgInfo {
     -- uploaded, but rather when it was replaced. This way, pkgUploadData won't change
     -- even if a cabal file is changed.
     -- Should be updated whenever a tarball is uploaded (see mergePkg state function)
-    pkgDataOld :: ![(ByteString, UploadInfo)],
+    pkgDataOld :: ![(CabalFileText, UploadInfo)],
     -- | When the package was created. Imports will override this with time in their logs.
     pkgUploadData :: !UploadInfo
 } deriving (Eq, Typeable, Show)
@@ -90,8 +99,8 @@ instance Serialize PkgInfo where
 
   get = do
     infoId  <- Serialize.get
-    bstring <- Serialize.get
-    desc <- case parsePackageDescription . fromUTF8 . BS.unpack $ bstring of
+    cabal <- Serialize.get
+    desc <- case parsePackageDescription . cabalFileString $ cabal of
         ParseFailed e -> fail $ "Internal error: " ++ show e
         ParseOk _ x   -> return x
     tarball <- Serialize.get
@@ -103,7 +112,7 @@ instance Serialize PkgInfo where
         pkgUploadData = updata,
         pkgDataOld    = old,
         pkgTarball    = tarball,
-        pkgData       = bstring
+        pkgData       = cabal
     }
 
 instance Serialize PkgTarball where

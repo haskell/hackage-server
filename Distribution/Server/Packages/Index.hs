@@ -19,7 +19,7 @@ import qualified Codec.Archive.Tar.Entry as Tar
 import qualified Distribution.Server.Util.Index as PackageIndex
 
 import Distribution.Server.Packages.Types
-         ( PkgInfo(..) )
+         ( CabalFileText(..), PkgInfo(..) )
 import qualified Distribution.Server.Users.Users as Users
          ( Users, idToName )
 
@@ -41,7 +41,7 @@ import Prelude hiding (read)
 -- a package index, an index tarball. This tarball has the modification times
 -- and uploading users built-in.
 write :: Users.Users -> Map String (ByteString, UTCTime) -> PackageIndex PkgInfo -> ByteString
-write users = PackageIndex.write pkgData setModTime . extraEntries
+write users = PackageIndex.write (cabalFileByteString . pkgData) setModTime . extraEntries
   where
     setModTime pkgInfo entry = let (utime, uuser) = pkgUploadData pkgInfo in entry {
       Tar.entryTime      = utcToUnixTime utime,

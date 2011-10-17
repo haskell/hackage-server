@@ -186,7 +186,7 @@ serveCandidateCabal dpath =
     runServerPartE $ --TODO: use something else for nice html error pages
     withCandidatePath dpath $ \_ pkg -> do
         guard (lookup "cabal" dpath == Just (display $ packageName pkg))
-        return $ toResponse (Resource.CabalFile (pkgData $ candPkgInfo pkg))
+        return $ toResponse (Resource.CabalFile (cabalFileByteString $ pkgData $ candPkgInfo pkg))
 
 serveCandidateChangeLog :: BlobStorage -> DynamicPath -> ServerPart Response
 serveCandidateChangeLog store dpath =
@@ -242,7 +242,7 @@ publishCandidate core users upload dpath doDelete = do
       Nothing -> do
         -- run filters
         let pkgInfo = candPkgInfo candidate
-            uresult = UploadResult (pkgDesc pkgInfo) (pkgData pkgInfo) (candWarnings candidate)
+            uresult = UploadResult (pkgDesc pkgInfo) (cabalFileByteString $ pkgData pkgInfo) (candWarnings candidate)
             uploadFilter = combineErrors $ runFilter'' (canUploadPackage upload) uid uresult
         merror <- liftIO $ combineErrors $ sequence [runUserFilter users uid, uploadFilter]
         case merror of

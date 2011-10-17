@@ -29,19 +29,17 @@ import qualified Distribution.Server.LegacyImport.UploadLog as UploadLog
 import qualified Distribution.Server.LegacyImport.HtPasswdDb as HtPasswdDb
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Framework.BlobStorage (BlobStorage)
-import Distribution.Server.Packages.Types (PkgInfo(..), PkgTarball(..), pkgUploadUser)
+import Distribution.Server.Packages.Types (CabalFileText(..), cabalFileString, PkgInfo(..), PkgTarball(..), pkgUploadUser)
 
 import Distribution.Package
 import Distribution.PackageDescription.Parse (parsePackageDescription)
 import Distribution.ParseUtils (ParseResult(..), locatedErrorMsg)
 import Distribution.Text (display)
-import Distribution.Simple.Utils (fromUTF8)
 import Distribution.Server.Util.Merge
 
 import Data.Maybe
 import System.FilePath (takeExtension)
 import Data.ByteString.Lazy.Char8 (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as BS (unpack)
 import qualified Codec.Compression.GZip as GZip
 import Control.Monad.Error () --intance Monad (Either String)
 import qualified Data.Map as Map
@@ -57,7 +55,7 @@ mergeMaintainers infos = Map.map Group.fromList $ Map.fromListWith (++) $ map as
 
 
 newPkgInfo :: PackageIdentifier
-           -> (FilePath, ByteString)
+           -> (FilePath, CabalFileText)
            -> UploadLog.Entry -> [UploadLog.Entry]
            -> Users
            -> Either String (PkgInfo, Users)
@@ -77,7 +75,7 @@ newPkgInfo pkgid (cabalFilePath, cabalFile) (UploadLog.Entry time user _) _ user
         pkgDataOld    = []
       }, fromMaybe users musers)
 
-  where parse = parsePackageDescription . fromUTF8 . BS.unpack
+  where parse = parsePackageDescription . cabalFileString
         (musers, uid) = Users.requireName user users
 
 importPkgIndex :: ByteString -> Either String [(PackageIdentifier, Tar.Entry)]
@@ -152,7 +150,7 @@ mergeIndexWithUploadLog pkgs entries usersInit =
   mergePkgs usersInit [] [] $
     mergeBy comparingPackageId
       (sortBy (comparing fst)
-              [ (pkgid, (path, cabalFile))
+              [ (pkgid, (path, CabalFileText cabalFile))
               | (pkgid, entry@Tar.Entry {
                           Tar.entryContent = Tar.NormalFile cabalFile _
                         }) <- pkgs

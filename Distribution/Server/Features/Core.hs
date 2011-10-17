@@ -301,7 +301,7 @@ serveCabalFile :: DynamicPath -> ServerPartE Response
 serveCabalFile dpath = withPackagePath dpath $ \pkg _ -> do
     -- check that the cabal name matches the package
     case lookup "cabal" dpath == Just (display $ packageName pkg) of
-        True  -> return $ toResponse (Resource.CabalFile (pkgData pkg))
+        True  -> return $ toResponse (Resource.CabalFile (cabalFileByteString (pkgData pkg)))
         False -> mzero
 
 -- result: changelog or not-found error
