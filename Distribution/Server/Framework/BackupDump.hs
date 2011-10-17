@@ -119,13 +119,24 @@ testRoundtripByQuery' query k = do
   where
     difference old_str new_str
         -- = indent 2 old_str ++ "Versus:\n" ++ indent 2 new_str
-        = indent 2 (take 80 old_str') ++ "\nVersus:\n" ++ indent 2 (take 80 new_str') ++ "\n(after " ++ show n_common ++ " chars)"
-      where (n_common, old_str', new_str') = dropCommonPrefix (0 :: Int) old_str new_str
+        = "After " ++ show (length common)   ++ " chars, in context:\n" ++
+            indent 2 (trunc_last 80 common)  ++ "\nOld data was:\n" ++
+            indent 2 (trunc 80 old_str_tail) ++ "\nVersus new data:\n" ++
+            indent 2 (trunc 80 new_str_tail)
+      where (common, old_str_tail, new_str_tail) = dropCommonPrefix [] old_str new_str
 
     indent n = unlines . map (replicate n ' ' ++) . lines
-    
-    dropCommonPrefix n (x:xs) (y:ys) | x == y = n `seq` dropCommonPrefix (n + 1) xs ys
-    dropCommonPrefix n xs ys = (n, xs, ys)
+
+    trunc n xs | null zs   = ys
+               | otherwise = ys ++ "..."
+      where (ys, zs) = splitAt n xs
+
+    trunc_last n xs | null ys_rev = reverse zs_rev
+                    | otherwise   = "..." ++ reverse zs_rev
+      where (zs_rev, ys_rev) = splitAt n (reverse xs)
+
+    dropCommonPrefix common (x:xs) (y:ys) | x == y = dropCommonPrefix (x:common) xs ys
+    dropCommonPrefix common xs ys = (reverse common, xs, ys)
 
 testBlobsExist :: BlobStorage -> [Blob.BlobId] -> IO [String]
 testBlobsExist store blobs
