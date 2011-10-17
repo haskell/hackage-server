@@ -88,7 +88,7 @@ alterTags name mtagList (PackageTags tags packages) =
     in PackageTags (Map.alter (const mtagList) name tags) packages'
 
 setTags :: PackageName -> Set Tag -> PackageTags -> PackageTags
-setTags pkgname tagList = alterTags pkgname (Just tagList)
+setTags pkgname tagList = alterTags pkgname (keepSet tagList)
 
 deletePackageTags :: PackageName -> PackageTags -> PackageTags
 deletePackageTags name = alterTags name Nothing
@@ -130,7 +130,7 @@ keepSet s = if Set.null s then Nothing else Just s
 
 -- these three are not currently exposed as happstack-state functions
 setTag :: Tag -> Set PackageName -> PackageTags -> PackageTags
-setTag tag pkgs = alterTag tag (Just pkgs)
+setTag tag pkgs = alterTag tag (keepSet pkgs)
 
 deleteTag :: Tag -> PackageTags -> PackageTags
 deleteTag tag = alterTag tag Nothing
