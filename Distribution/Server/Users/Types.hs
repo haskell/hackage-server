@@ -36,6 +36,14 @@ data UserStatus = Deleted
     deriving (Show, Typeable)
 data AccountEnabled = Enabled | Disabled deriving (Show, Enum, Eq, Typeable)
 
+isActive, isHistorical :: UserStatus -> Bool
+
+isActive (Active{}) = True
+isActive _          = False
+
+isHistorical Historical = True
+isHistorical _          = False
+
 data UserAuth = UserAuth PasswdHash deriving (Show, Eq, Typeable)
 
 instance Text UserId where

@@ -17,7 +17,7 @@ import Distribution.Server.Acid (query)
 import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 import Distribution.Server.Packages.Types
-import Distribution.Server.Users.Types (userName)
+import Distribution.Server.Users.Types (UserInfo)
 import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import Distribution.Server.Util.ChangeLog (lookupChangeLog)
 
@@ -105,14 +105,14 @@ data PackageRender = PackageRender {
     rendModules :: Maybe ModuleForest,
     rendHasTarball :: Bool,
     rendHasChangeLog :: Bool,
-    rendUploadInfo :: (UTCTime, String),
+    rendUploadInfo :: (UTCTime, Maybe UserInfo),
     rendPkgUri :: String,
     -- rendOther contains other useful fields which are merely strings, possibly empty
     --     for example: description, home page, copyright, author, stability
     -- If PackageRender is the One True Resource Representation, should they
     -- instead be fields of PackageRender?
     rendOther :: PackageDescription
-} deriving (Show, Eq)
+} deriving (Show)
 
 data SimpleCondTree = SimpleCondNode [Dependency] [(Condition ConfVar, SimpleCondTree, SimpleCondTree)]
                     | SimpleCondLeaf
@@ -148,7 +148,7 @@ doPackageRender store users info =
         , rendHasChangeLog = case changeLogRes of
                                Right _ -> True
                                _ -> False
-        , rendUploadInfo = let (utime, uid) = pkgUploadData info in (utime, maybe "Unknown" (display . userName) $ Users.lookupId uid users)
+        , rendUploadInfo = let (utime, uid) = pkgUploadData info in (utime, Users.lookupId uid users)
         , rendPkgUri = "/package/" ++ display (pkgInfoId info)
         , rendOther = desc
         }

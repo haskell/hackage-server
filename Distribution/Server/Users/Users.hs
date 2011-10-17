@@ -149,10 +149,6 @@ requireName name users =
         in case fmap fst $ find (isActive . snd) infos of
             Just uid -> Just uid
             Nothing  -> fmap fst $ find (isHistorical . snd) infos
-    isActive (Active{}) = True
-    isActive _ = False
-    isHistorical Historical = True
-    isHistorical _ = False
     UserId userId = nextId users
     userInfo = UserInfo {
       userName   = name,

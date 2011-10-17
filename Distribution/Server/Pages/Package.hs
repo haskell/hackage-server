@@ -14,6 +14,7 @@ import Distribution.Server.Pages.Package.HaddockParse (parseHaddockParagraphs)
 import Distribution.Server.Pages.Package.HaddockLex  (tokenise)
 import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Packages.ModuleForest
+import Distribution.Server.Users.Types (userStatus, userName, isActive)
 
 import Distribution.Package
 import Distribution.PackageDescription as P
@@ -196,10 +197,14 @@ renderFields render = [
         ("Bug tracker", linkField $ bugReports desc),
         ("Executables", commaList . map toHtml $ rendExecNames render),
         ("Upload date", toHtml $ showTime utime),
-        ("Uploaded by", toHtml $ uname)
+        ("Uploaded by", userField)
       ]
   where desc = rendOther render
-        (utime, uname) = rendUploadInfo render
+        (utime, uinfo) = rendUploadInfo render
+        uname = maybe "Unknown" (display . userName) uinfo
+        uactive = maybe False (isActive . userStatus) uinfo
+        userField | uactive   = anchor ! [href $ "/user/" ++ uname] << uname
+                  | otherwise = toHtml uname
         linkField url = case url of
             [] -> noHtml
             _  -> anchor ! [href url] << url
