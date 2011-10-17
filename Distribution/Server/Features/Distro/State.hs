@@ -34,7 +34,7 @@ data Distros = Distros {
     distDistros  :: !Distributions,
     distVersions :: !DistroVersions
 }
- deriving (Typeable, Show)
+ deriving (Eq, Typeable, Show)
 
 $(deriveSafeCopy 0 'base ''Distros)
 

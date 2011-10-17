@@ -147,7 +147,7 @@ $(makeAcidic ''HackageAdmins
 --------------------------------------------------------------------------
 data MirrorClients = MirrorClients {
     mirrorClients :: !Group.UserList
-} deriving (Typeable)
+} deriving (Eq, Typeable)
 $(deriveSafeCopy 0 'base ''MirrorClients)
 
 getMirrorClients :: Query MirrorClients UserList

@@ -1,5 +1,10 @@
 module Distribution.Server.Util.Merge where
 
+import Data.Map
+
+
+data MergeResult a b = OnlyInLeft a | InBoth a b | OnlyInRight b
+
 mergeBy :: (a -> b -> Ordering) -> [a] -> [b] -> [MergeResult a b]
 mergeBy cmp = merge
   where
@@ -11,4 +16,5 @@ mergeBy cmp = merge
         EQ -> InBoth      x y : merge xs     ys
         LT -> OnlyInLeft  x   : merge xs  (y:ys)
 
-data MergeResult a b = OnlyInLeft a | InBoth a b | OnlyInRight b
+mergeMaps :: Ord k => Map k a -> Map k b -> Map k (MergeResult a b)
+mergeMaps m1 m2 = unionWith (\(OnlyInLeft a) (OnlyInRight b) -> InBoth a b) (fmap OnlyInLeft m1) (fmap OnlyInRight m2)

@@ -52,7 +52,7 @@ import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import Distribution.Server.Util.ServeTarball (serveTarEntry)
 import Distribution.Server.Util.ChangeLog (lookupChangeLog)
 
-import Control.Monad (guard, mzero, when)
+import Control.Monad (liftM3, guard, mzero, when)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Time.Clock (UTCTime)
 import Data.Map (Map)
@@ -165,7 +165,7 @@ initCoreFeature config = do
               [ coreIndexPage, coreIndexTarball, corePackagesPage, corePackagePage
               , corePackageRedirect, corePackageTarball, coreCabalFile, coreChangeLogFile ]
           , featurePostInit = runHook indexHook
-          , featureDumpRestore = Just (dumpBackup store, restoreBackup store, testRoundtripDummy)
+          , featureDumpRestore = Just (dumpBackup store, restoreBackup store, testRoundtrip store)
           }
       , coreResource = resources
       , cacheIndexTarball  = indexTar
@@ -187,6 +187,12 @@ initCoreFeature config = do
       packageEntries <- readExportBlobs store $ indexToAllVersions packages
       return $ packageEntries ++ [csvToBackup ["users.csv"] $ usersToCSV users, csvToBackup ["admins.csv"] $ groupToCSV admins]
     restoreBackup store = mconcat [userBackup, packagesBackup store, groupBackup ["admins.csv"] ReplaceHackageAdmins]
+    testRoundtrip store = testRoundtripByQuery' (liftM3 (,,) (query GetUserDb) (query GetPackagesState) (query GetHackageAdmins)) $ \(_, packages, _) ->
+      testBlobsExist store [ blob
+                           | pkgInfo <- PackageIndex.allPackages (packageList packages)
+                           , (tarball, _) <- pkgTarball pkgInfo
+                           , blob <- [pkgTarballGz tarball, pkgTarballNoGz tarball]
+                           ]
 
 -- Should probably look more like an Apache index page (Name / Last modified / Size / Content-type)
 basicPackagePage :: CoreResource -> DynamicPath -> ServerPart Response

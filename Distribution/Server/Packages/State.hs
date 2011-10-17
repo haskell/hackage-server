@@ -42,7 +42,7 @@ instance (Package pkg, SafeCopy pkg) => SafeCopy (PackageIndex pkg) where
 data PackagesState = PackagesState {
     packageList  :: !(PackageIndex PkgInfo)
   }
-  deriving (Typeable, Show)
+  deriving (Eq, Typeable, Show)
 
 $(deriveSafeCopy 0 'base ''PackagesState)
 
@@ -195,7 +195,7 @@ $(makeAcidic ''Documentation ['insertDocumentation
 -------------------------------- Maintainer list
 data PackageMaintainers = PackageMaintainers {
     maintainers :: Map.Map PackageName UserList
-} deriving (Show, Typeable)
+} deriving (Eq, Show, Typeable)
 
 $(deriveSafeCopy 0 'base ''PackageMaintainers)
 

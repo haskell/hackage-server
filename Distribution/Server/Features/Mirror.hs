@@ -46,7 +46,7 @@ data MirrorResource = MirrorResource {
 instance IsHackageFeature MirrorFeature where
     getFeatureInterface mirror = (emptyHackageFeature "mirror") {
         featureResources = map ($mirrorResource mirror) [mirrorPackageTarball, mirrorCabalFile]
-      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtripDummy)
+      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtripByQuery (query GetMirrorClients))
       }
       where
         dumpBackup    = do

@@ -2,6 +2,7 @@
 module Distribution.Server.Features.BuildReports.Backup (
     dumpBackup,
     restoreBackup,
+    testRoundtrip,
     buildReportsToExport,
     packageReportsToExport
   ) where
@@ -9,7 +10,7 @@ module Distribution.Server.Features.BuildReports.Backup (
 import Distribution.Server.Acid (update, query)
 import Distribution.Server.Features.BuildReports.BuildReport (BuildReport)
 import qualified Distribution.Server.Features.BuildReports.BuildReport as Report
-import Distribution.Server.Features.BuildReports.BuildReports (BuildReports, PkgBuildReports, BuildReportId(..), BuildLog(..))
+import Distribution.Server.Features.BuildReports.BuildReports (BuildReports(..), PkgBuildReports(..), BuildReportId(..), BuildLog(..))
 import qualified Distribution.Server.Features.BuildReports.BuildReports as Reports
 import Distribution.Server.Features.BuildReports.State
 
@@ -40,6 +41,11 @@ dumpBackup store = do
 
 restoreBackup :: BlobStorage -> RestoreBackup
 restoreBackup storage = updateReports storage (Reports.emptyReports, Map.empty)
+
+testRoundtrip :: BlobStorage -> TestRoundtrip
+testRoundtrip store = testRoundtripByQuery' (query GetBuildReports) $ \buildReps -> do
+  testBlobsExist store [blob | pkgBuildRep <- Map.elems (reportsIndex buildReps)
+                             , (_, Just (BuildLog blob)) <- Map.elems (reports pkgBuildRep)]
 
 -- when logs are encountered before their corresponding build reports
 type PartialLogs = Map (PackageId, BuildReportId) BuildLog

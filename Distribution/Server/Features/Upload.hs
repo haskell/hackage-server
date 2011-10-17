@@ -38,7 +38,7 @@ import Data.Monoid (mconcat)
 import Data.Maybe (fromMaybe, listToMaybe, catMaybes)
 import qualified Data.Map as Map
 import Data.Time.Clock (getCurrentTime)
-import Control.Monad (when)
+import Control.Monad (liftM2, when)
 import Control.Monad.Trans (MonadIO(..))
 import Data.Function (fix)
 import Data.ByteString.Lazy.Char8 (ByteString)
@@ -76,8 +76,7 @@ instance IsHackageFeature UploadFeature where
             [uploadIndexPage,
              groupResource . packageGroupResource, groupUserResource . packageGroupResource,
              groupResource . trusteeResource, groupUserResource . trusteeResource]
-        -- TODO: backup maintainer groups, trustees
-      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtripDummy)
+      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
       }
       where
         dumpBackup    = do
@@ -86,6 +85,7 @@ instance IsHackageFeature UploadFeature where
             return [ csvToBackup ["trustees.csv"] $ groupToCSV trustees
                    , maintToExport mains ]
         restoreBackup = mconcat [maintainerBackup, groupBackup ["trustees.csv"] ReplaceHackageTrustees]
+        testRoundtrip = testRoundtripByQuery (liftM2 (,) (query GetHackageTrustees) (query AllPackageMaintainers))
 
 initUploadFeature :: ServerEnv -> CoreFeature -> UserFeature -> IO UploadFeature
 initUploadFeature env core users = do

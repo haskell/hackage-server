@@ -45,11 +45,13 @@ module Distribution.Server.Packages.PackageIndex (
     allPackagesByName
   ) where
 
+import Distribution.Server.Util.Merge
 
 import Prelude hiding (lookup)
 import Control.Exception (assert)
 import qualified Data.Map as Map
 import Data.Map (Map)
+import qualified Data.Foldable as Foldable
 import Data.List (groupBy, sortBy, find, isInfixOf)
 import Data.Monoid (Monoid(..))
 import Data.Maybe (fromMaybe)
@@ -66,7 +68,7 @@ import Distribution.Simple.Utils (lowercase, comparing)
 --
 -- It can be searched effeciently by package name and version.
 --
-newtype Package pkg => PackageIndex pkg = PackageIndex
+newtype PackageIndex pkg = PackageIndex
   -- This index package names to all the package records matching that package
   -- name case-sensitively. It includes all versions.
   --
@@ -76,6 +78,19 @@ newtype Package pkg => PackageIndex pkg = PackageIndex
   (Map PackageName [pkg])
 
   deriving (Show, Read, Typeable)
+
+instance Eq pkg => Eq (PackageIndex pkg) where
+  PackageIndex m1 == PackageIndex m2 = flip Foldable.all (mergeMaps m1 m2) $ \mr -> case mr of
+      InBoth pkgs1 pkgs2 -> bagsEq pkgs1 pkgs2
+      OnlyInLeft _       -> False
+      OnlyInRight _      -> False
+    where
+      bagsEq []     [] = True
+      bagsEq []     _  = False
+      bagsEq (x:xs) ys = case suitable_ys of
+        []                -> False
+        (_y:suitable_ys') -> bagsEq xs (unsuitable_ys ++ suitable_ys')
+        where (unsuitable_ys, suitable_ys) = break (==x) ys
 
 
 instance Package pkg => Monoid (PackageIndex pkg) where

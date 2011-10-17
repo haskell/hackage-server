@@ -440,6 +440,13 @@ testBackupCommand = makeCommand name shortDesc longDesc defaultTestBackupFlags o
           (reqArgFlag "DIR")
       ]
 
+-- FIXME: the following acidic types are neither backed up nor tested:
+--   PlatformPackages
+--   PreferredVersions
+--   CandidatePackages
+--   IndexUsers
+--   TarIndexMap
+
 testBackupAction :: TestBackupFlags -> IO ()
 testBackupAction opts = do
     defaults <- Server.defaultServerConfig

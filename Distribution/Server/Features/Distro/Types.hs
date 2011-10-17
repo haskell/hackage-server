@@ -43,21 +43,21 @@ instance Text DistroName where
 data Distributions = Distributions {
     nameMap :: !(Map.Map DistroName UserList)
 }
- deriving (Typeable, Show)
+ deriving (Eq, Typeable, Show)
 
 -- | Listing of which distirbutions have which version of particular
 -- packages.
 data DistroVersions = DistroVersions {
     packageDistroMap :: !(Map.Map PackageName (Map.Map DistroName DistroPackageInfo)),
     distroMap  :: !(Map.Map DistroName (Set.Set PackageName))
-} deriving (Typeable, Show)
+} deriving (Eq, Typeable, Show)
 
 data DistroPackageInfo
     = DistroPackageInfo
       { distroVersion :: Version.Version
       , distroUrl     :: String
       }
- deriving (Typeable, Show)
+ deriving (Eq, Typeable, Show)
 
 $(deriveSafeCopy 0 'base ''DistroName)
 $(deriveSafeCopy 0 'base ''Distributions)

@@ -59,7 +59,7 @@ data ReverseIndex = ReverseIndex {
 
     -- Cached counts for reverse dependencies.
     reverseCount :: Map PackageName ReverseCount
-} deriving (Show, Typeable)
+} deriving (Eq, Show, Typeable)
 
 emptyReverseIndex :: ReverseIndex
 emptyReverseIndex = ReverseIndex (PackageIndex.fromList [])

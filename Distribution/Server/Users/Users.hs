@@ -54,7 +54,7 @@ data Users = Users {
     -- | The next available UserId
     nextId      :: !UserId
   }
-  deriving (Typeable, Show)
+  deriving (Eq, Typeable, Show)
 
 -- invariant :: Users -> Bool
 -- invariant _ = True

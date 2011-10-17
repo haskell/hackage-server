@@ -56,11 +56,11 @@ data PkgBuildReports = PkgBuildReports {
     reports      :: !(Map BuildReportId (BuildReport, Maybe BuildLog)),
     -- one more than the maximum report id used
     nextReportId :: !BuildReportId
-} deriving (Typeable, Show)
+} deriving (Eq, Typeable, Show)
 
 data BuildReports = BuildReports {
     reportsIndex :: !(Map.Map PackageId PkgBuildReports)
-} deriving (Typeable, Show)
+} deriving (Eq, Typeable, Show)
 
 emptyPkgReports :: PkgBuildReports
 emptyPkgReports = PkgBuildReports {

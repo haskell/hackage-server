@@ -16,12 +16,12 @@ module Distribution.Server.Framework.BackupRestore (
     parseTime,
     timeFormatSpec,
     parseRead,
-    MergeResult(..),
-    mergeBy,
 
     equalTarBall,
 
-    bytesToString
+    bytesToString,
+
+    module Distribution.Server.Util.Merge
   ) where
 
 import qualified Codec.Archive.Tar as Tar
@@ -35,6 +35,7 @@ import qualified Data.Time as Time
 import System.Locale
 
 import Distribution.Simple.Utils (fromUTF8)
+import Distribution.Server.Util.Merge
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Data.Foldable (sequenceA_, traverse_)
@@ -92,18 +93,6 @@ instance Monoid RestoreBackup where
                   Left bad -> return $ Left bad
         , restoreComplete = comp >> comp'
         }
-
-mergeBy :: (a -> b -> Ordering) -> [a] -> [b] -> [MergeResult a b]
-mergeBy cmp = merge
-  where
-    merge []     ys     = [ OnlyInRight y | y <- ys]
-    merge xs     []     = [ OnlyInLeft  x | x <- xs]
-    merge (x:xs) (y:ys) =
-      case x `cmp` y of
-        GT -> OnlyInRight   y : merge (x:xs) ys
-        EQ -> InBoth      x y : merge xs     ys
-        LT -> OnlyInLeft  x   : merge xs  (y:ys)
-data MergeResult a b = OnlyInLeft a | InBoth a b | OnlyInRight b deriving (Show)
 
 
 importTar :: ByteString -> [(String, RestoreBackup)] -> IO (Maybe String)

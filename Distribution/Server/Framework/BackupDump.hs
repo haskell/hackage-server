@@ -14,8 +14,9 @@ module Distribution.Server.Framework.BackupDump (
 
     stringToBytes,
 
-    testRoundtripDummy,
     testRoundtripByQuery,
+    testRoundtripByQuery',
+    testBlobsExist
   ) where
 
 import Distribution.Simple.Utils (toUTF8)
@@ -35,10 +36,11 @@ import Codec.Compression.GZip (compress)
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
 
-import Control.Monad (forM)
+import Control.Monad (liftM, forM)
 import System.FilePath
 import System.Locale
 import System.IO.Unsafe (unsafeInterleaveIO)
+import Data.Maybe (catMaybes)
 import Data.Time
 
 exportTar :: [(String, IO [BackupEntry])] -> IO BS.ByteString
@@ -103,14 +105,20 @@ stringToBytes :: String -> BSL.ByteString
 stringToBytes = BSL.pack . toUTF8
 
 
-testRoundtripDummy :: TestRoundtrip
-testRoundtripDummy = return (return []) -- FIXME: remove all uses of this
-
 testRoundtripByQuery :: Eq a => IO a -> TestRoundtrip
-testRoundtripByQuery query = do
+testRoundtripByQuery query = testRoundtripByQuery' query $ \_ -> return []
+
+testRoundtripByQuery' :: Eq a => IO a -> (a -> IO [String]) -> TestRoundtrip
+testRoundtripByQuery' query k = do
     old <- query
     return $ do
       new <- query
-      return $ if old == new
-               then ["Internal state mismatch"]
-               else []
+      if old == new
+       then return ["Internal state mismatch"]
+       else k new
+
+testBlobsExist :: BlobStorage -> [Blob.BlobId] -> IO [String]
+testBlobsExist store blobs
+  = liftM catMaybes $ forM blobs $ \blob -> do
+       (Blob.fetch store blob >> return Nothing) `catch`
+         \e -> return $ Just $ "Could not open blob " ++ show blob ++ ": " ++ show (e :: IOError)

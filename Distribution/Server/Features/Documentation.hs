@@ -28,6 +28,7 @@ import Control.Monad.Trans
 import qualified Data.Map as Map
 import qualified Codec.Compression.GZip as GZip
 import Data.ByteString.Lazy.Char8 (ByteString)
+import Control.Monad (liftM)
 import Control.Monad.State (modify)
 
 -- TODO:
@@ -60,7 +61,7 @@ initDocumentationFeature env _ _ = do
     return DocumentationFeature {
         featureInterface = (emptyHackageFeature "documentation") {
           featureResources = map ($ resources) [packageDocs, packageDocTar, packageDocsUpload]
-        , featureDumpRestore = Just (dumpBackup store, restoreBackup store, testRoundtripDummy)
+        , featureDumpRestore = Just (dumpBackup store, restoreBackup store, testRoundtrip store)
         }
       , documentationResource = resources
       }
@@ -68,8 +69,14 @@ initDocumentationFeature env _ _ = do
     dumpBackup store = do
         doc <- query GetDocumentation
         let exportFunc (pkgid, (blob, _)) = ([display pkgid, "documentation.tar"], Right blob)
-        readExportBlobs store . map exportFunc . Map.toList $ documentation doc
+        readExportBlobs store $ map exportFunc . Map.toList $ documentation doc
     restoreBackup store = updateDocumentation store (Documentation Map.empty)
+    -- Checking documentation roundtripped is a bit tricky:
+    -- 1. We don't really want to check that the tar index is the same (probably)
+    -- 2. We must that the documentation blobs all got imported. To do this we just
+    --    need to check they *exist*, due to the MD5-hashing scheme we use.
+    testRoundtrip store = testRoundtripByQuery' (liftM (Map.map fst . documentation) $ query GetDocumentation) $ \doc ->
+        testBlobsExist store (Map.elems doc)
 
 serveDocumentationTar :: BlobStorage -> DynamicPath -> ServerPart Response
 serveDocumentationTar store dpath = runServerPartE $ withDocumentation dpath $ \_ blob _ -> do

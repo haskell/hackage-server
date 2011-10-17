@@ -25,7 +25,7 @@ import Control.DeepSeq
 data DownloadCounts = DownloadCounts {
     totalDownloads :: Int,
     downloadMap :: Map PackageName DownloadInfo
-} deriving (Show, Typeable)
+} deriving (Eq, Show, Typeable)
 emptyDownloadCounts :: DownloadCounts
 emptyDownloadCounts = DownloadCounts 0 Map.empty
 
@@ -33,14 +33,14 @@ data DownloadInfo = DownloadInfo {
     monthDownloads :: Map (Int, Int) PackageDownloads,
     dayDownloads :: Map Day PackageDownloads,
     packageDownloads :: PackageDownloads
-} deriving (Show, Typeable)
+} deriving (Eq, Show, Typeable)
 emptyDownloadInfo :: DownloadInfo
 emptyDownloadInfo = DownloadInfo Map.empty Map.empty emptyPackageDownloads
 
 data PackageDownloads = PackageDownloads {
     allDownloads :: Int,
     versionDownloads :: Map Version Int
-} deriving (Show, Typeable)
+} deriving (Eq, Show, Typeable)
 emptyPackageDownloads :: PackageDownloads
 emptyPackageDownloads = PackageDownloads 0 Map.empty
 

@@ -59,12 +59,12 @@ data PkgInfo = PkgInfo {
     pkgDataOld :: ![(ByteString, UploadInfo)],
     -- | When the package was created. Imports will override this with time in their logs.
     pkgUploadData :: !UploadInfo
-} deriving (Typeable, Show)
+} deriving (Eq, Typeable, Show)
 
 data PkgTarball = PkgTarball {
    pkgTarballGz   :: !BlobId,
    pkgTarballNoGz :: !BlobId
-} deriving (Typeable, Show)
+} deriving (Eq, Typeable, Show)
 
 type UploadInfo = (UTCTime, UserId)
 

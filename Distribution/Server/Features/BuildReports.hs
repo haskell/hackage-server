@@ -15,7 +15,6 @@ import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildR
 import Distribution.Server.Features.BuildReports.BuildReport (BuildReport(..))
 import Distribution.Server.Features.BuildReports.BuildReports (BuildReportId(..), BuildLog(..))
 import Distribution.Server.Users.State (GetUserDb(..))
-import Distribution.Server.Framework.BackupDump (testRoundtripDummy)
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
 
 import Distribution.Server.Packages.Types
@@ -74,7 +73,7 @@ initBuildReportsFeature env _ = do
     return ReportsFeature {
         featureInterface = (emptyHackageFeature "packages") {
           featureResources   = map ($ resources) [reportsList, reportsPage, reportsLog],
-          featureDumpRestore = Just (dumpBackup store, restoreBackup store, testRoundtripDummy)
+          featureDumpRestore = Just (dumpBackup store, restoreBackup store, testRoundtrip store)
         }
       , reportsResource = resources
       }

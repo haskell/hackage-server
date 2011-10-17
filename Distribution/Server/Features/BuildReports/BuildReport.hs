@@ -43,6 +43,7 @@ import Distribution.ParseUtils
          , syntaxError, locatedErrorMsg, showFields )
 import Distribution.Simple.Utils
          ( comparing )
+import Distribution.Server.Util.Merge
 
 import qualified Distribution.Compat.ReadP as Parse
          ( ReadP, pfail, munch1, skipSpaces )
@@ -96,7 +97,7 @@ data BuildReport
     -- | Configure outcome, did configure work ok?
     testsOutcome    :: Outcome
   }
-  deriving (Typeable, Show)
+  deriving (Eq, Typeable, Show)
 
 data InstallOutcome
    = DependencyFailed PackageIdentifier
@@ -107,9 +108,9 @@ data InstallOutcome
    | BuildFailed
    | InstallFailed
    | InstallOk
-   deriving (Show)
+   deriving (Eq, Show)
 
-data Outcome = NotTried | Failed | Ok deriving (Show)
+data Outcome = NotTried | Failed | Ok deriving (Eq, Show)
 
 -- ------------------------------------------------------------
 -- * External format
@@ -265,16 +266,3 @@ instance Text.Text Outcome where
       "Failed"   -> return Failed
       "Ok"       -> return Ok
       _          -> Parse.pfail
-
-mergeBy :: (a -> b -> Ordering) -> [a] -> [b] -> [MergeResult a b]
-mergeBy cmp = merge
-  where
-    merge []     ys     = [ OnlyInRight y | y <- ys]
-    merge xs     []     = [ OnlyInLeft  x | x <- xs]
-    merge (x:xs) (y:ys) =
-      case x `cmp` y of
-        GT -> OnlyInRight   y : merge (x:xs) ys
-        EQ -> InBoth      x y : merge xs     ys
-        LT -> OnlyInLeft  x   : merge xs  (y:ys)
-
-data MergeResult a b = OnlyInLeft a | InBoth a b | OnlyInRight b

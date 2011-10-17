@@ -28,12 +28,12 @@ newtype UserName  = UserName String
 data UserInfo = UserInfo {
     userName   :: UserName,
     userStatus :: UserStatus
-  } deriving (Show, Typeable)
+  } deriving (Eq, Show, Typeable)
 
 data UserStatus = Deleted
                 | Historical
                 | Active !AccountEnabled UserAuth
-    deriving (Show, Typeable)
+    deriving (Eq, Show, Typeable)
 data AccountEnabled = Enabled | Disabled deriving (Show, Enum, Eq, Typeable)
 
 isActive, isHistorical :: UserStatus -> Bool

@@ -7,7 +7,7 @@ module Distribution.Server.Features.Distro (
 
 import Distribution.Server.Acid (query, update)
 import Distribution.Server.Framework
-import Distribution.Server.Framework.BackupDump (testRoundtripDummy)
+import Distribution.Server.Framework.BackupDump (testRoundtripByQuery)
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages
 import Distribution.Server.Features.Users
@@ -45,7 +45,7 @@ data DistroResource = DistroResource {
 instance IsHackageFeature DistroFeature where
     getFeatureInterface distro = (emptyHackageFeature "distro") {
         featureResources = map ($distroResource distro) [distroIndexPage, distroAllPage, distroPackage]
-      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtripDummy)
+      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtripByQuery (query GetDistributions))
       }
 
 initDistroFeature :: ServerEnv -> CoreFeature -> UserFeature -> PackagesFeature -> IO DistroFeature

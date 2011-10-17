@@ -66,7 +66,7 @@ data PackageTags = PackageTags {
     packageTags :: Map PackageName (Set Tag),
     -- a secondary reverse mapping
     tagPackages :: Map Tag (Set PackageName)
-} deriving (Show, Typeable)
+} deriving (Eq, Show, Typeable)
 
 emptyPackageTags :: PackageTags
 emptyPackageTags = PackageTags Map.empty Map.empty
