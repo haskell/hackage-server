@@ -22,7 +22,7 @@ import System.Posix.Signals as Signal
 import System.IO
          ( stdout, hFlush )
 import System.Directory
-         ( createDirectory, doesDirectoryExist
+         ( createDirectory, createDirectoryIfMissing, doesDirectoryExist
          , Permissions(..), getPermissions )
 import System.FilePath
          ( (</>) )
@@ -468,7 +468,7 @@ testBackupAction opts = do
       tar <- Server.exportServerTar server
       return (tar, test_roundtrip)
 
-    createDirectory tmpStateDir
+    createDirectoryIfMissing True tmpStateDir
 
     withServer (config { confStateDir = tmpStateDir }) False $ \server -> do
       info "Parsing import tarball"
