@@ -77,7 +77,7 @@ instance IsHackageFeature TagsFeature where
     getFeatureInterface tags = (emptyHackageFeature "tags") {
         featureResources = map ($tagsResource tags) [tagsListing, tagListing, packageTagsListing]
       , featurePostInit = initImmutableTags
-      , featureDumpRestore = Just (dumpBackup, restoreBackup)
+      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtripDummy)
       }
       where
         initImmutableTags = do

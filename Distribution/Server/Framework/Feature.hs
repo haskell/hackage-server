@@ -2,7 +2,7 @@
 --
 module Distribution.Server.Framework.Feature where
 
-import Distribution.Server.Framework.BackupRestore (RestoreBackup, BackupEntry)
+import Distribution.Server.Framework.BackupRestore (RestoreBackup, BackupEntry, TestRoundtrip)
 import Distribution.Server.Framework.Resource      (Resource)
 
 -- | We compose the overall hackage server featureset from a bunch of these
@@ -21,7 +21,7 @@ data HackageFeature = HackageFeature {
 
     featurePostInit    :: IO (),
 
-    featureDumpRestore :: Maybe (IO [BackupEntry], RestoreBackup)
+    featureDumpRestore :: Maybe (IO [BackupEntry], RestoreBackup, TestRoundtrip)
 }
 
 -- | A feature with no state and no resources, just a name.

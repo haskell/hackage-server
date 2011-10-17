@@ -165,7 +165,7 @@ initCoreFeature config = do
               [ coreIndexPage, coreIndexTarball, corePackagesPage, corePackagePage
               , corePackageRedirect, corePackageTarball, coreCabalFile, coreChangeLogFile ]
           , featurePostInit = runHook indexHook
-          , featureDumpRestore = Just (dumpBackup store, restoreBackup store)
+          , featureDumpRestore = Just (dumpBackup store, restoreBackup store, testRoundtripDummy)
           }
       , coreResource = resources
       , cacheIndexTarball  = indexTar

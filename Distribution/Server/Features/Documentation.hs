@@ -60,7 +60,7 @@ initDocumentationFeature env _ _ = do
     return DocumentationFeature {
         featureInterface = (emptyHackageFeature "documentation") {
           featureResources = map ($ resources) [packageDocs, packageDocTar, packageDocsUpload]
-        , featureDumpRestore = Just (dumpBackup store, restoreBackup store)
+        , featureDumpRestore = Just (dumpBackup store, restoreBackup store, testRoundtripDummy)
         }
       , documentationResource = resources
       }

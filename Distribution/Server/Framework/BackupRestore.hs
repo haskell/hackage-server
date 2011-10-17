@@ -1,8 +1,9 @@
-{-# LANGUAGE RankNTypes, MultiParamTypeClasses, RecordWildCards, FlexibleInstances  #-}
+{-# LANGUAGE RankNTypes, MultiParamTypeClasses, RecordWildCards, FlexibleInstances, StandaloneDeriving #-}
 
 module Distribution.Server.Framework.BackupRestore (
     RestoreBackup(..),
     BackupEntry,
+    TestRoundtrip,
     Import,
     importTar,
     importBlank,
@@ -18,11 +19,15 @@ module Distribution.Server.Framework.BackupRestore (
     MergeResult(..),
     mergeBy,
 
+    equalTarBall,
+
     bytesToString
   ) where
 
 import qualified Codec.Archive.Tar as Tar
+import qualified Codec.Archive.Tar.Entry as Tar
 import Codec.Compression.GZip (decompress)
+import Control.Applicative
 import Control.Monad.State.Class
 import Control.Monad.Writer
 import Data.Time (UTCTime)
@@ -32,13 +37,22 @@ import System.Locale
 import Distribution.Simple.Utils (fromUTF8)
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.ByteString.Lazy.Char8 (ByteString)
+import Data.Foldable (sequenceA_, traverse_)
 import qualified Data.Map as Map
+import Data.Ord (comparing)
 import System.FilePath (splitDirectories)
 import Data.List (isPrefixOf)
 import Text.CSV hiding (csv)
 import qualified Control.Exception as Exception
 import Distribution.Text
 import Data.Map (Map)
+
+-- | Used to test that the backup/restore stuff works.
+--
+-- The outermost IO action takes an immutable snapshot of the internal state
+-- of the feature. The innermost IO action compares that to the new state and
+-- returns a list of errors if any problems are found.
+type TestRoundtrip = IO (IO [String])
 
 type BackupEntry = ([FilePath], ByteString)
 
@@ -153,6 +167,59 @@ fromFile path contents
                             Right restorer' -> restorer' `seq` put (Map.insert pathFront restorer' featureMap)
             Nothing -> return ()
     go _ = return ()
+
+
+-- Used to compare export/import tarballs for equality by the backup/restore test:
+
+deriving instance Eq Tar.EntryContent
+deriving instance Eq Tar.Ownership
+
+equalTarBall :: ByteString -- ^ "Before" tarball
+             -> ByteString -- ^ "After" tarball
+             -> [String]
+equalTarBall tar1 tar2 = runFailable_ $ do
+    (entries1, entries2) <- liftA2 (,) (readTar "before" tar1) (readTar "after" tar2)
+    flip traverse_ (mergeBy (comparing Tar.entryTarPath) entries1 entries2) $ \mr -> case mr of
+        OnlyInLeft  entry -> fail $ Tar.entryPath entry ++ " only in 'before' tarball"
+        OnlyInRight entry -> fail $ Tar.entryPath entry ++ " only in 'after' tarball"
+        InBoth entry1 entry2 -> sequenceA_ [
+              checkEq "content" Tar.entryContent,
+              checkEq "permissions" Tar.entryPermissions,
+              checkEq "ownership" Tar.entryOwnership
+              -- Don't particularly care about modification time/tar format
+            ]
+          where
+            tarPath = Tar.entryPath entry1
+            checkEq :: Eq a => String -> (Tar.Entry -> a) -> Failable ()
+            checkEq what f = when (f entry1 /= f entry2) $ fail $ tarPath ++ ": " ++ what ++ " did not match"
+  where
+    readTar err = entriesToList err . Tar.read . decompress
+
+    entriesToList err (Tar.Next entry entries) = liftM (entry :) $ entriesToList err entries
+    entriesToList _   Tar.Done                 = return []
+    entriesToList err (Tar.Fail s)             = fail ("Could not read '" ++ err ++ "' tarball: " ++ s)
+
+data Failable a = Failed [String] | NotFailed a
+
+runFailable_ :: Failable () -> [String]
+runFailable_ (Failed errs)  = errs
+runFailable_ (NotFailed ()) = []
+
+instance Functor Failable where fmap = liftM
+
+instance Applicative Failable where
+    pure = return
+    Failed errs1 <*> Failed errs2 = Failed (errs1 ++ errs2)
+    Failed errs  <*> NotFailed _  = Failed errs
+    NotFailed _  <*> Failed errs  = Failed errs
+    NotFailed f  <*> NotFailed x  = NotFailed (f x)
+
+instance Monad Failable where
+    return = NotFailed
+    NotFailed x >>= f = f x
+    Failed errs >>= _ = Failed errs
+    fail = Failed . return
+
 
 {-
 Some utilities worth recreating for the newer Import scheme, mostly

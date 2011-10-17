@@ -20,6 +20,7 @@ module Distribution.Server.Features.ReverseDependencies (
 import Distribution.Server.Acid (query, update)
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupRestore
+import Distribution.Server.Framework.BackupDump (testRoundtripDummy)
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.PreferredVersions
 
@@ -72,7 +73,7 @@ instance IsHackageFeature ReverseFeature where
     getFeatureInterface rev = (emptyHackageFeature "reverse") {
         featureResources = map ($reverseResource rev) []
       , featurePostInit = forkIO transferReverse >> return ()
-      , featureDumpRestore = Just (return [], restoreBackup)
+      , featureDumpRestore = Just (return [], restoreBackup, testRoundtripDummy)
       }
       where
         transferReverse = forever $ do

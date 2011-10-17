@@ -77,7 +77,7 @@ instance IsHackageFeature UploadFeature where
              groupResource . packageGroupResource, groupUserResource . packageGroupResource,
              groupResource . trusteeResource, groupUserResource . trusteeResource]
         -- TODO: backup maintainer groups, trustees
-      , featureDumpRestore = Just (dumpBackup, restoreBackup)
+      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtripDummy)
       }
       where
         dumpBackup    = do

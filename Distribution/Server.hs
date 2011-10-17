@@ -15,6 +15,7 @@ module Distribution.Server (
     bulkImport,
     importServerTar,
     exportServerTar,
+    testRoundtrip,
     initState,
 
     -- * Temporary server while loading data
@@ -57,7 +58,7 @@ import Distribution.Text
 import System.FilePath ((</>))
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist)
 import Control.Concurrent
-import Control.Monad (when, mplus, msum)
+import Control.Monad (liftM, when, mplus, msum)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Network.URI (URIAuth(URIAuth))
 import Network.BSD (getHostName)
@@ -279,7 +280,7 @@ exportServerTar server =
     exportTar
       [ (featureName feature, dump)
       | feature@HackageFeature {
-          featureDumpRestore = Just (dump, _restore)
+          featureDumpRestore = Just (dump, _restore, _test_rt)
         } <- serverFeatures server ]
 
 importServerTar :: Server -> ByteString -> IO (Maybe String)
@@ -287,7 +288,15 @@ importServerTar server tar =
     Import.importTar tar
       [ (featureName feature, restore)
       | feature@HackageFeature {
-          featureDumpRestore = Just (_dump, restore)
+          featureDumpRestore = Just (_dump, restore, _test_rt)
+        } <- serverFeatures server ]
+
+testRoundtrip :: Server -> Import.TestRoundtrip
+testRoundtrip server =
+    liftM (liftM concat . sequence) $ sequence
+      [ liftM (liftM (map ((featureName feature ++ ": ") ++))) test_rt
+      | feature@HackageFeature {
+          featureDumpRestore = Just (_dump, _restore, test_rt)
         } <- serverFeatures server ]
 
 
@@ -298,7 +307,7 @@ initState server (admin, pass) = do
     Import.importBlank
       [ (featureName feature, restore)
       | feature@HackageFeature {
-          featureDumpRestore = Just (_dump, restore)
+          featureDumpRestore = Just (_dump, restore, _test_rt)
         } <- serverFeatures server ]
     -- create default admin user
     muid <- case simpleParse admin of

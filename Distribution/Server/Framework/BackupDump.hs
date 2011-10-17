@@ -12,7 +12,10 @@ module Distribution.Server.Framework.BackupDump (
     csvToExport,
     blobToExport,
 
-    stringToBytes
+    stringToBytes,
+
+    testRoundtripDummy,
+    testRoundtripByQuery,
   ) where
 
 import Distribution.Simple.Utils (toUTF8)
@@ -20,7 +23,7 @@ import qualified Data.ByteString.Lazy.Char8 as BSL
 
 import Text.CSV hiding (csv)
 
-import Distribution.Server.Framework.BackupRestore (BackupEntry)
+import Distribution.Server.Framework.BackupRestore (BackupEntry, TestRoundtrip)
 import qualified Distribution.Server.Framework.BlobStorage as Blob
 
 import Distribution.Server.Framework.BlobStorage
@@ -99,3 +102,15 @@ unsafeInterleaveConcatMap f = go
 stringToBytes :: String -> BSL.ByteString
 stringToBytes = BSL.pack . toUTF8
 
+
+testRoundtripDummy :: TestRoundtrip
+testRoundtripDummy = return (return []) -- FIXME: remove all uses of this
+
+testRoundtripByQuery :: Eq a => IO a -> TestRoundtrip
+testRoundtripByQuery query = do
+    old <- query
+    return $ do
+      new <- query
+      return $ if old == new
+               then ["Internal state mismatch"]
+               else []
