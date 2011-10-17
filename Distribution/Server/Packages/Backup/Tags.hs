@@ -35,7 +35,7 @@ updateTags tags = fix $ \r -> RestoreBackup
 
 importTags :: ByteString -> Import PackageTags ()
 importTags contents = importCSV "tags.csv" contents $ \csv ->
-    mapM_ fromRecord (drop 2 csv)
+    mapM_ fromRecord csv
   where
     fromRecord (packageField:tagFields) | not (null tagFields) = do
         pkgname <- parseText "package name" packageField
