@@ -186,8 +186,7 @@ run server = do
     -- _method=PUT/DELETE.
     fakeBrowserHttpMethods part =
       msum [ do methodOnly POST
-                withDataFn (lookRead "_method") $ \mthd ->
-                  localRq (\req -> req { rqMethod = mthd}) part
+                methodOverrideHack part
 
              -- or just do things the normal way
            , part

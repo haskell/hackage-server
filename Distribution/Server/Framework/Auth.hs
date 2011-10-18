@@ -37,6 +37,7 @@ import Distribution.Server.Framework.AuthTypes
 import Distribution.Server.Framework.Error
 import Distribution.Server.Pages.Template (hackagePage)
 import Distribution.Server.Pages.Util (makeInput)
+import Distribution.Server.Util.Happstack (rqRealMethod)
 
 import Distribution.Text (display)
 
@@ -236,7 +237,7 @@ getDigestAuthInfo authHeader req = do
        digestNonce    = nonce,
        digestResponse = response,
        digestURI      = uri,
-       digestRqMethod = show (rqMethod req),
+       digestRqMethod = show (rqRealMethod req),
        digestQoP      = qopInfo
     }
   where

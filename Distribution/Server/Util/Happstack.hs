@@ -8,6 +8,9 @@ of Hackage.
 -}
 
 module Distribution.Server.Util.Happstack (
+    rqRealMethod,
+    methodOverrideHack,
+
     remainingPath,
     remainingPathString,
     mime,
@@ -16,9 +19,47 @@ module Distribution.Server.Util.Happstack (
 
 import Happstack.Server
 import qualified Happstack.Server.SURI as SURI
+import Happstack.Server.Internal.Monads
 import qualified Data.Map as Map
+import Data.Maybe (fromMaybe)
+import Control.Monad.Reader (runReaderT)
+import Control.Monad.Trans (MonadIO(..))
 import System.FilePath.Posix (takeExtension, (</>))
 import Control.Monad (liftM)
+
+import System.IO.Unsafe (unsafePerformIO)
+
+
+-- | Allows a hidden '_method' field on a form to override the apparent
+-- method of a request. Useful until we can standardise on HTML 5.
+methodOverrideHack :: MonadIO m => ServerPartT m a -> ServerPartT m a
+methodOverrideHack rest
+  = withDataFn (lookRead "_method") $ \mthd ->
+      localRq (\req -> req { rqMethod = mthd }) rest
+
+-- | For use with 'methodOverrideHack': tries to report the original method
+-- of a request before the hack was applied.
+rqRealMethod :: Request -> Method
+rqRealMethod rq = fromMaybe (rqMethod rq) $ runServerPartT_hack rq $
+    withDataFn (liftM (not . null) $ lookInputs "_method") $ \mthd_exists ->
+      return $ if mthd_exists then POST else rqMethod rq
+
+data Identity a = I { unI :: a }
+
+instance Monad Identity where
+    return = I
+    I x >>= f = f x
+
+-- Ughhh. Yes, this can't just be "error". It really is needed.
+instance MonadIO Identity where
+    liftIO = I . unsafePerformIO
+
+runServerPartT_hack :: Request -> ServerPartT Identity a -> Maybe a
+runServerPartT_hack rq mx = case unI (ununWebT (runReaderT (unServerPartT mx) rq)) of
+  Nothing           -> Nothing
+  Just (Left _,  _) -> Nothing
+  Just (Right x, _) -> Just x
+
 
 -- |Passes a list of remaining path segments in the URL. Does not
 -- include the query string. This call only fails if the passed in
