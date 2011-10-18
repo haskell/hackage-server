@@ -9,7 +9,7 @@ import Distribution.Server.Users.State ()
 import Distribution.Package
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
-import Distribution.Server.Packages.Types (PkgInfo(..), CandPkgInfo(..))
+import Distribution.Server.Packages.Types (PkgInfo(..), CandPkgInfo(..), pkgUploadUser, pkgUploadTime)
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserList)
 import Distribution.Server.Users.Types (UserId)
@@ -83,14 +83,19 @@ deletePackageVersion :: PackageId -> Update PackagesState ()
 deletePackageVersion pkg = State.modify $ \pkgsState -> pkgsState { packageList = deleteVersion (packageList pkgsState) }
     where deleteVersion = PackageIndex.deletePackageId pkg
 
+replacePackageUploader :: PackageId -> UserId -> Update PackagesState (Maybe String)
+replacePackageUploader pkg uid = modifyPkgInfo pkg $ \pkgInfo -> pkgInfo { pkgUploadData = (pkgUploadTime pkgInfo, uid) }
+
 replacePackageUploadTime :: PackageId -> UTCTime -> Update PackagesState (Maybe String)
-replacePackageUploadTime pkg time = do
+replacePackageUploadTime pkg time = modifyPkgInfo pkg $ \pkgInfo -> pkgInfo { pkgUploadData = (time, pkgUploadUser pkgInfo) }
+
+modifyPkgInfo :: PackageId -> (PkgInfo -> PkgInfo) -> Update PackagesState (Maybe String)
+modifyPkgInfo pkg f = do
   pkgsState <- State.get
   case PackageIndex.lookupPackageId (packageList pkgsState) pkg of
     Nothing -> return (Just "No such package")
-    Just pkgInfo@PkgInfo { pkgUploadData = (_, uploader) } -> do
-      State.put $ pkgsState { packageList = PackageIndex.insert (pkgInfo { pkgUploadData = (time, uploader) })
-                                                                (packageList pkgsState) }
+    Just pkgInfo -> do
+      State.put $ pkgsState { packageList = PackageIndex.insert (f pkgInfo) (packageList pkgsState) }
       return Nothing
 
 -- |Replace all existing packages and reports
@@ -106,6 +111,7 @@ getPackagesState = ask
 $(makeAcidic ''PackagesState ['getPackagesState
                              ,'replacePackagesState
                              ,'replacePackageUploadTime
+                             ,'replacePackageUploader
                              ,'insertPkgIfAbsent
                              ,'mergePkg
                              ,'deletePackageVersion

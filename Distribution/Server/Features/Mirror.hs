@@ -43,13 +43,14 @@ data MirrorFeature = MirrorFeature {
 data MirrorResource = MirrorResource {
     mirrorPackageTarball :: Resource,
     mirrorPackageUploadTime :: Resource,
+    mirrorPackageUploader :: Resource,
     mirrorCabalFile :: Resource,
     mirrorGroupResource :: GroupResource
 }
 
 instance IsHackageFeature MirrorFeature where
     getFeatureInterface mirror = (emptyHackageFeature "mirror") {
-        featureResources = map ($mirrorResource mirror) [mirrorPackageTarball, mirrorPackageUploadTime, mirrorCabalFile]
+        featureResources = map ($mirrorResource mirror) [mirrorPackageTarball, mirrorPackageUploadTime, mirrorPackageUploader, mirrorCabalFile]
       , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtripByQuery (query GetMirrorClients))
       }
       where
@@ -81,6 +82,9 @@ initMirrorFeature env core users = do
           , mirrorPackageUploadTime = (extendResourcePath "/upload-time" $ corePackageTarball coreR) {
                                      resourceGet = [("", uploadTimeGet)],
                                      resourcePut = [("", uploadTimePut)]
+                                   }
+          , mirrorPackageUploader = (extendResourcePath "/uploader" $ corePackageTarball coreR) {
+                                     resourcePut = [("", uploaderPut)]
                                    }
           , mirrorCabalFile      = (extendResource $ coreCabalFile coreR) {
                                      resourcePut = [("", cabalPut)]
@@ -127,17 +131,28 @@ initMirrorFeature env core users = do
                   }
                   return . toResponse $ unlines warnings
 
-    uploadTimeGet :: DynamicPath -> ServerPart Response
-    uploadTimeGet dpath = runServerPartE $ withPackagePath dpath $ \(PkgInfo { pkgUploadData = (utime, _) }) _ -> 
-        return $ toResponse $ formatTime defaultTimeLocale "%c" utime
+    uploaderPut :: DynamicPath -> ServerPart Response
+    uploaderPut dpath = runServerPartE $ do
+        requireMirrorAuth
+        withPackageId dpath $ \pkgid -> do
+          expectTextPlain
+          Body nameContent <- consumeRequestBody
+          uid <- update $ RequireUserName (UserName (fromUTF8 (BS.unpack nameContent)))
+          mb_err <- update $ ReplacePackageUploader pkgid uid
+          maybe (return $ toResponse "Updated uploader OK") (badRequest . toResponse) mb_err
 
-    -- curl  -H 'Content-Type: text/plain' -u admin:admin -X PUT -d "Tue Oct 18 20:54:28 UTC 2010" http://localhost:8080/package/edit-distance-0.2.1/edit-distance-0.2.1.tar.gz/upload-time
+    uploadTimeGet :: DynamicPath -> ServerPart Response
+    uploadTimeGet dpath = runServerPartE $ withPackagePath dpath $ \pkg _ -> 
+        return $ toResponse $ formatTime defaultTimeLocale "%c" (pkgUploadTime pkg)
+
+    -- curl -H 'Content-Type: text/plain' -u admin:admin -X PUT -d "Tue Oct 18 20:54:28 UTC 2010" http://localhost:8080/package/edit-distance-0.2.1/edit-distance-0.2.1.tar.gz/upload-time
     uploadTimePut :: DynamicPath -> ServerPart Response
     uploadTimePut dpath = runServerPartE $ do
         requireMirrorAuth
         withPackageId dpath $ \pkgid -> do
           expectTextPlain
           Body timeContent <- consumeRequestBody
+          liftIO $ print $ fromUTF8 (BS.unpack timeContent)
           case parseTime defaultTimeLocale "%c" (fromUTF8 (BS.unpack timeContent)) of
             Nothing -> badRequest $ toResponse "Could not parse upload time"
             Just t  -> do
