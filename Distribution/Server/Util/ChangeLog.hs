@@ -12,6 +12,7 @@
 -- Extra utils for handling change logs
 -----------------------------------------------------------------------------
 module Distribution.Server.Util.ChangeLog (
+    lookupTarball,
     lookupChangeLog
   ) where
 
@@ -27,14 +28,21 @@ import Control.Monad (msum)
 import Text.PrettyPrint.HughesPJ (render)
 import System.FilePath ((</>))
 
-lookupChangeLog :: BlobStorage -> PkgInfo -> IO (Either String (FilePath, TarIndex.TarEntryOffset, String))
-lookupChangeLog store pkgInfo =
+lookupTarball :: BlobStorage -> PkgInfo -> Maybe (IO (FilePath, TarIndex.TarIndex))
+lookupTarball store pkgInfo = 
     case pkgTarball pkgInfo of
-        [] -> return $ Left "Could not extract changelog: no tarball exists."
-        ((tb, _):_) ->
+        [] -> Nothing
+        ((tb, _):_) -> Just $
             do let blobId = pkgTarballNoGz tb
                    fp = BlobStorage.filepath store blobId
                index <- readTarIndex fp
+               return (fp, index)
+
+lookupChangeLog :: BlobStorage -> PkgInfo -> IO (Either String (FilePath, TarIndex.TarEntryOffset, String))
+lookupChangeLog store pkgInfo = case lookupTarball store pkgInfo of
+        Nothing -> return $ Left "Could not extract changelog: no tarball exists."
+        Just io ->
+            do (fp, index) <- io
                case msum $ map (lookupFile index) candidates of
                  Just (name, offset) -> return $ Right (fp, offset, name)
                  Nothing ->

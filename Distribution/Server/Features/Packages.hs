@@ -45,6 +45,7 @@ import Data.List (sort, sortBy, partition)
 import Data.Char (toLower, isSpace)
 import Data.Ord (comparing)
 import qualified Network.URI as URI
+import System.FilePath.Posix ((</>))
 
 -- the goal is to have the HTML modules import /this/ one, not the other way around
 import qualified Distribution.Server.Pages.Recent as Pages
@@ -104,7 +105,7 @@ data PackageRender = PackageRender {
     rendRepoHeads :: [(RepoType, String, SourceRepo)],
     rendModules :: Maybe ModuleForest,
     rendHasTarball :: Bool,
-    rendHasChangeLog :: Bool,
+    rendChangeLogUri :: Maybe String,
     rendUploadInfo :: (UTCTime, Maybe UserInfo),
     rendPkgUri :: String,
     -- rendOther contains other useful fields which are merely strings, possibly empty
@@ -134,6 +135,7 @@ doPackageRender store users info =
     do let genDesc  = pkgDesc info
            flatDesc = flattenPackageDescription genDesc
            desc     = packageDescription genDesc
+           pkgUri   = "/package/" ++ display (pkgInfoId info)
        changeLogRes <- lookupChangeLog store info
        return $ PackageRender
         { rendPkgId = pkgInfoId info
@@ -145,11 +147,11 @@ doPackageRender store users info =
         , rendRepoHeads = catMaybes (map rendRepo $ sourceRepos desc)
         , rendModules = fmap (moduleForest . exposedModules) (library flatDesc)
         , rendHasTarball = not . null $ pkgTarball info
-        , rendHasChangeLog = case changeLogRes of
-                               Right _ -> True
-                               _ -> False
+        , rendChangeLogUri = case changeLogRes of
+                               Right _ -> Just (pkgUri </> "changelog")
+                               _ -> Nothing
         , rendUploadInfo = let (utime, uid) = pkgUploadData info in (utime, Users.lookupId uid users)
-        , rendPkgUri = "/package/" ++ display (pkgInfoId info)
+        , rendPkgUri = pkgUri
         , rendOther = desc
         }
   where

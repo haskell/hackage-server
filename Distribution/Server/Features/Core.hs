@@ -49,8 +49,6 @@ import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Framework.BlobStorage (BlobStorage)
-import Distribution.Server.Util.ServeTarball (serveTarEntry)
-import Distribution.Server.Util.ChangeLog (lookupChangeLog)
 
 import Control.Monad (liftM3, guard, mzero, when)
 import Control.Monad.Trans (MonadIO, liftIO)
@@ -104,7 +102,6 @@ data CoreResource = CoreResource {
     corePackagePage  :: Resource,
     corePackageRedirect :: Resource,
     coreCabalFile    :: Resource,
-    coreChangeLogFile :: Resource,
     corePackageTarball :: Resource,
 
     indexTarballUri :: String,
@@ -112,8 +109,7 @@ data CoreResource = CoreResource {
     corePackageUri  :: String -> PackageId -> String,
     corePackageName :: String -> PackageName -> String,
     coreCabalUri   :: PackageId -> String,
-    coreTarballUri :: PackageId -> String,
-    coreChangeLogUri :: PackageId -> String
+    coreTarballUri :: PackageId -> String
 }
 
 instance IsHackageFeature CoreFeature where
@@ -150,20 +146,18 @@ initCoreFeature config = do
           , corePackageRedirect = (resourceAt "/package/") { resourceGet = [("", \_ -> seeOther "/packages/" $ toResponse ())] }
           , corePackageTarball = (resourceAt "/package/:package/:tarball.tar.gz") { resourceGet = [("tarball", runServerPartE . servePackageTarball downHook store)] }
           , coreCabalFile  = (resourceAt "/package/:package/:cabal.cabal") { resourceGet = [("cabal", runServerPartE . serveCabalFile)] }
-          , coreChangeLogFile  = (resourceAt "/package/:package/changelog") { resourceGet = [("changelog", runServerPartE . serveChangeLog store)] }
           , indexTarballUri = renderResource (coreIndexTarball resources) []
           , indexPackageUri = \format -> renderResource (corePackagesPage resources) [format]
           , corePackageUri  = \format pkgid -> renderResource (corePackagePage resources) [display pkgid, format]
           , corePackageName = \format pkgname -> renderResource (corePackagePage resources) [display pkgname, format]
           , coreCabalUri   = \pkgid -> renderResource (coreCabalFile resources) [display pkgid, display (packageName pkgid)]
           , coreTarballUri = \pkgid -> renderResource (corePackageTarball resources) [display pkgid, display pkgid]
-          , coreChangeLogUri = \pkgid -> renderResource (coreChangeLogFile resources) [display pkgid, display (packageName pkgid)]
           }
     return CoreFeature {
         featureInterface = (emptyHackageFeature "core") {
             featureResources = map ($ resources)
               [ coreIndexPage, coreIndexTarball, corePackagesPage, corePackagePage
-              , corePackageRedirect, corePackageTarball, coreCabalFile, coreChangeLogFile ]
+              , corePackageRedirect, corePackageTarball, coreCabalFile ]
           , featurePostInit = runHook indexHook
           , featureDumpRestore = Just (dumpBackup store, restoreBackup store, testRoundtrip store)
           }
@@ -203,21 +197,17 @@ basicPackagePage r dpath = runServerPartE $ withPackagePath dpath $ \_ pkgs ->
     showAllP pkgs = toHtml [
         h3 << "Downloads",
         unordList $ map (basicPackageSection (coreCabalUri r)
-                                             (coreTarballUri r)
-                                             (coreChangeLogUri r)) pkgs
+                                             (coreTarballUri r)) pkgs
      ]
 
 basicPackageSection :: (PackageId -> String)
                     -> (PackageId -> String)
-                    -> (PackageId -> String)
                     -> PkgInfo -> [Html]
-basicPackageSection cabalUrl tarUrl changeLogUrl pkgInfo =
+basicPackageSection cabalUrl tarUrl pkgInfo =
     let pkgId = packageId pkgInfo; pkgStr = display pkgId in [
     toHtml pkgStr,
     unordList $ [
         [anchor ! [href (cabalUrl pkgId)] << "Package description",
-         toHtml " (included in the package)"],
-        [anchor ! [href (changeLogUrl pkgId)] << "Package changelog",
          toHtml " (included in the package)"],
         case pkgTarball pkgInfo of
             [] -> [toHtml "Package not available"];
@@ -303,14 +293,6 @@ serveCabalFile dpath = withPackagePath dpath $ \pkg _ -> do
     case lookup "cabal" dpath == Just (display $ packageName pkg) of
         True  -> return $ toResponse (Resource.CabalFile (cabalFileByteString (pkgData pkg)))
         False -> mzero
-
--- result: changelog or not-found error
-serveChangeLog :: BlobStorage -> DynamicPath -> ServerPartE Response
-serveChangeLog store dpath = withPackagePath dpath $ \pkg _ -> do
-    res <- liftIO $ lookupChangeLog store pkg
-    case res of
-      Left err -> errNotFound "Changelog not found" [MText err]
-      Right (fp, offset, name) -> liftIO $ serveTarEntry fp offset name
 
 -- A wrapper around DeletePackageVersion that runs the proper hooks.
 -- (no authentication though)

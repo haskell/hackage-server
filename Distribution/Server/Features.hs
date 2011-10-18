@@ -21,6 +21,7 @@ import Distribution.Server.Features.Html     (initHtmlFeature)
 import Distribution.Server.Features.Check    (initCheckFeature)
 import Distribution.Server.Features.Packages (initPackagesFeature)
 import Distribution.Server.Features.Distro   (initDistroFeature)
+import Distribution.Server.Features.PackageContents     (initPackageContentsFeature)
 import Distribution.Server.Features.Documentation       (initDocumentationFeature)
 import Distribution.Server.Features.BuildReports        (initBuildReportsFeature)
 import Distribution.Server.Features.LegacyRedirects     (legacyRedirectsFeature)
@@ -84,6 +85,10 @@ initHackageFeatures env = do
     reportsFeature  <- initBuildReportsFeature env
                          coreFeature
 
+    packageContentsFeature <- initPackageContentsFeature env
+                                coreFeature
+                                checkFeature
+
     documentationFeature <- initDocumentationFeature env
                          coreFeature
                          uploadFeature
@@ -146,6 +151,7 @@ initHackageFeatures env = do
          , getFeatureInterface distroFeature
          , getFeatureInterface checkFeature
          , getFeatureInterface reportsFeature
+         , getFeatureInterface packageContentsFeature
          , getFeatureInterface documentationFeature
          , getFeatureInterface downloadFeature
          , getFeatureInterface tagsFeature

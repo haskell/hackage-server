@@ -39,8 +39,6 @@ import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
-import Distribution.Server.Util.ServeTarball (serveTarEntry)
-import Distribution.Server.Util.ChangeLog (lookupChangeLog)
 
 import Distribution.Text
 import Distribution.Package
@@ -66,7 +64,6 @@ data CheckResource = CheckResource {
     publishPage :: Resource,
     candidateCabal :: Resource,
     candidateTarball :: Resource,
-    candidateChangeLog :: Resource,
     -- There can also be build reports as well as documentation for proposed
     -- versions.
     -- These features check for existence of a package in the *main* index,
@@ -82,8 +79,7 @@ data CheckResource = CheckResource {
     packageCandidatesUri :: String -> PackageName -> String,
     publishUri :: String -> PackageId -> String,
     candidateTarballUri :: PackageId -> String,
-    candidateCabalUri :: PackageId -> String,
-    candidateChangeLogUri :: PackageId -> String
+    candidateCabalUri :: PackageId -> String
 }
 
 
@@ -92,7 +88,7 @@ data CheckResource = CheckResource {
 
 instance IsHackageFeature CheckFeature where
     getFeatureInterface check = (emptyHackageFeature "check") {
-        featureResources = map ($checkResource check) [candidatesPage, candidatePage, publishPage, candidateCabal, candidateTarball, candidateChangeLog]
+        featureResources = map ($checkResource check) [candidatesPage, candidatePage, publishPage, candidateCabal, candidateTarball]
       }
 
 -- URI generation (string-based), using maps; user groups
@@ -106,7 +102,6 @@ initCheckFeature env _ _ _ _ = do
           , packageCandidatesPage = resourceAt "/package/:package/candidates/.:format"
           , publishPage = resourceAt "/package/:package/candidate/publish.:format"
           , candidateCabal = (resourceAt "/package/:package/candidate/:cabal.cabal") { resourceGet = [("cabal", serveCandidateCabal)] }
-          , candidateChangeLog = (resourceAt "/package/:package/candidate/changelog") { resourceGet = [("changelog", serveCandidateChangeLog store)] }
           , candidateTarball = (resourceAt "/package/:package/candidate/:tarball.tar.gz") { resourceGet = [("tarball", serveCandidateTarball store)] }
 
           , candidatesUri = \format -> renderResource (candidatesPage r) [format]
@@ -115,7 +110,6 @@ initCheckFeature env _ _ _ _ = do
           , publishUri = \format pkgid -> renderResource (publishPage r) [display pkgid, format]
           , candidateTarballUri = \pkgid -> renderResource (candidateTarball r) [display pkgid, display pkgid]
           , candidateCabalUri = \pkgid -> renderResource (candidateCabal r) [display pkgid, display (packageName pkgid)]
-          , candidateChangeLogUri = \pkgid -> renderResource (candidateChangeLog r) [display pkgid, display (packageName pkgid)]
           }
       , candidateRender = \pkg -> do
             users <- query GetUserDb
@@ -139,7 +133,6 @@ initCheckFeature env _ _ _ _ = do
                            ]
       where section cand = basicPackageSection (candidateCabalUri r)
                                                (candidateTarballUri r)
-                                               (candidateChangeLogUri r)
                                                (candPkgInfo cand)
 
 postCandidate :: CheckResource -> UserFeature -> UploadFeature -> BlobStorage -> ServerPartE Response
@@ -187,15 +180,6 @@ serveCandidateCabal dpath =
     withCandidatePath dpath $ \_ pkg -> do
         guard (lookup "cabal" dpath == Just (display $ packageName pkg))
         return $ toResponse (Resource.CabalFile (cabalFileByteString $ pkgData $ candPkgInfo pkg))
-
-serveCandidateChangeLog :: BlobStorage -> DynamicPath -> ServerPart Response
-serveCandidateChangeLog store dpath =
-    runServerPartE $ --TODO: use something else for nice html error pages
-    withCandidatePath dpath $ \_ pkg -> do
-          res <- liftIO $ lookupChangeLog store (candPkgInfo pkg)
-          case res of
-            Left err -> errNotFound "Changelog not found" [MText err]
-            Right (fp, offset, name) -> liftIO $ serveTarEntry fp offset name
 
 uploadCandidate :: (PackageId -> Bool) -> UserFeature -> UploadFeature -> BlobStorage -> ServerPartE CandPkgInfo
 uploadCandidate isRight users upload storage = do

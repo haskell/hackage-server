@@ -106,16 +106,15 @@ downloadSection render =
                           else [toHtml << "Package tarball not uploaded"],
              [anchor ! [href cabalURL] << "Package description",
               toHtml $ if tarExists then " (included in the package)" else ""],
-             case (tarExists, changeLogExists) of
-               (True, True) -> [anchor ! [href changeLogURL] << "Changelog",
-                                toHtml << " (included in the package)"]
-               (True, False) -> [toHtml << "No changelog available"]
+             case (tarExists, mchangeLogURL) of
+               (True, Just changeLogURL) -> [anchor ! [href changeLogURL] << "Changelog",
+                                             toHtml << " (included in the package)"]
+               (True, Nothing) -> [toHtml << "No changelog available"]
                _ -> [toHtml << "Package tarball not uploaded"]]
         downloadURL = rendPkgUri render </> display pkgId <.> "tar.gz"
         cabalURL = rendPkgUri render </> display (packageName pkgId) <.> "cabal"
-        changeLogURL = rendPkgUri render </> "changelog"
+        mchangeLogURL = rendChangeLogUri render
         tarExists = rendHasTarball render
-        changeLogExists = rendHasChangeLog render
         pkgId = rendPkgId render
 
 moduleSection :: PackageRender -> Maybe URL -> [Html]
