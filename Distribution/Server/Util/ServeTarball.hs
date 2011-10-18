@@ -23,12 +23,14 @@ import Happstack.Server.Routing (methodOnly)
 import Happstack.Server.Response
 import Happstack.Server.FileServe as Happstack (mimeTypes)
 import Distribution.Server.Util.Happstack (remainingPath)
+import Distribution.Server.Pages.Template (hackagePage)
 
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
 import qualified Data.TarIndex as TarIndex
 import Data.TarIndex (TarIndex)
 
+import qualified Text.XHtml.Strict as XHtml
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.Map as Map
 import System.FilePath
@@ -58,7 +60,7 @@ serveTarball indices offset tarball tarIndex = do
 
     msum $ concat
      [ serveFiles validPaths
-     -- , serveDirs validPats
+     , serveDirs paths validPaths
      ]
 
  where serveFiles paths
@@ -72,22 +74,21 @@ serveTarball indices offset tarball tarIndex = do
 
        action act m = methodOnly act >> m
 
-{- We need to munge the paths to match the prefix in the
-   tarball (and the request?)
-
-       serveDirs tarIndex paths
+       serveDirs prefix paths
            = flip map paths $ \path ->
              case TarIndex.lookup tarIndex path of
                Just (TarIndex.TarDir fs)
-                   -> of $ toResponse $ renderDirIndex fname fs
+                   -> do ok $ toResponse $ renderDirIndex prefix fs
                _ -> mzero
-                                                  
-                   
-renderDirIndex root entries = hackagePage ""
- [ (XHtml.anchor XHtml.! [XHtml.href ("/" </> root </> e)] XHtml.<< e) 
-   XHtml.+++ XHtml.br
- | e <- entries ]
--}
+
+renderDirIndex :: [FilePath] -> [FilePath] -> XHtml.Html
+renderDirIndex paths entries = hackagePage "Directory Listing"
+    [ (XHtml.anchor XHtml.! [XHtml.href (mk_prefix e)] XHtml.<< e)
+      XHtml.+++ XHtml.br
+    | e <- entries ]
+  where -- We need to munge the paths to match the path prefix:
+        mk_prefix | null paths = id
+                  | otherwise  = (last paths </>)
 
 serveTarEntry :: FilePath -> Int -> FilePath -> IO Response
 serveTarEntry tarfile off fname = do
