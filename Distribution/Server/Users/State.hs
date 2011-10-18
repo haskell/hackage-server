@@ -12,7 +12,7 @@ import Distribution.Server.Users.Users as Users
 import Data.Acid     (Query, Update, makeAcidic)
 import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable (Typeable)
-import Data.Maybe (isJust, maybeToList)
+import Data.Maybe (maybeToList)
 
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
@@ -23,10 +23,9 @@ initialUsers = Users.empty
 --------------------------------------------
 
 -- Returns 'Nothing' if the user name is in use
-addUser :: UserName -> UserAuth -> Update Users (Maybe UserId)
-addUser uname auth = updateUsers' updateFn formatFn
+addUser :: UserName -> UserAuth -> Update Users (Either String UserId)
+addUser uname auth = updateUsers' updateFn
   where updateFn = Users.add uname auth
-        formatFn = id
 
 -- Requires that a user name exists, either by returning
 -- a reference to an active one, returning a reference to
@@ -42,18 +41,22 @@ requireUserName uname = do
     return uid
 
 -- Disables the indicated user
-setEnabledUser :: UserId -> Bool -> Update Users Bool
+setEnabledUser :: UserId -> Bool -> Update Users (Maybe String)
 setEnabledUser uid en = updateUsers $ Users.setEnabled en uid
 
 -- Deletes the indicated user. Cannot be re-enabled. The associated
 -- user name is available for re-use 
-deleteUser :: UserId -> Update Users Bool
+deleteUser :: UserId -> Update Users (Maybe String)
 deleteUser = updateUsers . Users.delete
 
 -- Re-set the user autenication info
-replaceUserAuth :: UserId -> UserAuth -> Update Users Bool
+replaceUserAuth :: UserId -> UserAuth -> Update Users (Maybe String)
 replaceUserAuth userId auth
     = updateUsers $ \users -> Users.replaceAuth users userId auth
+
+upgradeUserAuth :: UserId -> PasswdPlain -> UserAuth -> Update Users (Maybe String)
+upgradeUserAuth userId passwd auth
+    = updateUsers $ \users -> Users.upgradeAuth users userId passwd auth
 
 renameUser :: UserId -> UserName -> Update Users (Maybe (Maybe UserId))
 renameUser uid uname = do
@@ -65,20 +68,21 @@ renameUser uid uname = do
       return Nothing
 
 -- updates the user db with a simpler function
-updateUsers :: (Users -> Maybe Users) -> Update Users Bool
-updateUsers f = updateUsers' updateFn isJust
-    where updateFn users = fmap (swap . (,) ()) $ f users
-          swap (x,y) = (y,x)
+updateUsers :: (Users -> Either String Users) -> Update Users (Maybe String)
+updateUsers f = liftM finish $ updateUsers' updateFn
+    where updateFn users = fmap (flip (,) ()) $ f users
+          finish (Left msg) = Just msg
+          finish (Right ()) = Nothing
 
 -- Helper function for updating the users db
-updateUsers' :: (Users -> Maybe (Users, a)) -> (Maybe a -> b) -> Update Users b
-updateUsers' f format = do
+updateUsers' :: (Users -> Either String (Users, a)) -> Update Users (Either String a)
+updateUsers' f = do
   users <- State.get
-  liftM format $ case (f users) of
-    Nothing -> return Nothing
-    Just (users',a) -> do
+  case (f users) of
+    Left err -> return (Left err)
+    Right (users',a) -> do
       State.put users'
-      return (Just a)
+      return (Right a)
 
 lookupUserName :: UserName -> Query Users (Maybe UserId)
 lookupUserName = queryUsers . Users.lookupName
@@ -105,6 +109,7 @@ $(makeAcidic ''Users ['addUser
                      ,'setEnabledUser
                      ,'deleteUser
                      ,'replaceUserAuth
+                     ,'upgradeUserAuth
                      ,'renameUser
                      ,'lookupUserName
                      ,'getUserDb

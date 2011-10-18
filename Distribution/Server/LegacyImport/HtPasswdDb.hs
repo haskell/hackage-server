@@ -6,13 +6,9 @@ module Distribution.Server.LegacyImport.HtPasswdDb (
   ) where
 
 import Distribution.Server.Users.Types (UserName(..))
+import Distribution.Server.Framework.AuthTypes (HtPasswdHash(..))
 
 type HtPasswdDb = [(UserName, HtPasswdHash)]
-
--- | These are the crypt format password hashes. Not the same as what hackage stores.
---
-newtype HtPasswdHash = HtPasswdHash String
-  deriving (Eq, Show)
 
 parse :: String -> Either String HtPasswdDb
 parse = accum 0 [] . map parseLine . lines

@@ -38,6 +38,7 @@ import Distribution.Server.Packages.Reverse
 import Distribution.Server.Packages.Tag
 
 import Distribution.Server.Pages.Template (hackagePage, hackagePageWith, haddockPage)
+import Distribution.Server.Pages.Util
 import qualified Distribution.Server.Pages.Group as Pages
 import qualified Distribution.Server.Pages.Reverse as Pages
 import qualified Distribution.Server.Pages.Index as Pages
@@ -940,15 +941,9 @@ packageLink core pkgid = anchor ! [href $ corePackageUri core "" pkgid] << displ
 packageNameLink :: CoreResource -> PackageName -> Html
 packageNameLink core pkgname = anchor ! [href $ corePackageName core "" pkgname] << display pkgname
 
-makeInput :: [HtmlAttr] -> String -> String -> [Html]
-makeInput attrs fname labelName = [label ! [thefor fname] << labelName,
-                                   input ! (attrs ++ [name fname, identifier fname])]
-
-makeCheckbox :: Bool -> String -> String -> String -> [Html]
-makeCheckbox isChecked fname fvalue labelName = [input ! ([thetype "checkbox", name fname, identifier fname, value fvalue]
-                                                 ++ if isChecked then [checked] else []),
-                                        toHtml " ",
-                                        label ! [thefor fname] << labelName]
+-- Prevents page indexing (e.g. for search pages).
+noIndex :: Html
+noIndex = meta ! [name "robots", content "noindex"]
 
 renderItem :: CoreResource -> Maybe TagsResource -> PackageItem -> Html
 renderItem core mtagf item = li ! classes <<
@@ -970,8 +965,4 @@ renderTags :: TagsResource -> Set Tag -> [Html]
 renderTags tagf tags = intersperse (toHtml ", ")
     (map (\tg -> anchor ! [href $ tagUri tagf "" tg] << display tg)
       $ Set.toList tags)
-
--- Prevents page indexing (e.g. for search pages).
-noIndex :: Html
-noIndex = meta ! [name "robots", content "noindex"]
 

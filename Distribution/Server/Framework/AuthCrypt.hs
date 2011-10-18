@@ -1,5 +1,7 @@
+{-# LANGUAGE ForeignFunctionInterface #-}
 module Distribution.Server.Framework.AuthCrypt (
    PasswdPlain(..),
+   checkCryptAuthInfo,
    PasswdHash(..),
    newPasswdHash,
    checkBasicAuthInfo,
@@ -16,6 +18,9 @@ import Data.Digest.Pure.MD5 (md5)
 import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
 import Data.List (intercalate)
 
+import Foreign.C.String
+import System.IO.Unsafe (unsafePerformIO)
+
 -- Hashed passwords are stored in the format:
 --
 -- @md5 (username ++ ":" ++ realm ++ ":" ++ password)@.
@@ -28,6 +33,24 @@ import Data.List (intercalate)
 newPasswdHash :: RealmName -> UserName -> PasswdPlain -> PasswdHash
 newPasswdHash (RealmName realmName) (UserName userName) (PasswdPlain passwd) =
     PasswdHash $ md5HexDigest [userName, realmName, passwd]
+
+------------------
+-- Crypt auth
+--
+
+checkCryptAuthInfo :: HtPasswdHash -> PasswdPlain -> Bool
+checkCryptAuthInfo (HtPasswdHash hash) (PasswdPlain passwd)
+  = crypt passwd hash == hash
+
+foreign import ccall unsafe "crypt" cCrypt :: CString-> CString -> CString
+
+crypt :: String -- ^ Payload
+      -> String -- ^ Salt
+      -> String -- ^ Hash
+crypt key seed = unsafePerformIO $ do
+    k <- newCAString key
+    s <- newCAString seed
+    peekCAString $ cCrypt k s
 
 ------------------
 -- HTTP Basic auth

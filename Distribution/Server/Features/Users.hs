@@ -48,7 +48,7 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Function (fix)
-import Control.Monad (liftM, liftM2, MonadPlus(..) )
+import Control.Monad (liftM, liftM3, MonadPlus(..) )
 
 import Distribution.Text (display, simpleParse)
 
@@ -201,15 +201,17 @@ newUserWithAuth _ pwd1 pwd2 | pwd1 /= pwd2 = errBadRequest "Error registering us
 newUserWithAuth userNameStr password _ = case simpleParse userNameStr of
     Nothing -> errBadRequest "Error registering user" [MText "Not a valid user name!"]
     Just uname -> do
-      let userAuth = newPasswdHash hackageRealm uname password
-      muid <- update $ AddUser uname (UserAuth userAuth)
+      let auth = newDigestPass uname password
+      muid <- update $ AddUser uname auth
       case muid of
-        Nothing  -> errForbidden "Error registering user" [MText "User already exists"]
-        Just _   -> return uname
+        Left err  -> errForbidden "Error registering user" [MText err]
+        Right _   -> return uname
 
-data ChangePassword = ChangePassword { first :: String, second :: String } deriving (Eq, Show)
+data ChangePassword = ChangePassword { first :: String, second :: String, tryUpgrade :: Bool } deriving (Eq, Show)
 instance FromData ChangePassword where
-	fromData = liftM2 ChangePassword (look "password" `mplus` return "") (look "repeat-password" `mplus` return "")
+	fromData = liftM3 ChangePassword (look "password" `mplus` return "")
+                                   (look "repeat-password" `mplus` return "")
+                                   (liftM (const True) (look "try-upgrade") `mplus` return False)
 
 -- Arguments: the auth'd user id, the user path id (derived from the :username)
 canChangePassword :: MonadIO m => UserId -> UserId -> m Bool
@@ -220,31 +222,31 @@ canChangePassword uid userPathId = do
 changePassword :: UserName -> ServerPartE ()
 changePassword userPathName = do
     users  <- query State.GetUserDb
-    withHackageAuth users Nothing $ \uid _ ->
-        case Users.lookupName userPathName users of
-          Just userPathId -> do
-            -- if this user's id corresponds to the one in the path, or is an admin
-            canChange <- canChangePassword uid userPathId
-            if canChange
-              then do
-                pwd <- either (const $ return $ ChangePassword "not" "valid") return =<< getData
-                if (first pwd == second pwd && first pwd /= "")
-                  then do
-                    let passwd = PasswdPlain (first pwd)
-                        auth   = newDigestPass userPathName passwd
-                    res <- update $ ReplaceUserAuth userPathId auth
-                    if res
-                        then return ()
-                        else forbidChange "Error changing password"
-                  else forbidChange "Copies of new password do not match or is an invalid password (ex: blank)"
-              else forbidChange $ "Not authorized to change password for " ++ display userPathName
-          Nothing -> errForbidden "Error changing password" 
-                         [MText $ "User " ++ display userPathName ++ " doesn't exist"]
+    pwd <- either (const $ return $ ChangePassword "not" "valid" True) return =<< getData
+    if (first pwd == second pwd && first pwd /= "")
+     then do
+       let passwd = PasswdPlain (first pwd)
+           auth   = newDigestPass userPathName passwd
+       res <- case Users.lookupName userPathName users of
+                Just userPathId
+                  | tryUpgrade pwd -> do
+                    update $ UpgradeUserAuth userPathId passwd auth
+                  | otherwise -> do
+                    (uid, _) <- guardAuthenticated hackageRealm users
+                    -- if this user's id corresponds to the one in the path, or is an admin
+                    canChange <- canChangePassword uid userPathId
+                    if canChange
+                      then update $ ReplaceUserAuth userPathId auth
+                      else forbidChange $ "Not authorized to change password for " ++ display userPathName
+                Nothing -> errForbidden "Error changing password" 
+                                 [MText $ "User " ++ display userPathName ++ " doesn't exist"]
+       maybe (return ()) forbidChange res
+     else forbidChange "Copies of new password do not match or is an invalid password (ex: blank)"
   where
     forbidChange = errForbidden "Error changing password" . return . MText
 
 newDigestPass :: UserName -> PasswdPlain -> UserAuth
-newDigestPass name pwd = UserAuth (newPasswdHash hackageRealm name pwd)
+newDigestPass name pwd = NewUserAuth (newPasswdHash hackageRealm name pwd)
 
 --
 runUserFilter :: UserFeature -> UserId -> IO (Maybe ErrorResponse)

@@ -313,11 +313,11 @@ initState server (admin, pass) = do
     muid <- case simpleParse admin of
         Just uname -> do
             let userAuth = newPasswdHash hackageRealm uname (PasswdPlain pass)
-            update $ AddUser uname (Users.UserAuth userAuth)
+            update $ AddUser uname (Users.NewUserAuth userAuth)
         Nothing -> fail "Couldn't parse admin name (should be alphanumeric)"
     case muid of
-        Just uid -> update $ State.AddHackageAdmin uid
-        Nothing  -> fail "Failed to create admin user"
+        Right uid -> update $ State.AddHackageAdmin uid
+        Left err  -> fail $ "Failed to create admin user: " ++ err
 
 -- The top-level server part.
 -- It collects resources from Distribution.Server.Features, collects

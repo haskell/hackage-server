@@ -59,23 +59,34 @@ importAuth contents = importCSV "users.csv" contents $ \csv -> mapM_ fromRecord 
     fromRecord [nameStr, idStr, statusStr, auth] = do
         name <- parseText "user name" nameStr
         user <- parseText "user id" idStr
-        status <- parseStatus statusStr auth
+        -- Legacy import: all hashes new hashes
+        status <- parseStatus statusStr (NewUserAuth (PasswdHash auth))
+        insertUser user $ UserInfo name status
+    fromRecord [nameStr, idStr, statusStr, authNewOldStr, auth] = do
+        name <- parseText "user name" nameStr
+        user <- parseText "user id" idStr
+        mkAuth <- parseNewOld authNewOldStr
+        status <- parseStatus statusStr (mkAuth auth)
         insertUser user $ UserInfo name status
 
     fromRecord x = fail $ "Error processing auth record: " ++ show x
 
+    parseNewOld "new" = return $ NewUserAuth . PasswdHash
+    parseNewOld "old" = return $ OldUserAuth . HtPasswdHash
+    parseNewOld no    = fail $ "unable to parse whether new or old hash: " ++ no
+
     parseStatus "deleted"    _    = return Deleted
     parseStatus "historical" _    = return Historical
-    parseStatus "enabled"    auth = return $ Active Enabled $ UserAuth (PasswdHash auth)
-    parseStatus "disabled"   auth = return $ Active Disabled $ UserAuth (PasswdHash auth)
+    parseStatus "enabled"    auth = return $ Active Enabled  auth
+    parseStatus "disabled"   auth = return $ Active Disabled auth
     parseStatus sts _ = fail $ "unable to parse whether user enabled: " ++ sts
 
 insertUser :: UserId -> UserInfo -> Import Users ()
 insertUser user info = do
     users <- get
     case Users.insert user info users of
-        Nothing     -> fail $ "Duplicate user id for user: " ++ display user
-        Just users' -> put users'
+        Left err     -> fail err
+        Right users' -> put users'
 
 -- Import for a single group
 groupBackup :: ( UpdateEvent event
@@ -124,11 +135,13 @@ usersToCSV users
       (usersCSVKey:) $
 
       flip map (Users.enumerateAll users) $ \(user, userInfo) ->
+      let (authOldNew, auth) = infoToAuth userInfo in
 
       [ display . userName $ userInfo
       , display user
       , infoToStatus userInfo
-      , infoToAuth userInfo
+      , authOldNew
+      , auth
       ]
 
  where
@@ -149,8 +162,9 @@ usersToCSV users
         Active Enabled  _ -> "enabled"
 
     -- may be null
-    infoToAuth :: UserInfo -> String
+    infoToAuth :: UserInfo -> (String, String)
     infoToAuth userInfo = case userStatus userInfo of
-        Active _ (UserAuth (PasswdHash hash)) -> hash
-        _ -> ""
+        Active _ (NewUserAuth (PasswdHash   hash)) -> ("new", hash)
+        Active _ (OldUserAuth (HtPasswdHash hash)) -> ("old", hash)
+        _ -> ("new", "")
 

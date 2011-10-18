@@ -44,7 +44,9 @@ isActive _          = False
 isHistorical Historical = True
 isHistorical _          = False
 
-data UserAuth = UserAuth PasswdHash deriving (Show, Eq, Typeable)
+data UserAuth = NewUserAuth PasswdHash
+              | OldUserAuth HtPasswdHash
+              deriving (Show, Eq, Typeable)
 
 instance Text UserId where
     disp (UserId uid) = Disp.int uid
@@ -57,6 +59,6 @@ instance Text UserName where
 $(deriveSafeCopy 0 'base ''UserId)
 $(deriveSafeCopy 0 'base ''UserName)
 $(deriveSafeCopy 0 'base ''AccountEnabled)
-$(deriveSafeCopy 0 'base ''UserAuth)
+$(deriveSafeCopy 1 'base ''UserAuth)
 $(deriveSafeCopy 0 'base ''UserStatus)
 $(deriveSafeCopy 0 'base ''UserInfo)

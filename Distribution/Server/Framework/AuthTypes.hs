@@ -20,7 +20,14 @@ newtype PasswdPlain = PasswdPlain String
 newtype PasswdHash = PasswdHash String
   deriving (Eq, Ord, Show, Binary, Typeable)
 
+-- | These are the *old* crypt format password hashes (salted DES: perl crypt).
+-- Not the same as the new hashes we store in 'PasswdHash'.
+newtype HtPasswdHash = HtPasswdHash String
+  deriving (Eq, Show)
+
 newtype RealmName = RealmName String
   deriving (Show, Eq)
 
+$(deriveSafeCopy 0 'base ''PasswdPlain)
 $(deriveSafeCopy 0 'base ''PasswdHash)
+$(deriveSafeCopy 0 'base ''HtPasswdHash)

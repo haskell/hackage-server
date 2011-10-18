@@ -13,6 +13,7 @@ module Distribution.Server.Users.Users (
     delete,
     setEnabled,
     replaceAuth,
+    upgradeAuth,
     rename,
 
     -- * Lookup
@@ -30,8 +31,12 @@ module Distribution.Server.Users.Users (
   ) where
 
 import Distribution.Server.Users.Types
+import Distribution.Server.Framework.AuthCrypt (checkCryptAuthInfo)
 import Distribution.Server.Framework.Instances ()
 
+import Distribution.Text (display)
+
+import Control.Monad (liftM)
 import Data.Maybe (maybeToList)
 import Data.List (find)
 import qualified Data.Map as Map
@@ -39,6 +44,10 @@ import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
 import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable (Typeable)
+
+
+(?!) :: Maybe a -> e -> Either e a
+ma ?! e = maybe (Left e) Right ma
 
 
 -- | The entrie collection of users. Manages the mapping between 'UserName'
@@ -84,13 +93,12 @@ empty = Users {
 --
 -- The new account is created in the enabled state.
 --
--- * Returns 'Nothing' if the user name is already in use.
---
-add :: UserName -> UserAuth -> Users -> Maybe (Users, UserId)
+-- * Returns 'Left' if the user name is already in use.
+add :: UserName -> UserAuth -> Users -> Either String (Users, UserId)
 add name auth users =
   case Map.lookup name (userNameMap users) of
-    Just _  -> Nothing -- user name already exists
-    Nothing -> users' `seq` Just (users', UserId userId)
+    Just _  -> Left $ "Username " ++ display name ++ " already in use"
+    Nothing -> users' `seq` Right (users', UserId userId)
   where
     UserId userId = nextId users
     userInfo = UserInfo {
@@ -106,19 +114,19 @@ add name auth users =
 
 -- | Inserts the given info with the given id.
 -- If a user is already present with the passed in
--- id, 'Nothing' is returned.
+-- id, 'Left' is returned.
 --
 -- If the 'UserInfo' does not correspond to that of a
 -- deleted user and the user name is already in use,
--- 'Nothing' will be returned.
-insert :: UserId -> UserInfo -> Users -> Maybe Users
+-- 'Left' will be returned.
+insert :: UserId -> UserInfo -> Users -> Either String Users
 insert user@(UserId ident) info users = do
     let name = userName info
         isDeleted = case userStatus info of
             Active {} -> False
             _ -> True
-        idMap' = intInsertMaybe ident info (userIdMap users)
-        nameMap' = insertMaybe name user (userNameMap users)
+        idMap' = intInsertMaybe ident info (userIdMap users) ?! ("User ID " ++ show ident ++ " is already in use")
+        nameMap' = insertMaybe name user (userNameMap users) ?! ("Username " ++ display name ++ " already in use")
         totalMap = Map.insertWith IntSet.union name (IntSet.singleton ident) (totalNameMap users)
         nextIdent | user >= nextId users = UserId (ident + 1)
                   | otherwise = nextId users
@@ -172,11 +180,11 @@ requireName name users =
 -- be enabled again and a disabled account does not release the user name for
 -- re-use.
 --
--- * Returns 'Nothing' if the user id does not exist.
+-- * Returns 'Left' if the user id does not exist.
 --
-delete :: UserId -> Users -> Maybe Users
+delete :: UserId -> Users -> Either String Users
 delete (UserId userId) users = do
-  userInfo     <- IntMap.lookup userId (userIdMap users)
+  userInfo     <- IntMap.lookup userId (userIdMap users) ?! ("No user with ID " ++ show userId)
   let userInfo' = userInfo { userStatus = Deleted }
   return $! users {
     userIdMap   = IntMap.insert userId userInfo' (userIdMap users),
@@ -193,12 +201,12 @@ delete (UserId userId) users = do
 -- The disabled state is intended to be temporary. Use 'delete' to permanently
 -- delete the account and release the user name to be re-used.
 --
--- * Returns 'Nothing' if the user id does not exist or is deleted
+-- * Returns 'Left' if the user id does not exist or is deleted
 --
-setEnabled :: Bool -> UserId -> Users -> Maybe Users
+setEnabled :: Bool -> UserId -> Users -> Either String Users
 setEnabled newStatus (UserId userId) users = do
-    userInfo  <- IntMap.lookup userId (userIdMap users)
-    userInfo' <- changeStatus userInfo
+    userInfo  <- IntMap.lookup userId (userIdMap users) ?! ("No user with ID " ++ show userId)
+    userInfo' <- changeStatus userInfo                  ?! "Inactive users cannot have their enabledness changed"
     return $! users {
         userIdMap = IntMap.insert userId userInfo' (userIdMap users)
     }
@@ -206,6 +214,7 @@ setEnabled newStatus (UserId userId) users = do
     changeStatus userInfo = case userStatus userInfo of
         Active _ auth -> Just userInfo { userStatus = Active (if newStatus then Enabled else Disabled) auth }
         _ -> Nothing
+
 
 lookupId :: UserId -> Users -> Maybe UserInfo
 lookupId (UserId userId) users = IntMap.lookup userId (userIdMap users)
@@ -226,29 +235,42 @@ idToName users userId@(UserId idNum) = case lookupId userId users of
 nameToId :: Users -> UserName -> UserId
 nameToId users name = case lookupName name users of
   Just userId -> userId
-  Nothing     -> error $ "Users.nameToId: no such user name " ++ show name
+  Nothing     -> error $ "Users.nameToId: no such user name " ++ display name
 
 -- | Replace the user authentication for the given user.
---   Returns 'Nothing' if the user does not exist.
---
---   If the given user exists and is deleted, 'Just'
---   is returned even though the user still may not
---   authenticate.
-replaceAuth :: Users -> UserId -> UserAuth -> Maybe Users
+--   Returns 'Left' if the user does not exist or the user existed but was not active.
+replaceAuth :: Users -> UserId -> UserAuth -> Either String Users
 replaceAuth users userId newAuth
-    = modifyUser users userId $ \userInfo ->
+    = modifyUserInfo users userId $ \userInfo ->
       case userStatus userInfo of
-        Active status _ -> userInfo { userStatus = Active status newAuth }
-        _ -> userInfo 
+        Active status _ -> Right $ userInfo { userStatus = Active status newAuth }
+        _ -> Left "Inactive users cannot have their authentication info changed"
 
--- | Modify a single user. Returns 'Nothing' if the user does not
+-- | Replace the user authentication for the given user.
+--   Returns 'Left' if the user does not exist, if the user existed but was not
+--   active, the old password didn't match, or if the password was already upgraded.
+upgradeAuth :: Users -> UserId -> PasswdPlain -> UserAuth -> Either String Users
+upgradeAuth users userId passwd newAuth
+    = modifyUserInfo users userId $ \userInfo ->
+      case userStatus userInfo of
+        Active status (OldUserAuth oldHash)
+          | checkCryptAuthInfo oldHash passwd -> Right $ userInfo { userStatus = Active status newAuth }
+          | otherwise                         -> Left "Password did not match user's old password"
+        Active _ _ -> Left "This user's password has already been upgraded"
+        _ -> Left "Inactive users cannot have their authentication info changed"
+
+-- | Modify a single user. Returns 'Left' if the user does not
 --   exist. This function isn't exported.
-modifyUser :: Users -> UserId -> (UserInfo -> UserInfo) -> Maybe Users
-modifyUser users (UserId userId) fn =
-    -- I'm using 'updateLookupWithKey' so I can tell if the lookup succeded
-    case IntMap.updateLookupWithKey (\_ user -> Just (fn user)) userId (userIdMap users) of
-      (Nothing,_) -> Nothing
-      (_,newMap)  -> Just $ users { userIdMap = newMap }
+modifyUserInfo :: Users -> UserId -> (UserInfo -> Either String UserInfo) -> Either String Users
+modifyUserInfo users (UserId userId) fn =
+    case alterM fn userId (userIdMap users) of
+      Nothing      -> Left $ "No user with ID " ++ show userId
+      Just mnewmap -> liftM (\newMap -> users { userIdMap = newMap }) mnewmap
+
+alterM :: (a -> Either String a) -> Int -> IntMap.IntMap a -> Maybe (Either String (IntMap.IntMap a))
+alterM f k mp = case IntMap.lookup k mp of
+  Just v  -> Just $ liftM (\v' -> IntMap.insert k v' mp) $ f v
+  Nothing -> Nothing
 
 -- | Rename a single user, regardless of account status. Returns either the
 -- successfully altered Users structure or a `Maybe UserId` to indicate an
@@ -257,10 +279,11 @@ modifyUser users (UserId userId) fn =
 rename :: Users -> UserId -> UserName -> Either (Maybe UserId) Users
 rename users uid uname = 
     case Map.lookup uname (userNameMap users) of
-        Nothing   -> case modifyUser users uid (\user -> user { userName = uname }) of
-            Nothing  -> Left Nothing
-            Just new -> Right new
+        Nothing   -> case modifyUserInfo users uid (\user -> Right $ user { userName = uname }) of
+            Left _no_user -> Left Nothing
+            Right new     -> Right new
         Just uid' -> Left $ Just uid'
+ -- FIXME: this function should probably modify the other fields of Users
 
 enumerateAll :: Users -> [(UserId, UserInfo)]
 enumerateAll = mapFst UserId . IntMap.assocs . userIdMap
@@ -285,5 +308,3 @@ intInsertMaybe k a m
         _ -> Nothing
 
 $(deriveSafeCopy 0 'base ''Users)
-
-
