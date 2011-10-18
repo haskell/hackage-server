@@ -332,16 +332,15 @@ mirrorPackages verbosity opts pkgsToMirror = do
 
 
 putPackage :: URI -> PkgIndexInfo -> FilePath -> MirrorSession ()
-putPackage baseURI (PkgIndexInfo pkgid _mtime _muname _muid) pkgFile = do
+putPackage baseURI (PkgIndexInfo pkgid mtime muname _muid) pkgFile = do
     putPackageTarball
-
-{-  case mtime of
-      Nothing   -> return ()
-      Just time -> putPackageUploadTime -}
+    maybe (return ()) putPackageUploadTime mtime
+    maybe (return ()) putPackageUploader muname
   where
+    pkgURI = baseURI <//> display pkgid <.> "tar.gz"
+
     putPackageTarball = do
       pkgContent <- liftIO $ BS.readFile pkgFile
-      let pkgURI = baseURI <//> display pkgid <.> "tar.gz"
       rsp <- browserAction $ requestPUT pkgURI "application/x-gzip" pkgContent
       case rsp of
         Just err -> notifyResponse (PutPackageFailed err pkgid)
@@ -351,15 +350,24 @@ putPackage baseURI (PkgIndexInfo pkgid _mtime _muname _muid) pkgFile = do
       --TODO: think about in what situations we delete the file
       -- and if we should actually cache it if we don't sucessfully upload.
 
-{-
+      -- TODO: perhaps we shouldn't report failure for the whole package if
+      -- we fail to set the upload time/uploader
+
+    toBS = BS.pack . toUTF8
+
     putPackageUploadTime time = do
-      (_, rsp) <- request (requestPUT pkgURI "text/plain" timeStr)
-      where
-        timeStr = formatTime defaultTimeLocale "%c" time
-    putPackageUploadUser = do
-      where
-        nameStr = display uname
--}
+      let timeStr = formatTime defaultTimeLocale "%c" time
+      rsp <- browserAction $ requestPUT (pkgURI <//> "upload-time") "text/plain" (toBS timeStr)
+      case rsp of
+        Just err -> notifyResponse (PutPackageFailed err pkgid)
+        Nothing  -> notifyResponse PutPackageOk
+
+    putPackageUploader uname = do
+      let nameStr = display uname
+      rsp <- browserAction $ requestPUT (pkgURI <//> "uploader") "text/plain" (toBS nameStr)
+      case rsp of
+        Just err -> notifyResponse (PutPackageFailed err pkgid)
+        Nothing  -> notifyResponse PutPackageOk
 
 -----------------------------
 -- Error handling strategy
