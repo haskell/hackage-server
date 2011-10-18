@@ -11,9 +11,6 @@ Backup:
  * Create backup tarballs on a running server
  * Create backup tarballs from selected features so others can set up their own Hackages
 
-Packages:
- * Serve package contents with Data.TarIndex
-
 Users:
  * Expose renaming for the Users feature
  * Expose user id information for mirrors and e.g. merging accounts with totalNameMap
@@ -26,8 +23,6 @@ Other features:
 Feature views:
  * Implement JSON views for all the features
  * Split up the HTML feature into smaller subpages
- * Move HTML generation in Packages feature, for the recent list, to HTML feature;
-     generalize it for any format (such as RSS)
  * Switch to BlazeHTML
  * Use the JSON functionality in-browser for Ajax
 
