@@ -333,6 +333,7 @@ instance ToMessage AuthError where
                                 _                     -> 401
                    }
 
+-- FIXME: serve plain-text errors to a cabal-install client
 showAuthError :: AuthError -> Html
 showAuthError err = case err of
     NoAuthError           -> toHtml "No authorization provided."
