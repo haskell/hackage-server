@@ -6,12 +6,13 @@ module Distribution.Server.Features.Mirror (
   ) where
 
 import Distribution.Server.Acid (query, update)
-import Distribution.Server.Framework
+import Distribution.Server.Framework hiding (formatTime)
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 
 import Distribution.Server.Users.State
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.State
 import Distribution.Server.Users.Backup
 import Distribution.Server.Users.Types
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
@@ -26,6 +27,8 @@ import Distribution.ParseUtils (ParseResult(..), locatedErrorMsg, showPWarning)
 import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Data.ByteString.Char8 as SBS
 import Data.Time.Clock (getCurrentTime)
+import Data.Time.Format (formatTime, parseTime)
+import System.Locale (defaultTimeLocale)
 
 import Control.Monad.Trans (MonadIO(..))
 import Distribution.Package
@@ -39,13 +42,14 @@ data MirrorFeature = MirrorFeature {
 }
 data MirrorResource = MirrorResource {
     mirrorPackageTarball :: Resource,
+    mirrorPackageUploadTime :: Resource,
     mirrorCabalFile :: Resource,
     mirrorGroupResource :: GroupResource
 }
 
 instance IsHackageFeature MirrorFeature where
     getFeatureInterface mirror = (emptyHackageFeature "mirror") {
-        featureResources = map ($mirrorResource mirror) [mirrorPackageTarball, mirrorCabalFile]
+        featureResources = map ($mirrorResource mirror) [mirrorPackageTarball, mirrorPackageUploadTime, mirrorCabalFile]
       , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtripByQuery (query GetMirrorClients))
       }
       where
@@ -73,6 +77,10 @@ initMirrorFeature env core users = do
       { mirrorResource = MirrorResource
           { mirrorPackageTarball = (extendResource $ corePackageTarball coreR) {
                                      resourcePut = [("", tarballPut store)]
+                                   }
+          , mirrorPackageUploadTime = (extendResourcePath "/upload-time" $ corePackageTarball coreR) {
+                                     resourceGet = [("", uploadTimeGet)],
+                                     resourcePut = [("", uploadTimePut)]
                                    }
           , mirrorCabalFile      = (extendResource $ coreCabalFile coreR) {
                                      resourcePut = [("", cabalPut)]
@@ -118,6 +126,23 @@ initMirrorFeature env core users = do
                       pkgDataOld    = []
                   }
                   return . toResponse $ unlines warnings
+
+    uploadTimeGet :: DynamicPath -> ServerPart Response
+    uploadTimeGet dpath = runServerPartE $ withPackagePath dpath $ \(PkgInfo { pkgUploadData = (utime, _) }) _ -> 
+        return $ toResponse $ formatTime defaultTimeLocale "%c" utime
+
+    -- curl  -H 'Content-Type: text/plain' -u admin:admin -X PUT -d "Tue Oct 18 20:54:28 UTC 2010" http://localhost:8080/package/edit-distance-0.2.1/edit-distance-0.2.1.tar.gz/upload-time
+    uploadTimePut :: DynamicPath -> ServerPart Response
+    uploadTimePut dpath = runServerPartE $ do
+        requireMirrorAuth
+        withPackageId dpath $ \pkgid -> do
+          expectTextPlain
+          Body timeContent <- consumeRequestBody
+          case parseTime defaultTimeLocale "%c" (fromUTF8 (BS.unpack timeContent)) of
+            Nothing -> badRequest $ toResponse "Could not parse upload time"
+            Just t  -> do
+              mb_err <- update $ ReplacePackageUploadTime pkgid t
+              maybe (return $ toResponse "Updated upload time OK") (badRequest . toResponse) mb_err
 
     -- return: error from parsing, bad request error, or warning lines
     cabalPut :: DynamicPath -> ServerPart Response

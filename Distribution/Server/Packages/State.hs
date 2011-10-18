@@ -25,6 +25,7 @@ import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import Data.Monoid
 import Data.Maybe (fromMaybe)
+import Data.Time (UTCTime)
 import Data.List (sortBy)
 import Data.Ord (comparing)
 
@@ -82,6 +83,16 @@ deletePackageVersion :: PackageId -> Update PackagesState ()
 deletePackageVersion pkg = State.modify $ \pkgsState -> pkgsState { packageList = deleteVersion (packageList pkgsState) }
     where deleteVersion = PackageIndex.deletePackageId pkg
 
+replacePackageUploadTime :: PackageId -> UTCTime -> Update PackagesState (Maybe String)
+replacePackageUploadTime pkg time = do
+  pkgsState <- State.get
+  case PackageIndex.lookupPackageId (packageList pkgsState) pkg of
+    Nothing -> return (Just "No such package")
+    Just pkgInfo@PkgInfo { pkgUploadData = (_, uploader) } -> do
+      State.put $ pkgsState { packageList = PackageIndex.insert (pkgInfo { pkgUploadData = (time, uploader) })
+                                                                (packageList pkgsState) }
+      return Nothing
+
 -- |Replace all existing packages and reports
 replacePackagesState :: PackagesState -> Update PackagesState ()
 replacePackagesState = State.put
@@ -94,6 +105,7 @@ getPackagesState = ask
 
 $(makeAcidic ''PackagesState ['getPackagesState
                              ,'replacePackagesState
+                             ,'replacePackageUploadTime
                              ,'insertPkgIfAbsent
                              ,'mergePkg
                              ,'deletePackageVersion
