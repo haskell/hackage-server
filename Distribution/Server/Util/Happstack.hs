@@ -40,25 +40,17 @@ methodOverrideHack rest
 -- | For use with 'methodOverrideHack': tries to report the original method
 -- of a request before the hack was applied.
 rqRealMethod :: Request -> Method
-rqRealMethod rq = fromMaybe (rqMethod rq) $ runServerPartT_hack rq $
+rqRealMethod rq = fromMaybe (rqMethod rq) $ unsafePerformIO $ runServerPartT_hack rq $
     withDataFn (liftM (not . null) $ lookInputs "_method") $ \mthd_exists ->
       return $ if mthd_exists then POST else rqMethod rq
 
-data Identity a = I { unI :: a }
-
-instance Monad Identity where
-    return = I
-    I x >>= f = f x
-
--- Ughhh. Yes, this can't just be "error". It really is needed.
-instance MonadIO Identity where
-    liftIO = I . unsafePerformIO
-
-runServerPartT_hack :: Request -> ServerPartT Identity a -> Maybe a
-runServerPartT_hack rq mx = case unI (ununWebT (runReaderT (unServerPartT mx) rq)) of
-  Nothing           -> Nothing
-  Just (Left _,  _) -> Nothing
-  Just (Right x, _) -> Just x
+runServerPartT_hack :: Monad m => Request -> ServerPartT m a -> m (Maybe a)
+runServerPartT_hack rq mx
+  = liftM (\res -> case res of
+                     Nothing           -> Nothing
+                     Just (Left _,  _) -> Nothing
+                     Just (Right x, _) -> Just x)
+          (ununWebT (runReaderT (unServerPartT mx) rq))
 
 
 -- |Passes a list of remaining path segments in the URL. Does not
