@@ -38,6 +38,7 @@ import Distribution.Server.Framework.Error
 import Distribution.Server.Pages.Template (hackagePage)
 import Distribution.Server.Pages.Util (makeInput)
 import Distribution.Server.Util.Happstack (rqRealMethod)
+import Distribution.Server.Util.ContentType
 
 import Distribution.Text (display)
 
@@ -316,7 +317,18 @@ authError realm err = do
   -- we want basic first, but addHeaderM makes them come out reversed
   setDigestAuthChallenge realm
   setBasicAuthChallenge  realm
-  finishWith (toResponse err)
+  req <- askRq
+  let accepts = maybe [] (parseContentAccept . BS.unpack) (getHeader "Accept" req)
+      want_text = foldr (\ct rest_want_text -> case ct of ContentType { ctType = "text", ctSubtype = st }
+                                                            | st `elem` ["html", "xhtml"] -> False
+                                                            | st == "plain"               -> True
+                                                          _ -> rest_want_text) True accepts
+  finishWith $ (showAuthError want_text (rqPeer req) err) {
+                     rsCode = case err of
+                                UnrecognizedAuthError -> 400
+                                OldAuthError _        -> 403 -- Fits in that authenticating will make no difference...
+                                _                     -> 401
+                   }
 
 data AuthError = NoAuthError | UnrecognizedAuthError | NoSuchUserError
                | PasswordMismatchError | OldAuthError UserName
@@ -325,24 +337,17 @@ data AuthError = NoAuthError | UnrecognizedAuthError | NoSuchUserError
 instance Error AuthError where
     noMsg = NoAuthError
 
-instance ToMessage AuthError where
-  toResponse err = (toResponse (Resource.XHtml $ showAuthError err)) {
-                     rsCode = case err of
-                                UnrecognizedAuthError -> 400
-                                OldAuthError _        -> 403 -- Fits in that authenticating will make no difference...
-                                _                     -> 401
-                   }
-
--- FIXME: serve plain-text errors to a cabal-install client
-showAuthError :: AuthError -> Html
-showAuthError err = case err of
-    NoAuthError           -> toHtml "No authorization provided."
-    UnrecognizedAuthError -> toHtml "Authorization scheme not recognized."
-    NoSuchUserError       -> toHtml "Username or password incorrect."
-    PasswordMismatchError -> toHtml "Username or password incorrect."
-    OldAuthError uname    -> hackagePage "Change password"
+showAuthError :: Bool -> Host -> AuthError -> Response
+showAuthError want_text (hostname, port) err = case err of
+    NoAuthError           -> toResponse "No authorization provided."
+    UnrecognizedAuthError -> toResponse "Authorization scheme not recognized."
+    NoSuchUserError       -> toResponse "Username or password incorrect."
+    PasswordMismatchError -> toResponse "Username or password incorrect."
+    OldAuthError uname 
+      | want_text -> toResponse $ "Hackage has been upgraded to use more secure passwords. You need login to Hackage and reenter your password at http://" ++ hostname ++ ":" ++ show port ++ rel_url
+      | otherwise -> toResponse $ Resource.XHtml $ hackagePage "Change password"
           [ toHtml "You haven't logged in since Hackage was upgraded. Please reenter your password below to upgrade your account."
-          , form ! [theclass "box", XHtml.method "POST", action $ "/user/" ++ display uname ++ "/password"] <<
+          , form ! [theclass "box", XHtml.method "POST", action rel_url] <<
                 [ simpleTable [] []
                     [ makeInput [thetype "password"] "password" "Old password"
                     , makeInput [thetype "password"] "repeat-password" "Repeat old password"
@@ -352,3 +357,4 @@ showAuthError err = case err of
                 , paragraph << input ! [thetype "submit", value "Upgrade password"]
                 ]
           ]
+      where rel_url = "/user/" ++ display uname ++ "/password"
