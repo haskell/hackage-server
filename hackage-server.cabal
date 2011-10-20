@@ -176,6 +176,9 @@ executable hackage-server
     alex       == 2.2.* || == 2.3.*,
     happy      == 1.17.* || == 1.18.*
 
+  if !os(darwin)
+    extra-libraries: crypt
+
   ghc-options: -Wall -threaded
                -fno-warn-orphans -fno-warn-unused-do-bind
                -fno-warn-warnings-deprecations
