@@ -67,9 +67,6 @@ makeRow users PkgInfo {
   where nbsp = XHtml.primHtmlChar "nbsp"
         user = Users.idToName users userId
 
-convertTime :: UTCTime -> CalendarTime
-convertTime utc = toUTCTime (TOD (floor (utcTimeToPOSIXSeconds utc)) 0)
-
 showTime :: UTCTime -> String
 showTime = formatTime defaultTimeLocale "%c"
 
@@ -102,13 +99,12 @@ channel now =
   [ RSS.Language "en"
   , RSS.ManagingEditor email
   , RSS.WebMaster email
-  , RSS.ChannelPubDate now'
-  , RSS.LastBuildDate	now'
+  , RSS.ChannelPubDate now
+  , RSS.LastBuildDate	now
   , RSS.Generator "rss-feed"
   ]
   where
     email = "duncan@haskell.org (Duncan Coutts)"
-    now'  = convertTime now
 
 releaseItem :: Users -> URIAuth -> PkgInfo -> [RSS.ItemElem]
 releaseItem users host PkgInfo {
@@ -119,7 +115,7 @@ releaseItem users host PkgInfo {
   [ RSS.Title title
   , RSS.Link uri
   , RSS.Guid True (uriToString id uri "")
-  , RSS.PubDate (convertTime time)
+  , RSS.PubDate time
   , RSS.Description desc
   ]
   where
