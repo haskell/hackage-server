@@ -21,6 +21,8 @@ import Data.List (intercalate)
 import Foreign.C.String
 import System.IO.Unsafe (unsafePerformIO)
 
+import Control.Concurrent.MVar (MVar, newMVar, withMVar)
+
 -- Hashed passwords are stored in the format:
 --
 -- @md5 (username ++ ":" ++ realm ++ ":" ++ password)@.
@@ -47,10 +49,14 @@ foreign import ccall unsafe "crypt" cCrypt :: CString-> CString -> CString
 crypt :: String -- ^ Payload
       -> String -- ^ Salt
       -> String -- ^ Hash
-crypt key seed = unsafePerformIO $ do
+crypt key seed = unsafePerformIO $ withMVar cryptMVar $ \_ -> do
     k <- newCAString key
     s <- newCAString seed
     peekCAString $ cCrypt k s
+
+cryptMVar :: MVar ()
+cryptMVar = unsafePerformIO $ newMVar ()
+{-# NOINLINE cryptMVar #-}
 
 ------------------
 -- HTTP Basic auth
