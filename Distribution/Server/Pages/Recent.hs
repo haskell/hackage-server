@@ -36,8 +36,7 @@ import Data.Time.Format
          ( formatTime )
 import System.Locale
          ( defaultTimeLocale )
-import System.Time --sadly have to use the old-time lib as well as new :-(
-         ( CalendarTime, ClockTime(TOD), toUTCTime )
+
 
 -- | Takes a list of package info, in reverse order by timestamp.
 --
