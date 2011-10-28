@@ -56,9 +56,9 @@ unpackPackage :: FilePath -> ByteString
                         ((GenericPackageDescription, ByteString), [String])
 unpackPackage tarGzFile contents =
   runUploadMonad $ do
-    (pkgDesc, warnings, cabalEntry) <- basicChecks tarGzFile contents
+    (entries, pkgDesc, warnings, cabalEntry) <- basicChecks tarGzFile contents
     mapM_ fail warnings
-    extraChecks pkgDesc
+    extraChecks entries pkgDesc
     return (pkgDesc, cabalEntry)
 
 unpackPackageRaw :: FilePath -> ByteString
@@ -66,11 +66,11 @@ unpackPackageRaw :: FilePath -> ByteString
                            ((GenericPackageDescription, ByteString), [String])
 unpackPackageRaw tarGzFile contents =
   runUploadMonad $ do
-    (pkgDesc, _warnings, cabalEntry) <- basicChecks tarGzFile contents
+    (_entries, pkgDesc, _warnings, cabalEntry) <- basicChecks tarGzFile contents
     return (pkgDesc, cabalEntry)
 
 basicChecks :: FilePath -> ByteString
-            -> UploadMonad (GenericPackageDescription, [String], ByteString)
+            -> UploadMonad (Tar.Entries, GenericPackageDescription, [String], ByteString)
 basicChecks tarGzFile contents = do
   let (pkgidStr, ext) = (base, tar ++ gz)
         where (tarFile, gz) = splitExtension (portableTakeFileName tarGzFile)
@@ -80,7 +80,7 @@ basicChecks tarGzFile contents = do
 
   pkgid <- case simpleParse pkgidStr of
     Just pkgid
-      | display pkgid == pkgidStr -> return pkgid
+      | display pkgid == pkgidStr -> return (pkgid :: PackageIdentifier)
 
       | not . null . versionTags . packageVersion $ pkgid
       -> fail $ "Hackage no longer accepts packages with version tags: "
@@ -88,17 +88,15 @@ basicChecks tarGzFile contents = do
     _ -> fail $ "Invalid package id " ++ show pkgidStr
              ++ ". The tarball must use the name of the package."
 
-  -- Check the tarball content for sanity and extract the .cabal file
-  let checkEntries = Tar.mapEntries (checkTarFilePath pkgid)
-                   . Tar.mapEntries checkTarFileType
-      selectEntry entry = case Tar.entryContent entry of
+  -- Extract the .cabal file from the tarball
+  let selectEntry entry = case Tar.entryContent entry of
         Tar.NormalFile bs _ | cabalFileName == normalise (Tar.entryPath entry)
                            -> Just bs
         _                  -> Nothing
       PackageName name  = packageName pkgid
       cabalFileName     = display pkgid </> name <.> "cabal"
       entries           = Tar.read (GZip.decompress contents)
-  cabalEntries <- selectEntries selectEntry (checkEntries entries)
+  cabalEntries <- selectEntries selectEntry entries
   cabalEntry   <- case cabalEntries of
     -- NB: tar files *can* contain more than one entry for the same filename.
     -- (This was observed in practice with the package CoreErlang-0.0.1).
@@ -121,7 +119,7 @@ basicChecks tarGzFile contents = do
   when (packageVersion pkgDesc /= packageVersion pkgid) $
     fail "Package version in the cabal file does not match the file name."
 
-  return (pkgDesc, warnings, cabalEntry)
+  return (entries, pkgDesc, warnings, cabalEntry)
 
   where
     showError (Nothing, msg) = msg
@@ -136,8 +134,8 @@ portableTakeFileName :: FilePath -> String
 portableTakeFileName = System.FilePath.Windows.takeFileName
 
 -- Miscellaneous checks on package description
-extraChecks :: GenericPackageDescription -> UploadMonad ()
-extraChecks genPkgDesc = do
+extraChecks :: Tar.Entries -> GenericPackageDescription -> UploadMonad ()
+extraChecks entries genPkgDesc = do
   let pkgDesc = flattenPackageDescription genPkgDesc
   -- various checks
 
@@ -159,6 +157,13 @@ extraChecks genPkgDesc = do
       (errors, warnings) = partition isDistError checks
   mapM_ (fail . explanation) errors
   mapM_ (warn . explanation) warnings
+
+  -- Check sanity of the tarball. Some of the tarballs we import from
+  -- old Hackage fail this check because e.g. they contain files
+  -- using the ././@LongLink hack for long file names
+  let checkEntries f = Tar.foldEntries (\x mr -> case f x of Nothing -> mr; Just s -> fail s) (return ()) fail entries
+  checkEntries (checkTarFilePath (package (packageDescription genPkgDesc)))
+  checkEntries checkTarFileType
 
   -- Check reasonableness of names of exposed modules
   let badTopLevel =
@@ -201,7 +206,7 @@ selectEntries select = extract []
         Nothing    -> extract          selected  entries
         Just saved -> extract (saved : selected) entries
 
-checkTarFileType :: Tar.Entry -> Either String Tar.Entry 
+checkTarFileType :: Tar.Entry -> Maybe String
 checkTarFileType entry
   | case Tar.entryContent entry of
       Tar.NormalFile _ _ -> True
@@ -209,28 +214,28 @@ checkTarFileType entry
       Tar.SymbolicLink _ -> True
       Tar.HardLink     _ -> True
       _                  -> False
-  = Right entry
+  = Nothing
 
   | otherwise
-  = Left $ "Bad file type in package tarball: " ++ Tar.entryPath entry
+  = Just $ "Bad file type in package tarball: " ++ Tar.entryPath entry
         ++ "\nFor portability, package tarballs should use the 'ustar' format "
         ++ "and only contain normal files, directories and file links. "
         ++ "Your tar program may be using non-standard extensions. For "
         ++ "example with GNU tar, use --format=ustar to get the portable "
         ++ "format."
 
-checkTarFilePath :: PackageIdentifier -> Tar.Entry -> Either String Tar.Entry 
+checkTarFilePath :: PackageIdentifier -> Tar.Entry -> Maybe String
 checkTarFilePath pkgid entry
   | not (all (/= "..") dirs)
-  = Left $ "Bad file name in package tarball: " ++ quote (Tar.entryPath entry)
+  = Just $ "Bad file name in package tarball: " ++ quote (Tar.entryPath entry)
         ++ "\nFor security reasons, files in package tarballs may not use"
         ++ " \"..\" components in their path." 
   | not (inPkgSubdir dirs)
-  = Left $ "Bad file name in package tarball: " ++ quote (Tar.entryPath entry)
+  = Just $ "Bad file name in package tarball: " ++ quote (Tar.entryPath entry)
         ++ "\nAll the file in the package tarball must be in the subdirectory "
         ++ quote pkgstr ++ "."
   | otherwise
-  = Right entry
+  = Nothing
   where
     dirs = splitDirectories (Tar.entryPath entry)
     pkgstr = display pkgid
