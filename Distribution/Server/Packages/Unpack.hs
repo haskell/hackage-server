@@ -100,11 +100,13 @@ basicChecks tarGzFile contents = do
       entries           = Tar.read (GZip.decompress contents)
   cabalEntries <- selectEntries selectEntry (checkEntries entries)
   cabalEntry   <- case cabalEntries of
-    [cabalEntry] -> return cabalEntry
+    -- NB: tar files *can* contain more than one entry for the same filename.
+    -- (This was observed in practice with the package CoreErlang-0.0.1).
+    -- In this case, after extracting the tar the *last* file in the archive
+    -- wins. Since selectEntries returns results in reverse order we use the head:
+    cabalEntry:_ -> return cabalEntry
     [] -> fail $ "The " ++ quote cabalFileName
               ++ " file is missing from the package tarball."
-    _  -> fail $ "The tarball contains duplicate entries with the name "
-              ++ quote cabalFileName ++ "."
 
   -- Parse the Cabal file
   let cabalFileContent = fromUTF8 (BS.unpack cabalEntry)
