@@ -18,6 +18,7 @@ import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
+import Distribution.Server.Util.Parse (unpackUTF8)
 
 import Distribution.Package
 import Distribution.Text (display, simpleParse)
@@ -80,7 +81,7 @@ finalizeReports reports = mempty
 importReport :: PackageId -> String -> ByteString -> Import (BuildReports, PartialLogs) ()
 importReport pkgid repIdStr contents = do
     reportId <- parseText "report id" repIdStr
-    case Report.parse (bytesToString contents) of
+    case Report.parse (unpackUTF8 contents) of
         Left err -> fail err
         Right report -> do
             (buildReps, partialLogs) <- get

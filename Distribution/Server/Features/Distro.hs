@@ -16,9 +16,8 @@ import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nul
 import Distribution.Server.Features.Distro.State
 import Distribution.Server.Features.Distro.Types
 import Distribution.Server.Features.Distro.Backup
-import Distribution.Simple.Utils (fromUTF8)
+import Distribution.Server.Util.Parse (unpackUTF8)
 
-import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.List (intercalate)
 import Distribution.Text (display, simpleParse)
 import Control.Monad
@@ -175,7 +174,7 @@ maintainerDescription dname = nullDescription
 lookCSVFile :: (CSVFile -> ServerPart Response) -> ServerPart Response
 lookCSVFile func = do
     Body fileContents <- consumeRequestBody
-    case parseCSV "PUT input" (fromUTF8 (BS.unpack (fileContents))) of
+    case parseCSV "PUT input" (unpackUTF8 fileContents) of
       Left err -> badRequest $ toResponse $ "Could not parse CSV File: " ++ show err
       Right csv -> func (CSVFile csv)
 

@@ -16,6 +16,7 @@ module Distribution.Server.Packages.Types where
 import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Framework.BlobStorage (BlobId)
 import Distribution.Server.Framework.Instances ()
+import Distribution.Server.Util.Parse (unpackUTF8)
 
 import Distribution.Package
          ( PackageIdentifier(..), Package(..) )
@@ -23,7 +24,6 @@ import Distribution.PackageDescription
          ( GenericPackageDescription(..))
 import Distribution.PackageDescription.Parse
          ( parsePackageDescription, ParseResult(..) )
-import Distribution.Simple.Utils (fromUTF8)
 
 import qualified Data.Serialize as Serialize
 import Data.Serialize (Serialize)
@@ -38,7 +38,7 @@ newtype CabalFileText = CabalFileText { cabalFileByteString :: ByteString }
   deriving (Eq, Serialize)
 
 cabalFileString :: CabalFileText -> String
-cabalFileString = fromUTF8 . BS.unpack . cabalFileByteString
+cabalFileString = unpackUTF8 . cabalFileByteString
 
 instance Show CabalFileText where
     show cft = "CabalFileText (Data.ByteString.Lazy.Char8.pack (Distribution.Simple.Utils.toUTF8 " ++ show (cabalFileString cft) ++ "))"

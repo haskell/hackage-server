@@ -19,12 +19,11 @@ import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nul
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Packages.Unpack as Upload
 import Distribution.Server.Framework.BackupDump
+import Distribution.Server.Util.Parse (unpackUTF8)
 
-import Distribution.Simple.Utils (fromUTF8)
 import Distribution.PackageDescription.Parse (parsePackageDescription)
 import Distribution.ParseUtils (ParseResult(..), locatedErrorMsg, showPWarning)
 
-import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Data.ByteString.Char8 as SBS
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (formatTime, parseTime)
@@ -137,7 +136,7 @@ initMirrorFeature env core users = do
         withPackageId dpath $ \pkgid -> do
           expectTextPlain
           Body nameContent <- consumeRequestBody
-          uid <- update $ RequireUserName (UserName (fromUTF8 (BS.unpack nameContent)))
+          uid <- update $ RequireUserName (UserName (unpackUTF8 nameContent))
           mb_err <- update $ ReplacePackageUploader pkgid uid
           maybe (return $ toResponse "Updated uploader OK") (badRequest . toResponse) mb_err
 
@@ -152,7 +151,7 @@ initMirrorFeature env core users = do
         withPackageId dpath $ \pkgid -> do
           expectTextPlain
           Body timeContent <- consumeRequestBody
-          case parseTime defaultTimeLocale "%c" (fromUTF8 (BS.unpack timeContent)) of
+          case parseTime defaultTimeLocale "%c" (unpackUTF8 timeContent) of
             Nothing -> badRequest $ toResponse "Could not parse upload time"
             Just t  -> do
               mb_err <- update $ ReplacePackageUploadTime pkgid t
@@ -167,7 +166,7 @@ initMirrorFeature env core users = do
           Body fileContent <- consumeRequestBody
           time <- liftIO getCurrentTime
           let uploadData = (time, uid)
-          case parsePackageDescription . fromUTF8 . BS.unpack $ fileContent of
+          case parsePackageDescription . unpackUTF8 $ fileContent of
               ParseFailed err -> badRequest (toResponse $ show (locatedErrorMsg err))
               ParseOk warnings pkg -> do
                   liftIO $ doMergePackage core $ PkgInfo {

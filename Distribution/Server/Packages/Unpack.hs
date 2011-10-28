@@ -24,10 +24,10 @@ import Distribution.ParseUtils
          ( ParseResult(..), locatedErrorMsg, showPWarning )
 import Distribution.Text
          ( display, simpleParse )
-import Distribution.Simple.Utils
-         ( fromUTF8 )
 import Distribution.ModuleName
          ( toFilePath )
+import Distribution.Server.Util.Parse
+         ( unpackUTF8 )
 
 import Data.List
          ( nub, (\\), partition, intercalate )
@@ -107,7 +107,7 @@ basicChecks tarGzFile contents = do
               ++ " file is missing from the package tarball."
 
   -- Parse the Cabal file
-  let cabalFileContent = fromUTF8 (BS.unpack cabalEntry)
+  let cabalFileContent = unpackUTF8 cabalEntry
   (pkgDesc, warnings) <- case parsePackageDescription cabalFileContent of
     ParseFailed err -> fail $ showError (locatedErrorMsg err)
     ParseOk warnings pkgDesc ->

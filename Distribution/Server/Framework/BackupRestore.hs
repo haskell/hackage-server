@@ -19,8 +19,6 @@ module Distribution.Server.Framework.BackupRestore (
 
     equalTarBall,
 
-    bytesToString,
-
     module Distribution.Server.Util.Merge
   ) where
 
@@ -34,9 +32,8 @@ import Data.Time (UTCTime)
 import qualified Data.Time as Time
 import System.Locale
 
-import Distribution.Simple.Utils (fromUTF8)
 import Distribution.Server.Util.Merge
-import qualified Data.ByteString.Lazy.Char8 as BS
+import Distribution.Server.Util.Parse (unpackUTF8)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Data.Foldable (sequenceA_, traverse_)
 import qualified Data.Map as Map
@@ -299,7 +296,7 @@ customParseCSV filename inp = case parseCSV filename inp of
 
 -- | Made customParseCSV into a nifty combinator.
 importCSV :: String -> ByteString -> (CSV -> Import s a) -> Import s a
-importCSV filename inp comb = case customParseCSV filename (bytesToString inp) of
+importCSV filename inp comb = case customParseCSV filename (unpackUTF8 inp) of
     Left  err -> fail err
     Right csv -> comb csv
 
@@ -323,6 +320,3 @@ parseText :: Text a => String -> String -> Import s a
 parseText label text = case simpleParse text of
     Nothing -> fail $ "Unable to parse " ++ label ++ ": " ++ show text
     Just a -> return a
-                            
-bytesToString :: ByteString -> String
-bytesToString = fromUTF8 . BS.unpack
