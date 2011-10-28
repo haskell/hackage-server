@@ -152,7 +152,6 @@ initMirrorFeature env core users = do
         withPackageId dpath $ \pkgid -> do
           expectTextPlain
           Body timeContent <- consumeRequestBody
-          liftIO $ print $ fromUTF8 (BS.unpack timeContent)
           case parseTime defaultTimeLocale "%c" (fromUTF8 (BS.unpack timeContent)) of
             Nothing -> badRequest $ toResponse "Could not parse upload time"
             Just t  -> do
