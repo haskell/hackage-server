@@ -40,7 +40,6 @@ import Control.Monad.Writer
 import Control.Monad.Identity
          ( Identity(..) )
 import qualified Codec.Compression.GZip as GZip
-import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.ByteString.Lazy.Char8
          ( ByteString )
 import System.FilePath
