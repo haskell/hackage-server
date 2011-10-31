@@ -123,7 +123,7 @@ readTarIndex file = do
 
 type Block = Int
 
-extractInfo :: Tar.Entries -> Maybe [(FilePath, Block)]
+extractInfo :: Tar.Entries e -> Maybe [(FilePath, Block)]
 extractInfo = go 0 []
   where
     go _ es' (Tar.Done)      = Just es'

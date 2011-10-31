@@ -50,7 +50,7 @@ read mkPackage indexFileContent = collect [] entries
     collect es' (Tar.Next e es) = case entry e of
                        Just e' -> collect (e':es') es
                        Nothing -> collect     es'  es
-    collect _   (Tar.Fail err)  = Left err
+    collect _   (Tar.Fail err)  = Left (show err)
 
     entry e
       | [pkgname,versionStr,_] <- splitDirectories (normalise (Tar.entryPath e))

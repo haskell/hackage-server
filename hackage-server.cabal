@@ -150,7 +150,7 @@ executable hackage-server
     network    >= 2.1,
     unix       < 2.6,
     zlib       >= 0.4 && < 0.6,
-    tar        == 0.3.*,
+    tar        == 0.4.*,
     binary     == 0.5.*,
     cereal     == 0.3.*,
     safecopy   == 0.5.*,

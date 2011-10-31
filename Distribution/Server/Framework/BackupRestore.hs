@@ -126,9 +126,9 @@ completeBackups res = case res of
 -- internal import utils
 type FeatureMap = Map String RestoreBackup
 
-fromEntries :: Tar.Entries -> Import FeatureMap ()
+fromEntries :: Tar.Entries Tar.FormatError -> Import FeatureMap ()
 fromEntries Tar.Done = return ()
-fromEntries (Tar.Fail err) = fail err
+fromEntries (Tar.Fail err) = fail (show err)
 fromEntries (Tar.Next x xs) = fromEntry x >> fromEntries xs
 
 fromEntry :: Tar.Entry -> Import FeatureMap ()
@@ -183,7 +183,7 @@ equalTarBall tar1 tar2 = runFailable_ $ do
 
     entriesToList err (Tar.Next entry entries) = liftM (entry :) $ entriesToList err entries
     entriesToList _   Tar.Done                 = return []
-    entriesToList err (Tar.Fail s)             = fail ("Could not read '" ++ err ++ "' tarball: " ++ s)
+    entriesToList err (Tar.Fail s)             = fail ("Could not read '" ++ err ++ "' tarball: " ++ show s)
 
 data Failable a = Failed [String] | NotFailed a
 

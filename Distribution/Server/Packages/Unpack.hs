@@ -69,7 +69,7 @@ unpackPackageRaw tarGzFile contents =
     return (pkgDesc, cabalEntry)
 
 basicChecks :: FilePath -> ByteString
-            -> UploadMonad (Tar.Entries, GenericPackageDescription, [String], ByteString)
+            -> UploadMonad (Tar.Entries Tar.FormatError, GenericPackageDescription, [String], ByteString)
 basicChecks tarGzFile contents = do
   let (pkgidStr, ext) = (base, tar ++ gz)
         where (tarFile, gz) = splitExtension (portableTakeFileName tarGzFile)
@@ -133,7 +133,7 @@ portableTakeFileName :: FilePath -> String
 portableTakeFileName = System.FilePath.Windows.takeFileName
 
 -- Miscellaneous checks on package description
-extraChecks :: Tar.Entries -> GenericPackageDescription -> UploadMonad ()
+extraChecks :: Tar.Entries Tar.FormatError -> GenericPackageDescription -> UploadMonad ()
 extraChecks entries genPkgDesc = do
   let pkgDesc = flattenPackageDescription genPkgDesc
   -- various checks
@@ -160,7 +160,7 @@ extraChecks entries genPkgDesc = do
   -- Check sanity of the tarball. Some of the tarballs we import from
   -- old Hackage fail this check because e.g. they contain files
   -- using the ././@LongLink hack for long file names
-  let checkEntries f = Tar.foldEntries (\x mr -> case f x of Nothing -> mr; Just s -> fail s) (return ()) fail entries
+  let checkEntries f = Tar.foldEntries (\x mr -> case f x of Nothing -> mr; Just s -> fail (show s)) (return ()) (fail . show) entries
   checkEntries (checkTarFilePath (package (packageDescription genPkgDesc)))
   checkEntries checkTarFileType
 
@@ -194,11 +194,11 @@ allocatedTopLevelNodes = [
         "Network", "Numeric", "Prelude", "Sound", "System", "Test", "Text"]
 
 selectEntries :: (Tar.Entry -> Maybe a)
-              -> Tar.Entries
+              -> Tar.Entries Tar.FormatError
               -> UploadMonad [a]
 selectEntries select = extract []
   where
-    extract _        (Tar.Fail err)           = fail err
+    extract _        (Tar.Fail err)           = fail (show err)
     extract selected  Tar.Done                = return selected
     extract selected (Tar.Next entry entries) =
       case select entry of
