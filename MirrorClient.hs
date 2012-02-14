@@ -58,7 +58,8 @@ data MirrorOpts = MirrorOpts {
                     dstURI       :: URI,
                     stateDir     :: FilePath,
                     selectedPkgs :: [PackageId],
-                    continuous   :: Maybe Int -- if so, interval in minutes
+                    continuous   :: Maybe Int, -- if so, interval in minutes
+                    keepGoing    :: Bool
                   }
 
 data MirrorEnv = MirrorEnv {
@@ -182,7 +183,7 @@ cron verbosity interval action x = do
 mirrorOneShot :: Verbosity -> MirrorOpts -> MirrorEnv -> MirrorState -> IO ()
 mirrorOneShot verbosity opts env st = do
 
-    (merr, _) <- mirrorOnce verbosity False opts env st
+    (merr, _) <- mirrorOnce verbosity opts env st
 
     case merr of
       Nothing  -> return ()
@@ -193,7 +194,7 @@ mirrorIteration :: Verbosity -> MirrorOpts -> MirrorEnv
                 -> MirrorState -> IO MirrorState
 mirrorIteration verbosity opts env st = do
 
-    (merr, st') <- mirrorOnce verbosity True opts env st
+    (merr, st') <- mirrorOnce verbosity opts { keepGoing = True } env st
 
     when (st' /= st) $
       savePackagesState env st'
@@ -214,13 +215,13 @@ savePackagesState (MirrorEnv _ _ missingPkgsFile unmirrorablePkgsFile)
   writePkgProblemFile unmirrorablePkgsFile unmirrorablePkgs
 
 
-mirrorOnce :: Verbosity -> Bool -> MirrorOpts -> MirrorEnv
+mirrorOnce :: Verbosity -> MirrorOpts -> MirrorEnv
            -> MirrorState -> IO (Maybe MirrorError, MirrorState)
-mirrorOnce verbosity keepGoing opts
+mirrorOnce verbosity opts
            (MirrorEnv srcCacheDir dstCacheDir missingPkgsFile unmirrorablePkgsFile)
            st@(MirrorState missingPkgs unmirrorablePkgs) =
 
-    mirrorSession verbosity keepGoing st $ do
+    mirrorSession verbosity (keepGoing opts) st $ do
 
       srcIndex <- downloadIndex (srcURI opts) srcCacheDir
       dstIndex <- downloadIndex (dstURI opts) dstCacheDir
@@ -772,13 +773,14 @@ data MirrorFlags = MirrorFlags {
     flagCacheDir  :: Maybe FilePath,
     flagContinuous:: Bool,
     flagInterval  :: Maybe String,
+    flagKeepGoing :: Bool,
     flagVerbosity :: Verbosity,
     flagHelp      :: Bool
 }
 
 defaultMirrorFlags :: MirrorFlags
 defaultMirrorFlags = MirrorFlags
-                       Nothing False Nothing normal False
+                       Nothing False Nothing False normal False
 
 mirrorFlagDescrs :: [OptDescr (MirrorFlags -> MirrorFlags)]
 mirrorFlagDescrs =
@@ -801,6 +803,10 @@ mirrorFlagDescrs =
   , Option [] ["interval"]
       (ReqArg (\int opts -> opts { flagInterval = Just int }) "MIN")
       "Set the mirroring interval in minutes (default 30)"
+
+  , Option [] ["keep-going"]
+      (NoArg (\opts -> opts { flagKeepGoing = True }))
+      "Don't fail on mirroring errors, keep going."
   ]
 
 validateOpts :: [String] -> IO (Verbosity, MirrorOpts)
@@ -826,7 +832,8 @@ validateOpts args = do
                  selectedPkgs = pkgs,
                  continuous   = if flagContinuous flags
                                   then Just interval
-                                  else Nothing
+                                  else Nothing,
+                 keepGoing    = flagKeepGoing flags
                }
           where
             mpkgs     = validatePackageIds pkgstrs
