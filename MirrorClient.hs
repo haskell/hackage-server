@@ -79,6 +79,8 @@ data MirrorState = MirrorState {
 
 main :: IO ()
 main = toplevelHandler $ do
+  hSetBuffering stdout LineBuffering
+
   args <- getArgs
   (verbosity, opts) <- validateOpts args
 
