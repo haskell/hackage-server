@@ -211,7 +211,7 @@ runAction opts = do
     let useTempServer = fromFlag (flagTemp opts)
     withServer config useTempServer $ \server ->
       withCheckpointHandler server $ do
-        info $ "Ready! Point your browser at http://localhost"
+        info $ "Ready! Point your browser at http://" ++ hostname
             ++ if port == 80 then "/" else ":" ++ show port ++ "/"
 
         Server.run server
