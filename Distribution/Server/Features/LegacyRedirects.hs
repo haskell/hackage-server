@@ -72,6 +72,15 @@ serveLegacyGets = msum
           movedPermanently ("/package/" ++ display (packageId :: PackageId)) $
           toResponse ""
       ]
+  , dir "package" $ path $ \fileName -> methodSP GET $
+      case Posix.splitExtension fileName of
+        (fileName', ".gz") -> case Posix.splitExtension fileName' of
+          (packageStr, ".tar") -> case simpleParse packageStr of
+            Just pkgid ->
+              movedPermanently (packageTarball pkgid) $ toResponse ""
+            _ -> mzero
+          _ -> mzero
+        _ -> mzero
   ]
   where
     -- HTTP 301 is suitable for permanently redirecting pages
@@ -127,11 +136,12 @@ serveArchiveTree = msum
       ]
   ]
   where
-    packageTarball :: PackageId -> String
-    packageTarball pkgid = "/package/" ++ display pkgid ++ "/" ++ display pkgid ++ ".tar.gz"
-
     docPath pkgid file = "/package/" ++ display pkgid ++ "/" ++ "doc/" ++ file
 
     cabalPath pkgid = "/package/" ++ display pkgid ++ "/"
                    ++ display (packageName pkgid) ++ ".cabal"
+
+packageTarball :: PackageId -> String
+packageTarball pkgid = "/package/" ++ display pkgid
+                    ++ "/" ++ display pkgid ++ ".tar.gz"
 
