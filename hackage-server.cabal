@@ -164,7 +164,7 @@ executable hackage-server
     csv        == 0.1.*,
     stm        == 2.2.*,
     acid-state == 0.5.*,
-    happstack-server == 6.2.*,
+    happstack-server == 7.0.*,
     happstack-util   == 6.0.*
 
   if ! flag(minimal)

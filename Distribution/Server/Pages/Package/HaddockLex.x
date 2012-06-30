@@ -5,6 +5,7 @@
 --
 
 {
+{-# LANGUAGE BangPatterns #-}
 {-# OPTIONS_GHC -w #-}
 module Distribution.Server.Pages.Package.HaddockLex ( 
 	Token(..), 

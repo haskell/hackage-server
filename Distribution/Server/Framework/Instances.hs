@@ -92,15 +92,6 @@ instance NFData Response where
 instance NFData PackageName where
     rnf (PackageName pkg) = rnf pkg
 
-instance NFData Version where
-    rnf (Version cont tags) = rnf cont `seq` rnf tags
-
 instance NFData PackageIdentifier where
     rnf (PackageIdentifier name version) = rnf name `seq` rnf version
-
-instance NFData Day where
-    rnf (ModifiedJulianDay day) = rnf day
-
-instance NFData UTCTime where
-    rnf time = rnf (utctDay time) `seq` rnf (toRational $ utctDayTime time)
 
