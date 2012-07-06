@@ -4,7 +4,8 @@ module Distribution.Server.Acid where
 import Control.Monad.Trans (MonadIO(liftIO))
 import Data.IORef          (IORef, newIORef, readIORef, writeIORef)
 import Data.Acid           hiding (update, query)
-import Data.Acid.Core      (MethodState)
+import Data.Acid.Advanced  (MethodState, query', update')
+import Data.Acid.Local     (createCheckpointAndClose)
 import System.FilePath     ((</>))
 import System.IO.Unsafe    (unsafePerformIO)
 
@@ -136,21 +137,21 @@ startAcid' :: FilePath
            -> Users
            -> IO Acid
 startAcid' stateDir buildReports candidatePackages distros documentation downloadCounts hackageAdmins hackageTrustees mirrorClients packageMaintainers packagesState packageTags platformPackages preferredVersions reverseIndex users =
-    do buildReports'       <- openAcidStateFrom (stateDir </> "BuildReports")       buildReports
-       candidatePackages'  <- openAcidStateFrom (stateDir </> "CandidatePackages")  candidatePackages
-       distros'            <- openAcidStateFrom (stateDir </> "Distros")            distros
-       documentation'      <- openAcidStateFrom (stateDir </> "Documentation")      documentation
-       downloadCounts'     <- openAcidStateFrom (stateDir </> "DownloadCounts")     downloadCounts
-       hackageAdmins'      <- openAcidStateFrom (stateDir </> "HackageAdmins")      hackageAdmins
-       hackageTrustees'    <- openAcidStateFrom (stateDir </> "HackageTrustees")    hackageTrustees
-       mirrorClients'      <- openAcidStateFrom (stateDir </> "MirrorClients")      mirrorClients
-       packageMaintainers' <- openAcidStateFrom (stateDir </> "PackageMaintainers") packageMaintainers
-       packagesState'      <- openAcidStateFrom (stateDir </> "PackagesState")      packagesState
-       packageTags'        <- openAcidStateFrom (stateDir </> "PackageTags")        packageTags
-       platformPackages'   <- openAcidStateFrom (stateDir </> "PlatformPackages")   platformPackages
-       preferredVersions'  <- openAcidStateFrom (stateDir </> "PreferredVersions")  preferredVersions
-       reverseIndex'       <- openAcidStateFrom (stateDir </> "ReverseIndex")       reverseIndex
-       users'              <- openAcidStateFrom (stateDir </> "Users")              users
+    do buildReports'       <- openLocalStateFrom (stateDir </> "BuildReports")       buildReports
+       candidatePackages'  <- openLocalStateFrom (stateDir </> "CandidatePackages")  candidatePackages
+       distros'            <- openLocalStateFrom (stateDir </> "Distros")            distros
+       documentation'      <- openLocalStateFrom (stateDir </> "Documentation")      documentation
+       downloadCounts'     <- openLocalStateFrom (stateDir </> "DownloadCounts")     downloadCounts
+       hackageAdmins'      <- openLocalStateFrom (stateDir </> "HackageAdmins")      hackageAdmins
+       hackageTrustees'    <- openLocalStateFrom (stateDir </> "HackageTrustees")    hackageTrustees
+       mirrorClients'      <- openLocalStateFrom (stateDir </> "MirrorClients")      mirrorClients
+       packageMaintainers' <- openLocalStateFrom (stateDir </> "PackageMaintainers") packageMaintainers
+       packagesState'      <- openLocalStateFrom (stateDir </> "PackagesState")      packagesState
+       packageTags'        <- openLocalStateFrom (stateDir </> "PackageTags")        packageTags
+       platformPackages'   <- openLocalStateFrom (stateDir </> "PlatformPackages")   platformPackages
+       preferredVersions'  <- openLocalStateFrom (stateDir </> "PreferredVersions")  preferredVersions
+       reverseIndex'       <- openLocalStateFrom (stateDir </> "ReverseIndex")       reverseIndex
+       users'              <- openLocalStateFrom (stateDir </> "Users")              users
        let acid = Acid { acidBuildReports       = buildReports' 
                        , acidCandidatePackages  = candidatePackages'
                        , acidDistros            = distros'

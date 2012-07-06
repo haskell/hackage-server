@@ -152,7 +152,7 @@ executable hackage-server
     tar        == 0.4.*,
     binary     == 0.5.*,
     cereal     == 0.3.*,
-    safecopy   == 0.5.*,
+    safecopy   == 0.6.*,
     pureMD5    >= 0.2,
     xhtml      >= 3000.1,
     json       >= 0.4 && < 0.6,
@@ -161,7 +161,7 @@ executable hackage-server
     Cabal      >= 1.14 && < 1.15,
     csv        == 0.1.*,
     stm        >= 2.2 && < 2.4,
-    acid-state == 0.5.*,
+    acid-state == 0.6.*,
     happstack-server == 7.0.*
 
   if ! flag(minimal)

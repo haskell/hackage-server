@@ -18,7 +18,7 @@ import Distribution.Server.Users.Types
 import Distribution.Server.Users.State (ReplaceUserDb(..))
 
 import Data.Acid (UpdateEvent)
-import Data.Acid.Core (MethodResult, MethodState)
+import Data.Acid.Advanced (MethodResult, MethodState)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Text (display)
