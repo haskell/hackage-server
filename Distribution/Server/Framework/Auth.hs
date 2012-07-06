@@ -43,7 +43,6 @@ import Distribution.Server.Util.ContentType
 import Distribution.Text (display)
 
 import Happstack.Server
-import qualified Happstack.Crypto.Base64 as Base64
 
 import Control.Monad.Trans (MonadIO, liftIO)
 import qualified Data.ByteString.Char8 as BS
@@ -54,6 +53,7 @@ import qualified Text.XHtml.Strict as XHtml
 
 import Control.Monad (guard, join, liftM2, mzero)
 import Control.Monad.Error.Class (Error, noMsg)
+import qualified Data.ByteString.Base64 as Base64
 import Data.Char (intToDigit, isAsciiLower)
 import System.Random (randomRs, newStdGen)
 import Data.Map (Map)
@@ -170,7 +170,7 @@ checkBasicAuth users realm ahdr = do
 
 getBasicAuthInfo :: RealmName -> BS.ByteString -> Maybe BasicAuthInfo
 getBasicAuthInfo realm authHeader
-  | (name, ':':pass) <- splitHeader authHeader
+  | Just (name, pass) <- splitHeader authHeader
   = Just BasicAuthInfo {
            basicRealm    = realm,
            basicUsername = UserName name,
@@ -178,7 +178,12 @@ getBasicAuthInfo realm authHeader
          }
   | otherwise = Nothing
   where
-    splitHeader = break (':'==) . Base64.decode . BS.unpack
+    splitHeader h = case Base64.decode h of
+                    Left _ -> Nothing
+                    Right xs ->
+                        case break (':' ==) $ BS.unpack xs of
+                        (name, ':' : pass) -> Just (name, pass)
+                        _ -> Nothing
 
 setBasicAuthChallenge :: RealmName -> ServerPartE ()
 setBasicAuthChallenge (RealmName realmName) = do

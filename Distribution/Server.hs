@@ -25,8 +25,6 @@ module Distribution.Server (
 
 import Happstack.Server hiding (port, host)
 import qualified Happstack.Server
--- for resetting the temporary 'loading' server
-import qualified Happstack.Util.Concurrent as HappsLoad
 
 import Distribution.Server.Acid (Acid, checkpointAcid, startAcid, stopAcid, update)
 import qualified Distribution.Server.Framework.BackupRestore as Import
@@ -360,7 +358,6 @@ html503 =
 tearDownTemp :: TempServer -> IO ()
 tearDownTemp (TempServer tid) = do
     killThread tid
-    HappsLoad.reset
-    -- apparently reset doesn't give the server enough time to release the bind
+    -- give the server enough time to release the bind
     threadDelay $ 1000000
 
