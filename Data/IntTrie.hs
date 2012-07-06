@@ -33,7 +33,7 @@ import Distribution.Server.Framework.Instances()
 
 -- | A compact mapping from sequences of small ints to small ints.
 --
-newtype (Enum k, Enum v) => IntTrie k v = IntTrie (A.UArray Word16 Word16)
+newtype IntTrie k v = IntTrie (A.UArray Word16 Word16)
     deriving (Show, Typeable)
 
 $(deriveSafeCopy 0 'base ''IntTrie)

@@ -24,10 +24,10 @@ import Distribution.Server.Framework.Instances()
 
 -- | An effecient mapping from strings to a dense set of integers.
 --
-data Enum id => StringTable id
-              = StringTable
-                  !BS.ByteString          -- all the strings concatenated
-                  !(A.UArray Int Word32)  -- offset table
+data StringTable id
+         = StringTable
+               !BS.ByteString          -- all the strings concatenated
+               !(A.UArray Int Word32)  -- offset table
   deriving (Show, Typeable)
 
 $(deriveSafeCopy 0 'base ''StringTable)
