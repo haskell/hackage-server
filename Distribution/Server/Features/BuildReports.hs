@@ -1,3 +1,5 @@
+-- TODO: Get rid of this pragma:
+{-# OPTIONS_GHC -fno-warn-deprecations #-}
 module Distribution.Server.Features.BuildReports (
     ReportsFeature,
     reportsResource,
@@ -24,8 +26,8 @@ import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import Distribution.Text
 import Distribution.Package
 
+import Control.Monad
 import Control.Monad.Trans
-import Control.Monad (mzero)
 import Data.ByteString.Lazy.Char8 (unpack)
 
 -- TODO: 
@@ -145,7 +147,7 @@ putBuildLog r store dpath =
         let pkgid = pkgInfoId pkg
         Body blogbody <- consumeRequestBody
         buildLog <- liftIO $ BlobStorage.add store blogbody
-        update $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
+        void $ update $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
         -- go to report page (linking the log)
         seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
 
@@ -159,7 +161,7 @@ deleteBuildLog r dpath =
     -- again, restrict this to whom?
     withHackageAuth users Nothing $ \_ _ -> do
         let pkgid = pkgInfoId pkg
-        update $ SetBuildLog pkgid reportId Nothing
+        void $ update $ SetBuildLog pkgid reportId Nothing
         -- go to report page (which should no longer link the log)
         seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
 

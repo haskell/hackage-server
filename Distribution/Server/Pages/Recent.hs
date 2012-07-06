@@ -30,8 +30,6 @@ import Network.URI
          ( URI(..), URIAuth(..), uriToString )
 import Data.Time.Clock
          ( UTCTime )
-import Data.Time.Clock.POSIX
-         ( utcTimeToPOSIXSeconds )
 import Data.Time.Format
          ( formatTime )
 import System.Locale

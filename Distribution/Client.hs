@@ -26,6 +26,7 @@ import qualified Codec.Compression.GZip  as GZip
 import qualified Codec.Archive.Tar       as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
 
+import Control.Monad.Trans
 import System.IO
 import System.IO.Error
 import System.FilePath
@@ -48,13 +49,14 @@ validateHackageURI str = case parseURI str of
 
 validatePackageIds :: [String] -> Either String [PackageId]
 validatePackageIds pkgstrs =
-    case errs of
-      (err:_) -> Left $ "'" ++ err ++ "' is not a valid package name or id"
-      _       -> Right pkgs
+    case theErrors of
+      theError : _ ->
+          Left $ "'" ++ theError ++ "' is not a valid package name or id"
+      _ -> Right pkgs
   where
-    pkgstrs' = [ (pkgstr, simpleParse pkgstr) | pkgstr <- pkgstrs ]
-    pkgs     = [ pkgid  | (_, Just pkgid)   <- pkgstrs' ]
-    errs     = [ pkgstr | (pkgstr, Nothing) <- pkgstrs' ]
+    pkgstrs'  = [ (pkgstr, simpleParse pkgstr) | pkgstr <- pkgstrs ]
+    pkgs      = [ pkgid  | (_, Just pkgid)   <- pkgstrs' ]
+    theErrors = [ pkgstr | (pkgstr, Nothing) <- pkgstrs' ]
 
 ----------------------------------------------------
 -- Fetching info from source and destination servers
@@ -84,21 +86,23 @@ downloadOldIndex uri cacheDir = do
     downloadFile indexURI indexFile
     downloadFile logURI logFile
 
-    ioAction $ do
+    liftIO $ do
 
       pkgids <- withFile indexFile ReadMode $ \hnd -> do
         content <- BS.hGetContents hnd
         case PackageIndex.read (\pkgid _ -> pkgid) (GZip.decompress content) of
-          Left  err  -> die $ "Error parsing index at " ++ show uri ++ ": " ++ err
-          Right pkgs -> return pkgs
+          Right pkgs     -> return pkgs
+          Left  theError ->
+              die $ "Error parsing index at " ++ show uri ++ ": " ++ theError
 
-      log <- withFile logFile ReadMode $ \hnd -> do
+      theLog <- withFile logFile ReadMode $ \hnd -> do
         content <- hGetContents hnd
         case UploadLog.read content of
-          Right log -> return log
-          Left  err -> die $ "Error parsing log at " ++ show uri ++ ": " ++ err
+          Right theLog   -> return theLog
+          Left  theError ->
+              die $ "Error parsing log at " ++ show uri ++ ": " ++ theError
 
-      return (mergeLogInfo pkgids log)
+      return (mergeLogInfo pkgids theLog)
 
   where
     indexURI  = uri <//> "packages" </> "archive" </> "00-index.tar.gz"
@@ -107,7 +111,7 @@ downloadOldIndex uri cacheDir = do
     logURI    = uri <//> "packages" </> "archive" </> "log"
     logFile   = cacheDir </> "log"
 
-    mergeLogInfo pkgids log =
+    mergeLogInfo pkgids theLog =
         catMaybes
       . map selectDetails
       $ mergeBy (\pkgid entry -> compare pkgid (entryPkgId entry))
@@ -115,7 +119,7 @@ downloadOldIndex uri cacheDir = do
                 ( map (maximumBy (comparing entryTime))
                 . groupBy (equating  entryPkgId)
                 . sortBy  (comparing entryPkgId)
-                $ log )
+                $ theLog )
 
     selectDetails (OnlyInRight _)     = Nothing
     selectDetails (OnlyInLeft  pkgid) =
@@ -130,10 +134,11 @@ downloadOldIndex uri cacheDir = do
 downloadNewIndex :: URI -> FilePath -> HttpSession [PkgIndexInfo]
 downloadNewIndex uri cacheDir = do
     downloadFile indexURI indexFile
-    ioAction $ withFile indexFile ReadMode $ \hnd -> do
+    liftIO $ withFile indexFile ReadMode $ \hnd -> do
       content <- BS.hGetContents hnd
       case PackageIndex.read selectDetails (GZip.decompress content) of
-        Left err   -> error $ "Error parsing index at " ++ show uri ++ ": " ++ err
+        Left theError ->
+            error $ "Error parsing index at " ++ show uri ++ ": " ++ theError
         Right pkgs -> return pkgs
 
   where
@@ -205,7 +210,7 @@ downloadFile :: URI -> FilePath -> HttpSession ()
 downloadFile uri file = do
   out $ "downloading " ++ show uri ++ " to " ++ file
   let etagFile = file <.> "etag"
-  metag <- ioAction $ catchJustDoesNotExistError
+  metag <- liftIO $ catchJustDoesNotExistError
                         (Just <$> readFile etagFile)
                         (\_ -> return Nothing)
   case metag of
@@ -214,13 +219,13 @@ downloadFile uri file = do
       (_, rsp) <- request (Request uri GET headers BS.empty)
       case rspCode rsp of
         (3,0,4) -> out $ file ++ " unchanged with ETag " ++ etag
-        (2,0,0) -> ioAction $ writeDowloadedFileAndEtag rsp
+        (2,0,0) -> liftIO $ writeDowloadedFileAndEtag rsp
         _       -> err (showFailure uri rsp)
 
     Nothing -> do
       (_, rsp) <- request (Request uri GET [] BS.empty)
       case rspCode rsp of
-        (2,0,0) -> ioAction $ writeDowloadedFileAndEtag rsp
+        (2,0,0) -> liftIO $ writeDowloadedFileAndEtag rsp
         _       -> err (showFailure uri rsp)
 
   where
@@ -264,7 +269,7 @@ downloadFile' uri file = do
     Nothing      -> do out $ "404 " ++ show uri
                        return False
 
-    Just content -> do ioAction $ BS.writeFile file content
+    Just content -> do liftIO $ BS.writeFile file content
                        return True
 
 requestGET :: URI -> HttpSession ByteString
@@ -289,7 +294,7 @@ requestGET' uri = do
 
 requestPUTFile :: URI -> String -> FilePath -> HttpSession ()
 requestPUTFile uri mime_type file = do
-    content <- ioAction $ BS.readFile file
+    content <- liftIO $ BS.readFile file
     requestPUT uri mime_type content
 
 requestPOST, requestPUT :: URI -> String -> ByteString -> HttpSession ()
@@ -308,7 +313,7 @@ requestPOSTPUT meth uri mimetype body = do
 checkStatus :: URI -> Response ByteString -> HttpSession ()
 checkStatus uri rsp = case rspCode rsp of
   (2,0,0) -> return ()
-  (4,0,0) -> ioAction (warn normal (showFailure uri rsp)) >> return ()
+  (4,0,0) -> liftIO (warn normal (showFailure uri rsp)) >> return ()
   _code   -> err (showFailure uri rsp)
 
 showFailure :: URI -> Response ByteString -> String

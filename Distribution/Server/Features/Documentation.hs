@@ -28,7 +28,7 @@ import Control.Monad.Trans
 import qualified Data.Map as Map
 import qualified Codec.Compression.GZip as GZip
 import Data.ByteString.Lazy.Char8 (ByteString)
-import Control.Monad (liftM)
+import Control.Monad
 import Control.Monad.State (modify)
 
 -- TODO:
@@ -105,7 +105,7 @@ uploadDocumentation store dpath = runServerPartE $
         Body fileContents <- consumeRequestBody
         blob <- liftIO $ BlobStorage.add store (GZip.decompress fileContents)
         tarIndex <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blob)
-        update $ InsertDocumentation pkgid blob tarIndex
+        void $ update $ InsertDocumentation pkgid blob tarIndex
         seeOther ("/package/" ++ display pkgid) (toResponse ())
 
 -- curl -u mgruen:admin -X PUT --data-binary @gtk.tar.gz http://localhost:8080/package/gtk-0.11.0

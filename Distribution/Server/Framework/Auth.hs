@@ -51,7 +51,7 @@ import Text.XHtml.Table (simpleTable)
 import Text.XHtml.Strict
 import qualified Text.XHtml.Strict as XHtml
 
-import Control.Monad (guard, join, liftM2, mzero)
+import Control.Monad
 import Control.Monad.Error.Class (Error, noMsg)
 import qualified Data.ByteString.Base64 as Base64
 import Data.Char (intToDigit, isAsciiLower)
@@ -70,10 +70,10 @@ import Data.List  (intercalate)
 {-# DEPRECATED withHackageAuth "use guardAuthorised instead" #-}
 withHackageAuth :: Users.Users -> Maybe Group.UserList
                 -> (UserId -> UserInfo -> ServerPartE a) -> ServerPartE a
-withHackageAuth users mgroup action = do
+withHackageAuth users mgroup theAction = do
     (uid, uinfo) <- guardAuthenticated hackageRealm users
     maybe (return ()) (\group -> guardPriviledged group uid) mgroup
-    action uid uinfo
+    theAction uid uinfo
 
 
 ------------------------------------------------------------------------
@@ -170,10 +170,10 @@ checkBasicAuth users realm ahdr = do
 
 getBasicAuthInfo :: RealmName -> BS.ByteString -> Maybe BasicAuthInfo
 getBasicAuthInfo realm authHeader
-  | Just (name, pass) <- splitHeader authHeader
+  | Just (username, pass) <- splitHeader authHeader
   = Just BasicAuthInfo {
            basicRealm    = realm,
-           basicUsername = UserName name,
+           basicUsername = UserName username,
            basicPasswd   = PasswdPlain pass
          }
   | otherwise = Nothing
@@ -182,7 +182,7 @@ getBasicAuthInfo realm authHeader
                     Left _ -> Nothing
                     Right xs ->
                         case break (':' ==) $ BS.unpack xs of
-                        (name, ':' : pass) -> Just (name, pass)
+                        (username, ':' : pass) -> Just (username, pass)
                         _ -> Nothing
 
 setBasicAuthChallenge :: RealmName -> ServerPartE ()
@@ -261,10 +261,10 @@ getDigestAuthInfo authHeader req = do
                        (Parse.skipSpaces >> Parse.char ',' >> Parse.skipSpaces)
 
         nameValuePair = do
-          name <- Parse.munch1 isAsciiLower
-          Parse.char '='
-          value <- quotedString
-          return (name, value)
+          theName <- Parse.munch1 isAsciiLower
+          void $ Parse.char '='
+          theValue <- quotedString
+          return (theName, theValue)
 
         quotedString :: Parse.ReadP String
         quotedString =
@@ -284,13 +284,13 @@ setDigestAuthChallenge (RealmName realmName) = do
     headerValue nonce =
       "Digest " ++
       intercalate ", "
-        [ "realm="     ++ quote realmName
-        , "qop="       ++ quote "auth"
-        , "nonce="     ++ quote nonce
-        , "opaque="    ++ quote ""
+        [ "realm="     ++ inQuotes realmName
+        , "qop="       ++ inQuotes "auth"
+        , "nonce="     ++ inQuotes nonce
+        , "opaque="    ++ inQuotes ""
         ]
     generateNonce = fmap (take 32 . map intToDigit . randomRs (0, 15)) newStdGen
-    quote s = '"' : s ++ ['"']
+    inQuotes s = '"' : s ++ ['"']
 
 
 ------------------------------------------------------------------------
@@ -343,13 +343,13 @@ instance Error AuthError where
     noMsg = NoAuthError
 
 showAuthError :: Bool -> Host -> AuthError -> Response
-showAuthError want_text (hostname, port) err = case err of
+showAuthError want_text (hostname, thePort) err = case err of
     NoAuthError           -> toResponse "No authorization provided."
     UnrecognizedAuthError -> toResponse "Authorization scheme not recognized."
     NoSuchUserError       -> toResponse "Username or password incorrect."
     PasswordMismatchError -> toResponse "Username or password incorrect."
     OldAuthError uname 
-      | want_text -> toResponse $ "Hackage has been upgraded to use more secure passwords. You need login to Hackage and reenter your password at http://" ++ hostname ++ ":" ++ show port ++ rel_url
+      | want_text -> toResponse $ "Hackage has been upgraded to use more secure passwords. You need login to Hackage and reenter your password at http://" ++ hostname ++ ":" ++ show thePort ++ rel_url
       | otherwise -> toResponse $ Resource.XHtml $ hackagePage "Change password"
           [ toHtml "You haven't logged in since Hackage was upgraded. Please reenter your password below to upgrade your account."
           , form ! [theclass "box", XHtml.method "POST", action rel_url] <<

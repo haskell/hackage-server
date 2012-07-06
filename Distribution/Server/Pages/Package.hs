@@ -19,7 +19,7 @@ import Distribution.Server.Users.Types (userStatus, userName, isActive)
 import Distribution.Package
 import Distribution.PackageDescription as P
 import Distribution.Simple.Utils ( cabalVersion )
-import Distribution.Version (Version (..), VersionRange (..))
+import Distribution.Version
 import Distribution.Text        (display)
 import Text.XHtml.Strict hiding (p, name, title, content)
 
@@ -148,9 +148,9 @@ showDependencies :: [Dependency] -> Html
 showDependencies deps = commaList (map showDependency deps)
 
 showDependency ::  Dependency -> Html
-showDependency (Dependency (PackageName pname) vs) = showPkg +++ showVersion vs
-  where showVersion AnyVersion = noHtml
-        showVersion vs' = toHtml (" (" ++ display vs' ++ ")")
+showDependency (Dependency (PackageName pname) vs) = showPkg +++ vsHtml
+  where vsHtml = if vs == anyVersion then noHtml
+                                     else toHtml (" (" ++ display vs ++ ")")
         -- mb_vers links to latest version in range. This is a bit computationally
         -- expensive, not cache-friendly, and perhaps unexpected in some cases
         {-mb_vers = maybeLast $ filter (`withinRange` vs) $ map packageVersion $
@@ -163,13 +163,13 @@ renderVersion :: PackageId -> [(Version, VersionStatus)] -> Maybe String -> (Str
 renderVersion (PackageIdentifier pname pversion) allVersions info =
     (if null earlierVersions && null laterVersions then "Version" else "Versions", versionList +++ infoHtml)
   where (earlierVersions, laterVersionsInc) = span ((<pversion) . fst) allVersions
-        (thisVersion, laterVersions) = case laterVersionsInc of
+        (mThisVersion, laterVersions) = case laterVersionsInc of
             (v:later) | fst v == pversion -> (Just v, later)
             later -> (Nothing, later)
         versionList = commaList $ map versionedLink earlierVersions
                                ++ (case pversion of
                                       Version [] [] -> []
-                                      _ -> [strong ! (maybe [] (status . snd) thisVersion) << display pversion]
+                                      _ -> [strong ! (maybe [] (status . snd) mThisVersion) << display pversion]
                                   )
                                ++ map versionedLink laterVersions
         versionedLink (v, s) = anchor ! (status s ++ [href $ packageURL $ PackageIdentifier pname v]) << display v

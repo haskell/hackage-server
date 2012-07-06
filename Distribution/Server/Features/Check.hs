@@ -47,7 +47,7 @@ import Text.XHtml.Strict (unordList, h3, (<<), toHtml)
 import Data.Function (fix)
 import Data.List (find)
 import Data.Maybe (listToMaybe, catMaybes)
-import Control.Monad (guard, when, mzero)
+import Control.Monad
 import Control.Monad.Trans (liftIO)
 import Data.Time.Clock (getCurrentTime)
 
@@ -158,7 +158,7 @@ putPackageCandidate r users upload store dpath = withPackageId dpath $ \pkgid ->
 doDeleteCandidate :: CheckResource -> DynamicPath -> ServerPartE Response
 doDeleteCandidate r dpath = withCandidatePath dpath $ \_ candidate -> do
     withPackageAuth candidate $ \_ _ -> do
-    update $ DeleteCandidate (packageId candidate)
+    void $ update $ DeleteCandidate (packageId candidate)
     seeOther (packageCandidatesUri r "" $ packageName candidate) $ toResponse ()
 
 serveCandidateTarball :: BlobStorage -> DynamicPath -> ServerPart Response
@@ -194,7 +194,7 @@ uploadCandidate isRight users upload storage = do
             candWarnings = uploadWarnings uresult,
             candPublic = True -- do withDataFn
         }
-    update $ AddCandidate candidate        
+    void $ update $ AddCandidate candidate
     let group = packageMaintainers upload [("package", display $ packageName pkgInfo)]
     exists <- liftIO $ Group.groupExists group 
     when (not exists) $ liftIO $ Group.addUserList group (pkgUploadUser pkgInfo)

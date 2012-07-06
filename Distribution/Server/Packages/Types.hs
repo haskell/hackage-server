@@ -27,7 +27,6 @@ import Distribution.PackageDescription.Parse
 
 import qualified Data.Serialize as Serialize
 import Data.Serialize (Serialize)
-import qualified Data.ByteString.Lazy.Char8 as BS (unpack)
 import Data.ByteString.Lazy (ByteString)
 import Data.Time.Clock (UTCTime)
 import Data.Typeable (Typeable)

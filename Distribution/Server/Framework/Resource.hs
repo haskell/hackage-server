@@ -312,7 +312,7 @@ parseTrunkAt = do
     return components
   where
     parseComponent = do
-        Parse.char '/'
+        void $ Parse.char '/'
         fmap DynamicBranch (Parse.char ':' >> Parse.many1 (Parse.noneOf "/"))
           Parse.<|> fmap StaticBranch (Parse.many1 (Parse.noneOf "/"))
 
@@ -325,12 +325,12 @@ parseFormatTrunkAt = do
   where
     parseComponent :: Parse.Parser (BranchComponent, BranchFormat)
     parseComponent = do
-        Parse.char '/'
+        void $ Parse.char '/'
         Parse.choice $ map Parse.try
           [ Parse.char '.' >> Parse.many1 (Parse.char '.') >>
             ((Parse.lookAhead (Parse.char '/') >> return ()) Parse.<|> Parse.eof) >> return (TrailingBranch, NoFormat)
           , Parse.char ':' >> parseMaybeFormat DynamicBranch
-          , do Parse.lookAhead (Parse.satisfy (/=':'))
+          , do Parse.lookAhead (void $ Parse.satisfy (/=':'))
                Parse.choice $ map Parse.try
                  [ parseMaybeFormat StaticBranch
                  , fmap ((,) (StaticBranch "")) parseFormat
@@ -364,7 +364,7 @@ serveResource (Resource _ rget rput rpost rdelete rformat rend) = \dpath -> msum
     methods = [rget, rput, rpost, rdelete]
     methodsList = [[GET, HEAD], [PUT], [POST], [DELETE]]
     makeOptions :: [Method] -> ServerResponse
-    makeOptions methodList = \_ -> methodSP OPTIONS $ do
+    makeOptions methodList = \_ -> method OPTIONS >> nullDir >> do
         setHeaderM "Allow" (intercalate ", " . map show $ methodList)
         return $ toResponse ()
     -- some of the dpath lookup calls can be replaced by pattern matching the head/replacing
@@ -376,35 +376,35 @@ serveResource (Resource _ rget rput rpost rdelete rformat rend) = \dpath -> msum
     -- > Go from format/content-type to ServerResponse to serve-}
     serveResources :: [Method] -> [(Content, ServerResponse)] -> ServerResponse
     serveResources met res dpath = case rend of
-        Trailing -> methodOnly met >> (remainingPathString >>= \str ->
-                                       serveContent res (("..", str):dpath))
+        Trailing -> method met >> (remainingPathString >>= \str ->
+                                   serveContent res (("..", str):dpath))
         _ -> serveFormat res met dpath
     serveFormat :: [(Content, ServerResponse)] -> [Method] -> ServerResponse
     serveFormat res met = case rformat of
-        ResourceFormat NoFormat Nothing -> \dpath -> methodSP met $ serveContent res dpath
-        ResourceFormat (StaticFormat format) Nothing -> \dpath -> path $ \format' -> methodSP met $ do
+        ResourceFormat NoFormat Nothing -> \dpath -> method met >> nullDir >> serveContent res dpath
+        ResourceFormat (StaticFormat format) Nothing -> \dpath -> path $ \format' -> method met >> nullDir >> do
             -- this branch shouldn't happen - /foo/.json would instead be stored as two static dirs
             guard (format' == ('.':format))
             serveContent res dpath
-        ResourceFormat (StaticFormat format) (Just (StaticBranch sdir)) -> \dpath -> methodSP met $
+        ResourceFormat (StaticFormat format) (Just (StaticBranch sdir)) -> \dpath -> method met >> nullDir >>
             -- likewise, foo.json should be stored as a single static dir
             if lookup sdir dpath == Just (sdir ++ "." ++ format) then mzero
                                                                  else serveContent res dpath
-        ResourceFormat (StaticFormat format) (Just (DynamicBranch sdir)) -> \dpath -> methodSP met $
+        ResourceFormat (StaticFormat format) (Just (DynamicBranch sdir)) -> \dpath -> method met >> nullDir >>
             case matchExt format =<< lookup sdir dpath of
                 Just pname -> serveContent res ((sdir, pname):dpath)
                 Nothing -> mzero
         ResourceFormat DynamicFormat Nothing -> \dpath ->
-            msum [ methodSP met $ serveContent res dpath
+            msum [ method met >> nullDir >> serveContent res dpath
                  , path $ \pname -> case pname of
-                       ('.':format) -> methodSP met $ serveContent res (("format", format):dpath)
+                       ('.':format) -> method met >> nullDir >> serveContent res (("format", format):dpath)
                        _ -> mzero
                  ]
-        ResourceFormat DynamicFormat (Just (StaticBranch sdir)) -> \dpath -> methodSP met $
+        ResourceFormat DynamicFormat (Just (StaticBranch sdir)) -> \dpath -> method met >> nullDir >>
             case fmap extractExt (lookup sdir dpath) of
                 Just (pname, format) | pname == sdir -> serveContent res (("format", format):dpath)
                 _ -> mzero
-        ResourceFormat DynamicFormat (Just (DynamicBranch sdir)) -> \dpath -> methodSP met $
+        ResourceFormat DynamicFormat (Just (DynamicBranch sdir)) -> \dpath -> method met >> nullDir >>
             -- this is somewhat complicated. consider /pkg-0.1 and /pkg-0.1.html. If the format is optional, where to split?
             -- the solution is to manually check the available formats to see if something matches
             -- if this situation comes up in practice, try to require a trailing slash, e.g. /pkg-0.1/.html
@@ -417,7 +417,7 @@ serveResource (Resource _ rget rput rpost rdelete rformat rend) = \dpath -> msum
                         Just {} -> splitOption
                 _ -> mzero
         -- some invalid combination
-        _ -> \dpath -> methodSP met $ serveContent res dpath
+        _ -> \dpath -> method met >> nullDir >> serveContent res dpath
     serveContent :: [(Content, ServerResponse)] -> ServerResponse
     serveContent res dpath = do
         -- there should be no remaining path segments at this point, now check page redirection

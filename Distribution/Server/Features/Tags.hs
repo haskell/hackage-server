@@ -41,7 +41,7 @@ import qualified Data.Map as Map
 import Data.Function (fix)
 import Data.List (foldl')
 import Data.Char (toLower)
-import Control.Monad (mzero, forM_, liftM)
+import Control.Monad
 import Control.Monad.Trans (MonadIO)
 
 
@@ -117,7 +117,7 @@ initTagsFeature _ cf = do
             , calculatedTags = specials
             , setCalculatedTag = \tag pkgs -> do
               Cache.modifyCache specials (setTag tag pkgs)
-              update $ SetTagPackages tag pkgs
+              void $ update $ SetTagPackages tag pkgs
               runHook'' updateTag pkgs (Set.singleton tag)
             }
 
@@ -142,7 +142,7 @@ putTags tagf pkgname = withPackageAll pkgname $ \_ -> do
         Just (TagList tags) -> do
             calcTags <- fmap (packageToTags pkgname) $ Cache.getCache $ calculatedTags tagf
             let tagSet = Set.fromList tags `Set.union` calcTags
-            update $ SetPackageTags pkgname tagSet
+            void $ update $ SetPackageTags pkgname tagSet
             runHook'' (tagsUpdated tagf) (Set.singleton pkgname) tagSet
             return ()
         Nothing -> errBadRequest "Tags not recognized" [MText "Couldn't parse your tag list. It should be comma separated with any number of alphanumerical tags. Tags can also also have -+#*."]

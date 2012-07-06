@@ -1,4 +1,7 @@
 {-# LANGUAGE DoRec #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+-- TODO: Get rid of this pragma:
+{-# OPTIONS_GHC -fno-warn-deprecations #-}
 module Distribution.Server.Features.Users (
     UserFeature,
     userResource,
@@ -48,7 +51,7 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Function (fix)
-import Control.Monad (liftM, liftM3, MonadPlus(..) )
+import Control.Monad
 
 import Distribution.Text (display, simpleParse)
 
@@ -133,8 +136,7 @@ deleteAccount uname = withUserName uname $ \uid _ -> do
     users <- query GetUserDb
     admins <- query State.GetHackageAdmins
     withHackageAuth users (Just admins) $ \_ _ -> do
-        update (DeleteUser uid)
-        return ()
+        void $ update (DeleteUser uid)
 
 -- result: not-found, not authenticated, or ok (success)
 enabledAccount :: UserName -> ServerPartE ()
@@ -144,10 +146,9 @@ enabledAccount uname = withUserName uname $ \uid _ -> do
     withHackageAuth users (Just admins) $ \_ _ -> do
         enabled <- optional $ look "enabled"
         -- for a checkbox, prescence in data string means 'checked'
-        case enabled of
-            Nothing -> update (SetEnabledUser uid False)
-            Just _  -> update (SetEnabledUser uid True)
-        return ()
+        void $ case enabled of
+               Nothing -> update (SetEnabledUser uid False)
+               Just _  -> update (SetEnabledUser uid True)
 
 -- | Resources representing the collection of known users.
 --

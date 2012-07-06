@@ -19,7 +19,7 @@ module Distribution.Server.Util.ServeTarball
 
 import Happstack.Server.Types
 import Happstack.Server.Monads
-import Happstack.Server.Routing (methodOnly)
+import Happstack.Server.Routing (method)
 import Happstack.Server.Response
 import Happstack.Server.FileServe as Happstack (mimeTypes)
 import Distribution.Server.Util.Happstack (remainingPath)
@@ -72,7 +72,7 @@ serveTarball indices offset tarball tarIndex = do
                  ok (toResponse tfe)
                _ -> mzero
 
-       action act m = methodOnly act >> m
+       action act m = method act >> m
 
        serveDirs prefix paths
            = flip map paths $ \path ->

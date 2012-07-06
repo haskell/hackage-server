@@ -52,9 +52,9 @@ testRoundtrip store = testRoundtripByQuery' (query GetBuildReports) $ \buildReps
 type PartialLogs = Map (PackageId, BuildReportId) BuildLog
 
 updateReports :: BlobStorage -> (BuildReports, PartialLogs) -> RestoreBackup
-updateReports storage reports = RestoreBackup
+updateReports storage reportLogs@(buildReports, partialLogs) = RestoreBackup
   { restoreEntry = \(entry, bs) -> do
-        res <- runImport reports $ case entry of
+        res <- runImport reportLogs $ case entry of
             ["package", pkgStr, reportItem] | Just pkgid <- simpleParse pkgStr -> case packageVersion pkgid of
                 Version [] [] -> fail $ "Build report package id " ++ show pkgStr ++ " must specify a version"
                 _ -> case splitExtension reportItem of
@@ -67,15 +67,15 @@ updateReports storage reports = RestoreBackup
         let insertLog buildReps ((pkgid, reportId), buildLog) = case Reports.setBuildLog pkgid reportId (Just buildLog) buildReps of
                 Just buildReps' -> Right buildReps'
                 Nothing -> Left $ "Build log #" ++ display reportId ++ " exists for " ++ display pkgid ++ " but report itself does not"
-        case foldM insertLog (fst reports) (Map.toList $ snd reports) of
+        case foldM insertLog buildReports (Map.toList partialLogs) of
             Right theReports -> return . Right $ finalizeReports theReports
             Left err -> return . Left $ err
   , restoreComplete = return ()
   }
 
 finalizeReports :: BuildReports -> RestoreBackup
-finalizeReports reports = mempty
-  { restoreComplete = update $ ReplaceBuildReports reports
+finalizeReports buildReports = mempty
+  { restoreComplete = update $ ReplaceBuildReports buildReports
   }
 
 importReport :: PackageId -> String -> ByteString -> Import (BuildReports, PartialLogs) ()
@@ -101,7 +101,7 @@ importLog storage pkgid repIdStr contents = do
 
 ------------------------------------------------------------------------------
 buildReportsToExport :: BuildReports -> [ExportEntry]
-buildReportsToExport reports = concatMap (uncurry packageReportsToExport) (Map.toList $ Reports.reportsIndex reports)
+buildReportsToExport buildReports = concatMap (uncurry packageReportsToExport) (Map.toList $ Reports.reportsIndex buildReports)
 
 packageReportsToExport :: PackageId -> PkgBuildReports -> [ExportEntry]
 packageReportsToExport pkgid pkgReports = concatMap (uncurry $ reportToExport prefix) (Map.toList $ Reports.reports pkgReports)

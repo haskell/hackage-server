@@ -73,7 +73,7 @@ initDistroFeature _ _ users _ = do
     distroDelete dpath = withDistroNamePath dpath $ \distro -> do
         -- authenticate Hackage admins
         -- should also check for existence here of distro here
-        update $ RemoveDistro distro
+        void $ update $ RemoveDistro distro
         seeOther ("/distros/") (toResponse ())
 
     -- result: ok response or not-found error
@@ -82,13 +82,13 @@ initDistroFeature _ _ users _ = do
         case info of
             Nothing -> notFound . toResponse $ "Package not found for " ++ display pkgname
             Just {} -> do
-                update $ DropPackage dname pkgname
+                void $ update $ DropPackage dname pkgname
                 ok $ toResponse "Ok!"
 
     -- result: see-other response, or an error: not authenticated or not found (todo)
     distroPackagePut dpath = withDistroPackagePath dpath $ \dname pkgname _ -> lookPackageInfo $ \newPkgInfo -> do
         -- authenticate distro maintainer
-        update $ AddPackage dname pkgname newPkgInfo
+        void $ update $ AddPackage dname pkgname newPkgInfo
         seeOther ("/distro/" ++ display dname ++ "/" ++ display pkgname) $ toResponse "Ok!"
 
     -- result: see-other response, or an error: not authentcated or bad request
@@ -105,7 +105,7 @@ initDistroFeature _ _ users _ = do
             case csvToPackageList csv of
                 Nothing -> fail $ "Could not parse CSV File to a distro package list"
                 Just list -> do
-                    update $ PutDistroPackageList dname list
+                    void $ update $ PutDistroPackageList dname list
                     ok $ toResponse "Ok!"
 
 withDistroNamePath :: DynamicPath -> (DistroName -> ServerPart Response) -> ServerPart Response

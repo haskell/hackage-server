@@ -36,6 +36,7 @@ import Codec.Compression.GZip (compress)
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
 
+import Control.Exception as Exception
 import Control.Monad (liftM, forM)
 import System.FilePath
 import System.Locale
@@ -141,5 +142,5 @@ testRoundtripByQuery' query k = do
 testBlobsExist :: BlobStorage -> [Blob.BlobId] -> IO [String]
 testBlobsExist store blobs
   = liftM catMaybes $ forM blobs $ \blob -> do
-       (Blob.fetch store blob >> return Nothing) `catch`
+       (Blob.fetch store blob >> return Nothing) `Exception.catch`
          \e -> return $ Just $ "Could not open blob " ++ show blob ++ ": " ++ show (e :: IOError)

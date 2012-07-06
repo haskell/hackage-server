@@ -59,20 +59,20 @@ data MirrorOpts = MirrorOpts {
                     stateDir     :: FilePath,
                     selectedPkgs :: [PackageId],
                     continuous   :: Maybe Int, -- if so, interval in minutes
-                    keepGoing    :: Bool
+                    mo_keepGoing    :: Bool
                   }
 
 data MirrorEnv = MirrorEnv {
-                   srcCacheDir :: FilePath,
-                   dstCacheDir :: FilePath,
-                   missingPkgsFile      :: FilePath,
-                   unmirrorablePkgsFile :: FilePath
+                   me_srcCacheDir :: FilePath,
+                   me_dstCacheDir :: FilePath,
+                   me_missingPkgsFile      :: FilePath,
+                   me_unmirrorablePkgsFile :: FilePath
                  }
   deriving Show
 
 data MirrorState = MirrorState {
-                     missingPkgs          :: Set PackageId,
-                     unmirrorablePkgs     :: Set PackageId
+                     ms_missingPkgs          :: Set PackageId,
+                     ms_unmirrorablePkgs     :: Set PackageId
                    }
   deriving (Eq, Show)
 
@@ -188,15 +188,15 @@ mirrorOneShot verbosity opts env st = do
     (merr, _) <- mirrorOnce verbosity opts env st
 
     case merr of
-      Nothing  -> return ()
-      Just err -> fail (formatMirrorError err)
+      Nothing -> return ()
+      Just theError -> fail (formatMirrorError theError)
 
 
 mirrorIteration :: Verbosity -> MirrorOpts -> MirrorEnv
                 -> MirrorState -> IO MirrorState
 mirrorIteration verbosity opts env st = do
 
-    (merr, st') <- mirrorOnce verbosity opts { keepGoing = True } env st
+    (merr, st') <- mirrorOnce verbosity opts { mo_keepGoing = True } env st
 
     when (st' /= st) $
       savePackagesState env st'
@@ -204,8 +204,8 @@ mirrorIteration verbosity opts env st = do
     case merr of
       Nothing          -> return ()
       Just Interrupted -> throw UserInterrupt
-      Just err         -> do
-        warn verbosity (formatMirrorError err)
+      Just theError         -> do
+        warn verbosity (formatMirrorError theError)
         notice verbosity "Abandoning this mirroring attempt."
     return st'
 
@@ -223,7 +223,7 @@ mirrorOnce verbosity opts
            (MirrorEnv srcCacheDir dstCacheDir missingPkgsFile unmirrorablePkgsFile)
            st@(MirrorState missingPkgs unmirrorablePkgs) =
 
-    mirrorSession verbosity (keepGoing opts) st $ do
+    mirrorSession (mo_keepGoing opts) $ do
 
       srcIndex <- downloadIndex (srcURI opts) srcCacheDir
       dstIndex <- downloadIndex (dstURI opts) dstCacheDir
@@ -250,9 +250,9 @@ mirrorOnce verbosity opts
       mirrorPackages verbosity opts pkgsToMirror'
 
   where
-    mirrorSession :: Verbosity -> Bool -> MirrorState
+    mirrorSession :: Bool
                   -> MirrorSession a -> IO (Maybe MirrorError, MirrorState)
-    mirrorSession verbosity keepGoing st action =
+    mirrorSession keepGoing action =
       liftM (\(eerr, st') -> (either Just (const Nothing) eerr,
                               fromErrorState st')) $
       runMirrorSession verbosity keepGoing (toErrorState st) $ do
@@ -275,10 +275,10 @@ diffIndex as bs =
 
 subsetIndex :: [PackageId] -> [PkgIndexInfo] -> [PkgIndexInfo]
 subsetIndex pkgids =
-    filter (\(PkgIndexInfo pkgid' _ _ _) -> anyMatchPackage pkgids pkgid')
+    filter (\(PkgIndexInfo pkgid' _ _ _) -> anyMatchPackage pkgid')
   where
-    anyMatchPackage :: [PackageId] -> PackageId -> Bool
-    anyMatchPackage pkgids pkgid' =
+    anyMatchPackage :: PackageId -> Bool
+    anyMatchPackage pkgid' =
       any (\pkgid -> matchPackage pkgid pkgid') pkgids
 
     matchPackage :: PackageId -> PackageId -> Bool
@@ -327,10 +327,10 @@ mirrorPackages verbosity opts pkgsToMirror = do
       liftIO $ notice verbosity $ "mirroring " ++ display pkgid
       rsp <- browserAction $ downloadFile' src pkgfile
       case rsp of
-        Just err -> notifyResponse (GetPackageFailed err pkgid)
+        Just theError -> notifyResponse (GetPackageFailed theError pkgid)
 
-        Nothing  -> do notifyResponse GetPackageOk
-                       putPackage dst pkginfo pkgfile
+        Nothing -> do notifyResponse GetPackageOk
+                      putPackage dst pkginfo pkgfile
 
 
 
@@ -346,10 +346,10 @@ putPackage baseURI (PkgIndexInfo pkgid mtime muname _muid) pkgFile = do
       pkgContent <- liftIO $ BS.readFile pkgFile
       rsp <- browserAction $ requestPUT pkgURI "application/x-gzip" pkgContent
       case rsp of
-        Just err -> notifyResponse (PutPackageFailed err pkgid)
+        Just theError -> notifyResponse (PutPackageFailed theError pkgid)
 
-        Nothing  -> do notifyResponse PutPackageOk
-                       liftIO $ removeFile pkgFile
+        Nothing -> do notifyResponse PutPackageOk
+                      liftIO $ removeFile pkgFile
       --TODO: think about in what situations we delete the file
       -- and if we should actually cache it if we don't sucessfully upload.
 
@@ -362,15 +362,15 @@ putPackage baseURI (PkgIndexInfo pkgid mtime muname _muid) pkgFile = do
       let timeStr = formatTime defaultTimeLocale "%c" time
       rsp <- browserAction $ requestPUT (pkgURI <//> "upload-time") "text/plain" (toBS timeStr)
       case rsp of
-        Just err -> notifyResponse (PutPackageFailed err pkgid)
-        Nothing  -> notifyResponse PutPackageOk
+        Just theError -> notifyResponse (PutPackageFailed theError pkgid)
+        Nothing       -> notifyResponse PutPackageOk
 
     putPackageUploader uname = do
       let nameStr = display uname
       rsp <- browserAction $ requestPUT (pkgURI <//> "uploader") "text/plain" (toBS nameStr)
       case rsp of
-        Just err -> notifyResponse (PutPackageFailed err pkgid)
-        Nothing  -> notifyResponse PutPackageOk
+        Just theError -> notifyResponse (PutPackageFailed theError pkgid)
+        Nothing       -> notifyResponse PutPackageOk
 
 -----------------------------
 -- Error handling strategy
@@ -470,9 +470,9 @@ formatMirrorError (MirrorIOError      ioe)  = formatIOError ioe
 formatMirrorError (GetEntityError entity rsp) =
     "Failed to download " ++ formatEntity entity
  ++ ",\n  " ++ formatErrorResponse rsp
-formatMirrorError (ParseEntityError entity uri err) =
+formatMirrorError (ParseEntityError entity uri theError) =
     "Error parsing " ++ formatEntity entity
- ++ " at " ++ show uri ++ ": " ++ err
+ ++ " at " ++ show uri ++ ": " ++ theError
 formatMirrorError (PutPackageError pkgid rsp) =
     "Failed to upload package "  ++ display pkgid
  ++ ",\n  " ++ formatErrorResponse rsp
@@ -484,8 +484,8 @@ formatEntity EntityLog             = "the package upload log"
 formatEntity (EntityPackage pkgid) = "package " ++ display pkgid
 
 data ErrorState = ErrorState {
-                    missing      :: Set PackageId,
-                    unmirrorable :: Set PackageId
+                    es_missing      :: Set PackageId,
+                    es_unmirrorable :: Set PackageId
                   }
   deriving Show
 
@@ -505,10 +505,10 @@ notifyResponse :: MirrorEvent -> MirrorSession ()
 notifyResponse e = do
     st <- get
     (verbosity, keepGoing) <- ask
-    st' <- handleEvent verbosity keepGoing e st
+    st' <- handleEvent verbosity keepGoing st
     put st'
   where
-    handleEvent _ False e st = case e of
+    handleEvent _ False st = case e of
       GetIndexOk   -> return st
       GetPackageOk -> return st
       PutPackageOk -> return st
@@ -517,7 +517,7 @@ notifyResponse e = do
       PutPackageFailed rsp pkgid ->
         throwError (PutPackageError pkgid rsp)
 
-    handleEvent verbosity True e st = case e of
+    handleEvent verbosity True st = case e of
       GetIndexOk   -> return st
       GetPackageOk -> return st
       PutPackageOk -> return st
@@ -526,7 +526,7 @@ notifyResponse e = do
             liftIO $ warn verbosity $
               formatMirrorError (GetEntityError (EntityPackage pkgid) rsp)
             return st {
-              missing = Set.insert pkgid (missing st)
+              es_missing = Set.insert pkgid (es_missing st)
             }
         | otherwise -> throwError (GetEntityError (EntityPackage pkgid) rsp)
 
@@ -535,7 +535,7 @@ notifyResponse e = do
             liftIO $ warn verbosity $
               formatMirrorError (PutPackageError pkgid rsp)
             return st {
-              unmirrorable = Set.insert pkgid (unmirrorable st)
+              es_unmirrorable = Set.insert pkgid (es_unmirrorable st)
             }
         | otherwise -> throwError (PutPackageError pkgid rsp)
 
@@ -558,33 +558,33 @@ isOldHackageURI uri
 downloadOldIndex :: URI -> FilePath -> MirrorSession [PkgIndexInfo]
 downloadOldIndex uri cacheDir = do
 
-    rsp <- browserAction $ downloadFile indexURI indexFile
-    case rsp of
-      Nothing  -> notifyResponse GetIndexOk
-      Just err -> throwError (GetEntityError EntityIndex err)
+    rsp1 <- browserAction $ downloadFile indexURI indexFile
+    case rsp1 of
+      Nothing       -> notifyResponse GetIndexOk
+      Just theError -> throwError (GetEntityError EntityIndex theError)
 
-    rsp <- browserAction $ downloadFile logURI logFile
-    case rsp of
-      Nothing  -> notifyResponse GetIndexOk
-      Just err -> throwError (GetEntityError EntityLog err)
+    rsp2 <- browserAction $ downloadFile logURI logFile
+    case rsp2 of
+      Nothing       -> notifyResponse GetIndexOk
+      Just theError -> throwError (GetEntityError EntityLog theError)
 
-    res <- liftIO $
+    res1 <- liftIO $
       withFile indexFile ReadMode $ \hnd ->
         evaluate . PackageIndex.read (\pkgid _ -> pkgid)
                  . GZip.decompress
                =<< BS.hGetContents hnd
-    pkgids <- case res of
-      Left  err  -> throwError (ParseEntityError EntityIndex uri err)
-      Right pkgs -> return pkgs
+    pkgids <- case res1 of
+      Left  theError -> throwError (ParseEntityError EntityIndex uri theError)
+      Right pkgs     -> return pkgs
 
-    res <- liftIO $
+    res2 <- liftIO $
       withFile logFile ReadMode $ \hnd ->
         evaluate . UploadLog.read =<< hGetContents hnd
-    log <- case res of
-      Left  err -> throwError (ParseEntityError EntityLog uri err)
-      Right log -> return log
+    theLog <- case res2 of
+      Left  theError -> throwError (ParseEntityError EntityLog uri theError)
+      Right theLog   -> return theLog
 
-    return (mergeLogInfo pkgids log)
+    return (mergeLogInfo pkgids theLog)
 
   where
     indexURI  = uri <//> "packages" </> "archive" </> "00-index.tar.gz"
@@ -593,7 +593,7 @@ downloadOldIndex uri cacheDir = do
     logURI    = uri <//> "packages" </> "archive" </> "log"
     logFile   = cacheDir </> "log"
 
-    mergeLogInfo pkgids log =
+    mergeLogInfo pkgids theLog =
         catMaybes
       . map selectDetails
       $ mergeBy (\pkgid entry -> compare pkgid (entryPkgId entry))
@@ -601,7 +601,7 @@ downloadOldIndex uri cacheDir = do
                 ( map (maximumBy (comparing entryTime))
                 . groupBy (equating  entryPkgId)
                 . sortBy  (comparing entryPkgId)
-                $ log )
+                $ theLog )
 
     selectDetails (OnlyInRight _)     = Nothing
     selectDetails (OnlyInLeft  pkgid) =
@@ -617,16 +617,16 @@ downloadNewIndex :: URI -> FilePath -> MirrorSession [PkgIndexInfo]
 downloadNewIndex uri cacheDir = do
     rsp <- browserAction $ downloadFile indexURI indexFile
     case rsp of
-      Just err -> throwError (GetEntityError EntityIndex err)
-      Nothing  -> do
+      Just theError -> throwError (GetEntityError EntityIndex theError)
+      Nothing -> do
         notifyResponse GetIndexOk
         res <- liftIO $ withFile indexFile ReadMode $ \hnd ->
                  evaluate . PackageIndex.read selectDetails
                           . GZip.decompress
                         =<< BS.hGetContents hnd
         case res of
-          Left  err  -> throwError (ParseEntityError EntityIndex uri err)
-          Right pkgs -> return pkgs
+          Left  theError -> throwError (ParseEntityError EntityIndex uri theError)
+          Right pkgs     -> return pkgs
 
   where
     indexURI  = uri <//> "packages/00-index.tar.gz"
@@ -724,10 +724,10 @@ downloadFile' uri file = do
   out $ "downloading " ++ show uri ++ " to " ++ file
   rsp <- requestGET uri
   case rsp of
-    Left  err     -> return (Just err)
-    Right content -> do liftIO $ BS.writeFile file content
-                        --TODO: check we wrote the expected length.
-                        return Nothing
+    Left  theError -> return (Just theError)
+    Right content  -> do liftIO $ BS.writeFile file content
+                         --TODO: check we wrote the expected length.
+                         return Nothing
 
 requestGET :: URI -> HttpSession (Either ErrorResponse ByteString)
 requestGET uri = do
@@ -821,11 +821,11 @@ validateOpts args = do
 
     case args' of
       (from:to:pkgstrs) -> case (validateHackageURI from, validateHackageURI to) of
-        (Left err, _) -> die err
-        (_, Left err) -> die err
+        (Left theError, _) -> die theError
+        (_, Left theError) -> die theError
         (Right fromURI, Right toURI) -> case (mpkgs, minterval) of
-          (Left err, _) -> die err
-          (_, Left err) -> die err
+          (Left theError, _) -> die theError
+          (_, Left theError) -> die theError
           (Right pkgs, Right interval) ->
              return $ (,) (flagVerbosity flags) MirrorOpts {
                  srcURI       = fromURI,
@@ -835,7 +835,7 @@ validateOpts args = do
                  continuous   = if flagContinuous flags
                                   then Just interval
                                   else Nothing,
-                 keepGoing    = flagKeepGoing flags
+                 mo_keepGoing    = flagKeepGoing flags
                }
           where
             mpkgs     = validatePackageIds pkgstrs

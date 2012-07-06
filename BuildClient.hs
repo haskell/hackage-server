@@ -15,6 +15,7 @@ import Data.Maybe
 import Data.IORef
 import Control.Exception
 import Control.Monad
+import Control.Monad.Trans
 import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Data.Set as S
 
@@ -69,7 +70,7 @@ buildOnce verbosity opts = do
       index <- downloadIndex (srcURI opts) cacheDir
       to_build <- filterM does_not_have_docs [pkg_id | PkgIndexInfo pkg_id _ _ _ <- index
                                                      , null (selectedPkgs opts) || pkg_id `elem` selectedPkgs opts]
-      ioAction $ notice verbosity $ show (length to_build) ++ " packages to build documentation for."
+      liftIO $ notice verbosity $ show (length to_build) ++ " packages to build documentation for."
       
       -- Try to build each of them, uploading the documentation and build reports
       -- along the way. We mark each package as having documentation in the cache even
@@ -77,7 +78,7 @@ buildOnce verbosity opts = do
       -- a failing package!
       forM_ to_build $ \pkg_id -> do
           buildPackage verbosity opts pkg_id
-          ioAction $ mark_as_having_docs pkg_id
+          liftIO $ mark_as_having_docs pkg_id
   where
     cacheDir = stateDir opts </> cacheDirName
     cacheDirName | URI { uriAuthority = Just auth } <- srcURI opts
@@ -93,12 +94,12 @@ mkPackageHasDocs opts = do
 
     let mark_as_having_docs pkg_id = atomicModifyIORef cache_var $ \already_built -> (S.insert pkg_id already_built, ())
         does_not_have_docs pkg_id = do
-            has_docs <- ioAction $ liftM (pkg_id `S.member`) $ readIORef cache_var
+            has_docs <- liftIO $ liftM (pkg_id `S.member`) $ readIORef cache_var
             if has_docs
              then return False
              else do
               has_no_docs <- liftM isNothing $ requestGET' (srcURI opts <//> "package" </> display pkg_id </> "doc")
-              unless has_no_docs $ ioAction $ mark_as_having_docs pkg_id
+              unless has_no_docs $ liftIO $ mark_as_having_docs pkg_id
               return has_no_docs
         persist = readIORef cache_var >>= writeBuiltCache (stateDir opts)
 
@@ -108,7 +109,7 @@ mkPackageHasDocs opts = do
     readBuiltCache cache_dir = do
         pkgstrs <- handleDoesNotExist (return []) $ liftM lines $ readFile (cache_dir </> "built")
         case validatePackageIds pkgstrs of
-            Left err   -> die err
+            Left theError -> die theError
             Right pkgs -> return (S.fromList pkgs)
     
     writeBuiltCache :: FilePath -> S.Set PackageId -> IO ()
@@ -149,7 +150,7 @@ buildPackage verbosity opts pkg_id = do
         --versionless_pkg_url = srcURI opts <//> "package" </> "$pkg"
         pkg_url = srcURI opts <//> "package" </> "$pkg-$version"
 
-    mb_docs <- ioAction $ withCurrentDirectory (stateDir opts) $ do
+    mb_docs <- liftIO $ withCurrentDirectory (stateDir opts) $ do
       -- Let's not clean in between installations. This should save us some download/installation time for packages
       -- that are depended on by a lot of things, at the cost of some disk space.
       --handleDoesNotExist (return ()) $ removeDirectoryRecursive "packages"
@@ -157,7 +158,8 @@ buildPackage verbosity opts pkg_id = do
 
       -- We CANNOT build from an unpacked directory, because Cabal only generates build reports
       -- if you are building from a tarball that was verifiably downloaded from the server
-      cabal verbosity opts "install" ["--enable-documentation", "--enable-tests",
+      -- TODO: Why do we ignore the result code here?
+      void $ cabal verbosity opts "install" ["--enable-documentation", "--enable-tests",
                                       -- We know where this documentation will eventually be hosted, bake that in.
                                       -- The wiki claims we shouldn't include the version in the hyperlinks so we don't have
                                       -- to rehaddock some package when the dependent packages get updated. However,
@@ -201,10 +203,10 @@ buildPackage verbosity opts pkg_id = do
 
 cabal :: Verbosity -> BuildOpts -> String -> [String] -> IO ExitCode
 cabal verbosity opts cmd args = do
-    cwd <- getCurrentDirectory
+    cwd' <- getCurrentDirectory
     let all_args = ("--config-file=" ++ stateDir opts </> "config"):cmd:args
-    notice verbosity $ "cd " ++ cwd ++ " && cabal " ++ intercalate " " all_args
-    ph <- runProcess "cabal" all_args (Just cwd) Nothing Nothing Nothing Nothing
+    notice verbosity $ "cd " ++ cwd' ++ " && cabal " ++ intercalate " " all_args
+    ph <- runProcess "cabal" all_args (Just cwd') Nothing Nothing Nothing Nothing
     waitForProcess ph
 
 tarGzDirectory :: FilePath -> IO BS.ByteString
@@ -216,8 +218,12 @@ tarGzDirectory dir = do
   where (containing_dir, nested_dir) = splitFileName dir
 
 withCurrentDirectory :: FilePath -> IO a -> IO a
-withCurrentDirectory cwd' act = bracket (do { cwd <- getCurrentDirectory; setCurrentDirectory cwd'; return cwd })
-                                        setCurrentDirectory (const act)
+withCurrentDirectory cwd1 act
+    = bracket (do cwd2 <- getCurrentDirectory
+                  setCurrentDirectory cwd1
+                  return cwd2)
+              setCurrentDirectory
+              (const act)
 
 
 -------------------------
@@ -258,10 +264,10 @@ validateOpts args = do
 
     case args' of
       (from:pkgstrs) -> case validateHackageURI from of
-        Left err -> die err
+        Left theError -> die theError
         Right fromURI -> do
           pkgs <- case validatePackageIds pkgstrs of
-            Left err   -> die err
+            Left theError -> die theError
             Right pkgs -> return pkgs
 
           (usrnme, psswrd) <- case extractURICredentials fromURI of

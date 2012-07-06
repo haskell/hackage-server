@@ -32,7 +32,7 @@ import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
 
 import Control.Concurrent
-import Control.Monad (forM_, forever)
+import Control.Monad
 import Data.Maybe (catMaybes)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -75,8 +75,7 @@ emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" 0 0 False 0
 instance IsHackageFeature ListFeature where
     getFeatureInterface listf = (emptyHackageFeature "list") {
         featurePostInit = do itemsCache
-                             forkIO periodicDownloadRefresh
-                             return ()
+                             void $ forkIO periodicDownloadRefresh
       }
       where itemsCache = do
                 items <- constructItemIndex

@@ -57,8 +57,6 @@ serveLegacyPosts upload = msum
 
 
 -- | GETs, both for cabal-install to use, and for links scattered throughout the web.
---
--- method is already guarded against, but methodSP is a nicer combinator than nullDir.
 serveLegacyGets :: ServerPart Response
 serveLegacyGets = msum
   [ dir "packages" $ msum
@@ -68,11 +66,11 @@ serveLegacyGets = msum
         --also search.html, advancedsearch.html, accounts.html, and admin.html
       ]
   , dir "cgi-bin" $ dir "hackage-scripts" $ msum
-      [ dir "package" $ path $ \packageId -> methodSP GET $
-          movedPermanently ("/package/" ++ display (packageId :: PackageId)) $
-          toResponse ""
+      [ dir "package" $ path $ \packageId -> method GET >> nullDir >>
+          (movedPermanently ("/package/" ++ display (packageId :: PackageId)) $
+           toResponse "")
       ]
-  , dir "package" $ path $ \fileName -> methodSP GET $
+  , dir "package" $ path $ \fileName -> method GET >> nullDir >>
       case Posix.splitExtension fileName of
         (fileName', ".gz") -> case Posix.splitExtension fileName' of
           (packageStr, ".tar") -> case simpleParse packageStr of
@@ -84,7 +82,7 @@ serveLegacyGets = msum
   ]
   where
     -- HTTP 301 is suitable for permanently redirecting pages
-    simpleMove from to = dir from $ methodSP GET $ movedPermanently to (toResponse "")
+    simpleMove from to = dir from $ method GET >> nullDir >> movedPermanently to (toResponse "")
 
 -- Some of the old-style paths may contain a version number
 -- or the text 'latest'. We represent the path '$pkgName/latest'
@@ -104,8 +102,8 @@ volToVersion (V v)  = v
 
 serveArchiveTree :: ServerPart Response
 serveArchiveTree = msum
-  [ dir "pkg-list.html" $ methodSP GET $ movedPermanently "/packages/" (toResponse "")
-  , dir "package" $ path $ \fileName -> methodSP GET $
+  [ dir "pkg-list.html" $ method GET >> nullDir >> movedPermanently "/packages/" (toResponse "")
+  , dir "package" $ path $ \fileName -> method GET >> nullDir >>
    case Posix.splitExtension fileName of
     (fileName', ".gz") -> case Posix.splitExtension fileName' of
        (packageStr, ".tar") -> case simpleParse packageStr of
@@ -114,23 +112,23 @@ serveArchiveTree = msum
           _ -> mzero
        _ -> mzero
     _ -> mzero
-  , dir "00-index.tar.gz" $ methodSP GET $ movedPermanently "/packages/index.tar.gz" (toResponse "")
+  , dir "00-index.tar.gz" $ method GET >> nullDir >> movedPermanently "/packages/index.tar.gz" (toResponse "")
   , path $ \name -> do
      msum
       [ path $ \version ->
         let pkgid = PackageIdentifier {pkgName = name, pkgVersion = volToVersion version}
         in msum
          [ let dirName = display pkgid ++ ".tar.gz"
-           in dir dirName $ methodSP GET $
+           in dir dirName $ method GET >> nullDir >>
               movedPermanently (packageTarball pkgid) (toResponse "")
 
          , let fileName = display name ++ ".cabal"
-           in dir fileName $ methodSP GET $
+           in dir fileName $ method GET >> nullDir >>
               movedPermanently (cabalPath pkgid) (toResponse "")
 
          , dir "doc" $ dir "html" $ remainingPath $ \paths ->
              let doc = Posix.joinPath paths
-             in methodSP GET $
+             in method GET >> nullDir >>
                 movedPermanently (docPath pkgid doc) (toResponse "")
          ]
       ]

@@ -34,7 +34,7 @@ import Data.List
 import Data.Traversable
          ( forM )
 import Control.Monad
-         ( unless, when )
+         ( void, unless, when )
 import qualified Data.ByteString.Lazy as BS
 
 import Paths_hackage_server as Paths (version)
@@ -672,7 +672,7 @@ withServer config doTemp = bracket initialise shutdown
       info "Initializing happstack-state..."
       server <- Server.initialise config
       info "Server data loaded into memory"
-      forM mtemp $ \temp -> do
+      void $ forM mtemp $ \temp -> do
         info "Tearing down temp server"
         Server.tearDownTemp temp
       return server

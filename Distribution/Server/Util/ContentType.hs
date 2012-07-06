@@ -5,6 +5,7 @@ module Distribution.Server.Util.ContentType (
 import Happstack.Server.Types (ContentType(..))
 
 import qualified Text.ParserCombinators.ReadP as Parse
+import Control.Monad
 import Data.List (find, sortBy)
 import Data.Char (isAlphaNum, isDigit)
 import Data.Ord (comparing)
@@ -26,7 +27,7 @@ parseContentAccept = process . maybe [] fst . find (null . snd) . Parse.readP_to
         -- a more 'accurate' type than (String, String)
         -- might be Maybe (String, Maybe String)
         typ <- parseMediaType
-        Parse.char '/'
+        void $ Parse.char '/'
         subTyp <- parseMediaType
         quality <- Parse.option 1000 $ do
             Parse.skipSpaces >> Parse.string ";q=" >> Parse.skipSpaces

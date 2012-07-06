@@ -42,6 +42,7 @@ import Data.Function (fix)
 import Data.List (intercalate, find)
 import Data.Time.Clock (getCurrentTime)
 import Control.Arrow (second)
+import Control.Monad
 import Control.Monad.Trans (MonadIO, liftIO)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -139,8 +140,8 @@ doPutPreferred f core pkgname =
         Just prefs -> case sequence . map simpleParse =<< depr of
             Just deprs -> case all (`elem` map packageVersion pkgs) deprs of
                 True  -> do
-                    update $ SetPreferredRanges pkgname prefs
-                    update $ SetDeprecatedVersions pkgname deprs
+                    void $ update $ SetPreferredRanges pkgname prefs
+                    void $ update $ SetDeprecatedVersions pkgname deprs
                     newInfo <- query $ GetPreferredInfo pkgname
                     prefVersions <- makePreferredVersions
                     now <- liftIO getCurrentTime
@@ -179,7 +180,7 @@ doPutDeprecated f pkgname =
   where
     deprecatedError = errBadRequest "Deprecation failed" . return . MText
     doUpdates deprs = do
-        update $ SetDeprecatedFor pkgname deprs
+        void $ update $ SetDeprecatedFor pkgname deprs
         runHook'' (deprecatedHook f) pkgname deprs
         liftIO $ updateDeprecatedTags f
 

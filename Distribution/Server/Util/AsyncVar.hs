@@ -9,6 +9,7 @@ module Distribution.Server.Util.AsyncVar (
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Exception
+import Control.Monad
 
 import Prelude hiding (read, catch)
 
@@ -34,7 +35,7 @@ new force initial = do
                         loop
           Right _ -> do modifyMVar_ outVar (\_ -> return value)
                         loop
-    forkIO loop
+    void $ forkIO loop
     return (AsyncVar inChan outVar)
   where
     -- get a list of all the input states currently queued

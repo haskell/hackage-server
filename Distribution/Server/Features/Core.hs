@@ -50,7 +50,7 @@ import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Framework.BlobStorage (BlobStorage)
 
-import Control.Monad (liftM3, guard, mzero, when)
+import Control.Monad
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Time.Clock (UTCTime)
 import Data.Map (Map)
@@ -298,7 +298,7 @@ serveCabalFile dpath = withPackagePath dpath $ \pkg _ -> do
 -- (no authentication though)
 doDeletePackage :: CoreFeature -> PackageId -> ServerPartE ()
 doDeletePackage core pkgid = withPackageVersion pkgid $ \pkg -> do
-    update $ DeletePackageVersion pkgid
+    void $ update $ DeletePackageVersion pkgid
     nowPkgs <- fmap (flip PackageIndex.lookupPackageName (packageName pkgid) . packageList) $ query GetPackagesState
     runHook' (packageRemoveHook core) pkg
     runHook (packageIndexChange core)
@@ -324,7 +324,8 @@ doMergePackage core pkgInfo = do
     state <- fmap packageList $ query GetPackagesState
     let mprev = PackageIndex.lookupPackageId state (packageId pkgInfo)
         nameExists = packageExists state pkgInfo
-    update $ MergePkg pkgInfo
+    -- TODO: Is there a thread-safety issue here?
+    void $ update $ MergePkg pkgInfo
     when (not nameExists) $ do
         runHook' (newPackageHook core) pkgInfo
     case mprev of

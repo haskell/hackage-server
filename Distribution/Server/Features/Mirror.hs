@@ -1,3 +1,5 @@
+-- TODO: Get rid of this pragma:
+{-# OPTIONS_GHC -fno-warn-deprecations #-}
 module Distribution.Server.Features.Mirror (
     MirrorFeature,
     mirrorResource,
@@ -29,6 +31,7 @@ import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (formatTime, parseTime)
 import System.Locale (defaultTimeLocale)
 
+import Control.Monad
 import Control.Monad.Trans (MonadIO(..))
 import Distribution.Package
 import Distribution.Text
@@ -132,7 +135,7 @@ initMirrorFeature env core users = do
 
     uploaderPut :: DynamicPath -> ServerPart Response
     uploaderPut dpath = runServerPartE $ do
-        requireMirrorAuth
+        void requireMirrorAuth
         withPackageId dpath $ \pkgid -> do
           expectTextPlain
           Body nameContent <- consumeRequestBody
@@ -147,7 +150,7 @@ initMirrorFeature env core users = do
     -- curl -H 'Content-Type: text/plain' -u admin:admin -X PUT -d "Tue Oct 18 20:54:28 UTC 2010" http://localhost:8080/package/edit-distance-0.2.1/edit-distance-0.2.1.tar.gz/upload-time
     uploadTimePut :: DynamicPath -> ServerPart Response
     uploadTimePut dpath = runServerPartE $ do
-        requireMirrorAuth
+        void requireMirrorAuth
         withPackageId dpath $ \pkgid -> do
           expectTextPlain
           Body timeContent <- consumeRequestBody

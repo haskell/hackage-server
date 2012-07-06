@@ -1,3 +1,5 @@
+-- TODO: Get rid of this pragma:
+{-# OPTIONS_GHC -fno-warn-deprecations #-}
 module Distribution.Server.Features.Upload (
     UploadFeature,
     uploadResource,

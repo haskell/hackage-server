@@ -1,5 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, FlexibleContexts #-}
 
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 -- | 'Typeable', 'Binary', 'Serialize', and 'NFData' instances for various
 -- types from Cabal, and other standard libraries.
 --

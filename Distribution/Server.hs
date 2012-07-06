@@ -1,3 +1,5 @@
+-- TODO: Get rid of this pragma:
+{-# OPTIONS_GHC -fno-warn-deprecations #-}
 module Distribution.Server (
     -- * Server control
     Server,
@@ -56,7 +58,7 @@ import Distribution.Text
 import System.FilePath ((</>))
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist)
 import Control.Concurrent
-import Control.Monad (liftM, when, mplus, msum)
+import Control.Monad
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Network.URI (URIAuth(URIAuth))
 import Network.BSD (getHostName)
@@ -301,7 +303,7 @@ testRoundtrip server =
 -- To accomplish this, we import a 'null' tarball, finalizing immediately after initializing import
 initState ::  Server -> (String, String) -> IO ()
 initState server (admin, pass) = do
-    Import.importBlank
+    void $ Import.importBlank
       [ (featureName feature, restore)
       | feature@HackageFeature {
           featureDumpRestore = Just (_dump, restore, _test_rt)
