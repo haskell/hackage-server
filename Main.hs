@@ -3,7 +3,7 @@
 module Main where
 
 import qualified Distribution.Server as Server
-import Distribution.Server (ServerConfig(..), Server)
+import Distribution.Server (ListenOn(..), ServerConfig(..), Server)
 import Distribution.Server.Framework.BackupRestore (equalTarBall)
 
 import Distribution.Text
@@ -36,6 +36,7 @@ import Data.Traversable
 import Control.Monad
          ( void, unless, when )
 import qualified Data.ByteString.Lazy as BS
+import qualified Text.Parsec as Parse
 
 import Paths_hackage_server as Paths (version)
 
@@ -131,6 +132,7 @@ globalCommand = CommandUI {
 
 data RunFlags = RunFlags {
     flagPort      :: Flag String,
+    flagIP        :: Flag String,
     flagHost      :: Flag String,
     flagStateDir  :: Flag FilePath,
     flagStaticDir :: Flag FilePath,
@@ -141,6 +143,7 @@ data RunFlags = RunFlags {
 defaultRunFlags :: RunFlags
 defaultRunFlags = RunFlags {
     flagPort      = NoFlag,
+    flagIP        = NoFlag,
     flagHost      = NoFlag,
     flagStateDir  = NoFlag,
     flagStaticDir = NoFlag,
@@ -165,6 +168,10 @@ runCommand = makeCommand name shortDesc longDesc defaultRunFlags options
           "Port number to serve on (default 8080)"
           flagPort (\v flags -> flags { flagPort = v })
           (reqArgFlag "PORT")
+      , option [] ["ip"]
+          "IPv4 address to listen on (default 0.0.0.0)"
+          flagIP (\v flags -> flags { flagIP = v })
+          (reqArgFlag "IP")
       , option [] ["host"]
           "Server's host name (defaults to machine name)"
           flagHost (\v flags -> flags { flagHost = v })
@@ -192,13 +199,18 @@ runAction opts = do
     defaults <- Server.defaultServerConfig
 
     port <- checkPortOpt defaults (flagToMaybe (flagPort opts))
+    ip   <- checkIPOpt   defaults (flagToMaybe (flagIP   opts))
     let hostname  = fromFlagOrDefault (confHostName  defaults) (flagHost      opts)
         stateDir  = fromFlagOrDefault (confStateDir  defaults) (flagStateDir  opts)
         staticDir = fromFlagOrDefault (confStaticDir defaults) (flagStaticDir opts)
         tmpDir    = fromFlagOrDefault (stateDir </> "tmp") (flagTmpDir    opts)
+        listenOn = (confListenOn defaults) {
+                       loPortNum = port,
+                       loIP      = ip
+                   }
         config = defaults {
             confHostName  = hostname,
-            confPortNum   = port,
+            confListenOn  = listenOn,
             confStateDir  = stateDir,
             confStaticDir = staticDir,
             confTmpDir    = tmpDir
@@ -219,11 +231,30 @@ runAction opts = do
   where
     -- Option handling:
     --
-    checkPortOpt defaults Nothing    = return (confPortNum defaults)
+    checkPortOpt defaults Nothing    = return (loPortNum (confListenOn defaults))
     checkPortOpt _        (Just str) = case reads str of
       [(n,"")]  | n >= 1 && n <= 65535
                -> return n
       _        -> fail $ "bad port number " ++ show str
+
+    checkIPOpt defaults Nothing    = return (loIP (confListenOn defaults))
+    checkIPOpt _        (Just str) =
+      let pQuad = do ds <- Parse.many1 Parse.digit
+                     let quad = read ds :: Integer
+                     when (quad < 0 || quad > 255) $ fail "bad IP address"
+                     return quad
+          pIPv4 = do q1 <- pQuad
+                     void $ Parse.char '.'
+                     q2 <- pQuad
+                     void $ Parse.char '.'
+                     q3 <- pQuad
+                     void $ Parse.char '.'
+                     q4 <- pQuad
+                     Parse.eof
+                     return (q1, q2, q3, q4)
+      in case Parse.parse pIPv4 str str of
+         Left err -> fail (show err)
+         Right _ -> return str
 
     -- Set a Unix signal handler for SIG USR1 to create a state checkpoint.
     -- Useage:

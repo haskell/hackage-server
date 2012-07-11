@@ -9,6 +9,7 @@ module Distribution.Server (
     checkpoint,
 
     -- * Server configuration
+    ListenOn(..),
     ServerConfig(..),
     defaultServerConfig,
     hasSavedState,
@@ -26,7 +27,6 @@ module Distribution.Server (
  ) where
 
 import Happstack.Server hiding (port, host)
-import qualified Happstack.Server
 
 import Distribution.Server.Acid (Acid, checkpointAcid, startAcid, stopAcid, update)
 import qualified Distribution.Server.Framework.BackupRestore as Import
@@ -67,9 +67,14 @@ import Data.Int  (Int64)
 
 import Paths_hackage_server (getDataDir)
 
+data ListenOn = ListenOn {
+  loPortNum :: Int,
+  loIP :: String
+} deriving (Show)
+
 data ServerConfig = ServerConfig {
   confHostName  :: String,
-  confPortNum   :: Int,
+  confListenOn  :: ListenOn,
   confStateDir  :: FilePath,
   confStaticDir :: FilePath,
   confTmpDir    :: FilePath
@@ -85,7 +90,10 @@ defaultServerConfig = do
   dataDir  <- getDataDir
   return ServerConfig {
     confHostName  = hostName,
-    confPortNum   = 8080,
+    confListenOn  = ListenOn {
+                        loPortNum = 8080,
+                        loIP = "0.0.0.0"
+                    },
     confStateDir  = "state",
     confStaticDir = dataDir </> "static",
     confTmpDir    = "upload-tmp"
@@ -94,7 +102,7 @@ defaultServerConfig = do
 data Server = Server {
   serverAcid      :: Acid,
   serverFeatures  :: [HackageFeature],
-  serverPort      :: Int,
+  serverListenOn  :: ListenOn,
   serverEnv       :: ServerEnv
 }
 
@@ -115,7 +123,7 @@ hasSavedState = doesDirectoryExist . confAcidStateDir
 -- with stale lock files.
 --
 initialise :: ServerConfig -> IO Server
-initialise initConfig@(ServerConfig hostName portNum stateDir staticDir tmpDir) = do
+initialise initConfig@(ServerConfig hostName listenOn stateDir staticDir tmpDir) = do
     createDirectoryIfMissing False stateDir
     store   <- BlobStorage.open blobStoreDir
 
@@ -135,7 +143,7 @@ initialise initConfig@(ServerConfig hostName portNum stateDir staticDir tmpDir) 
     return Server {
         serverAcid      = acid,
         serverFeatures  = features,
-        serverPort      = portNum,
+        serverListenOn  = listenOn,
         serverEnv       = env
     }
 
@@ -143,7 +151,8 @@ initialise initConfig@(ServerConfig hostName portNum stateDir staticDir tmpDir) 
     acidStateDir = confAcidStateDir initConfig
     blobStoreDir  = confBlobStoreDir  initConfig
     hostURI       = URIAuth "" hostName portStr
-      where portStr | portNum == 80 = ""
+      where portNum = loPortNum listenOn
+            portStr | portNum == 80 = ""
                     | otherwise     = ':':show portNum
 
 -- | Actually run the server, i.e. start accepting client http connections.
@@ -156,14 +165,14 @@ run server = do
     exists <- doesDirectoryExist staticDir
     when (not exists) $ fail $ "The static files directory " ++ staticDir ++ " does not exist."
 
-    simpleHTTP conf $ do
+    runServer listenOn $ do
 
       handlePutPostQuotas
 
       fakeBrowserHttpMethods (impl server)
 
   where
-    conf = nullConf { Happstack.Server.port = serverPort server }
+    listenOn = serverListenOn server
 
     -- HS6 - Quotas should be configurable as well. Also there are places in
     -- the code that want to work with the request body directly but maybe
@@ -344,10 +353,14 @@ setUpTemp sconf secs = do
         -- cost to it
         threadDelay $ secs*1000000
         -- could likewise specify a mirror to redirect to for tarballs, and 503 for everything else
-        simpleHTTP conf $ (resp 503 $ setHeader "Content-Type" "text/html" $ toResponse html503)
+        runServer listenOn $ (resp 503 $ setHeader "Content-Type" "text/html" $ toResponse html503)
     return (TempServer tid)
-  where
-    conf = nullConf { Happstack.Server.port = confPortNum sconf }
+  where listenOn = confListenOn sconf
+
+runServer :: (ToMessage a) => ListenOn -> ServerPartT IO a -> IO ()
+runServer listenOn f
+    = do socket <- bindIPv4 (loIP listenOn) (loPortNum listenOn)
+         simpleHTTPWithSocket socket nullConf f
 
 -- | Static 503 page, based on Happstack's 404 page.
 html503 :: String
