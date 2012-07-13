@@ -22,9 +22,6 @@ module Distribution.Server.Framework.Auth (
     -- ** Special cases
     guardAuthenticated,
     guardPriviledged,
-
-    -- * deprecatged
-    withHackageAuth
   ) where
 
 import Distribution.Server.Users.Types (UserId, UserName(..), UserAuth(..), UserInfo(userName))
@@ -61,19 +58,6 @@ import qualified Data.Map as Map
 import qualified Text.ParserCombinators.ReadP as Parse
 import Data.Maybe (listToMaybe)
 import Data.List  (intercalate)
-
-
-------------------------------------------------------------------------
--- The old deprecated interface
---
-
-{-# DEPRECATED withHackageAuth "use guardAuthorised instead" #-}
-withHackageAuth :: Users.Users -> Maybe Group.UserList
-                -> (UserId -> UserInfo -> ServerPartE a) -> ServerPartE a
-withHackageAuth users mgroup theAction = do
-    (uid, uinfo) <- guardAuthenticated hackageRealm users
-    maybe (return ()) (\group -> guardPriviledged group uid) mgroup
-    theAction uid uinfo
 
 
 ------------------------------------------------------------------------
