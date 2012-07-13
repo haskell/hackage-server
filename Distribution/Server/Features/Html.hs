@@ -1,5 +1,3 @@
--- TODO: Get rid of this pragma:
-{-# OPTIONS_GHC -fno-warn-deprecations #-}
 module Distribution.Server.Features.Html (
     HtmlFeature,
     htmlResources,
@@ -323,7 +321,7 @@ servePasswordForm :: UserResource -> DynamicPath -> ServerPart Response
 servePasswordForm r dpath = htmlResponse $
                             withUserPath dpath $ \pathUid userInfo -> do
     users <- query State.GetUserDb
-    withHackageAuth users Nothing $ \uid _ -> do
+    (uid, _) <- guardAuthenticated hackageRealm users
     let uname = userName userInfo
     canChange <- canChangePassword uid pathUid
     case canChange of

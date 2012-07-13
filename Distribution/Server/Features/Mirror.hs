@@ -1,5 +1,3 @@
--- TODO: Get rid of this pragma:
-{-# OPTIONS_GHC -fno-warn-deprecations #-}
 module Distribution.Server.Features.Mirror (
     MirrorFeature,
     mirrorResource,
@@ -187,8 +185,8 @@ initMirrorFeature env core users = do
     requireMirrorAuth = do
         ulist   <- query GetMirrorClients
         userdb  <- query GetUserDb
-        withHackageAuth userdb (Just ulist) $ \uid _info ->
-          return uid
+        (uid, _) <- guardAuthorised hackageRealm userdb ulist
+        return uid
 
     -- It's silly that these are in continuation style,
     -- we should be able to fail -- exception-style -- with an HTTP error code!

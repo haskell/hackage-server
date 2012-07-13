@@ -136,7 +136,8 @@ collectTags pkgs = do
 putTags :: TagsFeature -> PackageName -> ServerPartE ()
 putTags tagf pkgname = withPackageAll pkgname $ \_ -> do
     -- let anyone edit tags for the moment. otherwise, we can do:
-    -- users <- query GetUserDb; withHackageAuth users Nothing $ \_ _ -> do
+    -- users <- query GetUserDb
+    -- void $ guardAuthenticated hackageRealm users
     mtags <- optional $ look "tags"
     case simpleParse =<< mtags of
         Just (TagList tags) -> do

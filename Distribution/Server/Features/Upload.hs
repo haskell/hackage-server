@@ -1,5 +1,3 @@
--- TODO: Get rid of this pragma:
-{-# OPTIONS_GHC -fno-warn-deprecations #-}
 module Distribution.Server.Features.Upload (
     UploadFeature,
     uploadResource,
@@ -170,13 +168,15 @@ withPackageNameAuth :: PackageName -> (Users.UserId -> Users.UserInfo -> ServerP
 withPackageNameAuth pkgname func = do
     userDb <- query $ GetUserDb
     groupSum <- getPackageGroup pkgname
-    withHackageAuth userDb (Just groupSum) func
+    (uid, uinfo) <- guardAuthorised hackageRealm userDb groupSum
+    func uid uinfo
 
 withTrusteeAuth :: (Users.UserId -> Users.UserInfo -> ServerPartE a) -> ServerPartE a
 withTrusteeAuth func = do
     userDb <- query $ GetUserDb
     trustee <- query $ GetHackageTrustees
-    withHackageAuth userDb (Just trustee) func
+    (uid, uinfo) <- guardAuthorised hackageRealm userDb trustee
+    func uid uinfo
 
 getPackageGroup :: MonadIO m => PackageName -> m Group.UserList
 getPackageGroup pkg = do
@@ -232,9 +232,10 @@ extractPackage processFunc storage =
               let fileName    = (fromMaybe "noname" $ inputFilename input)
               in upload fileName file
   where
-    upload name file = query GetUserDb >>= \users -> 
-                          -- initial check to ensure logged in.
-                          withHackageAuth users Nothing $ \uid _ -> do
+    upload name file =
+     do users <- query GetUserDb
+        -- initial check to ensure logged in.
+        (uid, _) <- guardAuthenticated hackageRealm users
         let processPackage :: ByteString -> IO (Either ErrorResponse (UploadResult, BlobStorage.BlobId))
             processPackage content' = do
                 -- as much as it would be nice to do requirePackageAuth in here,

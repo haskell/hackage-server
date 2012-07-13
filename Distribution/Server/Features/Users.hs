@@ -124,8 +124,8 @@ initUsersFeature _ _ = do
 requireAuth :: ServerPartE Response
 requireAuth = do
     users <- query GetUserDb
-    Auth.withHackageAuth users Nothing $ \_ info -> do
-        fmap Right $ seeOther ("/user/" ++ display (userName info)) $ toResponse ()
+    (_, info) <- Auth.guardAuthenticated hackageRealm users
+    fmap Right $ seeOther ("/user/" ++ display (userName info)) $ toResponse ()
 -}
 
 -- result: either not-found, not-authenticated, or 204 (success)
@@ -182,7 +182,7 @@ adminAddUser = do
     -- with these lines commented out, self-registration is allowed
   --admins <- query State.GetHackageAdmins
   --users <- query State.GetUserDb
-  --withHackageAuth users (Just admins) $ \_ _ -> do
+  --void $ guardAuthorised hackageRealm users admins
     reqData <- getDataFn lookUserNamePasswords
     case reqData of
         (Left errs) -> errBadRequest "Error registering user"

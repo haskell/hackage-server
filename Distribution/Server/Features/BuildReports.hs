@@ -1,5 +1,3 @@
--- TODO: Get rid of this pragma:
-{-# OPTIONS_GHC -fno-warn-deprecations #-}
 module Distribution.Server.Features.BuildReports (
     ReportsFeature,
     reportsResource,
@@ -110,15 +108,15 @@ submitBuildReport r dpath =
   withPackageVersionPath dpath $ \pkg -> do
     users <- query GetUserDb
     -- require logged-in user
-    withHackageAuth users Nothing $ \_ _ -> do
-        let pkgid = pkgInfoId pkg
-        Body reportbody <- consumeRequestBody
-        case BuildReport.parse $ unpack reportbody of
-            Left err -> errBadRequest "Error submitting report" [MText err]
-            Right report -> do
-                reportId <- update $ AddReport pkgid (report, Nothing)
-                -- redirect to new reports page
-                seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
+    void $ guardAuthenticated hackageRealm users
+    let pkgid = pkgInfoId pkg
+    Body reportbody <- consumeRequestBody
+    case BuildReport.parse $ unpack reportbody of
+        Left err -> errBadRequest "Error submitting report" [MText err]
+        Right report -> do
+            reportId <- update $ AddReport pkgid (report, Nothing)
+            -- redirect to new reports page
+            seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
 
 -- result: auth error, not-found error or redirect
 deleteBuildReport :: ReportsResource -> DynamicPath -> ServerPart Response
@@ -128,12 +126,12 @@ deleteBuildReport r dpath =
   withReportId dpath $ \reportId -> do
     users <- query GetUserDb
     -- restrict this to whom? currently logged in users.. a bad idea
-    withHackageAuth users Nothing $ \_ _ -> do
-        let pkgid = pkgInfoId pkg
-        success <- update $ DeleteReport pkgid reportId
-        if success
-            then seeOther (reportsListUri r "" pkgid) $ toResponse ()
-            else errNotFound "Build report not found" [MText $ "Build report #" ++ display reportId ++ " not found"]
+    void $ guardAuthenticated hackageRealm users
+    let pkgid = pkgInfoId pkg
+    success <- update $ DeleteReport pkgid reportId
+    if success
+        then seeOther (reportsListUri r "" pkgid) $ toResponse ()
+        else errNotFound "Build report not found" [MText $ "Build report #" ++ display reportId ++ " not found"]
 
 -- result: auth error, not-found error, or redirect
 putBuildLog :: ReportsResource -> BlobStorage -> DynamicPath -> ServerPart Response
@@ -143,13 +141,13 @@ putBuildLog r store dpath =
   withReportId dpath $ \reportId -> do
     users <- query GetUserDb
     -- logged in users
-    withHackageAuth users Nothing $ \_ _ -> do
-        let pkgid = pkgInfoId pkg
-        Body blogbody <- consumeRequestBody
-        buildLog <- liftIO $ BlobStorage.add store blogbody
-        void $ update $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
-        -- go to report page (linking the log)
-        seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
+    void $ guardAuthenticated hackageRealm users
+    let pkgid = pkgInfoId pkg
+    Body blogbody <- consumeRequestBody
+    buildLog <- liftIO $ BlobStorage.add store blogbody
+    void $ update $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
+    -- go to report page (linking the log)
+    seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
 
 -- result: auth error, not-found error or redirect
 deleteBuildLog :: ReportsResource -> DynamicPath -> ServerPart Response
@@ -159,11 +157,11 @@ deleteBuildLog r dpath =
   withReportId dpath $ \reportId -> do
     users <- query GetUserDb
     -- again, restrict this to whom?
-    withHackageAuth users Nothing $ \_ _ -> do
-        let pkgid = pkgInfoId pkg
-        void $ update $ SetBuildLog pkgid reportId Nothing
-        -- go to report page (which should no longer link the log)
-        seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
+    void $ guardAuthenticated hackageRealm users
+    let pkgid = pkgInfoId pkg
+    void $ update $ SetBuildLog pkgid reportId Nothing
+    -- go to report page (which should no longer link the log)
+    seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
 
 ---------------------------------------------------------------------------
 
