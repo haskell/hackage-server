@@ -230,3 +230,17 @@ executable hackage-build
                -fno-warn-orphans -fno-warn-unused-do-bind
                -fno-warn-warnings-deprecations
                -fno-warn-name-shadowing
+
+Test-Suite HighLevelTest
+    type:           exitcode-stdio-1.0
+    main-is:        HighLevelTest.hs
+    hs-source-dirs: tests
+    ghc-options:    -threaded
+    build-depends:  base,
+                    directory,
+                    filepath,
+                    process,
+                    HTTP,
+                    unix,
+                    Cabal      >= 1.14 && < 1.15
+
