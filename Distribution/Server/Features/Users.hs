@@ -1,7 +1,5 @@
 {-# LANGUAGE DoRec #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
--- TODO: Get rid of this pragma:
-{-# OPTIONS_GHC -fno-warn-deprecations #-}
 module Distribution.Server.Features.Users (
     UserFeature,
     userResource,
@@ -135,20 +133,20 @@ deleteAccount :: UserName -> ServerPartE ()
 deleteAccount uname = withUserName uname $ \uid _ -> do
     users <- query GetUserDb
     admins <- query State.GetHackageAdmins
-    withHackageAuth users (Just admins) $ \_ _ -> do
-        void $ update (DeleteUser uid)
+    void $ guardAuthorised hackageRealm users admins
+    void $ update (DeleteUser uid)
 
 -- result: not-found, not authenticated, or ok (success)
 enabledAccount :: UserName -> ServerPartE ()
 enabledAccount uname = withUserName uname $ \uid _ -> do
     users <- query GetUserDb
     admins <- query State.GetHackageAdmins
-    withHackageAuth users (Just admins) $ \_ _ -> do
-        enabled <- optional $ look "enabled"
-        -- for a checkbox, prescence in data string means 'checked'
-        void $ case enabled of
-               Nothing -> update (SetEnabledUser uid False)
-               Just _  -> update (SetEnabledUser uid True)
+    void $ guardAuthorised hackageRealm users admins
+    enabled <- optional $ look "enabled"
+    -- for a checkbox, prescence in data string means 'checked'
+    void $ case enabled of
+           Nothing -> update (SetEnabledUser uid False)
+           Just _  -> update (SetEnabledUser uid True)
 
 -- | Resources representing the collection of known users.
 --
@@ -277,29 +275,27 @@ doGroupAddUser group _ = do
             Nothing -> addError $ "No user with name " ++ show ustr ++ " found"
             Just uid -> do                    
                 ulist <- liftIO . Group.queryGroups $ canAddGroup group
-                withHackageAuth users (Just ulist) $ \_ _ -> do
-                    liftIO $ addUserList group uid
-                    return ()
+                void $ guardAuthorised hackageRealm users ulist
+                liftIO $ addUserList group uid
    where addError = errBadRequest "Failed to add user" . return . MText
 
 doGroupDeleteUser :: UserGroup -> DynamicPath -> ServerPartE ()
 doGroupDeleteUser group dpath = withUserPath dpath $ \uid _ -> do
     users <- query GetUserDb
     ulist <- liftIO . Group.queryGroups $ canRemoveGroup group
-    withHackageAuth users (Just ulist) $ \_ _ -> do
-        liftIO $ removeUserList group uid
-        return ()
+    void $ guardAuthorised hackageRealm users ulist
+    liftIO $ removeUserList group uid
 
 withGroupEditAuth :: UserGroup -> (Bool -> Bool -> ServerPartE a) -> ServerPartE a
 withGroupEditAuth group func = do
     users  <- query GetUserDb
     addList    <- liftIO . Group.queryGroups $ canAddGroup group
     removeList <- liftIO . Group.queryGroups $ canRemoveGroup group
-    withHackageAuth users Nothing $ \uid _ -> do
-        let (canAdd, canDelete) = (uid `Group.member` addList, uid `Group.member` removeList)
-        if not (canAdd || canDelete)
-            then errForbidden "Forbidden" [MText "Can't edit permissions for user group"]
-            else func canAdd canDelete
+    (uid, _) <- guardAuthenticated hackageRealm users
+    let (canAdd, canDelete) = (uid `Group.member` addList, uid `Group.member` removeList)
+    if not (canAdd || canDelete)
+        then errForbidden "Forbidden" [MText "Can't edit permissions for user group"]
+        else func canAdd canDelete
 
 ------------ Encapsulation of resources related to editing a user group.
 data GroupResource = GroupResource {
