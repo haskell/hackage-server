@@ -62,7 +62,11 @@ doit root
                            info "Finished")
 
 runTests :: IO ()
-runTests = do
+runTests = do runUserTests
+              runPackageTests
+
+runUserTests :: IO ()
+runUserTests = do
     do info "Getting user list"
        xs <- getUrlStrings "/users/"
        unless (xs == ["Hackage users","admin"]) $
@@ -97,17 +101,17 @@ runTests = do
        checkUnauthedUrl "testuser" "badpass" "/user/testuser/password"
     do info "Getting password change page for testuser with bad username"
        checkUnauthedUrl "baduser" "testpass" "/user/testuser/password"
-    do info "Changing password for testuser"
-       void $ postAuthToUrl "testuser" "testpass" "/user/testuser/password"
-                  [("password", "newtestpass"),
-                   ("repeat-password", "newtestpass"),
+    do info "Changing password for testuser2"
+       void $ postAuthToUrl "testuser2" "testpass2" "/user/testuser2/password"
+                  [("password", "newtestpass2"),
+                   ("repeat-password", "newtestpass2"),
                    ("_method", "PUT")]
     do info "Checking password has changed"
-       void $ getAuthUrlStrings "testuser" "newtestpass"
-                                "/user/testuser/password"
-       checkUnauthedUrl "testuser" "testpass" "/user/testuser/password"
+       void $ getAuthUrlStrings "testuser2" "newtestpass2"
+                                "/user/testuser2/password"
+       checkUnauthedUrl "testuser2" "testpass2" "/user/testuser2/password"
     do info "Trying to delete testuser2 as testuser2"
-       deleteUrlRes ((4, 0, 3) ==) "testuser2" "testpass2" "/user/testuser2"
+       deleteUrlRes ((4, 0, 3) ==) "testuser2" "newtestpass2" "/user/testuser2"
        xs <- getUrlStrings "/users/"
        unless (xs == ["Hackage users","admin","testuser","testuser2"]) $
            die ("Bad user list: " ++ show xs)
@@ -116,6 +120,17 @@ runTests = do
        xs <- getUrlStrings "/users/"
        unless (xs == ["Hackage users","admin","testuser"]) $
            die ("Bad user list: " ++ show xs)
+    do info "Getting user info for testuser"
+       xs <- getUrlStrings "/user/testuser"
+       unless (xs == ["testuser"]) $
+           die ("Bad user info: " ++ show xs)
+
+runPackageTests :: IO ()
+runPackageTests = do
+    do info "Getting package list"
+       xs <- getUrlStrings "/packages/"
+       unless (xs == ["Packages by category","Categories:","."]) $
+           die ("Bad package list: " ++ show xs)
 
 getUrlStrings :: String -> IO [String]
 getUrlStrings url = getUrlStrings' (getRequest (mkUrl url))
