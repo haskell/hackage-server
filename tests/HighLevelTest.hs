@@ -82,6 +82,10 @@ runTests = do
        xs <- getUrlStrings "/users/"
        unless (xs == ["Hackage users","admin","testuser", "testuser2"]) $
            die ("Bad user list: " ++ show xs)
+    do info "Checking new users are not in admin list"
+       xs <- getUrlStrings "/users/admins/"
+       unless (xs == ["Hackage admins","[","edit","]","admin"]) $
+           die ("Bad admin user list: " ++ show xs)
     do info "Getting password change page for testuser"
        void $ getAuthUrlStrings "testuser" "testpass" "/user/testuser/password"
     do info "Getting password change page for testuser as an admin"
@@ -105,7 +109,7 @@ checkUnauthedUrl u p url = withAuth u p url $ \req -> do
          | rspCode rsp == (4, 0, 3) ->
             return ()
          | otherwise ->
-            die ("Bad response code: " ++ show (rspCode rsp))
+            badResponse rsp
 
 withAuth :: String -> String -> String -> (Request_String -> IO a) -> IO a
 withAuth u p url f = do
@@ -146,7 +150,7 @@ withAuth u p url f = do
                                        req
                f req'
          | otherwise ->
-            die ("Bad response code: " ++ show (rspCode rsp))
+            badResponse rsp
 
 -- This is a simple HTML screen-scraping function. It skips down to
 -- a div with class "content", and then returns the list of strings
@@ -169,7 +173,7 @@ getUrlStrings' req
                         Nothing -> die "Bad HTML?"
                         Just strings -> return $ tidy strings
               | otherwise ->
-                 die ("Bad response code: " ++ show (rspCode rsp))
+                 badResponse rsp
     where isAngleBracket '<' = True
           isAngleBracket '>' = True
           isAngleBracket _   = False
@@ -197,10 +201,14 @@ postToUrl url vals
               | rspCode rsp == (3, 0, 3) ->
                  return ()
               | otherwise ->
-                 die ("Bad response code: " ++ show (rspCode rsp))
+                 badResponse rsp
 
 mkUrl :: String -> String
 mkUrl path = "http://127.0.0.1:" ++ show testPort ++ path
+
+badResponse :: Response String -> IO a
+badResponse rsp = die ("Bad response code: " ++ show (rspCode rsp) ++ "\n\n"
+                    ++ show rsp)
 
 waitForServer :: IO ()
 waitForServer = f 10
