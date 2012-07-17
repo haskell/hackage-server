@@ -239,6 +239,7 @@ Test-Suite HighLevelTest
     build-depends:  base,
                     directory,
                     filepath,
+                    network,
                     process,
                     HTTP,
                     unix,

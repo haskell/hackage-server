@@ -15,6 +15,7 @@ import Data.List
 import Data.Maybe
 import Network.HTTP
 import Network.HTTP.Auth
+import Network.URI
 import System.Directory
 import System.Exit
 import System.FilePath
@@ -80,7 +81,7 @@ runTests = do
                             ("repeat-password", "testpass2")]
     do info "Checking new users are now in user list"
        xs <- getUrlStrings "/users/"
-       unless (xs == ["Hackage users","admin","testuser", "testuser2"]) $
+       unless (xs == ["Hackage users","admin","testuser","testuser2"]) $
            die ("Bad user list: " ++ show xs)
     do info "Checking new users are not in admin list"
        xs <- getUrlStrings "/users/admins/"
@@ -91,29 +92,57 @@ runTests = do
     do info "Getting password change page for testuser as an admin"
        void $ getAuthUrlStrings "admin" "admin" "/user/testuser/password"
     do info "Getting password change page for testuser as another user"
-       checkUnauthedUrl "testuser2" "testpass2" "/user/testuser/password"
+       checkForbiddenUrl "testuser2" "testpass2" "/user/testuser/password"
+    do info "Getting password change page for testuser with bad password"
+       checkUnauthedUrl "testuser" "badpass" "/user/testuser/password"
+    do info "Getting password change page for testuser with bad username"
+       checkUnauthedUrl "baduser" "testpass" "/user/testuser/password"
+    do info "Changing password for testuser"
+       void $ postAuthToUrl "testuser" "testpass" "/user/testuser/password"
+                  [("password", "newtestpass"),
+                   ("repeat-password", "newtestpass"),
+                   ("_method", "PUT")]
+    do info "Checking password has changed"
+       void $ getAuthUrlStrings "testuser" "newtestpass"
+                                "/user/testuser/password"
+       checkUnauthedUrl "testuser" "testpass" "/user/testuser/password"
+    do info "Trying to delete testuser2 as testuser2"
+       deleteUrlRes ((4, 0, 3) ==) "testuser2" "testpass2" "/user/testuser2"
+       xs <- getUrlStrings "/users/"
+       unless (xs == ["Hackage users","admin","testuser","testuser2"]) $
+           die ("Bad user list: " ++ show xs)
+    do info "Deleting testuser2 as admin"
+       deleteUrlRes ((2, 0, 0) ==) "admin" "admin" "/user/testuser2"
+       xs <- getUrlStrings "/users/"
+       unless (xs == ["Hackage users","admin","testuser"]) $
+           die ("Bad user list: " ++ show xs)
 
 getUrlStrings :: String -> IO [String]
 getUrlStrings url = getUrlStrings' (getRequest (mkUrl url))
 
 getAuthUrlStrings :: String -> String -> String -> IO [String]
-getAuthUrlStrings u p url = withAuth u p url getUrlStrings'
+getAuthUrlStrings u p url
+    = withAuth u p (getRequest (mkUrl url)) getUrlStrings'
+
+checkForbiddenUrl :: String -> String -> String -> IO ()
+checkForbiddenUrl u p url = withAuth u p (getRequest (mkUrl url)) $
+                            checkReqGivesResponse ((4, 0, 3) ==)
 
 checkUnauthedUrl :: String -> String -> String -> IO ()
-checkUnauthedUrl u p url = withAuth u p url $ \req -> do
-    res <- simpleHTTP req
-    case res of
-        Left e ->
-            die ("Request failed: " ++ show e)
-        Right rsp
-         | rspCode rsp == (4, 0, 3) ->
-            return ()
-         | otherwise ->
-            badResponse rsp
+checkUnauthedUrl u p url = withAuth u p (getRequest (mkUrl url)) $
+                           checkReqGivesResponse ((4, 0, 1) ==)
 
-withAuth :: String -> String -> String -> (Request_String -> IO a) -> IO a
-withAuth u p url f = do
-    let req = getRequest (mkUrl url)
+deleteUrlRes :: ((Int, Int, Int) -> Bool) -> String -> String -> String
+             -> IO ()
+deleteUrlRes wantedCode u p url = case parseURI (mkUrl url) of
+                                  Nothing -> die "Bad URL"
+                                  Just uri ->
+                                      withAuth u p (mkRequest DELETE uri) $
+                                      checkReqGivesResponse wantedCode
+
+withAuth :: String -> String -> Request_String -> (Request_String -> IO a)
+         -> IO a
+withAuth u p req f = do
     res <- simpleHTTP req
     case res of
         Left e ->
@@ -188,23 +217,35 @@ getUrlStrings' req
                             (_, '<' : xs') -> getStrings (n + 1) xs'
                             _              -> Nothing
 
+mkPostReq :: String -> [(String, String)] -> Request_String
+mkPostReq url vals = setRequestBody (postRequest (mkUrl url))
+                                    ("application/x-www-form-urlencoded",
+                                     urlEncodeVars vals)
+
 postToUrl :: String -> [(String, String)] -> IO ()
-postToUrl url vals
-    = do let req = setRequestBody (postRequest (mkUrl url))
-                                  ("application/x-www-form-urlencoded",
-                                   urlEncodeVars vals)
-         res <- simpleHTTP req
+postToUrl url vals = checkReqGivesResponse ((3, 0, 3) ==) $ mkPostReq url vals
+
+postAuthToUrl :: String -> String -> String -> [(String, String)] -> IO ()
+postAuthToUrl u p url vals
+    = withAuth u p (mkPostReq url vals) (checkReqGivesResponse goodCode)
+    where goodCode (3, 0, 3) = True
+          goodCode (2, 0, 0) = True
+          goodCode _         = False
+
+checkReqGivesResponse :: ((Int, Int, Int) -> Bool) -> Request_String -> IO ()
+checkReqGivesResponse wantedCode req
+    = do res <- simpleHTTP req
          case res of
              Left e ->
                  die ("Request failed: " ++ show e)
              Right rsp
-              | rspCode rsp == (3, 0, 3) ->
+              | wantedCode (rspCode rsp) ->
                  return ()
               | otherwise ->
                  badResponse rsp
 
 mkUrl :: String -> String
-mkUrl path = "http://127.0.0.1:" ++ show testPort ++ path
+mkUrl relPath = "http://127.0.0.1:" ++ show testPort ++ relPath
 
 badResponse :: Response String -> IO a
 badResponse rsp = die ("Bad response code: " ++ show (rspCode rsp) ++ "\n\n"
