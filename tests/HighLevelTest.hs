@@ -165,21 +165,24 @@ getUrlStrings' req
                         trim = dropWhile isSpace . reverse
                              . dropWhile isSpace . reverse
                         tidy = filter (not . null) . map trim
-                    return $ tidy $ getStrings 1 $ unlines xs1
+                    case getStrings 1 $ unlines xs1 of
+                        Nothing -> die "Bad HTML?"
+                        Just strings -> return $ tidy strings
               | otherwise ->
                  die ("Bad response code: " ++ show (rspCode rsp))
     where isAngleBracket '<' = True
           isAngleBracket '>' = True
           isAngleBracket _   = False
-          getStrings :: Integer -> String -> [String]
+          getStrings :: Integer -> String -> Maybe [String]
           getStrings 0 xs = case break isAngleBracket xs of
-                            (_,    '>' : _)   -> error "Bad HTML?"
-                            (pref, '<' : xs') -> pref : getStrings 1 xs'
-                            _                 -> [xs]
+                            (_,    '>' : _)   -> Nothing
+                            (pref, '<' : xs') -> fmap (pref :)
+                                               $ getStrings 1 xs'
+                            _                 -> Just [xs]
           getStrings n xs = case break isAngleBracket xs of
                             (_, '>' : xs') -> getStrings (n - 1) xs'
                             (_, '<' : xs') -> getStrings (n + 1) xs'
-                            _              -> error "Bad HTML?"
+                            _              -> Nothing
 
 postToUrl :: String -> [(String, String)] -> IO ()
 postToUrl url vals
