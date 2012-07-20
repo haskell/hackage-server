@@ -10,6 +10,8 @@ module Main (main) where
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
+import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Base64 as Base64
 import Data.Char
 import Data.List
 import Data.Maybe
@@ -22,6 +24,7 @@ import System.FilePath
 import System.IO
 import System.IO.Error
 
+import Package
 import Run
 
 -- A random port, that hopefully won't clash with anything else
@@ -130,6 +133,16 @@ runPackageTests = do
     do info "Getting package list"
        xs <- getUrlStrings "/packages/"
        unless (xs == ["Packages by category","Categories:","."]) $
+           die ("Bad package list: " ++ show xs)
+    do info "Uploading testpackage"
+       void $ postFileAuthToUrl "testuser" "testpass" "/packages/"
+                  "package" (mkPackage "testpackage")
+    do info "Getting package list"
+       xs <- getUrlStrings "/packages/"
+       unless (xs == ["Packages by category",
+                      "Categories:","MyCategory","&nbsp;(1).",
+                      "MyCategory",
+                      "testpackage","library: test package testpackage"]) $
            die ("Bad package list: " ++ show xs)
 
 getUrlStrings :: String -> IO [String]
@@ -247,6 +260,30 @@ postAuthToUrl u p url vals
           goodCode (2, 0, 0) = True
           goodCode _         = False
 
+postFileAuthToUrl :: String -> String -> String -> String -> (FilePath, String)
+                  -> IO ()
+postFileAuthToUrl u p url field (filename, fileContents)
+    = let boundary = "--BOUNDARY"
+          req = setRequestBody (postRequest (mkUrl url))
+                               ("multipart/form-data; boundary=" ++ boundary,
+                                body)
+          unlines' = concat . map (++ "\r\n")
+          body = unlines' ["--" ++ boundary,
+                           "Content-Disposition: form-data; name=" ++ show field ++ "; filename=" ++ show filename,
+                           "Content-Type: application/gzip",
+                           -- Base64 encoding avoids any possibility of
+                           -- the boundary clashing with the file data
+                           "Content-Transfer-Encoding: base64",
+                           "",
+                           BS.unpack $ Base64.encode $ BS.pack fileContents,
+                           "--" ++ boundary ++ "--",
+                           ""]
+
+      in withAuth u p req (checkReqGivesResponse goodCode)
+    where goodCode (3, 0, 3) = True
+          goodCode (2, 0, 0) = True
+          goodCode _         = False
+
 checkReqGivesResponse :: ((Int, Int, Int) -> Bool) -> Request_String -> IO ()
 checkReqGivesResponse wantedCode req
     = do res <- simpleHTTP req
@@ -264,7 +301,8 @@ mkUrl relPath = "http://127.0.0.1:" ++ show testPort ++ relPath
 
 badResponse :: Response String -> IO a
 badResponse rsp = die ("Bad response code: " ++ show (rspCode rsp) ++ "\n\n"
-                    ++ show rsp)
+                    ++ show rsp ++ "\n\n"
+                    ++ rspBody rsp)
 
 waitForServer :: IO ()
 waitForServer = f 10

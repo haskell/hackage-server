@@ -237,11 +237,15 @@ Test-Suite HighLevelTest
     hs-source-dirs: tests
     ghc-options:    -threaded
     build-depends:  base,
+                    bytestring,
+                    base64-bytestring,
+                    Cabal      >= 1.14 && < 1.15,
                     directory,
                     filepath,
+                    HTTP,
                     network,
                     process,
-                    HTTP,
+                    tar,
                     unix,
-                    Cabal      >= 1.14 && < 1.15
+                    zlib
 
