@@ -161,6 +161,14 @@ runPackageTests = do
                return ()
            _ ->
                die "Bad index contents"
+    do info "Getting testpackage info"
+       xs <- getUrlStrings "/package/testpackage"
+       unless (take 1 xs == ["The testpackage package"]) $
+           die ("Bad package info: " ++ show xs)
+    do info "Getting testpackage-1.0.0.0 info"
+       xs <- getUrlStrings "/package/testpackage-1.0.0.0"
+       unless (take 1 xs == ["The testpackage package"]) $
+           die ("Bad package info: " ++ show xs)
     where (testpackageTarFilename, testpackageTarFileContent,
            testpackageCabalIndexFilename, testpackageCabalFile)
               = mkPackage "testpackage"
