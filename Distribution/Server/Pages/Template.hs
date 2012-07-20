@@ -26,7 +26,7 @@ hackagePageWith links heading docs = toHtml [header << docHead, body << docBody]
            thetype "application/opensearchdescription+xml"] << noHtml :
         links
     docBody = [thediv ! [theclass "header"] << docHeader,
-        thediv ! [theclass "content"] << docs]
+        thediv ! [identifier "content"] << docs]
     docHeader = [h1 << hackageTitle,
         table ! [theclass "navigation"] << navigation]
     hackageTitle = "hackageDB :: [Package]"

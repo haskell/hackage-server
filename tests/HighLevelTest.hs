@@ -239,13 +239,13 @@ getReqStrings :: Request_String -> IO [String]
 getReqStrings req
     = do body <- getReq req
          let xs0 = lines body
-             contentStart = ("<div class=\"content\"" `isSuffixOf`)
+             contentStart = ("<div id=\"content\"" `isSuffixOf`)
              xs1 = dropWhile (not . contentStart) xs0
              trim = dropWhile isSpace . reverse
                   . dropWhile isSpace . reverse
              tidy = filter (not . null) . map trim
          case getStrings 1 $ unlines xs1 of
-             Nothing -> die "Bad HTML?"
+             Nothing -> die ("Bad HTML?\n\n" ++ body)
              Just strings -> return $ tidy strings
     where isAngleBracket '<' = True
           isAngleBracket '>' = True
