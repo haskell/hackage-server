@@ -182,6 +182,13 @@ runPackageTests = do
                      </> testpackageHaskellFilename)
        unless (hsFile == testpackageHaskellFileContent) $
            die "Bad Haskell file"
+    do info "Getting testpackage maintainer info"
+       xs <- getUrlStrings "/package/testpackage/maintainers/"
+       unless (xs == ["Maintainers for", "testpackage",
+                      "Maintainers for a package can upload new versions and adjust other attributes in the package database.",
+                      "[","edit","]",
+                      "testuser"]) $
+           die "Bad maintainers list"
     where (testpackageTarFilename,        testpackageTarFileContent,
            testpackageCabalIndexFilename, testpackageCabalFile,
            testpackageHaskellFilename,    testpackageHaskellFileContent)
