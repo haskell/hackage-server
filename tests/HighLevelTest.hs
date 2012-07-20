@@ -173,8 +173,18 @@ runPackageTests = do
        cabalFile <- getUrl "/package/testpackage-1.0.0.0/testpackage.cabal"
        unless (cabalFile == testpackageCabalFile) $
            die "Bad Cabal file"
-    where (testpackageTarFilename, testpackageTarFileContent,
-           testpackageCabalIndexFilename, testpackageCabalFile)
+    do info "Getting testpackage tar file"
+       tarFile <- getUrl "/package/testpackage/testpackage-1.0.0.0.tar.gz"
+       unless (tarFile == testpackageTarFileContent) $
+           die "Bad tar file"
+    do info "Getting testpackage source"
+       hsFile <- getUrl ("/package/testpackage/src"
+                     </> testpackageHaskellFilename)
+       unless (hsFile == testpackageHaskellFileContent) $
+           die "Bad Haskell file"
+    where (testpackageTarFilename,        testpackageTarFileContent,
+           testpackageCabalIndexFilename, testpackageCabalFile,
+           testpackageHaskellFilename,    testpackageHaskellFileContent)
               = mkPackage "testpackage"
 
 getUrl :: String -> IO String
@@ -302,11 +312,17 @@ postAuthToUrl u p url vals
 
 postFileAuthToUrl :: String -> String -> String -> String -> (FilePath, String)
                   -> IO ()
-postFileAuthToUrl u p url field (filename, fileContents)
+postFileAuthToUrl u p url field file
+    = postFileAuthToReq u p (postRequest (mkUrl url)) field file
+
+postFileAuthToReq :: String -> String -> Request_String -> String
+                  -> (FilePath, String)
+                  -> IO ()
+postFileAuthToReq u p req field (filename, fileContents)
     = let boundary = "--BOUNDARY"
-          req = setRequestBody (postRequest (mkUrl url))
-                               ("multipart/form-data; boundary=" ++ boundary,
-                                body)
+          req' = setRequestBody req
+                                ("multipart/form-data; boundary=" ++ boundary,
+                                 body)
           unlines' = concat . map (++ "\r\n")
           body = unlines' ["--" ++ boundary,
                            "Content-Disposition: form-data; name=" ++ show field ++ "; filename=" ++ show filename,
@@ -319,7 +335,7 @@ postFileAuthToUrl u p url field (filename, fileContents)
                            "--" ++ boundary ++ "--",
                            ""]
 
-      in withAuth u p req (checkReqGivesResponse goodCode)
+      in withAuth u p req' (checkReqGivesResponse goodCode)
     where goodCode (3, 0, 3) = True
           goodCode (2, 0, 0) = True
           goodCode _         = False

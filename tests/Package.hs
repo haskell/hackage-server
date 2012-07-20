@@ -11,29 +11,22 @@ import System.FilePath
 mkPackage :: String -> (FilePath,   -- Tar filename
                         String,     -- Tar file content
                         FilePath,   -- Cabal filename in index
-                        String)     -- Cabal file content
-mkPackage name
-    = let (entries, cabalFile) = mkEntries name
-          tar                  = write entries
-          targz                = compress tar
-      in (name ++ "-1.0.0.0.tar.gz", BS.unpack targz,
-          name ++ "/1.0.0.0/" ++ name ++ ".cabal", cabalFile)
-
-mkTarPath :: FilePath -> TarPath
-mkTarPath fp = case toTarPath False fp of
-               Left err -> error err
-               Right tp -> tp
-
-mkEntries :: String -> ([Entry], String)
-mkEntries name = (entries, cabalFile)
-    where entries = [directoryEntry (mkTarPath dir),
+                        String,     -- Cabal file content
+                        FilePath,   -- Haskell filename in source tree
+                        String)     -- Haskell file content
+mkPackage name = (name ++ "-1.0.0.0.tar.gz",               BS.unpack targz,
+                  name ++ "/1.0.0.0/" ++ name ++ ".cabal", cabalFile,
+                  modName <.> "hs",                        modFile)
+    where targz = compress tar
+          tar = write entries
+          entries = [directoryEntry (mkTarPath dir),
                      cabalEntry,
                      modEntry]
           dir = name ++ "-1.0.0.0"
           modName = headToUpper name
           cabalEntry = fileEntry (mkTarPath (dir </> name <.> "cabal"))
                                  (BS.pack cabalFile)
-          modEntry = fileEntry (mkTarPath (dir </> modName <.> "cabal"))
+          modEntry = fileEntry (mkTarPath (dir </> modName <.> "hs"))
                                (BS.pack modFile)
           cabalFile = unlines [
                           "name:          " ++ name,
@@ -51,6 +44,11 @@ mkEntries name = (entries, cabalFile)
                         "module " ++ modName ++ " where",
                         "f" ++ name ++ " :: () -> ()",
                         "f" ++ name ++ " () = ()"]
+
+mkTarPath :: FilePath -> TarPath
+mkTarPath fp = case toTarPath False fp of
+               Left err -> error err
+               Right tp -> tp
 
 headToUpper :: String -> String
 headToUpper [] = []
