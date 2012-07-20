@@ -169,6 +169,10 @@ runPackageTests = do
        xs <- getUrlStrings "/package/testpackage-1.0.0.0"
        unless (take 1 xs == ["The testpackage package"]) $
            die ("Bad package info: " ++ show xs)
+    do info "Getting testpackage Cabal file"
+       cabalFile <- getUrl "/package/testpackage-1.0.0.0/testpackage.cabal"
+       unless (cabalFile == testpackageCabalFile) $
+           die "Bad Cabal file"
     where (testpackageTarFilename, testpackageTarFileContent,
            testpackageCabalIndexFilename, testpackageCabalFile)
               = mkPackage "testpackage"
