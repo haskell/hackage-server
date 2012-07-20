@@ -7,11 +7,14 @@ server.
 
 module Main (main) where
 
+import qualified Codec.Archive.Tar as Tar
+import qualified Codec.Compression.GZip as GZip
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Base64 as Base64
+import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.Char
 import Data.List
 import Data.Maybe
@@ -135,8 +138,8 @@ runPackageTests = do
        unless (xs == ["Packages by category","Categories:","."]) $
            die ("Bad package list: " ++ show xs)
     do info "Uploading testpackage"
-       void $ postFileAuthToUrl "testuser" "testpass" "/packages/"
-                  "package" (mkPackage "testpackage")
+       void $ postFileAuthToUrl "testuser" "testpass" "/packages/" "package"
+                  (testpackageTarFilename, testpackageTarFileContent)
     do info "Getting package list"
        xs <- getUrlStrings "/packages/"
        unless (xs == ["Packages by category",
@@ -144,13 +147,33 @@ runPackageTests = do
                       "MyCategory",
                       "testpackage","library: test package testpackage"]) $
            die ("Bad package list: " ++ show xs)
+    do info "Getting package index"
+       targz <- getUrl "/packages/index.tar.gz"
+       let tar = GZip.decompress $ LBS.pack targz
+           entries = Tar.foldEntries (:) [] (error . show) $ Tar.read tar
+           entryFilenames = map Tar.entryPath    entries
+           entryContents  = map Tar.entryContent entries
+       unless (entryFilenames == [testpackageCabalIndexFilename]) $
+           die ("Bad index filenames: " ++ show entryFilenames)
+       case entryContents of
+           [Tar.NormalFile bs _]
+            | LBS.unpack bs == testpackageCabalFile ->
+               return ()
+           _ ->
+               die "Bad index contents"
+    where (testpackageTarFilename, testpackageTarFileContent,
+           testpackageCabalIndexFilename, testpackageCabalFile)
+              = mkPackage "testpackage"
+
+getUrl :: String -> IO String
+getUrl url = getReq (getRequest (mkUrl url))
 
 getUrlStrings :: String -> IO [String]
-getUrlStrings url = getUrlStrings' (getRequest (mkUrl url))
+getUrlStrings url = getReqStrings (getRequest (mkUrl url))
 
 getAuthUrlStrings :: String -> String -> String -> IO [String]
 getAuthUrlStrings u p url
-    = withAuth u p (getRequest (mkUrl url)) getUrlStrings'
+    = withAuth u p (getRequest (mkUrl url)) getReqStrings
 
 checkForbiddenUrl :: String -> String -> String -> IO ()
 checkForbiddenUrl u p url = withAuth u p (getRequest (mkUrl url)) $
@@ -212,25 +235,18 @@ withAuth u p req f = do
 -- This is a simple HTML screen-scraping function. It skips down to
 -- a div with class "content", and then returns the list of strings
 -- that are in the following HTML.
-getUrlStrings' :: Request_String -> IO [String]
-getUrlStrings' req
-    = do res <- simpleHTTP req
-         case res of
-             Left e ->
-                 die ("Request failed: " ++ show e)
-             Right rsp
-              | rspCode rsp == (2, 0, 0) ->
-                 do let xs0 = lines $ rspBody rsp
-                        contentStart = ("<div class=\"content\"" `isSuffixOf`)
-                        xs1 = dropWhile (not . contentStart) xs0
-                        trim = dropWhile isSpace . reverse
-                             . dropWhile isSpace . reverse
-                        tidy = filter (not . null) . map trim
-                    case getStrings 1 $ unlines xs1 of
-                        Nothing -> die "Bad HTML?"
-                        Just strings -> return $ tidy strings
-              | otherwise ->
-                 badResponse rsp
+getReqStrings :: Request_String -> IO [String]
+getReqStrings req
+    = do body <- getReq req
+         let xs0 = lines body
+             contentStart = ("<div class=\"content\"" `isSuffixOf`)
+             xs1 = dropWhile (not . contentStart) xs0
+             trim = dropWhile isSpace . reverse
+                  . dropWhile isSpace . reverse
+             tidy = filter (not . null) . map trim
+         case getStrings 1 $ unlines xs1 of
+             Nothing -> die "Bad HTML?"
+             Just strings -> return $ tidy strings
     where isAngleBracket '<' = True
           isAngleBracket '>' = True
           isAngleBracket _   = False
@@ -244,6 +260,18 @@ getUrlStrings' req
                             (_, '>' : xs') -> getStrings (n - 1) xs'
                             (_, '<' : xs') -> getStrings (n + 1) xs'
                             _              -> Nothing
+
+getReq :: Request_String -> IO String
+getReq req
+    = do res <- simpleHTTP req
+         case res of
+             Left e ->
+                 die ("Request failed: " ++ show e)
+             Right rsp
+              | rspCode rsp == (2, 0, 0) ->
+                 return $ rspBody rsp
+              | otherwise ->
+                 badResponse rsp
 
 mkPostReq :: String -> [(String, String)] -> Request_String
 mkPostReq url vals = setRequestBody (postRequest (mkUrl url))

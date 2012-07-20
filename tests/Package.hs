@@ -8,24 +8,28 @@ import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Char
 import System.FilePath
 
-mkPackage :: String -> (FilePath, String)
+mkPackage :: String -> (FilePath,   -- Tar filename
+                        String,     -- Tar file content
+                        FilePath,   -- Cabal filename in index
+                        String)     -- Cabal file content
 mkPackage name
-    = let entries = mkEntries name
-          tar     = write entries
-          targz   = compress tar
-      in (name ++ "-1.0.0.0.tar.gz", BS.unpack targz)
+    = let (entries, cabalFile) = mkEntries name
+          tar                  = write entries
+          targz                = compress tar
+      in (name ++ "-1.0.0.0.tar.gz", BS.unpack targz,
+          name ++ "/1.0.0.0/" ++ name ++ ".cabal", cabalFile)
 
 mkTarPath :: FilePath -> TarPath
 mkTarPath fp = case toTarPath False fp of
                Left err -> error err
                Right tp -> tp
 
-mkEntries :: String -> [Entry]
-mkEntries name = [directoryEntry (mkTarPath dir),
-                  cabalEntry,
-                  modEntry
-                 ]
-    where dir = name ++ "-1.0.0.0"
+mkEntries :: String -> ([Entry], String)
+mkEntries name = (entries, cabalFile)
+    where entries = [directoryEntry (mkTarPath dir),
+                     cabalEntry,
+                     modEntry]
+          dir = name ++ "-1.0.0.0"
           modName = headToUpper name
           cabalEntry = fileEntry (mkTarPath (dir </> name <.> "cabal"))
                                  (BS.pack cabalFile)
