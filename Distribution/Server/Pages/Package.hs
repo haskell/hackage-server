@@ -1,4 +1,5 @@
 -- Body of the HTML page for a package
+{-# LANGUAGE PatternGuards #-}
 module Distribution.Server.Pages.Package (
     packagePage,
     renderDependencies,
@@ -195,6 +196,7 @@ renderFields render = [
         ("Category",    commaList . map categoryField $ rendCategory render), 
         ("Home page",   linkField $ homepage desc),
         ("Bug tracker", linkField $ bugReports desc),
+        ("Source repository", vList $ map sourceRepositoryField $ (sourceRepos desc ++ sourceRepos desc)),
         ("Executables", commaList . map toHtml $ rendExecNames render),
         ("Upload date", toHtml $ showTime utime),
         ("Uploaded by", userField)
@@ -213,9 +215,50 @@ renderFields render = [
             Nothing -> strong ! [theclass "warning"] << toHtml "none"
             Just n  -> toHtml n
         showTime = formatTime defaultTimeLocale "%c"
+        sourceRepositoryField sr = sourceRepositoryToHtml sr
+
+sourceRepositoryToHtml :: SourceRepo -> Html
+sourceRepositoryToHtml sr
+    = toHtml (display (repoKind sr) ++ ": ")
+  +++ case repoType sr of
+      Just Darcs
+       | (Just url, Nothing, Nothing) <-
+         (repoLocation sr, repoModule sr, repoBranch sr) ->
+          concatHtml [toHtml "darcs get ",
+                      anchor ! [href url] << toHtml url,
+                      case repoTag sr of
+                          Just tag' -> toHtml (" --tag " ++ tag')
+                          Nothing   -> noHtml,
+                      case repoSubdir sr of
+                          Just sd -> toHtml " ("
+                                 +++ (anchor ! [href (url </> sd)]
+                                      << toHtml sd)
+                                 +++ toHtml ")"
+                          Nothing   -> noHtml]
+      Just Git
+       | (Just url, Nothing) <-
+         (repoLocation sr, repoModule sr) ->
+          concatHtml [toHtml "git clone ",
+                      anchor ! [href url] << toHtml url,
+                      case repoBranch sr of
+                          Just branch -> toHtml (" -b " ++ branch)
+                          Nothing     -> noHtml,
+                      case repoTag sr of
+                          Just tag' -> toHtml ("(tag " ++ tag' ++ ")")
+                          Nothing   -> noHtml,
+                      case repoSubdir sr of
+                          Just sd -> toHtml ("(tag " ++ sd ++ ")")
+                          Nothing -> noHtml]
+      _ ->
+          -- We don't know how to show this SourceRepo.
+          -- This is a kludge so that we at least show all the info.
+          toHtml (show sr)
 
 commaList :: [Html] -> Html
 commaList = concatHtml . intersperse (toHtml ", ")
+
+vList :: [Html] -> Html
+vList = concatHtml . intersperse br
 -----------------------------------------------------------------------------
 
 renderModuleForest :: Maybe URL -> ModuleForest -> Html
