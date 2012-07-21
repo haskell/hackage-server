@@ -570,7 +570,9 @@ restoreAction opts [tarFile] = do
         res <- Server.importServerTar server tar
         case res of
             Just err -> fail err
-            _ -> info "Successfully imported."
+            _ ->
+                do createDirectory (stateDir </> "tmp")
+                   info "Successfully imported."
 restoreAction _ _ = die "There should be exactly one argument: the backup tarball."
 
 -------------------------------------------------------------------------------
