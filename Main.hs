@@ -426,7 +426,7 @@ backupAction opts = do
 
     let stateDir = fromFlagOrDefault (confStateDir defaults) (flagBackupDir opts)
         config = defaults { confStateDir = stateDir }
-        exportPath = fromFlagOrDefault "export.tar" (flagBackupDir opts)
+        exportPath = fromFlagOrDefault "export.tar" (flagBackup opts)
 
     withServer config False $ \server -> do
       info "Preparing export tarball"
