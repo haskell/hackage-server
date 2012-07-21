@@ -48,14 +48,32 @@ main = do hSetBuffering stdout LineBuffering
 
 doit :: FilePath -> IO ()
 doit root
-    = do mec <- runServer root ["init"]
-         case mec of
-             Just ExitSuccess -> return ()
-             _ -> do info "init failed"
-                     exitFailure
+    = do info "initialising hackage database"
+         runServerChecked True root ["init"]
          withServerRunning root $ do runUserTests
                                      runPackageUploadTests
                                      runPackageTests
+         withServerRunning root $ runPackageTests
+         info "Making database backup"
+         runServerChecked False root ["backup", "-o", "hlb.tar"]
+         info "Removing old state"
+         removeDirectoryRecursive "state"
+         info "Checking server doesn't work"
+         mec <- runServer True root serverRunningArgs
+         case mec of
+             Just (ExitFailure 1) -> return ()
+             Just (ExitFailure _) -> die "Server failed with wrong exit code"
+             Just ExitSuccess     -> die "Server worked unexpectedly"
+             Nothing              -> die "Got a signal?"
+         info "Restoring database"
+         runServerChecked False root ["restore", "hlb.tar"]
+         info "Making another database backup"
+         runServerChecked False root ["backup", "-o", "hlb2.tar"]
+         info "Checking databases match"
+         db1 <- LBS.readFile "hlb.tar"
+         db2 <- LBS.readFile "hlb2.tar"
+         unless (db1 == db2) $ die "Databases don't match"
+         info "Checking server still works, and data is intact"
          withServerRunning root $ runPackageTests
 
 withServerRunning :: FilePath -> IO () -> IO ()
@@ -63,9 +81,7 @@ withServerRunning root f
     = do info "Forking server thread"
          mv <- newEmptyMVar
          bracket (forkIO (do info "Server thread started"
-                             void $ runServer root ["run",
-                                                    "--ip", "127.0.0.1",
-                                                    "--port", show testPort]
+                             void $ runServer True root serverRunningArgs
                           `finally` putMVar mv ()))
                  (\t -> do killThread t
                            takeMVar mv
@@ -74,6 +90,9 @@ withServerRunning root f
                            info "Server running"
                            f
                            info "Finished with server")
+
+serverRunningArgs :: [String]
+serverRunningArgs = ["run", "--ip", "127.0.0.1", "--port", show testPort]
 
 runUserTests :: IO ()
 runUserTests = do
@@ -403,11 +422,19 @@ waitForServer = f 10
                               threadDelay 100000
                               f (n - 1)
 
-runServer :: FilePath -> [String] -> IO (Maybe ExitCode)
-runServer root args = run server args'
+runServerChecked :: Bool -> FilePath -> [String] -> IO ()
+runServerChecked withStatic root args
+    = do mec <- runServer withStatic root args
+         case mec of
+             Just ExitSuccess -> return ()
+             _ -> die "Bad exit code from server"
+
+runServer :: Bool -> FilePath -> [String] -> IO (Maybe ExitCode)
+runServer withStatic root args = run server args'
     where server = root </> "dist/build/hackage-server/hackage-server"
-          args' = ("--static-dir=" ++ root </> "static/")
-                : args
+          args' = if withStatic
+                  then ("--static-dir=" ++ root </> "static/") : args
+                  else                                           args
 
 info :: String -> IO ()
 info str = putStrLn ("= " ++ str)
