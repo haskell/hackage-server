@@ -53,7 +53,14 @@ doit root
              Just ExitSuccess -> return ()
              _ -> do info "init failed"
                      exitFailure
-         info "Forking server thread"
+         withServerRunning root $ do runUserTests
+                                     runPackageUploadTests
+                                     runPackageTests
+         withServerRunning root $ runPackageTests
+
+withServerRunning :: FilePath -> IO () -> IO ()
+withServerRunning root f
+    = do info "Forking server thread"
          mv <- newEmptyMVar
          bracket (forkIO (do info "Server thread started"
                              void $ runServer root ["run",
@@ -61,15 +68,12 @@ doit root
                                                     "--port", show testPort]
                           `finally` putMVar mv ()))
                  (\t -> do killThread t
-                           takeMVar mv)
+                           takeMVar mv
+                           info "Server terminated")
                  (\_ -> do waitForServer
                            info "Server running"
-                           runTests
-                           info "Finished")
-
-runTests :: IO ()
-runTests = do runUserTests
-              runPackageTests
+                           f
+                           info "Finished with server")
 
 runUserTests :: IO ()
 runUserTests = do
@@ -131,8 +135,8 @@ runUserTests = do
        unless (xs == ["testuser"]) $
            die ("Bad user info: " ++ show xs)
 
-runPackageTests :: IO ()
-runPackageTests = do
+runPackageUploadTests :: IO ()
+runPackageUploadTests = do
     do info "Getting package list"
        xs <- getUrlStrings "/packages/"
        unless (xs == ["Packages by category","Categories:","."]) $
@@ -148,6 +152,11 @@ runPackageTests = do
        void $ postFileAuthToUrlRes ((2, 0, 0) ==)
                   "testuser" "testpass" "/packages/" "package"
                   (testpackageTarFilename, testpackageTarFileContent)
+    where (testpackageTarFilename, testpackageTarFileContent, _, _, _, _)
+              = testpackage
+
+runPackageTests :: IO ()
+runPackageTests = do
     do info "Getting package list"
        xs <- getUrlStrings "/packages/"
        unless (xs == ["Packages by category",
@@ -197,10 +206,13 @@ runPackageTests = do
                       "[","edit","]",
                       "testuser"]) $
            die "Bad maintainers list"
-    where (testpackageTarFilename,        testpackageTarFileContent,
+    where (_,                             testpackageTarFileContent,
            testpackageCabalIndexFilename, testpackageCabalFile,
            testpackageHaskellFilename,    testpackageHaskellFileContent)
-              = mkPackage "testpackage"
+              = testpackage
+
+testpackage :: (FilePath, String, FilePath, String, FilePath, String)
+testpackage = mkPackage "testpackage"
 
 getUrl :: String -> IO String
 getUrl url = getReq (getRequest (mkUrl url))
