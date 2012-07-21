@@ -196,7 +196,7 @@ renderFields render = [
         ("Category",    commaList . map categoryField $ rendCategory render), 
         ("Home page",   linkField $ homepage desc),
         ("Bug tracker", linkField $ bugReports desc),
-        ("Source repository", vList $ map sourceRepositoryField $ (sourceRepos desc ++ sourceRepos desc)),
+        ("Source repository", vList $ map sourceRepositoryField $ sourceRepos desc),
         ("Executables", commaList . map toHtml $ rendExecNames render),
         ("Upload date", toHtml $ showTime utime),
         ("Uploaded by", userField)
@@ -247,8 +247,41 @@ sourceRepositoryToHtml sr
                           Just tag' -> toHtml ("(tag " ++ tag' ++ ")")
                           Nothing   -> noHtml,
                       case repoSubdir sr of
-                          Just sd -> toHtml ("(tag " ++ sd ++ ")")
+                          Just sd -> toHtml ("(" ++ sd ++ ")")
                           Nothing -> noHtml]
+      Just SVN
+       | (Just url, Nothing, Nothing, Nothing) <-
+         (repoLocation sr, repoModule sr, repoBranch sr, repoTag sr) ->
+          concatHtml [toHtml "svn checkout ",
+                      anchor ! [href url] << toHtml url,
+                      case repoSubdir sr of
+                          Just sd -> toHtml ("(" ++ sd ++ ")")
+                          Nothing   -> noHtml]
+      Just CVS
+       | (Just url, Just m, Nothing, Nothing) <-
+         (repoLocation sr, repoModule sr, repoBranch sr, repoTag sr) ->
+          concatHtml [toHtml "cvs -d ",
+                      anchor ! [href url] << toHtml url,
+                      toHtml (" " ++ m),
+                      case repoSubdir sr of
+                          Just sd -> toHtml ("(" ++ sd ++ ")")
+                          Nothing   -> noHtml]
+      Just Mercurial
+       | (Just url, Nothing, Nothing, Nothing) <-
+         (repoLocation sr, repoModule sr, repoBranch sr, repoTag sr) ->
+          concatHtml [toHtml "hg clone ",
+                      anchor ! [href url] << toHtml url,
+                      case repoSubdir sr of
+                          Just sd -> toHtml ("(" ++ sd ++ ")")
+                          Nothing   -> noHtml]
+      Just Bazaar
+       | (Just url, Nothing, Nothing, Nothing) <-
+         (repoLocation sr, repoModule sr, repoBranch sr, repoTag sr) ->
+          concatHtml [toHtml "bzr branch ",
+                      anchor ! [href url] << toHtml url,
+                      case repoSubdir sr of
+                          Just sd -> toHtml ("(" ++ sd ++ ")")
+                          Nothing   -> noHtml]
       _ ->
           -- We don't know how to show this SourceRepo.
           -- This is a kludge so that we at least show all the info.
