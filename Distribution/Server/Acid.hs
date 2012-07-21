@@ -16,9 +16,10 @@ import Distribution.Server.Packages.Downloads       (DownloadCounts, initialDown
 import Distribution.Server.Packages.Platform        (PlatformPackages, initialPlatformPackages)
 import Distribution.Server.Packages.Preferred       (PreferredVersions, initialPreferredVersions)
 import Distribution.Server.Packages.Reverse         (ReverseIndex, initialReverseIndex)
-import Distribution.Server.Packages.State           (CandidatePackages, Documentation, HackageTrustees, PackageMaintainers, PackagesState,
+import Distribution.Server.Packages.State           (CandidatePackages, Documentation, HackageTrustees, HackageUploaders, PackageMaintainers, PackagesState,
                                                      initialCandidatePackages, initialDocumentation, 
-                                                     initialHackageTrustees, initialPackageMaintainers, initialPackagesState)
+                                                     initialHackageTrustees, initialHackageUploaders,
+                                                     initialPackageMaintainers, initialPackagesState)
 import Distribution.Server.Packages.Tag             (PackageTags, initialPackageTags)
 import Distribution.Server.Users.State              (HackageAdmins, MirrorClients, initialHackageAdmins, initialMirrorClients)
 import Distribution.Server.Users.Users              (Users)
@@ -33,6 +34,7 @@ data Acid = Acid
     , acidDownloadCounts     :: AcidState DownloadCounts
     , acidHackageAdmins      :: AcidState HackageAdmins
     , acidHackageTrustees    :: AcidState HackageTrustees
+    , acidHackageUploaders   :: AcidState HackageUploaders
     , acidMirrorClients      :: AcidState MirrorClients
     , acidPackageMaintainers :: AcidState PackageMaintainers
     , acidPackagesState      :: AcidState PackagesState
@@ -66,6 +68,9 @@ instance AcidComponent HackageAdmins where
 
 instance AcidComponent HackageTrustees where
     acidComponent = acidHackageTrustees
+
+instance AcidComponent HackageUploaders where
+    acidComponent = acidHackageUploaders
 
 instance AcidComponent MirrorClients where
     acidComponent = acidMirrorClients
@@ -110,6 +115,7 @@ startAcid stateDir =
            initialDownloadCounts
            initialHackageAdmins
            initialHackageTrustees
+           initialHackageUploaders
            initialMirrorClients
            initialPackageMaintainers
            initialPackagesState
@@ -127,6 +133,7 @@ startAcid' :: FilePath
            -> DownloadCounts
            -> HackageAdmins
            -> HackageTrustees
+           -> HackageUploaders
            -> MirrorClients
            -> PackageMaintainers
            -> PackagesState
@@ -136,7 +143,7 @@ startAcid' :: FilePath
            -> ReverseIndex
            -> Users
            -> IO Acid
-startAcid' stateDir buildReports candidatePackages distros documentation downloadCounts hackageAdmins hackageTrustees mirrorClients packageMaintainers packagesState packageTags platformPackages preferredVersions reverseIndex users =
+startAcid' stateDir buildReports candidatePackages distros documentation downloadCounts hackageAdmins hackageTrustees hackageUploaders mirrorClients packageMaintainers packagesState packageTags platformPackages preferredVersions reverseIndex users =
     do buildReports'       <- openLocalStateFrom (stateDir </> "BuildReports")       buildReports
        candidatePackages'  <- openLocalStateFrom (stateDir </> "CandidatePackages")  candidatePackages
        distros'            <- openLocalStateFrom (stateDir </> "Distros")            distros
@@ -144,6 +151,7 @@ startAcid' stateDir buildReports candidatePackages distros documentation downloa
        downloadCounts'     <- openLocalStateFrom (stateDir </> "DownloadCounts")     downloadCounts
        hackageAdmins'      <- openLocalStateFrom (stateDir </> "HackageAdmins")      hackageAdmins
        hackageTrustees'    <- openLocalStateFrom (stateDir </> "HackageTrustees")    hackageTrustees
+       hackageUploaders'   <- openLocalStateFrom (stateDir </> "HackageUploaders")   hackageUploaders
        mirrorClients'      <- openLocalStateFrom (stateDir </> "MirrorClients")      mirrorClients
        packageMaintainers' <- openLocalStateFrom (stateDir </> "PackageMaintainers") packageMaintainers
        packagesState'      <- openLocalStateFrom (stateDir </> "PackagesState")      packagesState
@@ -159,6 +167,7 @@ startAcid' stateDir buildReports candidatePackages distros documentation downloa
                        , acidDownloadCounts     = downloadCounts'
                        , acidHackageAdmins      = hackageAdmins'
                        , acidHackageTrustees    = hackageTrustees'
+                       , acidHackageUploaders   = hackageUploaders'
                        , acidMirrorClients      = mirrorClients'
                        , acidPackageMaintainers = packageMaintainers'
                        , acidPackagesState      = packagesState'
@@ -181,6 +190,7 @@ stopAcid acid =
        createCheckpointAndClose (acidDownloadCounts acid)
        createCheckpointAndClose (acidHackageAdmins acid)
        createCheckpointAndClose (acidHackageTrustees acid)
+       createCheckpointAndClose (acidHackageUploaders acid)
        createCheckpointAndClose (acidMirrorClients acid)
        createCheckpointAndClose (acidPackageMaintainers acid)
        createCheckpointAndClose (acidPackagesState acid)
@@ -199,6 +209,7 @@ checkpointAcid acid =
        createCheckpoint (acidDownloadCounts acid)
        createCheckpoint (acidHackageAdmins acid)
        createCheckpoint (acidHackageTrustees acid)
+       createCheckpoint (acidHackageUploaders acid)
        createCheckpoint (acidMirrorClients acid)
        createCheckpoint (acidPackageMaintainers acid)
        createCheckpoint (acidPackagesState acid)

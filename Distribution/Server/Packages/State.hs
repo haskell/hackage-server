@@ -282,3 +282,34 @@ $(makeAcidic ''HackageTrustees ['getHackageTrustees
                                ,'removeHackageTrustee
                                ,'replaceHackageTrustees
                                ])
+
+-------------------------------- Uploader list
+data HackageUploaders = HackageUploaders {
+    uploaderList :: UserList
+} deriving (Show, Typeable)
+
+$(deriveSafeCopy 0 'base ''HackageUploaders)
+
+initialHackageUploaders :: HackageUploaders
+initialHackageUploaders = HackageUploaders Group.empty
+
+getHackageUploaders :: Query HackageUploaders UserList
+getHackageUploaders = asks uploaderList
+
+modifyHackageUploaders :: (UserList -> UserList) -> Update HackageUploaders ()
+modifyHackageUploaders func = State.modify (\ht -> ht {uploaderList = func (uploaderList ht) })
+
+addHackageUploader :: UserId -> Update HackageUploaders ()
+addHackageUploader uid = modifyHackageUploaders (Group.add uid)
+
+removeHackageUploader :: UserId -> Update HackageUploaders ()
+removeHackageUploader uid = modifyHackageUploaders (Group.remove uid)
+
+replaceHackageUploaders :: UserList -> Update HackageUploaders ()
+replaceHackageUploaders ulist = modifyHackageUploaders (const ulist)
+
+$(makeAcidic ''HackageUploaders ['getHackageUploaders
+                                ,'addHackageUploader
+                                ,'removeHackageUploader
+                                ,'replaceHackageUploaders
+                                ])

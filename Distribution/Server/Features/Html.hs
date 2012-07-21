@@ -199,6 +199,7 @@ initHtmlFeature env core pkg upload check user version reversef tagf
         -- and user groups. package maintainers, trustees, admins
         ++ htmlGroupResource user (packageGroupResource uploads)
         ++ htmlGroupResource user (trusteeResource uploads)
+        ++ htmlGroupResource user (uploaderResource uploads)
         ++ htmlGroupResource user (adminResource users)
         ++ htmlGroupResource user (mirrorGroupResource $ mirrorResource mirror)
      }

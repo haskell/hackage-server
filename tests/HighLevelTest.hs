@@ -137,8 +137,16 @@ runPackageTests = do
        xs <- getUrlStrings "/packages/"
        unless (xs == ["Packages by category","Categories:","."]) $
            die ("Bad package list: " ++ show xs)
+    do info "Trying to upload testpackage"
+       void $ postFileAuthToUrlRes ((4, 0, 3) ==)
+                  "testuser" "testpass" "/packages/" "package"
+                  (testpackageTarFilename, testpackageTarFileContent)
+    do info "Adding testuser to uploaders"
+       void $ postAuthToUrl "admin" "admin" "/packages/uploaders/"
+                  [("user", "testuser")]
     do info "Uploading testpackage"
-       void $ postFileAuthToUrl "testuser" "testpass" "/packages/" "package"
+       void $ postFileAuthToUrlRes ((2, 0, 0) ==)
+                  "testuser" "testpass" "/packages/" "package"
                   (testpackageTarFilename, testpackageTarFileContent)
     do info "Getting package list"
        xs <- getUrlStrings "/packages/"
@@ -317,15 +325,18 @@ postAuthToUrl u p url vals
           goodCode (2, 0, 0) = True
           goodCode _         = False
 
-postFileAuthToUrl :: String -> String -> String -> String -> (FilePath, String)
-                  -> IO ()
-postFileAuthToUrl u p url field file
-    = postFileAuthToReq u p (postRequest (mkUrl url)) field file
+postFileAuthToUrlRes :: ((Int, Int, Int) -> Bool)
+                     -> String -> String -> String -> String
+                     -> (FilePath, String)
+                     -> IO ()
+postFileAuthToUrlRes wantedCode u p url field file
+    = postFileAuthToReqRes wantedCode u p (postRequest (mkUrl url)) field file
 
-postFileAuthToReq :: String -> String -> Request_String -> String
-                  -> (FilePath, String)
-                  -> IO ()
-postFileAuthToReq u p req field (filename, fileContents)
+postFileAuthToReqRes :: ((Int, Int, Int) -> Bool)
+                     -> String -> String -> Request_String -> String
+                     -> (FilePath, String)
+                     -> IO ()
+postFileAuthToReqRes wantedCode u p req field (filename, fileContents)
     = let boundary = "--BOUNDARY"
           req' = setRequestBody req
                                 ("multipart/form-data; boundary=" ++ boundary,
@@ -342,10 +353,7 @@ postFileAuthToReq u p req field (filename, fileContents)
                            "--" ++ boundary ++ "--",
                            ""]
 
-      in withAuth u p req' (checkReqGivesResponse goodCode)
-    where goodCode (3, 0, 3) = True
-          goodCode (2, 0, 0) = True
-          goodCode _         = False
+      in withAuth u p req' (checkReqGivesResponse wantedCode)
 
 checkReqGivesResponse :: ((Int, Int, Int) -> Bool) -> Request_String -> IO ()
 checkReqGivesResponse wantedCode req

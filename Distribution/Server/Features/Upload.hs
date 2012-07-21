@@ -38,7 +38,7 @@ import Data.Monoid (mconcat)
 import Data.Maybe (fromMaybe, listToMaybe, catMaybes)
 import qualified Data.Map as Map
 import Data.Time.Clock (getCurrentTime)
-import Control.Monad (liftM2, when)
+import Control.Monad
 import Control.Monad.Trans (MonadIO(..))
 import Data.Function (fix)
 import Data.ByteString.Lazy.Char8 (ByteString)
@@ -52,6 +52,7 @@ data UploadFeature = UploadFeature {
     uploadPackage    :: ServerPartE UploadResult,
     packageMaintainers :: GroupGen,
     trusteeGroup :: UserGroup,
+    uploaderGroup :: UserGroup,
     canUploadPackage :: Filter (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse))
 }
 
@@ -60,8 +61,10 @@ data UploadResource = UploadResource {
     deletePackagePage  :: Resource,
     packageGroupResource :: GroupResource,
     trusteeResource :: GroupResource,
+    uploaderResource :: GroupResource,
     packageMaintainerUri :: String -> PackageId -> String,
-    trusteeUri :: String -> String
+    trusteeUri :: String -> String,
+    uploaderUri :: String -> String
 }
 
 data UploadResult = UploadResult {
@@ -75,7 +78,8 @@ instance IsHackageFeature UploadFeature where
         featureResources = map ($uploadResource upload)
             [uploadIndexPage,
              groupResource . packageGroupResource, groupUserResource . packageGroupResource,
-             groupResource . trusteeResource, groupUserResource . trusteeResource]
+             groupResource . trusteeResource,      groupUserResource . trusteeResource,
+             groupResource . uploaderResource,     groupUserResource . uploaderResource]
       , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
       }
       where
@@ -92,7 +96,8 @@ initUploadFeature env core users = do
     -- some shared tasks
     let store = serverBlobStore env
         admins = adminGroup users
-    (trustees, trustResource) <- groupResourceAt users "/packages/trustees" (getTrusteesGroup [admins])
+    (trustees,  trustResource)     <- groupResourceAt users "/packages/trustees"  (getTrusteesGroup  [admins])
+    (uploaders, uploaderResource') <- groupResourceAt users "/packages/uploaders" (getUploadersGroup [admins])
 
     groupPkgs <- fmap (Map.keys . maintainers) $ query AllPackageMaintainers
     let getPkgMaintainers dpath =
@@ -116,13 +121,16 @@ initUploadFeature env core users = do
           , deletePackagePage = (extendResource . corePackagePage $ coreResource core) { resourceDelete = [] }
           , packageGroupResource = pkgResource
           , trusteeResource = trustResource
+          , uploaderResource = uploaderResource'
 
           , packageMaintainerUri = \format pkgname -> renderResource (groupResource pkgResource) [display pkgname, format]
-          , trusteeUri = \format -> renderResource (groupResource trustResource) [format]
+          , trusteeUri  = \format -> renderResource (groupResource trustResource)     [format]
+          , uploaderUri = \format -> renderResource (groupResource uploaderResource') [format]
           }
       , uploadPackage = doUploadPackage core users f store
       , packageMaintainers = pkgGroup
       , trusteeGroup = trustees
+      , uploaderGroup = uploaders
       , canUploadPackage = uploadFilter
       }
 
@@ -136,6 +144,17 @@ getTrusteesGroup canModify = fix $ \u -> UserGroup {
     removeUserList = update . RemoveHackageTrustee,
     groupExists = return True,
     canAddGroup = [u] ++ canModify,
+    canRemoveGroup = canModify
+}
+
+getUploadersGroup :: [UserGroup] -> UserGroup
+getUploadersGroup canModify = UserGroup {
+    groupDesc = uploaderDescription,
+    queryUserList = query $ GetHackageUploaders,
+    addUserList = update . AddHackageUploader,
+    removeUserList = update . RemoveHackageUploader,
+    groupExists = return True,
+    canAddGroup = canModify,
     canRemoveGroup = canModify
 }
 
@@ -160,6 +179,9 @@ maintainerDescription pkgname = GroupDescription
 
 trusteeDescription :: GroupDescription
 trusteeDescription = nullDescription { groupTitle = "Package trustees", groupPrologue = "Package trustees are essentially maintainers for the entire package database. They can edit package maintainer groups and upload any package." }
+
+uploaderDescription :: GroupDescription
+uploaderDescription = nullDescription { groupTitle = "Package uploaders", groupPrologue = "Package uploaders allowed to upload packages. If a package already exists then you also need to be in the maintainer group for that package." }
 
 withPackageAuth :: Package pkg => pkg -> (Users.UserId -> Users.UserInfo -> ServerPartE a) -> ServerPartE a
 withPackageAuth pkg func = withPackageNameAuth (packageName pkg) func
@@ -189,6 +211,9 @@ getPackageGroup pkg = do
 -- This is the upload function. It returns a generic result for multiple formats.
 doUploadPackage :: CoreFeature -> UserFeature -> UploadFeature -> BlobStorage -> ServerPartE UploadResult
 doUploadPackage core userf upf store = do
+    users <- query GetUserDb
+    uploaders <- query GetHackageUploaders
+    void $ guardAuthorised hackageRealm users uploaders
     state <- fmap packageList $ query GetPackagesState
     let uploadFilter uid info = combineErrors $ runFilter'' (canUploadPackage upf) uid info
     (pkgInfo, uresult) <- extractPackage (\uid info -> combineErrors $ sequence
