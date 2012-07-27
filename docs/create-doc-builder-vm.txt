@@ -1,0 +1,48 @@
+
+apt-get install debootstrap qemu-kvm virtinst extlinux
+dd if=/dev/zero of=hackage-docs.disk bs=1024 count=1048576
+/sbin/mke2fs -F hackage-docs.disk
+UUID=`/sbin/blkid -s UUID -o value hackage-docs.disk`
+mkdir mnt
+sudo mount hackage-docs.disk mnt -o loop
+sudo debootstrap stable mnt
+sudo UUID="$UUID" chroot mnt /bin/bash
+    apt-get install linux-image-amd64 extlinux openssh-server
+    extlinux-update
+    sed -i -e "s#^EXTLINUX_PARAMETERS.*#EXTLINUX_PARAMETERS=\"ro quiet root=UUID=$UUID console=ttyS0\"#" etc/default/extlinux
+    extlinux-update
+    sed -i -e "s/#\(.*ttyS0.*\)/\1/" etc/inittab
+    echo hackagedocs > /etc/hostname
+    passwd
+    echo "proc       /proc proc defaults                   0 0" >  /etc/fstab
+    echo "UUID=$UUID /     ext2 defaults,errors=remount-ro 0 1" >> /etc/fstab
+    echo "auto lo"                >> /etc/network/interfaces
+    echo "iface lo inet loopback" >> /etc/network/interfaces
+    echo "auto eth0"              >> /etc/network/interfaces
+    echo "iface eth0 inet dhcp"   >> /etc/network/interfaces
+    touch /etc/udev/rules.d/75-persistent-net-generator.rules
+sudo extlinux --install mnt/boot/extlinux
+sudo umount mnt
+cat <<EOF > hackage_docs_network.xml
+<network>
+    <name>hackage_docs_network</name>
+    <bridge name="virbr1" />
+    <forward mode="nat" />
+    <ip address="192.168.142.1" netmask="255.255.255.0">
+        <dhcp>
+            <range start="192.168.142.2" end="192.168.142.2" />
+        </dhcp>
+    </ip>
+</network>
+EOF
+sudo virsh net-create hackage_docs_network.xml
+virt-install --connect qemu:///system -n hackage-docs-vm -r 512 --vcpus=1 --os-type linux --os-variant debiansqueeze --disk path=hackage-docs.disk --nographics --hvm -w network=hackage_docs_network --import
+ssh root@192.168.142.2
+    apt-get install build-essential
+    apt-get clean
+    adduser hackage-docs --gecos "" --disabled-password
+    su - hackage-docs
+        mkdir .ssh
+        vi .ssh/authorized_keys
+ssh hackage-docs@192.168.142.2
+
