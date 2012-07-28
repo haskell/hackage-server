@@ -63,22 +63,25 @@ buildOnce verbosity opts = do
     prepareBuildPackages verbosity opts
 
     flip finally persist $ httpSession verbosity $ do
-      -- Make sure we authenticate to Hackage
-      setAuthorityGen $ provideAuthInfo (srcURI opts) $ Just (username opts, password opts)
+        -- Make sure we authenticate to Hackage
+        setAuthorityGen $ provideAuthInfo (srcURI opts) $ Just (username opts, password opts)
 
-      -- Find those files *not* marked as having documentation in our cache
-      index <- downloadIndex (srcURI opts) cacheDir
-      to_build <- filterM does_not_have_docs [pkg_id | PkgIndexInfo pkg_id _ _ _ <- index
-                                                     , null (selectedPkgs opts) || pkg_id `elem` selectedPkgs opts]
-      liftIO $ notice verbosity $ show (length to_build) ++ " packages to build documentation for."
+        -- Find those files *not* marked as having documentation in our cache
+        index <- downloadIndex (srcURI opts) cacheDir
+        to_build <- filterM does_not_have_docs
+                            [pkg_id | PkgIndexInfo pkg_id _ _ _ <- index
+                            , null (selectedPkgs opts) ||
+                              pkg_id `elem` selectedPkgs opts]
+        liftIO $ notice verbosity $ show (length to_build) ++ " packages to build documentation for."
       
-      -- Try to build each of them, uploading the documentation and build reports
-      -- along the way. We mark each package as having documentation in the cache even
-      -- if the build fails because we don't want to keep continually trying to build
-      -- a failing package!
-      forM_ to_build $ \pkg_id -> do
-          buildPackage verbosity opts pkg_id
-          liftIO $ mark_as_having_docs pkg_id
+        -- Try to build each of them, uploading the documentation and
+        -- build reports along the way. We mark each package as having
+        -- documentation in the cache even if the build fails because
+        -- we don't want to keep continually trying to build a failing
+        -- package!
+        forM_ to_build $ \pkg_id -> do
+            buildPackage verbosity opts pkg_id
+            liftIO $ mark_as_having_docs pkg_id
   where
     cacheDir = stateDir opts </> cacheDirName
     cacheDirName | URI { uriAuthority = Just auth } <- srcURI opts
@@ -86,8 +89,12 @@ buildOnce verbosity opts = do
                  | otherwise
                  = error $ "unexpected URI " ++ show (srcURI opts)
 
--- Builds a little memoised function that can tell us whether a particular package already has documentation
-mkPackageHasDocs :: BuildOpts -> IO (PackageId -> HttpSession Bool, PackageId -> IO (), IO ())
+-- Builds a little memoised function that can tell us whether a
+-- particular package already has documentation
+mkPackageHasDocs :: BuildOpts
+                 -> IO (PackageId -> HttpSession Bool,
+                        PackageId -> IO (),
+                        IO ())
 mkPackageHasDocs opts = do
     init_already_built <- readBuiltCache (stateDir opts)
     cache_var <- newIORef init_already_built
@@ -134,72 +141,100 @@ prepareBuildPackages verbosity opts = withCurrentDirectory (stateDir opts) $ do
     local_conf_d_exists <- doesDirectoryExist "local.conf.d"
     unless local_conf_d_exists $ do
         createDirectory "local.conf.d"
-        _ <- runProcess "ghc-pkg" ["recache", "--package-conf=" ++ stateDir opts </> "local.conf.d"]
-                                  Nothing Nothing Nothing Nothing Nothing >>= waitForProcess
+        let packageConf = stateDir opts </> "local.conf.d"
+        ph <- runProcess "ghc-pkg"
+                         ["recache", "--package-conf=" ++ packageConf]
+                         Nothing Nothing Nothing Nothing Nothing
+        -- TODO: Why do we ignore the exit code here?
+        _ <- waitForProcess ph
         return ()
     
     update_ec <- cabal verbosity opts "update" []
-    unless (update_ec == ExitSuccess) $ die "Could not 'cabal update' from specified server"
+    unless (update_ec == ExitSuccess) $
+        die "Could not 'cabal update' from specified server"
 
 
 buildPackage :: Verbosity -> BuildOpts -> PackageId -> HttpSession ()
 buildPackage verbosity opts pkg_id = do
-    -- The documentation is installed within the stateDir because we set a prefix while installing
-    let doc_dir = stateDir opts </> "share" </> "doc" </>  display pkg_id </> "html"
-        temp_doc_dir = stateDir opts </> "share" </> "doc" </>  display pkg_id </> display (pkgName pkg_id)
+    -- The documentation is installed within the stateDir because we
+    -- set a prefix while installing
+    let doc_root = stateDir opts </> "share" </> "doc"
+        doc_dir      = doc_root </> display pkg_id </> "html"
+        temp_doc_dir = doc_root </> display pkg_id </> display (pkgName pkg_id)
         --versionless_pkg_url = srcURI opts <//> "package" </> "$pkg"
         pkg_url = srcURI opts <//> "package" </> "$pkg-$version"
 
     mb_docs <- liftIO $ withCurrentDirectory (stateDir opts) $ do
-      -- Let's not clean in between installations. This should save us some download/installation time for packages
-      -- that are depended on by a lot of things, at the cost of some disk space.
-      --handleDoesNotExist (return ()) $ removeDirectoryRecursive "packages"
-      --handleDoesNotExist (return ()) (removeDirectoryRecursive "local.conf.d") >> createDirectoryIfMissing False "local.conf.d"
+        -- Let's not clean in between installations. This should save us
+        -- some download/installation time for packages that are
+        -- depended on by a lot of things, at the cost of some disk
+        -- space.
+        -- handleDoesNotExist (return ()) $ removeDirectoryRecursive "packages"
+        -- handleDoesNotExist (return ()) (removeDirectoryRecursive "local.conf.d")
+        -- createDirectoryIfMissing False "local.conf.d"
 
-      -- We CANNOT build from an unpacked directory, because Cabal only generates build reports
-      -- if you are building from a tarball that was verifiably downloaded from the server
-      -- TODO: Why do we ignore the result code here?
-      void $ cabal verbosity opts "install" ["--enable-documentation", "--enable-tests",
-                                      -- We know where this documentation will eventually be hosted, bake that in.
-                                      -- The wiki claims we shouldn't include the version in the hyperlinks so we don't have
-                                      -- to rehaddock some package when the dependent packages get updated. However,
-                                      -- this is NOT what the existing Hackage actually does in practice, so ignore that:
-                                      "--haddock-html-location=" ++ show (pkg_url <//> "doc"),
-                                      "--haddock-option=--built-in-themes",           -- Give the user a choice between themes
-                                      "--haddock-contents-location=" ++ show pkg_url, -- Link "Contents" to the package page
-                                      "--haddock-hyperlink-source",                   -- Link to colourised source code
-                                      "--prefix=" ++ stateDir opts,
-                                      display pkg_id]
+        -- We CANNOT build from an unpacked directory, because Cabal
+        -- only generates build reports if you are building from a
+        -- tarball that was verifiably downloaded from the server
+        -- TODO: Why do we ignore the result code here?
+        void $ cabal verbosity opts "install"
+                     ["--enable-documentation",
+                      "--enable-tests",
+                      -- We know where this documentation will
+                      -- eventually be hosted, bake that in.
+                      -- The wiki claims we shouldn't include the
+                      -- version in the hyperlinks so we don't have
+                      -- to rehaddock some package when the dependent
+                      -- packages get updated. However, this is NOT
+                      -- what the Hackage v1 did, so ignore that:
+                      "--haddock-html-location=" ++ show (pkg_url <//> "doc"),
+                      -- Give the user a choice between themes:
+                      "--haddock-option=--built-in-themes",
+                      -- Link "Contents" to the package page:
+                      "--haddock-contents-location=" ++ show pkg_url,
+                      -- Link to colourised source code:
+                      "--haddock-hyperlink-source",
+                      "--prefix=" ++ stateDir opts,
+                      display pkg_id]
 
-      -- Submit a report even if installation/tests failed: all interesting data points!
-      report_ec <- cabal verbosity opts "report" ["--username", username opts, "--password", password opts]
+        -- Submit a report even if installation/tests failed: all
+        -- interesting data points!
+        report_ec <- cabal verbosity opts "report"
+                           ["--username", username opts,
+                            "--password", password opts]
 
-      -- Delete reports after submission because we don't want to submit them *again* in the future
-      when (report_ec == ExitSuccess) $ do
-          -- This seems like a bit of a mess: some data goes into the user directory:
-          dotCabal <- getAppUserDataDirectory "cabal"
-          handleDoesNotExist (return ()) $ removeDirectoryRecursive (dotCabal </> "reports" </> srcName opts)
-          handleDoesNotExist (return ()) $ removeDirectoryRecursive (dotCabal </> "logs")
-          -- Other data goes into a local file storing build reports:
-          let simple_report_log = stateDir opts </> "packages" </> srcName opts </> "build-reports.log"
-          handleDoesNotExist (return ()) $ removeFile simple_report_log
+        -- Delete reports after submission because we don't want to
+        -- submit them *again* in the future
+        when (report_ec == ExitSuccess) $ do
+            -- This seems like a bit of a mess: some data goes into the
+            -- user directory:
+            dotCabal <- getAppUserDataDirectory "cabal"
+            handleDoesNotExist (return ()) $ removeDirectoryRecursive (dotCabal </> "reports" </> srcName opts)
+            handleDoesNotExist (return ()) $ removeDirectoryRecursive (dotCabal </> "logs")
+            -- Other data goes into a local file storing build reports:
+            let simple_report_log = stateDir opts </> "packages" </> srcName opts </> "build-reports.log"
+            handleDoesNotExist (return ()) $ removeFile simple_report_log
       
-      docs_generated <- doesDirectoryExist doc_dir
-      if docs_generated
-       then do
-         notice verbosity $ "Docs generated for " ++ display pkg_id
-         liftM Just $
-            -- We need the files in the documentation .tar.gz to have paths like foo/index.html
-            -- Unfortunately, on disk they have paths like foo-x.y.z/html/index.html. This hack resolves the problem:
-            bracket (renameDirectory doc_dir temp_doc_dir) (\() -> renameDirectory temp_doc_dir doc_dir) $ \() -> 
-                    tarGzDirectory temp_doc_dir
-       else return Nothing
+        docs_generated <- doesDirectoryExist doc_dir
+        if docs_generated
+            then do
+                notice verbosity $ "Docs generated for " ++ display pkg_id
+                liftM Just $
+                    -- We need the files in the documentation .tar.gz
+                    -- to have paths like foo/index.html
+                    -- Unfortunately, on disk they have paths like
+                    -- foo-x.y.z/html/index.html. This hack resolves
+                    -- the problem:
+                    bracket (renameDirectory doc_dir temp_doc_dir)
+                            (\() -> renameDirectory temp_doc_dir doc_dir)
+                            (\() -> tarGzDirectory temp_doc_dir)
+            else return Nothing
 
     -- Submit the generated docs, if possible
     case mb_docs of
-      Nothing       -> return ()
-      Just docs_tgz -> do
-        requestPUT (srcURI opts <//> "package" </> display pkg_id </> "doc") "application/x-gzip" docs_tgz
+        Nothing       -> return ()
+        Just docs_tgz -> do
+            requestPUT (srcURI opts <//> "package" </> display pkg_id </> "doc") "application/x-gzip" docs_tgz
 
 cabal :: Verbosity -> BuildOpts -> String -> [String] -> IO ExitCode
 cabal verbosity opts cmd args = do
@@ -211,9 +246,12 @@ cabal verbosity opts cmd args = do
 
 tarGzDirectory :: FilePath -> IO BS.ByteString
 tarGzDirectory dir = do
-    res <- liftM (GZip.compress . Tar.write) $ Tar.pack containing_dir [nested_dir]
-    -- This seq is extremely important! Tar.pack is lazy, scanning directories as entries are demanded.
-    -- This interacts very badly with the renameDirectory stuff with which tarGzDirectory gets wrapped.
+    res <- liftM (GZip.compress . Tar.write) $
+               Tar.pack containing_dir [nested_dir]
+    -- This seq is extremely important! Tar.pack is lazy, scanning
+    -- directories as entries are demanded.
+    -- This interacts very badly with the renameDirectory stuff with
+    -- which tarGzDirectory gets wrapped.
     BS.length res `seq` return res
   where (containing_dir, nested_dir) = splitFileName dir
 
@@ -274,11 +312,13 @@ validateOpts args = do
             Nothing    -> die "No Hackage server username/password"
             Just creds -> return creds
 
-          -- Ensure we store the absolute state_dir, because we might change the CWD later
-          -- and we don't want the stateDir to be invalidated by such a change
+          -- Ensure we store the absolute state_dir, because we might
+          -- change the CWD later and we don't want the stateDir to be
+          -- invalidated by such a change
           --
-          -- We have to ensure the directory exists before we do canonicalizePath, or
-          -- otherwise we get an exception if it does not yet exist
+          -- We have to ensure the directory exists before we do
+          -- canonicalizePath, or otherwise we get an exception if it
+          -- does not yet exist
           let rel_state_dir = fromMaybe "build-cache" (flagCacheDir flags)
           createDirectoryIfMissing False rel_state_dir
           abs_state_dir <- canonicalizePath rel_state_dir
@@ -295,16 +335,20 @@ validateOpts args = do
               printUsage
 
   where
-    printUsage  = do
-      putStrLn $ usageInfo usageHeader buildFlagDescrs
-      exitSuccess
+    printUsage = do
+        putStrLn $ usageInfo usageHeader buildFlagDescrs
+        exitSuccess
     usageHeader = "Usage: hackage-build URL [packages] [options]\nOptions:"
     printErrors errs = do
-      putStrLn $ concat errs ++ "Try --help."
-      exitFailure
+        putStrLn $ concat errs ++ "Try --help."
+        exitFailure
 
     accum flags = foldr (flip (.)) id flags
 
 
 handleDoesNotExist :: IO a -> IO a -> IO a
-handleDoesNotExist handler act = handleJust (\e -> if isDoesNotExistError e then Just () else Nothing) (\() -> handler) act
+handleDoesNotExist handler act
+    = handleJust (\e -> if isDoesNotExistError e then Just () else Nothing)
+                 (\() -> handler)
+                 act
+
