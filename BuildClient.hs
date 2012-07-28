@@ -8,9 +8,8 @@ import Distribution.Client
 import Distribution.Package
 import Distribution.Text
 import Distribution.Verbosity
-import Distribution.Simple.Utils hiding (intercalate)
+import Distribution.Simple.Utils
 
-import Data.List
 import Data.Maybe
 import Data.IORef
 import Control.Exception
@@ -240,7 +239,8 @@ cabal :: Verbosity -> BuildOpts -> String -> [String] -> IO ExitCode
 cabal verbosity opts cmd args = do
     cwd' <- getCurrentDirectory
     let all_args = ("--config-file=" ++ stateDir opts </> "config"):cmd:args
-    notice verbosity $ "cd " ++ cwd' ++ " && cabal " ++ intercalate " " all_args
+    notice verbosity ("In " ++ cwd' ++ ":\n" ++
+                      showCommandForUser "cabal" all_args)
     ph <- runProcess "cabal" all_args (Just cwd') Nothing Nothing Nothing Nothing
     waitForProcess ph
 
