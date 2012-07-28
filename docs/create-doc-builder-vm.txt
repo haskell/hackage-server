@@ -38,7 +38,7 @@ EOF
 sudo virsh net-create hackage_docs_network.xml
 virt-install --connect qemu:///system -n hackage-docs-vm -r 1024 --vcpus=1 --os-type linux --os-variant debiansqueeze --disk path=hackage-docs.disk --nographics --hvm -w network=hackage_docs_network --import
 ssh root@192.168.142.2
-    apt-get install build-essential libgmp3-dev libz-dev darcs alex happy hscolour
+    apt-get install build-essential libgmp3-dev libz-dev darcs alex happy hscolour vim
     apt-get clean
     adduser hackage-docs --gecos "" --disabled-password
     su - hackage-docs
