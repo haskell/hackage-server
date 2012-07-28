@@ -225,9 +225,9 @@ buildPackage verbosity opts pkg_id = do
                     -- Unfortunately, on disk they have paths like
                     -- foo-x.y.z/html/index.html. This hack resolves
                     -- the problem:
-                    bracket (renameDirectory doc_dir temp_doc_dir)
-                            (\() -> renameDirectory temp_doc_dir doc_dir)
-                            (\() -> tarGzDirectory temp_doc_dir)
+                    bracket_ (renameDirectory doc_dir      temp_doc_dir)
+                             (renameDirectory temp_doc_dir doc_dir)
+                             (tarGzDirectory temp_doc_dir)
             else return Nothing
 
     -- Submit the generated docs, if possible
