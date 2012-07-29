@@ -1,7 +1,11 @@
 #!/bin/sh
 
 PIDFILE=@PIDFILE@
+EXECUTABLE=@HACKAGEBUILD@
+DIRECTORY=@DIRECTORY@
 A_WHILE="1 hour"
+
+@EXTRA@
 
 if [ -e "$PIDFILE" ]
 then
@@ -18,7 +22,7 @@ else
     EXISTS=0
 fi
 
-/sbin/start-stop-daemon --quiet --startas @HACKAGEBUILD@ --start --pidfile "$PIDFILE" --make-pidfile
+/sbin/start-stop-daemon --quiet --start --pidfile "$PIDFILE" --make-pidfile -d "$DIRECTORY" --startas "$EXECUTABLE" -- build
 
 if [ "$?" -ne 0 ]
 then
