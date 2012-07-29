@@ -72,4 +72,11 @@ ssh hackage-docs@192.168.142.2
     darcs get http://code.haskell.org/hackage-server
     cd hackage-server
     cabal install
+    cd
+    mkdir hackage-docs
+    cd hackage-docs
+    hackage-build init http://192.168.142.1:8080/
+    sed -e "s#@PIDFILE@#$HOME/hackage-docs/hd.pid#" -e "s#@HACKAGEBUILD@#$HOME/.cabal/bin/hackage-build#" -e "s#@DIRECTORY@#$HOME/hackage-docs#" -e "s#@EXTRA@#export PATH=$HOME/.cabal/bin:\$PATH#" < ../downloads/hackage-server/docs/run-doc-builder.sh.example > run-doc-builder.sh
+    chmod +x run-doc-builder.sh
+    echo '*/5 * * * * '"$HOME/hackage-docs/run-doc-builder.sh" | crontab -
 
