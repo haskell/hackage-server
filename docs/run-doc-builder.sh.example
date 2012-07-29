@@ -1,0 +1,40 @@
+#!/bin/sh
+
+PIDFILE=@PIDFILE@
+A_WHILE="1 hour"
+
+if [ -e "$PIDFILE" ]
+then
+    EXISTS=1
+    touch --date="$A_WHILE ago" earlier
+    if [ "$PIDFILE" -ot earlier ]
+    then
+        BEEN_A_WHILE=1
+        touch "$PIDFILE"
+    else
+        BEEN_A_WHILE=0
+    fi
+else
+    EXISTS=0
+fi
+
+/sbin/start-stop-daemon --quiet --startas hackage-build --start --pidfile "$PIDFILE" --make-pidfile
+
+if [ "$?" -ne 0 ]
+then
+    if [ "$EXISTS" -eq 1 ]
+    then
+        if [ "$BEEN_A_WHILE" -eq 1 ]
+        then
+            echo "Still running after at least $A_WHILE; something wrong?" >&2
+            exit 1
+        fi
+    else
+        if [ ! -e "$PIDFILE" ]
+        then
+            echo "Starting failed" >&2
+            exit 1
+        fi
+    fi
+fi
+
