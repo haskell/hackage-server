@@ -343,6 +343,10 @@ buildFlagDescrs =
       (NoArg (\opts -> opts { flagHelp = True }))
       "Show this help text"
 
+  , Option ['s'] []
+      (NoArg (\opts -> opts { flagVerbosity = silent }))
+      "Silent mode"
+
   , Option ['v'] []
       (NoArg (\opts -> opts { flagVerbosity = moreVerbose (flagVerbosity opts) }))
       "Verbose mode (can be listed multiple times e.g. -vv)"
