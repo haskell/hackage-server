@@ -95,7 +95,7 @@ readConfig opts = do xs <- readFile $ configFile opts
                              -- Shouldn't happen: We check that this
                              -- returns Right when we create the
                              -- config file. See [Note: Show/Read URI].
-                             Left err -> die err
+                             Left theError -> die theError
                              Right uri ->
                                  return $ BuildConfig {
                                               bc_srcURI   = uri,
@@ -375,14 +375,14 @@ validateOpts args = do
                    -- We don't actually want the URI at this point
                    -- (see [Note: Show/Read URI])
                    case validateHackageURI uri of
-                   Left  err -> Help [err]
-                   Right _   -> Init uri
+                   Left  theError -> Help [theError]
+                   Right _        -> Init uri
                "init" : _ ->
                    Help ["init takes a single argument (repo URL)"]
                "build" : pkgstrs ->
                    case validatePackageIds pkgstrs of
-                   Left  err  -> Help [err]
-                   Right pkgs -> Build pkgs
+                   Left  theError -> Help [theError]
+                   Right pkgs     -> Build pkgs
                cmd : _ -> Help ["Unrecognised command: " ++ show cmd]
                [] -> Help []
 
