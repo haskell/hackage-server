@@ -296,10 +296,17 @@ buildPackage verbosity opts config pkg_id = do
 cabal :: BuildOpts -> String -> [String] -> IO ExitCode
 cabal opts cmd args = do
     cwd' <- getCurrentDirectory
-    let cabalConfigFile = bo_stateDir opts </> "cabal-config"
-        all_args = ("--config-file=" ++ cabalConfigFile) : cmd : args
-    notice (bo_verbosity opts) ("In " ++ cwd' ++ ":\n" ++
-                                showCommandForUser "cabal" all_args)
+    let verbosity = bo_verbosity opts
+        cabalConfigFile = bo_stateDir opts </> "cabal-config"
+        verbosityArgs = if verbosity == silent
+                        then ["-v0"]
+                        else []
+        all_args = ("--config-file=" ++ cabalConfigFile)
+                 : cmd
+                 : verbosityArgs
+                ++ args
+    notice verbosity ("In " ++ cwd' ++ ":\n" ++
+                      showCommandForUser "cabal" all_args)
     ph <- runProcess "cabal" all_args (Just cwd')
                      Nothing Nothing Nothing Nothing
     waitForProcess ph
