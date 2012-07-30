@@ -22,7 +22,7 @@ else
     EXISTS=0
 fi
 
-/sbin/start-stop-daemon --quiet --start --pidfile "$PIDFILE" --make-pidfile -d "$DIRECTORY" --startas "$EXECUTABLE" -- build
+/sbin/start-stop-daemon --quiet --start --pidfile "$PIDFILE" --make-pidfile -d "$DIRECTORY" --startas "$EXECUTABLE" -- build -s
 
 if [ "$?" -ne 0 ]
 then
