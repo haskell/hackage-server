@@ -55,7 +55,7 @@ unpackPackage :: FilePath -> ByteString
                         ((GenericPackageDescription, ByteString), [String])
 unpackPackage tarGzFile contents =
   runUploadMonad $ do
-    (entries, pkgDesc, warnings, cabalEntry) <- basicChecks tarGzFile contents
+    (entries, pkgDesc, warnings, cabalEntry) <- basicChecks False tarGzFile contents
     mapM_ fail warnings
     extraChecks entries pkgDesc
     return (pkgDesc, cabalEntry)
@@ -65,12 +65,12 @@ unpackPackageRaw :: FilePath -> ByteString
                            ((GenericPackageDescription, ByteString), [String])
 unpackPackageRaw tarGzFile contents =
   runUploadMonad $ do
-    (_entries, pkgDesc, _warnings, cabalEntry) <- basicChecks tarGzFile contents
+    (_entries, pkgDesc, _warnings, cabalEntry) <- basicChecks True tarGzFile contents
     return (pkgDesc, cabalEntry)
 
-basicChecks :: FilePath -> ByteString
+basicChecks :: Bool -> FilePath -> ByteString
             -> UploadMonad (Tar.Entries Tar.FormatError, GenericPackageDescription, [String], ByteString)
-basicChecks tarGzFile contents = do
+basicChecks lax tarGzFile contents = do
   let (pkgidStr, ext) = (base, tar ++ gz)
         where (tarFile, gz) = splitExtension (portableTakeFileName tarGzFile)
               (base,   tar) = splitExtension tarFile
@@ -95,7 +95,7 @@ basicChecks tarGzFile contents = do
       PackageName name  = packageName pkgid
       cabalFileName     = display pkgid </> name <.> "cabal"
       entries           = Tar.read (GZip.decompress contents)
-  cabalEntries <- selectEntries selectEntry entries
+  cabalEntries <- selectEntries lax selectEntry entries
   cabalEntry   <- case cabalEntries of
     -- NB: tar files *can* contain more than one entry for the same filename.
     -- (This was observed in practice with the package CoreErlang-0.0.1).
@@ -193,11 +193,15 @@ allocatedTopLevelNodes = [
         "Distribution", "DotNet", "Foreign", "Graphics", "Language",
         "Network", "Numeric", "Prelude", "Sound", "System", "Test", "Text"]
 
-selectEntries :: (Tar.Entry -> Maybe a)
+selectEntries :: Bool -> (Tar.Entry -> Maybe a)
               -> Tar.Entries Tar.FormatError
               -> UploadMonad [a]
-selectEntries select = extract []
+selectEntries lax select = extract []
   where
+    -- We ignore those errors that are present in the historical hackage
+    -- DB in lax mode (used when mirroring hackage)
+    extract selected (Tar.Fail Tar.ShortTrailer)
+     | lax                                    = return selected
     extract _        (Tar.Fail err)           = fail (show err)
     extract selected  Tar.Done                = return selected
     extract selected (Tar.Next entry entries) =
