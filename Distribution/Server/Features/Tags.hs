@@ -1,3 +1,5 @@
+{-# LANGUAGE BangPatterns #-}
+
 module Distribution.Server.Features.Tags (
     TagsFeature,
     tagsResource,
@@ -163,7 +165,9 @@ constructImmutableTagIndex :: PackageIndex PkgInfo -> PackageTags
 constructImmutableTagIndex = foldl' addToTags emptyPackageTags . PackageIndex.allPackagesByName
   where addToTags calcTags pkgList =
             let info = pkgDesc $ last pkgList
-            in setTags (packageName info) (Set.fromList $ constructImmutableTags info) calcTags
+                !pn = packageName info
+                !tags = constructImmutableTags info
+            in setTags pn (Set.fromList tags) calcTags
 
 -- These are constructed when a package is uploaded/on startup
 constructCategoryTags :: PackageDescription -> [Tag]
@@ -176,9 +180,12 @@ constructCategoryTags = map (tagify . map toLower) . fillMe . categorySplit . ca
 constructImmutableTags :: GenericPackageDescription -> [Tag]
 constructImmutableTags genDesc =
     let desc = flattenPackageDescription genDesc
-    in licenseToTag (license desc)
-    ++ (if hasLibs desc then [Tag "library"] else [])
-    ++ (if hasExes desc then [Tag "program"] else [])
+        !l = license desc
+        !hl = hasLibs desc
+        !he = hasExes desc
+    in licenseToTag l
+    ++ (if hl then [Tag "library"] else [])
+    ++ (if he then [Tag "program"] else [])
   where
     licenseToTag :: License -> [Tag]
     licenseToTag l = case l of
