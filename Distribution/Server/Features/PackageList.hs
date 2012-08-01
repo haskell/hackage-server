@@ -47,25 +47,25 @@ data ListFeature = ListFeature {
 
 data PackageItem = PackageItem {
     -- The name of the package
-    itemName :: PackageName,
+    itemName :: !PackageName,
     -- The tags for this package
-    itemTags :: Set Tag,
+    itemTags :: !(Set Tag),
     -- If the package is deprecated, what is it deprecated in favor of
-    itemDeprecated :: Maybe [PackageName],
+    itemDeprecated :: !(Maybe [PackageName]),
     -- The description of the package from its Cabal file
-    itemDesc :: String,
+    itemDesc :: !String,
     -- Whether the item is in the Haskell Platform
   --itemPlatform :: Bool,
     -- The total number of downloads. (For sorting, not displaying.)
     -- Updated periodically.
-    itemDownloads :: Int,
+    itemDownloads :: !Int,
     -- The number of direct revdeps. (Likewise.)
     -- also: distinguish direct/flat?
-    itemRevDepsCount :: Int,
+    itemRevDepsCount :: !Int,
     -- Whether there's a library here.
-    itemHasLibrary :: Bool,
+    itemHasLibrary :: !Bool,
     -- How many executables (>=0) this package has.
-    itemNumExecutables :: Int
+    itemNumExecutables :: !Int
     -- Hotness: a more heuristic way to sort packages. presently non-existent.
   --itemHotness :: Int
 }
