@@ -22,16 +22,34 @@ import Data.List (intersperse, sortBy, groupBy, nub, maximumBy)
 
 packageIndex :: PackageIndex.PackageIndex PkgInfo -> Html
 packageIndex = formatPkgGroups
-                 . map (flattenPackageDescription
+                 . map (mkPackageIndexInfo
+                      . flattenPackageDescription
                       . pkgDesc
                       . maximumBy (comparing packageVersion))
                  . PackageIndex.allPackagesByName
+
+data PackageIndexInfo = PackageIndexInfo {
+                            pii_pkgName :: !PackageName,
+                            pii_categories :: ![Category],
+                            pii_hasLibrary :: !Bool,
+                            pii_numExecutables :: !Int,
+                            pii_synopsis :: !String
+                        }
+
+mkPackageIndexInfo :: PackageDescription -> PackageIndexInfo
+mkPackageIndexInfo pd = PackageIndexInfo {
+                            pii_pkgName = pkgName $ package pd,
+                            pii_categories = categories pd,
+                            pii_hasLibrary = hasLibs pd,
+                            pii_numExecutables = length (executables pd),
+                            pii_synopsis = synopsis pd
+                        }
 
 data Category = Category String | NoCategory
         deriving (Eq, Ord, Show)
 
 -- Packages, grouped by category and ordered by name with each category.
-formatPkgGroups :: [PackageDescription] -> Html
+formatPkgGroups :: [PackageIndexInfo] -> Html
 formatPkgGroups pkgs = hackagePage "packages by category" docBody
   where docBody =
                 (thediv ! [theclass "floatright"] << searchBox) :
@@ -58,8 +76,8 @@ formatPkgGroups pkgs = hackagePage "packages by category" docBody
                 toHtml ("(" ++ show (length sub_pkgs) ++ ")")
           where catName = categoryName cat
         cat_pkgs = groupOnFstBy normalizeCategory $ [(capitalize cat, pkg) |
-                        pkg <- pkgs, cat <- categories pkg]
-        sortKey pkg = map toLower $ unPackageName $ pkgName $ package pkg
+                        pkg <- pkgs, cat <- pii_categories pkg]
+        sortKey pkg = map toLower $ unPackageName $ pii_pkgName pkg
         formatCategory cat =
                 h3 ! [theclass "category"] <<
                         anchor ! [XHtml.name (catLabel catName)] << catName
@@ -71,22 +89,22 @@ formatPkgGroups pkgs = hackagePage "packages by category" docBody
                 Category (unwords [toUpper c : cs | (c:cs) <- words s])
         capitalize NoCategory = NoCategory
 
-formatPkgList :: [PackageDescription] -> Html
+formatPkgList :: [PackageIndexInfo] -> Html
 formatPkgList pkgs = ulist ! [theclass "packages"] << map formatPkg pkgs
 
-formatPkg :: PackageDescription -> Html
+formatPkg :: PackageIndexInfo -> Html
 formatPkg pkg = li << (pkgLink : toHtml (" " ++ ptype) : defn)
-  where pname = pkgName (package pkg)
+  where pname = pii_pkgName pkg
         pkgLink = anchor ! [href (packageNameURL pname)] << unPackageName pname
         defn
-          | null (synopsis pkg) = []
-          | otherwise = [toHtml (": " ++ trim (synopsis pkg))]
+          | null (pii_synopsis pkg) = []
+          | otherwise = [toHtml (": " ++ trim (pii_synopsis pkg))]
         ptype
-          | null (executables pkg) = "library"
-          | hasLibs pkg = "library and " ++ programs
+          | pii_numExecutables pkg == 0 = "library"
+          | pii_hasLibrary pkg = "library and " ++ programs
           | otherwise = programs
           where programs
-                  | length (executables pkg) > 1 = "programs"
+                  | pii_numExecutables pkg > 1 = "programs"
                   | otherwise = "program"
         trim s
           | length s < 90 = s
