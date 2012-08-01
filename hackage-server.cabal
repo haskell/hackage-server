@@ -179,7 +179,7 @@ executable hackage-server
                -fno-warn-orphans -fno-warn-unused-do-bind
                -fno-warn-warnings-deprecations
   if impl(ghc >= 7.0)
-    ghc-options: -rtsopts -with-rtsopts=-I0
+    ghc-options: -with-rtsopts=-I0
 
 executable hackage-mirror
   main-is: MirrorClient.hs
