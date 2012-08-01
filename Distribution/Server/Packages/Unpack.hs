@@ -42,6 +42,7 @@ import Control.Monad.Identity
 import qualified Codec.Compression.GZip as GZip
 import Data.ByteString.Lazy.Char8
          ( ByteString )
+import qualified Data.ByteString.Lazy.Char8 as LBS
 import System.FilePath
          ( (</>), (<.>), splitExtension, splitDirectories, normalise )
 import qualified System.FilePath.Windows
@@ -101,7 +102,11 @@ basicChecks lax tarGzFile contents = do
     -- (This was observed in practice with the package CoreErlang-0.0.1).
     -- In this case, after extracting the tar the *last* file in the archive
     -- wins. Since selectEntries returns results in reverse order we use the head:
-    cabalEntry:_ -> return cabalEntry
+    cabalEntry:_ -> -- We tend to keep hold of the .cabal file, but
+                    -- cabalEntry itself is part of a much larger
+                    -- ByteString (the whole tar file), so we make a
+                    -- copy of it
+                    return $ LBS.copy cabalEntry
     [] -> fail $ "The " ++ quote cabalFileName
               ++ " file is missing from the package tarball."
 
