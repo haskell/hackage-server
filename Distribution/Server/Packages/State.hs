@@ -70,7 +70,6 @@ mergePkg :: PkgInfo -> Update PackagesState ()
 mergePkg pkg = State.modify $ \pkgsState -> pkgsState { packageList = PackageIndex.insertWith mergeFunc pkg (packageList pkgsState) }
   where
     mergeFunc newPkg oldPkg = oldPkg {
-        pkgDesc = pkgDesc newPkg,
         pkgData = pkgData newPkg,
         pkgTarball = sortByDate $ pkgTarball newPkg ++ pkgTarball oldPkg,
         -- the old package data paired with when and by whom it was replaced

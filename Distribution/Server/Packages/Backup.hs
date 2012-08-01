@@ -83,10 +83,9 @@ partialToFullPkg (pkgId, partial) = do
       [] -> Left $ "No cabal files found for " ++ display pkgId
       ((cabal, info):cabalOld) -> case parsePackageDescription (cabalFileString cabal) of
         ParseFailed err -> Left $ show (locatedErrorMsg err)
-        ParseOk _ parsePkg -> do
+        ParseOk _ _ -> do
             return $ PkgInfo {
                 pkgInfoId = pkgId,
-                pkgDesc = parsePkg,
                 pkgData = cabal,
                 pkgTarball = descendUploadTimes tarballDex,
                 pkgDataOld = cabalOld,

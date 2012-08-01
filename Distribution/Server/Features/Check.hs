@@ -235,7 +235,6 @@ publishCandidate core users upload dpath doDelete = do
             uploadData <- fmap (flip (,) uid) (liftIO getCurrentTime)
             let pkgInfo' = PkgInfo {
                     pkgInfoId     = packageId candidate,
-                    pkgDesc       = pkgDesc pkgInfo,
                     pkgData       = pkgData pkgInfo,
                     pkgTarball    = case pkgTarball pkgInfo of
                         ((blobId, _):_) -> [(blobId, uploadData)]

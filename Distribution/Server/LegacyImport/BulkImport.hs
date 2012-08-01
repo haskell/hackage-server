@@ -66,9 +66,8 @@ newPkgInfo pkgid (cabalFilePath, cabalFile) (UploadLog.Entry time user _) _ user
                              ++ ": " ++ message
         where (lineno, message) = locatedErrorMsg err
 
-      ParseOk _ pkg   -> return (PkgInfo {
+      ParseOk _ _   -> return (PkgInfo {
         pkgInfoId     = pkgid,
-        pkgDesc       = pkg,
         pkgData       = cabalFile,
         pkgTarball    = [],
         pkgUploadData = (time, uid),

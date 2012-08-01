@@ -283,7 +283,6 @@ extractPackage processFunc storage =
                 uploadData <- fmap (flip (,) uid) (liftIO getCurrentTime)
                 return $ (PkgInfo {
                     pkgInfoId     = packageId pkg,
-                    pkgDesc       = pkg,
                     pkgData       = CabalFileText pkgStr,
                     pkgTarball    = [(PkgTarball { pkgTarballGz = blobId,
                                                    pkgTarballNoGz = blobIdDecompressed },

@@ -48,10 +48,6 @@ instance Show CabalFileText where
 -- We normally disallow re-uploading but may make occasional exceptions.
 data PkgInfo = PkgInfo {
     pkgInfoId :: !PackageIdentifier,
-    -- | The information held in a parsed .cabal file (used by cabal-install)
-    -- If this takes up too much space, it might be possible to wrap it in
-    -- Maybe and let the server parse the data on the fly.
-    pkgDesc   :: !GenericPackageDescription,
     -- | The .cabal file text.
     pkgData   :: !CabalFileText,
     -- | The actual package .tar.gz file. It is optional for making an incomplete
@@ -68,6 +64,15 @@ data PkgInfo = PkgInfo {
     -- | When the package was created. Imports will override this with time in their logs.
     pkgUploadData :: !UploadInfo
 } deriving (Eq, Typeable, Show)
+
+-- | The information held in a parsed .cabal file (used by cabal-install)
+pkgDesc :: PkgInfo -> GenericPackageDescription
+pkgDesc pkgInfo
+     = case parsePackageDescription $ cabalFileString $ pkgData pkgInfo of
+       -- We only make PkgInfos with parsable pkgDatas, so if it
+       -- doesn't parse then something has gone wrong.
+       ParseFailed e -> error ("Internal error: " ++ show e)
+       ParseOk _ x   -> x
 
 data PkgTarball = PkgTarball {
    pkgTarballGz   :: !BlobId,
@@ -99,15 +104,14 @@ instance Serialize PkgInfo where
   get = do
     infoId  <- Serialize.get
     cabal <- Serialize.get
-    desc <- case parsePackageDescription . cabalFileString $ cabal of
+    case parsePackageDescription . cabalFileString $ cabal of
         ParseFailed e -> fail $ "Internal error: " ++ show e
-        ParseOk _ x   -> return x
+        ParseOk _ _   -> return ()
     tarball <- Serialize.get
     old     <- Serialize.get
     updata  <- Serialize.get
     return PkgInfo {
         pkgInfoId = infoId,
-        pkgDesc   = desc,
         pkgUploadData = updata,
         pkgDataOld    = old,
         pkgTarball    = tarball,

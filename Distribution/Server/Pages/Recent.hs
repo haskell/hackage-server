@@ -6,7 +6,6 @@ module Distribution.Server.Pages.Recent (
   ) where
 
 import Distribution.Server.Packages.Types
-         ( PkgInfo(..) )
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users)
 import Distribution.Server.Pages.Template
@@ -104,11 +103,10 @@ channel now =
     email = "duncan@haskell.org (Duncan Coutts)"
 
 releaseItem :: Users -> URIAuth -> PkgInfo -> [RSS.ItemElem]
-releaseItem users host PkgInfo {
+releaseItem users host pkgInfo@(PkgInfo {
       pkgInfoId = pkgId
-    , pkgDesc = pkg
     , pkgUploadData = (time, userId)
-  } =
+  }) =
   [ RSS.Title title
   , RSS.Link uri
   , RSS.Guid True (uriToString id uri "")
@@ -118,7 +116,7 @@ releaseItem users host PkgInfo {
   where
     uri   = hackageURI host (packageURL pkgId)
     title = unPackageName (packageName pkgId) ++ " " ++ display (packageVersion pkgId)
-    body  = synopsis (packageDescription pkg)
+    body  = synopsis (packageDescription (pkgDesc pkgInfo))
     desc  = "<i>Added by " ++ display user ++ ", " ++ showTime time ++ ".</i>"
 	 ++ if null body then "" else "<p>" ++ body
     user = Users.idToName users userId

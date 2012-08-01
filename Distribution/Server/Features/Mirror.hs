@@ -121,7 +121,6 @@ initMirrorFeature env core users = do
                   -- if it's able (if it's a trustee).
                   liftIO $ doMergePackage core $ PkgInfo {
                       pkgInfoId     = packageId pkg,
-                      pkgDesc       = pkg,
                       pkgData       = CabalFileText pkgStr,
                       pkgTarball    = [(PkgTarball { pkgTarballGz = blobId,
                                                      pkgTarballNoGz = blobIdDecompressed },
@@ -172,7 +171,6 @@ initMirrorFeature env core users = do
               ParseOk warnings pkg -> do
                   liftIO $ doMergePackage core $ PkgInfo {
                       pkgInfoId     = packageId pkg,
-                      pkgDesc       = pkg,
                       pkgData       = CabalFileText fileContent,
                       pkgTarball    = [],
                       pkgUploadData = uploadData,
