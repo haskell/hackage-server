@@ -37,14 +37,14 @@ hackagePageWith links heading docs = toHtml [header << docHead, body << docBody]
 haddockPage :: HTML doc => String -> doc -> Html
 haddockPage pkgname doc = toHtml [header << docHead, body << doc]
   where docHead = [
-		meta ! [httpequiv "Content-type",
-			content "text/html; charset=ISO-8859-1"],
-		thetitle << ("HackageDB: " ++ pkgname),
+                meta ! [httpequiv "Content-type",
+                        content "text/html; charset=ISO-8859-1"],
+                thetitle << ("HackageDB: " ++ pkgname),
                 haddockThemesLinks,
-		script ! [thetype "text/javascript",
-			src haddockJSURL] << noHtml,
-		script ! [thetype "text/javascript"] <<
-			"window.onload = function() {pageLoad();};"]
+                script ! [thetype "text/javascript",
+                        src haddockJSURL] << noHtml,
+                script ! [thetype "text/javascript"] <<
+                        "window.onload = function() {pageLoad();};"]
 
 haddockThemesLinks :: Html
 haddockThemesLinks =

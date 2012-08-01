@@ -208,7 +208,7 @@ newUserWithAuth userNameStr password _ = case simpleParse userNameStr of
 
 data ChangePassword = ChangePassword { first :: String, second :: String, tryUpgrade :: Bool } deriving (Eq, Show)
 instance FromData ChangePassword where
-	fromData = liftM3 ChangePassword (look "password" `mplus` return "")
+        fromData = liftM3 ChangePassword (look "password" `mplus` return "")
                                    (look "repeat-password" `mplus` return "")
                                    (liftM (const True) (look "try-upgrade") `mplus` return False)
 

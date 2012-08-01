@@ -1,12 +1,12 @@
 -- stolen from Haddock's HsSyn.lhs and HaddockHtml.hs
 module Distribution.Server.Pages.Package.HaddockHtml where
 
-import Data.Char		(isSpace)
-import Text.XHtml.Strict	hiding (p)
+import Data.Char                (isSpace)
+import Text.XHtml.Strict        hiding (p)
 import Network.URI              (escapeURIString, isUnreserved)
 
 data GenDoc id
-  = DocEmpty 
+  = DocEmpty
   | DocAppend (GenDoc id) (GenDoc id)
   | DocString String
   | DocParagraph (GenDoc id)
@@ -42,27 +42,27 @@ data DocMarkup id a = Markup {
   markupOrderedList   :: [a] -> a,
   markupDefList       :: [(a,a)] -> a,
   markupCodeBlock     :: a -> a,
-  markupURL	      :: String -> a,
+  markupURL           :: String -> a,
   markupPic           :: String -> a,
-  markupAName	      :: String -> a
+  markupAName         :: String -> a
   }
 
 markup :: DocMarkup id a -> GenDoc id -> a
-markup m DocEmpty		= markupEmpty m
-markup m (DocAppend d1 d2)	= markupAppend m (markup m d1) (markup m d2)
-markup m (DocString s)		= markupString m s
-markup m (DocParagraph d)	= markupParagraph m (markup m d)
-markup m (DocIdentifier i)	= markupIdentifier m i
-markup m (DocModule mod0)	= markupModule m mod0
-markup m (DocEmphasis d)	= markupEmphasis m (markup m d)
-markup m (DocMonospaced d)	= markupMonospaced m (markup m d)
-markup m (DocUnorderedList ds)	= markupUnorderedList m (map (markup m) ds)
-markup m (DocOrderedList ds)	= markupOrderedList m (map (markup m) ds)
+markup m DocEmpty               = markupEmpty m
+markup m (DocAppend d1 d2)      = markupAppend m (markup m d1) (markup m d2)
+markup m (DocString s)          = markupString m s
+markup m (DocParagraph d)       = markupParagraph m (markup m d)
+markup m (DocIdentifier i)      = markupIdentifier m i
+markup m (DocModule mod0)       = markupModule m mod0
+markup m (DocEmphasis d)        = markupEmphasis m (markup m d)
+markup m (DocMonospaced d)      = markupMonospaced m (markup m d)
+markup m (DocUnorderedList ds)  = markupUnorderedList m (map (markup m) ds)
+markup m (DocOrderedList ds)    = markupOrderedList m (map (markup m) ds)
 markup m (DocDefList ds)        = markupDefList m (map (markupPair m) ds)
-markup m (DocCodeBlock d)	= markupCodeBlock m (markup m d)
-markup m (DocURL url)		= markupURL m url
+markup m (DocCodeBlock d)       = markupCodeBlock m (markup m d)
+markup m (DocURL url)           = markupURL m url
 markup m (DocPic url)           = markupPic m url
-markup m (DocAName ref)		= markupAName m ref
+markup m (DocAName ref)         = markupAName m ref
 
 markupPair :: DocMarkup id a -> (GenDoc id, GenDoc id) -> (a, a)
 markupPair m (a,b) = (markup m a, markup m b)
@@ -82,9 +82,9 @@ idMarkup = Markup {
   markupOrderedList   = DocOrderedList,
   markupDefList       = DocDefList,
   markupCodeBlock     = DocCodeBlock,
-  markupURL	      = DocURL,
+  markupURL           = DocURL,
   markupPic           = DocPic,
-  markupAName	      = DocAName
+  markupAName         = DocAName
   }
 
 htmlMarkup :: DocMarkup String Html
@@ -118,11 +118,11 @@ escapeStr = escapeURIString isUnreserved
 
 -- used to make parsing easier; we group the list items later
 docAppend :: Doc -> Doc -> Doc
-docAppend (DocUnorderedList ds1) (DocUnorderedList ds2) 
+docAppend (DocUnorderedList ds1) (DocUnorderedList ds2)
   = DocUnorderedList (ds1++ds2)
 docAppend (DocUnorderedList ds1) (DocAppend (DocUnorderedList ds2) d)
   = DocAppend (DocUnorderedList (ds1++ds2)) d
-docAppend (DocOrderedList ds1) (DocOrderedList ds2) 
+docAppend (DocOrderedList ds1) (DocOrderedList ds2)
   = DocOrderedList (ds1++ds2)
 docAppend (DocOrderedList ds1) (DocAppend (DocOrderedList ds2) d)
   = DocAppend (DocOrderedList (ds1++ds2)) d
@@ -132,7 +132,7 @@ docAppend (DocDefList ds1) (DocAppend (DocDefList ds2) d)
   = DocAppend (DocDefList (ds1++ds2)) d
 docAppend DocEmpty d = d
 docAppend d DocEmpty = d
-docAppend d1 d2 
+docAppend d1 d2
   = DocAppend d1 d2
 
 -- again to make parsing easier - we spot a paragraph whose only item
@@ -144,7 +144,7 @@ docParagraph (DocAppend (DocString s1) (DocMonospaced p))
   | all isSpace s1
   = DocCodeBlock p
 docParagraph (DocAppend (DocString s1)
-		(DocAppend (DocMonospaced p) (DocString s2)))
+                (DocAppend (DocMonospaced p) (DocString s2)))
   | all isSpace s1 && all isSpace s2
   = DocCodeBlock p
 docParagraph (DocAppend (DocMonospaced p) (DocString s2))

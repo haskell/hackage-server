@@ -166,8 +166,8 @@ categorySplit xs | all isSpace xs = []
 categorySplit xs = map (dropWhile isSpace) $ splitOn ',' xs
   where
     splitOn x ys = front : case back of
-	    [] -> []
-	    (_:ys') -> splitOn x ys'
+                           [] -> []
+                           (_:ys') -> splitOn x ys'
       where (front, back) = break (== x) ys
 
 

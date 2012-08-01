@@ -175,9 +175,10 @@ executable hackage-server
   if !os(darwin)
     extra-libraries: crypt
 
-  ghc-options: -Wall -threaded
+  ghc-options: -Wall -fwarn-tabs
                -fno-warn-orphans -fno-warn-unused-do-bind
                -fno-warn-warnings-deprecations
+               -threaded
   if impl(ghc >= 7.0)
     ghc-options: -with-rtsopts=-I0
 
@@ -200,7 +201,7 @@ executable hackage-mirror
     --TODO: eliminate:
     safecopy, cereal, binary, mtl
 
-  ghc-options: -Wall
+  ghc-options: -Wall -fwarn-tabs
                -fno-warn-orphans -fno-warn-unused-do-bind
                -fno-warn-warnings-deprecations
                -fno-warn-name-shadowing
@@ -226,7 +227,7 @@ executable hackage-build
     -- Runtime dependency only:
     hscolour >= 1.8
 
-  ghc-options: -Wall
+  ghc-options: -Wall -fwarn-tabs
                -fno-warn-orphans -fno-warn-unused-do-bind
                -fno-warn-warnings-deprecations
                -fno-warn-name-shadowing

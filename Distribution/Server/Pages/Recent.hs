@@ -41,7 +41,7 @@ recentPage :: Users -> [PkgInfo] -> Html
 recentPage users pkgs =
   let log_rows = map (makeRow users) (take 20 pkgs)
       docBody = [XHtml.h2 << "Recent additions",
-	  XHtml.table ! [XHtml.align "center"] << log_rows]
+          XHtml.table ! [XHtml.align "center"] << log_rows]
       rss_link = XHtml.thelink ! [XHtml.rel "alternate",
                                   XHtml.thetype "application/rss+xml",
                                   XHtml.title "HackageDB RSS Feed",
@@ -55,10 +55,10 @@ makeRow users PkgInfo {
   } =
   XHtml.tr <<
     [XHtml.td ! [XHtml.align "right"] <<
-	    [XHtml.toHtml (showTime time), nbsp, nbsp],
+            [XHtml.toHtml (showTime time), nbsp, nbsp],
      XHtml.td ! [XHtml.align "left"] << display user,
      XHtml.td ! [XHtml.align "left"] <<
-	    [nbsp, nbsp, XHtml.anchor !
+            [nbsp, nbsp, XHtml.anchor !
                            [XHtml.href (packageURL pkgid)] << display pkgid]]
   where nbsp = XHtml.primHtmlChar "nbsp"
         user = Users.idToName users userId
@@ -88,7 +88,7 @@ recentFeed users host now pkgs = RSS
 
 hackageURI :: URIAuth -> String -> URI
 hackageURI host path =
-	URI "http:" (Just host) path "" ""
+        URI "http:" (Just host) path "" ""
 
 channel :: UTCTime -> [RSS.ChannelElem]
 channel now =
@@ -96,7 +96,7 @@ channel now =
   , RSS.ManagingEditor email
   , RSS.WebMaster email
   , RSS.ChannelPubDate now
-  , RSS.LastBuildDate	now
+  , RSS.LastBuildDate   now
   , RSS.Generator "rss-feed"
   ]
   where
@@ -118,7 +118,7 @@ releaseItem users host pkgInfo@(PkgInfo {
     title = unPackageName (packageName pkgId) ++ " " ++ display (packageVersion pkgId)
     body  = synopsis (packageDescription (pkgDesc pkgInfo))
     desc  = "<i>Added by " ++ display user ++ ", " ++ showTime time ++ ".</i>"
-	 ++ if null body then "" else "<p>" ++ body
+         ++ if null body then "" else "<p>" ++ body
     user = Users.idToName users userId
 
 unPackageName :: PackageName -> String

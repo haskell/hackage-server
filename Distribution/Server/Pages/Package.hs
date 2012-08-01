@@ -40,9 +40,9 @@ packagePage render headLinks top sections bottom docURL =
     pkgid = rendPkgId render
 
     docHeader = [
-		ulist ! [theclass "links", identifier "page-menu"] <<
-			li << anchor ! [href "/"] << "hackageDB",
-		paragraph ! [theclass "caption"] << docTitle]
+                ulist ! [theclass "links", identifier "page-menu"] <<
+                        li << anchor ! [href "/"] << "hackageDB",
+                paragraph ! [theclass "caption"] << docTitle]
 
     docTitle = display (packageName pkgid) ++ case synopsis (rendOther render) of
         "" -> ""
@@ -67,11 +67,11 @@ packagePage render headLinks top sections bottom docURL =
             (map (\item -> "[" +++ item +++ "] ") items)]
 
     docFooter = paragraph << [
-		toHtml "Produced by ",
-		anchor ! [href "/"] << "hackageDB",
-		toHtml " and ",
-		anchor ! [href cabalHomeURL] << "Cabal",
-		toHtml (" " ++ display cabalVersion)]
+                toHtml "Produced by ",
+                anchor ! [href "/"] << "hackageDB",
+                toHtml " and ",
+                anchor ! [href cabalHomeURL] << "Cabal",
+                toHtml (" " ++ display cabalVersion)]
 
     pair (title, content) =
         toHtml [ h2 << title, content ]
@@ -134,7 +134,7 @@ propertySection sections =
 
 tabulate :: [(String, Html)] -> Html
 tabulate items = table <<
-	[tr << [th ! [align "left", valign "top"] << t, td << d] | (t, d) <- items]
+        [tr << [th ! [align "left", valign "top"] << t, td << d] | (t, d) <- items]
 
 
 renderDependencies :: PackageRender -> (String, Html)
