@@ -92,7 +92,7 @@ withServerRunning root f
                            info "Finished with server")
 
 serverRunningArgs :: [String]
-serverRunningArgs = ["run", "--ip", "127.0.0.1", "--port", show testPort]
+serverRunningArgs = ["run", "--disable-caches", "--ip", "127.0.0.1", "--port", show testPort]
 
 runUserTests :: IO ()
 runUserTests = do
