@@ -122,8 +122,8 @@ hasSavedState = doesDirectoryExist . confAcidStateDir
 -- Note: the server instance must eventually be 'shutdown' or you'll end up
 -- with stale lock files.
 --
-initialise :: ServerConfig -> IO Server
-initialise initConfig@(ServerConfig hostName listenOn stateDir staticDir tmpDir) = do
+initialise :: Bool -> ServerConfig -> IO Server
+initialise enableCaches initConfig@(ServerConfig hostName listenOn stateDir staticDir tmpDir) = do
     createDirectoryIfMissing False stateDir
     store   <- BlobStorage.open blobStoreDir
 
@@ -138,7 +138,7 @@ initialise initConfig@(ServerConfig hostName listenOn stateDir staticDir tmpDir)
             serverHostURI   = hostURI
          }
     -- do feature initialization
-    features <- Features.initHackageFeatures env
+    features <- Features.initHackageFeatures enableCaches env
 
     return Server {
         serverAcid      = acid,

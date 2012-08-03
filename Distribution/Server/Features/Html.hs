@@ -84,12 +84,14 @@ instance IsHackageFeature HtmlFeature where
 --
 -- This means of generating HTML is somewhat temporary, in that a more advanced
 -- (and better-looking) HTML ajaxy scheme should come about later on.
-initHtmlFeature :: ServerEnv -> CoreFeature -> PackagesFeature -> UploadFeature
+initHtmlFeature :: Bool
+                -> ServerEnv -> CoreFeature -> PackagesFeature -> UploadFeature
                 -> CheckFeature -> UserFeature -> VersionsFeature
                 -> ReverseFeature -> TagsFeature -> DownloadFeature
                 -> ListFeature -> NamesFeature -> MirrorFeature
                 -> IO HtmlFeature
-initHtmlFeature env core pkg upload check user version reversef tagf
+initHtmlFeature enableCaches env
+                core pkg upload check user version reversef tagf
                 down list namef mirror = do
     -- resources to extend
     let cores = coreResource core
@@ -112,7 +114,7 @@ initHtmlFeature env core pkg upload check user version reversef tagf
         tagEdit = (resourceAt "/package/:package/tags/edit") { resourceGet = [("html", serveTagsForm cores tags)] }
     -- Index page caches
     namesCache <- Cache.newCacheable $ toResponse ()
-    mainCache <- Cache.newCacheableAction $
+    mainCache <- Cache.newCacheableAction enableCaches $
         do index <- fmap State.packageList $ query State.GetPackagesState
            return (toResponse $ Resource.XHtml $ Pages.packageIndex index)
     let computeNames = Cache.putCache namesCache =<< packagesPage cores list tags

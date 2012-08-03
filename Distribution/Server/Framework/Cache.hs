@@ -50,13 +50,15 @@ respondCache :: ToMessage r => Cache a -> (a -> r) -> b -> ServerPart Response
 respondCache cache func _ = return . toResponse . func =<< getCache cache
 
 -----------------------------------------------------------------------
-data CacheableAction a = CachedAction {
-                             ca_current :: MVar a,
-                             ca_needsUpdate :: TVar Bool
-                         }
+data CacheableAction a = CachedAction
+                             (MVar a) -- Holds the current value
+                             (TVar Bool) -- Set to True to request new
+                                         -- value to be cmoputed
+                       | NotCached (IO a)
 
-newCacheableAction :: NFData a => IO a -> IO (CacheableAction a)
-newCacheableAction action
+newCacheableAction :: NFData a => Bool -> IO a -> IO (CacheableAction a)
+newCacheableAction cacheEnabled action
+ | cacheEnabled
     = do parent <- myThreadId
          -- We compute the initial value in the current thread.
          -- This means that by the time anyone tries to read the value,
@@ -80,15 +82,17 @@ newCacheableAction action
                 case res of
                     Left  e -> throwTo parent (e :: SomeException)
                     Right v -> modifyMVar_ current $ const $ return v
-         return $ CachedAction {
-                      ca_current = current,
-                      ca_needsUpdate = needsUpdateVar
-                  }
+         return $ CachedAction current needsUpdateVar
+ | otherwise
+      -- TODO: Should we deepseq here, for consistency?
+    = return $ NotCached action
 
 getCacheableAction :: MonadIO m => CacheableAction a -> m a
-getCacheableAction ca = liftIO $ readMVar $ ca_current ca
+getCacheableAction (CachedAction current _) = liftIO $ readMVar current
+getCacheableAction (NotCached action) = liftIO action
 
 refreshCacheableAction :: MonadIO m => CacheableAction a -> m ()
-refreshCacheableAction ca
-    = liftIO $ atomically $ writeTVar (ca_needsUpdate ca) True
+refreshCacheableAction (CachedAction _ needsUpdateVar)
+    = liftIO $ atomically $ writeTVar needsUpdateVar True
+refreshCacheableAction (NotCached _) = return ()
 

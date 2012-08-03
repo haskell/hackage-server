@@ -137,7 +137,8 @@ data RunFlags = RunFlags {
     flagStateDir  :: Flag FilePath,
     flagStaticDir :: Flag FilePath,
     flagTmpDir    :: Flag FilePath,
-    flagTemp      :: Flag Bool
+    flagTemp      :: Flag Bool,
+    flagEnableCaches :: Flag Bool
   }
 
 defaultRunFlags :: RunFlags
@@ -148,7 +149,8 @@ defaultRunFlags = RunFlags {
     flagStateDir  = NoFlag,
     flagStaticDir = NoFlag,
     flagTemp      = Flag False,
-    flagTmpDir    = NoFlag
+    flagTmpDir    = NoFlag,
+    flagEnableCaches = Flag True
   }
 
 runCommand :: CommandUI RunFlags
@@ -192,6 +194,10 @@ runCommand = makeCommand name shortDesc longDesc defaultRunFlags options
           "Set up a temporary server while initializing state for maintenance restarts"
           flagTemp (\v flags -> flags { flagTemp = v })
           (noArg (Flag True))
+      , option [] ["disable-caches"]
+          "Disable some cached results. Mainly useful for consistency when running tests, and during bulk uploads (especially mirroring)"
+          flagEnableCaches (\v flags -> flags { flagEnableCaches = v })
+          (noArg (Flag False))
       ]
 
 runAction :: RunFlags -> IO ()
@@ -220,8 +226,9 @@ runAction opts = do
     checkStaticDir staticDir (flagStaticDir opts)
     checkTmpDir    tmpDir
 
-    let useTempServer = fromFlag (flagTemp opts)
-    withServer config useTempServer $ \server ->
+    let enableCaches = fromFlag (flagEnableCaches opts)
+        useTempServer = fromFlag (flagTemp opts)
+    withServer enableCaches config useTempServer $ \server ->
       withCheckpointHandler server $ do
         info $ "Ready! Point your browser at http://" ++ hostname
             ++ if port == 80 then "/" else ":" ++ show port ++ "/"
@@ -373,7 +380,7 @@ initAction opts = do
     checkAccidentalDataLoss =<< Server.hasSavedState config
     checkStaticDir staticDir (flagInitStaticDir opts)
 
-    withServer config False $ \server -> do
+    withServer False config False $ \server -> do
         info "Creating initial state..."
         Server.initState server admin
         createDirectory (stateDir </> "tmp")
@@ -428,7 +435,7 @@ backupAction opts = do
         config = defaults { confStateDir = stateDir }
         exportPath = fromFlagOrDefault "export.tar" (flagBackup opts)
 
-    withServer config False $ \server -> do
+    withServer False config False $ \server -> do
       info "Preparing export tarball"
       tar <- Server.exportServerTar server
       info "Saving export tarball"
@@ -492,7 +499,7 @@ testBackupAction opts = do
 
     checkTmpDir tmpDir
 
-    (tar, test_roundtrip) <- withServer config False $ \server -> do
+    (tar, test_roundtrip) <- withServer False config False $ \server -> do
       info "Taking a snapshot of server state"
       test_roundtrip <- Server.testRoundtrip server
       info "Preparing export tarball"
@@ -506,7 +513,7 @@ testBackupAction opts = do
 
     createDirectoryIfMissing True tmpStateDir
 
-    withServer config' False $ \server -> do
+    withServer False config' False $ \server -> do
       info "Parsing import tarball"
       res <- Server.importServerTar server tar
       maybe (return ()) fail res
@@ -564,7 +571,7 @@ restoreAction opts [tarFile] = do
 
     checkAccidentalDataLoss =<< Server.hasSavedState config
 
-    withServer config False $ \server -> do
+    withServer False config False $ \server -> do
         tar <- BS.readFile tarFile
         info "Parsing import tarball..."
         res <- Server.importServerTar server tar
@@ -693,8 +700,8 @@ convertAction _
 -- common action functions
 --
 
-withServer :: ServerConfig -> Bool -> (Server -> IO a) -> IO a
-withServer config doTemp = bracket initialise shutdown
+withServer :: Bool -> ServerConfig -> Bool -> (Server -> IO a) -> IO a
+withServer enableCaches config doTemp = bracket initialise shutdown
   where
     initialise = do
       mtemp <- case doTemp of
@@ -703,7 +710,7 @@ withServer config doTemp = bracket initialise shutdown
             fmap Just $ Server.setUpTemp config 1
           False -> return Nothing
       info "Initializing happstack-state..."
-      server <- Server.initialise config
+      server <- Server.initialise enableCaches config
       info "Server data loaded into memory"
       void $ forM mtemp $ \temp -> do
         info "Tearing down temp server"
