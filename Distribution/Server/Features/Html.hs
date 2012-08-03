@@ -131,7 +131,7 @@ initHtmlFeature enableCaches env
          [ (extendResource $ corePackagePage cores) { resourceGet = [("html", servePackagePage cores pkg reverses versions tags maintainPackage tagEdit)] }
          --, (extendResource $ coreIndexPage cores) { resourceGet = [("html", serveIndexPage)] }, currently in 'core' feature
          , (resourceAt "/packages/names" ) { resourceGet = [("html", Cache.respondCache namesCache id)] }
-         , (extendResource $ corePackagesPage cores) { resourceGet = [("html", const $ liftM toResponse $ Cache.refreshCacheableAction mainCache)] }
+         , (extendResource $ corePackagesPage cores) { resourceGet = [("html", const $ Cache.getCacheableAction mainCache)] }
          , maintainPackage
         -- users
          , (extendResource $ userList users) { resourceGet = [("html", serveUserList users)], resourcePost = [("html", \_ -> htmlResponse $ adminAddUser)] }
