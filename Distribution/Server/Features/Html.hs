@@ -52,7 +52,7 @@ import Distribution.Text (display)
 import Distribution.PackageDescription
 import Data.List (intercalate, intersperse, insert, sortBy)
 import Data.Function (on)
-import Control.Monad (forM)
+import Control.Monad
 import Control.Monad.Trans (MonadIO, liftIO)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -68,7 +68,7 @@ import Data.Maybe (fromMaybe)
 -- See the TODO file for more ways to improve the HTML.
 data HtmlFeature = HtmlFeature {
     htmlResources :: [Resource],
-    cachePackagesPage :: Cache.Cache Response,
+    cachePackagesPage :: Cache.CacheableAction Response,
     cacheNamesPage :: Cache.Cache Response,
     generateCaches :: IO ()
 }
@@ -112,24 +112,24 @@ initHtmlFeature env core pkg upload check user version reversef tagf
         tagEdit = (resourceAt "/package/:package/tags/edit") { resourceGet = [("html", serveTagsForm cores tags)] }
     -- Index page caches
     namesCache <- Cache.newCacheable $ toResponse ()
-    mainCache <- Cache.newCacheable $ toResponse ()
-    let computePackages = do
-            index <- fmap State.packageList $ query State.GetPackagesState
-            Cache.putCache mainCache (toResponse $ Resource.XHtml $ Pages.packageIndex index)
-        computeNames = Cache.putCache namesCache =<< packagesPage cores list tags
+    mainCache <- Cache.newCacheableAction $
+        do index <- fmap State.packageList $ query State.GetPackagesState
+           return (toResponse $ Resource.XHtml $ Pages.packageIndex index)
+    let computeNames = Cache.putCache namesCache =<< packagesPage cores list tags
     registerHook (itemUpdate list) $ \_ -> computeNames
-    registerHook (packageIndexChange core) $ computePackages
+    registerHook (packageIndexChange core) $ Cache.refreshCacheableAction mainCache
 
     return HtmlFeature
       { cachePackagesPage = mainCache
       , cacheNamesPage = namesCache
-      , generateCaches = computePackages >> computeNames
+      , generateCaches = do Cache.refreshCacheableAction mainCache
+                            computeNames
       , htmlResources =
         -- core
          [ (extendResource $ corePackagePage cores) { resourceGet = [("html", servePackagePage cores pkg reverses versions tags maintainPackage tagEdit)] }
          --, (extendResource $ coreIndexPage cores) { resourceGet = [("html", serveIndexPage)] }, currently in 'core' feature
          , (resourceAt "/packages/names" ) { resourceGet = [("html", Cache.respondCache namesCache id)] }
-         , (extendResource $ corePackagesPage cores) { resourceGet = [("html", Cache.respondCache mainCache id)] }
+         , (extendResource $ corePackagesPage cores) { resourceGet = [("html", const $ liftM toResponse $ Cache.refreshCacheableAction mainCache)] }
          , maintainPackage
         -- users
          , (extendResource $ userList users) { resourceGet = [("html", serveUserList users)], resourcePost = [("html", \_ -> htmlResponse $ adminAddUser)] }

@@ -30,6 +30,8 @@ new force initial = do
             accum x (Left  f)  = f x
             accum _ (Right x') = x'
         res <- try $ evaluate (force value)
+        -- TODO: Handle asynchronous exceptions better
+        -- (same in Distribution.Server.Framework.Cache.newCacheableAction)
         case res of
           Left  e -> do throwTo parent (e :: SomeException)
                         loop
