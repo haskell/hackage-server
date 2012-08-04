@@ -60,7 +60,6 @@ import Data.Monoid (mconcat)
 import Text.XHtml.Strict (Html, toHtml, unordList, h3, (<<), anchor, href, (!))
 import Data.Ord (comparing)
 import Data.List (sortBy, find)
-import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.ByteString.Lazy.Char8 (ByteString)
 
 import Distribution.Text (display)
@@ -73,7 +72,7 @@ data CoreFeature = CoreFeature {
     coreResource :: CoreResource,
 
     -- index.tar.gz
-    cacheIndexTarball :: Cache.Cache ByteString,
+    cacheIndexTarball :: Cache.CacheableAction ByteString,
     -- other files to put in the index tarball like preferred-versions
     indexExtras :: Cache.Cache (Map String (ByteString, UTCTime)),
 
@@ -115,17 +114,16 @@ data CoreResource = CoreResource {
 instance IsHackageFeature CoreFeature where
     getFeatureInterface = featureInterface
 
-initCoreFeature :: ServerEnv -> IO CoreFeature
-initCoreFeature config = do
+initCoreFeature :: Bool -> ServerEnv -> IO CoreFeature
+initCoreFeature enableCaches config = do
     -- Caches
-    indexTar <- Cache.newCacheable BS.empty
     extraMap <- Cache.newCacheable Map.empty
 
-    let computeCache = do
+    indexTar <- Cache.newCacheableAction enableCaches $ do
             users <- query GetUserDb
             index <- fmap packageList $ query GetPackagesState
             extras <- Cache.getCache extraMap
-            Cache.putCache indexTar (GZip.compress $ Packages.Index.write users extras index)
+            return $ GZip.compress $ Packages.Index.write users extras index
 
     downHook <- newHook
     addHook  <- newHook
@@ -134,13 +132,13 @@ initCoreFeature config = do
     indexHook  <- newHook
     newPkgHook <- newHook
     noPkgHook <- newHook
-    registerHook indexHook computeCache
+    registerHook indexHook $ Cache.refreshCacheableAction indexTar
 
     let store = serverBlobStore config
         resources = CoreResource {
             -- the rudimentary HTML resources are for when we don't want an additional HTML feature
             coreIndexPage = (resourceAt "/.:format") { resourceGet = [("html", indexPage $ serverStaticDir config)] }
-          , coreIndexTarball = (resourceAt "/packages/index.tar.gz") { resourceGet = [("tarball", Cache.respondCache indexTar Resource.IndexTarball)] }
+          , coreIndexTarball = (resourceAt "/packages/index.tar.gz") { resourceGet = [("tarball", const $ liftM (toResponse . Resource.IndexTarball) $ Cache.getCacheableAction indexTar)] }
           , corePackagesPage = (resourceAt "/packages/.:format") { resourceGet = [] } -- -- have basic packages listing?
           , corePackagePage = (resourceAt "/package/:package.:format") { resourceGet = [("html", basicPackagePage resources)] }
           , corePackageRedirect = (resourceAt "/package/") { resourceGet = [("", \_ -> seeOther "/packages/" $ toResponse ())] }

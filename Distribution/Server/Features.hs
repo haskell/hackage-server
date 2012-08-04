@@ -54,7 +54,7 @@ initHackageFeatures enableCaches env = do
     -- themselves unused, functions from their modules are.
     -- What follows is a topological sort along those lines
 
-    coreFeature     <- initCoreFeature env
+    coreFeature     <- initCoreFeature enableCaches env
 
     usersFeature    <- initUsersFeature env
                          coreFeature
