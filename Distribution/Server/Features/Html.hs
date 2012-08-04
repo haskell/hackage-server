@@ -69,7 +69,7 @@ import Data.Maybe (fromMaybe)
 data HtmlFeature = HtmlFeature {
     htmlResources :: [Resource],
     cachePackagesPage :: Cache.CacheableAction Response,
-    cacheNamesPage :: Cache.Cache Response,
+    cacheNamesPage :: Cache.CacheableAction Response,
     generateCaches :: IO ()
 }
 
@@ -116,26 +116,26 @@ initHtmlFeature enableCaches env
         candMaintainForm = (resourceAt "/package/:package/candidate/maintain") { resourceGet = [("html", serveCandidateMaintain cores checks)] }
         tagEdit = (resourceAt "/package/:package/tags/edit") { resourceGet = [("html", serveTagsForm cores tags)] }
     -- Index page caches
-    namesCache <- Cache.newCacheable $ toResponse ()
+    namesCache <- Cache.newCacheableAction enableCaches $
+        packagesPage cores list tags
     mainCache <- Cache.newCacheableAction enableCaches $
         do index <- fmap State.packageList $ query State.GetPackagesState
            return (toResponse $ Resource.XHtml $ Pages.packageIndex index)
-    let computeNames = Cache.putCache namesCache =<< packagesPage cores list tags
-    registerHook (itemUpdate list) $ \_ -> computeNames
+    registerHook (itemUpdate list) $ \_ -> Cache.refreshCacheableAction namesCache
     registerHook (packageIndexChange core) $ Cache.refreshCacheableAction mainCache
 
     return HtmlFeature
       { cachePackagesPage = mainCache
       , cacheNamesPage = namesCache
       , generateCaches = do Cache.refreshCacheableAction mainCache
-                            computeNames
+                            Cache.refreshCacheableAction namesCache
       , htmlResources =
         -- core
          [ (extendResource $ corePackagePage cores) { resourceGet = [("html", servePackagePage cores pkg
                                                                                                -- [reverse index disabled] reverses
                                                                                                versions tags maintainPackage tagEdit)] }
          --, (extendResource $ coreIndexPage cores) { resourceGet = [("html", serveIndexPage)] }, currently in 'core' feature
-         , (resourceAt "/packages/names" ) { resourceGet = [("html", Cache.respondCache namesCache id)] }
+         , (resourceAt "/packages/names" ) { resourceGet = [("html", const $ Cache.getCacheableAction namesCache)] }
          , (extendResource $ corePackagesPage cores) { resourceGet = [("html", const $ Cache.getCacheableAction mainCache)] }
          , maintainPackage
         -- users
