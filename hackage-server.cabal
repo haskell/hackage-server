@@ -68,7 +68,7 @@ executable hackage-server
     Distribution.Server.Packages.Backup
     Distribution.Server.Packages.PackageIndex
     Distribution.Server.Packages.Preferred
-    Distribution.Server.Packages.Reverse
+    -- [reverse index disabled] Distribution.Server.Packages.Reverse
     Distribution.Server.Packages.State
     Distribution.Server.Packages.Tag
     Distribution.Server.Packages.Types
@@ -82,7 +82,7 @@ executable hackage-server
     Distribution.Server.Pages.Package.HaddockLex
     Distribution.Server.Pages.Package.HaddockParse
     Distribution.Server.Pages.Recent
-    Distribution.Server.Pages.Reverse
+    -- [reverse index disabled] Distribution.Server.Pages.Reverse
     Distribution.Server.Pages.Template
     Distribution.Server.Pages.Util
     Distribution.Server.Users.Group
@@ -128,7 +128,7 @@ executable hackage-server
       Distribution.Server.Features.NameSearch
       Distribution.Server.Features.Packages
       Distribution.Server.Features.PreferredVersions
-      Distribution.Server.Features.ReverseDependencies
+      -- [reverse index disabled] Distribution.Server.Features.ReverseDependencies
       Distribution.Server.Features.Tags
 
   build-depends:

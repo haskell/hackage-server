@@ -12,7 +12,7 @@ module Distribution.Server.Features.PackageList (
 import Distribution.Server.Acid (query)
 import Distribution.Server.Framework
 import Distribution.Server.Features.Core
-import Distribution.Server.Features.ReverseDependencies
+-- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies
 import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.PreferredVersions
@@ -23,7 +23,7 @@ import Distribution.Server.Packages.State
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.Tag
 import Distribution.Server.Packages.Preferred
-import Distribution.Server.Packages.Reverse
+-- [reverse index disabled] import Distribution.Server.Packages.Reverse
 import Distribution.Server.Packages.Downloads
 import Distribution.Server.Util.Histogram
 
@@ -61,7 +61,7 @@ data PackageItem = PackageItem {
     itemDownloads :: !Int,
     -- The number of direct revdeps. (Likewise.)
     -- also: distinguish direct/flat?
-    itemRevDepsCount :: !Int,
+    -- [reverse index disabled] itemRevDepsCount :: !Int,
     -- Whether there's a library here.
     itemHasLibrary :: !Bool,
     -- How many executables (>=0) this package has.
@@ -70,7 +70,9 @@ data PackageItem = PackageItem {
   --itemHotness :: Int
 }
 emptyPackageItem :: PackageName -> PackageItem
-emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" 0 0 False 0
+emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" 0
+                                   -- [reverse index disabled] 0
+                                   False 0
 
 instance IsHackageFeature ListFeature where
     getFeatureInterface listf = (emptyHackageFeature "list") {
@@ -84,9 +86,13 @@ instance IsHackageFeature ListFeature where
                 threadDelay (10 * 60 * 1000000) -- 10 minutes
                 refreshDownloads listf
 
-initListFeature :: ServerEnv -> CoreFeature -> ReverseFeature -> DownloadFeature
+initListFeature :: ServerEnv -> CoreFeature
+                -- [reverse index disabled] -> ReverseFeature
+                -> DownloadFeature
                 -> TagsFeature -> VersionsFeature -> IO ListFeature
-initListFeature _ core revs downs tagf versions = do
+initListFeature _ core
+                -- [reverse index disabled] revs
+                downs tagf versions = do
     iCache <- Cache.newCache Map.empty id
     iUpdate <- newHook
     let modifyItem pkgname token = do
@@ -109,12 +115,14 @@ initListFeature _ core revs downs tagf versions = do
     registerHook (packageAddHook core) $ updateDesc . packageName
     registerHook (packageRemoveHook core) $ updateDesc . packageName
     registerHook (packageChangeHook core) $ \_ -> updateDesc . packageName
+    {- [reverse index disabled]
     registerHook (reverseUpdateHook revs) $ \mrev -> do
         let pkgs = Map.keys mrev
         forM_ pkgs $ \pkgname -> do
             revCount <- query . GetReverseCount $ pkgname
             modifyItem pkgname (updateReverseItem revCount)
         runHook' (iUpdate) $ Set.fromDistinctAscList pkgs
+    -}
     registerHook (tagsUpdated tagf) $ \pkgs _ -> do
         forM_ (Set.toList pkgs) $ \pkgname -> do
             tags <- query . TagsForPackage $ pkgname
@@ -144,15 +152,15 @@ constructItemIndex = do
 constructItem :: PkgInfo -> IO (PackageName, PackageItem)
 constructItem pkg = do
     let pkgname = packageName pkg
-    revCount <- query . GetReverseCount $ pkgname
+    -- [reverse index disabled] revCount <- query . GetReverseCount $ pkgname
     tags <- query . TagsForPackage $ pkgname
     infos <- query . GetDownloadInfo $ pkgname
     deprs <- query . GetDeprecatedFor $ pkgname
     return $ (,) pkgname $ (updateDescriptionItem (pkgDesc pkg) $ emptyPackageItem pkgname) {
         itemTags = tags,
         itemDeprecated = deprs,
-        itemDownloads = packageDowns infos,
-        itemRevDepsCount = directReverseCount revCount
+        itemDownloads = packageDowns infos
+        -- [reverse index disabled] , itemRevDepsCount = directReverseCount revCount
     }
 
 updateDescriptionItem :: GenericPackageDescription -> PackageItem -> PackageItem
@@ -179,11 +187,13 @@ updateDeprecation pkgs item =
         itemDeprecated = pkgs
     }
 
+{- [reverse index disabled]
 updateReverseItem :: ReverseCount -> PackageItem -> PackageItem
 updateReverseItem revCount item =
     item {
         itemRevDepsCount = directReverseCount revCount
     }
+-}
 
 updateDownload :: Int -> PackageItem -> PackageItem
 updateDownload count item =

@@ -15,7 +15,7 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.NameSearch
 import Distribution.Server.Features.PreferredVersions
-import Distribution.Server.Features.ReverseDependencies
+-- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies
 import Distribution.Server.Features.PackageList
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Mirror
@@ -34,13 +34,13 @@ import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Users.Group (UserGroup(..))
 import Distribution.Server.Features.Distro.Distributions (DistroPackageInfo(..))
 import Distribution.Server.Packages.Preferred
-import Distribution.Server.Packages.Reverse
+-- [reverse index disabled] import Distribution.Server.Packages.Reverse
 import Distribution.Server.Packages.Tag
 
 import Distribution.Server.Pages.Template (hackagePage, hackagePageWith, haddockPage)
 import Distribution.Server.Pages.Util
 import qualified Distribution.Server.Pages.Group as Pages
-import qualified Distribution.Server.Pages.Reverse as Pages
+-- [reverse index disabled] import qualified Distribution.Server.Pages.Reverse as Pages
 import qualified Distribution.Server.Pages.Index as Pages
 import Text.XHtml.Strict
 import qualified Text.XHtml.Strict as XHtml
@@ -87,11 +87,14 @@ instance IsHackageFeature HtmlFeature where
 initHtmlFeature :: Bool
                 -> ServerEnv -> CoreFeature -> PackagesFeature -> UploadFeature
                 -> CheckFeature -> UserFeature -> VersionsFeature
-                -> ReverseFeature -> TagsFeature -> DownloadFeature
+                -- [reverse index disabled] -> ReverseFeature
+                -> TagsFeature -> DownloadFeature
                 -> ListFeature -> NamesFeature -> MirrorFeature
                 -> IO HtmlFeature
 initHtmlFeature enableCaches env
-                core pkg upload check user version reversef tagf
+                core pkg upload check user version
+                -- [reverse index disabled] reversef
+                tagf
                 down list namef mirror = do
     -- resources to extend
     let cores = coreResource core
@@ -99,7 +102,7 @@ initHtmlFeature enableCaches env
         uploads = uploadResource upload
         checks  = checkResource check
         versions = versionsResource version
-        reverses = reverseResource reversef
+        -- [reverse index disabled] reverses = reverseResource reversef
         tags = tagsResource tagf
         downs = downloadResource down
         names = namesResource namef
@@ -128,7 +131,9 @@ initHtmlFeature enableCaches env
                             computeNames
       , htmlResources =
         -- core
-         [ (extendResource $ corePackagePage cores) { resourceGet = [("html", servePackagePage cores pkg reverses versions tags maintainPackage tagEdit)] }
+         [ (extendResource $ corePackagePage cores) { resourceGet = [("html", servePackagePage cores pkg
+                                                                                               -- [reverse index disabled] reverses
+                                                                                               versions tags maintainPackage tagEdit)] }
          --, (extendResource $ coreIndexPage cores) { resourceGet = [("html", serveIndexPage)] }, currently in 'core' feature
          , (resourceAt "/packages/names" ) { resourceGet = [("html", Cache.respondCache namesCache id)] }
          , (extendResource $ corePackagesPage cores) { resourceGet = [("html", const $ Cache.getCacheableAction mainCache)] }
@@ -182,12 +187,14 @@ initHtmlFeature enableCaches env
           , (extendResource $ preferredPackageResource versions) { resourceGet = [("html", servePackagePreferred cores versions editPreferred)], resourcePut = [("html", servePutPreferred cores version)] }
           , (extendResource $ deprecatedResource versions) { resourceGet = [("html", serveDeprecatedSummary cores)]  }
           , (extendResource $ deprecatedPackageResource versions) { resourceGet = [("html", servePackageDeprecated cores editDeprecated)], resourcePut = [("html", servePutDeprecated cores version)] }
+        {- [reverse index disabled]
         -- reverse
           , (extendResource $ reversePackage reverses) { resourceGet = [("html", serveReverse cores reverses True)] }
           , (extendResource $ reversePackageOld reverses) { resourceGet = [("html", serveReverse cores reverses False)] }
           , (extendResource $ reversePackageAll reverses) { resourceGet = [("html", serveReverseFlat cores reverses)] }
           , (extendResource $ reversePackageStats reverses) { resourceGet = [("html", serveReverseStats cores reverses)] }
           , (extendResource $ reversePackages reverses) { resourceGet = [("html", serveReverseList cores reversef)] }
+          -}
         -- downloads
           , (extendResource $ topDownloads downs) { resourceGet = [("html", serveDownloadTop cores down)] }
         -- tags
@@ -212,10 +219,13 @@ initHtmlFeature enableCaches env
 -- of features about their attributes for the given package. It'll need
 -- reorganizing to look aesthetic, as opposed to the sleek and simple current
 -- design that takes the 1990s school of web design.
-servePackagePage :: CoreResource -> PackagesFeature -> ReverseResource
+servePackagePage :: CoreResource -> PackagesFeature
+                 -- [reverse index disabled] -> ReverseResource
                  -> VersionsResource -> TagsResource -> Resource -> Resource
                  -> DynamicPath -> ServerPart Response
-servePackagePage core pkgr revr versions tagf maintain tagEdit dpath =
+servePackagePage core pkgr
+                 -- [reverse index disabled] revr
+                 versions tagf maintain tagEdit dpath =
                         htmlResponse $
                         withPackageId dpath $ \pkgid  ->
                         withPackagePreferred pkgid $ \pkg pkgs -> do
@@ -231,13 +241,14 @@ servePackagePage core pkgr revr versions tagf maintain tagEdit dpath =
                       Pages.renderDependencies render]
     -- and other package indices
     distributions <- query $ State.PackageStatus pkgname
-    revCount <- revPackageSummary realpkg
+    -- [reverse index disabled] revCount <- revPackageSummary realpkg
     (totalDown, versionDown) <- perVersionDownloads pkg
     let distHtml = case distributions of
             [] -> []
             _  -> [("Distributions", concatHtml . intersperse (toHtml ", ") $ map showDist distributions)]
-        afterHtml  = distHtml ++ [Pages.renderDownloads totalDown versionDown $ packageVersion realpkg,
-                                  Pages.reversePackageSummary realpkg revr revCount]
+        afterHtml  = distHtml ++ [Pages.renderDownloads totalDown versionDown $ packageVersion realpkg
+                                 -- [reverse index disabled] ,Pages.reversePackageSummary realpkg revr revCount
+                                 ]
     -- bottom sections, currently only documentation
     hasDocs  <- query $ State.HasDocumentation realpkg
     let docURL | hasDocs   = Just $ "/package" </> display realpkg </> "doc"
@@ -746,6 +757,7 @@ servePreferForm core r dpath =
           , paragraph << input ! [thetype "submit", value "Set status"]
           ]]
 
+{- [reverse index disabled]
 --------------------------------------------------------------------------------
 -- Reverse
 serveReverse :: CoreResource -> ReverseResource -> Bool -> DynamicPath -> ServerPart Response
@@ -782,6 +794,7 @@ serveReverseList core revs _ = do
     hackCount <- fmap (PackageIndex.indexSize . State.packageList) $ query State.GetPackagesState
     return $ toResponse $ Resource.XHtml $ hackagePage "Reverse dependencies" $
         Pages.reversePackagesRender (corePackageName core "") revr hackCount triple
+-}
 
 --------------------------------------------------------------------------------
 -- Downloads

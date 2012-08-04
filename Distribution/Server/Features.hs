@@ -26,7 +26,7 @@ import Distribution.Server.Features.Documentation       (initDocumentationFeatur
 import Distribution.Server.Features.BuildReports        (initBuildReportsFeature)
 import Distribution.Server.Features.LegacyRedirects     (legacyRedirectsFeature)
 import Distribution.Server.Features.PreferredVersions   (initVersionsFeature)
-import Distribution.Server.Features.ReverseDependencies (initReverseFeature)
+-- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies (initReverseFeature)
 import Distribution.Server.Features.DownloadCount       (initDownloadFeature)
 import Distribution.Server.Features.Tags            (initTagsFeature)
 import Distribution.Server.Features.NameSearch      (initNamesFeature)
@@ -104,16 +104,18 @@ initHackageFeatures enableCaches env = do
                          uploadFeature
                          tagsFeature
 
+    {- [reverse index disabled]
     reverseFeature  <- initReverseFeature env
                          coreFeature
                          versionsFeature
+                         -}
 
     namesFeature    <- initNamesFeature env
                          coreFeature
 
     listFeature     <- initListFeature env
                          coreFeature
-                         reverseFeature
+                         -- [reverse index disabled] reverseFeature
                          downloadFeature
                          tagsFeature
                          versionsFeature
@@ -128,7 +130,7 @@ initHackageFeatures enableCaches env = do
                          checkFeature
                          usersFeature
                          versionsFeature
-                         reverseFeature
+                         -- [reverse index disabled] reverseFeature
                          tagsFeature
                          downloadFeature
                          listFeature
@@ -154,7 +156,7 @@ initHackageFeatures enableCaches env = do
          , getFeatureInterface downloadFeature
          , getFeatureInterface tagsFeature
          , getFeatureInterface versionsFeature
-         , getFeatureInterface reverseFeature
+         -- [reverse index disabled] , getFeatureInterface reverseFeature
          , getFeatureInterface namesFeature
          , getFeatureInterface listFeature
          , getFeatureInterface platformFeature

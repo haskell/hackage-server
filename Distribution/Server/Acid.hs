@@ -15,7 +15,7 @@ import Distribution.Server.Features.Distro.State      (Distros, initialDistros)
 import Distribution.Server.Packages.Downloads       (DownloadCounts, initialDownloadCounts)
 import Distribution.Server.Packages.Platform        (PlatformPackages, initialPlatformPackages)
 import Distribution.Server.Packages.Preferred       (PreferredVersions, initialPreferredVersions)
-import Distribution.Server.Packages.Reverse         (ReverseIndex, initialReverseIndex)
+-- [reverse index disabled] import Distribution.Server.Packages.Reverse         (ReverseIndex, initialReverseIndex)
 import Distribution.Server.Packages.State           (CandidatePackages, Documentation, HackageTrustees, HackageUploaders, PackageMaintainers, PackagesState,
                                                      initialCandidatePackages, initialDocumentation, 
                                                      initialHackageTrustees, initialHackageUploaders,
@@ -41,7 +41,7 @@ data Acid = Acid
     , acidPackageTags        :: AcidState PackageTags
     , acidPlatformPackages   :: AcidState PlatformPackages
     , acidPreferredVersions  :: AcidState PreferredVersions
-    , acidReverseIndex       :: AcidState ReverseIndex
+    -- [reverse index disabled] , acidReverseIndex       :: AcidState ReverseIndex
     , acidUsers              :: AcidState Users 
     }
 
@@ -90,8 +90,8 @@ instance AcidComponent PlatformPackages where
 instance AcidComponent PreferredVersions where
     acidComponent = acidPreferredVersions
 
-instance AcidComponent ReverseIndex where
-    acidComponent = acidReverseIndex
+-- [reverse index disabled] instance AcidComponent ReverseIndex where
+-- [reverse index disabled]     acidComponent = acidReverseIndex
 
 instance AcidComponent Users where
     acidComponent = acidUsers
@@ -122,7 +122,7 @@ startAcid stateDir =
            initialPackageTags
            initialPlatformPackages
            initialPreferredVersions
-           initialReverseIndex
+           -- [reverse index disabled] initialReverseIndex
            initialUsers
 
 startAcid' :: FilePath 
@@ -140,10 +140,12 @@ startAcid' :: FilePath
            -> PackageTags
            -> PlatformPackages
            -> PreferredVersions
-           -> ReverseIndex
+           -- [reverse index disabled] -> ReverseIndex
            -> Users
            -> IO Acid
-startAcid' stateDir buildReports candidatePackages distros documentation downloadCounts hackageAdmins hackageTrustees hackageUploaders mirrorClients packageMaintainers packagesState packageTags platformPackages preferredVersions reverseIndex users =
+startAcid' stateDir buildReports candidatePackages distros documentation downloadCounts hackageAdmins hackageTrustees hackageUploaders mirrorClients packageMaintainers packagesState packageTags platformPackages preferredVersions
+    -- [reverse index disabled] reverseIndex
+    users =
     do buildReports'       <- openLocalStateFrom (stateDir </> "BuildReports")       buildReports
        candidatePackages'  <- openLocalStateFrom (stateDir </> "CandidatePackages")  candidatePackages
        distros'            <- openLocalStateFrom (stateDir </> "Distros")            distros
@@ -158,7 +160,7 @@ startAcid' stateDir buildReports candidatePackages distros documentation downloa
        packageTags'        <- openLocalStateFrom (stateDir </> "PackageTags")        packageTags
        platformPackages'   <- openLocalStateFrom (stateDir </> "PlatformPackages")   platformPackages
        preferredVersions'  <- openLocalStateFrom (stateDir </> "PreferredVersions")  preferredVersions
-       reverseIndex'       <- openLocalStateFrom (stateDir </> "ReverseIndex")       reverseIndex
+       -- [reverse index disabled] reverseIndex'       <- openLocalStateFrom (stateDir </> "ReverseIndex")       reverseIndex
        users'              <- openLocalStateFrom (stateDir </> "Users")              users
        let acid = Acid { acidBuildReports       = buildReports' 
                        , acidCandidatePackages  = candidatePackages'
@@ -174,7 +176,7 @@ startAcid' stateDir buildReports candidatePackages distros documentation downloa
                        , acidPackageTags        = packageTags'
                        , acidPlatformPackages   = platformPackages'
                        , acidPreferredVersions  = preferredVersions'
-                       , acidReverseIndex       = reverseIndex'
+                       -- [reverse index disabled] , acidReverseIndex       = reverseIndex'
                        , acidUsers              = users'
                        }
        setAcid acid
@@ -197,7 +199,7 @@ stopAcid acid =
        createCheckpointAndClose (acidPackageTags acid)
        createCheckpointAndClose (acidPlatformPackages acid)
        createCheckpointAndClose (acidPreferredVersions acid)
-       createCheckpointAndClose (acidReverseIndex acid)
+       -- [reverse index disabled] createCheckpointAndClose (acidReverseIndex acid)
        createCheckpointAndClose (acidUsers acid)
 
 checkpointAcid :: Acid -> IO ()
@@ -216,7 +218,7 @@ checkpointAcid acid =
        createCheckpoint (acidPackageTags acid)
        createCheckpoint (acidPlatformPackages acid)
        createCheckpoint (acidPreferredVersions acid)
-       createCheckpoint (acidReverseIndex acid)
+       -- [reverse index disabled] createCheckpoint (acidReverseIndex acid)
        createCheckpoint (acidUsers acid)
 
 update :: ( AcidComponent (MethodState event)
