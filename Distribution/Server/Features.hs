@@ -68,7 +68,7 @@ initHackageFeatures enableCaches env = do
                          usersFeature
 
 #ifndef MINIMAL
-    packagesFeature <- initPackagesFeature env
+    packagesFeature <- initPackagesFeature enableCaches env
                          coreFeature
 
     distroFeature   <- initDistroFeature env

@@ -39,7 +39,7 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.Foldable as Foldable
 import qualified Data.Traversable as Traversable
-import Control.Monad (guard, liftM2)
+import Control.Monad
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import Data.List (sort, sortBy, partition)
 import Data.Char (toLower, isSpace)
@@ -53,7 +53,7 @@ import qualified Distribution.Server.Pages.Recent as Pages
 data PackagesFeature = PackagesFeature {
     packagesResource :: PackagesResource,
     -- recent caches. in lieu of an ActionLog
-    cacheRecent :: Cache.Cache (Response, Response), -- rss
+    cacheRecent :: Cache.CacheableAction (Response, Response), -- rss
     -- TODO: perhaps a hook, recentUpdated :: HookList ([PkgInfo] -> IO ())
 
     -- necessary information for the representation of a package resource
@@ -71,20 +71,21 @@ instance IsHackageFeature PackagesFeature where
         featureResources = map ($packagesResource pkgs) [packagesRecent]
       }
 
-initPackagesFeature :: ServerEnv -> CoreFeature -> IO PackagesFeature
-initPackagesFeature serverEnv core = do
-    recents <- Cache.newCacheable (toResponse (), toResponse ())
-    registerHook (packageIndexChange core) $ do
+initPackagesFeature :: Bool -> ServerEnv -> CoreFeature -> IO PackagesFeature
+initPackagesFeature enableCaches serverEnv core = do
+    recents <- Cache.newCacheableAction enableCaches $ do
         -- TODO: this should be moved to HTML/RSS features
         state <- query State.GetPackagesState
         users <- query State.GetUserDb
         now   <- getCurrentTime
         let recentChanges = reverse $ sortBy (comparing pkgUploadTime) (PackageIndex.allPackages . State.packageList $ state)
-        Cache.putCache recents (toResponse $ Resource.XHtml $ Pages.recentPage users recentChanges,
-                                toResponse $ Pages.recentFeed users (fromJust $ URI.uriAuthority =<< URI.parseURI "http://hackage.haskell.org") now recentChanges)
+        return (toResponse $ Resource.XHtml $ Pages.recentPage users recentChanges,
+                toResponse $ Pages.recentFeed users (fromJust $ URI.uriAuthority =<< URI.parseURI "http://hackage.haskell.org") now recentChanges)
+    registerHook (packageIndexChange core) $
+        Cache.refreshCacheableAction recents
     return PackagesFeature
       { packagesResource = PackagesResource
-          { packagesRecent = (resourceAt "/recent.:format") { resourceGet = [("html", Cache.respondCache recents fst), ("rss", Cache.respondCache recents snd)] }
+          { packagesRecent = (resourceAt "/recent.:format") { resourceGet = [("html", const $ liftM fst $ Cache.getCacheableAction recents), ("rss", const $ liftM snd $ Cache.getCacheableAction recents)] }
           }
       , cacheRecent   = recents
       , packageRender = \pkg -> do
