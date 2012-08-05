@@ -28,6 +28,7 @@ import Data.Typeable (Typeable)
 import Data.Serialize (Serialize)
 import System.FilePath ((</>))
 import Control.Exception (handle, throwIO, evaluate)
+import Control.Monad
 import System.Directory
 import System.IO
 
@@ -44,7 +45,9 @@ instance Show BlobId where show (BlobId digest) = show digest
 newtype BlobStorage = BlobStorage FilePath -- ^ location of the store
 
 filepath :: BlobStorage -> BlobId -> FilePath
-filepath (BlobStorage storeDir) (BlobId hash) = storeDir </> show hash
+filepath (BlobStorage storeDir) (BlobId hash)
+    = storeDir </> take 2 str </> str
+    where str = show hash
 
 incomingDir :: BlobStorage -> FilePath
 incomingDir (BlobStorage storeDir) = storeDir </> "incoming"
@@ -154,7 +157,16 @@ fetch store blobid = BS.readFile (filepath store blobid)
 --
 open :: FilePath -> IO BlobStorage
 open storeDir = do
-  createDirectoryIfMissing False storeDir
-  let store = BlobStorage storeDir
-  createDirectoryIfMissing False (incomingDir store)
-  return store
+    let store = BlobStorage storeDir
+
+    exists <- doesDirectoryExist storeDir
+    unless exists $ do
+        let chars = ['0' .. '9'] ++ ['a' .. 'f']
+            chars2 = [ [x, y] | x <- chars, y <- chars ]
+        createDirectory storeDir
+        sequence_ [ createDirectory (storeDir </> x)
+                  | x <- chars2 ]
+        createDirectory (incomingDir store)
+
+    return store
+
