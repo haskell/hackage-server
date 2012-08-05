@@ -221,7 +221,7 @@ checkpoint server = checkpointAcid (serverAcid server)
 -- This is not really a good thing. (FIXME)
 --
 -- However, it does not need happstack-state to function.
-bulkImport :: FilePath -- path to blob storage, get rid of this
+bulkImport :: FilePath -- path to state directory, get rid of this
            -> ByteString  -- Index
            -> String      -- Log
            -> Maybe ByteString -- archive
@@ -230,7 +230,7 @@ bulkImport :: FilePath -- path to blob storage, get rid of this
            -> IO ([UploadLog.Entry], ByteString)
 bulkImport storageDir indexFile logFile archiveFile htPasswdFile adminsFile = do
     createDirectoryIfMissing True storageDir
-    storage <- BlobStorage.open storageDir
+    storage <- BlobStorage.open (storageDir ++ "/blobs")
 
     putStrLn "Reading index file"
     -- [(PackageIdentifier, Tar.Entry)]

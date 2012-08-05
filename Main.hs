@@ -682,7 +682,7 @@ convertAction ConvertFlags {
 
     -- todo: get rid of using blob storage for conversion
     defaults <- Server.defaultServerConfig
-    let stateDir  = confStateDir defaults ++ "/blobs"
+    let stateDir  = confStateDir defaults
 
     info "Creating export tarball..."
     (badLogEntries, bulkTar) <- Server.bulkImport stateDir indexFile logFile tarballs htpasswd admins
