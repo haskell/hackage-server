@@ -35,6 +35,7 @@ source-repository head
 flag minimal
   default: False
   description: Include only the minimum feature set.
+  manual: True
 
 executable hackage-server
   main-is: Main.hs
