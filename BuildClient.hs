@@ -159,7 +159,7 @@ mkPackageHasDocs opts config = do
             if has_docs
              then return False
              else do
-              has_no_docs <- liftM isNothing $ requestGET' (bc_srcURI config <//> "package" </> display pkg_id </> "doc")
+              has_no_docs <- liftM isNothing $ requestGET' (bc_srcURI config <//> "package" </> display pkg_id </> "doc/")
               unless has_no_docs $ liftIO $ mark_as_having_docs pkg_id
               return has_no_docs
         persist = readIORef cache_var >>= writeBuiltCache (bo_stateDir opts)
