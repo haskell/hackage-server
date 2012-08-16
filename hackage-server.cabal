@@ -37,7 +37,21 @@ flag minimal
   description: Include only the minimum feature set.
   manual: True
 
+flag build-hackage-server
+  default: True
+  manual: True
+
+flag build-hackage-mirror
+  default: True
+  manual: True
+
+flag build-hackage-build
+  default: True
+  manual: True
+
 executable hackage-server
+  if ! flag(build-hackage-server)
+    buildable: False
   main-is: Main.hs
   other-modules:
     Data.IntTrie
@@ -184,6 +198,8 @@ executable hackage-server
     ghc-options: -with-rtsopts=-I0
 
 executable hackage-mirror
+  if ! flag(build-hackage-mirror)
+    buildable: False
   main-is: MirrorClient.hs
   other-modules:
     Distribution.Client
@@ -208,6 +224,8 @@ executable hackage-mirror
                -fno-warn-name-shadowing
 
 executable hackage-build
+  if ! flag(build-hackage-build)
+    buildable: False
   main-is: BuildClient.hs
   other-modules:
     Distribution.Client
