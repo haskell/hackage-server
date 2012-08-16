@@ -122,7 +122,7 @@ ssh hackage-docs@192.168.142.2
     cd downloads
     darcs get http://code.haskell.org/hackage-server
     cd hackage-server
-    cabal install
+    cabal install -f-build-hackage-server -f-build-hackage-mirror
     cd
     mkdir hackage-docs
     cd hackage-docs
