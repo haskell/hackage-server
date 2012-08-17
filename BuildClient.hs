@@ -8,8 +8,9 @@ import Distribution.Client
 import Distribution.Package
 import Distribution.Text
 import Distribution.Verbosity
-import Distribution.Simple.Utils
+import Distribution.Simple.Utils hiding (intercalate)
 
+import Data.List
 import Data.Maybe
 import Data.IORef
 import Control.Exception
@@ -32,6 +33,7 @@ import System.IO.Error
 
 data Mode = Help [String]
           | Init String
+          | Stats
           | Build [PackageId]
 
 data BuildOpts = BuildOpts {
@@ -67,6 +69,12 @@ main = topHandler $ do
                putStrLn $ usageInfo usageHeader buildFlagDescrs
                unless (null strs) exitFailure
         Init uri -> initialise opts uri
+        Stats ->
+            do stateDir <- canonicalizePath $ bo_stateDir opts
+               let opts' = opts {
+                               bo_stateDir = stateDir
+                           }
+               stats opts'
         Build pkgs ->
             do stateDir <- canonicalizePath $ bo_stateDir opts
                let opts' = opts {
@@ -110,6 +118,58 @@ readConfig opts = do xs <- readFile $ configFile opts
 configFile :: BuildOpts -> FilePath
 configFile opts = bo_stateDir opts </> "hd-config"
 
+data StatResult = AllHaveDocs
+                | MostRecentHasDocs
+                | SomeHaveDocs
+                | NoneHaveDocs
+    deriving Eq
+
+stats :: BuildOpts -> IO ()
+stats opts = do
+    config <- readConfig opts
+    let verbosity = bo_verbosity opts
+        cacheDir = bo_stateDir opts </> cacheDirName
+        cacheDirName | URI { uriAuthority = Just auth } <- bc_srcURI config
+                     = makeValid (uriRegName auth ++ uriPort auth)
+                     | otherwise
+                     = error $ "unexpected URI " ++ show (bc_srcURI config)
+
+    notice verbosity "Initialising"
+
+    createDirectoryIfMissing False cacheDir
+
+    httpSession verbosity $ do
+        liftIO $ notice verbosity "Getting index"
+        index <- downloadIndex (bc_srcURI config) cacheDir
+        let pkgIds = [ pkg_id | PkgIndexInfo pkg_id _ _ _ <- index ]
+            checkHasDocs pkgId = do hasDocs <- liftM isJust $ requestGET' (bc_srcURI config <//> "package" </> display pkgId </> "doc/")
+                                    return (pkgId, hasDocs)
+        liftIO $ notice verbosity "Checking which packages have docs"
+        pkgIdsHaveDocs <- mapM checkHasDocs pkgIds
+        let byPackage = map (sortBy (flip (comparing (pkgVersion . fst))))
+                      $ groupBy (equating  (pkgName . fst))
+                      $ sortBy  (comparing (pkgName . fst)) pkgIdsHaveDocs
+            categorise xs@(x : _)
+             | and (map snd xs) = AllHaveDocs
+             | snd x            = MostRecentHasDocs
+             | or  (map snd xs) = SomeHaveDocs
+             | otherwise        = NoneHaveDocs
+            categorise [] = error "categorise: Can't happen: []"
+            categorised = map categorise byPackage
+            count c = show (length (filter (c ==) categorised))
+            printTable xss
+                = let col1Width = maximum (map (length . head) xss)
+                      f [x, y] = replicate (col1Width - length x) ' ' ++ x
+                              ++ "   " ++ y
+                      f _ = error "printTable: Can't happen"
+                  in mapM_ (putStrLn . f) xss
+
+        liftIO $ printTable [["Number of packages",    "Category"],
+                             [count AllHaveDocs,       "all have docs"],
+                             [count MostRecentHasDocs, "most recent has docs"],
+                             [count SomeHaveDocs,      "some have docs"],
+                             [count NoneHaveDocs,      "none have docs"]]
+
 buildOnce :: BuildOpts -> [PackageId] -> IO ()
 buildOnce opts pkgs = do
     config <- readConfig opts
@@ -128,7 +188,8 @@ buildOnce opts pkgs = do
 
     flip finally persist $ httpSession verbosity $ do
         -- Make sure we authenticate to Hackage
-        setAuthorityGen $ provideAuthInfo (bc_srcURI config) $ Just (bc_username config, bc_password config)
+        setAuthorityGen $ provideAuthInfo (bc_srcURI config)
+                        $ Just (bc_username config, bc_password config)
 
         -- Find those files *not* marked as having documentation in our cache
         liftIO $ notice verbosity "Getting index"
@@ -397,6 +458,10 @@ validateOpts args = do
                    Right _        -> Init uri
                "init" : _ ->
                    Help ["init takes a single argument (repo URL)"]
+               ["stats"] ->
+                   Stats
+               "stats" : _ ->
+                   Help ["stats takes no arguments"]
                "build" : pkgstrs ->
                    case validatePackageIds pkgstrs of
                    Left  theError -> Help [theError]
