@@ -49,6 +49,8 @@ srcName :: BuildConfig -> String
 srcName config = fromMaybe (show (bc_srcURI config))
                            (uriHostName (bc_srcURI config))
 
+installDirectory :: BuildOpts -> FilePath
+installDirectory bo = bo_stateDir bo </> "inst"
 
 main :: IO ()
 main = topHandler $ do
@@ -118,6 +120,7 @@ buildOnce opts pkgs = do
                      | otherwise
                      = error $ "unexpected URI " ++ show (bc_srcURI config)
 
+    notice verbosity "Initialising"
     (does_not_have_docs, mark_as_having_docs, persist) <- mkPackageHasDocs opts config
 
     createDirectoryIfMissing False cacheDir
@@ -128,12 +131,14 @@ buildOnce opts pkgs = do
         setAuthorityGen $ provideAuthInfo (bc_srcURI config) $ Just (bc_username config, bc_password config)
 
         -- Find those files *not* marked as having documentation in our cache
+        liftIO $ notice verbosity "Getting index"
         index <- downloadIndex (bc_srcURI config) cacheDir
+        liftIO $ notice verbosity "Checking for packages without docs"
         to_build <- filterM does_not_have_docs
                             [ pkg_id | PkgIndexInfo pkg_id _ _ _ <- index
                             , null pkgs || pkg_id `elem` pkgs]
         liftIO $ notice verbosity $ show (length to_build) ++ " packages to build documentation for."
-      
+
         -- Try to build each of them, uploading the documentation and
         -- build reports along the way. We mark each package as having
         -- documentation in the cache even if the build fails because
@@ -182,9 +187,9 @@ prepareBuildPackages opts config
  = withCurrentDirectory (bo_stateDir opts) $ do
     writeFile "cabal-config" $ unlines [
         "remote-repo: " ++ srcName config ++ ":" ++ show (bc_srcURI config <//> "packages" </> "archive"),
-        "remote-repo-cache: " ++ bo_stateDir opts </> "packages",
+        "remote-repo-cache: " ++ installDirectory opts </> "packages",
         "library-for-ghci: False",
-        "package-db: " ++ bo_stateDir opts </> "local.conf.d",
+        "package-db: " ++ installDirectory opts </> "local.conf.d",
         "documentation: True",
         "remote-build-reporting: detailed",
         -- TODO: These are currently only used for the "upload" commands
@@ -193,43 +198,44 @@ prepareBuildPackages opts config
         "password: " ++ bc_password config
       ]
 
-    -- Create cache for the empty configuration directory
-    local_conf_d_exists <- doesDirectoryExist "local.conf.d"
-    unless local_conf_d_exists $ do
-        createDirectory "local.conf.d"
-        let packageConf = bo_stateDir opts </> "local.conf.d"
-        ph <- runProcess "ghc-pkg"
-                         ["recache", "--package-conf=" ++ packageConf]
-                         Nothing Nothing Nothing Nothing Nothing
-        -- TODO: Why do we ignore the exit code here?
-        _ <- waitForProcess ph
-        return ()
-    
-    update_ec <- cabal opts "update" []
-    unless (update_ec == ExitSuccess) $
-        die "Could not 'cabal update' from specified server"
-
-
 buildPackage :: Verbosity -> BuildOpts -> BuildConfig -> PackageId
              -> HttpSession ()
 buildPackage verbosity opts config pkg_id = do
+    liftIO $ do notice verbosity ("Building " ++ display pkg_id)
+                handleDoesNotExist (return ()) $
+                    removeDirectoryRecursive $ installDirectory opts
+                createDirectory $ installDirectory opts
+
+                -- Create cache for the empty configuration directory
+                let packageConf = installDirectory opts </> "local.conf.d"
+                local_conf_d_exists <- doesDirectoryExist packageConf
+                unless local_conf_d_exists $ do
+                    createDirectory packageConf
+                    ph <- runProcess "ghc-pkg"
+                                     ["recache",
+                                      "--package-conf=" ++ packageConf]
+                                     Nothing Nothing Nothing Nothing Nothing
+                    -- TODO: Why do we ignore the exit code here?
+                    _ <- waitForProcess ph
+                    return ()
+
+                -- We don't really want to be running "cabal update"
+                -- every time, but the index file and package cache
+                -- end up in the same place, so when re remove the
+                -- latter we also remove the former
+                update_ec <- cabal opts "update" []
+                unless (update_ec == ExitSuccess) $
+                    die "Could not 'cabal update' from specified server"
+
     -- The documentation is installed within the stateDir because we
     -- set a prefix while installing
-    let doc_root = bo_stateDir opts </> "share" </> "doc"
+    let doc_root = installDirectory opts </> "share" </> "doc"
         doc_dir      = doc_root </> display pkg_id </> "html"
         temp_doc_dir = doc_root </> display pkg_id </> display (pkgName pkg_id)
         --versionless_pkg_url = srcURI opts <//> "package" </> "$pkg"
         pkg_url = bc_srcURI config <//> "package" </> "$pkg-$version"
 
-    mb_docs <- liftIO $ withCurrentDirectory (bo_stateDir opts) $ do
-        -- Let's not clean in between installations. This should save us
-        -- some download/installation time for packages that are
-        -- depended on by a lot of things, at the cost of some disk
-        -- space.
-        -- handleDoesNotExist (return ()) $ removeDirectoryRecursive "packages"
-        -- handleDoesNotExist (return ()) (removeDirectoryRecursive "local.conf.d")
-        -- createDirectoryIfMissing False "local.conf.d"
-
+    mb_docs <- liftIO $ withCurrentDirectory (installDirectory opts) $ do
         -- We CANNOT build from an unpacked directory, because Cabal
         -- only generates build reports if you are building from a
         -- tarball that was verifiably downloaded from the server
@@ -237,6 +243,11 @@ buildPackage verbosity opts config pkg_id = do
         void $ cabal opts "install"
                      ["--enable-documentation",
                       "--enable-tests",
+                      -- We don't want packages installed in the user
+                      -- package.conf to affect things. In particular,
+                      -- we don't want doc building to fail because
+                      -- "packages are likely to be broken by the reinstalls"
+                      "--ghc-pkg-option", "--no-user-package-conf",
                       -- We know where this documentation will
                       -- eventually be hosted, bake that in.
                       -- The wiki claims we shouldn't include the
@@ -251,7 +262,7 @@ buildPackage verbosity opts config pkg_id = do
                       "--haddock-contents-location=" ++ show pkg_url,
                       -- Link to colourised source code:
                       "--haddock-hyperlink-source",
-                      "--prefix=" ++ bo_stateDir opts,
+                      "--prefix=" ++ installDirectory opts,
                       display pkg_id]
 
         -- Submit a report even if installation/tests failed: all
@@ -269,9 +280,9 @@ buildPackage verbosity opts config pkg_id = do
             handleDoesNotExist (return ()) $ removeDirectoryRecursive (dotCabal </> "reports" </> srcName config)
             handleDoesNotExist (return ()) $ removeDirectoryRecursive (dotCabal </> "logs")
             -- Other data goes into a local file storing build reports:
-            let simple_report_log = bo_stateDir opts </> "packages" </> srcName config </> "build-reports.log"
+            let simple_report_log = installDirectory opts </> "packages" </> srcName config </> "build-reports.log"
             handleDoesNotExist (return ()) $ removeFile simple_report_log
-      
+
         docs_generated <- doesDirectoryExist doc_dir
         if docs_generated
             then do
