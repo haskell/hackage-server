@@ -251,6 +251,7 @@ prepareBuildPackages opts config
     writeFile "cabal-config" $ unlines [
         "remote-repo: " ++ srcName config ++ ":" ++ show (bc_srcURI config <//> "packages" </> "archive"),
         "remote-repo-cache: " ++ installDirectory opts </> "packages",
+        "logs-dir: " ++ installDirectory opts </> "logs",
         "library-for-ghci: False",
         "package-db: " ++ installDirectory opts </> "local.conf.d",
         "documentation: True",
