@@ -146,6 +146,8 @@ stats opts = do
                                     return (pkgId, hasDocs)
         liftIO $ notice verbosity "Checking which packages have docs"
         pkgIdsHaveDocs <- mapM checkHasDocs pkgIds
+        liftIO $ putStrLn ("Total package versions with docs: " ++
+                           show (length (filter snd pkgIdsHaveDocs)))
         let byPackage = map (sortBy (flip (comparing (pkgVersion . fst))))
                       $ groupBy (equating  (pkgName . fst))
                       $ sortBy  (comparing (pkgName . fst)) pkgIdsHaveDocs
