@@ -144,6 +144,8 @@ stats opts = do
         let pkgIds = [ pkg_id | PkgIndexInfo pkg_id _ _ _ <- index ]
             checkHasDocs pkgId = do hasDocs <- liftM isJust $ requestGET' (bc_srcURI config <//> "package" </> display pkgId </> "doc/")
                                     return (pkgId, hasDocs)
+        liftIO $ putStrLn ("Total package versions: " ++
+                           show (length pkgIds))
         liftIO $ notice verbosity "Checking which packages have docs"
         pkgIdsHaveDocs <- mapM checkHasDocs pkgIds
         liftIO $ putStrLn ("Total package versions with docs: " ++
