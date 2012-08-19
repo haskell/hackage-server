@@ -309,6 +309,12 @@ buildPackage verbosity opts config pkg_id = do
         void $ cabal opts "install"
                      ["--enable-documentation",
                       "--enable-tests",
+                      -- We only care about docs, so we want to build as
+                      -- quickly as possible, and hence turn
+                      -- optimisation off. Also explicitly pass -O0 as a
+                      -- GHC option, in case it overrides a .cabal
+                      -- setting or anything
+                      "--disable-optimization", "--ghc-option", "-O0",
                       -- We don't want packages installed in the user
                       -- package.conf to affect things. In particular,
                       -- we don't want doc building to fail because
