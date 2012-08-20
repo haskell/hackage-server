@@ -140,7 +140,7 @@ stats opts = do
 
     httpSession verbosity $ do
         liftIO $ notice verbosity "Getting index"
-        index <- downloadIndex (bc_srcURI config) cacheDir
+        index <- readNewIndex cacheDir
         let pkgIds = [ pkg_id | PkgIndexInfo pkg_id _ _ _ <- index ]
             checkHasDocs pkgId = do hasDocs <- liftM isJust $ requestGET' (bc_srcURI config <//> "package" </> display pkgId </> "doc/")
                                     return (pkgId, hasDocs)

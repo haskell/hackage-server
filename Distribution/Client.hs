@@ -134,15 +134,23 @@ downloadOldIndex uri cacheDir = do
 downloadNewIndex :: URI -> FilePath -> HttpSession [PkgIndexInfo]
 downloadNewIndex uri cacheDir = do
     downloadFile indexURI indexFile
+    readNewIndex cacheDir
+
+  where
+    indexURI  = uri <//> "packages/00-index.tar.gz"
+    indexFile = cacheDir </> "00-index.tar.gz"
+
+readNewIndex :: FilePath -> HttpSession [PkgIndexInfo]
+readNewIndex cacheDir = do
     liftIO $ withFile indexFile ReadMode $ \hnd -> do
       content <- BS.hGetContents hnd
       case PackageIndex.read selectDetails (GZip.decompress content) of
         Left theError ->
-            error $ "Error parsing index at " ++ show uri ++ ": " ++ theError
+            error ("Error parsing index at " ++ show indexFile ++ ": "
+                ++ theError)
         Right pkgs -> return pkgs
 
   where
-    indexURI  = uri <//> "packages/00-index.tar.gz"
     indexFile = cacheDir </> "00-index.tar.gz"
 
     selectDetails :: PackageId -> Tar.Entry -> PkgIndexInfo
