@@ -13,6 +13,7 @@ import Distribution.Simple.Utils hiding (intercalate)
 import Data.List
 import Data.Maybe
 import Data.IORef
+import Data.Time
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans
@@ -38,6 +39,7 @@ data Mode = Help [String]
 
 data BuildOpts = BuildOpts {
                      bo_verbosity :: Verbosity,
+                     bo_runTime   :: Maybe NominalDiffTime,
                      bo_stateDir  :: FilePath
                  }
 
@@ -214,11 +216,19 @@ buildOnce opts pkgs = do
         -- documentation in the cache even if the build fails because
         -- we don't want to keep continually trying to build a failing
         -- package!
+        startTime <- liftIO $ getCurrentTime
         forM_ pkgIds' $ \pkg_id -> do
             needsDocs <- does_not_have_docs pkg_id
             when needsDocs $ do
                 buildPackage verbosity opts config pkg_id
                 liftIO $ mark_as_having_docs pkg_id
+                -- We don't check the runtime until we've actually tried
+                -- to build a doc, so as to ensure we make progress.
+                case bo_runTime opts of
+                    Nothing -> return ()
+                    Just d ->
+                        liftIO $ do currentTime <- getCurrentTime
+                                    when ((currentTime `diffUTCTime` startTime) > d) exitSuccess
 
 -- Builds a little memoised function that can tell us whether a
 -- particular package already has documentation
@@ -428,11 +438,12 @@ withCurrentDirectory cwd1 act
 data BuildFlags = BuildFlags {
     flagCacheDir  :: Maybe FilePath,
     flagVerbosity :: Verbosity,
+    flagRunTime   :: Maybe NominalDiffTime,
     flagHelp      :: Bool
 }
 
 emptyBuildFlags :: BuildFlags
-emptyBuildFlags = BuildFlags Nothing normal False
+emptyBuildFlags = BuildFlags Nothing normal Nothing False
 
 buildFlagDescrs :: [OptDescr (BuildFlags -> BuildFlags)]
 buildFlagDescrs =
@@ -446,6 +457,12 @@ buildFlagDescrs =
 
   , Option ['v'] []
       (NoArg (\opts -> opts { flagVerbosity = moreVerbose (flagVerbosity opts) }))
+      "Verbose mode (can be listed multiple times e.g. -vv)"
+
+  , Option [] ["run-time"]
+      (ReqArg (\mins opts -> case reads mins of
+                             [(mins', "")] -> opts { flagRunTime = Just (fromInteger mins') }
+                             _ -> error "Can't parse minutes") "MINS")
       "Verbose mode (can be listed multiple times e.g. -vv)"
 
   , Option [] ["cache-dir"]
@@ -462,6 +479,7 @@ validateOpts args = do
 
         opts = BuildOpts {
                    bo_verbosity = flagVerbosity flags,
+                   bo_runTime   = flagRunTime flags,
                    bo_stateDir  = stateDir
                }
 
