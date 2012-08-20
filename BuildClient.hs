@@ -199,19 +199,26 @@ buildOnce opts pkgs = do
         liftIO $ notice verbosity "Getting index"
         index <- downloadIndex (bc_srcURI config) cacheDir
         liftIO $ notice verbosity "Checking for packages without docs"
-        to_build <- filterM does_not_have_docs
-                            [ pkg_id | PkgIndexInfo pkg_id _ _ _ <- index
-                            , null pkgs || pkg_id `elem` pkgs]
-        liftIO $ notice verbosity $ show (length to_build) ++ " packages to build documentation for."
+        let pkgIds = [ pkg_id | PkgIndexInfo pkg_id _ _ _ <- index
+                     , null pkgs || pkg_id `elem` pkgs]
+            pkgIdss = map (sortBy (flip (comparing pkgVersion)))
+                    $ groupBy (equating  pkgName)
+                    $ sortBy  (comparing pkgName) pkgIds
+            pkgIds' = -- First build all of the latest versions of each package
+                      map head pkgIdss
+                      -- Then go back and build all the older versions
+                   ++ concatMap tail pkgIdss
 
         -- Try to build each of them, uploading the documentation and
         -- build reports along the way. We mark each package as having
         -- documentation in the cache even if the build fails because
         -- we don't want to keep continually trying to build a failing
         -- package!
-        forM_ to_build $ \pkg_id -> do
-            buildPackage verbosity opts config pkg_id
-            liftIO $ mark_as_having_docs pkg_id
+        forM_ pkgIds' $ \pkg_id -> do
+            needsDocs <- does_not_have_docs pkg_id
+            when needsDocs $ do
+                buildPackage verbosity opts config pkg_id
+                liftIO $ mark_as_having_docs pkg_id
 
 -- Builds a little memoised function that can tell us whether a
 -- particular package already has documentation
