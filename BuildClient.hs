@@ -325,7 +325,6 @@ buildPackage verbosity opts config pkg_id = do
         -- TODO: Why do we ignore the result code here?
         void $ cabal opts "install"
                      ["--enable-documentation",
-                      "--enable-tests",
                       -- We only care about docs, so we want to build as
                       -- quickly as possible, and hence turn
                       -- optimisation off. Also explicitly pass -O0 as a
