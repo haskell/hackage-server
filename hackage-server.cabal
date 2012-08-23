@@ -154,7 +154,7 @@ executable hackage-server
     array      >= 0.1,
     containers >= 0.4.2,
     pretty     >= 1.0,
-    base64-bytestring == 0.1.*,
+    base64-bytestring == 1.0.*,
     bytestring >= 0.9,
     time       >= 1.1 && < 1.5,
     old-locale >= 1.0,
