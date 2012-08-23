@@ -332,7 +332,7 @@ initState server (admin, pass) = do
 -- them into a path hierarchy, and serves them.
 impl :: Server -> ServerPart Response
 impl server =
-      flip mplus (fileServe ["hackage.html"] . serverStaticDir $ serverEnv server)
+      flip mplus (serveDirectory DisableBrowsing ["hackage.html"] . serverStaticDir $ serverEnv server)
     -- ServerPart Response
     . renderServerTree []
     -- ServerTree ServerResponse
