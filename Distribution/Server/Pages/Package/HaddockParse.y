@@ -12,8 +12,6 @@ module Distribution.Server.Pages.Package.HaddockParse (parseHaddockParagraphs) w
 
 import Distribution.Server.Pages.Package.HaddockLex
 import Distribution.Server.Pages.Package.HaddockHtml
-
-import Control.Monad.Error      ()
 }
 
 %tokentype { Token }
