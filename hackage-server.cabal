@@ -191,7 +191,7 @@ executable hackage-server
     extra-libraries: crypt
 
   ghc-options: -Wall -fwarn-tabs
-               -fno-warn-orphans -fno-warn-unused-do-bind
+               -fno-warn-orphans
                -threaded
   if impl(ghc >= 7.0)
     ghc-options: -with-rtsopts=-I0
@@ -218,7 +218,7 @@ executable hackage-mirror
     safecopy, cereal, binary, mtl
 
   ghc-options: -Wall -fwarn-tabs
-               -fno-warn-orphans -fno-warn-unused-do-bind
+               -fno-warn-orphans
 
 executable hackage-build
   if ! flag(build-hackage-build)
@@ -244,7 +244,7 @@ executable hackage-build
     hscolour >= 1.8
 
   ghc-options: -Wall -fwarn-tabs
-               -fno-warn-orphans -fno-warn-unused-do-bind
+               -fno-warn-orphans
 
 Test-Suite HighLevelTest
     type:           exitcode-stdio-1.0
