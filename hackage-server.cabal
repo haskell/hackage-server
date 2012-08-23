@@ -192,7 +192,6 @@ executable hackage-server
 
   ghc-options: -Wall -fwarn-tabs
                -fno-warn-orphans -fno-warn-unused-do-bind
-               -fno-warn-warnings-deprecations
                -threaded
   if impl(ghc >= 7.0)
     ghc-options: -with-rtsopts=-I0
@@ -220,7 +219,6 @@ executable hackage-mirror
 
   ghc-options: -Wall -fwarn-tabs
                -fno-warn-orphans -fno-warn-unused-do-bind
-               -fno-warn-warnings-deprecations
 
 executable hackage-build
   if ! flag(build-hackage-build)
@@ -247,7 +245,6 @@ executable hackage-build
 
   ghc-options: -Wall -fwarn-tabs
                -fno-warn-orphans -fno-warn-unused-do-bind
-               -fno-warn-warnings-deprecations
 
 Test-Suite HighLevelTest
     type:           exitcode-stdio-1.0
