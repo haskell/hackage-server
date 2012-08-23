@@ -1,5 +1,3 @@
--- TODO: Get rid of this pragma:
-{-# OPTIONS_GHC -fno-warn-deprecations #-}
 module Distribution.Server (
     -- * Server control
     Server,
@@ -194,7 +192,7 @@ run server = do
     -- browsers to PUT/DELETE etc by POSTing with a query or body paramater of
     -- _method=PUT/DELETE.
     fakeBrowserHttpMethods part =
-      msum [ do methodOnly POST
+      msum [ do method POST
                 methodOverrideHack part
 
              -- or just do things the normal way
