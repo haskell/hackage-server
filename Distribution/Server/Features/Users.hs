@@ -261,8 +261,8 @@ adminGroupDesc = UserGroup {
     addUserList = update . AddHackageAdmin,
     removeUserList = update . RemoveHackageAdmin,
     groupExists = return True,
-    canAddGroup = [],
-    canRemoveGroup = []
+    canAddGroup = [adminGroupDesc],
+    canRemoveGroup = [adminGroupDesc]
 }
 
 doGroupAddUser :: UserGroup -> DynamicPath -> ServerPartE ()
