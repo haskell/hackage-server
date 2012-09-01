@@ -241,7 +241,9 @@ processUpload state uid res = do
     pkgGroup <- getPackageGroup $ packageName pkg
     if packageIdExists state pkg
         then uploadError "Package name and version already exist in the database" --allow trustees to do this?
-        else if packageExists state pkg && not (uid `Group.member` pkgGroup)
+        else -- This check is disabled for now: As long as you are in
+             -- the uploaders group, you can upload any package
+            if False && packageExists state pkg && not (uid `Group.member` pkgGroup)
             then uploadError "Not authorized to upload a new version of this package"
             else return Nothing
   where uploadError = return . Just . ErrorResponse 403 "Upload failed" . return . MText
