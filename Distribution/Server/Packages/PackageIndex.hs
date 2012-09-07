@@ -55,6 +55,7 @@ import qualified Data.Foldable as Foldable
 import Data.List (groupBy, sortBy, find, isInfixOf)
 import Data.Monoid (Monoid(..))
 import Data.Maybe (fromMaybe)
+import Data.SafeCopy
 import Data.Typeable
 
 import Distribution.Package
@@ -341,4 +342,12 @@ indexSize (PackageIndex m) = Map.size m
 -- | Get an ascending list of package names in the index.
 packageNames :: Package pkg => PackageIndex pkg -> [PackageName]
 packageNames (PackageIndex m) = Map.keys m
+
+---------------------------------- State for PackageIndex
+instance (Package pkg, SafeCopy pkg) => SafeCopy (PackageIndex pkg) where
+  putCopy index = contain $ do
+    safePut $ allPackages index
+  getCopy = contain $ do
+    packages <- safeGet
+    return $ fromList packages
 

@@ -32,14 +32,6 @@ import Data.Ord (comparing)
 
 import qualified Data.Map as Map
 
----------------------------------- State for PackageIndex
-instance (Package pkg, SafeCopy pkg) => SafeCopy (PackageIndex pkg) where
-  putCopy index = contain $ do
-    safePut $ PackageIndex.allPackages index
-  getCopy = contain $ do
-    packages <- safeGet
-    return $ PackageIndex.fromList packages
-
 ---------------------------------- Index of metadata and tarballs
 data PackagesState = PackagesState {
     packageList  :: !(PackageIndex PkgInfo)
