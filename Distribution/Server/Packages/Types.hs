@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, DeriveDataTypeable, StandaloneDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, DeriveDataTypeable, StandaloneDeriving, TemplateHaskell #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Server.Packages.Types
@@ -32,6 +32,7 @@ import Data.Time.Clock (UTCTime)
 import Data.Typeable (Typeable)
 import Data.List (sortBy)
 import Data.Ord (comparing)
+import Data.SafeCopy
 
 newtype CabalFileText = CabalFileText { cabalFileByteString :: ByteString }
   deriving (Eq, Serialize)
@@ -64,6 +65,10 @@ data PkgInfo = PkgInfo {
     -- | When the package was created. Imports will override this with time in their logs.
     pkgUploadData :: !UploadInfo
 } deriving (Eq, Typeable, Show)
+
+instance SafeCopy PkgInfo where
+  putCopy = contain . Serialize.put
+  getCopy = contain Serialize.get
 
 -- | The information held in a parsed .cabal file (used by cabal-install)
 pkgDesc :: PkgInfo -> GenericPackageDescription
@@ -146,6 +151,8 @@ data CandPkgInfo = CandPkgInfo {
     -- | Whether to allow non-maintainers to view the page or not.
     candPublic :: !Bool
 } deriving (Show, Typeable)
+
+$(deriveSafeCopy 0 'base ''CandPkgInfo)
 
 instance Package CandPkgInfo where packageId = candInfoId
 

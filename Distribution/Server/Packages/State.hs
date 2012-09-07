@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell,
              FlexibleInstances, FlexibleContexts, MultiParamTypeClasses,
              TypeOperators, TypeSynonymInstances #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module Distribution.Server.Packages.State where
 
 import Distribution.Server.Framework.Instances ()
@@ -16,8 +16,6 @@ import Distribution.Server.Users.Group (UserList)
 import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Framework.BlobStorage (BlobId)
 import Data.TarIndex (TarIndex)
-
-import qualified Data.Serialize as Serialize
 
 import Data.Acid     (Query, Update, makeAcidic)
 import Data.SafeCopy (SafeCopy(..), base, contain, deriveSafeCopy, safeGet, safePut)
@@ -44,10 +42,6 @@ initialPackagesState :: PackagesState
 initialPackagesState = PackagesState {
     packageList = mempty
   }
-
-instance SafeCopy PkgInfo where
-  putCopy = contain . Serialize.put
-  getCopy = contain Serialize.get
 
 insertPkgIfAbsent :: PkgInfo -> Update PackagesState Bool
 insertPkgIfAbsent pkg = do
@@ -122,8 +116,6 @@ initialCandidatePackages = CandidatePackages {
     candidateList = mempty
   }
 
-$(deriveSafeCopy 0 'base ''CandPkgInfo)
-
 replaceCandidate :: CandPkgInfo -> Update CandidatePackages ()
 replaceCandidate pkg = State.modify $ \candidates -> candidates { candidateList = replaceVersions (candidateList candidates) }
     where replaceVersions = PackageIndex.insert pkg . PackageIndex.deletePackageName (packageName pkg)
@@ -168,10 +160,6 @@ initialDocumentation = Documentation Map.empty
 instance SafeCopy Documentation where
     putCopy (Documentation m) = contain $ safePut m
     getCopy = contain $ liftM Documentation safeGet
-
-instance SafeCopy BlobId where
-  putCopy = contain . Serialize.put
-  getCopy = contain Serialize.get
 
 lookupDocumentation :: PackageIdentifier -> Query Documentation (Maybe (BlobId, TarIndex))
 lookupDocumentation pkgId

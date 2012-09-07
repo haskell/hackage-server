@@ -25,10 +25,11 @@ import qualified Data.ByteString.Lazy as BS
 import Data.ByteString.Lazy (ByteString)
 import Data.Digest.Pure.MD5 (MD5Digest, md5)
 import Data.Typeable (Typeable)
-import Data.Serialize (Serialize)
+import Data.Serialize
 import System.FilePath ((</>))
 import Control.Exception (handle, throwIO, evaluate)
 import Control.Monad
+import Data.SafeCopy
 import System.Directory
 import System.IO
 
@@ -38,6 +39,10 @@ newtype BlobId = BlobId MD5Digest
   deriving (Eq, Ord, Serialize, Typeable)
 
 instance Show BlobId where show (BlobId digest) = show digest
+
+instance SafeCopy BlobId where
+  putCopy = contain . put
+  getCopy = contain get
 
 -- | A persistent blob storage area. Blobs can be added and retrieved but
 -- not removed or modified.
