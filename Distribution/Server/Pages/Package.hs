@@ -103,7 +103,7 @@ downloadSection render =
     ]
   where downloadItems =
             [if tarExists then [anchor ! [href downloadURL] << (display pkgId ++ ".tar.gz"),
-                                toHtml << " [", anchor ! [href (rendPkgUri render </> "src")] << "browse" , toHtml << "]",
+                                toHtml << " [", anchor ! [href (rendPkgUri render </> "src/")] << "browse" , toHtml << "]",
                                 toHtml << " (Cabal source package)"]
                           else [toHtml << "Package tarball not uploaded"],
              [anchor ! [href cabalURL] << "Package description",
