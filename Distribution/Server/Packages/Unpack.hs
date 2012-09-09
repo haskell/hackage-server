@@ -25,7 +25,7 @@ import Distribution.ParseUtils
 import Distribution.Text
          ( display, simpleParse )
 import Distribution.ModuleName
-         ( toFilePath )
+         ( components )
 import Distribution.Server.Util.Parse
          ( unpackUTF8 )
 
@@ -170,10 +170,11 @@ extraChecks entries genPkgDesc = do
   checkEntries checkTarFileType
 
   -- Check reasonableness of names of exposed modules
-  let badTopLevel =
-          maybe [] (nub . map (takeWhile (/= '.') . toFilePath) . exposedModules)
-                  (library pkgDesc) \\
-          allocatedTopLevelNodes
+  let topLevel = case library pkgDesc of
+                 Nothing -> []
+                 Just l ->
+                     nub $ map head $ filter (not . null) $ map components $ exposedModules l
+      badTopLevel = topLevel \\ allocatedTopLevelNodes
 
   unless (null badTopLevel) $
           warn $ "Exposed modules use unallocated top-level names: " ++
