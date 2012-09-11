@@ -54,6 +54,7 @@ doit root
          withServerRunning root $ do validate (mkUrl "/")
                                      validate (mkUrl "/accounts.html")
                                      validate (mkUrl "/admin.html")
+                                     validate (mkUrl "/upload.html")
                                      runUserTests
                                      runPackageUploadTests
                                      runPackageTests
