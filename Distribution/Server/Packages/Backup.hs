@@ -36,7 +36,7 @@ import Data.ByteString.Lazy.Char8 (ByteString)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.IntSet as IntSet
-import Data.List (sortBy, maximumBy)
+import Data.List
 import Data.Ord (comparing)
 import Data.Monoid (mempty)
 import Control.Monad.State
@@ -158,10 +158,7 @@ doPackageImport storage packages (("package":pkgStr:rest), bs) = runImport packa
         -- we're done, but the PartialPkgs will need to be garbage collected. Doing it along the way will
         -- make GHC less heap-hungry.
         modify (Map.insert pkgId partial')
-  where stripPrefix [] ys = Just ys   -- from Data.List, GHC 6.12
-        stripPrefix (x:xs) (y:ys) | x == y = stripPrefix xs ys
-        stripPrefix _ _ = Nothing
-        extractVersion name text ext = case stripPrefix (display text ++ ext) name of
+  where extractVersion name text ext = case stripPrefix (display text ++ ext) name of
             Just "" -> Just 0
             Just ('-':num) -> case reads num of
                 [(version, "")] -> Just version
