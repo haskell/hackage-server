@@ -413,7 +413,7 @@ badResponse rsp = die ("Bad response code: " ++ show (rspCode rsp) ++ "\n\n"
 
 validate :: String -> IO ()
 validate url = do putStrLn ("HTML validating " ++ show url)
-                  ec <- rawSystem "/usr/bin/validate" [url]
+                  ec <- rawSystem "/usr/bin/validate" ["--warn", url]
                   unless (ec == ExitSuccess) $
                       die "Validate failed"
 
