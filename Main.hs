@@ -20,7 +20,6 @@ import Control.Exception
 import System.Posix.Signals as Signal
          ( installHandler, Handler(Catch), userDefinedSignal1 )
 import System.IO
-         ( stdout, hFlush )
 import System.Directory
          ( createDirectory, createDirectoryIfMissing, doesDirectoryExist
          , Permissions(..), getPermissions )
@@ -46,6 +45,7 @@ import Paths_hackage_server as Paths (version)
 
 main :: IO ()
 main = topHandler $ do
+    hSetBuffering stdout LineBuffering
     args <- getArgs
     case commandsRun globalCommand commands args of
       CommandHelp   help  -> printHelp help
