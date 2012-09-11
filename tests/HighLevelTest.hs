@@ -26,6 +26,7 @@ import System.Exit
 import System.FilePath
 import System.IO
 import System.IO.Error
+import System.Process
 
 import Package
 import Run
@@ -50,7 +51,10 @@ doit :: FilePath -> IO ()
 doit root
     = do info "initialising hackage database"
          runServerChecked True root ["init"]
-         withServerRunning root $ do runUserTests
+         withServerRunning root $ do validate (mkUrl "/")
+                                     validate (mkUrl "/accounts.html")
+                                     validate (mkUrl "/admin.html")
+                                     runUserTests
                                      runPackageUploadTests
                                      runPackageTests
          withServerRunning root $ runPackageTests
@@ -405,6 +409,12 @@ badResponse :: Response String -> IO a
 badResponse rsp = die ("Bad response code: " ++ show (rspCode rsp) ++ "\n\n"
                     ++ show rsp ++ "\n\n"
                     ++ rspBody rsp)
+
+validate :: String -> IO ()
+validate url = do putStrLn ("HTML validating " ++ show url)
+                  ec <- rawSystem "/usr/bin/validate" [url]
+                  unless (ec == ExitSuccess) $
+                      die "Validate failed"
 
 waitForServer :: IO ()
 waitForServer = f 10
