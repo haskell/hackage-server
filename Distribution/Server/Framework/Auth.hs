@@ -336,14 +336,14 @@ showAuthError want_text (hostname, thePort) err = case err of
       | want_text -> toResponse $ "Hackage has been upgraded to use more secure passwords. You need login to Hackage and reenter your password at http://" ++ hostname ++ ":" ++ show thePort ++ rel_url
       | otherwise -> toResponse $ Resource.XHtml $ hackagePage "Change password"
           [ toHtml "You haven't logged in since Hackage was upgraded. Please reenter your password below to upgrade your account."
-          , form ! [theclass "box", XHtml.method "POST", action rel_url] <<
+          , form ! [theclass "box", XHtml.method "post", action rel_url] <<
                 [ simpleTable [] []
                     [ makeInput [thetype "password"] "password" "Old password"
                     , makeInput [thetype "password"] "repeat-password" "Repeat old password"
                     ]
-                , hidden "try-upgrade" "1"
-                , hidden "_method" "PUT" --method override
-                , paragraph << input ! [thetype "submit", value "Upgrade password"]
+                , paragraph << [ hidden "try-upgrade" "1"
+                               , hidden "_method" "PUT" --method override
+                               , input ! [thetype "submit", value "Upgrade password"] ]
                 ]
           ]
       where rel_url = "/user/" ++ display uname ++ "/password"

@@ -321,7 +321,7 @@ addUserForm :: UserResource -> DynamicPath -> ServerPart Response
 addUserForm r _ = htmlResponse $ do
     return $ toResponse $ Resource.XHtml $ hackagePage "Register account"
       [ paragraph << "Register a user account here!"
-      , form ! [theclass "box", XHtml.method "POST", action $ userListUri r ""] <<
+      , form ! [theclass "box", XHtml.method "post", action $ userListUri r ""] <<
             [ simpleTable [] []
                 [ makeInput [thetype "text"] "username" "User name"
                 , makeInput [thetype "password"] "password" "Password"
@@ -342,13 +342,13 @@ servePasswordForm r dpath = htmlResponse $
         False -> errForbidden "Can't change password" [MText "You're neither this user nor an admin."]
         True -> return $ toResponse $ Resource.XHtml $ hackagePage "Change password"
           [ toHtml "Change your password. You'll be prompted for authentication upon submission, if you haven't logged in already."
-          , form ! [theclass "box", XHtml.method "POST", action $ userPasswordUri r "" uname] <<
+          , form ! [theclass "box", XHtml.method "post", action $ userPasswordUri r "" uname] <<
                 [ simpleTable [] []
                     [ makeInput [thetype "password"] "password" "Password"
                     , makeInput [thetype "password"] "repeat-password" "Confirm password"
                     ]
-                , hidden "_method" "PUT" --method override
-                , paragraph << input ! [thetype "submit", value "Change password"]
+                , paragraph << [ hidden "_method" "PUT" --method override
+                               , input ! [thetype "submit", value "Change password"] ]
                 ]
           ]
 
@@ -360,7 +360,7 @@ serveEnabledForm r dpath = htmlResponse $
     -- TODO: expose some of the functionality in changePassword function to determine if permissions are correct
     -- before serving this form (either admin or user)
       [ toHtml "Change the account status here."
-      , form ! [theclass "box", XHtml.method "POST", action $ userEnabledUri r "" uname] <<
+      , form ! [theclass "box", XHtml.method "post", action $ userEnabledUri r "" uname] <<
             [ toHtml $ makeCheckbox (isEnabled userInfo) "enabled" "on" "Enable user account"
             , hidden "_method" "PUT" --method override
             , paragraph << input ! [thetype "submit", value "Change status"]
@@ -448,7 +448,7 @@ serveUploadForm _ = htmlResponse $ do
     return $ toResponse $ Resource.XHtml $ hackagePage "Upload package"
       [ h2 << "Upload package"
       , paragraph << [toHtml "See also the ", anchor ! [href "/upload.html"] << "upload help page", toHtml "."]
-      , form ! [theclass "box", XHtml.method "POST", action "/packages/", enctype "multipart/form-data"] <<
+      , form ! [theclass "box", XHtml.method "post", action "/packages/", enctype "multipart/form-data"] <<
             [ input ! [thetype "file", name "package"]
             , input ! [thetype "submit", value "Upload package"]
             ]
@@ -472,7 +472,7 @@ serveCandidateUploadForm _ = htmlResponse $ do
     return $ toResponse $ Resource.XHtml $ hackagePage "Checking and uploading candidates"
       [ h2 << "Checking and uploading candidates"
       , paragraph << [toHtml "See also the ", anchor ! [href "/upload.html"] << "upload help page", toHtml "."]
-      , form ! [theclass "box", XHtml.method "POST", action "/packages/candidates/", enctype "multipart/form-data"] <<
+      , form ! [theclass "box", XHtml.method "post", action "/packages/candidates/", enctype "multipart/form-data"] <<
             [ input ! [thetype "file", name "package"]
             , input ! [thetype "submit", value "Upload candidate"]
             ]
@@ -481,7 +481,7 @@ serveCandidateUploadForm _ = htmlResponse $ do
 servePackageCandidateUpload :: CoreResource -> CheckResource -> DynamicPath -> ServerPart Response
 servePackageCandidateUpload _ _ _ = htmlResponse $ do
     return $ toResponse $ Resource.XHtml $ hackagePage "Checking and uploading candidates"
-      [ form ! [theclass "box", XHtml.method "POST", action "/packages/candidates/", enctype "multipart/form-data"] <<
+      [ form ! [theclass "box", XHtml.method "post", action "/packages/candidates/", enctype "multipart/form-data"] <<
             [ input ! [thetype "file", name "package"]
             , input ! [thetype "submit", value "Upload candidate"]
             ]
@@ -527,7 +527,7 @@ servePublishForm r dpath = htmlResponse $
         Just err -> throwError err
         Nothing  -> do
             return $ toResponse $ Resource.XHtml $ hackagePage "Publishing candidates"
-                [form ! [theclass "box", XHtml.method "POST", action $ publishUri r "" pkgid]
+                [form ! [theclass "box", XHtml.method "post", action $ publishUri r "" pkgid]
                     << input ! [thetype "submit", value "Publish package"]]
 
 serveCandidatesPage :: CoreResource -> CheckResource -> DynamicPath -> ServerPart Response
@@ -729,7 +729,7 @@ serveDeprecateForm core r dpath =
             Nothing -> (False, "")
     return $ toResponse $ Resource.XHtml $ hackagePage "Deprecate package"
         [paragraph << [toHtml "Configure deprecation for ", packageNameLink core pkgname],
-         form . ulist ! [theclass "box", XHtml.method "POST", action $ deprecatedPackageUri r "" pkgname] <<
+         form . ulist ! [theclass "box", XHtml.method "post", action $ deprecatedPackageUri r "" pkgname] <<
           [ hidden "_method" "PUT"
           , li . toHtml $ makeCheckbox isDepr "deprecated" "on" "Deprecate package"
           , li . toHtml $ makeInput [thetype "text", value mfield] "by" "Superseded by: " ++ [br, toHtml "(Optional; space-separated list of package names)"]
@@ -748,7 +748,7 @@ servePreferForm core r dpath =
         deprVersions = rendVersions pref
     return $ toResponse $ Resource.XHtml $ hackagePage "Adjust preferred versions"
         [concatHtml $ packagePrefAbout core r Nothing pkgname,
-         form ! [theclass "box", XHtml.method "POST", action $ preferredPackageUri r "" pkgname] <<
+         form ! [theclass "box", XHtml.method "post", action $ preferredPackageUri r "" pkgname] <<
           [ hidden "_method" "PUT"
           , paragraph << "Preferred version ranges."
           , paragraph << textarea ! [name "preferred", rows $ show (4::Int), cols $ show (80::Int)] << unlines rangesList
@@ -891,7 +891,7 @@ serveTagsForm core tags dpath =
     let tagsStr = concat . intersperse ", " . map display . Set.toList $ currTags
     return $ toResponse $ Resource.XHtml $ hackagePage "Edit package tags"
       [paragraph << [toHtml "Set tags for ", packageNameLink core pkgname],
-       form ! [theclass "box", XHtml.method "POST", action $ packageTagsUri tags "" pkgname] <<
+       form ! [theclass "box", XHtml.method "post", action $ packageTagsUri tags "" pkgname] <<
         [ hidden "_method" "PUT"
         , dlist . ddef . toHtml $ makeInput [thetype "text", value tagsStr] "tags" "Set tags to "
         , paragraph << input ! [thetype "submit", value "Set tags"]

@@ -247,8 +247,9 @@ getUrlStrings relPath = do validate url
     where url = mkUrl relPath
 
 getAuthUrlStrings :: String -> String -> String -> IO [String]
-getAuthUrlStrings u p url
-    = withAuth u p (getRequest (mkUrl url)) getReqStrings
+getAuthUrlStrings u p relPath
+    = do validate $ mkAuthUrl u p relPath
+         withAuth u p (getRequest (mkUrl relPath)) getReqStrings
 
 checkForbiddenUrl :: String -> String -> String -> IO ()
 checkForbiddenUrl u p url = withAuth u p (getRequest (mkUrl url)) $
@@ -407,6 +408,9 @@ checkReqGivesResponse wantedCode req
 
 mkUrl :: String -> String
 mkUrl relPath = "http://127.0.0.1:" ++ show testPort ++ relPath
+
+mkAuthUrl :: String -> String -> String -> String
+mkAuthUrl u p relPath = "http://" ++ u ++ ":" ++ p ++ "@127.0.0.1:" ++ show testPort ++ relPath
 
 badResponse :: Response String -> IO a
 badResponse rsp = die ("Bad response code: " ++ show (rspCode rsp) ++ "\n\n"
