@@ -16,7 +16,7 @@
 module Distribution.Server.Framework.ResourceTypes where
 
 import Distribution.Server.Framework.BlobStorage
-         ( BlobId )
+         ( BlobId, blobMd5 )
 
 import Happstack.Server
          ( ToMessage(..), Response(..), RsFlags(..), Length(NoContentLength), nullRsFlags, mkHeaders
@@ -45,8 +45,8 @@ data PackageTarball = PackageTarball BS.Lazy.ByteString BlobId UTCTime
 instance ToMessage PackageTarball where
   toResponse (PackageTarball bs blobid time) = mkResponse bs
     [ ("Content-Type",  "application/gzip")
-    , ("Content-MD5",   show blobid)
-    , ("ETag",          '"' : show blobid ++ ['"'])
+    , ("Content-MD5",   blobMd5 blobid)
+    , ("ETag",          '"' : blobMd5 blobid ++ ['"'])
     , ("Last-modified", formatTime time)
     ]
 
@@ -55,8 +55,8 @@ data DocTarball = DocTarball BS.Lazy.ByteString BlobId
 instance ToMessage DocTarball where
   toResponse (DocTarball bs blobid) = mkResponse bs
     [ ("Content-Type",  "application/gzip")
-    , ("Content-MD5",   show blobid)
-    , ("ETag",          '"' : show blobid ++ ['"'])
+    , ("Content-MD5",   blobMd5 blobid)
+    , ("ETag",          '"' : blobMd5 blobid ++ ['"'])
     ]
 
 formatTime :: UTCTime -> String

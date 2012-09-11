@@ -13,6 +13,7 @@
 module Distribution.Server.Framework.BlobStorage (
     BlobStorage,
     BlobId,
+    blobMd5,
     open,
     add,
     addWith,
@@ -36,9 +37,10 @@ import System.IO
 -- | An id for a blob. The content of the blob is stable.
 --
 newtype BlobId = BlobId MD5Digest
-  deriving (Eq, Ord, Serialize, Typeable)
+  deriving (Eq, Ord, Show, Serialize, Typeable)
 
-instance Show BlobId where show (BlobId digest) = show digest
+blobMd5 :: BlobId -> String
+blobMd5 (BlobId digest) = show digest
 
 instance SafeCopy BlobId where
   putCopy = contain . put
