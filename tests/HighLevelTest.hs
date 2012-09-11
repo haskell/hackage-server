@@ -417,6 +417,7 @@ badResponse rsp = die ("Bad response code: " ++ show (rspCode rsp) ++ "\n\n"
                     ++ show rsp ++ "\n\n"
                     ++ rspBody rsp)
 
+-- validate is in the wdg-html-validator package on Debian
 validate :: String -> IO ()
 validate url = do putStrLn ("HTML validating " ++ show url)
                   ec <- rawSystem "/usr/bin/validate" ["--warn", url]
