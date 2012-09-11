@@ -239,10 +239,12 @@ testpackage :: (FilePath, String, FilePath, String, FilePath, String)
 testpackage = mkPackage "testpackage"
 
 getUrl :: String -> IO String
-getUrl url = getReq (getRequest (mkUrl url))
+getUrl relPath = getReq (getRequest (mkUrl relPath))
 
 getUrlStrings :: String -> IO [String]
-getUrlStrings url = getReqStrings (getRequest (mkUrl url))
+getUrlStrings relPath = do validate url
+                           getReqStrings (getRequest url)
+    where url = mkUrl relPath
 
 getAuthUrlStrings :: String -> String -> String -> IO [String]
 getAuthUrlStrings u p url

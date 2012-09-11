@@ -63,7 +63,7 @@ removeUser uname uri =
 
 listGroup :: [Users.UserName] -> Maybe String -> Html
 listGroup [] _ = p << "No member exist presently"
-listGroup users muri = p << unordList (map displayName users)
+listGroup users muri = unordList (map displayName users)
   where displayName uname = (anchor ! [href $ "/user/" ++ display uname] << display uname) +++
                             fromMaybe [] (fmap (removeUser uname) muri)
 
