@@ -71,6 +71,7 @@ form.box {
 	margin: 1.5ex 0;
 }
 strong.warning { color: red; }
+tt { font-family: monospace }
 
 a:link    { color: #0000e0; text-decoration: none }
 a:visited { color: #0000a0; text-decoration: none }

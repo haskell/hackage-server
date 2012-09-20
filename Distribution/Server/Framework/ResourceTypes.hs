@@ -77,6 +77,11 @@ instance ToMessage SuggestJson where
     toContentType _ = BS.pack "application/x-suggestions+json"
     toMessage (SuggestJson val) = BS.Lazy.pack $ JSON.encode val
 
+newtype JSON = JSON JSON.JSValue
+instance ToMessage JSON where
+    toContentType _ = BS.pack "application/json"
+    toMessage (JSON val) = BS.Lazy.pack $ JSON.encode val
+
 newtype CabalFile = CabalFile BS.Lazy.ByteString
 
 instance ToMessage CabalFile where

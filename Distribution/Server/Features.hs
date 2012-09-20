@@ -25,6 +25,7 @@ import Distribution.Server.Features.PackageContents     (initPackageContentsFeat
 import Distribution.Server.Features.Documentation       (initDocumentationFeature)
 import Distribution.Server.Features.BuildReports        (initBuildReportsFeature)
 import Distribution.Server.Features.LegacyRedirects     (legacyRedirectsFeature)
+import Distribution.Server.Features.ServerApiDoc        (serverApiDocFeature)
 import Distribution.Server.Features.PreferredVersions   (initVersionsFeature)
 -- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies (initReverseFeature)
 import Distribution.Server.Features.DownloadCount       (initDownloadFeature)
@@ -163,6 +164,7 @@ initHackageFeatures enableCaches env = do
          , getFeatureInterface htmlFeature
          , legacyRedirectsFeature uploadFeature
 #endif
+         , serverApiDocFeature allFeatures
          ]
 
     -- Run all post init hooks, now that everyone's gotten a chance to register
