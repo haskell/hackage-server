@@ -9,7 +9,6 @@ module Distribution.Server.Users.Backup (
     groupToCSV
   ) where
 
-import Distribution.Server.Acid (AcidComponent, update)
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users(..))
 import Distribution.Server.Users.Group (UserList(..))
@@ -17,8 +16,8 @@ import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Types
 import Distribution.Server.Users.State (ReplaceUserDb(..))
 
-import Data.Acid (UpdateEvent)
-import Data.Acid.Advanced (MethodResult, MethodState)
+import Data.Acid (AcidState, EventState, UpdateEvent, update)
+import Data.Acid.Advanced (MethodResult)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Text (display)
@@ -29,16 +28,16 @@ import Text.CSV (CSV)
 import qualified Data.IntSet as IntSet
 
 -- Import for the user database
-userBackup :: RestoreBackup
-userBackup = updateUserBackup Users.empty
+userBackup :: AcidState Users -> RestoreBackup
+userBackup usersState = updateUserBackup usersState Users.empty
 
-updateUserBackup :: Users -> RestoreBackup
-updateUserBackup users = RestoreBackup
+updateUserBackup :: AcidState Users -> Users -> RestoreBackup
+updateUserBackup usersState users = RestoreBackup
   { restoreEntry = \entry -> do
         res <- doUserImport users entry
-        return $ fmap updateUserBackup res
-  , restoreFinalize = return . Right $ updateUserBackup users
-  , restoreComplete = update $ ReplaceUserDb users
+        return $ fmap (updateUserBackup usersState) res
+  , restoreFinalize = return . Right $ updateUserBackup usersState users
+  , restoreComplete = update usersState $ ReplaceUserDb users
   }
 
 doUserImport :: Users -> BackupEntry -> IO (Either String Users)
@@ -89,12 +88,11 @@ insertUser user info = do
         Right users' -> put users'
 
 -- Import for a single group
-groupBackup :: ( UpdateEvent event
-               , MethodResult event ~ ()
-               , AcidComponent (MethodState event)
-               ) => [FilePath] -> (UserList -> event)
+groupBackup :: (UpdateEvent event, MethodResult event ~ ())
+            => AcidState (EventState event)
+            -> [FilePath] -> (UserList -> event)
             -> RestoreBackup
-groupBackup csvPath updateFunc = updateGroupBackup Group.empty
+groupBackup state csvPath updateFunc = updateGroupBackup Group.empty
   where
     updateGroupBackup group = fix $ \restorer -> RestoreBackup
               { restoreEntry = \entry -> do
@@ -102,7 +100,7 @@ groupBackup csvPath updateFunc = updateGroupBackup Group.empty
                         then fmap (fmap updateGroupBackup) $ runImport group (importGroup entry >>= put)
                         else return . Right $ restorer
               , restoreFinalize = return . Right $ restorer
-              , restoreComplete = update (updateFunc group)
+              , restoreComplete = update state (updateFunc group)
               }
 
 -- parses a rather lax format. Any layout of integer ids separated by commas.

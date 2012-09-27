@@ -23,7 +23,6 @@ import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import Distribution.Server.Util.ChangeLog (lookupChangeLog)
 
 import qualified Distribution.Server.Users.Users as Users
-import qualified Distribution.Server.Users.State as State
 import qualified Distribution.Server.Packages.State as State
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import qualified Distribution.Server.Framework.Cache as Cache
@@ -77,7 +76,7 @@ initPackagesFeature enableCaches serverEnv UserFeature{..} core = do
     recents <- Cache.newCacheableAction enableCaches $ do
         -- TODO: this should be moved to HTML/RSS features
         state <- query State.GetPackagesState
-        users <- query State.GetUserDb
+        users <- queryGetUserDb
         now   <- getCurrentTime
         let recentChanges = reverse $ sortBy (comparing pkgUploadTime) (PackageIndex.allPackages . State.packageList $ state)
         return (toResponse $ Resource.XHtml $ Pages.recentPage users recentChanges,
@@ -90,7 +89,7 @@ initPackagesFeature enableCaches serverEnv UserFeature{..} core = do
           }
       , cacheRecent   = recents
       , packageRender = \pkg -> do
-            users <- query State.GetUserDb
+            users <- queryGetUserDb
             doPackageRender (serverBlobStore serverEnv) users pkg
       }
 

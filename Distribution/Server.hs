@@ -1,3 +1,4 @@
+{-# LANGUAGE NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server (
     -- * Server control
     Server,
@@ -26,7 +27,7 @@ module Distribution.Server (
 
 import Happstack.Server hiding (port, host)
 
-import Distribution.Server.Acid (Acid, checkpointAcid, startAcid, stopAcid, update)
+import Distribution.Server.Acid (Acid, checkpointAcid, startAcid, stopAcid)
 import qualified Distribution.Server.Framework.BackupRestore as Import
 import Distribution.Server.Framework.BackupDump
 -- TODO: move this to BulkImport module
@@ -39,9 +40,9 @@ import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Framework
 import Distribution.Server.Framework.Feature as Feature
 import qualified Distribution.Server.Features as Features
+import Distribution.Server.Features.Users
 import Distribution.Server.Framework.AuthTypes (PasswdPlain(..))
 
-import Distribution.Server.Users.State as State
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.LegacyImport.BulkImport as BulkImport
 import qualified Distribution.Server.LegacyImport.UploadLog as UploadLog
@@ -98,10 +99,11 @@ defaultServerConfig = do
   }
 
 data Server = Server {
-  serverAcid      :: Acid,
-  serverFeatures  :: [HackageFeature],
-  serverListenOn  :: ListenOn,
-  serverEnv       :: ServerEnv
+  serverAcid        :: Acid,
+  serverFeatures    :: [HackageFeature],
+  serverUserFeature :: UserFeature,
+  serverListenOn    :: ListenOn,
+  serverEnv         :: ServerEnv
 }
 
 -- | If we made a server instance from this 'ServerConfig', would we find some
@@ -136,13 +138,14 @@ initialise enableCaches initConfig@(ServerConfig hostName listenOn stateDir stat
             serverHostURI   = hostURI
          }
     -- do feature initialization
-    features <- Features.initHackageFeatures enableCaches env
+    (features, userFeature) <- Features.initHackageFeatures enableCaches env
 
     return Server {
-        serverAcid      = acid,
-        serverFeatures  = features,
-        serverListenOn  = listenOn,
-        serverEnv       = env
+        serverAcid        = acid,
+        serverFeatures    = features,
+        serverUserFeature = userFeature,
+        serverListenOn    = listenOn,
+        serverEnv         = env
     }
 
   where
@@ -321,13 +324,14 @@ initState server (admin, pass) = do
           featureDumpRestore = Just (_dump, restore, _test_rt)
         } <- serverFeatures server ]
     -- create default admin user
+    let UserFeature{updateAddUser, adminGroup} = serverUserFeature server
     muid <- case simpleParse admin of
         Just uname -> do
             let userAuth = newPasswdHash hackageRealm uname (PasswdPlain pass)
-            update $ AddUser uname (Users.NewUserAuth userAuth)
+            updateAddUser uname (Users.NewUserAuth userAuth)
         Nothing -> fail "Couldn't parse admin name (should be alphanumeric)"
     case muid of
-        Right uid -> update $ State.AddHackageAdmin uid
+        Right uid -> Group.addUserList adminGroup uid
         Left err  -> fail $ "Failed to create admin user: " ++ err
 
 -- The top-level server part.

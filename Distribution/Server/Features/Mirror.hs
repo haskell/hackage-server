@@ -5,7 +5,7 @@ module Distribution.Server.Features.Mirror (
     initMirrorFeature
   ) where
 
-import Distribution.Server.Acid (query, update)
+import Distribution.Server.Acid (query, update, unsafeGetAcid)
 import Distribution.Server.Framework hiding (formatTime)
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
@@ -85,7 +85,7 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
         clients <- query GetMirrorClients
         return [csvToBackup ["clients.csv"] $ groupToCSV clients]
 
-    restoreBackup = groupBackup ["clients.csv"] ReplaceMirrorClients
+    restoreBackup = groupBackup unsafeGetAcid ["clients.csv"] ReplaceMirrorClients
 
     testRoundtrip = testRoundtripByQuery (query GetMirrorClients)
 
@@ -159,7 +159,7 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
         withPackageId dpath $ \pkgid -> do
           expectTextPlain
           Body nameContent <- consumeRequestBody
-          uid <- update $ RequireUserName (UserName (unpackUTF8 nameContent))
+          uid <- updateRequireUserName (UserName (unpackUTF8 nameContent))
           mb_err <- update $ ReplacePackageUploader pkgid uid
           maybe (return $ toResponse "Updated uploader OK") (badRequest . toResponse) mb_err
 
@@ -205,7 +205,7 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
     requireMirrorAuth :: ServerPartE UserId
     requireMirrorAuth = do
         ulist   <- query GetMirrorClients
-        userdb  <- query GetUserDb
+        userdb  <- queryGetUserDb
         (uid, _) <- guardAuthorised hackageRealm userdb ulist
         return uid
 

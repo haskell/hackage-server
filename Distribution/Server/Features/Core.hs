@@ -19,8 +19,6 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Packages.Backup
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.State
-import Distribution.Server.Users.Backup
-import Distribution.Server.Users.State
 import qualified Distribution.Server.Framework.Cache as Cache
 import qualified Distribution.Server.Packages.Index as Packages.Index
 import qualified Codec.Compression.GZip as GZip
@@ -35,7 +33,6 @@ import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Time.Clock (UTCTime)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Monoid (mconcat)
 --TODO: why are we importing xhtml here!?
 import Text.XHtml.Strict (Html, toHtml, unordList, h3, (<<), anchor, href, (!))
 import Data.Ord (comparing)
@@ -117,7 +114,7 @@ initCoreFeature enableCaches env UserFeature{..} = do
     extraMap <- Cache.newCacheable Map.empty
 
     indexTar <- Cache.newCacheableAction enableCaches $ do
-            users  <- query GetUserDb
+            users  <- queryGetUserDb
             index  <- packageList <$> query GetPackagesState
             extras <- Cache.getCache extraMap
             return $ GZip.compress $ Packages.Index.write users extras index
@@ -180,14 +177,12 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
     indexPage staticDir _ = serveFile (const $ return "text/html") (staticDir ++ "/hackage.html")
 
     dumpBackup = do
-      users    <- query GetUserDb
       packages <- query GetPackagesState
-      admins   <- query GetHackageAdmins
-      packageEntries <- readExportBlobs store $ indexToAllVersions packages
-      return $ packageEntries ++ [csvToBackup ["users.csv"] $ usersToCSV users, csvToBackup ["admins.csv"] $ groupToCSV admins]
-    restoreBackup = mconcat [userBackup, packagesBackup store, groupBackup ["admins.csv"] ReplaceHackageAdmins]
+      readExportBlobs store $ indexToAllVersions packages
 
-    testRoundtrip = testRoundtripByQuery' (liftM3 (,,) (query GetUserDb) (query GetPackagesState) (query GetHackageAdmins)) $ \(_, packages, _) ->
+    restoreBackup = packagesBackup store
+
+    testRoundtrip = testRoundtripByQuery' (query GetPackagesState) $ \packages ->
       testBlobsExist store [ blob
                            | pkgInfo <- PackageIndex.allPackages (packageList packages)
                            , (tarball, _) <- pkgTarball pkgInfo

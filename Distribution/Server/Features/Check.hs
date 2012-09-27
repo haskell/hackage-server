@@ -17,7 +17,6 @@ import Distribution.Server.Features.Users
 
 import Distribution.Server.Packages.State
 import Distribution.Server.Packages.Types
-import Distribution.Server.Users.State (GetUserDb(..))
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Group as Group
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
@@ -280,7 +279,7 @@ checkFeature ServerEnv{serverBlobStore = store}
 
     candidateRender :: CandPkgInfo -> IO CandidateRender
     candidateRender cand = do
-           users  <- query GetUserDb
+           users  <- queryGetUserDb
            index  <- packageList `fmap` query GetPackagesState
            render <- doPackageRender store users (candPkgInfo cand)
            return $ CandidateRender {

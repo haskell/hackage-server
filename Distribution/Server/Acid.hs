@@ -21,9 +21,7 @@ import Distribution.Server.Packages.State           (CandidatePackages, Document
                                                      initialHackageTrustees, initialHackageUploaders,
                                                      initialPackageMaintainers, initialPackagesState)
 import Distribution.Server.Packages.Tag             (PackageTags, initialPackageTags)
-import Distribution.Server.Users.State              (HackageAdmins, MirrorClients, initialHackageAdmins, initialMirrorClients)
-import Distribution.Server.Users.Users              (Users)
-import Distribution.Server.Users.State              (initialUsers)
+import Distribution.Server.Users.State              (MirrorClients, initialMirrorClients)
 
 -- WARNING: if you add fields here, you must update checkpointAcid and stopAcid. Failure to do so will *not* result in a compiler error.
 data Acid = Acid 
@@ -32,7 +30,6 @@ data Acid = Acid
     , acidDistros            :: AcidState Distros
     , acidDocumentation      :: AcidState Documentation
     , acidDownloadCounts     :: AcidState DownloadCounts
-    , acidHackageAdmins      :: AcidState HackageAdmins
     , acidHackageTrustees    :: AcidState HackageTrustees
     , acidHackageUploaders   :: AcidState HackageUploaders
     , acidMirrorClients      :: AcidState MirrorClients
@@ -42,7 +39,6 @@ data Acid = Acid
     , acidPlatformPackages   :: AcidState PlatformPackages
     , acidPreferredVersions  :: AcidState PreferredVersions
     -- [reverse index disabled] , acidReverseIndex       :: AcidState ReverseIndex
-    , acidUsers              :: AcidState Users 
     }
 
 class AcidComponent c where
@@ -62,9 +58,6 @@ instance AcidComponent Documentation where
 
 instance AcidComponent DownloadCounts where
     acidComponent = acidDownloadCounts
-
-instance AcidComponent HackageAdmins where
-    acidComponent = acidHackageAdmins
 
 instance AcidComponent HackageTrustees where
     acidComponent = acidHackageTrustees
@@ -93,13 +86,16 @@ instance AcidComponent PreferredVersions where
 -- [reverse index disabled] instance AcidComponent ReverseIndex where
 -- [reverse index disabled]     acidComponent = acidReverseIndex
 
-instance AcidComponent Users where
-    acidComponent = acidUsers
-
 
 acidRef :: IORef Acid
 acidRef = unsafePerformIO $ newIORef (error "acid not initialized.")
 {-# NOINLINE acidRef #-}
+
+-- FIXME: a strictly temporary measure, while we're converting to encapsulated state use
+unsafeGetAcid :: AcidComponent c => AcidState c
+unsafeGetAcid = unsafePerformIO $ do
+  acid <- liftIO $ readIORef acidRef
+  return (acidComponent acid)
 
 setAcid :: Acid -> IO ()
 setAcid acid =
@@ -113,7 +109,6 @@ startAcid stateDir =
            initialDistros
            initialDocumentation
            initialDownloadCounts
-           initialHackageAdmins
            initialHackageTrustees
            initialHackageUploaders
            initialMirrorClients
@@ -123,7 +118,6 @@ startAcid stateDir =
            initialPlatformPackages
            initialPreferredVersions
            -- [reverse index disabled] initialReverseIndex
-           initialUsers
 
 startAcid' :: FilePath 
            -> BuildReports
@@ -131,7 +125,6 @@ startAcid' :: FilePath
            -> Distros
            -> Documentation
            -> DownloadCounts
-           -> HackageAdmins
            -> HackageTrustees
            -> HackageUploaders
            -> MirrorClients
@@ -141,17 +134,15 @@ startAcid' :: FilePath
            -> PlatformPackages
            -> PreferredVersions
            -- [reverse index disabled] -> ReverseIndex
-           -> Users
            -> IO Acid
-startAcid' stateDir buildReports candidatePackages distros documentation downloadCounts hackageAdmins hackageTrustees hackageUploaders mirrorClients packageMaintainers packagesState packageTags platformPackages preferredVersions
+startAcid' stateDir buildReports candidatePackages distros documentation downloadCounts hackageTrustees hackageUploaders mirrorClients packageMaintainers packagesState packageTags platformPackages preferredVersions
     -- [reverse index disabled] reverseIndex
-    users =
+    =
     do buildReports'       <- openLocalStateFrom (stateDir </> "BuildReports")       buildReports
        candidatePackages'  <- openLocalStateFrom (stateDir </> "CandidatePackages")  candidatePackages
        distros'            <- openLocalStateFrom (stateDir </> "Distros")            distros
        documentation'      <- openLocalStateFrom (stateDir </> "Documentation")      documentation
        downloadCounts'     <- openLocalStateFrom (stateDir </> "DownloadCounts")     downloadCounts
-       hackageAdmins'      <- openLocalStateFrom (stateDir </> "HackageAdmins")      hackageAdmins
        hackageTrustees'    <- openLocalStateFrom (stateDir </> "HackageTrustees")    hackageTrustees
        hackageUploaders'   <- openLocalStateFrom (stateDir </> "HackageUploaders")   hackageUploaders
        mirrorClients'      <- openLocalStateFrom (stateDir </> "MirrorClients")      mirrorClients
@@ -161,13 +152,11 @@ startAcid' stateDir buildReports candidatePackages distros documentation downloa
        platformPackages'   <- openLocalStateFrom (stateDir </> "PlatformPackages")   platformPackages
        preferredVersions'  <- openLocalStateFrom (stateDir </> "PreferredVersions")  preferredVersions
        -- [reverse index disabled] reverseIndex'       <- openLocalStateFrom (stateDir </> "ReverseIndex")       reverseIndex
-       users'              <- openLocalStateFrom (stateDir </> "Users")              users
        let acid = Acid { acidBuildReports       = buildReports' 
                        , acidCandidatePackages  = candidatePackages'
                        , acidDistros            = distros'
                        , acidDocumentation      = documentation'
                        , acidDownloadCounts     = downloadCounts'
-                       , acidHackageAdmins      = hackageAdmins'
                        , acidHackageTrustees    = hackageTrustees'
                        , acidHackageUploaders   = hackageUploaders'
                        , acidMirrorClients      = mirrorClients'
@@ -177,7 +166,6 @@ startAcid' stateDir buildReports candidatePackages distros documentation downloa
                        , acidPlatformPackages   = platformPackages'
                        , acidPreferredVersions  = preferredVersions'
                        -- [reverse index disabled] , acidReverseIndex       = reverseIndex'
-                       , acidUsers              = users'
                        }
        setAcid acid
        return acid
@@ -190,7 +178,6 @@ stopAcid acid =
        createCheckpointAndClose (acidDistros acid)
        createCheckpointAndClose (acidDocumentation acid)
        createCheckpointAndClose (acidDownloadCounts acid)
-       createCheckpointAndClose (acidHackageAdmins acid)
        createCheckpointAndClose (acidHackageTrustees acid)
        createCheckpointAndClose (acidHackageUploaders acid)
        createCheckpointAndClose (acidMirrorClients acid)
@@ -200,7 +187,6 @@ stopAcid acid =
        createCheckpointAndClose (acidPlatformPackages acid)
        createCheckpointAndClose (acidPreferredVersions acid)
        -- [reverse index disabled] createCheckpointAndClose (acidReverseIndex acid)
-       createCheckpointAndClose (acidUsers acid)
 
 checkpointAcid :: Acid -> IO ()
 checkpointAcid acid =
@@ -209,7 +195,6 @@ checkpointAcid acid =
        createCheckpoint (acidDistros acid)
        createCheckpoint (acidDocumentation acid)
        createCheckpoint (acidDownloadCounts acid)
-       createCheckpoint (acidHackageAdmins acid)
        createCheckpoint (acidHackageTrustees acid)
        createCheckpoint (acidHackageUploaders acid)
        createCheckpoint (acidMirrorClients acid)
@@ -219,7 +204,6 @@ checkpointAcid acid =
        createCheckpoint (acidPlatformPackages acid)
        createCheckpoint (acidPreferredVersions acid)
        -- [reverse index disabled] createCheckpoint (acidReverseIndex acid)
-       createCheckpoint (acidUsers acid)
 
 update :: ( AcidComponent (MethodState event)
           , UpdateEvent event

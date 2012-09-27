@@ -15,7 +15,6 @@ import Distribution.Server.Features.BuildReports.State
 import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
 import Distribution.Server.Features.BuildReports.BuildReport (BuildReport(..))
 import Distribution.Server.Features.BuildReports.BuildReports (BuildReportId(..), BuildLog(..))
-import Distribution.Server.Users.State (GetUserDb(..))
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
 
 import Distribution.Server.Packages.Types
@@ -106,7 +105,7 @@ initBuildReportsFeature ServerEnv{serverBlobStore = store}
     submitBuildReport r dpath =
       runServerPartE $
       withPackageVersionPath dpath $ \pkg -> do
-        users <- query GetUserDb
+        users <- queryGetUserDb
         -- require logged-in user
         void $ guardAuthenticated hackageRealm users
         let pkgid = pkgInfoId pkg
@@ -124,7 +123,7 @@ initBuildReportsFeature ServerEnv{serverBlobStore = store}
       runServerPartE $
       withPackageVersionPath dpath $ \pkg ->
       withReportId dpath $ \reportId -> do
-        users <- query GetUserDb
+        users <- queryGetUserDb
         -- restrict this to whom? currently logged in users.. a bad idea
         void $ guardAuthenticated hackageRealm users
         let pkgid = pkgInfoId pkg
@@ -139,7 +138,7 @@ initBuildReportsFeature ServerEnv{serverBlobStore = store}
       runServerPartE $
       withPackageVersionPath dpath $ \pkg ->
       withReportId dpath $ \reportId -> do
-        users <- query GetUserDb
+        users <- queryGetUserDb
         -- logged in users
         void $ guardAuthenticated hackageRealm users
         let pkgid = pkgInfoId pkg
@@ -155,7 +154,7 @@ initBuildReportsFeature ServerEnv{serverBlobStore = store}
       runServerPartE $
       withPackageVersionPath dpath $ \pkg ->
       withReportId dpath $ \reportId -> do
-        users <- query GetUserDb
+        users <- queryGetUserDb
         -- again, restrict this to whom?
         void $ guardAuthenticated hackageRealm users
         let pkgid = pkgInfoId pkg

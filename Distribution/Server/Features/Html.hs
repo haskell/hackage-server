@@ -24,7 +24,6 @@ import Distribution.Server.Features.Mirror
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
 import qualified Distribution.Server.Pages.Package as Pages
 import qualified Distribution.Server.Packages.State as State
-import qualified Distribution.Server.Users.State as State
 import qualified Distribution.Server.Features.Distro.State as State
 import qualified Distribution.Server.Framework.Cache as Cache
 
@@ -293,7 +292,7 @@ initHtmlFeature enableCaches _env
     ---- Users
     serveUserList :: DynamicPath -> ServerPart Response
     serveUserList _ = do
-        userlist <- Map.keys . Users.userNameMap <$> query State.GetUserDb
+        userlist <- Map.keys . Users.userNameMap <$> queryGetUserDb
         let hlist = unordList $ map (\uname -> anchor ! [href $ userPageUri users "" uname] << display uname) userlist
         ok $ toResponse $ Resource.XHtml $ hackagePage "Hackage users" [h2 << "Hackage users", hlist]
 
@@ -332,7 +331,7 @@ initHtmlFeature enableCaches _env
     servePasswordForm :: DynamicPath -> ServerPart Response
     servePasswordForm dpath = htmlResponse $
                                 withUserPath dpath $ \pathUid userInfo -> do
-        users <- query State.GetUserDb
+        users <- queryGetUserDb
         (uid, _) <- guardAuthenticated hackageRealm users
         let uname = userName userInfo
         canChange <- canChangePassword uid pathUid
@@ -398,7 +397,7 @@ initHtmlFeature enableCaches _env
       ]
       where
         getList dpath = withGroup (groupGen dpath) $ \group -> do
-            userDb   <- query State.GetUserDb
+            userDb   <- queryGetUserDb
             userlist <- liftIO . queryUserList $ group
             let unames = [ Users.idToName userDb uid
                          | uid   <- Group.enumerate userlist ]
@@ -407,7 +406,7 @@ initHtmlFeature enableCaches _env
                 unames baseUri (False, False) (groupDesc group)
         getEditList dpath = withGroup (groupGen dpath) $ \group ->
                             withGroupEditAuth group $ \canAdd canDelete -> do
-            userDb   <- query State.GetUserDb
+            userDb   <- queryGetUserDb
             userlist <- liftIO . queryUserList $ group
             let unames = [ Users.idToName userDb uid
                          | uid   <- Group.enumerate userlist ]

@@ -11,9 +11,10 @@ module Distribution.Server.Features.Users (
 
 import Control.Applicative ((<$>), (<*>), optional)
 
-import Distribution.Server.Acid (query, update)
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
+import Data.Acid
+import Data.Acid.Advanced
 import qualified Distribution.Server.Framework.Cache as Cache
 
 import Distribution.Server.Users.Types
@@ -32,6 +33,7 @@ import qualified Data.Set as Set
 import Data.Function (fix)
 import Data.Monoid (Monoid(..))
 import Control.Monad
+import System.FilePath ((</>))
 
 import Distribution.Text (display, simpleParse)
 
@@ -49,6 +51,13 @@ data UserFeature = UserFeature {
     adminGroup :: UserGroup,
     -- Filters for all features modifying the package index
     packageMutate :: Filter (UserId -> IO Bool),
+
+    -- These function fields are marked strict for the sole purpose of
+    -- getting compile-time error if they are accidentally not initialised
+    queryGetUserDb    :: forall m. MonadIO m => m Users.Users,
+    
+    updateAddUser     :: forall m. MonadIO m => UserName -> UserAuth -> m (Either String UserId),
+    updateRequireUserName :: forall m. MonadIO m => UserName -> m UserId,
 
     groupAddUser      :: UserGroup -> DynamicPath -> ServerPartE (),
     groupDeleteUser   :: UserGroup -> DynamicPath -> ServerPartE (),
@@ -118,7 +127,15 @@ emptyGroupIndex = GroupIndex IntMap.empty Map.empty
 
 -- TODO: add renaming
 initUserFeature :: ServerEnv -> IO UserFeature
-initUserFeature ServerEnv{} = do
+initUserFeature ServerEnv{serverStateDir} = do
+
+  -- Canonical state
+  usersState  <- openLocalStateFrom
+                   (serverStateDir </> "db" </> "Users")
+                   initialUsers
+  adminsState <- openLocalStateFrom
+                   (serverStateDir </> "db" </> "HackageAdmins")
+                   initialHackageAdmins
 
   -- Cached state
   groupIndex   <- Cache.newCache emptyGroupIndex id
@@ -134,20 +151,24 @@ initUserFeature ServerEnv{} = do
   -- Instead of trying to pull it apart, we just use a 'do rec'
   --
   rec let (feature@UserFeature{groupResourceAt}, adminGroupDesc)
-            = userFeature groupIndex userAdded packageMutate
+            = userFeature usersState adminsState
+                          groupIndex userAdded packageMutate
                           adminG adminR
 
       (adminG, adminR) <- groupResourceAt "/users/admins/" adminGroupDesc
 
   return feature
 
-userFeature :: Cache.Cache GroupIndex
+userFeature :: AcidState Users.Users
+            -> AcidState HackageAdmins
+            -> Cache.Cache GroupIndex
             -> Hook (IO ())
             -> Filter (UserId -> IO Bool)
             -> UserGroup
             -> GroupResource
             -> (UserFeature, UserGroup)
-userFeature  groupIndex userAdded packageMutate
+userFeature  usersState adminsState
+             groupIndex userAdded packageMutate
              adminGroup adminResource
   = (UserFeature {..}, adminGroupDesc)
   where
@@ -156,6 +177,12 @@ userFeature  groupIndex userAdded packageMutate
             [userList, userPage, passwordResource, enabledResource]
             ++ [groupResource adminResource, groupUserResource adminResource]
       , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
+      , featureCheckpoint = do
+          createCheckpoint usersState
+          createCheckpoint adminsState
+      , featureShutdown = do
+          closeAcidState usersState
+          closeAcidState adminsState
       }
 
     userResource = fix $ \r -> UserResource
@@ -173,22 +200,31 @@ userFeature  groupIndex userAdded packageMutate
         }
 
     dumpBackup = do
-      users    <- query GetUserDb
-      admins   <- query GetHackageAdmins
+      users    <- query usersState  GetUserDb
+      admins   <- query adminsState GetHackageAdmins
       return [ csvToBackup ["users.csv"]  (usersToCSV users)
              , csvToBackup ["admins.csv"] (groupToCSV admins) ]
 
     restoreBackup =
-      mconcat [ userBackup
-              , groupBackup ["admins.csv"] ReplaceHackageAdmins ]
+      mconcat [ userBackup  usersState
+              , groupBackup adminsState ["admins.csv"] ReplaceHackageAdmins ]
 
-    testRoundtrip = testRoundtripByQuery ((,) <$> query GetUserDb
-                                              <*> query GetHackageAdmins)
+    testRoundtrip = testRoundtripByQuery ((,) <$> query usersState  GetUserDb
+                                              <*> query adminsState GetHackageAdmins)
+
+    queryGetUserDb :: MonadIO m => m Users.Users
+    queryGetUserDb = query' usersState GetUserDb
+    
+    updateRequireUserName :: MonadIO m => UserName -> m UserId
+    updateRequireUserName uname = update' usersState (RequireUserName uname)
+
+    updateAddUser :: MonadIO m => UserName -> UserAuth -> m (Either String UserId)
+    updateAddUser uname auth = update' usersState (AddUser uname auth)
 
     {- result: see-other for user page or authentication error
     requireAuth :: ServerPartE Response
     requireAuth = do
-        users <- query GetUserDb
+        users <- query' usersState GetUserDb
         (_, info) <- Auth.guardAuthenticated hackageRealm users
         fmap Right $ seeOther ("/user/" ++ display (userName info)) $ toResponse ()
     -}
@@ -197,23 +233,23 @@ userFeature  groupIndex userAdded packageMutate
     deleteAccount :: UserName -> ServerPartE ()
     deleteAccount uname =
       withUserName  uname $ \uid _ -> do
-        users  <- query GetUserDb
-        admins <- query State.GetHackageAdmins
+        users  <- query' usersState GetUserDb
+        admins <- query' adminsState State.GetHackageAdmins
         void $ guardAuthorised hackageRealm users admins
-        void $ update (DeleteUser uid)
+        void $ update' usersState (DeleteUser uid)
 
     -- result: not-found, not authenticated, or ok (success)
     enabledAccount :: UserName -> ServerPartE ()
     enabledAccount uname =
       withUserName uname $ \uid _ -> do
-        users  <- query GetUserDb
-        admins <- query State.GetHackageAdmins
+        users  <- query' usersState GetUserDb
+        admins <- query' adminsState State.GetHackageAdmins
         void $ guardAuthorised hackageRealm users admins
         enabled <- optional $ look "enabled"
         -- for a checkbox, prescence in data string means 'checked'
         void $ case enabled of
-               Nothing -> update (SetEnabledUser uid False)
-               Just _  -> update (SetEnabledUser uid True)
+               Nothing -> update' usersState (SetEnabledUser uid False)
+               Just _  -> update' usersState (SetEnabledUser uid True)
 
     -- | Resources representing the collection of known users.
     --
@@ -231,7 +267,7 @@ userFeature  groupIndex userAdded packageMutate
 
     withUserName :: UserName -> (UserId -> UserInfo -> ServerPartE a) -> ServerPartE a
     withUserName uname func = do
-        users <- query GetUserDb
+        users <- query' usersState GetUserDb
         case Users.lookupName uname users of
           Nothing  -> userLost "Could not find user: not presently registered"
           Just uid -> case Users.lookupId uid users of
@@ -269,7 +305,7 @@ userFeature  groupIndex userAdded packageMutate
         Nothing -> errBadRequest "Error registering user" [MText "Not a valid user name!"]
         Just uname -> do
           let auth = newDigestPass uname password
-          muid <- update $ AddUser uname auth
+          muid <- update' usersState $ AddUser uname auth
           case muid of
             Left err  -> errForbidden "Error registering user" [MText err]
             Right _   -> return uname
@@ -277,12 +313,12 @@ userFeature  groupIndex userAdded packageMutate
     -- Arguments: the auth'd user id, the user path id (derived from the :username)
     canChangePassword :: MonadIO m => UserId -> UserId -> m Bool
     canChangePassword uid userPathId = do
-        admins <- query State.GetHackageAdmins
+        admins <- query' adminsState State.GetHackageAdmins
         return $ uid == userPathId || (uid `Group.member` admins)
 
     changePassword :: UserName -> ServerPartE ()
     changePassword userPathName = do
-        users  <- query State.GetUserDb
+        users  <- query' usersState State.GetUserDb
         pwd <- either (const $ return $ ChangePassword "not" "valid" True) return =<< getData
         if (first pwd == second pwd && first pwd /= "")
          then do
@@ -291,13 +327,13 @@ userFeature  groupIndex userAdded packageMutate
            res <- case Users.lookupName userPathName users of
                     Just userPathId
                       | tryUpgrade pwd -> do
-                        update $ UpgradeUserAuth userPathId passwd auth
+                        update' usersState $ UpgradeUserAuth userPathId passwd auth
                       | otherwise -> do
                         (uid, _) <- guardAuthenticated hackageRealm users
                         -- if this user's id corresponds to the one in the path, or is an admin
                         canChange <- canChangePassword uid userPathId
                         if canChange
-                          then update $ ReplaceUserAuth userPathId auth
+                          then update' usersState $ ReplaceUserAuth userPathId auth
                           else forbidChange $ "Not authorized to change password for " ++ display userPathName
                     Nothing -> errForbidden "Error changing password"
                                      [MText $ "User " ++ display userPathName ++ " doesn't exist"]
@@ -320,9 +356,9 @@ userFeature  groupIndex userAdded packageMutate
     adminGroupDesc :: UserGroup
     adminGroupDesc = UserGroup {
           groupDesc      = nullDescription { groupTitle = "Hackage admins" },
-          queryUserList  = query GetHackageAdmins,
-          addUserList    = update . AddHackageAdmin,
-          removeUserList = update . RemoveHackageAdmin,
+          queryUserList  = query adminsState GetHackageAdmins,
+          addUserList    = update adminsState . AddHackageAdmin,
+          removeUserList = update adminsState . RemoveHackageAdmin,
           groupExists    = return True,
           canAddGroup    = [adminGroupDesc],
           canRemoveGroup = [adminGroupDesc]
@@ -330,7 +366,7 @@ userFeature  groupIndex userAdded packageMutate
 
     groupAddUser :: UserGroup -> DynamicPath -> ServerPartE ()
     groupAddUser group _ = do
-        users <- query GetUserDb
+        users <- query' usersState GetUserDb
         muser <- optional $ look "user"
         case muser of
             Nothing -> addError "Bad request (could not find 'user' argument)"
@@ -345,14 +381,14 @@ userFeature  groupIndex userAdded packageMutate
     groupDeleteUser :: UserGroup -> DynamicPath -> ServerPartE ()
     groupDeleteUser group dpath =
       withUserPath dpath $ \uid _ -> do
-        users <- query GetUserDb
+        users <- query' usersState GetUserDb
         ulist <- liftIO . Group.queryGroups $ canRemoveGroup group
         void $ guardAuthorised hackageRealm users ulist
         liftIO $ removeUserList group uid
 
     withGroupEditAuth :: UserGroup -> (Bool -> Bool -> ServerPartE a) -> ServerPartE a
     withGroupEditAuth group func = do
-        users  <- query GetUserDb
+        users  <- query' usersState GetUserDb
         addList    <- liftIO . Group.queryGroups $ canAddGroup group
         removeList <- liftIO . Group.queryGroups $ canRemoveGroup group
         (uid, _) <- guardAuthenticated hackageRealm users

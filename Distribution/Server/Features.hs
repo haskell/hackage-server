@@ -49,7 +49,7 @@ import Distribution.Server.Features.ServerApiDoc        (serverApiDocFeature)
 --     best approach is probably to write backup tarball to disk and transfer
 --     it away through non-HTTP means (somewhat more secure)
 
-initHackageFeatures :: Bool -> ServerEnv -> IO [HackageFeature]
+initHackageFeatures :: Bool -> ServerEnv -> IO ([HackageFeature], UserFeature)
 initHackageFeatures enableCaches env = do
 
     -- Arguments denote data dependencies, even if the feature objects are
@@ -176,7 +176,7 @@ initHackageFeatures enableCaches env = do
     -- other features It also happens even in the backup/restore modes.
     mapM_ featurePostInit allFeatures
 
-    return allFeatures
+    return (allFeatures, usersFeature)
 
 checkpointAllFeatures :: [HackageFeature] -> IO ()
 checkpointAllFeatures = mapM_ featureCheckpoint

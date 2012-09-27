@@ -7,7 +7,7 @@ module Distribution.Server.Features.Upload (
     uploadsRestrictedToMaintainers,
   ) where
 
-import Distribution.Server.Acid (query, update)
+import Distribution.Server.Acid (query, update, unsafeGetAcid)
 import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
@@ -15,7 +15,6 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Packages.Backup
 import Distribution.Server.Packages.State
-import Distribution.Server.Users.State
 import Distribution.Server.Users.Backup
 import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Users.Types as Users
@@ -156,7 +155,7 @@ uploadFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
         return [ csvToBackup ["trustees.csv"] $ groupToCSV trustees
                , maintToExport mains ]
     restoreBackup = mconcat [ maintainerBackup
-                            , groupBackup ["trustees.csv"] ReplaceHackageTrustees ]
+                            , groupBackup unsafeGetAcid ["trustees.csv"] ReplaceHackageTrustees ]
     testRoundtrip = testRoundtripByQuery (liftM2 (,) (query GetHackageTrustees) (query AllPackageMaintainers))
 
     uploadResource = UploadResource
@@ -226,14 +225,14 @@ uploadFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
 
     withPackageNameAuth :: PackageName -> (Users.UserId -> Users.UserInfo -> ServerPartE a) -> ServerPartE a
     withPackageNameAuth pkgname func = do
-        userDb <- query GetUserDb
+        userDb <- queryGetUserDb
         groupSum <- getPackageGroup pkgname
         (uid, uinfo) <- guardAuthorised hackageRealm userDb groupSum
         func uid uinfo
 
     withTrusteeAuth :: (Users.UserId -> Users.UserInfo -> ServerPartE a) -> ServerPartE a
     withTrusteeAuth func = do
-        userDb <- query GetUserDb
+        userDb <- queryGetUserDb
         trustee <- query $ GetHackageTrustees
         (uid, uinfo) <- guardAuthorised hackageRealm userDb trustee
         func uid uinfo
@@ -249,7 +248,7 @@ uploadFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
     -- This is the upload function. It returns a generic result for multiple formats.
     uploadPackage :: ServerPartE UploadResult
     uploadPackage = do
-        users     <- query GetUserDb
+        users     <- queryGetUserDb
         uploaders <- query GetHackageUploaders
         void $ guardAuthorised hackageRealm users uploaders
         state <- fmap packageList $ query GetPackagesState
@@ -298,7 +297,7 @@ uploadFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
                   in upload fileName file
       where
         upload name file =
-         do users <- query GetUserDb
+         do users <- queryGetUserDb
             -- initial check to ensure logged in.
             (uid, _) <- guardAuthenticated hackageRealm users
             let processPackage :: ByteString -> IO (Either ErrorResponse (UploadResult, BlobStorage.BlobId))
