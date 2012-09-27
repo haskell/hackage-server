@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.Distro (
     DistroFeature,
     distroResource,
@@ -26,7 +27,7 @@ import Text.CSV (parseCSV)
 import Data.Version (showVersion)
 
 
--- TODO: 
+-- TODO:
 -- 1. write an HTML view for this module, and delete the text
 -- 2. use GroupResource from the Users feature
 -- 3. use MServerPart to support multiple views
@@ -47,9 +48,8 @@ instance IsHackageFeature DistroFeature where
       , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtripByQuery (query GetDistributions))
       }
 
-initDistroFeature :: ServerEnv -> CoreFeature -> UserFeature -> PackagesFeature -> IO DistroFeature
-initDistroFeature _ _ users _ = do
-    let admins = adminGroup users
+initDistroFeature :: ServerEnv -> UserFeature -> CoreFeature -> PackagesFeature -> IO DistroFeature
+initDistroFeature _ UserFeature{..} CoreFeature{..} _ =
     return $ DistroFeature
       { distroResource = DistroResource
           { distroIndexPage = (resourceAt "/distros/.:format") { resourceGet = [("txt", textEnumDistros)], resourcePost = [("", distroNew)] }
@@ -58,7 +58,7 @@ initDistroFeature _ _ users _ = do
           }
       , maintainersGroup = \dpath -> case simpleParse =<< lookup "distro" dpath of
             Nothing -> return Nothing
-            Just dname -> getMaintainersGroup admins dname
+            Just dname -> getMaintainersGroup adminGroup dname
       }
   where
     textEnumDistros _ = fmap (toResponse . intercalate ", " . map display) (query EnumerateDistros)
@@ -108,59 +108,61 @@ initDistroFeature _ _ users _ = do
                     void $ update $ PutDistroPackageList dname list
                     ok $ toResponse "Ok!"
 
-withDistroNamePath :: DynamicPath -> (DistroName -> ServerPart Response) -> ServerPart Response
-withDistroNamePath dpath = require (return $ simpleParse =<< lookup "distro" dpath)
+    withDistroNamePath :: DynamicPath -> (DistroName -> ServerPart Response) -> ServerPart Response
+    withDistroNamePath dpath = require (return $ simpleParse =<< lookup "distro" dpath)
 
-withDistroPath :: DynamicPath -> (DistroName -> [(PackageName, DistroPackageInfo)] -> ServerPart Response) -> ServerPart Response
-withDistroPath dpath func = withDistroNamePath dpath $ \dname -> do
-    isDist <- query (IsDistribution dname)
-    case isDist of
-      False -> notFound $ toResponse "Distribution does not exist"
-      True -> do
-        pkgs <- query (DistroStatus dname)
-        func dname pkgs
+    withDistroPath :: DynamicPath -> (DistroName -> [(PackageName, DistroPackageInfo)] -> ServerPart Response) -> ServerPart Response
+    withDistroPath dpath func = withDistroNamePath dpath $ \dname -> do
+        isDist <- query (IsDistribution dname)
+        case isDist of
+          False -> notFound $ toResponse "Distribution does not exist"
+          True -> do
+            pkgs <- query (DistroStatus dname)
+            func dname pkgs
 
--- guards on the distro existing, but not the package
-withDistroPackagePath :: DynamicPath -> (DistroName -> PackageName -> Maybe DistroPackageInfo -> ServerPart Response) -> ServerPart Response
-withDistroPackagePath dpath func = withDistroNamePath dpath $ \dname -> withPackageName dpath $ \pkgname -> do
-    isDist <- query (IsDistribution dname)
-    case isDist of
-      False -> notFound $ toResponse "Distribution does not exist"
-      True -> do
-        pkgInfo <- query (DistroPackageStatus dname pkgname)
-        func dname pkgname pkgInfo
+    -- guards on the distro existing, but not the package
+    withDistroPackagePath :: DynamicPath -> (DistroName -> PackageName -> Maybe DistroPackageInfo -> ServerPart Response) -> ServerPart Response
+    withDistroPackagePath dpath func =
+      withDistroNamePath dpath $ \dname ->
+      withPackageName dpath $ \pkgname -> do
+        isDist <- query (IsDistribution dname)
+        case isDist of
+          False -> notFound $ toResponse "Distribution does not exist"
+          True -> do
+            pkgInfo <- query (DistroPackageStatus dname pkgname)
+            func dname pkgname pkgInfo
 
-lookPackageInfo :: (DistroPackageInfo -> ServerPart Response) -> ServerPart Response
-lookPackageInfo func = do
-    mInfo <- getDataFn $ do
-        pVerStr <- look "version"
-        pUriStr  <- look "uri"
-        case simpleParse pVerStr of
-            Nothing -> mzero
-            Just pVer -> return $ DistroPackageInfo pVer pUriStr
-    case mInfo of
-        (Left errs) -> ok $ toResponse $ unlines $ "Sorry, something went wrong there." : errs
-        (Right pInfo) -> func pInfo
+    lookPackageInfo :: (DistroPackageInfo -> ServerPart Response) -> ServerPart Response
+    lookPackageInfo func = do
+        mInfo <- getDataFn $ do
+            pVerStr <- look "version"
+            pUriStr  <- look "uri"
+            case simpleParse pVerStr of
+                Nothing -> mzero
+                Just pVer -> return $ DistroPackageInfo pVer pUriStr
+        case mInfo of
+            (Left errs) -> ok $ toResponse $ unlines $ "Sorry, something went wrong there." : errs
+            (Right pInfo) -> func pInfo
 
-lookDistroName :: (DistroName -> ServerPart Response) -> ServerPart Response
-lookDistroName func = withDataFn (look "distro") $ \dname -> case simpleParse dname of
-    Just distro -> func distro
-    _ -> badRequest $ toResponse "Not a valid distro name"
+    lookDistroName :: (DistroName -> ServerPart Response) -> ServerPart Response
+    lookDistroName func = withDataFn (look "distro") $ \dname -> case simpleParse dname of
+        Just distro -> func distro
+        _ -> badRequest $ toResponse "Not a valid distro name"
 
-getMaintainersGroup :: UserGroup -> DistroName -> IO (Maybe UserGroup)
-getMaintainersGroup admins dname = do
-    isDist <- query (IsDistribution dname)
-    case isDist of
-      False -> return Nothing
-      True  -> return . Just $ UserGroup
-        { groupDesc = maintainerDescription dname
-        , queryUserList = query $ GetDistroMaintainers dname
-        , addUserList = update . AddDistroMaintainer dname
-        , removeUserList = update . RemoveDistroMaintainer dname
-        , groupExists = query (IsDistribution dname)
-        , canAddGroup = [admins]
-        , canRemoveGroup = [admins]
-        }
+    getMaintainersGroup :: UserGroup -> DistroName -> IO (Maybe UserGroup)
+    getMaintainersGroup admins dname = do
+        isDist <- query (IsDistribution dname)
+        case isDist of
+          False -> return Nothing
+          True  -> return . Just $ UserGroup
+            { groupDesc = maintainerDescription dname
+            , queryUserList = query $ GetDistroMaintainers dname
+            , addUserList = update . AddDistroMaintainer dname
+            , removeUserList = update . RemoveDistroMaintainer dname
+            , groupExists = query (IsDistribution dname)
+            , canAddGroup = [admins]
+            , canRemoveGroup = [admins]
+            }
 
 
 maintainerDescription :: DistroName -> GroupDescription

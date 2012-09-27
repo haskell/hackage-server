@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.HaskellPlatform (
     PlatformFeature,
     platformResource,
@@ -30,7 +31,12 @@ import Control.Monad.Trans (MonadIO)
 --
 
 data PlatformFeature = PlatformFeature {
-    platformResource :: PlatformResource
+    platformResource :: PlatformResource,
+
+    platformVersions :: forall m. MonadIO m => PackageName -> m [Version],
+    platformPackageLatest :: forall m. MonadIO m => m [(PackageName, Version)],
+    setPlatform :: forall m. MonadIO m => PackageName -> [Version] -> m (),
+    removePlatform :: forall m. MonadIO m => PackageName -> m ()
 }
 
 data PlatformResource = PlatformResource {
@@ -56,19 +62,23 @@ initPlatformFeature _ _ = do
           , platformPackagesUri = \format -> renderResource (platformPackages r) [format]
         -- and maybe "/platform/haskell-platform.cabal"
           }
+      , platformVersions
+      , platformPackageLatest
+      , setPlatform
+      , removePlatform
       }
+  where
+    ------------------------------------------
+    -- functionality: showing status for a single package, and for all packages, adding a package, deleting a package
+    platformVersions :: MonadIO m => PackageName -> m [Version]
+    platformVersions pkgname = liftM Set.toList $ query $ GetPlatformPackage pkgname
 
-------------------------------------------
--- functionality: showing status for a single package, and for all packages, adding a package, deleting a package
-platformVersions :: MonadIO m => PackageName -> m [Version]
-platformVersions pkgname = liftM Set.toList $ query $ GetPlatformPackage pkgname
+    platformPackageLatest :: MonadIO m => m [(PackageName, Version)]
+    platformPackageLatest = liftM (Map.toList . Map.map Set.findMax . blessedPackages) $ query $ GetPlatformPackages
 
-platformPackageLatest :: MonadIO m => m [(PackageName, Version)]
-platformPackageLatest = liftM (Map.toList . Map.map Set.findMax . blessedPackages) $ query $ GetPlatformPackages
+    setPlatform :: MonadIO m => PackageName -> [Version] -> m ()
+    setPlatform pkgname versions = update $ SetPlatformPackage pkgname (Set.fromList versions)
 
-setPlatform :: MonadIO m => PackageName -> [Version] -> m ()
-setPlatform pkgname versions = update $ SetPlatformPackage pkgname (Set.fromList versions)
-
-removePlatform :: MonadIO m => PackageName -> m ()
-removePlatform pkgname = update $ SetPlatformPackage pkgname Set.empty
+    removePlatform :: MonadIO m => PackageName -> m ()
+    removePlatform pkgname = update $ SetPlatformPackage pkgname Set.empty
 

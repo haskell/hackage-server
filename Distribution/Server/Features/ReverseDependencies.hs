@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.ReverseDependencies (
     ReverseFeature,
     reverseResource,

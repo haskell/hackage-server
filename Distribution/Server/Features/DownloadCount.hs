@@ -1,11 +1,8 @@
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.DownloadCount (
-    DownloadFeature,
-    downloadResource,
+    DownloadFeature(..),
     DownloadResource(..),
-    getDownloadHistogram,
     initDownloadFeature,
-    perVersionDownloads,
-    sortedPackages,
   ) where
 
 import Distribution.Server.Acid (query, update)
@@ -34,7 +31,11 @@ import Control.Monad.Trans (MonadIO)
 data DownloadFeature = DownloadFeature {
     downloadResource :: DownloadResource,
     downloadStream :: Chan PackageId,
-    downloadHistogram :: Cache.Cache (Histogram PackageName)
+    downloadHistogram :: Cache.Cache (Histogram PackageName),
+
+    getDownloadHistogram :: IO (Histogram PackageName),
+    perVersionDownloads :: (MonadIO m, Package pkg) => pkg -> m (Int, Int),
+    sortedPackages :: IO [(PackageName, Int)]
 }
 
 data DownloadResource = DownloadResource {
@@ -74,35 +75,38 @@ initDownloadFeature _ core = do
           }
       , downloadStream = downChan
       , downloadHistogram = downHist
+      , getDownloadHistogram = getDownloadHistogram downHist
+      , perVersionDownloads
+      , sortedPackages = sortedPackages downHist
       }
+  where
+    getDownloadHistogram :: Cache.Cache (Histogram PackageName) -> IO (Histogram PackageName)
+    getDownloadHistogram downHist = Cache.getCache downHist
 
-getDownloadHistogram :: DownloadFeature -> IO (Histogram PackageName)
-getDownloadHistogram = Cache.getCache . downloadHistogram
+    --totalDownloadCount :: MonadIO m => m Int
+    --totalDownloadCount = liftM totalDownloads $ query GetDownloadCounts
 
---totalDownloadCount :: MonadIO m => m Int
---totalDownloadCount = liftM totalDownloads $ query GetDownloadCounts
+    -- sortedPackages and sortByDownloads both order packages by total downloads without exposing download data
 
--- sortedPackages and sortByDownloads both order packages by total downloads without exposing download data
+    -- A lazy list of the top packages, which can be filtered, taken from, etc.
+    -- Does not include packages with no downloads.
+    sortedPackages :: Cache.Cache (Histogram PackageName) -> IO [(PackageName, Int)]
+    sortedPackages downHist = fmap topCounts $ Cache.getCache downHist
 
--- A lazy list of the top packages, which can be filtered, taken from, etc.
--- Does not include packages with no downloads.
-sortedPackages :: DownloadFeature -> IO [(PackageName, Int)]
-sortedPackages downs = fmap topCounts $ Cache.getCache (downloadHistogram downs)
+    {-
+    -- Sorts a list of package-y items by their download count.
+    -- Use sortedPackages to get an entire list.
+    -- TODO: use the Histogram's sortByCounts for this
+    sortByDownloads :: MonadIO m => (a -> PackageName) -> [a] -> m [(a, Int)]
+    sortByDownloads nameFunc pkgs = query GetDownloadCounts >>= \counts -> do
+        let modEntry pkg = (pkg, lookupPackageDowns (nameFunc pkg) downloadMap)
+        return $ sortBy (comparing snd) $ map modEntry pkgs
+    -}
 
-{-
--- Sorts a list of package-y items by their download count.
--- Use sortedPackages to get an entire list.
--- TODO: use the Histogram's sortByCounts for this
-sortByDownloads :: MonadIO m => (a -> PackageName) -> [a] -> m [(a, Int)]
-sortByDownloads nameFunc pkgs = query GetDownloadCounts >>= \counts -> do
-    let modEntry pkg = (pkg, lookupPackageDowns (nameFunc pkg) downloadMap)
-    return $ sortBy (comparing snd) $ map modEntry pkgs
--}
-
--- For at-a-glance download information.
-perVersionDownloads :: (MonadIO m, Package pkg) => pkg -> m (Int, Int)
-perVersionDownloads pkg = do
-    info <- query $ GetDownloadInfo (packageName pkg)
-    let (PackageDownloads total perVersion) = packageDownloads info
-    return (total, Map.findWithDefault 0 (packageVersion pkg) perVersion)
+    -- For at-a-glance download information.
+    perVersionDownloads :: (MonadIO m, Package pkg) => pkg -> m (Int, Int)
+    perVersionDownloads pkg = do
+        info <- query $ GetDownloadInfo (packageName pkg)
+        let (PackageDownloads total perVersion) = packageDownloads info
+        return (total, Map.findWithDefault 0 (packageVersion pkg) perVersion)
 

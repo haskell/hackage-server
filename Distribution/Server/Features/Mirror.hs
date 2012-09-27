@@ -1,6 +1,6 @@
+{-# LANGUAGE DoRec, RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.Mirror (
-    MirrorFeature,
-    mirrorResource,
+    MirrorFeature(..),
     MirrorResource(..),
     initMirrorFeature
   ) where
@@ -37,6 +37,7 @@ import System.FilePath ((<.>))
 import qualified Codec.Compression.GZip as GZip
 
 data MirrorFeature = MirrorFeature {
+    mirrorFeatureInterface :: HackageFeature,
     mirrorResource :: MirrorResource,
     mirrorGroup :: UserGroup
 }
@@ -49,54 +50,76 @@ data MirrorResource = MirrorResource {
 }
 
 instance IsHackageFeature MirrorFeature where
-    getFeatureInterface mirror = (emptyHackageFeature "mirror") {
-        featureResources = map ($mirrorResource mirror) [mirrorPackageTarball, mirrorPackageUploadTime, mirrorPackageUploader, mirrorCabalFile]
-      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtripByQuery (query GetMirrorClients))
-      }
-      where
-        dumpBackup    = do
-            clients <- query GetMirrorClients
-            return [csvToBackup ["clients.csv"] $ groupToCSV clients]
-        restoreBackup = groupBackup ["clients.csv"] ReplaceMirrorClients
-
+    getFeatureInterface = mirrorFeatureInterface
 -------------------------------------------------------------------------
 initMirrorFeature :: ServerEnv -> CoreFeature -> UserFeature -> IO MirrorFeature
-initMirrorFeature env core users = do
-    let coreR  = coreResource core
-        store  = serverBlobStore env
-        mirrorers = UserGroup {
-            groupDesc = nullDescription { groupTitle = "Mirror clients" },
-            queryUserList = query GetMirrorClients,
-            addUserList = update . AddMirrorClient,
-            removeUserList = update . RemoveMirrorClient,
-            groupExists = return True,
-            canRemoveGroup = [adminGroup users],
-            canAddGroup = [adminGroup users]
-        }
-    (mirrorers', mirrorR) <- groupResourceAt users "/packages/mirrorers" mirrorers
-    return MirrorFeature
-      { mirrorResource = MirrorResource
-          { mirrorPackageTarball = (extendResource $ corePackageTarball coreR) {
-                                     resourcePut = [("", tarballPut store)]
-                                   }
-          , mirrorPackageUploadTime = (extendResourcePath "/upload-time" $ corePackageTarball coreR) {
-                                     resourceGet = [("", uploadTimeGet)],
-                                     resourcePut = [("", uploadTimePut)]
-                                   }
-          , mirrorPackageUploader = (extendResourcePath "/uploader" $ corePackageTarball coreR) {
-                                     resourcePut = [("", uploaderPut)]
-                                   }
-          , mirrorCabalFile      = (extendResource $ coreCabalFile coreR) {
-                                     resourcePut = [("", cabalPut)]
-                                   }
-          , mirrorGroupResource  = mirrorR
-          }
-      , mirrorGroup = mirrorers'
-      }
+initMirrorFeature env core user@UserFeature{..} = do
+
+    -- Tie the knot with a do-rec
+    rec let (feature, mirrorersGroupDesc)
+              = mirrorFeature env core user
+                              mirrorersG mirrorR
+
+        (mirrorersG, mirrorR) <- groupResourceAt "/packages/mirrorers" mirrorersGroupDesc
+
+    return feature
+
+
+mirrorFeature :: ServerEnv
+              -> CoreFeature
+              -> UserFeature
+              -> UserGroup
+              -> GroupResource
+              -> (MirrorFeature, UserGroup)
+
+mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
+              mirrorGroup mirrorGroupResource
+  = (MirrorFeature{..}, mirrorersGroupDesc)
   where
+    mirrorFeatureInterface = (emptyHackageFeature "mirror") {
+        featureResources = map ($mirrorResource) [mirrorPackageTarball, mirrorPackageUploadTime, mirrorPackageUploader, mirrorCabalFile]
+      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
+      }
+
+    dumpBackup    = do
+        clients <- query GetMirrorClients
+        return [csvToBackup ["clients.csv"] $ groupToCSV clients]
+
+    restoreBackup = groupBackup ["clients.csv"] ReplaceMirrorClients
+
+    testRoundtrip = testRoundtripByQuery (query GetMirrorClients)
+
+    mirrorResource = MirrorResource {
+        mirrorPackageTarball = (extendResource $ corePackageTarball coreResource) {
+                                 resourcePut = [("", tarballPut)]
+                               }
+      , mirrorPackageUploadTime = (extendResourcePath "/upload-time" $ corePackageTarball coreResource) {
+                                 resourceGet = [("", uploadTimeGet)],
+                                 resourcePut = [("", uploadTimePut)]
+                               }
+      , mirrorPackageUploader = (extendResourcePath "/uploader" $ corePackageTarball coreResource) {
+                                 resourcePut = [("", uploaderPut)]
+                               }
+      , mirrorCabalFile      = (extendResource $ coreCabalFile coreResource) {
+                                 resourcePut = [("", cabalPut)]
+                               }
+      , mirrorGroupResource
+      }
+
+    mirrorersGroupDesc = UserGroup {
+        groupDesc      = nullDescription { groupTitle = "Mirror clients" },
+        queryUserList  = query GetMirrorClients,
+        addUserList    = update . AddMirrorClient,
+        removeUserList = update . RemoveMirrorClient,
+        groupExists    = return True,
+        canRemoveGroup = [adminGroup],
+        canAddGroup    = [adminGroup]
+    }
+
+
     -- result: error from unpacking, bad request error, or warning lines
-    tarballPut :: BlobStorage.BlobStorage -> DynamicPath -> ServerPart Response
-    tarballPut store dpath = runServerPartE $ do
+    tarballPut :: DynamicPath -> ServerPart Response
+    tarballPut dpath = runServerPartE $ do
         uid <- requireMirrorAuth
         withPackageTarball dpath $ \pkgid -> do
           expectTarball
@@ -119,7 +142,7 @@ initMirrorFeature env core users = do
                   -- the user to the package's maintainer group
                   -- the mirror client should probably do this itself,
                   -- if it's able (if it's a trustee).
-                  liftIO $ doMergePackage core $ PkgInfo {
+                  liftIO $ doMergePackage $ PkgInfo {
                       pkgInfoId     = packageId pkg,
                       pkgData       = CabalFileText pkgStr,
                       pkgTarball    = [(PkgTarball { pkgTarballGz = blobId,
@@ -141,7 +164,7 @@ initMirrorFeature env core users = do
           maybe (return $ toResponse "Updated uploader OK") (badRequest . toResponse) mb_err
 
     uploadTimeGet :: DynamicPath -> ServerPart Response
-    uploadTimeGet dpath = runServerPartE $ withPackagePath dpath $ \pkg _ -> 
+    uploadTimeGet dpath = runServerPartE $ withPackagePath dpath $ \pkg _ ->
         return $ toResponse $ formatTime defaultTimeLocale "%c" (pkgUploadTime pkg)
 
     -- curl -H 'Content-Type: text/plain' -u admin:admin -X PUT -d "Tue Oct 18 20:54:28 UTC 2010" http://localhost:8080/package/edit-distance-0.2.1/edit-distance-0.2.1.tar.gz/upload-time
@@ -169,7 +192,7 @@ initMirrorFeature env core users = do
           case parsePackageDescription . unpackUTF8 $ fileContent of
               ParseFailed err -> badRequest (toResponse $ show (locatedErrorMsg err))
               ParseOk warnings pkg -> do
-                  liftIO $ doMergePackage core $ PkgInfo {
+                  liftIO $ doMergePackage $ PkgInfo {
                       pkgInfoId     = packageId pkg,
                       pkgData       = CabalFileText fileContent,
                       pkgTarball    = [],

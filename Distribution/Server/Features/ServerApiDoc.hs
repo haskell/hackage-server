@@ -71,7 +71,7 @@ apiDocPageHtml serverFeatures = hackagePage title content
         [     renderLocationTemplate resource
           +++ methodList resource
         | resource <- featureResources feature ]
-    
+
     methodList resource =
       unordList
         [ show httpMethod +++ ": " +++ formatList formats
@@ -80,7 +80,7 @@ apiDocPageHtml serverFeatures = hackagePage title content
     formatList formats =
       intersperse (toHtml ", ")
         [ tt << format | format <- formats ]
-    
+
     renderLocationTemplate :: Resource -> Html
     renderLocationTemplate resource =
         tt << (renderComponents pathComponents
@@ -121,7 +121,7 @@ apiDocJSON serverFeatures = featureList
             [ ("feature", JSString $ toJSString $ featureName feature)
             , ("resources", resourceList feature) ]
         | feature <- serverFeatures ]
-    
+
     resourceList :: HackageFeature -> JSValue
     resourceList feature =
       JSArray
@@ -137,7 +137,7 @@ apiDocJSON serverFeatures = featureList
             [ ("method", JSString $ toJSString $ show httpMethod)
             , ("formats", formatList formats) ]
         | (httpMethod, formats) <- resourceMethodsAndFormats resource ]
-    
+
     formatList formats =
       JSArray
         [ JSObject $ toJSObject

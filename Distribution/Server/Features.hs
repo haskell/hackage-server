@@ -11,8 +11,9 @@ module Distribution.Server.Features where
 
 import Distribution.Server.Framework.Feature
 import Distribution.Server.Framework.Types   (ServerEnv)
+
+import Distribution.Server.Features.Users    (initUserFeature, UserFeature)
 import Distribution.Server.Features.Core     (initCoreFeature)
-import Distribution.Server.Features.Users    (initUsersFeature)
 import Distribution.Server.Features.Upload   (initUploadFeature)
 import Distribution.Server.Features.Mirror   (initMirrorFeature)
 
@@ -25,7 +26,6 @@ import Distribution.Server.Features.PackageContents     (initPackageContentsFeat
 import Distribution.Server.Features.Documentation       (initDocumentationFeature)
 import Distribution.Server.Features.BuildReports        (initBuildReportsFeature)
 import Distribution.Server.Features.LegacyRedirects     (legacyRedirectsFeature)
-import Distribution.Server.Features.ServerApiDoc        (serverApiDocFeature)
 import Distribution.Server.Features.PreferredVersions   (initVersionsFeature)
 -- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies (initReverseFeature)
 import Distribution.Server.Features.DownloadCount       (initDownloadFeature)
@@ -34,6 +34,7 @@ import Distribution.Server.Features.NameSearch      (initNamesFeature)
 import Distribution.Server.Features.PackageList     (initListFeature)
 import Distribution.Server.Features.HaskellPlatform (initPlatformFeature)
 #endif
+import Distribution.Server.Features.ServerApiDoc        (serverApiDocFeature)
 
 -- TODO:
 -- * PackageServe: serving from tarballs (most of the work is setting it up on import)
@@ -55,10 +56,11 @@ initHackageFeatures enableCaches env = do
     -- themselves unused, functions from their modules are.
     -- What follows is a topological sort along those lines
 
-    coreFeature     <- initCoreFeature enableCaches env
 
-    usersFeature    <- initUsersFeature env
-                         coreFeature
+    usersFeature    <- initUserFeature env
+
+    coreFeature     <- initCoreFeature enableCaches env
+                         usersFeature
 
     mirrorFeature   <- initMirrorFeature env
                          coreFeature
@@ -70,20 +72,22 @@ initHackageFeatures enableCaches env = do
 
 #ifndef MINIMAL
     packagesFeature <- initPackagesFeature enableCaches env
+                         usersFeature
                          coreFeature
 
     distroFeature   <- initDistroFeature env
-                         coreFeature
                          usersFeature
+                         coreFeature
                          packagesFeature
 
     checkFeature    <- initCheckFeature env
-                         coreFeature
                          usersFeature
+                         coreFeature
                          packagesFeature
                          uploadFeature
 
     reportsFeature  <- initBuildReportsFeature env
+                         usersFeature
                          coreFeature
 
     packageContentsFeature <- initPackageContentsFeature env
@@ -125,11 +129,11 @@ initHackageFeatures enableCaches env = do
                          coreFeature
 
     htmlFeature     <- initHtmlFeature enableCaches env
+                         usersFeature
                          coreFeature
                          packagesFeature
                          uploadFeature
                          checkFeature
-                         usersFeature
                          versionsFeature
                          -- [reverse index disabled] reverseFeature
                          tagsFeature
@@ -143,8 +147,8 @@ initHackageFeatures enableCaches env = do
     -- the order of this list.
     let allFeatures :: [HackageFeature]
         allFeatures =
-         [ getFeatureInterface coreFeature
-         , getFeatureInterface usersFeature
+         [ getFeatureInterface usersFeature
+         , getFeatureInterface coreFeature
          , getFeatureInterface mirrorFeature
          , getFeatureInterface uploadFeature
 #ifndef MINIMAL

@@ -1,10 +1,8 @@
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.NameSearch (
-    NamesFeature,
-    namesResource,
+    NamesFeature(..),
     NamesResource(..),
     initNamesFeature,
-    packageFindWith,
-    searchFindPackage
   ) where
 
 import Distribution.Server.Acid (query)
@@ -36,7 +34,10 @@ data NamesFeature = NamesFeature {
     packageNameIndex :: Cache.Cache NameIndex,
     packageTextIndex :: Cache.Cache TextSearch,
     openSearchCache :: Cache.Cache Response,
-    regenerateIndices :: IO ()
+    regenerateIndices :: IO (),
+
+    packageFindWith :: forall a. (Maybe (String, Bool) -> ServerPart a) -> ServerPart a,
+    searchFindPackage :: MonadIO m => String -> Bool -> m ([PackageName], [PackageName])
 }
 
 data NamesResource = NamesResource {
@@ -61,7 +62,7 @@ initNamesFeature env core = do
     textCache <- Cache.newCache (constructTextIndex []) id
     osdCache <- Cache.newCacheable (toResponse $ Resource.OpenSearchXml $ BS.pack $ mungeSearchXml hostStr)
     let regen = do
-            index <- fmap packageList $ query GetPackagesState            
+            index <- fmap packageList $ query GetPackagesState
             -- asynchronously update indices
             Cache.putCache pkgCache (constructIndex (map display $ PackageIndex.packageNames index) Nothing)
             Cache.putCache textCache (constructPackageText index)
@@ -79,43 +80,46 @@ initNamesFeature env core = do
       , packageTextIndex = textCache
       , openSearchCache = osdCache
       , regenerateIndices = regen
+      , packageFindWith
+      , searchFindPackage = searchFindPackage pkgCache textCache
       }
+  where
+    constructPackageText :: PackageIndex PkgInfo -> TextSearch
+    constructPackageText = constructTextIndex . map makeEntry . PackageIndex.allPackagesByName
+      where makeEntry pkgs = let desc = pkgDesc $ last pkgs
+                                 pkgStr = display $ packageName desc
+                             in (pkgStr, pkgStr ++ " " ++ synopsis (packageDescription desc))
 
-constructPackageText :: PackageIndex PkgInfo -> TextSearch
-constructPackageText = constructTextIndex . map makeEntry . PackageIndex.allPackagesByName
-  where makeEntry pkgs = let desc = pkgDesc $ last pkgs
-                             pkgStr = display $ packageName desc
-                         in (pkgStr, pkgStr ++ " " ++ synopsis (packageDescription desc))
 
+    -- Returns (list of exact matches, list of text matches)
+    -- HTML search pages should have meta ! [name "robots", content "noindex"]
+    searchFindPackage :: MonadIO m => Cache.Cache NameIndex -> Cache.Cache TextSearch
+                      -> String -> Bool -> m ([PackageName], [PackageName])
+    searchFindPackage packageNameIndex packageTextIndex str doTextSearch = do
+        nmIndex <- Cache.getCache packageNameIndex
+        txIndex <- Cache.getCache packageTextIndex
+        let nameRes = lookupName str nmIndex
+            textRes = if doTextSearch then searchText txIndex str else []
+        return $ (map PackageName $ Set.toList nameRes, map (PackageName . fst) textRes)
 
--- Returns (list of exact matches, list of text matches)
--- HTML search pages should have meta ! [name "robots", content "noindex"]
-searchFindPackage :: MonadIO m => NamesFeature -> String -> Bool -> m ([PackageName], [PackageName])
-searchFindPackage names str doTextSearch = do
-    nmIndex <- Cache.getCache $ packageNameIndex names
-    txIndex <- Cache.getCache $ packageTextIndex names
-    let nameRes = lookupName str nmIndex
-        textRes = if doTextSearch then searchText txIndex str else []
-    return $ (map PackageName $ Set.toList nameRes, map (PackageName . fst) textRes)
+    packageFindWith :: (Maybe (String, Bool) -> ServerPart a) -> ServerPart a
+    packageFindWith func = do
+        mname <- optional (look "name")
+        func $ fmap (\n -> (n, length n >= 3)) mname
 
-packageFindWith :: (Maybe (String, Bool) -> ServerPart a) -> ServerPart a
-packageFindWith func = do
-    mname <- optional (look "name")
-    func $ fmap (\n -> (n, length n >= 3)) mname
-
-suggestJson :: String -> Cache.Cache NameIndex -> ServerPart Response
-suggestJson hostStr cache = do
-    queryStr <- look "name" <|> pure ""
-    -- There are a few ways to improve this.
-    -- 1. Group similarly prefixed items, so user can see more breadth and less depth
-    -- 2. Sort by revdeps, downloads, etc. (create a general "hotness" index)
-    results <- fmap (take 20 . Set.toList . lookupPrefix queryStr) $ Cache.getCache cache
-    let packagePrefix = hostStr ++ "/package/"
-    return . toResponse $ Resource.SuggestJson $ JSArray
-      [ JSString $ toJSString queryStr
-      , JSArray $ map (JSString . toJSString) results
-      , JSArray []
-      , JSArray $ map (JSString . toJSString . (packagePrefix++)) results ]
+    suggestJson :: String -> Cache.Cache NameIndex -> ServerPart Response
+    suggestJson hostStr cache = do
+        queryStr <- look "name" <|> pure ""
+        -- There are a few ways to improve this.
+        -- 1. Group similarly prefixed items, so user can see more breadth and less depth
+        -- 2. Sort by revdeps, downloads, etc. (create a general "hotness" index)
+        results <- fmap (take 20 . Set.toList . lookupPrefix queryStr) $ Cache.getCache cache
+        let packagePrefix = hostStr ++ "/package/"
+        return . toResponse $ Resource.SuggestJson $ JSArray
+          [ JSString $ toJSString queryStr
+          , JSArray $ map (JSString . toJSString) results
+          , JSArray []
+          , JSArray $ map (JSString . toJSString . (packagePrefix++)) results ]
 
 -- A hacky but simple OpenSearch XML generator.
 -- The only reason it's not hard-coded in the static directory is because it

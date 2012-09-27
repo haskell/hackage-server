@@ -1,11 +1,8 @@
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.PackageList (
-    ListFeature,
-    itemUpdate,
+    ListFeature(..),
     initListFeature,
     PackageItem(..),
-    makeItemList,
-    makeItemMap,
-    getAllLists,
     tagHistogram
   ) where
 
@@ -42,7 +39,12 @@ import qualified Data.Set as Set
 data ListFeature = ListFeature {
     itemCache :: Cache.Cache (Map PackageName PackageItem),
     itemUpdate :: Hook (Set PackageName -> IO ()),
-    refreshDownloads :: IO ()
+    refreshDownloads :: IO (),
+
+    constructItemIndex :: IO (Map PackageName PackageItem),
+    makeItemList :: [PackageName] -> IO [PackageItem],
+    makeItemMap  :: forall a. Map PackageName a -> IO (Map PackageName (PackageItem, a)),
+    getAllLists  :: IO (Map PackageName PackageItem)
 }
 
 data PackageItem = PackageItem {
@@ -80,7 +82,7 @@ instance IsHackageFeature ListFeature where
                              void $ forkIO periodicDownloadRefresh
       }
       where itemsCache = do
-                items <- constructItemIndex
+                items <- constructItemIndex listf
                 Cache.putCache (itemCache listf) items
             periodicDownloadRefresh = forever $ do
                 threadDelay (10 * 60 * 1000000) -- 10 minutes
@@ -90,9 +92,9 @@ initListFeature :: ServerEnv -> CoreFeature
                 -- [reverse index disabled] -> ReverseFeature
                 -> DownloadFeature
                 -> TagsFeature -> VersionsFeature -> IO ListFeature
-initListFeature _ core
+initListFeature _ CoreFeature{..}
                 -- [reverse index disabled] revs
-                downs tagf versions = do
+                DownloadFeature{..} TagsFeature{..} VersionsFeature{..} = do
     iCache <- Cache.newCache Map.empty id
     iUpdate <- newHook
     let modifyItem pkgname token = do
@@ -112,9 +114,9 @@ initListFeature _ core
                [] -> Cache.modifyCache iCache (Map.delete pkgname)
                _  -> modifyItem pkgname (updateDescriptionItem $ pkgDesc $ last pkgs)
             runHook' (iUpdate) $ Set.singleton pkgname
-    registerHook (packageAddHook core) $ updateDesc . packageName
-    registerHook (packageRemoveHook core) $ updateDesc . packageName
-    registerHook (packageChangeHook core) $ \_ -> updateDesc . packageName
+    registerHook packageAddHook $ updateDesc . packageName
+    registerHook packageRemoveHook $ updateDesc . packageName
+    registerHook packageChangeHook $ \_ -> updateDesc . packageName
     {- [reverse index disabled]
     registerHook (reverseUpdateHook revs) $ \mrev -> do
         let pkgs = Map.keys mrev
@@ -123,16 +125,16 @@ initListFeature _ core
             modifyItem pkgname (updateReverseItem revCount)
         runHook' (iUpdate) $ Set.fromDistinctAscList pkgs
     -}
-    registerHook (tagsUpdated tagf) $ \pkgs _ -> do
+    registerHook tagsUpdated $ \pkgs _ -> do
         forM_ (Set.toList pkgs) $ \pkgname -> do
             tags <- query . TagsForPackage $ pkgname
             modifyItem pkgname (updateTagItem tags)
         runHook' (iUpdate) pkgs
-    registerHook (deprecatedHook versions) $ \pkgname mpkgs -> do
+    registerHook deprecatedHook $ \pkgname mpkgs -> do
         modifyItem pkgname (updateDeprecation mpkgs)
         runHook' (iUpdate) $ Set.singleton pkgname
     let updateDownloads = do
-            hist <- getDownloadHistogram downs
+            hist <- getDownloadHistogram
             Cache.modifyCache iCache $ Map.mapWithKey (\pkg item -> updateDownload (getCount hist pkg) item)
             -- Say all packages were updated here (detecting this is more laborious)
             mainMap <- Cache.getCache iCache
@@ -141,30 +143,52 @@ initListFeature _ core
       { itemCache = iCache
       , itemUpdate = iUpdate
       , refreshDownloads = updateDownloads
+      , constructItemIndex
+      , makeItemList = makeItemList iCache
+      , makeItemMap  = makeItemMap iCache
+      , getAllLists  = getAllLists iCache
       }
 
-constructItemIndex :: IO (Map PackageName PackageItem)
-constructItemIndex = do
-    index <- fmap packageList $ query GetPackagesState
-    items <- mapM (constructItem . last) $ PackageIndex.allPackagesByName index
-    return $ Map.fromList items
+  where
+    constructItemIndex :: IO (Map PackageName PackageItem)
+    constructItemIndex = do
+        index <- fmap packageList $ query GetPackagesState
+        items <- mapM (constructItem . last) $ PackageIndex.allPackagesByName index
+        return $ Map.fromList items
 
-constructItem :: PkgInfo -> IO (PackageName, PackageItem)
-constructItem pkg = do
-    let pkgname = packageName pkg
-    -- [reverse index disabled] revCount <- query . GetReverseCount $ pkgname
-    tags <- query . TagsForPackage $ pkgname
-    infos <- query . GetDownloadInfo $ pkgname
-    deprs <- query . GetDeprecatedFor $ pkgname
-    return $ (,) pkgname $ (updateDescriptionItem (pkgDesc pkg) $ emptyPackageItem pkgname) {
-        itemTags = tags,
-        itemDeprecated = deprs,
-        itemDownloads = packageDowns infos
-        -- [reverse index disabled] , itemRevDepsCount = directReverseCount revCount
-    }
+    constructItem :: PkgInfo -> IO (PackageName, PackageItem)
+    constructItem pkg = do
+        let pkgname = packageName pkg
+        -- [reverse index disabled] revCount <- query . GetReverseCount $ pkgname
+        tags <- query . TagsForPackage $ pkgname
+        infos <- query . GetDownloadInfo $ pkgname
+        deprs <- query . GetDeprecatedFor $ pkgname
+        return $ (,) pkgname $ (updateDescriptionItem (pkgDesc pkg) $ emptyPackageItem pkgname) {
+            itemTags = tags,
+            itemDeprecated = deprs,
+            itemDownloads = packageDowns infos
+            -- [reverse index disabled] , itemRevDepsCount = directReverseCount revCount
+        }
+
+    ------------------------------
+    makeItemList :: Cache.Cache (Map PackageName PackageItem) -> [PackageName] -> IO [PackageItem]
+    makeItemList itemCache pkgnames = do
+        mainMap <- Cache.getCache itemCache
+        return $ catMaybes $ map (flip Map.lookup mainMap) pkgnames
+
+    makeItemMap :: Cache.Cache (Map PackageName PackageItem) -> Map PackageName a -> IO (Map PackageName (PackageItem, a))
+    makeItemMap itemCache pkgmap = do
+        mainMap <- Cache.getCache itemCache
+        return $ Map.intersectionWith (,) mainMap pkgmap
+
+    getAllLists :: Cache.Cache (Map PackageName PackageItem) -> IO (Map PackageName PackageItem)
+    getAllLists itemCache = Cache.getCache itemCache
+
+tagHistogram :: [PackageItem] -> Map Tag Int
+tagHistogram = Map.fromListWith (+) . map (flip (,) 1) . concatMap (Set.toList . itemTags)
 
 updateDescriptionItem :: GenericPackageDescription -> PackageItem -> PackageItem
-updateDescriptionItem genDesc item = 
+updateDescriptionItem genDesc item =
     let desc = flattenPackageDescription genDesc
     in item {
         itemDesc = synopsis desc,
@@ -200,21 +224,4 @@ updateDownload count item =
     item {
         itemDownloads = count
     }
-
-------------------------------
-makeItemList :: ListFeature -> [PackageName] -> IO [PackageItem]
-makeItemList listf pkgnames = do
-    mainMap <- Cache.getCache (itemCache listf)
-    return $ catMaybes $ map (flip Map.lookup mainMap) pkgnames
-
-makeItemMap :: ListFeature -> Map PackageName a -> IO (Map PackageName (PackageItem, a))
-makeItemMap listf pkgmap = do
-    mainMap <- Cache.getCache (itemCache listf)
-    return $ Map.intersectionWith (,) mainMap pkgmap
-
-getAllLists :: ListFeature -> IO (Map PackageName PackageItem)
-getAllLists listf = Cache.getCache (itemCache listf)
-
-tagHistogram :: [PackageItem] -> Map Tag Int
-tagHistogram = Map.fromListWith (+) . map (flip (,) 1) . concatMap (Set.toList . itemTags)
 

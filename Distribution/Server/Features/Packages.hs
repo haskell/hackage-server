@@ -1,13 +1,12 @@
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.Packages (
-    PackagesFeature,
-    packagesResource,
+    PackagesFeature(..),
     PackagesResource(..),
     initPackagesFeature,
 
     -- * Package render
     PackageRender(..),
     doPackageRender,
-    packageRender,
 
     -- * Utils
     categorySplit,
@@ -16,6 +15,8 @@ module Distribution.Server.Features.Packages (
 import Distribution.Server.Acid (query)
 import Distribution.Server.Framework
 import Distribution.Server.Features.Core
+import Distribution.Server.Features.Users
+
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Types (UserInfo)
 import Distribution.Server.Framework.BlobStorage (BlobStorage)
@@ -71,8 +72,8 @@ instance IsHackageFeature PackagesFeature where
         featureResources = map ($packagesResource pkgs) [packagesRecent]
       }
 
-initPackagesFeature :: Bool -> ServerEnv -> CoreFeature -> IO PackagesFeature
-initPackagesFeature enableCaches serverEnv core = do
+initPackagesFeature :: Bool -> ServerEnv -> UserFeature -> CoreFeature -> IO PackagesFeature
+initPackagesFeature enableCaches serverEnv UserFeature{..} core = do
     recents <- Cache.newCacheableAction enableCaches $ do
         -- TODO: this should be moved to HTML/RSS features
         state <- query State.GetPackagesState

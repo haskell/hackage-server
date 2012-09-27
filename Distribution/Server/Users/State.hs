@@ -7,13 +7,12 @@ module Distribution.Server.Users.State where
 import Distribution.Server.Framework.Instances ()
 
 import Distribution.Server.Users.Types
-import Distribution.Server.Users.Group as Group (UserList(..), enumerate, add, remove, empty)
+import Distribution.Server.Users.Group as Group (UserList(..), add, remove, empty)
 import Distribution.Server.Users.Users as Users
 
 import Data.Acid     (Query, Update, makeAcidic)
 import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable (Typeable)
-import Data.Maybe (maybeToList)
 
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
@@ -97,14 +96,6 @@ getUserDb = ask
 replaceUserDb :: Users -> Update Users ()
 replaceUserDb = State.put
 
-listGroupMembers :: UserList -> Query Users [UserName]
-listGroupMembers userList = do
-    users <- ask
-    return $ do
-        uid <- Group.enumerate userList
-        uinfo <- maybeToList $ Users.lookupId uid users
-        return $ userName uinfo
-
 $(makeAcidic ''Users ['addUser
                      ,'requireUserName
                      ,'setEnabledUser
@@ -115,7 +106,6 @@ $(makeAcidic ''Users ['addUser
                      ,'lookupUserName
                      ,'getUserDb
                      ,'replaceUserDb
-                     ,'listGroupMembers
                      ])
 
 -----------------------------------------------------
