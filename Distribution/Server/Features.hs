@@ -177,3 +177,9 @@ initHackageFeatures enableCaches env = do
     mapM_ featurePostInit allFeatures
 
     return allFeatures
+
+checkpointAllFeatures :: [HackageFeature] -> IO ()
+checkpointAllFeatures = mapM_ featureCheckpoint
+
+shutdownAllFeatures :: [HackageFeature] -> IO ()
+shutdownAllFeatures   = mapM_ featureShutdown

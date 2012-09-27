@@ -20,6 +20,8 @@ data HackageFeature = HackageFeature {
     featureResources   :: [Resource],
 
     featurePostInit    :: IO (),
+    featureCheckpoint  :: IO (),
+    featureShutdown    :: IO (),
 
     featureDumpRestore :: Maybe (IO [BackupEntry], RestoreBackup, TestRoundtrip)
 }
@@ -38,6 +40,8 @@ emptyHackageFeature name = HackageFeature {
     featureResources   = [],
 
     featurePostInit    = return (),
+    featureCheckpoint  = return (),
+    featureShutdown    = return (),
 
     featureDumpRestore = Nothing
   }

@@ -203,7 +203,10 @@ run server = do
 -- | Perform a clean shutdown of the server.
 --
 shutdown :: Server -> IO ()
-shutdown server = stopAcid (serverAcid server)
+shutdown server = do
+  Features.shutdownAllFeatures (serverFeatures server)
+  stopAcid (serverAcid server)
+
 --TODO: stop accepting incomming connections,
 -- wait for connections to be processed.
 
@@ -211,7 +214,9 @@ shutdown server = stopAcid (serverAcid server)
 -- because fewer logged transactions have to be replayed.
 --
 checkpoint :: Server -> IO ()
-checkpoint server = checkpointAcid (serverAcid server)
+checkpoint server = do
+  Features.checkpointAllFeatures (serverFeatures server)
+  checkpointAcid (serverAcid server)
 
 -- Convert a set of old data into a new export tarball.
 -- This also populates the blob database, which is then
