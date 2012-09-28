@@ -10,8 +10,11 @@ module Distribution.Server.Features.Tags (
 
 import Control.Applicative (optional)
 
-import Distribution.Server.Acid
+import qualified Distribution.Server.Acid as OldAcid
 import Distribution.Server.Framework
+import Data.Acid
+import Data.Acid.Advanced
+
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages (categorySplit)
 import Distribution.Server.Packages.Tag
@@ -39,12 +42,17 @@ import Data.List (foldl')
 import Data.Char (toLower)
 import Control.Monad
 import Control.Monad.Trans (MonadIO)
+import System.FilePath ((</>))
 
 
 data TagsFeature = TagsFeature {
     tagsFeatureInterface :: HackageFeature,
 
     tagsResource :: TagsResource,
+
+    queryGetTagList     :: forall m. MonadIO m => m [(Tag, Set PackageName)],
+    queryTagsForPackage :: forall m. MonadIO m => PackageName -> m (Set Tag),
+
     -- All package names that were modified, and all tags that were modified
     -- In almost all cases, one of these will be a singleton. Happstack
     -- functions should be used to query the resultant state.
@@ -80,24 +88,34 @@ data TagsResource = TagsResource {
 }
 
 initTagsFeature :: ServerEnv -> CoreFeature -> IO TagsFeature
-initTagsFeature _ core@CoreFeature{..} = do
+initTagsFeature ServerEnv{serverStateDir} core@CoreFeature{..} = do
+
+    tagsState <- openLocalStateFrom
+                   (serverStateDir </> "db" </> "Users")
+                   initialPackageTags
+
     specials <- Cache.newCacheable emptyPackageTags
     updateTag <- newHook
+
+    let feature = tagsFeature core
+                              tagsState
+                              specials updateTag
+
     registerHook packageAddHook $ \pkginfo -> do
       let pkgname = packageName . packageDescription . pkgDesc $ pkginfo
           tags = Set.fromList . constructImmutableTags . pkgDesc $ pkginfo
-      update . SetPackageTags pkgname $ tags
+      update tagsState . SetPackageTags pkgname $ tags
 
-    return $
-      tagsFeature core
-                  specials updateTag
+    return feature
 
 tagsFeature :: CoreFeature
+            -> AcidState PackageTags
             -> Cache.Cache PackageTags
             -> Hook (Set PackageName -> Set Tag -> IO ())
             -> TagsFeature
 
 tagsFeature CoreFeature{..}
+            tagsState
             calculatedTags
             tagsUpdated
   = TagsFeature{..}
@@ -121,48 +139,59 @@ tagsFeature CoreFeature{..}
         featureResources   = map ($tagsResource) [tagsListing, tagListing, packageTagsListing]
       , featurePostInit    = initImmutableTags
       , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
+      , featureCheckpoint = do
+          createCheckpoint tagsState
+      , featureShutdown = do
+          closeAcidState tagsState
       }
 
+    initImmutableTags :: IO ()
     initImmutableTags = do
-            index <- fmap packageList $ query GetPackagesState
+            index <- fmap packageList $ OldAcid.query GetPackagesState
             let calcTags = tagPackages $ constructImmutableTagIndex index
             forM_ (Map.toList calcTags) $ uncurry setCalculatedTag
 
     dumpBackup    = do
-        pkgTags <- query GetPackageTags
+        pkgTags <- query tagsState GetPackageTags
         return [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]
-    restoreBackup = tagsBackup
-    testRoundtrip = testRoundtripByQuery (query GetPackageTags)
+    restoreBackup = tagsBackup tagsState
+    testRoundtrip = testRoundtripByQuery (query tagsState GetPackageTags)
+
+    queryGetTagList :: MonadIO m => m [(Tag, Set PackageName)]
+    queryGetTagList = query' tagsState GetTagList
+
+    queryTagsForPackage :: MonadIO m => PackageName -> m (Set Tag)
+    queryTagsForPackage pkgname = query' tagsState (TagsForPackage pkgname)
 
     setCalculatedTag :: Tag -> Set PackageName -> IO ()
     setCalculatedTag tag pkgs = do
       Cache.modifyCache calculatedTags (setTag tag pkgs)
-      void $ update $ SetTagPackages tag pkgs
+      void $ update tagsState $ SetTagPackages tag pkgs
       runHook'' tagsUpdated pkgs (Set.singleton tag)
 
     withTagPath :: DynamicPath -> (Tag -> Set PackageName -> ServerPart a) -> ServerPart a
     withTagPath dpath func = case simpleParse =<< lookup "tag" dpath of
         Nothing -> mzero
         Just tag -> do
-            pkgs <- query $ PackagesForTag tag
+            pkgs <- query' tagsState $ PackagesForTag tag
             func tag pkgs
 
     collectTags :: MonadIO m => Set PackageName -> m (Map PackageName (Set Tag))
     collectTags pkgs = do
-        pkgMap <- liftM packageTags $ query GetPackageTags
+        pkgMap <- liftM packageTags $ query' tagsState GetPackageTags
         return $ Map.fromDistinctAscList . map (\pkg -> (pkg, Map.findWithDefault Set.empty pkg pkgMap)) $ Set.toList pkgs
 
     putTags :: PackageName -> ServerPartE ()
     putTags pkgname = withPackageAll pkgname $ \_ -> do
-        -- let anyone edit tags for the moment. otherwise, we can do:
-        -- users <- query GetUserDb
+        -- FIXME: anyone can edit tags for the moment. we should do:
+        -- users <- queryGetUserDb
         -- void $ guardAuthenticated hackageRealm users
         mtags <- optional $ look "tags"
         case simpleParse =<< mtags of
             Just (TagList tags) -> do
                 calcTags <- fmap (packageToTags pkgname) $ Cache.getCache calculatedTags
                 let tagSet = Set.fromList tags `Set.union` calcTags
-                void $ update $ SetPackageTags pkgname tagSet
+                void $ update' tagsState $ SetPackageTags pkgname tagSet
                 runHook'' tagsUpdated (Set.singleton pkgname) tagSet
                 return ()
             Nothing -> errBadRequest "Tags not recognized" [MText "Couldn't parse your tag list. It should be comma separated with any number of alphanumerical tags. Tags can also also have -+#*."]

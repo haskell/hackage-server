@@ -284,7 +284,7 @@ packageGroupResource uploads)] }
         let docURL | hasDocs   = Just $ "/package" </> display realpkg </> "doc"
                    | otherwise = Nothing
         -- extra features like tags and downloads
-        tags <- query $ TagsForPackage pkgname
+        tags <- queryTagsForPackage pkgname
 
         let maintainLink = anchor ! [href $ renderResource maintainPackage [display pkgname]] << toHtml "maintain"
             tagLinks = toHtml [anchor ! [href "/packages/tags"] << "Tags", toHtml ": ",
@@ -867,7 +867,7 @@ packageGroupResource uploads)] }
     -- Tags
     serveTagsListing :: DynamicPath -> ServerPart Response
     serveTagsListing _ = do
-        tagList <- query GetTagList
+        tagList <- queryGetTagList
         let withCounts = filter ((>0) . snd) . map (\(tg, pkgs) -> (tg, Set.size pkgs)) $ tagList
             countSort = sortBy (flip compare `on` snd) withCounts
         return $ toResponse $ Resource.XHtml $ hackagePage "Hackage tags" $
@@ -923,7 +923,7 @@ packageGroupResource uploads)] }
     serveTagsForm dpath =
       htmlResponse $
       withPackageName dpath $ \pkgname -> do
-        currTags <- query (TagsForPackage pkgname)
+        currTags <- queryTagsForPackage pkgname
         let tagsStr = concat . intersperse ", " . map display . Set.toList $ currTags
         return $ toResponse $ Resource.XHtml $ hackagePage "Edit package tags"
           [paragraph << [toHtml "Set tags for ", packageNameLink pkgname],

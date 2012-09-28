@@ -20,7 +20,6 @@ import Distribution.Server.Packages.State           (CandidatePackages, Document
                                                      initialCandidatePackages, initialDocumentation, 
                                                      initialHackageTrustees, initialHackageUploaders,
                                                      initialPackageMaintainers, initialPackagesState)
-import Distribution.Server.Packages.Tag             (PackageTags, initialPackageTags)
 import Distribution.Server.Users.State              (MirrorClients, initialMirrorClients)
 
 -- WARNING: if you add fields here, you must update checkpointAcid and stopAcid. Failure to do so will *not* result in a compiler error.
@@ -35,7 +34,6 @@ data Acid = Acid
     , acidMirrorClients      :: AcidState MirrorClients
     , acidPackageMaintainers :: AcidState PackageMaintainers
     , acidPackagesState      :: AcidState PackagesState
-    , acidPackageTags        :: AcidState PackageTags
     , acidPlatformPackages   :: AcidState PlatformPackages
     , acidPreferredVersions  :: AcidState PreferredVersions
     -- [reverse index disabled] , acidReverseIndex       :: AcidState ReverseIndex
@@ -74,9 +72,6 @@ instance AcidComponent PackageMaintainers where
 instance AcidComponent PackagesState where
     acidComponent = acidPackagesState
 
-instance AcidComponent PackageTags where
-    acidComponent = acidPackageTags
-
 instance AcidComponent PlatformPackages where
     acidComponent = acidPlatformPackages
 
@@ -114,7 +109,6 @@ startAcid stateDir =
            initialMirrorClients
            initialPackageMaintainers
            initialPackagesState
-           initialPackageTags
            initialPlatformPackages
            initialPreferredVersions
            -- [reverse index disabled] initialReverseIndex
@@ -130,12 +124,11 @@ startAcid' :: FilePath
            -> MirrorClients
            -> PackageMaintainers
            -> PackagesState
-           -> PackageTags
            -> PlatformPackages
            -> PreferredVersions
            -- [reverse index disabled] -> ReverseIndex
            -> IO Acid
-startAcid' stateDir buildReports candidatePackages distros documentation downloadCounts hackageTrustees hackageUploaders mirrorClients packageMaintainers packagesState packageTags platformPackages preferredVersions
+startAcid' stateDir buildReports candidatePackages distros documentation downloadCounts hackageTrustees hackageUploaders mirrorClients packageMaintainers packagesState platformPackages preferredVersions
     -- [reverse index disabled] reverseIndex
     =
     do buildReports'       <- openLocalStateFrom (stateDir </> "BuildReports")       buildReports
@@ -148,7 +141,6 @@ startAcid' stateDir buildReports candidatePackages distros documentation downloa
        mirrorClients'      <- openLocalStateFrom (stateDir </> "MirrorClients")      mirrorClients
        packageMaintainers' <- openLocalStateFrom (stateDir </> "PackageMaintainers") packageMaintainers
        packagesState'      <- openLocalStateFrom (stateDir </> "PackagesState")      packagesState
-       packageTags'        <- openLocalStateFrom (stateDir </> "PackageTags")        packageTags
        platformPackages'   <- openLocalStateFrom (stateDir </> "PlatformPackages")   platformPackages
        preferredVersions'  <- openLocalStateFrom (stateDir </> "PreferredVersions")  preferredVersions
        -- [reverse index disabled] reverseIndex'       <- openLocalStateFrom (stateDir </> "ReverseIndex")       reverseIndex
@@ -162,7 +154,6 @@ startAcid' stateDir buildReports candidatePackages distros documentation downloa
                        , acidMirrorClients      = mirrorClients'
                        , acidPackageMaintainers = packageMaintainers'
                        , acidPackagesState      = packagesState'
-                       , acidPackageTags        = packageTags'
                        , acidPlatformPackages   = platformPackages'
                        , acidPreferredVersions  = preferredVersions'
                        -- [reverse index disabled] , acidReverseIndex       = reverseIndex'
@@ -183,7 +174,6 @@ stopAcid acid =
        createCheckpointAndClose (acidMirrorClients acid)
        createCheckpointAndClose (acidPackageMaintainers acid)
        createCheckpointAndClose (acidPackagesState acid)
-       createCheckpointAndClose (acidPackageTags acid)
        createCheckpointAndClose (acidPlatformPackages acid)
        createCheckpointAndClose (acidPreferredVersions acid)
        -- [reverse index disabled] createCheckpointAndClose (acidReverseIndex acid)
@@ -200,7 +190,6 @@ checkpointAcid acid =
        createCheckpoint (acidMirrorClients acid)
        createCheckpoint (acidPackageMaintainers acid)
        createCheckpoint (acidPackagesState acid)
-       createCheckpoint (acidPackageTags acid)
        createCheckpoint (acidPlatformPackages acid)
        createCheckpoint (acidPreferredVersions acid)
        -- [reverse index disabled] createCheckpoint (acidReverseIndex acid)

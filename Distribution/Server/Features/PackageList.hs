@@ -110,7 +110,7 @@ initListFeature _ core@CoreFeature{..}
     -}
     registerHook tagsUpdated $ \pkgs _ -> do
         forM_ (Set.toList pkgs) $ \pkgname -> do
-            tags <- query . TagsForPackage $ pkgname
+            tags <- queryTagsForPackage pkgname
             modifyItem pkgname (updateTagItem tags)
         runHook' itemUpdate pkgs
     registerHook deprecatedHook $ \pkgname mpkgs -> do
@@ -181,7 +181,7 @@ listFeature CoreFeature{..}
     constructItem pkg = do
         let pkgname = packageName pkg
         -- [reverse index disabled] revCount <- query . GetReverseCount $ pkgname
-        tags <- query . TagsForPackage $ pkgname
+        tags <- queryTagsForPackage pkgname
         infos <- query . GetDownloadInfo $ pkgname
         deprs <- query . GetDeprecatedFor $ pkgname
         return $ (,) pkgname $ (updateDescriptionItem (pkgDesc pkg) $ emptyPackageItem pkgname) {

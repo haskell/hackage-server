@@ -4,7 +4,7 @@ module Distribution.Server.Packages.Backup.Tags (
     tagsToRecord
   ) where
 
-import Distribution.Server.Acid (update)
+import Data.Acid (AcidState, update)
 import Distribution.Server.Packages.Tag
 import Distribution.Server.Framework.BackupRestore
 
@@ -19,18 +19,18 @@ import Control.Monad.State (modify)
 import Data.Function (fix)
 import Data.ByteString.Lazy.Char8 (ByteString)
 
-tagsBackup :: RestoreBackup
-tagsBackup = updateTags emptyPackageTags
+tagsBackup :: AcidState PackageTags -> RestoreBackup
+tagsBackup tagsState = updateTags tagsState emptyPackageTags
 
-updateTags :: PackageTags -> RestoreBackup
-updateTags tags = fix $ \r -> RestoreBackup
+updateTags :: AcidState PackageTags -> PackageTags -> RestoreBackup
+updateTags tagsState tags = fix $ \r -> RestoreBackup
   { restoreEntry = \(entry, bs) -> do
         res <- runImport tags $ case entry of
             ["tags.csv"] -> importTags bs
             _ -> return ()
-        return $ fmap updateTags res
+        return $ fmap (updateTags tagsState) res
   , restoreFinalize = return . Right $ r
-  , restoreComplete = update $ ReplacePackageTags tags
+  , restoreComplete = update tagsState $ ReplacePackageTags tags
   }
 
 importTags :: ByteString -> Import PackageTags ()
