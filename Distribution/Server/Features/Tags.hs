@@ -91,7 +91,7 @@ initTagsFeature :: ServerEnv -> CoreFeature -> IO TagsFeature
 initTagsFeature ServerEnv{serverStateDir} core@CoreFeature{..} = do
 
     tagsState <- openLocalStateFrom
-                   (serverStateDir </> "db" </> "Users")
+                   (serverStateDir </> "db" </> "Tags")
                    initialPackageTags
 
     specials <- Cache.newCacheable emptyPackageTags
