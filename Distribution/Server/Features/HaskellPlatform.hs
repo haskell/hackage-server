@@ -1,13 +1,8 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.HaskellPlatform (
     PlatformFeature,
-    platformResource,
     PlatformResource(..),
     initPlatformFeature,
-    platformVersions,
-    platformPackageLatest,
-    setPlatform,
-    removePlatform
   ) where
 
 import Distribution.Server.Acid (query, update)
@@ -31,6 +26,8 @@ import Control.Monad.Trans (MonadIO)
 --
 
 data PlatformFeature = PlatformFeature {
+    platformFeatureInterface :: HackageFeature,
+    
     platformResource :: PlatformResource,
 
     platformVersions :: forall m. MonadIO m => PackageName -> m [Version],
@@ -39,6 +36,9 @@ data PlatformFeature = PlatformFeature {
     removePlatform :: forall m. MonadIO m => PackageName -> m ()
 }
 
+instance IsHackageFeature PlatformFeature where
+    getFeatureInterface = platformFeatureInterface
+
 data PlatformResource = PlatformResource {
     platformPackage :: Resource,
     platformPackages :: Resource,
@@ -46,28 +46,30 @@ data PlatformResource = PlatformResource {
     platformPackagesUri :: String -> String
 }
 
-instance IsHackageFeature PlatformFeature where
-    getFeatureInterface platform = (emptyHackageFeature "platform") {
-        featureResources = map ($platformResource platform) [platformPackage, platformPackages]
+initPlatformFeature :: ServerEnv -> CoreFeature -> IO PlatformFeature
+initPlatformFeature _ _ = do
+    -- FIXME: currently the state is global
+
+    return $
+      platformFeature
+
+platformFeature :: PlatformFeature
+platformFeature
+  = PlatformFeature{..}
+  where
+    platformFeatureInterface = (emptyHackageFeature "platform") {
+        featureResources = map ($platformResource) [platformPackage, platformPackages]
       , featureDumpRestore = Nothing -- TODO
       }
 
-initPlatformFeature :: ServerEnv -> CoreFeature -> IO PlatformFeature
-initPlatformFeature _ _ = do
-    return PlatformFeature
-      { platformResource = fix $ \r -> PlatformResource
+    platformResource = fix $ \r -> PlatformResource
           { platformPackage  = (resourceAt "/platform/package/:package.:format") { resourceGet = [], resourceDelete = [], resourcePut = [] }
           , platformPackages = (resourceAt "/platform/.:format") { resourceGet = [], resourcePost = [] }
           , platformPackageUri = \format pkgid -> renderResource (platformPackage r) [display pkgid, format]
           , platformPackagesUri = \format -> renderResource (platformPackages r) [format]
         -- and maybe "/platform/haskell-platform.cabal"
           }
-      , platformVersions
-      , platformPackageLatest
-      , setPlatform
-      , removePlatform
-      }
-  where
+
     ------------------------------------------
     -- functionality: showing status for a single package, and for all packages, adding a package, deleting a package
     platformVersions :: MonadIO m => PackageName -> m [Version]

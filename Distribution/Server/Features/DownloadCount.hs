@@ -22,13 +22,12 @@ import Control.Arrow (second)
 import Control.Monad (forever)
 import Control.Concurrent.Chan
 import Control.Concurrent (forkIO)
-import Data.Function (fix)
---import Data.List (sortBy)
---import Data.Ord (comparing)
 import qualified Data.Map as Map
 import Control.Monad.Trans (MonadIO)
 
 data DownloadFeature = DownloadFeature {
+    downloadFeatureInterface :: HackageFeature,
+    
     downloadResource :: DownloadResource,
     downloadStream :: Chan PackageId,
     downloadHistogram :: Cache.Cache (Histogram PackageName),
@@ -38,50 +37,64 @@ data DownloadFeature = DownloadFeature {
     sortedPackages :: IO [(PackageName, Int)]
 }
 
+instance IsHackageFeature DownloadFeature where
+    getFeatureInterface = downloadFeatureInterface
+
 data DownloadResource = DownloadResource {
     topDownloads :: Resource
 }
-
-instance IsHackageFeature DownloadFeature where
-    getFeatureInterface download = (emptyHackageFeature "download") {
-        featureResources = map (\x -> x $ downloadResource download) [topDownloads]
-      , featurePostInit  = do countCache
-                              forkIO transferDownloads >> return ()
-      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtripByQuery (query GetDownloadCounts))
-      }
-      where countCache = do
-                dc <- query GetDownloadCounts
-                let dmap = map (second packageDowns) (Map.toList $ downloadMap dc)
-                Cache.putCache (downloadHistogram download) (constructHistogram dmap)
-            transferDownloads = forever $ do
-                pkg <- readChan (downloadStream download)
-                time <- getCurrentTime
-                (_, new) <- update $ RegisterDownload (utctDay time) pkg 1
-                Cache.modifyCache (downloadHistogram download)
-                    (updateHistogram (packageName pkg) new)
-            dumpBackup = do
-                dc <- query GetDownloadCounts
-                return [csvToBackup ["downloads.csv"] $ downloadsToCSV dc]
-            restoreBackup = downloadsBackup
 
 initDownloadFeature :: ServerEnv -> CoreFeature -> IO DownloadFeature
 initDownloadFeature _ core = do
     downChan <- newChan
     downHist <- Cache.newCacheable emptyHistogram
     registerHook (tarballDownload core) $ writeChan downChan
-    return DownloadFeature
-      { downloadResource = fix $ \_ -> DownloadResource
-          { topDownloads = resourceAt "/packages/top.:format"
-          }
-      , downloadStream = downChan
-      , downloadHistogram = downHist
-      , getDownloadHistogram = getDownloadHistogram downHist
-      , perVersionDownloads
-      , sortedPackages = sortedPackages downHist
-      }
+
+    return $
+      downloadFeature core
+                      downChan downHist 
+
+
+downloadFeature :: CoreFeature
+                -> Chan PackageId
+                -> Cache.Cache (Histogram PackageName)
+                -> DownloadFeature
+
+downloadFeature CoreFeature{}
+                downloadStream downloadHistogram
+  = DownloadFeature{..}
   where
-    getDownloadHistogram :: Cache.Cache (Histogram PackageName) -> IO (Histogram PackageName)
-    getDownloadHistogram downHist = Cache.getCache downHist
+    downloadFeatureInterface = (emptyHackageFeature "download") {
+        featureResources = map (\x -> x $ downloadResource) [topDownloads]
+      , featurePostInit  = do countCache
+                              forkIO transferDownloads >> return ()
+      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtripByQuery (query GetDownloadCounts))
+      }
+
+    countCache = do
+        dc <- query GetDownloadCounts
+        let dmap = map (second packageDowns) (Map.toList $ downloadMap dc)
+        Cache.putCache downloadHistogram (constructHistogram dmap)
+
+    transferDownloads = forever $ do
+        pkg <- readChan downloadStream
+        time <- getCurrentTime
+        (_, new) <- update $ RegisterDownload (utctDay time) pkg 1
+        Cache.modifyCache downloadHistogram
+            (updateHistogram (packageName pkg) new)
+
+    dumpBackup = do
+        dc <- query GetDownloadCounts
+        return [csvToBackup ["downloads.csv"] $ downloadsToCSV dc]
+
+    restoreBackup = downloadsBackup
+
+    downloadResource = DownloadResource
+              { topDownloads = resourceAt "/packages/top.:format"
+              }
+
+    getDownloadHistogram :: IO (Histogram PackageName)
+    getDownloadHistogram = Cache.getCache downloadHistogram
 
     --totalDownloadCount :: MonadIO m => m Int
     --totalDownloadCount = liftM totalDownloads $ query GetDownloadCounts
@@ -90,8 +103,8 @@ initDownloadFeature _ core = do
 
     -- A lazy list of the top packages, which can be filtered, taken from, etc.
     -- Does not include packages with no downloads.
-    sortedPackages :: Cache.Cache (Histogram PackageName) -> IO [(PackageName, Int)]
-    sortedPackages downHist = fmap topCounts $ Cache.getCache downHist
+    sortedPackages :: IO [(PackageName, Int)]
+    sortedPackages = fmap topCounts $ Cache.getCache downloadHistogram
 
     {-
     -- Sorts a list of package-y items by their download count.

@@ -41,6 +41,10 @@ data MirrorFeature = MirrorFeature {
     mirrorResource :: MirrorResource,
     mirrorGroup :: UserGroup
 }
+
+instance IsHackageFeature MirrorFeature where
+    getFeatureInterface = mirrorFeatureInterface
+
 data MirrorResource = MirrorResource {
     mirrorPackageTarball :: Resource,
     mirrorPackageUploadTime :: Resource,
@@ -49,8 +53,6 @@ data MirrorResource = MirrorResource {
     mirrorGroupResource :: GroupResource
 }
 
-instance IsHackageFeature MirrorFeature where
-    getFeatureInterface = mirrorFeatureInterface
 -------------------------------------------------------------------------
 initMirrorFeature :: ServerEnv -> CoreFeature -> UserFeature -> IO MirrorFeature
 initMirrorFeature env core user@UserFeature{..} = do

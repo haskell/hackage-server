@@ -22,7 +22,6 @@ import Distribution.Package
 import Distribution.PackageDescription
 
 import Control.Applicative ((<|>), optional, pure)
-import Data.Function (fix)
 import qualified Data.Set as Set
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Network.URI (URI(..), uriToString)
@@ -30,15 +29,18 @@ import Control.Monad.Trans (MonadIO)
 import Text.JSON
 
 data NamesFeature = NamesFeature {
+    namesFeatureInterface :: HackageFeature,
     namesResource :: NamesResource,
     packageNameIndex :: Cache.Cache NameIndex,
     packageTextIndex :: Cache.Cache TextSearch,
     openSearchCache :: Cache.Cache Response,
-    regenerateIndices :: IO (),
 
     packageFindWith :: forall a. (Maybe (String, Bool) -> ServerPart a) -> ServerPart a,
     searchFindPackage :: MonadIO m => String -> Bool -> m ([PackageName], [PackageName])
 }
+
+instance IsHackageFeature NamesFeature where
+    getFeatureInterface = namesFeatureInterface
 
 data NamesResource = NamesResource {
     openSearchXml :: Resource,
@@ -46,44 +48,57 @@ data NamesResource = NamesResource {
     suggestPackageResource :: Resource
 }
 
-instance IsHackageFeature NamesFeature where
-    getFeatureInterface names = (emptyHackageFeature "names") {
-        featureResources = map ($namesResource names) [openSearchXml, findPackageResource, suggestPackageResource]
-      , featurePostInit = regenerateIndices names
-      }
-
 -- Currently only prefix-searching of package names is supported, as well as a
 -- text search of package descriptions using Bayer-Moore. The results could also
 -- be ordered by download (see DownloadCount.hs sortByDownloads).
 initNamesFeature :: ServerEnv -> CoreFeature -> IO NamesFeature
-initNamesFeature env core = do
-    let hostStr = uriToString id (URI "http:" (Just $ serverHostURI env) "" "" "") ""
-    pkgCache <- Cache.newCacheable (emptyNameIndex Nothing)
+initNamesFeature env CoreFeature{..} = do
+    pkgCache  <- Cache.newCacheable (emptyNameIndex Nothing)
     textCache <- Cache.newCache (constructTextIndex []) id
-    osdCache <- Cache.newCacheable (toResponse $ Resource.OpenSearchXml $ BS.pack $ mungeSearchXml hostStr)
-    let regen = do
-            index <- fmap packageList $ query GetPackagesState
-            -- asynchronously update indices
-            Cache.putCache pkgCache (constructIndex (map display $ PackageIndex.packageNames index) Nothing)
-            Cache.putCache textCache (constructPackageText index)
-    registerHook (packageAddHook core) $ \_ -> regen
-    registerHook (packageRemoveHook core) $ \_ -> regen
-    registerHook (packageChangeHook core) $ \_ _ -> regen
-    return NamesFeature
-      { namesResource = fix $ \_ -> NamesResource
-          { openSearchXml = (resourceAt "/opensearch.xml") { resourceGet = [("xml", Cache.respondCache osdCache id)] }
-            -- /packages/find?name=happstack
-          , findPackageResource = resourceAt "/packages/find.:format"
-          , suggestPackageResource = (resourceAt "/packages/suggest.:format") { resourceGet = [("json", \_ -> suggestJson hostStr pkgCache)] }
-          }
-      , packageNameIndex = pkgCache
-      , packageTextIndex = textCache
-      , openSearchCache = osdCache
-      , regenerateIndices = regen
-      , packageFindWith
-      , searchFindPackage = searchFindPackage pkgCache textCache
-      }
+    osdCache  <- Cache.newCacheable (toResponse $ Resource.OpenSearchXml $ BS.pack $ mungeSearchXml $ hostUriStr env)
+    
+    let (feature, regenerateIndices) =
+          namesFeature env
+                       pkgCache textCache osdCache
+
+    registerHook packageAddHook    $ \_   -> regenerateIndices
+    registerHook packageRemoveHook $ \_   -> regenerateIndices
+    registerHook packageChangeHook $ \_ _ -> regenerateIndices
+    
+    return feature
+
+hostUriStr :: ServerEnv -> String
+hostUriStr ServerEnv{serverHostURI} = uriToString id (URI "http:" (Just serverHostURI) "" "" "") ""
+
+namesFeature :: ServerEnv
+             -> Cache.Cache NameIndex
+             -> Cache.Cache TextSearch
+             -> Cache.Cache Response
+             -> (NamesFeature, IO ())
+
+namesFeature env
+             packageNameIndex packageTextIndex
+             openSearchCache
+  = (NamesFeature{..}, regenerateIndices)
   where
+    namesFeatureInterface = (emptyHackageFeature "names") {
+        featureResources = map ($namesResource) [openSearchXml, findPackageResource, suggestPackageResource]
+      , featurePostInit = regenerateIndices
+      }
+
+    namesResource = NamesResource
+      { openSearchXml = (resourceAt "/opensearch.xml") { resourceGet = [("xml", Cache.respondCache openSearchCache id)] }
+        -- /packages/find?name=happstack
+      , findPackageResource = resourceAt "/packages/find.:format"
+      , suggestPackageResource = (resourceAt "/packages/suggest.:format") { resourceGet = [("json", \_ -> suggestJson (hostUriStr env) packageNameIndex)] }
+      }
+
+    regenerateIndices = do
+      index <- fmap packageList $ query GetPackagesState
+      -- asynchronously update indices
+      Cache.putCache packageNameIndex (constructIndex (map display $ PackageIndex.packageNames index) Nothing)
+      Cache.putCache packageTextIndex (constructPackageText index)
+
     constructPackageText :: PackageIndex PkgInfo -> TextSearch
     constructPackageText = constructTextIndex . map makeEntry . PackageIndex.allPackagesByName
       where makeEntry pkgs = let desc = pkgDesc $ last pkgs
@@ -93,9 +108,8 @@ initNamesFeature env core = do
 
     -- Returns (list of exact matches, list of text matches)
     -- HTML search pages should have meta ! [name "robots", content "noindex"]
-    searchFindPackage :: MonadIO m => Cache.Cache NameIndex -> Cache.Cache TextSearch
-                      -> String -> Bool -> m ([PackageName], [PackageName])
-    searchFindPackage packageNameIndex packageTextIndex str doTextSearch = do
+    searchFindPackage :: MonadIO m => String -> Bool -> m ([PackageName], [PackageName])
+    searchFindPackage str doTextSearch = do
         nmIndex <- Cache.getCache packageNameIndex
         txIndex <- Cache.getCache packageTextIndex
         let nameRes = lookupName str nmIndex

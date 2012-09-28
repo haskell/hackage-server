@@ -1,6 +1,4 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
-{-# LANGUAGE PatternGuards #-}
-
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, PatternGuards #-}
 module Distribution.Server.Features.Documentation (
     DocumentationFeature,
     DocumentationResource(..),
@@ -16,7 +14,7 @@ import Distribution.Server.Packages.State
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
-import Distribution.Server.Framework.BlobStorage (BlobId, BlobStorage)
+import Distribution.Server.Framework.BlobStorage (BlobId)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Util.ServeTarball as TarIndex
 import Data.TarIndex (TarIndex)
@@ -36,9 +34,12 @@ import Control.Monad.State (modify)
 -- 1. Write an HTML view for organizing uploads
 -- 2. Have cabal generate a standard doc tarball, and serve that here
 data DocumentationFeature = DocumentationFeature {
-    featureInterface :: HackageFeature,
+    documentationFeatureInterface :: HackageFeature,
     documentationResource :: DocumentationResource
 }
+
+instance IsHackageFeature DocumentationFeature where
+    getFeatureInterface = documentationFeatureInterface
 
 data DocumentationResource = DocumentationResource {
     packageDocs :: Resource,
@@ -47,57 +48,65 @@ data DocumentationResource = DocumentationResource {
     packageDocUri :: PackageId -> String -> String
 }
 
-instance IsHackageFeature DocumentationFeature where
-    getFeatureInterface = featureInterface
-
 initDocumentationFeature :: ServerEnv -> CoreFeature -> UploadFeature -> IO DocumentationFeature
-initDocumentationFeature env CoreFeature{..} UploadFeature{..} = do
-    let store = serverBlobStore env
-        resources = DocumentationResource {
-            packageDocs = (resourceAt "/package/:package/doc/..") { resourceGet = [("", serveDocumentation store)] }
-          , packageDocsUpload = (resourceAt "/package/:package/doc/.:format") { resourcePut = [("txt", uploadDocumentation store)] }
-          , packageDocTar = (resourceAt "/package/:package/:doc.tar") { resourceGet = [("tar", serveDocumentationTar store)] }
-          , packageDocUri = \pkgid str -> renderResource (packageDocs resources) [display pkgid, str]
-          }
-    return DocumentationFeature {
-        featureInterface = (emptyHackageFeature "documentation") {
-          featureResources = map ($ resources) [packageDocs, packageDocTar, packageDocsUpload]
-        , featureDumpRestore = Just (dumpBackup store, restoreBackup store, testRoundtrip store)
-        }
-      , documentationResource = resources
-      }
+initDocumentationFeature env core upload = do
+
+    -- FIXME: currently the state is global
+
+    return $
+      documentationFeature env core upload
+
+documentationFeature :: ServerEnv
+                     -> CoreFeature
+                     -> UploadFeature
+                     -> DocumentationFeature
+documentationFeature ServerEnv{serverBlobStore = store}
+                     CoreFeature{..} UploadFeature{..}
+  = DocumentationFeature{..}
   where
-    dumpBackup store = do
+    documentationFeatureInterface = (emptyHackageFeature "documentation") {
+        featureResources = map ($ documentationResource) [packageDocs, packageDocTar, packageDocsUpload]
+      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
+      }
+    
+    dumpBackup = do
         doc <- query GetDocumentation
         let exportFunc (pkgid, (blob, _)) = ([display pkgid, "documentation.tar"], Right blob)
         readExportBlobs store $ map exportFunc . Map.toList $ documentation doc
-    restoreBackup store = updateDocumentation store (Documentation Map.empty)
+    restoreBackup = updateDocumentation (Documentation Map.empty)
     -- Checking documentation roundtripped is a bit tricky:
     -- 1. We don't really want to check that the tar index is the same (probably)
     -- 2. We must that the documentation blobs all got imported. To do this we just
     --    need to check they *exist*, due to the MD5-hashing scheme we use.
-    testRoundtrip store = testRoundtripByQuery' (liftM (Map.map fst . documentation) $ query GetDocumentation) $ \doc ->
+    testRoundtrip = testRoundtripByQuery' (liftM (Map.map fst . documentation) $ query GetDocumentation) $ \doc ->
         testBlobsExist store (Map.elems doc)
 
-    serveDocumentationTar :: BlobStorage -> DynamicPath -> ServerPart Response
-    serveDocumentationTar store dpath = runServerPartE $ withDocumentation dpath $ \_ blob _ -> do
+    documentationResource = DocumentationResource {
+        packageDocs = (resourceAt "/package/:package/doc/..") { resourceGet = [("", serveDocumentation)] }
+      , packageDocsUpload = (resourceAt "/package/:package/doc/.:format") { resourcePut = [("txt", uploadDocumentation)] }
+      , packageDocTar = (resourceAt "/package/:package/:doc.tar") { resourceGet = [("tar", serveDocumentationTar)] }
+      , packageDocUri = \pkgid str -> renderResource (packageDocs documentationResource) [display pkgid, str]
+      }
+
+    serveDocumentationTar :: DynamicPath -> ServerPart Response
+    serveDocumentationTar dpath = runServerPartE $ withDocumentation dpath $ \_ blob _ -> do
         file <- liftIO $ BlobStorage.fetch store blob
         return $ toResponse $ Resource.DocTarball file blob
 
 
     -- return: not-found error or tarball
-    serveDocumentation :: BlobStorage -> DynamicPath -> ServerPart Response
-    serveDocumentation store dpath = runServerPartE $ withDocumentation dpath $ \pkgid blob index -> do
+    serveDocumentation :: DynamicPath -> ServerPart Response
+    serveDocumentation dpath = runServerPartE $ withDocumentation dpath $ \pkgid blob index -> do
         let tarball = BlobStorage.filepath store blob
         -- if given a directory, the default page is index.html
         -- the default directory prefix is the package name itself
         TarIndex.serveTarball ["index.html"] (display $ packageName pkgid) tarball index
 
     -- return: not-found error (parsing) or see other uri
-    uploadDocumentation :: BlobStorage -> DynamicPath -> ServerPart Response
-    uploadDocumentation store dpath = runServerPartE $
-                                      withPackageId dpath $ \pkgid ->
-                                      withPackageAuth pkgid $ \_ _ -> do
+    uploadDocumentation :: DynamicPath -> ServerPart Response
+    uploadDocumentation dpath = runServerPartE $
+                                withPackageId dpath $ \pkgid ->
+                                withPackageAuth pkgid $ \_ _ -> do
             -- The order of operations:
             -- * Insert new documentation into blob store
             -- * Generate the new index
@@ -121,21 +130,21 @@ initDocumentationFeature env CoreFeature{..} UploadFeature{..} = do
           Just (blob, index) -> func pkgid blob index
 
     ---- Import
-    updateDocumentation :: BlobStorage -> Documentation -> RestoreBackup
-    updateDocumentation store docs = fix $ \r -> RestoreBackup
+    updateDocumentation :: Documentation -> RestoreBackup
+    updateDocumentation docs = fix $ \r -> RestoreBackup
       { restoreEntry = \(entryPath, bs) ->
             case entryPath of
                 [str, "documentation.tar"] | Just pkgid <- simpleParse str -> do
-                    res <- runImport docs (importDocumentation store pkgid bs)
-                    return $ fmap (updateDocumentation store) res
+                    res <- runImport docs (importDocumentation pkgid bs)
+                    return $ fmap updateDocumentation res
                 _ -> return . Right $ r
       , restoreFinalize = return . Right $ r
       , restoreComplete = update $ ReplaceDocumentation docs
       }
 
-    importDocumentation :: BlobStorage -> PackageId
+    importDocumentation :: PackageId
                         -> ByteString -> Import Documentation ()
-    importDocumentation store pkgid doc = do
+    importDocumentation pkgid doc = do
         blobId <- liftIO $ BlobStorage.add store doc
         -- this may fail for a bad tarball
         tarred <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blobId)

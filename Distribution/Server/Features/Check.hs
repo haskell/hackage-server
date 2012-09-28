@@ -4,7 +4,6 @@ module Distribution.Server.Features.Check (
     CheckResource(..),
     initCheckFeature,
 
-
     CandidateRender(..),
   ) where
 
@@ -55,6 +54,10 @@ data CheckFeature = CheckFeature {
     withCandidates    :: forall a. PackageName -> (CandidatePackages -> [CandPkgInfo] -> ServerPartE a) -> ServerPartE a
 }
 
+instance IsHackageFeature CheckFeature where
+    getFeatureInterface = checkFeatureInterface
+
+
 data CheckResource = CheckResource {
     candidatesPage :: Resource,
     candidatePage :: Resource,
@@ -80,7 +83,6 @@ data CheckResource = CheckResource {
     candidateCabalUri :: PackageId -> String
 }
 
-
 -- candidates can be published at any time; there can be multiple candidates per package
 -- they can be deleted, but it's not required
 
@@ -91,9 +93,6 @@ data CandidateRender = CandidateRender {
 }
 
 
-instance IsHackageFeature CheckFeature where
-    getFeatureInterface = checkFeatureInterface
-
 -- URI generation (string-based), using maps; user groups
 initCheckFeature :: ServerEnv -> UserFeature -> CoreFeature -> PackagesFeature -> UploadFeature -> IO CheckFeature
 initCheckFeature env user core _ upload =
@@ -103,7 +102,10 @@ initCheckFeature env user core _ upload =
     return $
       checkFeature env user core upload
 
-checkFeature :: ServerEnv -> UserFeature -> CoreFeature -> UploadFeature
+checkFeature :: ServerEnv
+             -> UserFeature
+             -> CoreFeature
+             -> UploadFeature
              -> CheckFeature
 
 checkFeature ServerEnv{serverBlobStore = store}

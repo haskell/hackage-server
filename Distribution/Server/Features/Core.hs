@@ -88,6 +88,9 @@ data CoreFeature = CoreFeature {
     withPackageTarball     :: forall a. DynamicPath -> (PackageId -> ServerPartE a) -> ServerPartE a
 }
 
+instance IsHackageFeature CoreFeature where
+    getFeatureInterface = coreFeatureInterface
+
 data CoreResource = CoreResource {
     coreIndexPage    :: Resource,
     coreIndexTarball :: Resource,
@@ -104,9 +107,6 @@ data CoreResource = CoreResource {
     coreCabalUri    :: PackageId -> String,
     coreTarballUri  :: PackageId -> String
 }
-
-instance IsHackageFeature CoreFeature where
-    getFeatureInterface = coreFeatureInterface
 
 initCoreFeature :: Bool -> ServerEnv -> UserFeature -> IO CoreFeature
 initCoreFeature enableCaches env UserFeature{..} = do

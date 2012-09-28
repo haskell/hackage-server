@@ -55,6 +55,9 @@ data UploadFeature = UploadFeature {
     extractPackage :: (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)) -> ServerPartE (PkgInfo, UploadResult)
 }
 
+instance IsHackageFeature UploadFeature where
+    getFeatureInterface = uploadFeatureInterface
+
 data UploadResource = UploadResource {
     uploadIndexPage :: Resource,
     deletePackagePage  :: Resource,
@@ -71,9 +74,6 @@ data UploadResult = UploadResult {
     uploadCabal :: !ByteString,
     uploadWarnings :: ![String]
 }
-
-instance IsHackageFeature UploadFeature where
-    getFeatureInterface = uploadFeatureInterface
 
 initUploadFeature :: ServerEnv -> CoreFeature -> UserFeature -> IO UploadFeature
 initUploadFeature env core@CoreFeature{..} user@UserFeature{..} = do

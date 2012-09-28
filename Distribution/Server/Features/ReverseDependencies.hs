@@ -46,11 +46,17 @@ import Control.Concurrent (forkIO)
 import Control.Concurrent.Chan
 
 data ReverseFeature = ReverseFeature {
+    reverseFeatureInterface :: HackageFeature,
+
     reverseResource :: ReverseResource,
     reverseStream :: Chan (IO (Map PackageName [Version])),
     reverseUpdateHook :: Hook (Map PackageName [Version] -> IO ()),
     reverseTopCache :: Cache.Cache [(PackageName, Int, Int)]
 }
+
+instance IsHackageFeature ReverseFeature where
+    getFeatureInterface = reverseFeatureInterface
+
 
 data ReverseResource = ReverseResource {
     reversePackage :: Resource,
@@ -70,29 +76,6 @@ data ReverseResource = ReverseResource {
     reversesAllUri  :: String -> String
 }
 
-instance IsHackageFeature ReverseFeature where
-    getFeatureInterface rev = (emptyHackageFeature "reverse") {
-        featureResources = map ($reverseResource rev) []
-      , featurePostInit = forkIO transferReverse >> return ()
-      , featureDumpRestore = Just (return [], restoreBackup, testRoundtripByQuery (query GetReverseIndex))
-      }
-      where
-        transferReverse = forever $ do
-                revFunc <- readChan (reverseStream rev)
-                modded  <- revFunc
-                runHook' (reverseUpdateHook rev) modded
-
-        --TODO: this isn't a restore!
-        --      do we need a post init/restore hook for initialising caches?
-        restoreBackup = RestoreBackup
-              { restoreEntry    = \_ -> return $ Right restoreBackup
-              , restoreFinalize = return $ Right restoreBackup
-              , restoreComplete = do
-                    putStrLn "Calculating reverse dependencies"
-                    index <- fmap packageList $ query GetPackagesState
-                    let revs = constructReverseIndex index
-                    update $ ReplaceReverseIndex revs
-              }
 
 initReverseFeature :: ServerEnv -> CoreFeature -> VersionsFeature -> IO ReverseFeature
 initReverseFeature _ core _ = do
@@ -110,8 +93,45 @@ initReverseFeature _ core _ = do
         sortedRevs = fmap (sortBy $ on (flip compare) select) revSummary
     revTopCache <- Cache.newCacheable =<< sortedRevs
     registerHook revHook $ \_ -> Cache.putCache revTopCache =<< sortedRevs
-    return ReverseFeature
-      { reverseResource = fix $ \r -> ReverseResource
+    
+    return $
+      reverseFeature core
+                     revChan revHook revTopCache
+      
+reverseFeature :: CoreFeature
+               -> Chan (IO (Map PackageName [Version]))
+               -> Hook (Map PackageName [Version] -> IO ())
+               -> Cache.Cache [(PackageName, Int, Int)]
+               -> ReverseFeature
+
+reverseFeature CoreFeature{..}
+               reverseStream reverseUpdateHook reverseTopCache
+  = ReverseFeature{..}
+  where
+    reverseFeatureInterface = (emptyHackageFeature "reverse") {
+        featureResources = map ($reverseResource) []
+      , featurePostInit = forkIO transferReverse >> return ()
+      , featureDumpRestore = Just (return [], restoreBackup, testRoundtripByQuery (query GetReverseIndex))
+      }
+
+    transferReverse = forever $ do
+            revFunc <- readChan reverseStream
+            modded  <- revFunc
+            runHook' reverseUpdateHook modded
+
+    --TODO: this isn't a restore!
+    --      do we need a post init/restore hook for initialising caches?
+    restoreBackup = RestoreBackup
+          { restoreEntry    = \_ -> return $ Right restoreBackup
+          , restoreFinalize = return $ Right restoreBackup
+          , restoreComplete = do
+                putStrLn "Calculating reverse dependencies"
+                index <- fmap packageList $ query GetPackagesState
+                let revs = constructReverseIndex index
+                update $ ReplaceReverseIndex revs
+          }
+
+    reverseResource = fix $ \r -> ReverseResource
           { reversePackage = resourceAt ("/package/:package/reverse.:format")
           , reversePackageOld = resourceAt ("/package/:package/reverse/old.:format")
           , reversePackageAll = resourceAt ("/package/:package/reverse/all.:format")
@@ -128,11 +148,7 @@ initReverseFeature _ core _ = do
           , reversesUri = \format -> renderResource (reversePackages r) [format]
           , reversesAllUri = \format -> renderResource (reversePackagesAll r) [format]
           }
-      , reverseStream = revChan
-      , reverseUpdateHook = revHook
-      , reverseTopCache = revTopCache
-      }
-  where
+
     --textRevDisplay :: ReverseDisplay -> String
     --textRevDisplay m = unlines . map (\(n, (v, m)) -> display n ++ "-" ++ display v ++ ": " ++ show m) . Map.toList $ m
 

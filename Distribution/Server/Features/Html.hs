@@ -1,10 +1,8 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE DoRec, RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.Html (
-    HtmlFeature,
-    htmlResources,
+    HtmlFeature(..),
     initHtmlFeature
   ) where
-
 
 import Distribution.Server.Acid (query)
 import Distribution.Server.Framework
@@ -69,17 +67,11 @@ import Data.Maybe (fromMaybe)
 --
 -- See the TODO file for more ways to improve the HTML.
 data HtmlFeature = HtmlFeature {
-    htmlResources :: [Resource],
-    cachePackagesPage :: Cache.CacheableAction Response,
-    cacheNamesPage :: Cache.CacheableAction Response,
-    generateCaches :: IO ()
+    htmlFeatureInterface :: HackageFeature
 }
 
 instance IsHackageFeature HtmlFeature where
-    getFeatureInterface html = (emptyHackageFeature "html") {
-        featureResources = htmlResources html
-      , featurePostInit  = generateCaches html
-      }
+    getFeatureInterface = htmlFeatureInterface
 
 -- This feature provides the HTML view to the models of other features
 -- currently it uses the xhtml package to render HTML (Text.XHtml.Strict)
@@ -93,40 +85,83 @@ initHtmlFeature :: Bool
                 -> TagsFeature -> DownloadFeature
                 -> ListFeature -> NamesFeature -> MirrorFeature
                 -> IO HtmlFeature
-initHtmlFeature enableCaches _env
-                UserFeature{..}  CoreFeature{..} PackagesFeature{..} UploadFeature{..}
-                CheckFeature{..} VersionsFeature{..}
-                -- [reverse index disabled] ReverseFeature{..}
-                TagsFeature{..} DownloadFeature{..}
-                ListFeature{..} NamesFeature{..} MirrorFeature{..} = do
 
-    -- pages defined for the HTML feature in particular
-    let editDeprecated  = (resourceAt "/package/:package/deprecated/edit") { resourceGet = [("html", serveDeprecateForm)] }
-        editPreferred   = (resourceAt "/package/:package/preferred/edit") { resourceGet = [("html", servePreferForm)] }
-        maintainPackage = (resourceAt "/package/:package/maintain") { resourceGet = [("html", serveMaintainLinks editDeprecated editPreferred $
- packageGroupResource uploads)] }
-        pkgCandUploadForm = (resourceAt "/package/:package/candidate/upload") { resourceGet = [("html", servePackageCandidateUpload)] }
-        candMaintainForm = (resourceAt "/package/:package/candidate/maintain") { resourceGet = [("html", serveCandidateMaintain)] }
-        tagEdit = (resourceAt "/package/:package/tags/edit") { resourceGet = [("html", serveTagsForm)] }
+initHtmlFeature enableCaches _env
+                user core@CoreFeature{packageIndexChange}
+                packages upload
+                check versions
+                -- [reverse index disabled] reverse
+                tags download
+                list@ListFeature{itemUpdate}
+                names mirror = do
+
     -- Index page caches
-    namesCache <- Cache.newCacheableAction enableCaches packagesPage
     mainCache <- Cache.newCacheableAction enableCaches $
         do index <- fmap State.packageList $ query State.GetPackagesState
            return (toResponse $ Resource.XHtml $ Pages.packageIndex index)
+
+    -- do rec, tie the knot
+    rec let (feature, packagesPage) =
+              htmlFeature user core
+                          packages upload
+                          check versions
+                          tags download
+                          list names mirror
+                          mainCache namesCache
+        namesCache <- Cache.newCacheableAction enableCaches packagesPage
+    
     registerHook itemUpdate $ \_ -> Cache.refreshCacheableAction namesCache
     registerHook packageIndexChange $ Cache.refreshCacheableAction mainCache
 
-    return HtmlFeature
-      { cachePackagesPage = mainCache
-      , cacheNamesPage = namesCache
-      , generateCaches = do Cache.refreshCacheableAction mainCache
-                            Cache.refreshCacheableAction namesCache
-      , htmlResources =
+    return feature
+
+htmlFeature :: UserFeature
+            -> CoreFeature
+            -> PackagesFeature
+            -> UploadFeature
+            -> CheckFeature
+            -> VersionsFeature
+            -> TagsFeature
+            -> DownloadFeature
+            -> ListFeature
+            -> NamesFeature
+            -> MirrorFeature
+            -> Cache.CacheableAction Response
+            -> Cache.CacheableAction Response
+            -> (HtmlFeature, IO Response)
+
+htmlFeature UserFeature{..} CoreFeature{..}
+            PackagesFeature{..} UploadFeature{..}
+            CheckFeature{..} VersionsFeature{..}
+            -- [reverse index disabled] ReverseFeature{..}
+            TagsFeature{..} DownloadFeature{..}
+            ListFeature{..} NamesFeature{..} MirrorFeature{..}
+            cachePackagesPage cacheNamesPage
+  = (HtmlFeature{..}, packagesPage)
+  where
+    htmlFeatureInterface = (emptyHackageFeature "html") {
+        featureResources = htmlResources
+      , featurePostInit  = generateCaches
+      }
+
+    generateCaches = do Cache.refreshCacheableAction cachePackagesPage
+                        Cache.refreshCacheableAction cacheNamesPage
+
+    -- pages defined for the HTML feature in particular
+    editDeprecated  = (resourceAt "/package/:package/deprecated/edit") { resourceGet = [("html", serveDeprecateForm)] }
+    editPreferred   = (resourceAt "/package/:package/preferred/edit") { resourceGet = [("html", servePreferForm)] }
+    maintainPackage = (resourceAt "/package/:package/maintain") { resourceGet = [("html", serveMaintainLinks editDeprecated editPreferred $
+packageGroupResource uploads)] }
+    pkgCandUploadForm = (resourceAt "/package/:package/candidate/upload") { resourceGet = [("html", servePackageCandidateUpload)] }
+    candMaintainForm = (resourceAt "/package/:package/candidate/maintain") { resourceGet = [("html", serveCandidateMaintain)] }
+    tagEdit = (resourceAt "/package/:package/tags/edit") { resourceGet = [("html", serveTagsForm)] }
+
+    htmlResources =
         -- core
-         [ (extendResource $ corePackagePage cores) { resourceGet = [("html", servePackagePage maintainPackage tagEdit)] }
+         [ (extendResource $ corePackagePage cores) { resourceGet = [("html", servePackagePage)] }
          --, (extendResource $ coreIndexPage cores) { resourceGet = [("html", serveIndexPage)] }, currently in 'core' feature
-         , (resourceAt "/packages/names" ) { resourceGet = [("html", const $ Cache.getCacheableAction namesCache)] }
-         , (extendResource $ corePackagesPage cores) { resourceGet = [("html", const $ Cache.getCacheableAction mainCache)] }
+         , (resourceAt "/packages/names" ) { resourceGet = [("html", const $ Cache.getCacheableAction cacheNamesPage)] }
+         , (extendResource $ corePackagesPage cores) { resourceGet = [("html", const $ Cache.getCacheableAction cachePackagesPage)] }
          , maintainPackage
         -- users
          , (extendResource $ userList users) { resourceGet = [("html", serveUserList)], resourcePost = [("html", \_ -> htmlResponse $ adminAddUser)] }
@@ -201,8 +236,7 @@ initHtmlFeature enableCaches _env
         ++ htmlGroupResource (uploaderResource uploadResource)
         ++ htmlGroupResource (adminResource userResource)
         ++ htmlGroupResource (mirrorGroupResource mirrorResource)
-     }
-  where
+
     -- resources to extend
     cores = coreResource
     users = userResource
@@ -220,9 +254,8 @@ initHtmlFeature enableCaches _env
     -- of features about their attributes for the given package. It'll need
     -- reorganizing to look aesthetic, as opposed to the sleek and simple current
     -- design that takes the 1990s school of web design.
-    servePackagePage :: Resource -> Resource
-                     -> DynamicPath -> ServerPart Response
-    servePackagePage maintain tagEdit dpath =
+    servePackagePage :: DynamicPath -> ServerPart Response
+    servePackagePage dpath =
                             htmlResponse $
                             withPackageId dpath $ \pkgid  ->
                             withPackagePreferred pkgid $ \pkg pkgs -> do
@@ -253,7 +286,7 @@ initHtmlFeature enableCaches _env
         -- extra features like tags and downloads
         tags <- query $ TagsForPackage pkgname
 
-        let maintainLink = anchor ! [href $ renderResource maintain [display pkgname]] << toHtml "maintain"
+        let maintainLink = anchor ! [href $ renderResource maintainPackage [display pkgname]] << toHtml "maintain"
             tagLinks = toHtml [anchor ! [href "/packages/tags"] << "Tags", toHtml ": ",
                                toHtml (renderTags tags), toHtml " | ",
                                anchor ! [href $ renderResource tagEdit [display pkgname]] << "edit"]
@@ -821,7 +854,7 @@ initHtmlFeature enableCaches _env
 
     --------------------------------------------------------------------------------
     -- Additional package indices
-    packagesPage :: MonadIO m => m Response
+    packagesPage :: IO Response
     packagesPage = do
         let itemFunc = renderItem
         items <- liftIO $ getAllLists

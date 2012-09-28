@@ -1,7 +1,6 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.Distro (
     DistroFeature,
-    distroResource,
     DistroResource(..),
     initDistroFeature
   ) where
@@ -32,9 +31,13 @@ import Data.Version (showVersion)
 -- 2. use GroupResource from the Users feature
 -- 3. use MServerPart to support multiple views
 data DistroFeature = DistroFeature {
+    distroFeatureInterface :: HackageFeature,
     distroResource   :: DistroResource,
     maintainersGroup :: DynamicPath -> IO (Maybe UserGroup)
 }
+
+instance IsHackageFeature DistroFeature where
+    getFeatureInterface = distroFeatureInterface
 
 data DistroResource = DistroResource {
     distroIndexPage :: Resource,
@@ -42,25 +45,34 @@ data DistroResource = DistroResource {
     distroPackage   :: Resource
 }
 
-instance IsHackageFeature DistroFeature where
-    getFeatureInterface distro = (emptyHackageFeature "distro") {
-        featureResources = map ($distroResource distro) [distroIndexPage, distroAllPage, distroPackage]
+initDistroFeature :: ServerEnv -> UserFeature -> CoreFeature -> PackagesFeature -> IO DistroFeature
+initDistroFeature _ user core _ =
+
+    -- FIXME: currently the state is global
+
+    return $
+      distroFeature user core
+
+distroFeature :: UserFeature
+              -> CoreFeature
+              -> DistroFeature
+distroFeature UserFeature{..} CoreFeature{..}
+  = DistroFeature{..}
+  where
+    distroFeatureInterface = (emptyHackageFeature "distro") {
+        featureResources   = map ($distroResource) [distroIndexPage, distroAllPage, distroPackage]
       , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtripByQuery (query GetDistributions))
       }
 
-initDistroFeature :: ServerEnv -> UserFeature -> CoreFeature -> PackagesFeature -> IO DistroFeature
-initDistroFeature _ UserFeature{..} CoreFeature{..} _ =
-    return $ DistroFeature
-      { distroResource = DistroResource
+    distroResource = DistroResource
           { distroIndexPage = (resourceAt "/distros/.:format") { resourceGet = [("txt", textEnumDistros)], resourcePost = [("", distroNew)] }
           , distroAllPage = (resourceAt "/distro/:distro/.:format") { resourceGet = [("txt", textDistroPkgs), ("csv",csvDistroPackageList)], resourcePut = [("",distroPackageListPut)], resourceDelete = [("", distroDelete)] }
           , distroPackage = (resourceAt "/distro/:distro/package/:package.:format") { resourceGet = [("txt", textDistroPkg)], resourcePut = [("", distroPackagePut)], resourceDelete = [("", distroPackageDelete)] }
           }
-      , maintainersGroup = \dpath -> case simpleParse =<< lookup "distro" dpath of
+    maintainersGroup = \dpath -> case simpleParse =<< lookup "distro" dpath of
             Nothing -> return Nothing
             Just dname -> getMaintainersGroup adminGroup dname
-      }
-  where
+
     textEnumDistros _ = fmap (toResponse . intercalate ", " . map display) (query EnumerateDistros)
     textDistroPkgs dpath = withDistroPath dpath $ \dname pkgs -> do
         let pkglines = map (\(name, info) -> display name ++ " at " ++ display (distroVersion info) ++ ": " ++ distroUrl info) $ pkgs

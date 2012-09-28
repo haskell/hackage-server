@@ -65,6 +65,9 @@ data TagsFeature = TagsFeature {
 
 }
 
+instance IsHackageFeature TagsFeature where
+    getFeatureInterface = tagsFeatureInterface
+
 data TagsResource = TagsResource {
     tagsListing :: Resource,
     tagListing :: Resource,
@@ -75,9 +78,6 @@ data TagsResource = TagsResource {
     tagsUri :: String -> String,
     packageTagsUri :: String -> PackageName -> String
 }
-
-instance IsHackageFeature TagsFeature where
-    getFeatureInterface = tagsFeatureInterface
 
 initTagsFeature :: ServerEnv -> CoreFeature -> IO TagsFeature
 initTagsFeature _ core@CoreFeature{..} = do

@@ -79,6 +79,9 @@ data UserFeature = UserFeature {
     getIndexDesc      :: forall m. MonadIO m => String -> m GroupDescription
 }
 
+instance IsHackageFeature UserFeature where
+  getFeatureInterface = userFeatureInterface
+
 data UserResource = UserResource {
     userList :: Resource,
     userPage :: Resource,
@@ -92,9 +95,6 @@ data UserResource = UserResource {
     userEnabledUri  :: String -> UserName -> String,
     adminPageUri :: String -> String
 }
-
-instance IsHackageFeature UserFeature where
-  getFeatureInterface = userFeatureInterface
 
 instance FromReqURI UserName where
   fromReqURI = simpleParse

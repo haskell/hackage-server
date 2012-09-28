@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE DoRec, RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.Packages (
     PackagesFeature(..),
     PackagesResource(..),
@@ -51,29 +51,61 @@ import System.FilePath.Posix ((</>))
 import qualified Distribution.Server.Pages.Recent as Pages
 
 data PackagesFeature = PackagesFeature {
+    packagesFeatureInterface :: HackageFeature,
     packagesResource :: PackagesResource,
-    -- recent caches. in lieu of an ActionLog
-    cacheRecent :: Cache.CacheableAction (Response, Response), -- rss
-    -- TODO: perhaps a hook, recentUpdated :: HookList ([PkgInfo] -> IO ())
 
     -- necessary information for the representation of a package resource
     packageRender :: PkgInfo -> IO PackageRender
     -- other informational hooks: perhaps a simplified CondTree so a browser script can dynamically change the package page based on flags
 }
 
+instance IsHackageFeature PackagesFeature where
+    getFeatureInterface = packagesFeatureInterface
+
 data PackagesResource = PackagesResource {
     -- replace with log resource
     packagesRecent :: Resource
 }
 
-instance IsHackageFeature PackagesFeature where
-    getFeatureInterface pkgs = (emptyHackageFeature "packages") {
-        featureResources = map ($packagesResource pkgs) [packagesRecent]
-      }
-
 initPackagesFeature :: Bool -> ServerEnv -> UserFeature -> CoreFeature -> IO PackagesFeature
-initPackagesFeature enableCaches serverEnv UserFeature{..} core = do
-    recents <- Cache.newCacheableAction enableCaches $ do
+initPackagesFeature enableCaches env user core@CoreFeature{..} = do
+
+    -- recent caches. in lieu of an ActionLog
+    -- TODO: perhaps a hook, recentUpdated :: HookList ([PkgInfo] -> IO ())
+    rec let (feature, updateRecentCache) =
+              packagesFeature env user core
+                              cacheRecent
+
+        cacheRecent <- Cache.newCacheableAction enableCaches updateRecentCache
+
+    registerHook packageIndexChange $ Cache.refreshCacheableAction cacheRecent
+
+    return feature
+
+
+packagesFeature :: ServerEnv
+                -> UserFeature
+                -> CoreFeature
+                -> Cache.CacheableAction (Response, Response)
+                -> (PackagesFeature, IO (Response, Response))
+
+packagesFeature ServerEnv{serverBlobStore=store}
+                UserFeature{..} CoreFeature{..}
+                cacheRecent
+  = (PackagesFeature{..}, updateRecentCache)
+  where
+    packagesFeatureInterface = (emptyHackageFeature "packages") {
+        featureResources = map ($packagesResource) [packagesRecent]
+      }
+    packagesResource = PackagesResource
+      { packagesRecent = (resourceAt "/recent.:format") { resourceGet = [("html", const $ liftM fst $ Cache.getCacheableAction cacheRecent), ("rss", const $ liftM snd $ Cache.getCacheableAction cacheRecent)] }
+      }
+    
+    packageRender pkg = do
+      users <- queryGetUserDb
+      doPackageRender store users pkg
+
+    updateRecentCache = do
         -- TODO: this should be moved to HTML/RSS features
         state <- query State.GetPackagesState
         users <- queryGetUserDb
@@ -81,17 +113,6 @@ initPackagesFeature enableCaches serverEnv UserFeature{..} core = do
         let recentChanges = reverse $ sortBy (comparing pkgUploadTime) (PackageIndex.allPackages . State.packageList $ state)
         return (toResponse $ Resource.XHtml $ Pages.recentPage users recentChanges,
                 toResponse $ Pages.recentFeed users (fromJust $ URI.uriAuthority =<< URI.parseURI "http://hackage.haskell.org") now recentChanges)
-    registerHook (packageIndexChange core) $
-        Cache.refreshCacheableAction recents
-    return PackagesFeature
-      { packagesResource = PackagesResource
-          { packagesRecent = (resourceAt "/recent.:format") { resourceGet = [("html", const $ liftM fst $ Cache.getCacheableAction recents), ("rss", const $ liftM snd $ Cache.getCacheableAction recents)] }
-          }
-      , cacheRecent   = recents
-      , packageRender = \pkg -> do
-            users <- queryGetUserDb
-            doPackageRender (serverBlobStore serverEnv) users pkg
-      }
 
 -- This should provide the caller enough information to encode the package information
 -- in its particular format (text, html, json) with minimal effort on its part.

@@ -38,6 +38,8 @@ import qualified Data.Set as Set
 import qualified Data.ByteString.Lazy.Char8 as BS
 
 data VersionsFeature = VersionsFeature {
+    versionsFeatureInterface :: HackageFeature,
+    
     versionsResource :: VersionsResource,
     preferredHook  :: Hook (PackageName -> PreferredInfo -> IO ()),
     deprecatedHook :: Hook (PackageName -> Maybe [PackageName] -> IO ()),
@@ -53,6 +55,10 @@ data VersionsFeature = VersionsFeature {
     withPackagePreferred     :: forall a. PackageId -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a,
     withPackagePreferredPath :: forall a. DynamicPath -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a
 }
+
+instance IsHackageFeature VersionsFeature where
+    getFeatureInterface = versionsFeatureInterface
+
 
 data VersionsResource = VersionsResource {
     preferredResource :: Resource,
@@ -74,21 +80,40 @@ data PreferredRender = PreferredRender {
 } deriving (Show, Eq)
 
 
-instance IsHackageFeature VersionsFeature where
-    getFeatureInterface versions = (emptyHackageFeature "versions") {
-        featureResources = map ($versionsResource versions)
+initVersionsFeature :: ServerEnv -> CoreFeature -> UploadFeature -> TagsFeature -> IO VersionsFeature
+initVersionsFeature _ core upload tags = do
+    preferredHook  <- newHook
+    deprecatedHook <- newHook
+    
+    return $
+      versionsFeature core upload tags
+                      preferredHook deprecatedHook
+      
+
+versionsFeature :: CoreFeature
+                -> UploadFeature
+                -> TagsFeature
+                -> Hook (PackageName -> PreferredInfo -> IO ())
+                -> Hook (PackageName -> Maybe [PackageName] -> IO ())
+                -> VersionsFeature
+
+versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
+                preferredHook deprecatedHook
+  = VersionsFeature{..}
+  where
+    versionsFeatureInterface = (emptyHackageFeature "versions") {
+        featureResources = map ($versionsResource)
             [preferredResource, preferredPackageResource,
              deprecatedResource, deprecatedPackageResource,
              preferredText]
-      , featurePostInit = updateDeprecatedTags versions
+      , featurePostInit = updateDeprecatedTags
       }
 
-initVersionsFeature :: ServerEnv -> CoreFeature -> UploadFeature -> TagsFeature -> IO VersionsFeature
-initVersionsFeature _ CoreFeature{..} UploadFeature{..} tags = do
-    prefHook <- newHook
-    deprHook <- newHook
-    return $ fix $ \f -> VersionsFeature
-      { versionsResource = fix $ \r -> VersionsResource
+    updateDeprecatedTags = do
+      pkgs <- fmap (Map.keys . deprecatedMap) $ query GetPreferredVersions
+      setCalculatedTag (Tag "deprecated") (Set.fromDistinctAscList pkgs)
+
+    versionsResource = fix $ \r -> VersionsResource
           { preferredResource = resourceAt "/packages/preferred.:format"
           , preferredText = (resourceAt "/packages/preferred-versions") { resourceGet = [("txt", \_ -> textPreferred)] }
           , preferredPackageResource = resourceAt "/package/:package/preferred.:format"
@@ -100,22 +125,7 @@ initVersionsFeature _ CoreFeature{..} UploadFeature{..} tags = do
           , deprecatedUri = \format -> renderResource (deprecatedResource r) [format]
           , deprecatedPackageUri = \format pkgid -> renderResource (deprecatedPackageResource r) [display pkgid, format]
           }
-      , preferredHook  = prefHook
-      , deprecatedHook = deprHook
-      , putPreferred  = doPutPreferred f
-      , putDeprecated = doPutDeprecated f
-      , updateDeprecatedTags = do
-            pkgs <- fmap (Map.keys . deprecatedMap) $ query GetPreferredVersions
-            setCalculatedTag tags (Tag "deprecated") (Set.fromDistinctAscList pkgs)
-      , doPreferredRender
-      , doDeprecatedRender
-      , doPreferredsRender
-      , doDeprecatedsRender
-      , makePreferredVersions
-      , withPackagePreferred
-      , withPackagePreferredPath
-      }
-  where
+
     textPreferred = fmap toResponse makePreferredVersions
 
     ---------------------------
@@ -144,8 +154,8 @@ initVersionsFeature _ CoreFeature{..} UploadFeature{..} tags = do
       withPackageId dpath $ \pkgid ->
         withPackagePreferred pkgid func
 
-    doPutPreferred :: VersionsFeature -> PackageName -> ServerPartE ()
-    doPutPreferred f pkgname =
+    putPreferred :: PackageName -> ServerPartE ()
+    putPreferred pkgname =
             withPackageAll pkgname $ \pkgs ->
             withPackageNameAuth pkgname $ \_ _ -> do
         pref <- optional $ fmap lines $ look "preferred"
@@ -161,7 +171,7 @@ initVersionsFeature _ CoreFeature{..} UploadFeature{..} tags = do
                         now <- liftIO getCurrentTime
                         --FIXME: this is modifying the cache belonging to the Core feature.
                         Cache.modifyCache indexExtras $ Map.insert "preferred-versions" (BS.pack prefVersions, now)
-                        runHook'' (preferredHook f) pkgname newInfo
+                        runHook'' preferredHook pkgname newInfo
                         runHook packageIndexChange
                         return ()
                     False -> preferredError "Not all of the selected versions are in the main index."
@@ -170,8 +180,8 @@ initVersionsFeature _ CoreFeature{..} UploadFeature{..} tags = do
       where
         preferredError = errBadRequest "Preferred ranges failed" . return . MText
 
-    doPutDeprecated :: VersionsFeature -> PackageName -> ServerPartE Bool
-    doPutDeprecated f pkgname =
+    putDeprecated :: PackageName -> ServerPartE Bool
+    putDeprecated pkgname =
             withPackageAll pkgname $ \_ ->
             withPackageNameAuth pkgname $ \_ _ -> do
         index  <- fmap packageList $ query GetPackagesState
@@ -195,8 +205,8 @@ initVersionsFeature _ CoreFeature{..} UploadFeature{..} tags = do
         deprecatedError = errBadRequest "Deprecation failed" . return . MText
         doUpdates deprs = do
             void $ update $ SetDeprecatedFor pkgname deprs
-            runHook'' (deprecatedHook f) pkgname deprs
-            liftIO $ updateDeprecatedTags f
+            runHook'' deprecatedHook pkgname deprs
+            liftIO $ updateDeprecatedTags
 
     renderPrefInfo :: PreferredInfo -> PreferredRender
     renderPrefInfo pref = PreferredRender {

@@ -31,9 +31,13 @@ import Data.ByteString.Lazy.Char8 (unpack)
 -- 1. Put the HTML view for this module in the HTML feature; get rid of the text view
 -- 2. Decide build report upload policy (anonymous and authenticated)
 data ReportsFeature = ReportsFeature {
-    featureInterface :: HackageFeature,
+    reportsFeatureInterface :: HackageFeature,
     reportsResource :: ReportsResource
 }
+
+instance IsHackageFeature ReportsFeature where
+    getFeatureInterface = reportsFeatureInterface
+
 
 data ReportsResource = ReportsResource {
     reportsList :: Resource,
@@ -44,44 +48,54 @@ data ReportsResource = ReportsResource {
     reportsLogUri  :: PackageId -> BuildReportId -> String
 }
 
-instance IsHackageFeature ReportsFeature where
-    getFeatureInterface = featureInterface
 
 initBuildReportsFeature :: ServerEnv -> UserFeature -> CoreFeature -> IO ReportsFeature
-initBuildReportsFeature ServerEnv{serverBlobStore = store}
-                        UserFeature{..} CoreFeature{..} = do
-    let resources = ReportsResource
+initBuildReportsFeature env user core = do
+                        
+    -- FIXME: currently the state is global
+
+    return $
+      buildReportsFeature env user core
+
+buildReportsFeature :: ServerEnv
+                    -> UserFeature
+                    -> CoreFeature
+                    -> ReportsFeature
+buildReportsFeature ServerEnv{serverBlobStore = store}
+                    UserFeature{..} CoreFeature{..}
+  = ReportsFeature{..}
+  where
+    reportsFeatureInterface = (emptyHackageFeature "packages") {
+          featureResources   = map ($ reportsResource) [reportsList, reportsPage, reportsLog],
+          featureDumpRestore = Just (dumpBackup store, restoreBackup store, testRoundtrip store)
+        }
+
+    reportsResource = ReportsResource
           { reportsList = (resourceAt "/package/:package/reports/.:format") {
                             resourceGet =  [("txt", textPackageReports)],
-                            resourcePost = [("",    submitBuildReport resources)]
+                            resourcePost = [("",    submitBuildReport)]
                           }
           , reportsPage = (resourceAt "/package/:package/reports/:id.:format") {
                             resourceGet    = [("txt", textPackageReport)],
-                            resourceDelete = [("",    deleteBuildReport resources)]
+                            resourceDelete = [("",    deleteBuildReport)]
                           }
           , reportsLog  = (resourceAt "/package/:package/reports/:id/log") {
                             resourceGet    = [("txt", serveBuildLog)],
-                            resourceDelete = [("",    deleteBuildLog resources)],
-                            resourcePut    = [("",    putBuildLog resources)]
+                            resourceDelete = [("",    deleteBuildLog)],
+                            resourcePut    = [("",    putBuildLog)]
                           }
 
-          , reportsListUri = \format pkgid -> renderResource (reportsList resources) [display pkgid, format]
-          , reportsPageUri = \format pkgid repid -> renderResource (reportsPage resources) [display pkgid, display repid, format]
-          , reportsLogUri  = \pkgid repid -> renderResource (reportsLog resources) [display pkgid, display repid]
+          , reportsListUri = \format pkgid -> renderResource (reportsList reportsResource) [display pkgid, format]
+          , reportsPageUri = \format pkgid repid -> renderResource (reportsPage reportsResource) [display pkgid, display repid, format]
+          , reportsLogUri  = \pkgid repid -> renderResource (reportsLog reportsResource) [display pkgid, display repid]
           }
-    return ReportsFeature {
-        featureInterface = (emptyHackageFeature "packages") {
-          featureResources   = map ($ resources) [reportsList, reportsPage, reportsLog],
-          featureDumpRestore = Just (dumpBackup store, restoreBackup store, testRoundtrip store)
-        }
-      , reportsResource = resources
-      }
-  where
+
     textPackageReports dpath =
       runServerPartE $
       withPackageVersionPath dpath $ \pkg -> do
         reportList <- query $ LookupPackageReports (packageId pkg)
         return . toResponse $ show reportList
+
     textPackageReport dpath =
       runServerPartE $
       withPackageVersionPath dpath $ \pkg ->
@@ -101,8 +115,8 @@ initBuildReportsFeature ServerEnv{serverBlobStore = store}
             return . toResponse $ Resource.BuildLog file
 
     -- result: auth error, not-found error, parse error, or redirect
-    submitBuildReport :: ReportsResource -> DynamicPath -> ServerPart Response
-    submitBuildReport r dpath =
+    submitBuildReport :: DynamicPath -> ServerPart Response
+    submitBuildReport dpath =
       runServerPartE $
       withPackageVersionPath dpath $ \pkg -> do
         users <- queryGetUserDb
@@ -115,11 +129,11 @@ initBuildReportsFeature ServerEnv{serverBlobStore = store}
             Right report -> do
                 reportId <- update $ AddReport pkgid (report, Nothing)
                 -- redirect to new reports page
-                seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
+                seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
     -- result: auth error, not-found error or redirect
-    deleteBuildReport :: ReportsResource -> DynamicPath -> ServerPart Response
-    deleteBuildReport r dpath =
+    deleteBuildReport :: DynamicPath -> ServerPart Response
+    deleteBuildReport dpath =
       runServerPartE $
       withPackageVersionPath dpath $ \pkg ->
       withReportId dpath $ \reportId -> do
@@ -129,12 +143,12 @@ initBuildReportsFeature ServerEnv{serverBlobStore = store}
         let pkgid = pkgInfoId pkg
         success <- update $ DeleteReport pkgid reportId
         if success
-            then seeOther (reportsListUri r "" pkgid) $ toResponse ()
+            then seeOther (reportsListUri reportsResource "" pkgid) $ toResponse ()
             else errNotFound "Build report not found" [MText $ "Build report #" ++ display reportId ++ " not found"]
 
     -- result: auth error, not-found error, or redirect
-    putBuildLog :: ReportsResource -> DynamicPath -> ServerPart Response
-    putBuildLog r dpath =
+    putBuildLog :: DynamicPath -> ServerPart Response
+    putBuildLog dpath =
       runServerPartE $
       withPackageVersionPath dpath $ \pkg ->
       withReportId dpath $ \reportId -> do
@@ -146,11 +160,11 @@ initBuildReportsFeature ServerEnv{serverBlobStore = store}
         buildLog <- liftIO $ BlobStorage.add store blogbody
         void $ update $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
         -- go to report page (linking the log)
-        seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
+        seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
     -- result: auth error, not-found error or redirect
-    deleteBuildLog :: ReportsResource -> DynamicPath -> ServerPart Response
-    deleteBuildLog r dpath =
+    deleteBuildLog :: DynamicPath -> ServerPart Response
+    deleteBuildLog dpath =
       runServerPartE $
       withPackageVersionPath dpath $ \pkg ->
       withReportId dpath $ \reportId -> do
@@ -160,7 +174,7 @@ initBuildReportsFeature ServerEnv{serverBlobStore = store}
         let pkgid = pkgInfoId pkg
         void $ update $ SetBuildLog pkgid reportId Nothing
         -- go to report page (which should no longer link the log)
-        seeOther (reportsPageUri r "" pkgid reportId) $ toResponse ()
+        seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
     ---------------------------------------------------------------------------
 
