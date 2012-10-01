@@ -18,11 +18,11 @@ import Distribution.Server.Features.PreferredVersions
 import Distribution.Server.Features.PackageList
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Mirror
+import Distribution.Server.Features.Distro
 
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
 import qualified Distribution.Server.Pages.Package as Pages
 import qualified Distribution.Server.Packages.State as State
-import qualified Distribution.Server.Features.Distro.State as State
 import qualified Distribution.Server.Framework.Cache as Cache
 
 import Distribution.Server.Users.Types
@@ -83,7 +83,8 @@ initHtmlFeature :: Bool
                 -> UploadFeature -> CheckFeature -> VersionsFeature
                 -- [reverse index disabled] -> ReverseFeature
                 -> TagsFeature -> DownloadFeature
-                -> ListFeature -> NamesFeature -> MirrorFeature
+                -> ListFeature -> NamesFeature
+                -> MirrorFeature -> DistroFeature
                 -> IO HtmlFeature
 
 initHtmlFeature enableCaches _env
@@ -93,7 +94,7 @@ initHtmlFeature enableCaches _env
                 -- [reverse index disabled] reverse
                 tags download
                 list@ListFeature{itemUpdate}
-                names mirror = do
+                names mirror distros = do
 
     -- Index page caches
     mainCache <- Cache.newCacheableAction enableCaches $
@@ -106,7 +107,8 @@ initHtmlFeature enableCaches _env
                           packages upload
                           check versions
                           tags download
-                          list names mirror
+                          list names
+                          mirror distros
                           mainCache namesCache
         namesCache <- Cache.newCacheableAction enableCaches packagesPage
     
@@ -126,6 +128,7 @@ htmlFeature :: UserFeature
             -> ListFeature
             -> NamesFeature
             -> MirrorFeature
+            -> DistroFeature
             -> Cache.CacheableAction Response
             -> Cache.CacheableAction Response
             -> (HtmlFeature, IO Response)
@@ -135,7 +138,8 @@ htmlFeature UserFeature{..} CoreFeature{..}
             CheckFeature{..} VersionsFeature{..}
             -- [reverse index disabled] ReverseFeature{..}
             TagsFeature{..} DownloadFeature{..}
-            ListFeature{..} NamesFeature{..} MirrorFeature{..}
+            ListFeature{..} NamesFeature{..}
+            MirrorFeature{..} DistroFeature{..}
             cachePackagesPage cacheNamesPage
   = (HtmlFeature{..}, packagesPage)
   where
@@ -270,7 +274,7 @@ packageGroupResource uploads)] }
             beforeHtml = [Pages.renderVersion realpkg (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl,
                           Pages.renderDependencies render]
         -- and other package indices
-        distributions <- query $ State.PackageStatus pkgname
+        distributions <- queryPackageStatus pkgname
         -- [reverse index disabled] revCount <- revPackageSummary realpkg
         (totalDown, versionDown) <- perVersionDownloads pkg
         let distHtml = case distributions of

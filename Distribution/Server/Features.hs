@@ -141,6 +141,7 @@ initHackageFeatures enableCaches env = do
                          listFeature
                          namesFeature
                          mirrorFeature
+                         distroFeature
 #endif
 
     -- The order of initialization above should be the same as

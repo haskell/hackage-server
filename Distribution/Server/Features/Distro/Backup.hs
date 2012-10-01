@@ -8,7 +8,7 @@ module Distribution.Server.Features.Distro.Backup (
     distroToCSV
   ) where
 
-import Distribution.Server.Acid (update, query)
+import Data.Acid
 import qualified Distribution.Server.Features.Distro.Distributions as Distros
 import Distribution.Server.Features.Distro.Distributions (DistroName, Distributions(..), DistroVersions(..), DistroPackageInfo(..))
 import Distribution.Server.Features.Distro.State
@@ -31,42 +31,42 @@ import Data.Monoid (mempty)
 import Control.Arrow (second)
 import System.FilePath (takeExtension)
 
-dumpBackup  :: IO [BackupEntry]
-dumpBackup = do
-    allDist <- query GetDistributions
+dumpBackup  :: AcidState Distros -> IO [BackupEntry]
+dumpBackup distrosState = do
+    allDist <- query distrosState GetDistributions
     let distros  = distDistros allDist
         versions = distVersions allDist
     return $ distroUsersToExport distros:distrosToExport distros versions
 
-restoreBackup :: RestoreBackup
-restoreBackup = updateDistros Distros.emptyDistributions Distros.emptyDistroVersions Map.empty
+restoreBackup :: AcidState Distros -> RestoreBackup
+restoreBackup distrosState = updateDistros distrosState Distros.emptyDistributions Distros.emptyDistroVersions Map.empty
 
-updateDistros :: Distributions -> DistroVersions -> Map DistroName UserList -> RestoreBackup
-updateDistros distros versions maintainers = fix $ \restorer -> RestoreBackup
+updateDistros :: AcidState Distros -> Distributions -> DistroVersions -> Map DistroName UserList -> RestoreBackup
+updateDistros distrosState distros versions maintainers = fix $ \restorer -> RestoreBackup
       { restoreEntry = \(path, bs) -> do
             case path of          
               ["package", distro] | takeExtension distro == ".csv" -> do
                 res <- runImport (distros, versions) (importDistro distro bs)
                 case res of
                     Right (distros', versions') -> return . Right $
-                        updateDistros distros' versions' maintainers
+                        updateDistros distrosState distros' versions' maintainers
                     Left bad -> return (Left bad)
               ["maintainers.csv"] -> do
                 res <- runImport maintainers (importMaintainers bs)
                 case res of
                     Right maintainers' -> return . Right $
-                        updateDistros distros versions maintainers'
+                        updateDistros distrosState distros versions maintainers'
                     Left bad -> return (Left bad)
               _ -> return . Right $ restorer
       , restoreFinalize = do
             let distros' = foldl' (\dists (name, group) -> Distros.modifyDistroMaintainers name (const group) dists) distros (Map.toList maintainers)
-            return . Right $ finalizeDistros distros' versions
+            return . Right $ finalizeDistros distrosState distros' versions
       , restoreComplete = return ()
       }
 
-finalizeDistros :: Distributions -> DistroVersions -> RestoreBackup
-finalizeDistros distros versions = mempty
-  { restoreComplete = update $ ReplaceDistributions distros versions
+finalizeDistros :: AcidState Distros -> Distributions -> DistroVersions -> RestoreBackup
+finalizeDistros distrosState distros versions = mempty
+  { restoreComplete = update distrosState $ ReplaceDistributions distros versions
   }
 
 importMaintainers :: ByteString -> Import (Map DistroName UserList) ()

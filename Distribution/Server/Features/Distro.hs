@@ -1,13 +1,14 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.Distro (
-    DistroFeature,
+    DistroFeature(..),
     DistroResource(..),
     initDistroFeature
   ) where
 
-import Distribution.Server.Acid (query, update)
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump (testRoundtripByQuery)
+import Data.Acid
+import Data.Acid.Advanced
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages
 import Distribution.Server.Features.Users
@@ -21,6 +22,8 @@ import Distribution.Server.Util.Parse (unpackUTF8)
 import Data.List (intercalate)
 import Distribution.Text (display, simpleParse)
 import Control.Monad
+import Control.Monad.Trans (MonadIO(..))
+import System.FilePath ((</>))
 import Distribution.Package
 import Text.CSV (parseCSV)
 import Data.Version (showVersion)
@@ -33,7 +36,8 @@ import Data.Version (showVersion)
 data DistroFeature = DistroFeature {
     distroFeatureInterface :: HackageFeature,
     distroResource   :: DistroResource,
-    maintainersGroup :: DynamicPath -> IO (Maybe UserGroup)
+    maintainersGroup :: DynamicPath -> IO (Maybe UserGroup),
+    queryPackageStatus :: MonadIO m => PackageName -> m [(DistroName, DistroPackageInfo)]
 }
 
 instance IsHackageFeature DistroFeature where
@@ -46,23 +50,37 @@ data DistroResource = DistroResource {
 }
 
 initDistroFeature :: ServerEnv -> UserFeature -> CoreFeature -> PackagesFeature -> IO DistroFeature
-initDistroFeature _ user core _ =
+initDistroFeature ServerEnv{serverStateDir} user core _ = do
 
-    -- FIXME: currently the state is global
+    -- Canonical state
+    distrosState  <- openLocalStateFrom
+                       (serverStateDir </> "db" </> "Distros")
+                       initialDistros
 
     return $
       distroFeature user core
+                    distrosState
 
 distroFeature :: UserFeature
               -> CoreFeature
+              -> AcidState Distros
               -> DistroFeature
-distroFeature UserFeature{..} CoreFeature{..}
+distroFeature UserFeature{..} CoreFeature{..} distrosState
   = DistroFeature{..}
   where
     distroFeatureInterface = (emptyHackageFeature "distro") {
         featureResources   = map ($distroResource) [distroIndexPage, distroAllPage, distroPackage]
-      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtripByQuery (query GetDistributions))
+      , featureDumpRestore = Just (dumpBackup distrosState,
+                                   restoreBackup distrosState,
+                                   testRoundtripByQuery (query distrosState GetDistributions))
+      , featureCheckpoint = do
+          createCheckpoint distrosState
+      , featureShutdown = do
+          closeAcidState distrosState
       }
+
+    queryPackageStatus :: MonadIO m => PackageName -> m [(DistroName, DistroPackageInfo)]
+    queryPackageStatus pkgname = query' distrosState (PackageStatus pkgname)
 
     distroResource = DistroResource
           { distroIndexPage = (resourceAt "/distros/.:format") { resourceGet = [("txt", textEnumDistros)], resourcePost = [("", distroNew)] }
@@ -73,7 +91,7 @@ distroFeature UserFeature{..} CoreFeature{..}
             Nothing -> return Nothing
             Just dname -> getMaintainersGroup adminGroup dname
 
-    textEnumDistros _ = fmap (toResponse . intercalate ", " . map display) (query EnumerateDistros)
+    textEnumDistros _ = fmap (toResponse . intercalate ", " . map display) (query' distrosState EnumerateDistros)
     textDistroPkgs dpath = withDistroPath dpath $ \dname pkgs -> do
         let pkglines = map (\(name, info) -> display name ++ " at " ++ display (distroVersion info) ++ ": " ++ distroUrl info) $ pkgs
         return $ toResponse (unlines $ ("Packages for " ++ display dname):pkglines)
@@ -85,7 +103,7 @@ distroFeature UserFeature{..} CoreFeature{..}
     distroDelete dpath = withDistroNamePath dpath $ \distro -> do
         -- authenticate Hackage admins
         -- should also check for existence here of distro here
-        void $ update $ RemoveDistro distro
+        void $ update' distrosState $ RemoveDistro distro
         seeOther ("/distros/") (toResponse ())
 
     -- result: ok response or not-found error
@@ -94,18 +112,18 @@ distroFeature UserFeature{..} CoreFeature{..}
         case info of
             Nothing -> notFound . toResponse $ "Package not found for " ++ display pkgname
             Just {} -> do
-                void $ update $ DropPackage dname pkgname
+                void $ update' distrosState $ DropPackage dname pkgname
                 ok $ toResponse "Ok!"
 
     -- result: see-other response, or an error: not authenticated or not found (todo)
     distroPackagePut dpath = withDistroPackagePath dpath $ \dname pkgname _ -> lookPackageInfo $ \newPkgInfo -> do
         -- authenticate distro maintainer
-        void $ update $ AddPackage dname pkgname newPkgInfo
+        void $ update' distrosState $ AddPackage dname pkgname newPkgInfo
         seeOther ("/distro/" ++ display dname ++ "/" ++ display pkgname) $ toResponse "Ok!"
 
     -- result: see-other response, or an error: not authentcated or bad request
     distroNew _ = lookDistroName $ \dname -> do
-        success <- update $ AddDistro dname
+        success <- update' distrosState $ AddDistro dname
         if success
             then seeOther ("/distro/" ++ display dname) $ toResponse "Ok!"
             else badRequest $ toResponse "Selected distribution name is already in use"
@@ -117,7 +135,7 @@ distroFeature UserFeature{..} CoreFeature{..}
             case csvToPackageList csv of
                 Nothing -> fail $ "Could not parse CSV File to a distro package list"
                 Just list -> do
-                    void $ update $ PutDistroPackageList dname list
+                    void $ update' distrosState $ PutDistroPackageList dname list
                     ok $ toResponse "Ok!"
 
     withDistroNamePath :: DynamicPath -> (DistroName -> ServerPart Response) -> ServerPart Response
@@ -125,11 +143,11 @@ distroFeature UserFeature{..} CoreFeature{..}
 
     withDistroPath :: DynamicPath -> (DistroName -> [(PackageName, DistroPackageInfo)] -> ServerPart Response) -> ServerPart Response
     withDistroPath dpath func = withDistroNamePath dpath $ \dname -> do
-        isDist <- query (IsDistribution dname)
+        isDist <- query' distrosState (IsDistribution dname)
         case isDist of
           False -> notFound $ toResponse "Distribution does not exist"
           True -> do
-            pkgs <- query (DistroStatus dname)
+            pkgs <- query' distrosState (DistroStatus dname)
             func dname pkgs
 
     -- guards on the distro existing, but not the package
@@ -137,11 +155,11 @@ distroFeature UserFeature{..} CoreFeature{..}
     withDistroPackagePath dpath func =
       withDistroNamePath dpath $ \dname ->
       withPackageName dpath $ \pkgname -> do
-        isDist <- query (IsDistribution dname)
+        isDist <- query' distrosState (IsDistribution dname)
         case isDist of
           False -> notFound $ toResponse "Distribution does not exist"
           True -> do
-            pkgInfo <- query (DistroPackageStatus dname pkgname)
+            pkgInfo <- query' distrosState (DistroPackageStatus dname pkgname)
             func dname pkgname pkgInfo
 
     lookPackageInfo :: (DistroPackageInfo -> ServerPart Response) -> ServerPart Response
@@ -163,15 +181,15 @@ distroFeature UserFeature{..} CoreFeature{..}
 
     getMaintainersGroup :: UserGroup -> DistroName -> IO (Maybe UserGroup)
     getMaintainersGroup admins dname = do
-        isDist <- query (IsDistribution dname)
+        isDist <- query distrosState (IsDistribution dname)
         case isDist of
           False -> return Nothing
           True  -> return . Just $ UserGroup
             { groupDesc = maintainerDescription dname
-            , queryUserList = query $ GetDistroMaintainers dname
-            , addUserList = update . AddDistroMaintainer dname
-            , removeUserList = update . RemoveDistroMaintainer dname
-            , groupExists = query (IsDistribution dname)
+            , queryUserList = query distrosState $ GetDistroMaintainers dname
+            , addUserList = update distrosState . AddDistroMaintainer dname
+            , removeUserList = update distrosState . RemoveDistroMaintainer dname
+            , groupExists = query distrosState (IsDistribution dname)
             , canAddGroup = [admins]
             , canRemoveGroup = [admins]
             }
