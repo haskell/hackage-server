@@ -65,7 +65,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
                     UserFeature{..} CoreFeature{..}
   = ReportsFeature{..}
   where
-    reportsFeatureInterface = (emptyHackageFeature "packages") {
+    reportsFeatureInterface = (emptyHackageFeature "reports") {
           featureResources   = map ($ reportsResource) [reportsList, reportsPage, reportsLog],
           featureDumpRestore = Just (dumpBackup store, restoreBackup store, testRoundtrip store)
         }
