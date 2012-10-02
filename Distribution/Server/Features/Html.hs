@@ -4,8 +4,8 @@ module Distribution.Server.Features.Html (
     initHtmlFeature
   ) where
 
-import Distribution.Server.Acid (query)
 import Distribution.Server.Framework
+
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages
 import Distribution.Server.Features.Upload
@@ -23,7 +23,6 @@ import Distribution.Server.Features.Documentation
 
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
 import qualified Distribution.Server.Pages.Package as Pages
-import qualified Distribution.Server.Packages.State as State
 import qualified Distribution.Server.Framework.Cache as Cache
 
 import Distribution.Server.Users.Types
@@ -580,7 +579,7 @@ packageGroupResource uploads)] }
 
     serveCandidatesPage :: DynamicPath -> ServerPart Response
     serveCandidatesPage _ = do
-        cands <- fmap State.candidateList $ query State.GetCandidatePackages
+        cands <- queryGetCandidateIndex
         return $ toResponse $ Resource.XHtml $ hackagePage "Package candidates"
           [ h2 << "Package candidates"
           , paragraph <<

@@ -10,20 +10,15 @@ import System.FilePath     ((</>))
 import System.IO.Unsafe    (unsafePerformIO)
 
 -- [reverse index disabled] import Distribution.Server.Packages.Reverse         (ReverseIndex, initialReverseIndex)
-import Distribution.Server.Packages.State           (CandidatePackages,
-                                                     initialCandidatePackages)
 
 -- WARNING: if you add fields here, you must update checkpointAcid and stopAcid. Failure to do so will *not* result in a compiler error.
 data Acid = Acid 
-    { acidCandidatePackages  :: AcidState CandidatePackages
+    {
     -- [reverse index disabled] , acidReverseIndex       :: AcidState ReverseIndex
     }
 
 class AcidComponent c where
     acidComponent :: Acid -> AcidState c
-
-instance AcidComponent CandidatePackages where
-    acidComponent = acidCandidatePackages
 
 -- [reverse index disabled] instance AcidComponent ReverseIndex where
 -- [reverse index disabled]     acidComponent = acidReverseIndex
@@ -46,19 +41,16 @@ setAcid acid =
 startAcid :: FilePath -> IO Acid
 startAcid stateDir =
     startAcid' stateDir 
-           initialCandidatePackages
            -- [reverse index disabled] initialReverseIndex
 
 startAcid' :: FilePath 
-           -> CandidatePackages
            -- [reverse index disabled] -> ReverseIndex
            -> IO Acid
-startAcid' stateDir candidatePackages
+startAcid' stateDir
     -- [reverse index disabled] reverseIndex
     =
-    do candidatePackages'  <- openLocalStateFrom (stateDir </> "CandidatePackages")  candidatePackages
-       -- [reverse index disabled] reverseIndex'       <- openLocalStateFrom (stateDir </> "ReverseIndex")       reverseIndex
-       let acid = Acid { acidCandidatePackages  = candidatePackages'
+    do -- [reverse index disabled] reverseIndex'       <- openLocalStateFrom (stateDir </> "ReverseIndex")       reverseIndex
+       let acid = Acid {
                        -- [reverse index disabled] , acidReverseIndex       = reverseIndex'
                        }
        setAcid acid
@@ -67,12 +59,10 @@ startAcid' stateDir candidatePackages
 stopAcid :: Acid -> IO ()
 stopAcid acid = 
     do setAcid (error "acid-state has been shutdown already.")
-       createCheckpointAndClose (acidCandidatePackages acid)
        -- [reverse index disabled] createCheckpointAndClose (acidReverseIndex acid)
 
 checkpointAcid :: Acid -> IO ()
-checkpointAcid acid =
-    do createCheckpoint (acidCandidatePackages acid)
+checkpointAcid acid = return ()
        -- [reverse index disabled] createCheckpoint (acidReverseIndex acid)
 
 update :: ( AcidComponent (MethodState event)
