@@ -5,8 +5,10 @@ module Distribution.Server.Features.BuildReports (
     initBuildReportsFeature
   ) where
 
-import Distribution.Server.Acid (update, query)
 import Distribution.Server.Framework hiding (BuildLog)
+import Data.Acid
+import Data.Acid.Advanced
+
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.Core
 
@@ -14,7 +16,7 @@ import Distribution.Server.Features.BuildReports.Backup
 import Distribution.Server.Features.BuildReports.State
 import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
 import Distribution.Server.Features.BuildReports.BuildReport (BuildReport(..))
-import Distribution.Server.Features.BuildReports.BuildReports (BuildReportId(..), BuildLog(..))
+import Distribution.Server.Features.BuildReports.BuildReports (BuildReports, BuildReportId(..), BuildLog(..))
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
 
 import Distribution.Server.Packages.Types
@@ -26,6 +28,7 @@ import Distribution.Package
 import Control.Monad
 import Control.Monad.Trans
 import Data.ByteString.Lazy.Char8 (unpack)
+import System.FilePath ((</>))
 
 -- TODO:
 -- 1. Put the HTML view for this module in the HTML feature; get rid of the text view
@@ -50,24 +53,36 @@ data ReportsResource = ReportsResource {
 
 
 initBuildReportsFeature :: ServerEnv -> UserFeature -> CoreFeature -> IO ReportsFeature
-initBuildReportsFeature env user core = do
+initBuildReportsFeature env@ServerEnv{serverStateDir} user core = do
                         
-    -- FIXME: currently the state is global
+    -- Canonical state
+    reportsState  <- openLocalStateFrom
+                       (serverStateDir </> "db" </> "BuildReports")
+                       initialBuildReports
 
     return $
       buildReportsFeature env user core
+                          reportsState
 
 buildReportsFeature :: ServerEnv
                     -> UserFeature
                     -> CoreFeature
+                    -> AcidState BuildReports
                     -> ReportsFeature
 buildReportsFeature ServerEnv{serverBlobStore = store}
                     UserFeature{..} CoreFeature{..}
+                    reportsState
   = ReportsFeature{..}
   where
     reportsFeatureInterface = (emptyHackageFeature "reports") {
           featureResources   = map ($ reportsResource) [reportsList, reportsPage, reportsLog],
-          featureDumpRestore = Just (dumpBackup store, restoreBackup store, testRoundtrip store)
+          featureCheckpoint = do
+            createCheckpoint reportsState,
+          featureShutdown = do
+            closeAcidState reportsState,
+          featureDumpRestore = Just ( dumpBackup    reportsState store
+                                    , restoreBackup reportsState store
+                                    , testRoundtrip reportsState store )
         }
 
     reportsResource = ReportsResource
@@ -93,7 +108,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
     textPackageReports dpath =
       runServerPartE $
       withPackageVersionPath dpath $ \pkg -> do
-        reportList <- query $ LookupPackageReports (packageId pkg)
+        reportList <- query' reportsState $ LookupPackageReports (packageId pkg)
         return . toResponse $ show reportList
 
     textPackageReport dpath =
@@ -127,7 +142,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
         case BuildReport.parse $ unpack reportbody of
             Left err -> errBadRequest "Error submitting report" [MText err]
             Right report -> do
-                reportId <- update $ AddReport pkgid (report, Nothing)
+                reportId <- update' reportsState $ AddReport pkgid (report, Nothing)
                 -- redirect to new reports page
                 seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
@@ -141,7 +156,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
         -- restrict this to whom? currently logged in users.. a bad idea
         void $ guardAuthenticated hackageRealm users
         let pkgid = pkgInfoId pkg
-        success <- update $ DeleteReport pkgid reportId
+        success <- update' reportsState $ DeleteReport pkgid reportId
         if success
             then seeOther (reportsListUri reportsResource "" pkgid) $ toResponse ()
             else errNotFound "Build report not found" [MText $ "Build report #" ++ display reportId ++ " not found"]
@@ -158,7 +173,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
         let pkgid = pkgInfoId pkg
         Body blogbody <- consumeRequestBody
         buildLog <- liftIO $ BlobStorage.add store blogbody
-        void $ update $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
+        void $ update' reportsState $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
         -- go to report page (linking the log)
         seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
@@ -172,7 +187,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
         -- again, restrict this to whom?
         void $ guardAuthenticated hackageRealm users
         let pkgid = pkgInfoId pkg
-        void $ update $ SetBuildLog pkgid reportId Nothing
+        void $ update' reportsState $ SetBuildLog pkgid reportId Nothing
         -- go to report page (which should no longer link the log)
         seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
@@ -187,7 +202,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
     withPackageReport :: DynamicPath -> PackageId -> (BuildReportId -> (BuildReport, Maybe BuildLog) -> ServerPartE a) -> ServerPartE a
     withPackageReport dpath pkgid func =
       withReportId dpath $ \reportId -> do
-        mreport <- query $ LookupReport pkgid reportId
+        mreport <- query' reportsState $ LookupReport pkgid reportId
         case mreport of
             Nothing -> errNotFound "Report not found" [MText "Build report does not exist"]
             Just report -> func reportId report

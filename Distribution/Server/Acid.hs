@@ -9,8 +9,6 @@ import Data.Acid.Local     (createCheckpointAndClose)
 import System.FilePath     ((</>))
 import System.IO.Unsafe    (unsafePerformIO)
 
-import Distribution.Server.Features.BuildReports.BuildReports (BuildReports)
-import Distribution.Server.Features.BuildReports.State        (initialBuildReports)
 import Distribution.Server.Packages.Platform        (PlatformPackages, initialPlatformPackages)
 -- [reverse index disabled] import Distribution.Server.Packages.Reverse         (ReverseIndex, initialReverseIndex)
 import Distribution.Server.Packages.State           (CandidatePackages, PackagesState,
@@ -19,8 +17,7 @@ import Distribution.Server.Packages.State           (CandidatePackages, Packages
 
 -- WARNING: if you add fields here, you must update checkpointAcid and stopAcid. Failure to do so will *not* result in a compiler error.
 data Acid = Acid 
-    { acidBuildReports       :: AcidState BuildReports
-    , acidCandidatePackages  :: AcidState CandidatePackages
+    { acidCandidatePackages  :: AcidState CandidatePackages
     , acidPackagesState      :: AcidState PackagesState
     , acidPlatformPackages   :: AcidState PlatformPackages
     -- [reverse index disabled] , acidReverseIndex       :: AcidState ReverseIndex
@@ -28,9 +25,6 @@ data Acid = Acid
 
 class AcidComponent c where
     acidComponent :: Acid -> AcidState c
-
-instance AcidComponent BuildReports where
-    acidComponent = acidBuildReports
 
 instance AcidComponent CandidatePackages where
     acidComponent = acidCandidatePackages
@@ -62,29 +56,25 @@ setAcid acid =
 startAcid :: FilePath -> IO Acid
 startAcid stateDir =
     startAcid' stateDir 
-           initialBuildReports
            initialCandidatePackages
            initialPackagesState
            initialPlatformPackages
            -- [reverse index disabled] initialReverseIndex
 
 startAcid' :: FilePath 
-           -> BuildReports
            -> CandidatePackages
            -> PackagesState
            -> PlatformPackages
            -- [reverse index disabled] -> ReverseIndex
            -> IO Acid
-startAcid' stateDir buildReports candidatePackages packagesState platformPackages
+startAcid' stateDir candidatePackages packagesState platformPackages
     -- [reverse index disabled] reverseIndex
     =
-    do buildReports'       <- openLocalStateFrom (stateDir </> "BuildReports")       buildReports
-       candidatePackages'  <- openLocalStateFrom (stateDir </> "CandidatePackages")  candidatePackages
+    do candidatePackages'  <- openLocalStateFrom (stateDir </> "CandidatePackages")  candidatePackages
        packagesState'      <- openLocalStateFrom (stateDir </> "PackagesState")      packagesState
        platformPackages'   <- openLocalStateFrom (stateDir </> "PlatformPackages")   platformPackages
        -- [reverse index disabled] reverseIndex'       <- openLocalStateFrom (stateDir </> "ReverseIndex")       reverseIndex
-       let acid = Acid { acidBuildReports       = buildReports' 
-                       , acidCandidatePackages  = candidatePackages'
+       let acid = Acid { acidCandidatePackages  = candidatePackages'
                        , acidPackagesState      = packagesState'
                        , acidPlatformPackages   = platformPackages'
                        -- [reverse index disabled] , acidReverseIndex       = reverseIndex'
@@ -95,7 +85,6 @@ startAcid' stateDir buildReports candidatePackages packagesState platformPackage
 stopAcid :: Acid -> IO ()
 stopAcid acid = 
     do setAcid (error "acid-state has been shutdown already.")
-       createCheckpointAndClose (acidBuildReports acid)
        createCheckpointAndClose (acidCandidatePackages acid)
        createCheckpointAndClose (acidPackagesState acid)
        createCheckpointAndClose (acidPlatformPackages acid)
@@ -103,8 +92,7 @@ stopAcid acid =
 
 checkpointAcid :: Acid -> IO ()
 checkpointAcid acid =
-    do createCheckpoint (acidBuildReports acid)
-       createCheckpoint (acidCandidatePackages acid)
+    do createCheckpoint (acidCandidatePackages acid)
        createCheckpoint (acidPackagesState acid)
        createCheckpoint (acidPlatformPackages acid)
        -- [reverse index disabled] createCheckpoint (acidReverseIndex acid)

@@ -7,7 +7,7 @@ module Distribution.Server.Features.BuildReports.Backup (
     packageReportsToExport
   ) where
 
-import Distribution.Server.Acid (update, query)
+import Data.Acid (AcidState, update, query)
 import Distribution.Server.Features.BuildReports.BuildReport (BuildReport)
 import qualified Distribution.Server.Features.BuildReports.BuildReport as Report
 import Distribution.Server.Features.BuildReports.BuildReports (BuildReports(..), PkgBuildReports(..), BuildReportId(..), BuildLog(..))
@@ -34,25 +34,25 @@ import System.FilePath (splitExtension)
 import Data.ByteString.Lazy.Char8 (ByteString)
 
 
-dumpBackup  :: BlobStorage -> IO [BackupEntry]
-dumpBackup store = do
-  buildReps <- query GetBuildReports
+dumpBackup  :: AcidState BuildReports -> BlobStorage -> IO [BackupEntry]
+dumpBackup reportsState store = do
+  buildReps <- query reportsState GetBuildReports
   exports <- readExportBlobs store (buildReportsToExport buildReps)
   return exports
 
-restoreBackup :: BlobStorage -> RestoreBackup
-restoreBackup storage = updateReports storage (Reports.emptyReports, Map.empty)
+restoreBackup :: AcidState BuildReports -> BlobStorage -> RestoreBackup
+restoreBackup reportsState storage = updateReports reportsState storage (Reports.emptyReports, Map.empty)
 
-testRoundtrip :: BlobStorage -> TestRoundtrip
-testRoundtrip store = testRoundtripByQuery' (query GetBuildReports) $ \buildReps -> do
+testRoundtrip :: AcidState BuildReports -> BlobStorage -> TestRoundtrip
+testRoundtrip reportsState store = testRoundtripByQuery' (query reportsState GetBuildReports) $ \buildReps -> do
   testBlobsExist store [blob | pkgBuildRep <- Map.elems (reportsIndex buildReps)
                              , (_, Just (BuildLog blob)) <- Map.elems (reports pkgBuildRep)]
 
 -- when logs are encountered before their corresponding build reports
 type PartialLogs = Map (PackageId, BuildReportId) BuildLog
 
-updateReports :: BlobStorage -> (BuildReports, PartialLogs) -> RestoreBackup
-updateReports storage reportLogs@(buildReports, partialLogs) = RestoreBackup
+updateReports :: AcidState BuildReports -> BlobStorage -> (BuildReports, PartialLogs) -> RestoreBackup
+updateReports reportsState storage reportLogs@(buildReports, partialLogs) = RestoreBackup
   { restoreEntry = \(entry, bs) -> do
         res <- runImport reportLogs $ case entry of
             ["package", pkgStr, reportItem] | Just pkgid <- simpleParse pkgStr -> case packageVersion pkgid of
@@ -62,20 +62,20 @@ updateReports storage reportLogs@(buildReports, partialLogs) = RestoreBackup
                         (num, "log") -> importLog storage pkgid num bs
                         _ -> return ()
             _ -> return ()
-        return $ fmap (updateReports storage) res
+        return $ fmap (updateReports reportsState storage) res
   , restoreFinalize = do
         let insertLog buildReps ((pkgid, reportId), buildLog) = case Reports.setBuildLog pkgid reportId (Just buildLog) buildReps of
                 Just buildReps' -> Right buildReps'
                 Nothing -> Left $ "Build log #" ++ display reportId ++ " exists for " ++ display pkgid ++ " but report itself does not"
         case foldM insertLog buildReports (Map.toList partialLogs) of
-            Right theReports -> return . Right $ finalizeReports theReports
+            Right theReports -> return . Right $ finalizeReports reportsState theReports
             Left err -> return . Left $ err
   , restoreComplete = return ()
   }
 
-finalizeReports :: BuildReports -> RestoreBackup
-finalizeReports buildReports = mempty
-  { restoreComplete = update $ ReplaceBuildReports buildReports
+finalizeReports :: AcidState BuildReports -> BuildReports -> RestoreBackup
+finalizeReports reportsState buildReports = mempty
+  { restoreComplete = update reportsState $ ReplaceBuildReports buildReports
   }
 
 importReport :: PackageId -> String -> ByteString -> Import (BuildReports, PartialLogs) ()
