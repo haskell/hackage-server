@@ -1,12 +1,13 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, PatternGuards #-}
 module Distribution.Server.Features.Documentation (
-    DocumentationFeature,
+    DocumentationFeature(..),
     DocumentationResource(..),
     initDocumentationFeature
   ) where
 
-import Distribution.Server.Acid (query, update)
 import Distribution.Server.Framework
+import Data.Acid
+import Data.Acid.Advanced
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
 
@@ -29,12 +30,16 @@ import qualified Codec.Compression.GZip as GZip
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Control.Monad
 import Control.Monad.State (modify)
+import System.FilePath ((</>))
 
 -- TODO:
 -- 1. Write an HTML view for organizing uploads
 -- 2. Have cabal generate a standard doc tarball, and serve that here
 data DocumentationFeature = DocumentationFeature {
     documentationFeatureInterface :: HackageFeature,
+
+    queryHasDocumentation :: MonadIO m => PackageIdentifier -> m Bool,
+
     documentationResource :: DocumentationResource
 }
 
@@ -49,28 +54,38 @@ data DocumentationResource = DocumentationResource {
 }
 
 initDocumentationFeature :: ServerEnv -> CoreFeature -> UploadFeature -> IO DocumentationFeature
-initDocumentationFeature env core upload = do
+initDocumentationFeature env@ServerEnv{serverStateDir} core upload = do
 
-    -- FIXME: currently the state is global
+    -- Canonical state
+    documentationState <- openLocalStateFrom
+                            (serverStateDir </> "db" </> "Documentation")
+                            initialDocumentation
 
     return $
       documentationFeature env core upload
+                           documentationState
 
 documentationFeature :: ServerEnv
                      -> CoreFeature
                      -> UploadFeature
+                     -> AcidState Documentation
                      -> DocumentationFeature
 documentationFeature ServerEnv{serverBlobStore = store}
                      CoreFeature{..} UploadFeature{..}
+                     documentationState
   = DocumentationFeature{..}
   where
     documentationFeatureInterface = (emptyHackageFeature "documentation") {
         featureResources = map ($ documentationResource) [packageDocs, packageDocTar, packageDocsUpload]
+      , featureCheckpoint = do
+          createCheckpoint documentationState
+      , featureShutdown = do
+          closeAcidState documentationState
       , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
       }
     
     dumpBackup = do
-        doc <- query GetDocumentation
+        doc <- query documentationState GetDocumentation
         let exportFunc (pkgid, (blob, _)) = ([display pkgid, "documentation.tar"], Right blob)
         readExportBlobs store $ map exportFunc . Map.toList $ documentation doc
     restoreBackup = updateDocumentation (Documentation Map.empty)
@@ -78,8 +93,11 @@ documentationFeature ServerEnv{serverBlobStore = store}
     -- 1. We don't really want to check that the tar index is the same (probably)
     -- 2. We must that the documentation blobs all got imported. To do this we just
     --    need to check they *exist*, due to the MD5-hashing scheme we use.
-    testRoundtrip = testRoundtripByQuery' (liftM (Map.map fst . documentation) $ query GetDocumentation) $ \doc ->
+    testRoundtrip = testRoundtripByQuery' (liftM (Map.map fst . documentation) $ query documentationState GetDocumentation) $ \doc ->
         testBlobsExist store (Map.elems doc)
+
+    queryHasDocumentation :: MonadIO m => PackageIdentifier -> m Bool
+    queryHasDocumentation pkgid = query' documentationState (HasDocumentation pkgid)
 
     documentationResource = DocumentationResource {
         packageDocs = (resourceAt "/package/:package/doc/..") { resourceGet = [("", serveDocumentation)] }
@@ -115,7 +133,7 @@ documentationFeature ServerEnv{serverBlobStore = store}
             Body fileContents <- consumeRequestBody
             blob <- liftIO $ BlobStorage.add store (GZip.decompress fileContents)
             tarIndex <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blob)
-            void $ update $ InsertDocumentation pkgid blob tarIndex
+            void $ update' documentationState $ InsertDocumentation pkgid blob tarIndex
             seeOther ("/package/" ++ display pkgid) (toResponse ())
 
     -- curl -u mgruen:admin -X PUT --data-binary @gtk.tar.gz http://localhost:8080/package/gtk-0.11.0
@@ -124,7 +142,7 @@ documentationFeature ServerEnv{serverBlobStore = store}
     withDocumentation dpath func =
         withPackagePath dpath $ \pkg _ -> do
         let pkgid = packageId pkg
-        mdocs <- query $ LookupDocumentation pkgid
+        mdocs <- query' documentationState $ LookupDocumentation pkgid
         case mdocs of
           Nothing -> errNotFound "Not Found" [MText $ "There is no documentation for " ++ display pkgid]
           Just (blob, index) -> func pkgid blob index
@@ -139,7 +157,7 @@ documentationFeature ServerEnv{serverBlobStore = store}
                     return $ fmap updateDocumentation res
                 _ -> return . Right $ r
       , restoreFinalize = return . Right $ r
-      , restoreComplete = update $ ReplaceDocumentation docs
+      , restoreComplete = update documentationState $ ReplaceDocumentation docs
       }
 
     importDocumentation :: PackageId

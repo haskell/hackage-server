@@ -19,6 +19,7 @@ import Distribution.Server.Features.PackageList
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Mirror
 import Distribution.Server.Features.Distro
+import Distribution.Server.Features.Documentation
 
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
 import qualified Distribution.Server.Pages.Package as Pages
@@ -85,6 +86,7 @@ initHtmlFeature :: Bool
                 -> TagsFeature -> DownloadFeature
                 -> ListFeature -> NamesFeature
                 -> MirrorFeature -> DistroFeature
+                -> DocumentationFeature
                 -> IO HtmlFeature
 
 initHtmlFeature enableCaches _env
@@ -94,7 +96,8 @@ initHtmlFeature enableCaches _env
                 -- [reverse index disabled] reverse
                 tags download
                 list@ListFeature{itemUpdate}
-                names mirror distros = do
+                names mirror
+                distros docs = do
 
     -- Index page caches
     mainCache <- Cache.newCacheableAction enableCaches $
@@ -108,7 +111,7 @@ initHtmlFeature enableCaches _env
                           check versions
                           tags download
                           list names
-                          mirror distros
+                          mirror distros docs
                           mainCache namesCache
         namesCache <- Cache.newCacheableAction enableCaches packagesPage
     
@@ -129,6 +132,7 @@ htmlFeature :: UserFeature
             -> NamesFeature
             -> MirrorFeature
             -> DistroFeature
+            -> DocumentationFeature
             -> Cache.CacheableAction Response
             -> Cache.CacheableAction Response
             -> (HtmlFeature, IO Response)
@@ -140,6 +144,7 @@ htmlFeature UserFeature{..} CoreFeature{..}
             TagsFeature{..} DownloadFeature{..}
             ListFeature{..} NamesFeature{..}
             MirrorFeature{..} DistroFeature{..}
+            DocumentationFeature{..}
             cachePackagesPage cacheNamesPage
   = (HtmlFeature{..}, packagesPage)
   where
@@ -284,7 +289,7 @@ packageGroupResource uploads)] }
                                      -- [reverse index disabled] ,Pages.reversePackageSummary realpkg revr revCount
                                      ]
         -- bottom sections, currently only documentation
-        hasDocs  <- query $ State.HasDocumentation realpkg
+        hasDocs  <- queryHasDocumentation realpkg
         let docURL | hasDocs   = Just $ "/package" </> display realpkg </> "doc"
                    | otherwise = Nothing
         -- extra features like tags and downloads
