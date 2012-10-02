@@ -181,4 +181,5 @@ checkpointAllFeatures :: [HackageFeature] -> IO ()
 checkpointAllFeatures = mapM_ featureCheckpoint
 
 shutdownAllFeatures :: [HackageFeature] -> IO ()
-shutdownAllFeatures   = mapM_ featureShutdown
+shutdownAllFeatures   = mapM_ featureShutdown . reverse
+
