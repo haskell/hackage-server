@@ -25,10 +25,10 @@ module Distribution.Server (
     tearDownTemp
  ) where
 
-import Happstack.Server hiding (port, host)
-
-import qualified Distribution.Server.Framework.BackupRestore as Import
+import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
+import qualified Distribution.Server.Framework.BackupRestore as Import
+
 -- TODO: move this to BulkImport module
 import Distribution.Server.Users.Backup (usersToCSV, groupToCSV)
 import Distribution.Server.Packages.Backup (infoToCurrentEntries, maintToExport)
@@ -36,7 +36,6 @@ import Distribution.Server.Packages.Backup.Tags (tagsToCSV)
 import Distribution.Server.Features.Tags (constructTagIndex)
 import qualified Distribution.Server.Users.Group as Group
 
-import Distribution.Server.Framework
 import Distribution.Server.Framework.Feature as Feature
 import qualified Distribution.Server.Features as Features
 import Distribution.Server.Features.Users
@@ -50,13 +49,10 @@ import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
 
-
 import Distribution.Text
 
-import System.FilePath ((</>))
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist)
 import Control.Concurrent
-import Control.Monad
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Network.URI (URIAuth(URIAuth))
 import Network.BSD (getHostName)
@@ -64,6 +60,7 @@ import Data.List (foldl')
 import Data.Int  (Int64)
 
 import Paths_hackage_server (getDataDir)
+
 
 data ListenOn = ListenOn {
   loPortNum :: Int,

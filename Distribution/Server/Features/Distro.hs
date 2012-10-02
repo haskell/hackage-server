@@ -7,8 +7,7 @@ module Distribution.Server.Features.Distro (
 
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump (testRoundtripByQuery)
-import Data.Acid
-import Data.Acid.Advanced
+
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 
@@ -18,12 +17,10 @@ import Distribution.Server.Features.Distro.Types
 import Distribution.Server.Features.Distro.Backup
 import Distribution.Server.Util.Parse (unpackUTF8)
 
-import Data.List (intercalate)
 import Distribution.Text (display, simpleParse)
-import Control.Monad
-import Control.Monad.Trans (MonadIO(..))
-import System.FilePath ((</>))
 import Distribution.Package
+
+import Data.List (intercalate)
 import Text.CSV (parseCSV)
 import Data.Version (showVersion)
 

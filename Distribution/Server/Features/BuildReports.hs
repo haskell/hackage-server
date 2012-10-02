@@ -6,8 +6,6 @@ module Distribution.Server.Features.BuildReports (
   ) where
 
 import Distribution.Server.Framework hiding (BuildLog)
-import Data.Acid
-import Data.Acid.Advanced
 
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.Core
@@ -25,10 +23,8 @@ import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Text
 import Distribution.Package
 
-import Control.Monad
-import Control.Monad.Trans
 import Data.ByteString.Lazy.Char8 (unpack)
-import System.FilePath ((</>))
+
 
 -- TODO:
 -- 1. Put the HTML view for this module in the HTML feature; get rid of the text view

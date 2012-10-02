@@ -6,8 +6,7 @@ module Distribution.Server.Features.Documentation (
   ) where
 
 import Distribution.Server.Framework
-import Data.Acid
-import Data.Acid.Advanced
+
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
 
@@ -24,13 +23,10 @@ import Distribution.Text
 import Distribution.Package
 
 import Data.Function
-import Control.Monad.Trans
 import qualified Data.Map as Map
 import qualified Codec.Compression.GZip as GZip
 import Data.ByteString.Lazy.Char8 (ByteString)
-import Control.Monad
 import Control.Monad.State (modify)
-import System.FilePath ((</>))
 
 -- TODO:
 -- 1. Write an HTML view for organizing uploads

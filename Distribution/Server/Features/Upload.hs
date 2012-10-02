@@ -8,13 +8,11 @@ module Distribution.Server.Features.Upload (
   ) where
 
 import Distribution.Server.Framework
-import Data.Acid
-import Data.Acid.Advanced
+import Distribution.Server.Framework.BackupDump
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 
-import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Packages.Backup
 import Distribution.Server.Packages.State
 import Distribution.Server.Users.Backup
@@ -26,19 +24,17 @@ import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Packages.Unpack as Upload
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 
-import Data.Monoid (mconcat)
 import Data.Maybe (fromMaybe, listToMaybe, catMaybes)
 import qualified Data.Map as Map
 import Data.Time.Clock (getCurrentTime)
-import Control.Monad
-import Control.Monad.Trans (MonadIO(..))
 import Data.Function (fix)
 import Data.ByteString.Lazy.Char8 (ByteString)
-import System.FilePath ((</>))
+
 import Distribution.Package
 import Distribution.PackageDescription (GenericPackageDescription)
 import Distribution.Text (display, simpleParse)
 import qualified Codec.Compression.GZip as GZip
+
 
 data UploadFeature = UploadFeature {
     uploadFeatureInterface :: HackageFeature,

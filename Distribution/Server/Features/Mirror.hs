@@ -6,8 +6,6 @@ module Distribution.Server.Features.Mirror (
   ) where
 
 import Distribution.Server.Framework hiding (formatTime)
-import Data.Acid
-import Data.Acid.Advanced
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
@@ -29,13 +27,11 @@ import qualified Data.ByteString.Char8 as SBS
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (formatTime, parseTime)
 import System.Locale (defaultTimeLocale)
+import qualified Codec.Compression.GZip as GZip
 
-import Control.Monad
-import Control.Monad.Trans (MonadIO(..))
 import Distribution.Package
 import Distribution.Text
-import System.FilePath ((</>), (<.>))
-import qualified Codec.Compression.GZip as GZip
+
 
 data MirrorFeature = MirrorFeature {
     mirrorFeatureInterface :: HackageFeature,

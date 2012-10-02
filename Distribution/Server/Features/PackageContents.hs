@@ -6,6 +6,7 @@ module Distribution.Server.Features.PackageContents (
   ) where
 
 import Distribution.Server.Framework
+
 import Distribution.Server.Features.Check
 import Distribution.Server.Features.Core
 
@@ -16,8 +17,6 @@ import Data.TarIndex (TarIndex)
 
 import Distribution.Text
 import Distribution.Package
-
-import Control.Monad.Trans
 
 
 -- FIXME: cache TarIndexes?

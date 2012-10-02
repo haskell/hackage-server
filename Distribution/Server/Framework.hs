@@ -3,6 +3,9 @@
 module Distribution.Server.Framework (
 
     module Happstack.Server,
+    module Data.Acid,
+    module Data.Acid.Advanced,
+
     module Distribution.Server.Framework.Auth,
     module Distribution.Server.Framework.Feature,
     module Distribution.Server.Framework.Types,
@@ -10,11 +13,20 @@ module Distribution.Server.Framework (
     module Distribution.Server.Framework.Resource,
     module Distribution.Server.Framework.Hook,
     module Distribution.Server.Framework.Error,
-    module Distribution.Server.Util.Happstack
+    module Distribution.Server.Util.Happstack,
+
+    module Data.Monoid,
+    module Control.Applicative,
+    module Control.Monad,
+    module Control.Monad.Trans,
+    module System.FilePath,
 
   ) where
 
 import Happstack.Server
+import Data.Acid
+import Data.Acid.Advanced (update', query')
+
 import Distribution.Server.Framework.Auth
 import Distribution.Server.Framework.Feature
 import Distribution.Server.Framework.Types
@@ -23,3 +35,10 @@ import Distribution.Server.Framework.Resource
 import Distribution.Server.Framework.Hook
 import Distribution.Server.Framework.Error
 import Distribution.Server.Util.Happstack
+
+
+import Data.Monoid (Monoid(..))
+import Control.Applicative (Applicative(..), (<$>))
+import Control.Monad
+import Control.Monad.Trans (MonadIO, liftIO)
+import System.FilePath ((</>), (<.>))

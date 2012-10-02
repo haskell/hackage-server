@@ -14,9 +14,6 @@ import Data.Version ( Version (..) )
 
 import qualified System.FilePath.Posix as Posix (joinPath, splitExtension)
 
-import Control.Applicative ( (<$>) )
-import Control.Monad (msum, mzero)
-
 
 -- | A feature to provide redirection for URLs that existed in the first
 -- incarnation of the hackage server.

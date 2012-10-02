@@ -9,12 +9,8 @@ module Distribution.Server.Features.Users (
     GroupGen,
   ) where
 
-import Control.Applicative ((<$>), (<*>), optional)
-
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
-import Data.Acid
-import Data.Acid.Advanced
 import qualified Distribution.Server.Framework.Cache as Cache
 
 import Distribution.Server.Users.Types
@@ -31,13 +27,10 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Function (fix)
-import Data.Monoid (Monoid(..))
-import Control.Monad
-import System.FilePath ((</>))
+import Control.Applicative (optional)
 
 import Distribution.Text (display, simpleParse)
 
-import Control.Monad.Trans (MonadIO(..))
 
 -- | A feature to allow manipulation of the database of users.
 --

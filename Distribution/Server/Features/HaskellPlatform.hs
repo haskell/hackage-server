@@ -6,20 +6,17 @@ module Distribution.Server.Features.HaskellPlatform (
   ) where
 
 import Distribution.Server.Framework
-import Data.Acid
-import Data.Acid.Advanced
+
 import Distribution.Server.Packages.Platform
-import Data.Function
 
 import Distribution.Package
 import Distribution.Version
 import Distribution.Text
 
+import Data.Function
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Control.Monad (liftM)
-import Control.Monad.Trans (MonadIO)
-import System.FilePath ((</>))
+
 
 -- Note: this can be generalized into dividing Hackage up into however many
 -- subsets of packages are desired. One could implement a Debian-esque system

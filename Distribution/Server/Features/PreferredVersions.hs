@@ -7,11 +7,8 @@ module Distribution.Server.Features.PreferredVersions (
     PreferredRender(..),
   ) where
 
-import Control.Applicative (optional)
-
 import Distribution.Server.Framework
-import Data.Acid
-import Data.Acid.Advanced
+
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Tags
@@ -30,13 +27,12 @@ import Data.Either   (rights)
 import Data.Function (fix)
 import Data.List (intercalate, find)
 import Data.Time.Clock (getCurrentTime)
-import System.FilePath ((</>))
 import Control.Arrow (second)
-import Control.Monad
-import Control.Monad.Trans (MonadIO, liftIO)
+import Control.Applicative (optional)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.ByteString.Lazy.Char8 as BS
+
 
 data VersionsFeature = VersionsFeature {
     versionsFeatureInterface :: HackageFeature,

@@ -12,8 +12,6 @@ module Distribution.Server.Features.Core (
 
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
-import Data.Acid
-import Data.Acid.Advanced
 
 import Distribution.Server.Features.Users
 
@@ -29,9 +27,6 @@ import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
-import Control.Applicative
-import Control.Monad
-import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Time.Clock (UTCTime)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -40,7 +35,6 @@ import Text.XHtml.Strict (Html, toHtml, unordList, h3, (<<), anchor, href, (!))
 import Data.Ord (comparing)
 import Data.List (sortBy, find)
 import Data.ByteString.Lazy.Char8 (ByteString)
-import System.FilePath ((</>))
 
 import Distribution.Text (display)
 import Distribution.Package

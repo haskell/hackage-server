@@ -41,24 +41,24 @@ import Distribution.Server.Pages.Util
 import qualified Distribution.Server.Pages.Group as Pages
 -- [reverse index disabled] import qualified Distribution.Server.Pages.Reverse as Pages
 import qualified Distribution.Server.Pages.Index as Pages
-import Text.XHtml.Strict
-import qualified Text.XHtml.Strict as XHtml
-import Text.XHtml.Table (simpleTable)
 
 import Distribution.Package
 import Distribution.Version
 import Distribution.Text (display)
 import Distribution.PackageDescription
+
 import Data.List (intercalate, intersperse, insert, sortBy)
 import Data.Function (on)
-import Control.Applicative
-import Control.Monad
-import Control.Monad.Trans (MonadIO, liftIO)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-import System.FilePath.Posix ((</>))
 import Data.Maybe (fromMaybe)
+import System.FilePath.Posix ((</>))
+
+import Text.XHtml.Strict
+import qualified Text.XHtml.Strict as XHtml
+import Text.XHtml.Table (simpleTable)
+
 
 -- TODO: move more of the below to Distribution.Server.Pages.*, it's getting
 -- close to 1K lines, way too much... it's okay to keep data-querying in here,
@@ -289,7 +289,7 @@ packageGroupResource uploads)] }
                                      ]
         -- bottom sections, currently only documentation
         hasDocs  <- queryHasDocumentation realpkg
-        let docURL | hasDocs   = Just $ "/package" </> display realpkg </> "doc"
+        let docURL | hasDocs   = Just $ "/package" <//> display realpkg <//> "doc"
                    | otherwise = Nothing
         -- extra features like tags and downloads
         tags <- queryTagsForPackage pkgname
@@ -1023,3 +1023,5 @@ packageGroupResource uploads)] }
         (map (\tg -> anchor ! [href $ tagUri tagsResource "" tg] << display tg)
           $ Set.toList tags)
 
+(<//>) :: String -> String -> String
+(<//>) = (System.FilePath.Posix.</>)

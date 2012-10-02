@@ -6,8 +6,6 @@ module Distribution.Server.Features.DownloadCount (
   ) where
 
 import Distribution.Server.Framework
-import Data.Acid
-import Data.Acid.Advanced
 
 import Distribution.Server.Features.Core
 
@@ -21,12 +19,10 @@ import Distribution.Package
 
 import Data.Time.Clock
 import Control.Arrow (second)
-import Control.Monad (forever)
 import Control.Concurrent.Chan
 import Control.Concurrent (forkIO)
 import qualified Data.Map as Map
-import Control.Monad.Trans (MonadIO)
-import System.FilePath ((</>))
+
 
 data DownloadFeature = DownloadFeature {
     downloadFeatureInterface :: HackageFeature,

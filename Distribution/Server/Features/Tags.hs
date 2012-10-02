@@ -11,8 +11,6 @@ module Distribution.Server.Features.Tags (
 import Control.Applicative (optional)
 
 import Distribution.Server.Framework
-import Data.Acid
-import Data.Acid.Advanced
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages (categorySplit)
@@ -38,9 +36,6 @@ import qualified Data.Map as Map
 import Data.Function (fix)
 import Data.List (foldl')
 import Data.Char (toLower)
-import Control.Monad
-import Control.Monad.Trans (MonadIO)
-import System.FilePath ((</>))
 
 
 data TagsFeature = TagsFeature {

@@ -13,6 +13,7 @@ module Distribution.Server.Features.Packages (
   ) where
 
 import Distribution.Server.Framework
+
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 
@@ -32,18 +33,18 @@ import Distribution.PackageDescription.Configuration (flattenPackageDescription)
 import Distribution.Version
 import Distribution.Server.Packages.ModuleForest
 import Distribution.Text
+
 import Data.Maybe (catMaybes, fromJust)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.Foldable as Foldable
 import qualified Data.Traversable as Traversable
-import Control.Monad
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import Data.List (sort, sortBy, partition)
 import Data.Char (toLower, isSpace)
 import Data.Ord (comparing)
 import qualified Network.URI as URI
-import System.FilePath.Posix ((</>))
+
 
 -- the goal is to have the HTML modules import /this/ one, not the other way around
 import qualified Distribution.Server.Pages.Recent as Pages

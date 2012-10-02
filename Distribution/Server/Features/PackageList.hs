@@ -7,6 +7,7 @@ module Distribution.Server.Features.PackageList (
   ) where
 
 import Distribution.Server.Framework
+
 import Distribution.Server.Features.Core
 -- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies
 import Distribution.Server.Features.DownloadCount
@@ -26,12 +27,12 @@ import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
 
 import Control.Concurrent
-import Control.Monad
 import Data.Maybe (catMaybes)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
+
 
 data ListFeature = ListFeature {
     listFeatureInterface :: HackageFeature,

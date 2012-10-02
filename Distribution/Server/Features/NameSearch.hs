@@ -15,16 +15,17 @@ import qualified Distribution.Server.Framework.ResourceTypes as Resource
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import Distribution.Server.Packages.Types
+
 import Distribution.Text
 import Distribution.Package
 import Distribution.PackageDescription
 
-import Control.Applicative ((<|>), optional, pure)
+import Control.Applicative ((<|>), optional)
 import qualified Data.Set as Set
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Network.URI (URI(..), uriToString)
-import Control.Monad.Trans (MonadIO)
 import Text.JSON
+
 
 data NamesFeature = NamesFeature {
     namesFeatureInterface :: HackageFeature,

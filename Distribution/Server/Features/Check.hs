@@ -8,8 +8,6 @@ module Distribution.Server.Features.Check (
   ) where
 
 import Distribution.Server.Framework
-import Data.Acid
-import Data.Acid.Advanced
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages
@@ -27,15 +25,13 @@ import qualified Distribution.Server.Framework.ResourceTypes as Resource
 
 import Distribution.Text
 import Distribution.Package
+
 import Data.Version
 import Text.XHtml.Strict (unordList, h3, (<<), toHtml)
 import Data.Function (fix)
 import Data.List (find)
 import Data.Maybe (listToMaybe, catMaybes)
-import Control.Monad
-import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Time.Clock (getCurrentTime)
-import System.FilePath ((</>))
 
 
 data CheckFeature = CheckFeature {
