@@ -58,7 +58,6 @@ executable hackage-server
     Data.StringTable
     Data.TarIndex
     Distribution.Server
-    Distribution.Server.Acid
     Distribution.Server.Framework
     Distribution.Server.Framework.Auth
     Distribution.Server.Framework.AuthTypes

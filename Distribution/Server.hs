@@ -27,7 +27,6 @@ module Distribution.Server (
 
 import Happstack.Server hiding (port, host)
 
-import Distribution.Server.Acid (Acid, checkpointAcid, startAcid, stopAcid)
 import qualified Distribution.Server.Framework.BackupRestore as Import
 import Distribution.Server.Framework.BackupDump
 -- TODO: move this to BulkImport module
@@ -79,9 +78,9 @@ data ServerConfig = ServerConfig {
   confTmpDir    :: FilePath
 } deriving (Show)
 
-confAcidStateDir, confBlobStoreDir :: ServerConfig -> FilePath
-confAcidStateDir config = confStateDir config </> "db"
-confBlobStoreDir  config = confStateDir config </> "blobs"
+confDbStateDir, confBlobStoreDir :: ServerConfig -> FilePath
+confDbStateDir   config = confStateDir config </> "db"
+confBlobStoreDir config = confStateDir config </> "blobs"
 
 defaultServerConfig :: IO ServerConfig
 defaultServerConfig = do
@@ -99,7 +98,6 @@ defaultServerConfig = do
   }
 
 data Server = Server {
-  serverAcid        :: Acid,
   serverFeatures    :: [HackageFeature],
   serverUserFeature :: UserFeature,
   serverListenOn    :: ListenOn,
@@ -111,7 +109,7 @@ data Server = Server {
 -- existing state.
 --
 hasSavedState :: ServerConfig -> IO Bool
-hasSavedState = doesDirectoryExist . confAcidStateDir
+hasSavedState = doesDirectoryExist . confDbStateDir
 
 -- | Make a server instance from the server configuration.
 --
@@ -127,9 +125,6 @@ initialise enableCaches initConfig@(ServerConfig hostName listenOn stateDir stat
     createDirectoryIfMissing False stateDir
     store   <- BlobStorage.open blobStoreDir
 
---    txCtl   <- runTxSystem (Queue (FileSaver happsStateDir)) hackageEntryPoint
-    acid <- startAcid acidStateDir
-
     let env = ServerEnv {
             serverStaticDir = staticDir,
             serverStateDir  = stateDir,
@@ -141,7 +136,6 @@ initialise enableCaches initConfig@(ServerConfig hostName listenOn stateDir stat
     (features, userFeature) <- Features.initHackageFeatures enableCaches env
 
     return Server {
-        serverAcid        = acid,
         serverFeatures    = features,
         serverUserFeature = userFeature,
         serverListenOn    = listenOn,
@@ -149,7 +143,6 @@ initialise enableCaches initConfig@(ServerConfig hostName listenOn stateDir stat
     }
 
   where
-    acidStateDir = confAcidStateDir initConfig
     blobStoreDir  = confBlobStoreDir  initConfig
     hostURI       = URIAuth "" hostName portStr
       where portNum = loPortNum listenOn
@@ -206,9 +199,8 @@ run server = do
 -- | Perform a clean shutdown of the server.
 --
 shutdown :: Server -> IO ()
-shutdown server = do
+shutdown server =
   Features.shutdownAllFeatures (serverFeatures server)
-  stopAcid (serverAcid server)
 
 --TODO: stop accepting incomming connections,
 -- wait for connections to be processed.
@@ -217,9 +209,8 @@ shutdown server = do
 -- because fewer logged transactions have to be replayed.
 --
 checkpoint :: Server -> IO ()
-checkpoint server = do
+checkpoint server =
   Features.checkpointAllFeatures (serverFeatures server)
-  checkpointAcid (serverAcid server)
 
 -- Convert a set of old data into a new export tarball.
 -- This also populates the blob database, which is then
