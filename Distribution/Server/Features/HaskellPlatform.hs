@@ -5,8 +5,9 @@ module Distribution.Server.Features.HaskellPlatform (
     initPlatformFeature,
   ) where
 
-import Distribution.Server.Acid (query, update)
 import Distribution.Server.Framework
+import Data.Acid
+import Data.Acid.Advanced
 import Distribution.Server.Features.Core
 import Distribution.Server.Packages.Platform
 import Data.Function
@@ -19,6 +20,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Control.Monad (liftM)
 import Control.Monad.Trans (MonadIO)
+import System.FilePath ((</>))
 
 -- Note: this can be generalized into dividing Hackage up into however many
 -- subsets of packages are desired. One could implement a Debian-esque system
@@ -30,10 +32,10 @@ data PlatformFeature = PlatformFeature {
     
     platformResource :: PlatformResource,
 
-    platformVersions :: forall m. MonadIO m => PackageName -> m [Version],
-    platformPackageLatest :: forall m. MonadIO m => m [(PackageName, Version)],
-    setPlatform :: forall m. MonadIO m => PackageName -> [Version] -> m (),
-    removePlatform :: forall m. MonadIO m => PackageName -> m ()
+    platformVersions      :: MonadIO m => PackageName -> m [Version],
+    platformPackageLatest :: MonadIO m => m [(PackageName, Version)],
+    setPlatform           :: MonadIO m => PackageName -> [Version] -> m (),
+    removePlatform        :: MonadIO m => PackageName -> m ()
 }
 
 instance IsHackageFeature PlatformFeature where
@@ -47,19 +49,28 @@ data PlatformResource = PlatformResource {
 }
 
 initPlatformFeature :: ServerEnv -> CoreFeature -> IO PlatformFeature
-initPlatformFeature _ _ = do
-    -- FIXME: currently the state is global
+initPlatformFeature ServerEnv{serverStateDir} _ = do
+
+    -- Canonical state
+    platformState <- openLocalStateFrom
+                       (serverStateDir </> "db" </> "PlatformPackages")
+                       initialPlatformPackages
 
     return $
-      platformFeature
+      platformFeature platformState
 
-platformFeature :: PlatformFeature
-platformFeature
+platformFeature :: AcidState PlatformPackages
+                -> PlatformFeature
+platformFeature platformState
   = PlatformFeature{..}
   where
     platformFeatureInterface = (emptyHackageFeature "platform") {
         featureResources = map ($platformResource) [platformPackage, platformPackages]
-      , featureDumpRestore = Nothing -- TODO
+      , featureCheckpoint = do
+          createCheckpoint platformState
+      , featureShutdown = do
+          closeAcidState platformState
+      , featureDumpRestore = Nothing -- FIXME: no backup!
       }
 
     platformResource = fix $ \r -> PlatformResource
@@ -73,14 +84,14 @@ platformFeature
     ------------------------------------------
     -- functionality: showing status for a single package, and for all packages, adding a package, deleting a package
     platformVersions :: MonadIO m => PackageName -> m [Version]
-    platformVersions pkgname = liftM Set.toList $ query $ GetPlatformPackage pkgname
+    platformVersions pkgname = liftM Set.toList $ query' platformState $ GetPlatformPackage pkgname
 
     platformPackageLatest :: MonadIO m => m [(PackageName, Version)]
-    platformPackageLatest = liftM (Map.toList . Map.map Set.findMax . blessedPackages) $ query $ GetPlatformPackages
+    platformPackageLatest = liftM (Map.toList . Map.map Set.findMax . blessedPackages) $ query' platformState $ GetPlatformPackages
 
     setPlatform :: MonadIO m => PackageName -> [Version] -> m ()
-    setPlatform pkgname versions = update $ SetPlatformPackage pkgname (Set.fromList versions)
+    setPlatform pkgname versions = update' platformState $ SetPlatformPackage pkgname (Set.fromList versions)
 
     removePlatform :: MonadIO m => PackageName -> m ()
-    removePlatform pkgname = update $ SetPlatformPackage pkgname Set.empty
+    removePlatform pkgname = update' platformState $ SetPlatformPackage pkgname Set.empty
 
