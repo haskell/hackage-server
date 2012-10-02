@@ -19,7 +19,6 @@ import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.State
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.Tag
-import Distribution.Server.Packages.Preferred
 -- [reverse index disabled] import Distribution.Server.Packages.Reverse
 import Distribution.Server.Packages.Downloads
 import Distribution.Server.Util.Histogram
@@ -183,7 +182,7 @@ listFeature CoreFeature{..}
         -- [reverse index disabled] revCount <- query . GetReverseCount $ pkgname
         tags <- queryTagsForPackage pkgname
         infos <- query . GetDownloadInfo $ pkgname
-        deprs <- query . GetDeprecatedFor $ pkgname
+        deprs <- queryGetDeprecatedFor  pkgname
         return $ (,) pkgname $ (updateDescriptionItem (pkgDesc pkg) $ emptyPackageItem pkgname) {
             itemTags = tags,
             itemDeprecated = deprs,

@@ -269,7 +269,7 @@ packageGroupResource uploads)] }
             pkgname = packageName realpkg
             middleHtml = Pages.renderFields render
         -- get additional information from other features
-        prefInfo <- query $ GetPreferredInfo pkgname
+        prefInfo <- queryGetPreferredInfo pkgname
         let infoUrl = fmap (\_ -> preferredPackageUri versions "" pkgname) $ sumRange prefInfo
             beforeHtml = [Pages.renderVersion realpkg (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl,
                           Pages.renderDependencies render]
@@ -295,7 +295,7 @@ packageGroupResource uploads)] }
                                toHtml (renderTags tags), toHtml " | ",
                                anchor ! [href $ renderResource tagEdit [display pkgname]] << "edit"]
             backHackage = anchor ! [href $ "http://hackage.haskell.org/package/" ++ display pkgid] << "on hackage"
-        deprs <- query $ GetDeprecatedFor pkgname
+        deprs <- queryGetDeprecatedFor pkgname
         let deprHtml = case deprs of
               Just fors -> paragraph ! [thestyle "color: red"] << [toHtml "Deprecated", case fors of
                 [] -> noHtml
@@ -549,7 +549,7 @@ packageGroupResource uploads)] }
         otherVersions <- fmap (map packageVersion .
                                flip PackageIndex.lookupPackageName pkgname .
                                State.packageList) $ query State.GetPackagesState
-        prefInfo <- query $ GetPreferredInfo pkgname
+        prefInfo <- queryGetPreferredInfo pkgname
         let sectionHtml = [Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing,
                            Pages.renderDependencies render] ++ Pages.renderFields render
             maintainHtml = anchor ! [href $ renderResource maintain [display $ packageId cand]] << "maintain"
@@ -707,7 +707,7 @@ packageGroupResource uploads)] }
             withPackageAllPath dpath $ \pkgname pkgs -> do
         pref <- doPreferredRender pkgname
         let dtitle = display pkgname ++ ": preferred and deprecated versions"
-        prefInfo <- query $ GetPreferredInfo pkgname
+        prefInfo <- queryGetPreferredInfo pkgname
         return $ toResponse $ Resource.XHtml $ hackagePage dtitle --needs core, preferredVersions, pkgname
           [ h2 << dtitle
           , concatHtml $ packagePrefAbout (Just prefEdit) pkgname

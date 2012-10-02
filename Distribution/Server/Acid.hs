@@ -13,7 +13,6 @@ import Distribution.Server.Features.BuildReports.BuildReports (BuildReports)
 import Distribution.Server.Features.BuildReports.State        (initialBuildReports)
 import Distribution.Server.Packages.Downloads       (DownloadCounts, initialDownloadCounts)
 import Distribution.Server.Packages.Platform        (PlatformPackages, initialPlatformPackages)
-import Distribution.Server.Packages.Preferred       (PreferredVersions, initialPreferredVersions)
 -- [reverse index disabled] import Distribution.Server.Packages.Reverse         (ReverseIndex, initialReverseIndex)
 import Distribution.Server.Packages.State           (CandidatePackages, Documentation, HackageTrustees, HackageUploaders, PackageMaintainers, PackagesState,
                                                      initialCandidatePackages, initialDocumentation, 
@@ -33,7 +32,6 @@ data Acid = Acid
     , acidPackageMaintainers :: AcidState PackageMaintainers
     , acidPackagesState      :: AcidState PackagesState
     , acidPlatformPackages   :: AcidState PlatformPackages
-    , acidPreferredVersions  :: AcidState PreferredVersions
     -- [reverse index disabled] , acidReverseIndex       :: AcidState ReverseIndex
     }
 
@@ -70,9 +68,6 @@ instance AcidComponent PackagesState where
 instance AcidComponent PlatformPackages where
     acidComponent = acidPlatformPackages
 
-instance AcidComponent PreferredVersions where
-    acidComponent = acidPreferredVersions
-
 -- [reverse index disabled] instance AcidComponent ReverseIndex where
 -- [reverse index disabled]     acidComponent = acidReverseIndex
 
@@ -104,7 +99,6 @@ startAcid stateDir =
            initialPackageMaintainers
            initialPackagesState
            initialPlatformPackages
-           initialPreferredVersions
            -- [reverse index disabled] initialReverseIndex
 
 startAcid' :: FilePath 
@@ -118,10 +112,9 @@ startAcid' :: FilePath
            -> PackageMaintainers
            -> PackagesState
            -> PlatformPackages
-           -> PreferredVersions
            -- [reverse index disabled] -> ReverseIndex
            -> IO Acid
-startAcid' stateDir buildReports candidatePackages documentation downloadCounts hackageTrustees hackageUploaders mirrorClients packageMaintainers packagesState platformPackages preferredVersions
+startAcid' stateDir buildReports candidatePackages documentation downloadCounts hackageTrustees hackageUploaders mirrorClients packageMaintainers packagesState platformPackages
     -- [reverse index disabled] reverseIndex
     =
     do buildReports'       <- openLocalStateFrom (stateDir </> "BuildReports")       buildReports
@@ -134,7 +127,6 @@ startAcid' stateDir buildReports candidatePackages documentation downloadCounts 
        packageMaintainers' <- openLocalStateFrom (stateDir </> "PackageMaintainers") packageMaintainers
        packagesState'      <- openLocalStateFrom (stateDir </> "PackagesState")      packagesState
        platformPackages'   <- openLocalStateFrom (stateDir </> "PlatformPackages")   platformPackages
-       preferredVersions'  <- openLocalStateFrom (stateDir </> "PreferredVersions")  preferredVersions
        -- [reverse index disabled] reverseIndex'       <- openLocalStateFrom (stateDir </> "ReverseIndex")       reverseIndex
        let acid = Acid { acidBuildReports       = buildReports' 
                        , acidCandidatePackages  = candidatePackages'
@@ -146,7 +138,6 @@ startAcid' stateDir buildReports candidatePackages documentation downloadCounts 
                        , acidPackageMaintainers = packageMaintainers'
                        , acidPackagesState      = packagesState'
                        , acidPlatformPackages   = platformPackages'
-                       , acidPreferredVersions  = preferredVersions'
                        -- [reverse index disabled] , acidReverseIndex       = reverseIndex'
                        }
        setAcid acid
@@ -165,7 +156,6 @@ stopAcid acid =
        createCheckpointAndClose (acidPackageMaintainers acid)
        createCheckpointAndClose (acidPackagesState acid)
        createCheckpointAndClose (acidPlatformPackages acid)
-       createCheckpointAndClose (acidPreferredVersions acid)
        -- [reverse index disabled] createCheckpointAndClose (acidReverseIndex acid)
 
 checkpointAcid :: Acid -> IO ()
@@ -180,7 +170,6 @@ checkpointAcid acid =
        createCheckpoint (acidPackageMaintainers acid)
        createCheckpoint (acidPackagesState acid)
        createCheckpoint (acidPlatformPackages acid)
-       createCheckpoint (acidPreferredVersions acid)
        -- [reverse index disabled] createCheckpoint (acidReverseIndex acid)
 
 update :: ( AcidComponent (MethodState event)
