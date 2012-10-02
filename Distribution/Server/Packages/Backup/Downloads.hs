@@ -4,9 +4,9 @@ module Distribution.Server.Packages.Backup.Downloads (
     downloadsToRecord
   ) where
 
-import Distribution.Server.Acid (update)
 import Distribution.Server.Packages.Downloads
 import Distribution.Server.Framework.BackupRestore
+import Data.Acid (AcidState, update)
 
 import Distribution.Package
 import Distribution.Text (display)
@@ -20,18 +20,18 @@ import Data.Function (fix)
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Data.Time.Calendar
 
-downloadsBackup :: RestoreBackup
-downloadsBackup = updateDownloads emptyDownloadCounts
+downloadsBackup :: AcidState DownloadCounts -> RestoreBackup
+downloadsBackup downloadState = updateDownloads downloadState emptyDownloadCounts
 
-updateDownloads :: DownloadCounts -> RestoreBackup
-updateDownloads dcs = fix $ \r -> RestoreBackup
+updateDownloads :: AcidState DownloadCounts -> DownloadCounts -> RestoreBackup
+updateDownloads downloadState dcs = fix $ \r -> RestoreBackup
   { restoreEntry = \(entry, bs) -> do
         res <- runImport dcs $ case entry of
             ["downloads.csv"] -> importDownloads bs
             _ -> return ()
-        return $ fmap updateDownloads res
+        return $ fmap (updateDownloads downloadState) res
   , restoreFinalize = return . Right $ r
-  , restoreComplete = update $ ReplacePackageDownloads dcs
+  , restoreComplete = update downloadState $ ReplacePackageDownloads dcs
   }
 
 importDownloads :: ByteString -> Import DownloadCounts ()

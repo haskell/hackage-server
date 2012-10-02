@@ -181,7 +181,7 @@ listFeature CoreFeature{..}
         let pkgname = packageName pkg
         -- [reverse index disabled] revCount <- query . GetReverseCount $ pkgname
         tags <- queryTagsForPackage pkgname
-        infos <- query . GetDownloadInfo $ pkgname
+        infos <- queryGetDownloadInfo pkgname
         deprs <- queryGetDeprecatedFor  pkgname
         return $ (,) pkgname $ (updateDescriptionItem (pkgDesc pkg) $ emptyPackageItem pkgname) {
             itemTags = tags,

@@ -5,8 +5,10 @@ module Distribution.Server.Features.DownloadCount (
     initDownloadFeature,
   ) where
 
-import Distribution.Server.Acid (query, update)
 import Distribution.Server.Framework
+import Data.Acid
+import Data.Acid.Advanced
+
 import Distribution.Server.Features.Core
 
 import Distribution.Server.Packages.Downloads
@@ -24,13 +26,14 @@ import Control.Concurrent.Chan
 import Control.Concurrent (forkIO)
 import qualified Data.Map as Map
 import Control.Monad.Trans (MonadIO)
+import System.FilePath ((</>))
 
 data DownloadFeature = DownloadFeature {
     downloadFeatureInterface :: HackageFeature,
-    
+
+    queryGetDownloadInfo :: MonadIO m => PackageName -> m DownloadInfo,
+
     downloadResource :: DownloadResource,
-    downloadStream :: Chan PackageId,
-    downloadHistogram :: Cache.Cache (Histogram PackageName),
 
     getDownloadHistogram :: IO (Histogram PackageName),
     perVersionDownloads :: (MonadIO m, Package pkg) => pkg -> m (Int, Int),
@@ -45,49 +48,65 @@ data DownloadResource = DownloadResource {
 }
 
 initDownloadFeature :: ServerEnv -> CoreFeature -> IO DownloadFeature
-initDownloadFeature _ core = do
+initDownloadFeature ServerEnv{serverStateDir} core = do
+
+    downloadState <- openLocalStateFrom
+                       (serverStateDir </> "db" </> "DownloadCounts")
+                       initialDownloadCounts
+
     downChan <- newChan
     downHist <- Cache.newCacheable emptyHistogram
     registerHook (tarballDownload core) $ writeChan downChan
 
     return $
       downloadFeature core
-                      downChan downHist 
+                      downloadState
+                      downChan downHist
 
 
 downloadFeature :: CoreFeature
+                -> AcidState DownloadCounts
                 -> Chan PackageId
                 -> Cache.Cache (Histogram PackageName)
                 -> DownloadFeature
 
 downloadFeature CoreFeature{}
-                downloadStream downloadHistogram
+                downloadState downloadStream downloadHistogram
   = DownloadFeature{..}
   where
     downloadFeatureInterface = (emptyHackageFeature "download") {
         featureResources = map (\x -> x $ downloadResource) [topDownloads]
       , featurePostInit  = do countCache
                               forkIO transferDownloads >> return ()
-      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtripByQuery (query GetDownloadCounts))
+      , featureCheckpoint = do
+          createCheckpoint downloadState
+      , featureShutdown = do
+          closeAcidState downloadState
+      , featureDumpRestore = Just (dumpBackup,
+                                   restoreBackup,
+                                   testRoundtripByQuery (query downloadState GetDownloadCounts))
       }
 
     countCache = do
-        dc <- query GetDownloadCounts
+        dc <- query downloadState GetDownloadCounts
         let dmap = map (second packageDowns) (Map.toList $ downloadMap dc)
         Cache.putCache downloadHistogram (constructHistogram dmap)
 
     transferDownloads = forever $ do
         pkg <- readChan downloadStream
         time <- getCurrentTime
-        (_, new) <- update $ RegisterDownload (utctDay time) pkg 1
+        (_, new) <- update downloadState $ RegisterDownload (utctDay time) pkg 1
         Cache.modifyCache downloadHistogram
             (updateHistogram (packageName pkg) new)
 
     dumpBackup = do
-        dc <- query GetDownloadCounts
+        dc <- query downloadState GetDownloadCounts
         return [csvToBackup ["downloads.csv"] $ downloadsToCSV dc]
 
-    restoreBackup = downloadsBackup
+    restoreBackup = downloadsBackup downloadState
+
+    queryGetDownloadInfo :: MonadIO m => PackageName -> m DownloadInfo
+    queryGetDownloadInfo name = query' downloadState (GetDownloadInfo name)
 
     downloadResource = DownloadResource
               { topDownloads = resourceAt "/packages/top.:format"
@@ -97,7 +116,7 @@ downloadFeature CoreFeature{}
     getDownloadHistogram = Cache.getCache downloadHistogram
 
     --totalDownloadCount :: MonadIO m => m Int
-    --totalDownloadCount = liftM totalDownloads $ query GetDownloadCounts
+    --totalDownloadCount = liftM totalDownloads $ query downloadState GetDownloadCounts
 
     -- sortedPackages and sortByDownloads both order packages by total downloads without exposing download data
 
@@ -111,7 +130,7 @@ downloadFeature CoreFeature{}
     -- Use sortedPackages to get an entire list.
     -- TODO: use the Histogram's sortByCounts for this
     sortByDownloads :: MonadIO m => (a -> PackageName) -> [a] -> m [(a, Int)]
-    sortByDownloads nameFunc pkgs = query GetDownloadCounts >>= \counts -> do
+    sortByDownloads nameFunc pkgs = query' downloadState GetDownloadCounts >>= \counts -> do
         let modEntry pkg = (pkg, lookupPackageDowns (nameFunc pkg) downloadMap)
         return $ sortBy (comparing snd) $ map modEntry pkgs
     -}
@@ -119,7 +138,7 @@ downloadFeature CoreFeature{}
     -- For at-a-glance download information.
     perVersionDownloads :: (MonadIO m, Package pkg) => pkg -> m (Int, Int)
     perVersionDownloads pkg = do
-        info <- query $ GetDownloadInfo (packageName pkg)
+        info <- query' downloadState $ GetDownloadInfo (packageName pkg)
         let (PackageDownloads total perVersion) = packageDownloads info
         return (total, Map.findWithDefault 0 (packageVersion pkg) perVersion)
 

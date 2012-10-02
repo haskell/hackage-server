@@ -11,7 +11,6 @@ import System.IO.Unsafe    (unsafePerformIO)
 
 import Distribution.Server.Features.BuildReports.BuildReports (BuildReports)
 import Distribution.Server.Features.BuildReports.State        (initialBuildReports)
-import Distribution.Server.Packages.Downloads       (DownloadCounts, initialDownloadCounts)
 import Distribution.Server.Packages.Platform        (PlatformPackages, initialPlatformPackages)
 -- [reverse index disabled] import Distribution.Server.Packages.Reverse         (ReverseIndex, initialReverseIndex)
 import Distribution.Server.Packages.State           (CandidatePackages, Documentation, HackageTrustees, HackageUploaders, PackageMaintainers, PackagesState,
@@ -25,7 +24,6 @@ data Acid = Acid
     { acidBuildReports       :: AcidState BuildReports
     , acidCandidatePackages  :: AcidState CandidatePackages
     , acidDocumentation      :: AcidState Documentation
-    , acidDownloadCounts     :: AcidState DownloadCounts
     , acidHackageTrustees    :: AcidState HackageTrustees
     , acidHackageUploaders   :: AcidState HackageUploaders
     , acidMirrorClients      :: AcidState MirrorClients
@@ -46,9 +44,6 @@ instance AcidComponent CandidatePackages where
 
 instance AcidComponent Documentation where
     acidComponent = acidDocumentation
-
-instance AcidComponent DownloadCounts where
-    acidComponent = acidDownloadCounts
 
 instance AcidComponent HackageTrustees where
     acidComponent = acidHackageTrustees
@@ -92,7 +87,6 @@ startAcid stateDir =
            initialBuildReports
            initialCandidatePackages
            initialDocumentation
-           initialDownloadCounts
            initialHackageTrustees
            initialHackageUploaders
            initialMirrorClients
@@ -105,7 +99,6 @@ startAcid' :: FilePath
            -> BuildReports
            -> CandidatePackages
            -> Documentation
-           -> DownloadCounts
            -> HackageTrustees
            -> HackageUploaders
            -> MirrorClients
@@ -114,13 +107,12 @@ startAcid' :: FilePath
            -> PlatformPackages
            -- [reverse index disabled] -> ReverseIndex
            -> IO Acid
-startAcid' stateDir buildReports candidatePackages documentation downloadCounts hackageTrustees hackageUploaders mirrorClients packageMaintainers packagesState platformPackages
+startAcid' stateDir buildReports candidatePackages documentation hackageTrustees hackageUploaders mirrorClients packageMaintainers packagesState platformPackages
     -- [reverse index disabled] reverseIndex
     =
     do buildReports'       <- openLocalStateFrom (stateDir </> "BuildReports")       buildReports
        candidatePackages'  <- openLocalStateFrom (stateDir </> "CandidatePackages")  candidatePackages
        documentation'      <- openLocalStateFrom (stateDir </> "Documentation")      documentation
-       downloadCounts'     <- openLocalStateFrom (stateDir </> "DownloadCounts")     downloadCounts
        hackageTrustees'    <- openLocalStateFrom (stateDir </> "HackageTrustees")    hackageTrustees
        hackageUploaders'   <- openLocalStateFrom (stateDir </> "HackageUploaders")   hackageUploaders
        mirrorClients'      <- openLocalStateFrom (stateDir </> "MirrorClients")      mirrorClients
@@ -131,7 +123,6 @@ startAcid' stateDir buildReports candidatePackages documentation downloadCounts 
        let acid = Acid { acidBuildReports       = buildReports' 
                        , acidCandidatePackages  = candidatePackages'
                        , acidDocumentation      = documentation'
-                       , acidDownloadCounts     = downloadCounts'
                        , acidHackageTrustees    = hackageTrustees'
                        , acidHackageUploaders   = hackageUploaders'
                        , acidMirrorClients      = mirrorClients'
@@ -149,7 +140,6 @@ stopAcid acid =
        createCheckpointAndClose (acidBuildReports acid)
        createCheckpointAndClose (acidCandidatePackages acid)
        createCheckpointAndClose (acidDocumentation acid)
-       createCheckpointAndClose (acidDownloadCounts acid)
        createCheckpointAndClose (acidHackageTrustees acid)
        createCheckpointAndClose (acidHackageUploaders acid)
        createCheckpointAndClose (acidMirrorClients acid)
@@ -163,7 +153,6 @@ checkpointAcid acid =
     do createCheckpoint (acidBuildReports acid)
        createCheckpoint (acidCandidatePackages acid)
        createCheckpoint (acidDocumentation acid)
-       createCheckpoint (acidDownloadCounts acid)
        createCheckpoint (acidHackageTrustees acid)
        createCheckpoint (acidHackageUploaders acid)
        createCheckpoint (acidMirrorClients acid)
