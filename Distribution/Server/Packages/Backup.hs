@@ -13,7 +13,9 @@ module Distribution.Server.Packages.Backup (
     maintToCSV
   ) where
 
-import Distribution.Server.Acid (update)
+import qualified Distribution.Server.Acid as OldAcid (update)
+import Data.Acid (AcidState, update)
+
 import Distribution.Server.Packages.State
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Group (UserList(..))
@@ -60,7 +62,7 @@ updatePackageBackup storage packageMap = RestoreBackup
 
 finalPackagesBackup :: PackagesState -> RestoreBackup
 finalPackagesBackup packages = mempty {
-    restoreComplete = update $ ReplacePackagesState packages
+    restoreComplete = OldAcid.update $ ReplacePackagesState packages
   }
 
 
@@ -245,18 +247,20 @@ versionListToCSV infos = [showVersion versionCSVVer]:versionCSVKey:
 
 -------------------------------------------------------------------------------
 -- Maintainer groups backup
-maintainerBackup :: RestoreBackup
-maintainerBackup = updateMaintainers Map.empty
+maintainerBackup :: AcidState PackageMaintainers -> RestoreBackup
+maintainerBackup maintainersState =
+  updateMaintainers maintainersState Map.empty
 
-updateMaintainers :: Map PackageName UserList -> RestoreBackup
-updateMaintainers mains = fix $ \r -> RestoreBackup
+updateMaintainers :: AcidState PackageMaintainers
+                  -> Map PackageName UserList -> RestoreBackup
+updateMaintainers maintainersState mains = fix $ \r -> RestoreBackup
   { restoreEntry = \(entry, bs) -> do
         res <- runImport mains $ case entry of
             ["maintainers.csv"] -> importMaintainers bs
             _ -> return ()
-        return $ fmap updateMaintainers res
+        return $ fmap (updateMaintainers maintainersState) res
   , restoreFinalize = return . Right $ r
-  , restoreComplete = update $ ReplacePackageMaintainers (PackageMaintainers mains)
+  , restoreComplete = update maintainersState $ ReplacePackageMaintainers (PackageMaintainers mains)
   }
 
 importMaintainers :: ByteString -> Import (Map PackageName UserList) ()

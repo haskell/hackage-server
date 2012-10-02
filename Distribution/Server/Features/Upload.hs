@@ -7,8 +7,11 @@ module Distribution.Server.Features.Upload (
     uploadsRestrictedToMaintainers,
   ) where
 
-import Distribution.Server.Acid (query, update, unsafeGetAcid)
 import Distribution.Server.Framework
+import Data.Acid
+import Data.Acid.Advanced
+import qualified Distribution.Server.Acid as OldAcid
+
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 
@@ -32,6 +35,7 @@ import Control.Monad
 import Control.Monad.Trans (MonadIO(..))
 import Data.Function (fix)
 import Data.ByteString.Lazy.Char8 (ByteString)
+import System.FilePath ((</>))
 import Distribution.Package
 import Distribution.PackageDescription (GenericPackageDescription)
 import Distribution.Text (display, simpleParse)
@@ -76,7 +80,21 @@ data UploadResult = UploadResult {
 }
 
 initUploadFeature :: ServerEnv -> CoreFeature -> UserFeature -> IO UploadFeature
-initUploadFeature env core@CoreFeature{..} user@UserFeature{..} = do
+initUploadFeature env@ServerEnv{serverStateDir}
+                  core@CoreFeature{..} user@UserFeature{..} = do
+
+    -- Canonical state
+    trusteesState    <- openLocalStateFrom
+                          (serverStateDir </> "db" </> "HackageTrustees")
+                          initialHackageTrustees
+    uploadersState   <- openLocalStateFrom
+                          (serverStateDir </> "db" </> "HackageUploaders")
+                          initialHackageUploaders
+    maintainersState <- openLocalStateFrom
+                          (serverStateDir </> "db" </> "PackageMaintainers")
+                          initialPackageMaintainers
+
+
     -- some shared tasks
     let admins = adminGroup
         UserResource{..} = userResource
@@ -89,9 +107,9 @@ initUploadFeature env core@CoreFeature{..} user@UserFeature{..} = do
     rec let (feature,
              getTrusteesGroup, getUploadersGroup, makeMaintainersGroup)
               = uploadFeature env core user
-                              trustees  trustResource
-                              uploaders uploaderResource'
-                              pkgGroup  pkgResource
+                              trusteesState    trustees  trustResource
+                              uploadersState   uploaders uploaderResource'
+                              maintainersState pkgGroup  pkgResource
                               uploadFilter
 
         (trustees,  trustResource) <-
@@ -99,7 +117,9 @@ initUploadFeature env core@CoreFeature{..} user@UserFeature{..} = do
         (uploaders, uploaderResource') <-
           groupResourceAt "/packages/uploaders" (getUploadersGroup [admins])
 
-        groupPkgs <- fmap (Map.keys . maintainers) $ query AllPackageMaintainers
+        groupPkgs <- fmap (Map.keys . maintainers) $ query maintainersState AllPackageMaintainers
+        --TODO: move this local function inside uploadFeature,
+        --      like getTrusteesGroup, getUploadersGroup etc.
         let getPkgMaintainers dpath =
                 let pkgname = case simpleParse =<< lookup "package" dpath of
                         Just name -> name
@@ -121,24 +141,23 @@ initUploadFeature env core@CoreFeature{..} user@UserFeature{..} = do
 uploadFeature :: ServerEnv
               -> CoreFeature
               -> UserFeature
-              -> UserGroup
-              -> GroupResource
-              -> UserGroup
-              -> GroupResource
-              -> GroupGen
-              -> GroupResource
+              -> AcidState HackageTrustees    -> UserGroup -> GroupResource
+              -> AcidState HackageUploaders   -> UserGroup -> GroupResource
+              -> AcidState PackageMaintainers -> GroupGen  -> GroupResource
               -> Filter (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse))
               -> (UploadFeature,
                   [UserGroup] -> UserGroup,
                   [UserGroup] -> UserGroup,
                   [UserGroup] -> PackageName -> UserGroup)
 
-uploadFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
-              trusteeGroup trustResource
-              uploaderGroup uploaderResource'
-              packageMaintainers pkgResource
+uploadFeature ServerEnv{serverBlobStore = store}
+              CoreFeature{..} UserFeature{..}
+              trusteesState    trusteeGroup       trustResource
+              uploadersState   uploaderGroup      uploaderResource'
+              maintainersState packageMaintainers pkgResource
               canUploadPackage
-   = (UploadFeature {..}, getTrusteesGroup, getUploadersGroup, makeMaintainersGroup)
+   = ( UploadFeature {..}
+     , getTrusteesGroup, getUploadersGroup, makeMaintainersGroup)
    where
     uploadFeatureInterface = (emptyHackageFeature "upload") {
         featureResources = map ($uploadResource)
@@ -146,17 +165,29 @@ uploadFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
              groupResource . packageGroupResource, groupUserResource . packageGroupResource,
              groupResource . trusteeResource,      groupUserResource . trusteeResource,
              groupResource . uploaderResource,     groupUserResource . uploaderResource]
+      , featureCheckpoint = do
+          createCheckpoint trusteesState
+          createCheckpoint uploadersState
+          createCheckpoint maintainersState
+      , featureShutdown = do
+          closeAcidState trusteesState
+          closeAcidState uploadersState
+          closeAcidState maintainersState
       , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
       }
 
     dumpBackup    = do
-        trustees <- query GetHackageTrustees
-        PackageMaintainers mains <- query AllPackageMaintainers
-        return [ csvToBackup ["trustees.csv"] $ groupToCSV trustees
+        trustees  <- query trusteesState GetHackageTrustees
+        uploaders <- query uploadersState GetHackageUploaders
+        PackageMaintainers mains <- query maintainersState AllPackageMaintainers
+        return [ csvToBackup ["trustees.csv"]  $ groupToCSV trustees
+               , csvToBackup ["uploaders.csv"] $ groupToCSV uploaders
                , maintToExport mains ]
-    restoreBackup = mconcat [ maintainerBackup
-                            , groupBackup unsafeGetAcid ["trustees.csv"] ReplaceHackageTrustees ]
-    testRoundtrip = testRoundtripByQuery (liftM2 (,) (query GetHackageTrustees) (query AllPackageMaintainers))
+    restoreBackup = mconcat [ maintainerBackup maintainersState
+                            , groupBackup uploadersState ["uploaders.csv"] ReplaceHackageUploaders
+                            , groupBackup trusteesState  ["trustees.csv"]  ReplaceHackageTrustees ]
+    testRoundtrip = testRoundtripByQuery (liftM2 (,) (query trusteesState GetHackageTrustees)
+                                                     (query maintainersState AllPackageMaintainers))
 
     uploadResource = UploadResource
           { uploadIndexPage      = (extendResource (corePackagesPage coreResource)) { resourcePost = [] }
@@ -175,20 +206,20 @@ uploadFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
     getTrusteesGroup :: [UserGroup] -> UserGroup
     getTrusteesGroup canModify = fix $ \u -> UserGroup {
         groupDesc = trusteeDescription,
-        queryUserList = query $ GetHackageTrustees,
-        addUserList = update . AddHackageTrustee,
-        removeUserList = update . RemoveHackageTrustee,
-        groupExists = return True,
-        canAddGroup = [u] ++ canModify,
+        queryUserList  = query  trusteesState   GetHackageTrustees,
+        addUserList    = update trusteesState . AddHackageTrustee,
+        removeUserList = update trusteesState . RemoveHackageTrustee,
+        groupExists    = return True,
+        canAddGroup    = [u] ++ canModify,
         canRemoveGroup = canModify
     }
 
     getUploadersGroup :: [UserGroup] -> UserGroup
     getUploadersGroup canModify = UserGroup {
         groupDesc      = uploaderDescription,
-        queryUserList  = query $ GetHackageUploaders,
-        addUserList    = update . AddHackageUploader,
-        removeUserList = update . RemoveHackageUploader,
+        queryUserList  = query  uploadersState   GetHackageUploaders,
+        addUserList    = update uploadersState . AddHackageUploader,
+        removeUserList = update uploadersState . RemoveHackageUploader,
         groupExists    = return True,
         canAddGroup    = canModify,
         canRemoveGroup = canModify
@@ -197,10 +228,10 @@ uploadFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
     makeMaintainersGroup :: [UserGroup] -> PackageName -> UserGroup
     makeMaintainersGroup canModify name = fix $ \u -> UserGroup {
         groupDesc      = maintainerDescription name,
-        queryUserList  = query $ GetPackageMaintainers name,
-        addUserList    = update . AddPackageMaintainer name,
-        removeUserList = update . RemovePackageMaintainer name,
-        groupExists    = fmap (Map.member name . maintainers) $ query AllPackageMaintainers,
+        queryUserList  = query  maintainersState $ GetPackageMaintainers name,
+        addUserList    = update maintainersState . AddPackageMaintainer name,
+        removeUserList = update maintainersState . RemovePackageMaintainer name,
+        groupExists    = fmap (Map.member name . maintainers) $ query maintainersState AllPackageMaintainers,
         canAddGroup    = [u] ++ canModify,
         canRemoveGroup = canModify
       }
@@ -233,14 +264,14 @@ uploadFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
     withTrusteeAuth :: (Users.UserId -> Users.UserInfo -> ServerPartE a) -> ServerPartE a
     withTrusteeAuth func = do
         userDb <- queryGetUserDb
-        trustee <- query $ GetHackageTrustees
+        trustee <- query' trusteesState GetHackageTrustees
         (uid, uinfo) <- guardAuthorised hackageRealm userDb trustee
         func uid uinfo
 
     getPackageGroup :: MonadIO m => PackageName -> m Group.UserList
     getPackageGroup pkg = do
-        pkgm    <- query $ GetPackageMaintainers pkg
-        trustee <- query $ GetHackageTrustees
+        pkgm    <- query' maintainersState (GetPackageMaintainers pkg)
+        trustee <- query' trusteesState GetHackageTrustees
         return $ Group.unions [trustee, pkgm]
 
     ----------------------------------------------------
@@ -249,9 +280,9 @@ uploadFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
     uploadPackage :: ServerPartE UploadResult
     uploadPackage = do
         users     <- queryGetUserDb
-        uploaders <- query GetHackageUploaders
+        uploaders <- query' uploadersState GetHackageUploaders
         void $ guardAuthorised hackageRealm users uploaders
-        state <- fmap packageList $ query GetPackagesState
+        state <- fmap packageList $ OldAcid.query GetPackagesState
         let uploadFilter uid info = combineErrors $ runFilter'' canUploadPackage uid info
         (pkgInfo, uresult) <- extractPackage (\uid info -> combineErrors $ sequence
            [ processUpload state uid info
@@ -263,7 +294,7 @@ uploadFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
              -- make package maintainers group for new package
             let existedBefore = packageExists state pkgInfo
             when (not existedBefore) $ do
-                update $ AddPackageMaintainer (packageName pkgInfo) (pkgUploadUser pkgInfo)
+                update' maintainersState $ AddPackageMaintainer (packageName pkgInfo) (pkgUploadUser pkgInfo)
             return uresult
           -- this is already checked in processUpload, and race conditions are highly unlikely but imaginable
           else errForbidden "Upload failed" [MText "Package already exists."]
