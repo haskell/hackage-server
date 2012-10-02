@@ -101,10 +101,9 @@ data CandidateRender = CandidateRender {
 
 -- URI generation (string-based), using maps; user groups
 initCheckFeature :: ServerEnv
-                 -> UserFeature -> CoreFeature
-                 -> PackagesFeature -> UploadFeature
+                 -> UserFeature -> CoreFeature -> UploadFeature
                  -> IO CheckFeature
-initCheckFeature env@ServerEnv{serverStateDir} user core _ upload = do
+initCheckFeature env@ServerEnv{serverStateDir} user core upload = do
 
     -- Canonical state
     candidatesState <- openLocalStateFrom

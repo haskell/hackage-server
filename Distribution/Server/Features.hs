@@ -78,12 +78,10 @@ initHackageFeatures enableCaches env = do
     distroFeature   <- initDistroFeature env
                          usersFeature
                          coreFeature
-                         packagesFeature
 
     checkFeature    <- initCheckFeature env
                          usersFeature
                          coreFeature
-                         packagesFeature
                          uploadFeature
 
     reportsFeature  <- initBuildReportsFeature env
@@ -126,7 +124,6 @@ initHackageFeatures enableCaches env = do
                          versionsFeature
 
     platformFeature <- initPlatformFeature env
-                         coreFeature
 
     htmlFeature     <- initHtmlFeature enableCaches env
                          usersFeature

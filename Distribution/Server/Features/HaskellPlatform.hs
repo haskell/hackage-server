@@ -8,7 +8,6 @@ module Distribution.Server.Features.HaskellPlatform (
 import Distribution.Server.Framework
 import Data.Acid
 import Data.Acid.Advanced
-import Distribution.Server.Features.Core
 import Distribution.Server.Packages.Platform
 import Data.Function
 
@@ -48,8 +47,8 @@ data PlatformResource = PlatformResource {
     platformPackagesUri :: String -> String
 }
 
-initPlatformFeature :: ServerEnv -> CoreFeature -> IO PlatformFeature
-initPlatformFeature ServerEnv{serverStateDir} _ = do
+initPlatformFeature :: ServerEnv -> IO PlatformFeature
+initPlatformFeature ServerEnv{serverStateDir} = do
 
     -- Canonical state
     platformState <- openLocalStateFrom

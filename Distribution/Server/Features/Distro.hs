@@ -10,7 +10,6 @@ import Distribution.Server.Framework.BackupDump (testRoundtripByQuery)
 import Data.Acid
 import Data.Acid.Advanced
 import Distribution.Server.Features.Core
-import Distribution.Server.Features.Packages
 import Distribution.Server.Features.Users
 
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
@@ -49,8 +48,8 @@ data DistroResource = DistroResource {
     distroPackage   :: Resource
 }
 
-initDistroFeature :: ServerEnv -> UserFeature -> CoreFeature -> PackagesFeature -> IO DistroFeature
-initDistroFeature ServerEnv{serverStateDir} user core _ = do
+initDistroFeature :: ServerEnv -> UserFeature -> CoreFeature -> IO DistroFeature
+initDistroFeature ServerEnv{serverStateDir} user core = do
 
     -- Canonical state
     distrosState  <- openLocalStateFrom
