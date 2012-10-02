@@ -158,9 +158,6 @@ fromFile path contents
 
 -- Used to compare export/import tarballs for equality by the backup/restore test:
 
-deriving instance Eq Tar.EntryContent
-deriving instance Eq Tar.Ownership
-
 equalTarBall :: ByteString -- ^ "Before" tarball
              -> ByteString -- ^ "After" tarball
              -> [String]
