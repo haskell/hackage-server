@@ -10,7 +10,6 @@ module Distribution.Server.Features.Upload (
 import Distribution.Server.Framework
 import Data.Acid
 import Data.Acid.Advanced
-import qualified Distribution.Server.Acid as OldAcid
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
@@ -282,17 +281,17 @@ uploadFeature ServerEnv{serverBlobStore = store}
         users     <- queryGetUserDb
         uploaders <- query' uploadersState GetHackageUploaders
         void $ guardAuthorised hackageRealm users uploaders
-        state <- fmap packageList $ OldAcid.query GetPackagesState
+        pkgIndex <- queryGetPackageIndex
         let uploadFilter uid info = combineErrors $ runFilter'' canUploadPackage uid info
         (pkgInfo, uresult) <- extractPackage (\uid info -> combineErrors $ sequence
-           [ processUpload state uid info
+           [ processUpload pkgIndex uid info
            , uploadFilter uid info
            , runUserFilter uid ])
         success <- liftIO $ doAddPackage pkgInfo
         if success
           then do
              -- make package maintainers group for new package
-            let existedBefore = packageExists state pkgInfo
+            let existedBefore = packageExists pkgIndex pkgInfo
             when (not existedBefore) $ do
                 update' maintainersState $ AddPackageMaintainer (packageName pkgInfo) (pkgUploadUser pkgInfo)
             return uresult

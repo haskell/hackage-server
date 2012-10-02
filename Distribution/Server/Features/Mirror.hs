@@ -5,7 +5,6 @@ module Distribution.Server.Features.Mirror (
     initMirrorFeature
   ) where
 
-import qualified Distribution.Server.Acid as OldAcid
 import Distribution.Server.Framework hiding (formatTime)
 import Data.Acid
 import Data.Acid.Advanced
@@ -15,7 +14,6 @@ import Distribution.Server.Features.Users
 
 import Distribution.Server.Users.State
 import Distribution.Server.Packages.Types
-import Distribution.Server.Packages.State
 import Distribution.Server.Users.Backup
 import Distribution.Server.Users.Types
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
@@ -175,7 +173,7 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
           expectTextPlain
           Body nameContent <- consumeRequestBody
           uid <- updateRequireUserName (UserName (unpackUTF8 nameContent))
-          mb_err <- OldAcid.update $ ReplacePackageUploader pkgid uid
+          mb_err <- updateReplacePackageUploader pkgid uid
           maybe (return $ toResponse "Updated uploader OK") (badRequest . toResponse) mb_err
 
     uploadTimeGet :: DynamicPath -> ServerPart Response
@@ -192,7 +190,7 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
           case parseTime defaultTimeLocale "%c" (unpackUTF8 timeContent) of
             Nothing -> badRequest $ toResponse "Could not parse upload time"
             Just t  -> do
-              mb_err <- OldAcid.update $ ReplacePackageUploadTime pkgid t
+              mb_err <- updateReplacePackageUploadTime pkgid t
               maybe (return $ toResponse "Updated upload time OK") (badRequest . toResponse) mb_err
 
     -- return: error from parsing, bad request error, or warning lines

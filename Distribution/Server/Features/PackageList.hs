@@ -6,7 +6,6 @@ module Distribution.Server.Features.PackageList (
     tagHistogram
   ) where
 
-import Distribution.Server.Acid (query)
 import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 -- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies
@@ -16,7 +15,6 @@ import Distribution.Server.Features.PreferredVersions
 import qualified Distribution.Server.Framework.Cache as Cache
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
-import Distribution.Server.Packages.State
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.Tag
 -- [reverse index disabled] import Distribution.Server.Packages.Reverse
@@ -150,13 +148,13 @@ listFeature CoreFeature{..}
         case hasItem of
             True  -> Cache.modifyCache itemCache $ Map.adjust token pkgname
             False -> do
-                index <- fmap packageList $ query GetPackagesState
+                index <- queryGetPackageIndex
                 let pkgs = PackageIndex.lookupPackageName index pkgname
                 case pkgs of
                     [] -> return () --this shouldn't happen
                     _  -> Cache.modifyCache itemCache . uncurry Map.insert =<< constructItem (last pkgs)
     updateDesc pkgname = do
-        index <- fmap packageList $ query GetPackagesState
+        index <- queryGetPackageIndex
         let pkgs = PackageIndex.lookupPackageName index pkgname
         case pkgs of
            [] -> Cache.modifyCache itemCache (Map.delete pkgname)
@@ -172,7 +170,7 @@ listFeature CoreFeature{..}
 
     constructItemIndex :: IO (Map PackageName PackageItem)
     constructItemIndex = do
-        index <- fmap packageList $ query GetPackagesState
+        index <- queryGetPackageIndex
         items <- mapM (constructItem . last) $ PackageIndex.allPackagesByName index
         return $ Map.fromList items
 

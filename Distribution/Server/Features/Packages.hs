@@ -12,7 +12,6 @@ module Distribution.Server.Features.Packages (
     categorySplit,
   ) where
 
-import Distribution.Server.Acid (query)
 import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
@@ -23,7 +22,6 @@ import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import Distribution.Server.Util.ChangeLog (lookupChangeLog)
 
 import qualified Distribution.Server.Users.Users as Users
-import qualified Distribution.Server.Packages.State as State
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import qualified Distribution.Server.Framework.Cache as Cache
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
@@ -107,10 +105,10 @@ packagesFeature ServerEnv{serverBlobStore=store}
 
     updateRecentCache = do
         -- TODO: this should be moved to HTML/RSS features
-        state <- query State.GetPackagesState
+        pkgIndex <- queryGetPackageIndex
         users <- queryGetUserDb
         now   <- getCurrentTime
-        let recentChanges = reverse $ sortBy (comparing pkgUploadTime) (PackageIndex.allPackages . State.packageList $ state)
+        let recentChanges = reverse $ sortBy (comparing pkgUploadTime) (PackageIndex.allPackages pkgIndex)
         return (toResponse $ Resource.XHtml $ Pages.recentPage users recentChanges,
                 toResponse $ Pages.recentFeed users (fromJust $ URI.uriAuthority =<< URI.parseURI "http://hackage.haskell.org") now recentChanges)
 

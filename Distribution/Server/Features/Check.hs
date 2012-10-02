@@ -198,7 +198,7 @@ checkFeature ServerEnv{serverBlobStore = store}
 
     uploadCandidate :: (PackageId -> Bool) -> ServerPartE CandPkgInfo
     uploadCandidate isRight = do
-        regularIndex <- fmap packageList $ query GetPackagesState
+        regularIndex <- queryGetPackageIndex
         -- ensure that the user has proper auth if the package exists
         (pkgInfo, uresult) <- extractPackage (\uid info -> combineErrors $ sequence
           [ processCandidate isRight regularIndex uid info
@@ -231,7 +231,7 @@ checkFeature ServerEnv{serverBlobStore = store}
 
     publishCandidate :: DynamicPath -> Bool -> ServerPartE UploadResult
     publishCandidate dpath doDelete = do
-        packages <- fmap packageList $ query GetPackagesState
+        packages <- queryGetPackageIndex
         withCandidatePath dpath $ \_ candidate -> do
         -- check authorization to upload - must already be a maintainer
         withPackageAuth candidate $ \uid _ -> do
@@ -282,7 +282,7 @@ checkFeature ServerEnv{serverBlobStore = store}
     candidateRender :: CandPkgInfo -> IO CandidateRender
     candidateRender cand = do
            users  <- queryGetUserDb
-           index  <- packageList `fmap` query GetPackagesState
+           index  <- queryGetPackageIndex
            render <- doPackageRender store users (candPkgInfo cand)
            return $ CandidateRender {
              candPackageRender = render { rendPkgUri = rendPkgUri render ++ "/candidate" },

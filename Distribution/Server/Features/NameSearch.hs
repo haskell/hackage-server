@@ -5,7 +5,6 @@ module Distribution.Server.Features.NameSearch (
     initNamesFeature,
   ) where
 
-import Distribution.Server.Acid (query)
 import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 
@@ -15,7 +14,6 @@ import qualified Distribution.Server.Framework.Cache as Cache
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
-import Distribution.Server.Packages.State
 import Distribution.Server.Packages.Types
 import Distribution.Text
 import Distribution.Package
@@ -52,13 +50,13 @@ data NamesResource = NamesResource {
 -- text search of package descriptions using Bayer-Moore. The results could also
 -- be ordered by download (see DownloadCount.hs sortByDownloads).
 initNamesFeature :: ServerEnv -> CoreFeature -> IO NamesFeature
-initNamesFeature env CoreFeature{..} = do
+initNamesFeature env core@CoreFeature{..} = do
     pkgCache  <- Cache.newCacheable (emptyNameIndex Nothing)
     textCache <- Cache.newCache (constructTextIndex []) id
     osdCache  <- Cache.newCacheable (toResponse $ Resource.OpenSearchXml $ BS.pack $ mungeSearchXml $ hostUriStr env)
     
     let (feature, regenerateIndices) =
-          namesFeature env
+          namesFeature env core
                        pkgCache textCache osdCache
 
     registerHook packageAddHook    $ \_   -> regenerateIndices
@@ -71,12 +69,13 @@ hostUriStr :: ServerEnv -> String
 hostUriStr ServerEnv{serverHostURI} = uriToString id (URI "http:" (Just serverHostURI) "" "" "") ""
 
 namesFeature :: ServerEnv
+             -> CoreFeature
              -> Cache.Cache NameIndex
              -> Cache.Cache TextSearch
              -> Cache.Cache Response
              -> (NamesFeature, IO ())
 
-namesFeature env
+namesFeature env CoreFeature{..}
              packageNameIndex packageTextIndex
              openSearchCache
   = (NamesFeature{..}, regenerateIndices)
@@ -94,7 +93,7 @@ namesFeature env
       }
 
     regenerateIndices = do
-      index <- fmap packageList $ query GetPackagesState
+      index <- queryGetPackageIndex :: IO (PackageIndex PkgInfo)
       -- asynchronously update indices
       Cache.putCache packageNameIndex (constructIndex (map display $ PackageIndex.packageNames index) Nothing)
       Cache.putCache packageTextIndex (constructPackageText index)

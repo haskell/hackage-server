@@ -10,7 +10,6 @@ module Distribution.Server.Features.Tags (
 
 import Control.Applicative (optional)
 
-import qualified Distribution.Server.Acid as OldAcid
 import Distribution.Server.Framework
 import Data.Acid
 import Data.Acid.Advanced
@@ -21,7 +20,6 @@ import Distribution.Server.Packages.Tag
 
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
-import Distribution.Server.Packages.State (GetPackagesState(..), packageList)
 import Distribution.Server.Packages.Types
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Packages.Backup.Tags
@@ -147,7 +145,7 @@ tagsFeature CoreFeature{..}
 
     initImmutableTags :: IO ()
     initImmutableTags = do
-            index <- fmap packageList $ OldAcid.query GetPackagesState
+            index <- queryGetPackageIndex
             let calcTags = tagPackages $ constructImmutableTagIndex index
             forM_ (Map.toList calcTags) $ uncurry setCalculatedTag
 

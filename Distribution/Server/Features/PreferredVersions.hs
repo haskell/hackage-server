@@ -10,7 +10,6 @@ module Distribution.Server.Features.PreferredVersions (
 import Control.Applicative (optional)
 
 import Distribution.Server.Framework
-import qualified Distribution.Server.Acid as OldAcid
 import Data.Acid
 import Data.Acid.Advanced
 import Distribution.Server.Features.Core
@@ -21,7 +20,6 @@ import qualified Distribution.Server.Framework.Cache as Cache
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.Preferred
 import Distribution.Server.Packages.Tag
-import Distribution.Server.Packages.State
 import Distribution.Server.Packages.Types
 
 import Distribution.Package
@@ -160,9 +158,9 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
     -- It could be enhanced by displaying a search page in the case of failure,
     -- which is outside of the scope of this feature.
     withPackagePreferred :: PackageId -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a
-    withPackagePreferred pkgid func =
-      OldAcid.query GetPackagesState >>= \state ->
-        case PackageIndex.lookupPackageName (packageList state) (packageName pkgid) of
+    withPackagePreferred pkgid func = do
+      pkgIndex <- queryGetPackageIndex
+      case PackageIndex.lookupPackageName pkgIndex (packageName pkgid) of
             []   ->  packageError [MText "No such package in package index"]
             pkgs  | pkgVersion pkgid == Version [] [] -> query' preferredState (GetPreferredInfo $ packageName pkgid) >>= \info -> do
                 let rangeToCheck = sumRange info
@@ -211,7 +209,7 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
     putDeprecated pkgname =
             withPackageAll pkgname $ \_ ->
             withPackageNameAuth pkgname $ \_ _ -> do
-        index  <- fmap packageList $ OldAcid.query GetPackagesState
+        index  <- queryGetPackageIndex
         isDepr <- optional $ look "deprecated"
         case isDepr of
             Just {} -> do

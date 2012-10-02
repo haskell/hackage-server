@@ -13,7 +13,6 @@ module Distribution.Server.Packages.Backup (
     maintToCSV
   ) where
 
-import qualified Distribution.Server.Acid as OldAcid (update)
 import Data.Acid (AcidState, update)
 
 import Distribution.Server.Packages.State
@@ -44,25 +43,25 @@ import Data.Monoid (mempty)
 import Control.Monad.State
 import qualified Codec.Compression.GZip as GZip
 
-packagesBackup :: BlobStorage -> RestoreBackup
-packagesBackup blobs = updatePackageBackup blobs Map.empty
+packagesBackup :: AcidState PackagesState -> BlobStorage -> RestoreBackup
+packagesBackup packagesState blobs = updatePackageBackup packagesState blobs Map.empty
 
 type PartialIndex = Map PackageId PartialPkg
 
-updatePackageBackup :: BlobStorage -> PartialIndex -> RestoreBackup
-updatePackageBackup storage packageMap = RestoreBackup
+updatePackageBackup :: AcidState PackagesState -> BlobStorage -> PartialIndex -> RestoreBackup
+updatePackageBackup packagesState storage packageMap = RestoreBackup
   { restoreEntry    = \entry -> do
         res <- doPackageImport storage packageMap entry
-        return $ fmap (updatePackageBackup storage) res
+        return $ fmap (updatePackageBackup packagesState storage) res
   , restoreFinalize =
         let results = mapM partialToFullPkg (Map.toList packageMap)
-        in return $ fmap (finalPackagesBackup . PackagesState . PackageIndex.fromList) results
+        in return $ fmap (finalPackagesBackup packagesState . PackagesState . PackageIndex.fromList) results
   , restoreComplete = return ()
   }
 
-finalPackagesBackup :: PackagesState -> RestoreBackup
-finalPackagesBackup packages = mempty {
-    restoreComplete = OldAcid.update $ ReplacePackagesState packages
+finalPackagesBackup :: AcidState PackagesState -> PackagesState -> RestoreBackup
+finalPackagesBackup packagesState packages = mempty {
+    restoreComplete = update packagesState $ ReplacePackagesState packages
   }
 
 

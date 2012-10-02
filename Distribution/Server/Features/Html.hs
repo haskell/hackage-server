@@ -90,7 +90,7 @@ initHtmlFeature :: Bool
                 -> IO HtmlFeature
 
 initHtmlFeature enableCaches _env
-                user core@CoreFeature{packageIndexChange}
+                user core@CoreFeature{queryGetPackageIndex, packageIndexChange}
                 packages upload
                 check versions
                 -- [reverse index disabled] reverse
@@ -101,7 +101,7 @@ initHtmlFeature enableCaches _env
 
     -- Index page caches
     mainCache <- Cache.newCacheableAction enableCaches $
-        do index <- fmap State.packageList $ query State.GetPackagesState
+        do index <- queryGetPackageIndex
            return (toResponse $ Resource.XHtml $ Pages.packageIndex index)
 
     -- do rec, tie the knot
@@ -551,9 +551,9 @@ packageGroupResource uploads)] }
         candRender <- liftIO $ candidateRender cand
         let PackageIdentifier pkgname version = packageId cand
             render = candPackageRender candRender
-        otherVersions <- fmap (map packageVersion .
-                               flip PackageIndex.lookupPackageName pkgname .
-                               State.packageList) $ query State.GetPackagesState
+        otherVersions <- map packageVersion
+                       . flip PackageIndex.lookupPackageName pkgname
+                     <$> queryGetPackageIndex
         prefInfo <- queryGetPreferredInfo pkgname
         let sectionHtml = [Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing,
                            Pages.renderDependencies render] ++ Pages.renderFields render
@@ -570,7 +570,7 @@ packageGroupResource uploads)] }
                                withCandidatePath dpath $ \_ candidate ->
                                withPackageAuth candidate $ \_ _ -> do
         let pkgid = packageId candidate
-        packages <- fmap State.packageList $ query State.GetPackagesState
+        packages <- queryGetPackageIndex
         case checkPublish packages candidate of
             Just err -> throwError err
             Nothing  -> do
@@ -838,7 +838,7 @@ packageGroupResource uploads)] }
     serveReverseList _ = do
         let revr = reverseResource revs
         triple <- sortedRevSummary revs
-        hackCount <- fmap (PackageIndex.indexSize . State.packageList) $ query State.GetPackagesState
+        hackCount <- PackageIndex.indexSize <$> queryGetPackageIndex
         return $ toResponse $ Resource.XHtml $ hackagePage "Reverse dependencies" $
             Pages.reversePackagesRender (corePackageName "") revr hackCount triple
     -}

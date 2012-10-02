@@ -10,14 +10,16 @@ module Distribution.Server.Features.Core (
     packageIdExists,
   ) where
 
-import Distribution.Server.Acid (query, update)
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
+import Data.Acid
+import Data.Acid.Advanced
 
 import Distribution.Server.Features.Users
 
 import Distribution.Server.Packages.Backup
 import Distribution.Server.Packages.Types
+import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Packages.State
 import qualified Distribution.Server.Framework.Cache as Cache
 import qualified Distribution.Server.Packages.Index as Packages.Index
@@ -38,6 +40,7 @@ import Text.XHtml.Strict (Html, toHtml, unordList, h3, (<<), anchor, href, (!))
 import Data.Ord (comparing)
 import Data.List (sortBy, find)
 import Data.ByteString.Lazy.Char8 (ByteString)
+import System.FilePath ((</>))
 
 import Distribution.Text (display)
 import Distribution.Package
@@ -49,6 +52,16 @@ data CoreFeature = CoreFeature {
 
     coreResource     :: CoreResource,
 
+    -- queries
+    queryGetPackageIndex :: MonadIO m => m (PackageIndex PkgInfo),
+
+    -- update transactions
+    updateReplacePackageUploader :: MonadIO m
+                                 => PackageId -> UserId
+                                 -> m (Maybe String),
+    updateReplacePackageUploadTime :: MonadIO m
+                                   => PackageId -> UTCTime
+                                   -> m (Maybe String),
     --TODO: should be made into transactions
     doAddPackage    :: PkgInfo -> IO Bool,
     doMergePackage  :: PkgInfo -> IO (),
@@ -109,13 +122,19 @@ data CoreResource = CoreResource {
 }
 
 initCoreFeature :: Bool -> ServerEnv -> UserFeature -> IO CoreFeature
-initCoreFeature enableCaches env UserFeature{..} = do
+initCoreFeature enableCaches env@ServerEnv{serverStateDir} UserFeature{..} = do
+
+    -- Canonical state
+    packagesState <- openLocalStateFrom
+                       (serverStateDir </> "db" </> "PackagesState")
+                       initialPackagesState
+
     -- Caches
     extraMap <- Cache.newCacheable Map.empty
 
     indexTar <- Cache.newCacheableAction enableCaches $ do
             users  <- queryGetUserDb
-            index  <- packageList <$> query GetPackagesState
+            index  <- packageList <$> query packagesState GetPackagesState
             extras <- Cache.getCache extraMap
             return $ GZip.compress $ Packages.Index.write users extras index
 
@@ -128,11 +147,12 @@ initCoreFeature enableCaches env UserFeature{..} = do
     noPkgHook  <- newHook
     registerHook indexHook $ Cache.refreshCacheableAction indexTar
 
-    return $ coreFeature env extraMap indexTar
+    return $ coreFeature env packagesState extraMap indexTar
                          downHook addHook removeHook changeHook
                          indexHook newPkgHook noPkgHook
 
 coreFeature :: ServerEnv
+            -> AcidState PackagesState
             -> Cache.Cache (Map String (ByteString, UTCTime))
             -> Cache.CacheableAction ByteString
             -> Hook (PackageId -> IO ())
@@ -145,7 +165,7 @@ coreFeature :: ServerEnv
             -> CoreFeature
 
 coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
-            indexExtras cacheIndexTarball
+            packagesState indexExtras cacheIndexTarball
             tarballDownload packageAddHook packageRemoveHook packageChangeHook
             packageIndexChange newPackageHook noPackageHook
   = CoreFeature{..}
@@ -155,6 +175,10 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
           [ coreIndexPage, coreIndexTarball, corePackagesPage, corePackagePage
           , corePackageRedirect, corePackageTarball, coreCabalFile ]
       , featurePostInit    = runHook packageIndexChange
+      , featureCheckpoint = do
+          createCheckpoint packagesState
+      , featureShutdown = do
+          closeAcidState packagesState
       , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
       }
 
@@ -177,17 +201,35 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
     indexPage staticDir _ = serveFile (const $ return "text/html") (staticDir ++ "/hackage.html")
 
     dumpBackup = do
-      packages <- query GetPackagesState
+      packages <- query packagesState GetPackagesState
       readExportBlobs store $ indexToAllVersions packages
 
-    restoreBackup = packagesBackup store
+    restoreBackup = packagesBackup packagesState store
 
-    testRoundtrip = testRoundtripByQuery' (query GetPackagesState) $ \packages ->
+    testRoundtrip = testRoundtripByQuery' (query packagesState GetPackagesState) $ \packages ->
       testBlobsExist store [ blob
                            | pkgInfo <- PackageIndex.allPackages (packageList packages)
                            , (tarball, _) <- pkgTarball pkgInfo
                            , blob <- [pkgTarballGz tarball, pkgTarballNoGz tarball]
                            ]
+
+    -- Queries
+    --
+    queryGetPackageIndex :: MonadIO m => m (PackageIndex PkgInfo)
+    queryGetPackageIndex = return . packageList =<< query' packagesState GetPackagesState
+
+    -- Update transactions
+    --
+    updateReplacePackageUploader :: MonadIO m => PackageId -> UserId
+                                 -> m (Maybe String)
+    updateReplacePackageUploader pkgid userid =
+      update' packagesState (ReplacePackageUploader pkgid userid)
+
+    updateReplacePackageUploadTime :: MonadIO m => PackageId -> UTCTime
+                                   -> m (Maybe String)
+    updateReplacePackageUploadTime pkgid time =
+      update' packagesState (ReplacePackageUploadTime pkgid time)
+      
 
     -- Should probably look more like an Apache index page (Name / Last modified / Size / Content-type)
     basicPackagePage :: DynamicPath -> ServerPart Response
@@ -216,8 +258,8 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
 
     withPackage :: PackageId -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a
     withPackage pkgid func = do
-        state <- query GetPackagesState
-        case PackageIndex.lookupPackageName (packageList state) (packageName pkgid) of
+        pkgIndex <- queryGetPackageIndex
+        case PackageIndex.lookupPackageName pkgIndex (packageName pkgid) of
             []   ->  packageError [MText "No such package in package index"]
             pkgs  | pkgVersion pkgid == Version [] [] ->
                 -- pkgs is sorted by version number and non-empty
@@ -231,8 +273,8 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
 
     withPackageAll :: PackageName -> ([PkgInfo] -> ServerPartE a) -> ServerPartE a
     withPackageAll pkgname func = do
-        state <- query GetPackagesState
-        case PackageIndex.lookupPackageName (packageList state) pkgname of
+        pkgsIndex <- queryGetPackageIndex
+        case PackageIndex.lookupPackageName pkgsIndex pkgname of
             []   -> packageError [MText "No such package in package index"]
             pkgs -> func pkgs
 
@@ -242,7 +284,8 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
     withPackageVersion :: PackageId -> (PkgInfo -> ServerPartE a) -> ServerPartE a
     withPackageVersion pkgid func = do
         guard (packageVersion pkgid /= Version [] [])
-        query GetPackagesState >>= \state -> case PackageIndex.lookupPackageId (packageList state) pkgid of
+        pkgs <- queryGetPackageIndex
+        case PackageIndex.lookupPackageId pkgs pkgid of
             Nothing -> packageError [MText $ "No such package version for " ++ display (packageName pkgid)]
             Just pkg -> func pkg
 
@@ -299,10 +342,10 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
     -- This is a wrapper around InsertPkgIfAbsent that runs the necessary hooks in core.
     doAddPackage :: PkgInfo -> IO Bool
     doAddPackage pkgInfo = do
-        state <- fmap packageList $ query GetPackagesState
-        success <- update $ InsertPkgIfAbsent pkgInfo
+        pkgs    <- queryGetPackageIndex
+        success <- update packagesState $ InsertPkgIfAbsent pkgInfo
         when success $ do
-            let existedBefore = packageExists state pkgInfo
+            let existedBefore = packageExists pkgs pkgInfo
             when (not existedBefore) $ do
                 runHook' newPackageHook pkgInfo
             runHook' packageAddHook pkgInfo
@@ -312,11 +355,11 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
     -- A wrapper around MergePkg.
     doMergePackage :: PkgInfo -> IO ()
     doMergePackage pkgInfo = do
-        state <- fmap packageList $ query GetPackagesState
-        let mprev = PackageIndex.lookupPackageId state (packageId pkgInfo)
-            nameExists = packageExists state pkgInfo
+        pkgs <- queryGetPackageIndex
+        let mprev = PackageIndex.lookupPackageId pkgs (packageId pkgInfo)
+            nameExists = packageExists pkgs pkgInfo
         -- TODO: Is there a thread-safety issue here?
-        void $ update $ MergePkg pkgInfo
+        void $ update packagesState $ MergePkg pkgInfo
         when (not nameExists) $ do
             runHook' newPackageHook pkgInfo
         case mprev of
@@ -326,8 +369,8 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
         runHook packageIndexChange
 
 packageExists, packageIdExists :: (Package pkg, Package pkg') => PackageIndex pkg -> pkg' -> Bool
-packageExists   state pkg = not . null $ PackageIndex.lookupPackageName state (packageName pkg)
-packageIdExists state pkg = maybe False (const True) $ PackageIndex.lookupPackageId state (packageId pkg)
+packageExists   pkgs pkg = not . null $ PackageIndex.lookupPackageName pkgs (packageName pkg)
+packageIdExists pkgs pkg = maybe False (const True) $ PackageIndex.lookupPackageId pkgs (packageId pkg)
 
 basicPackageSection :: (PackageId -> String)
                     -> (PackageId -> String)
