@@ -16,14 +16,12 @@ import Distribution.Server.Packages.Platform        (PlatformPackages, initialPl
 import Distribution.Server.Packages.State           (CandidatePackages, Documentation, PackagesState,
                                                      initialCandidatePackages, initialDocumentation, 
                                                      initialPackagesState)
-import Distribution.Server.Users.State              (MirrorClients, initialMirrorClients)
 
 -- WARNING: if you add fields here, you must update checkpointAcid and stopAcid. Failure to do so will *not* result in a compiler error.
 data Acid = Acid 
     { acidBuildReports       :: AcidState BuildReports
     , acidCandidatePackages  :: AcidState CandidatePackages
     , acidDocumentation      :: AcidState Documentation
-    , acidMirrorClients      :: AcidState MirrorClients
     , acidPackagesState      :: AcidState PackagesState
     , acidPlatformPackages   :: AcidState PlatformPackages
     -- [reverse index disabled] , acidReverseIndex       :: AcidState ReverseIndex
@@ -40,9 +38,6 @@ instance AcidComponent CandidatePackages where
 
 instance AcidComponent Documentation where
     acidComponent = acidDocumentation
-
-instance AcidComponent MirrorClients where
-    acidComponent = acidMirrorClients
 
 instance AcidComponent PackagesState where
     acidComponent = acidPackagesState
@@ -74,7 +69,6 @@ startAcid stateDir =
            initialBuildReports
            initialCandidatePackages
            initialDocumentation
-           initialMirrorClients
            initialPackagesState
            initialPlatformPackages
            -- [reverse index disabled] initialReverseIndex
@@ -83,25 +77,22 @@ startAcid' :: FilePath
            -> BuildReports
            -> CandidatePackages
            -> Documentation
-           -> MirrorClients
            -> PackagesState
            -> PlatformPackages
            -- [reverse index disabled] -> ReverseIndex
            -> IO Acid
-startAcid' stateDir buildReports candidatePackages documentation mirrorClients packagesState platformPackages
+startAcid' stateDir buildReports candidatePackages documentation packagesState platformPackages
     -- [reverse index disabled] reverseIndex
     =
     do buildReports'       <- openLocalStateFrom (stateDir </> "BuildReports")       buildReports
        candidatePackages'  <- openLocalStateFrom (stateDir </> "CandidatePackages")  candidatePackages
        documentation'      <- openLocalStateFrom (stateDir </> "Documentation")      documentation
-       mirrorClients'      <- openLocalStateFrom (stateDir </> "MirrorClients")      mirrorClients
        packagesState'      <- openLocalStateFrom (stateDir </> "PackagesState")      packagesState
        platformPackages'   <- openLocalStateFrom (stateDir </> "PlatformPackages")   platformPackages
        -- [reverse index disabled] reverseIndex'       <- openLocalStateFrom (stateDir </> "ReverseIndex")       reverseIndex
        let acid = Acid { acidBuildReports       = buildReports' 
                        , acidCandidatePackages  = candidatePackages'
                        , acidDocumentation      = documentation'
-                       , acidMirrorClients      = mirrorClients'
                        , acidPackagesState      = packagesState'
                        , acidPlatformPackages   = platformPackages'
                        -- [reverse index disabled] , acidReverseIndex       = reverseIndex'
@@ -115,7 +106,6 @@ stopAcid acid =
        createCheckpointAndClose (acidBuildReports acid)
        createCheckpointAndClose (acidCandidatePackages acid)
        createCheckpointAndClose (acidDocumentation acid)
-       createCheckpointAndClose (acidMirrorClients acid)
        createCheckpointAndClose (acidPackagesState acid)
        createCheckpointAndClose (acidPlatformPackages acid)
        -- [reverse index disabled] createCheckpointAndClose (acidReverseIndex acid)
@@ -125,7 +115,6 @@ checkpointAcid acid =
     do createCheckpoint (acidBuildReports acid)
        createCheckpoint (acidCandidatePackages acid)
        createCheckpoint (acidDocumentation acid)
-       createCheckpoint (acidMirrorClients acid)
        createCheckpoint (acidPackagesState acid)
        createCheckpoint (acidPlatformPackages acid)
        -- [reverse index disabled] createCheckpoint (acidReverseIndex acid)

@@ -5,8 +5,11 @@ module Distribution.Server.Features.Mirror (
     initMirrorFeature
   ) where
 
-import Distribution.Server.Acid (query, update, unsafeGetAcid)
+import qualified Distribution.Server.Acid as OldAcid
 import Distribution.Server.Framework hiding (formatTime)
+import Data.Acid
+import Data.Acid.Advanced
+
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 
@@ -33,7 +36,7 @@ import Control.Monad
 import Control.Monad.Trans (MonadIO(..))
 import Distribution.Package
 import Distribution.Text
-import System.FilePath ((<.>))
+import System.FilePath ((</>), (<.>))
 import qualified Codec.Compression.GZip as GZip
 
 data MirrorFeature = MirrorFeature {
@@ -55,12 +58,17 @@ data MirrorResource = MirrorResource {
 
 -------------------------------------------------------------------------
 initMirrorFeature :: ServerEnv -> CoreFeature -> UserFeature -> IO MirrorFeature
-initMirrorFeature env core user@UserFeature{..} = do
+initMirrorFeature env@ServerEnv{serverStateDir} core user@UserFeature{..} = do
+
+    -- Canonical state
+    mirrorersState <- openLocalStateFrom
+                        (serverStateDir </> "db" </> "MirrorClients")
+                        initialMirrorClients
 
     -- Tie the knot with a do-rec
     rec let (feature, mirrorersGroupDesc)
               = mirrorFeature env core user
-                              mirrorersG mirrorR
+                              mirrorersState mirrorersG mirrorR
 
         (mirrorersG, mirrorR) <- groupResourceAt "/packages/mirrorers" mirrorersGroupDesc
 
@@ -70,26 +78,31 @@ initMirrorFeature env core user@UserFeature{..} = do
 mirrorFeature :: ServerEnv
               -> CoreFeature
               -> UserFeature
+              -> AcidState MirrorClients
               -> UserGroup
               -> GroupResource
               -> (MirrorFeature, UserGroup)
 
 mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
-              mirrorGroup mirrorGroupResource
+              mirrorersState mirrorGroup mirrorGroupResource
   = (MirrorFeature{..}, mirrorersGroupDesc)
   where
     mirrorFeatureInterface = (emptyHackageFeature "mirror") {
         featureResources = map ($mirrorResource) [mirrorPackageTarball, mirrorPackageUploadTime, mirrorPackageUploader, mirrorCabalFile]
+      , featureCheckpoint = do
+          createCheckpoint mirrorersState
+      , featureShutdown = do
+          closeAcidState mirrorersState
       , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
       }
 
     dumpBackup    = do
-        clients <- query GetMirrorClients
+        clients <- query mirrorersState GetMirrorClients
         return [csvToBackup ["clients.csv"] $ groupToCSV clients]
 
-    restoreBackup = groupBackup unsafeGetAcid ["clients.csv"] ReplaceMirrorClients
+    restoreBackup = groupBackup mirrorersState ["clients.csv"] ReplaceMirrorClients
 
-    testRoundtrip = testRoundtripByQuery (query GetMirrorClients)
+    testRoundtrip = testRoundtripByQuery (query mirrorersState GetMirrorClients)
 
     mirrorResource = MirrorResource {
         mirrorPackageTarball = (extendResource $ corePackageTarball coreResource) {
@@ -110,9 +123,9 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
 
     mirrorersGroupDesc = UserGroup {
         groupDesc      = nullDescription { groupTitle = "Mirror clients" },
-        queryUserList  = query GetMirrorClients,
-        addUserList    = update . AddMirrorClient,
-        removeUserList = update . RemoveMirrorClient,
+        queryUserList  = query  mirrorersState   GetMirrorClients,
+        addUserList    = update mirrorersState . AddMirrorClient,
+        removeUserList = update mirrorersState . RemoveMirrorClient,
         groupExists    = return True,
         canRemoveGroup = [adminGroup],
         canAddGroup    = [adminGroup]
@@ -162,7 +175,7 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
           expectTextPlain
           Body nameContent <- consumeRequestBody
           uid <- updateRequireUserName (UserName (unpackUTF8 nameContent))
-          mb_err <- update $ ReplacePackageUploader pkgid uid
+          mb_err <- OldAcid.update $ ReplacePackageUploader pkgid uid
           maybe (return $ toResponse "Updated uploader OK") (badRequest . toResponse) mb_err
 
     uploadTimeGet :: DynamicPath -> ServerPart Response
@@ -179,7 +192,7 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
           case parseTime defaultTimeLocale "%c" (unpackUTF8 timeContent) of
             Nothing -> badRequest $ toResponse "Could not parse upload time"
             Just t  -> do
-              mb_err <- update $ ReplacePackageUploadTime pkgid t
+              mb_err <- OldAcid.update $ ReplacePackageUploadTime pkgid t
               maybe (return $ toResponse "Updated upload time OK") (badRequest . toResponse) mb_err
 
     -- return: error from parsing, bad request error, or warning lines
@@ -206,7 +219,7 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
 
     requireMirrorAuth :: ServerPartE UserId
     requireMirrorAuth = do
-        ulist   <- query GetMirrorClients
+        ulist   <- query' mirrorersState GetMirrorClients
         userdb  <- queryGetUserDb
         (uid, _) <- guardAuthorised hackageRealm userdb ulist
         return uid
