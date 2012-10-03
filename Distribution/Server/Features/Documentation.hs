@@ -7,10 +7,10 @@ module Distribution.Server.Features.Documentation (
 
 import Distribution.Server.Framework
 
+import Distribution.Server.Features.Documentation.State
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
 
-import Distribution.Server.Packages.State
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
 import qualified Distribution.Server.Framework.ResourceTypes as Resource

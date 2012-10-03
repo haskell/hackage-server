@@ -31,7 +31,8 @@ import qualified Distribution.Server.Framework.BackupRestore as Import
 
 -- TODO: move this to BulkImport module
 import Distribution.Server.Users.Backup (usersToCSV, groupToCSV)
-import Distribution.Server.Packages.Backup (infoToCurrentEntries, maintToExport)
+import Distribution.Server.Features.Core.Backup (infoToCurrentEntries)
+import Distribution.Server.Features.Upload.Backup (maintToExport)
 import Distribution.Server.Packages.Backup.Tags (tagsToCSV)
 import Distribution.Server.Features.Tags (constructTagIndex)
 import qualified Distribution.Server.Users.Group as Group

@@ -7,8 +7,8 @@ module Distribution.Server.Features.PackageContents (
 
 import Distribution.Server.Framework
 
-import Distribution.Server.Features.Check
 import Distribution.Server.Features.Core
+import Distribution.Server.Features.Check
 
 import Distribution.Server.Packages.Types
 import Distribution.Server.Util.ChangeLog (lookupTarball, lookupChangeLog)

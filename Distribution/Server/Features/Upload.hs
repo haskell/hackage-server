@@ -10,11 +10,12 @@ module Distribution.Server.Features.Upload (
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
 
+import Distribution.Server.Features.Upload.State
+import Distribution.Server.Features.Upload.Backup
+
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 
-import Distribution.Server.Packages.Backup
-import Distribution.Server.Packages.State
 import Distribution.Server.Users.Backup
 import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Users.Types as Users

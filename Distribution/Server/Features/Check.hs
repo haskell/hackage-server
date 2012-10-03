@@ -5,16 +5,19 @@ module Distribution.Server.Features.Check (
     initCheckFeature,
 
     CandidateRender(..),
+    CandPkgInfo(..),
   ) where
 
 import Distribution.Server.Framework
+
+import Distribution.Server.Features.Check.Types
+import Distribution.Server.Features.Check.State
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Users
 
-import Distribution.Server.Packages.State
 import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Group as Group

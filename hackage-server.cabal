@@ -79,11 +79,9 @@ executable hackage-server
     Distribution.Server.Packages.Downloads
     Distribution.Server.Packages.Index
     Distribution.Server.Packages.ModuleForest
-    Distribution.Server.Packages.Backup
     Distribution.Server.Packages.PackageIndex
     Distribution.Server.Packages.Preferred
     -- [reverse index disabled] Distribution.Server.Packages.Reverse
-    Distribution.Server.Packages.State
     Distribution.Server.Packages.Tag
     Distribution.Server.Packages.Types
     Distribution.Server.Packages.Unpack
@@ -116,8 +114,12 @@ executable hackage-server
     Distribution.Server.Util.ChangeLog
 
     Distribution.Server.Features.Core
+    Distribution.Server.Features.Core.State
+    Distribution.Server.Features.Core.Backup
     Distribution.Server.Features.Mirror
     Distribution.Server.Features.Upload
+    Distribution.Server.Features.Upload.State
+    Distribution.Server.Features.Upload.Backup
     Distribution.Server.Features.Users
 
   if flag(minimal)
@@ -131,12 +133,15 @@ executable hackage-server
       Distribution.Server.Features.BuildReports.Backup
       Distribution.Server.Features.BuildReports.State
       Distribution.Server.Features.Check
+      Distribution.Server.Features.Check.Types
+      Distribution.Server.Features.Check.State
       Distribution.Server.Features.Distro
       Distribution.Server.Features.Distro.Distributions
       Distribution.Server.Features.Distro.Backup
       Distribution.Server.Features.Distro.State
       Distribution.Server.Features.Distro.Types
       Distribution.Server.Features.Documentation
+      Distribution.Server.Features.Documentation.State
       Distribution.Server.Features.DownloadCount
       Distribution.Server.Features.Html
       Distribution.Server.Features.NameSearch

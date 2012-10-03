@@ -1,12 +1,4 @@
-{-# LANGUAGE
-    DeriveDataTypeable
-  , TemplateHaskell
-  , RecordWildCards
-  , TypeFamilies
-  , FlexibleInstances
-  , MultiParamTypeClasses
-  , FlexibleContexts
-  #-}
+{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, RecordWildCards #-}
 
 module Distribution.Server.Features.Distro.State where
 
@@ -36,7 +28,7 @@ data Distros = Distros {
 }
  deriving (Eq, Typeable, Show)
 
-$(deriveSafeCopy 0 'base ''Distros)
+deriveSafeCopy 0 'base ''Distros
 
 initialDistros :: Distros
 initialDistros = Distros Dist.emptyDistributions Dist.emptyDistroVersions
@@ -111,7 +103,7 @@ removeDistroMaintainer name uid = modifyDistroMaintainers name (Group.remove uid
 replaceDistroMaintainers :: DistroName -> UserList -> Update Distros ()
 replaceDistroMaintainers name ulist = modifyDistroMaintainers name (const ulist)
 
-$(makeAcidic
+makeAcidic
   ''Distros
   [ -- update collection of distributions
     'addDistro
@@ -143,4 +135,4 @@ $(makeAcidic
   , 'addDistroMaintainer
   , 'removeDistroMaintainer
   ]
- )
+

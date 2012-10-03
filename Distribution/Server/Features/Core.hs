@@ -13,12 +13,13 @@ module Distribution.Server.Features.Core (
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
 
+import Distribution.Server.Features.Core.State
+import Distribution.Server.Features.Core.Backup
+
 import Distribution.Server.Features.Users
 
-import Distribution.Server.Packages.Backup
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Types (UserId)
-import Distribution.Server.Packages.State
 import qualified Distribution.Server.Framework.Cache as Cache
 import qualified Distribution.Server.Packages.Index as Packages.Index
 import qualified Codec.Compression.GZip as GZip
