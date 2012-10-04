@@ -77,12 +77,12 @@ getBuildReports = ask
 replaceBuildReports :: BuildReports -> Update BuildReports ()
 replaceBuildReports = State.put
 
-$(makeAcidic ''BuildReports ['addReport
-                            ,'setBuildLog
-                            ,'deleteReport
-                            ,'lookupReport
-                            ,'lookupPackageReports
-                            ,'getBuildReports
-                            ,'replaceBuildReports
-                            ])
+makeAcidic ''BuildReports ['addReport
+                          ,'setBuildLog
+                          ,'deleteReport
+                          ,'lookupReport
+                          ,'lookupPackageReports
+                          ,'getBuildReports
+                          ,'replaceBuildReports
+                          ]
 

@@ -1,11 +1,11 @@
-module Distribution.Server.Packages.Backup.Tags (
+module Distribution.Server.Features.Tags.Backup (
     tagsBackup,
     tagsToCSV,
     tagsToRecord
   ) where
 
 import Data.Acid (AcidState, update)
-import Distribution.Server.Packages.Tag
+import Distribution.Server.Features.Tags.State
 import Distribution.Server.Framework.BackupRestore
 
 import Distribution.Package

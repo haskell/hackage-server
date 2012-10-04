@@ -3,17 +3,20 @@ module Distribution.Server.Features.DownloadCount (
     DownloadFeature(..),
     DownloadResource(..),
     initDownloadFeature,
+
+    packageDowns,
   ) where
 
 import Distribution.Server.Framework
+import Distribution.Server.Framework.BackupDump
+import qualified Distribution.Server.Framework.Cache as Cache
+
+import Distribution.Server.Features.DownloadCount.State
+import Distribution.Server.Features.DownloadCount.Backup
 
 import Distribution.Server.Features.Core
 
-import Distribution.Server.Packages.Downloads
-import Distribution.Server.Framework.BackupDump
-import Distribution.Server.Packages.Backup.Downloads
 import Distribution.Server.Util.Histogram
-import qualified Distribution.Server.Framework.Cache as Cache
 
 import Distribution.Package
 

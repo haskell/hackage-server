@@ -5,23 +5,25 @@ module Distribution.Server.Features.Tags (
     TagsResource(..),
     initTagsFeature,
 
+    Tag(..),
     constructTagIndex
   ) where
 
 import Control.Applicative (optional)
 
 import Distribution.Server.Framework
+import Distribution.Server.Framework.BackupDump
+import qualified Distribution.Server.Framework.Cache as Cache
+
+import Distribution.Server.Features.Tags.State
+import Distribution.Server.Features.Tags.Backup
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages (categorySplit)
-import Distribution.Server.Packages.Tag
 
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import Distribution.Server.Packages.Types
-import Distribution.Server.Framework.BackupDump
-import Distribution.Server.Packages.Backup.Tags
-import qualified Distribution.Server.Framework.Cache as Cache
 
 import Distribution.Text
 import Distribution.Package

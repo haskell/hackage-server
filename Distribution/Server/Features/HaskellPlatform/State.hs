@@ -1,8 +1,6 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell,
-             FlexibleInstances, FlexibleContexts, MultiParamTypeClasses,
-             TypeOperators, TypeSynonymInstances, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell #-}
 
-module Distribution.Server.Packages.Platform where
+module Distribution.Server.Features.HaskellPlatform.State where
 
 import Data.Acid (Query, Update, makeAcidic)
 import Data.Map (Map)
@@ -44,9 +42,9 @@ $(deriveSafeCopy 0 'base ''PlatformPackages)
 initialPlatformPackages :: PlatformPackages
 initialPlatformPackages = emptyPlatformPackages
 
-$(makeAcidic ''PlatformPackages ['getPlatformPackages
-                                ,'getPlatformPackage
-                                ,'setPlatformPackage
-                                ,'replacePlatformPackages
-                                ])
+makeAcidic ''PlatformPackages ['getPlatformPackages
+                              ,'getPlatformPackage
+                              ,'setPlatformPackage
+                              ,'replacePlatformPackages
+                              ]
 

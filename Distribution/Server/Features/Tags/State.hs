@@ -1,8 +1,6 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell,
-             FlexibleInstances, FlexibleContexts, MultiParamTypeClasses,
-             TypeOperators, TypeSynonymInstances, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, GeneralizedNewtypeDeriving #-}
 
-module Distribution.Server.Packages.Tag where
+module Distribution.Server.Features.Tags.State where
 
 import Distribution.Server.Framework.Instances ()
 
@@ -189,14 +187,14 @@ removePackageTag name tag = do
         Nothing -> return False
         Just pkgTags' -> put pkgTags' >> return True
 
-$(makeAcidic ''PackageTags ['tagsForPackage
-                           ,'packagesForTag
-                           ,'getTagList
-                           ,'getPackageTags
-                           ,'replacePackageTags
-                           ,'setPackageTags
-                           ,'setTagPackages
-                           ,'addPackageTag
-                           ,'removePackageTag
-                           ])
+makeAcidic ''PackageTags ['tagsForPackage
+                         ,'packagesForTag
+                         ,'getTagList
+                         ,'getPackageTags
+                         ,'replacePackageTags
+                         ,'setPackageTags
+                         ,'setTagPackages
+                         ,'addPackageTag
+                         ,'removePackageTag
+                         ]
 

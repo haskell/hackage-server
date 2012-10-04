@@ -1,7 +1,6 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell,
-             FlexibleInstances, FlexibleContexts, MultiParamTypeClasses,
-             TypeOperators, TypeSynonymInstances #-}
-module Distribution.Server.Packages.Preferred where
+{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell #-}
+
+module Distribution.Server.Features.PreferredVersions.State where
 
 import Distribution.Server.Framework.Instances ()
 
@@ -104,15 +103,15 @@ getPreferredVersions = ask
 replacePreferredVersions :: PreferredVersions -> Update PreferredVersions ()
 replacePreferredVersions = put
 
-$(makeAcidic ''PreferredVersions ['setPreferredRanges
-                                 ,'setDeprecatedVersions
-                                 ,'getPreferredInfo
-                                 ,'setDeprecatedFor
-                                 ,'getDeprecatedFor
-                                 ,'isDeprecated
-                                 ,'getPreferredVersions
-                                 ,'replacePreferredVersions
-                                 ])
+makeAcidic ''PreferredVersions ['setPreferredRanges
+                               ,'setDeprecatedVersions
+                               ,'getPreferredInfo
+                               ,'setDeprecatedFor
+                               ,'getDeprecatedFor
+                               ,'isDeprecated
+                               ,'getPreferredVersions
+                               ,'replacePreferredVersions
+                               ]
 
 ---------------
 maybeBestVersion :: PreferredInfo -> [Version] -> Set Version -> Maybe (Version, Maybe VersionStatus)

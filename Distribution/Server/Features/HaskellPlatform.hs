@@ -7,7 +7,7 @@ module Distribution.Server.Features.HaskellPlatform (
 
 import Distribution.Server.Framework
 
-import Distribution.Server.Packages.Platform
+import Distribution.Server.Features.HaskellPlatform.State
 
 import Distribution.Package
 import Distribution.Version

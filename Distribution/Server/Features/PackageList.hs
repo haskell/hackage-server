@@ -17,9 +17,7 @@ import qualified Distribution.Server.Framework.Cache as Cache
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Distribution.Server.Packages.Types
-import Distribution.Server.Packages.Tag
 -- [reverse index disabled] import Distribution.Server.Packages.Reverse
-import Distribution.Server.Packages.Downloads
 import Distribution.Server.Util.Histogram
 
 import Distribution.Package

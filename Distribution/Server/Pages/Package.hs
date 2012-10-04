@@ -9,7 +9,7 @@ module Distribution.Server.Pages.Package (
   ) where
 
 import Distribution.Server.Features.Packages
-import Distribution.Server.Packages.Preferred
+import Distribution.Server.Features.PreferredVersions
 
 import Distribution.Server.Pages.Package.HaddockParse (parseHaddockParagraphs)
 import Distribution.Server.Pages.Package.HaddockLex  (tokenise)

@@ -4,19 +4,23 @@ module Distribution.Server.Features.PreferredVersions (
     VersionsResource(..),
     initVersionsFeature,
 
+    PreferredInfo(..),
+    VersionStatus(..),
+    classifyVersions,
+
     PreferredRender(..),
   ) where
 
 import Distribution.Server.Framework
+import qualified Distribution.Server.Framework.Cache as Cache
+
+import Distribution.Server.Features.PreferredVersions.State
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Tags
-import qualified Distribution.Server.Framework.Cache as Cache
 
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
-import Distribution.Server.Packages.Preferred
-import Distribution.Server.Packages.Tag
 import Distribution.Server.Packages.Types
 
 import Distribution.Package

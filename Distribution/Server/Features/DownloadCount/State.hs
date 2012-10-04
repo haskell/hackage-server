@@ -1,10 +1,9 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell,
-             FlexibleInstances, FlexibleContexts, MultiParamTypeClasses,
-             TypeOperators, TypeSynonymInstances #-}
+{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell #-}
 
-module Distribution.Server.Packages.Downloads where
+module Distribution.Server.Features.DownloadCount.State where
 
 import Distribution.Server.Framework.Instances ()
+
 import Distribution.Package
 import Distribution.Version
 
@@ -26,6 +25,7 @@ data DownloadCounts = DownloadCounts {
     totalDownloads :: Int,
     downloadMap :: Map PackageName DownloadInfo
 } deriving (Eq, Show, Typeable)
+
 emptyDownloadCounts :: DownloadCounts
 emptyDownloadCounts = DownloadCounts 0 Map.empty
 
@@ -34,6 +34,7 @@ data DownloadInfo = DownloadInfo {
     dayDownloads :: Map Day PackageDownloads,
     packageDownloads :: PackageDownloads
 } deriving (Eq, Show, Typeable)
+
 emptyDownloadInfo :: DownloadInfo
 emptyDownloadInfo = DownloadInfo Map.empty Map.empty emptyPackageDownloads
 
@@ -41,6 +42,7 @@ data PackageDownloads = PackageDownloads {
     allDownloads :: Int,
     versionDownloads :: Map Version Int
 } deriving (Eq, Show, Typeable)
+
 emptyPackageDownloads :: PackageDownloads
 emptyPackageDownloads = PackageDownloads 0 Map.empty
 
@@ -92,9 +94,9 @@ getDownloadInfo pkgname = asks (Map.findWithDefault emptyDownloadInfo pkgname . 
 
 --------------------------------------------------------------------------------
 
-$(deriveSafeCopy 0 'base ''DownloadCounts)
-$(deriveSafeCopy 0 'base ''DownloadInfo)
-$(deriveSafeCopy 0 'base ''PackageDownloads)
+deriveSafeCopy 0 'base ''DownloadCounts
+deriveSafeCopy 0 'base ''DownloadInfo
+deriveSafeCopy 0 'base ''PackageDownloads
 
 instance NFData PackageDownloads where
     rnf (PackageDownloads a b) = rnf a `seq` rnf b
@@ -106,9 +108,9 @@ instance NFData DownloadCounts where
 initialDownloadCounts :: DownloadCounts
 initialDownloadCounts = emptyDownloadCounts
 
-$(makeAcidic ''DownloadCounts ['replacePackageDownloads
-                              ,'registerDownload
-                              ,'getDownloadCounts
-                              ,'getDownloadInfo
-                              ])
+makeAcidic ''DownloadCounts ['replacePackageDownloads
+                            ,'registerDownload
+                            ,'getDownloadCounts
+                            ,'getDownloadInfo
+                            ]
 

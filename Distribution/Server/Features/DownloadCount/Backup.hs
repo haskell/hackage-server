@@ -1,12 +1,13 @@
-module Distribution.Server.Packages.Backup.Downloads (
+module Distribution.Server.Features.DownloadCount.Backup (
     downloadsBackup,
     downloadsToCSV,
     downloadsToRecord
   ) where
 
-import Distribution.Server.Packages.Downloads
 import Distribution.Server.Framework.BackupRestore
 import Data.Acid (AcidState, update)
+
+import Distribution.Server.Features.DownloadCount.State
 
 import Distribution.Package
 import Distribution.Text (display)

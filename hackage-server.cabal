@@ -57,7 +57,9 @@ executable hackage-server
     Data.IntTrie
     Data.StringTable
     Data.TarIndex
+
     Distribution.Server
+
     Distribution.Server.Framework
     Distribution.Server.Framework.Auth
     Distribution.Server.Framework.AuthTypes
@@ -72,19 +74,17 @@ executable hackage-server
     Distribution.Server.Framework.ResourceTypes
     Distribution.Server.Framework.BackupDump
     Distribution.Server.Framework.BackupRestore
+
     Distribution.Server.LegacyImport.BulkImport
     Distribution.Server.LegacyImport.UploadLog
     Distribution.Server.LegacyImport.HtPasswdDb
-    Distribution.Server.Features
-    Distribution.Server.Packages.Downloads
+
     Distribution.Server.Packages.Index
     Distribution.Server.Packages.ModuleForest
     Distribution.Server.Packages.PackageIndex
-    Distribution.Server.Packages.Preferred
-    -- [reverse index disabled] Distribution.Server.Packages.Reverse
-    Distribution.Server.Packages.Tag
     Distribution.Server.Packages.Types
     Distribution.Server.Packages.Unpack
+
     Distribution.Server.Pages.BuildReports
     Distribution.Server.Pages.Distributions
     Distribution.Server.Pages.Group
@@ -97,11 +97,13 @@ executable hackage-server
     -- [reverse index disabled] Distribution.Server.Pages.Reverse
     Distribution.Server.Pages.Template
     Distribution.Server.Pages.Util
+
     Distribution.Server.Users.Group
     Distribution.Server.Users.State
     Distribution.Server.Users.Types
     Distribution.Server.Users.Backup
     Distribution.Server.Users.Users
+
     Distribution.Server.Util.AsyncVar
     Distribution.Server.Util.Happstack
     Distribution.Server.Util.Histogram
@@ -113,6 +115,7 @@ executable hackage-server
     Distribution.Server.Util.TextSearch
     Distribution.Server.Util.ChangeLog
 
+    Distribution.Server.Features
     Distribution.Server.Features.Core
     Distribution.Server.Features.Core.State
     Distribution.Server.Features.Core.Backup
@@ -143,12 +146,16 @@ executable hackage-server
       Distribution.Server.Features.Documentation
       Distribution.Server.Features.Documentation.State
       Distribution.Server.Features.DownloadCount
+      Distribution.Server.Features.DownloadCount.State
       Distribution.Server.Features.Html
       Distribution.Server.Features.NameSearch
       Distribution.Server.Features.Packages
       Distribution.Server.Features.PreferredVersions
+      Distribution.Server.Features.PreferredVersions.State
       -- [reverse index disabled] Distribution.Server.Features.ReverseDependencies
+    -- [reverse index disabled] Distribution.Server.Features.ReverseDependencies.State
       Distribution.Server.Features.Tags
+      Distribution.Server.Features.Tags.State
 
   build-depends:
     base       == 4.*,

@@ -5,6 +5,8 @@ module Distribution.Server.Features.Html (
   ) where
 
 import Distribution.Server.Framework
+import qualified Distribution.Server.Framework.ResourceTypes as Resource
+import qualified Distribution.Server.Framework.Cache as Cache
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages
@@ -21,10 +23,6 @@ import Distribution.Server.Features.Mirror
 import Distribution.Server.Features.Distro
 import Distribution.Server.Features.Documentation
 
-import qualified Distribution.Server.Framework.ResourceTypes as Resource
-import qualified Distribution.Server.Pages.Package as Pages
-import qualified Distribution.Server.Framework.Cache as Cache
-
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Packages.Types
@@ -32,10 +30,9 @@ import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Users.Group (UserGroup(..))
 import Distribution.Server.Features.Distro.Distributions (DistroPackageInfo(..))
-import Distribution.Server.Packages.Preferred
 -- [reverse index disabled] import Distribution.Server.Packages.Reverse
-import Distribution.Server.Packages.Tag
 
+import qualified Distribution.Server.Pages.Package as Pages
 import Distribution.Server.Pages.Template (hackagePage, hackagePageWith, haddockPage)
 import Distribution.Server.Pages.Util
 import qualified Distribution.Server.Pages.Group as Pages
