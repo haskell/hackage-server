@@ -57,16 +57,14 @@ data CoreFeature = CoreFeature {
     updateReplacePackageUploadTime :: MonadIO m
                                    => PackageId -> UTCTime
                                    -> m (Maybe String),
+    -- | Set an entry in the 00-index.tar file.
+    -- The 00-index.tar file contains all the package entries, but it is an
+    -- extensible format and we can add more stuff. E.g. version preferences
+    -- or crypto signatures.
+    updateArchiveIndexEntry  :: MonadIO m => String -> (ByteString, UTCTime) -> m (),
     --TODO: should be made into transactions
     doAddPackage    :: PkgInfo -> IO Bool,
     doMergePackage  :: PkgInfo -> IO (),
-
-    -- Caches
-    -- index.tar.gz
-    cacheIndexTarball :: Cache.CacheableAction ByteString,
-    -- other files to put in the index tarball like preferred-versions
-    --FIXME: this is internal state and should not be exported.
-    indexExtras :: Cache.Cache (Map String (ByteString, UTCTime)),
 
     -- Updating top-level packages
     -- This is run after a package is added
@@ -125,8 +123,10 @@ initCoreFeature enableCaches env@ServerEnv{serverStateDir} UserFeature{..} = do
                        initialPackagesState
 
     -- Caches
+    -- Additional files to put in the index tarball like preferred-versions
     extraMap <- Cache.newCacheable Map.empty
 
+    -- The index.tar.gz file
     indexTar <- Cache.newCacheableAction enableCaches $ do
             users  <- queryGetUserDb
             index  <- packageList <$> query packagesState GetPackagesState
@@ -224,7 +224,10 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
                                    -> m (Maybe String)
     updateReplacePackageUploadTime pkgid time =
       update' packagesState (ReplacePackageUploadTime pkgid time)
-      
+
+    updateArchiveIndexEntry :: MonadIO m => String -> (ByteString, UTCTime) -> m ()
+    updateArchiveIndexEntry entryName entryDetails =
+      Cache.modifyCache indexExtras (Map.insert entryName entryDetails)
 
     -- Should probably look more like an Apache index page (Name / Last modified / Size / Content-type)
     basicPackagePage :: DynamicPath -> ServerPart Response

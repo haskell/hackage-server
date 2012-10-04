@@ -59,7 +59,6 @@ data TagsFeature = TagsFeature {
     -- This feature itself defines a few such tags: libary, executable,
     -- and license tags, as well as package categories on
     -- initial import.
-    calculatedTags :: Cache.Cache PackageTags,
     setCalculatedTag :: Tag -> Set PackageName -> IO (),
 
     withTagPath :: forall a. DynamicPath -> (Tag -> Set PackageName -> ServerPart a) -> ServerPart a,

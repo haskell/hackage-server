@@ -40,7 +40,6 @@ data UserFeature = UserFeature {
     userResource :: UserResource,
 
     userAdded :: Hook (IO ()),
-    groupIndex :: Cache.Cache GroupIndex,
     adminGroup :: UserGroup,
     -- Filters for all features modifying the package index
     packageMutate :: Filter (UserId -> IO Bool),

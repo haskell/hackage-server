@@ -34,7 +34,7 @@ import qualified Data.Set as Set
 
 data ListFeature = ListFeature {
     listFeatureInterface :: HackageFeature,
-    itemCache :: Cache.Cache (Map PackageName PackageItem),
+
     itemUpdate :: Hook (Set PackageName -> IO ()),
 
     constructItemIndex :: IO (Map PackageName PackageItem),

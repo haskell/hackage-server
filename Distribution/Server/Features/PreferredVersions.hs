@@ -12,7 +12,6 @@ module Distribution.Server.Features.PreferredVersions (
   ) where
 
 import Distribution.Server.Framework
-import qualified Distribution.Server.Framework.Cache as Cache
 
 import Distribution.Server.Features.PreferredVersions.State
 
@@ -118,6 +117,7 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
             [preferredResource, preferredPackageResource,
              deprecatedResource, deprecatedPackageResource,
              preferredText]
+        --FIXME: don't we need to set the preferred-versions on init?
       , featurePostInit = updateDeprecatedTags
       , featureCheckpoint = do
           createCheckpoint preferredState
@@ -194,8 +194,7 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
                         newInfo <- query' preferredState $ GetPreferredInfo pkgname
                         prefVersions <- makePreferredVersions
                         now <- liftIO getCurrentTime
-                        --FIXME: this is modifying the cache belonging to the Core feature.
-                        Cache.modifyCache indexExtras $ Map.insert "preferred-versions" (BS.pack prefVersions, now)
+                        updateArchiveIndexEntry "preferred-versions" (BS.pack prefVersions, now)
                         runHook'' preferredHook pkgname newInfo
                         runHook packageIndexChange
                         return ()

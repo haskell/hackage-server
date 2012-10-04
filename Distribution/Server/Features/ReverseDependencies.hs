@@ -49,9 +49,7 @@ data ReverseFeature = ReverseFeature {
     reverseFeatureInterface :: HackageFeature,
 
     reverseResource :: ReverseResource,
-    reverseStream :: Chan (IO (Map PackageName [Version])),
     reverseUpdateHook :: Hook (Map PackageName [Version] -> IO ()),
-    reverseTopCache :: Cache.Cache [(PackageName, Int, Int)]
 }
 
 instance IsHackageFeature ReverseFeature where

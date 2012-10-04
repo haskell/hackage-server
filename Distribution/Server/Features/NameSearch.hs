@@ -30,9 +30,6 @@ import Text.JSON
 data NamesFeature = NamesFeature {
     namesFeatureInterface :: HackageFeature,
     namesResource :: NamesResource,
-    packageNameIndex :: Cache.Cache NameIndex,
-    packageTextIndex :: Cache.Cache TextSearch,
-    openSearchCache :: Cache.Cache Response,
 
     packageFindWith :: forall a. (Maybe (String, Bool) -> ServerPart a) -> ServerPart a,
     searchFindPackage :: MonadIO m => String -> Bool -> m ([PackageName], [PackageName])
