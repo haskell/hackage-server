@@ -97,9 +97,10 @@ runServerPartE :: ServerPartE a -> ServerPart a
 runServerPartE = mapServerPartT' (spUnwrapErrorT fallbackHandler)
   where
     fallbackHandler :: ErrorResponse -> ServerPart a
-    fallbackHandler err = finishWith (result (errorCode err) message)
+    fallbackHandler err = finishWith response
       where
-        message = errorTitle err ++ ": " ++ messageToText (errorDetail err)
+        response = (toResponse message) { rsCode = errorCode err }
+        message  = errorTitle err ++ ": " ++ messageToText (errorDetail err)
 
 handleErrorResponse :: (ErrorResponse -> ServerPartE Response)
                     -> ServerPartE a -> ServerPartE a
