@@ -12,6 +12,7 @@ module Distribution.Server.Features.PreferredVersions (
   ) where
 
 import Distribution.Server.Framework
+import qualified Distribution.Server.Framework.ResourceTypes as Resource
 
 import Distribution.Server.Features.PreferredVersions.State
 
@@ -29,13 +30,15 @@ import Distribution.Text
 import Data.Either   (rights)
 import Data.Function (fix)
 import Data.List (intercalate, find)
+import Data.Maybe (isJust, fromMaybe)
 import Data.Time.Clock (getCurrentTime)
 import Control.Arrow (second)
 import Control.Applicative (optional)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.ByteString.Lazy.Char8 as BS
-
+import Text.JSON
+         ( JSValue(..), toJSObject, toJSString )
 
 data VersionsFeature = VersionsFeature {
     versionsFeatureInterface :: HackageFeature,
@@ -142,8 +145,12 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
           { preferredResource = resourceAt "/packages/preferred.:format"
           , preferredText = (resourceAt "/packages/preferred-versions") { resourceGet = [("txt", \_ -> textPreferred)] }
           , preferredPackageResource = resourceAt "/package/:package/preferred.:format"
-          , deprecatedResource = resourceAt "/packages/deprecated.:format"
-          , deprecatedPackageResource = resourceAt "/package/:package/deprecated.:format"
+          , deprecatedResource = (resourceAt "/packages/deprecated.:format") {
+                                   resourceGet = [("json", handlePackagesDeprecatedGet)]
+                                 }
+          , deprecatedPackageResource = (resourceAt "/package/:package/deprecated.:format") {
+                                          resourceGet = [("json", handlePackageDeprecatedGet) ]
+                                        }
 
           , preferredUri = \format -> renderResource (preferredResource r) [format]
           , preferredPackageUri = \format pkgid -> renderResource (preferredPackageResource r) [display pkgid, format]
@@ -152,6 +159,28 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
           }
 
     textPreferred = fmap toResponse makePreferredVersions
+
+    handlePackagesDeprecatedGet _ = do
+      deprPkgs <- deprecatedMap <$> query' preferredState GetPreferredVersions
+      return $ toResponse $ Resource.JSON $
+        JSArray
+          [ JSObject $ toJSObject
+              [ ("deprecated-package", JSString $ toJSString $ display deprPkg)
+              , ("in-favour-of", JSArray [ JSString $ toJSString $ display pkg
+                                         | pkg <- replacementPkgs ])
+              ]
+          | (deprPkg, replacementPkgs) <- Map.toList deprPkgs ]
+
+    handlePackageDeprecatedGet dpath =
+      runServerPartE $
+      withPackageAllPath dpath $ \pkgname _ -> do
+        mdep <- query' preferredState (GetDeprecatedFor pkgname)
+        return $ toResponse $ Resource.JSON $
+          JSObject $ toJSObject
+              [ ("is-deprecated", JSBool (isJust mdep))
+              , ("in-favour-of", JSArray [ JSString $ toJSString $ display pkg
+                                         | pkg <- fromMaybe [] mdep ])
+              ]
 
     ---------------------------
     -- This is a function used by the HTML feature to select the version to display.
