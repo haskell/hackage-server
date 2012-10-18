@@ -190,7 +190,9 @@ buildOnce opts pkgs = do
     (does_not_have_docs, mark_as_having_docs, persist) <- mkPackageHasDocs opts config
 
     createDirectoryIfMissing False cacheDir
-    prepareBuildPackages opts config
+
+    configFileExists <- doesFileExist (bo_stateDir opts </> "cabal-config")
+    unless configFileExists $ prepareBuildPackages opts config
 
     flip finally persist $ httpSession verbosity $ do
         -- Make sure we authenticate to Hackage
