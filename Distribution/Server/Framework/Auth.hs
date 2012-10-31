@@ -289,7 +289,7 @@ getUserAuth userInfo =
 
 getPasswdHash :: UserAuth -> Maybe PasswdHash
 getPasswdHash (NewUserAuth hash) = Just hash
-getPasswdHash (OldUserAuth _)    = Nothing
+getPasswdHash _                  = Nothing
 
 -- | The \"oh noes?!\" operator
 --

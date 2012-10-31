@@ -46,6 +46,7 @@ isHistorical _          = False
 
 data UserAuth = NewUserAuth PasswdHash
               | OldUserAuth HtPasswdHash
+              | NoUserAuth
               deriving (Show, Eq, Typeable)
 
 instance Text UserId where
