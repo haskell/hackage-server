@@ -217,24 +217,3 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
         userdb  <- queryGetUserDb
         (uid, _) <- guardAuthorised hackageRealm userdb ulist
         return uid
-
-    -- It's silly that these are in continuation style,
-    -- we should be able to fail -- exception-style -- with an HTTP error code!
-    expectTextPlain :: ServerPartE ()
-    expectTextPlain = do
-      req <- askRq
-      let contentType     = fmap SBS.unpack (getHeader "Content-Type" req)
-          contentEncoding = fmap SBS.unpack (getHeader "Content-Encoding"  req)
-      case (contentType, contentEncoding) of
-        (Just "text/plain", Nothing) -> return ()
-        _ -> finishWith =<< resp 415 (toResponse "expected text/plain")
-
-    expectTarball  :: ServerPartE ()
-    expectTarball = do
-      req <- askRq
-      let contentType     = fmap SBS.unpack (getHeader "Content-Type" req)
-          contentEncoding = fmap SBS.unpack (getHeader "Content-Encoding" req)
-      case (contentType, contentEncoding) of
-        (Just "application/x-tar", Just "gzip") -> return ()
-        (Just "application/x-gzip", Nothing)    -> return ()
-        _ -> finishWith =<< resp 415 (toResponse "expected application/x-tar or x-gzip")

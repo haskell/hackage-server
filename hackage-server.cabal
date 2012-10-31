@@ -74,6 +74,7 @@ executable hackage-server
     Distribution.Server.Framework.ResourceTypes
     Distribution.Server.Framework.BackupDump
     Distribution.Server.Framework.BackupRestore
+    Distribution.Server.Framework.Validation
 
     Distribution.Server.LegacyImport.BulkImport
     Distribution.Server.LegacyImport.UploadLog
