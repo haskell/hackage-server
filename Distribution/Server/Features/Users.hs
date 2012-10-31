@@ -26,6 +26,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
+import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.Function (fix)
 import Control.Applicative (optional)
 
@@ -44,8 +45,6 @@ data UserFeature = UserFeature {
     -- Filters for all features modifying the package index
     packageMutate :: Filter (UserId -> IO Bool),
 
-    -- These function fields are marked strict for the sole purpose of
-    -- getting compile-time error if they are accidentally not initialised
     queryGetUserDb    :: forall m. MonadIO m => m Users.Users,
     
     updateAddUser     :: forall m. MonadIO m => UserName -> UserAuth -> m (Either String UserId),
@@ -78,6 +77,7 @@ data UserResource = UserResource {
     userList :: Resource,
     userPage :: Resource,
     passwordResource :: Resource,
+    htpasswordResource :: Resource,
     enabledResource  :: Resource,
     adminResource :: GroupResource,
 
@@ -166,7 +166,7 @@ userFeature  usersState adminsState
   where
     userFeatureInterface = (emptyHackageFeature "users") {
         featureResources = map ($ userResource)
-            [userList, userPage, passwordResource, enabledResource]
+            [userList, userPage, passwordResource, htpasswordResource, enabledResource]
             ++ [groupResource adminResource, groupUserResource adminResource]
       , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
       , featureCheckpoint = do
@@ -179,8 +179,14 @@ userFeature  usersState adminsState
 
     userResource = fix $ \r -> UserResource
         { userList         = resourceAt "/users/.:format"
-        , userPage         = resourceAt "/user/:username.:format"
+        , userPage         = (resourceAt "/user/:username.:format") {
+                                 resourcePut    = [ ("", handleUserPut) ],
+                                 resourceDelete = [ ("", handleUserDelete) ]
+                               }
         , passwordResource = resourceAt "/user/:username/password.:format"
+        , htpasswordResource = (resourceAt "/user/:username/htpasswd") {
+                                 resourcePut = [ ("", handleUserHtpasswdPut) ]
+                               }
         , enabledResource  = resourceAt "/user/:username/enabled.:format"
         , adminResource    = adminResource
 
@@ -235,13 +241,58 @@ userFeature  usersState adminsState
     enabledAccount uname =
       withUserName uname $ \uid _ -> do
         users  <- query' usersState GetUserDb
-        admins <- query' adminsState State.GetHackageAdmins
+        admins <- query' adminsState GetHackageAdmins
         void $ guardAuthorised hackageRealm users admins
         enabled <- optional $ look "enabled"
         -- for a checkbox, prescence in data string means 'checked'
         void $ case enabled of
                Nothing -> update' usersState (SetEnabledUser uid False)
                Just _  -> update' usersState (SetEnabledUser uid True)
+
+    handleUserPut :: DynamicPath -> ServerPart Response
+    handleUserPut dpath =
+        runServerPartE $ do
+          users  <- query' usersState GetUserDb
+          admins <- query' adminsState GetHackageAdmins
+          _ <- guardAuthorised hackageRealm users admins
+          withUserNamePath dpath $ \username -> do
+            muid <- update' usersState $ AddUser username NoUserAuth
+            case muid of
+              -- the only possible error is that the user exists already
+              -- but that's ok too
+              Left  _err -> noContent $ toResponse ()
+              Right _    -> noContent $ toResponse ()
+
+
+    handleUserDelete :: DynamicPath -> ServerPart Response
+    handleUserDelete dpath =
+        runServerPartE $ do
+          users  <- query' usersState GetUserDb
+          admins <- query' adminsState GetHackageAdmins
+          _ <- guardAuthorised hackageRealm users admins
+          withUserPath dpath $ \uid _uinfo -> do
+            merr <- update' usersState $ DeleteUser uid
+            case merr of
+              Nothing   -> noContent $ toResponse ()
+              --TODO: need to be able to delete user by name to fix this race condition
+              Just _err -> errInternalError [MText "uid does not exist (but lookup was sucessful)"]
+
+    handleUserHtpasswdPut :: DynamicPath -> ServerPart Response
+    handleUserHtpasswdPut dpath =
+        runServerPartE $ do
+          users  <- query' usersState GetUserDb
+          admins <- query' adminsState GetHackageAdmins
+          _admin <- guardAuthorised hackageRealm users admins
+          withUserPath dpath $ \uid _ -> do
+            expectTextPlain
+            Body htpasswd <- consumeRequestBody
+            if validHtpasswd htpasswd
+              then do let auth = OldUserAuth (HtPasswdHash (LBS.unpack htpasswd))
+                      update' usersState $ ReplaceUserAuth uid auth
+                      noContent $ toResponse ()
+              else badRequest (toResponse "invalid htpasswd hash")
+      where
+        validHtpasswd str = LBS.length str == 13
 
     -- | Resources representing the collection of known users.
     --
