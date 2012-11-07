@@ -5,7 +5,7 @@
 --                    Duncan Coutts 2008
 -- License     :  BSD-like
 --
--- Maintainer  :  duncan@haskell.org
+-- Maintainer  :  duncan@community.haskell.org
 -- Stability   :  provisional
 -- Portability :  portable
 --
@@ -70,7 +70,7 @@ instance Text Entry where
 read :: String -> Either String [Entry]
 read = check [] . map parseLine . lines
   where
-    check es' []           = Right es'
+    check es' []           = Right (reverse es')
     check es' (Right e:es) = check (e:es') es
     check _   (Left err:_) = Left err
     parseLine line = maybe (Left err) Right (simpleParse line)

@@ -267,12 +267,7 @@ executable hackage-import
     network,  HTTP >= 4000.1.3,
     Cabal,
     safecopy, cereal, binary, mtl,
-    happstack-server == 7.0.* && >= 7.0.6,
-    deepseq    == 1.3.*,
-    pureMD5    >= 0.2
-
-  if !os(darwin)
-    extra-libraries: crypt
+    json, csv
 
   ghc-options: -Wall -fwarn-tabs
 

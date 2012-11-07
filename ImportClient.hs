@@ -7,36 +7,47 @@ import Network.Browser hiding (err)
 import Network.URI (URI(..), URIAuth(..), parseURI)
 
 import qualified ImportClient.HtPasswdDb as HtPasswdDb
-import qualified ImportClient.BulkImport as BulkImport
+import qualified ImportClient.UploadLog  as UploadLog
+import qualified ImportClient.TagsFile   as TagsFile
+import qualified ImportClient.DistroMap  as DistroMap
+import qualified ImportClient.PkgIndex   as PkgIndex
 
 import Distribution.Server.Users.Types (UserName(..))
 import Distribution.Server.Framework.AuthTypes (HtPasswdHash(..))
 
 import Distribution.Package
-         ( PackageId, packageName )
+         ( PackageId, PackageName, packageName )
 import Distribution.Text
-         ( display )
+         ( display, simpleParse )
 import Distribution.Simple.Utils
-         ( topHandler, die, {-warn, debug,-} wrapText )
+         ( topHandler, die, {-warn, debug,-} wrapText, toUTF8 )
 import Distribution.Verbosity
          ( Verbosity, normal, verbose )
 
+import Distribution.Simple.Command
+import Distribution.Simple.Setup
+         ( Flag(..), fromFlag, flagToList )
+
 import System.Environment
          ( getArgs, getProgName )
+import System.Locale
+         ( defaultTimeLocale )
 import System.Exit
          ( exitWith, ExitCode(..) )
 import System.IO
 import System.FilePath
-         ( (</>), (<.>) )
+         ( (</>), (<.>), takeFileName, splitExtensions )
 import qualified System.FilePath.Posix as Posix
-import Distribution.Simple.Command
-import Distribution.Simple.Setup
-         ( Flag(..), fromFlag, flagToList )
 import Data.List
 import Data.Maybe
+import Data.Time (UTCTime, formatTime)
 import Control.Monad
+import Control.Monad.Trans
 import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BS
+import Text.JSON as JSON
+         ( JSValue(..), toJSObject, toJSString, encodeStrict )
+import qualified Text.CSV as CSV
 
 import Paths_hackage_server as Paths (version)
 
@@ -94,6 +105,9 @@ main = topHandler $ do
     commands =
       [ usersCommand    `commandAddAction` usersAction
       , metadataCommand `commandAddAction` metadataAction
+      , tarballCommand  `commandAddAction` tarballAction
+      , distroCommand   `commandAddAction` distroAction
+      , deprecationCommand `commandAddAction` deprecationAction
       ]
 
     commandAddActionNoArgs cmd action =
@@ -159,7 +173,7 @@ defaultUsersFlags = UsersFlags {
 usersCommand :: CommandUI UsersFlags
 usersCommand =
     (makeCommand name shortDesc longDesc defaultUsersFlags options) {
-      commandUsage = \pname -> 
+      commandUsage = \pname ->
            "Usage: " ++ pname ++ " " ++ name ++ " [FLAGS] [URI]\n\n"
         ++ "Flags for " ++ name ++ ":"
     }
@@ -234,10 +248,6 @@ importAddresses :: FilePath -> URI -> IO ()
 importAddresses _addressesFile _baseURI =
     die "--addresses flag not yet implemented"
 
-validateOptsServerURI :: [String] -> Either String URI
-validateOptsServerURI [server] = validateHttpURI server
-validateOptsServerURI _        = Left $ "The command expects the target server "
-                            ++ "URI e.g. http://admin:admin@localhost:8080/"
 
 -------------------------------------------------------------------------------
 -- Metadata command
@@ -257,7 +267,7 @@ defaultMetadataFlags = MetadataFlags {
 metadataCommand :: CommandUI MetadataFlags
 metadataCommand =
     (makeCommand name shortDesc longDesc defaultMetadataFlags options) {
-      commandUsage = \pname -> 
+      commandUsage = \pname ->
            "Usage: " ++ pname ++ " " ++ name ++ " [FLAGS] [URI]\n\n"
         ++ "Flags for " ++ name ++ ":"
     }
@@ -300,7 +310,7 @@ importIndex :: FilePath -> URI -> IO ()
 importIndex indexFile baseURI = do
     info $ "Reading index file " ++ indexFile
     pkgs  <- either fail return
-           . BulkImport.readPkgIndex
+           . PkgIndex.readPkgIndex
          =<< BS.readFile indexFile
 
     httpSession $ do
@@ -308,7 +318,6 @@ importIndex indexFile baseURI = do
       sequence_
         [ putCabalFile baseURI pkgid cabalFile
         |  (pkgid, cabalFile) <- pkgs ]
-
 
 putCabalFile :: URI -> PackageId -> ByteString -> HttpSession ()
 putCabalFile baseURI pkgid cabalFile = do
@@ -319,17 +328,227 @@ putCabalFile baseURI pkgid cabalFile = do
       Just err -> fail (formatErrorResponse err)
 
   where
-    pkgURI   = baseURI <//> "package" </> display pkgid
-                        </> display (packageName pkgid) <.> "cabal"
+    pkgURI = baseURI <//> "package" </> display pkgid
+                      </> display (packageName pkgid) <.> "cabal"
+
 
 importUploadLog :: FilePath -> URI -> IO ()
-importUploadLog uploadLogFile _baseURI = do
-    putStrLn "Reading log file"
+importUploadLog uploadLogFile baseURI = do
+    info $ "Reading log file " ++ uploadLogFile
     uploadLog <- either fail return
-               . BulkImport.importUploadLog
+               . UploadLog.read
              =<< readFile uploadLogFile
 
-    die "--upload-log flag not yet implemented"
+    httpSession $ do
+      setAuthorityFromURI baseURI
+      sequence_
+        [ putUploadInfo baseURI  time uname pkgid
+        |  UploadLog.Entry time uname pkgid <- uploadLog ]
+
+putUploadInfo :: URI -> UTCTime -> UserName -> PackageId -> HttpSession ()
+putUploadInfo baseURI time uname pkgid = do
+
+    let timeStr = formatTime defaultTimeLocale "%c" time
+    rsp <- requestPUT (pkgURI <//> "upload-time") "text/plain" (toBS timeStr)
+    case rsp of
+      Nothing  -> return ()
+      Just err -> fail (formatErrorResponse err)
+
+    let nameStr = display uname
+    rsp <- requestPUT (pkgURI <//> "uploader") "text/plain" (toBS nameStr)
+    case rsp of
+      Nothing  -> return ()
+      Just err -> fail (formatErrorResponse err)
+
+    -- Add this user to the package's maintainers group
+    rsp <- requestPUT (pkgURI <//> "maintainers" </> display uname) "" BS.empty
+    case rsp of
+      Nothing  -> return ()
+      Just err -> fail (formatErrorResponse err)
+
+  where
+    pkgURI = baseURI <//> "package" </> display pkgid
+    toBS   = BS.pack . toUTF8
+
+
+-------------------------------------------------------------------------------
+-- Tarballs command
+--
+
+data TarballFlags = TarballFlags
+
+defaultTarballFlags :: TarballFlags
+defaultTarballFlags = TarballFlags
+
+tarballCommand :: CommandUI TarballFlags
+tarballCommand =
+    (makeCommand name shortDesc longDesc defaultTarballFlags options) {
+      commandUsage = \pname ->
+           "Usage: " ++ pname ++ " " ++ name ++ " [URI] [TARBALL]... \n\n"
+        ++ "Flags for " ++ name ++ ":"
+    }
+  where
+    name       = "tarball"
+    shortDesc  = "Import package tarballs"
+    longDesc   = Just $ \_ ->
+                     "The package tarballs can be imported directly from\n"
+                  ++ " local .tar.gz files."
+    options _  = []
+
+tarballAction :: TarballFlags -> [String] -> GlobalFlags -> IO ()
+tarballAction _opts args _ = do
+
+    (baseURI, tarballFiles) <- either die return (validateOptsServerURI' args)
+
+    let pkgidAndTarball =
+          [ (mpkgid, file)
+          | file <- tarballFiles
+          , let (pkgidstr, ext) = splitExtensions (takeFileName file)
+                mpkgid | ext == ".tar.gz" = simpleParse pkgidstr
+                       | otherwise        = Nothing ]
+
+    case [ file | (Nothing, file) <- pkgidAndTarball] of
+      []    -> return ()
+      files -> die $ "the following files don't match the expected naming "
+                  ++ "convention of foo-1.0.tar.gz:\n" ++ unlines files
+
+    httpSession $ do
+      setAuthorityFromURI baseURI
+      sequence_
+        [ putPackageTarball baseURI pkgid tarballFilePath
+        |  (Just pkgid, tarballFilePath) <- pkgidAndTarball ]
+
+putPackageTarball :: URI -> PackageId -> FilePath -> HttpSession ()
+putPackageTarball baseURI pkgid tarballFilePath = do
+
+    pkgContent <- liftIO $ BS.readFile tarballFilePath
+    rsp <- requestPUT pkgURI "application/x-gzip" pkgContent
+    case rsp of
+      Nothing  -> return ()
+      Just err -> fail (formatErrorResponse err)
+
+  where
+    pkgURI = baseURI <//> "package" </> display pkgid <.> "tar.gz"
+
+
+-------------------------------------------------------------------------------
+-- Deprecations command
+--
+
+data DeprecationFlags = DeprecationFlags
+
+defaultDeprecationFlags :: DeprecationFlags
+defaultDeprecationFlags = DeprecationFlags
+
+deprecationCommand :: CommandUI DeprecationFlags
+deprecationCommand =
+    (makeCommand name shortDesc longDesc defaultDeprecationFlags options) {
+      commandUsage = \pname ->
+           "Usage: " ++ pname ++ " " ++ name ++ " [URI] [TAGS]... \n\n"
+        ++ "Flags for " ++ name ++ ":"
+    }
+  where
+    name       = "deprecation"
+    shortDesc  = "Import package deprecation info from old hackage files"
+    longDesc   = Just $ \_ ->
+                     "The old hackage server has files like alsa/0.4/tags\n"
+                  ++ "and some of these tags files contain info about the \n"
+                  ++ "package being deprecated, and sometimes what it is\n"
+                  ++ "superceded by. The files must follow this file name\n"
+                  ++ "convention so we know which package the tags apply to."
+    options _  = []
+
+deprecationAction :: DeprecationFlags -> [String] -> GlobalFlags -> IO ()
+deprecationAction _opts args _ = do
+
+    (baseURI, tagFiles) <- either die return (validateOptsServerURI' args)
+
+    entries <- forM tagFiles $ \tagFile -> do
+      content <- readFile tagFile
+      either die return (TagsFile.read tagFile content)
+
+    httpSession $ do
+      setAuthorityFromURI baseURI
+      sequence_
+        [ putDeprecatedInfo baseURI pkgname replacement
+        |  (pkgname, replacement) <- TagsFile.collectDeprecated entries ]
+
+
+putDeprecatedInfo :: URI -> PackageName -> Maybe PackageName -> HttpSession ()
+putDeprecatedInfo baseURI pkgname replacement = do
+
+    rsp <- requestPUT (pkgURI <//> "deprecated") "text/json" (toBS deprecatedInfo)
+    case rsp of
+      Nothing  -> return ()
+      Just err -> fail (formatErrorResponse err)
+
+  where
+    pkgURI = baseURI <//> "package" </> display pkgname
+    toBS   = BS.pack . toUTF8 . JSON.encodeStrict
+
+    deprecatedInfo =
+      JSObject $ toJSObject
+          [ ("is-deprecated", JSBool True)
+          , ("in-favour-of", JSArray [ JSString $ toJSString $ display pkg
+                                     | pkg <- maybeToList replacement ])
+          ]
+
+
+-------------------------------------------------------------------------------
+-- Distro command
+--
+
+data DistroFlags = DistroFlags
+
+defaultDistroFlags :: DistroFlags
+defaultDistroFlags = DistroFlags
+
+distroCommand :: CommandUI DistroFlags
+distroCommand =
+    (makeCommand name shortDesc longDesc defaultDistroFlags options) {
+      commandUsage = \pname ->
+           "Usage: " ++ pname ++ " " ++ name ++ " [URI] [TAGS]... \n\n"
+        ++ "Flags for " ++ name ++ ":"
+    }
+  where
+    name       = "distro"
+    shortDesc  = "Import distro info from old hackage files"
+    longDesc   = Just $ \_ ->
+                     "The old hackage server has files like archive/00-distromap/Debian\n"
+                  ++ "which contain info about what versions of the packages \n"
+                  ++ "are available in the respective distributions.\n"
+                  ++ "The file name must be the distro name."
+    options _  = []
+
+distroAction :: DistroFlags -> [String] -> GlobalFlags -> IO ()
+distroAction _opts args _ = do
+
+    (baseURI, distroFiles) <- either die return (validateOptsServerURI' args)
+
+    distros <- forM distroFiles $ \distroFile -> do
+      content <- readFile distroFile
+      let (errs, entries) = DistroMap.read content
+      mapM_ info errs
+      return (takeFileName distroFile, entries)
+
+    httpSession $ do
+      setAuthorityFromURI baseURI
+      sequence_
+        [ putDistroInfo baseURI distroname entries
+        | (distroname, entries) <- distros ]
+
+
+putDistroInfo :: URI -> String -> [DistroMap.Entry] -> HttpSession ()
+putDistroInfo baseURI distroname entries = do
+
+    rsp <- requestPUT (distroURI <//> distroname) "text/csv" (toBS entries)
+    case rsp of
+      Nothing  -> return ()
+      Just err -> fail (formatErrorResponse err)
+
+  where
+    distroURI = baseURI <//> "distro" </> distroname
+    toBS      = BS.pack . toUTF8 . CSV.printCSV . DistroMap.toCSV
 
 
 -------------------------
@@ -445,7 +664,7 @@ warn verbosity msg =
 
 debug :: Verbosity -> String -> IO ()
 debug verbosity msg =
-  when (verbosity >= normal) $
+  when (verbosity > normal) $
     putStrLn ("Debug: " ++ msg)
 
 info :: String -> IO ()
@@ -453,4 +672,14 @@ info msg = do
   pname <- getProgName
   putStrLn (pname ++ ": " ++ msg)
   hFlush stdout
+
+validateOptsServerURI :: [String] -> Either String URI
+validateOptsServerURI [server] = validateHttpURI server
+validateOptsServerURI _        = Left $ "The command expects the target server "
+                            ++ "URI e.g. http://admin:admin@localhost:8080/"
+
+validateOptsServerURI' :: [String] -> Either String (URI, [String])
+validateOptsServerURI' (server:opts) = (\uri -> (uri,opts)) `fmap` validateHttpURI server
+validateOptsServerURI' _             = Left $ "The command expects the target server "
+                            ++ "URI e.g. http://admin:admin@localhost:8080/"
 
