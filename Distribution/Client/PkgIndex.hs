@@ -1,6 +1,6 @@
 -----------------------------------------------------------------------------
 -- |
--- Module      :  ImportClient.PkgIndex
+-- Module      :  Distribution.Client.PkgIndex
 -- Copyright   :  (c) Duncan Coutts 2012
 -- License     :  BSD-like
 --
@@ -10,7 +10,7 @@
 --
 -- Support for importing cabal files from a 00-index.tar.gz file
 -----------------------------------------------------------------------------
-module ImportClient.PkgIndex (
+module Distribution.Client.PkgIndex (
   readPkgIndex
   ) where
 

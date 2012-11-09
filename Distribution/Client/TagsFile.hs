@@ -1,7 +1,7 @@
 {-# LANGUAGE PatternGuards #-}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  ImportClient.TagsFile
+-- Module      :  Distribution.Client.TagsFile
 -- Copyright   :  (c) Duncan Coutts 2012
 -- License     :  BSD-like
 --
@@ -9,7 +9,7 @@
 --
 -- Support for reading the tags files of the old hackage server.
 -----------------------------------------------------------------------------
-module ImportClient.TagsFile (
+module Distribution.Client.TagsFile (
     Entry,
     read,
     collectDeprecated,

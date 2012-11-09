@@ -1,6 +1,6 @@
 -- | Parsing @.htpasswd@ files
 --
-module ImportClient.HtPasswdDb (
+module Distribution.Client.HtPasswdDb (
     HtPasswdDb,
     parse,
   ) where

@@ -7,7 +7,8 @@ import Network.Browser
 import Network.URI (URI(..), URIAuth(..))
 
 import Distribution.Client (validateHackageURI, validatePackageIds, PkgIndexInfo(..))
-import Distribution.Server.LegacyImport.UploadLog as UploadLog (read, Entry(..))
+import Distribution.Client.UploadLog as UploadLog (read, Entry(..))
+
 import Distribution.Server.Users.Types (UserId(..), UserName(UserName))
 import Distribution.Server.Util.Index as PackageIndex (read)
 import Distribution.Server.Util.Merge

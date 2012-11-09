@@ -1,7 +1,7 @@
 {-# LANGUAGE PatternGuards #-}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  ImportClient.DistroMap
+-- Module      :  Distribution.Client.DistroMap
 -- Copyright   :  (c) Duncan Coutts 2012
 -- License     :  BSD-like
 --
@@ -9,7 +9,7 @@
 --
 -- Support for reading the distromap files of the old hackage server.
 -----------------------------------------------------------------------------
-module ImportClient.DistroMap (
+module Distribution.Client.DistroMap (
     Entry(..),
     read,
     toCSV,

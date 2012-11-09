@@ -6,11 +6,11 @@ import Network.HTTP
 import Network.Browser hiding (err)
 import Network.URI (URI(..), URIAuth(..), parseURI)
 
-import qualified ImportClient.HtPasswdDb as HtPasswdDb
-import qualified ImportClient.UploadLog  as UploadLog
-import qualified ImportClient.TagsFile   as TagsFile
-import qualified ImportClient.DistroMap  as DistroMap
-import qualified ImportClient.PkgIndex   as PkgIndex
+import qualified Distribution.Client.HtPasswdDb as HtPasswdDb
+import qualified Distribution.Client.UploadLog  as UploadLog
+import qualified Distribution.Client.TagsFile   as TagsFile
+import qualified Distribution.Client.DistroMap  as DistroMap
+import qualified Distribution.Client.PkgIndex   as PkgIndex
 
 import Distribution.Server.Users.Types (UserName(..))
 import Distribution.Server.Framework.AuthTypes (HtPasswdHash(..))
