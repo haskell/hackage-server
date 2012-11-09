@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, FlexibleContexts #-}
+{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, FlexibleContexts, CPP #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -84,8 +84,10 @@ instance Serialize UTCTime where
     return (UTCTime (ModifiedJulianDay day) (fromRational secs))
 
 -- rough versions of RNF for these
+#if !(MIN_VERSION_bytestring(0,10,0))
 instance NFData ByteString where
     rnf bs = BS.length bs `seq` ()
+#endif
 
 instance NFData Response where
     rnf res@(Response{}) = rnf $ rsBody res
