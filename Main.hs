@@ -29,7 +29,7 @@ import Distribution.Simple.Command
 import Distribution.Simple.Setup
          ( Flag(..), fromFlag, fromFlagOrDefault, flagToList, flagToMaybe )
 import Data.List
-         ( sort, intersperse )
+         ( intersperse )
 import Data.Traversable
          ( forM )
 import Control.Monad
@@ -72,7 +72,6 @@ main = topHandler $ do
       , initCommand    `commandAddActionNoArgs` initAction
       , backupCommand  `commandAddActionNoArgs` backupAction
       , restoreCommand `commandAddAction`       restoreAction
-      , convertCommand `commandAddActionNoArgs` convertAction
       , testBackupCommand `commandAddActionNoArgs` testBackupAction
       ]
 
@@ -581,119 +580,6 @@ restoreAction opts [tarFile] = do
                 do createDirectory (stateDir </> "tmp")
                    info "Successfully imported."
 restoreAction _ _ = die "There should be exactly one argument: the backup tarball."
-
--------------------------------------------------------------------------------
--- Convert command
---
-
-data ConvertFlags = ConvertFlags {
-    flagImportIndex    :: Flag FilePath,
-    flagImportLog      :: Flag FilePath,
-    flagImportArchive  :: Flag FilePath,
-    flagImportHtPasswd :: Flag FilePath,
-    flagImportAdmins   :: Flag FilePath,
-    flagConvertTarball :: Flag FilePath
-  }
-
-defaultConvertFlags :: ConvertFlags
-defaultConvertFlags = ConvertFlags {
-    flagImportIndex    = NoFlag,
-    flagImportLog      = NoFlag,
-    flagImportArchive  = NoFlag,
-    flagImportHtPasswd = NoFlag,
-    flagImportAdmins   = NoFlag,
-    flagConvertTarball = NoFlag
-  }
-
-convertCommand :: CommandUI ConvertFlags
-convertCommand = makeCommand name shortDesc longDesc defaultConvertFlags options
-  where
-    name       = "convert"
-    shortDesc  = "Convert legacy Hackage data to a new backup tarball."
-    longDesc   = Just $ \_ ->
-                 "This is not needed by most users. It is just for the "
-              ++ "migration of the central\nhackage.haskell.org server from "
-              ++ "the old hackage-scripts data formats.\n\nIf you want to create "
-              ++ "your own hackage mirror then initialise an empty server\nand "
-              ++ "use the hackage-mirror client to copy the packages over.\n"
-    options _  =
-      [ option [] ["index"]
-          "Import an existing hackage index file (00-index.tar.gz)"
-          flagImportIndex (\v flags -> flags { flagImportIndex = v })
-          (reqArgFlag "TARBALL")
-      , option [] ["log"]
-          "Import an existing hackage upload log file"
-          flagImportLog (\v flags -> flags { flagImportLog = v })
-          (reqArgFlag "LOG")
-      , option [] ["archive"]
-          "Import an existing hackage package tarball archive file (archive.tar)"
-          flagImportArchive (\v flags -> flags { flagImportArchive = v })
-          (reqArgFlag "LOG")
-      , option [] ["accounts"]
-          "Import an existing apache 'htpasswd' user account database file"
-          flagImportHtPasswd (\v flags -> flags { flagImportHtPasswd = v })
-          (reqArgFlag "HTPASSWD")
-      , option [] ["admins"]
-          "Import a text file containing a list a users which should be administrators"
-          flagImportAdmins (\v flags -> flags { flagImportAdmins = v })
-          (reqArgFlag "ADMINS")
-      , option ['o'] ["output"]
-          "The path to write the backup tarball (default export.tar)"
-          flagConvertTarball (\v flags -> flags { flagConvertTarball = v })
-          (reqArgFlag "TARBALL")
-      ]
-
-convertAction :: ConvertFlags -> IO ()
-convertAction ConvertFlags {
-                flagImportAdmins   = Flag _,
-                flagImportHtPasswd = NoFlag
-              }
-  = die "Cannot import administrators without users"
-
-convertAction ConvertFlags {
-                flagImportIndex    = NoFlag,
-                flagImportLog      = NoFlag,
-                flagImportArchive  = Flag _
-              }
-  = die "An archive tar should be imported along with an index tarball."
-
-convertAction ConvertFlags {
-                flagImportIndex    = NoFlag,
-                flagImportLog      = NoFlag,
-                flagImportHtPasswd = Flag _
-              }
-  = die "An htpasswd file should be imported along with an index."
-
-convertAction ConvertFlags {
-                flagImportIndex    = Flag indexFileName,
-                flagImportLog      = Flag logFileName,
-                flagImportArchive  = archiveFile,
-                flagImportHtPasswd = htpasswdFile,
-                flagImportAdmins   = adminsFile,
-                flagConvertTarball = exportFile
-              }
-  = do
-    indexFile <- BS.readFile indexFileName
-    logFile   <- readFile logFileName
-    tarballs  <- forM (flagToMaybe archiveFile)  BS.readFile
-    htpasswd  <- forM (flagToMaybe htpasswdFile) readFile
-    admins    <- forM (flagToMaybe adminsFile)   readFile
-    let exportPath = fromFlagOrDefault "export.tar" exportFile
-
-    -- todo: get rid of using blob storage for conversion
-    defaults <- Server.defaultServerConfig
-    let stateDir  = confStateDir defaults
-
-    info "Creating export tarball..."
-    (badLogEntries, bulkTar) <- Server.bulkImport stateDir indexFile logFile tarballs htpasswd admins
-    BS.writeFile exportPath bulkTar
-    info "Done"
-    unless (null badLogEntries) $ putStr $
-        "Warning: Upload log entries for non-existant packages:\n"
-        ++ unlines (map display (sort badLogEntries))
-
-convertAction _
-  = die "A package index and log file must be supplied together."
 
 
 -------------------------------------------------------------------------------

@@ -76,10 +76,6 @@ executable hackage-server
     Distribution.Server.Framework.BackupRestore
     Distribution.Server.Framework.Validation
 
-    Distribution.Server.LegacyImport.BulkImport
-    Distribution.Server.LegacyImport.UploadLog
-    Distribution.Server.LegacyImport.HtPasswdDb
-
     Distribution.Server.Packages.Index
     Distribution.Server.Packages.ModuleForest
     Distribution.Server.Packages.PackageIndex
@@ -213,7 +209,6 @@ executable hackage-mirror
   main-is: MirrorClient.hs
   other-modules:
     Distribution.Client
-    Distribution.Server.LegacyImport.UploadLog
     Distribution.Server.Users.Types
     Distribution.Server.Util.Index
     Distribution.Server.Util.Merge
@@ -235,7 +230,6 @@ executable hackage-build
   main-is: BuildClient.hs
   other-modules:
     Distribution.Client
-    Distribution.Server.LegacyImport.UploadLog
     Distribution.Server.Users.Types
     Distribution.Server.Util.Index
     Distribution.Server.Util.Merge

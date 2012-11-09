@@ -14,7 +14,6 @@ module Distribution.Server (
     hasSavedState,
 
     -- * First time initialisation of the database
-    bulkImport,
     importServerTar,
     exportServerTar,
     testRoundtrip,
@@ -28,27 +27,15 @@ module Distribution.Server (
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
 import qualified Distribution.Server.Framework.BackupRestore as Import
-
--- TODO: move this to BulkImport module
-import Distribution.Server.Users.Backup (usersToCSV, groupToCSV)
-import Distribution.Server.Features.Core.Backup (infoToCurrentEntries)
-import Distribution.Server.Features.Upload.Backup (maintToExport)
-import Distribution.Server.Features.Tags.Backup (tagsToCSV)
-import Distribution.Server.Features.Tags (constructTagIndex)
-import qualified Distribution.Server.Users.Group as Group
+import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
 import Distribution.Server.Framework.Feature as Feature
 import qualified Distribution.Server.Features as Features
 import Distribution.Server.Features.Users
 import Distribution.Server.Framework.AuthTypes (PasswdPlain(..))
 
-import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
-import qualified Distribution.Server.LegacyImport.BulkImport as BulkImport
-import qualified Distribution.Server.LegacyImport.UploadLog as UploadLog
-import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
-
-import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Types as Users
+import qualified Distribution.Server.Users.Group as Group
 
 import Distribution.Text
 
@@ -209,74 +196,6 @@ shutdown server =
 checkpoint :: Server -> IO ()
 checkpoint server =
   Features.checkpointAllFeatures (serverFeatures server)
-
--- Convert a set of old data into a new export tarball.
--- This also populates the blob database, which is then
--- repopulated upon import of the new export tarball.
--- This is not really a good thing. (FIXME)
---
--- However, it does not need happstack-state to function.
-bulkImport :: FilePath -- path to state directory, get rid of this
-           -> ByteString  -- Index
-           -> String      -- Log
-           -> Maybe ByteString -- archive
-           -> Maybe String -- users
-           -> Maybe String -- admin users
-           -> IO ([UploadLog.Entry], ByteString)
-bulkImport storageDir indexFile logFile archiveFile htPasswdFile adminsFile = do
-    createDirectoryIfMissing True storageDir
-    storage <- BlobStorage.open (storageDir ++ "/blobs")
-
-    putStrLn "Reading index file"
-    -- [(PackageIdentifier, Tar.Entry)]
-    pkgIndex  <- either fail return $ BulkImport.importPkgIndex indexFile
-    putStrLn "Reading log file"
-    -- [UploadLog.Entry].
-    uploadLog <- either fail return $ BulkImport.importUploadLog logFile
-    -- [(PackageIdentifier, BlobId)]
-    -- needs IO to store the blobs. with enough craftiness, the blob storage
-    -- needn't be involved at all, merging on-the-fly
-    putStrLn "Reading archive file"
-    tarballs  <- BulkImport.importTarballs storage archiveFile
-    -- Users
-    putStrLn "Reading user accounts"
-    accounts  <- either fail return $ BulkImport.importUsers htPasswdFile
-    let admins = importAdminsList adminsFile
-
-    -- [PkgInfo], Users, [UploadLog.Entry]
-    -- it might be possible to export by skipping PkgInfo entirely, exporting
-    -- the files along with versionListToCSV
-    putStrLn "Merging package info"
-    (pkgsInfo, users, badLogEntries) <- either fail return $ BulkImport.mergePkgInfo pkgIndex uploadLog tarballs accounts
-    let pkgsIndex = PackageIndex.fromList pkgsInfo
-        maint = BulkImport.mergeMaintainers pkgsInfo
-    putStrLn "Done merging"
-    adminUids <- case admins of
-        Nothing -> return []
-        Just adminUsers -> either fail return $ lookupUsers users adminUsers
-    let adminFile = groupToCSV $ Group.fromList adminUids
-        getEntries = do
-            putStrLn "Creating package entries"
-            currentPackageEntries <- readExportBlobs storage (concatMap infoToCurrentEntries pkgsInfo)
-            putStrLn "Creating user entries"
-            let userEntry  = csvToBackup ["users.csv"] . usersToCSV $ users
-                adminEntry = csvToBackup ["admins.csv"] adminFile
-            return $ currentPackageEntries ++ [userEntry, adminEntry]
-        getTags = return [csvToBackup ["tags.csv"] . tagsToCSV . constructTagIndex $ pkgsIndex]
-        getGroups = return [maintToExport maint, csvToBackup ["trustees.csv"] adminFile]
-    putStrLn "Actually creating tarball"
-    tarBytes <- exportTar [("core", getEntries),
-                           ("tags", getTags),
-                           ("upload", getGroups)]
-    return (badLogEntries, tarBytes)
- where
-    importAdminsList :: Maybe String -> Maybe [Users.UserName]
-    importAdminsList = fmap (map Users.UserName . lines)
-
-    lookupUsers users names = mapM lookupUser names
-      where lookupUser name = case Users.lookupName name users of
-                Nothing -> Left $ "User " ++ show name ++ " not found"
-                Just uid -> Right uid
 
 exportServerTar :: Server -> IO ByteString
 exportServerTar server =
