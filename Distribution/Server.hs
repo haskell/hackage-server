@@ -38,6 +38,7 @@ import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Group as Group
 
 import Distribution.Text
+import Distribution.Verbosity as Verbosity
 
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist)
 import Control.Concurrent
@@ -46,6 +47,7 @@ import Network.URI (URIAuth(URIAuth))
 import Network.BSD (getHostName)
 import Data.List (foldl')
 import Data.Int  (Int64)
+import qualified System.Log.Logger as HsLogger
 
 import Paths_hackage_server (getDataDir)
 
@@ -56,6 +58,7 @@ data ListenOn = ListenOn {
 } deriving (Show)
 
 data ServerConfig = ServerConfig {
+  confVerbosity :: Verbosity,
   confHostName  :: String,
   confListenOn  :: ListenOn,
   confStateDir  :: FilePath,
@@ -72,6 +75,7 @@ defaultServerConfig = do
   hostName <- getHostName
   dataDir  <- getDataDir
   return ServerConfig {
+    confVerbosity = Verbosity.normal,
     confHostName  = hostName,
     confListenOn  = ListenOn {
                         loPortNum = 8080,
@@ -86,6 +90,7 @@ data Server = Server {
   serverFeatures    :: [HackageFeature],
   serverUserFeature :: UserFeature,
   serverListenOn    :: ListenOn,
+  serverVerbosity   :: Verbosity,
   serverEnv         :: ServerEnv
 }
 
@@ -106,7 +111,8 @@ hasSavedState = doesDirectoryExist . confDbStateDir
 -- with stale lock files.
 --
 initialise :: Bool -> ServerConfig -> IO Server
-initialise enableCaches initConfig@(ServerConfig hostName listenOn stateDir staticDir tmpDir) = do
+initialise enableCaches initConfig@(ServerConfig verbosity hostName listenOn
+                                                 stateDir staticDir tmpDir) = do
     createDirectoryIfMissing False stateDir
     store   <- BlobStorage.open blobStoreDir
 
@@ -124,6 +130,7 @@ initialise enableCaches initConfig@(ServerConfig hostName listenOn stateDir stat
         serverFeatures    = features,
         serverUserFeature = userFeature,
         serverListenOn    = listenOn,
+        serverVerbosity   = verbosity,
         serverEnv         = env
     }
 
@@ -148,6 +155,8 @@ run server = do
 
       handlePutPostQuotas
 
+      setLogging
+
       fakeBrowserHttpMethods (impl server)
 
   where
@@ -165,6 +174,16 @@ run server = do
         quota  = 10 ^ (6 :: Int64)
         bodyPolicy = defaultBodyPolicy tmpdir quota quota quota
 
+    setLogging =
+        liftIO $ HsLogger.updateGlobalLogger
+                   "Happstack.Server"
+                   (adjustLogLevel (serverVerbosity server))
+      where
+        adjustLogLevel v
+          | v == Verbosity.normal    = HsLogger.setLevel HsLogger.WARNING
+          | v == Verbosity.verbose   = HsLogger.setLevel HsLogger.INFO
+          | v == Verbosity.deafening = HsLogger.setLevel HsLogger.DEBUG
+          | otherwise                = id
 
     -- This is a cunning hack to solve the problem that current web browsers
     -- (non-HTML5 forms) do not support PUT, DELETE, etc, they only support GET

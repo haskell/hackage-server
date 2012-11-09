@@ -10,6 +10,7 @@ import Distribution.Text
          ( display )
 import Distribution.Simple.Utils
          ( topHandler, die )
+import Distribution.Verbosity as Verbosity
 
 import System.Environment
          ( getArgs, getProgName )
@@ -130,6 +131,7 @@ globalCommand = CommandUI {
 --
 
 data RunFlags = RunFlags {
+    flagVerbosity :: Flag Verbosity,
     flagPort      :: Flag String,
     flagIP        :: Flag String,
     flagHost      :: Flag String,
@@ -142,13 +144,14 @@ data RunFlags = RunFlags {
 
 defaultRunFlags :: RunFlags
 defaultRunFlags = RunFlags {
+    flagVerbosity = Flag Verbosity.normal,
     flagPort      = NoFlag,
     flagIP        = NoFlag,
     flagHost      = NoFlag,
     flagStateDir  = NoFlag,
     flagStaticDir = NoFlag,
-    flagTemp      = Flag False,
     flagTmpDir    = NoFlag,
+    flagTemp      = Flag False,
     flagEnableCaches = Flag True
   }
 
@@ -165,7 +168,13 @@ runCommand = makeCommand name shortDesc longDesc defaultRunFlags options
                ++ " $ kill -USR1 $the_pid\n"
                ++ "where $the_pid is the process id of the running server.\n"
     options _  =
-      [ option [] ["port"]
+      [ option "v" ["verbose"]
+          "Control verbosity (n is 0--3, default verbosity level is 1)"
+          flagVerbosity (\v flags -> flags { flagVerbosity = v })
+          (optArg "n" (fmap Flag Verbosity.flagToVerbosity)
+                (Flag Verbosity.verbose)
+                (fmap (Just . showForCabal) . flagToList))
+      , option [] ["port"]
           "Port number to serve on (default 8080)"
           flagPort (\v flags -> flags { flagPort = v })
           (reqArgFlag "PORT")
@@ -205,7 +214,8 @@ runAction opts = do
 
     port <- checkPortOpt defaults (flagToMaybe (flagPort opts))
     ip   <- checkIPOpt   defaults (flagToMaybe (flagIP   opts))
-    let hostname  = fromFlagOrDefault (confHostName  defaults) (flagHost      opts)
+    let verbosity = fromFlag (flagVerbosity opts)
+        hostname  = fromFlagOrDefault (confHostName  defaults) (flagHost      opts)
         stateDir  = fromFlagOrDefault (confStateDir  defaults) (flagStateDir  opts)
         staticDir = fromFlagOrDefault (confStaticDir defaults) (flagStaticDir opts)
         tmpDir    = fromFlagOrDefault (stateDir </> "tmp") (flagTmpDir    opts)
@@ -214,6 +224,7 @@ runAction opts = do
                        loIP      = ip
                    }
         config = defaults {
+            confVerbosity = verbosity,
             confHostName  = hostname,
             confListenOn  = listenOn,
             confStateDir  = stateDir,

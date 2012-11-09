@@ -185,7 +185,8 @@ executable hackage-server
     csv        == 0.1.*,
     stm        >= 2.2 && < 2.5,
     acid-state == 0.8.*,
-    happstack-server == 7.0.* || ==7.1.* && >= 7.0.6
+    happstack-server == 7.0.* || ==7.1.* && >= 7.0.6,
+    hslogger
 
   if ! flag(minimal)
     build-depends:
