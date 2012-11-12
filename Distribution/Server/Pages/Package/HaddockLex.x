@@ -19,6 +19,7 @@ module Distribution.Server.Pages.Package.HaddockLex (
  ) where
 
 import Data.Char
+import Data.Word (Word8)
 import Numeric
 }
 
@@ -108,6 +109,17 @@ type Action = String -> StartCode -> (StartCode -> [Token]) -> [Token]
 
 type AlexInput = (Char,String)
 
+-- | For alex >= 3
+--
+-- See also alexGetChar
+alexGetByte :: AlexInput -> Maybe (Word8, AlexInput)
+alexGetByte (_, [])   = Nothing
+alexGetByte (_, c:cs) = Just (fromIntegral (ord c), (c,cs))
+
+-- | For alex < 3
+--
+-- See also alexGetByte
+alexGetChar :: AlexInput -> Maybe (Char, AlexInput)
 alexGetChar (_, [])   = Nothing
 alexGetChar (_, c:cs) = Just (c, (c,cs))
 

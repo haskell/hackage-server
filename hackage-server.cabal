@@ -193,7 +193,7 @@ executable hackage-server
       stringsearch == 0.3.*
 
   build-tools:
-    alex       == 2.2.* || == 2.3.*,
+    alex       >= 2.2 && < 3.1,
     happy      == 1.17.* || == 1.18.*
 
   if !os(darwin)
