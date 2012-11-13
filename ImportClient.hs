@@ -342,33 +342,50 @@ importUploadLog uploadLogFile baseURI = do
     httpSession $ do
       setAuthorityFromURI baseURI
       sequence_
-        [ putUploadInfo baseURI  time uname pkgid
-        |  UploadLog.Entry time uname pkgid <- uploadLog ]
+        [ putUploadInfo baseURI pkgid time uname
+        | (pkgid, time, uname) <- UploadLog.collectUploadInfo uploadLog ]
+      sequence_
+        [ putMaintainersInfo baseURI pkgname maintainers
+        | (pkgname, maintainers) <- UploadLog.collectMaintainerInfo uploadLog ]
 
-putUploadInfo :: URI -> UTCTime -> UserName -> PackageId -> HttpSession ()
-putUploadInfo baseURI time uname pkgid = do
+
+putUploadInfo :: URI -> PackageId -> UTCTime -> UserName -> HttpSession ()
+putUploadInfo baseURI pkgid time uname = do
+
+    liftIO $ info $ "setting upload info for " ++ display pkgid
 
     let timeStr = formatTime defaultTimeLocale "%c" time
     rsp <- requestPUT (pkgURI <//> "upload-time") "text/plain" (toBS timeStr)
     case rsp of
       Nothing  -> return ()
+      Just err | isErrNotFound err -> liftIO $ info $ "Ignoring upload log entry for package " ++ display pkgid
       Just err -> fail (formatErrorResponse err)
 
     let nameStr = display uname
     rsp <- requestPUT (pkgURI <//> "uploader") "text/plain" (toBS nameStr)
     case rsp of
       Nothing  -> return ()
-      Just err -> fail (formatErrorResponse err)
-
-    -- Add this user to the package's maintainers group
-    rsp <- requestPUT (pkgURI <//> "maintainers" </> display uname) "" BS.empty
-    case rsp of
-      Nothing  -> return ()
+      Just err | isErrNotFound err  -> liftIO $ info $ "Ignoring upload log entry for package " ++ display pkgid
       Just err -> fail (formatErrorResponse err)
 
   where
     pkgURI = baseURI <//> "package" </> display pkgid
     toBS   = BS.pack . toUTF8
+
+
+putMaintainersInfo :: URI -> PackageName -> [UserName] -> HttpSession ()
+putMaintainersInfo baseURI pkgname maintainers =
+
+    -- Add to the package's maintainers group
+    forM_ maintainers $ \uname -> do
+      rsp <- requestPUT (pkgURI <//> "maintainers" </> "user" </> display uname) "" BS.empty
+      case rsp of
+        Nothing  -> return ()
+        Just err | isErrNotFound err -> liftIO $ info $ "Ignoring upload log entry for package " ++ display pkgname
+        Just err -> fail (formatErrorResponse err)
+
+  where
+    pkgURI = baseURI <//> "package" </> display pkgname
 
 
 -------------------------------------------------------------------------------
@@ -587,6 +604,9 @@ httpSession action =
 data ErrorResponse = ErrorResponse URI ResponseCode String (Maybe String)
   deriving Show
 
+isErrNotFound :: ErrorResponse -> Bool
+isErrNotFound (ErrorResponse _ (4,0,4) _ _) = True
+isErrNotFound _                             = False
 
 setAuthorityFromURI :: URI -> HttpSession ()
 setAuthorityFromURI uri = do

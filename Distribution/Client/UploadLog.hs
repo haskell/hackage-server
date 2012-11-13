@@ -14,14 +14,15 @@
 module Distribution.Client.UploadLog (
     Entry(..),
     read,
-    group,
+    collectUploadInfo,
+    collectMaintainerInfo,
   ) where
 
 import Distribution.Server.Users.Types
          ( UserName )
 
 import Distribution.Package
-         ( PackageIdentifier(..))
+         ( PackageId, PackageName, packageName, PackageIdentifier(..))
 import Distribution.Text
          ( Text(..), simpleParse )
 import Distribution.ParseUtils ( parsePackageNameQ )
@@ -41,7 +42,7 @@ import Data.Time.Format
 import System.Locale
          ( defaultTimeLocale )
 import Data.List
-         ( sortBy, groupBy )
+         ( sortBy, groupBy, nub )
 
 import Prelude hiding (read)
 
@@ -76,15 +77,34 @@ read = check [] . map parseLine . lines
     parseLine line = maybe (Left err) Right (simpleParse line)
       where err = "Failed to parse log line:\n" ++ show line
 
-group :: [Entry] -> [(Entry, [Entry])]
-group =
-    map ((\(p:ps) -> (p, ps))
-       . sortBy (comparing packageTime))
-  . groupBy (equating packageId)
-  . sortBy (comparing packageId)
+collectUploadInfo :: [Entry] -> [(PackageId, UTCTime, UserName)]
+collectUploadInfo =
+    map (uploadInfo . sortBy (comparing entryTime))
+  . groupBy (equating entryPackageId)
+  . sortBy (comparing entryPackageId)
   where
-    packageId   (Entry _  _ pkgid) = pkgid
-    packageTime (Entry t  _ _)     = t
+    entryPackageId (Entry _  _ pkgid) = pkgid
+    entryTime      (Entry t  _ _)     = t
+    
+    uploadInfo :: [Entry] -> (PackageId, UTCTime, UserName)
+    uploadInfo entries =
+      case last entries of
+        Entry time uname pkgid -> (pkgid, time, uname)
+
+collectMaintainerInfo :: [Entry] -> [(PackageName, [UserName])]
+collectMaintainerInfo =
+    map maintainersInfo
+  . groupBy (equating entryPackageName)
+  . sortBy (comparing entryPackageName)
+  where
+    entryPackageName (Entry _  _ pkgid) = packageName pkgid
+    
+    maintainersInfo :: [Entry] -> (PackageName, [UserName])
+    maintainersInfo entries =
+        (packageName pkgid, maintainers)
+      where
+        Entry _ _ pkgid = head entries
+        maintainers     = nub [ uname | Entry _ uname _ <- entries ]
 
 -- | The time lib doesn't know the time offsets of standard time zones so we
 -- have to do it ourselves for a couple zones we're interested in. Sigh.
