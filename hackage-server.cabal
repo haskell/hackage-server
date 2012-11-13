@@ -199,7 +199,7 @@ executable hackage-server
   if !os(darwin)
     extra-libraries: crypt
 
-  ghc-options: -Wall -fwarn-tabs
+  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind
                -threaded
   if impl(ghc >= 7.0)
     ghc-options: -rtsopts -with-rtsopts=-I0
