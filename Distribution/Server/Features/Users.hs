@@ -12,6 +12,7 @@ module Distribution.Server.Features.Users (
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
 import qualified Distribution.Server.Framework.Cache as Cache
+import qualified Distribution.Server.Framework.ResourceTypes as Resource
 
 import Distribution.Server.Users.Types
 import Distribution.Server.Users.State as State
@@ -29,6 +30,8 @@ import qualified Data.Set as Set
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.Function (fix)
 import Control.Applicative (optional)
+import Text.JSON
+         ( JSValue(..), toJSObject, toJSString )
 
 import Distribution.Text (display, simpleParse)
 
@@ -464,11 +467,17 @@ userFeature  usersState adminsState
               }
         ulist <- queryUserList group
         initGroupIndex ulist groupUri descr
-        return $ (,) group' $ GroupResource
-          { groupResource = extendResourcePath "/.:format" mainr
-          , groupUserResource = extendResourcePath "/user/:username.:format" mainr
-          , getGroup = \_ -> group'
-          }
+        let groupr = GroupResource {
+                groupResource = (extendResourcePath "/.:format" mainr) {
+                                  resourceGet = [("json", handleUserGroupGet group')]
+                                }
+              , groupUserResource = (extendResourcePath "/user/:username.:format" mainr) {
+                                  resourcePut    = [("", handleUserGroupUserPut group groupr)],
+                                  resourceDelete = [("", handleUserGroupUserDelete group groupr)]
+                                }
+              , getGroup = \_ -> group'
+              }
+        return (group', groupr)
 
     -- | Registers a collection of user groups for external display. These groups
     -- are usually backing a separate collection. Like groupResourceAt, it takes the
@@ -497,14 +506,72 @@ userFeature  usersState adminsState
                         addUserList group uid
                   , removeUserList = \uid -> do
                         removeGroupIndex uid (renderResource' mainr dpath)
-                        addUserList group uid
+                        removeUserList group uid
                   }
         mapM_ collectUserList dpaths
-        return $ (,) getGroupFunc $ GroupResource
-          { groupResource = extendResourcePath "/.:format" mainr
-          , groupUserResource = extendResourcePath "/user/:username.:format" mainr
-          , getGroup = getGroupFunc
-          }
+        let groupr = GroupResource {
+                groupResource = (extendResourcePath "/.:format" mainr) {
+                                  resourceGet = [("json", \dpath -> handleUserGroupGet (getGroupFunc dpath) dpath)]
+                                }
+              , groupUserResource = (extendResourcePath "/user/:username.:format" mainr) {
+                                      resourcePut    = [("", \dpath -> handleUserGroupUserPut    (getGroupFunc dpath) groupr dpath)],
+                                      resourceDelete = [("", \dpath -> handleUserGroupUserDelete (getGroupFunc dpath) groupr dpath)]
+                                    }
+              , getGroup = getGroupFunc
+              }
+        return (getGroupFunc, groupr) 
+
+    handleUserGroupGet group _dpath =
+      runServerPartE $
+      withGroup group $ \g -> do
+        userDb   <- queryGetUserDb
+        userlist <- liftIO $ queryUserList g
+        let unames = [ Users.idToName userDb uid
+                     | uid <- Group.enumerate userlist ]
+        return . toResponse . Resource.JSON $
+            JSObject $ toJSObject [
+              ("title",       JSString $ toJSString $ groupTitle $ groupDesc g)
+            , ("description", JSString $ toJSString $ groupPrologue $ groupDesc g)
+            , ("members",     JSArray [ JSString $ toJSString $ display uname
+                                      | uname <- unames ])
+            ]
+
+    handleUserGroupUserPut group groupr dpath =
+      runServerPartE $
+      withGroup group $ \g -> 
+        withUserNamePath dpath $ \uname -> do
+
+          -- check the acting user is authorised to modify this group
+          users <- queryGetUserDb
+          ulist <- liftIO . Group.queryGroups $ canAddGroup g
+          guardAuthorised hackageRealm users ulist
+
+          withUserName uname $ \uid _ ->
+            liftIO $ addUserList g uid
+
+          goToList groupr dpath
+
+    handleUserGroupUserDelete group groupr dpath =
+      runServerPartE $
+      withUserNamePath dpath $ \uname -> do
+
+          -- check the acting user is authorised to modify this group
+        users <- queryGetUserDb
+        ulist <- liftIO . Group.queryGroups $ canRemoveGroup group
+        guardAuthorised hackageRealm users ulist
+
+        withUserName uname $ \uid _ ->
+          liftIO $ removeUserList group uid
+
+        goToList groupr dpath
+
+    goToList group dpath = seeOther (renderResource' (groupResource group) dpath)
+                                    (toResponse ())
+
+    withGroup group func = do
+        exists <- liftIO (groupExists group)
+        if exists then func group
+                  else errNotFound "User group doesn't exist" [MText "User group doesn't exist"]
 
     ---------------------------------------------------------------
     addGroupIndex :: MonadIO m => UserId -> String -> GroupDescription -> m ()
