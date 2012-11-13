@@ -229,7 +229,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
         removeUserList = update maintainersState . RemovePackageMaintainer name,
         groupExists    = fmap (Map.member name . maintainers) $ query maintainersState AllPackageMaintainers,
         canAddGroup    = [u] ++ canModify,
-        canRemoveGroup = canModify
+        canRemoveGroup = [u] ++ canModify
       }
 
     maintainerDescription :: PackageName -> GroupDescription
