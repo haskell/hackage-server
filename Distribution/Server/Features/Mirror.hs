@@ -14,6 +14,7 @@ import Distribution.Server.Users.State
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Backup
 import Distribution.Server.Users.Types
+import Distribution.Server.Users.Users
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Packages.Unpack as Upload
@@ -102,11 +103,12 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
         mirrorPackageTarball = (extendResource $ corePackageTarball coreResource) {
                                  resourcePut = [("", tarballPut)]
                                }
-      , mirrorPackageUploadTime = (extendResourcePath "/upload-time" $ corePackageTarball coreResource) {
+      , mirrorPackageUploadTime = (extendResourcePath "/upload-time" $ corePackagePage coreResource) {
                                  resourceGet = [("", uploadTimeGet)],
                                  resourcePut = [("", uploadTimePut)]
                                }
-      , mirrorPackageUploader = (extendResourcePath "/uploader" $ corePackageTarball coreResource) {
+      , mirrorPackageUploader = (extendResourcePath "/uploader" $ corePackagePage coreResource) {
+                                 resourceGet = [("", uploaderGet)],
                                  resourcePut = [("", uploaderPut)]
                                }
       , mirrorCabalFile      = (extendResource $ coreCabalFile coreResource) {
@@ -162,21 +164,28 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
                   }
                   return . toResponse $ unlines warnings
 
+
+    uploaderGet dpath = runServerPartE $ withPackagePath dpath $ \pkg _ -> do
+        userdb <- queryGetUserDb
+        return $ toResponse $ display (idToName userdb (pkgUploadUser pkg))
+
     uploaderPut :: DynamicPath -> ServerPart Response
     uploaderPut dpath = runServerPartE $ do
         void requireMirrorAuth
         withPackageId dpath $ \pkgid -> do
           expectTextPlain
           Body nameContent <- consumeRequestBody
-          uid <- updateRequireUserName (UserName (unpackUTF8 nameContent))
-          mb_err <- updateReplacePackageUploader pkgid uid
-          maybe (return $ toResponse "Updated uploader OK") (badRequest . toResponse) mb_err
+          let uname = UserName (unpackUTF8 nameContent)
+          withUserName uname $ \uid _ -> do
+            mb_err <- updateReplacePackageUploader pkgid uid
+            maybe (return ()) (\err -> errNotFound err []) mb_err
+            return $ toResponse "Updated uploader OK"
 
     uploadTimeGet :: DynamicPath -> ServerPart Response
     uploadTimeGet dpath = runServerPartE $ withPackagePath dpath $ \pkg _ ->
         return $ toResponse $ formatTime defaultTimeLocale "%c" (pkgUploadTime pkg)
 
-    -- curl -H 'Content-Type: text/plain' -u admin:admin -X PUT -d "Tue Oct 18 20:54:28 UTC 2010" http://localhost:8080/package/edit-distance-0.2.1/edit-distance-0.2.1.tar.gz/upload-time
+    -- curl -H 'Content-Type: text/plain' -u admin:admin -X PUT -d "Tue Oct 18 20:54:28 UTC 2010" http://localhost:8080/package/edit-distance-0.2.1/upload-time
     uploadTimePut :: DynamicPath -> ServerPart Response
     uploadTimePut dpath = runServerPartE $ do
         void requireMirrorAuth
@@ -187,7 +196,8 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
             Nothing -> badRequest $ toResponse "Could not parse upload time"
             Just t  -> do
               mb_err <- updateReplacePackageUploadTime pkgid t
-              maybe (return $ toResponse "Updated upload time OK") (badRequest . toResponse) mb_err
+              maybe (return ()) (\err -> errNotFound err []) mb_err
+              return $ toResponse "Updated upload time OK"
 
     -- return: error from parsing, bad request error, or warning lines
     cabalPut :: DynamicPath -> ServerPart Response

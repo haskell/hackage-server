@@ -341,11 +341,11 @@ putPackage baseURI (PkgIndexInfo pkgid mtime muname _muid) pkgFile = do
     maybe (return ()) putPackageUploadTime mtime
     maybe (return ()) putPackageUploader muname
   where
-    pkgURI = baseURI <//> display pkgid <.> "tar.gz"
+    tarballURI = baseURI <//> display pkgid <.> "tar.gz"
 
     putPackageTarball = do
       pkgContent <- liftIO $ BS.readFile pkgFile
-      rsp <- browserAction $ requestPUT pkgURI "application/x-gzip" pkgContent
+      rsp <- browserAction $ requestPUT tarballURI "application/x-gzip" pkgContent
       case rsp of
         Just theError -> notifyResponse (PutPackageFailed theError pkgid)
 
@@ -361,14 +361,14 @@ putPackage baseURI (PkgIndexInfo pkgid mtime muname _muid) pkgFile = do
 
     putPackageUploadTime time = do
       let timeStr = formatTime defaultTimeLocale "%c" time
-      rsp <- browserAction $ requestPUT (pkgURI <//> "upload-time") "text/plain" (toBS timeStr)
+      rsp <- browserAction $ requestPUT (baseURI <//> "upload-time") "text/plain" (toBS timeStr)
       case rsp of
         Just theError -> notifyResponse (PutPackageFailed theError pkgid)
         Nothing       -> notifyResponse PutPackageOk
 
     putPackageUploader uname = do
       let nameStr = display uname
-      rsp <- browserAction $ requestPUT (pkgURI <//> "uploader") "text/plain" (toBS nameStr)
+      rsp <- browserAction $ requestPUT (baseURI <//> "uploader") "text/plain" (toBS nameStr)
       case rsp of
         Just theError -> notifyResponse (PutPackageFailed theError pkgid)
         Nothing       -> notifyResponse PutPackageOk
