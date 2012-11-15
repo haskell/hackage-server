@@ -108,6 +108,7 @@ main = topHandler $ do
       , tarballCommand  `commandAddAction` tarballAction
       , distroCommand   `commandAddAction` distroAction
       , deprecationCommand `commandAddAction` deprecationAction
+      , docsCommand     `commandAddAction` docsAction
       ]
 
     commandAddActionNoArgs cmd action =
@@ -566,6 +567,66 @@ putDistroInfo baseURI distroname entries = do
   where
     distroURI = baseURI <//> "distro" </> distroname
     toBS      = BS.pack . toUTF8 . CSV.printCSV . DistroMap.toCSV
+
+
+-------------------------------------------------------------------------------
+-- Documentation tarballs command
+--
+
+data DocsFlags = DocsFlags
+
+defaultDocsFlags :: DocsFlags
+defaultDocsFlags = DocsFlags
+
+docsCommand :: CommandUI DocsFlags
+docsCommand =
+    (makeCommand name shortDesc longDesc defaultDocsFlags options) {
+      commandUsage = \pname ->
+           "Usage: " ++ pname ++ " " ++ name ++ " [URI] [TARBALL]... \n\n"
+        ++ "Flags for " ++ name ++ ":"
+    }
+  where
+    name       = "docs"
+    shortDesc  = "Import package documentation tarballs"
+    longDesc   = Just $ \_ ->
+                     "The package tarballs can be imported directly from\n"
+                  ++ " local .tar.gz files of the html bundle."
+    options _  = []
+
+docsAction :: DocsFlags -> [String] -> GlobalFlags -> IO ()
+docsAction _opts args _ = do
+
+    (baseURI, docTarballFiles) <- either die return (validateOptsServerURI' args)
+
+    let pkgidAndTarball =
+          [ (mpkgid, file)
+          | file <- docTarballFiles
+          , let (pkgidstr, ext) = splitExtensions (takeFileName file)
+                mpkgid | ext == ".tar.gz" = simpleParse pkgidstr
+                       | otherwise        = Nothing ]
+
+    case [ file | (Nothing, file) <- pkgidAndTarball] of
+      []    -> return ()
+      files -> die $ "the following files don't match the expected naming "
+                  ++ "convention of foo-1.0[-*].tar.gz:\n" ++ unlines files
+
+    httpSession $ do
+      setAuthorityFromURI baseURI
+      sequence_
+        [ putPackageDocsTarball baseURI pkgid tarballFilePath
+        |  (Just pkgid, tarballFilePath) <- pkgidAndTarball ]
+
+putPackageDocsTarball :: URI -> PackageId -> FilePath -> HttpSession ()
+putPackageDocsTarball baseURI pkgid tarballFilePath = do
+
+    tarballContent <- liftIO $ BS.readFile tarballFilePath
+    rsp <- requestPUT pkgDocURI "application/x-gzip" tarballContent
+    case rsp of
+      Nothing  -> return ()
+      Just err -> fail (formatErrorResponse err)
+
+  where
+    pkgDocURI = baseURI <//> "package" </> display pkgid </> "doc"
 
 
 -------------------------
