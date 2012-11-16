@@ -41,7 +41,8 @@ instance IsHackageFeature DistroFeature where
 
 data DistroResource = DistroResource {
     distroIndexPage :: Resource,
-    distroAllPage  :: Resource,
+    distroAllPage   :: Resource,
+    distroPackages  :: Resource,
     distroPackage   :: Resource
 }
 
@@ -65,7 +66,7 @@ distroFeature UserFeature{..} CoreFeature{..} distrosState
   = DistroFeature{..}
   where
     distroFeatureInterface = (emptyHackageFeature "distro") {
-        featureResources   = map ($distroResource) [distroIndexPage, distroAllPage, distroPackage]
+        featureResources   = map ($distroResource) [distroIndexPage, distroAllPage, distroPackages, distroPackage]
       , featureDumpRestore = Just (dumpBackup distrosState,
                                    restoreBackup distrosState,
                                    testRoundtripByQuery (query distrosState GetDistributions))
@@ -79,10 +80,26 @@ distroFeature UserFeature{..} CoreFeature{..} distrosState
     queryPackageStatus pkgname = query' distrosState (PackageStatus pkgname)
 
     distroResource = DistroResource
-          { distroIndexPage = (resourceAt "/distros/.:format") { resourceGet = [("txt", textEnumDistros)], resourcePost = [("", distroNew)] }
-          , distroAllPage = (resourceAt "/distro/:distro/.:format") { resourceGet = [("txt", textDistroPkgs), ("csv",csvDistroPackageList)], resourcePut = [("",distroPackageListPut)], resourceDelete = [("", distroDelete)] }
-          , distroPackage = (resourceAt "/distro/:distro/package/:package.:format") { resourceGet = [("txt", textDistroPkg)], resourcePut = [("", distroPackagePut)], resourceDelete = [("", distroPackageDelete)] }
+          { distroIndexPage = (resourceAt "/distros/.:format") {
+                resourceGet  = [("txt", textEnumDistros)],
+                resourcePost = [("", distroPostNew)]
+              }
+          , distroAllPage = (resourceAt "/distro/:distro") {
+                resourcePut    = [("", distroPutNew)],
+                resourceDelete = [("", distroDelete)]
+              }
+          , distroPackages = (resourceAt "/distro/:distro/packages.:format") {
+                resourceGet    = [("txt", textDistroPkgs),
+                                  ("csv", csvDistroPackageList)],
+                resourcePut    = [("csv", distroPackageListPut)]
+              }
+          , distroPackage = (resourceAt "/distro/:distro/package/:package.:format") {
+                resourceGet    = [("txt", textDistroPkg)],
+                resourcePut    = [("",    distroPackagePut)],
+                resourceDelete = [("",    distroPackageDelete)]
+              }
           }
+
     maintainersGroup = \dpath -> case simpleParse =<< lookup "distro" dpath of
             Nothing -> return Nothing
             Just dname -> getMaintainersGroup adminGroup dname
@@ -118,15 +135,23 @@ distroFeature UserFeature{..} CoreFeature{..} distrosState
         seeOther ("/distro/" ++ display dname ++ "/" ++ display pkgname) $ toResponse "Ok!"
 
     -- result: see-other response, or an error: not authentcated or bad request
-    distroNew _ = lookDistroName $ \dname -> do
+    distroPostNew _ = lookDistroName $ \dname -> do
         success <- update' distrosState $ AddDistro dname
         if success
             then seeOther ("/distro/" ++ display dname) $ toResponse "Ok!"
             else badRequest $ toResponse "Selected distribution name is already in use"
 
+    distroPutNew dpath =
+      withDistroNamePath dpath $ \dname -> do
+        _success <- update' distrosState $ AddDistro dname
+        -- it doesn't matter if it exists already or not
+        ok $ toResponse "Ok!"
+
     -- result: ok repsonse or not-found error
-    distroPackageListPut dpath = withDistroPath dpath $ \dname _pkgs -> do
-        -- authenticate distro maintainer
+    distroPackageListPut dpath =
+      withDistroPath dpath $ \dname _pkgs -> do
+        -- FIXME: authenticate distro maintainer
+--        expectMimeType "text/csv"
         lookCSVFile $ \csv ->
             case csvToPackageList csv of
                 Nothing -> fail $ "Could not parse CSV File to a distro package list"

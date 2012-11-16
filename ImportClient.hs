@@ -559,7 +559,12 @@ distroAction _opts args _ = do
 putDistroInfo :: URI -> String -> [DistroMap.Entry] -> HttpSession ()
 putDistroInfo baseURI distroname entries = do
 
-    rsp <- requestPUT (distroURI <//> distroname) "text/csv" (toBS entries)
+    rsp <- requestPUT distroURI "" BS.empty
+    case rsp of
+      Nothing  -> return ()
+      Just err -> fail (formatErrorResponse err)
+
+    rsp <- requestPUT (distroURI <//> "packages.csv") "text/csv" (toBS entries)
     case rsp of
       Nothing  -> return ()
       Just err -> fail (formatErrorResponse err)

@@ -25,7 +25,7 @@ import Distribution.Text
 import Text.CSV
          ( CSV )
 import Network.URI
-         ( URI, parseAbsoluteURI )
+         ( URI, parseURI )
 import Data.Either
          ( partitionEithers )
 
@@ -34,9 +34,7 @@ import Prelude hiding (read)
 data Entry = Entry PackageName Version (Maybe URI)
   deriving (Eq, Show)
 
--- | Returns a list of log entries, however some packages have been uploaded
--- more than once, so each entry is paired with any older entries for the same
--- package.
+-- | Returns a list of log entries.
 --
 read :: String -> ([String], [Entry])
 read = partitionEithers . map parseLine . lines
@@ -45,7 +43,7 @@ read = partitionEithers . map parseLine . lines
       | [((pkgnamestr, pkgverstr, murlstr),_)] <- reads line
       , Just pkgname <- simpleParse pkgnamestr
       , Just pkgver  <- simpleParse pkgverstr
-      , Just murl    <- maybe (Just Nothing) (fmap Just . parseAbsoluteURI) murlstr
+      , Just murl    <- maybe (Just Nothing) (fmap Just . parseURI) murlstr
       = Right (Entry pkgname pkgver murl)
 
       | otherwise
