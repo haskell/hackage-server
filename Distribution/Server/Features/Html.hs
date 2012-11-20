@@ -201,11 +201,15 @@ htmlFeature UserFeature{..} CoreFeature{..}
           }
         -- form to post to /users/
       , (resourceAt "/users/register") {
-            resourceGet  = [ ("html", addUserForm) ]
+            resourceDesc = [ (GET, "show \"add user\" form") ]
+          , resourceGet  = [ ("html", addUserForm) ]
           }
         -- user page with link to password form and list of groups (how to do this?)
       , (extendResource $ userPage users) {
-            resourceGet    = [ ("html", serveUserPage) ]
+            resourceDesc   = [ (GET,    "show user page")
+                             , (DELETE, "delete the user")
+                             ]
+          , resourceGet    = [ ("html", serveUserPage) ]
           , resourceDelete = [ ("html", serveDeleteUser) ]
           }
         -- form to PUT password
