@@ -193,28 +193,34 @@ htmlFeature UserFeature{..} CoreFeature{..}
       -- users
         -- list of users with user links; if admin, a link to add user page
       , (extendResource $ userList users) {
-            resourceDesc = ["GET: list of users. POST: create a new user"]
-          , resourceGet  = [("html", serveUserList)]
-          , resourcePost = [("html", \_ -> htmlResponse $ adminAddUser)]
+            resourceDesc = [ (GET,  "list of users")
+                           , (POST, "create a new user")
+                           ]
+          , resourceGet  = [ ("html", serveUserList) ]
+          , resourcePost = [ ("html", \_ -> htmlResponse $ adminAddUser) ]
           }
         -- form to post to /users/
       , (resourceAt "/users/register") {
-            resourceGet  = [("html", addUserForm)]
+            resourceGet  = [ ("html", addUserForm) ]
           }
         -- user page with link to password form and list of groups (how to do this?)
       , (extendResource $ userPage users) {
-            resourceGet    = [("html", serveUserPage)]
-          , resourceDelete = [("html", serveDeleteUser)]
+            resourceGet    = [ ("html", serveUserPage) ]
+          , resourceDelete = [ ("html", serveDeleteUser) ]
           }
         -- form to PUT password
       , (extendResource $ passwordResource users) {
-            resourceDesc = ["GET: show password change form; PUT: change password."]
-          , resourceGet  = [("html", servePasswordForm)]
-          , resourcePut  = [("html", servePutPassword)]
+            resourceDesc = [ (GET, "show password change form")
+                           , (PUT, "change password")
+                           ]
+          , resourceGet  = [ ("html", servePasswordForm) ]
+          , resourcePut  = [ ("html", servePutPassword) ]
           }
         -- form to enable or disable users (admin only)
       , (extendResource $ enabledResource users) {
-            resourceDesc = [ "GET/PUT whether the user is enabled" ]
+            resourceDesc = [ (GET, "return if the user is enabled")
+                           , (PUT, "set if the user is enabled")
+                           ]
           , resourceGet  = [("html", serveEnabledForm)]
           , resourcePut  = [("html", servePutEnabled)]
           }

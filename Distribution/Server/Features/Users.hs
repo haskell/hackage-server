@@ -184,7 +184,9 @@ userFeature  usersState adminsState
     userResource = fix $ \r -> UserResource {
         userList = (resourceAt "/users/.:format")
       , userPage = (resourceAt "/user/:username.:format") {
-            resourceDesc   = [ "PUT: create user; DELETE: delete user." ]
+            resourceDesc   = [ (PUT,    "create user")
+                             , (DELETE, "delete user")
+                             ]
           , resourcePut    = [ ("", handleUserPut) ]
           , resourceDelete = [ ("", handleUserDelete) ]
           }

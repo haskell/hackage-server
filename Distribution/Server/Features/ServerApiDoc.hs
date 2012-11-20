@@ -9,7 +9,7 @@ import Distribution.Server.Pages.Template (hackagePage)
 
 import Text.XHtml.Strict
          ( Html, (+++), concatHtml, noHtml, toHtml, (<<)
-         , h2, h3, p, tt, emphasize, br, blockquote
+         , h2, h3, p, tt, emphasize, blockquote
          , anchor, (!), href, name
          , unordList, defList )
 import Text.JSON
@@ -75,23 +75,19 @@ apiDocPageHtml serverFeatures = hackagePage title content
         ]
 
     renderResourceWithExtensions mFeature resource =
-            p << renderResourceDescription (resourceDesc resource)
-        +++ methodList resource
+            methodList resource
         +++ case mFeature of
                Nothing      -> mempty
                Just feature -> extensionsElsewhere feature resource
 
     methodList resource =
       unordList
-        [ show httpMethod +++ ": " +++ formatList formats
-        | (httpMethod, formats) <- resourceMethodsAndFormats resource ]
+        [ show httpMethod +++ ": " +++ formatList formats +++ " -- " +++ description
+        | (httpMethod, formats, description) <- resourceMethodsAndFormats resource ]
 
     formatList formats =
       intersperse (toHtml ", ")
         [ tt << format | format <- formats ]
-
-    renderResourceDescription :: [String] -> Html
-    renderResourceDescription desc = p << concatHtml (map (+++ br) desc)
 
     renderLocationTemplate :: Resource -> Html
     renderLocationTemplate resource =
@@ -134,13 +130,17 @@ apiDocPageHtml serverFeatures = hackagePage title content
           , not (null (resourceMethods resource'))
           ]
 
-resourceMethodsAndFormats :: Resource -> [(Method, [String])]
-resourceMethodsAndFormats (Resource _ rget rput rpost rdelete _ _ _) =
-    [ (httpMethod, [ formatName | (formatName, _) <- handlers ])
+resourceMethodsAndFormats :: Resource -> [(Method, [String], String)]
+resourceMethodsAndFormats (Resource _ rget rput rpost rdelete _ _ desc) =
+    [ (httpMethod, [ formatName | (formatName, _) <- handlers ], descriptionFor httpMethod desc)
     | (handlers@(_:_), httpMethod) <- zip methodsHandlers methodsKinds ]
   where
     methodsHandlers = [rget, rput, rpost, rdelete]
     methodsKinds    = [GET,  PUT,  POST,  DELETE]
+    descriptionFor _ [] = "Method description unavailable"
+    descriptionFor m ((m',d):ds)
+      | m == m'   = d
+      | otherwise = descriptionFor m ds
 
 apiDocJSON :: [HackageFeature] -> JSValue
 apiDocJSON serverFeatures = featureList
@@ -166,7 +166,7 @@ apiDocJSON serverFeatures = featureList
         [ JSObject $ toJSObject
             [ ("method", JSString $ toJSString $ show httpMethod)
             , ("formats", formatList formats) ]
-        | (httpMethod, formats) <- resourceMethodsAndFormats resource ]
+        | (httpMethod, formats, _) <- resourceMethodsAndFormats resource ]
 
     formatList formats =
       JSArray

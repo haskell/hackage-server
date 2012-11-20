@@ -71,7 +71,7 @@ data Resource = Resource {
     -- | The trailing slash conventions held by the resource.
     resourcePathEnd  :: BranchEnd,
     -- | Human readable description of the resource
-    resourceDesc     :: [String]
+    resourceDesc     :: [(Method, String)]
   }
 
 -- favors first
