@@ -274,7 +274,7 @@ Test-Suite HighLevelTest
     build-depends:  base,
                     bytestring,
                     base64-bytestring,
-                    Cabal      >= 1.14 && < 1.15,
+                    Cabal,
                     directory,
                     filepath,
                     HTTP,
