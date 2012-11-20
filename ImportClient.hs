@@ -1,4 +1,4 @@
-{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE PatternGuards, ScopedTypeVariables #-}
 
 module Main where
 
@@ -36,7 +36,7 @@ import System.Exit
          ( exitWith, ExitCode(..) )
 import System.IO
 import System.FilePath
-         ( (</>), (<.>), takeFileName, splitExtensions )
+         ( (</>), (<.>), takeFileName, dropExtension, takeExtension )
 import qualified System.FilePath.Posix as Posix
 import Data.List
 import Data.Maybe
@@ -421,7 +421,9 @@ tarballAction _opts args _ = do
     let pkgidAndTarball =
           [ (mpkgid, file)
           | file <- tarballFiles
-          , let (pkgidstr, ext) = splitExtensions (takeFileName file)
+          , let pkgidstr = (dropExtension . dropExtension . takeFileName) file
+                ext      = takeExtension (dropExtension file)
+                             <.> takeExtension file
                 mpkgid | ext == ".tar.gz" = simpleParse pkgidstr
                        | otherwise        = Nothing ]
 
@@ -446,7 +448,7 @@ putPackageTarball baseURI pkgid tarballFilePath = do
       Just err -> fail (formatErrorResponse err)
 
   where
-    pkgURI = baseURI <//> "package" </> display pkgid <.> "tar.gz"
+    pkgURI = baseURI <//> "package" </> display pkgid </> display pkgid <.> "tar.gz"
 
 
 -------------------------------------------------------------------------------
@@ -606,7 +608,9 @@ docsAction _opts args _ = do
     let pkgidAndTarball =
           [ (mpkgid, file)
           | file <- docTarballFiles
-          , let (pkgidstr, ext) = splitExtensions (takeFileName file)
+          , let pkgidstr = (dropExtension . dropExtension. takeFileName) file
+                ext      = takeExtension (dropExtension file)
+                             <.> takeExtension file
                 mpkgid | ext == ".tar.gz" = simpleParse pkgidstr
                        | otherwise        = Nothing ]
 
