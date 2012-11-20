@@ -101,7 +101,7 @@ apiDocPageHtml serverFeatures = hackagePage title content
         renderComponents (DynamicBranch leaf:[])
           | ResourceFormat _ (Just (StaticBranch _)) <- resourceFormat resource
                                                  = "/" +++ leaf
-        renderComponents (DynamicBranch ddir:cs) = "/" +++ emphasize << ("{" ++ ddir ++ "}")
+        renderComponents (DynamicBranch ddir:cs) = "/" +++ emphasize << (":" ++ ddir)
                                                        +++ renderComponents cs
         renderComponents (TrailingBranch    :_ ) = emphasize << "*"
         renderComponents []                      = noHtml
@@ -187,7 +187,7 @@ apiDocJSON serverFeatures = featureList
         renderComponents (DynamicBranch leaf:[])
           | ResourceFormat _ (Just (StaticBranch _)) <- resourceFormat resource
                                                  = "/" ++ leaf
-        renderComponents (DynamicBranch ddir:cs) = "/" ++ "{" ++ ddir ++ "}"
+        renderComponents (DynamicBranch ddir:cs) = "/" ++ ":" ++ ddir
                                                        ++ renderComponents cs
         renderComponents (TrailingBranch    :_ ) = "*"
         renderComponents []                      = ""
