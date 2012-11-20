@@ -17,6 +17,7 @@ import Distribution.Server.Framework.Resource      (Resource)
 --
 data HackageFeature = HackageFeature {
     featureName        :: String,
+    featureDescription :: String,
     featureResources   :: [Resource],
 
     featurePostInit    :: IO (),
@@ -37,6 +38,7 @@ data HackageFeature = HackageFeature {
 emptyHackageFeature :: String -> HackageFeature
 emptyHackageFeature name = HackageFeature {
     featureName        = name,
+    featureDescription = "No feature description available",
     featureResources   = [],
 
     featurePostInit    = return (),

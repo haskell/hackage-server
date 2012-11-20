@@ -9,7 +9,7 @@ import Distribution.Server.Pages.Template (hackagePage)
 
 import Text.XHtml.Strict
          ( Html, (+++), concatHtml, noHtml, toHtml, (<<)
-         , h2, h3, p, tt, emphasize
+         , h2, h3, p, tt, emphasize, br
          , anchor, (!), href, name
          , unordList )
 import Text.JSON
@@ -63,12 +63,14 @@ apiDocPageHtml serverFeatures = hackagePage title content
     featureList =
       concatHtml
         [ anchor ! [ name (featureName feature) ] << h3 << featureName feature
+          +++ p << featureDescription feature
           +++ resourceList feature
         | feature <- serverFeatures ]
 
     resourceList feature =
       unordList
         [     renderLocationTemplate resource
+          +++ p << renderResourceDescription (resourceDescription resource)
           +++ methodList resource
         | resource <- featureResources feature ]
 
@@ -80,6 +82,9 @@ apiDocPageHtml serverFeatures = hackagePage title content
     formatList formats =
       intersperse (toHtml ", ")
         [ tt << format | format <- formats ]
+
+    renderResourceDescription :: [String] -> Html
+    renderResourceDescription desc = p << concatHtml (map (+++ br) desc)
 
     renderLocationTemplate :: Resource -> Html
     renderLocationTemplate resource =
@@ -103,7 +108,7 @@ apiDocPageHtml serverFeatures = hackagePage title content
         renderTrailer _ _                                     = ""
 
 resourceMethodsAndFormats :: Resource -> [(Method, [String])]
-resourceMethodsAndFormats (Resource _ rget rput rpost rdelete _ _) =
+resourceMethodsAndFormats (Resource _ rget rput rpost rdelete _ _ _) =
     [ (httpMethod, [ formatName | (formatName, _) <- handlers ])
     | (handlers@(_:_), httpMethod) <- zip methodsHandlers methodsKinds ]
   where

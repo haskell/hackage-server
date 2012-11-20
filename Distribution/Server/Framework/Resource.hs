@@ -69,16 +69,18 @@ data Resource = Resource {
     -- | The format conventions held by the resource.
     resourceFormat  :: ResourceFormat,
     -- | The trailing slash conventions held by the resource.
-    resourcePathEnd :: BranchEnd
+    resourcePathEnd :: BranchEnd,
+    -- | Human readable description of the resource
+    resourceDescription :: [String]
 }
 -- favors first
 instance Monoid Resource where
-    mempty = Resource [] [] [] [] [] noFormat NoSlash
-    mappend (Resource bpath rget rput rpost rdelete rformat rend)
-            (Resource bpath' rget' rput' rpost' rdelete' rformat' rend') =
+    mempty = Resource [] [] [] [] [] noFormat NoSlash ["No resource description available"]
+    mappend (Resource bpath rget rput rpost rdelete rformat rend desc)
+            (Resource bpath' rget' rput' rpost' rdelete' rformat' rend' desc') =
         Resource (simpleCombine bpath bpath') (ccombine rget rget') (ccombine rput rput')
                    (ccombine rpost rpost') (ccombine rdelete rdelete')
-                   (simpleCombine rformat rformat') (simpleCombine rend rend')
+                   (simpleCombine rformat rformat') (simpleCombine rend rend') (desc ++ desc')
       where ccombine = unionBy ((==) `on` fst)
             simpleCombine xs ys = if null bpath then ys else xs
 
@@ -356,7 +358,7 @@ parseFormatTrunkAt = do
 -- [res "/foo" ["json"], res "/foo/:bar.:format" ["html", "json"], res "/baz/test/.:format" ["html", "text", "json"], res "/package/:package/:tarball.tar.gz" ["tarball"], res "/a/:a/:b/" ["html", "json"], res "/mon/..." [""], res "/wiki/path.:format" [], res "/hi.:format" ["yaml", "blah"]]
 --     where res field formats = (resourceAt field) { resourceGet = map (\format -> (format, \_ -> return . toResponse . (++"\n") . ((show format++" - ")++) . show)) formats }
 serveResource :: Resource -> ServerResponse
-serveResource (Resource _ rget rput rpost rdelete rformat rend) = \dpath -> msum $
+serveResource (Resource _ rget rput rpost rdelete rformat rend _) = \dpath -> msum $
     map (\func -> func dpath) $ methodPart ++ [optionPart]
   where
     optionPart = makeOptions $ concat [ met | ((_:_), met) <- zip methods methodsList]
@@ -464,7 +466,7 @@ serveResource (Resource _ rget rput rpost rdelete rformat rend) = \dpath -> msum
                                               _ -> (pname, "") -- this shouldn't happen
 
 resourceMethods :: Resource -> [Method]
-resourceMethods (Resource _ rget rput rpost rdelete _ _) = [ met | ((_:_), met) <- zip methods methodsList]
+resourceMethods (Resource _ rget rput rpost rdelete _ _ _) = [ met | ((_:_), met) <- zip methods methodsList]
   where methods = [rget, rput, rpost, rdelete]
         methodsList = [GET, PUT, POST, DELETE]
 
