@@ -49,6 +49,10 @@ import Text.JSON as JSON
          ( JSValue(..), toJSObject, toJSString, encodeStrict )
 import qualified Text.CSV as CSV
 
+import Control.Exception
+import Control.Concurrent.Chan
+import Control.Concurrent.Async
+
 import Paths_hackage_server as Paths (version)
 
 --
@@ -393,10 +397,14 @@ putMaintainersInfo baseURI pkgname maintainers =
 -- Tarballs command
 --
 
-data TarballFlags = TarballFlags
+data TarballFlags = TarballFlags {
+    tarballFlagJobs :: Flag String
+  }
 
 defaultTarballFlags :: TarballFlags
-defaultTarballFlags = TarballFlags
+defaultTarballFlags = TarballFlags {
+    tarballFlagJobs = NoFlag
+  }
 
 tarballCommand :: CommandUI TarballFlags
 tarballCommand =
@@ -410,11 +418,22 @@ tarballCommand =
     shortDesc  = "Import package tarballs"
     longDesc   = Just $ \_ ->
                      "The package tarballs can be imported directly from\n"
-                  ++ " local .tar.gz files."
-    options _  = []
+                  ++ " local .tar.gz files.\n"
+    options _  = [ option [] ["jobs"]
+                   "The level of concurrency to use when uploading tarballs"
+                   tarballFlagJobs (\v flags -> flags { tarballFlagJobs = v })
+                   (reqArgFlag "N")
+                 ]
 
 tarballAction :: TarballFlags -> [String] -> GlobalFlags -> IO ()
-tarballAction _opts args _ = do
+tarballAction flags args _ = do
+
+    jobs <- case tarballFlagJobs flags of
+      NoFlag                       -> return 1
+      Flag s | [(n,"")] <- reads s
+             , n >= 1 && n < 10    -> return n
+      Flag s | [(n :: Int,"")] <- reads s -> die "not a sensible number for --jobs"
+             | otherwise           -> die "expected a number for --jobs"
 
     (baseURI, tarballFiles) <- either die return (validateOptsServerURI' args)
 
@@ -432,11 +451,15 @@ tarballAction _opts args _ = do
       files -> die $ "the following files don't match the expected naming "
                   ++ "convention of foo-1.0.tar.gz:\n" ++ unlines files
 
-    httpSession $ do
-      setAuthorityFromURI baseURI
-      sequence_
-        [ putPackageTarball baseURI pkgid tarballFilePath
-        |  (Just pkgid, tarballFilePath) <- pkgidAndTarball ]
+    let pkgidAndTarball' = [ (pkgid, tarballFilePath)
+                           | (Just pkgid, tarballFilePath) <- pkgidAndTarball ]
+
+    concForM_ jobs pkgidAndTarball' $ \tasks ->
+      httpSession $ do
+        setAuthorityFromURI baseURI
+        tasks $ \(pkgid, tarballFilePath) ->
+          putPackageTarball baseURI pkgid tarballFilePath
+
 
 putPackageTarball :: URI -> PackageId -> FilePath -> HttpSession ()
 putPackageTarball baseURI pkgid tarballFilePath = do
@@ -772,4 +795,31 @@ validateOptsServerURI' :: [String] -> Either String (URI, [String])
 validateOptsServerURI' (server:opts) = (\uri -> (uri,opts)) `fmap` validateHttpURI server
 validateOptsServerURI' _             = Left $ "The command expects the target server "
                             ++ "URI e.g. http://admin:admin@localhost:8080/"
+
+-------------------------------------------------------------------------------
+-- Concurrency Utils
+--
+
+concForM_ :: MonadIO m => Int -> [a] -> (((a -> m ()) -> m ()) -> IO ()) -> IO ()
+concForM_ n = flip (concMapM_ n)
+
+concMapM_ :: forall m a. MonadIO m => Int -> (((a -> m ()) -> m ()) -> IO ()) -> [a] -> IO ()
+concMapM_ n action xs = do
+    chan <- newChan
+    writeList2Chan chan (map Just xs ++ replicate n Nothing)
+    bracket
+      (replicateM n (async (worker chan)))
+      (mapM_ cancel)
+      (\as -> waitAny as >> mapM_ wait as)
+  where
+    worker :: Chan (Maybe a) -> IO ()
+    worker chan = action mapMTasks
+      where
+        mapMTasks :: MonadIO m => (a -> m ()) -> m ()
+        mapMTasks process = go
+          where
+            go = do mx <- liftIO $ readChan chan
+                    case mx of
+                      Nothing -> return ()
+                      Just x  -> process x >> go
 

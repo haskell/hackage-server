@@ -262,7 +262,7 @@ executable hackage-import
     network,  HTTP >= 4000.1.3,
     Cabal,
     safecopy, cereal, binary, mtl,
-    json, csv
+    json, csv, async
 
   ghc-options: -Wall -fwarn-tabs
 
