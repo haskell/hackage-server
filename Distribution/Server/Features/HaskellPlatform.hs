@@ -25,7 +25,7 @@ import qualified Data.Set as Set
 
 data PlatformFeature = PlatformFeature {
     platformFeatureInterface :: HackageFeature,
-    
+
     platformResource :: PlatformResource,
 
     platformVersions      :: MonadIO m => PackageName -> m [Version],

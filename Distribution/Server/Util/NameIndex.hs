@@ -81,7 +81,7 @@ lookupPrefix caseName (NameIndex index _ _ _) =
     in Set.unions nameSets
 
 takeSetPrefix :: String -> Set String -> Set String
-takeSetPrefix name strs = 
+takeSetPrefix name strs =
     let (_, present, startSet) = Set.splitMember name strs
         (totalSet, _, _) = Set.splitMember (mapLast succ name) startSet
     in (if present then Set.insert name else id) totalSet

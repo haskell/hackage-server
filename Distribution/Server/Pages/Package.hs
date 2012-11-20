@@ -141,7 +141,7 @@ renderDependencies :: PackageRender -> (String, Html)
 renderDependencies render = ("Dependencies", case htmlDepsList of
     [] -> toHtml "None"
     _  -> foldr (+++) noHtml htmlDepsList)
-  where htmlDepsList = 
+  where htmlDepsList =
             intersperse (toHtml " " +++ bold (toHtml "or") +++ br) $
             map showDependencies (rendDepends render)
 
@@ -193,7 +193,7 @@ renderFields render = [
         ("Author",      toHtml $ author desc),
         ("Maintainer",  maintainField $ rendMaintainer render),
         ("Stability",   toHtml $ stability desc),
-        ("Category",    commaList . map categoryField $ rendCategory render), 
+        ("Category",    commaList . map categoryField $ rendCategory render),
         ("Home page",   linkField $ homepage desc),
         ("Bug tracker", linkField $ bugReports desc),
         ("Source repository", vList $ map sourceRepositoryField $ sourceRepos desc),

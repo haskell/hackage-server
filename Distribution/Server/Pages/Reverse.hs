@@ -3,7 +3,7 @@ module Distribution.Server.Pages.Reverse (
     reverseFlatRender,
     reverseStatsRender,
     reversePackagesRender,
-    reversePackageSummary    
+    reversePackageSummary
   ) where
 
 import Distribution.Server.Features.ReverseDependencies
@@ -116,7 +116,7 @@ reverseFlatRender pkgname packageLink r (ReverseCount total flat _) pairs =
 
 -- /package/:package/reverse/summary
 reverseStatsRender :: PackageName -> [Version] -> (PackageId -> String) -> ReverseResource -> ReverseCount -> [Html]
-reverseStatsRender pkgname allVersions packageLink r (ReverseCount total flat versions) = 
+reverseStatsRender pkgname allVersions packageLink r (ReverseCount total flat versions) =
     h2 << (display pkgname ++ ": reverse dependency statistics"):
   [ case total of
         0 -> paragraph << [ toHtml "No packages depend on ", thisPackage, toHtml "." ]

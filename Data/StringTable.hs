@@ -6,9 +6,9 @@ module Data.StringTable {-(
     lookup,
     index,
     construct,
-    
+
     prop,
-  
+
  )-} where
 
 import Prelude hiding (lookup)
@@ -47,7 +47,7 @@ lookup (StringTable bs tbl) str = binarySearch 0 (topBound-1) (BS.pack str)
           EQ -> Just (toEnum mid)
           GT -> binarySearch (mid+1) b key
       where mid = (a + b) `div` 2
-    
+
 index' :: BS.ByteString -> A.UArray Int Word32 -> Int -> BS.ByteString
 index' bs tbl i = BS.take len . BS.drop start $ bs
   where
@@ -92,9 +92,9 @@ prop strs =
   where
     tbl :: StringTable Int
     tbl = construct strs
-    
+
     lookupIndex str = index tbl ident == str
       where Just ident = lookup tbl str
-    
+
     indexLookup ident = lookup tbl str == Just ident
       where str       = index tbl ident

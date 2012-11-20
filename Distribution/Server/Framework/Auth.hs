@@ -7,7 +7,7 @@
 module Distribution.Server.Framework.Auth (
     -- * Checking authorisation
     guardAuthorised,
-    
+
     -- ** Realms
     RealmName,
     hackageRealm,
@@ -332,7 +332,7 @@ showAuthError want_text (hostname, thePort) err = case err of
     UnrecognizedAuthError -> toResponse "Authorization scheme not recognized."
     NoSuchUserError       -> toResponse "Username or password incorrect."
     PasswordMismatchError -> toResponse "Username or password incorrect."
-    OldAuthError uname 
+    OldAuthError uname
       | want_text -> toResponse $ "Hackage has been upgraded to use more secure passwords. You need login to Hackage and reenter your password at http://" ++ hostname ++ ":" ++ show thePort ++ rel_url
       | otherwise -> toResponse $ Resource.XHtml $ hackagePage "Change password"
           [ toHtml "You haven't logged in since Hackage was upgraded. Please reenter your password below to upgrade your account."

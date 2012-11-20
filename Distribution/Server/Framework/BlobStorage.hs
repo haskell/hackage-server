@@ -105,10 +105,10 @@ hBlobId hnd = evaluate . BlobId . md5 =<< BS.hGetContents hnd
 
 fpBlobId :: FilePath -> IO BlobId
 fpBlobId file =
-    do hnd <- openBinaryFile file ReadMode 
+    do hnd <- openBinaryFile file ReadMode
        blobId <- hBlobId hnd
        hClose hnd
-       return blobId 
+       return blobId
 
 withIncoming :: BlobStorage -> ByteString
               -> (FilePath -> BlobId -> IO (a, Bool))
@@ -129,7 +129,7 @@ withIncoming store content action = do
         removeFile tmpFile
         throwIO (err :: IOError)
 
-withIncomingFile :: BlobStorage 
+withIncomingFile :: BlobStorage
                      -> FilePath
                      -> (FilePath -> BlobId -> IO (a, Bool))
                      -> IO a

@@ -29,7 +29,7 @@ constructTextIndex strs = case go strs 0 of
   where
     go :: [(String, String)] -> Int -> ([ByteString], [(Int, (String, String))])
     go [] _ = ([], [])
-    go (pair@(_, text):xs) pos = 
+    go (pair@(_, text):xs) pos =
         let text' = BS.pack $ "\0" ++ stripText text
         in case go xs (BS.length text' + pos) of
             ~(bs, texts) -> (text':bs, (pos, pair):texts)

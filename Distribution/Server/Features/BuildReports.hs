@@ -50,7 +50,7 @@ data ReportsResource = ReportsResource {
 
 initBuildReportsFeature :: ServerEnv -> UserFeature -> CoreFeature -> IO ReportsFeature
 initBuildReportsFeature env@ServerEnv{serverStateDir} user core = do
-                        
+
     -- Canonical state
     reportsState  <- openLocalStateFrom
                        (serverStateDir </> "db" </> "BuildReports")

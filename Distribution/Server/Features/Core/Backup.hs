@@ -138,7 +138,7 @@ doPackageImport storage packages (("package":pkgStr:rest), bs) = runImport packa
         partial' <- case rest of
             ["uploads.csv"] -> importVersionList "uploads.csv" bs >>= \list ->
                         return $ partial { partialCabalUpload = list }
-            ["tarball.csv"] -> importVersionList "tarball.csv" bs >>= \list -> 
+            ["tarball.csv"] -> importVersionList "tarball.csv" bs >>= \list ->
                         return $ partial {  partialTarballUpload = list }
             [other] | Just version <- extractVersion other (packageName pkgId) ".cabal" ->
                         return $ partial { partialCabal = (version, CabalFileText bs):partialCabal partial }
@@ -164,7 +164,7 @@ doPackageImport _ packages _ = return . Right $ packages
 
 importVersionList :: FilePath -> ByteString -> Import s [(Int, UploadInfo)]
 importVersionList name contents = importCSV name contents $ mapM fromRecord . drop 2
-  where 
+  where
     fromRecord [indexStr, timeStr, idStr] = do
          index <- parseRead "index" indexStr
          utcTime <- parseTime timeStr

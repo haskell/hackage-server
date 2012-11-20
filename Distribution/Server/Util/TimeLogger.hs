@@ -13,7 +13,7 @@ import qualified Data.ByteString.Lazy as BS
 setUpLog :: IO (Chan String)
 setUpLog = do
     ch <- newChan
-    HappsLoad.fork $ withFile "times" AppendMode $ \h -> do 
+    HappsLoad.fork $ withFile "times" AppendMode $ \h -> do
         hSetBuffering h LineBuffering
         forever $ hPutStrLn h =<< readChan ch
     return ch

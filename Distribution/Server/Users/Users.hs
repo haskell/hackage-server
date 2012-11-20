@@ -277,7 +277,7 @@ alterM f k mp = case IntMap.lookup k mp of
 -- error: `Nothing` if the user does not exist and `Just uid` if there is
 -- already a user by that name.
 rename :: Users -> UserId -> UserName -> Either (Maybe UserId) Users
-rename users uid uname = 
+rename users uid uname =
     case Map.lookup uname (userNameMap users) of
         Nothing   -> case modifyUserInfo users uid (\user -> Right $ user { userName = uname }) of
             Left _no_user -> Left Nothing

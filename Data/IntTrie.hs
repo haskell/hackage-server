@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveDataTypeable, TemplateHaskell #-}
 
 module Data.IntTrie (
-  
+
   IntTrie(..),
   construct,
 
@@ -10,7 +10,7 @@ module Data.IntTrie (
   TrieLookup(..),
 
 #ifdef TESTS
-  tests,  
+  tests,
   prop,
 #endif
 
@@ -86,9 +86,9 @@ example2' = Trie [ Node 0 t1 ]
 0: [1,N0,3]
 
   3: [1,N3,6]
-   
+
    6: [2,N1,N2,11,12]
-     
+
      11: [1,4,10608]
      14: [1,4,10612]
 -}
@@ -147,7 +147,7 @@ example3 :: [Word16]
 example3 =
  [1, tagNode 1,
      3,
-  3, tagLeaf 2, tagLeaf 3, tagNode 4, 
+  3, tagLeaf 2, tagLeaf 3, tagNode 4,
      512,       2048,      10,
   1, tagLeaf 5,
      4096

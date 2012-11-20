@@ -28,7 +28,7 @@ data HackageFeature = HackageFeature {
 }
 
 -- | A feature with no state and no resources, just a name.
--- 
+--
 -- Define your new feature by extending this one, e.g.
 --
 -- > myHackageFeature = emptyHackageFeature "wizzo" {

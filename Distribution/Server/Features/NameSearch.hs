@@ -52,7 +52,7 @@ initNamesFeature env core@CoreFeature{..} = do
     pkgCache  <- Cache.newCacheable (emptyNameIndex Nothing)
     textCache <- Cache.newCache (constructTextIndex []) id
     osdCache  <- Cache.newCacheable (toResponse $ Resource.OpenSearchXml $ BS.pack $ mungeSearchXml $ hostUriStr env)
-    
+
     let (feature, regenerateIndices) =
           namesFeature env core
                        pkgCache textCache osdCache
@@ -60,7 +60,7 @@ initNamesFeature env core@CoreFeature{..} = do
     registerHook packageAddHook    $ \_   -> regenerateIndices
     registerHook packageRemoveHook $ \_   -> regenerateIndices
     registerHook packageChangeHook $ \_ _ -> regenerateIndices
-    
+
     return feature
 
 hostUriStr :: ServerEnv -> String

@@ -519,5 +519,5 @@ addServerNode trunk response tree = treeFold trunk (ServerTree (Just response) M
 --This version is greatly simplified compared to what was previously here.
 treeFold :: Monoid a => BranchPath -> ServerTree a -> ServerTree a -> ServerTree a
 treeFold [] newChild topLevel = combine newChild topLevel
-treeFold (sdir:otherTree) newChild topLevel = treeFold otherTree (ServerTree Nothing $ Map.singleton sdir newChild) topLevel 
+treeFold (sdir:otherTree) newChild topLevel = treeFold otherTree (ServerTree Nothing $ Map.singleton sdir newChild) topLevel
 

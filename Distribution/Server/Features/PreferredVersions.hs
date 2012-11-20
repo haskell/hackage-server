@@ -42,7 +42,7 @@ import Text.JSON
 
 data VersionsFeature = VersionsFeature {
     versionsFeatureInterface :: HackageFeature,
-    
+
     queryGetPreferredInfo :: MonadIO m => PackageName -> m PreferredInfo,
     queryGetDeprecatedFor :: MonadIO m => PackageName -> m (Maybe [PackageName]),
 
@@ -96,12 +96,12 @@ initVersionsFeature ServerEnv{serverStateDir} core upload tags = do
 
     preferredHook  <- newHook
     deprecatedHook <- newHook
-    
+
     return $
       versionsFeature core upload tags
                       preferredState
                       preferredHook deprecatedHook
-      
+
 
 versionsFeature :: CoreFeature
                 -> UploadFeature

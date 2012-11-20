@@ -104,7 +104,7 @@ dropPackage distro package dv@DistroVersions{..}
       { packageDistroMap = Map.update pUpdate package packageDistroMap
       , distroMap  = Map.update dUpdate distro distroMap
       }
- where pUpdate infoMap = 
+ where pUpdate infoMap =
            case Map.delete distro infoMap of
              infoMap'
                  -> if Map.null infoMap'

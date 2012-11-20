@@ -79,7 +79,7 @@ documentationFeature ServerEnv{serverBlobStore = store}
           closeAcidState documentationState
       , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
       }
-    
+
     dumpBackup = do
         doc <- query documentationState GetDocumentation
         let exportFunc (pkgid, (blob, _)) = ([display pkgid, "documentation.tar"], Right blob)

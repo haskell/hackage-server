@@ -49,7 +49,7 @@ data UserFeature = UserFeature {
     packageMutate :: Filter (UserId -> IO Bool),
 
     queryGetUserDb    :: forall m. MonadIO m => m Users.Users,
-    
+
     updateAddUser     :: forall m. MonadIO m => UserName -> UserAuth -> m (Either String UserId),
     updateRequireUserName :: forall m. MonadIO m => UserName -> m UserId,
 
@@ -215,7 +215,7 @@ userFeature  usersState adminsState
 
     queryGetUserDb :: MonadIO m => m Users.Users
     queryGetUserDb = query' usersState GetUserDb
-    
+
     updateRequireUserName :: MonadIO m => UserName -> m UserId
     updateRequireUserName uname = update' usersState (RequireUserName uname)
 
@@ -519,7 +519,7 @@ userFeature  usersState adminsState
                                     }
               , getGroup = getGroupFunc
               }
-        return (getGroupFunc, groupr) 
+        return (getGroupFunc, groupr)
 
     handleUserGroupGet group _dpath =
       runServerPartE $
@@ -538,7 +538,7 @@ userFeature  usersState adminsState
 
     handleUserGroupUserPut group groupr dpath =
       runServerPartE $
-      withGroup group $ \g -> 
+      withGroup group $ \g ->
         withUserNamePath dpath $ \uname -> do
 
           -- check the acting user is authorised to modify this group

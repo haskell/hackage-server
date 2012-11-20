@@ -23,7 +23,7 @@ import Data.SafeCopy
 
 ------------------------------------------------------
 -- | The information we keep about a candidate package.
--- 
+--
 -- It's currently possible to have candidates for packages which don't exist yet.
 --
 data CandPkgInfo = CandPkgInfo {

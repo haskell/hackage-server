@@ -44,7 +44,7 @@ restoreBackup distrosState = updateDistros distrosState Distros.emptyDistributio
 updateDistros :: AcidState Distros -> Distributions -> DistroVersions -> Map DistroName UserList -> RestoreBackup
 updateDistros distrosState distros versions maintainers = fix $ \restorer -> RestoreBackup
       { restoreEntry = \(path, bs) -> do
-            case path of          
+            case path of
               ["package", distro] | takeExtension distro == ".csv" -> do
                 res <- runImport (distros, versions) (importDistro distro bs)
                 case res of

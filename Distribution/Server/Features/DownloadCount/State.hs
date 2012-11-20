@@ -59,7 +59,7 @@ incrementCounts day pkgname version count (DownloadCounts total perPackage) =
       (adjustFrom (incrementInfo day version count) pkgname emptyDownloadInfo perPackage)
 
 incrementInfo :: Day -> Version -> Int -> DownloadInfo -> DownloadInfo
-incrementInfo day version count (DownloadInfo perMonth perDay total) = 
+incrementInfo day version count (DownloadInfo perMonth perDay total) =
     DownloadInfo
       (adjustFrom (incrementPackage version count) (fromIntegral year, month) emptyPackageDownloads perMonth)
       (adjustFrom (incrementPackage version count) day emptyPackageDownloads perDay)

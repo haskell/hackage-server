@@ -22,7 +22,7 @@ data TarIndexMap = M {indexMap :: Map.Map BlobId TarIndex}
  deriving (Typeable, Show)
 
 addIndex :: BlobId -> TarIndex -> Update TarIndexMap ()
-addIndex blob index = modify $ insertTarIndex blob index 
+addIndex blob index = modify $ insertTarIndex blob index
 
 insertTarIndex :: BlobId -> TarIndex -> TarIndexMap -> TarIndexMap
 insertTarIndex blob index (M state) = M (Map.insert blob index state)

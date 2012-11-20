@@ -59,7 +59,7 @@ buildReportDetail report reportId buildLog = hackagePage title body
             | (name, field) <- showFields
             , let value = field report
             , not (isNoHtml value) ]
-    
+
     buildLogPara = p << [ ulist << [li << buildLogLink]]
     buildLogLink = case buildLog of
       Nothing -> toHtml "No build log available"

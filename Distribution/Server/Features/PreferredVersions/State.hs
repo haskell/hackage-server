@@ -37,7 +37,7 @@ emptyPreferredInfo :: PreferredInfo
 emptyPreferredInfo = PreferredInfo [] [] Nothing
 
 consolidateRanges :: [VersionRange] -> [Version] -> Maybe VersionRange
-consolidateRanges ranges depr = 
+consolidateRanges ranges depr =
     let range = simplifyVersionRange $ foldr intersectVersionRanges anyVersion (map notThisVersion depr ++ ranges)
     in if isAnyVersion range || isNoVersion range
         then Nothing
@@ -159,7 +159,7 @@ function is partial. Use maybeBestVersion for a safe check.
 
 -}
 findBestVersion :: PreferredInfo -> [Version] -> Set Version -> (Version, Maybe VersionStatus)
-findBestVersion info allVersions versions = 
+findBestVersion info allVersions versions =
     let topStatus = getVersionStatus info maxVersion
     in if maxAllVersion == maxVersion && topStatus == NormalVersion
         then (maxVersion, Just NormalVersion) -- most common case
@@ -175,7 +175,7 @@ findBestVersion info allVersions versions =
     infoMap = Map.fromDistinctAscList $ classifyVersions info allVersions
 
     newSearch (v:vs) _ = case infoMap Map.! v of
-        NormalVersion | v == maxAllVersion -> (v, (NormalVersion, True)) 
+        NormalVersion | v == maxAllVersion -> (v, (NormalVersion, True))
         NormalVersion -> oldSearch vs (v, (NormalVersion, False))
         DeprecatedVersion -> newSearch vs (v, (DeprecatedVersion, True))
         UnpreferredVersion -> oldSearch vs (v, (UnpreferredVersion, True))

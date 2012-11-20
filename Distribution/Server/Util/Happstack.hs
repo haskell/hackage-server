@@ -56,7 +56,7 @@ runServerPartT_hack rq mx
 
 -- |Passes a list of remaining path segments in the URL. Does not
 -- include the query string. This call only fails if the passed in
--- handler fails. 
+-- handler fails.
 remainingPath :: Monad m => ([String] -> ServerPartT m a) -> ServerPartT m a
 remainingPath handle = do
     rq <- askRq

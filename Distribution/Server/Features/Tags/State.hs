@@ -134,7 +134,7 @@ deleteTag :: Tag -> PackageTags -> PackageTags
 deleteTag tag = alterTag tag Nothing
 
 renameTag :: Tag -> Tag -> PackageTags -> PackageTags
-renameTag tag tag' pkgTags@(PackageTags _ packages) = 
+renameTag tag tag' pkgTags@(PackageTags _ packages) =
     let oldPkgs = Map.findWithDefault Set.empty tag packages
     in setTag tag' oldPkgs . deleteTag tag $ pkgTags
 -------------------------------------------------------------------------------
@@ -144,7 +144,7 @@ $(deriveSafeCopy 0 'base ''PackageTags)
 
 instance NFData PackageTags where
     rnf (PackageTags a b) = rnf a `seq` rnf b
- 
+
 initialPackageTags :: PackageTags
 initialPackageTags = emptyPackageTags
 

@@ -14,7 +14,7 @@ import Distribution.Text
 import Data.Maybe
 
 renderGroupName :: GroupDescription -> Maybe String -> Html
-renderGroupName desc murl = 
+renderGroupName desc murl =
     maybeUrl (groupTitle desc) murl
       +++
     maybe noHtml (\(for, mfor) -> " for " +++ maybeUrl for mfor) (groupEntity desc)

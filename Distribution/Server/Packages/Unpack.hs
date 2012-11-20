@@ -238,7 +238,7 @@ checkTarFilePath pkgid entry
   | not (all (/= "..") dirs)
   = Just $ "Bad file name in package tarball: " ++ quote (Tar.entryPath entry)
         ++ "\nFor security reasons, files in package tarballs may not use"
-        ++ " \"..\" components in their path." 
+        ++ " \"..\" components in their path."
   | not (inPkgSubdir dirs)
   = Just $ "Bad file name in package tarball: " ++ quote (Tar.entryPath entry)
         ++ "\nAll the file in the package tarball must be in the subdirectory "

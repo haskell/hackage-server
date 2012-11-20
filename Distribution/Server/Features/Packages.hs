@@ -99,7 +99,7 @@ packagesFeature ServerEnv{serverBlobStore=store}
     packagesResource = PackagesResource
       { packagesRecent = (resourceAt "/recent.:format") { resourceGet = [("html", const $ liftM fst $ Cache.getCacheableAction cacheRecent), ("rss", const $ liftM snd $ Cache.getCacheableAction cacheRecent)] }
       }
-    
+
     packageRender pkg = do
       users <- queryGetUserDb
       doPackageRender store users pkg

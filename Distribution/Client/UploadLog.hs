@@ -85,7 +85,7 @@ collectUploadInfo =
   where
     entryPackageId (Entry _  _ pkgid) = pkgid
     entryTime      (Entry t  _ _)     = t
-    
+
     uploadInfo :: [Entry] -> (PackageId, UTCTime, UserName)
     uploadInfo entries =
       case last entries of
@@ -98,7 +98,7 @@ collectMaintainerInfo =
   . sortBy (comparing entryPackageName)
   where
     entryPackageName (Entry _  _ pkgid) = packageName pkgid
-    
+
     maintainersInfo :: [Entry] -> (PackageName, [UserName])
     maintainersInfo entries =
         (packageName pkgid, maintainers)

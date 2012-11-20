@@ -45,7 +45,7 @@ setEnabledUser :: UserId -> Bool -> Update Users (Maybe String)
 setEnabledUser uid en = updateUsers $ Users.setEnabled en uid
 
 -- Deletes the indicated user. Cannot be re-enabled. The associated
--- user name is available for re-use 
+-- user name is available for re-use
 deleteUser :: UserId -> Update Users (Maybe String)
 deleteUser = updateUsers . Users.delete
 
@@ -160,7 +160,7 @@ removeMirrorClient uid = modifyMirrorClients (Group.remove uid)
 
 replaceMirrorClients :: UserList -> Update MirrorClients ()
 replaceMirrorClients ulist = modifyMirrorClients (const ulist)
-     
+
 initialMirrorClients :: MirrorClients
 initialMirrorClients = MirrorClients Group.empty
 

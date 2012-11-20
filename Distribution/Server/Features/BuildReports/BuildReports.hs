@@ -85,7 +85,7 @@ lookupPackageReports pkgid buildReports = case Map.lookup pkgid (reportsIndex bu
 -------------------------
 -- PackageIds should /not/ have empty Versions. Caller should ensure this.
 addReport :: PackageId -> (BuildReport, Maybe BuildLog) -> BuildReports -> (BuildReports, BuildReportId)
-addReport pkgid report buildReports = 
+addReport pkgid report buildReports =
     let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
         reportId    = nextReportId pkgReports
         pkgReports' = PkgBuildReports { reports = Map.insert reportId report (reports pkgReports)
@@ -144,5 +144,5 @@ instance Serialize PkgBuildReports where
             nextReportId = if Map.null listing
                               then BuildReportId 1
                               else incrementReportId (fst $ Map.findMax listing)
-        } 
+        }
 

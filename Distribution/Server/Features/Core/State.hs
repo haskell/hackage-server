@@ -35,7 +35,7 @@ initialPackagesState = PackagesState {
 insertPkgIfAbsent :: PkgInfo -> Update PackagesState Bool
 insertPkgIfAbsent pkg = do
     pkgsState <- State.get
-    case PackageIndex.lookupPackageId (packageList pkgsState) (packageId pkg) of   
+    case PackageIndex.lookupPackageId (packageList pkgsState) (packageId pkg) of
         Nothing -> do State.put $ pkgsState { packageList = PackageIndex.insert pkg (packageList pkgsState) }
                       return True
         Just{}  -> do return False

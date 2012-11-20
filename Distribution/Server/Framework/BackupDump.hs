@@ -62,7 +62,7 @@ readExportBlobs :: BlobStorage -> [ExportEntry] -> IO [BackupEntry]
 readExportBlobs storage entries = forM entries $ \(path, export) ->
     case export of
         Left bs -> return (path, bs)
-        Right blobId -> do 
+        Right blobId -> do
             contents <- unsafeInterleaveIO $ Blob.fetch storage blobId
             return (path, contents)
 
@@ -93,7 +93,7 @@ mkBaseDir time = "export-" ++ formatTime defaultTimeLocale (iso8601DateFormat No
    before we need to.
 -}
 unsafeInterleaveConcatMap :: (a -> IO [b]) -> [a] -> IO [b]
-unsafeInterleaveConcatMap f = go 
+unsafeInterleaveConcatMap f = go
   where
     go [] = return []
     go (x:xs) = do

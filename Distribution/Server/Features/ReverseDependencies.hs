@@ -91,11 +91,11 @@ initReverseFeature _ core _ = do
         sortedRevs = fmap (sortBy $ on (flip compare) select) revSummary
     revTopCache <- Cache.newCacheable =<< sortedRevs
     registerHook revHook $ \_ -> Cache.putCache revTopCache =<< sortedRevs
-    
+
     return $
       reverseFeature core
                      revChan revHook revTopCache
-      
+
 reverseFeature :: CoreFeature
                -> Chan (IO (Map PackageName [Version]))
                -> Hook (Map PackageName [Version] -> IO ())

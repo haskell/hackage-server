@@ -261,7 +261,7 @@ mkPackageHasDocs opts config = do
         case validatePackageIds pkgstrs of
             Left theError -> die theError
             Right pkgs -> return (S.fromList pkgs)
-    
+
     writeBuiltCache :: FilePath -> S.Set PackageId -> IO ()
     writeBuiltCache cache_dir pkgs = writeFile (cache_dir </> "built") $ unlines $ map display $ S.toList pkgs
 

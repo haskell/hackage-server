@@ -2,14 +2,14 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, DeriveDataTypeable, TemplateHaskell #-}
 
 module Data.TarIndex {-(
-  
+
     TarIndex,
     TarIndexEntry(..),
     TarEntryOffset,
-      
+
     lookup,
     construct,
-    
+
     prop_lookup, prop,
 
   )-} where
@@ -103,7 +103,7 @@ toComponentIds table = lookupComponents [] . FilePath.splitDirectories
     lookupComponents cs' (c:cs) = case StringTable.lookup table c of
       Nothing  -> Nothing
       Just cid -> lookupComponents (cid:cs') cs
-      
+
 fromComponentIds :: StringTable PathComponentId -> [PathComponentId] -> FilePath
 fromComponentIds table = FilePath.joinPath . map (StringTable.index table)
 

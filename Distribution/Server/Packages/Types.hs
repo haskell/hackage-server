@@ -44,7 +44,7 @@ instance Show CabalFileText where
     show cft = "CabalFileText (Data.ByteString.Lazy.Char8.pack (Distribution.Simple.Utils.toUTF8 " ++ show (cabalFileString cft) ++ "))"
 
 -- | The information we keep about a particular version of a package.
--- 
+--
 -- Previous versions of this package name and version may exist as well.
 -- We normally disallow re-uploading but may make occasional exceptions.
 data PkgInfo = PkgInfo {

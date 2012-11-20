@@ -110,7 +110,7 @@ initHtmlFeature enableCaches _env
                           mirror distros docs
                           mainCache namesCache
         namesCache <- Cache.newCacheableAction enableCaches packagesPage
-    
+
     registerHook itemUpdate $ \_ -> Cache.refreshCacheableAction namesCache
     registerHook packageIndexChange $ Cache.refreshCacheableAction mainCache
 

@@ -3,7 +3,7 @@
 module Distribution.Server.Features.ReverseDependencies.State where
 
 import Distribution.Server.Packages.Types
-import Distribution.Server.Packages.State ()    
+import Distribution.Server.Packages.State ()
 import Distribution.Server.Packages.Preferred
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
@@ -38,7 +38,7 @@ type RevDeps = Map PackageName (Map Version (Map PackageName (Set Version)), Map
 type CombinedDeps = Map PackageName VersionRange
 
 -- TODO: should this be (Maybe (Version, Maybe VersionStatus))?
--- it should be possible, albeit with a bit more work, to determine all revdeps 
+-- it should be possible, albeit with a bit more work, to determine all revdeps
 -- of a package which don't have any versions presently satisfying them.
 -- (for an entry (a, b) of RevDeps, take (union a \ b))
 type ReverseDisplay = Map PackageName (Version, Maybe VersionStatus)
@@ -72,7 +72,7 @@ emptyReverseCount :: ReverseCount
 emptyReverseCount = ReverseCount 0 0 Map.empty
 
 constructReverseIndex :: PackageIndex PkgInfo -> ReverseIndex
-constructReverseIndex index = 
+constructReverseIndex index =
     let deps = constructRevDeps index
     in updateReverseCount $ emptyReverseIndex {
         duplicatedIndex = constructDupIndex index,
@@ -142,7 +142,7 @@ getAllVersions index = map packageVersion . PackageIndex.lookupPackageName index
 
 -- | Given a package id, modify the entries of the package's dependencies in
 -- the reverse dependencies mapping to include it.
-registerPackage :: (PackageName -> [Version])       
+registerPackage :: (PackageName -> [Version])
                 -> PackageId -> CombinedDeps
                 -> RevDeps -> (RevDeps, Map PackageName [Version])
 registerPackage getVersions (PackageIdentifier name version) ranges revs =
@@ -193,7 +193,7 @@ unregisterPackage getVersions (PackageIdentifier name version) ranges revs =
                         keepSet $ Set.difference g h)
                     e f)
                 a c
-              , Map.differenceWith (\e f -> 
+              , Map.differenceWith (\e f ->
                     keepMap $ Map.difference e f)
                 b d
               )) prev (Map.singleton pkgname (revPackage, revRange))
@@ -221,7 +221,7 @@ selectVersions range versions= filter (flip withinRange range) versions
 -- imprecise but mostly good enough (a slightly better heuristic might be
 -- intersecting within a block, but unioning blocks together).
 getAllDependencies :: PkgInfo -> CombinedDeps
-getAllDependencies pkg = 
+getAllDependencies pkg =
     let desc = pkgDesc pkg
     in Map.fromListWith unionVersionRanges $ toDepsList (maybeToList $ condLibrary desc)
                                           ++ toDepsList (map snd $ condExecutables desc)
@@ -281,7 +281,7 @@ constructPackageReverse indexFunc revs =
         return (pkg, rev)
 
 constructVersionReverse :: VersionIndex -> RevDeps -> Map PackageId ReverseDisplay
-constructVersionReverse indexFunc revs = 
+constructVersionReverse indexFunc revs =
     Map.fromList $ do
         pkg <- getNodes =<< Map.toList revs
         rev <- maybeToList . keepMap $ perVersionReverse indexFunc revs pkg
@@ -310,7 +310,7 @@ updateReverseDisplay indexFunc pkgname versions revDisplay =
 -- In this case, the RevDeps data structure hasn't changed.
 
 updatePackageReverse :: VersionIndex -> PackageName -> [PackageName] -> RevDeps -> Map PackageName ReverseDisplay -> Map PackageName ReverseDisplay
-updatePackageReverse indexFunc updated deps revs nameMap = 
+updatePackageReverse indexFunc updated deps revs nameMap =
     foldl' (\revd pkg -> Map.alter (alterRevDisplay pkg . fromMaybe Map.empty) pkg revd) nameMap deps
   where
     lookupVersions :: PackageName -> Set Version

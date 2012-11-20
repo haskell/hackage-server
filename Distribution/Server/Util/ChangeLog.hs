@@ -29,7 +29,7 @@ import Text.PrettyPrint.HughesPJ (render)
 import System.FilePath ((</>))
 
 lookupTarball :: BlobStorage -> PkgInfo -> Maybe (IO (FilePath, TarIndex.TarIndex))
-lookupTarball store pkgInfo = 
+lookupTarball store pkgInfo =
     case pkgTarball pkgInfo of
         [] -> Nothing
         ((tb, _):_) -> Just $

@@ -85,7 +85,7 @@ data UserGroup = UserGroup {
 }
 
 -- | A displayable description for a user group.
--- 
+--
 -- Given a groupTitle of A and a group entity of Nothing, the group will be
 -- called "A"; given a groupTitle  of "A" and a groupEntity of Just ("B",
 -- Just "C"), the title will be displayed as "A for <a href=C>B</a>".
