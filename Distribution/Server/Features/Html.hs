@@ -153,94 +153,200 @@ htmlFeature UserFeature{..} CoreFeature{..}
                         Cache.refreshCacheableAction cacheNamesPage
 
     -- pages defined for the HTML feature in particular
-    editDeprecated  = (resourceAt "/package/:package/deprecated/edit") { resourceGet = [("html", serveDeprecateForm)] }
-    editPreferred   = (resourceAt "/package/:package/preferred/edit") { resourceGet = [("html", servePreferForm)] }
-    maintainPackage = (resourceAt "/package/:package/maintain") { resourceGet = [("html", serveMaintainLinks editDeprecated editPreferred $
-packageGroupResource uploads)] }
-    pkgCandUploadForm = (resourceAt "/package/:package/candidate/upload") { resourceGet = [("html", servePackageCandidateUpload)] }
-    candMaintainForm = (resourceAt "/package/:package/candidate/maintain") { resourceGet = [("html", serveCandidateMaintain)] }
-    tagEdit = (resourceAt "/package/:package/tags/edit") { resourceGet = [("html", serveTagsForm)] }
+    editDeprecated    = (resourceAt "/package/:package/deprecated/edit") {
+                            resourceGet = [("html", serveDeprecateForm)]
+                          }
+    editPreferred     = (resourceAt "/package/:package/preferred/edit") {
+                            resourceGet = [("html", servePreferForm)]
+                          }
+    pkgCandUploadForm = (resourceAt "/package/:package/candidate/upload") {
+                            resourceGet = [("html", servePackageCandidateUpload)]
+                          }
+    candMaintainForm  = (resourceAt "/package/:package/candidate/maintain") {
+                            resourceGet = [("html", serveCandidateMaintain)]
+                          }
+    tagEdit           = (resourceAt "/package/:package/tags/edit") {
+                            resourceGet = [("html", serveTagsForm)]
+                          }
+    maintainPackage   = (resourceAt "/package/:package/maintain") {
+                            resourceGet = [("html", serveMaintainLinks editDeprecated editPreferred $ packageGroupResource uploads)]
+                          }
 
-    htmlResources =
-        -- core
-         [ (extendResource $ corePackagePage cores) { resourceGet = [("html", servePackagePage)] }
-         --, (extendResource $ coreIndexPage cores) { resourceGet = [("html", serveIndexPage)] }, currently in 'core' feature
-         , (resourceAt "/packages/names" ) { resourceGet = [("html", const $ Cache.getCacheableAction cacheNamesPage)] }
-         , (extendResource $ corePackagesPage cores) { resourceGet = [("html", const $ Cache.getCacheableAction cachePackagesPage)] }
-         , maintainPackage
-        -- users
-         , (extendResource $ userList users) { resourceGet = [("html", serveUserList)], resourcePost = [("html", \_ -> htmlResponse $ adminAddUser)] }
-            -- list of users with user links; if admin, a link to add user page
-         , (resourceAt "/users/register") { resourceGet = [("html", addUserForm)] }
-            -- form to post to /users/
-         , (extendResource $ userPage users) { resourceGet = [("html", serveUserPage)], resourceDelete = [("html", serveDeleteUser)] }
-            -- user page with link to password form and list of groups (how to do this?)
-         , (extendResource $ passwordResource users) { resourceGet = [("html", servePasswordForm)], resourcePut = [("html", servePutPassword)] }
-            -- form to PUT password
-         , (extendResource $ enabledResource users) { resourceGet = [("html", serveEnabledForm)], resourcePut = [("html", servePutEnabled)] }
-            -- form to enable or disable users (admin only)
+    htmlResources = [
+      -- Core
+        (extendResource $ corePackagePage cores) {
+            resourceGet = [("html", servePackagePage)]
+          }
+      {-
+      , (extendResource $ coreIndexPage cores) {
+            resourceGet = [("html", serveIndexPage)]
+          }, currently in 'core' feature
+      -}
+      , (resourceAt "/packages/names" ) {
+            resourceGet = [("html", const $ Cache.getCacheableAction cacheNamesPage)]
+          }
+      , (extendResource $ corePackagesPage cores) {
+            resourceGet = [("html", const $ Cache.getCacheableAction cachePackagesPage)]
+          }
+      , maintainPackage
 
-        -- uploads
-         , (extendResource $ uploadIndexPage uploads) { resourcePost = [("html", serveUploadResult)] }
-            -- serve upload result as HTML
-         , (resourceAt "/packages/upload") { resourceGet = [("html", serveUploadForm)] }
-            -- form for uploading
+      -- users
+        -- list of users with user links; if admin, a link to add user page
+      , (extendResource $ userList users) {
+            resourceGet  = [("html", serveUserList)]
+          , resourcePost = [("html", \_ -> htmlResponse $ adminAddUser)]
+          }
+        -- form to post to /users/
+      , (resourceAt "/users/register") {
+             resourceGet = [("html", addUserForm)]
+          }
+        -- user page with link to password form and list of groups (how to do this?)
+      , (extendResource $ userPage users) {
+            resourceGet    = [("html", serveUserPage)]
+          , resourceDelete = [("html", serveDeleteUser)]
+          }
+        -- form to PUT password
+      , (extendResource $ passwordResource users) {
+            resourceGet = [("html", servePasswordForm)]
+          , resourcePut = [("html", servePutPassword)]
+          }
+        -- form to enable or disable users (admin only)
+      , (extendResource $ enabledResource users) {
+            resourceGet = [("html", serveEnabledForm)]
+          , resourcePut = [("html", servePutEnabled)]
+          }
 
-        -- checks
-         , (extendResource $ candidatesPage checks) { resourceGet = [("html", serveCandidatesPage)], resourcePost = [("html", \_ -> htmlResponse $ postCandidate)] }
-            -- list of all packages which have candidates
-         , (extendResource $ packageCandidatesPage checks) { resourceGet = [("html", servePackageCandidates pkgCandUploadForm)], resourcePost = [("", htmlResponse . postPackageCandidate)] }
-            -- TODO: use custom functions, not htmlResponse
-         , (extendResource $ candidatePage checks) { resourceGet = [("html", serveCandidatePage candMaintainForm)], resourcePut = [("html", htmlResponse . putPackageCandidate)], resourceDelete = [("html", htmlResponse . doDeleteCandidate)] }
-            -- package page for a candidate
-         , (resourceAt "/packages/candidates/upload") { resourceGet = [("html", serveCandidateUploadForm)] }
-            -- form for uploading candidate
-         , pkgCandUploadForm
-            -- form for uploading candidate for a specific package version
-         , candMaintainForm
-            -- maintenance for candidate packages
-         , (extendResource $ publishPage checks) { resourceGet = [("html", servePublishForm)], resourcePost = [("html", servePostPublish)] }
-            -- form for publishing package
-        -- TODO: write HTML for reports and distros to display the information effectively
-        -- reports
-         --, (extendResource $ reportsList reports) { resourceGet = [("html", serveReportsList)] }
-         --, (extendResource $ reportsPage reports) { resourceGet = [("html", serveReportsPage)] }
+      -- uploads
+        -- serve upload result as HTML
+      , (extendResource $ uploadIndexPage uploads) {
+            resourcePost = [("html", serveUploadResult)]
+          }
+        -- form for uploading
+      , (resourceAt "/packages/upload") {
+            resourceGet = [("html", serveUploadForm)]
+          }
 
-        -- distros
-         --, (extendResource $ distroIndexPage distros) { resourceGet = [("html", serveDistroIndex)] }
-         --, (extendResource $ distroAllPage distros) { resourceGet = [("html", serveDistroPackages)] }
-         --, (extendResource $ distroPackage distros) { resourceGet = [("html", serveDistroPackage)] }
-        -- preferred versions
-          , editDeprecated
-          , editPreferred
-          , (extendResource $ preferredResource versions) { resourceGet = [("html", servePreferredSummary)] }
-          , (extendResource $ preferredPackageResource versions) { resourceGet = [("html", servePackagePreferred editPreferred)], resourcePut = [("html", servePutPreferred)] }
-          , (extendResource $ deprecatedResource versions) { resourceGet = [("html", serveDeprecatedSummary)]  }
-          , (extendResource $ deprecatedPackageResource versions) { resourceGet = [("html", servePackageDeprecated editDeprecated)], resourcePut = [("html", servePutDeprecated )] }
-        {- [reverse index disabled]
-        -- reverse
-          , (extendResource $ reversePackage reverses) { resourceGet = [("html", serveReverse True)] }
-          , (extendResource $ reversePackageOld reverses) { resourceGet = [("html", serveReverse False)] }
-          , (extendResource $ reversePackageAll reverses) { resourceGet = [("html", serveReverseFlat)] }
-          , (extendResource $ reversePackageStats reverses) { resourceGet = [("html", serveReverseStats)] }
-          , (extendResource $ reversePackages reverses) { resourceGet = [("html", serveReverseList)] }
-          -}
-        -- downloads
-          , (extendResource $ topDownloads downs) { resourceGet = [("html", serveDownloadTop)] }
-        -- tags
-          , (extendResource $ tagsListing tags) { resourceGet = [("html", serveTagsListing)] }
-          , (extendResource $ tagListing tags) { resourceGet = [("html", serveTagListing)] }
-          , (extendResource $ packageTagsListing tags) { resourcePut = [("html", putPackageTags)], resourceGet = [] }
-          , tagEdit -- (extendResource $ packageTagsEdit tags) { resourceGet = [("html", serveTagsForm)] }
-        -- search
-          , (extendResource $ findPackageResource names) { resourceGet = [("html", servePackageFind)] }
-         ]
-        -- and user groups. package maintainers, trustees, admins
-        ++ htmlGroupResource (packageGroupResource uploadResource)
-        ++ htmlGroupResource (trusteeResource uploadResource)
-        ++ htmlGroupResource (uploaderResource uploadResource)
-        ++ htmlGroupResource (adminResource userResource)
-        ++ htmlGroupResource (mirrorGroupResource mirrorResource)
+      -- checks
+        -- list of all packages which have candidates
+      , (extendResource $ candidatesPage checks) {
+            resourceGet  = [("html", serveCandidatesPage)]
+          , resourcePost = [("html", \_ -> htmlResponse $ postCandidate)]
+          }
+        -- TODO: use custom functions, not htmlResponse
+      , (extendResource $ packageCandidatesPage checks) {
+            resourceGet  = [("html", servePackageCandidates pkgCandUploadForm)]
+          , resourcePost = [("", htmlResponse . postPackageCandidate)]
+          }
+        -- package page for a candidate
+      , (extendResource $ candidatePage checks) {
+            resourceGet    = [("html", serveCandidatePage candMaintainForm)]
+          , resourcePut    = [("html", htmlResponse . putPackageCandidate)]
+          , resourceDelete = [("html", htmlResponse . doDeleteCandidate)]
+          }
+        -- form for uploading candidate
+      , (resourceAt "/packages/candidates/upload") {
+            resourceGet = [("html", serveCandidateUploadForm)]
+          }
+        -- form for uploading candidate for a specific package version
+      , pkgCandUploadForm
+        -- maintenance for candidate packages
+      , candMaintainForm
+        -- form for publishing package
+      , (extendResource $ publishPage checks) {
+           resourceGet = [("html", servePublishForm)]
+         , resourcePost = [("html", servePostPublish)]
+         }
+
+      -- TODO: write HTML for reports and distros to display the information
+      -- effectively reports
+      {-
+      , (extendResource $ reportsList reports) {
+            resourceGet = [("html", serveReportsList)]
+          }
+      , (extendResource $ reportsPage reports) {
+            resourceGet = [("html", serveReportsPage)]
+          }
+      -}
+
+      -- distros
+      {-
+      , (extendResource $ distroIndexPage distros) {
+            resourceGet = [("html", serveDistroIndex)]
+          }
+      , (extendResource $ distroAllPage distros) {
+            resourceGet = [("html", serveDistroPackages)]
+          }
+      , (extendResource $ distroPackage distros) {
+            resourceGet = [("html", serveDistroPackage)]
+          }
+      -}
+
+      -- preferred versions
+      , editDeprecated
+      , editPreferred
+      , (extendResource $ preferredResource versions) {
+            resourceGet = [("html", servePreferredSummary)]
+          }
+      , (extendResource $ preferredPackageResource versions) {
+            resourceGet = [("html", servePackagePreferred editPreferred)]
+          , resourcePut = [("html", servePutPreferred)]
+          }
+      , (extendResource $ deprecatedResource versions) {
+            resourceGet = [("html", serveDeprecatedSummary)]
+          }
+      , (extendResource $ deprecatedPackageResource versions) {
+            resourceGet = [("html", servePackageDeprecated editDeprecated)]
+          , resourcePut = [("html", servePutDeprecated )]
+          }
+
+      -- reverse index (disabled)
+      {-
+      , (extendResource $ reversePackage reverses) {
+            resourceGet = [("html", serveReverse True)]
+          }
+      , (extendResource $ reversePackageOld reverses) {
+            resourceGet = [("html", serveReverse False)]
+          }
+      , (extendResource $ reversePackageAll reverses) {
+            resourceGet = [("html", serveReverseFlat)]
+          }
+      , (extendResource $ reversePackageStats reverses) {
+            resourceGet = [("html", serveReverseStats)]
+          }
+      , (extendResource $ reversePackages reverses) {
+            resourceGet = [("html", serveReverseList)]
+          }
+      -}
+
+      -- downloads
+      , (extendResource $ topDownloads downs) {
+            resourceGet = [("html", serveDownloadTop)]
+          }
+
+      -- tags
+      , (extendResource $ tagsListing tags) {
+            resourceGet = [("html", serveTagsListing)]
+          }
+      , (extendResource $ tagListing tags) {
+            resourceGet = [("html", serveTagListing)]
+          }
+      , (extendResource $ packageTagsListing tags) {
+            resourcePut = [("html", putPackageTags)], resourceGet = []
+          }
+      , tagEdit -- (extendResource $ packageTagsEdit tags) { resourceGet = [("html", serveTagsForm)] }
+
+      -- search
+      , (extendResource $ findPackageResource names) {
+            resourceGet = [("html", servePackageFind)]
+          }
+      ]
+
+      -- and user groups. package maintainers, trustees, admins
+      ++ htmlGroupResource (packageGroupResource uploadResource)
+      ++ htmlGroupResource (trusteeResource uploadResource)
+      ++ htmlGroupResource (uploaderResource uploadResource)
+      ++ htmlGroupResource (adminResource userResource)
+      ++ htmlGroupResource (mirrorGroupResource mirrorResource)
 
     -- resources to extend
     cores = coreResource
