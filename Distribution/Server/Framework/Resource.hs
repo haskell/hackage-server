@@ -59,23 +59,24 @@ data Resource = Resource {
     -- | The location in a form which can be added to a ServerTree.
     resourceLocation :: BranchPath,
     -- | Handlers for GET requests for different content-types
-    resourceGet    :: [(Content, ServerResponse)],
+    resourceGet      :: [(Content, ServerResponse)],
     -- | Handlers for PUT requests
-    resourcePut    :: [(Content, ServerResponse)],
+    resourcePut      :: [(Content, ServerResponse)],
     -- | Handlers for POST requests
-    resourcePost   :: [(Content, ServerResponse)],
+    resourcePost     :: [(Content, ServerResponse)],
     -- | Handlers for DELETE requests
-    resourceDelete :: [(Content, ServerResponse)],
+    resourceDelete   :: [(Content, ServerResponse)],
     -- | The format conventions held by the resource.
-    resourceFormat  :: ResourceFormat,
+    resourceFormat   :: ResourceFormat,
     -- | The trailing slash conventions held by the resource.
-    resourcePathEnd :: BranchEnd,
+    resourcePathEnd  :: BranchEnd,
     -- | Human readable description of the resource
-    resourceDescription :: [String]
-}
+    resourceDesc     :: [String]
+  }
+
 -- favors first
 instance Monoid Resource where
-    mempty = Resource [] [] [] [] [] noFormat NoSlash ["No resource description available"]
+    mempty = Resource [] [] [] [] [] noFormat NoSlash []
     mappend (Resource bpath rget rput rpost rdelete rformat rend desc)
             (Resource bpath' rget' rput' rpost' rdelete' rformat' rend' desc') =
         Resource (simpleCombine bpath bpath') (ccombine rget rget') (ccombine rput rput')
@@ -133,7 +134,13 @@ resourceAt arg = mempty
 -- will be combined. This can be useful for extending an existing resource with new representations and new
 -- functionality.
 extendResource :: Resource -> Resource
-extendResource resource = resource { resourceGet = [], resourcePut = [], resourcePost = [], resourceDelete = [] }
+extendResource resource = resource {
+    resourceDesc   = []
+  , resourceGet    = []
+  , resourcePut    = []
+  , resourcePost   = []
+  , resourceDelete = []
+  }
 
 -- | Creates a new resource that is at a subdirectory of an existing resource. This function takes care of formats
 -- as best as it can.

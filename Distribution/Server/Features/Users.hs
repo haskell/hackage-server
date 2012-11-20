@@ -168,7 +168,8 @@ userFeature  usersState adminsState
   = (UserFeature {..}, adminGroupDesc)
   where
     userFeatureInterface = (emptyHackageFeature "users") {
-        featureResources = map ($ userResource)
+        featureDesc = "Manipulate the user database."
+      , featureResources = map ($ userResource)
             [userList, userPage, passwordResource, htpasswordResource, enabledResource]
             ++ [groupResource adminResource, groupUserResource adminResource]
       , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
@@ -180,25 +181,31 @@ userFeature  usersState adminsState
           closeAcidState adminsState
       }
 
-    userResource = fix $ \r -> UserResource
-        { userList         = resourceAt "/users/.:format"
-        , userPage         = (resourceAt "/user/:username.:format") {
-                                 resourcePut    = [ ("", handleUserPut) ],
-                                 resourceDelete = [ ("", handleUserDelete) ]
-                               }
-        , passwordResource = resourceAt "/user/:username/password.:format"
-        , htpasswordResource = (resourceAt "/user/:username/htpasswd") {
-                                 resourcePut = [ ("", handleUserHtpasswdPut) ]
-                               }
-        , enabledResource  = resourceAt "/user/:username/enabled.:format"
-        , adminResource    = adminResource
+    userResource = fix $ \r -> UserResource {
+        userList = (resourceAt "/users/.:format")
+      , userPage = (resourceAt "/user/:username.:format") {
+            resourceDesc   = [ "PUT: create user; DELETE: delete user." ]
+          , resourcePut    = [ ("", handleUserPut) ]
+          , resourceDelete = [ ("", handleUserDelete) ]
+          }
+      , passwordResource = resourceAt "/user/:username/password.:format"
+      , htpasswordResource = (resourceAt "/user/:username/htpasswd") {
+            resourcePut = [ ("", handleUserHtpasswdPut) ]
+          }
+      , enabledResource = (resourceAt "/user/:username/enabled.:format")
+      , adminResource = adminResource
 
-        , userListUri     = \format -> renderResource (userList r) [format]
-        , userPageUri     = \format uname -> renderResource (userPage r) [display uname, format]
-        , userPasswordUri = \format uname -> renderResource (passwordResource r) [display uname, format]
-        , userEnabledUri  = \format uname -> renderResource (enabledResource  r) [display uname, format]
-        , adminPageUri    = \format -> renderResource (groupResource adminResource) [format]
-        }
+      , userListUri = \format ->
+          renderResource (userList r) [format]
+      , userPageUri = \format uname ->
+          renderResource (userPage r) [display uname, format]
+      , userPasswordUri = \format uname ->
+          renderResource (passwordResource r) [display uname, format]
+      , userEnabledUri  = \format uname ->
+          renderResource (enabledResource  r) [display uname, format]
+      , adminPageUri = \format ->
+          renderResource (groupResource adminResource) [format]
+      }
 
     dumpBackup = do
       users    <- query usersState  GetUserDb

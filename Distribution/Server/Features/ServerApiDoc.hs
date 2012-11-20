@@ -9,9 +9,9 @@ import Distribution.Server.Pages.Template (hackagePage)
 
 import Text.XHtml.Strict
          ( Html, (+++), concatHtml, noHtml, toHtml, (<<)
-         , h2, h3, p, tt, emphasize, br
+         , h2, h3, p, tt, emphasize, br, blockquote
          , anchor, (!), href, name
-         , unordList )
+         , unordList, defList )
 import Text.JSON
          ( JSValue(..), toJSObject, toJSString )
 import Data.List
@@ -63,16 +63,23 @@ apiDocPageHtml serverFeatures = hackagePage title content
     featureList =
       concatHtml
         [ anchor ! [ name (featureName feature) ] << h3 << featureName feature
-          +++ p << featureDescription feature
+          +++ p << featureDesc feature
           +++ resourceList feature
         | feature <- serverFeatures ]
 
     resourceList feature =
-      unordList
-        [     renderLocationTemplate resource
-          +++ p << renderResourceDescription (resourceDescription resource)
-          +++ methodList resource
-        | resource <- featureResources feature ]
+      unordList [
+              renderLocationTemplate resource
+          +++ renderResourceWithExtensions (Just feature) resource
+        | resource <- featureResources feature
+        ]
+
+    renderResourceWithExtensions mFeature resource =
+            p << renderResourceDescription (resourceDesc resource)
+        +++ methodList resource
+        +++ case mFeature of
+               Nothing      -> mempty
+               Just feature -> extensionsElsewhere feature resource
 
     methodList resource =
       unordList
@@ -107,6 +114,26 @@ apiDocPageHtml serverFeatures = hackagePage title content
         renderTrailer _ Slash                                 = "/"
         renderTrailer _ _                                     = ""
 
+    extensionsElsewhere feature resource =
+        if null matchingResources
+          then mempty
+          else p << "Methods defined elsewhere:"
+               +++ blockquote << defList (renderMatching matchingResources)
+      where
+        renderMatching :: [(HackageFeature, Resource)] -> [(Html, Html)]
+        renderMatching = map $ \(f, r) ->
+          (toHtml $ featureName f, renderResourceWithExtensions Nothing r)
+
+        matchingResources :: [(HackageFeature, Resource)]
+        matchingResources = [
+            (feature', resource')
+          | feature'  <- serverFeatures
+          , featureName feature' /= featureName feature
+          , resource' <- featureResources feature'
+          , resourceLocation resource' == resourceLocation resource
+          , not (null (resourceMethods resource'))
+          ]
+
 resourceMethodsAndFormats :: Resource -> [(Method, [String])]
 resourceMethodsAndFormats (Resource _ rget rput rpost rdelete _ _ _) =
     [ (httpMethod, [ formatName | (formatName, _) <- handlers ])
@@ -114,8 +141,6 @@ resourceMethodsAndFormats (Resource _ rget rput rpost rdelete _ _ _) =
   where
     methodsHandlers = [rget, rput, rpost, rdelete]
     methodsKinds    = [GET,  PUT,  POST,  DELETE]
-
-
 
 apiDocJSON :: [HackageFeature] -> JSValue
 apiDocJSON serverFeatures = featureList
