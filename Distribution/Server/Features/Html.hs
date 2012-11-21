@@ -175,7 +175,8 @@ htmlFeature UserFeature{..} CoreFeature{..}
     htmlResources = [
       -- Core
         (extendResource $ corePackagePage cores) {
-            resourceGet = [("html", servePackagePage)]
+            resourceDesc = [(GET, "Show detailed package information")]
+          , resourceGet  = [("html", servePackagePage)]
           }
       {-
       , (extendResource $ coreIndexPage cores) {
@@ -186,7 +187,8 @@ htmlFeature UserFeature{..} CoreFeature{..}
             resourceGet = [("html", const $ Cache.getCacheableAction cacheNamesPage)]
           }
       , (extendResource $ corePackagesPage cores) {
-            resourceGet = [("html", const $ Cache.getCacheableAction cachePackagesPage)]
+            resourceDesc = [(GET, "Show package index")]
+          , resourceGet  = [("html", const $ Cache.getCacheableAction cachePackagesPage)]
           }
       , maintainPackage
 
@@ -232,7 +234,8 @@ htmlFeature UserFeature{..} CoreFeature{..}
       -- uploads
         -- serve upload result as HTML
       , (extendResource $ uploadIndexPage uploads) {
-            resourcePost = [("html", serveUploadResult)]
+            resourceDesc = [(POST, "Upload package")]
+          , resourcePost = [("html", serveUploadResult)]
           }
         -- form for uploading
       , (resourceAt "/packages/upload") {
@@ -242,23 +245,34 @@ htmlFeature UserFeature{..} CoreFeature{..}
       -- checks
         -- list of all packages which have candidates
       , (extendResource $ candidatesPage checks) {
-            resourceGet  = [("html", serveCandidatesPage)]
-          , resourcePost = [("html", \_ -> htmlResponse $ postCandidate)]
+            resourceDesc = [ (GET, "Show all package candidates")
+                           , (POST, "Upload a new candidate")
+                           ]
+          , resourceGet  = [ ("html", serveCandidatesPage) ]
+          , resourcePost = [ ("html", \_ -> htmlResponse $ postCandidate) ]
           }
         -- TODO: use custom functions, not htmlResponse
       , (extendResource $ packageCandidatesPage checks) {
-            resourceGet  = [("html", servePackageCandidates pkgCandUploadForm)]
-          , resourcePost = [("", htmlResponse . postPackageCandidate)]
+            resourceDesc = [ (GET, "Show candidate upload form")
+                           , (POST, "Upload new package candidate")
+                           ]
+          , resourceGet  = [ ("html", servePackageCandidates pkgCandUploadForm) ]
+          , resourcePost = [ ("", htmlResponse . postPackageCandidate) ]
           }
         -- package page for a candidate
       , (extendResource $ candidatePage checks) {
-            resourceGet    = [("html", serveCandidatePage candMaintainForm)]
+            resourceDesc   = [ (GET, "Show candidate maintenance form")
+                             , (PUT, "Upload new package candidate")
+                             , (DELETE, "Delete a package candidate")
+                             ]
+          , resourceGet    = [("html", serveCandidatePage candMaintainForm)]
           , resourcePut    = [("html", htmlResponse . putPackageCandidate)]
           , resourceDelete = [("html", htmlResponse . doDeleteCandidate)]
           }
         -- form for uploading candidate
       , (resourceAt "/packages/candidates/upload") {
-            resourceGet = [("html", serveCandidateUploadForm)]
+            resourceDesc = [ (GET, "Show package candidate upload form") ]
+          , resourceGet  = [ ("html", serveCandidateUploadForm) ]
           }
         -- form for uploading candidate for a specific package version
       , pkgCandUploadForm
@@ -266,8 +280,11 @@ htmlFeature UserFeature{..} CoreFeature{..}
       , candMaintainForm
         -- form for publishing package
       , (extendResource $ publishPage checks) {
-           resourceGet = [("html", servePublishForm)]
-         , resourcePost = [("html", servePostPublish)]
+           resourceDesc = [ (GET, "Show candidate publish form")
+                          , (POST, "Publish a package candidate")
+                          ]
+         , resourceGet  = [ ("html", servePublishForm) ]
+         , resourcePost = [ ("html", servePostPublish) ]
          }
 
       -- TODO: write HTML for reports and distros to display the information

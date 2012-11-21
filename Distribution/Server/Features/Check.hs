@@ -127,32 +127,52 @@ checkFeature ServerEnv{serverBlobStore = store}
   = CheckFeature{..}
   where
     checkFeatureInterface = (emptyHackageFeature "check") {
-        featureResources = map ($checkResource) [candidatesPage, candidatePage, publishPage, candidateCabal, candidateTarball]
-      , featureCheckpoint = do
-          createCheckpoint candidatesState
-      , featureShutdown = do
-          closeAcidState candidatesState
+        featureDesc = "Support for package candidates"
+      , featureResources =
+          map ($checkResource) [
+              candidatesPage
+            , candidatePage
+            , publishPage
+            , candidateCabal
+            , candidateTarball
+            ]
+      , featureCheckpoint  = createCheckpoint candidatesState
+      , featureShutdown    = closeAcidState candidatesState
       , featureDumpRestore = Nothing -- FIXME: no backup!
       }
 
     queryGetCandidateIndex :: MonadIO m => m (PackageIndex CandPkgInfo)
     queryGetCandidateIndex = return . candidateList =<< query' candidatesState GetCandidatePackages
 
-    checkResource = fix $ \r -> CheckResource
-          { candidatesPage = resourceAt "/packages/candidates/.:format"
-          , candidatePage = (resourceAt "/package/:package/candidate.:format") { resourceGet = [("html", basicCandidatePage r)] }
-          , packageCandidatesPage = resourceAt "/package/:package/candidates/.:format"
-          , publishPage = resourceAt "/package/:package/candidate/publish.:format"
-          , candidateCabal = (resourceAt "/package/:package/candidate/:cabal.cabal") { resourceGet = [("cabal", serveCandidateCabal)] }
-          , candidateTarball = (resourceAt "/package/:package/candidate/:tarball.tar.gz") { resourceGet = [("tarball", serveCandidateTarball)] }
-
-          , candidatesUri = \format -> renderResource (candidatesPage r) [format]
-          , candidateUri  = \format pkgid -> renderResource (candidatePage r) [display pkgid, format]
-          , packageCandidatesUri = \format pkgname -> renderResource (packageCandidatesPage r) [display pkgname, format]
-          , publishUri = \format pkgid -> renderResource (publishPage r) [display pkgid, format]
-          , candidateTarballUri = \pkgid -> renderResource (candidateTarball r) [display pkgid, display pkgid]
-          , candidateCabalUri = \pkgid -> renderResource (candidateCabal r) [display pkgid, display (packageName pkgid)]
+    checkResource = fix $ \r -> CheckResource {
+        candidatesPage = resourceAt "/packages/candidates/.:format"
+      , candidatePage = (resourceAt "/package/:package/candidate.:format") {
+            resourceDesc = [(GET, "Show basic package candidate page")]
+          , resourceGet  = [("html", basicCandidatePage r)]
           }
+      , packageCandidatesPage = resourceAt "/package/:package/candidates/.:format"
+      , publishPage = resourceAt "/package/:package/candidate/publish.:format"
+      , candidateCabal = (resourceAt "/package/:package/candidate/:cabal.cabal") {
+            resourceDesc = [(GET, "Candidate .cabal file")]
+          , resourceGet  = [("cabal", serveCandidateCabal)]
+          }
+      , candidateTarball = (resourceAt "/package/:package/candidate/:tarball.tar.gz") {
+            resourceDesc = [(GET, "Candidate tarball")]
+          , resourceGet  = [("tarball", serveCandidateTarball)]
+          }
+      , candidatesUri = \format ->
+          renderResource (candidatesPage r) [format]
+      , candidateUri  = \format pkgid ->
+          renderResource (candidatePage r) [display pkgid, format]
+      , packageCandidatesUri = \format pkgname ->
+          renderResource (packageCandidatesPage r) [display pkgname, format]
+      , publishUri = \format pkgid ->
+          renderResource (publishPage r) [display pkgid, format]
+      , candidateTarballUri = \pkgid ->
+          renderResource (candidateTarball r) [display pkgid, display pkgid]
+      , candidateCabalUri = \pkgid ->
+          renderResource (candidateCabal r) [display pkgid, display (packageName pkgid)]
+      }
 
     basicCandidatePage :: CheckResource -> DynamicPath -> ServerPart Response
     basicCandidatePage r dpath = runServerPartE $ --TODO: use something else for nice html error pages

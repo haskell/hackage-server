@@ -38,7 +38,7 @@ data HackageFeature = HackageFeature {
 emptyHackageFeature :: String -> HackageFeature
 emptyHackageFeature name = HackageFeature {
     featureName        = name,
-    featureDesc        = "No feature description available",
+    featureDesc        = "",
     featureResources   = [],
 
     featurePostInit    = return (),

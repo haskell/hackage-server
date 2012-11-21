@@ -166,32 +166,66 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
   = CoreFeature{..}
   where
     coreFeatureInterface = (emptyHackageFeature "core") {
-        featureResources =
-          [ coreIndexPage, coreIndexTarball, corePackagesPage, corePackagePage
-          , corePackageRedirect, corePackageTarball, coreCabalFile ]
+        featureDesc = "Core functionality"
+      , featureResources = [
+            coreIndexPage
+          , coreIndexTarball
+          , corePackagesPage
+          , corePackagePage
+          , corePackageRedirect
+          , corePackageTarball
+          , coreCabalFile
+          ]
       , featurePostInit    = runHook packageIndexChange
-      , featureCheckpoint = do
-          createCheckpoint packagesState
-      , featureShutdown = do
-          closeAcidState packagesState
+      , featureCheckpoint  = createCheckpoint packagesState
+      , featureShutdown    = closeAcidState packagesState
       , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
       }
 
+    -- the rudimentary HTML resources are for when we don't want an additional HTML feature
     coreResource = CoreResource {..}
-            -- the rudimentary HTML resources are for when we don't want an additional HTML feature
-    coreIndexPage    = (resourceAt "/.:format") { resourceGet = [("html", indexPage serverStaticDir)] }
-    coreIndexTarball = (resourceAt "/packages/index.tar.gz") { resourceGet = [("tarball", const $ liftM (toResponse . Resource.IndexTarball) $ Cache.getCacheableAction cacheIndexTarball)] }
-    corePackagesPage = (resourceAt "/packages/.:format") { resourceGet = [] } -- -- have basic packages listing?
-    corePackagePage  = (resourceAt "/package/:package.:format") { resourceGet = [("html", basicPackagePage)] }
-    corePackageRedirect = (resourceAt "/package/") { resourceGet = [("", \_ -> seeOther "/packages/" $ toResponse ())] }
-    corePackageTarball  = (resourceAt "/package/:package/:tarball.tar.gz") { resourceGet = [("tarball", runServerPartE . servePackageTarball)] }
-    coreCabalFile   = (resourceAt "/package/:package/:cabal.cabal") { resourceGet = [("cabal", runServerPartE . serveCabalFile)] }
-    indexTarballUri = renderResource coreIndexTarball []
-    indexPackageUri = \format -> renderResource corePackagesPage [format]
-    corePackageUri  = \format pkgid -> renderResource corePackagePage [display pkgid, format]
-    corePackageName = \format pkgname -> renderResource corePackagePage [display pkgname, format]
-    coreCabalUri    = \pkgid -> renderResource coreCabalFile [display pkgid, display (packageName pkgid)]
-    coreTarballUri  = \pkgid -> renderResource corePackageTarball [display pkgid, display pkgid]
+    coreIndexPage = (resourceAt "/.:format") {
+        resourceDesc = [(GET, "The (static) index page")]
+      , resourceGet  = [("html", indexPage serverStaticDir)]
+      }
+    coreIndexTarball = (resourceAt "/packages/index.tar.gz") {
+        resourceDesc = [(GET, "tarball of package descriptions")]
+      , resourceGet  = [("tarball",
+                          const $ liftM (toResponse . Resource.IndexTarball)
+                                $ Cache.getCacheableAction cacheIndexTarball)
+                       ]
+      }
+    corePackagesPage = (resourceAt "/packages/.:format") {
+        resourceGet = [] -- have basic packages listing?
+      }
+    corePackagePage = (resourceAt "/package/:package.:format") {
+        resourceDesc = [(GET, "Show basic package information")]
+      , resourceGet  = [("html", basicPackagePage)]
+      }
+    corePackageRedirect = (resourceAt "/package/") {
+        resourceDesc = [(GET,  "Redirect to /packages/")]
+      , resourceGet  = [("", \_ -> seeOther "/packages/" $ toResponse ())]
+      }
+    corePackageTarball = (resourceAt "/package/:package/:tarball.tar.gz") {
+        resourceDesc = [(GET, "Get package tarball")]
+      , resourceGet  = [("tarball", runServerPartE . servePackageTarball)]
+      }
+    coreCabalFile = (resourceAt "/package/:package/:cabal.cabal") {
+        resourceDesc = [(GET, "Get package .cabal file")]
+      , resourceGet  = [("cabal", runServerPartE . serveCabalFile)]
+      }
+    indexTarballUri =
+      renderResource coreIndexTarball []
+    indexPackageUri = \format ->
+      renderResource corePackagesPage [format]
+    corePackageUri  = \format pkgid ->
+      renderResource corePackagePage [display pkgid, format]
+    corePackageName = \format pkgname ->
+      renderResource corePackagePage [display pkgname, format]
+    coreCabalUri    = \pkgid ->
+      renderResource coreCabalFile [display pkgid, display (packageName pkgid)]
+    coreTarballUri  = \pkgid ->
+      renderResource corePackageTarball [display pkgid, display pkgid]
 
     indexPage staticDir _ = serveFile (const $ return "text/html") (staticDir ++ "/hackage.html")
 

@@ -25,13 +25,16 @@ import Data.List
 --
 serverApiDocFeature :: [HackageFeature] -> HackageFeature
 serverApiDocFeature serverFeatures = (emptyHackageFeature "serverapi") {
-    featureResources =
+    featureDesc = "Lists the resources available on this server."
+  , featureResources =
       [ (resourceAt "/api.:format") {
-           resourceGet = [("html", \_ -> serveApiDocHtml serverFeatures)
-                         ,("json", \_ -> serveApiDocJSON serverFeatures)]
-        }
+            resourceDesc = [ (GET, "This page") ]
+          , resourceGet  = [ ("html", \_ -> serveApiDocHtml serverFeatures)
+                           , ("json", \_ -> serveApiDocJSON serverFeatures)
+                           ]
+          }
       ]
-}
+  }
 
 serveApiDocHtml :: [HackageFeature] -> ServerPart Response
 serveApiDocHtml = return . toResponse . Resource.XHtml . apiDocPageHtml
@@ -64,7 +67,9 @@ apiDocPageHtml serverFeatures = hackagePage title content
     featureList =
       concatHtml
         [ anchor ! [ name (featureName feature) ] << h3 << featureName feature
-          +++ p << featureDesc feature
+          +++ p << (let desc = featureDesc feature
+                    in if null desc then thespan ! [thestyle "color: red"] << "Feature description unavailable"
+                                    else toHtml desc)
           +++ resourceList feature
         | feature <- serverFeatures ]
 
