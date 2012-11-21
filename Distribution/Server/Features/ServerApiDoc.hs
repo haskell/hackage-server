@@ -70,6 +70,12 @@ apiDocPageHtml serverFeatures = hackagePage title content
           +++ p << (let desc = featureDesc feature
                     in if null desc then thespan ! [thestyle "color: red"] << "Feature description unavailable"
                                     else toHtml desc)
+          +++ p << (case featureDumpRestore feature of
+                      Nothing -> toHtml "This feature does not backup any state."
+                      Just dumpRestore ->
+                        let desc = featureBackupDesc dumpRestore in
+                        if null desc then thespan ! [thestyle "color: red"] << "Backup description unavailable"
+                                     else toHtml desc)
           +++ resourceList feature
         | feature <- serverFeatures ]
 

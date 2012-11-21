@@ -92,7 +92,6 @@ instance Monoid RestoreBackup where
         , restoreComplete = comp >> comp'
         }
 
-
 importTar :: ByteString -> [(String, RestoreBackup)] -> IO (Maybe String)
 importTar tar featureBackups = do
     res <- runImport (Map.fromList featureBackups) $ do

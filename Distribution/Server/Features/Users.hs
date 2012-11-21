@@ -181,7 +181,11 @@ userFeature  usersState adminsState
               groupResource adminResource
             , groupUserResource adminResource
             ]
-      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
+      , featureDumpRestore = Just hackageFeatureBackup {
+            featureBackup     = dumpBackup
+          , featureRestore    = restoreBackup
+          , featureTestBackup = testRoundtrip
+          }
       , featureCheckpoint = do
           createCheckpoint usersState
           createCheckpoint adminsState

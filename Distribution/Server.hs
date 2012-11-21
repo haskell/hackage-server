@@ -219,25 +219,25 @@ checkpoint server =
 exportServerTar :: Server -> IO ByteString
 exportServerTar server =
     exportTar
-      [ (featureName feature, dump)
+      [ (featureName feature, featureBackup dumpRestore)
       | feature@HackageFeature {
-          featureDumpRestore = Just (dump, _restore, _test_rt)
+          featureDumpRestore = Just dumpRestore
         } <- serverFeatures server ]
 
 importServerTar :: Server -> ByteString -> IO (Maybe String)
 importServerTar server tar =
     Import.importTar tar
-      [ (featureName feature, restore)
+      [ (featureName feature, featureRestore dumpRestore)
       | feature@HackageFeature {
-          featureDumpRestore = Just (_dump, restore, _test_rt)
+          featureDumpRestore = Just dumpRestore
         } <- serverFeatures server ]
 
 testRoundtrip :: Server -> Import.TestRoundtrip
 testRoundtrip server =
     liftM (liftM concat . sequence) $ sequence
-      [ liftM (liftM (map ((featureName feature ++ ": ") ++))) test_rt
+      [ liftM (liftM (map ((featureName feature ++ ": ") ++))) (featureTestBackup dumpRestore)
       | feature@HackageFeature {
-          featureDumpRestore = Just (_dump, _restore, test_rt)
+          featureDumpRestore = Just dumpRestore
         } <- serverFeatures server ]
 
 
@@ -246,9 +246,9 @@ testRoundtrip server =
 initState ::  Server -> (String, String) -> IO ()
 initState server (admin, pass) = do
     void $ Import.importBlank
-      [ (featureName feature, restore)
+      [ (featureName feature, featureRestore dumpRestore)
       | feature@HackageFeature {
-          featureDumpRestore = Just (_dump, restore, _test_rt)
+          featureDumpRestore = Just dumpRestore
         } <- serverFeatures server ]
     -- create default admin user
     let UserFeature{updateAddUser, adminGroup} = serverUserFeature server

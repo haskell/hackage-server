@@ -130,13 +130,20 @@ tagsFeature CoreFeature{..}
         }
 
     tagsFeatureInterface = (emptyHackageFeature "tags") {
-        featureResources   = map ($tagsResource) [tagsListing, tagListing, packageTagsListing]
+        featureResources =
+          map ($tagsResource) [
+              tagsListing
+            , tagListing
+            , packageTagsListing
+            ]
       , featurePostInit    = initImmutableTags
-      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
-      , featureCheckpoint = do
-          createCheckpoint tagsState
-      , featureShutdown = do
-          closeAcidState tagsState
+      , featureCheckpoint  = createCheckpoint tagsState
+      , featureShutdown    = closeAcidState tagsState
+      , featureDumpRestore = Just hackageFeatureBackup {
+            featureBackup     = dumpBackup
+          , featureRestore    = restoreBackup
+          , featureTestBackup = testRoundtrip
+          }
       }
 
     initImmutableTags :: IO ()

@@ -83,12 +83,20 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
   = (MirrorFeature{..}, mirrorersGroupDesc)
   where
     mirrorFeatureInterface = (emptyHackageFeature "mirror") {
-        featureResources = map ($mirrorResource) [mirrorPackageTarball, mirrorPackageUploadTime, mirrorPackageUploader, mirrorCabalFile]
-      , featureCheckpoint = do
-          createCheckpoint mirrorersState
-      , featureShutdown = do
-          closeAcidState mirrorersState
-      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
+        featureResources =
+          map ($mirrorResource) [
+              mirrorPackageTarball
+            , mirrorPackageUploadTime
+            , mirrorPackageUploader
+            , mirrorCabalFile
+            ]
+      , featureCheckpoint  = createCheckpoint mirrorersState
+      , featureShutdown    = closeAcidState mirrorersState
+      , featureDumpRestore = Just hackageFeatureBackup {
+            featureBackup     = dumpBackup
+          , featureRestore    = restoreBackup
+          , featureTestBackup = testRoundtrip
+          }
       }
 
     dumpBackup    = do

@@ -74,16 +74,16 @@ downloadFeature CoreFeature{}
   = DownloadFeature{..}
   where
     downloadFeatureInterface = (emptyHackageFeature "download") {
-        featureResources = map (\x -> x $ downloadResource) [topDownloads]
-      , featurePostInit  = do countCache
-                              forkIO transferDownloads >> return ()
-      , featureCheckpoint = do
-          createCheckpoint downloadState
-      , featureShutdown = do
-          closeAcidState downloadState
-      , featureDumpRestore = Just (dumpBackup,
-                                   restoreBackup,
-                                   testRoundtripByQuery (query downloadState GetDownloadCounts))
+        featureResources   = map ($ downloadResource) [topDownloads]
+      , featurePostInit    = do countCache
+                                forkIO transferDownloads >> return ()
+      , featureCheckpoint  = createCheckpoint downloadState
+      , featureShutdown    = closeAcidState downloadState
+      , featureDumpRestore = Just hackageFeatureBackup {
+            featureBackup     = dumpBackup
+          , featureRestore    = restoreBackup
+          , featureTestBackup = testRoundtripByQuery (query downloadState GetDownloadCounts)
+          }
       }
 
     countCache = do

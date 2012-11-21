@@ -156,7 +156,8 @@ uploadFeature ServerEnv{serverBlobStore = store}
      , getTrusteesGroup, getUploadersGroup, makeMaintainersGroup)
    where
     uploadFeatureInterface = (emptyHackageFeature "upload") {
-        featureResources =
+        featureDesc = "Support for package uploads, and define groups for trustees, uploaders, and package maintainers"
+      , featureResources =
           map ($uploadResource) [
               uploadIndexPage
             , groupResource . packageGroupResource
@@ -174,7 +175,12 @@ uploadFeature ServerEnv{serverBlobStore = store}
           closeAcidState trusteesState
           closeAcidState uploadersState
           closeAcidState maintainersState
-      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
+      , featureDumpRestore = Just hackageFeatureBackup {
+            featureBackupDesc = "Backs up the trustees, uploaders and package maintainer groups."
+          , featureBackup     = dumpBackup
+          , featureRestore    = restoreBackup
+          , featureTestBackup = testRoundtrip
+          }
       }
 
     dumpBackup    = do

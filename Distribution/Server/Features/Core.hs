@@ -179,7 +179,11 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
       , featurePostInit    = runHook packageIndexChange
       , featureCheckpoint  = createCheckpoint packagesState
       , featureShutdown    = closeAcidState packagesState
-      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
+      , featureDumpRestore = Just hackageFeatureBackup {
+            featureBackup     = dumpBackup
+          , featureRestore    = restoreBackup
+          , featureTestBackup = testRoundtrip
+          }
       }
 
     -- the rudimentary HTML resources are for when we don't want an additional HTML feature

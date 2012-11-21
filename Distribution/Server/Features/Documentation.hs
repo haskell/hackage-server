@@ -72,12 +72,19 @@ documentationFeature ServerEnv{serverBlobStore = store}
   = DocumentationFeature{..}
   where
     documentationFeatureInterface = (emptyHackageFeature "documentation") {
-        featureResources = map ($ documentationResource) [packageDocs, packageDocTar, packageDocsUpload]
-      , featureCheckpoint = do
-          createCheckpoint documentationState
-      , featureShutdown = do
-          closeAcidState documentationState
-      , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
+        featureResources =
+          map ($ documentationResource) [
+              packageDocs
+            , packageDocTar
+            , packageDocsUpload
+            ]
+      , featureCheckpoint  = createCheckpoint documentationState
+      , featureShutdown    = closeAcidState documentationState
+      , featureDumpRestore = Just hackageFeatureBackup {
+            featureBackup     = dumpBackup
+          , featureRestore    = restoreBackup
+          , featureTestBackup = testRoundtrip
+          }
       }
 
     dumpBackup = do

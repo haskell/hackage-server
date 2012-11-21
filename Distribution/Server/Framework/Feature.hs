@@ -2,8 +2,9 @@
 --
 module Distribution.Server.Framework.Feature where
 
-import Distribution.Server.Framework.BackupRestore (RestoreBackup, BackupEntry, TestRoundtrip)
+import Distribution.Server.Framework.BackupRestore (RestoreBackup(..), BackupEntry, TestRoundtrip)
 import Distribution.Server.Framework.Resource      (Resource)
+import Data.Function (fix)
 
 -- | We compose the overall hackage server featureset from a bunch of these
 -- features. The intention is to make the hackage server reasonably modular
@@ -24,8 +25,27 @@ data HackageFeature = HackageFeature {
     featureCheckpoint  :: IO (),
     featureShutdown    :: IO (),
 
-    featureDumpRestore :: Maybe (IO [BackupEntry], RestoreBackup, TestRoundtrip)
+    featureDumpRestore :: Maybe HackageFeatureBackup
 }
+
+data HackageFeatureBackup = HackageFeatureBackup {
+    featureBackupDesc :: String -- What does the feature backup?
+  , featureBackup     :: IO [BackupEntry]
+  , featureRestore    :: RestoreBackup
+  , featureTestBackup :: TestRoundtrip
+  }
+
+hackageFeatureBackup :: HackageFeatureBackup
+hackageFeatureBackup = HackageFeatureBackup {
+    featureBackupDesc = ""
+  , featureBackup = return []
+  , featureRestore = fix $ \r -> RestoreBackup {
+        restoreEntry    = \_ -> error "hackageFeatureBackup: restoreEntry undefined"
+      , restoreFinalize = return (Right r)
+      , restoreComplete = return ()
+      }
+  , featureTestBackup = return (return [])
+  }
 
 -- | A feature with no state and no resources, just a name.
 --

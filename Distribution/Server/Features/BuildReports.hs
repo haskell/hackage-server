@@ -71,15 +71,20 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
   = ReportsFeature{..}
   where
     reportsFeatureInterface = (emptyHackageFeature "reports") {
-          featureResources   = map ($ reportsResource) [reportsList, reportsPage, reportsLog],
-          featureCheckpoint = do
-            createCheckpoint reportsState,
-          featureShutdown = do
-            closeAcidState reportsState,
-          featureDumpRestore = Just ( dumpBackup    reportsState store
-                                    , restoreBackup reportsState store
-                                    , testRoundtrip reportsState store )
-        }
+        featureResources =
+          map ($ reportsResource) [
+              reportsList
+            , reportsPage
+            , reportsLog
+            ]
+      , featureCheckpoint  = createCheckpoint reportsState
+      , featureShutdown    = closeAcidState reportsState
+      , featureDumpRestore = Just hackageFeatureBackup {
+            featureBackup     = dumpBackup    reportsState store
+          , featureRestore    = restoreBackup reportsState store
+          , featureTestBackup = testRoundtrip reportsState store
+          }
+      }
 
     reportsResource = ReportsResource
           { reportsList = (resourceAt "/package/:package/reports/.:format") {

@@ -66,14 +66,20 @@ distroFeature UserFeature{..} CoreFeature{..} distrosState
   = DistroFeature{..}
   where
     distroFeatureInterface = (emptyHackageFeature "distro") {
-        featureResources   = map ($distroResource) [distroIndexPage, distroAllPage, distroPackages, distroPackage]
-      , featureDumpRestore = Just (dumpBackup distrosState,
-                                   restoreBackup distrosState,
-                                   testRoundtripByQuery (query distrosState GetDistributions))
-      , featureCheckpoint = do
-          createCheckpoint distrosState
-      , featureShutdown = do
-          closeAcidState distrosState
+        featureResources =
+          map ($distroResource) [
+              distroIndexPage
+            , distroAllPage
+            , distroPackages
+            , distroPackage
+            ]
+      , featureCheckpoint  = createCheckpoint distrosState
+      , featureShutdown    = closeAcidState distrosState
+      , featureDumpRestore = Just hackageFeatureBackup {
+              featureBackup     = dumpBackup distrosState
+            , featureRestore    = restoreBackup distrosState
+            , featureTestBackup = testRoundtripByQuery (query distrosState GetDistributions)
+            }
       }
 
     queryPackageStatus :: MonadIO m => PackageName -> m [(DistroName, DistroPackageInfo)]
