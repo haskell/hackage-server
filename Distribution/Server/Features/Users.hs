@@ -487,12 +487,12 @@ userFeature  usersState adminsState
         initGroupIndex ulist groupUri descr
         let groupr = GroupResource {
                 groupResource = (extendResourcePath "/.:format" mainr) {
-                    resourceDesc = [ (GET, "Description of the group and a list of its members") ]
+                    resourceDesc = [ (GET, "Description of the group and a list of its members (defined in 'users' feature)") ]
                   , resourceGet  = [ ("json", handleUserGroupGet group') ]
                   }
               , groupUserResource = (extendResourcePath "/user/:username.:format" mainr) {
-                    resourceDesc   = [ (PUT, "Add a user to the group")
-                                     , (DELETE, "Remove a user from the group")
+                    resourceDesc   = [ (PUT, "Add a user to the group (defined in 'users' feature)")
+                                     , (DELETE, "Remove a user from the group (defined in 'users' feature)")
                                      ]
                   , resourcePut    = [ ("", handleUserGroupUserPut group groupr) ]
                   , resourceDelete = [ ("", handleUserGroupUserDelete group groupr) ]
@@ -533,12 +533,16 @@ userFeature  usersState adminsState
         mapM_ collectUserList dpaths
         let groupr = GroupResource {
                 groupResource = (extendResourcePath "/.:format" mainr) {
-                                  resourceGet = [("json", \dpath -> handleUserGroupGet (getGroupFunc dpath) dpath)]
-                                }
+                    resourceDesc = [ (GET, "Description of the group and a list of the members (defined in 'users' feature)") ]
+                  , resourceGet  = [ ("json", \dpath -> handleUserGroupGet (getGroupFunc dpath) dpath) ]
+                  }
               , groupUserResource = (extendResourcePath "/user/:username.:format" mainr) {
-                                      resourcePut    = [("", \dpath -> handleUserGroupUserPut    (getGroupFunc dpath) groupr dpath)],
-                                      resourceDelete = [("", \dpath -> handleUserGroupUserDelete (getGroupFunc dpath) groupr dpath)]
-                                    }
+                    resourceDesc   = [ (PUT,    "Add a user to the group (defined in 'users' feature)")
+                                     , (DELETE, "Delete a user from the group (defined in 'users' feature)")
+                                     ]
+                  , resourcePut    = [ ("", \dpath -> handleUserGroupUserPut    (getGroupFunc dpath) groupr dpath) ]
+                  , resourceDelete = [ ("", \dpath -> handleUserGroupUserDelete (getGroupFunc dpath) groupr dpath) ]
+                  }
               , getGroup = getGroupFunc
               }
         return (getGroupFunc, groupr)

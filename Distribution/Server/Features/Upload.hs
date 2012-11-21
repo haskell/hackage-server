@@ -156,11 +156,16 @@ uploadFeature ServerEnv{serverBlobStore = store}
      , getTrusteesGroup, getUploadersGroup, makeMaintainersGroup)
    where
     uploadFeatureInterface = (emptyHackageFeature "upload") {
-        featureResources = map ($uploadResource)
-            [uploadIndexPage,
-             groupResource . packageGroupResource, groupUserResource . packageGroupResource,
-             groupResource . trusteeResource,      groupUserResource . trusteeResource,
-             groupResource . uploaderResource,     groupUserResource . uploaderResource]
+        featureResources =
+          map ($uploadResource) [
+              uploadIndexPage
+            , groupResource . packageGroupResource
+            , groupUserResource . packageGroupResource
+            , groupResource . trusteeResource
+            , groupUserResource . trusteeResource
+            , groupResource . uploaderResource
+            , groupUserResource . uploaderResource
+            ]
       , featureCheckpoint = do
           createCheckpoint trusteesState
           createCheckpoint uploadersState
