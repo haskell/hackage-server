@@ -498,7 +498,7 @@ deprecationCommand =
                   ++ "and some of these tags files contain info about the \n"
                   ++ "package being deprecated, and sometimes what it is\n"
                   ++ "superceded by. The files must follow this file name\n"
-                  ++ "convention so we know which package the tags apply to."
+                  ++ "convention so we know which package the tags apply to.\n"
     options _  = []
 
 deprecationAction :: DeprecationFlags -> [String] -> GlobalFlags -> IO ()
@@ -514,7 +514,7 @@ deprecationAction _opts args _ = do
       setAuthorityFromURI baseURI
       sequence_
         [ putDeprecatedInfo baseURI pkgname replacement
-        |  (pkgname, replacement) <- TagsFile.collectDeprecated entries ]
+        | (pkgname, replacement) <- TagsFile.collectDeprecated entries ]
 
 
 putDeprecatedInfo :: URI -> PackageName -> Maybe PackageName -> HttpSession ()
