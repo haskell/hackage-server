@@ -169,9 +169,18 @@ userFeature  usersState adminsState
   where
     userFeatureInterface = (emptyHackageFeature "users") {
         featureDesc = "Manipulate the user database."
-      , featureResources = map ($ userResource)
-            [userList, userPage, passwordResource, htpasswordResource, enabledResource]
-            ++ [groupResource adminResource, groupUserResource adminResource]
+      , featureResources =
+          map ($ userResource)
+            [ userList
+            , userPage
+            , passwordResource
+            , htpasswordResource
+            , enabledResource
+            ]
+          ++ [
+              groupResource adminResource
+            , groupUserResource adminResource
+            ]
       , featureDumpRestore = Just (dumpBackup, restoreBackup, testRoundtrip)
       , featureCheckpoint = do
           createCheckpoint usersState
@@ -478,12 +487,16 @@ userFeature  usersState adminsState
         initGroupIndex ulist groupUri descr
         let groupr = GroupResource {
                 groupResource = (extendResourcePath "/.:format" mainr) {
-                                  resourceGet = [("json", handleUserGroupGet group')]
-                                }
+                    resourceDesc = [ (GET, "Description of the group and a list of its members") ]
+                  , resourceGet  = [ ("json", handleUserGroupGet group') ]
+                  }
               , groupUserResource = (extendResourcePath "/user/:username.:format" mainr) {
-                                  resourcePut    = [("", handleUserGroupUserPut group groupr)],
-                                  resourceDelete = [("", handleUserGroupUserDelete group groupr)]
-                                }
+                    resourceDesc   = [ (PUT, "Add a user to the group")
+                                     , (DELETE, "Remove a user from the group")
+                                     ]
+                  , resourcePut    = [ ("", handleUserGroupUserPut group groupr) ]
+                  , resourceDelete = [ ("", handleUserGroupUserDelete group groupr) ]
+                  }
               , getGroup = \_ -> group'
               }
         return (group', groupr)

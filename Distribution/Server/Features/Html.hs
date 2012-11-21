@@ -548,9 +548,21 @@ htmlFeature UserFeature{..} CoreFeature{..}
 
     htmlGroupResource :: GroupResource -> [Resource]
     htmlGroupResource r@(GroupResource groupR userR groupGen) =
-      [ (extendResource groupR) { resourceGet = [("html", htmlResponse . getList)], resourcePost = [("html", htmlResponse . postUser)] }
-      , (extendResource userR) { resourceDelete = [("html", htmlResponse . deleteFromGroup)] }
-      , (extendResourcePath "/edit" groupR) { resourceGet = [("html", htmlResponse . getEditList)] }
+      [ (extendResource groupR) {
+            resourceDesc = [ (GET, "Show list of users")
+                           , (POST, "Udd a user to the group")
+                           ]
+          , resourceGet  = [ ("html", htmlResponse . getList) ]
+          , resourcePost = [ ("html", htmlResponse . postUser) ]
+          }
+      , (extendResource userR) {
+            resourceDesc   = [ (DELETE, "Delete a user from the group") ]
+          , resourceDelete = [ ("html", htmlResponse . deleteFromGroup) ]
+          }
+      , (extendResourcePath "/edit" groupR) {
+            resourceDesc = [ (GET, "Show edit form for the group") ]
+          , resourceGet  = [ ("html", htmlResponse . getEditList) ]
+          }
       ]
       where
         getList dpath = withGroup (groupGen dpath) $ \group -> do

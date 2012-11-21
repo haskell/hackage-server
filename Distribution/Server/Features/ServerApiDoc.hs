@@ -9,7 +9,8 @@ import Distribution.Server.Pages.Template (hackagePage)
 
 import Text.XHtml.Strict
          ( Html, (+++), concatHtml, noHtml, toHtml, (<<)
-         , h2, h3, p, tt, emphasize, blockquote
+         , h2, h3, p, tt, emphasize
+         , blockquote, thespan, thestyle
          , anchor, (!), href, name
          , unordList, defList )
 import Text.JSON
@@ -130,16 +131,18 @@ apiDocPageHtml serverFeatures = hackagePage title content
           , not (null (resourceMethods resource'))
           ]
 
-resourceMethodsAndFormats :: Resource -> [(Method, [String], String)]
+resourceMethodsAndFormats :: Resource -> [(Method, [String], Html)]
 resourceMethodsAndFormats (Resource _ rget rput rpost rdelete _ _ desc) =
     [ (httpMethod, [ formatName | (formatName, _) <- handlers ], descriptionFor httpMethod desc)
     | (handlers@(_:_), httpMethod) <- zip methodsHandlers methodsKinds ]
   where
     methodsHandlers = [rget, rput, rpost, rdelete]
     methodsKinds    = [GET,  PUT,  POST,  DELETE]
-    descriptionFor _ [] = "Method description unavailable"
+
+    descriptionFor :: Method -> [(Method, String)] -> Html
+    descriptionFor _ [] = thespan ! [thestyle "color: red"] << "Method description unavailable"
     descriptionFor m ((m',d):ds)
-      | m == m'   = d
+      | m == m'   = toHtml d
       | otherwise = descriptionFor m ds
 
 apiDocJSON :: [HackageFeature] -> JSValue
