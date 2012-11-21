@@ -520,7 +520,7 @@ deprecationAction _opts args _ = do
 putDeprecatedInfo :: URI -> PackageName -> Maybe PackageName -> HttpSession ()
 putDeprecatedInfo baseURI pkgname replacement = do
 
-    rsp <- requestPUT (pkgURI <//> "deprecated") "text/json" (toBS deprecatedInfo)
+    rsp <- requestPUT (pkgURI <//> "deprecated.json") "application/json" (toBS deprecatedInfo)
     case rsp of
       Nothing  -> return ()
       Just err -> fail (formatErrorResponse err)

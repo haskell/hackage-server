@@ -7,11 +7,17 @@ module Distribution.Server.Framework.Validation (
     expectTextPlain,
     expectTarball,
 
+    -- * checking content
+    expectJsonContent
+
   ) where
 
 import Happstack.Server
+import Distribution.Server.Util.Happstack
 import Distribution.Server.Framework.Error
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy.Char8 as LBS
+import Text.JSON
 
 -- | Expect the request body to have the given mime type (exact match),
 -- and to have no content-encoding.
@@ -33,6 +39,7 @@ expectMimeType expected = do
 expectTextPlain :: ServerPartE ()
 expectTextPlain = expectMimeType (BS.pack "text/plain")
 
+
 -- | Expect a compressed @.tar.gz@ file.
 --
 -- Compressed tarballs are a little odd in that some clients send them
@@ -49,3 +56,12 @@ expectTarball = do
     (Just "application/x-tar", Just "gzip") -> return ()
     (Just "application/x-gzip", Nothing)    -> return ()
     _ -> finishWith =<< resp 415 (toResponse "expected application/x-tar or x-gzip")
+
+expectJsonContent :: ServerPartE JSValue
+expectJsonContent = do
+  expectMimeType (BS.pack "application/json")
+  Body contents <- consumeRequestBody
+  case decodeStrict (LBS.unpack contents) of
+    Ok a      -> return a
+    Error msg -> finishWith =<< resp 400 (toResponse $ "malformed JSON: " ++ msg)
+

@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, PatternGuards #-}
 module Distribution.Server.Features.PreferredVersions (
     VersionsFeature(..),
     VersionsResource(..),
@@ -30,7 +30,7 @@ import Distribution.Text
 import Data.Either   (rights)
 import Data.Function (fix)
 import Data.List (intercalate, find)
-import Data.Maybe (isJust, fromMaybe)
+import Data.Maybe (isJust, fromMaybe, catMaybes)
 import Data.Time.Clock (getCurrentTime)
 import Control.Arrow (second)
 import Control.Applicative (optional)
@@ -38,7 +38,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Text.JSON
-         ( JSValue(..), toJSObject, toJSString )
+         ( JSValue(..), toJSObject, fromJSObject, toJSString, fromJSString )
 
 data VersionsFeature = VersionsFeature {
     versionsFeatureInterface :: HackageFeature,
@@ -141,6 +141,12 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
       pkgs <- fmap (Map.keys . deprecatedMap) $ query preferredState GetPreferredVersions
       setCalculatedTag (Tag "deprecated") (Set.fromDistinctAscList pkgs)
 
+    updatePackageDeprecation :: MonadIO m => PackageName -> Maybe [PackageName] -> m ()
+    updatePackageDeprecation pkgname deprs = liftIO $ do
+      update' preferredState $ SetDeprecatedFor pkgname deprs
+      runHook'' deprecatedHook pkgname deprs
+      updateDeprecatedTags
+
     versionsResource = fix $ \r -> VersionsResource
           { preferredResource = resourceAt "/packages/preferred.:format"
           , preferredText = (resourceAt "/packages/preferred-versions") { resourceGet = [("txt", \_ -> textPreferred)] }
@@ -149,7 +155,8 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
                                    resourceGet = [("json", handlePackagesDeprecatedGet)]
                                  }
           , deprecatedPackageResource = (resourceAt "/package/:package/deprecated.:format") {
-                                          resourceGet = [("json", handlePackageDeprecatedGet) ]
+                                          resourceGet = [("json", handlePackageDeprecatedGet) ],
+                                          resourcePut = [("json", handlePackageDeprecatedPut) ]
                                         }
 
           , preferredUri = \format -> renderResource (preferredResource r) [format]
@@ -181,6 +188,26 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
               , ("in-favour-of", JSArray [ JSString $ toJSString $ display pkg
                                          | pkg <- fromMaybe [] mdep ])
               ]
+
+    handlePackageDeprecatedPut dpath =
+      runServerPartE $
+      withPackageAllPath dpath $ \pkgname _ ->
+      withPackageNameAuth pkgname $ \_ _ -> do
+        jv <- expectJsonContent
+        case jv of
+          JSObject o
+            | fields <- fromJSObject o
+            , Just (JSBool deprecated) <- lookup "is-deprecated" fields
+            , Just (JSArray strs)      <- lookup "in-favour-of"  fields
+            , let asPackage (JSString s) = simpleParse (fromJSString s)
+                  asPackage _            = Nothing
+                  mpkgs = map asPackage strs
+            , all isJust mpkgs
+            -> do let deprecatedInfo | deprecated = Just (catMaybes mpkgs)
+                                     | otherwise  = Nothing
+                  updatePackageDeprecation pkgname deprecatedInfo
+                  ok $ toResponse ()
+          _ -> errBadRequest "bad json format or content" []
 
     ---------------------------
     -- This is a function used by the HTML feature to select the version to display.
