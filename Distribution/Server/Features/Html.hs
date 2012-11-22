@@ -147,6 +147,7 @@ htmlFeature UserFeature{..} CoreFeature{..}
     htmlFeatureInterface = (emptyHackageFeature "html") {
         featureResources = htmlResources
       , featurePostInit  = generateCaches
+      , featureState     = []
       }
 
     generateCaches = do Cache.refreshCacheableAction cachePackagesPage

@@ -99,14 +99,22 @@ initVersionsFeature ServerEnv{serverStateDir} core upload tags = do
 
     return $
       versionsFeature core upload tags
-                      preferredState
+                      (preferredStateComponent preferredState)
                       preferredHook deprecatedHook
 
+preferredStateComponent :: AcidState PreferredVersions -> StateComponent PreferredVersions
+preferredStateComponent st = StateComponent {
+    stateDesc    = "Preferred package versions"
+  , acidState    = st
+  -- TODO: backup
+  , backupState  = return []
+  , testBackup   = return (return ["Backup not implemented"])
+  }
 
 versionsFeature :: CoreFeature
                 -> UploadFeature
                 -> TagsFeature
-                -> AcidState PreferredVersions
+                -> StateComponent PreferredVersions
                 -> Hook (PackageName -> PreferredInfo -> IO ())
                 -> Hook (PackageName -> Maybe [PackageName] -> IO ())
                 -> VersionsFeature
@@ -116,29 +124,27 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
   = VersionsFeature{..}
   where
     versionsFeatureInterface = (emptyHackageFeature "versions") {
-        featureResources = map ($versionsResource)
-            [preferredResource, preferredPackageResource,
-             deprecatedResource, deprecatedPackageResource,
-             preferredText]
+        featureResources =
+          map ($versionsResource) [
+              preferredResource
+            , preferredPackageResource
+            , deprecatedResource
+            , deprecatedPackageResource
+            , preferredText
+            ]
         --FIXME: don't we need to set the preferred-versions on init?
       , featurePostInit = updateDeprecatedTags
-      , featureCheckpoint = do
-          createCheckpoint preferredState
-      , featureShutdown = do
-          closeAcidState preferredState
-        --FIXME: no backup!?!
-      , featureDumpRestore = Nothing
-
+      , featureState    = [SomeStateComponent preferredState]
       }
 
     queryGetPreferredInfo :: MonadIO m => PackageName -> m PreferredInfo
-    queryGetPreferredInfo name = query' preferredState (GetPreferredInfo name)
+    queryGetPreferredInfo name = queryState preferredState (GetPreferredInfo name)
 
     queryGetDeprecatedFor :: MonadIO m => PackageName -> m (Maybe [PackageName])
-    queryGetDeprecatedFor name = query' preferredState (GetDeprecatedFor name)
+    queryGetDeprecatedFor name = queryState preferredState (GetDeprecatedFor name)
 
     updateDeprecatedTags = do
-      pkgs <- fmap (Map.keys . deprecatedMap) $ query preferredState GetPreferredVersions
+      pkgs <- fmap (Map.keys . deprecatedMap) $ queryState preferredState GetPreferredVersions
       setCalculatedTag (Tag "deprecated") (Set.fromDistinctAscList pkgs)
 
     updatePackageDeprecation :: MonadIO m => PackageName -> Maybe [PackageName] -> m ()
@@ -168,7 +174,7 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
     textPreferred = fmap toResponse makePreferredVersions
 
     handlePackagesDeprecatedGet _ = do
-      deprPkgs <- deprecatedMap <$> query' preferredState GetPreferredVersions
+      deprPkgs <- deprecatedMap <$> queryState preferredState GetPreferredVersions
       return $ toResponse $ Resource.JSON $
         JSArray
           [ JSObject $ toJSObject
@@ -181,7 +187,7 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
     handlePackageDeprecatedGet dpath =
       runServerPartE $
       withPackageAllPath dpath $ \pkgname _ -> do
-        mdep <- query' preferredState (GetDeprecatedFor pkgname)
+        mdep <- queryState preferredState (GetDeprecatedFor pkgname)
         return $ toResponse $ Resource.JSON $
           JSObject $ toJSObject
               [ ("is-deprecated", JSBool (isJust mdep))
@@ -218,7 +224,7 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
       pkgIndex <- queryGetPackageIndex
       case PackageIndex.lookupPackageName pkgIndex (packageName pkgid) of
             []   ->  packageError [MText "No such package in package index"]
-            pkgs  | pkgVersion pkgid == Version [] [] -> query' preferredState (GetPreferredInfo $ packageName pkgid) >>= \info -> do
+            pkgs  | pkgVersion pkgid == Version [] [] -> queryState preferredState (GetPreferredInfo $ packageName pkgid) >>= \info -> do
                 let rangeToCheck = sumRange info
                 case maybe id (\r -> filter (flip withinRange r . packageVersion)) rangeToCheck pkgs of
                     -- no preferred version available, choose latest from list ordered by version
@@ -245,9 +251,9 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
             Just prefs -> case sequence . map simpleParse =<< depr of
                 Just deprs -> case all (`elem` map packageVersion pkgs) deprs of
                     True  -> do
-                        void $ update' preferredState $ SetPreferredRanges pkgname prefs
-                        void $ update' preferredState $ SetDeprecatedVersions pkgname deprs
-                        newInfo <- query' preferredState $ GetPreferredInfo pkgname
+                        void $ updateState preferredState $ SetPreferredRanges pkgname prefs
+                        void $ updateState preferredState $ SetDeprecatedVersions pkgname deprs
+                        newInfo <- queryState preferredState $ GetPreferredInfo pkgname
                         prefVersions <- makePreferredVersions
                         now <- liftIO getCurrentTime
                         updateArchiveIndexEntry "preferred-versions" (BS.pack prefVersions, now)
@@ -284,7 +290,7 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
       where
         deprecatedError = errBadRequest "Deprecation failed" . return . MText
         doUpdates deprs = do
-            void $ update' preferredState $ SetDeprecatedFor pkgname deprs
+            void $ updateState preferredState $ SetDeprecatedFor pkgname deprs
             runHook'' deprecatedHook pkgname deprs
             liftIO $ updateDeprecatedTags
 
@@ -297,22 +303,22 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
 
     doPreferredRender :: PackageName -> ServerPartE PreferredRender
     doPreferredRender pkgname = withPackageAll pkgname $ \_ -> do
-        pref <- query' preferredState $ GetPreferredInfo pkgname
+        pref <- queryState preferredState $ GetPreferredInfo pkgname
         return $ renderPrefInfo pref
 
     doDeprecatedRender :: PackageName -> ServerPartE (Maybe [PackageName])
-    doDeprecatedRender pkgname = withPackageAll pkgname $ \_ -> query' preferredState $ GetDeprecatedFor pkgname
+    doDeprecatedRender pkgname = withPackageAll pkgname $ \_ -> queryState preferredState $ GetDeprecatedFor pkgname
 
     doPreferredsRender :: MonadIO m => m [(PackageName, PreferredRender)]
-    doPreferredsRender = query' preferredState GetPreferredVersions >>=
+    doPreferredsRender = queryState preferredState GetPreferredVersions >>=
         return . map (second renderPrefInfo) . Map.toList . preferredMap
 
     doDeprecatedsRender :: MonadIO m => m [(PackageName, [PackageName])]
-    doDeprecatedsRender = query' preferredState GetPreferredVersions >>=
+    doDeprecatedsRender = queryState preferredState GetPreferredVersions >>=
         return . Map.toList . deprecatedMap
 
     makePreferredVersions :: MonadIO m => m String
-    makePreferredVersions = query' preferredState GetPreferredVersions >>= \(PreferredVersions prefs _) -> do
+    makePreferredVersions = queryState preferredState GetPreferredVersions >>= \(PreferredVersions prefs _) -> do
         return . unlines . (topText++) . map (display . uncurry Dependency) . Map.toList $ Map.mapMaybe sumRange prefs
     -- note: setting noVersion is kind of useless..
     -- $ unionWith const (Map.mapMaybe sumRange deprs) (Map.map (const noVersion) prefs)

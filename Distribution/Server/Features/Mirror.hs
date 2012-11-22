@@ -63,17 +63,26 @@ initMirrorFeature env@ServerEnv{serverStateDir} core user@UserFeature{..} = do
     -- Tie the knot with a do-rec
     rec let (feature, mirrorersGroupDesc)
               = mirrorFeature env core user
-                              mirrorersState mirrorersG mirrorR
+                              (mirrorersStateComponent mirrorersState) mirrorersG mirrorR
 
         (mirrorersG, mirrorR) <- groupResourceAt "/packages/mirrorers" mirrorersGroupDesc
 
     return feature
 
+mirrorersStateComponent :: AcidState MirrorClients -> StateComponent MirrorClients
+mirrorersStateComponent st = StateComponent {
+    stateDesc    = "Mirror clients"
+  , acidState    = st
+  , backupState  = do clients <- query st GetMirrorClients
+                      return [csvToBackup ["clients.csv"] $ groupToCSV clients]
+  , restoreState = groupBackup st ["clients.csv"] ReplaceMirrorClients
+  , testBackup   = testRoundtripByQuery $ query st GetMirrorClients
+  }
 
 mirrorFeature :: ServerEnv
               -> CoreFeature
               -> UserFeature
-              -> AcidState MirrorClients
+              -> StateComponent MirrorClients
               -> UserGroup
               -> GroupResource
               -> (MirrorFeature, UserGroup)
@@ -90,22 +99,8 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
             , mirrorPackageUploader
             , mirrorCabalFile
             ]
-      , featureCheckpoint  = createCheckpoint mirrorersState
-      , featureShutdown    = closeAcidState mirrorersState
-      , featureDumpRestore = Just hackageFeatureBackup {
-            featureBackup     = dumpBackup
-          , featureRestore    = restoreBackup
-          , featureTestBackup = testRoundtrip
-          }
+      , featureState = [SomeStateComponent mirrorersState]
       }
-
-    dumpBackup    = do
-        clients <- query mirrorersState GetMirrorClients
-        return [csvToBackup ["clients.csv"] $ groupToCSV clients]
-
-    restoreBackup = groupBackup mirrorersState ["clients.csv"] ReplaceMirrorClients
-
-    testRoundtrip = testRoundtripByQuery (query mirrorersState GetMirrorClients)
 
     mirrorResource = MirrorResource {
         mirrorPackageTarball = (extendResource $ corePackageTarball coreResource) {
@@ -127,9 +122,9 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
 
     mirrorersGroupDesc = UserGroup {
         groupDesc      = nullDescription { groupTitle = "Mirror clients" },
-        queryUserList  = query  mirrorersState   GetMirrorClients,
-        addUserList    = update mirrorersState . AddMirrorClient,
-        removeUserList = update mirrorersState . RemoveMirrorClient,
+        queryUserList  = queryState  mirrorersState   GetMirrorClients,
+        addUserList    = updateState mirrorersState . AddMirrorClient,
+        removeUserList = updateState mirrorersState . RemoveMirrorClient,
         groupExists    = return True,
         canRemoveGroup = [adminGroup],
         canAddGroup    = [adminGroup]
@@ -231,7 +226,7 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
 
     requireMirrorAuth :: ServerPartE UserId
     requireMirrorAuth = do
-        ulist   <- query' mirrorersState GetMirrorClients
+        ulist   <- queryState mirrorersState GetMirrorClients
         userdb  <- queryGetUserDb
         (uid, _) <- guardAuthorised hackageRealm userdb ulist
         return uid

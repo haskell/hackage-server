@@ -95,9 +95,16 @@ packagesFeature ServerEnv{serverBlobStore=store}
   where
     packagesFeatureInterface = (emptyHackageFeature "packages") {
         featureResources = map ($packagesResource) [packagesRecent]
+      , featureState     = []
       }
-    packagesResource = PackagesResource
-      { packagesRecent = (resourceAt "/recent.:format") { resourceGet = [("html", const $ liftM fst $ Cache.getCacheableAction cacheRecent), ("rss", const $ liftM snd $ Cache.getCacheableAction cacheRecent)] }
+
+    packagesResource = PackagesResource {
+        packagesRecent = (resourceAt "/recent.:format") {
+            resourceGet = [
+                ("html", const $ liftM fst $ Cache.getCacheableAction cacheRecent)
+              , ("rss", const $ liftM snd $ Cache.getCacheableAction cacheRecent)
+              ]
+          }
       }
 
     packageRender pkg = do

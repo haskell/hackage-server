@@ -59,12 +59,21 @@ initDownloadFeature ServerEnv{serverStateDir} core = do
 
     return $
       downloadFeature core
-                      downloadState
+                      (downloadStateComponent downloadState)
                       downChan downHist
 
+downloadStateComponent :: AcidState DownloadCounts -> StateComponent DownloadCounts
+downloadStateComponent st = StateComponent {
+    stateDesc    = "Download counts"
+  , acidState    = st
+  , backupState  = do dc <- query st GetDownloadCounts
+                      return [csvToBackup ["downloads.csv"] $ downloadsToCSV dc]
+  , restoreState = downloadsBackup st
+  , testBackup   = testRoundtripByQuery (query st GetDownloadCounts)
+  }
 
 downloadFeature :: CoreFeature
-                -> AcidState DownloadCounts
+                -> StateComponent DownloadCounts
                 -> Chan PackageId
                 -> Cache.Cache (Histogram PackageName)
                 -> DownloadFeature
@@ -74,38 +83,26 @@ downloadFeature CoreFeature{}
   = DownloadFeature{..}
   where
     downloadFeatureInterface = (emptyHackageFeature "download") {
-        featureResources   = map ($ downloadResource) [topDownloads]
-      , featurePostInit    = do countCache
-                                forkIO transferDownloads >> return ()
-      , featureCheckpoint  = createCheckpoint downloadState
-      , featureShutdown    = closeAcidState downloadState
-      , featureDumpRestore = Just hackageFeatureBackup {
-            featureBackup     = dumpBackup
-          , featureRestore    = restoreBackup
-          , featureTestBackup = testRoundtripByQuery (query downloadState GetDownloadCounts)
-          }
+        featureResources = map ($ downloadResource) [topDownloads]
+      , featurePostInit  = do countCache
+                              forkIO transferDownloads >> return ()
+      , featureState     = [SomeStateComponent downloadState]
       }
 
     countCache = do
-        dc <- query downloadState GetDownloadCounts
+        dc <- queryState downloadState GetDownloadCounts
         let dmap = map (second packageDowns) (Map.toList $ downloadMap dc)
         Cache.putCache downloadHistogram (constructHistogram dmap)
 
     transferDownloads = forever $ do
         pkg <- readChan downloadStream
         time <- getCurrentTime
-        (_, new) <- update downloadState $ RegisterDownload (utctDay time) pkg 1
+        (_, new) <- updateState downloadState $ RegisterDownload (utctDay time) pkg 1
         Cache.modifyCache downloadHistogram
             (updateHistogram (packageName pkg) new)
 
-    dumpBackup = do
-        dc <- query downloadState GetDownloadCounts
-        return [csvToBackup ["downloads.csv"] $ downloadsToCSV dc]
-
-    restoreBackup = downloadsBackup downloadState
-
     queryGetDownloadInfo :: MonadIO m => PackageName -> m DownloadInfo
-    queryGetDownloadInfo name = query' downloadState (GetDownloadInfo name)
+    queryGetDownloadInfo name = queryState downloadState (GetDownloadInfo name)
 
     downloadResource = DownloadResource
               { topDownloads = resourceAt "/packages/top.:format"
@@ -129,7 +126,7 @@ downloadFeature CoreFeature{}
     -- Use sortedPackages to get an entire list.
     -- TODO: use the Histogram's sortByCounts for this
     sortByDownloads :: MonadIO m => (a -> PackageName) -> [a] -> m [(a, Int)]
-    sortByDownloads nameFunc pkgs = query' downloadState GetDownloadCounts >>= \counts -> do
+    sortByDownloads nameFunc pkgs = queryState downloadState GetDownloadCounts >>= \counts -> do
         let modEntry pkg = (pkg, lookupPackageDowns (nameFunc pkg) downloadMap)
         return $ sortBy (comparing snd) $ map modEntry pkgs
     -}
@@ -137,7 +134,7 @@ downloadFeature CoreFeature{}
     -- For at-a-glance download information.
     perVersionDownloads :: (MonadIO m, Package pkg) => pkg -> m (Int, Int)
     perVersionDownloads pkg = do
-        info <- query' downloadState $ GetDownloadInfo (packageName pkg)
+        info <- queryState downloadState $ GetDownloadInfo (packageName pkg)
         let (PackageDownloads total perVersion) = packageDownloads info
         return (total, Map.findWithDefault 0 (packageVersion pkg) perVersion)
 

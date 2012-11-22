@@ -1,10 +1,14 @@
 -- | This module defines a plugin interface for hackage features.
 --
+{-# LANGUAGE ExistentialQuantification, RankNTypes, NoMonomorphismRestriction #-}
 module Distribution.Server.Framework.Feature where
 
 import Distribution.Server.Framework.BackupRestore (RestoreBackup(..), BackupEntry, TestRoundtrip)
 import Distribution.Server.Framework.Resource      (Resource)
 import Data.Function (fix)
+import Control.Monad.Trans (MonadIO)
+import Data.Acid
+import Data.Acid.Advanced
 
 -- | We compose the overall hackage server featureset from a bunch of these
 -- features. The intention is to make the hackage server reasonably modular
@@ -17,34 +21,13 @@ import Data.Function (fix)
 -- 'featureDumpRestore' appropriately.
 --
 data HackageFeature = HackageFeature {
-    featureName        :: String,
-    featureDesc        :: String,
-    featureResources   :: [Resource],
+    featureName        :: String
+  , featureDesc        :: String
+  , featureResources   :: [Resource]
 
-    featurePostInit    :: IO (),
-    featureCheckpoint  :: IO (),
-    featureShutdown    :: IO (),
+  , featurePostInit    :: IO ()
 
-    featureDumpRestore :: Maybe HackageFeatureBackup
-}
-
-data HackageFeatureBackup = HackageFeatureBackup {
-    featureBackupDesc :: String -- What does the feature backup?
-  , featureBackup     :: IO [BackupEntry]
-  , featureRestore    :: RestoreBackup
-  , featureTestBackup :: TestRoundtrip
-  }
-
-hackageFeatureBackup :: HackageFeatureBackup
-hackageFeatureBackup = HackageFeatureBackup {
-    featureBackupDesc = ""
-  , featureBackup = return []
-  , featureRestore = fix $ \r -> RestoreBackup {
-        restoreEntry    = \_ -> error "hackageFeatureBackup: restoreEntry undefined"
-      , restoreFinalize = return (Right r)
-      , restoreComplete = return ()
-      }
-  , featureTestBackup = return (return [])
+  , featureState       :: [SomeStateComponent]
   }
 
 -- | A feature with no state and no resources, just a name.
@@ -57,16 +40,46 @@ hackageFeatureBackup = HackageFeatureBackup {
 --
 emptyHackageFeature :: String -> HackageFeature
 emptyHackageFeature name = HackageFeature {
-    featureName        = name,
-    featureDesc        = "",
-    featureResources   = [],
+    featureName      = name,
+    featureDesc      = "",
+    featureResources = [],
 
-    featurePostInit    = return (),
-    featureCheckpoint  = return (),
-    featureShutdown    = return (),
+    featurePostInit  = return (),
 
-    featureDumpRestore = Nothing
+    featureState     = error $ "Feature state not defined for feature '" ++ name ++ "'"
   }
 
 class IsHackageFeature feature where
   getFeatureInterface :: feature -> HackageFeature
+
+--------------------------------------------------------------------------------
+-- State components                                                           --
+--------------------------------------------------------------------------------
+
+data StateComponent st = StateComponent {
+    stateDesc    :: String
+  , acidState    :: AcidState st
+  , backupState  :: IO [BackupEntry]
+  , restoreState :: RestoreBackup
+  , testBackup   :: TestRoundtrip
+  }
+
+data SomeStateComponent = forall st. SomeStateComponent (StateComponent st)
+
+queryState :: (MonadIO m, QueryEvent event)
+           => StateComponent (EventState event)
+           -> event
+           -> m (EventResult event)
+queryState = query' . acidState
+
+updateState :: (MonadIO m, UpdateEvent event)
+            => StateComponent (EventState event)
+            -> event
+            -> m (EventResult event)
+updateState = update' . acidState
+
+createCheckpointState :: SomeStateComponent -> IO ()
+createCheckpointState (SomeStateComponent st) = createCheckpoint (acidState st)
+
+closeState :: SomeStateComponent -> IO ()
+closeState (SomeStateComponent st) = closeAcidState (acidState st)

@@ -92,7 +92,7 @@ initTagsFeature ServerEnv{serverStateDir} core@CoreFeature{..} = do
     updateTag <- newHook
 
     let feature = tagsFeature core
-                              tagsState
+                              (tagsStateComponent tagsState)
                               specials updateTag
 
     registerHook packageAddHook $ \pkginfo -> do
@@ -102,8 +102,18 @@ initTagsFeature ServerEnv{serverStateDir} core@CoreFeature{..} = do
 
     return feature
 
+tagsStateComponent :: AcidState PackageTags -> StateComponent PackageTags
+tagsStateComponent st = StateComponent {
+    stateDesc    = "Package tags"
+  , acidState    = st
+  , backupState  = do pkgTags <- query st GetPackageTags
+                      return [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]
+  , restoreState = tagsBackup st
+  , testBackup   = testRoundtripByQuery $ query st GetPackageTags
+  }
+
 tagsFeature :: CoreFeature
-            -> AcidState PackageTags
+            -> StateComponent PackageTags
             -> Cache.Cache PackageTags
             -> Hook (Set PackageName -> Set Tag -> IO ())
             -> TagsFeature
@@ -136,14 +146,8 @@ tagsFeature CoreFeature{..}
             , tagListing
             , packageTagsListing
             ]
-      , featurePostInit    = initImmutableTags
-      , featureCheckpoint  = createCheckpoint tagsState
-      , featureShutdown    = closeAcidState tagsState
-      , featureDumpRestore = Just hackageFeatureBackup {
-            featureBackup     = dumpBackup
-          , featureRestore    = restoreBackup
-          , featureTestBackup = testRoundtrip
-          }
+      , featurePostInit = initImmutableTags
+      , featureState    = [SomeStateComponent tagsState]
       }
 
     initImmutableTags :: IO ()
@@ -152,34 +156,28 @@ tagsFeature CoreFeature{..}
             let calcTags = tagPackages $ constructImmutableTagIndex index
             forM_ (Map.toList calcTags) $ uncurry setCalculatedTag
 
-    dumpBackup    = do
-        pkgTags <- query tagsState GetPackageTags
-        return [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]
-    restoreBackup = tagsBackup tagsState
-    testRoundtrip = testRoundtripByQuery (query tagsState GetPackageTags)
-
     queryGetTagList :: MonadIO m => m [(Tag, Set PackageName)]
-    queryGetTagList = query' tagsState GetTagList
+    queryGetTagList = queryState tagsState GetTagList
 
     queryTagsForPackage :: MonadIO m => PackageName -> m (Set Tag)
-    queryTagsForPackage pkgname = query' tagsState (TagsForPackage pkgname)
+    queryTagsForPackage pkgname = queryState tagsState (TagsForPackage pkgname)
 
     setCalculatedTag :: Tag -> Set PackageName -> IO ()
     setCalculatedTag tag pkgs = do
       Cache.modifyCache calculatedTags (setTag tag pkgs)
-      void $ update tagsState $ SetTagPackages tag pkgs
+      void $ updateState tagsState $ SetTagPackages tag pkgs
       runHook'' tagsUpdated pkgs (Set.singleton tag)
 
     withTagPath :: DynamicPath -> (Tag -> Set PackageName -> ServerPart a) -> ServerPart a
     withTagPath dpath func = case simpleParse =<< lookup "tag" dpath of
         Nothing -> mzero
         Just tag -> do
-            pkgs <- query' tagsState $ PackagesForTag tag
+            pkgs <- queryState tagsState $ PackagesForTag tag
             func tag pkgs
 
     collectTags :: MonadIO m => Set PackageName -> m (Map PackageName (Set Tag))
     collectTags pkgs = do
-        pkgMap <- liftM packageTags $ query' tagsState GetPackageTags
+        pkgMap <- liftM packageTags $ queryState tagsState GetPackageTags
         return $ Map.fromDistinctAscList . map (\pkg -> (pkg, Map.findWithDefault Set.empty pkg pkgMap)) $ Set.toList pkgs
 
     putTags :: PackageName -> ServerPartE ()
@@ -192,7 +190,7 @@ tagsFeature CoreFeature{..}
             Just (TagList tags) -> do
                 calcTags <- fmap (packageToTags pkgname) $ Cache.getCache calculatedTags
                 let tagSet = Set.fromList tags `Set.union` calcTags
-                void $ update' tagsState $ SetPackageTags pkgname tagSet
+                void $ updateState tagsState $ SetPackageTags pkgname tagSet
                 runHook'' tagsUpdated (Set.singleton pkgname) tagSet
                 return ()
             Nothing -> errBadRequest "Tags not recognized" [MText "Couldn't parse your tag list. It should be comma separated with any number of alphanumerical tags. Tags can also also have -+#*."]

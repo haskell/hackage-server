@@ -75,7 +75,7 @@ executable hackage-server
     Distribution.Server.Framework.BackupDump
     Distribution.Server.Framework.BackupRestore
     Distribution.Server.Framework.Validation
-
+    
     Distribution.Server.Packages.Index
     Distribution.Server.Packages.ModuleForest
     Distribution.Server.Packages.PackageIndex
@@ -121,6 +121,7 @@ executable hackage-server
     Distribution.Server.Features.Upload.State
     Distribution.Server.Features.Upload.Backup
     Distribution.Server.Features.Users
+
 
   if flag(minimal)
     cpp-options: -DMINIMAL

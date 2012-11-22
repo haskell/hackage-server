@@ -34,6 +34,7 @@ serverApiDocFeature serverFeatures = (emptyHackageFeature "serverapi") {
                            ]
           }
       ]
+  , featureState = []
   }
 
 serveApiDocHtml :: [HackageFeature] -> ServerPart Response
@@ -70,21 +71,32 @@ apiDocPageHtml serverFeatures = hackagePage title content
           +++ p << (let desc = featureDesc feature
                     in if null desc then thespan ! [thestyle "color: red"] << "Feature description unavailable"
                                     else toHtml desc)
+          +++ stateList feature
+          +++ resourceList feature
+        | feature <- serverFeatures ]
+
+    stateList feature =
+      let states = [stateDesc st | SomeStateComponent st <- featureState feature]in
+      if null states
+        then     p << "This feature does not have any state."
+        else     p << emphasize << "State"
+             +++ unordList states
+{-
           +++ p << (case featureDumpRestore feature of
                       Nothing -> toHtml "This feature does not backup any state."
                       Just dumpRestore ->
                         let desc = featureBackupDesc dumpRestore in
                         if null desc then thespan ! [thestyle "color: red"] << "Backup description unavailable"
                                      else toHtml desc)
-          +++ resourceList feature
-        | feature <- serverFeatures ]
+-}
 
     resourceList feature =
-      unordList [
-              renderLocationTemplate resource
-          +++ renderResourceWithExtensions (Just feature) resource
-        | resource <- featureResources feature
-        ]
+          p << emphasize << "Resources"
+      +++ unordList [
+                  renderLocationTemplate resource
+              +++ renderResourceWithExtensions (Just feature) resource
+            | resource <- featureResources feature
+            ]
 
     renderResourceWithExtensions mFeature resource =
             methodList resource

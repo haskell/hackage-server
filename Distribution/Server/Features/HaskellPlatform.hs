@@ -53,20 +53,29 @@ initPlatformFeature ServerEnv{serverStateDir} = do
                        initialPlatformPackages
 
     return $
-      platformFeature platformState
+      platformFeature (platformStateComponent platformState)
 
-platformFeature :: AcidState PlatformPackages
+platformStateComponent :: AcidState PlatformPackages -> StateComponent PlatformPackages
+platformStateComponent st = StateComponent {
+    stateDesc     = "Platform packages"
+  , acidState     = st
+  -- TODO: backup
+  , backupState   = return []
+  , testBackup    = return (return ["Backup not implemented"])
+  }
+
+platformFeature :: StateComponent PlatformPackages
                 -> PlatformFeature
 platformFeature platformState
   = PlatformFeature{..}
   where
     platformFeatureInterface = (emptyHackageFeature "platform") {
-        featureResources = map ($platformResource) [platformPackage, platformPackages]
-      , featureCheckpoint = do
-          createCheckpoint platformState
-      , featureShutdown = do
-          closeAcidState platformState
-      , featureDumpRestore = Nothing -- FIXME: no backup!
+        featureResources =
+          map ($platformResource) [
+              platformPackage
+            , platformPackages
+            ]
+      , featureState = [SomeStateComponent platformState]
       }
 
     platformResource = fix $ \r -> PlatformResource
@@ -80,14 +89,14 @@ platformFeature platformState
     ------------------------------------------
     -- functionality: showing status for a single package, and for all packages, adding a package, deleting a package
     platformVersions :: MonadIO m => PackageName -> m [Version]
-    platformVersions pkgname = liftM Set.toList $ query' platformState $ GetPlatformPackage pkgname
+    platformVersions pkgname = liftM Set.toList $ queryState platformState $ GetPlatformPackage pkgname
 
     platformPackageLatest :: MonadIO m => m [(PackageName, Version)]
-    platformPackageLatest = liftM (Map.toList . Map.map Set.findMax . blessedPackages) $ query' platformState $ GetPlatformPackages
+    platformPackageLatest = liftM (Map.toList . Map.map Set.findMax . blessedPackages) $ queryState platformState $ GetPlatformPackages
 
     setPlatform :: MonadIO m => PackageName -> [Version] -> m ()
-    setPlatform pkgname versions = update' platformState $ SetPlatformPackage pkgname (Set.fromList versions)
+    setPlatform pkgname versions = updateState platformState $ SetPlatformPackage pkgname (Set.fromList versions)
 
     removePlatform :: MonadIO m => PackageName -> m ()
-    removePlatform pkgname = update' platformState $ SetPlatformPackage pkgname Set.empty
+    removePlatform pkgname = updateState platformState $ SetPlatformPackage pkgname Set.empty
 

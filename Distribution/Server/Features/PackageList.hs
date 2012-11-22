@@ -134,6 +134,7 @@ listFeature CoreFeature{..}
     listFeatureInterface = (emptyHackageFeature "list") {
         featurePostInit = do itemsCache
                              void $ forkIO periodicDownloadRefresh
+      , featureState = []
       }
       where itemsCache = do
                 items <- constructItemIndex

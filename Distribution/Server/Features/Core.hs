@@ -142,12 +142,36 @@ initCoreFeature enableCaches env@ServerEnv{serverStateDir} UserFeature{..} = do
     noPkgHook  <- newHook
     registerHook indexHook $ Cache.refreshCacheableAction indexTar
 
-    return $ coreFeature env packagesState extraMap indexTar
+    return $ coreFeature env (packagesStateComponent env packagesState) extraMap indexTar
                          downHook addHook removeHook changeHook
                          indexHook newPkgHook noPkgHook
 
+packagesStateComponent :: ServerEnv -> AcidState PackagesState -> StateComponent PackagesState
+packagesStateComponent env packagesState = StateComponent {
+     stateDesc    = "Main package database"
+   , acidState    = packagesState
+   , backupState  = dumpBackup
+   , restoreState = packagesBackup packagesState (serverBlobStore env)
+   , testBackup   = testRoundtrip
+   }
+ where
+   store = serverBlobStore env
+
+   dumpBackup = do
+     packages <- query packagesState GetPackagesState
+     readExportBlobs store $ indexToAllVersions packages
+
+   testRoundtrip =
+     testRoundtripByQuery' (query packagesState GetPackagesState) $ \packages ->
+       testBlobsExist store [
+           blob
+         | pkgInfo <- PackageIndex.allPackages (packageList packages)
+         , (tarball, _) <- pkgTarball pkgInfo
+         , blob <- [pkgTarballGz tarball, pkgTarballNoGz tarball]
+         ]
+
 coreFeature :: ServerEnv
-            -> AcidState PackagesState
+            -> StateComponent PackagesState
             -> Cache.Cache (Map String (ByteString, UTCTime))
             -> Cache.CacheableAction ByteString
             -> Hook (PackageId -> IO ())
@@ -176,14 +200,8 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
           , corePackageTarball
           , coreCabalFile
           ]
-      , featurePostInit    = runHook packageIndexChange
-      , featureCheckpoint  = createCheckpoint packagesState
-      , featureShutdown    = closeAcidState packagesState
-      , featureDumpRestore = Just hackageFeatureBackup {
-            featureBackup     = dumpBackup
-          , featureRestore    = restoreBackup
-          , featureTestBackup = testRoundtrip
-          }
+      , featurePostInit = runHook packageIndexChange
+      , featureState    = [SomeStateComponent packagesState]
       }
 
     -- the rudimentary HTML resources are for when we don't want an additional HTML feature
@@ -233,35 +251,23 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
 
     indexPage staticDir _ = serveFile (const $ return "text/html") (staticDir ++ "/hackage.html")
 
-    dumpBackup = do
-      packages <- query packagesState GetPackagesState
-      readExportBlobs store $ indexToAllVersions packages
-
-    restoreBackup = packagesBackup packagesState store
-
-    testRoundtrip = testRoundtripByQuery' (query packagesState GetPackagesState) $ \packages ->
-      testBlobsExist store [ blob
-                           | pkgInfo <- PackageIndex.allPackages (packageList packages)
-                           , (tarball, _) <- pkgTarball pkgInfo
-                           , blob <- [pkgTarballGz tarball, pkgTarballNoGz tarball]
-                           ]
 
     -- Queries
     --
     queryGetPackageIndex :: MonadIO m => m (PackageIndex PkgInfo)
-    queryGetPackageIndex = return . packageList =<< query' packagesState GetPackagesState
+    queryGetPackageIndex = return . packageList =<< queryState packagesState GetPackagesState
 
     -- Update transactions
     --
     updateReplacePackageUploader :: MonadIO m => PackageId -> UserId
                                  -> m (Maybe String)
     updateReplacePackageUploader pkgid userid =
-      update' packagesState (ReplacePackageUploader pkgid userid)
+      updateState packagesState (ReplacePackageUploader pkgid userid)
 
     updateReplacePackageUploadTime :: MonadIO m => PackageId -> UTCTime
                                    -> m (Maybe String)
     updateReplacePackageUploadTime pkgid time =
-      update' packagesState (ReplacePackageUploadTime pkgid time)
+      updateState packagesState (ReplacePackageUploadTime pkgid time)
 
     updateArchiveIndexEntry :: MonadIO m => String -> (ByteString, UTCTime) -> m ()
     updateArchiveIndexEntry entryName entryDetails =
@@ -379,7 +385,7 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
     doAddPackage :: PkgInfo -> IO Bool
     doAddPackage pkgInfo = do
         pkgs    <- queryGetPackageIndex
-        success <- update packagesState $ InsertPkgIfAbsent pkgInfo
+        success <- updateState packagesState $ InsertPkgIfAbsent pkgInfo
         when success $ do
             let existedBefore = packageExists pkgs pkgInfo
             when (not existedBefore) $ do
@@ -395,7 +401,7 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
         let mprev = PackageIndex.lookupPackageId pkgs (packageId pkgInfo)
             nameExists = packageExists pkgs pkgInfo
         -- TODO: Is there a thread-safety issue here?
-        void $ update packagesState $ MergePkg pkgInfo
+        void $ updateState packagesState $ MergePkg pkgInfo
         when (not nameExists) $ do
             runHook' newPackageHook pkgInfo
         case mprev of

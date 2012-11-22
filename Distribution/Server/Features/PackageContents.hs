@@ -58,18 +58,34 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
   = PackageContentsFeature{..}
   where
     packageFeatureInterface = (emptyHackageFeature "package-contents") {
-        featureResources = map ($ packageContentsResource) [packageContents, packageContentsCandidate, packageContentsChangeLog, packageContentsCandidateChangeLog]
-    }
+        featureResources =
+          map ($ packageContentsResource) [
+              packageContents
+            , packageContentsCandidate
+            , packageContentsChangeLog
+            , packageContentsCandidateChangeLog
+            ]
+      , featureState = []
+      }
 
     packageContentsResource = PackageContentsResource {
-              packageContents                   = (resourceAt "/package/:package/src/..") { resourceGet = [("", serveContents)] }
-            , packageContentsCandidate          = (resourceAt "/package/:package/candidate/src/..") { resourceGet = [("", serveCandidateContents)] }
-            , packageContentsChangeLog          = (resourceAt "/package/:package/changelog") { resourceGet = [("changelog", serveChangeLog)] }
-            , packageContentsCandidateChangeLog = (resourceAt "/package/:package/candidate/changelog") { resourceGet = [("changelog", serveCandidateChangeLog)] }
-
-            , packageContentsChangeLogUri          = \pkgid -> renderResource (packageContentsChangeLog          packageContentsResource) [display pkgid, display (packageName pkgid)]
-            , packageContentsCandidateChangeLogUri = \pkgid -> renderResource (packageContentsCandidateChangeLog packageContentsResource) [display pkgid, display (packageName pkgid)]
-          }
+          packageContents = (resourceAt "/package/:package/src/..") {
+              resourceGet = [("", serveContents)]
+            }
+        , packageContentsCandidate = (resourceAt "/package/:package/candidate/src/..") {
+              resourceGet = [("", serveCandidateContents)]
+            }
+        , packageContentsChangeLog = (resourceAt "/package/:package/changelog") {
+              resourceGet = [("changelog", serveChangeLog)]
+            }
+        , packageContentsCandidateChangeLog = (resourceAt "/package/:package/candidate/changelog") {
+              resourceGet = [("changelog", serveCandidateChangeLog)]
+            }
+        , packageContentsChangeLogUri = \pkgid ->
+            renderResource (packageContentsChangeLog packageContentsResource) [display pkgid, display (packageName pkgid)]
+        , packageContentsCandidateChangeLogUri = \pkgid ->
+            renderResource (packageContentsCandidateChangeLog packageContentsResource) [display pkgid, display (packageName pkgid)]
+        }
 
     --TODO: use something other than runServerPartE for nice html error pages
 

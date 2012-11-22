@@ -79,8 +79,14 @@ namesFeature env CoreFeature{..}
   = (NamesFeature{..}, regenerateIndices)
   where
     namesFeatureInterface = (emptyHackageFeature "names") {
-        featureResources = map ($namesResource) [openSearchXml, findPackageResource, suggestPackageResource]
-      , featurePostInit = regenerateIndices
+        featureResources =
+          map ($namesResource) [
+              openSearchXml
+            , findPackageResource
+            , suggestPackageResource
+            ]
+      , featurePostInit  = regenerateIndices
+      , featureState     = []
       }
 
     namesResource = NamesResource

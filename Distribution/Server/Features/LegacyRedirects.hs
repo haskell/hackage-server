@@ -21,8 +21,14 @@ import qualified System.FilePath.Posix as Posix (joinPath, splitExtension)
 legacyRedirectsFeature :: UploadFeature -> HackageFeature
 legacyRedirectsFeature upload = (emptyHackageFeature "legacy") {
     -- get rid of trailing resource and manually create a mapping?
-    featureResources = [(resourceAt "/..") { resourceGet = [("", \_ -> serveLegacyGets)], resourcePost = [("", \_ -> serveLegacyPosts upload)] }]
-}
+    featureResources =
+      [ (resourceAt "/..") {
+            resourceGet = [("", \_ -> serveLegacyGets)]
+          , resourcePost = [("", \_ -> serveLegacyPosts upload)]
+          }
+      ]
+  , featureState = []
+  }
 
 -- | Support for the old URL scheme from the first version of hackage.
 --

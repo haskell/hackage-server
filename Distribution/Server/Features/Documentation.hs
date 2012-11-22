@@ -59,12 +59,54 @@ initDocumentationFeature env@ServerEnv{serverStateDir} core upload = do
 
     return $
       documentationFeature env core upload
-                           documentationState
+                           (documentationStateComponent env documentationState)
+
+
+documentationStateComponent :: ServerEnv -> AcidState Documentation -> StateComponent Documentation
+documentationStateComponent ServerEnv{serverBlobStore = store} st = StateComponent {
+    stateDesc    = "Package documentation"
+  , acidState    = st
+  , backupState  = dumpBackup
+  , restoreState = updateDocumentation (Documentation Map.empty)
+  , testBackup   = testRoundtrip
+  }
+  where
+    dumpBackup = do
+        doc <- query st GetDocumentation
+        let exportFunc (pkgid, (blob, _)) = ([display pkgid, "documentation.tar"], Right blob)
+        readExportBlobs store $ map exportFunc . Map.toList $ documentation doc
+
+    updateDocumentation :: Documentation -> RestoreBackup
+    updateDocumentation docs = fix $ \r -> RestoreBackup
+      { restoreEntry = \(entryPath, bs) ->
+            case entryPath of
+                [str, "documentation.tar"] | Just pkgid <- simpleParse str -> do
+                    res <- runImport docs (importDocumentation pkgid bs)
+                    return $ fmap updateDocumentation res
+                _ -> return . Right $ r
+      , restoreFinalize = return . Right $ r
+      , restoreComplete = update st $ ReplaceDocumentation docs
+      }
+
+    importDocumentation :: PackageId
+                        -> ByteString -> Import Documentation ()
+    importDocumentation pkgid doc = do
+        blobId <- liftIO $ BlobStorage.add store doc
+        -- this may fail for a bad tarball
+        tarred <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blobId)
+        modify $ Documentation . Map.insert pkgid (blobId, tarred) . documentation
+
+    -- Checking documentation roundtripped is a bit tricky:
+    -- 1. We don't really want to check that the tar index is the same (probably)
+    -- 2. We must that the documentation blobs all got imported. To do this we just
+    --    need to check they *exist*, due to the MD5-hashing scheme we use.
+    testRoundtrip = testRoundtripByQuery' (liftM (Map.map fst . documentation) $ query st GetDocumentation) $ \doc ->
+        testBlobsExist store (Map.elems doc)
 
 documentationFeature :: ServerEnv
                      -> CoreFeature
                      -> UploadFeature
-                     -> AcidState Documentation
+                     -> StateComponent Documentation
                      -> DocumentationFeature
 documentationFeature ServerEnv{serverBlobStore = store}
                      CoreFeature{..} UploadFeature{..}
@@ -78,29 +120,11 @@ documentationFeature ServerEnv{serverBlobStore = store}
             , packageDocTar
             , packageDocsUpload
             ]
-      , featureCheckpoint  = createCheckpoint documentationState
-      , featureShutdown    = closeAcidState documentationState
-      , featureDumpRestore = Just hackageFeatureBackup {
-            featureBackup     = dumpBackup
-          , featureRestore    = restoreBackup
-          , featureTestBackup = testRoundtrip
-          }
+      , featureState = [SomeStateComponent documentationState]
       }
 
-    dumpBackup = do
-        doc <- query documentationState GetDocumentation
-        let exportFunc (pkgid, (blob, _)) = ([display pkgid, "documentation.tar"], Right blob)
-        readExportBlobs store $ map exportFunc . Map.toList $ documentation doc
-    restoreBackup = updateDocumentation (Documentation Map.empty)
-    -- Checking documentation roundtripped is a bit tricky:
-    -- 1. We don't really want to check that the tar index is the same (probably)
-    -- 2. We must that the documentation blobs all got imported. To do this we just
-    --    need to check they *exist*, due to the MD5-hashing scheme we use.
-    testRoundtrip = testRoundtripByQuery' (liftM (Map.map fst . documentation) $ query documentationState GetDocumentation) $ \doc ->
-        testBlobsExist store (Map.elems doc)
-
     queryHasDocumentation :: MonadIO m => PackageIdentifier -> m Bool
-    queryHasDocumentation pkgid = query' documentationState (HasDocumentation pkgid)
+    queryHasDocumentation pkgid = queryState documentationState (HasDocumentation pkgid)
 
     documentationResource = DocumentationResource {
         packageDocs = (resourceAt "/package/:package/doc/..") { resourceGet = [("", serveDocumentation)] }
@@ -136,7 +160,7 @@ documentationFeature ServerEnv{serverBlobStore = store}
             Body fileContents <- consumeRequestBody
             blob <- liftIO $ BlobStorage.add store (GZip.decompress fileContents)
             tarIndex <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blob)
-            void $ update' documentationState $ InsertDocumentation pkgid blob tarIndex
+            void $ updateState documentationState $ InsertDocumentation pkgid blob tarIndex
             seeOther ("/package/" ++ display pkgid) (toResponse ())
 
     -- curl -u mgruen:admin -X PUT --data-binary @gtk.tar.gz http://localhost:8080/package/gtk-0.11.0
@@ -145,29 +169,8 @@ documentationFeature ServerEnv{serverBlobStore = store}
     withDocumentation dpath func =
         withPackagePath dpath $ \pkg _ -> do
         let pkgid = packageId pkg
-        mdocs <- query' documentationState $ LookupDocumentation pkgid
+        mdocs <- queryState documentationState $ LookupDocumentation pkgid
         case mdocs of
           Nothing -> errNotFound "Not Found" [MText $ "There is no documentation for " ++ display pkgid]
           Just (blob, index) -> func pkgid blob index
-
-    ---- Import
-    updateDocumentation :: Documentation -> RestoreBackup
-    updateDocumentation docs = fix $ \r -> RestoreBackup
-      { restoreEntry = \(entryPath, bs) ->
-            case entryPath of
-                [str, "documentation.tar"] | Just pkgid <- simpleParse str -> do
-                    res <- runImport docs (importDocumentation pkgid bs)
-                    return $ fmap updateDocumentation res
-                _ -> return . Right $ r
-      , restoreFinalize = return . Right $ r
-      , restoreComplete = update documentationState $ ReplaceDocumentation docs
-      }
-
-    importDocumentation :: PackageId
-                        -> ByteString -> Import Documentation ()
-    importDocumentation pkgid doc = do
-        blobId <- liftIO $ BlobStorage.add store doc
-        -- this may fail for a bad tarball
-        tarred <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blobId)
-        modify $ Documentation . Map.insert pkgid (blobId, tarred) . documentation
 

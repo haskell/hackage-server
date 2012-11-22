@@ -111,13 +111,22 @@ initCheckFeature env@ServerEnv{serverStateDir} user core upload = do
 
     return $
       checkFeature env user core upload
-                   candidatesState
+                   (candidatesStateComponent candidatesState)
+
+candidatesStateComponent :: AcidState CandidatePackages -> StateComponent CandidatePackages
+candidatesStateComponent st = StateComponent {
+    stateDesc     = "Candidate packages"
+  , acidState    = st
+    -- TODO: backup
+  , backupState  = return []
+  , testBackup   = return (return ["Backup not implemented"])
+  }
 
 checkFeature :: ServerEnv
              -> UserFeature
              -> CoreFeature
              -> UploadFeature
-             -> AcidState CandidatePackages
+             -> StateComponent CandidatePackages
              -> CheckFeature
 
 checkFeature ServerEnv{serverBlobStore = store}
@@ -136,13 +145,11 @@ checkFeature ServerEnv{serverBlobStore = store}
             , candidateCabal
             , candidateTarball
             ]
-      , featureCheckpoint  = createCheckpoint candidatesState
-      , featureShutdown    = closeAcidState candidatesState
-      , featureDumpRestore = Nothing -- FIXME: no backup!
+      , featureState = [SomeStateComponent candidatesState]
       }
 
     queryGetCandidateIndex :: MonadIO m => m (PackageIndex CandPkgInfo)
-    queryGetCandidateIndex = return . candidateList =<< query' candidatesState GetCandidatePackages
+    queryGetCandidateIndex = return . candidateList =<< queryState candidatesState GetCandidatePackages
 
     checkResource = fix $ \r -> CheckResource {
         candidatesPage = resourceAt "/packages/candidates/.:format"
@@ -214,7 +221,7 @@ checkFeature ServerEnv{serverBlobStore = store}
     doDeleteCandidate :: DynamicPath -> ServerPartE Response
     doDeleteCandidate dpath = withCandidatePath dpath $ \_ candidate -> do
         withPackageAuth candidate $ \_ _ -> do
-        void $ update' candidatesState $ DeleteCandidate (packageId candidate)
+        void $ updateState candidatesState $ DeleteCandidate (packageId candidate)
         seeOther (packageCandidatesUri checkResource "" $ packageName candidate) $ toResponse ()
 
     serveCandidateTarball :: DynamicPath -> ServerPart Response
@@ -250,7 +257,7 @@ checkFeature ServerEnv{serverBlobStore = store}
                 candWarnings = uploadWarnings uresult,
                 candPublic = True -- do withDataFn
             }
-        void $ update' candidatesState $ AddCandidate candidate
+        void $ updateState candidatesState $ AddCandidate candidate
         let group = packageMaintainers [("package", display $ packageName pkgInfo)]
         exists <- liftIO $ Group.groupExists group
         when (not exists) $ liftIO $ Group.addUserList group (pkgUploadUser pkgInfo)
@@ -303,7 +310,7 @@ checkFeature ServerEnv{serverBlobStore = store}
                   then do
                     -- delete when requested: "moving" the resource
                     -- should this be required? (see notes in CheckResource)
-                    when doDelete $ update' candidatesState $ DeleteCandidate (packageId candidate)
+                    when doDelete $ updateState candidatesState $ DeleteCandidate (packageId candidate)
                     return uresult
                   else errForbidden "Upload failed" [MText "Package already exists."]
       where combineErrors = fmap (listToMaybe . catMaybes)
@@ -339,7 +346,7 @@ checkFeature ServerEnv{serverBlobStore = store}
 
     withCandidate :: PackageId -> (CandidatePackages -> Maybe CandPkgInfo -> [CandPkgInfo] -> ServerPartE a) -> ServerPartE a
     withCandidate pkgid func = do
-        state <- query' candidatesState GetCandidatePackages
+        state <- queryState candidatesState GetCandidatePackages
         let pkgs = PackageIndex.lookupPackageName (candidateList state) (packageName pkgid)
         func state (find ((==pkgid) . packageId) pkgs) pkgs
 

@@ -217,39 +217,44 @@ checkpoint server =
   Features.checkpointAllFeatures (serverFeatures server)
 
 exportServerTar :: Server -> IO ByteString
-exportServerTar server =
-    exportTar
-      [ (featureName feature, featureBackup dumpRestore)
-      | feature@HackageFeature {
-          featureDumpRestore = Just dumpRestore
-        } <- serverFeatures server ]
+exportServerTar server = exportTar
+  [ (featureName feature, backupState st)
+  | feature               <- serverFeatures server
+  , SomeStateComponent st <- featureState feature
+  ]
 
 importServerTar :: Server -> ByteString -> IO (Maybe String)
-importServerTar server tar =
-    Import.importTar tar
-      [ (featureName feature, featureRestore dumpRestore)
-      | feature@HackageFeature {
-          featureDumpRestore = Just dumpRestore
-        } <- serverFeatures server ]
+importServerTar server tar = Import.importTar tar
+  [ (featureName feature, restoreState st)
+  | feature               <- serverFeatures server
+  , SomeStateComponent st <- featureState feature
+  ]
 
+-- TODO: this computes all the checks before executing them, rather than
+-- interleaving the creation of the checks with their execution.
+-- This is bad for memory usage, but interleaving would require a different
+-- setup; in particular, a different type for testRoundtrip.
 testRoundtrip :: Server -> Import.TestRoundtrip
-testRoundtrip server =
-    liftM (liftM concat . sequence) $ sequence
-      [ liftM (liftM (map ((featureName feature ++ ": ") ++))) (featureTestBackup dumpRestore)
-      | feature@HackageFeature {
-          featureDumpRestore = Just dumpRestore
-        } <- serverFeatures server ]
-
+testRoundtrip server = do
+    checks <- sequence [ addFeatureName feature <$> testBackup st
+                       | feature               <- serverFeatures server
+                       , SomeStateComponent st <- featureState feature
+                       ] :: IO [IO [String]]
+    return $ concat <$> sequence checks
+  where
+    -- Add the name of the feature to the reported errors
+    addFeatureName :: HackageFeature -> IO [String] -> IO [String]
+    addFeatureName feature = liftM $ map ((featureName feature ++ ": ") ++)
 
 -- An alternative to an import: starts the server off to a sane initial state.
 -- To accomplish this, we import a 'null' tarball, finalizing immediately after initializing import
 initState ::  Server -> (String, String) -> IO ()
 initState server (admin, pass) = do
     void $ Import.importBlank
-      [ (featureName feature, featureRestore dumpRestore)
-      | feature@HackageFeature {
-          featureDumpRestore = Just dumpRestore
-        } <- serverFeatures server ]
+      [ (featureName feature, restoreState st)
+      | feature               <- serverFeatures server
+      , SomeStateComponent st <- featureState feature
+      ]
     -- create default admin user
     let UserFeature{updateAddUser, adminGroup} = serverUserFeature server
     muid <- case simpleParse admin of

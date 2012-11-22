@@ -58,12 +58,21 @@ initBuildReportsFeature env@ServerEnv{serverStateDir} user core = do
 
     return $
       buildReportsFeature env user core
-                          reportsState
+                          (reportsStateComponent env reportsState)
+
+reportsStateComponent :: ServerEnv -> AcidState BuildReports -> StateComponent BuildReports
+reportsStateComponent ServerEnv{serverBlobStore = store} st = StateComponent {
+    stateDesc    = "Build reports"
+  , acidState    = st
+  , backupState  = dumpBackup    st store
+  , restoreState = restoreBackup st store
+  , testBackup   = testRoundtrip st store
+  }
 
 buildReportsFeature :: ServerEnv
                     -> UserFeature
                     -> CoreFeature
-                    -> AcidState BuildReports
+                    -> StateComponent BuildReports
                     -> ReportsFeature
 buildReportsFeature ServerEnv{serverBlobStore = store}
                     UserFeature{..} CoreFeature{..}
@@ -77,13 +86,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
             , reportsPage
             , reportsLog
             ]
-      , featureCheckpoint  = createCheckpoint reportsState
-      , featureShutdown    = closeAcidState reportsState
-      , featureDumpRestore = Just hackageFeatureBackup {
-            featureBackup     = dumpBackup    reportsState store
-          , featureRestore    = restoreBackup reportsState store
-          , featureTestBackup = testRoundtrip reportsState store
-          }
+      , featureState = [SomeStateComponent reportsState]
       }
 
     reportsResource = ReportsResource
@@ -109,7 +112,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
     textPackageReports dpath =
       runServerPartE $
       withPackageVersionPath dpath $ \pkg -> do
-        reportList <- query' reportsState $ LookupPackageReports (packageId pkg)
+        reportList <- queryState reportsState $ LookupPackageReports (packageId pkg)
         return . toResponse $ show reportList
 
     textPackageReport dpath =
@@ -143,7 +146,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
         case BuildReport.parse $ unpack reportbody of
             Left err -> errBadRequest "Error submitting report" [MText err]
             Right report -> do
-                reportId <- update' reportsState $ AddReport pkgid (report, Nothing)
+                reportId <- updateState reportsState $ AddReport pkgid (report, Nothing)
                 -- redirect to new reports page
                 seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
@@ -157,7 +160,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
         -- restrict this to whom? currently logged in users.. a bad idea
         void $ guardAuthenticated hackageRealm users
         let pkgid = pkgInfoId pkg
-        success <- update' reportsState $ DeleteReport pkgid reportId
+        success <- updateState reportsState $ DeleteReport pkgid reportId
         if success
             then seeOther (reportsListUri reportsResource "" pkgid) $ toResponse ()
             else errNotFound "Build report not found" [MText $ "Build report #" ++ display reportId ++ " not found"]
@@ -174,7 +177,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
         let pkgid = pkgInfoId pkg
         Body blogbody <- consumeRequestBody
         buildLog <- liftIO $ BlobStorage.add store blogbody
-        void $ update' reportsState $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
+        void $ updateState reportsState $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
         -- go to report page (linking the log)
         seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
@@ -188,7 +191,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
         -- again, restrict this to whom?
         void $ guardAuthenticated hackageRealm users
         let pkgid = pkgInfoId pkg
-        void $ update' reportsState $ SetBuildLog pkgid reportId Nothing
+        void $ updateState reportsState $ SetBuildLog pkgid reportId Nothing
         -- go to report page (which should no longer link the log)
         seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
@@ -203,7 +206,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
     withPackageReport :: DynamicPath -> PackageId -> (BuildReportId -> (BuildReport, Maybe BuildLog) -> ServerPartE a) -> ServerPartE a
     withPackageReport dpath pkgid func =
       withReportId dpath $ \reportId -> do
-        mreport <- query' reportsState $ LookupReport pkgid reportId
+        mreport <- queryState reportsState $ LookupReport pkgid reportId
         case mreport of
             Nothing -> errNotFound "Report not found" [MText "Build report does not exist"]
             Just report -> func reportId report
