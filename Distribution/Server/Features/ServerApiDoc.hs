@@ -81,14 +81,6 @@ apiDocPageHtml serverFeatures = hackagePage title content
         then     p << "This feature does not have any state."
         else     p << emphasize << "State"
              +++ unordList states
-{-
-          +++ p << (case featureDumpRestore feature of
-                      Nothing -> toHtml "This feature does not backup any state."
-                      Just dumpRestore ->
-                        let desc = featureBackupDesc dumpRestore in
-                        if null desc then thespan ! [thestyle "color: red"] << "Backup description unavailable"
-                                     else toHtml desc)
--}
 
     resourceList feature =
           p << emphasize << "Resources"
