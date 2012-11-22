@@ -149,7 +149,7 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
 
     updatePackageDeprecation :: MonadIO m => PackageName -> Maybe [PackageName] -> m ()
     updatePackageDeprecation pkgname deprs = liftIO $ do
-      update' preferredState $ SetDeprecatedFor pkgname deprs
+      updateState preferredState $ SetDeprecatedFor pkgname deprs
       runHook'' deprecatedHook pkgname deprs
       updateDeprecatedTags
 
