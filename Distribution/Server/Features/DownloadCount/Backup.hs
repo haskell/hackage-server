@@ -26,7 +26,7 @@ downloadsBackup downloadState = updateDownloads downloadState emptyDownloadCount
 
 updateDownloads :: AcidState DownloadCounts -> DownloadCounts -> RestoreBackup
 updateDownloads downloadState dcs = fix $ \r -> RestoreBackup
-  { restoreEntry = \(entry, bs) -> do
+  { restoreEntry = \entry bs -> do
         res <- runImport dcs $ case entry of
             ["downloads.csv"] -> importDownloads bs
             _ -> return ()

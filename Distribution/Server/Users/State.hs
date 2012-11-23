@@ -116,8 +116,11 @@ data HackageAdmins = HackageAdmins {
 
 $(deriveSafeCopy 0 'base ''HackageAdmins)
 
-getHackageAdmins :: Query HackageAdmins UserList
-getHackageAdmins = asks adminList
+getHackageAdmins :: Query HackageAdmins HackageAdmins
+getHackageAdmins = ask
+
+getAdminList :: Query HackageAdmins UserList
+getAdminList = asks adminList
 
 modifyHackageAdmins :: (UserList -> UserList) -> Update HackageAdmins ()
 modifyHackageAdmins func = State.modify (\users -> users { adminList = func (adminList users) })
@@ -136,6 +139,7 @@ initialHackageAdmins = HackageAdmins Group.empty
 
 $(makeAcidic ''HackageAdmins
                  ['getHackageAdmins
+                 ,'getAdminList
                  ,'addHackageAdmin
                  ,'removeHackageAdmin
                  ,'replaceHackageAdmins])
@@ -146,8 +150,11 @@ data MirrorClients = MirrorClients {
 } deriving (Eq, Typeable)
 $(deriveSafeCopy 0 'base ''MirrorClients)
 
-getMirrorClients :: Query MirrorClients UserList
-getMirrorClients = asks mirrorClients
+getMirrorClients :: Query MirrorClients MirrorClients
+getMirrorClients = ask
+
+getMirrorClientsList :: Query MirrorClients UserList
+getMirrorClientsList = asks mirrorClients
 
 modifyMirrorClients :: (UserList -> UserList) -> Update MirrorClients ()
 modifyMirrorClients func = State.modify (\users -> users { mirrorClients = func (mirrorClients users) })
@@ -166,6 +173,7 @@ initialMirrorClients = MirrorClients Group.empty
 
 $(makeAcidic ''MirrorClients
                     ['getMirrorClients
+                    ,'getMirrorClientsList
                     ,'addMirrorClient
                     ,'removeMirrorClient
                     ,'replaceMirrorClients])

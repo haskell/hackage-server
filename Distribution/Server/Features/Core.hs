@@ -147,22 +147,19 @@ initCoreFeature enableCaches env@ServerEnv{serverStateDir} UserFeature{..} = do
                          indexHook newPkgHook noPkgHook
 
 packagesStateComponent :: ServerEnv -> AcidState PackagesState -> StateComponent PackagesState
-packagesStateComponent env packagesState = StateComponent {
+packagesStateComponent env st = StateComponent {
      stateDesc    = "Main package database"
-   , acidState    = packagesState
-   , backupState  = dumpBackup
-   , restoreState = packagesBackup packagesState (serverBlobStore env)
+   , acidState    = st
+   , getState     = query st GetPackagesState
+   , backupState  = indexToAllVersions
+   , restoreState = packagesBackup st (serverBlobStore env)
    , testBackup   = testRoundtrip
    }
  where
    store = serverBlobStore env
 
-   dumpBackup = do
-     packages <- query packagesState GetPackagesState
-     readExportBlobs store $ indexToAllVersions packages
-
    testRoundtrip =
-     testRoundtripByQuery' (query packagesState GetPackagesState) $ \packages ->
+     testRoundtripByQuery' (query st GetPackagesState) $ \packages ->
        testBlobsExist store [
            blob
          | pkgInfo <- PackageIndex.allPackages (packageList packages)

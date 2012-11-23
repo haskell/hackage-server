@@ -24,7 +24,7 @@ tagsBackup tagsState = updateTags tagsState emptyPackageTags
 
 updateTags :: AcidState PackageTags -> PackageTags -> RestoreBackup
 updateTags tagsState tags = fix $ \r -> RestoreBackup
-  { restoreEntry = \(entry, bs) -> do
+  { restoreEntry = \entry bs -> do
         res <- runImport tags $ case entry of
             ["tags.csv"] -> importTags bs
             _ -> return ()

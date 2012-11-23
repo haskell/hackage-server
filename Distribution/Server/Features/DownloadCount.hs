@@ -66,8 +66,8 @@ downloadStateComponent :: AcidState DownloadCounts -> StateComponent DownloadCou
 downloadStateComponent st = StateComponent {
     stateDesc    = "Download counts"
   , acidState    = st
-  , backupState  = do dc <- query st GetDownloadCounts
-                      return [csvToBackup ["downloads.csv"] $ downloadsToCSV dc]
+  , getState     = query st GetDownloadCounts
+  , backupState  = \dc -> [csvToBackup ["downloads.csv"] $ downloadsToCSV dc]
   , restoreState = downloadsBackup st
   , testBackup   = testRoundtripByQuery (query st GetDownloadCounts)
   }

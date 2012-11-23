@@ -106,8 +106,9 @@ preferredStateComponent :: AcidState PreferredVersions -> StateComponent Preferr
 preferredStateComponent st = StateComponent {
     stateDesc    = "Preferred package versions"
   , acidState    = st
+  , getState     = query st GetPreferredVersions
   -- TODO: backup
-  , backupState  = return []
+  , backupState  = \_ -> []
   , testBackup   = return (return ["Backup not implemented"])
   }
 
@@ -149,7 +150,7 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
 
     updatePackageDeprecation :: MonadIO m => PackageName -> Maybe [PackageName] -> m ()
     updatePackageDeprecation pkgname deprs = liftIO $ do
-      updateState preferredState $ SetDeprecatedFor pkgname deprs
+      update' preferredState $ SetDeprecatedFor pkgname deprs
       runHook'' deprecatedHook pkgname deprs
       updateDeprecatedTags
 

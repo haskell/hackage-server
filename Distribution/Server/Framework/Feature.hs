@@ -59,7 +59,8 @@ class IsHackageFeature feature where
 data StateComponent st = StateComponent {
     stateDesc    :: String
   , acidState    :: AcidState st
-  , backupState  :: IO [BackupEntry]
+  , getState     :: IO st
+  , backupState  :: st -> [BackupEntry]
   , restoreState :: RestoreBackup
   , testBackup   :: TestRoundtrip
   }

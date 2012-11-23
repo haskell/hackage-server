@@ -115,10 +115,11 @@ initCheckFeature env@ServerEnv{serverStateDir} user core upload = do
 
 candidatesStateComponent :: AcidState CandidatePackages -> StateComponent CandidatePackages
 candidatesStateComponent st = StateComponent {
-    stateDesc     = "Candidate packages"
+    stateDesc    = "Candidate packages"
+  , getState     = query st GetCandidatePackages
   , acidState    = st
     -- TODO: backup
-  , backupState  = return []
+  , backupState  = \_ -> []
   , testBackup   = return (return ["Backup not implemented"])
   }
 

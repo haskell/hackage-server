@@ -6,11 +6,8 @@ Create a tarball with the structured defined by each individual feature.
 
 module Distribution.Server.Framework.BackupDump (
     exportTar,
-    ExportEntry,
-    readExportBlobs,
     csvToBackup,
-    csvToExport,
-    blobToExport,
+    blobToBackup,
 
     stringToBytes,
 
@@ -24,7 +21,7 @@ import qualified Data.ByteString.Lazy.Char8 as BSL
 
 import Text.CSV hiding (csv)
 
-import Distribution.Server.Framework.BackupRestore (BackupEntry, TestRoundtrip)
+import Distribution.Server.Framework.BackupRestore (BackupEntry(..), TestRoundtrip)
 import qualified Distribution.Server.Framework.BlobStorage as Blob
 
 import Distribution.Server.Framework.BlobStorage
@@ -44,42 +41,36 @@ import System.IO.Unsafe (unsafeInterleaveIO)
 import Data.Maybe (catMaybes)
 import Data.Time
 
-exportTar :: [(String, IO [BackupEntry])] -> IO BS.ByteString
-exportTar = fmap (compress . Tar.write) . toEntries
+exportTar :: BlobStorage -> [(String, IO [BackupEntry])] -> IO BS.ByteString
+exportTar store = fmap (compress . Tar.write) . toEntries store
 
 -- this is probably insufficiently lazy. use unsafeInterleaveIO to avoid loading /everything/ into memory
-toEntries :: [(String, IO [BackupEntry])] -> IO [Tar.Entry]
-toEntries featureMap = do
+toEntries :: BlobStorage -> [(String, IO [BackupEntry])] -> IO [Tar.Entry]
+toEntries store featureMap = do
     baseDir <- mkBaseDir `fmap` getCurrentTime
-    let exportEntries (name, ioEntries) = do
+    let exportEntries :: (String, IO [BackupEntry]) -> IO [Tar.Entry]
+        exportEntries (name, ioEntries) = do
             entries <- ioEntries
-            return $ flip map entries $ \(path, export) -> bsToEntry export (joinPath $ baseDir:name:path)
+            -- forM entries $ \(path, export) -> bsToEntry export (joinPath $ baseDir:name:path) -}
+            forM entries $ backupToTar store (joinPath . (\ps -> baseDir:name:ps))
     unsafeInterleaveConcatMap exportEntries featureMap
 
-type ExportEntry = ([FilePath], Either BS.ByteString BlobId)
-
-readExportBlobs :: BlobStorage -> [ExportEntry] -> IO [BackupEntry]
-readExportBlobs storage entries = forM entries $ \(path, export) ->
-    case export of
-        Left bs -> return (path, bs)
-        Right blobId -> do
-            contents <- unsafeInterleaveIO $ Blob.fetch storage blobId
-            return (path, contents)
-
--- | Convert a ByteString to a tar entry
-bsToEntry :: BS.ByteString -> FilePath -> Tar.Entry
-bsToEntry chunk path = case Tar.toTarPath False path of
-    Right tarPath -> Tar.fileEntry tarPath chunk
+backupToTar :: BlobStorage -> ([FilePath] -> FilePath) -> BackupEntry -> IO Tar.Entry
+backupToTar store mkPath (BackupByteString path bs) =
+  case Tar.toTarPath False (mkPath path) of
+    Right tarPath -> return $ Tar.fileEntry tarPath bs
+    Left err -> error $ "Error in export: " ++ err
+backupToTar store mkPath (BackupBlob path blobId) = do
+  contents <- unsafeInterleaveIO $ Blob.fetch store blobId
+  case Tar.toTarPath False (mkPath path) of
+    Right tarPath -> return $ Tar.fileEntry tarPath contents
     Left err -> error $ "Error in export: " ++ err
 
 csvToBackup :: [String] -> CSV -> BackupEntry
-csvToBackup fpath csv = (fpath, BS.pack (printCSV csv))
+csvToBackup fpath csv = BackupByteString fpath $ BS.pack (printCSV csv)
 
-csvToExport :: [String] -> CSV -> ExportEntry
-csvToExport fpath csv = (fpath, Left $ BS.pack (printCSV csv))
-
-blobToExport :: [String] -> BlobId -> ExportEntry
-blobToExport fpath blob = (fpath, Right blob)
+blobToBackup :: [String] -> BlobId -> BackupEntry
+blobToBackup = BackupBlob
 
 mkBaseDir :: UTCTime -> FilePath
 mkBaseDir time = "export-" ++ formatTime defaultTimeLocale (iso8601DateFormat Nothing) time

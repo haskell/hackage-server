@@ -66,19 +66,19 @@ documentationStateComponent :: ServerEnv -> AcidState Documentation -> StateComp
 documentationStateComponent ServerEnv{serverBlobStore = store} st = StateComponent {
     stateDesc    = "Package documentation"
   , acidState    = st
+  , getState     = query st GetDocumentation
   , backupState  = dumpBackup
   , restoreState = updateDocumentation (Documentation Map.empty)
   , testBackup   = testRoundtrip
   }
   where
-    dumpBackup = do
-        doc <- query st GetDocumentation
-        let exportFunc (pkgid, (blob, _)) = ([display pkgid, "documentation.tar"], Right blob)
-        readExportBlobs store $ map exportFunc . Map.toList $ documentation doc
+    dumpBackup doc =
+        let exportFunc (pkgid, (blob, _)) = BackupBlob ([display pkgid, "documentation.tar"]) blob
+        in map exportFunc . Map.toList $ documentation doc
 
     updateDocumentation :: Documentation -> RestoreBackup
     updateDocumentation docs = fix $ \r -> RestoreBackup
-      { restoreEntry = \(entryPath, bs) ->
+      { restoreEntry = \entryPath bs ->
             case entryPath of
                 [str, "documentation.tar"] | Just pkgid <- simpleParse str -> do
                     res <- runImport docs (importDocumentation pkgid bs)

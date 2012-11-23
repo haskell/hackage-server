@@ -3,7 +3,7 @@
 
 module Distribution.Server.Framework.BackupRestore (
     RestoreBackup(..),
-    BackupEntry,
+    BackupEntry(..),
     TestRoundtrip,
     Import,
     importTar,
@@ -46,6 +46,8 @@ import qualified Control.Exception as Exception
 import Distribution.Text
 import Data.Map (Map)
 
+import Distribution.Server.Framework.BlobStorage (BlobId)
+
 -- | Used to test that the backup/restore stuff works.
 --
 -- The outermost IO action takes an immutable snapshot of the internal state
@@ -53,10 +55,12 @@ import Data.Map (Map)
 -- returns a list of errors if any problems are found.
 type TestRoundtrip = IO (IO [String])
 
-type BackupEntry = ([FilePath], ByteString)
+data BackupEntry =
+    BackupByteString [FilePath] ByteString
+  | BackupBlob [FilePath] BlobId
 
 data RestoreBackup = RestoreBackup {
-    restoreEntry :: BackupEntry -> IO (Either String RestoreBackup),
+    restoreEntry :: [FilePath] -> ByteString -> IO (Either String RestoreBackup),
     -- Final checks and transformations on the accumulated data.
     -- For the most part, it combines partial data accumulated during importing
     -- tar entries, failing if bits are missing. It should not fail if no
@@ -70,16 +74,16 @@ data RestoreBackup = RestoreBackup {
 }
 instance Monoid RestoreBackup where
     mempty = RestoreBackup
-        { restoreEntry    = \_ -> return . Right $ mempty
+        { restoreEntry    = \_ _ -> return . Right $ mempty
         , restoreFinalize = return . Right $ mempty
         , restoreComplete = return ()
         }
     mappend (RestoreBackup run fin comp) (RestoreBackup run' fin' comp') = RestoreBackup
-        { restoreEntry = \entry -> do
-              res <- run entry
+        { restoreEntry = \path bs -> do
+              res <- run path bs
               case res of
                   Right backup -> do
-                      res' <- run' entry
+                      res' <- run' path bs
                       return $ fmap (mappend backup) res'
                   Left bad -> return $ Left bad
         , restoreFinalize = do
@@ -148,7 +152,7 @@ fromFile path contents
         featureMap <- get
         case Map.lookup pathFront featureMap of
             Just restorer -> do
-                res <- liftIO $ restoreEntry restorer (pathEnd, contents)
+                res <- liftIO $ restoreEntry restorer pathEnd contents
                 case res of Left e          -> fail $ "Error importing '" ++ path ++ "' :" ++ e
                             Right restorer' -> restorer' `seq` put (Map.insert pathFront restorer' featureMap)
             Nothing -> return ()

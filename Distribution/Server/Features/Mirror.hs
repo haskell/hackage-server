@@ -73,10 +73,10 @@ mirrorersStateComponent :: AcidState MirrorClients -> StateComponent MirrorClien
 mirrorersStateComponent st = StateComponent {
     stateDesc    = "Mirror clients"
   , acidState    = st
-  , backupState  = do clients <- query st GetMirrorClients
-                      return [csvToBackup ["clients.csv"] $ groupToCSV clients]
+  , getState     = query st GetMirrorClients
+  , backupState  = \(MirrorClients clients) -> [csvToBackup ["clients.csv"] $ groupToCSV clients]
   , restoreState = groupBackup st ["clients.csv"] ReplaceMirrorClients
-  , testBackup   = testRoundtripByQuery $ query st GetMirrorClients
+  , testBackup   = testRoundtripByQuery $ query st GetMirrorClientsList
   }
 
 mirrorFeature :: ServerEnv
@@ -122,7 +122,7 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
 
     mirrorersGroupDesc = UserGroup {
         groupDesc      = nullDescription { groupTitle = "Mirror clients" },
-        queryUserList  = queryState  mirrorersState   GetMirrorClients,
+        queryUserList  = queryState  mirrorersState   GetMirrorClientsList,
         addUserList    = updateState mirrorersState . AddMirrorClient,
         removeUserList = updateState mirrorersState . RemoveMirrorClient,
         groupExists    = return True,
@@ -226,7 +226,7 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
 
     requireMirrorAuth :: ServerPartE UserId
     requireMirrorAuth = do
-        ulist   <- queryState mirrorersState GetMirrorClients
+        ulist   <- queryState mirrorersState GetMirrorClientsList
         userdb  <- queryGetUserDb
         (uid, _) <- guardAuthorised hackageRealm userdb ulist
         return uid

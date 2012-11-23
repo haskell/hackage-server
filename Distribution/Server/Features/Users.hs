@@ -159,8 +159,8 @@ usersStateComponent :: AcidState Users.Users -> StateComponent Users.Users
 usersStateComponent st = StateComponent {
     stateDesc    = "List of users"
   , acidState    = st
-  , backupState  = do users <- query st GetUserDb
-                      return [csvToBackup ["users.csv"] (usersToCSV users)]
+  , getState     = query st GetUserDb
+  , backupState  = \users -> [csvToBackup ["users.csv"] (usersToCSV users)]
   , restoreState = userBackup st
   , testBackup   = testRoundtripByQuery $ query st GetUserDb
   }
@@ -169,10 +169,10 @@ adminsStateComponent :: AcidState HackageAdmins -> StateComponent HackageAdmins
 adminsStateComponent st = StateComponent {
     stateDesc    = "Admins"
   , acidState    = st
-  , backupState  = do admins <- query st GetHackageAdmins
-                      return [csvToBackup ["admins.csv"] (groupToCSV admins)]
+  , getState     = query st GetHackageAdmins
+  , backupState  = \(HackageAdmins admins) -> [csvToBackup ["admins.csv"] (groupToCSV admins)]
   , restoreState = groupBackup st ["admins.csv"] ReplaceHackageAdmins
-  , testBackup   = testRoundtripByQuery $ query st GetHackageAdmins
+  , testBackup   = testRoundtripByQuery $ query st GetAdminList
   }
 
 userFeature :: StateComponent Users.Users
@@ -259,7 +259,7 @@ userFeature  usersState adminsState
     deleteAccount uname =
       withUserName  uname $ \uid _ -> do
         users  <- queryState usersState GetUserDb
-        admins <- queryState adminsState State.GetHackageAdmins
+        admins <- queryState adminsState State.GetAdminList
         void $ guardAuthorised hackageRealm users admins
         void $ updateState usersState (DeleteUser uid)
 
@@ -268,7 +268,7 @@ userFeature  usersState adminsState
     enabledAccount uname =
       withUserName uname $ \uid _ -> do
         users  <- queryState usersState GetUserDb
-        admins <- queryState adminsState GetHackageAdmins
+        admins <- queryState adminsState GetAdminList
         void $ guardAuthorised hackageRealm users admins
         enabled <- optional $ look "enabled"
         -- for a checkbox, prescence in data string means 'checked'
@@ -280,7 +280,7 @@ userFeature  usersState adminsState
     handleUserPut dpath =
         runServerPartE $ do
           users  <- queryState usersState GetUserDb
-          admins <- queryState adminsState GetHackageAdmins
+          admins <- queryState adminsState GetAdminList
           _ <- guardAuthorised hackageRealm users admins
           withUserNamePath dpath $ \username -> do
             muid <- updateState usersState $ AddUser username NoUserAuth
@@ -295,7 +295,7 @@ userFeature  usersState adminsState
     handleUserDelete dpath =
         runServerPartE $ do
           users  <- queryState usersState GetUserDb
-          admins <- queryState adminsState GetHackageAdmins
+          admins <- queryState adminsState GetAdminList
           _ <- guardAuthorised hackageRealm users admins
           withUserPath dpath $ \uid _uinfo -> do
             merr <- updateState usersState $ DeleteUser uid
@@ -308,7 +308,7 @@ userFeature  usersState adminsState
     handleUserHtpasswdPut dpath =
         runServerPartE $ do
           users  <- queryState usersState GetUserDb
-          admins <- queryState adminsState GetHackageAdmins
+          admins <- queryState adminsState GetAdminList
           _admin <- guardAuthorised hackageRealm users admins
           withUserPath dpath $ \uid _ -> do
             expectTextPlain
@@ -353,7 +353,7 @@ userFeature  usersState adminsState
     adminAddUser :: ServerPartE Response
     adminAddUser = do
         -- with these lines commented out, self-registration is allowed
-      --admins <- query State.GetHackageAdmins
+      --admins <- query State.GetAdminList
       --users <- query State.GetUserDb
       --void $ guardAuthorised hackageRealm users admins
         reqData <- getDataFn lookUserNamePasswords
@@ -383,7 +383,7 @@ userFeature  usersState adminsState
     -- Arguments: the auth'd user id, the user path id (derived from the :username)
     canChangePassword :: MonadIO m => UserId -> UserId -> m Bool
     canChangePassword uid userPathId = do
-        admins <- queryState adminsState State.GetHackageAdmins
+        admins <- queryState adminsState State.GetAdminList
         return $ uid == userPathId || (uid `Group.member` admins)
 
     changePassword :: UserName -> ServerPartE ()
@@ -426,7 +426,7 @@ userFeature  usersState adminsState
     adminGroupDesc :: UserGroup
     adminGroupDesc = UserGroup {
           groupDesc      = nullDescription { groupTitle = "Hackage admins" },
-          queryUserList  = queryState adminsState GetHackageAdmins,
+          queryUserList  = queryState adminsState GetAdminList,
           addUserList    = updateState adminsState . AddHackageAdmin,
           removeUserList = updateState adminsState . RemoveHackageAdmin,
           groupExists    = return True,

@@ -217,11 +217,13 @@ checkpoint server =
   Features.checkpointAllFeatures (serverFeatures server)
 
 exportServerTar :: Server -> IO ByteString
-exportServerTar server = exportTar
-  [ (featureName feature, backupState st)
+exportServerTar server = exportTar store
+  [ (featureName feature, backupState st <$> getState st)
   | feature               <- serverFeatures server
   , SomeStateComponent st <- featureState feature
   ]
+    where
+      store = serverBlobStore (serverEnv server)
 
 importServerTar :: Server -> ByteString -> IO (Maybe String)
 importServerTar server tar = Import.importTar tar

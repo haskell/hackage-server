@@ -64,7 +64,8 @@ reportsStateComponent :: ServerEnv -> AcidState BuildReports -> StateComponent B
 reportsStateComponent ServerEnv{serverBlobStore = store} st = StateComponent {
     stateDesc    = "Build reports"
   , acidState    = st
-  , backupState  = dumpBackup    st store
+  , getState     = query st GetBuildReports
+  , backupState  = dumpBackup
   , restoreState = restoreBackup st store
   , testBackup   = testRoundtrip st store
   }

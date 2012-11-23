@@ -31,19 +31,18 @@ import Data.Monoid (mempty)
 import Control.Arrow (second)
 import System.FilePath (takeExtension)
 
-dumpBackup  :: AcidState Distros -> IO [BackupEntry]
-dumpBackup distrosState = do
-    allDist <- query distrosState GetDistributions
+dumpBackup  :: Distros -> [BackupEntry]
+dumpBackup allDist =
     let distros  = distDistros allDist
         versions = distVersions allDist
-    return $ distroUsersToExport distros:distrosToExport distros versions
+    in distroUsersToExport distros:distrosToExport distros versions
 
 restoreBackup :: AcidState Distros -> RestoreBackup
 restoreBackup distrosState = updateDistros distrosState Distros.emptyDistributions Distros.emptyDistroVersions Map.empty
 
 updateDistros :: AcidState Distros -> Distributions -> DistroVersions -> Map DistroName UserList -> RestoreBackup
 updateDistros distrosState distros versions maintainers = fix $ \restorer -> RestoreBackup
-      { restoreEntry = \(path, bs) -> do
+      { restoreEntry = \path bs -> do
             case path of
               ["package", distro] | takeExtension distro == ".csv" -> do
                 res <- runImport (distros, versions) (importDistro distro bs)

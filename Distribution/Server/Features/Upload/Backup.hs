@@ -34,7 +34,7 @@ maintainerBackup maintainersState =
 updateMaintainers :: AcidState PackageMaintainers
                   -> Map PackageName UserList -> RestoreBackup
 updateMaintainers maintainersState mains = fix $ \r -> RestoreBackup
-  { restoreEntry = \(entry, bs) -> do
+  { restoreEntry = \entry bs -> do
         res <- runImport mains $ case entry of
             ["maintainers.csv"] -> importMaintainers bs
             _ -> return ()

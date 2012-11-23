@@ -59,8 +59,9 @@ platformStateComponent :: AcidState PlatformPackages -> StateComponent PlatformP
 platformStateComponent st = StateComponent {
     stateDesc     = "Platform packages"
   , acidState     = st
+  , getState      = query st GetPlatformPackages
   -- TODO: backup
-  , backupState   = return []
+  , backupState   = \_ -> []
   , testBackup    = return (return ["Backup not implemented"])
   }
 

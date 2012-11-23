@@ -62,7 +62,8 @@ distrosStateComponent :: AcidState Distros -> StateComponent Distros
 distrosStateComponent st = StateComponent {
     stateDesc    = ""
   , acidState    = st
-  , backupState  = dumpBackup st
+  , getState     = query st GetDistributions
+  , backupState  = dumpBackup
   , restoreState = restoreBackup st
   , testBackup   = testRoundtripByQuery (query st GetDistributions)
   }

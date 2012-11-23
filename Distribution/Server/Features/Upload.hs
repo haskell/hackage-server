@@ -138,18 +138,18 @@ trusteesStateComponent :: AcidState HackageTrustees -> StateComponent HackageTru
 trusteesStateComponent st = StateComponent {
     stateDesc    = "Trustees"
   , acidState    = st
-  , backupState  = do trustees <- query st GetHackageTrustees
-                      return [csvToBackup ["trustees.csv"] $ groupToCSV trustees]
+  , getState     = query st GetHackageTrustees
+  , backupState  = \(HackageTrustees trustees) -> [csvToBackup ["trustees.csv"] $ groupToCSV trustees]
   , restoreState = groupBackup st ["trustees.csv"] ReplaceHackageTrustees
-  , testBackup   = testRoundtripByQuery $ query st GetHackageTrustees
+  , testBackup   = testRoundtripByQuery $ query st GetTrusteesList
   }
 
 uploadersStateComponent :: AcidState HackageUploaders -> StateComponent HackageUploaders
 uploadersStateComponent st = StateComponent {
     stateDesc    = "Uploaders"
   , acidState    = st
-  , backupState  = do uploaders <- query st GetHackageUploaders
-                      return [csvToBackup ["uploaders.csv"] $ groupToCSV uploaders]
+  , getState     = query st GetHackageUploaders
+  , backupState  = \(HackageUploaders uploaders) -> [csvToBackup ["uploaders.csv"] $ groupToCSV uploaders]
   , restoreState = groupBackup st ["uploaders.csv"] ReplaceHackageUploaders
   , testBackup   = return (return ["Backup test for uploaders not implemented"])
   }
@@ -158,8 +158,8 @@ maintainersStateComponent :: AcidState PackageMaintainers -> StateComponent Pack
 maintainersStateComponent st = StateComponent {
     stateDesc    = "Package maintainers"
   , acidState    = st
-  , backupState  = do PackageMaintainers mains <- query st AllPackageMaintainers
-                      return [maintToExport mains]
+  , getState     = query st AllPackageMaintainers
+  , backupState  = \(PackageMaintainers mains) -> [maintToExport mains]
   , restoreState = maintainerBackup st
   , testBackup   = testRoundtripByQuery $ query st AllPackageMaintainers
   }
@@ -221,7 +221,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
     getTrusteesGroup :: [UserGroup] -> UserGroup
     getTrusteesGroup canModify = fix $ \u -> UserGroup {
         groupDesc = trusteeDescription,
-        queryUserList  = queryState  trusteesState   GetHackageTrustees,
+        queryUserList  = queryState  trusteesState   GetTrusteesList,
         addUserList    = updateState trusteesState . AddHackageTrustee,
         removeUserList = updateState trusteesState . RemoveHackageTrustee,
         groupExists    = return True,
@@ -232,7 +232,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
     getUploadersGroup :: [UserGroup] -> UserGroup
     getUploadersGroup canModify = UserGroup {
         groupDesc      = uploaderDescription,
-        queryUserList  = queryState  uploadersState   GetHackageUploaders,
+        queryUserList  = queryState  uploadersState   GetUploadersList,
         addUserList    = updateState uploadersState . AddHackageUploader,
         removeUserList = updateState uploadersState . RemoveHackageUploader,
         groupExists    = return True,
@@ -279,14 +279,14 @@ uploadFeature ServerEnv{serverBlobStore = store}
     withTrusteeAuth :: (Users.UserId -> Users.UserInfo -> ServerPartE a) -> ServerPartE a
     withTrusteeAuth func = do
         userDb <- queryGetUserDb
-        trustee <- queryState trusteesState GetHackageTrustees
+        trustee <- queryState trusteesState GetTrusteesList
         (uid, uinfo) <- guardAuthorised hackageRealm userDb trustee
         func uid uinfo
 
     getPackageGroup :: MonadIO m => PackageName -> m Group.UserList
     getPackageGroup pkg = do
         pkgm    <- queryState maintainersState (GetPackageMaintainers pkg)
-        trustee <- queryState trusteesState GetHackageTrustees
+        trustee <- queryState trusteesState GetTrusteesList
         return $ Group.unions [trustee, pkgm]
 
     ----------------------------------------------------
@@ -295,7 +295,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
     uploadPackage :: ServerPartE UploadResult
     uploadPackage = do
         users     <- queryGetUserDb
-        uploaders <- queryState uploadersState GetHackageUploaders
+        uploaders <- queryState uploadersState GetUploadersList
         void $ guardAuthorised hackageRealm users uploaders
         pkgIndex <- queryGetPackageIndex
         let uploadFilter uid info = combineErrors $ runFilter'' canUploadPackage uid info

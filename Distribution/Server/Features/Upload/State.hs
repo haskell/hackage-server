@@ -69,8 +69,11 @@ deriveSafeCopy 0 'base ''HackageTrustees
 initialHackageTrustees :: HackageTrustees
 initialHackageTrustees = HackageTrustees Group.empty
 
-getHackageTrustees :: Query HackageTrustees UserList
-getHackageTrustees = asks trusteeList
+getHackageTrustees :: Query HackageTrustees HackageTrustees
+getHackageTrustees = ask
+
+getTrusteesList :: Query HackageTrustees UserList
+getTrusteesList = asks trusteeList
 
 modifyHackageTrustees :: (UserList -> UserList) -> Update HackageTrustees ()
 modifyHackageTrustees func = State.modify (\ht -> ht {trusteeList = func (trusteeList ht) })
@@ -85,6 +88,7 @@ replaceHackageTrustees :: UserList -> Update HackageTrustees ()
 replaceHackageTrustees ulist = modifyHackageTrustees (const ulist)
 
 makeAcidic ''HackageTrustees ['getHackageTrustees
+                             ,'getTrusteesList
                              ,'addHackageTrustee
                              ,'removeHackageTrustee
                              ,'replaceHackageTrustees
@@ -100,8 +104,11 @@ $(deriveSafeCopy 0 'base ''HackageUploaders)
 initialHackageUploaders :: HackageUploaders
 initialHackageUploaders = HackageUploaders Group.empty
 
-getHackageUploaders :: Query HackageUploaders UserList
-getHackageUploaders = asks uploaderList
+getHackageUploaders :: Query HackageUploaders HackageUploaders
+getHackageUploaders = ask
+
+getUploadersList :: Query HackageUploaders UserList
+getUploadersList = asks uploaderList
 
 modifyHackageUploaders :: (UserList -> UserList) -> Update HackageUploaders ()
 modifyHackageUploaders func = State.modify (\ht -> ht {uploaderList = func (uploaderList ht) })
@@ -116,6 +123,7 @@ replaceHackageUploaders :: UserList -> Update HackageUploaders ()
 replaceHackageUploaders ulist = modifyHackageUploaders (const ulist)
 
 makeAcidic ''HackageUploaders ['getHackageUploaders
+                              ,'getUploadersList
                               ,'addHackageUploader
                               ,'removeHackageUploader
                               ,'replaceHackageUploaders

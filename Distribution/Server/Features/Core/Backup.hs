@@ -45,8 +45,8 @@ type PartialIndex = Map PackageId PartialPkg
 
 updatePackageBackup :: AcidState PackagesState -> BlobStorage -> PartialIndex -> RestoreBackup
 updatePackageBackup packagesState storage packageMap = RestoreBackup
-  { restoreEntry    = \entry -> do
-        res <- doPackageImport storage packageMap entry
+  { restoreEntry    = \path bs -> do
+        res <- doPackageImport storage packageMap path bs
         return $ fmap (updatePackageBackup packagesState storage) res
   , restoreFinalize =
         let results = mapM partialToFullPkg (Map.toList packageMap)
@@ -130,8 +130,8 @@ data2 - upload0 (upload time of earliest version is at top)
 -- instead of keeping the PartialPkgs around for a long time, there could be package data
 -- tarballs within the backup tarball, which are read one at a time (and so we can see if
 -- import fails /during/ import rather than during restoreFinalize)
-doPackageImport :: BlobStorage -> PartialIndex -> BackupEntry -> IO (Either String PartialIndex)
-doPackageImport storage packages (("package":pkgStr:rest), bs) = runImport packages $ case simpleParse pkgStr of
+doPackageImport :: BlobStorage -> PartialIndex -> [FilePath] -> ByteString -> IO (Either String PartialIndex)
+doPackageImport storage packages ("package":pkgStr:rest) bs = runImport packages $ case simpleParse pkgStr of
     Nothing    -> fail $ "Package directory " ++ show pkgStr ++ " isn't a valid package id"
     Just pkgId -> do
         partial  <- gets (Map.findWithDefault emptyPartialPkg pkgId)
@@ -160,7 +160,7 @@ doPackageImport storage packages (("package":pkgStr:rest), bs) = runImport packa
                 [(version, "")] -> Just version
                 _ -> Nothing
             _ -> Nothing
-doPackageImport _ packages _ = return . Right $ packages
+doPackageImport _ packages _ _ = return . Right $ packages
 
 importVersionList :: FilePath -> ByteString -> Import s [(Int, UploadInfo)]
 importVersionList name contents = importCSV name contents $ mapM fromRecord . drop 2
@@ -174,19 +174,19 @@ importVersionList name contents = importCSV name contents $ mapM fromRecord . dr
 
 --------------------------------------------------------------------------------
 -- Every tarball and cabal file ever uploaded for every single package name and version
-indexToAllVersions :: PackagesState -> [ExportEntry]
+indexToAllVersions :: PackagesState -> [BackupEntry]
 indexToAllVersions st =
     let pkgList = PackageIndex.allPackages . packageList $ st
     in concatMap infoToAllEntries pkgList
 
 -- The most recent tarball and cabal file for every single package name and version
-indexToAllVersions' :: PackagesState -> [ExportEntry]
+indexToAllVersions' :: PackagesState -> [BackupEntry]
 indexToAllVersions' st =
     let pkgList = PackageIndex.allPackages . packageList $ st
     in concatMap infoToCurrentEntries pkgList
 
 -- The most recent tarball and cabal file for the most recent version of every package
-indexToCurrentVersions :: PackagesState -> [ExportEntry]
+indexToCurrentVersions :: PackagesState -> [BackupEntry]
 indexToCurrentVersions st =
     let pkgList = PackageIndex.allPackagesByName . packageList $ st
         pkgList' = map (maximumBy (comparing pkgUploadTime)) pkgList
@@ -195,14 +195,14 @@ indexToCurrentVersions st =
 -- it's also possible to make a cabal-only export
 
 ---------- Converting PkgInfo to entries
-infoToAllEntries :: PkgInfo -> [ExportEntry]
+infoToAllEntries :: PkgInfo -> [BackupEntry]
 infoToAllEntries pkg =
     let pkgId = pkgInfoId pkg
         cabals   = cabalListToExport pkgId $ unshiftUploadTimes ((pkgData pkg, pkgUploadData pkg):pkgDataOld pkg)
         tarballs = tarballListToExport pkgId (pkgTarball pkg)
     in cabals ++ tarballs
 
-infoToCurrentEntries :: PkgInfo -> [ExportEntry]
+infoToCurrentEntries :: PkgInfo -> [BackupEntry]
 infoToCurrentEntries pkg =
     let pkgId = pkgInfoId pkg
         cabals   = cabalListToExport pkgId [(pkgData pkg, pkgUploadData pkg)]
@@ -210,24 +210,24 @@ infoToCurrentEntries pkg =
     in cabals ++ tarballs
 
 ----------- Converting pieces of PkgInfo to entries
-cabalListToExport :: PackageId -> [(CabalFileText, UploadInfo)] -> [ExportEntry]
-cabalListToExport pkgId cabalInfos = csvToExport (pkgPath ++ ["uploads.csv"]) (versionListToCSV infos):
+cabalListToExport :: PackageId -> [(CabalFileText, UploadInfo)] -> [BackupEntry]
+cabalListToExport pkgId cabalInfos = csvToBackup (pkgPath ++ ["uploads.csv"]) (versionListToCSV infos):
     map cabalToExport (zip [0..] cabals)
   where (cabals, infos) = unzip cabalInfos
         cabalName = display (packageName pkgId) ++ ".cabal"
-        cabalToExport :: (Int, CabalFileText) -> ExportEntry
-        cabalToExport (0, CabalFileText bs) = (pkgPath ++ [cabalName], Left bs)
-        cabalToExport (n, CabalFileText bs) = (pkgPath ++ [cabalName ++ "-" ++ show n], Left bs)
+        cabalToExport :: (Int, CabalFileText) -> BackupEntry
+        cabalToExport (0, CabalFileText bs) = BackupByteString (pkgPath ++ [cabalName]) bs
+        cabalToExport (n, CabalFileText bs) = BackupByteString (pkgPath ++ [cabalName ++ "-" ++ show n]) bs
         pkgPath = ["package", display pkgId]
 
-tarballListToExport :: PackageId -> [(PkgTarball, UploadInfo)] -> [ExportEntry]
-tarballListToExport pkgId tarballInfos = csvToExport (pkgPath ++ ["tarball.csv"]) (versionListToCSV infos):
+tarballListToExport :: PackageId -> [(PkgTarball, UploadInfo)] -> [BackupEntry]
+tarballListToExport pkgId tarballInfos = csvToBackup (pkgPath ++ ["tarball.csv"]) (versionListToCSV infos):
     map tarballToExport (zip [0..] tarballs)
   where (tarballs, infos) = unzip tarballInfos
         tarballName = display pkgId ++ ".tar.gz"
-        tarballToExport :: (Int, PkgTarball) -> ExportEntry
-        tarballToExport (0, tb) = blobToExport (pkgPath ++ [tarballName]) (pkgTarballGz tb)
-        tarballToExport (n, tb) = blobToExport (pkgPath ++ [tarballName ++ "-" ++ show n]) (pkgTarballGz tb)
+        tarballToExport :: (Int, PkgTarball) -> BackupEntry
+        tarballToExport (0, tb) = blobToBackup (pkgPath ++ [tarballName]) (pkgTarballGz tb)
+        tarballToExport (n, tb) = blobToBackup (pkgPath ++ [tarballName ++ "-" ++ show n]) (pkgTarballGz tb)
         pkgPath = ["package", display pkgId]
 
 versionListToCSV :: [UploadInfo] -> CSV

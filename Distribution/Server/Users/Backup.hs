@@ -33,16 +33,16 @@ userBackup usersState = updateUserBackup usersState Users.empty
 
 updateUserBackup :: AcidState Users -> Users -> RestoreBackup
 updateUserBackup usersState users = RestoreBackup
-  { restoreEntry = \entry -> do
-        res <- doUserImport users entry
+  { restoreEntry = \path bs -> do
+        res <- doUserImport users path bs
         return $ fmap (updateUserBackup usersState) res
   , restoreFinalize = return . Right $ updateUserBackup usersState users
   , restoreComplete = update usersState $ ReplaceUserDb users
   }
 
-doUserImport :: Users -> BackupEntry -> IO (Either String Users)
-doUserImport users (["users.csv"], bs) = runImport users (importAuth bs)
-doUserImport users _ = return . Right $ users
+doUserImport :: Users -> [FilePath] -> ByteString -> IO (Either String Users)
+doUserImport users ["users.csv"] bs = runImport users (importAuth bs)
+doUserImport users _             _  = return . Right $ users
 
 importAuth :: ByteString -> Import Users ()
 importAuth contents = importCSV "users.csv" contents $ \csv -> mapM_ fromRecord (drop 2 csv)
@@ -94,18 +94,19 @@ groupBackup :: (UpdateEvent event, MethodResult event ~ ())
             -> RestoreBackup
 groupBackup state csvPath updateFunc = updateGroupBackup Group.empty
   where
-    updateGroupBackup group = fix $ \restorer -> RestoreBackup
-              { restoreEntry = \entry -> do
-                    if fst entry == csvPath
-                        then fmap (fmap updateGroupBackup) $ runImport group (importGroup entry >>= put)
-                        else return . Right $ restorer
-              , restoreFinalize = return . Right $ restorer
-              , restoreComplete = update state (updateFunc group)
-              }
+    updateGroupBackup group = fix $ \restorer -> RestoreBackup {
+        restoreEntry = \path bs ->
+          if path == csvPath
+            then fmap (fmap updateGroupBackup) $ runImport group (importGroup path bs >>= put)
+            else return . Right $ restorer
+      , restoreFinalize = return . Right $ restorer
+      , restoreComplete = update state (updateFunc group)
+      }
 
 -- parses a rather lax format. Any layout of integer ids separated by commas.
-importGroup :: BackupEntry -> Import s UserList
-importGroup (file, contents) = importCSV (last file) contents $ \vals ->
+importGroup :: [FilePath] -> ByteString -> Import s UserList
+importGroup file contents =
+  importCSV (last file) contents $ \vals ->
     fmap (UserList . IntSet.fromList) $ mapM parseUserId (concat $ clean vals)
   where
     clean xs = if all null xs then [] else xs

@@ -106,8 +106,8 @@ tagsStateComponent :: AcidState PackageTags -> StateComponent PackageTags
 tagsStateComponent st = StateComponent {
     stateDesc    = "Package tags"
   , acidState    = st
-  , backupState  = do pkgTags <- query st GetPackageTags
-                      return [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]
+  , getState     = query st GetPackageTags
+  , backupState  = \pkgTags -> [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]
   , restoreState = tagsBackup st
   , testBackup   = testRoundtripByQuery $ query st GetPackageTags
   }

@@ -33,12 +33,8 @@ import Data.Monoid (mempty)
 import System.FilePath (splitExtension)
 import Data.ByteString.Lazy.Char8 (ByteString)
 
-
-dumpBackup  :: AcidState BuildReports -> BlobStorage -> IO [BackupEntry]
-dumpBackup reportsState store = do
-  buildReps <- query reportsState GetBuildReports
-  exports <- readExportBlobs store (buildReportsToExport buildReps)
-  return exports
+dumpBackup  :: BuildReports -> [BackupEntry]
+dumpBackup = buildReportsToExport
 
 restoreBackup :: AcidState BuildReports -> BlobStorage -> RestoreBackup
 restoreBackup reportsState storage = updateReports reportsState storage (Reports.emptyReports, Map.empty)
@@ -53,7 +49,7 @@ type PartialLogs = Map (PackageId, BuildReportId) BuildLog
 
 updateReports :: AcidState BuildReports -> BlobStorage -> (BuildReports, PartialLogs) -> RestoreBackup
 updateReports reportsState storage reportLogs@(buildReports, partialLogs) = RestoreBackup
-  { restoreEntry = \(entry, bs) -> do
+  { restoreEntry = \entry bs -> do
         res <- runImport reportLogs $ case entry of
             ["package", pkgStr, reportItem] | Just pkgid <- simpleParse pkgStr -> case packageVersion pkgid of
                 Version [] [] -> fail $ "Build report package id " ++ show pkgStr ++ " must specify a version"
@@ -100,16 +96,16 @@ importLog storage pkgid repIdStr contents = do
         Just buildReps' -> put (buildReps', logs)
 
 ------------------------------------------------------------------------------
-buildReportsToExport :: BuildReports -> [ExportEntry]
+buildReportsToExport :: BuildReports -> [BackupEntry]
 buildReportsToExport buildReports = concatMap (uncurry packageReportsToExport) (Map.toList $ Reports.reportsIndex buildReports)
 
-packageReportsToExport :: PackageId -> PkgBuildReports -> [ExportEntry]
+packageReportsToExport :: PackageId -> PkgBuildReports -> [BackupEntry]
 packageReportsToExport pkgid pkgReports = concatMap (uncurry $ reportToExport prefix) (Map.toList $ Reports.reports pkgReports)
     where prefix = ["package", display pkgid]
 
-reportToExport :: [FilePath] -> BuildReportId -> (BuildReport, Maybe BuildLog) -> [ExportEntry]
-reportToExport prefix reportId (report, mlog) = (getPath ".txt", Left . stringToBytes $ Report.show report) :
-    case mlog of Nothing -> []; Just (BuildLog blobId) -> [blobToExport (getPath ".log") blobId]
+reportToExport :: [FilePath] -> BuildReportId -> (BuildReport, Maybe BuildLog) -> [BackupEntry]
+reportToExport prefix reportId (report, mlog) = BackupByteString (getPath ".txt") (stringToBytes $ Report.show report) :
+    case mlog of Nothing -> []; Just (BuildLog blobId) -> [blobToBackup (getPath ".log") blobId]
   where
     getPath ext = prefix ++ [display reportId ++ ext]
 
