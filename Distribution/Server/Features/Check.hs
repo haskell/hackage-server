@@ -120,6 +120,7 @@ candidatesStateComponent st = StateComponent {
   , acidState    = st
     -- TODO: backup
   , backupState  = \_ -> []
+  , restoreState = mempty
   , testBackup   = return (return ["Backup not implemented"])
   }
 

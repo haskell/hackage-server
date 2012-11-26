@@ -531,14 +531,16 @@ testBackupAction opts = do
       errs <- test_roundtrip
       unless (null errs) $ do
         mapM_ info errs
-        fail "Snapshot check failed!"
+      --   fail "Snapshot check failed!"
       info "Preparing second export tarball"
       tar' <- Server.exportServerTar server
       case tar `equalTarBall` tar' of
         [] -> return ()
         tar_eq_errs -> do
           mapM_ info tar_eq_errs
-          fail "Tarballs don't match!"
+          BS.writeFile "export-before.tar" tar
+          BS.writeFile "export-after.tar" tar'
+          fail "Tarballs don't match! Written to export-before.tar and export-after.tar."
 
 
 -------------------------------------------------------------------------------

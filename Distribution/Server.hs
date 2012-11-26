@@ -227,10 +227,16 @@ exportServerTar server = exportTar store
 
 importServerTar :: Server -> ByteString -> IO (Maybe String)
 importServerTar server tar = Import.importTar tar
-  [ (featureName feature, restoreState st)
-  | feature               <- serverFeatures server
-  , SomeStateComponent st <- featureState feature
+  [ (featureName feature, featureRestoreState feature)
+  | feature <- serverFeatures server
   ]
+
+-- Import.importTar requires a single entry per feature
+featureRestoreState :: HackageFeature -> Import.RestoreBackup
+featureRestoreState feature =
+  mconcat [ restoreState st
+          | SomeStateComponent st <- featureState feature
+          ]
 
 -- TODO: this computes all the checks before executing them, rather than
 -- interleaving the creation of the checks with their execution.
@@ -253,9 +259,8 @@ testRoundtrip server = do
 initState ::  Server -> (String, String) -> IO ()
 initState server (admin, pass) = do
     void $ Import.importBlank
-      [ (featureName feature, restoreState st)
-      | feature               <- serverFeatures server
-      , SomeStateComponent st <- featureState feature
+      [ (featureName feature, featureRestoreState feature)
+      | feature <- serverFeatures server
       ]
     -- create default admin user
     let UserFeature{updateAddUser, adminGroup} = serverUserFeature server

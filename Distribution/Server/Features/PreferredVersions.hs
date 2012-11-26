@@ -109,6 +109,7 @@ preferredStateComponent st = StateComponent {
   , getState     = query st GetPreferredVersions
   -- TODO: backup
   , backupState  = \_ -> []
+  , restoreState = mempty
   , testBackup   = return (return ["Backup not implemented"])
   }
 

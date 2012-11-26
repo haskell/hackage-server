@@ -57,12 +57,13 @@ initPlatformFeature ServerEnv{serverStateDir} = do
 
 platformStateComponent :: AcidState PlatformPackages -> StateComponent PlatformPackages
 platformStateComponent st = StateComponent {
-    stateDesc     = "Platform packages"
-  , acidState     = st
-  , getState      = query st GetPlatformPackages
+    stateDesc    = "Platform packages"
+  , acidState    = st
+  , getState     = query st GetPlatformPackages
   -- TODO: backup
-  , backupState   = \_ -> []
-  , testBackup    = return (return ["Backup not implemented"])
+  , backupState  = \_ -> []
+  , restoreState = mempty
+  , testBackup   = return (return ["Backup not implemented"])
   }
 
 platformFeature :: StateComponent PlatformPackages
