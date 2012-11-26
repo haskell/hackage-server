@@ -10,6 +10,7 @@ module Distribution.Server.Framework.BackupRestore (
     importBlank,
 
     importCSV,
+    importCSV',
     runImport,
     getImport,
     withSubImport,
@@ -20,7 +21,13 @@ module Distribution.Server.Framework.BackupRestore (
 
     equalTarBall,
 
-    module Distribution.Server.Util.Merge
+    module Distribution.Server.Util.Merge,
+
+    -- * We are slowly transitioning to a pure restore process
+    -- Once that transition is complete this will replace RestoreBackup
+    PureRestoreBackup(..),
+    fromPureRestoreBackup,
+    concatM
   ) where
 
 import qualified Codec.Archive.Tar as Tar
@@ -72,6 +79,25 @@ data RestoreBackup = RestoreBackup {
     -- is useful for analyses of data in other features that can be recalculated on import)
     restoreComplete :: IO ()
 }
+
+data PureRestoreBackup st = PureRestoreBackup {
+    pureRestoreEntry    :: [FilePath] -> ByteString -> Either String (PureRestoreBackup st)
+  , pureRestoreFinalize :: Either String st
+  }
+
+fromPureRestoreBackup :: (st -> IO ()) -> PureRestoreBackup st -> RestoreBackup
+fromPureRestoreBackup putState = translate
+  where
+    translate prb = RestoreBackup {
+        restoreEntry = \path bs -> return (translate <$> pureRestoreEntry prb path bs)
+      , restoreFinalize = case pureRestoreFinalize prb of
+          Left err -> return . Left $ err
+          Right st -> return . Right $ mempty {
+              restoreComplete = putState st
+            }
+      , restoreComplete = error "complete called before finalize"
+      }
+
 instance Monoid RestoreBackup where
     mempty = RestoreBackup
         { restoreEntry    = \_ _ -> return . Right $ mempty
@@ -229,6 +255,10 @@ addTarIndex blob
 
 -- implementation of the Import data type
 
+concatM :: (Monad m) => [a -> m a] -> (a -> m a)
+concatM fs = foldr (>=>) return fs
+
+
 newtype Import s a = Imp {unImp :: forall r. (String -> IO r) -- error
                                           -> (a -> s -> IO r) -- success
                                           -> s -- state
@@ -296,18 +326,21 @@ customParseCSV filename inp = case parseCSV filename inp of
    chopLastRecord ([""]:[]) = []
    chopLastRecord (x:xs) = x : chopLastRecord xs
 
+importCSV' :: FilePath -> ByteString -> Either String CSV
+importCSV' filename inp = customParseCSV filename (unpackUTF8 inp)
+
 -- | Made customParseCSV into a nifty combinator.
 importCSV :: String -> ByteString -> (CSV -> Import s a) -> Import s a
-importCSV filename inp comb = case customParseCSV filename (unpackUTF8 inp) of
+importCSV filename inp comb = case importCSV' filename inp of
     Left  err -> fail err
     Right csv -> comb csv
 
-parseRead :: Read a => String -> String -> Import s a
+parseRead :: (Read a, Monad m) => String -> String -> m a
 parseRead label str = case reads str of
     [(value, "")] -> return value
     _ -> fail $ "Unable to parse " ++ label ++ ": " ++ show str
 
-parseTime :: String -> Import s UTCTime
+parseTime :: Monad m => String -> m UTCTime
 parseTime str = case Time.parseTime defaultTimeLocale timeFormatSpec str of
     Nothing -> fail $ "Unable to parse time: " ++ str
     Just x  -> return x
@@ -318,7 +351,7 @@ timeFormatSpec :: String
 timeFormatSpec = "%Y-%m-%d %H:%M:%S %z"
 
 -- Parse a string, throw an error if it's bad
-parseText :: Text a => String -> String -> Import s a
+parseText :: (Text a, Monad m) => String -> String -> m a
 parseText label text = case simpleParse text of
     Nothing -> fail $ "Unable to parse " ++ label ++ ": " ++ show text
     Just a -> return a

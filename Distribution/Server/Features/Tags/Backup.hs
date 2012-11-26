@@ -15,33 +15,34 @@ import Text.CSV (CSV, Record)
 import qualified Data.Map as Map
 -- import Data.Set (Set)
 import qualified Data.Set as Set
-import Control.Monad.State (modify)
-import Data.Function (fix)
 import Data.ByteString.Lazy.Char8 (ByteString)
 
 tagsBackup :: AcidState PackageTags -> RestoreBackup
-tagsBackup tagsState = updateTags tagsState emptyPackageTags
+tagsBackup tagsState =
+  fromPureRestoreBackup
+    (update tagsState . ReplacePackageTags)
+    (updateTagsPure emptyPackageTags)
 
-updateTags :: AcidState PackageTags -> PackageTags -> RestoreBackup
-updateTags tagsState tags = fix $ \r -> RestoreBackup
-  { restoreEntry = \entry bs -> do
-        res <- runImport tags $ case entry of
-            ["tags.csv"] -> importTags bs
-            _ -> return ()
-        return $ fmap (updateTags tagsState) res
-  , restoreFinalize = return . Right $ r
-  , restoreComplete = update tagsState $ ReplacePackageTags tags
+updateTagsPure :: PackageTags -> PureRestoreBackup PackageTags
+updateTagsPure tagsState = PureRestoreBackup {
+    pureRestoreEntry = \entry bs ->
+      if entry == ["tags.csv"]
+        then do csv <- importCSV' "tags.csv" bs
+                tagsState' <- updateFromCSV csv tagsState
+                return (updateTagsPure tagsState')
+        else return (updateTagsPure tagsState)
+  , pureRestoreFinalize = return tagsState
   }
 
-importTags :: ByteString -> Import PackageTags ()
-importTags contents = importCSV "tags.csv" contents $ \csv ->
-    mapM_ fromRecord csv
+updateFromCSV :: CSV -> PackageTags -> Either String PackageTags
+updateFromCSV = concatM . map fromRecord
   where
-    fromRecord (packageField:tagFields) | not (null tagFields) = do
-        pkgname <- parseText "package name" packageField
-        tags <- mapM (parseText "tag") tagFields
-        modify $ setTags pkgname (Set.fromList tags)
-    fromRecord x = fail $ "Invalid tags record: " ++ show x
+    fromRecord :: Record -> PackageTags -> Either String PackageTags
+    fromRecord (packageField:tagFields) tagsState | not (null tagFields) = do
+      pkgname <- parseText "package name" packageField :: Either String PackageName
+      tags <- mapM (parseText "tag") tagFields :: Either String [Tag]
+      return (setTags pkgname (Set.fromList tags) tagsState)
+    fromRecord x _ = fail $ "Invalid tags record: " ++ show x
 
 ------------------------------------------------------------------------------
 tagsToCSV :: PackageTags -> CSV
