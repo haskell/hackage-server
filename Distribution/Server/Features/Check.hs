@@ -103,25 +103,21 @@ initCheckFeature :: ServerEnv
                  -> UserFeature -> CoreFeature -> UploadFeature
                  -> IO CheckFeature
 initCheckFeature env@ServerEnv{serverStateDir} user core upload = do
+    candidatesState <- candidatesStateComponent serverStateDir
+    return $ checkFeature env user core upload candidatesState
 
-    -- Canonical state
-    candidatesState <- openLocalStateFrom
-                         (serverStateDir </> "db" </> "CandidatePackages")
-                         initialCandidatePackages
-
-    return $
-      checkFeature env user core upload
-                   (candidatesStateComponent candidatesState)
-
-candidatesStateComponent :: AcidState CandidatePackages -> StateComponent CandidatePackages
-candidatesStateComponent st = StateComponent {
-    stateDesc    = "Candidate packages"
-  , getState     = query st GetCandidatePackages
-  , acidState    = st
-    -- TODO: backup
-  , backupState  = \_ -> []
-  , restoreState = mempty
-  , testBackup   = return (return ["Backup not implemented"])
+candidatesStateComponent :: FilePath -> IO (StateComponent CandidatePackages)
+candidatesStateComponent stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "CandidatePackages") initialCandidatePackages
+  return StateComponent {
+      stateDesc    = "Candidate packages"
+    , getState     = query st GetCandidatePackages
+    , acidState    = st
+    , resetState   = const candidatesStateComponent
+      -- TODO: backup
+    , backupState  = \_ -> []
+    , restoreState = mempty
+    , testBackup   = return (return ["Backup not implemented"])
   }
 
 checkFeature :: ServerEnv

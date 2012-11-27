@@ -88,30 +88,25 @@ data PreferredRender = PreferredRender {
 
 initVersionsFeature :: ServerEnv -> CoreFeature -> UploadFeature -> TagsFeature -> IO VersionsFeature
 initVersionsFeature ServerEnv{serverStateDir} core upload tags = do
-
-    -- Canonical state
-    preferredState  <- openLocalStateFrom
-                         (serverStateDir </> "db" </> "PreferredVersions")
-                         initialPreferredVersions
-
+    preferredState <- preferredStateComponent serverStateDir
     preferredHook  <- newHook
     deprecatedHook <- newHook
+    return $ versionsFeature core upload tags
+                             preferredState preferredHook deprecatedHook
 
-    return $
-      versionsFeature core upload tags
-                      (preferredStateComponent preferredState)
-                      preferredHook deprecatedHook
-
-preferredStateComponent :: AcidState PreferredVersions -> StateComponent PreferredVersions
-preferredStateComponent st = StateComponent {
-    stateDesc    = "Preferred package versions"
-  , acidState    = st
-  , getState     = query st GetPreferredVersions
-  -- TODO: backup
-  , backupState  = \_ -> []
-  , restoreState = mempty
-  , testBackup   = return (return ["Backup not implemented"])
-  }
+preferredStateComponent :: FilePath -> IO (StateComponent PreferredVersions)
+preferredStateComponent stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "PreferredVersions") initialPreferredVersions
+  return StateComponent {
+      stateDesc    = "Preferred package versions"
+    , acidState    = st
+    , getState     = query st GetPreferredVersions
+    , resetState   = const preferredStateComponent
+    -- TODO: backup
+    , backupState  = \_ -> []
+    , restoreState = mempty
+    , testBackup   = return (return ["Backup not implemented"])
+    }
 
 versionsFeature :: CoreFeature
                 -> UploadFeature

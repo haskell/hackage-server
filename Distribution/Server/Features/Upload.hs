@@ -80,16 +80,9 @@ initUploadFeature env@ServerEnv{serverStateDir}
                   core@CoreFeature{..} user@UserFeature{..} = do
 
     -- Canonical state
-    trusteesState    <- openLocalStateFrom
-                          (serverStateDir </> "db" </> "HackageTrustees")
-                          initialHackageTrustees
-    uploadersState   <- openLocalStateFrom
-                          (serverStateDir </> "db" </> "HackageUploaders")
-                          initialHackageUploaders
-    maintainersState <- openLocalStateFrom
-                          (serverStateDir </> "db" </> "PackageMaintainers")
-                          initialPackageMaintainers
-
+    trusteesState    <- trusteesStateComponent    serverStateDir
+    uploadersState   <- uploadersStateComponent   serverStateDir
+    maintainersState <- maintainersStateComponent serverStateDir
 
     -- some shared tasks
     let admins = adminGroup
@@ -103,9 +96,9 @@ initUploadFeature env@ServerEnv{serverStateDir}
     rec let (feature,
              getTrusteesGroup, getUploadersGroup, makeMaintainersGroup)
               = uploadFeature env core user
-                              (trusteesStateComponent trusteesState)       trustees  trustResource
-                              (uploadersStateComponent uploadersState)     uploaders uploaderResource'
-                              (maintainersStateComponent maintainersState) pkgGroup  pkgResource
+                              trusteesState    trustees  trustResource
+                              uploadersState   uploaders uploaderResource'
+                              maintainersState pkgGroup  pkgResource
                               uploadFilter
 
         (trustees,  trustResource) <-
@@ -113,7 +106,7 @@ initUploadFeature env@ServerEnv{serverStateDir}
         (uploaders, uploaderResource') <-
           groupResourceAt "/packages/uploaders" (getUploadersGroup [admins])
 
-        groupPkgs <- fmap (Map.keys . maintainers) $ query maintainersState AllPackageMaintainers
+        groupPkgs <- fmap (Map.keys . maintainers) $ queryState maintainersState AllPackageMaintainers
         --TODO: move this local function inside uploadFeature,
         --      like getTrusteesGroup, getUploadersGroup etc.
         let getPkgMaintainers dpath =
@@ -134,35 +127,44 @@ initUploadFeature env@ServerEnv{serverStateDir}
 
     return feature
 
-trusteesStateComponent :: AcidState HackageTrustees -> StateComponent HackageTrustees
-trusteesStateComponent st = StateComponent {
-    stateDesc    = "Trustees"
-  , acidState    = st
-  , getState     = query st GetHackageTrustees
-  , backupState  = \(HackageTrustees trustees) -> [csvToBackup ["trustees.csv"] $ groupToCSV trustees]
-  , restoreState = groupBackup st ["trustees.csv"] ReplaceHackageTrustees
-  , testBackup   = testRoundtripByQuery $ query st GetTrusteesList
-  }
+trusteesStateComponent :: FilePath -> IO (StateComponent HackageTrustees)
+trusteesStateComponent stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "HackageTrustees") initialHackageTrustees
+  return StateComponent {
+      stateDesc    = "Trustees"
+    , acidState    = st
+    , getState     = query st GetHackageTrustees
+    , backupState  = \(HackageTrustees trustees) -> [csvToBackup ["trustees.csv"] $ groupToCSV trustees]
+    , restoreState = groupBackup st ["trustees.csv"] ReplaceHackageTrustees
+    , testBackup   = testRoundtripByQuery $ query st GetTrusteesList
+    , resetState   = const trusteesStateComponent
+    }
 
-uploadersStateComponent :: AcidState HackageUploaders -> StateComponent HackageUploaders
-uploadersStateComponent st = StateComponent {
-    stateDesc    = "Uploaders"
-  , acidState    = st
-  , getState     = query st GetHackageUploaders
-  , backupState  = \(HackageUploaders uploaders) -> [csvToBackup ["uploaders.csv"] $ groupToCSV uploaders]
-  , restoreState = groupBackup st ["uploaders.csv"] ReplaceHackageUploaders
-  , testBackup   = return (return ["Backup test for uploaders not implemented"])
-  }
+uploadersStateComponent :: FilePath -> IO (StateComponent HackageUploaders)
+uploadersStateComponent stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "HackageUploaders") initialHackageUploaders
+  return StateComponent {
+      stateDesc    = "Uploaders"
+    , acidState    = st
+    , getState     = query st GetHackageUploaders
+    , backupState  = \(HackageUploaders uploaders) -> [csvToBackup ["uploaders.csv"] $ groupToCSV uploaders]
+    , restoreState = groupBackup st ["uploaders.csv"] ReplaceHackageUploaders
+    , testBackup   = return (return ["Backup test for uploaders not implemented"])
+    , resetState   = const uploadersStateComponent
+    }
 
-maintainersStateComponent :: AcidState PackageMaintainers -> StateComponent PackageMaintainers
-maintainersStateComponent st = StateComponent {
-    stateDesc    = "Package maintainers"
-  , acidState    = st
-  , getState     = query st AllPackageMaintainers
-  , backupState  = \(PackageMaintainers mains) -> [maintToExport mains]
-  , restoreState = maintainerBackup st
-  , testBackup   = testRoundtripByQuery $ query st AllPackageMaintainers
-  }
+maintainersStateComponent :: FilePath -> IO (StateComponent PackageMaintainers)
+maintainersStateComponent stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "PackageMaintainers") initialPackageMaintainers
+  return StateComponent {
+      stateDesc    = "Package maintainers"
+    , acidState    = st
+    , getState     = query st AllPackageMaintainers
+    , backupState  = \(PackageMaintainers mains) -> [maintToExport mains]
+    , restoreState = maintainerBackup st
+    , testBackup   = testRoundtripByQuery $ query st AllPackageMaintainers
+    , resetState   = const maintainersStateComponent
+    }
 
 uploadFeature :: ServerEnv
               -> CoreFeature

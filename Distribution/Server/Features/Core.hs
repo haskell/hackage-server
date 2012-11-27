@@ -115,12 +115,10 @@ data CoreResource = CoreResource {
 }
 
 initCoreFeature :: Bool -> ServerEnv -> UserFeature -> IO CoreFeature
-initCoreFeature enableCaches env@ServerEnv{serverStateDir} UserFeature{..} = do
+initCoreFeature enableCaches env@ServerEnv{serverStateDir, serverBlobStore} UserFeature{..} = do
 
     -- Canonical state
-    packagesState <- openLocalStateFrom
-                       (serverStateDir </> "db" </> "PackagesState")
-                       initialPackagesState
+    packagesState <- packagesStateComponent serverBlobStore serverStateDir
 
     -- Caches
     -- Additional files to put in the index tarball like preferred-versions
@@ -129,7 +127,7 @@ initCoreFeature enableCaches env@ServerEnv{serverStateDir} UserFeature{..} = do
     -- The index.tar.gz file
     indexTar <- Cache.newCacheableAction enableCaches $ do
             users  <- queryGetUserDb
-            index  <- packageList <$> query packagesState GetPackagesState
+            index  <- packageList <$> queryState packagesState GetPackagesState
             extras <- Cache.getCache extraMap
             return $ GZip.compress $ Packages.Index.write users extras index
 
@@ -142,23 +140,24 @@ initCoreFeature enableCaches env@ServerEnv{serverStateDir} UserFeature{..} = do
     noPkgHook  <- newHook
     registerHook indexHook $ Cache.refreshCacheableAction indexTar
 
-    return $ coreFeature env (packagesStateComponent env packagesState) extraMap indexTar
+    return $ coreFeature env packagesState extraMap indexTar
                          downHook addHook removeHook changeHook
                          indexHook newPkgHook noPkgHook
 
-packagesStateComponent :: ServerEnv -> AcidState PackagesState -> StateComponent PackagesState
-packagesStateComponent env st = StateComponent {
-     stateDesc    = "Main package database"
-   , acidState    = st
-   , getState     = query st GetPackagesState
-   , backupState  = indexToAllVersions
-   , restoreState = packagesBackup st (serverBlobStore env)
-   , testBackup   = testRoundtrip
-   }
+packagesStateComponent :: BlobStorage -> FilePath -> IO (StateComponent PackagesState)
+packagesStateComponent store stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "PackagesState") initialPackagesState
+  return StateComponent {
+       stateDesc    = "Main package database"
+     , acidState    = st
+     , getState     = query st GetPackagesState
+     , backupState  = indexToAllVersions
+     , restoreState = packagesBackup st store
+     , testBackup   = testRoundtrip st
+     , resetState   = packagesStateComponent
+     }
  where
-   store = serverBlobStore env
-
-   testRoundtrip =
+   testRoundtrip st =
      testRoundtripByQuery' (query st GetPackagesState) $ \packages ->
        testBlobsExist store [
            blob

@@ -56,28 +56,29 @@ initMirrorFeature :: ServerEnv -> CoreFeature -> UserFeature -> IO MirrorFeature
 initMirrorFeature env@ServerEnv{serverStateDir} core user@UserFeature{..} = do
 
     -- Canonical state
-    mirrorersState <- openLocalStateFrom
-                        (serverStateDir </> "db" </> "MirrorClients")
-                        initialMirrorClients
+    mirrorersState <- mirrorersStateComponent serverStateDir
 
     -- Tie the knot with a do-rec
     rec let (feature, mirrorersGroupDesc)
               = mirrorFeature env core user
-                              (mirrorersStateComponent mirrorersState) mirrorersG mirrorR
+                              mirrorersState mirrorersG mirrorR
 
         (mirrorersG, mirrorR) <- groupResourceAt "/packages/mirrorers" mirrorersGroupDesc
 
     return feature
 
-mirrorersStateComponent :: AcidState MirrorClients -> StateComponent MirrorClients
-mirrorersStateComponent st = StateComponent {
-    stateDesc    = "Mirror clients"
-  , acidState    = st
-  , getState     = query st GetMirrorClients
-  , backupState  = \(MirrorClients clients) -> [csvToBackup ["clients.csv"] $ groupToCSV clients]
-  , restoreState = groupBackup st ["clients.csv"] ReplaceMirrorClients
-  , testBackup   = testRoundtripByQuery $ query st GetMirrorClientsList
-  }
+mirrorersStateComponent :: FilePath -> IO (StateComponent MirrorClients)
+mirrorersStateComponent stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "MirrorClients") initialMirrorClients
+  return StateComponent {
+      stateDesc    = "Mirror clients"
+    , acidState    = st
+    , getState     = query st GetMirrorClients
+    , backupState  = \(MirrorClients clients) -> [csvToBackup ["clients.csv"] $ groupToCSV clients]
+    , restoreState = groupBackup st ["clients.csv"] ReplaceMirrorClients
+    , testBackup   = testRoundtripByQuery $ query st GetMirrorClientsList
+    , resetState   = const mirrorersStateComponent
+    }
 
 mirrorFeature :: ServerEnv
               -> CoreFeature

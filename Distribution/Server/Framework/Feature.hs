@@ -1,10 +1,25 @@
 -- | This module defines a plugin interface for hackage features.
 --
 {-# LANGUAGE ExistentialQuantification, RankNTypes, NoMonomorphismRestriction #-}
-module Distribution.Server.Framework.Feature where
+module Distribution.Server.Framework.Feature
+  ( -- * Main datatypes
+    HackageFeature(..)
+  , IsHackageFeature(..)
+  , emptyHackageFeature
+    -- * State components
+  , StateComponent(..)
+  , SomeStateComponent(..)
+  , queryState
+  , updateState
+  , createCheckpointState
+  , closeState
+    -- * Re-exports
+  , BlobStorage
+  ) where
 
 import Distribution.Server.Framework.BackupRestore (RestoreBackup(..), BackupEntry, TestRoundtrip)
 import Distribution.Server.Framework.Resource      (Resource)
+import Distribution.Server.Framework.BlobStorage   (BlobStorage)
 import Data.Function (fix)
 import Control.Monad.Trans (MonadIO)
 import Data.Acid
@@ -57,11 +72,19 @@ class IsHackageFeature feature where
 --------------------------------------------------------------------------------
 
 data StateComponent st = StateComponent {
+    -- | Human readable description of the state component
     stateDesc    :: String
+    -- | The underlying AcidState handle
   , acidState    :: AcidState st
+    -- | Return the entire state
   , getState     :: IO st
+    -- | (Pure) backup function
   , backupState  :: st -> [BackupEntry]
+    -- | (Currently impure) backup restore
   , restoreState :: RestoreBackup
+    -- | Clone the state component in the given state directory
+  , resetState   :: BlobStorage -> FilePath -> IO (StateComponent st)
+    -- | Test that the backup works (will be replaced)
   , testBackup   :: TestRoundtrip
   }
 

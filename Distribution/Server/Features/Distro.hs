@@ -48,25 +48,21 @@ data DistroResource = DistroResource {
 
 initDistroFeature :: ServerEnv -> UserFeature -> CoreFeature -> IO DistroFeature
 initDistroFeature ServerEnv{serverStateDir} user core = do
+    distrosState <- distrosStateComponent serverStateDir
+    return $ distroFeature user core distrosState
 
-    -- Canonical state
-    distrosState  <- openLocalStateFrom
-                       (serverStateDir </> "db" </> "Distros")
-                       initialDistros
-
-    return $
-      distroFeature user core
-                    (distrosStateComponent distrosState)
-
-distrosStateComponent :: AcidState Distros -> StateComponent Distros
-distrosStateComponent st = StateComponent {
-    stateDesc    = ""
-  , acidState    = st
-  , getState     = query st GetDistributions
-  , backupState  = dumpBackup
-  , restoreState = restoreBackup st
-  , testBackup   = testRoundtripByQuery (query st GetDistributions)
-  }
+distrosStateComponent :: FilePath -> IO (StateComponent Distros)
+distrosStateComponent stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "Distros") initialDistros
+  return StateComponent {
+      stateDesc    = ""
+    , acidState    = st
+    , getState     = query st GetDistributions
+    , backupState  = dumpBackup
+    , restoreState = restoreBackup st
+    , testBackup   = testRoundtripByQuery (query st GetDistributions)
+    , resetState   = const distrosStateComponent
+    }
 
 distroFeature :: UserFeature
               -> CoreFeature

@@ -125,12 +125,8 @@ initUserFeature :: ServerEnv -> IO UserFeature
 initUserFeature ServerEnv{serverStateDir} = do
 
   -- Canonical state
-  usersState  <- openLocalStateFrom
-                   (serverStateDir </> "db" </> "Users")
-                   initialUsers
-  adminsState <- openLocalStateFrom
-                   (serverStateDir </> "db" </> "HackageAdmins")
-                   initialHackageAdmins
+  usersState  <- usersStateComponent  serverStateDir
+  adminsState <- adminsStateComponent serverStateDir
 
   -- Cached state
   groupIndex   <- Cache.newCache emptyGroupIndex id
@@ -146,8 +142,8 @@ initUserFeature ServerEnv{serverStateDir} = do
   -- Instead of trying to pull it apart, we just use a 'do rec'
   --
   rec let (feature@UserFeature{groupResourceAt}, adminGroupDesc)
-            = userFeature (usersStateComponent usersState)
-                          (adminsStateComponent adminsState)
+            = userFeature usersState
+                          adminsState
                           groupIndex userAdded packageMutate
                           adminG adminR
 
@@ -155,25 +151,31 @@ initUserFeature ServerEnv{serverStateDir} = do
 
   return feature
 
-usersStateComponent :: AcidState Users.Users -> StateComponent Users.Users
-usersStateComponent st = StateComponent {
-    stateDesc    = "List of users"
-  , acidState    = st
-  , getState     = query st GetUserDb
-  , backupState  = \users -> [csvToBackup ["users.csv"] (usersToCSV users)]
-  , restoreState = userBackup st
-  , testBackup   = testRoundtripByQuery $ query st GetUserDb
-  }
+usersStateComponent :: FilePath -> IO (StateComponent Users.Users)
+usersStateComponent stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "Users") initialUsers
+  return StateComponent {
+      stateDesc    = "List of users"
+    , acidState    = st
+    , getState     = query st GetUserDb
+    , backupState  = \users -> [csvToBackup ["users.csv"] (usersToCSV users)]
+    , restoreState = userBackup st
+    , testBackup   = testRoundtripByQuery $ query st GetUserDb
+    , resetState   = const usersStateComponent
+    }
 
-adminsStateComponent :: AcidState HackageAdmins -> StateComponent HackageAdmins
-adminsStateComponent st = StateComponent {
-    stateDesc    = "Admins"
-  , acidState    = st
-  , getState     = query st GetHackageAdmins
-  , backupState  = \(HackageAdmins admins) -> [csvToBackup ["admins.csv"] (groupToCSV admins)]
-  , restoreState = groupBackup st ["admins.csv"] ReplaceHackageAdmins
-  , testBackup   = testRoundtripByQuery $ query st GetAdminList
-  }
+adminsStateComponent :: FilePath -> IO (StateComponent HackageAdmins)
+adminsStateComponent stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "HackageAdmins") initialHackageAdmins
+  return StateComponent {
+      stateDesc    = "Admins"
+    , acidState    = st
+    , getState     = query st GetHackageAdmins
+    , backupState  = \(HackageAdmins admins) -> [csvToBackup ["admins.csv"] (groupToCSV admins)]
+    , restoreState = groupBackup st ["admins.csv"] ReplaceHackageAdmins
+    , testBackup   = testRoundtripByQuery $ query st GetAdminList
+    , resetState   = const adminsStateComponent
+    }
 
 userFeature :: StateComponent Users.Users
             -> StateComponent HackageAdmins

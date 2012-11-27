@@ -49,26 +49,22 @@ data ReportsResource = ReportsResource {
 
 
 initBuildReportsFeature :: ServerEnv -> UserFeature -> CoreFeature -> IO ReportsFeature
-initBuildReportsFeature env@ServerEnv{serverStateDir} user core = do
+initBuildReportsFeature env@ServerEnv{serverBlobStore, serverStateDir} user core = do
+    reportsState <- reportsStateComponent serverBlobStore serverStateDir
+    return $ buildReportsFeature env user core reportsState
 
-    -- Canonical state
-    reportsState  <- openLocalStateFrom
-                       (serverStateDir </> "db" </> "BuildReports")
-                       initialBuildReports
-
-    return $
-      buildReportsFeature env user core
-                          (reportsStateComponent env reportsState)
-
-reportsStateComponent :: ServerEnv -> AcidState BuildReports -> StateComponent BuildReports
-reportsStateComponent ServerEnv{serverBlobStore = store} st = StateComponent {
-    stateDesc    = "Build reports"
-  , acidState    = st
-  , getState     = query st GetBuildReports
-  , backupState  = dumpBackup
-  , restoreState = restoreBackup st store
-  , testBackup   = testRoundtrip st store
-  }
+reportsStateComponent :: BlobStorage -> FilePath -> IO (StateComponent BuildReports)
+reportsStateComponent store stateDir = do
+  st  <- openLocalStateFrom (stateDir </> "db" </> "BuildReports") initialBuildReports
+  return StateComponent {
+      stateDesc    = "Build reports"
+    , acidState    = st
+    , getState     = query st GetBuildReports
+    , backupState  = dumpBackup
+    , restoreState = restoreBackup st store
+    , testBackup   = testRoundtrip st store
+    , resetState   = reportsStateComponent
+    }
 
 buildReportsFeature :: ServerEnv
                     -> UserFeature

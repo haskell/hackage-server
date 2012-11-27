@@ -48,29 +48,26 @@ data DownloadResource = DownloadResource {
 
 initDownloadFeature :: ServerEnv -> CoreFeature -> IO DownloadFeature
 initDownloadFeature ServerEnv{serverStateDir} core = do
+    downloadState <- downloadStateComponent serverStateDir
+    downChan      <- newChan
+    downHist      <- Cache.newCacheable emptyHistogram
 
-    downloadState <- openLocalStateFrom
-                       (serverStateDir </> "db" </> "DownloadCounts")
-                       initialDownloadCounts
-
-    downChan <- newChan
-    downHist <- Cache.newCacheable emptyHistogram
     registerHook (tarballDownload core) $ writeChan downChan
 
-    return $
-      downloadFeature core
-                      (downloadStateComponent downloadState)
-                      downChan downHist
+    return $ downloadFeature core downloadState downChan downHist
 
-downloadStateComponent :: AcidState DownloadCounts -> StateComponent DownloadCounts
-downloadStateComponent st = StateComponent {
-    stateDesc    = "Download counts"
-  , acidState    = st
-  , getState     = query st GetDownloadCounts
-  , backupState  = \dc -> [csvToBackup ["downloads.csv"] $ downloadsToCSV dc]
-  , restoreState = downloadsBackup st
-  , testBackup   = testRoundtripByQuery (query st GetDownloadCounts)
-  }
+downloadStateComponent :: FilePath -> IO (StateComponent DownloadCounts)
+downloadStateComponent stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "DownloadCounts") initialDownloadCounts
+  return StateComponent {
+      stateDesc    = "Download counts"
+    , acidState    = st
+    , getState     = query st GetDownloadCounts
+    , backupState  = \dc -> [csvToBackup ["downloads.csv"] $ downloadsToCSV dc]
+    , restoreState = downloadsBackup st
+    , testBackup   = testRoundtripByQuery (query st GetDownloadCounts)
+    , resetState   = const downloadStateComponent
+    }
 
 downloadFeature :: CoreFeature
                 -> StateComponent DownloadCounts

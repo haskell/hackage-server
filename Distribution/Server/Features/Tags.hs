@@ -83,34 +83,31 @@ data TagsResource = TagsResource {
 
 initTagsFeature :: ServerEnv -> CoreFeature -> IO TagsFeature
 initTagsFeature ServerEnv{serverStateDir} core@CoreFeature{..} = do
-
-    tagsState <- openLocalStateFrom
-                   (serverStateDir </> "db" </> "Tags")
-                   initialPackageTags
-
-    specials <- Cache.newCacheable emptyPackageTags
+    tagsState <- tagsStateComponent serverStateDir
+    specials  <- Cache.newCacheable emptyPackageTags
     updateTag <- newHook
 
-    let feature = tagsFeature core
-                              (tagsStateComponent tagsState)
-                              specials updateTag
+    let feature = tagsFeature core tagsState specials updateTag
 
     registerHook packageAddHook $ \pkginfo -> do
       let pkgname = packageName . packageDescription . pkgDesc $ pkginfo
           tags = Set.fromList . constructImmutableTags . pkgDesc $ pkginfo
-      update tagsState . SetPackageTags pkgname $ tags
+      updateState tagsState . SetPackageTags pkgname $ tags
 
     return feature
 
-tagsStateComponent :: AcidState PackageTags -> StateComponent PackageTags
-tagsStateComponent st = StateComponent {
-    stateDesc    = "Package tags"
-  , acidState    = st
-  , getState     = query st GetPackageTags
-  , backupState  = \pkgTags -> [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]
-  , restoreState = tagsBackup st
-  , testBackup   = testRoundtripByQuery $ query st GetPackageTags
-  }
+tagsStateComponent :: FilePath -> IO (StateComponent PackageTags)
+tagsStateComponent stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "Tags") initialPackageTags
+  return StateComponent {
+      stateDesc    = "Package tags"
+    , acidState    = st
+    , getState     = query st GetPackageTags
+    , backupState  = \pkgTags -> [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]
+    , restoreState = tagsBackup st
+    , testBackup   = testRoundtripByQuery $ query st GetPackageTags
+    , resetState   = const tagsStateComponent
+    }
 
 tagsFeature :: CoreFeature
             -> StateComponent PackageTags

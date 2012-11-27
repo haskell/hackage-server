@@ -46,25 +46,22 @@ data PlatformResource = PlatformResource {
 
 initPlatformFeature :: ServerEnv -> IO PlatformFeature
 initPlatformFeature ServerEnv{serverStateDir} = do
+    platformState <- platformStateComponent serverStateDir
+    return $ platformFeature platformState
 
-    -- Canonical state
-    platformState <- openLocalStateFrom
-                       (serverStateDir </> "db" </> "PlatformPackages")
-                       initialPlatformPackages
-
-    return $
-      platformFeature (platformStateComponent platformState)
-
-platformStateComponent :: AcidState PlatformPackages -> StateComponent PlatformPackages
-platformStateComponent st = StateComponent {
-    stateDesc    = "Platform packages"
-  , acidState    = st
-  , getState     = query st GetPlatformPackages
-  -- TODO: backup
-  , backupState  = \_ -> []
-  , restoreState = mempty
-  , testBackup   = return (return ["Backup not implemented"])
-  }
+platformStateComponent :: FilePath -> IO (StateComponent PlatformPackages)
+platformStateComponent stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "PlatformPackages") initialPlatformPackages
+  return StateComponent {
+      stateDesc    = "Platform packages"
+    , acidState    = st
+    , getState     = query st GetPlatformPackages
+    , resetState   = const platformStateComponent
+    -- TODO: backup
+    , backupState  = \_ -> []
+    , restoreState = mempty
+    , testBackup   = return (return ["Backup not implemented"])
+    }
 
 platformFeature :: StateComponent PlatformPackages
                 -> PlatformFeature

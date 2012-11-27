@@ -50,39 +50,34 @@ data DocumentationResource = DocumentationResource {
 }
 
 initDocumentationFeature :: ServerEnv -> CoreFeature -> UploadFeature -> IO DocumentationFeature
-initDocumentationFeature env@ServerEnv{serverStateDir} core upload = do
+initDocumentationFeature env@ServerEnv{serverStateDir, serverBlobStore} core upload = do
+    documentationState <- documentationStateComponent serverBlobStore serverStateDir
+    return $ documentationFeature env core upload documentationState
 
-    -- Canonical state
-    documentationState <- openLocalStateFrom
-                            (serverStateDir </> "db" </> "Documentation")
-                            initialDocumentation
-
-    return $
-      documentationFeature env core upload
-                           (documentationStateComponent env documentationState)
-
-
-documentationStateComponent :: ServerEnv -> AcidState Documentation -> StateComponent Documentation
-documentationStateComponent ServerEnv{serverBlobStore = store} st = StateComponent {
-    stateDesc    = "Package documentation"
-  , acidState    = st
-  , getState     = query st GetDocumentation
-  , backupState  = dumpBackup
-  , restoreState = updateDocumentation (Documentation Map.empty)
-  , testBackup   = testRoundtrip
-  }
+documentationStateComponent :: BlobStorage -> FilePath -> IO (StateComponent Documentation)
+documentationStateComponent store stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "Documentation") initialDocumentation
+  return StateComponent {
+      stateDesc    = "Package documentation"
+    , acidState    = st
+    , getState     = query st GetDocumentation
+    , backupState  = dumpBackup
+    , restoreState = updateDocumentation st (Documentation Map.empty)
+    , testBackup   = testRoundtrip st
+    , resetState   = documentationStateComponent
+    }
   where
     dumpBackup doc =
         let exportFunc (pkgid, (blob, _)) = BackupBlob ([display pkgid, "documentation.tar"]) blob
         in map exportFunc . Map.toList $ documentation doc
 
-    updateDocumentation :: Documentation -> RestoreBackup
-    updateDocumentation docs = fix $ \r -> RestoreBackup
+    updateDocumentation :: AcidState Documentation -> Documentation -> RestoreBackup
+    updateDocumentation st docs = fix $ \r -> RestoreBackup
       { restoreEntry = \entryPath bs ->
             case entryPath of
                 [str, "documentation.tar"] | Just pkgid <- simpleParse str -> do
                     res <- runImport docs (importDocumentation pkgid bs)
-                    return $ fmap updateDocumentation res
+                    return $ fmap (updateDocumentation st) res
                 _ -> return . Right $ r
       , restoreFinalize = return . Right $ r
       , restoreComplete = update st $ ReplaceDocumentation docs
@@ -100,7 +95,7 @@ documentationStateComponent ServerEnv{serverBlobStore = store} st = StateCompone
     -- 1. We don't really want to check that the tar index is the same (probably)
     -- 2. We must that the documentation blobs all got imported. To do this we just
     --    need to check they *exist*, due to the MD5-hashing scheme we use.
-    testRoundtrip = testRoundtripByQuery' (liftM (Map.map fst . documentation) $ query st GetDocumentation) $ \doc ->
+    testRoundtrip st = testRoundtripByQuery' (liftM (Map.map fst . documentation) $ query st GetDocumentation) $ \doc ->
         testBlobsExist store (Map.elems doc)
 
 documentationFeature :: ServerEnv
