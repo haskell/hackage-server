@@ -340,7 +340,7 @@ parseTime str = case Time.parseTime defaultTimeLocale timeFormatSpec str of
 -- | Time/Date format used in exported files.
 -- Variant on ISO formatted date, with time and time zone.
 timeFormatSpec :: String
-timeFormatSpec = "%Y-%m-%d %H:%M:%S %z"
+timeFormatSpec = "%Y-%m-%d %H:%M:%S%Q %z"
 
 -- Parse a string, throw an error if it's bad
 parseText :: (Text a, Monad m) => String -> String -> m a
