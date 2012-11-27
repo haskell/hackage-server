@@ -140,7 +140,8 @@ listFeature CoreFeature{..}
                 items <- constructItemIndex
                 Cache.putCache itemCache items
             periodicDownloadRefresh = forever $ do
-                threadDelay (10 * 60 * 1000000) -- 10 minutes
+                --FIXME: don't do this if nothing has changed!
+                threadDelay (30 * 60 * 1000000) -- 30 minutes
                 refreshDownloads
 
     modifyItem pkgname token = do
