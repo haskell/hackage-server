@@ -40,6 +40,7 @@ import System.FilePath
 import qualified System.FilePath.Posix as Posix
 import Data.List
 import Data.Maybe
+import Data.Ord (comparing)
 import Data.Time (UTCTime, formatTime)
 import Control.Monad
 import Control.Monad.Trans
@@ -260,13 +261,15 @@ importAddresses _addressesFile _baseURI =
 
 data MetadataFlags = MetadataFlags {
     flagImportIndex     :: Flag FilePath,
-    flagImportUploadLog :: Flag FilePath
+    flagImportUploadLog :: Flag FilePath,
+    flagImportJobs      :: Flag String
   }
 
 defaultMetadataFlags :: MetadataFlags
 defaultMetadataFlags = MetadataFlags {
     flagImportIndex     = NoFlag,
-    flagImportUploadLog = NoFlag
+    flagImportUploadLog = NoFlag,
+    flagImportJobs      = NoFlag
   }
 
 metadataCommand :: CommandUI MetadataFlags
@@ -291,11 +294,16 @@ metadataCommand =
           "Import who uploaded what when, and set maintainer groups"
           flagImportUploadLog (\v flags -> flags { flagImportUploadLog = v })
           (reqArgFlag "LOG")
+      , option [] ["jobs"]
+          "The level of concurrency to use when uploading"
+          flagImportJobs (\v flags -> flags { flagImportJobs = v })
+          (reqArgFlag "N")
       ]
 
 metadataAction :: MetadataFlags -> [String] -> GlobalFlags -> IO ()
 metadataAction opts args _ = do
 
+    jobs    <- validateOptsJobs (flagImportJobs opts)
     baseURI <- validateOptsServerURI args
 
     when (flagImportIndex opts == NoFlag
@@ -305,24 +313,28 @@ metadataAction opts args _ = do
 
     case flagImportIndex opts of
       NoFlag    -> return ()
-      Flag file -> importIndex file baseURI
+      Flag file -> importIndex jobs file baseURI
 
     case flagImportUploadLog opts of
       NoFlag    -> return ()
       Flag file -> importUploadLog file baseURI
 
-importIndex :: FilePath -> URI -> IO ()
-importIndex indexFile baseURI = do
+importIndex :: Int -> FilePath -> URI -> IO ()
+importIndex jobs indexFile baseURI = do
     info $ "Reading index file " ++ indexFile
     pkgs  <- either fail return
            . PkgIndex.readPkgIndex
          =<< BS.readFile indexFile
 
-    httpSession $ do
-      setAuthorityFromURI baseURI
-      sequence_
-        [ putCabalFile baseURI pkgid cabalFile
-        |  (pkgid, cabalFile) <- pkgs ]
+    pkgs' <- evaluate (sortBy (comparing fst) pkgs)
+    info $ "Uploading..."
+
+    concForM_ jobs pkgs' $ \tasks ->
+      httpSession $ do
+        setAuthorityFromURI baseURI
+        tasks $ \ (pkgid, cabalFile) ->
+          putCabalFile baseURI pkgid cabalFile
+
 
 putCabalFile :: URI -> PackageId -> ByteString -> HttpSession ()
 putCabalFile baseURI pkgid cabalFile = do
@@ -428,12 +440,7 @@ tarballCommand =
 tarballAction :: TarballFlags -> [String] -> GlobalFlags -> IO ()
 tarballAction flags args _ = do
 
-    jobs <- case tarballFlagJobs flags of
-      NoFlag                       -> return 1
-      Flag s | [(n,"")] <- reads s
-             , n >= 1 && n < 10    -> return n
-      Flag s | [(n :: Int,"")] <- reads s -> die "not a sensible number for --jobs"
-             | otherwise           -> die "expected a number for --jobs"
+    jobs <- validateOptsJobs (tarballFlagJobs flags)
 
     (baseURI, tarballFiles) <- validateOptsServerURI' args
 
@@ -796,6 +803,16 @@ validateOptsServerURI' (server:opts) = do uri <- either die return $ validateHtt
                                           return (uri,opts)
 validateOptsServerURI' _             = die $ "The command expects the target server "
                                           ++ "URI e.g. http://admin:admin@localhost:8080/"
+
+validateOptsJobs :: Flag String -> IO Int
+validateOptsJobs  NoFlag       = return 1
+validateOptsJobs (Flag s)
+  | [(n,"")] <- reads s
+ , n >= 1 && n <= 16           = return n
+validateOptsJobs (Flag s)
+  | [(n :: Int,"")] <- reads s = die "not a sensible number for --jobs"
+  | otherwise                  = die "expected a number for --jobs"
+
 
 -------------------------------------------------------------------------------
 -- Concurrency Utils
