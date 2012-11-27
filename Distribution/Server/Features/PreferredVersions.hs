@@ -254,7 +254,6 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
                         now <- liftIO getCurrentTime
                         updateArchiveIndexEntry "preferred-versions" (BS.pack prefVersions, now)
                         runHook'' preferredHook pkgname newInfo
-                        runHook packageIndexChange
                         return ()
                     False -> preferredError "Not all of the selected versions are in the main index."
                 Nothing -> preferredError "Version could not be parsed."

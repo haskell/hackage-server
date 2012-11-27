@@ -262,6 +262,7 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir} UserFeature{..}
     updateArchiveIndexEntry :: MonadIO m => String -> (ByteString, UTCTime) -> m ()
     updateArchiveIndexEntry entryName entryDetails = do
       modifyMemState indexExtras (Map.insert entryName entryDetails)
+      runHook packageIndexChange
 
     -- Cache updates
     --
