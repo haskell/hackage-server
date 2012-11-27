@@ -201,7 +201,7 @@ usersCommand =
 
 usersAction :: UsersFlags -> [String] -> GlobalFlags -> IO ()
 usersAction opts args _ = do
-    baseURI <- either die return (validateOptsServerURI args)
+    baseURI <- validateOptsServerURI args
 
     when (flagImportHtPasswd opts == NoFlag
        && flagImportAddresses opts == NoFlag) $
@@ -296,7 +296,7 @@ metadataCommand =
 metadataAction :: MetadataFlags -> [String] -> GlobalFlags -> IO ()
 metadataAction opts args _ = do
 
-    baseURI <- either die return (validateOptsServerURI args)
+    baseURI <- validateOptsServerURI args
 
     when (flagImportIndex opts == NoFlag
        && flagImportUploadLog opts == NoFlag) $
@@ -435,7 +435,7 @@ tarballAction flags args _ = do
       Flag s | [(n :: Int,"")] <- reads s -> die "not a sensible number for --jobs"
              | otherwise           -> die "expected a number for --jobs"
 
-    (baseURI, tarballFiles) <- either die return (validateOptsServerURI' args)
+    (baseURI, tarballFiles) <- validateOptsServerURI' args
 
     let pkgidAndTarball =
           [ (mpkgid, file)
@@ -504,7 +504,7 @@ deprecationCommand =
 deprecationAction :: DeprecationFlags -> [String] -> GlobalFlags -> IO ()
 deprecationAction _opts args _ = do
 
-    (baseURI, tagFiles) <- either die return (validateOptsServerURI' args)
+    (baseURI, tagFiles) <- validateOptsServerURI' args
 
     entries <- forM tagFiles $ \tagFile -> do
       content <- readFile tagFile
@@ -566,7 +566,7 @@ distroCommand =
 distroAction :: DistroFlags -> [String] -> GlobalFlags -> IO ()
 distroAction _opts args _ = do
 
-    (baseURI, distroFiles) <- either die return (validateOptsServerURI' args)
+    (baseURI, distroFiles) <- validateOptsServerURI' args
 
     distros <- forM distroFiles $ \distroFile -> do
       content <- readFile distroFile
@@ -626,7 +626,7 @@ docsCommand =
 docsAction :: DocsFlags -> [String] -> GlobalFlags -> IO ()
 docsAction _opts args _ = do
 
-    (baseURI, docTarballFiles) <- either die return (validateOptsServerURI' args)
+    (baseURI, docTarballFiles) <- validateOptsServerURI' args
 
     let pkgidAndTarball =
           [ (mpkgid, file)
@@ -786,15 +786,16 @@ info msg = do
   putStrLn (pname ++ ": " ++ msg)
   hFlush stdout
 
-validateOptsServerURI :: [String] -> Either String URI
-validateOptsServerURI [server] = validateHttpURI server
-validateOptsServerURI _        = Left $ "The command expects the target server "
+validateOptsServerURI :: [String] -> IO URI
+validateOptsServerURI [server] = either die return $ validateHttpURI server
+validateOptsServerURI _        = die $ "The command expects the target server "
                             ++ "URI e.g. http://admin:admin@localhost:8080/"
 
-validateOptsServerURI' :: [String] -> Either String (URI, [String])
-validateOptsServerURI' (server:opts) = (\uri -> (uri,opts)) `fmap` validateHttpURI server
-validateOptsServerURI' _             = Left $ "The command expects the target server "
-                            ++ "URI e.g. http://admin:admin@localhost:8080/"
+validateOptsServerURI' :: [String] -> IO (URI, [String])
+validateOptsServerURI' (server:opts) = do uri <- either die return $ validateHttpURI server
+                                          return (uri,opts)
+validateOptsServerURI' _             = die $ "The command expects the target server "
+                                          ++ "URI e.g. http://admin:admin@localhost:8080/"
 
 -------------------------------------------------------------------------------
 -- Concurrency Utils
