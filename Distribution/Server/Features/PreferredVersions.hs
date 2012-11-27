@@ -105,7 +105,6 @@ preferredStateComponent stateDir = do
     -- TODO: backup
     , backupState  = \_ -> []
     , restoreState = mempty
-    , testBackup   = return (return ["Backup not implemented"])
     }
 
 versionsFeature :: CoreFeature
@@ -131,7 +130,7 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
             ]
         --FIXME: don't we need to set the preferred-versions on init?
       , featurePostInit = updateDeprecatedTags
-      , featureState    = [SomeStateComponent preferredState]
+      , featureState    = [abstractStateComponent preferredState]
       }
 
     queryGetPreferredInfo :: MonadIO m => PackageName -> m PreferredInfo

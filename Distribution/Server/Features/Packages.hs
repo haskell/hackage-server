@@ -19,7 +19,6 @@ import Distribution.Server.Features.Users
 
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Types (UserInfo)
-import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import Distribution.Server.Util.ChangeLog (lookupChangeLog)
 
 import qualified Distribution.Server.Users.Users as Users

@@ -24,7 +24,6 @@ import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.PackageDescription.Parse (parsePackageDescription)
 import Distribution.ParseUtils (ParseResult(..), locatedErrorMsg, showPWarning)
 
-import qualified Data.ByteString.Char8 as SBS
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (formatTime, parseTime)
 import System.Locale (defaultTimeLocale)
@@ -76,7 +75,6 @@ mirrorersStateComponent stateDir = do
     , getState     = query st GetMirrorClients
     , backupState  = \(MirrorClients clients) -> [csvToBackup ["clients.csv"] $ groupToCSV clients]
     , restoreState = groupBackup st ["clients.csv"] ReplaceMirrorClients
-    , testBackup   = testRoundtripByQuery $ query st GetMirrorClientsList
     , resetState   = const mirrorersStateComponent
     }
 
@@ -100,7 +98,7 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
             , mirrorPackageUploader
             , mirrorCabalFile
             ]
-      , featureState = [SomeStateComponent mirrorersState]
+      , featureState = [abstractStateComponent mirrorersState]
       }
 
     mirrorResource = MirrorResource {

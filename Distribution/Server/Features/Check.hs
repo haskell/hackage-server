@@ -117,7 +117,6 @@ candidatesStateComponent stateDir = do
       -- TODO: backup
     , backupState  = \_ -> []
     , restoreState = mempty
-    , testBackup   = return (return ["Backup not implemented"])
   }
 
 checkFeature :: ServerEnv
@@ -143,7 +142,7 @@ checkFeature ServerEnv{serverBlobStore = store}
             , candidateCabal
             , candidateTarball
             ]
-      , featureState = [SomeStateComponent candidatesState]
+      , featureState = [abstractStateComponent candidatesState]
       }
 
     queryGetCandidateIndex :: MonadIO m => m (PackageIndex CandPkgInfo)

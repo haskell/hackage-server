@@ -160,7 +160,6 @@ usersStateComponent stateDir = do
     , getState     = query st GetUserDb
     , backupState  = \users -> [csvToBackup ["users.csv"] (usersToCSV users)]
     , restoreState = userBackup st
-    , testBackup   = testRoundtripByQuery $ query st GetUserDb
     , resetState   = const usersStateComponent
     }
 
@@ -173,7 +172,6 @@ adminsStateComponent stateDir = do
     , getState     = query st GetHackageAdmins
     , backupState  = \(HackageAdmins admins) -> [csvToBackup ["admins.csv"] (groupToCSV admins)]
     , restoreState = groupBackup st ["admins.csv"] ReplaceHackageAdmins
-    , testBackup   = testRoundtripByQuery $ query st GetAdminList
     , resetState   = const adminsStateComponent
     }
 
@@ -205,8 +203,8 @@ userFeature  usersState adminsState
             , groupUserResource adminResource
             ]
       , featureState = [
-            SomeStateComponent usersState
-          , SomeStateComponent adminsState
+            abstractStateComponent usersState
+          , abstractStateComponent adminsState
           ]
       }
 

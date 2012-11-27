@@ -1,7 +1,8 @@
 {-# LANGUAGE NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server (
     -- * Server control
-    Server,
+    Server(..),
+    ServerEnv(..),
     initialise,
     run,
     shutdown,
@@ -13,10 +14,8 @@ module Distribution.Server (
     defaultServerConfig,
     hasSavedState,
 
-    -- * First time initialisation of the database
-    importServerTar,
-    exportServerTar,
-    testRoundtrip,
+    -- * Server state
+    serverState,
     initState,
 
     -- * Temporary server while loading data
@@ -25,7 +24,6 @@ module Distribution.Server (
  ) where
 
 import Distribution.Server.Framework
-import Distribution.Server.Framework.BackupDump
 import qualified Distribution.Server.Framework.BackupRestore as Import
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
@@ -42,11 +40,11 @@ import Distribution.Verbosity as Verbosity
 
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist)
 import Control.Concurrent
-import Data.ByteString.Lazy.Char8 (ByteString)
 import Network.URI (URIAuth(URIAuth))
 import Network.BSD (getHostName)
 import Data.List (foldl')
 import Data.Int  (Int64)
+import Control.Arrow (second)
 import qualified System.Log.Logger as HsLogger
 
 import Paths_hackage_server (getDataDir)
@@ -216,52 +214,17 @@ checkpoint :: Server -> IO ()
 checkpoint server =
   Features.checkpointAllFeatures (serverFeatures server)
 
-exportServerTar :: Server -> IO ByteString
-exportServerTar server = exportTar store
-  [ (featureName feature, backupState st <$> getState st)
-  | feature               <- serverFeatures server
-  , SomeStateComponent st <- featureState feature
-  ]
-    where
-      store = serverBlobStore (serverEnv server)
-
-importServerTar :: Server -> ByteString -> IO (Maybe String)
-importServerTar server tar = Import.importTar tar
-  [ (featureName feature, featureRestoreState feature)
-  | feature <- serverFeatures server
-  ]
-
--- Import.importTar requires a single entry per feature
-featureRestoreState :: HackageFeature -> Import.RestoreBackup
-featureRestoreState feature =
-  mconcat [ restoreState st
-          | SomeStateComponent st <- featureState feature
-          ]
-
--- TODO: this computes all the checks before executing them, rather than
--- interleaving the creation of the checks with their execution.
--- This is bad for memory usage, but interleaving would require a different
--- setup; in particular, a different type for testRoundtrip.
-testRoundtrip :: Server -> Import.TestRoundtrip
-testRoundtrip server = do
-    checks <- sequence [ addFeatureName feature <$> testBackup st
-                       | feature               <- serverFeatures server
-                       , SomeStateComponent st <- featureState feature
-                       ] :: IO [IO [String]]
-    return $ concat <$> sequence checks
-  where
-    -- Add the name of the feature to the reported errors
-    addFeatureName :: HackageFeature -> IO [String] -> IO [String]
-    addFeatureName feature = liftM $ map ((featureName feature ++ ": ") ++)
+-- | Return /one/ abstract state component per feature
+serverState :: Server -> [(String, AbstractStateComponent)]
+serverState server = [ (featureName feature, mconcat (featureState feature))
+                     | feature <- serverFeatures server
+                     ]
 
 -- An alternative to an import: starts the server off to a sane initial state.
 -- To accomplish this, we import a 'null' tarball, finalizing immediately after initializing import
 initState ::  Server -> (String, String) -> IO ()
 initState server (admin, pass) = do
-    void $ Import.importBlank
-      [ (featureName feature, featureRestoreState feature)
-      | feature <- serverFeatures server
-      ]
+    void . Import.importBlank $ map (second abstractStateRestore) (serverState server)
     -- create default admin user
     let UserFeature{updateAddUser, adminGroup} = serverUserFeature server
     muid <- case simpleParse admin of

@@ -136,7 +136,6 @@ trusteesStateComponent stateDir = do
     , getState     = query st GetHackageTrustees
     , backupState  = \(HackageTrustees trustees) -> [csvToBackup ["trustees.csv"] $ groupToCSV trustees]
     , restoreState = groupBackup st ["trustees.csv"] ReplaceHackageTrustees
-    , testBackup   = testRoundtripByQuery $ query st GetTrusteesList
     , resetState   = const trusteesStateComponent
     }
 
@@ -149,7 +148,6 @@ uploadersStateComponent stateDir = do
     , getState     = query st GetHackageUploaders
     , backupState  = \(HackageUploaders uploaders) -> [csvToBackup ["uploaders.csv"] $ groupToCSV uploaders]
     , restoreState = groupBackup st ["uploaders.csv"] ReplaceHackageUploaders
-    , testBackup   = return (return ["Backup test for uploaders not implemented"])
     , resetState   = const uploadersStateComponent
     }
 
@@ -162,7 +160,6 @@ maintainersStateComponent stateDir = do
     , getState     = query st AllPackageMaintainers
     , backupState  = \(PackageMaintainers mains) -> [maintToExport mains]
     , restoreState = maintainerBackup st
-    , testBackup   = testRoundtripByQuery $ query st AllPackageMaintainers
     , resetState   = const maintainersStateComponent
     }
 
@@ -200,9 +197,9 @@ uploadFeature ServerEnv{serverBlobStore = store}
             , groupUserResource . uploaderResource
             ]
       , featureState = [
-            SomeStateComponent trusteesState
-          , SomeStateComponent uploadersState
-          , SomeStateComponent maintainersState
+            abstractStateComponent trusteesState
+          , abstractStateComponent uploadersState
+          , abstractStateComponent maintainersState
           ]
       }
 

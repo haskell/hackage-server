@@ -19,7 +19,7 @@ import Control.Monad.State (put, modify)
 
 newtype PlatformPackages = PlatformPackages {
     blessedPackages :: Map PackageName (Set Version)
-} deriving (Show, Typeable)
+} deriving (Show, Typeable, Eq)
 emptyPlatformPackages :: PlatformPackages
 emptyPlatformPackages = PlatformPackages Map.empty
 

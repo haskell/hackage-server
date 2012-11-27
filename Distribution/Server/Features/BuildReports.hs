@@ -62,7 +62,6 @@ reportsStateComponent store stateDir = do
     , getState     = query st GetBuildReports
     , backupState  = dumpBackup
     , restoreState = restoreBackup st store
-    , testBackup   = testRoundtrip st store
     , resetState   = reportsStateComponent
     }
 
@@ -83,7 +82,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
             , reportsPage
             , reportsLog
             ]
-      , featureState = [SomeStateComponent reportsState]
+      , featureState = [abstractStateComponent reportsState]
       }
 
     reportsResource = ReportsResource

@@ -76,7 +76,7 @@ apiDocPageHtml serverFeatures = hackagePage title content
         | feature <- serverFeatures ]
 
     stateList feature =
-      let states = [stateDesc st | SomeStateComponent st <- featureState feature]in
+      let states = map abstractStateDesc (featureState feature) in
       if null states
         then     p << "This feature does not have any state."
         else     p << emphasize << "State"

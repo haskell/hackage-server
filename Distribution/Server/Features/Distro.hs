@@ -6,7 +6,6 @@ module Distribution.Server.Features.Distro (
   ) where
 
 import Distribution.Server.Framework
-import Distribution.Server.Framework.BackupDump (testRoundtripByQuery)
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
@@ -60,7 +59,6 @@ distrosStateComponent stateDir = do
     , getState     = query st GetDistributions
     , backupState  = dumpBackup
     , restoreState = restoreBackup st
-    , testBackup   = testRoundtripByQuery (query st GetDistributions)
     , resetState   = const distrosStateComponent
     }
 
@@ -79,7 +77,7 @@ distroFeature UserFeature{..} CoreFeature{..} distrosState
             , distroPackages
             , distroPackage
             ]
-      , featureState = [SomeStateComponent distrosState]
+      , featureState = [abstractStateComponent distrosState]
       }
 
     queryPackageStatus :: MonadIO m => PackageName -> m [(DistroName, DistroPackageInfo)]

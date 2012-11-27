@@ -62,7 +62,7 @@ makeAcidic ''PackageMaintainers ['getPackageMaintainers
 -- this could be reasonably merged into the above, as a PackageGroups data structure
 data HackageTrustees = HackageTrustees {
     trusteeList :: UserList
-} deriving (Show, Typeable)
+} deriving (Show, Typeable, Eq)
 
 deriveSafeCopy 0 'base ''HackageTrustees
 
@@ -97,7 +97,7 @@ makeAcidic ''HackageTrustees ['getHackageTrustees
 -------------------------------- Uploader list
 data HackageUploaders = HackageUploaders {
     uploaderList :: UserList
-} deriving (Show, Typeable)
+} deriving (Show, Typeable, Eq)
 
 $(deriveSafeCopy 0 'base ''HackageUploaders)
 

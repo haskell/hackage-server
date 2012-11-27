@@ -65,7 +65,6 @@ downloadStateComponent stateDir = do
     , getState     = query st GetDownloadCounts
     , backupState  = \dc -> [csvToBackup ["downloads.csv"] $ downloadsToCSV dc]
     , restoreState = downloadsBackup st
-    , testBackup   = testRoundtripByQuery (query st GetDownloadCounts)
     , resetState   = const downloadStateComponent
     }
 
@@ -83,7 +82,7 @@ downloadFeature CoreFeature{}
         featureResources = map ($ downloadResource) [topDownloads]
       , featurePostInit  = do countCache
                               forkIO transferDownloads >> return ()
-      , featureState     = [SomeStateComponent downloadState]
+      , featureState     = [abstractStateComponent downloadState]
       }
 
     countCache = do

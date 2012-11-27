@@ -15,7 +15,6 @@ import Text.CSV (CSV, Record)
 import qualified Data.Map as Map
 -- import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.ByteString.Lazy.Char8 (ByteString)
 
 tagsBackup :: AcidState PackageTags -> RestoreBackup
 tagsBackup tagsState =

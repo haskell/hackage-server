@@ -19,7 +19,7 @@ import Data.Monoid
 -- boilerplate code based on PackagesState
 data CandidatePackages = CandidatePackages {
     candidateList :: !(PackageIndex.PackageIndex CandPkgInfo)
-} deriving (Typeable, Show)
+} deriving (Typeable, Show, Eq)
 
 deriveSafeCopy 0 'base ''CandidatePackages
 

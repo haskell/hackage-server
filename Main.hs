@@ -4,7 +4,10 @@ module Main where
 
 import qualified Distribution.Server as Server
 import Distribution.Server (ListenOn(..), ServerConfig(..), Server)
-import Distribution.Server.Framework.BackupRestore (equalTarBall)
+import Distribution.Server.Framework.Feature
+import Distribution.Server.Framework.BackupRestore (equalTarBall, importTar)
+import Distribution.Server.Framework.BackupDump (exportTar)
+import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
 import Distribution.Text
          ( display )
@@ -17,7 +20,7 @@ import System.Environment
 import System.Exit
          ( exitWith, ExitCode(..) )
 import Control.Exception
-         ( bracket )
+         ( bracket, evaluate )
 import System.Posix.Signals as Signal
          ( installHandler, Handler(Catch), userDefinedSignal1 )
 import System.IO
@@ -34,7 +37,9 @@ import Data.List
 import Data.Traversable
          ( forM )
 import Control.Monad
-         ( void, unless, when )
+         ( void, unless, when, liftM )
+import Control.Arrow
+         ( second )
 import qualified Data.ByteString.Lazy as BS
 import qualified Text.Parsec as Parse
 
@@ -446,8 +451,10 @@ backupAction opts = do
         exportPath = fromFlagOrDefault "export.tar" (flagBackup opts)
 
     withServer False config False $ \server -> do
+      let store = Server.serverBlobStore (Server.serverEnv server)
+          state = Server.serverState server
       info "Preparing export tarball"
-      tar <- Server.exportServerTar server
+      tar <- exportTar store $ map (second abstractStateBackup) state
       info "Saving export tarball"
       BS.writeFile exportPath tar
       info "Done"
@@ -508,40 +515,46 @@ testBackupAction opts = do
         tmpStateDir = tmpDir </> "state"
 
     checkTmpDir tmpDir
+    createDirectoryIfMissing True tmpStateDir
 
-    (tar, test_roundtrip) <- withServer False config False $ \server -> do
-      info "Taking a snapshot of server state"
-      test_roundtrip <- Server.testRoundtrip server
+    withServer False config False $ \server -> do
+      let state = Server.serverState server
+          store = Server.serverBlobStore (Server.serverEnv server)
+
       info "Preparing export tarball"
-      tar <- Server.exportServerTar server
+      tar <- exportTar store $ map (second abstractStateBackup) state
       -- It is EXTREMELY IMPORTANT that we force the tarball to be constructed
       -- now. If we wait until it is demanded in the next withServer context
       -- then the tar gets filled with entirely wrong files!
-      BS.length tar `seq` return (tar, test_roundtrip)
+      evaluate (BS.length tar)
 
-    let config' = config { confStateDir = tmpStateDir }
+      -- Reset all the state components, then run the import against the cloned
+      -- components and check that the states got restored.
+      store' <- BlobStorage.open (tmpDir </> "blobs")
+      (state', compares) <- liftM unzip . forM state $ \(name, st) -> do
+                             (st', cmpSt) <- abstractStateReset st store' tmpStateDir
+                             return ((name, st'), liftM (map (\err -> name ++ ": " ++ err)) cmpSt)
+      let compareAll :: IO [String] ; compareAll = liftM concat (sequence compares)
 
-    createDirectoryIfMissing True tmpStateDir
-
-    withServer False config' False $ \server -> do
       info "Parsing import tarball"
-      res <- Server.importServerTar server tar
+      res <- importTar tar $ map (second abstractStateRestore) state'
       maybe (return ()) fail res
+
       info "Checking snapshot"
-      errs <- test_roundtrip
+      errs <- compareAll
       unless (null errs) $ do
         mapM_ info errs
       --   fail "Snapshot check failed!"
+
       info "Preparing second export tarball"
-      tar' <- Server.exportServerTar server
+      tar' <- exportTar store' $ map (second abstractStateBackup) state'
       case tar `equalTarBall` tar' of
-        [] -> return ()
+        [] -> info "Tarballs match"
         tar_eq_errs -> do
           mapM_ info tar_eq_errs
           BS.writeFile "export-before.tar" tar
           BS.writeFile "export-after.tar" tar'
           fail "Tarballs don't match! Written to export-before.tar and export-after.tar."
-
 
 -------------------------------------------------------------------------------
 -- Restore command
@@ -586,7 +599,7 @@ restoreAction opts [tarFile] = do
     withServer False config False $ \server -> do
         tar <- BS.readFile tarFile
         info "Parsing import tarball..."
-        res <- Server.importServerTar server tar
+        res <- importTar tar $ map (second abstractStateRestore) (Server.serverState server)
         case res of
             Just err -> fail err
             _ ->

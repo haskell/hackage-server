@@ -60,7 +60,6 @@ platformStateComponent stateDir = do
     -- TODO: backup
     , backupState  = \_ -> []
     , restoreState = mempty
-    , testBackup   = return (return ["Backup not implemented"])
     }
 
 platformFeature :: StateComponent PlatformPackages
@@ -74,7 +73,7 @@ platformFeature platformState
               platformPackage
             , platformPackages
             ]
-      , featureState = [SomeStateComponent platformState]
+      , featureState = [abstractStateComponent platformState]
       }
 
     platformResource = fix $ \r -> PlatformResource

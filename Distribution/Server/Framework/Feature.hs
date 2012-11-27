@@ -1,6 +1,6 @@
 -- | This module defines a plugin interface for hackage features.
 --
-{-# LANGUAGE ExistentialQuantification, RankNTypes, NoMonomorphismRestriction #-}
+{-# LANGUAGE ExistentialQuantification, RankNTypes, NoMonomorphismRestriction, RecordWildCards #-}
 module Distribution.Server.Framework.Feature
   ( -- * Main datatypes
     HackageFeature(..)
@@ -8,19 +8,21 @@ module Distribution.Server.Framework.Feature
   , emptyHackageFeature
     -- * State components
   , StateComponent(..)
-  , SomeStateComponent(..)
+  , AbstractStateComponent(..)
+  , abstractStateComponent
+  , abstractStateComponent'
   , queryState
   , updateState
-  , createCheckpointState
-  , closeState
+  , compareState
     -- * Re-exports
   , BlobStorage
   ) where
 
-import Distribution.Server.Framework.BackupRestore (RestoreBackup(..), BackupEntry, TestRoundtrip)
+import Distribution.Server.Framework.BackupRestore (RestoreBackup(..), BackupEntry)
 import Distribution.Server.Framework.Resource      (Resource)
 import Distribution.Server.Framework.BlobStorage   (BlobStorage)
-import Data.Function (fix)
+import Data.Monoid
+import Control.Monad (liftM, liftM2)
 import Control.Monad.Trans (MonadIO)
 import Data.Acid
 import Data.Acid.Advanced
@@ -42,7 +44,7 @@ data HackageFeature = HackageFeature {
 
   , featurePostInit    :: IO ()
 
-  , featureState       :: [SomeStateComponent]
+  , featureState       :: [AbstractStateComponent]
   }
 
 -- | A feature with no state and no resources, just a name.
@@ -71,6 +73,7 @@ class IsHackageFeature feature where
 -- State components                                                           --
 --------------------------------------------------------------------------------
 
+-- | A state component encapsulates (part of) a feature's state
 data StateComponent st = StateComponent {
     -- | Human readable description of the state component
     stateDesc    :: String
@@ -84,11 +87,82 @@ data StateComponent st = StateComponent {
   , restoreState :: RestoreBackup
     -- | Clone the state component in the given state directory
   , resetState   :: BlobStorage -> FilePath -> IO (StateComponent st)
-    -- | Test that the backup works (will be replaced)
-  , testBackup   :: TestRoundtrip
   }
 
-data SomeStateComponent = forall st. SomeStateComponent (StateComponent st)
+-- | 'AbstractStateComponent' abstracts away from a particular type of
+-- 'StateComponent'
+data AbstractStateComponent = AbstractStateComponent {
+    abstractStateDesc       :: String
+  , abstractStateCheckpoint :: IO ()
+  , abstractStateClose      :: IO ()
+  , abstractStateBackup     :: IO [BackupEntry]
+  , abstractStateRestore    :: RestoreBackup
+  , abstractStateReset      :: BlobStorage -> FilePath -> IO (AbstractStateComponent, IO [String])
+  }
+
+compareState :: (Eq st, Show st) => st -> st -> [String]
+compareState old new =
+    if old /= new
+     then ["Internal state mismatch:\n" ++ difference (show old) (show new)]
+     else []
+  where
+    difference old_str new_str
+        -- = indent 2 old_str ++ "Versus:\n" ++ indent 2 new_str
+        = "After " ++ show (length common)   ++ " chars, in context:\n" ++
+            indent 2 (trunc_last 80 common)  ++ "\nOld data was:\n" ++
+            indent 2 (trunc 80 old_str_tail) ++ "\nVersus new data:\n" ++
+            indent 2 (trunc 80 new_str_tail)
+      where (common, old_str_tail, new_str_tail) = dropCommonPrefix [] old_str new_str
+
+    indent n = unlines . map (replicate n ' ' ++) . lines
+
+    trunc n xs | null zs   = ys
+               | otherwise = ys ++ "..."
+      where (ys, zs) = splitAt n xs
+
+    trunc_last n xs | null ys_rev = reverse zs_rev
+                    | otherwise   = "..." ++ reverse zs_rev
+      where (zs_rev, ys_rev) = splitAt n (reverse xs)
+
+    dropCommonPrefix common (x:xs) (y:ys) | x == y = dropCommonPrefix (x:common) xs ys
+    dropCommonPrefix common xs ys = (reverse common, xs, ys)
+
+abstractStateComponent :: (Eq st, Show st) => StateComponent st -> AbstractStateComponent
+abstractStateComponent = abstractStateComponent' compareState
+
+abstractStateComponent' :: (st -> st -> [String]) -> StateComponent st -> AbstractStateComponent
+abstractStateComponent' cmp st = AbstractStateComponent {
+    abstractStateDesc       = stateDesc st
+  , abstractStateCheckpoint = createCheckpoint (acidState st)
+  , abstractStateClose      = closeAcidState (acidState st)
+  , abstractStateBackup     = liftM (backupState st) (getState st)
+  , abstractStateRestore    = restoreState st
+  , abstractStateReset      = \store stateDir -> do
+                                st' <- resetState st store stateDir
+                                let cmpSt = liftM2 cmp (getState st) (getState st')
+                                return (abstractStateComponent' cmp st', cmpSt)
+  }
+
+instance Monoid AbstractStateComponent where
+  mempty = AbstractStateComponent {
+      abstractStateDesc       = ""
+    , abstractStateCheckpoint = return ()
+    , abstractStateClose      = return ()
+    , abstractStateBackup     = return []
+    , abstractStateRestore    = mempty
+    , abstractStateReset      = \_store _stateDir -> return (mempty, return [])
+    }
+  a `mappend` b = AbstractStateComponent {
+      abstractStateDesc       = abstractStateDesc a ++ "\n" ++ abstractStateDesc b
+    , abstractStateCheckpoint = abstractStateCheckpoint a >> abstractStateCheckpoint b
+    , abstractStateClose      = abstractStateClose a >> abstractStateClose b
+    , abstractStateBackup     = liftM2 (++) (abstractStateBackup a) (abstractStateBackup b)
+    , abstractStateRestore    = abstractStateRestore a `mappend` abstractStateRestore b
+    , abstractStateReset      = \store stateDir -> do
+                                 (a', cmpA) <- abstractStateReset a store stateDir
+                                 (b', cmpB) <- abstractStateReset b store stateDir
+                                 return (a' `mappend` b', liftM2 (++) cmpA cmpB)
+    }
 
 queryState :: (MonadIO m, QueryEvent event)
            => StateComponent (EventState event)
@@ -101,9 +175,3 @@ updateState :: (MonadIO m, UpdateEvent event)
             -> event
             -> m (EventResult event)
 updateState = update' . acidState
-
-createCheckpointState :: SomeStateComponent -> IO ()
-createCheckpointState (SomeStateComponent st) = createCheckpoint (acidState st)
-
-closeState :: SomeStateComponent -> IO ()
-closeState (SomeStateComponent st) = closeAcidState (acidState st)

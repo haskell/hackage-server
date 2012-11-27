@@ -11,7 +11,6 @@ module Distribution.Server.Features.Core (
   ) where
 
 import Distribution.Server.Framework
-import Distribution.Server.Framework.BackupDump
 
 import Distribution.Server.Features.Core.State
 import Distribution.Server.Features.Core.Backup
@@ -153,18 +152,8 @@ packagesStateComponent store stateDir = do
      , getState     = query st GetPackagesState
      , backupState  = indexToAllVersions
      , restoreState = packagesBackup st store
-     , testBackup   = testRoundtrip st
      , resetState   = packagesStateComponent
      }
- where
-   testRoundtrip st =
-     testRoundtripByQuery' (query st GetPackagesState) $ \packages ->
-       testBlobsExist store [
-           blob
-         | pkgInfo <- PackageIndex.allPackages (packageList packages)
-         , (tarball, _) <- pkgTarball pkgInfo
-         , blob <- [pkgTarballGz tarball, pkgTarballNoGz tarball]
-         ]
 
 coreFeature :: ServerEnv
             -> StateComponent PackagesState
@@ -197,7 +186,7 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
           , coreCabalFile
           ]
       , featurePostInit = runHook packageIndexChange
-      , featureState    = [SomeStateComponent packagesState]
+      , featureState    = [abstractStateComponent packagesState]
       }
 
     -- the rudimentary HTML resources are for when we don't want an additional HTML feature

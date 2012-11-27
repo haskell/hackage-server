@@ -11,8 +11,6 @@ module Distribution.Server.Framework.BackupDump (
 
     stringToBytes,
 
-    testRoundtripByQuery,
-    testRoundtripByQuery',
     testBlobsExist
   ) where
 
@@ -21,7 +19,7 @@ import qualified Data.ByteString.Lazy.Char8 as BSL
 
 import Text.CSV hiding (csv)
 
-import Distribution.Server.Framework.BackupRestore (BackupEntry(..), TestRoundtrip)
+import Distribution.Server.Framework.BackupRestore (BackupEntry(..))
 import qualified Distribution.Server.Framework.BlobStorage as Blob
 
 import Distribution.Server.Framework.BlobStorage
@@ -56,7 +54,7 @@ toEntries store featureMap = do
     unsafeInterleaveConcatMap exportEntries featureMap
 
 backupToTar :: BlobStorage -> ([FilePath] -> FilePath) -> BackupEntry -> IO Tar.Entry
-backupToTar store mkPath (BackupByteString path bs) =
+backupToTar _store mkPath (BackupByteString path bs) =
   case Tar.toTarPath False (mkPath path) of
     Right tarPath -> return $ Tar.fileEntry tarPath bs
     Left err -> error $ "Error in export: " ++ err
@@ -95,40 +93,6 @@ unsafeInterleaveConcatMap f = go
 -- via UTF8 conversion.
 stringToBytes :: String -> BSL.ByteString
 stringToBytes = BSL.pack . toUTF8
-
-
-testRoundtripByQuery :: (Show a, Eq a) => IO a -> TestRoundtrip
-testRoundtripByQuery query = testRoundtripByQuery' query $ \_ -> return []
-
-testRoundtripByQuery' :: (Show a, Eq a) => IO a -> (a -> IO [String]) -> TestRoundtrip
-testRoundtripByQuery' query k = do
-    old <- query
-    return $ do
-      new <- query
-      if old /= new
-       then return ["Internal state mismatch:\n" ++ difference (show old) (show new)]
-       else k new
-  where
-    difference old_str new_str
-        -- = indent 2 old_str ++ "Versus:\n" ++ indent 2 new_str
-        = "After " ++ show (length common)   ++ " chars, in context:\n" ++
-            indent 2 (trunc_last 80 common)  ++ "\nOld data was:\n" ++
-            indent 2 (trunc 80 old_str_tail) ++ "\nVersus new data:\n" ++
-            indent 2 (trunc 80 new_str_tail)
-      where (common, old_str_tail, new_str_tail) = dropCommonPrefix [] old_str new_str
-
-    indent n = unlines . map (replicate n ' ' ++) . lines
-
-    trunc n xs | null zs   = ys
-               | otherwise = ys ++ "..."
-      where (ys, zs) = splitAt n xs
-
-    trunc_last n xs | null ys_rev = reverse zs_rev
-                    | otherwise   = "..." ++ reverse zs_rev
-      where (zs_rev, ys_rev) = splitAt n (reverse xs)
-
-    dropCommonPrefix common (x:xs) (y:ys) | x == y = dropCommonPrefix (x:common) xs ys
-    dropCommonPrefix common xs ys = (reverse common, xs, ys)
 
 testBlobsExist :: BlobStorage -> [Blob.BlobId] -> IO [String]
 testBlobsExist store blobs

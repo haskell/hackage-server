@@ -105,7 +105,6 @@ tagsStateComponent stateDir = do
     , getState     = query st GetPackageTags
     , backupState  = \pkgTags -> [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]
     , restoreState = tagsBackup st
-    , testBackup   = testRoundtripByQuery $ query st GetPackageTags
     , resetState   = const tagsStateComponent
     }
 
@@ -144,7 +143,7 @@ tagsFeature CoreFeature{..}
             , packageTagsListing
             ]
       , featurePostInit = initImmutableTags
-      , featureState    = [SomeStateComponent tagsState]
+      , featureState    = [abstractStateComponent tagsState]
       }
 
     initImmutableTags :: IO ()

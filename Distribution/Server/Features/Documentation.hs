@@ -11,7 +11,6 @@ import Distribution.Server.Features.Documentation.State
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
 
-import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
 import Distribution.Server.Framework.BlobStorage (BlobId)
@@ -63,7 +62,6 @@ documentationStateComponent store stateDir = do
     , getState     = query st GetDocumentation
     , backupState  = dumpBackup
     , restoreState = updateDocumentation st (Documentation Map.empty)
-    , testBackup   = testRoundtrip st
     , resetState   = documentationStateComponent
     }
   where
@@ -91,13 +89,6 @@ documentationStateComponent store stateDir = do
         tarred <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blobId)
         modify $ Documentation . Map.insert pkgid (blobId, tarred) . documentation
 
-    -- Checking documentation roundtripped is a bit tricky:
-    -- 1. We don't really want to check that the tar index is the same (probably)
-    -- 2. We must that the documentation blobs all got imported. To do this we just
-    --    need to check they *exist*, due to the MD5-hashing scheme we use.
-    testRoundtrip st = testRoundtripByQuery' (liftM (Map.map fst . documentation) $ query st GetDocumentation) $ \doc ->
-        testBlobsExist store (Map.elems doc)
-
 documentationFeature :: ServerEnv
                      -> CoreFeature
                      -> UploadFeature
@@ -115,7 +106,8 @@ documentationFeature ServerEnv{serverBlobStore = store}
             , packageDocTar
             , packageDocsUpload
             ]
-      , featureState = [SomeStateComponent documentationState]
+        -- We don't really want to check that the tar index is the same (probably)
+      , featureState = [abstractStateComponent' (compareState `on` (Map.map fst . documentation)) documentationState]
       }
 
     queryHasDocumentation :: MonadIO m => PackageIdentifier -> m Bool

@@ -178,13 +178,13 @@ initHackageFeatures enableCaches env = do
     return (allFeatures, usersFeature)
 
 featureCheckpoint :: HackageFeature -> IO ()
-featureCheckpoint = mapM_ createCheckpointState . featureState
+featureCheckpoint = mapM_ abstractStateCheckpoint . featureState
 
 checkpointAllFeatures :: [HackageFeature] -> IO ()
 checkpointAllFeatures = mapM_ featureCheckpoint
 
 featureShutdown :: HackageFeature -> IO ()
-featureShutdown = mapM_ closeState . featureState
+featureShutdown = mapM_ abstractStateClose . featureState
 
 shutdownAllFeatures :: [HackageFeature] -> IO ()
 shutdownAllFeatures   = mapM_ featureShutdown . reverse

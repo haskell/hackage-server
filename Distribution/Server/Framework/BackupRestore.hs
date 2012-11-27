@@ -4,7 +4,6 @@
 module Distribution.Server.Framework.BackupRestore (
     RestoreBackup(..),
     BackupEntry(..),
-    TestRoundtrip,
     Import,
     importTar,
     importBlank,
@@ -54,13 +53,6 @@ import Distribution.Text
 import Data.Map (Map)
 
 import Distribution.Server.Framework.BlobStorage (BlobId)
-
--- | Used to test that the backup/restore stuff works.
---
--- The outermost IO action takes an immutable snapshot of the internal state
--- of the feature. The innermost IO action compares that to the new state and
--- returns a list of errors if any problems are found.
-type TestRoundtrip = IO (IO [String])
 
 data BackupEntry =
     BackupByteString [FilePath] ByteString

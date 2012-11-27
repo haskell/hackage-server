@@ -36,7 +36,7 @@ data CandPkgInfo = CandPkgInfo {
     candWarnings   :: ![String],
     -- | Whether to allow non-maintainers to view the page or not.
     candPublic :: !Bool
-} deriving (Show, Typeable)
+} deriving (Show, Typeable, Eq)
 
 deriveSafeCopy 0 'base ''CandPkgInfo
 
