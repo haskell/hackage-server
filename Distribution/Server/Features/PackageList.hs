@@ -13,7 +13,6 @@ import Distribution.Server.Features.Core
 import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.PreferredVersions
-import qualified Distribution.Server.Framework.Cache as Cache
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Distribution.Server.Packages.Types
@@ -86,7 +85,7 @@ initListFeature _ core@CoreFeature{..}
                 download
                 tagsf@TagsFeature{..}
                 versions@VersionsFeature{..} = do
-    itemCache  <- Cache.newCache Map.empty id
+    itemCache  <- newMemStateWHNF Map.empty
     itemUpdate <- newHook
 
     let (feature, modifyItem, updateDesc) =
@@ -120,7 +119,7 @@ listFeature :: CoreFeature
             -> DownloadFeature
             -> TagsFeature
             -> VersionsFeature
-            -> Cache.Cache (Map PackageName PackageItem)
+            -> MemState (Map PackageName PackageItem)
             -> Hook (Set PackageName -> IO ())
             -> (ListFeature,
                 PackageName -> (PackageItem -> PackageItem) -> IO (),
@@ -138,35 +137,35 @@ listFeature CoreFeature{..}
       }
       where itemsCache = do
                 items <- constructItemIndex
-                Cache.putCache itemCache items
+                writeMemState itemCache items
             periodicDownloadRefresh = forever $ do
                 --FIXME: don't do this if nothing has changed!
                 threadDelay (30 * 60 * 1000000) -- 30 minutes
                 refreshDownloads
 
     modifyItem pkgname token = do
-        hasItem <- fmap (Map.member pkgname) $ Cache.getCache itemCache
+        hasItem <- fmap (Map.member pkgname) $ readMemState itemCache
         case hasItem of
-            True  -> Cache.modifyCache itemCache $ Map.adjust token pkgname
+            True  -> modifyMemState itemCache $ Map.adjust token pkgname
             False -> do
                 index <- queryGetPackageIndex
                 let pkgs = PackageIndex.lookupPackageName index pkgname
                 case pkgs of
                     [] -> return () --this shouldn't happen
-                    _  -> Cache.modifyCache itemCache . uncurry Map.insert =<< constructItem (last pkgs)
+                    _  -> modifyMemState itemCache . uncurry Map.insert =<< constructItem (last pkgs)
     updateDesc pkgname = do
         index <- queryGetPackageIndex
         let pkgs = PackageIndex.lookupPackageName index pkgname
         case pkgs of
-           [] -> Cache.modifyCache itemCache (Map.delete pkgname)
+           [] -> modifyMemState itemCache (Map.delete pkgname)
            _  -> modifyItem pkgname (updateDescriptionItem $ pkgDesc $ last pkgs)
         runHook' itemUpdate $ Set.singleton pkgname
 
     refreshDownloads = do
             hist <- getDownloadHistogram
-            Cache.modifyCache itemCache $ Map.mapWithKey (\pkg item -> updateDownload (getCount hist pkg) item)
+            modifyMemState itemCache $ Map.mapWithKey (\pkg item -> updateDownload (getCount hist pkg) item)
             -- Say all packages were updated here (detecting this is more laborious)
-            mainMap <- Cache.getCache itemCache
+            mainMap <- readMemState itemCache
             runHook' itemUpdate (Set.fromDistinctAscList $ Map.keys mainMap)
 
     constructItemIndex :: IO (Map PackageName PackageItem)
@@ -192,16 +191,16 @@ listFeature CoreFeature{..}
     ------------------------------
     makeItemList :: [PackageName] -> IO [PackageItem]
     makeItemList pkgnames = do
-        mainMap <- Cache.getCache itemCache
+        mainMap <- readMemState itemCache
         return $ catMaybes $ map (flip Map.lookup mainMap) pkgnames
 
     makeItemMap :: Map PackageName a -> IO (Map PackageName (PackageItem, a))
     makeItemMap pkgmap = do
-        mainMap <- Cache.getCache itemCache
+        mainMap <- readMemState itemCache
         return $ Map.intersectionWith (,) mainMap pkgmap
 
     getAllLists :: IO (Map PackageName PackageItem)
-    getAllLists = Cache.getCache itemCache
+    getAllLists = readMemState itemCache
 
 tagHistogram :: [PackageItem] -> Map Tag Int
 tagHistogram = Map.fromListWith (+) . map (flip (,) 1) . concatMap (Set.toList . itemTags)

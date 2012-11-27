@@ -144,7 +144,7 @@ data RunFlags = RunFlags {
     flagStaticDir :: Flag FilePath,
     flagTmpDir    :: Flag FilePath,
     flagTemp      :: Flag Bool,
-    flagEnableCaches :: Flag Bool
+    flagCacheDelay:: Flag String
   }
 
 defaultRunFlags :: RunFlags
@@ -157,7 +157,7 @@ defaultRunFlags = RunFlags {
     flagStaticDir = NoFlag,
     flagTmpDir    = NoFlag,
     flagTemp      = Flag False,
-    flagEnableCaches = Flag True
+    flagCacheDelay= NoFlag
   }
 
 runCommand :: CommandUI RunFlags
@@ -207,10 +207,10 @@ runCommand = makeCommand name shortDesc longDesc defaultRunFlags options
           "Set up a temporary server while initializing state for maintenance restarts"
           flagTemp (\v flags -> flags { flagTemp = v })
           (noArg (Flag True))
-      , option [] ["disable-caches"]
-          "Disable some cached results. Mainly useful for consistency when running tests, and during bulk uploads (especially mirroring)"
-          flagEnableCaches (\v flags -> flags { flagEnableCaches = v })
-          (noArg (Flag False))
+      , option [] ["delay-cache-updates"]
+          "Save time during bulk imports by delaying cache updates."
+          flagCacheDelay (\v flags -> flags { flagCacheDelay = v })
+          (reqArgFlag "SECONDS")
       ]
 
 runAction :: RunFlags -> IO ()
@@ -219,11 +219,12 @@ runAction opts = do
 
     port <- checkPortOpt defaults (flagToMaybe (flagPort opts))
     ip   <- checkIPOpt   defaults (flagToMaybe (flagIP   opts))
+    cacheDelay <- checkCacheDelay (confCacheDelay defaults) (flagToMaybe (flagCacheDelay opts))
     let verbosity = fromFlag (flagVerbosity opts)
         hostname  = fromFlagOrDefault (confHostName  defaults) (flagHost      opts)
         stateDir  = fromFlagOrDefault (confStateDir  defaults) (flagStateDir  opts)
         staticDir = fromFlagOrDefault (confStaticDir defaults) (flagStaticDir opts)
-        tmpDir    = fromFlagOrDefault (stateDir </> "tmp") (flagTmpDir    opts)
+        tmpDir    = fromFlagOrDefault (confTmpDir    defaults) (flagTmpDir    opts)
         listenOn = (confListenOn defaults) {
                        loPortNum = port,
                        loIP      = ip
@@ -234,16 +235,16 @@ runAction opts = do
             confListenOn  = listenOn,
             confStateDir  = stateDir,
             confStaticDir = staticDir,
-            confTmpDir    = tmpDir
+            confTmpDir    = tmpDir,
+            confCacheDelay=cacheDelay
         }
 
     checkBlankServerState =<< Server.hasSavedState config
     checkStaticDir staticDir (flagStaticDir opts)
     checkTmpDir    tmpDir
 
-    let enableCaches = fromFlag (flagEnableCaches opts)
-        useTempServer = fromFlag (flagTemp opts)
-    withServer enableCaches config useTempServer $ \server ->
+    let useTempServer = fromFlag (flagTemp opts)
+    withServer config useTempServer $ \server ->
       withCheckpointHandler server $ do
         info $ "Ready! Point your browser at http://" ++ hostname
             ++ if port == 80 then "/" else ":" ++ show port ++ "/"
@@ -277,6 +278,13 @@ runAction opts = do
       in case Parse.parse pIPv4 str str of
          Left err -> fail (show err)
          Right _ -> return str
+
+    checkCacheDelay def Nothing    = return def
+    checkCacheDelay _   (Just str) = case reads str of
+      [(n,"")]  | n >= 0 && n <= 3600
+               -> return n
+      _        -> fail $ "bad cache delay number " ++ show str
+
 
     -- Set a Unix signal handler for SIG USR1 to create a state checkpoint.
     -- Useage:
@@ -395,7 +403,7 @@ initAction opts = do
     checkAccidentalDataLoss =<< Server.hasSavedState config
     checkStaticDir staticDir (flagInitStaticDir opts)
 
-    withServer False config False $ \server -> do
+    withServer config False $ \server -> do
         info "Creating initial state..."
         Server.initState server admin
         createDirectory (stateDir </> "tmp")
@@ -450,7 +458,7 @@ backupAction opts = do
         config = defaults { confStateDir = stateDir }
         exportPath = fromFlagOrDefault "export.tar" (flagBackup opts)
 
-    withServer False config False $ \server -> do
+    withServer config False $ \server -> do
       let store = Server.serverBlobStore (Server.serverEnv server)
           state = Server.serverState server
       info "Preparing export tarball"
@@ -517,7 +525,7 @@ testBackupAction opts = do
     checkTmpDir tmpDir
     createDirectoryIfMissing True tmpStateDir
 
-    withServer False config False $ \server -> do
+    withServer config False $ \server -> do
       let state = Server.serverState server
           store = Server.serverBlobStore (Server.serverEnv server)
 
@@ -596,7 +604,7 @@ restoreAction opts [tarFile] = do
 
     checkAccidentalDataLoss =<< Server.hasSavedState config
 
-    withServer False config False $ \server -> do
+    withServer config False $ \server -> do
         tar <- BS.readFile tarFile
         info "Parsing import tarball..."
         res <- importTar tar $ map (second abstractStateRestore) (Server.serverState server)
@@ -612,8 +620,8 @@ restoreAction _ _ = die "There should be exactly one argument: the backup tarbal
 -- common action functions
 --
 
-withServer :: Bool -> ServerConfig -> Bool -> (Server -> IO a) -> IO a
-withServer enableCaches config doTemp = bracket initialise shutdown
+withServer :: ServerConfig -> Bool -> (Server -> IO a) -> IO a
+withServer config doTemp = bracket initialise shutdown
   where
     initialise = do
       mtemp <- case doTemp of
@@ -622,7 +630,7 @@ withServer enableCaches config doTemp = bracket initialise shutdown
             fmap Just $ Server.setUpTemp config 1
           False -> return Nothing
       info "Initializing happstack-state..."
-      server <- Server.initialise enableCaches config
+      server <- Server.initialise config
       info "Server data loaded into memory"
       void $ forM mtemp $ \temp -> do
         info "Tearing down temp server"

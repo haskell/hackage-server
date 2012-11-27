@@ -4,7 +4,8 @@ module Distribution.Server.Framework (
 
     module Happstack.Server,
     module Data.Acid,
-    module Data.Acid.Advanced,
+    module Distribution.Server.Framework.MemState,
+    module Distribution.Server.Framework.Cache,
 
     module Distribution.Server.Framework.Auth,
     module Distribution.Server.Framework.Feature,
@@ -25,8 +26,10 @@ module Distribution.Server.Framework (
   ) where
 
 import Happstack.Server
+
 import Data.Acid
-import Data.Acid.Advanced (update', query')
+import Distribution.Server.Framework.MemState
+import Distribution.Server.Framework.Cache
 
 import Distribution.Server.Framework.Auth
 import Distribution.Server.Framework.Feature
@@ -36,6 +39,7 @@ import Distribution.Server.Framework.Resource
 import Distribution.Server.Framework.Hook
 import Distribution.Server.Framework.Error
 import Distribution.Server.Framework.Validation
+
 import Distribution.Server.Util.Happstack
 
 

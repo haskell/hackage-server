@@ -31,7 +31,18 @@ data ServerEnv = ServerEnv {
     -- | The base URI of the server, just the hostname (and perhaps port).
     -- Use this if you need to construct absolute URIs pointing to the
     -- current server (e.g. as required in RSS feeds).
-    serverHostURI   :: URI.URIAuth
+    serverHostURI   :: URI.URIAuth,
+
+    -- | A tunable parameter for cache policy. Setting this parameter high
+    -- during bulk imports can very significantly improve performance. During
+    -- normal operation it probably doesn't help much.
+    
+    -- By delaying cache updates we can sometimes save some effort: caches are
+    -- based on a bit of changing state and if that state is updated more
+    -- frequently than the time taken to update the cache, then we don't have
+    -- to do as many cache updates as we do state updates. By artificially
+    -- increasing the time taken to update the cache we can push this further.
+    serverCacheDelay :: Int
 }
 
 type DynamicPath = [(String, String)]

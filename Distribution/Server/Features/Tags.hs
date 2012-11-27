@@ -13,7 +13,6 @@ import Control.Applicative (optional)
 
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
-import qualified Distribution.Server.Framework.Cache as Cache
 
 import Distribution.Server.Features.Tags.State
 import Distribution.Server.Features.Tags.Backup
@@ -84,7 +83,7 @@ data TagsResource = TagsResource {
 initTagsFeature :: ServerEnv -> CoreFeature -> IO TagsFeature
 initTagsFeature ServerEnv{serverStateDir} core@CoreFeature{..} = do
     tagsState <- tagsStateComponent serverStateDir
-    specials  <- Cache.newCacheable emptyPackageTags
+    specials  <- newMemStateWHNF emptyPackageTags
     updateTag <- newHook
 
     let feature = tagsFeature core tagsState specials updateTag
@@ -110,7 +109,7 @@ tagsStateComponent stateDir = do
 
 tagsFeature :: CoreFeature
             -> StateComponent PackageTags
-            -> Cache.Cache PackageTags
+            -> MemState PackageTags
             -> Hook (Set PackageName -> Set Tag -> IO ())
             -> TagsFeature
 
@@ -160,7 +159,7 @@ tagsFeature CoreFeature{..}
 
     setCalculatedTag :: Tag -> Set PackageName -> IO ()
     setCalculatedTag tag pkgs = do
-      Cache.modifyCache calculatedTags (setTag tag pkgs)
+      modifyMemState calculatedTags (setTag tag pkgs)
       void $ updateState tagsState $ SetTagPackages tag pkgs
       runHook'' tagsUpdated pkgs (Set.singleton tag)
 
@@ -184,7 +183,7 @@ tagsFeature CoreFeature{..}
         mtags <- optional $ look "tags"
         case simpleParse =<< mtags of
             Just (TagList tags) -> do
-                calcTags <- fmap (packageToTags pkgname) $ Cache.getCache calculatedTags
+                calcTags <- fmap (packageToTags pkgname) $ readMemState calculatedTags
                 let tagSet = Set.fromList tags `Set.union` calcTags
                 void $ updateState tagsState $ SetPackageTags pkgname tagSet
                 runHook'' tagsUpdated (Set.singleton pkgname) tagSet

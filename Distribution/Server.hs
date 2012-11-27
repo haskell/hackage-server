@@ -61,7 +61,8 @@ data ServerConfig = ServerConfig {
   confListenOn  :: ListenOn,
   confStateDir  :: FilePath,
   confStaticDir :: FilePath,
-  confTmpDir    :: FilePath
+  confTmpDir    :: FilePath,
+  confCacheDelay:: Int
 } deriving (Show)
 
 confDbStateDir, confBlobStoreDir :: ServerConfig -> FilePath
@@ -81,7 +82,8 @@ defaultServerConfig = do
                     },
     confStateDir  = "state",
     confStaticDir = dataDir </> "static",
-    confTmpDir    = "upload-tmp"
+    confTmpDir    = "state" </> "tmp",
+    confCacheDelay= 0
   }
 
 data Server = Server {
@@ -108,9 +110,9 @@ hasSavedState = doesDirectoryExist . confDbStateDir
 -- Note: the server instance must eventually be 'shutdown' or you'll end up
 -- with stale lock files.
 --
-initialise :: Bool -> ServerConfig -> IO Server
-initialise enableCaches initConfig@(ServerConfig verbosity hostName listenOn
-                                                 stateDir staticDir tmpDir) = do
+initialise :: ServerConfig -> IO Server
+initialise initConfig@(ServerConfig verbosity hostName listenOn
+                                    stateDir staticDir tmpDir cacheDelay) = do
     createDirectoryIfMissing False stateDir
     store   <- BlobStorage.open blobStoreDir
 
@@ -119,10 +121,11 @@ initialise enableCaches initConfig@(ServerConfig verbosity hostName listenOn
             serverStateDir  = stateDir,
             serverBlobStore = store,
             serverTmpDir    = tmpDir,
+            serverCacheDelay= cacheDelay * 1000000, --microseconds
             serverHostURI   = hostURI
          }
     -- do feature initialization
-    (features, userFeature) <- Features.initHackageFeatures enableCaches env
+    (features, userFeature) <- Features.initHackageFeatures env
 
     return Server {
         serverFeatures    = features,

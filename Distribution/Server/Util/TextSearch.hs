@@ -11,6 +11,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Char
 import Data.Maybe (catMaybes)
+import Control.DeepSeq
 
 -- Basic full text search. This works best when there are plenty of entries
 -- and all of them are short. I'd use something like Hayoo here, but there's
@@ -19,9 +20,11 @@ import Data.Maybe (catMaybes)
 -- At present this uses Bayer-Moore. Something with multiple search keys
 -- might be more flexible. Or, even better, a Lucene-like engine.
 data TextSearch = TextSearch {
-    fullText :: ByteString,
-    textIndex :: Map Int (String, String)
+    fullText  :: !ByteString,
+    textIndex :: !(Map Int (String, String))
 } deriving Show
+
+instance NFData TextSearch
 
 constructTextIndex :: [(String, String)] -> TextSearch
 constructTextIndex strs = case go strs 0 of

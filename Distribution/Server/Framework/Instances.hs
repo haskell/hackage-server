@@ -28,6 +28,7 @@ import Data.SafeCopy (SafeCopy(getCopy, putCopy), contain)
 
 import Happstack.Server
 
+import qualified Data.ByteString as SBS
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Data.Maybe (fromJust)
@@ -87,11 +88,17 @@ instance Serialize UTCTime where
 #if !(MIN_VERSION_bytestring(0,10,0))
 instance NFData ByteString where
     rnf bs = BS.length bs `seq` ()
+
+instance NFData SBS.ByteString where
+    rnf bs = bs `seq` ()
 #endif
 
 instance NFData Response where
-    rnf res@(Response{}) = rnf $ rsBody res
+    rnf res@(Response{}) = rnf (rsBody res) `seq` rnf (rsHeaders res)
     rnf _ = ()
+
+instance NFData HeaderPair where
+    rnf (HeaderPair a b) = rnf a `seq` rnf b
 
 instance NFData PackageName where
     rnf (PackageName pkg) = rnf pkg

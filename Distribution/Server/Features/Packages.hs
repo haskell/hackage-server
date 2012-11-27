@@ -23,7 +23,6 @@ import Distribution.Server.Util.ChangeLog (lookupChangeLog)
 
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
-import qualified Distribution.Server.Framework.Cache as Cache
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
 
 import Distribution.Package
@@ -33,7 +32,7 @@ import Distribution.Version
 import Distribution.Server.Packages.ModuleForest
 import Distribution.Text
 
-import Data.Maybe (catMaybes, fromJust)
+import Data.Maybe (catMaybes)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.Foldable as Foldable
@@ -42,7 +41,6 @@ import Data.Time.Clock (getCurrentTime, UTCTime)
 import Data.List (sort, sortBy, partition)
 import Data.Char (toLower, isSpace)
 import Data.Ord (comparing)
-import qualified Network.URI as URI
 
 
 -- the goal is to have the HTML modules import /this/ one, not the other way around
@@ -65,8 +63,9 @@ data PackagesResource = PackagesResource {
     packagesRecent :: Resource
 }
 
-initPackagesFeature :: Bool -> ServerEnv -> UserFeature -> CoreFeature -> IO PackagesFeature
-initPackagesFeature enableCaches env user core@CoreFeature{..} = do
+initPackagesFeature :: ServerEnv -> UserFeature -> CoreFeature -> IO PackagesFeature
+initPackagesFeature env@ServerEnv{serverCacheDelay}
+                    user core@CoreFeature{packageIndexChange} = do
 
     -- recent caches. in lieu of an ActionLog
     -- TODO: perhaps a hook, recentUpdated :: HookList ([PkgInfo] -> IO ())
@@ -74,9 +73,13 @@ initPackagesFeature enableCaches env user core@CoreFeature{..} = do
               packagesFeature env user core
                               cacheRecent
 
-        cacheRecent <- Cache.newCacheableAction enableCaches updateRecentCache
+        cacheRecent <- newAsyncCacheNF updateRecentCache
+                         defaultAsyncCachePolicy {
+                           asyncCacheName = "recent uploads (html,rss)",
+                           asyncCacheUpdateDelay = serverCacheDelay
+                         }
 
-    registerHook packageIndexChange $ Cache.refreshCacheableAction cacheRecent
+    registerHook packageIndexChange $ prodAsyncCache cacheRecent
 
     return feature
 
@@ -84,10 +87,10 @@ initPackagesFeature enableCaches env user core@CoreFeature{..} = do
 packagesFeature :: ServerEnv
                 -> UserFeature
                 -> CoreFeature
-                -> Cache.CacheableAction (Response, Response)
+                -> AsyncCache (Response, Response)
                 -> (PackagesFeature, IO (Response, Response))
 
-packagesFeature ServerEnv{serverBlobStore=store}
+packagesFeature env@ServerEnv{serverBlobStore=store}
                 UserFeature{..} CoreFeature{..}
                 cacheRecent
   = (PackagesFeature{..}, updateRecentCache)
@@ -100,8 +103,8 @@ packagesFeature ServerEnv{serverBlobStore=store}
     packagesResource = PackagesResource {
         packagesRecent = (resourceAt "/recent.:format") {
             resourceGet = [
-                ("html", const $ liftM fst $ Cache.getCacheableAction cacheRecent)
-              , ("rss", const $ liftM snd $ Cache.getCacheableAction cacheRecent)
+                ("html", const $ liftM fst $ readAsyncCache cacheRecent)
+              , ("rss",  const $ liftM snd $ readAsyncCache cacheRecent)
               ]
           }
       }
@@ -111,13 +114,14 @@ packagesFeature ServerEnv{serverBlobStore=store}
       doPackageRender store users pkg
 
     updateRecentCache = do
-        -- TODO: this should be moved to HTML/RSS features
+        -- TODO: move the html version to the HTML feature
         pkgIndex <- queryGetPackageIndex
         users <- queryGetUserDb
         now   <- getCurrentTime
         let recentChanges = reverse $ sortBy (comparing pkgUploadTime) (PackageIndex.allPackages pkgIndex)
-        return (toResponse $ Resource.XHtml $ Pages.recentPage users recentChanges,
-                toResponse $ Pages.recentFeed users (fromJust $ URI.uriAuthority =<< URI.parseURI "http://hackage.haskell.org") now recentChanges)
+            xmlRepresentation = toResponse $ Resource.XHtml $ Pages.recentPage users recentChanges
+            rssRepresentation = toResponse $ Pages.recentFeed users (serverHostURI env) now recentChanges
+        return (xmlRepresentation, rssRepresentation)
 
 -- This should provide the caller enough information to encode the package information
 -- in its particular format (text, html, json) with minimal effort on its part.

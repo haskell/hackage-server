@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, DoRec #-}
 module Distribution.Server.Features.NameSearch (
     NamesFeature(..),
     NamesResource(..),
@@ -6,11 +6,11 @@ module Distribution.Server.Features.NameSearch (
   ) where
 
 import Distribution.Server.Framework
+
 import Distribution.Server.Features.Core
 
 import Distribution.Server.Util.NameIndex
 import Distribution.Server.Util.TextSearch
-import qualified Distribution.Server.Framework.Cache as Cache
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
@@ -48,18 +48,36 @@ data NamesResource = NamesResource {
 -- text search of package descriptions using Bayer-Moore. The results could also
 -- be ordered by download (see DownloadCount.hs sortByDownloads).
 initNamesFeature :: ServerEnv -> CoreFeature -> IO NamesFeature
-initNamesFeature env core@CoreFeature{..} = do
-    pkgCache  <- Cache.newCacheable (emptyNameIndex Nothing)
-    textCache <- Cache.newCache (constructTextIndex []) id
-    osdCache  <- Cache.newCacheable (toResponse $ Resource.OpenSearchXml $ BS.pack $ mungeSearchXml $ hostUriStr env)
+initNamesFeature env@ServerEnv{serverCacheDelay} core@CoreFeature{..} = do
 
-    let (feature, regenerateIndices) =
-          namesFeature env core
-                       pkgCache textCache osdCache
+    rec let (feature, getNameIndex, getTextIndex, getOpenSearch) =
+              namesFeature env core
+                           pkgCache textCache osdCache
 
-    registerHook packageAddHook    $ \_   -> regenerateIndices
-    registerHook packageRemoveHook $ \_   -> regenerateIndices
-    registerHook packageChangeHook $ \_ _ -> regenerateIndices
+        pkgCache  <- newAsyncCacheNF getNameIndex
+                       defaultAsyncCachePolicy {
+                         asyncCacheName = "pkg name index",
+                         asyncCacheUpdateDelay = serverCacheDelay
+                       }
+
+        textCache <- newAsyncCacheNF getTextIndex
+                       defaultAsyncCachePolicy {
+                         asyncCacheName = "text index",
+                         asyncCacheUpdateDelay = serverCacheDelay
+                       }
+
+        osdCache  <- newAsyncCacheNF getOpenSearch
+                       defaultAsyncCachePolicy {
+                         asyncCacheName = "osd, TODO not a cache",
+                         asyncCacheUpdateDelay = serverCacheDelay
+                       }
+
+    registerHook packageAddHook    $ \_   -> prodAsyncCache pkgCache
+                                          >> prodAsyncCache textCache
+    registerHook packageRemoveHook $ \_   -> prodAsyncCache pkgCache
+                                          >> prodAsyncCache textCache
+    registerHook packageChangeHook $ \_ _ -> prodAsyncCache pkgCache
+                                          >> prodAsyncCache textCache
 
     return feature
 
@@ -68,15 +86,15 @@ hostUriStr ServerEnv{serverHostURI} = uriToString id (URI "http:" (Just serverHo
 
 namesFeature :: ServerEnv
              -> CoreFeature
-             -> Cache.Cache NameIndex
-             -> Cache.Cache TextSearch
-             -> Cache.Cache Response
-             -> (NamesFeature, IO ())
+             -> AsyncCache NameIndex
+             -> AsyncCache TextSearch
+             -> AsyncCache Response
+             -> (NamesFeature, IO NameIndex, IO TextSearch, IO Response)
 
 namesFeature env CoreFeature{..}
              packageNameIndex packageTextIndex
              openSearchCache
-  = (NamesFeature{..}, regenerateIndices)
+  = (NamesFeature{..}, getNameIndex, getTextIndex, getOpenSearch)
   where
     namesFeatureInterface = (emptyHackageFeature "names") {
         featureResources =
@@ -85,22 +103,30 @@ namesFeature env CoreFeature{..}
             , findPackageResource
             , suggestPackageResource
             ]
-      , featurePostInit  = regenerateIndices
       , featureState     = []
       }
 
     namesResource = NamesResource
-      { openSearchXml = (resourceAt "/opensearch.xml") { resourceGet = [("xml", Cache.respondCache openSearchCache id)] }
+      { openSearchXml = (resourceAt "/opensearch.xml") {
+          resourceGet = [("xml", \_ -> opensearchGet)]
+        }
         -- /packages/find?name=happstack
       , findPackageResource = resourceAt "/packages/find.:format"
-      , suggestPackageResource = (resourceAt "/packages/suggest.:format") { resourceGet = [("json", \_ -> suggestJson (hostUriStr env) packageNameIndex)] }
+      , suggestPackageResource = (resourceAt "/packages/suggest.:format") {
+          resourceGet = [("json", \_ -> suggestJson)]
+        }
       }
 
-    regenerateIndices = do
+    getNameIndex = do
       index <- queryGetPackageIndex :: IO (PackageIndex PkgInfo)
-      -- asynchronously update indices
-      Cache.putCache packageNameIndex (constructIndex (map display $ PackageIndex.packageNames index) Nothing)
-      Cache.putCache packageTextIndex (constructPackageText index)
+      let names     = map display $ PackageIndex.packageNames index
+          nameindex = constructIndex names Nothing
+      return nameindex
+    
+    getTextIndex = do
+      index <- queryGetPackageIndex :: IO (PackageIndex PkgInfo)
+      let textindex = constructPackageText index
+      return textindex
 
     constructPackageText :: PackageIndex PkgInfo -> TextSearch
     constructPackageText = constructTextIndex . map makeEntry . PackageIndex.allPackagesByName
@@ -113,8 +139,8 @@ namesFeature env CoreFeature{..}
     -- HTML search pages should have meta ! [name "robots", content "noindex"]
     searchFindPackage :: MonadIO m => String -> Bool -> m ([PackageName], [PackageName])
     searchFindPackage str doTextSearch = do
-        nmIndex <- Cache.getCache packageNameIndex
-        txIndex <- Cache.getCache packageTextIndex
+        nmIndex <- readAsyncCache packageNameIndex
+        txIndex <- readAsyncCache packageTextIndex
         let nameRes = lookupName str nmIndex
             textRes = if doTextSearch then searchText txIndex str else []
         return $ (map PackageName $ Set.toList nameRes, map (PackageName . fst) textRes)
@@ -124,14 +150,21 @@ namesFeature env CoreFeature{..}
         mname <- optional (look "name")
         func $ fmap (\n -> (n, length n >= 3)) mname
 
-    suggestJson :: String -> Cache.Cache NameIndex -> ServerPart Response
-    suggestJson hostStr cache = do
+    getOpenSearch :: IO Response
+    getOpenSearch = return $ toResponse (Resource.OpenSearchXml xmlstr)
+      where xmlstr = BS.pack (mungeSearchXml (hostUriStr env))
+
+    opensearchGet :: ServerPart Response
+    opensearchGet = return . toResponse =<< readAsyncCache openSearchCache
+
+    suggestJson :: ServerPart Response
+    suggestJson = do
         queryStr <- look "name" <|> pure ""
         -- There are a few ways to improve this.
         -- 1. Group similarly prefixed items, so user can see more breadth and less depth
         -- 2. Sort by revdeps, downloads, etc. (create a general "hotness" index)
-        results <- fmap (take 20 . Set.toList . lookupPrefix queryStr) $ Cache.getCache cache
-        let packagePrefix = hostStr ++ "/package/"
+        results <- fmap (take 20 . Set.toList . lookupPrefix queryStr) $ readAsyncCache packageNameIndex
+        let packagePrefix = hostUriStr env ++ "/package/"
         return . toResponse $ Resource.SuggestJson $ JSArray
           [ JSString $ toJSString queryStr
           , JSArray $ map (JSString . toJSString) results

@@ -70,6 +70,7 @@ executable hackage-server
     Distribution.Server.Framework.Feature
     Distribution.Server.Framework.Hook
     Distribution.Server.Framework.Instances
+    Distribution.Server.Framework.MemState
     Distribution.Server.Framework.Resource
     Distribution.Server.Framework.ResourceTypes
     Distribution.Server.Framework.BackupDump
@@ -101,7 +102,6 @@ executable hackage-server
     Distribution.Server.Users.Backup
     Distribution.Server.Users.Users
 
-    Distribution.Server.Util.AsyncVar
     Distribution.Server.Util.Happstack
     Distribution.Server.Util.Histogram
     Distribution.Server.Util.Index

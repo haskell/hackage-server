@@ -6,7 +6,6 @@ module Distribution.Server.Features.Html (
 
 import Distribution.Server.Framework
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
-import qualified Distribution.Server.Framework.Cache as Cache
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages
@@ -75,8 +74,7 @@ instance IsHackageFeature HtmlFeature where
 --
 -- This means of generating HTML is somewhat temporary, in that a more advanced
 -- (and better-looking) HTML ajaxy scheme should come about later on.
-initHtmlFeature :: Bool
-                -> ServerEnv -> UserFeature -> CoreFeature -> PackagesFeature
+initHtmlFeature :: ServerEnv -> UserFeature -> CoreFeature -> PackagesFeature
                 -> UploadFeature -> CheckFeature -> VersionsFeature
                 -- [reverse index disabled] -> ReverseFeature
                 -> TagsFeature -> DownloadFeature
@@ -85,8 +83,8 @@ initHtmlFeature :: Bool
                 -> DocumentationFeature
                 -> IO HtmlFeature
 
-initHtmlFeature enableCaches _env
-                user core@CoreFeature{queryGetPackageIndex, packageIndexChange}
+initHtmlFeature ServerEnv{serverCacheDelay}
+                user core@CoreFeature{packageIndexChange}
                 packages upload
                 check versions
                 -- [reverse index disabled] reverse
@@ -95,13 +93,8 @@ initHtmlFeature enableCaches _env
                 names mirror
                 distros docs = do
 
-    -- Index page caches
-    mainCache <- Cache.newCacheableAction enableCaches $
-        do index <- queryGetPackageIndex
-           return (toResponse $ Resource.XHtml $ Pages.packageIndex index)
-
     -- do rec, tie the knot
-    rec let (feature, packagesPage) =
+    rec let (feature, packageIndex, packagesPage) =
               htmlFeature user core
                           packages upload
                           check versions
@@ -109,10 +102,24 @@ initHtmlFeature enableCaches _env
                           list names
                           mirror distros docs
                           mainCache namesCache
-        namesCache <- Cache.newCacheableAction enableCaches packagesPage
 
-    registerHook itemUpdate $ \_ -> Cache.refreshCacheableAction namesCache
-    registerHook packageIndexChange $ Cache.refreshCacheableAction mainCache
+        -- Index page caches
+        mainCache  <- newAsyncCacheNF packageIndex
+                        defaultAsyncCachePolicy {
+                          asyncCacheName = "packages index page (by category)",
+                          asyncCacheUpdateDelay = serverCacheDelay
+                        }
+
+        namesCache <- newAsyncCacheNF packagesPage
+                        defaultAsyncCachePolicy {
+                          asyncCacheName = "packages index page (by name)",
+                          asyncCacheUpdateDelay = serverCacheDelay
+                        }
+
+    registerHook itemUpdate $ \_ ->   prodAsyncCache mainCache
+                                   >> prodAsyncCache namesCache
+    registerHook packageIndexChange $ prodAsyncCache mainCache
+                                   >> prodAsyncCache namesCache
 
     return feature
 
@@ -129,9 +136,9 @@ htmlFeature :: UserFeature
             -> MirrorFeature
             -> DistroFeature
             -> DocumentationFeature
-            -> Cache.CacheableAction Response
-            -> Cache.CacheableAction Response
-            -> (HtmlFeature, IO Response)
+            -> AsyncCache Response
+            -> AsyncCache Response
+            -> (HtmlFeature, IO Response, IO Response)
 
 htmlFeature UserFeature{..} CoreFeature{..}
             PackagesFeature{..} UploadFeature{..}
@@ -142,16 +149,12 @@ htmlFeature UserFeature{..} CoreFeature{..}
             MirrorFeature{..} DistroFeature{..}
             DocumentationFeature{..}
             cachePackagesPage cacheNamesPage
-  = (HtmlFeature{..}, packagesPage)
+  = (HtmlFeature{..}, packageIndex, packagesPage)
   where
     htmlFeatureInterface = (emptyHackageFeature "html") {
         featureResources = htmlResources
-      , featurePostInit  = generateCaches
       , featureState     = []
       }
-
-    generateCaches = do Cache.refreshCacheableAction cachePackagesPage
-                        Cache.refreshCacheableAction cacheNamesPage
 
     -- pages defined for the HTML feature in particular
     editDeprecated    = (resourceAt "/package/:package/deprecated/edit") {
@@ -185,11 +188,11 @@ htmlFeature UserFeature{..} CoreFeature{..}
           }, currently in 'core' feature
       -}
       , (resourceAt "/packages/names" ) {
-            resourceGet = [("html", const $ Cache.getCacheableAction cacheNamesPage)]
+            resourceGet = [("html", const $ readAsyncCache cacheNamesPage)]
           }
       , (extendResource $ corePackagesPage cores) {
             resourceDesc = [(GET, "Show package index")]
-          , resourceGet  = [("html", const $ Cache.getCacheableAction cachePackagesPage)]
+          , resourceGet  = [("html", const $ readAsyncCache cachePackagesPage)]
           }
       , maintainPackage
 
@@ -1008,14 +1011,22 @@ htmlFeature UserFeature{..} CoreFeature{..}
 
     --------------------------------------------------------------------------------
     -- Additional package indices
+
+    packageIndex :: IO Response
+    packageIndex = do
+       index <- queryGetPackageIndex
+       let htmlIndex = toResponse $ Resource.XHtml $ Pages.packageIndex index
+       return htmlIndex
+
     packagesPage :: IO Response
     packagesPage = do
-        let itemFunc = renderItem
         items <- liftIO $ getAllLists
-        return $ toResponse $ Resource.XHtml $ hackagePage "All packages by name" $
-          [ h2 << "All packages by name"
-          , ulist ! [theclass "packages"] << map itemFunc (Map.elems items)
-          ]
+        let htmlpage =
+              toResponse $ Resource.XHtml $ hackagePage "All packages by name" $
+                [ h2 << "All packages by name"
+                , ulist ! [theclass "packages"] << map renderItem (Map.elems items)
+                ]
+        return htmlpage
 
     --------------------------------------------------------------------------------
     -- Tags

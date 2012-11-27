@@ -9,7 +9,6 @@ module Distribution.Server.Features.DownloadCount (
 
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
-import qualified Distribution.Server.Framework.Cache as Cache
 
 import Distribution.Server.Features.DownloadCount.State
 import Distribution.Server.Features.DownloadCount.Backup
@@ -50,7 +49,7 @@ initDownloadFeature :: ServerEnv -> CoreFeature -> IO DownloadFeature
 initDownloadFeature ServerEnv{serverStateDir} core = do
     downloadState <- downloadStateComponent serverStateDir
     downChan      <- newChan
-    downHist      <- Cache.newCacheable emptyHistogram
+    downHist      <- newMemStateWHNF emptyHistogram
 
     registerHook (tarballDownload core) $ writeChan downChan
 
@@ -71,7 +70,7 @@ downloadStateComponent stateDir = do
 downloadFeature :: CoreFeature
                 -> StateComponent DownloadCounts
                 -> Chan PackageId
-                -> Cache.Cache (Histogram PackageName)
+                -> MemState (Histogram PackageName)
                 -> DownloadFeature
 
 downloadFeature CoreFeature{}
@@ -88,13 +87,13 @@ downloadFeature CoreFeature{}
     countCache = do
         dc <- queryState downloadState GetDownloadCounts
         let dmap = map (second packageDowns) (Map.toList $ downloadMap dc)
-        Cache.putCache downloadHistogram (constructHistogram dmap)
+        writeMemState downloadHistogram (constructHistogram dmap)
 
     transferDownloads = forever $ do
         pkg <- readChan downloadStream
         time <- getCurrentTime
         (_, new) <- updateState downloadState $ RegisterDownload (utctDay time) pkg 1
-        Cache.modifyCache downloadHistogram
+        modifyMemState downloadHistogram
             (updateHistogram (packageName pkg) new)
 
     queryGetDownloadInfo :: MonadIO m => PackageName -> m DownloadInfo
@@ -105,7 +104,7 @@ downloadFeature CoreFeature{}
               }
 
     getDownloadHistogram :: IO (Histogram PackageName)
-    getDownloadHistogram = Cache.getCache downloadHistogram
+    getDownloadHistogram = readMemState downloadHistogram
 
     --totalDownloadCount :: MonadIO m => m Int
     --totalDownloadCount = liftM totalDownloads $ query downloadState GetDownloadCounts
@@ -115,7 +114,7 @@ downloadFeature CoreFeature{}
     -- A lazy list of the top packages, which can be filtered, taken from, etc.
     -- Does not include packages with no downloads.
     sortedPackages :: IO [(PackageName, Int)]
-    sortedPackages = fmap topCounts $ Cache.getCache downloadHistogram
+    sortedPackages = fmap topCounts $ readMemState downloadHistogram
 
     {-
     -- Sorts a list of package-y items by their download count.

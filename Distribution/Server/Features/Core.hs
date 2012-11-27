@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, DoRec #-}
 module Distribution.Server.Features.Core (
     CoreFeature(..),
     CoreResource(..),
@@ -19,7 +19,6 @@ import Distribution.Server.Features.Users
 
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Types (UserId)
-import qualified Distribution.Server.Framework.Cache as Cache
 import qualified Distribution.Server.Packages.Index as Packages.Index
 import qualified Codec.Compression.GZip as GZip
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
@@ -113,23 +112,17 @@ data CoreResource = CoreResource {
     coreTarballUri  :: PackageId -> String
 }
 
-initCoreFeature :: Bool -> ServerEnv -> UserFeature -> IO CoreFeature
-initCoreFeature enableCaches env@ServerEnv{serverStateDir, serverBlobStore} UserFeature{..} = do
+initCoreFeature :: ServerEnv -> UserFeature -> IO CoreFeature
+initCoreFeature env@ServerEnv{serverStateDir, serverBlobStore, serverCacheDelay} users = do
 
     -- Canonical state
     packagesState <- packagesStateComponent serverBlobStore serverStateDir
 
-    -- Caches
+    -- Ephemeral state
     -- Additional files to put in the index tarball like preferred-versions
-    extraMap <- Cache.newCacheable Map.empty
+    extraMap <- newMemStateWHNF Map.empty
 
-    -- The index.tar.gz file
-    indexTar <- Cache.newCacheableAction enableCaches $ do
-            users  <- queryGetUserDb
-            index  <- packageList <$> queryState packagesState GetPackagesState
-            extras <- Cache.getCache extraMap
-            return $ GZip.compress $ Packages.Index.write users extras index
-
+    -- Hooks
     downHook   <- newHook
     addHook    <- newHook
     removeHook <- newHook
@@ -137,11 +130,25 @@ initCoreFeature enableCaches env@ServerEnv{serverStateDir, serverBlobStore} User
     indexHook  <- newHook
     newPkgHook <- newHook
     noPkgHook  <- newHook
-    registerHook indexHook $ Cache.refreshCacheableAction indexTar
 
-    return $ coreFeature env packagesState extraMap indexTar
-                         downHook addHook removeHook changeHook
-                         indexHook newPkgHook noPkgHook
+    rec let (feature, getIndexTarball)
+              = coreFeature env users
+                            packagesState extraMap indexTar
+                            downHook addHook removeHook changeHook
+                            indexHook newPkgHook noPkgHook
+
+        -- Caches
+        -- The index.tar.gz file
+        indexTar <- newAsyncCacheNF getIndexTarball
+                      defaultAsyncCachePolicy {
+                        asyncCacheName = "index tarball",
+                        asyncCacheUpdateDelay = serverCacheDelay
+                      }
+
+    registerHook indexHook (prodAsyncCache indexTar)
+
+    return feature
+
 
 packagesStateComponent :: BlobStorage -> FilePath -> IO (StateComponent PackagesState)
 packagesStateComponent store stateDir = do
@@ -156,9 +163,10 @@ packagesStateComponent store stateDir = do
      }
 
 coreFeature :: ServerEnv
+            -> UserFeature
             -> StateComponent PackagesState
-            -> Cache.Cache (Map String (ByteString, UTCTime))
-            -> Cache.CacheableAction ByteString
+            -> MemState (Map String (ByteString, UTCTime))
+            -> AsyncCache ByteString
             -> Hook (PackageId -> IO ())
             -> Hook (PkgInfo -> IO ())
             -> Hook (PkgInfo -> IO ())
@@ -166,13 +174,14 @@ coreFeature :: ServerEnv
             -> Hook (IO ())
             -> Hook (PkgInfo -> IO ())
             -> Hook (PkgInfo -> IO ())
-            -> CoreFeature
+            -> ( CoreFeature
+               , IO ByteString )
 
-coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
+coreFeature ServerEnv{serverBlobStore = store, serverStaticDir} UserFeature{..}
             packagesState indexExtras cacheIndexTarball
             tarballDownload packageAddHook packageRemoveHook packageChangeHook
             packageIndexChange newPackageHook noPackageHook
-  = CoreFeature{..}
+  = (CoreFeature{..}, getIndexTarball)
   where
     coreFeatureInterface = (emptyHackageFeature "core") {
         featureDesc = "Core functionality"
@@ -185,7 +194,6 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
           , corePackageTarball
           , coreCabalFile
           ]
-      , featurePostInit = runHook packageIndexChange
       , featureState    = [abstractStateComponent packagesState]
       }
 
@@ -197,10 +205,7 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
       }
     coreIndexTarball = (resourceAt "/packages/index.tar.gz") {
         resourceDesc = [(GET, "tarball of package descriptions")]
-      , resourceGet  = [("tarball",
-                          const $ liftM (toResponse . Resource.IndexTarball)
-                                $ Cache.getCacheableAction cacheIndexTarball)
-                       ]
+      , resourceGet  = [("tarball", servePackagesIndex)]
       }
     corePackagesPage = (resourceAt "/packages/.:format") {
         resourceGet = [] -- have basic packages listing?
@@ -255,8 +260,18 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
       updateState packagesState (ReplacePackageUploadTime pkgid time)
 
     updateArchiveIndexEntry :: MonadIO m => String -> (ByteString, UTCTime) -> m ()
-    updateArchiveIndexEntry entryName entryDetails =
-      Cache.modifyCache indexExtras (Map.insert entryName entryDetails)
+    updateArchiveIndexEntry entryName entryDetails = do
+      modifyMemState indexExtras (Map.insert entryName entryDetails)
+
+    -- Cache updates
+    --
+    getIndexTarball :: IO ByteString
+    getIndexTarball = do
+      users  <- queryGetUserDb  -- note, changes here don't automatically propagate
+      index  <- queryGetPackageIndex
+      extras <- readMemState indexExtras
+      let indexTarball' = GZip.compress (Packages.Index.write users extras index)
+      return indexTarball'
 
     -- Should probably look more like an Apache index page (Name / Last modified / Size / Content-type)
     basicPackagePage :: DynamicPath -> ServerPart Response
@@ -330,6 +345,12 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir}
         func pkgid
 
     ------------------------------------------------------------------------
+
+    servePackagesIndex :: DynamicPath -> ServerPart Response
+    servePackagesIndex _ = do
+      indexTarball <- readAsyncCache cacheIndexTarball
+      return $ toResponse (Resource.IndexTarball indexTarball)
+
     -- result: tarball or not-found error
     servePackageTarball :: DynamicPath -> ServerPartE Response
     servePackageTarball dpath =

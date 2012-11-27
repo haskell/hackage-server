@@ -49,8 +49,8 @@ import Distribution.Server.Features.ServerApiDoc        (serverApiDocFeature)
 --     best approach is probably to write backup tarball to disk and transfer
 --     it away through non-HTTP means (somewhat more secure)
 
-initHackageFeatures :: Bool -> ServerEnv -> IO ([HackageFeature], UserFeature)
-initHackageFeatures enableCaches env = do
+initHackageFeatures :: ServerEnv -> IO ([HackageFeature], UserFeature)
+initHackageFeatures env = do
 
     -- Arguments denote data dependencies, even if the feature objects are
     -- themselves unused, functions from their modules are.
@@ -59,7 +59,7 @@ initHackageFeatures enableCaches env = do
 
     usersFeature    <- initUserFeature env
 
-    coreFeature     <- initCoreFeature enableCaches env
+    coreFeature     <- initCoreFeature env
                          usersFeature
 
     mirrorFeature   <- initMirrorFeature env
@@ -71,7 +71,7 @@ initHackageFeatures enableCaches env = do
                          usersFeature
 
 #ifndef MINIMAL
-    packagesFeature <- initPackagesFeature enableCaches env
+    packagesFeature <- initPackagesFeature env
                          usersFeature
                          coreFeature
 
@@ -125,7 +125,7 @@ initHackageFeatures enableCaches env = do
 
     platformFeature <- initPlatformFeature env
 
-    htmlFeature     <- initHtmlFeature enableCaches env
+    htmlFeature     <- initHtmlFeature env
                          usersFeature
                          coreFeature
                          packagesFeature

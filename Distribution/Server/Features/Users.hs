@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, DoRec #-}
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, DoRec, BangPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Features.Users (
     initUserFeature,
@@ -11,7 +11,6 @@ module Distribution.Server.Features.Users (
 
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
-import qualified Distribution.Server.Framework.Cache as Cache
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
 
 import Distribution.Server.Users.Types
@@ -113,8 +112,8 @@ type GroupGen = DynamicPath -> UserGroup
 -- a secondary concern, as user groups should be defined by each feature
 -- and not global, to be perfectly modular.
 data GroupIndex = GroupIndex {
-    usersToGroupUri :: IntMap (Set String),
-    groupUrisToDesc :: Map String GroupDescription
+    usersToGroupUri :: !(IntMap (Set String)),
+    groupUrisToDesc :: !(Map String GroupDescription)
 }
 emptyGroupIndex :: GroupIndex
 emptyGroupIndex = GroupIndex IntMap.empty Map.empty
@@ -128,8 +127,8 @@ initUserFeature ServerEnv{serverStateDir} = do
   usersState  <- usersStateComponent  serverStateDir
   adminsState <- adminsStateComponent serverStateDir
 
-  -- Cached state
-  groupIndex   <- Cache.newCache emptyGroupIndex id
+  -- Ephemeral state
+  groupIndex   <- newMemStateWHNF emptyGroupIndex
 
   -- Extension hooks
   userAdded     <- newHook
@@ -177,7 +176,7 @@ adminsStateComponent stateDir = do
 
 userFeature :: StateComponent Users.Users
             -> StateComponent HackageAdmins
-            -> Cache.Cache GroupIndex
+            -> MemState GroupIndex
             -> Hook (IO ())
             -> Filter (UserId -> IO Bool)
             -> UserGroup
@@ -608,14 +607,14 @@ userFeature  usersState adminsState
     ---------------------------------------------------------------
     addGroupIndex :: MonadIO m => UserId -> String -> GroupDescription -> m ()
     addGroupIndex (UserId uid) uri desc =
-        Cache.modifyCache groupIndex $
+        modifyMemState groupIndex $
           adjustGroupIndex
             (IntMap.insertWith Set.union uid (Set.singleton uri))
             (Map.insert uri desc)
 
     removeGroupIndex :: MonadIO m => UserId -> String -> m ()
     removeGroupIndex (UserId uid) uri =
-        Cache.modifyCache groupIndex $
+        modifyMemState groupIndex $
           adjustGroupIndex
             (IntMap.update (keepSet . Set.delete uri) uid)
             id
@@ -624,7 +623,7 @@ userFeature  usersState adminsState
 
     initGroupIndex :: MonadIO m => UserList -> String -> GroupDescription -> m ()
     initGroupIndex ulist uri desc =
-        Cache.modifyCache groupIndex $
+        modifyMemState groupIndex $
           adjustGroupIndex
             (IntMap.unionWith Set.union (IntMap.fromList . map mkEntry $ Group.enumerate ulist))
             (Map.insert uri desc)
@@ -633,11 +632,11 @@ userFeature  usersState adminsState
 
     getGroupIndex :: (Functor m, MonadIO m) => UserId -> m [String]
     getGroupIndex (UserId uid) =
-      liftM (maybe [] Set.toList . IntMap.lookup uid . usersToGroupUri) $ Cache.getCache groupIndex
+      liftM (maybe [] Set.toList . IntMap.lookup uid . usersToGroupUri) $ readMemState groupIndex
 
     getIndexDesc :: MonadIO m => String -> m GroupDescription
     getIndexDesc uri =
-      liftM (Map.findWithDefault nullDescription uri . groupUrisToDesc) $ Cache.getCache groupIndex
+      liftM (Map.findWithDefault nullDescription uri . groupUrisToDesc) $ readMemState groupIndex
 
     -- partitioning index modifications, a cheap combinator
     adjustGroupIndex :: (IntMap (Set String) -> IntMap (Set String))
