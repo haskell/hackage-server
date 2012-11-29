@@ -48,8 +48,8 @@ updateReports reportsState storage reportLogs@(buildReports, partialLogs) = Rest
             ["package", pkgStr, reportItem] | Just pkgid <- simpleParse pkgStr -> case packageVersion pkgid of
                 Version [] [] -> fail $ "Build report package id " ++ show pkgStr ++ " must specify a version"
                 _ -> case splitExtension reportItem of
-                        (num, "txt") -> importReport pkgid num bs
-                        (num, "log") -> importLog storage pkgid num bs
+                        (num, ".txt") -> importReport pkgid num bs
+                        (num, ".log") -> importLog storage pkgid num bs
                         _ -> return ()
             _ -> return ()
         return $ fmap (updateReports reportsState storage) res
