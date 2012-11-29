@@ -51,6 +51,7 @@ import Text.CSV hiding (csv)
 import qualified Control.Exception as Exception
 import Distribution.Text
 import Data.Map (Map)
+import Data.List (sortBy)
 
 import Distribution.Server.Framework.BlobStorage (BlobId)
 
@@ -184,7 +185,8 @@ equalTarBall :: ByteString -- ^ "Before" tarball
              -> ByteString -- ^ "After" tarball
              -> [String]
 equalTarBall tar1 tar2 = runFailable_ $ do
-    (entries1, entries2) <- liftA2 (,) (readTar "before" tar1) (readTar "after" tar2)
+    entries1 <- sortBy (comparing Tar.entryTarPath) <$> readTar "before" tar1
+    entries2 <- sortBy (comparing Tar.entryTarPath) <$> readTar "after"  tar2
     flip traverse_ (mergeBy (comparing Tar.entryTarPath) entries1 entries2) $ \mr -> case mr of
         OnlyInLeft  entry -> fail $ Tar.entryPath entry ++ " only in 'before' tarball"
         OnlyInRight entry -> fail $ Tar.entryPath entry ++ " only in 'after' tarball"
