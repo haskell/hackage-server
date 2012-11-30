@@ -46,8 +46,8 @@ data DownloadResource = DownloadResource {
 }
 
 initDownloadFeature :: ServerEnv -> CoreFeature -> IO DownloadFeature
-initDownloadFeature ServerEnv{serverStateDir} core = do
-    downloadState <- downloadStateComponent serverStateDir
+initDownloadFeature ServerEnv{serverStateDir, serverBlobStore} core = do
+    downloadState <- downloadStateComponent serverBlobStore serverStateDir
     downChan      <- newChan
     downHist      <- newMemStateWHNF emptyHistogram
 
@@ -55,16 +55,16 @@ initDownloadFeature ServerEnv{serverStateDir} core = do
 
     return $ downloadFeature core downloadState downChan downHist
 
-downloadStateComponent :: FilePath -> IO (StateComponent DownloadCounts)
-downloadStateComponent stateDir = do
+downloadStateComponent :: BlobStorage -> FilePath -> IO (StateComponent DownloadCounts)
+downloadStateComponent store stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "DownloadCounts") initialDownloadCounts
   return StateComponent {
       stateDesc    = "Download counts"
     , acidState    = st
     , getState     = query st GetDownloadCounts
     , backupState  = \dc -> [csvToBackup ["downloads.csv"] $ downloadsToCSV dc]
-    , restoreState = downloadsBackup st
-    , resetState   = const downloadStateComponent
+    , restoreState = downloadsBackup store st
+    , resetState   = downloadStateComponent
     }
 
 downloadFeature :: CoreFeature

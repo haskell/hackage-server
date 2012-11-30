@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, MultiParamTypeClasses, RecordWildCards, FlexibleInstances, StandaloneDeriving #-}
+{-# LANGUAGE RankNTypes, MultiParamTypeClasses, RecordWildCards, FlexibleInstances, StandaloneDeriving, KindSignatures, GADTs #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Distribution.Server.Framework.BackupRestore (
@@ -26,7 +26,10 @@ module Distribution.Server.Framework.BackupRestore (
     -- Once that transition is complete this will replace RestoreBackup
     PureRestoreBackup(..),
     fromPureRestoreBackup,
-    concatM
+    concatM,
+    Restore,
+    restoreAddBlob,
+    restoreGetBlob
   ) where
 
 import qualified Codec.Archive.Tar as Tar
@@ -53,7 +56,7 @@ import Distribution.Text
 import Data.Map (Map)
 import Data.List (sortBy)
 
-import Distribution.Server.Framework.BlobStorage (BlobStorage, BlobId, add)
+import Distribution.Server.Framework.BlobStorage (BlobStorage, BlobId, add, fetch)
 
 data BackupEntry =
     BackupByteString [FilePath] ByteString
@@ -74,20 +77,56 @@ data RestoreBackup = RestoreBackup {
 }
 
 data PureRestoreBackup st = PureRestoreBackup {
-    pureRestoreEntry    :: BackupEntry -> Either String (PureRestoreBackup st)
-  , pureRestoreFinalize :: Either String st
+    pureRestoreEntry    :: BackupEntry -> Restore (PureRestoreBackup st)
+  , pureRestoreFinalize :: Restore st
   }
 
-fromPureRestoreBackup :: (st -> IO ()) -> PureRestoreBackup st -> RestoreBackup
-fromPureRestoreBackup putState = translate
+data Restore :: * -> * where
+  RestoreDone :: forall a. a -> Restore a
+  RestoreBind :: Restore a -> (a -> Restore b) -> Restore b
+  RestoreFail :: forall a. String -> Restore a
+  RestoreAddBlob :: ByteString -> Restore BlobId
+  RestoreGetBlob :: BlobId -> Restore ByteString
+
+instance Functor Restore where
+  f `fmap` x = x >>= return . f
+
+instance Monad Restore where
+  return = RestoreDone
+  (>>=)  = RestoreBind
+  fail   = RestoreFail
+
+runRestore :: BlobStorage -> Restore a -> IO (Either String a)
+runRestore store = go
+  where
+    go :: forall a. Restore a -> IO (Either String a)
+    go (RestoreDone a)      = return (Right a)
+    go (RestoreBind x f)    = do mx' <- go x
+                                 case mx' of
+                                   Left err -> return (Left err)
+                                   Right x' -> go (f x')
+    go (RestoreFail err)    = return (Left err)
+    go (RestoreAddBlob bs)  = Right <$> add store bs
+    go (RestoreGetBlob bid) = Right <$> fetch store bid
+
+restoreAddBlob :: ByteString -> Restore BlobId
+restoreAddBlob = RestoreAddBlob
+
+restoreGetBlob :: BlobId -> Restore ByteString
+restoreGetBlob = RestoreGetBlob
+
+fromPureRestoreBackup :: BlobStorage -> (st -> IO ()) -> PureRestoreBackup st -> RestoreBackup
+fromPureRestoreBackup store putState = translate
   where
     translate prb = RestoreBackup {
-        restoreEntry = \entry -> return (translate <$> pureRestoreEntry prb entry)
-      , restoreFinalize = case pureRestoreFinalize prb of
-          Left err -> return . Left $ err
-          Right st -> return . Right $ mempty {
-              restoreComplete = putState st
-            }
+        restoreEntry = \entry -> do
+          result <- runRestore store $ pureRestoreEntry prb entry
+          return (translate <$> result)
+      , restoreFinalize = do
+          result <- runRestore store $ pureRestoreFinalize prb
+          case result of
+            Left err -> return . Left $ err
+            Right st -> return . Right $ mempty {restoreComplete = putState st}
       , restoreComplete = error "complete called before finalize"
       }
 
@@ -384,8 +423,10 @@ customParseCSV filename inp = case parseCSV filename inp of
    chopLastRecord ([""]:[]) = []
    chopLastRecord (x:xs) = x : chopLastRecord xs
 
-importCSV' :: FilePath -> ByteString -> Either String CSV
-importCSV' filename inp = customParseCSV filename (unpackUTF8 inp)
+importCSV' :: Monad m => FilePath -> ByteString -> m CSV
+importCSV' filename inp = case customParseCSV filename (unpackUTF8 inp) of
+  Left err  -> fail err
+  Right csv -> return csv
 
 -- | Made customParseCSV into a nifty combinator.
 importCSV :: String -> ByteString -> (CSV -> Import s a) -> Import s a

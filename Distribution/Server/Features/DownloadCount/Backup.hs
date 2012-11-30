@@ -5,6 +5,7 @@ module Distribution.Server.Features.DownloadCount.Backup (
   ) where
 
 import Distribution.Server.Framework.BackupRestore
+import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import Data.Acid (AcidState, update)
 
 import Distribution.Server.Features.DownloadCount.State
@@ -18,9 +19,9 @@ import qualified Data.Map as Map
 import Control.Monad
 import Data.Time.Calendar
 
-downloadsBackup :: AcidState DownloadCounts -> RestoreBackup
-downloadsBackup downloadState =
-  fromPureRestoreBackup
+downloadsBackup :: BlobStorage -> AcidState DownloadCounts -> RestoreBackup
+downloadsBackup store downloadState =
+  fromPureRestoreBackup store
     (update downloadState . ReplacePackageDownloads)
     (updateDownloadsPure emptyDownloadCounts)
 
@@ -35,10 +36,10 @@ updateDownloadsPure dcs = PureRestoreBackup {
   , pureRestoreFinalize = return dcs
   }
 
-updateFromCSV :: CSV -> DownloadCounts -> Either String DownloadCounts
+updateFromCSV :: CSV -> DownloadCounts -> Restore DownloadCounts
 updateFromCSV = concatM . map fromRecord
   where
-    fromRecord :: Record -> DownloadCounts -> Either String DownloadCounts
+    fromRecord :: Record -> DownloadCounts -> Restore DownloadCounts
     fromRecord [dayField, packageNameField, packageVerField, countField] dcs = do
         day <- liftM ModifiedJulianDay $ parseRead "day" dayField
         pkgname <- parseText "package name" packageNameField
