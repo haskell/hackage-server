@@ -406,8 +406,7 @@ cabal opts cmd args = do
                  : cmd
                  : verbosityArgs
                 ++ args
-    notice verbosity ("In " ++ cwd' ++ ":\n" ++
-                      showCommandForUser "cabal" all_args)
+    notice verbosity $ "In " ++ cwd' ++ ":\n" ++ unwords ("cabal":all_args)
     ph <- runProcess "cabal" all_args (Just cwd')
                      Nothing Nothing Nothing Nothing
     waitForProcess ph

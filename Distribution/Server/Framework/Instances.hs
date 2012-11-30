@@ -106,3 +106,12 @@ instance NFData PackageName where
 instance NFData PackageIdentifier where
     rnf (PackageIdentifier name version) = rnf name `seq` rnf version
 
+#if !(MIN_VERSION_deepseq(1,3,0))
+instance NFData Version where
+    rnf (Version branch tags) = rnf branch `seq` rnf tags
+#endif
+
+#if !(MIN_VERSION_time(1,4,0))
+instance NFData Day where
+    rnf (ModifiedJulianDay a) = rnf a
+#endif
