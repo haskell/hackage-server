@@ -15,6 +15,7 @@ module Distribution.Server.Util.ServeTarball
     ( serveTarball
     , serveTarEntry
     , readTarIndex
+    , constructTarIndex
     ) where
 
 import Happstack.Server.Types
@@ -34,7 +35,6 @@ import qualified Text.XHtml.Strict as XHtml
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.Map as Map
 import System.FilePath
-import Control.Exception (evaluate)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Control.Monad (msum, mzero)
 import System.IO
@@ -116,10 +116,17 @@ mimeTypes' = Happstack.mimeTypes `Map.union` Map.fromList
 readTarIndex :: FilePath -> IO TarIndex
 readTarIndex file = do
   tar <- BS.readFile file
-  let entries = Tar.read tar
-  case extractInfo entries of
-    Just info -> evaluate (TarIndex.construct info)
-    Nothing   -> fail "bad tar file"
+  case constructTarIndex tar of
+    Left err       -> fail err
+    Right tarIndex -> return tarIndex
+
+-- | Forcing the Either will force the tar index
+constructTarIndex :: BS.ByteString -> Either String TarIndex
+constructTarIndex tar =
+  case extractInfo (Tar.read tar) of
+    Just info -> let tarIndex = TarIndex.construct info
+                 in tarIndex `seq` Right tarIndex
+    Nothing   -> Left "bad tar file"
 
 type Block = Int
 

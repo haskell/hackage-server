@@ -24,8 +24,6 @@ import Distribution.Package
 import Data.Function
 import qualified Data.Map as Map
 import qualified Codec.Compression.GZip as GZip
-import Data.ByteString.Lazy.Char8 (ByteString)
-import Control.Monad.State (modify)
 
 -- TODO:
 -- 1. Write an HTML view for organizing uploads
@@ -61,7 +59,7 @@ documentationStateComponent store stateDir = do
     , acidState    = st
     , getState     = query st GetDocumentation
     , backupState  = dumpBackup
-    , restoreState = updateDocumentation st (Documentation Map.empty)
+    , restoreState = updateDocumentation st
     , resetState   = documentationStateComponent
     }
   where
@@ -69,24 +67,32 @@ documentationStateComponent store stateDir = do
         let exportFunc (pkgid, (blob, _)) = BackupBlob ([display pkgid, "documentation.tar"]) blob
         in map exportFunc . Map.toList $ documentation doc
 
-    updateDocumentation :: AcidState Documentation -> Documentation -> RestoreBackup
-    updateDocumentation st docs = fix $ \r -> RestoreBackup
-      { restoreEntry = \entry ->
-            case entry of
-                BackupBlob [str, "documentation.tar"] blobId | Just pkgid <- simpleParse str -> do
-                    res <- runImport docs (importDocumentation pkgid blobId)
-                    return $ fmap (updateDocumentation st) res
-                _ -> return . Right $ r
-      , restoreFinalize = return . Right $ r
-      , restoreComplete = update st $ ReplaceDocumentation docs
+    updateDocumentation :: AcidState Documentation -> RestoreBackup
+    updateDocumentation st =
+      fromPureRestoreBackup store
+        (update st . ReplaceDocumentation)
+        (updateDocumentationPure (Documentation Map.empty))
+
+    updateDocumentationPure :: Documentation -> PureRestoreBackup Documentation
+    updateDocumentationPure docs = PureRestoreBackup {
+        pureRestoreEntry = \entry ->
+          case entry of
+            BackupBlob [str, "documentation.tar"] blobId | Just pkgId <- simpleParse str -> do
+              docs' <- importDocumentation pkgId blobId docs
+              return (updateDocumentationPure docs')
+            _ ->
+              return (updateDocumentationPure docs)
+      , pureRestoreFinalize = return docs
       }
 
-    importDocumentation :: PackageId
-                        -> BlobId -> Import Documentation ()
-    importDocumentation pkgid blobId = do
-        -- this may fail for a bad tarball
-        tarred <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blobId)
-        modify $ Documentation . Map.insert pkgid (blobId, tarred) . documentation
+    importDocumentation :: PackageId -> BlobId -> Documentation -> Restore Documentation
+    importDocumentation pkgId blobId (Documentation docs) = do
+      tar <- restoreGetBlob blobId
+      case TarIndex.constructTarIndex tar of
+        Left err ->
+          fail err
+        Right tarIndex ->
+          return (Documentation (Map.insert pkgId (blobId, tarIndex) docs))
 
 documentationFeature :: ServerEnv
                      -> CoreFeature
