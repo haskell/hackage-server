@@ -97,6 +97,9 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
             , mirrorPackageUploadTime
             , mirrorPackageUploader
             , mirrorCabalFile
+            ] ++
+            [ groupResource     mirrorGroupResource
+            , groupUserResource mirrorGroupResource
             ]
       , featureState = [abstractStateComponent mirrorersState]
       }
