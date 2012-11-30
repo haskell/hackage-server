@@ -16,36 +16,36 @@ import Distribution.Version
 import Text.CSV (CSV, Record)
 import qualified Data.Map as Map
 import Control.Monad
-import Control.Monad.State (modify)
-import Data.Function (fix)
-import Data.ByteString.Lazy.Char8 (ByteString)
 import Data.Time.Calendar
 
 downloadsBackup :: AcidState DownloadCounts -> RestoreBackup
-downloadsBackup downloadState = updateDownloads downloadState emptyDownloadCounts
+downloadsBackup downloadState =
+  fromPureRestoreBackup
+    (update downloadState . ReplacePackageDownloads)
+    (updateDownloadsPure emptyDownloadCounts)
 
-updateDownloads :: AcidState DownloadCounts -> DownloadCounts -> RestoreBackup
-updateDownloads downloadState dcs = fix $ \r -> RestoreBackup
-  { restoreEntry = \entry -> do
-        res <- runImport dcs $ case entry of
-            BackupByteString ["downloads.csv"] bs -> importDownloads bs
-            _ -> return ()
-        return $ fmap (updateDownloads downloadState) res
-  , restoreFinalize = return . Right $ r
-  , restoreComplete = update downloadState $ ReplacePackageDownloads dcs
+updateDownloadsPure :: DownloadCounts -> PureRestoreBackup DownloadCounts
+updateDownloadsPure dcs = PureRestoreBackup {
+    pureRestoreEntry = \(BackupByteString entry bs) ->
+      if entry == ["downloads.csv"]
+        then do csv  <- importCSV' "downloads.csv" bs
+                dcs' <- updateFromCSV csv dcs
+                return (updateDownloadsPure dcs')
+        else return (updateDownloadsPure dcs)
+  , pureRestoreFinalize = return dcs
   }
 
-importDownloads :: ByteString -> Import DownloadCounts ()
-importDownloads contents = importCSV "downloads.csv" contents $ \csv ->
-    mapM_ fromRecord csv
+updateFromCSV :: CSV -> DownloadCounts -> Either String DownloadCounts
+updateFromCSV = concatM . map fromRecord
   where
-    fromRecord [dayField, packageNameField, packageVerField, countField] = do
+    fromRecord :: Record -> DownloadCounts -> Either String DownloadCounts
+    fromRecord [dayField, packageNameField, packageVerField, countField] dcs = do
         day <- liftM ModifiedJulianDay $ parseRead "day" dayField
         pkgname <- parseText "package name" packageNameField
         pkgver <- parseText "package version" packageVerField
         count <- parseRead "day download count" countField
-        modify $ incrementCounts day pkgname pkgver count
-    fromRecord x = fail $ "Invalid tags record: " ++ show x
+        return (incrementCounts day pkgname pkgver count dcs)
+    fromRecord x _ = fail $ "Invalid tags record: " ++ show x
 
 ------------------------------------------------------------------------------
 downloadsToCSV :: DownloadCounts -> CSV
