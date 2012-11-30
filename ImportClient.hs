@@ -4,7 +4,8 @@ module Main where
 
 import Network.HTTP
 import Network.Browser hiding (err)
-import Network.URI (URI(..), URIAuth(..), parseURI)
+import Network.URI
+         ( URI(..), URIAuth(..), parseURI, escapeURIString, isUnescapedInURI )
 
 import qualified Distribution.Client.HtPasswdDb as HtPasswdDb
 import qualified Distribution.Client.UploadLog  as UploadLog
@@ -16,7 +17,9 @@ import Distribution.Server.Users.Types (UserName(..))
 import Distribution.Server.Framework.AuthTypes (HtPasswdHash(..))
 
 import Distribution.Package
-         ( PackageId, PackageName, packageName )
+         ( PackageId, PackageName, packageName, packageVersion )
+import Distribution.Version
+         ( Version, versionTags )
 import Distribution.Text
          ( display, simpleParse )
 import Distribution.Simple.Utils
@@ -93,7 +96,7 @@ main = topHandler $ do
       CommandErrors errs  -> printErrors errs
       CommandReadyToGo (globalflags, commandParse) ->
         case commandParse of
-          _ | fromFlag (flagVersion globalflags) -> printVersion
+          _ | fromFlag (globalVersion globalflags) -> printVersion
           CommandHelp      help    -> printHelp help
           CommandList      opts    -> printOptionsList opts
           CommandErrors    errs    -> printErrors errs
@@ -130,12 +133,12 @@ main = topHandler $ do
 --
 
 data GlobalFlags = GlobalFlags {
-    flagVersion :: Flag Bool
+    globalVersion :: Flag Bool
   }
 
 defaultGlobalFlags :: GlobalFlags
 defaultGlobalFlags = GlobalFlags {
-    flagVersion = Flag False
+    globalVersion = Flag False
   }
 
 globalCommand :: CommandUI GlobalFlags
@@ -155,7 +158,7 @@ globalCommand = CommandUI {
     commandOptions      = \_ ->
       [option ['V'] ["version"]
          "Print version information"
-         flagVersion (\v flags -> flags { flagVersion = v })
+         globalVersion (\v flags -> flags { globalVersion = v })
          (noArg (Flag True))
       ]
   }
@@ -166,14 +169,16 @@ globalCommand = CommandUI {
 --
 
 data UsersFlags = UsersFlags {
-    flagImportHtPasswd  :: Flag FilePath,
-    flagImportAddresses :: Flag FilePath
+    usersHtPasswd  :: Flag FilePath,
+    usersAddresses :: Flag FilePath,
+    usersJobs      :: Flag String
   }
 
 defaultUsersFlags :: UsersFlags
 defaultUsersFlags = UsersFlags {
-    flagImportHtPasswd  = NoFlag,
-    flagImportAddresses = NoFlag
+    usersHtPasswd  = NoFlag,
+    usersAddresses = NoFlag,
+    usersJobs      = NoFlag
   }
 
 usersCommand :: CommandUI UsersFlags
@@ -192,42 +197,47 @@ usersCommand =
     options _  =
       [ option [] ["htpasswd"]
           "Import an apache 'htpasswd' user account database file"
-          flagImportHtPasswd (\v flags -> flags { flagImportHtPasswd = v })
+          usersHtPasswd (\v flags -> flags { usersHtPasswd = v })
           (reqArgFlag "HTPASSWD")
       , option [] ["addresses"]
           "Import user email addresses"
-          flagImportAddresses (\v flags -> flags { flagImportAddresses = v })
+          usersAddresses (\v flags -> flags { usersAddresses = v })
           (reqArgFlag "ADDRESSES")
+      , option [] ["jobs"]
+          "The level of concurrency to use when uploading"
+          usersJobs (\v flags -> flags { usersJobs = v })
+          (reqArgFlag "N")
       ]
 
 usersAction :: UsersFlags -> [String] -> GlobalFlags -> IO ()
-usersAction opts args _ = do
+usersAction flags args _ = do
+    jobs    <- validateOptsJobs (usersJobs flags)
     baseURI <- validateOptsServerURI args
 
-    when (flagImportHtPasswd opts == NoFlag
-       && flagImportAddresses opts == NoFlag) $
+    when (usersHtPasswd flags == NoFlag
+       && usersAddresses flags == NoFlag) $
       die $ "specify what to import using one or more of the flags:\n"
          ++ "  --htpasswd=  --addresses="
 
-    case flagImportHtPasswd opts of
+    case usersHtPasswd flags of
       NoFlag    -> return ()
-      Flag file -> importAccounts file baseURI
+      Flag file -> importAccounts jobs file baseURI
 
-    case flagImportAddresses opts of
+    case usersAddresses flags of
       NoFlag    -> return ()
       Flag file -> importAddresses file baseURI
 
-importAccounts :: FilePath -> URI -> IO ()
-importAccounts htpasswdFile baseURI = do
+importAccounts :: Int -> FilePath -> URI -> IO ()
+importAccounts jobs htpasswdFile baseURI = do
 
   htpasswdDb <- either die return . HtPasswdDb.parse
             =<< readFile htpasswdFile
 
-  httpSession $ do
-    setAuthorityFromURI baseURI
-    sequence_
-      [ putUserAccount baseURI username mPasswdhash
-      | (username, mPasswdhash) <- htpasswdDb ]
+  concForM_ jobs htpasswdDb $ \tasks ->
+    httpSession $ do
+      setAuthorityFromURI baseURI
+      tasks $ \(username, mPasswdhash) ->
+        putUserAccount baseURI username mPasswdhash
 
 
 putUserAccount :: URI -> UserName -> Maybe HtPasswdHash -> HttpSession ()
@@ -260,16 +270,16 @@ importAddresses _addressesFile _baseURI =
 --
 
 data MetadataFlags = MetadataFlags {
-    flagImportIndex     :: Flag FilePath,
-    flagImportUploadLog :: Flag FilePath,
-    flagImportJobs      :: Flag String
+    metadataIndex     :: Flag FilePath,
+    metadataUploadLog :: Flag FilePath,
+    metadataJobs      :: Flag String
   }
 
 defaultMetadataFlags :: MetadataFlags
 defaultMetadataFlags = MetadataFlags {
-    flagImportIndex     = NoFlag,
-    flagImportUploadLog = NoFlag,
-    flagImportJobs      = NoFlag
+    metadataIndex     = NoFlag,
+    metadataUploadLog = NoFlag,
+    metadataJobs      = NoFlag
   }
 
 metadataCommand :: CommandUI MetadataFlags
@@ -288,36 +298,36 @@ metadataCommand =
     options _  =
       [ option [] ["index"]
           "Import all the packages from a hackage '00-index.tar' file"
-          flagImportIndex (\v flags -> flags { flagImportIndex = v })
+          metadataIndex (\v flags -> flags { metadataIndex = v })
           (reqArgFlag "INDEX")
       , option [] ["upload-log"]
           "Import who uploaded what when, and set maintainer groups"
-          flagImportUploadLog (\v flags -> flags { flagImportUploadLog = v })
+          metadataUploadLog (\v flags -> flags { metadataUploadLog = v })
           (reqArgFlag "LOG")
       , option [] ["jobs"]
           "The level of concurrency to use when uploading"
-          flagImportJobs (\v flags -> flags { flagImportJobs = v })
+          metadataJobs (\v flags -> flags { metadataJobs = v })
           (reqArgFlag "N")
       ]
 
 metadataAction :: MetadataFlags -> [String] -> GlobalFlags -> IO ()
-metadataAction opts args _ = do
+metadataAction flags args _ = do
 
-    jobs    <- validateOptsJobs (flagImportJobs opts)
+    jobs    <- validateOptsJobs (metadataJobs flags)
     baseURI <- validateOptsServerURI args
 
-    when (flagImportIndex opts == NoFlag
-       && flagImportUploadLog opts == NoFlag) $
+    when (metadataIndex flags == NoFlag
+       && metadataUploadLog flags == NoFlag) $
       die $ "specify what to import using one or more of the flags:\n"
          ++ "  --index=  --upload-log="
 
-    case flagImportIndex opts of
+    case metadataIndex flags of
       NoFlag    -> return ()
       Flag file -> importIndex jobs file baseURI
 
-    case flagImportUploadLog opts of
+    case metadataUploadLog flags of
       NoFlag    -> return ()
-      Flag file -> importUploadLog file baseURI
+      Flag file -> importUploadLog jobs file baseURI
 
 importIndex :: Int -> FilePath -> URI -> IO ()
 importIndex jobs indexFile baseURI = do
@@ -349,21 +359,27 @@ putCabalFile baseURI pkgid cabalFile = do
                       </> display (packageName pkgid) <.> "cabal"
 
 
-importUploadLog :: FilePath -> URI -> IO ()
-importUploadLog uploadLogFile baseURI = do
+importUploadLog :: Int -> FilePath -> URI -> IO ()
+importUploadLog jobs uploadLogFile baseURI = do
     info $ "Reading log file " ++ uploadLogFile
     uploadLog <- either fail return
                . UploadLog.read
              =<< readFile uploadLogFile
 
-    httpSession $ do
-      setAuthorityFromURI baseURI
-      sequence_
-        [ putUploadInfo baseURI pkgid time uname
-        | (pkgid, time, uname) <- UploadLog.collectUploadInfo uploadLog ]
-      sequence_
-        [ putMaintainersInfo baseURI pkgname maintainers
-        | (pkgname, maintainers) <- UploadLog.collectMaintainerInfo uploadLog ]
+    let uploadInfo     = UploadLog.collectUploadInfo uploadLog
+        maintainerInfo = UploadLog.collectMaintainerInfo uploadLog
+
+    concForM_ jobs uploadInfo $ \tasks ->
+      httpSession $ do
+        setAuthorityFromURI baseURI
+        tasks $ \(pkgid, time, uname) ->
+          putUploadInfo baseURI pkgid time uname
+
+    concForM_ jobs maintainerInfo $ \tasks ->
+      httpSession $ do
+        setAuthorityFromURI baseURI
+        tasks $ \(pkgname, maintainers) ->
+          putMaintainersInfo baseURI pkgname maintainers
 
 
 putUploadInfo :: URI -> PackageId -> UTCTime -> UserName -> HttpSession ()
@@ -410,12 +426,12 @@ putMaintainersInfo baseURI pkgname maintainers =
 --
 
 data TarballFlags = TarballFlags {
-    tarballFlagJobs :: Flag String
+    tarballJobs :: Flag String
   }
 
 defaultTarballFlags :: TarballFlags
 defaultTarballFlags = TarballFlags {
-    tarballFlagJobs = NoFlag
+    tarballJobs = NoFlag
   }
 
 tarballCommand :: CommandUI TarballFlags
@@ -433,14 +449,14 @@ tarballCommand =
                   ++ " local .tar.gz files.\n"
     options _  = [ option [] ["jobs"]
                    "The level of concurrency to use when uploading tarballs"
-                   tarballFlagJobs (\v flags -> flags { tarballFlagJobs = v })
+                   tarballJobs (\v flags -> flags { tarballJobs = v })
                    (reqArgFlag "N")
                  ]
 
 tarballAction :: TarballFlags -> [String] -> GlobalFlags -> IO ()
 tarballAction flags args _ = do
 
-    jobs <- validateOptsJobs (tarballFlagJobs flags)
+    jobs <- validateOptsJobs (tarballJobs flags)
 
     (baseURI, tarballFiles) <- validateOptsServerURI' args
 
@@ -450,13 +466,19 @@ tarballAction flags args _ = do
           , let pkgidstr = (dropExtension . dropExtension . takeFileName) file
                 ext      = takeExtension (dropExtension file)
                              <.> takeExtension file
-                mpkgid | ext == ".tar.gz" = simpleParse pkgidstr
-                       | otherwise        = Nothing ]
+                mpkgid | ext == ".tar.gz" 
+                       , Just pkgid <- simpleParse pkgidstr
+                       , null (versionTags (packageVersion pkgid))
+                       = Just pkgid
+                       | otherwise
+                       = Nothing
+          ]
 
     case [ file | (Nothing, file) <- pkgidAndTarball] of
       []    -> return ()
-      files -> die $ "the following files don't match the expected naming "
-                  ++ "convention of foo-1.0.tar.gz:\n" ++ unlines files
+      files -> warn normal $ "the following files will be ignored because they "
+                          ++ "do not match the expected naming convention of "
+                          ++ "foo-1.0.tar.gz:\n" ++ unlines files
 
     let pkgidAndTarball' = [ (pkgid, tarballFilePath)
                            | (Just pkgid, tarballFilePath) <- pkgidAndTarball ]
@@ -475,7 +497,7 @@ putPackageTarball baseURI pkgid tarballFilePath = do
     rsp <- requestPUT pkgURI "application/x-gzip" pkgContent
     case rsp of
       Nothing  -> return ()
-      Just err -> fail (formatErrorResponse err)
+      Just err -> out (formatErrorResponse err)
 
   where
     pkgURI = baseURI <//> "package" </> display pkgid </> display pkgid <.> "tar.gz"
@@ -509,7 +531,7 @@ deprecationCommand =
     options _  = []
 
 deprecationAction :: DeprecationFlags -> [String] -> GlobalFlags -> IO ()
-deprecationAction _opts args _ = do
+deprecationAction _flags args _ = do
 
     (baseURI, tagFiles) <- validateOptsServerURI' args
 
@@ -571,7 +593,7 @@ distroCommand =
     options _  = []
 
 distroAction :: DistroFlags -> [String] -> GlobalFlags -> IO ()
-distroAction _opts args _ = do
+distroAction _flags args _ = do
 
     (baseURI, distroFiles) <- validateOptsServerURI' args
 
@@ -585,7 +607,7 @@ distroAction _opts args _ = do
       setAuthorityFromURI baseURI
       sequence_
         [ putDistroInfo baseURI distroname entries
-        | (distroname, entries) <- distros ]
+        | (distroname, entries) <- distros, not (null entries) ]
 
 
 putDistroInfo :: URI -> String -> [DistroMap.Entry] -> HttpSession ()
@@ -631,7 +653,7 @@ docsCommand =
     options _  = []
 
 docsAction :: DocsFlags -> [String] -> GlobalFlags -> IO ()
-docsAction _opts args _ = do
+docsAction _flags args _ = do
 
     (baseURI, docTarballFiles) <- validateOptsServerURI' args
 
@@ -641,13 +663,18 @@ docsAction _opts args _ = do
           , let pkgidstr = (dropExtension . dropExtension. takeFileName) file
                 ext      = takeExtension (dropExtension file)
                              <.> takeExtension file
-                mpkgid | ext == ".tar.gz" = simpleParse pkgidstr
-                       | otherwise        = Nothing ]
+                mpkgid | ext == ".tar.gz" 
+                       , Just pkgid <- simpleParse pkgidstr
+                       , null (versionTags (packageVersion pkgid))
+                       = Just pkgid
+                       | otherwise
+                       = Nothing
+          ]
 
-    case [ file | (Nothing, file) <- pkgidAndTarball] of
+    case [ file | (Nothing, file) <- pkgidAndTarball ] of
       []    -> return ()
-      files -> die $ "the following files don't match the expected naming "
-                  ++ "convention of foo-1.0[-*].tar.gz:\n" ++ unlines files
+      files -> warn normal $ "the following files don't match the expected naming "
+                          ++ "convention of foo-1.0.tar.gz:\n" ++ unlines files
 
     httpSession $ do
       setAuthorityFromURI baseURI
@@ -676,7 +703,7 @@ infixr 5 <//>
 
 (<//>) :: URI -> FilePath -> URI
 uri <//> path = uri { uriPath = Posix.addTrailingPathSeparator (uriPath uri)
-                                Posix.</> path }
+                                Posix.</> escapeURIString isUnescapedInURI path }
 
 validateHttpURI :: String -> Either String URI
 validateHttpURI str = case parseURI str of
