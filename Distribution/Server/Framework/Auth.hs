@@ -265,11 +265,12 @@ setDigestAuthChallenge (RealmName realmName) = do
     headerName = "WWW-Authenticate"
     -- Note that offering both qop=\"auth,auth-int\" can confuse some browsers
     -- e.g. see http://code.google.com/p/chromium/issues/detail?id=45194
+    -- TODO: can't even offer qop="auth" because the HTTP package does it wrong
     headerValue nonce =
       "Digest " ++
       intercalate ", "
         [ "realm="     ++ inQuotes realmName
-        , "qop="       ++ inQuotes "auth"
+        , "qop="       ++ inQuotes ""
         , "nonce="     ++ inQuotes nonce
         , "opaque="    ++ inQuotes ""
         ]
@@ -305,7 +306,7 @@ authError :: RealmName -> AuthError -> ServerPartE a
 authError realm err = do
   -- we want basic first, but addHeaderM makes them come out reversed
   setDigestAuthChallenge realm
-  setBasicAuthChallenge  realm
+--  setBasicAuthChallenge  realm
   req <- askRq
   let accepts = maybe [] (parseContentAccept . BS.unpack) (getHeader "Accept" req)
       want_text = foldr (\ct rest_want_text -> case ct of ContentType { ctType = "text", ctSubtype = st }
