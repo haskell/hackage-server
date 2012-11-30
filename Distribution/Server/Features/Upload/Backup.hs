@@ -13,45 +13,48 @@ import Distribution.Server.Features.Upload.State
 import Distribution.Server.Users.Group (UserList(..))
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Framework.BackupDump
+import Distribution.Server.Framework.BlobStorage (BlobStorage)
 
 import Distribution.Package
 import Distribution.Text
 import Data.Version
-import Text.CSV
+import Text.CSV (CSV, Record)
 
-import Data.ByteString.Lazy.Char8 (ByteString)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.IntSet as IntSet
-import Control.Monad.State
 
 -------------------------------------------------------------------------------
 -- Maintainer groups backup
-maintainerBackup :: AcidState PackageMaintainers -> RestoreBackup
-maintainerBackup maintainersState =
-  updateMaintainers maintainersState Map.empty
+maintainerBackup :: BlobStorage -> AcidState PackageMaintainers -> RestoreBackup
+maintainerBackup store maintainersState =
+  fromPureRestoreBackup store
+    (update maintainersState . ReplacePackageMaintainers)
+    (updateMaintainersPure Map.empty)
 
-updateMaintainers :: AcidState PackageMaintainers
-                  -> Map PackageName UserList -> RestoreBackup
-updateMaintainers maintainersState mains = fix $ \r -> RestoreBackup
-  { restoreEntry = \entry -> do
-        res <- runImport mains $ case entry of
-            BackupByteString ["maintainers.csv"] bs -> importMaintainers bs
-            _ -> return ()
-        return $ fmap (updateMaintainers maintainersState) res
-  , restoreFinalize = return . Right $ r
-  , restoreComplete = update maintainersState $ ReplacePackageMaintainers (PackageMaintainers mains)
+updateMaintainersPure :: Map PackageName UserList -> PureRestoreBackup PackageMaintainers
+updateMaintainersPure mains = PureRestoreBackup {
+    pureRestoreEntry = \entry -> do
+      case entry of
+        BackupByteString ["maintainers.csv"] bs -> do
+          csv    <- importCSV' "maintainers.csv" bs
+          mains' <- importMaintainers csv mains
+          return (updateMaintainersPure mains')
+        _ ->
+          return (updateMaintainersPure mains)
+  , pureRestoreFinalize =
+      return $ PackageMaintainers (mains)
   }
 
-importMaintainers :: ByteString -> Import (Map PackageName UserList) ()
-importMaintainers contents = importCSV "maintainers.csv" contents $ \csvs -> do
-    mapM_ fromRecord (drop 2 csvs)
+importMaintainers :: CSV -> Map PackageName UserList -> Restore (Map PackageName UserList)
+importMaintainers = concatM . map fromRecord . drop 2
   where
-    fromRecord (packageStr:idStr) = do
+    fromRecord :: Record -> Map PackageName UserList -> Restore (Map PackageName UserList)
+    fromRecord (packageStr:idStr) mains = do
         pkgname <- parseText "package name" packageStr
         ids <- mapM (parseRead "user id") idStr
-        modify $ Map.insert pkgname (UserList $ IntSet.fromList ids)
-    fromRecord x = fail $ "Invalid package maintainer record: " ++ show x
+        return (Map.insert pkgname (UserList $ IntSet.fromList ids) mains)
+    fromRecord x _ = fail $ "Invalid package maintainer record: " ++ show x
 
 maintToExport :: Map PackageName UserList -> BackupEntry
 maintToExport pkgmap = csvToBackup ["maintainers.csv"] (maintToCSV assocUsers)

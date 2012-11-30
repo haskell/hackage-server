@@ -76,13 +76,13 @@ data UploadResult = UploadResult {
 }
 
 initUploadFeature :: ServerEnv -> CoreFeature -> UserFeature -> IO UploadFeature
-initUploadFeature env@ServerEnv{serverStateDir}
+initUploadFeature env@ServerEnv{serverStateDir, serverBlobStore}
                   core@CoreFeature{..} user@UserFeature{..} = do
 
     -- Canonical state
     trusteesState    <- trusteesStateComponent    serverStateDir
     uploadersState   <- uploadersStateComponent   serverStateDir
-    maintainersState <- maintainersStateComponent serverStateDir
+    maintainersState <- maintainersStateComponent serverBlobStore serverStateDir
 
     -- some shared tasks
     let admins = adminGroup
@@ -151,16 +151,16 @@ uploadersStateComponent stateDir = do
     , resetState   = const uploadersStateComponent
     }
 
-maintainersStateComponent :: FilePath -> IO (StateComponent PackageMaintainers)
-maintainersStateComponent stateDir = do
+maintainersStateComponent :: BlobStorage -> FilePath -> IO (StateComponent PackageMaintainers)
+maintainersStateComponent store stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "PackageMaintainers") initialPackageMaintainers
   return StateComponent {
       stateDesc    = "Package maintainers"
     , acidState    = st
     , getState     = query st AllPackageMaintainers
     , backupState  = \(PackageMaintainers mains) -> [maintToExport mains]
-    , restoreState = maintainerBackup st
-    , resetState   = const maintainersStateComponent
+    , restoreState = maintainerBackup store st
+    , resetState   = maintainersStateComponent
     }
 
 uploadFeature :: ServerEnv
