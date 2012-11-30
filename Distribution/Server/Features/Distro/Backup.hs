@@ -15,20 +15,16 @@ import Distribution.Server.Features.Distro.State
 import Distribution.Server.Users.Group (UserList(..))
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
+import Distribution.Server.Framework.BlobStorage (BlobStorage)
 
-import Distribution.Package
 import Distribution.Text
 import Data.Version
-import Text.CSV (CSV)
+import Text.CSV (CSV, Record)
 
-import Data.ByteString.Lazy.Char8 (ByteString)
-import Control.Monad.State
 import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.IntSet as IntSet
 import Data.List (foldl')
-import Data.Monoid (mempty)
-import Control.Arrow (second)
 import System.FilePath (takeExtension)
 
 dumpBackup  :: Distros -> [BackupEntry]
@@ -37,70 +33,61 @@ dumpBackup allDist =
         versions = distVersions allDist
     in distroUsersToExport distros:distrosToExport distros versions
 
-restoreBackup :: AcidState Distros -> RestoreBackup
-restoreBackup distrosState = updateDistros distrosState Distros.emptyDistributions Distros.emptyDistroVersions Map.empty
+restoreBackup :: BlobStorage -> AcidState Distros -> RestoreBackup
+restoreBackup store distrosState =
+  fromPureRestoreBackup store
+    (update distrosState . uncurry ReplaceDistributions)
+    (updateDistros Distros.emptyDistributions Distros.emptyDistroVersions Map.empty)
 
-updateDistros :: AcidState Distros -> Distributions -> DistroVersions -> Map DistroName UserList -> RestoreBackup
-updateDistros distrosState distros versions maintainers = fix $ \restorer -> RestoreBackup
-      { restoreEntry = \entry -> do
-            case entry of
-              BackupByteString ["package", distro] bs | takeExtension distro == ".csv" -> do
-                res <- runImport (distros, versions) (importDistro distro bs)
-                case res of
-                    Right (distros', versions') -> return . Right $
-                        updateDistros distrosState distros' versions' maintainers
-                    Left bad -> return (Left bad)
-              BackupByteString ["maintainers.csv"] bs -> do
-                res <- runImport maintainers (importMaintainers bs)
-                case res of
-                    Right maintainers' -> return . Right $
-                        updateDistros distrosState distros versions maintainers'
-                    Left bad -> return (Left bad)
-              _ -> return . Right $ restorer
-      , restoreFinalize = do
-            let distros' = foldl' (\dists (name, group) -> Distros.modifyDistroMaintainers name (const group) dists) distros (Map.toList maintainers)
-            return . Right $ finalizeDistros distrosState distros' versions
-      , restoreComplete = return ()
-      }
-
-finalizeDistros :: AcidState Distros -> Distributions -> DistroVersions -> RestoreBackup
-finalizeDistros distrosState distros versions = mempty
-  { restoreComplete = update distrosState $ ReplaceDistributions distros versions
+updateDistros :: Distributions -> DistroVersions -> Map DistroName UserList -> PureRestoreBackup (Distributions, DistroVersions)
+updateDistros distros versions maintainers = PureRestoreBackup {
+    pureRestoreEntry = \entry ->
+      case entry of
+        BackupByteString ["package", distro] bs | takeExtension distro == ".csv" -> do
+          csv <- importCSV' distro bs
+          (distros', versions') <- importDistro csv distros versions
+          return (updateDistros distros' versions' maintainers)
+        BackupByteString ["maintainers.csv"] bs -> do
+          csv <- importCSV' "maintainers.csv" bs
+          maintainers' <- importMaintainers csv maintainers
+          return (updateDistros distros versions maintainers')
+        _ ->
+          return (updateDistros distros versions maintainers)
+  , pureRestoreFinalize = do
+      let distros' = foldl' (\dists (name, group) -> Distros.modifyDistroMaintainers name (const group) dists) distros (Map.toList maintainers)
+      return (distros', versions)
   }
 
-importMaintainers :: ByteString -> Import (Map DistroName UserList) ()
-importMaintainers contents = importCSV "maintainers.csv" contents $ \csv -> do
-    mapM_ fromRecord (drop 2 csv)
-  where
-    fromRecord (distroStr:idStr) = do
-        distro <- parseText "distribution name" distroStr
-        ids <- mapM (parseRead "user id") idStr
-        modify $ Map.insert distro (UserList $ IntSet.fromList ids)
-    fromRecord x = fail $ "Invalid distro maintainer record: " ++ show x
-
-importDistro :: String -> ByteString -> Import (Distributions, DistroVersions) ()
-importDistro filename contents = importCSV filename contents $ \csv -> do
+importDistro :: CSV -> Distributions -> DistroVersions -> Restore (Distributions, DistroVersions)
+importDistro csv dists = \versions -> do
     let [[distroStr]] = take 1 $ drop 1 csv --no bounds checking..
-    distro <- parseText "distribution name" distroStr
-    addDistribution distro
-    mapM_ (fromRecord distro) (drop 3 csv)
- where
-    fromRecord distro [packageStr, versionStr, uri] = do
+    distro    <- parseText "distribution name" distroStr
+    dists'    <- addDistribution distro dists
+    versions' <- concatM (map (fromRecord distro) (drop 3 csv)) versions
+    return (dists', versions')
+  where
+    fromRecord :: DistroName -> Record -> DistroVersions -> Restore DistroVersions
+    fromRecord distro [packageStr, versionStr, uri] versions = do
         package <- parseText "package name" packageStr
         version <- parseText "version" versionStr
-        addDistroPackage distro package $ DistroPackageInfo version uri
-    fromRecord _ x = fail $ "Invalid distribution record in " ++ filename ++ ": " ++ show x
+        return (Distros.addPackage distro package (DistroPackageInfo version uri) versions)
+    fromRecord _ x _ = fail $ "Invalid distribution record " ++ show x
 
-addDistribution :: DistroName -> Import (Distributions, DistroVersions) ()
-addDistribution distro = do
-    (dists, versions) <- get
-    case Distros.addDistro distro dists of
-        Just dists' -> put (dists', versions)
-        Nothing     -> fail $ "Could not add distro: " ++ display distro
+addDistribution :: DistroName -> Distributions -> Restore Distributions
+addDistribution distro dists = do
+  case Distros.addDistro distro dists of
+    Just dists' -> return dists'
+    Nothing     -> fail $ "Could not add distro: " ++ display distro
 
-addDistroPackage :: DistroName -> PackageName -> DistroPackageInfo -> Import (Distributions, DistroVersions) ()
-addDistroPackage distro package info =
-    modify $ \dists -> second (Distros.addPackage distro package info) dists
+importMaintainers :: CSV -> Map DistroName UserList -> Restore (Map DistroName UserList)
+importMaintainers = concatM . map fromRecord . drop 2
+  where
+    fromRecord :: Record -> Map DistroName UserList -> Restore (Map DistroName UserList)
+    fromRecord (distroStr:idStr) maintainers = do
+        distro <- parseText "distribution name" distroStr
+        ids <- mapM (parseRead "user id") idStr
+        return (Map.insert distro (UserList $ IntSet.fromList ids) maintainers)
+    fromRecord x _ = fail $ "Invalid distro maintainer record: " ++ show x
 
 --------------------------------------------------------------------------
 distroUsersToExport :: Distributions -> BackupEntry
