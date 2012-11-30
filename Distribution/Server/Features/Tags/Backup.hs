@@ -24,7 +24,7 @@ tagsBackup tagsState =
 
 updateTagsPure :: PackageTags -> PureRestoreBackup PackageTags
 updateTagsPure tagsState = PureRestoreBackup {
-    pureRestoreEntry = \entry bs ->
+    pureRestoreEntry = \(BackupByteString entry bs) ->
       if entry == ["tags.csv"]
         then do csv <- importCSV' "tags.csv" bs
                 tagsState' <- updateFromCSV csv tagsState

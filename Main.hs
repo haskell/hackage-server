@@ -545,7 +545,7 @@ testBackupAction opts = do
       let compareAll :: IO [String] ; compareAll = liftM concat (sequence compares)
 
       info "Parsing import tarball"
-      res <- importTar tar $ map (second abstractStateRestore) state'
+      res <- importTar store' tar $ map (second abstractStateRestore) state'
       maybe (return ()) fail res
 
       info "Checking snapshot"
@@ -605,9 +605,11 @@ restoreAction opts [tarFile] = do
     checkAccidentalDataLoss =<< Server.hasSavedState config
 
     withServer config False $ \server -> do
+        let store = Server.serverBlobStore (Server.serverEnv server)
+
         tar <- BS.readFile tarFile
         info "Parsing import tarball..."
-        res <- importTar tar $ map (second abstractStateRestore) (Server.serverState server)
+        res <- importTar store tar $ map (second abstractStateRestore) (Server.serverState server)
         case res of
             Just err -> fail err
             _ ->

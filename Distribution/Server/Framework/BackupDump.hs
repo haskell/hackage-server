@@ -48,21 +48,38 @@ toEntries store featureMap = do
     baseDir <- mkBaseDir `fmap` getCurrentTime
     let exportEntries :: (String, IO [BackupEntry]) -> IO [Tar.Entry]
         exportEntries (name, ioEntries) = do
-            entries <- ioEntries
-            -- forM entries $ \(path, export) -> bsToEntry export (joinPath $ baseDir:name:path) -}
-            forM entries $ backupToTar store (joinPath . (\ps -> baseDir:name:ps))
+            backupEntries <- ioEntries
+            tarEntries <- forM backupEntries $ backupToTar store baseDir name
+            return (concat tarEntries)
     unsafeInterleaveConcatMap exportEntries featureMap
 
-backupToTar :: BlobStorage -> ([FilePath] -> FilePath) -> BackupEntry -> IO Tar.Entry
-backupToTar _store mkPath (BackupByteString path bs) =
-  case Tar.toTarPath False (mkPath path) of
-    Right tarPath -> return $ Tar.fileEntry tarPath bs
+backupToTar :: BlobStorage -> FilePath -> String -> BackupEntry -> IO [Tar.Entry]
+backupToTar _store baseDir featureName (BackupByteString path bs) =
+  case Tar.toTarPath False (mkTarPath baseDir featureName path) of
+    Right tarPath -> return [Tar.fileEntry tarPath bs]
     Left err -> error $ "Error in export: " ++ err
-backupToTar store mkPath (BackupBlob path blobId) = do
+backupToTar store baseDir featureName (BackupBlob path blobId) = do
   contents <- unsafeInterleaveIO $ Blob.fetch store blobId
-  case Tar.toTarPath False (mkPath path) of
-    Right tarPath -> return $ Tar.fileEntry tarPath contents
+  let blobPath = baseDir </> "blobs" </> blobMd5 blobId
+      -- go back to the root of the tarball. 'path' here would be something like
+      -- a/b/c/filename, which we store in feature/a/b/c/filename; in this
+      -- example, we want to go back 4 directories (feature/a/b/c), which is
+      -- @length path@ (because 'path' includes the filename)
+      blobLink = joinPath (replicate (length path) "..") </> "blobs" </> blobMd5 blobId
+  -- Sigh. Lots of annoying tar path conversions
+  case Tar.toTarPath False (mkTarPath baseDir featureName path) of
     Left err -> error $ "Error in export: " ++ err
+    Right tarPath -> case Tar.toTarPath False blobPath of
+      Left err -> error $ "Error in export: " ++ err
+      Right blobTarPath -> case Tar.toLinkTarget blobLink of
+        Nothing -> error "Could not generate link target"
+        Just linkTarget ->
+          return [ Tar.fileEntry blobTarPath contents
+                 , Tar.simpleEntry tarPath (Tar.SymbolicLink linkTarget)
+                 ]
+
+mkTarPath :: FilePath -> String -> [FilePath] -> FilePath
+mkTarPath baseDir featureName ps = joinPath $ baseDir : featureName : ps
 
 csvToBackup :: [String] -> CSV -> BackupEntry
 csvToBackup fpath csv = BackupByteString fpath $ BS.pack (printCSV csv)

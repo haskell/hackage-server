@@ -227,7 +227,8 @@ serverState server = [ (featureName feature, mconcat (featureState feature))
 -- To accomplish this, we import a 'null' tarball, finalizing immediately after initializing import
 initState ::  Server -> (String, String) -> IO ()
 initState server (admin, pass) = do
-    void . Import.importBlank $ map (second abstractStateRestore) (serverState server)
+    let store = serverBlobStore (serverEnv server)
+    void . Import.importBlank store $ map (second abstractStateRestore) (serverState server)
     -- create default admin user
     let UserFeature{updateAddUser, adminGroup} = serverUserFeature server
     muid <- case simpleParse admin of

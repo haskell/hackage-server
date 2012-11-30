@@ -33,7 +33,7 @@ userBackup usersState = updateUserBackup usersState Users.empty
 
 updateUserBackup :: AcidState Users -> Users -> RestoreBackup
 updateUserBackup usersState users = RestoreBackup
-  { restoreEntry = \path bs -> do
+  { restoreEntry = \(BackupByteString path bs) -> do
         res <- doUserImport users path bs
         return $ fmap (updateUserBackup usersState) res
   , restoreFinalize = return . Right $ updateUserBackup usersState users
@@ -95,7 +95,7 @@ groupBackup :: (UpdateEvent event, MethodResult event ~ ())
 groupBackup state csvPath updateFunc = updateGroupBackup Group.empty
   where
     updateGroupBackup group = fix $ \restorer -> RestoreBackup {
-        restoreEntry = \path bs ->
+        restoreEntry = \(BackupByteString path bs) ->
           if path == csvPath
             then fmap (fmap updateGroupBackup) $ runImport group (importGroup path bs >>= put)
             else return . Right $ restorer

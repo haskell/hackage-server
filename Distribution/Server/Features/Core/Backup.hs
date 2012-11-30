@@ -45,8 +45,8 @@ type PartialIndex = Map PackageId PartialPkg
 
 updatePackageBackup :: AcidState PackagesState -> BlobStorage -> PartialIndex -> RestoreBackup
 updatePackageBackup packagesState storage packageMap = RestoreBackup
-  { restoreEntry    = \path bs -> do
-        res <- doPackageImport storage packageMap path bs
+  { restoreEntry    = \entry -> do
+        res <- doPackageImport storage packageMap entry
         return $ fmap (updatePackageBackup packagesState storage) res
   , restoreFinalize =
         let results = mapM partialToFullPkg (Map.toList packageMap)
@@ -130,8 +130,9 @@ data2 - upload0 (upload time of earliest version is at top)
 -- instead of keeping the PartialPkgs around for a long time, there could be package data
 -- tarballs within the backup tarball, which are read one at a time (and so we can see if
 -- import fails /during/ import rather than during restoreFinalize)
-doPackageImport :: BlobStorage -> PartialIndex -> [FilePath] -> ByteString -> IO (Either String PartialIndex)
-doPackageImport storage packages ("package":pkgStr:rest) bs = runImport packages $ case simpleParse pkgStr of
+doPackageImport :: BlobStorage -> PartialIndex -> BackupEntry -> IO (Either String PartialIndex)
+doPackageImport storage packages entry = runImport packages $ case entry of
+  BackupByteString ("package":pkgStr:rest) bs -> case simpleParse pkgStr of
     Nothing    -> fail $ "Package directory " ++ show pkgStr ++ " isn't a valid package id"
     Just pkgId -> do
         partial  <- gets (Map.findWithDefault emptyPartialPkg pkgId)
@@ -142,25 +143,34 @@ doPackageImport storage packages ("package":pkgStr:rest) bs = runImport packages
                         return $ partial {  partialTarballUpload = list }
             [other] | Just version <- extractVersion other (packageName pkgId) ".cabal" ->
                         return $ partial { partialCabal = (version, CabalFileText bs):partialCabal partial }
-                    | Just version <- extractVersion other pkgId ".tar.gz" -> do
-                        blobId <- liftIO $ BlobStorage.add storage bs
-                        blobIdUncompressed <- liftIO $ BlobStorage.add storage (GZip.decompress bs)
-                        let tb = PkgTarball { pkgTarballGz = blobId,
-                                              pkgTarballNoGz = blobIdUncompressed }
-                        return $ partial { partialTarball = (version, tb):partialTarball partial }
             _ -> return partial
         -- TODO: if we have both uploads.csv and tarball.csv, it should be possible to convert to PkgInfo
         -- before the finalization, reducing total memory usage -- the PkgInfos will still be in memory when
         -- we're done, but the PartialPkgs will need to be garbage collected. Doing it along the way will
         -- make GHC less heap-hungry.
         modify (Map.insert pkgId partial')
-  where extractVersion name text ext = case stripPrefix (display text ++ ext) name of
-            Just "" -> Just 0
-            Just ('-':num) -> case reads num of
-                [(version, "")] -> Just version
-                _ -> Nothing
-            _ -> Nothing
-doPackageImport _ packages _ _ = return . Right $ packages
+  BackupBlob ("package":pkgStr:rest) blobId -> case simpleParse pkgStr of
+    Nothing    -> fail $ "Package directory " ++ show pkgStr ++ " isn't a valid package id"
+    Just pkgId -> do
+        partial  <- gets (Map.findWithDefault emptyPartialPkg pkgId)
+        partial' <- case rest of
+            [other] | Just version <- extractVersion other pkgId ".tar.gz" -> do
+                        bs <- liftIO $ BlobStorage.fetch storage blobId
+                        blobIdUncompressed <- liftIO $ BlobStorage.add storage (GZip.decompress bs)
+                        let tb = PkgTarball { pkgTarballGz = blobId,
+                                              pkgTarballNoGz = blobIdUncompressed }
+                        return $ partial { partialTarball = (version, tb):partialTarball partial }
+            _ -> return partial
+        modify (Map.insert pkgId partial')
+  _ ->
+    return ()
+  where
+    extractVersion name text ext = case stripPrefix (display text ++ ext) name of
+      Just "" -> Just 0
+      Just ('-':num) -> case reads num of
+          [(version, "")] -> Just version
+          _ -> Nothing
+      _ -> Nothing
 
 importVersionList :: FilePath -> ByteString -> Import s [(Int, UploadInfo)]
 importVersionList name contents = importCSV name contents $ mapM fromRecord . drop 2

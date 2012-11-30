@@ -71,10 +71,10 @@ documentationStateComponent store stateDir = do
 
     updateDocumentation :: AcidState Documentation -> Documentation -> RestoreBackup
     updateDocumentation st docs = fix $ \r -> RestoreBackup
-      { restoreEntry = \entryPath bs ->
-            case entryPath of
-                [str, "documentation.tar"] | Just pkgid <- simpleParse str -> do
-                    res <- runImport docs (importDocumentation pkgid bs)
+      { restoreEntry = \entry ->
+            case entry of
+                BackupBlob [str, "documentation.tar"] blobId | Just pkgid <- simpleParse str -> do
+                    res <- runImport docs (importDocumentation pkgid blobId)
                     return $ fmap (updateDocumentation st) res
                 _ -> return . Right $ r
       , restoreFinalize = return . Right $ r
@@ -82,9 +82,8 @@ documentationStateComponent store stateDir = do
       }
 
     importDocumentation :: PackageId
-                        -> ByteString -> Import Documentation ()
-    importDocumentation pkgid doc = do
-        blobId <- liftIO $ BlobStorage.add store doc
+                        -> BlobId -> Import Documentation ()
+    importDocumentation pkgid blobId = do
         -- this may fail for a bad tarball
         tarred <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blobId)
         modify $ Documentation . Map.insert pkgid (blobId, tarred) . documentation

@@ -43,13 +43,17 @@ type PartialLogs = Map (PackageId, BuildReportId) BuildLog
 
 updateReports :: AcidState BuildReports -> BlobStorage -> (BuildReports, PartialLogs) -> RestoreBackup
 updateReports reportsState storage reportLogs@(buildReports, partialLogs) = RestoreBackup
-  { restoreEntry = \entry bs -> do
+  { restoreEntry = \entry -> do
         res <- runImport reportLogs $ case entry of
-            ["package", pkgStr, reportItem] | Just pkgid <- simpleParse pkgStr -> case packageVersion pkgid of
+            BackupByteString ["package", pkgStr, reportItem] bs | Just pkgid <- simpleParse pkgStr -> case packageVersion pkgid of
                 Version [] [] -> fail $ "Build report package id " ++ show pkgStr ++ " must specify a version"
                 _ -> case splitExtension reportItem of
                         (num, ".txt") -> importReport pkgid num bs
-                        (num, ".log") -> importLog storage pkgid num bs
+                        _ -> return ()
+            BackupBlob ["package", pkgStr, reportItem] blobId | Just pkgid <- simpleParse pkgStr -> case packageVersion pkgid of
+                Version [] [] -> fail $ "Build report package id " ++ show pkgStr ++ " must specify a version"
+                _ -> case splitExtension reportItem of
+                        (num, ".log") -> importLog storage pkgid num blobId
                         _ -> return ()
             _ -> return ()
         return $ fmap (updateReports reportsState storage) res
@@ -79,10 +83,9 @@ importReport pkgid repIdStr contents = do
                 buildReps' = Reports.unsafeSetReport pkgid reportId (report, mlog) buildReps --doesn't check for duplicates
             put (buildReps', partialLogs')
 
-importLog :: BlobStorage -> PackageId -> String -> ByteString -> Import (BuildReports, PartialLogs) ()
-importLog storage pkgid repIdStr contents = do
+importLog :: BlobStorage -> PackageId -> String -> BlobStorage.BlobId -> Import (BuildReports, PartialLogs) ()
+importLog storage pkgid repIdStr blobId = do
     reportId <- parseText "report id" repIdStr
-    blobId <- liftIO $ BlobStorage.add storage contents
     let buildLog = BuildLog blobId
     (buildReps, logs) <- get
     case Reports.setBuildLog pkgid reportId (Just buildLog) buildReps of

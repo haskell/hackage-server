@@ -45,7 +45,7 @@ import Data.ByteString.Lazy.Char8 (ByteString)
 import Data.Foldable (sequenceA_, traverse_)
 import qualified Data.Map as Map
 import Data.Ord (comparing)
-import System.FilePath (splitDirectories)
+import System.FilePath (splitDirectories, joinPath)
 import Data.List (isPrefixOf)
 import Text.CSV hiding (csv)
 import qualified Control.Exception as Exception
@@ -53,14 +53,14 @@ import Distribution.Text
 import Data.Map (Map)
 import Data.List (sortBy)
 
-import Distribution.Server.Framework.BlobStorage (BlobId)
+import Distribution.Server.Framework.BlobStorage (BlobStorage, BlobId, add)
 
 data BackupEntry =
     BackupByteString [FilePath] ByteString
   | BackupBlob [FilePath] BlobId
 
 data RestoreBackup = RestoreBackup {
-    restoreEntry :: [FilePath] -> ByteString -> IO (Either String RestoreBackup),
+    restoreEntry :: BackupEntry -> IO (Either String RestoreBackup),
     -- Final checks and transformations on the accumulated data.
     -- For the most part, it combines partial data accumulated during importing
     -- tar entries, failing if bits are missing. It should not fail if no
@@ -74,7 +74,7 @@ data RestoreBackup = RestoreBackup {
 }
 
 data PureRestoreBackup st = PureRestoreBackup {
-    pureRestoreEntry    :: [FilePath] -> ByteString -> Either String (PureRestoreBackup st)
+    pureRestoreEntry    :: BackupEntry -> Either String (PureRestoreBackup st)
   , pureRestoreFinalize :: Either String st
   }
 
@@ -82,7 +82,7 @@ fromPureRestoreBackup :: (st -> IO ()) -> PureRestoreBackup st -> RestoreBackup
 fromPureRestoreBackup putState = translate
   where
     translate prb = RestoreBackup {
-        restoreEntry = \path bs -> return (translate <$> pureRestoreEntry prb path bs)
+        restoreEntry = \entry -> return (translate <$> pureRestoreEntry prb entry)
       , restoreFinalize = case pureRestoreFinalize prb of
           Left err -> return . Left $ err
           Right st -> return . Right $ mempty {
@@ -93,16 +93,16 @@ fromPureRestoreBackup putState = translate
 
 instance Monoid RestoreBackup where
     mempty = RestoreBackup
-        { restoreEntry    = \_ _ -> return . Right $ mempty
+        { restoreEntry    = \_ -> return . Right $ mempty
         , restoreFinalize = return . Right $ mempty
         , restoreComplete = return ()
         }
     mappend (RestoreBackup run fin comp) (RestoreBackup run' fin' comp') = RestoreBackup
-        { restoreEntry = \path bs -> do
-              res <- run path bs
+        { restoreEntry = \entry -> do
+              res <- run entry
               case res of
                   Right backup -> do
-                      res' <- run' path bs
+                      res' <- run' entry
                       return $ fmap (mappend backup) res'
                   Left bad -> return $ Left bad
         , restoreFinalize = do
@@ -116,68 +116,132 @@ instance Monoid RestoreBackup where
         }
 
 -- featureBackups must contain a SINGLE entry for each feature
-importTar :: ByteString -> [(String, RestoreBackup)] -> IO (Maybe String)
-importTar tar featureBackups = do
-    res <- runImport (Map.fromList featureBackups) $ do
+importTar :: BlobStorage -> ByteString -> [(String, RestoreBackup)] -> IO (Maybe String)
+importTar store tar featureBackups = do
+    res <- runImport (initialFeatureImportState store featureBackups) $ do
         fromEntries . Tar.read . decompress $ tar
         finalizeBackups (map fst featureBackups)
     completeBackups res
 
 -- A variant of importTar that finalizes immediately.
-importBlank :: [(String, RestoreBackup)] -> IO (Maybe String)
-importBlank featureBackups = do
-    res <- runImport (Map.fromList featureBackups)
+importBlank :: BlobStorage -> [(String, RestoreBackup)] -> IO (Maybe String)
+importBlank store featureBackups = do
+    res <- runImport (initialFeatureImportState store featureBackups)
          $ finalizeBackups (map fst featureBackups)
     completeBackups res
 
 -- | Call restoreFinalize for every backup. Caller must ensure that every
 -- feature name is in the map.
-finalizeBackups :: [String] -> Import FeatureMap ()
+finalizeBackups :: [String] -> Import FeatureImportState ()
 finalizeBackups list = forM_ list $ \name -> do
-    featureMap <- get
-    mbackup <- liftIO $ restoreFinalize (featureMap Map.! name)
+    features <- gets featureMap
+    mbackup <- liftIO $ restoreFinalize (features Map.! name)
     case mbackup of
         Left err      -> fail $ "Error finalizing feature " ++ name ++ ":" ++ err
-        Right backup' -> put (Map.insert name backup' featureMap)
+        Right backup' -> updateFeatureMap name backup'
 
-completeBackups :: Either String FeatureMap -> IO (Maybe String)
+completeBackups :: Either String FeatureImportState -> IO (Maybe String)
 completeBackups res = case res of
     Left err -> return $ Just err
-    Right featureMap -> do
-        mapM_ restoreComplete (Map.elems featureMap)
+    Right st -> do
+        mapM_ restoreComplete (Map.elems (featureMap st))
         return Nothing
 
 -- internal import utils
-type FeatureMap = Map String RestoreBackup
+data FeatureImportState = FeatureImportState {
+    -- | The 'RestoreBackup' of each state
+    featureMap :: Map String RestoreBackup
 
-fromEntries :: Tar.Entries Tar.FormatError -> Import FeatureMap ()
+    -- | The blob storage
+  , featureStorage :: BlobStorage
+
+    -- | Mapping from strings to blob IDs
+    --
+    -- TODO: The tar format we use is
+    --
+    --   export-{date}/blobs/{blobId}
+    --   ..
+    --   export-{date}/core/{package}/{package}.tar.gz --> ../../blobs/{blobId}
+    --
+    -- These {blobId}s are strings, however, and we cannot easily convert a
+    -- string into a blobID (in particular, there is a Show instance for
+    -- MD5Digest but no Read instance). We therefore maintain a mapping from
+    -- string's to blobIds -- whenever we encounter
+    --
+    --   export-{date}/blobs/{blobId}
+    --
+    -- we add the file to the blob storage; this gets us a "real" blob ID, and
+    -- we update this mapping. Note however that this is inefficient for two
+    -- reasons: first of all, there should be no need to maintain this mapping
+    -- (once we have a Read instance for MD5Digest). Secondly, when we 'add'
+    -- a blob to the storage, we /recompute/ its hash. This is not necessary:
+    -- we already /know/ the hash.
+  , featureBlobs :: Map String BlobId
+  }
+
+initialFeatureImportState :: BlobStorage -> [(String, RestoreBackup)] -> FeatureImportState
+initialFeatureImportState store featureBackups = FeatureImportState {
+    featureMap     = Map.fromList featureBackups
+  , featureBlobs   = Map.empty
+  , featureStorage = store
+  }
+
+updateFeatureMap :: String -> RestoreBackup -> Import FeatureImportState ()
+updateFeatureMap feature backup =
+  modify (\st -> st { featureMap = Map.insert feature backup (featureMap st) })
+
+updateFeatureBlobs :: String -> BlobId -> Import FeatureImportState ()
+updateFeatureBlobs str blobid =
+  modify (\st -> st { featureBlobs = Map.insert str blobid (featureBlobs st) })
+
+fromEntries :: Tar.Entries Tar.FormatError -> Import FeatureImportState ()
 fromEntries Tar.Done = return ()
 fromEntries (Tar.Fail err) = fail (show err)
 fromEntries (Tar.Next x xs) = fromEntry x >> fromEntries xs
 
-fromEntry :: Tar.Entry -> Import FeatureMap ()
+fromEntry :: Tar.Entry -> Import FeatureImportState ()
 fromEntry entry = case Tar.entryContent entry of
         Tar.NormalFile bytes _ -> fromFile (Tar.entryPath entry) bytes
         Tar.Directory {} -> return () -- ignore directory entries
+        Tar.SymbolicLink target -> fromLink (Tar.entryPath entry) (Tar.fromLinkTarget target)
         _ -> fail $ "Unexpected Tar.Entry: " ++ Tar.entryPath entry
 
-fromFile :: FilePath -> ByteString -> Import FeatureMap ()
-fromFile path contents
-    = let paths = splitDirectories path
-      in case paths of
-           baseDir:rest | "export-" `isPrefixOf` baseDir -> go rest
-           _ -> return () -- ignore unknown files
- where
-    go (pathFront:pathEnd) = do
-        featureMap <- get
-        case Map.lookup pathFront featureMap of
-            Just restorer -> do
-                res <- liftIO $ restoreEntry restorer pathEnd contents
-                case res of Left e          -> fail $ "Error importing '" ++ path ++ "' :" ++ e
-                            Right restorer' -> restorer' `seq` put (Map.insert pathFront restorer' featureMap)
-            Nothing -> return ()
-    go _ = return ()
+fromFile :: FilePath -> ByteString -> Import FeatureImportState ()
+fromFile path contents = case splitDirectories path of
+  baseDir:rest | "export-" `isPrefixOf` baseDir ->
+    case rest of
+      ["blobs", blobIdStr] -> do
+        store <- gets featureStorage
+        blobId <- liftIO $ add store contents
+        updateFeatureBlobs blobIdStr blobId
+      _ ->
+        fromBackupEntry rest (`BackupByteString` contents)
+  _ ->
+    return () -- ignore unknown files
 
+fromLink :: FilePath -> FilePath -> Import FeatureImportState ()
+fromLink path linkTarget =
+  -- links have format "../../../blobs/blobId" (for some number of "../"s)
+  case (splitDirectories path, reverse (splitDirectories linkTarget)) of
+    (baseDir : rest, blobIdStr : "blobs" : _) | "export-" `isPrefixOf` baseDir -> do
+      mBlobId <- gets (Map.lookup blobIdStr . featureBlobs)
+      case mBlobId of
+        Just blobId -> fromBackupEntry rest (`BackupBlob` blobId)
+        Nothing     -> fail $ "Unknown blob ID " ++ blobIdStr
+    _ ->
+      return ()
+
+fromBackupEntry :: [FilePath] -> ([FilePath] -> BackupEntry) -> Import FeatureImportState ()
+fromBackupEntry path@(pathFront:pathEnd) mkEntry = do
+  features <- gets featureMap
+  case Map.lookup pathFront features of
+    Just restorer -> do
+      res <- liftIO $ restoreEntry restorer (mkEntry pathEnd)
+      case res of Left e          -> fail $ "Error importing '" ++ joinPath path ++ "' :" ++ e
+                  Right restorer' -> restorer' `seq` updateFeatureMap pathFront restorer'
+    Nothing ->
+      return ()
+fromBackupEntry _ _ = return ()
 
 -- Used to compare export/import tarballs for equality by the backup/restore test:
 
