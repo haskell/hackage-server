@@ -26,9 +26,6 @@ import Distribution.Version
 import Control.Monad (foldM)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Control.Monad.Trans (liftIO)
-import Control.Monad.State (get, put)
-import Data.Monoid (mempty)
 import System.FilePath (splitExtension)
 import Data.ByteString.Lazy.Char8 (ByteString)
 
@@ -36,69 +33,72 @@ dumpBackup  :: BuildReports -> [BackupEntry]
 dumpBackup = buildReportsToExport
 
 restoreBackup :: AcidState BuildReports -> BlobStorage -> RestoreBackup
-restoreBackup reportsState storage = updateReports reportsState storage (Reports.emptyReports, Map.empty)
+restoreBackup reportsState storage = -- updateReports reportsState storage (Reports.emptyReports, Map.empty)
+  fromPureRestoreBackup storage
+    (update reportsState . ReplaceBuildReports)
+    (updateReports Reports.emptyReports Map.empty)
+
 
 -- when logs are encountered before their corresponding build reports
 type PartialLogs = Map (PackageId, BuildReportId) BuildLog
 
-updateReports :: AcidState BuildReports -> BlobStorage -> (BuildReports, PartialLogs) -> RestoreBackup
-updateReports reportsState storage reportLogs@(buildReports, partialLogs) = RestoreBackup
-  { restoreEntry = \entry -> do
-        res <- runImport reportLogs $ case entry of
-            BackupByteString ["package", pkgStr, reportItem] bs | Just pkgid <- simpleParse pkgStr -> case packageVersion pkgid of
-                Version [] [] -> fail $ "Build report package id " ++ show pkgStr ++ " must specify a version"
-                _ -> case splitExtension reportItem of
-                        (num, ".txt") -> importReport pkgid num bs
-                        _ -> return ()
-            BackupBlob ["package", pkgStr, reportItem] blobId | Just pkgid <- simpleParse pkgStr -> case packageVersion pkgid of
-                Version [] [] -> fail $ "Build report package id " ++ show pkgStr ++ " must specify a version"
-                _ -> case splitExtension reportItem of
-                        (num, ".log") -> importLog storage pkgid num blobId
-                        _ -> return ()
-            _ -> return ()
-        return $ fmap (updateReports reportsState storage) res
-  , restoreFinalize = do
-        let insertLog buildReps ((pkgid, reportId), buildLog) = case Reports.setBuildLog pkgid reportId (Just buildLog) buildReps of
-                Just buildReps' -> Right buildReps'
-                Nothing -> Left $ "Build log #" ++ display reportId ++ " exists for " ++ display pkgid ++ " but report itself does not"
-        case foldM insertLog buildReports (Map.toList partialLogs) of
-            Right theReports -> return . Right $ finalizeReports reportsState theReports
-            Left err -> return . Left $ err
-  , restoreComplete = return ()
+updateReports :: BuildReports -> PartialLogs -> PureRestoreBackup BuildReports
+updateReports buildReports partialLogs = PureRestoreBackup {
+    pureRestoreEntry = \entry -> do
+      case entry of
+        BackupByteString ["package", pkgStr, reportItem] bs
+          | Just pkgId <- simpleParse pkgStr
+          , (num, ".txt") <- splitExtension reportItem ->
+              do checkPackageVersion pkgStr pkgId
+                 (buildReports', partialLogs') <- importReport pkgId num bs buildReports partialLogs
+                 return (updateReports buildReports' partialLogs')
+        BackupBlob ["package", pkgStr, reportItem] blobId
+          | Just pkgId <- simpleParse pkgStr
+          , (num, ".log") <- splitExtension reportItem ->
+              do checkPackageVersion pkgStr pkgId
+                 (buildReports', partialLogs') <- importLog pkgId num blobId buildReports partialLogs
+                 return (updateReports buildReports' partialLogs')
+        _ ->
+          return (updateReports buildReports partialLogs)
+  , pureRestoreFinalize =
+      foldM insertLog buildReports (Map.toList partialLogs)
   }
 
-finalizeReports :: AcidState BuildReports -> BuildReports -> RestoreBackup
-finalizeReports reportsState buildReports = mempty
-  { restoreComplete = update reportsState $ ReplaceBuildReports buildReports
-  }
+insertLog :: BuildReports -> ((PackageId, BuildReportId), BuildLog) -> Restore BuildReports
+insertLog buildReps ((pkgId, reportId), buildLog) =
+  case Reports.setBuildLog pkgId reportId (Just buildLog) buildReps of
+    Just buildReps' -> return buildReps'
+    Nothing -> fail $ "Build log #" ++ display reportId ++ " exists for " ++ display pkgId ++ " but report itself does not"
 
-importReport :: PackageId -> String -> ByteString -> Import (BuildReports, PartialLogs) ()
-importReport pkgid repIdStr contents = do
-    reportId <- parseText "report id" repIdStr
-    case Report.parse (unpackUTF8 contents) of
-        Left err -> fail err
-        Right report -> do
-            (buildReps, partialLogs) <- get
-            let (mlog, partialLogs') = Map.updateLookupWithKey (\_ _ -> Nothing) (pkgid, reportId) partialLogs
-                buildReps' = Reports.unsafeSetReport pkgid reportId (report, mlog) buildReps --doesn't check for duplicates
-            put (buildReps', partialLogs')
+checkPackageVersion :: String -> PackageIdentifier -> Restore ()
+checkPackageVersion pkgStr pkgId =
+  case packageVersion pkgId of
+    Version [] [] -> fail $ "Build report package id " ++ show pkgStr ++ " must specify a version"
+    _             -> return ()
 
-importLog :: BlobStorage -> PackageId -> String -> BlobStorage.BlobId -> Import (BuildReports, PartialLogs) ()
-importLog storage pkgid repIdStr blobId = do
-    reportId <- parseText "report id" repIdStr
-    let buildLog = BuildLog blobId
-    (buildReps, logs) <- get
-    case Reports.setBuildLog pkgid reportId (Just buildLog) buildReps of
-        Nothing -> put (buildReps, Map.insert (pkgid, reportId) buildLog logs)
-        Just buildReps' -> put (buildReps', logs)
+importReport :: PackageId -> String -> ByteString -> BuildReports -> PartialLogs -> Restore (BuildReports, PartialLogs)
+importReport pkgId repIdStr contents buildReps partialLogs = do
+  reportId <- parseText "report id" repIdStr
+  report   <- Report.parse (unpackUTF8 contents)
+  let (mlog, partialLogs') = Map.updateLookupWithKey (\_ _ -> Nothing) (pkgId, reportId) partialLogs
+      buildReps' = Reports.unsafeSetReport pkgId reportId (report, mlog) buildReps --doesn't check for duplicates
+  return (buildReps', partialLogs')
+
+importLog :: PackageId -> String -> BlobStorage.BlobId -> BuildReports -> PartialLogs -> Restore (BuildReports, PartialLogs)
+importLog pkgId repIdStr blobId buildReps logs = do
+  reportId <- parseText "report id" repIdStr
+  let buildLog = BuildLog blobId
+  case Reports.setBuildLog pkgId reportId (Just buildLog) buildReps of
+    Nothing -> return (buildReps, Map.insert (pkgId, reportId) buildLog logs)
+    Just buildReps' -> return (buildReps', logs)
 
 ------------------------------------------------------------------------------
 buildReportsToExport :: BuildReports -> [BackupEntry]
 buildReportsToExport buildReports = concatMap (uncurry packageReportsToExport) (Map.toList $ Reports.reportsIndex buildReports)
 
 packageReportsToExport :: PackageId -> PkgBuildReports -> [BackupEntry]
-packageReportsToExport pkgid pkgReports = concatMap (uncurry $ reportToExport prefix) (Map.toList $ Reports.reports pkgReports)
-    where prefix = ["package", display pkgid]
+packageReportsToExport pkgId pkgReports = concatMap (uncurry $ reportToExport prefix) (Map.toList $ Reports.reports pkgReports)
+    where prefix = ["package", display pkgId]
 
 reportToExport :: [FilePath] -> BuildReportId -> (BuildReport, Maybe BuildLog) -> [BackupEntry]
 reportToExport prefix reportId (report, mlog) = BackupByteString (getPath ".txt") (stringToBytes $ Report.show report) :
