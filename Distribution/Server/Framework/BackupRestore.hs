@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, MultiParamTypeClasses, RecordWildCards, FlexibleInstances, StandaloneDeriving, KindSignatures, GADTs #-}
+{-# LANGUAGE RankNTypes, MultiParamTypeClasses, RecordWildCards, FlexibleInstances, StandaloneDeriving, KindSignatures, GADTs, GeneralizedNewtypeDeriving #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Distribution.Server.Framework.BackupRestore (
@@ -33,7 +33,8 @@ import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
 import Codec.Compression.GZip (decompress)
 import Control.Applicative
-import Control.Monad.State.Class
+import Control.Monad.State
+import Control.Monad.Error
 import Control.Monad.Writer
 import Data.Time (UTCTime)
 import qualified Data.Time as Time
@@ -42,18 +43,20 @@ import System.Locale
 import Distribution.Server.Util.Merge
 import Distribution.Server.Util.Parse (unpackUTF8)
 import Data.ByteString.Lazy.Char8 (ByteString)
-import Data.Foldable (sequenceA_, traverse_)
 import qualified Data.Map as Map
 import Data.Ord (comparing)
 import System.FilePath (splitDirectories, joinPath)
 import Data.List (isPrefixOf)
 import Text.CSV hiding (csv)
-import qualified Control.Exception as Exception
 import Distribution.Text
 import Data.Map (Map)
 import Data.List (sortBy)
 
 import Distribution.Server.Framework.BlobStorage (BlobStorage, BlobId, add, fetch)
+
+--------------------------------------------------------------------------------
+-- Creating/restoring backups                                                 --
+--------------------------------------------------------------------------------
 
 data BackupEntry =
     BackupByteString [FilePath] ByteString
@@ -113,6 +116,49 @@ instance Monoid AbstractRestoreBackup where
            Left bad -> return $ Left bad
     }
 
+--------------------------------------------------------------------------------
+-- Utilities for creating RestoreBackup objects                               --
+--------------------------------------------------------------------------------
+
+concatM :: (Monad m) => [a -> m a] -> (a -> m a)
+concatM fs = foldr (>=>) return fs
+
+importCSV :: Monad m => FilePath -> ByteString -> m CSV
+importCSV filename inp = case parseCSV filename (unpackUTF8 inp) of
+    Left err  -> fail (show err)
+    Right csv -> return (chopLastRecord csv)
+  where
+    -- | Chops off the last entry if it's null.
+    -- I'm not sure why parseCSV does this, but it's
+    -- irritating.
+    chopLastRecord [] = []
+    chopLastRecord ([""]:[]) = []
+    chopLastRecord (x:xs) = x : chopLastRecord xs
+
+parseRead :: (Read a, Monad m) => String -> String -> m a
+parseRead label str = case reads str of
+    [(value, "")] -> return value
+    _ -> fail $ "Unable to parse " ++ label ++ ": " ++ show str
+
+parseTime :: Monad m => String -> m UTCTime
+parseTime str = case Time.parseTime defaultTimeLocale timeFormatSpec str of
+    Nothing -> fail $ "Unable to parse time: " ++ str
+    Just x  -> return x
+
+-- | Time/Date format used in exported files.
+-- Variant on ISO formatted date, with time and time zone.
+timeFormatSpec :: String
+timeFormatSpec = "%Y-%m-%d %H:%M:%S%Q %z"
+
+-- Parse a string, throw an error if it's bad
+parseText :: (Text a, Monad m) => String -> String -> m a
+parseText label text = case simpleParse text of
+    Nothing -> fail $ "Unable to parse " ++ label ++ ": " ++ show text
+    Just a -> return a
+
+--------------------------------------------------------------------------------
+-- Restore Monad                                                              --
+--------------------------------------------------------------------------------
 
 data Restore :: * -> * where
   RestoreDone :: forall a. a -> Restore a
@@ -122,7 +168,7 @@ data Restore :: * -> * where
   RestoreGetBlob :: BlobId -> Restore ByteString
 
 instance Functor Restore where
-  f `fmap` x = x >>= return . f
+  fmap = liftM
 
 instance Monad Restore where
   return = RestoreDone
@@ -148,10 +194,14 @@ restoreAddBlob = RestoreAddBlob
 restoreGetBlob :: BlobId -> Restore ByteString
 restoreGetBlob = RestoreGetBlob
 
+--------------------------------------------------------------------------------
+-- Import a backup                                                            --
+--------------------------------------------------------------------------------
+
 -- featureBackups must contain a SINGLE entry for each feature
 importTar :: BlobStorage -> ByteString -> [(String, AbstractRestoreBackup)] -> IO (Maybe String)
 importTar store tar featureBackups = do
-    finalizers <- evalImport (initialFeatureImportState store featureBackups) $ do
+    finalizers <- evalImport store featureBackups $ do
         fromEntries . Tar.read . decompress $ tar
         finalizeBackups store (map fst featureBackups)
     completeBackups finalizers
@@ -159,13 +209,13 @@ importTar store tar featureBackups = do
 -- A variant of importTar that finalizes immediately.
 importBlank :: BlobStorage -> [(String, AbstractRestoreBackup)] -> IO (Maybe String)
 importBlank store featureBackups = do
-    finalizers <- evalImport (initialFeatureImportState store featureBackups)
-         $ finalizeBackups store (map fst featureBackups)
+    finalizers <- evalImport store featureBackups $
+        finalizeBackups store (map fst featureBackups)
     completeBackups finalizers
 
 -- | Call restoreFinalize for every backup. Caller must ensure that every
 -- feature name is in the map.
-finalizeBackups :: BlobStorage -> [String] -> Import FeatureImportState [IO ()]
+finalizeBackups :: BlobStorage -> [String] -> Import [IO ()]
 finalizeBackups store list = forM list $ \name -> do
     features <- gets featureMap
     mbackup <- liftIO $ abstractRestoreFinalize (features Map.! name) store
@@ -181,6 +231,15 @@ completeBackups res = case res of
     Right putSt -> sequence_ putSt >> return Nothing
 
 -- internal import utils
+
+newtype Import a = Import { unImp :: StateT FeatureImportState (ErrorT String IO) a }
+  deriving (Monad, MonadIO, MonadState FeatureImportState)
+
+evalImport :: BlobStorage -> [(String, AbstractRestoreBackup)] -> Import a -> IO (Either String a)
+evalImport store featureBackups imp = runErrorT (evalStateT (unImp imp) initState)
+  where
+    initState = initialFeatureImportState store featureBackups
+
 data FeatureImportState = FeatureImportState {
     -- | The 'RestoreBackup' of each state
     featureMap :: Map String AbstractRestoreBackup
@@ -219,27 +278,27 @@ initialFeatureImportState store featureBackups = FeatureImportState {
   , featureStorage = store
   }
 
-updateFeatureMap :: String -> AbstractRestoreBackup -> Import FeatureImportState ()
+updateFeatureMap :: String -> AbstractRestoreBackup -> Import ()
 updateFeatureMap feature backup =
   modify (\st -> st { featureMap = Map.insert feature backup (featureMap st) })
 
-updateFeatureBlobs :: String -> BlobId -> Import FeatureImportState ()
+updateFeatureBlobs :: String -> BlobId -> Import ()
 updateFeatureBlobs str blobid =
   modify (\st -> st { featureBlobs = Map.insert str blobid (featureBlobs st) })
 
-fromEntries :: Tar.Entries Tar.FormatError -> Import FeatureImportState ()
+fromEntries :: Tar.Entries Tar.FormatError -> Import ()
 fromEntries Tar.Done        = return ()
 fromEntries (Tar.Fail err)  = fail (show err)
 fromEntries (Tar.Next x xs) = fromEntry x >> fromEntries xs
 
-fromEntry :: Tar.Entry -> Import FeatureImportState ()
+fromEntry :: Tar.Entry -> Import ()
 fromEntry entry = case Tar.entryContent entry of
         Tar.NormalFile bytes _ -> fromFile (Tar.entryPath entry) bytes
         Tar.Directory {} -> return () -- ignore directory entries
         Tar.SymbolicLink target -> fromLink (Tar.entryPath entry) (Tar.fromLinkTarget target)
         _ -> fail $ "Unexpected Tar.Entry: " ++ Tar.entryPath entry
 
-fromFile :: FilePath -> ByteString -> Import FeatureImportState ()
+fromFile :: FilePath -> ByteString -> Import ()
 fromFile path contents = case splitDirectories path of
   baseDir:rest | "export-" `isPrefixOf` baseDir ->
     case rest of
@@ -252,7 +311,7 @@ fromFile path contents = case splitDirectories path of
   _ ->
     return () -- ignore unknown files
 
-fromLink :: FilePath -> FilePath -> Import FeatureImportState ()
+fromLink :: FilePath -> FilePath -> Import ()
 fromLink path linkTarget =
   -- links have format "../../../blobs/blobId" (for some number of "../"s)
   case (splitDirectories path, reverse (splitDirectories linkTarget)) of
@@ -264,7 +323,7 @@ fromLink path linkTarget =
     _ ->
       return ()
 
-fromBackupEntry :: [FilePath] -> ([FilePath] -> BackupEntry) -> Import FeatureImportState ()
+fromBackupEntry :: [FilePath] -> ([FilePath] -> BackupEntry) -> Import ()
 fromBackupEntry path@(pathFront:pathEnd) mkEntry = do
   store    <- gets featureStorage
   features <- gets featureMap
@@ -277,154 +336,43 @@ fromBackupEntry path@(pathFront:pathEnd) mkEntry = do
       return ()
 fromBackupEntry _ _ = return ()
 
--- Used to compare export/import tarballs for equality by the backup/restore test:
+--------------------------------------------------------------------------------
+-- Compare tarballs                                                           --
+--------------------------------------------------------------------------------
 
+-- Used to compare export/import tarballs for equality by the backup/restore test:
 equalTarBall :: ByteString -- ^ "Before" tarball
              -> ByteString -- ^ "After" tarball
              -> [String]
-equalTarBall tar1 tar2 = runFailable_ $ do
-    entries1 <- sortBy (comparing Tar.entryTarPath) <$> readTar "before" tar1
-    entries2 <- sortBy (comparing Tar.entryTarPath) <$> readTar "after"  tar2
-    flip traverse_ (mergeBy (comparing Tar.entryTarPath) entries1 entries2) $ \mr -> case mr of
-        OnlyInLeft  entry -> fail $ Tar.entryPath entry ++ " only in 'before' tarball"
-        OnlyInRight entry -> fail $ Tar.entryPath entry ++ " only in 'after' tarball"
-        InBoth entry1 entry2 -> sequenceA_ [
-              checkEq "content" Tar.entryContent,
-              checkEq "permissions" Tar.entryPermissions,
-              checkEq "ownership" Tar.entryOwnership
-              -- Don't particularly care about modification time/tar format
-            ]
-          where
-            tarPath = Tar.entryPath entry1
-            checkEq :: Eq a => String -> (Tar.Entry -> a) -> Failable ()
-            checkEq what f = when (f entry1 /= f entry2) $ fail $ tarPath ++ ": " ++ what ++ " did not match"
+equalTarBall tar1 tar2 = do
+  let entries :: Either String ([Tar.Entry], [Tar.Entry])
+      entries = do
+        entries1 <- sortBy (comparing Tar.entryTarPath) <$> readTar "before" tar1
+        entries2 <- sortBy (comparing Tar.entryTarPath) <$> readTar "after"  tar2
+        return (entries1, entries2)
+  case entries of
+    Left err -> [err]
+    Right (entries1, entries2) ->
+      flip concatMap (mergeBy (comparing Tar.entryTarPath) entries1 entries2) $ \mr -> case mr of
+          OnlyInLeft  entry -> [Tar.entryPath entry ++ " only in 'before' tarball"]
+          OnlyInRight entry -> [Tar.entryPath entry ++ " only in 'after' tarball"]
+          InBoth entry1 entry2 -> concat [
+                checkEq "content" Tar.entryContent,
+                checkEq "permissions" Tar.entryPermissions,
+                checkEq "ownership" Tar.entryOwnership
+                -- Don't particularly care about modification time/tar format
+              ]
+            where
+              tarPath = Tar.entryPath entry1
+              checkEq :: Eq a => String -> (Tar.Entry -> a) -> [String]
+              checkEq what f = if (f entry1 /= f entry2)
+                                 then [tarPath ++ ": " ++ what ++ " did not match"]
+                                 else []
   where
+    readTar :: Monad m => String -> ByteString -> m [Tar.Entry]
     readTar err = entriesToList err . Tar.read . decompress
 
+    entriesToList :: (Monad m, Show a) => String -> Tar.Entries a -> m [Tar.Entry]
     entriesToList err (Tar.Next entry entries) = liftM (entry :) $ entriesToList err entries
     entriesToList _   Tar.Done                 = return []
     entriesToList err (Tar.Fail s)             = fail ("Could not read '" ++ err ++ "' tarball: " ++ show s)
-
-data Failable a = Failed [String] | NotFailed a
-
-runFailable_ :: Failable () -> [String]
-runFailable_ (Failed errs)  = errs
-runFailable_ (NotFailed ()) = []
-
-instance Functor Failable where fmap = liftM
-
-instance Applicative Failable where
-    pure = return
-    Failed errs1 <*> Failed errs2 = Failed (errs1 ++ errs2)
-    Failed errs  <*> NotFailed _  = Failed errs
-    NotFailed _  <*> Failed errs  = Failed errs
-    NotFailed f  <*> NotFailed x  = NotFailed (f x)
-
-instance Monad Failable where
-    return = NotFailed
-    NotFailed x >>= f = f x
-    Failed errs >>= _ = Failed errs
-    fail = Failed . return
-
-
-{-
-Some utilities worth recreating for the newer Import scheme, mostly
-to import documentation:
-
-addFile :: ByteString -> Import BlobId
-addFile file = do
-  store <- gets isStorage
-  io2imp $ BlobStorage.add store file
-
-addTarIndex :: BlobId -> Import ()
-addTarIndex blob
-    = do
-  store <- gets isStorage
-  let tarFile = BlobStorage.filepath store blob
-  index <- io2imp $ TarIndex.readTarIndex tarFile
-  modify $ \is -> is { isTarIndex = TarIndexMap.insertTarIndex blob index (isTarIndex is) }
--}
-
--- implementation of the Import data type
-
-concatM :: (Monad m) => [a -> m a] -> (a -> m a)
-concatM fs = foldr (>=>) return fs
-
-
-newtype Import s a = Imp {unImp :: forall r. (String -> IO r) -- error
-                                          -> (a -> s -> IO r) -- success
-                                          -> s -- state
-                                          -> IO r }
-
-evalImport :: s -> Import s a -> IO (Either String a)
-evalImport initState imp = unImp imp err k initState
-  where k a _ = return $ Right a
-        err   = return . Left
-
-instance Functor (Import s) where
-    f `fmap` g = Imp $ \err k st -> unImp g err (k . f) st
-
-instance Monad (Import s) where
-    return a = Imp $ \_ k st -> k a st
-
-    m >>= f
-      = Imp $ \err k -> unImp m err $ \a -> unImp (f a) err k
-
-    m >> n
-      = Imp $ \err k ->
-        unImp m err $ \_ ->
-        unImp n err k
-
-    fail str
-        = Imp $ \err _k _s -> err str
-
-instance MonadState s (Import s) where
-    get   = Imp $ \_ k s -> k s s
-    put s = Imp $ \_ k _ -> {- s `seq` -} k () s
-
--- not sure if this is as good as it could be,
--- but it seems that k must be fully applied if I want
--- to unwrap x
-instance MonadIO (Import s) where
-  --liftIO x = Imp $ \_ k s -> x >>= \v -> k v s
-    liftIO x = Imp $ \err k s -> do
-        Exception.catch (x >>= \v -> k v s)
-                        (\e -> let msg = "Caught exception: " ++ show (e :: Exception.SomeException) in err msg)
-
--- | Chops off the last entry if it's null.
--- I'm not sure why parseCSV does this, but it's
--- irritating.
-customParseCSV :: String -> String -> Either String CSV
-customParseCSV filename inp = case parseCSV filename inp of
-    Left err -> Left . show $ err
-    Right csv -> Right . chopLastRecord $ csv
- where
-   chopLastRecord [] = []
-   chopLastRecord ([""]:[]) = []
-   chopLastRecord (x:xs) = x : chopLastRecord xs
-
-importCSV :: Monad m => FilePath -> ByteString -> m CSV
-importCSV filename inp = case customParseCSV filename (unpackUTF8 inp) of
-  Left err  -> fail err
-  Right csv -> return csv
-
-parseRead :: (Read a, Monad m) => String -> String -> m a
-parseRead label str = case reads str of
-    [(value, "")] -> return value
-    _ -> fail $ "Unable to parse " ++ label ++ ": " ++ show str
-
-parseTime :: Monad m => String -> m UTCTime
-parseTime str = case Time.parseTime defaultTimeLocale timeFormatSpec str of
-    Nothing -> fail $ "Unable to parse time: " ++ str
-    Just x  -> return x
-
--- | Time/Date format used in exported files.
--- Variant on ISO formatted date, with time and time zone.
-timeFormatSpec :: String
-timeFormatSpec = "%Y-%m-%d %H:%M:%S%Q %z"
-
--- Parse a string, throw an error if it's bad
-parseText :: (Text a, Monad m) => String -> String -> m a
-parseText label text = case simpleParse text of
-    Nothing -> fail $ "Unable to parse " ++ label ++ ": " ++ show text
-    Just a -> return a
