@@ -81,8 +81,8 @@ data TagsResource = TagsResource {
 }
 
 initTagsFeature :: ServerEnv -> CoreFeature -> IO TagsFeature
-initTagsFeature ServerEnv{serverStateDir, serverBlobStore} core@CoreFeature{..} = do
-    tagsState <- tagsStateComponent serverBlobStore serverStateDir
+initTagsFeature ServerEnv{serverStateDir} core@CoreFeature{..} = do
+    tagsState <- tagsStateComponent serverStateDir
     specials  <- newMemStateWHNF emptyPackageTags
     updateTag <- newHook
 
@@ -95,15 +95,16 @@ initTagsFeature ServerEnv{serverStateDir, serverBlobStore} core@CoreFeature{..} 
 
     return feature
 
-tagsStateComponent :: BlobStorage -> FilePath -> IO (StateComponent PackageTags)
-tagsStateComponent store stateDir = do
+tagsStateComponent :: FilePath -> IO (StateComponent PackageTags)
+tagsStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "Tags") initialPackageTags
   return StateComponent {
       stateDesc    = "Package tags"
     , acidState    = st
     , getState     = query st GetPackageTags
+    , putState     = update st . ReplacePackageTags
     , backupState  = \pkgTags -> [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]
-    , restoreState = tagsBackup store st
+    , restoreState = tagsBackup
     , resetState   = tagsStateComponent
     }
 

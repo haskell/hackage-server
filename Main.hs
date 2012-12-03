@@ -540,7 +540,7 @@ testBackupAction opts = do
       -- components and check that the states got restored.
       store' <- BlobStorage.open (tmpDir </> "blobs")
       (state', compares) <- liftM unzip . forM state $ \(name, st) -> do
-                             (st', cmpSt) <- abstractStateReset st store' tmpStateDir
+                             (st', cmpSt) <- abstractStateReset st tmpStateDir
                              return ((name, st'), liftM (map (\err -> name ++ ": " ++ err)) cmpSt)
       let compareAll :: IO [String] ; compareAll = liftM concat (sequence compares)
 

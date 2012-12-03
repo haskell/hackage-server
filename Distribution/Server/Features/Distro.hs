@@ -46,19 +46,20 @@ data DistroResource = DistroResource {
 }
 
 initDistroFeature :: ServerEnv -> UserFeature -> CoreFeature -> IO DistroFeature
-initDistroFeature ServerEnv{serverStateDir, serverBlobStore} user core = do
-    distrosState <- distrosStateComponent serverBlobStore serverStateDir
+initDistroFeature ServerEnv{serverStateDir} user core = do
+    distrosState <- distrosStateComponent serverStateDir
     return $ distroFeature user core distrosState
 
-distrosStateComponent :: BlobStorage -> FilePath -> IO (StateComponent Distros)
-distrosStateComponent store stateDir = do
+distrosStateComponent :: FilePath -> IO (StateComponent Distros)
+distrosStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "Distros") initialDistros
   return StateComponent {
       stateDesc    = ""
     , acidState    = st
     , getState     = query st GetDistributions
+    , putState     = \(Distros dists versions) -> update st (ReplaceDistributions dists versions)
     , backupState  = dumpBackup
-    , restoreState = restoreBackup store st
+    , restoreState = restoreBackup
     , resetState   = distrosStateComponent
     }
 

@@ -49,19 +49,20 @@ data ReportsResource = ReportsResource {
 
 
 initBuildReportsFeature :: ServerEnv -> UserFeature -> CoreFeature -> IO ReportsFeature
-initBuildReportsFeature env@ServerEnv{serverBlobStore, serverStateDir} user core = do
-    reportsState <- reportsStateComponent serverBlobStore serverStateDir
+initBuildReportsFeature env@ServerEnv{serverStateDir} user core = do
+    reportsState <- reportsStateComponent serverStateDir
     return $ buildReportsFeature env user core reportsState
 
-reportsStateComponent :: BlobStorage -> FilePath -> IO (StateComponent BuildReports)
-reportsStateComponent store stateDir = do
+reportsStateComponent :: FilePath -> IO (StateComponent BuildReports)
+reportsStateComponent stateDir = do
   st  <- openLocalStateFrom (stateDir </> "db" </> "BuildReports") initialBuildReports
   return StateComponent {
       stateDesc    = "Build reports"
     , acidState    = st
     , getState     = query st GetBuildReports
+    , putState     = update st . ReplaceBuildReports
     , backupState  = dumpBackup
-    , restoreState = restoreBackup st store
+    , restoreState = restoreBackup
     , resetState   = reportsStateComponent
     }
 

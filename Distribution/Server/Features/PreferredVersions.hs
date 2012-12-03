@@ -13,6 +13,7 @@ module Distribution.Server.Features.PreferredVersions (
 
 import Distribution.Server.Framework
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
+import Distribution.Server.Framework.BackupRestore (restoreBackupUnimplemented)
 
 import Distribution.Server.Features.PreferredVersions.State
 
@@ -101,10 +102,11 @@ preferredStateComponent stateDir = do
       stateDesc    = "Preferred package versions"
     , acidState    = st
     , getState     = query st GetPreferredVersions
-    , resetState   = const preferredStateComponent
+    , putState     = update st . ReplacePreferredVersions
+    , resetState   = preferredStateComponent
     -- TODO: backup
     , backupState  = \_ -> []
-    , restoreState = mempty
+    , restoreState = restoreBackupUnimplemented
     }
 
 versionsFeature :: CoreFeature

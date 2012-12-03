@@ -47,19 +47,20 @@ data DocumentationResource = DocumentationResource {
 }
 
 initDocumentationFeature :: ServerEnv -> CoreFeature -> UploadFeature -> IO DocumentationFeature
-initDocumentationFeature env@ServerEnv{serverStateDir, serverBlobStore} core upload = do
-    documentationState <- documentationStateComponent serverBlobStore serverStateDir
+initDocumentationFeature env@ServerEnv{serverStateDir} core upload = do
+    documentationState <- documentationStateComponent serverStateDir
     return $ documentationFeature env core upload documentationState
 
-documentationStateComponent :: BlobStorage -> FilePath -> IO (StateComponent Documentation)
-documentationStateComponent store stateDir = do
+documentationStateComponent :: FilePath -> IO (StateComponent Documentation)
+documentationStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "Documentation") initialDocumentation
   return StateComponent {
       stateDesc    = "Package documentation"
     , acidState    = st
     , getState     = query st GetDocumentation
+    , putState     = update st . ReplaceDocumentation
     , backupState  = dumpBackup
-    , restoreState = updateDocumentation st
+    , restoreState = updateDocumentation (Documentation Map.empty)
     , resetState   = documentationStateComponent
     }
   where
@@ -67,22 +68,16 @@ documentationStateComponent store stateDir = do
         let exportFunc (pkgid, (blob, _)) = BackupBlob ([display pkgid, "documentation.tar"]) blob
         in map exportFunc . Map.toList $ documentation doc
 
-    updateDocumentation :: AcidState Documentation -> RestoreBackup
-    updateDocumentation st =
-      fromPureRestoreBackup store
-        (update st . ReplaceDocumentation)
-        (updateDocumentationPure (Documentation Map.empty))
-
-    updateDocumentationPure :: Documentation -> PureRestoreBackup Documentation
-    updateDocumentationPure docs = PureRestoreBackup {
-        pureRestoreEntry = \entry ->
+    updateDocumentation :: Documentation -> RestoreBackup Documentation
+    updateDocumentation docs = RestoreBackup {
+        restoreEntry = \entry ->
           case entry of
             BackupBlob [str, "documentation.tar"] blobId | Just pkgId <- simpleParse str -> do
               docs' <- importDocumentation pkgId blobId docs
-              return (updateDocumentationPure docs')
+              return (updateDocumentation docs')
             _ ->
-              return (updateDocumentationPure docs)
-      , pureRestoreFinalize = return docs
+              return (updateDocumentation docs)
+      , restoreFinalize = return docs
       }
 
     importDocumentation :: PackageId -> BlobId -> Documentation -> Restore Documentation

@@ -6,6 +6,7 @@ module Distribution.Server.Features.HaskellPlatform (
   ) where
 
 import Distribution.Server.Framework
+import Distribution.Server.Framework.BackupRestore (restoreBackupUnimplemented)
 
 import Distribution.Server.Features.HaskellPlatform.State
 
@@ -56,10 +57,11 @@ platformStateComponent stateDir = do
       stateDesc    = "Platform packages"
     , acidState    = st
     , getState     = query st GetPlatformPackages
-    , resetState   = const platformStateComponent
+    , putState     = update st . ReplacePlatformPackages
+    , resetState   = platformStateComponent
     -- TODO: backup
     , backupState  = \_ -> []
-    , restoreState = mempty
+    , restoreState = restoreBackupUnimplemented
     }
 
 platformFeature :: StateComponent PlatformPackages

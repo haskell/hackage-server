@@ -76,13 +76,13 @@ data UploadResult = UploadResult {
 }
 
 initUploadFeature :: ServerEnv -> CoreFeature -> UserFeature -> IO UploadFeature
-initUploadFeature env@ServerEnv{serverStateDir, serverBlobStore}
+initUploadFeature env@ServerEnv{serverStateDir}
                   core@CoreFeature{..} user@UserFeature{..} = do
 
     -- Canonical state
     trusteesState    <- trusteesStateComponent    serverStateDir
     uploadersState   <- uploadersStateComponent   serverStateDir
-    maintainersState <- maintainersStateComponent serverBlobStore serverStateDir
+    maintainersState <- maintainersStateComponent serverStateDir
 
     -- some shared tasks
     let admins = adminGroup
@@ -134,9 +134,10 @@ trusteesStateComponent stateDir = do
       stateDesc    = "Trustees"
     , acidState    = st
     , getState     = query st GetHackageTrustees
+    , putState     = update st . ReplaceHackageTrustees . trusteeList
     , backupState  = \(HackageTrustees trustees) -> [csvToBackup ["trustees.csv"] $ groupToCSV trustees]
-    , restoreState = groupBackup st ["trustees.csv"] ReplaceHackageTrustees
-    , resetState   = const trusteesStateComponent
+    , restoreState = HackageTrustees <$> groupBackup ["trustees.csv"]
+    , resetState   = trusteesStateComponent
     }
 
 uploadersStateComponent :: FilePath -> IO (StateComponent HackageUploaders)
@@ -146,20 +147,22 @@ uploadersStateComponent stateDir = do
       stateDesc    = "Uploaders"
     , acidState    = st
     , getState     = query st GetHackageUploaders
+    , putState     = update st . ReplaceHackageUploaders . uploaderList
     , backupState  = \(HackageUploaders uploaders) -> [csvToBackup ["uploaders.csv"] $ groupToCSV uploaders]
-    , restoreState = groupBackup st ["uploaders.csv"] ReplaceHackageUploaders
-    , resetState   = const uploadersStateComponent
+    , restoreState = HackageUploaders <$> groupBackup ["uploaders.csv"]
+    , resetState   = uploadersStateComponent
     }
 
-maintainersStateComponent :: BlobStorage -> FilePath -> IO (StateComponent PackageMaintainers)
-maintainersStateComponent store stateDir = do
+maintainersStateComponent :: FilePath -> IO (StateComponent PackageMaintainers)
+maintainersStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "PackageMaintainers") initialPackageMaintainers
   return StateComponent {
       stateDesc    = "Package maintainers"
     , acidState    = st
     , getState     = query st AllPackageMaintainers
+    , putState     = update st . ReplacePackageMaintainers
     , backupState  = \(PackageMaintainers mains) -> [maintToExport mains]
-    , restoreState = maintainerBackup store st
+    , restoreState = maintainerBackup
     , resetState   = maintainersStateComponent
     }
 

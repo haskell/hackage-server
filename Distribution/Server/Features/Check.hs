@@ -25,6 +25,7 @@ import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Framework.ResourceTypes as Resource
+import Distribution.Server.Framework.BackupRestore (restoreBackupUnimplemented)
 
 import Distribution.Text
 import Distribution.Package
@@ -112,11 +113,12 @@ candidatesStateComponent stateDir = do
   return StateComponent {
       stateDesc    = "Candidate packages"
     , getState     = query st GetCandidatePackages
+    , putState     = update st . ReplaceCandidatePackages
     , acidState    = st
-    , resetState   = const candidatesStateComponent
+    , resetState   = candidatesStateComponent
       -- TODO: backup
     , backupState  = \_ -> []
-    , restoreState = mempty
+    , restoreState = restoreBackupUnimplemented
   }
 
 checkFeature :: ServerEnv

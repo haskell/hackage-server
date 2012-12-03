@@ -8,14 +8,12 @@ module Distribution.Server.Features.Distro.Backup (
     distroToCSV
   ) where
 
-import Data.Acid
 import qualified Distribution.Server.Features.Distro.Distributions as Distros
 import Distribution.Server.Features.Distro.Distributions (DistroName, Distributions(..), DistroVersions(..), DistroPackageInfo(..))
 import Distribution.Server.Features.Distro.State
 import Distribution.Server.Users.Group (UserList(..))
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
-import Distribution.Server.Framework.BlobStorage (BlobStorage)
 
 import Distribution.Text
 import Data.Version
@@ -33,29 +31,27 @@ dumpBackup allDist =
         versions = distVersions allDist
     in distroUsersToExport distros:distrosToExport distros versions
 
-restoreBackup :: BlobStorage -> AcidState Distros -> RestoreBackup
-restoreBackup store distrosState =
-  fromPureRestoreBackup store
-    (update distrosState . uncurry ReplaceDistributions)
-    (updateDistros Distros.emptyDistributions Distros.emptyDistroVersions Map.empty)
+restoreBackup :: RestoreBackup Distros
+restoreBackup =
+  updateDistros Distros.emptyDistributions Distros.emptyDistroVersions Map.empty
 
-updateDistros :: Distributions -> DistroVersions -> Map DistroName UserList -> PureRestoreBackup (Distributions, DistroVersions)
-updateDistros distros versions maintainers = PureRestoreBackup {
-    pureRestoreEntry = \entry ->
+updateDistros :: Distributions -> DistroVersions -> Map DistroName UserList -> RestoreBackup Distros
+updateDistros distros versions maintainers = RestoreBackup {
+    restoreEntry = \entry ->
       case entry of
         BackupByteString ["package", distro] bs | takeExtension distro == ".csv" -> do
-          csv <- importCSV' distro bs
+          csv <- importCSV distro bs
           (distros', versions') <- importDistro csv distros versions
           return (updateDistros distros' versions' maintainers)
         BackupByteString ["maintainers.csv"] bs -> do
-          csv <- importCSV' "maintainers.csv" bs
+          csv <- importCSV "maintainers.csv" bs
           maintainers' <- importMaintainers csv maintainers
           return (updateDistros distros versions maintainers')
         _ ->
           return (updateDistros distros versions maintainers)
-  , pureRestoreFinalize = do
+  , restoreFinalize = do
       let distros' = foldl' (\dists (name, group) -> Distros.modifyDistroMaintainers name (const group) dists) distros (Map.toList maintainers)
-      return (distros', versions)
+      return (Distros distros' versions)
   }
 
 importDistro :: CSV -> Distributions -> DistroVersions -> Restore (Distributions, DistroVersions)

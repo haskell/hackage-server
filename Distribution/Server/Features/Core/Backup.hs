@@ -9,14 +9,11 @@ module Distribution.Server.Features.Core.Backup (
     infoToCurrentEntries,
   ) where
 
-import Data.Acid (AcidState, update)
-
 import Distribution.Server.Features.Core.State
 
 import Distribution.Server.Packages.Types
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Framework.BackupDump
-import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Distribution.Package
@@ -35,18 +32,15 @@ import Data.Ord (comparing)
 import Control.Monad.State
 import qualified Codec.Compression.GZip as GZip
 
-packagesBackup :: AcidState PackagesState -> BlobStorage -> RestoreBackup
-packagesBackup packagesState blobs = -- updatePackageBackup packagesState blobs Map.empty
-  fromPureRestoreBackup blobs
-    (update packagesState . ReplacePackagesState)
-    (updatePackagesPure Map.empty)
+packagesBackup :: RestoreBackup PackagesState
+packagesBackup = updatePackages Map.empty
 
-updatePackagesPure :: PartialIndex -> PureRestoreBackup PackagesState
-updatePackagesPure packageMap = PureRestoreBackup {
-    pureRestoreEntry = \entry -> do
+updatePackages :: PartialIndex -> RestoreBackup PackagesState
+updatePackages packageMap = RestoreBackup {
+    restoreEntry = \entry -> do
       packageMap' <- doPackageImport packageMap entry
-      return (updatePackagesPure packageMap')
-  , pureRestoreFinalize = do
+      return (updatePackages packageMap')
+  , restoreFinalize = do
       results <- mapM partialToFullPkg (Map.toList packageMap)
       return $ PackagesState (PackageIndex.fromList results)
   }
@@ -67,10 +61,10 @@ doPackageImport packages entry = case entry of
     let partial = Map.findWithDefault emptyPartialPkg pkgId packages
     partial' <- case rest of
       ["uploads.csv"] -> do
-        list <- importCSV' "uploads.csv" bs >>= importVersionList
+        list <- importCSV "uploads.csv" bs >>= importVersionList
         return $ partial { partialCabalUpload = list }
       ["tarball.csv"] -> do
-        list <- importCSV' "tarball.csv" bs >>= importVersionList
+        list <- importCSV "tarball.csv" bs >>= importVersionList
         return $ partial { partialTarballUpload = list }
       [other] | Just version <- extractVersion other (packageName pkgId) ".cabal" ->
         return $ partial { partialCabal = (version, CabalFileText bs):partialCabal partial }

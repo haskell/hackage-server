@@ -73,9 +73,10 @@ mirrorersStateComponent stateDir = do
       stateDesc    = "Mirror clients"
     , acidState    = st
     , getState     = query st GetMirrorClients
+    , putState     = update st . ReplaceMirrorClients . mirrorClients
     , backupState  = \(MirrorClients clients) -> [csvToBackup ["clients.csv"] $ groupToCSV clients]
-    , restoreState = groupBackup st ["clients.csv"] ReplaceMirrorClients
-    , resetState   = const mirrorersStateComponent
+    , restoreState = MirrorClients <$> groupBackup ["clients.csv"]
+    , resetState   = mirrorersStateComponent
     }
 
 mirrorFeature :: ServerEnv

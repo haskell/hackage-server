@@ -4,10 +4,8 @@ module Distribution.Server.Features.Tags.Backup (
     tagsToRecord
   ) where
 
-import Data.Acid (AcidState, update)
 import Distribution.Server.Features.Tags.State
 import Distribution.Server.Framework.BackupRestore
-import Distribution.Server.Framework.BlobStorage (BlobStorage)
 
 import Distribution.Package
 import Distribution.Text (display)
@@ -17,21 +15,18 @@ import qualified Data.Map as Map
 -- import Data.Set (Set)
 import qualified Data.Set as Set
 
-tagsBackup :: BlobStorage -> AcidState PackageTags -> RestoreBackup
-tagsBackup store tagsState =
-  fromPureRestoreBackup store
-    (update tagsState . ReplacePackageTags)
-    (updateTagsPure emptyPackageTags)
+tagsBackup :: RestoreBackup PackageTags
+tagsBackup = updateTags emptyPackageTags
 
-updateTagsPure :: PackageTags -> PureRestoreBackup PackageTags
-updateTagsPure tagsState = PureRestoreBackup {
-    pureRestoreEntry = \(BackupByteString entry bs) ->
+updateTags :: PackageTags -> RestoreBackup PackageTags
+updateTags tagsState = RestoreBackup {
+    restoreEntry = \(BackupByteString entry bs) ->
       if entry == ["tags.csv"]
-        then do csv <- importCSV' "tags.csv" bs
+        then do csv <- importCSV "tags.csv" bs
                 tagsState' <- updateFromCSV csv tagsState
-                return (updateTagsPure tagsState')
-        else return (updateTagsPure tagsState)
-  , pureRestoreFinalize = return tagsState
+                return (updateTags tagsState')
+        else return (updateTags tagsState)
+  , restoreFinalize = return tagsState
   }
 
 updateFromCSV :: CSV -> PackageTags -> Restore PackageTags

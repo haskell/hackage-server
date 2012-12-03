@@ -2,17 +2,11 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Distribution.Server.Framework.BackupRestore (
-    RestoreBackup(..),
     BackupEntry(..),
-    Import,
     importTar,
     importBlank,
 
     importCSV,
-    importCSV',
-    runImport,
-    getImport,
-    withSubImport,
     parseText,
     parseTime,
     timeFormatSpec,
@@ -24,12 +18,15 @@ module Distribution.Server.Framework.BackupRestore (
 
     -- * We are slowly transitioning to a pure restore process
     -- Once that transition is complete this will replace RestoreBackup
-    PureRestoreBackup(..),
-    fromPureRestoreBackup,
+    RestoreBackup(..),
+    restoreBackupUnimplemented,
     concatM,
     Restore,
     restoreAddBlob,
-    restoreGetBlob
+    restoreGetBlob,
+
+    AbstractRestoreBackup(..),
+    abstractRestoreBackup
   ) where
 
 import qualified Codec.Archive.Tar as Tar
@@ -62,24 +59,60 @@ data BackupEntry =
     BackupByteString [FilePath] ByteString
   | BackupBlob [FilePath] BlobId
 
-data RestoreBackup = RestoreBackup {
-    restoreEntry :: BackupEntry -> IO (Either String RestoreBackup),
-    -- Final checks and transformations on the accumulated data.
-    -- For the most part, it combines partial data accumulated during importing
-    -- tar entries, failing if bits are missing. It should not fail if no
-    -- entries have been imported.
-    -- It is called before restoreComplete.
-    restoreFinalize :: IO (Either String RestoreBackup),
-    -- This is where Happstack updating and any additional state manipulating should happen.
-    -- This should \*not\* fail. Features may rely on the state of their dependencies (this
-    -- is useful for analyses of data in other features that can be recalculated on import)
-    restoreComplete :: IO ()
-}
-
-data PureRestoreBackup st = PureRestoreBackup {
-    pureRestoreEntry    :: BackupEntry -> Restore (PureRestoreBackup st)
-  , pureRestoreFinalize :: Restore st
+data RestoreBackup st = RestoreBackup {
+    restoreEntry    :: BackupEntry -> Restore (RestoreBackup st)
+  , restoreFinalize :: Restore st
   }
+
+instance Functor RestoreBackup where
+  f `fmap` RestoreBackup {..} = RestoreBackup {
+      restoreEntry    = liftM (fmap f) . restoreEntry
+    , restoreFinalize = liftM f restoreFinalize
+    }
+
+restoreBackupUnimplemented :: RestoreBackup st
+restoreBackupUnimplemented = RestoreBackup {
+    restoreEntry    = const (return restoreBackupUnimplemented)
+  , restoreFinalize = fail "Backup unimplemented"
+  }
+
+data AbstractRestoreBackup = AbstractRestoreBackup {
+    abstractRestoreEntry    :: BlobStorage -> BackupEntry -> IO (Either String AbstractRestoreBackup)
+  , abstractRestoreFinalize :: BlobStorage -> IO (Either String (IO ()))
+  }
+
+abstractRestoreBackup :: (st -> IO ()) -> RestoreBackup st -> AbstractRestoreBackup
+abstractRestoreBackup putSt = go
+  where
+    go RestoreBackup {..} = AbstractRestoreBackup {
+        abstractRestoreEntry = \store entry ->
+          liftM go    <$> (runRestore store $ restoreEntry entry)
+      , abstractRestoreFinalize = \store ->
+          liftM putSt <$> (runRestore store $ restoreFinalize)
+      }
+
+instance Monoid AbstractRestoreBackup where
+  mempty = AbstractRestoreBackup {
+      abstractRestoreEntry = \_ _ -> return . Right $ mempty
+    , abstractRestoreFinalize = \_ -> return . Right $ return ()
+    }
+  mappend (AbstractRestoreBackup run fin) (AbstractRestoreBackup run' fin') = AbstractRestoreBackup {
+      abstractRestoreEntry = \store entry -> do
+         res <- run store entry
+         case res of
+           Right backup -> do
+             res' <- run' store entry
+             return $ fmap (mappend backup) res'
+           Left bad -> return $ Left bad
+    , abstractRestoreFinalize = \store -> do
+         res <- fin store
+         case res of
+           Right finalizer -> do
+             res' <- fin' store
+             return $ fmap (finalizer >>) res'
+           Left bad -> return $ Left bad
+    }
+
 
 data Restore :: * -> * where
   RestoreDone :: forall a. a -> Restore a
@@ -115,81 +148,42 @@ restoreAddBlob = RestoreAddBlob
 restoreGetBlob :: BlobId -> Restore ByteString
 restoreGetBlob = RestoreGetBlob
 
-fromPureRestoreBackup :: BlobStorage -> (st -> IO ()) -> PureRestoreBackup st -> RestoreBackup
-fromPureRestoreBackup store putState = translate
-  where
-    translate prb = RestoreBackup {
-        restoreEntry = \entry -> do
-          result <- runRestore store $ pureRestoreEntry prb entry
-          return (translate <$> result)
-      , restoreFinalize = do
-          result <- runRestore store $ pureRestoreFinalize prb
-          case result of
-            Left err -> return . Left $ err
-            Right st -> return . Right $ mempty {restoreComplete = putState st}
-      , restoreComplete = error "complete called before finalize"
-      }
-
-instance Monoid RestoreBackup where
-    mempty = RestoreBackup
-        { restoreEntry    = \_ -> return . Right $ mempty
-        , restoreFinalize = return . Right $ mempty
-        , restoreComplete = return ()
-        }
-    mappend (RestoreBackup run fin comp) (RestoreBackup run' fin' comp') = RestoreBackup
-        { restoreEntry = \entry -> do
-              res <- run entry
-              case res of
-                  Right backup -> do
-                      res' <- run' entry
-                      return $ fmap (mappend backup) res'
-                  Left bad -> return $ Left bad
-        , restoreFinalize = do
-              res <- fin
-              case res of
-                  Right backup -> do
-                      res' <- fin'
-                      return $ fmap (mappend backup) res'
-                  Left bad -> return $ Left bad
-        , restoreComplete = comp >> comp'
-        }
-
 -- featureBackups must contain a SINGLE entry for each feature
-importTar :: BlobStorage -> ByteString -> [(String, RestoreBackup)] -> IO (Maybe String)
+importTar :: BlobStorage -> ByteString -> [(String, AbstractRestoreBackup)] -> IO (Maybe String)
 importTar store tar featureBackups = do
-    res <- runImport (initialFeatureImportState store featureBackups) $ do
+    finalizers <- evalImport (initialFeatureImportState store featureBackups) $ do
         fromEntries . Tar.read . decompress $ tar
-        finalizeBackups (map fst featureBackups)
-    completeBackups res
+        finalizeBackups store (map fst featureBackups)
+    completeBackups finalizers
 
 -- A variant of importTar that finalizes immediately.
-importBlank :: BlobStorage -> [(String, RestoreBackup)] -> IO (Maybe String)
+importBlank :: BlobStorage -> [(String, AbstractRestoreBackup)] -> IO (Maybe String)
 importBlank store featureBackups = do
-    res <- runImport (initialFeatureImportState store featureBackups)
-         $ finalizeBackups (map fst featureBackups)
-    completeBackups res
+    finalizers <- evalImport (initialFeatureImportState store featureBackups)
+         $ finalizeBackups store (map fst featureBackups)
+    completeBackups finalizers
 
 -- | Call restoreFinalize for every backup. Caller must ensure that every
 -- feature name is in the map.
-finalizeBackups :: [String] -> Import FeatureImportState ()
-finalizeBackups list = forM_ list $ \name -> do
+finalizeBackups :: BlobStorage -> [String] -> Import FeatureImportState [IO ()]
+finalizeBackups store list = forM list $ \name -> do
     features <- gets featureMap
-    mbackup <- liftIO $ restoreFinalize (features Map.! name)
+    mbackup <- liftIO $ abstractRestoreFinalize (features Map.! name) store
     case mbackup of
-        Left err      -> fail $ "Error finalizing feature " ++ name ++ ":" ++ err
-        Right backup' -> updateFeatureMap name backup'
+        Left err       -> do -- TODO: instead: fail $ "Error finalizing feature " ++ name ++ ":" ++ err
+                             liftIO . putStrLn $ "WARNING: Error finalizing feature " ++  name ++ ":" ++ err
+                             return (return ())
+        Right finalize -> return finalize
 
-completeBackups :: Either String FeatureImportState -> IO (Maybe String)
+completeBackups :: Either String [IO ()] -> IO (Maybe String)
 completeBackups res = case res of
     Left err -> return $ Just err
-    Right st -> do
-        mapM_ restoreComplete (Map.elems (featureMap st))
-        return Nothing
+    Right putSt -> sequence_ putSt >> return Nothing
 
 -- internal import utils
 data FeatureImportState = FeatureImportState {
     -- | The 'RestoreBackup' of each state
-    featureMap :: Map String RestoreBackup
+    featureMap :: Map String AbstractRestoreBackup
 
     -- | The blob storage
   , featureStorage :: BlobStorage
@@ -218,14 +212,14 @@ data FeatureImportState = FeatureImportState {
   , featureBlobs :: Map String BlobId
   }
 
-initialFeatureImportState :: BlobStorage -> [(String, RestoreBackup)] -> FeatureImportState
+initialFeatureImportState :: BlobStorage -> [(String, AbstractRestoreBackup)] -> FeatureImportState
 initialFeatureImportState store featureBackups = FeatureImportState {
     featureMap     = Map.fromList featureBackups
   , featureBlobs   = Map.empty
   , featureStorage = store
   }
 
-updateFeatureMap :: String -> RestoreBackup -> Import FeatureImportState ()
+updateFeatureMap :: String -> AbstractRestoreBackup -> Import FeatureImportState ()
 updateFeatureMap feature backup =
   modify (\st -> st { featureMap = Map.insert feature backup (featureMap st) })
 
@@ -234,8 +228,8 @@ updateFeatureBlobs str blobid =
   modify (\st -> st { featureBlobs = Map.insert str blobid (featureBlobs st) })
 
 fromEntries :: Tar.Entries Tar.FormatError -> Import FeatureImportState ()
-fromEntries Tar.Done = return ()
-fromEntries (Tar.Fail err) = fail (show err)
+fromEntries Tar.Done        = return ()
+fromEntries (Tar.Fail err)  = fail (show err)
 fromEntries (Tar.Next x xs) = fromEntry x >> fromEntries xs
 
 fromEntry :: Tar.Entry -> Import FeatureImportState ()
@@ -272,10 +266,11 @@ fromLink path linkTarget =
 
 fromBackupEntry :: [FilePath] -> ([FilePath] -> BackupEntry) -> Import FeatureImportState ()
 fromBackupEntry path@(pathFront:pathEnd) mkEntry = do
+  store    <- gets featureStorage
   features <- gets featureMap
   case Map.lookup pathFront features of
     Just restorer -> do
-      res <- liftIO $ restoreEntry restorer (mkEntry pathEnd)
+      res <- liftIO $ abstractRestoreEntry restorer store (mkEntry pathEnd)
       case res of Left e          -> fail $ "Error importing '" ++ joinPath path ++ "' :" ++ e
                   Right restorer' -> restorer' `seq` updateFeatureMap pathFront restorer'
     Nothing ->
@@ -361,25 +356,10 @@ newtype Import s a = Imp {unImp :: forall r. (String -> IO r) -- error
                                           -> s -- state
                                           -> IO r }
 
-runImport :: s -> Import s a -> IO (Either String s)
-runImport initState imp = unImp imp err k initState
-  where k _ s = return $ Right s
+evalImport :: s -> Import s a -> IO (Either String a)
+evalImport initState imp = unImp imp err k initState
+  where k a _ = return $ Right a
         err   = return . Left
-
-getImport :: s -> Import s a -> IO (Either String (s, a))
-getImport initState imp = unImp imp err k initState
-  where k a s = return $ Right (s, a)
-        err   = return . Left
-
--- For nested import. Not as useful in practice.
-withSubImport :: (s -> s') -> (s' -> s -> s) -> Import s' a -> Import s a
-withSubImport extractState returnState subImport = do
-    initState <- get
-    let subState = extractState initState
-    mresult <- liftIO $ getImport subState subImport
-    case mresult of
-        Right (subState', result) -> put (returnState subState' initState) >> return result
-        Left  err -> fail err
 
 instance Functor (Import s) where
     f `fmap` g = Imp $ \err k st -> unImp g err (k . f) st
@@ -423,16 +403,10 @@ customParseCSV filename inp = case parseCSV filename inp of
    chopLastRecord ([""]:[]) = []
    chopLastRecord (x:xs) = x : chopLastRecord xs
 
-importCSV' :: Monad m => FilePath -> ByteString -> m CSV
-importCSV' filename inp = case customParseCSV filename (unpackUTF8 inp) of
+importCSV :: Monad m => FilePath -> ByteString -> m CSV
+importCSV filename inp = case customParseCSV filename (unpackUTF8 inp) of
   Left err  -> fail err
   Right csv -> return csv
-
--- | Made customParseCSV into a nifty combinator.
-importCSV :: String -> ByteString -> (CSV -> Import s a) -> Import s a
-importCSV filename inp comb = case importCSV' filename inp of
-    Left  err -> fail err
-    Right csv -> comb csv
 
 parseRead :: (Read a, Monad m) => String -> String -> m a
 parseRead label str = case reads str of

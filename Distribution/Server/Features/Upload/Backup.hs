@@ -6,14 +6,11 @@ module Distribution.Server.Features.Upload.Backup (
     maintToCSV
   ) where
 
-import Data.Acid (AcidState, update)
-
 import Distribution.Server.Features.Upload.State
 
 import Distribution.Server.Users.Group (UserList(..))
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Framework.BackupDump
-import Distribution.Server.Framework.BlobStorage (BlobStorage)
 
 import Distribution.Package
 import Distribution.Text
@@ -26,23 +23,20 @@ import qualified Data.IntSet as IntSet
 
 -------------------------------------------------------------------------------
 -- Maintainer groups backup
-maintainerBackup :: BlobStorage -> AcidState PackageMaintainers -> RestoreBackup
-maintainerBackup store maintainersState =
-  fromPureRestoreBackup store
-    (update maintainersState . ReplacePackageMaintainers)
-    (updateMaintainersPure Map.empty)
+maintainerBackup :: RestoreBackup PackageMaintainers
+maintainerBackup = updateMaintainers Map.empty
 
-updateMaintainersPure :: Map PackageName UserList -> PureRestoreBackup PackageMaintainers
-updateMaintainersPure mains = PureRestoreBackup {
-    pureRestoreEntry = \entry -> do
+updateMaintainers :: Map PackageName UserList -> RestoreBackup PackageMaintainers
+updateMaintainers mains = RestoreBackup {
+    restoreEntry = \entry -> do
       case entry of
         BackupByteString ["maintainers.csv"] bs -> do
-          csv    <- importCSV' "maintainers.csv" bs
+          csv    <- importCSV "maintainers.csv" bs
           mains' <- importMaintainers csv mains
-          return (updateMaintainersPure mains')
+          return (updateMaintainers mains')
         _ ->
-          return (updateMaintainersPure mains)
-  , pureRestoreFinalize =
+          return (updateMaintainers mains)
+  , restoreFinalize =
       return $ PackageMaintainers (mains)
   }
 

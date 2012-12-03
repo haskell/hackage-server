@@ -113,10 +113,10 @@ data CoreResource = CoreResource {
 }
 
 initCoreFeature :: ServerEnv -> UserFeature -> IO CoreFeature
-initCoreFeature env@ServerEnv{serverStateDir, serverBlobStore, serverCacheDelay} users = do
+initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay} users = do
 
     -- Canonical state
-    packagesState <- packagesStateComponent serverBlobStore serverStateDir
+    packagesState <- packagesStateComponent serverStateDir
 
     -- Ephemeral state
     -- Additional files to put in the index tarball like preferred-versions
@@ -150,15 +150,16 @@ initCoreFeature env@ServerEnv{serverStateDir, serverBlobStore, serverCacheDelay}
     return feature
 
 
-packagesStateComponent :: BlobStorage -> FilePath -> IO (StateComponent PackagesState)
-packagesStateComponent store stateDir = do
+packagesStateComponent :: FilePath -> IO (StateComponent PackagesState)
+packagesStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "PackagesState") initialPackagesState
   return StateComponent {
        stateDesc    = "Main package database"
      , acidState    = st
      , getState     = query st GetPackagesState
+     , putState     = update st . ReplacePackagesState
      , backupState  = indexToAllVersions
-     , restoreState = packagesBackup st store
+     , restoreState = packagesBackup
      , resetState   = packagesStateComponent
      }
 

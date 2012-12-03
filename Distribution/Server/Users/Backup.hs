@@ -14,61 +14,56 @@ import Distribution.Server.Users.Users (Users(..))
 import Distribution.Server.Users.Group (UserList(..))
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Types
-import Distribution.Server.Users.State (ReplaceUserDb(..))
 
-import Data.Acid (AcidState, EventState, UpdateEvent, update)
-import Data.Acid.Advanced (MethodResult)
-import Data.ByteString.Lazy.Char8 (ByteString)
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Text (display)
 import Data.Version
-import Data.Function (fix)
-import Control.Monad.State (get, put)
-import Text.CSV (CSV)
+import Text.CSV (CSV, Record)
 import qualified Data.IntSet as IntSet
 
 -- Import for the user database
-userBackup :: AcidState Users -> RestoreBackup
-userBackup usersState = updateUserBackup usersState Users.empty
+userBackup :: RestoreBackup Users
+userBackup = updateUserBackup Users.empty
 
-updateUserBackup :: AcidState Users -> Users -> RestoreBackup
-updateUserBackup usersState users = RestoreBackup
-  { restoreEntry = \(BackupByteString path bs) -> do
-        res <- doUserImport users path bs
-        return $ fmap (updateUserBackup usersState) res
-  , restoreFinalize = return . Right $ updateUserBackup usersState users
-  , restoreComplete = update usersState $ ReplaceUserDb users
+updateUserBackup :: Users -> RestoreBackup Users
+updateUserBackup users = RestoreBackup {
+    restoreEntry = \entry -> case entry of
+      BackupByteString ["users.csv"] bs -> do
+        csv <- importCSV "users.csv" bs
+        users' <- importAuth csv users
+        return (updateUserBackup users')
+      _ ->
+        return (updateUserBackup users)
+  , restoreFinalize =
+     return users
   }
 
-doUserImport :: Users -> [FilePath] -> ByteString -> IO (Either String Users)
-doUserImport users ["users.csv"] bs = runImport users (importAuth bs)
-doUserImport users _             _  = return . Right $ users
-
-importAuth :: ByteString -> Import Users ()
-importAuth contents = importCSV "users.csv" contents $ \csv -> mapM_ fromRecord (drop 2 csv)
+importAuth :: CSV -> Users -> Restore Users
+importAuth = concatM . map fromRecord . drop 2
   where
-    fromRecord [nameStr, idStr, "deleted", "none", ""] = do
+    fromRecord :: Record -> Users -> Restore Users
+    fromRecord [nameStr, idStr, "deleted", "none", ""] users = do
         name <- parseText "user name" nameStr
         user <- parseText "user id" idStr
-        insertUser user $ UserInfo name Deleted
-    fromRecord [nameStr, idStr, "historical", "none", ""] = do
+        insertUser users user $ UserInfo name Deleted
+    fromRecord [nameStr, idStr, "historical", "none", ""] users = do
         name <- parseText "user name" nameStr
         user <- parseText "user id" idStr
-        insertUser user $ UserInfo name Historical
-    fromRecord [nameStr, idStr, statusStr, auth] = do
+        insertUser users user $ UserInfo name Historical
+    fromRecord [nameStr, idStr, statusStr, auth] users = do
         name <- parseText "user name" nameStr
         user <- parseText "user id" idStr
         -- Legacy import: all hashes new hashes
         status <- parseStatus statusStr (NewUserAuth (PasswdHash auth))
-        insertUser user $ UserInfo name status
-    fromRecord [nameStr, idStr, statusStr, authNewOldStr, auth] = do
+        insertUser users user $ UserInfo name status
+    fromRecord [nameStr, idStr, statusStr, authNewOldStr, auth] users = do
         name <- parseText "user name" nameStr
         user <- parseText "user id" idStr
         mkAuth <- parseNewOld authNewOldStr
         status <- parseStatus statusStr (mkAuth auth)
-        insertUser user $ UserInfo name status
+        insertUser users user $ UserInfo name status
 
-    fromRecord x = fail $ "Error processing auth record: " ++ show x
+    fromRecord x _ = fail $ "Error processing auth record: " ++ show x
 
     parseNewOld "new" = return $ NewUserAuth . PasswdHash
     parseNewOld "old" = return $ OldUserAuth . HtPasswdHash
@@ -80,40 +75,39 @@ importAuth contents = importCSV "users.csv" contents $ \csv -> mapM_ fromRecord 
     parseStatus "disabled"   auth = return $ Active Disabled auth
     parseStatus sts _ = fail $ "unable to parse whether user enabled: " ++ sts
 
-insertUser :: UserId -> UserInfo -> Import Users ()
-insertUser user info = do
-    users <- get
+insertUser :: Users -> UserId -> UserInfo -> Restore Users
+insertUser users user info =
     case Users.insert user info users of
         Left err     -> fail err
-        Right users' -> put users'
+        Right users' -> return users'
 
 -- Import for a single group
-groupBackup :: (UpdateEvent event, MethodResult event ~ ())
-            => AcidState (EventState event)
-            -> [FilePath] -> (UserList -> event)
-            -> RestoreBackup
-groupBackup state csvPath updateFunc = updateGroupBackup Group.empty
+groupBackup :: [FilePath] -> RestoreBackup UserList
+groupBackup csvPath = updateGroupBackup Group.empty
   where
-    updateGroupBackup group = fix $ \restorer -> RestoreBackup {
-        restoreEntry = \(BackupByteString path bs) ->
-          if path == csvPath
-            then fmap (fmap updateGroupBackup) $ runImport group (importGroup path bs >>= put)
-            else return . Right $ restorer
-      , restoreFinalize = return . Right $ restorer
-      , restoreComplete = update state (updateFunc group)
+    updateGroupBackup group = RestoreBackup {
+        restoreEntry = \entry -> case entry of
+          BackupByteString path bs | path == csvPath -> do
+            csv    <- importCSV (last path) bs
+            group' <- importGroup csv
+            -- TODO: we just discard "group" here. Is that right?
+            return (updateGroupBackup group')
+          _ ->
+            return (updateGroupBackup group)
+      , restoreFinalize =
+          return group
       }
 
 -- parses a rather lax format. Any layout of integer ids separated by commas.
-importGroup :: [FilePath] -> ByteString -> Import s UserList
-importGroup file contents =
-  importCSV (last file) contents $ \vals ->
-    fmap (UserList . IntSet.fromList) $ mapM parseUserId (concat $ clean vals)
+importGroup :: CSV -> Restore UserList
+importGroup csv = do
+    parsed <- mapM parseUserId (concat $ clean csv)
+    return . UserList . IntSet.fromList $ parsed
   where
     clean xs = if all null xs then [] else xs
     parseUserId uid = case reads uid of
         [(num, "")] -> return num
         _ -> fail $ "Unable to parse user id : " ++ show uid
-
 
 -------------------------------------------------- Exporting
 -- group.csv

@@ -6,14 +6,11 @@ module Distribution.Server.Features.BuildReports.Backup (
     packageReportsToExport
   ) where
 
-import Data.Acid (AcidState, update)
 import Distribution.Server.Features.BuildReports.BuildReport (BuildReport)
 import qualified Distribution.Server.Features.BuildReports.BuildReport as Report
 import Distribution.Server.Features.BuildReports.BuildReports (BuildReports(..), PkgBuildReports(..), BuildReportId(..), BuildLog(..))
 import qualified Distribution.Server.Features.BuildReports.BuildReports as Reports
-import Distribution.Server.Features.BuildReports.State
 
-import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
@@ -32,19 +29,15 @@ import Data.ByteString.Lazy.Char8 (ByteString)
 dumpBackup  :: BuildReports -> [BackupEntry]
 dumpBackup = buildReportsToExport
 
-restoreBackup :: AcidState BuildReports -> BlobStorage -> RestoreBackup
-restoreBackup reportsState storage = -- updateReports reportsState storage (Reports.emptyReports, Map.empty)
-  fromPureRestoreBackup storage
-    (update reportsState . ReplaceBuildReports)
-    (updateReports Reports.emptyReports Map.empty)
-
+restoreBackup :: RestoreBackup BuildReports
+restoreBackup = updateReports Reports.emptyReports Map.empty
 
 -- when logs are encountered before their corresponding build reports
 type PartialLogs = Map (PackageId, BuildReportId) BuildLog
 
-updateReports :: BuildReports -> PartialLogs -> PureRestoreBackup BuildReports
-updateReports buildReports partialLogs = PureRestoreBackup {
-    pureRestoreEntry = \entry -> do
+updateReports :: BuildReports -> PartialLogs -> RestoreBackup BuildReports
+updateReports buildReports partialLogs = RestoreBackup {
+    restoreEntry = \entry -> do
       case entry of
         BackupByteString ["package", pkgStr, reportItem] bs
           | Just pkgId <- simpleParse pkgStr
@@ -60,7 +53,7 @@ updateReports buildReports partialLogs = PureRestoreBackup {
                  return (updateReports buildReports' partialLogs')
         _ ->
           return (updateReports buildReports partialLogs)
-  , pureRestoreFinalize =
+  , restoreFinalize =
       foldM insertLog buildReports (Map.toList partialLogs)
   }
 

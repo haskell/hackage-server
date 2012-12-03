@@ -157,9 +157,10 @@ usersStateComponent stateDir = do
       stateDesc    = "List of users"
     , acidState    = st
     , getState     = query st GetUserDb
+    , putState     = update st . ReplaceUserDb
     , backupState  = \users -> [csvToBackup ["users.csv"] (usersToCSV users)]
-    , restoreState = userBackup st
-    , resetState   = const usersStateComponent
+    , restoreState = userBackup
+    , resetState   = usersStateComponent
     }
 
 adminsStateComponent :: FilePath -> IO (StateComponent HackageAdmins)
@@ -169,9 +170,10 @@ adminsStateComponent stateDir = do
       stateDesc    = "Admins"
     , acidState    = st
     , getState     = query st GetHackageAdmins
+    , putState     = update st . ReplaceHackageAdmins . adminList
     , backupState  = \(HackageAdmins admins) -> [csvToBackup ["admins.csv"] (groupToCSV admins)]
-    , restoreState = groupBackup st ["admins.csv"] ReplaceHackageAdmins
-    , resetState   = const adminsStateComponent
+    , restoreState = HackageAdmins <$> groupBackup ["admins.csv"]
+    , resetState   = adminsStateComponent
     }
 
 userFeature :: StateComponent Users.Users

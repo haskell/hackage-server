@@ -5,8 +5,6 @@ module Distribution.Server.Features.DownloadCount.Backup (
   ) where
 
 import Distribution.Server.Framework.BackupRestore
-import Distribution.Server.Framework.BlobStorage (BlobStorage)
-import Data.Acid (AcidState, update)
 
 import Distribution.Server.Features.DownloadCount.State
 
@@ -19,21 +17,18 @@ import qualified Data.Map as Map
 import Control.Monad
 import Data.Time.Calendar
 
-downloadsBackup :: BlobStorage -> AcidState DownloadCounts -> RestoreBackup
-downloadsBackup store downloadState =
-  fromPureRestoreBackup store
-    (update downloadState . ReplacePackageDownloads)
-    (updateDownloadsPure emptyDownloadCounts)
+downloadsBackup :: RestoreBackup DownloadCounts
+downloadsBackup = updateDownloads emptyDownloadCounts
 
-updateDownloadsPure :: DownloadCounts -> PureRestoreBackup DownloadCounts
-updateDownloadsPure dcs = PureRestoreBackup {
-    pureRestoreEntry = \(BackupByteString entry bs) ->
+updateDownloads :: DownloadCounts -> RestoreBackup DownloadCounts
+updateDownloads dcs = RestoreBackup {
+    restoreEntry = \(BackupByteString entry bs) ->
       if entry == ["downloads.csv"]
-        then do csv  <- importCSV' "downloads.csv" bs
+        then do csv  <- importCSV "downloads.csv" bs
                 dcs' <- updateFromCSV csv dcs
-                return (updateDownloadsPure dcs')
-        else return (updateDownloadsPure dcs)
-  , pureRestoreFinalize = return dcs
+                return (updateDownloads dcs')
+        else return (updateDownloads dcs)
+  , restoreFinalize = return dcs
   }
 
 updateFromCSV :: CSV -> DownloadCounts -> Restore DownloadCounts
