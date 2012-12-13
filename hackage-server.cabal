@@ -71,6 +71,7 @@ executable hackage-server
     Distribution.Server.Framework.Hook
     Distribution.Server.Framework.Instances
     Distribution.Server.Framework.MemState
+    Distribution.Server.Framework.MemSize
     Distribution.Server.Framework.Resource
     Distribution.Server.Framework.ResourceTypes
     Distribution.Server.Framework.BackupDump
@@ -216,7 +217,7 @@ executable hackage-mirror
     Distribution.Server.Util.Merge
   build-depends:
     base,
-    containers, bytestring, pretty,
+    containers, array, bytestring, pretty,
     filepath, directory,
     time,     old-locale, random,
     tar,      zlib,
@@ -237,7 +238,7 @@ executable hackage-build
     Distribution.Server.Util.Merge
   build-depends:
     base,
-    containers, bytestring, pretty,
+    containers, array, bytestring, pretty,
     filepath, directory, process >= 1.0,
     time,     old-locale,
     tar,      zlib,
@@ -256,7 +257,7 @@ executable hackage-import
   other-modules:
   build-depends:
     base,
-    containers, bytestring, pretty,
+    containers, array, bytestring, pretty,
     filepath, directory,
     time,     old-locale, random,
     tar,      zlib,

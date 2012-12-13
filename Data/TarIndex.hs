@@ -25,6 +25,9 @@ import Data.IntTrie (IntTrie)
 import qualified System.FilePath as FilePath
 import Prelude hiding (lookup)
 
+import Distribution.Server.Framework.MemSize
+
+
 -- | An index of the entries in a tar file. This lets us look up a filename
 -- within the tar file and find out where in the tar file (ie the file offset)
 -- that entry occurs.
@@ -67,6 +70,10 @@ type TarEntryOffset = Int
 $(deriveSafeCopy 0 'base ''TarIndex)
 $(deriveSafeCopy 0 'base ''PathComponentId)
 $(deriveSafeCopy 0 'base ''TarIndexEntry)
+
+instance MemSize TarIndex where
+    memSize (TarIndex a b) = memSize2 a b
+
 
 -- | Look up a given filepath in the index. It may return a 'TarFileEntry'
 -- containing the offset and length of the file within the tar file, or if

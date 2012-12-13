@@ -33,6 +33,7 @@ module Distribution.Server.Users.Users (
 import Distribution.Server.Users.Types
 import Distribution.Server.Framework.AuthCrypt (checkCryptAuthInfo)
 import Distribution.Server.Framework.Instances ()
+import Distribution.Server.Framework.MemSize
 
 import Distribution.Text (display)
 
@@ -64,6 +65,9 @@ data Users = Users {
     nextId      :: !UserId
   }
   deriving (Eq, Typeable, Show)
+
+instance MemSize Users where
+  memSize (Users a b c d) = 5 + memSize a + memSize b + memSize c + memSize d
 
 -- invariant :: Users -> Bool
 -- invariant _ = True

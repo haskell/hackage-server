@@ -22,6 +22,8 @@ module Distribution.Server.Framework.BlobStorage (
     filepath,
   ) where
 
+import Distribution.Server.Framework.MemSize
+
 import qualified Data.ByteString.Lazy as BS
 import Data.ByteString.Lazy (ByteString)
 import Data.Digest.Pure.MD5 (MD5Digest, md5)
@@ -45,6 +47,9 @@ blobMd5 (BlobId digest) = show digest
 instance SafeCopy BlobId where
   putCopy = contain . put
   getCopy = contain get
+
+instance MemSize BlobId where
+  memSize _ = 7 --TODO: pureMD5 package wastes 5 words!
 
 -- | A persistent blob storage area. Blobs can be added and retrieved but
 -- not removed or modified.

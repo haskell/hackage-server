@@ -3,6 +3,7 @@
 module Distribution.Server.Features.Tags.State where
 
 import Distribution.Server.Framework.Instances ()
+import Distribution.Server.Framework.MemSize
 
 import qualified Distribution.ParseUtils   as Parse
 import qualified Distribution.Compat.ReadP as Parse
@@ -32,7 +33,7 @@ instance Text TagList where
 
 -- A tag is a string describing a package; presently the preferred word-separation
 -- character is the dash.
-newtype Tag = Tag String deriving (Show, Typeable, Ord, Eq, NFData)
+newtype Tag = Tag String deriving (Show, Typeable, Ord, Eq, NFData, MemSize)
 instance Text Tag where
     disp (Tag tag) = Disp.text tag
     parse = do
@@ -144,6 +145,9 @@ $(deriveSafeCopy 0 'base ''PackageTags)
 
 instance NFData PackageTags where
     rnf (PackageTags a b) = rnf a `seq` rnf b
+
+instance MemSize PackageTags where
+    memSize (PackageTags a b) = memSize2 a b
 
 initialPackageTags :: PackageTags
 initialPackageTags = emptyPackageTags

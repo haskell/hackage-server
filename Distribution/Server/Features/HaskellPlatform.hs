@@ -62,6 +62,7 @@ platformStateComponent stateDir = do
     -- TODO: backup
     , backupState  = \_ -> []
     , restoreState = restoreBackupUnimplemented
+    , getStateSize = memSize <$> query st GetPlatformPackages
     }
 
 platformFeature :: StateComponent PlatformPackages

@@ -98,6 +98,12 @@ packagesFeature env@ServerEnv{serverBlobStore=store}
     packagesFeatureInterface = (emptyHackageFeature "packages") {
         featureResources = map ($packagesResource) [packagesRecent]
       , featureState     = []
+      , featureCaches    = [
+            CacheComponent {
+              cacheDesc       = "recents packages page (html, rss)",
+              getCacheMemSize = memSize <$> readAsyncCache cacheRecent
+            }
+          ]
       }
 
     packagesResource = PackagesResource {

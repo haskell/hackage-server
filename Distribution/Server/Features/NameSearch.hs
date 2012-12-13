@@ -103,7 +103,17 @@ namesFeature env CoreFeature{..}
             , findPackageResource
             , suggestPackageResource
             ]
-      , featureState     = []
+      , featureState  = []
+      , featureCaches = [
+            CacheComponent {
+              cacheDesc       = "package name search index",
+              getCacheMemSize = memSize <$> readAsyncCache packageNameIndex
+            }
+          , CacheComponent {
+              cacheDesc       = "package text search index",
+              getCacheMemSize = memSize <$> readAsyncCache packageTextIndex
+            }
+          ]
       }
 
     namesResource = NamesResource

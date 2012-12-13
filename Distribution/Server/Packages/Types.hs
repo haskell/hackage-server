@@ -16,6 +16,7 @@ module Distribution.Server.Packages.Types where
 import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Framework.BlobStorage (BlobId)
 import Distribution.Server.Framework.Instances ()
+import Distribution.Server.Framework.MemSize
 import Distribution.Server.Util.Parse (unpackUTF8)
 
 import Distribution.Package
@@ -35,7 +36,7 @@ import Data.Ord (comparing)
 import Data.SafeCopy
 
 newtype CabalFileText = CabalFileText { cabalFileByteString :: ByteString }
-  deriving (Eq, Serialize)
+  deriving (Eq, Serialize, MemSize)
 
 cabalFileString :: CabalFileText -> String
 cabalFileString = unpackUTF8 . cabalFileByteString
@@ -135,3 +136,8 @@ instance Serialize PkgTarball where
           pkgTarballNoGz = noGz
       }
 
+instance MemSize PkgInfo where
+    memSize (PkgInfo a b c d e) = memSize5 a b c d e
+
+instance MemSize PkgTarball where
+    memSize (PkgTarball a b) = memSize2 a b

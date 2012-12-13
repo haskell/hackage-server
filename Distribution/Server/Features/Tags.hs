@@ -106,6 +106,7 @@ tagsStateComponent stateDir = do
     , backupState  = \pkgTags -> [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]
     , restoreState = tagsBackup
     , resetState   = tagsStateComponent
+    , getStateSize = memSize <$> query st GetPackageTags
     }
 
 tagsFeature :: CoreFeature
@@ -144,6 +145,12 @@ tagsFeature CoreFeature{..}
             ]
       , featurePostInit = initImmutableTags
       , featureState    = [abstractStateComponent tagsState]
+      , featureCaches   = [
+            CacheComponent {
+              cacheDesc       = "calculated tags",
+              getCacheMemSize = memSize <$> readMemState calculatedTags
+            }
+          ]
       }
 
     initImmutableTags :: IO ()

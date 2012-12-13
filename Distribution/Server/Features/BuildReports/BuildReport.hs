@@ -44,6 +44,8 @@ import Distribution.ParseUtils
 import Distribution.Simple.Utils
          ( comparing )
 import Distribution.Server.Util.Merge
+import Distribution.Server.Framework.Instances ()
+import Distribution.Server.Framework.MemSize
 
 import qualified Distribution.Compat.ReadP as Parse
          ( ReadP, pfail, munch1, skipSpaces )
@@ -266,3 +268,13 @@ instance Text.Text Outcome where
       "Failed"   -> return Failed
       "Ok"       -> return Ok
       _          -> Parse.pfail
+
+instance MemSize BuildReport where
+    memSize (BuildReport a b c d e f g h i j) = memSize10 a b c d e f g h i j
+
+instance MemSize InstallOutcome where
+    memSize (DependencyFailed a) = memSize1 a
+    memSize _                    = memSize0
+
+instance MemSize Outcome where
+    memSize _ = memSize0

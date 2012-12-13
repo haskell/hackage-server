@@ -1,6 +1,8 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, TemplateHaskell #-}
 module Distribution.Server.Framework.AuthTypes where
 
+import Distribution.Server.Framework.MemSize
+
 import Data.Binary (Binary)
 import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable (Typeable)
@@ -18,12 +20,12 @@ newtype PasswdPlain = PasswdPlain String
 -- us to use either the basic or digest HTTP authentication methods.
 --
 newtype PasswdHash = PasswdHash String
-  deriving (Eq, Ord, Show, Binary, Typeable)
+  deriving (Eq, Ord, Show, Binary, Typeable, MemSize)
 
 -- | These are the *old* crypt format password hashes (salted DES: perl crypt).
 -- Not the same as the new hashes we store in 'PasswdHash'.
 newtype HtPasswdHash = HtPasswdHash String
-  deriving (Eq, Show)
+  deriving (Eq, Show, MemSize)
 
 newtype RealmName = RealmName String
   deriving (Show, Eq)

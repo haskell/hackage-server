@@ -154,6 +154,16 @@ htmlFeature UserFeature{..} CoreFeature{..}
     htmlFeatureInterface = (emptyHackageFeature "html") {
         featureResources = htmlResources
       , featureState     = []
+      , featureCaches    = [
+           CacheComponent {
+             cacheDesc       = "packages page by category",
+             getCacheMemSize = memSize <$> readAsyncCache cachePackagesPage
+           }
+         , CacheComponent {
+             cacheDesc       = "packages page by name",
+             getCacheMemSize = memSize <$> readAsyncCache cacheNamesPage
+           }
+         ]
       }
 
     -- pages defined for the HTML feature in particular

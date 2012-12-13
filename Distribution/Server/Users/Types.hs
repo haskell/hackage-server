@@ -5,6 +5,7 @@ module Distribution.Server.Users.Types (
   ) where
 
 import Distribution.Server.Framework.AuthTypes
+import Distribution.Server.Framework.MemSize
 
 import Distribution.Text
          ( Text(..) )
@@ -20,10 +21,10 @@ import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable (Typeable)
 
 newtype UserId = UserId Int
-  deriving (Eq, Ord, Show, Serialize, Typeable)
+  deriving (Eq, Ord, Show, Serialize, Typeable, MemSize)
 
 newtype UserName  = UserName String
-  deriving (Eq, Ord, Show, Serialize, Typeable)
+  deriving (Eq, Ord, Show, Serialize, Typeable, MemSize)
 
 data UserInfo = UserInfo {
     userName   :: UserName,
@@ -48,6 +49,22 @@ data UserAuth = NewUserAuth PasswdHash
               | OldUserAuth HtPasswdHash
               | NoUserAuth
               deriving (Show, Eq, Typeable)
+
+instance MemSize UserInfo where
+    memSize (UserInfo a b) = 3 + memSize a + memSize b
+
+instance MemSize UserStatus where
+    memSize Deleted      = 0
+    memSize Historical   = 0
+    memSize (Active a b) = 3 + memSize a + memSize b
+
+instance MemSize AccountEnabled where
+    memSize _ = 0
+
+instance MemSize UserAuth where
+    memSize (NewUserAuth a) = 2 + memSize a
+    memSize (OldUserAuth a) = 2 + memSize a
+    memSize NoUserAuth      = 0
 
 instance Text UserId where
     disp (UserId uid) = Disp.int uid

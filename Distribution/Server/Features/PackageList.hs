@@ -70,6 +70,11 @@ data PackageItem = PackageItem {
     -- Hotness: a more heuristic way to sort packages. presently non-existent.
   --itemHotness :: Int
 }
+
+instance MemSize PackageItem where
+    memSize (PackageItem a b c d e f g) = memSize7 a b c d e f g
+
+
 emptyPackageItem :: PackageName -> PackageItem
 emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" 0
                                    -- [reverse index disabled] 0
@@ -133,7 +138,13 @@ listFeature CoreFeature{..}
     listFeatureInterface = (emptyHackageFeature "list") {
         featurePostInit = do itemsCache
                              void $ forkIO periodicDownloadRefresh
-      , featureState = []
+      , featureState    = []
+      , featureCaches   = [
+            CacheComponent {
+              cacheDesc       = "per-package-name summary info",
+              getCacheMemSize = memSize <$> readMemState itemCache
+            }
+          ]
       }
       where itemsCache = do
                 items <- constructItemIndex

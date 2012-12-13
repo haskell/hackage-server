@@ -62,6 +62,7 @@ documentationStateComponent stateDir = do
     , backupState  = dumpBackup
     , restoreState = updateDocumentation (Documentation Map.empty)
     , resetState   = documentationStateComponent
+    , getStateSize = memSize <$> query st GetDocumentation
     }
   where
     dumpBackup doc =

@@ -11,6 +11,7 @@ module Distribution.Server.Features.Check.Types where
 
 import Distribution.Server.Packages.Types (PkgInfo)
 import Distribution.Server.Framework.Instances ()
+import Distribution.Server.Framework.MemSize
 
 import Distribution.Package
          ( PackageIdentifier(..), Package(..) )
@@ -61,3 +62,5 @@ instance Serialize CandPkgInfo where
         candPublic = public
     }
 
+instance MemSize CandPkgInfo where
+    memSize (CandPkgInfo a b c d) = memSize4 a b c d

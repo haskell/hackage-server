@@ -118,6 +118,8 @@ data GroupIndex = GroupIndex {
 emptyGroupIndex :: GroupIndex
 emptyGroupIndex = GroupIndex IntMap.empty Map.empty
 
+instance MemSize GroupIndex where
+    memSize (GroupIndex a b) = memSize2 a b
 
 -- TODO: add renaming
 initUserFeature :: ServerEnv -> IO UserFeature
@@ -161,6 +163,7 @@ usersStateComponent stateDir = do
     , backupState  = \users -> [csvToBackup ["users.csv"] (usersToCSV users)]
     , restoreState = userBackup
     , resetState   = usersStateComponent
+    , getStateSize = memSize <$> query st GetUserDb
     }
 
 adminsStateComponent :: FilePath -> IO (StateComponent HackageAdmins)
@@ -174,6 +177,7 @@ adminsStateComponent stateDir = do
     , backupState  = \(HackageAdmins admins) -> [csvToBackup ["admins.csv"] (groupToCSV admins)]
     , restoreState = HackageAdmins <$> groupBackup ["admins.csv"]
     , resetState   = adminsStateComponent
+    , getStateSize = memSize <$> query st GetHackageAdmins
     }
 
 userFeature :: StateComponent Users.Users
@@ -206,6 +210,12 @@ userFeature  usersState adminsState
       , featureState = [
             abstractStateComponent usersState
           , abstractStateComponent adminsState
+          ]
+      , featureCaches = [
+            CacheComponent {
+              cacheDesc       = "user group index",
+              getCacheMemSize = memSize <$> readMemState groupIndex
+            }
           ]
       }
 

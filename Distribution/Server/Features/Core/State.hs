@@ -7,6 +7,7 @@ import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.Types (PkgInfo(..), pkgUploadUser, pkgUploadTime)
 import Distribution.Server.Users.Types (UserId)
+import Distribution.Server.Framework.MemSize
 
 import Data.Acid     (Query, Update, makeAcidic)
 import Data.SafeCopy (base, deriveSafeCopy)
@@ -26,6 +27,9 @@ data PackagesState = PackagesState {
   deriving (Eq, Typeable, Show)
 
 deriveSafeCopy 0 'base ''PackagesState
+
+instance MemSize PackagesState where
+    memSize (PackagesState a) = 2 + memSize a
 
 initialPackagesState :: PackagesState
 initialPackagesState = PackagesState {

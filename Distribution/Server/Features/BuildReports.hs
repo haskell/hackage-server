@@ -64,6 +64,7 @@ reportsStateComponent stateDir = do
     , backupState  = dumpBackup
     , restoreState = restoreBackup
     , resetState   = reportsStateComponent
+    , getStateSize = memSize <$> query st GetBuildReports
     }
 
 buildReportsFeature :: ServerEnv

@@ -12,6 +12,7 @@ import Distribution.Server.Users.Group (UserList)
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Users.State ()
+import Distribution.Server.Framework.MemSize
 
 import Data.Acid     (Query, Update, makeAcidic)
 import Data.SafeCopy (base, deriveSafeCopy)
@@ -29,6 +30,9 @@ data Distros = Distros {
  deriving (Eq, Typeable, Show)
 
 deriveSafeCopy 0 'base ''Distros
+
+instance MemSize Distros where
+    memSize (Distros a b) = memSize2 a b
 
 initialDistros :: Distros
 initialDistros = Distros Dist.emptyDistributions Dist.emptyDistroVersions

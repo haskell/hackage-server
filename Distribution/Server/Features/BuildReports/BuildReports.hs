@@ -23,7 +23,7 @@ import Distribution.Server.Features.BuildReports.BuildReport (BuildReport)
 import Distribution.Package (PackageId)
 import Distribution.Text (Text(..))
 
-import Distribution.Server.Framework.Instances ()
+import Distribution.Server.Framework.MemSize
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -37,7 +37,7 @@ import qualified Distribution.Server.Util.Parse as Parse
 import qualified Text.PrettyPrint          as Disp
 
 newtype BuildReportId = BuildReportId Int
-  deriving (Eq, Ord, Serialize, Typeable, Show)
+  deriving (Eq, Ord, Serialize, Typeable, Show, MemSize)
 
 incrementReportId :: BuildReportId -> BuildReportId
 incrementReportId (BuildReportId n) = BuildReportId (n+1)
@@ -47,7 +47,7 @@ instance Text BuildReportId where
   parse = BuildReportId <$> Parse.int
 
 newtype BuildLog = BuildLog BlobStorage.BlobId
-  deriving (Eq, Serialize, Typeable, Show)
+  deriving (Eq, Serialize, Typeable, Show, MemSize)
 
 data PkgBuildReports = PkgBuildReports {
     -- for each report, other useful information: Maybe UserId, UTCTime
@@ -146,3 +146,9 @@ instance Serialize PkgBuildReports where
                               else incrementReportId (fst $ Map.findMax listing)
         }
 
+
+instance MemSize BuildReports where
+    memSize (BuildReports a) = memSize1 a
+
+instance MemSize PkgBuildReports where
+    memSize (PkgBuildReports a b) = memSize2 a b

@@ -8,20 +8,27 @@ import Data.List (delete, sortBy)
 import Data.Ord (comparing)
 import Control.DeepSeq
 
+import Distribution.Server.Framework.MemSize
+
+
 -- | Histograms are intended to keep track of an integer attribute related
 -- to a collection of objects.
 data Histogram a = Histogram {
-    histogram :: Map a Int,
-    reverseHistogram :: Map Count [a]
+    histogram        :: !(Map a Int),
+    reverseHistogram :: !(Map Count [a])
 }
 emptyHistogram :: Histogram a
 emptyHistogram = Histogram Map.empty Map.empty
 
-newtype Count = Count Int deriving (Eq, Show, NFData)
+newtype Count = Count Int deriving (Eq, Show, NFData, MemSize)
 instance Ord Count where
     compare (Count a) (Count b) = compare b a
+
 instance NFData a => NFData (Histogram a) where
     rnf (Histogram a b) = rnf a `seq` rnf b
+
+instance MemSize a => MemSize (Histogram a) where
+    memSize (Histogram a b) = memSize2 a b
 
 topCounts :: Ord a => Histogram a -> [(a, Int)]
 topCounts = concatMap (\(Count c, es) -> map (flip (,) c) es) . Map.toList . reverseHistogram

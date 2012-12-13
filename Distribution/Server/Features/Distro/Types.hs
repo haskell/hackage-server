@@ -9,6 +9,7 @@
 module Distribution.Server.Features.Distro.Types where
 
 import Distribution.Server.Framework.Instances ()
+import Distribution.Server.Framework.MemSize
 import Distribution.Server.Users.State()
 import Distribution.Server.Users.Group (UserList)
 
@@ -32,7 +33,7 @@ import Data.Typeable
 
 -- | Distribution names may contain letters, numbers and punctuation.
 newtype DistroName = DistroName String
- deriving (Eq, Ord, Read, Show, Typeable)
+ deriving (Eq, Ord, Read, Show, Typeable, MemSize)
 
 instance Text DistroName where
   disp (DistroName name) = Disp.text name
@@ -63,3 +64,12 @@ $(deriveSafeCopy 0 'base ''DistroName)
 $(deriveSafeCopy 0 'base ''Distributions)
 $(deriveSafeCopy 0 'base ''DistroVersions)
 $(deriveSafeCopy 0 'base ''DistroPackageInfo)
+
+instance MemSize Distributions where
+    memSize (Distributions a) = memSize1 a
+
+instance MemSize DistroVersions where
+    memSize (DistroVersions a b) = memSize2 a b
+
+instance MemSize DistroPackageInfo where
+    memSize (DistroPackageInfo a b) = memSize2 a b

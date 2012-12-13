@@ -66,6 +66,7 @@ downloadStateComponent stateDir = do
     , backupState  = \dc -> [csvToBackup ["downloads.csv"] $ downloadsToCSV dc]
     , restoreState = downloadsBackup
     , resetState   = downloadStateComponent
+    , getStateSize = memSize <$> query st GetDownloadCounts
     }
 
 downloadFeature :: CoreFeature
@@ -83,6 +84,12 @@ downloadFeature CoreFeature{}
       , featurePostInit  = do countCache
                               forkIO transferDownloads >> return ()
       , featureState     = [abstractStateComponent downloadState]
+      , featureCaches    = [
+            CacheComponent {
+              cacheDesc       = "package download histogram",
+              getCacheMemSize = memSize <$> readMemState downloadHistogram
+            }
+          ]
       }
 
     countCache = do

@@ -3,6 +3,7 @@
 module Distribution.Server.Features.Check.State where
 
 import Distribution.Server.Features.Check.Types
+import Distribution.Server.Framework.MemSize
 
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Package
@@ -22,6 +23,9 @@ data CandidatePackages = CandidatePackages {
 } deriving (Typeable, Show, Eq)
 
 deriveSafeCopy 0 'base ''CandidatePackages
+
+instance MemSize CandidatePackages where
+    memSize (CandidatePackages a) = memSize1 a
 
 initialCandidatePackages :: CandidatePackages
 initialCandidatePackages = CandidatePackages {

@@ -3,6 +3,7 @@
 module Distribution.Server.Features.DownloadCount.State where
 
 import Distribution.Server.Framework.Instances ()
+import Distribution.Server.Framework.MemSize
 
 import Distribution.Package
 import Distribution.Version
@@ -104,6 +105,13 @@ instance NFData DownloadInfo where
     rnf (DownloadInfo a b c) = rnf a `seq` rnf b `seq` rnf c
 instance NFData DownloadCounts where
     rnf (DownloadCounts a b) = rnf a `seq` rnf b
+
+instance MemSize PackageDownloads where
+    memSize (PackageDownloads a b) = memSize2 a b
+instance MemSize DownloadInfo where
+    memSize (DownloadInfo a b c) = memSize3 a b c
+instance MemSize DownloadCounts where
+    memSize (DownloadCounts a b) = memSize2 a b
 
 initialDownloadCounts :: DownloadCounts
 initialDownloadCounts = emptyDownloadCounts

@@ -30,6 +30,7 @@ import Data.Function (on)
 import Data.SafeCopy (base, deriveSafeCopy)
 
 import Distribution.Server.Framework.Instances()
+import Distribution.Server.Framework.MemSize
 
 -- | A compact mapping from sequences of small ints to small ints.
 --
@@ -37,6 +38,9 @@ newtype IntTrie k v = IntTrie (A.UArray Word16 Word16)
     deriving (Show, Typeable)
 
 $(deriveSafeCopy 0 'base ''IntTrie)
+
+instance MemSize (IntTrie k v) where
+    memSize (IntTrie o) = memSizeUArray 2 o
 
 -- Compact, read-only implementation of a trie. It's intended for use with file
 -- paths, but we do that via string ids.

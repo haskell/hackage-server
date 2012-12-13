@@ -6,6 +6,7 @@ module Distribution.Server.Framework (
     module Data.Acid,
     module Distribution.Server.Framework.MemState,
     module Distribution.Server.Framework.Cache,
+    module Distribution.Server.Framework.MemSize,
 
     module Distribution.Server.Framework.Auth,
     module Distribution.Server.Framework.Feature,
@@ -30,6 +31,7 @@ import Happstack.Server
 import Data.Acid
 import Distribution.Server.Framework.MemState
 import Distribution.Server.Framework.Cache
+import Distribution.Server.Framework.MemSize
 
 import Distribution.Server.Framework.Auth
 import Distribution.Server.Framework.Feature

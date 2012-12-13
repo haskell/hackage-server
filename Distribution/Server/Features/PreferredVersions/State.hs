@@ -3,6 +3,7 @@
 module Distribution.Server.Features.PreferredVersions.State where
 
 import Distribution.Server.Framework.Instances ()
+import Distribution.Server.Framework.MemSize
 
 import Distribution.Package
 import Distribution.Version
@@ -68,6 +69,12 @@ partitionVersions info versions = if (not . isJust $ sumRange info) then (versio
 $(deriveSafeCopy 0 'base ''PreferredVersions)
 $(deriveSafeCopy 0 'base ''PreferredInfo)
 $(deriveSafeCopy 0 'base ''VersionStatus)
+
+instance MemSize PreferredVersions where
+    memSize (PreferredVersions a b) = memSize2 a b
+
+instance MemSize PreferredInfo where
+    memSize (PreferredInfo a b c) = memSize3 a b c
 
 initialPreferredVersions :: PreferredVersions
 initialPreferredVersions = emptyPreferredVersions

@@ -5,6 +5,7 @@ module Distribution.Server.Features.Documentation.State where
 import Distribution.Package
 import Distribution.Server.Framework.BlobStorage (BlobId)
 import Data.TarIndex (TarIndex)
+import Distribution.Server.Framework.MemSize
 
 import Data.Acid     (Query, Update, makeAcidic)
 import Data.SafeCopy (base, deriveSafeCopy)
@@ -16,10 +17,13 @@ import qualified Data.Map as Map
 
 ---------------------------------- Documentation
 data Documentation = Documentation {
-     documentation :: Map.Map PackageIdentifier (BlobId, TarIndex)
+     documentation :: !(Map.Map PackageIdentifier (BlobId, TarIndex))
    } deriving (Typeable, Show)
 
 deriveSafeCopy 0 'base ''Documentation
+
+instance MemSize Documentation where
+    memSize (Documentation a) = memSize1 a
 
 initialDocumentation :: Documentation
 initialDocumentation = Documentation Map.empty

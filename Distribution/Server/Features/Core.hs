@@ -161,6 +161,7 @@ packagesStateComponent stateDir = do
      , backupState  = indexToAllVersions
      , restoreState = packagesBackup
      , resetState   = packagesStateComponent
+     , getStateSize = memSize <$> query st GetPackagesState
      }
 
 coreFeature :: ServerEnv
@@ -196,6 +197,16 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir} UserFeature{..}
           , coreCabalFile
           ]
       , featureState    = [abstractStateComponent packagesState]
+      , featureCaches   = [
+            CacheComponent {
+              cacheDesc       = "main package index tarball",
+              getCacheMemSize = memSize <$> readAsyncCache cacheIndexTarball
+            }
+          , CacheComponent {
+              cacheDesc       = "package index extra files",
+              getCacheMemSize = memSize <$> readMemState indexExtras
+            }
+          ]
       }
 
     -- the rudimentary HTML resources are for when we don't want an additional HTML feature

@@ -34,7 +34,7 @@ import Distribution.Server.Features.NameSearch      (initNamesFeature)
 import Distribution.Server.Features.PackageList     (initListFeature)
 import Distribution.Server.Features.HaskellPlatform (initPlatformFeature)
 #endif
-import Distribution.Server.Features.ServerApiDoc        (serverApiDocFeature)
+import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
 
 -- TODO:
 -- * PackageServe: serving from tarballs (most of the work is setting it up on import)
@@ -167,7 +167,7 @@ initHackageFeatures env = do
          , getFeatureInterface htmlFeature
          , legacyRedirectsFeature uploadFeature
 #endif
-         , serverApiDocFeature allFeatures
+         , serverIntrospectFeature allFeatures
          ]
 
     -- Run all post init hooks, now that everyone's gotten a chance to register

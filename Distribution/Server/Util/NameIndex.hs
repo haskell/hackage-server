@@ -14,6 +14,9 @@ import Data.List (unfoldr, foldl')
 import Data.Maybe (maybeToList)
 import Control.DeepSeq
 import Data.SafeCopy
+
+import Distribution.Server.Framework.MemSize
+
 -- | Case-insensitive name search. This is meant to be an enhanced set of
 -- names, not a full text search. It's also meant to be a sort of a short-term
 -- solution for name suggestion searches; e.g., package searches should also
@@ -102,3 +105,6 @@ instance SafeCopy NameIndex where
 
 instance NFData NameIndex where
     rnf (NameIndex a b _ _) = rnf a `seq` rnf b
+
+instance MemSize NameIndex where
+    memSize (NameIndex a b c d) = memSize4 a b c d

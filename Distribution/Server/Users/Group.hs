@@ -16,6 +16,7 @@ module Distribution.Server.Users.Group (
   ) where
 
 import Distribution.Server.Users.Types
+import Distribution.Server.Framework.MemSize
 
 import qualified Data.IntSet as IntSet
 import Data.Monoid (Monoid)
@@ -30,7 +31,7 @@ import Prelude hiding (id)
 -- | Some subset of users, eg those allowed to perform some action.
 --
 newtype UserList = UserList IntSet.IntSet
-  deriving (Eq, Monoid, Serialize, Typeable, Show)
+  deriving (Eq, Monoid, Serialize, Typeable, Show, MemSize)
 
 instance SafeCopy UserList where
   putCopy = contain . Serialize.put
@@ -94,6 +95,7 @@ data GroupDescription = GroupDescription {
     groupEntity :: Maybe (String, Maybe String),
     groupPrologue  :: String
 }
+
 nullDescription :: GroupDescription
 nullDescription = GroupDescription { groupTitle = "", groupEntity = Nothing, groupPrologue = "" }
 
@@ -107,3 +109,5 @@ queryGroups = fmap unions . mapM queryUserList
 instance NFData GroupDescription where
     rnf (GroupDescription a b c) = rnf a `seq` rnf b `seq` rnf c
 
+instance MemSize GroupDescription where
+    memSize (GroupDescription a b c) = memSize3 a b c

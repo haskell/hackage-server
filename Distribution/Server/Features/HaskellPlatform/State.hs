@@ -1,4 +1,5 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, DeriveDataTypeable,
+             TypeFamilies, TemplateHaskell #-}
 
 module Distribution.Server.Features.HaskellPlatform.State where
 
@@ -11,6 +12,8 @@ import qualified Data.Set as Set
 import Data.Typeable
 
 import Distribution.Server.Framework.Instances ()
+import Distribution.Server.Framework.MemSize
+
 import Distribution.Package
 import Distribution.Version
 
@@ -19,7 +22,8 @@ import Control.Monad.State (put, modify)
 
 newtype PlatformPackages = PlatformPackages {
     blessedPackages :: Map PackageName (Set Version)
-} deriving (Show, Typeable, Eq)
+} deriving (Show, Typeable, Eq, MemSize)
+
 emptyPlatformPackages :: PlatformPackages
 emptyPlatformPackages = PlatformPackages Map.empty
 

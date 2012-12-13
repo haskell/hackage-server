@@ -5,6 +5,7 @@
 module Distribution.Server.Users.State where
 
 import Distribution.Server.Framework.Instances ()
+import Distribution.Server.Framework.MemSize
 
 import Distribution.Server.Users.Types
 import Distribution.Server.Users.Group as Group (UserList(..), add, remove, empty)
@@ -116,6 +117,9 @@ data HackageAdmins = HackageAdmins {
 
 $(deriveSafeCopy 0 'base ''HackageAdmins)
 
+instance MemSize HackageAdmins where
+    memSize (HackageAdmins a) = memSize1 a
+
 getHackageAdmins :: Query HackageAdmins HackageAdmins
 getHackageAdmins = ask
 
@@ -148,7 +152,11 @@ $(makeAcidic ''HackageAdmins
 data MirrorClients = MirrorClients {
     mirrorClients :: !Group.UserList
 } deriving (Eq, Typeable, Show)
+
 $(deriveSafeCopy 0 'base ''MirrorClients)
+
+instance MemSize MirrorClients where
+    memSize (MirrorClients a) = memSize1 a
 
 getMirrorClients :: Query MirrorClients MirrorClients
 getMirrorClients = ask
@@ -182,6 +190,7 @@ $(makeAcidic ''MirrorClients
 data IndexUsers = IndexUsers {
     indexUsers :: !Group.UserList
 } deriving (Typeable)
+
 $(deriveSafeCopy 0 'base ''IndexUsers)
 
 getIndexUsers :: Query IndexUsers UserList

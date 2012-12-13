@@ -13,6 +13,9 @@ import Data.Char
 import Data.Maybe (catMaybes)
 import Control.DeepSeq
 
+import Distribution.Server.Framework.MemSize
+
+
 -- Basic full text search. This works best when there are plenty of entries
 -- and all of them are short. I'd use something like Hayoo here, but there's
 -- no easy way to integrate it into the site.
@@ -56,3 +59,5 @@ getIndexEntry index theIndex = case Map.splitLookup index theIndex of
         (True, False) -> Just $ snd $ Map.findMin afterMap
         (False, _) -> Just $ snd $ Map.findMax beforeMap
 
+instance MemSize TextSearch where
+    memSize (TextSearch a b) = memSize2 a b

@@ -14,6 +14,8 @@ module Distribution.Server.Framework.Feature
   , queryState
   , updateState
   , compareState
+    -- * Cache components
+  , CacheComponent(..)
     -- * Re-exports
   , BlobStorage
   ) where
@@ -45,6 +47,7 @@ data HackageFeature = HackageFeature {
   , featurePostInit    :: IO ()
 
   , featureState       :: [AbstractStateComponent]
+  , featureCaches      :: [CacheComponent]
   }
 
 -- | A feature with no state and no resources, just a name.
@@ -63,7 +66,8 @@ emptyHackageFeature name = HackageFeature {
 
     featurePostInit  = return (),
 
-    featureState     = error $ "Feature state not defined for feature '" ++ name ++ "'"
+    featureState     = error $ "'featureState' not defined for feature '" ++ name ++ "'",
+    featureCaches    = []
   }
 
 class IsHackageFeature feature where
@@ -89,6 +93,8 @@ data StateComponent st = StateComponent {
   , restoreState :: RestoreBackup st
     -- | Clone the state component in the given state directory
   , resetState   :: FilePath -> IO (StateComponent st)
+    -- | Get the current memory residency of the state
+  , getStateSize :: !(IO Int)
   }
 
 -- | 'AbstractStateComponent' abstracts away from a particular type of
@@ -100,6 +106,7 @@ data AbstractStateComponent = AbstractStateComponent {
   , abstractStateBackup     :: IO [BackupEntry]
   , abstractStateRestore    :: AbstractRestoreBackup
   , abstractStateReset      :: FilePath -> IO (AbstractStateComponent, IO [String])
+  , abstractStateSize       :: IO Int
   }
 
 compareState :: (Eq st, Show st) => st -> st -> [String]
@@ -143,6 +150,7 @@ abstractStateComponent' cmp st = AbstractStateComponent {
                                 st' <- resetState st stateDir
                                 let cmpSt = liftM2 cmp (getState st) (getState st')
                                 return (abstractStateComponent' cmp st', cmpSt)
+  , abstractStateSize       = getStateSize st
   }
 
 instance Monoid AbstractStateComponent where
@@ -153,6 +161,7 @@ instance Monoid AbstractStateComponent where
     , abstractStateBackup     = return []
     , abstractStateRestore    = mempty
     , abstractStateReset      = \_stateDir -> return (mempty, return [])
+    , abstractStateSize       = return 0
     }
   a `mappend` b = AbstractStateComponent {
       abstractStateDesc       = abstractStateDesc a ++ "\n" ++ abstractStateDesc b
@@ -164,6 +173,8 @@ instance Monoid AbstractStateComponent where
                                  (a', cmpA) <- abstractStateReset a stateDir
                                  (b', cmpB) <- abstractStateReset b stateDir
                                  return (a' `mappend` b', liftM2 (++) cmpA cmpB)
+    , abstractStateSize       = liftM2 (+) (abstractStateSize a)
+                                           (abstractStateSize b)
     }
 
 queryState :: (MonadIO m, QueryEvent event)
@@ -177,3 +188,17 @@ updateState :: (MonadIO m, UpdateEvent event)
             -> event
             -> m (EventResult event)
 updateState = update' . acidState
+
+
+--------------------------------------------------------------------------------
+-- Cache components                                                           --
+--------------------------------------------------------------------------------
+
+-- | A cache component encapsulates a cache, managed by a feature
+data CacheComponent = CacheComponent {
+    -- | Human readable description of the state component
+    cacheDesc :: String
+
+    -- | Get the current memory residency of the cache
+  , getCacheMemSize :: IO Int
+  }

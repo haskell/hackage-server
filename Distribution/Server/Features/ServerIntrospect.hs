@@ -1,6 +1,6 @@
 {-# LANGUAGE PatternGuards #-}
-module Distribution.Server.Features.ServerApiDoc (
-    serverApiDocFeature
+module Distribution.Server.Features.ServerIntrospect (
+    serverIntrospectFeature
   ) where
 
 import Distribution.Server.Framework
@@ -9,22 +9,30 @@ import Distribution.Server.Pages.Template (hackagePage)
 
 import Text.XHtml.Strict
          ( Html, (+++), concatHtml, noHtml, toHtml, (<<)
-         , h2, h3, p, tt, emphasize
+         , h2, h3, h4, p, tt, emphasize, bold, primHtmlChar
          , blockquote, thespan, thestyle
          , anchor, (!), href, name
-         , unordList, defList )
+         , ordList, unordList, defList )
 import Text.JSON
          ( JSValue(..), toJSObject, toJSString )
 import Data.List
+import Data.Function (on)
 
--- | A feature to let people find out what the API of this hackage server
+-- | A feature to serve information and status about the server itself.
+-- It has access to all the other features on the server so can do some
+-- amount of introspection.
+--
+-- In particular it provides:
+-- 
+-- * API introspection: let people find out what the API of this hackage server
 -- instance is. It lists all the active features and all the resources they
 -- serve, including what methods and formats they support.
---
 -- This should make things more obvious to people writing clients.
 --
-serverApiDocFeature :: [HackageFeature] -> HackageFeature
-serverApiDocFeature serverFeatures = (emptyHackageFeature "serverapi") {
+-- * Memory consumption by each of the features
+--
+serverIntrospectFeature :: [HackageFeature] -> HackageFeature
+serverIntrospectFeature serverFeatures = (emptyHackageFeature "serverapi") {
     featureDesc = "Lists the resources available on this server."
   , featureResources =
       [ (resourceAt "/api.:format") {
@@ -33,9 +41,18 @@ serverApiDocFeature serverFeatures = (emptyHackageFeature "serverapi") {
                            , ("json", \_ -> serveApiDocJSON serverFeatures)
                            ]
           }
+      , (resourceAt "/server-status/memory.:format") {
+            resourceDesc = [ (GET, "Server memory usage") ]
+          , resourceGet  = [ ("html", \_ -> serveMemSizeHtml serverFeatures)
+                           ]
+          }
       ]
   , featureState = []
   }
+
+-------------------
+-- Server API stuff
+--
 
 serveApiDocHtml :: [HackageFeature] -> ServerPart Response
 serveApiDocHtml = return . toResponse . Resource.XHtml . apiDocPageHtml
@@ -213,3 +230,94 @@ apiDocJSON serverFeatures = featureList
         renderTrailer (ResourceFormat (StaticFormat ext) _) _ = "." ++ ext
         renderTrailer _ Slash                                 = "/"
         renderTrailer _ _                                     = ""
+
+----------------------
+-- Memory consumption
+--
+
+serveMemSizeHtml :: [HackageFeature] -> ServerPart Response
+serveMemSizeHtml serverFeatures =
+      toResponse
+    . Resource.XHtml
+    . memSizePageHtml
+  <$> liftIO (mapM getFeatureSizes serverFeatures)
+  where
+    getFeatureSizes feature =
+      (,,,) <$> pure (featureName feature)
+            <*> pure (featureDesc feature)
+            <*> mapM getCanonicalStateSizes (featureState feature)
+            <*> mapM getCacheStateSizes     (featureCaches feature)
+    
+    getCanonicalStateSizes component =
+      (,)   <$> pure (abstractStateDesc component)
+            <*> abstractStateSize component
+
+    getCacheStateSizes component =
+      (,)   <$> pure (cacheDesc component)
+            <*> getCacheMemSize component
+
+memSizePageHtml :: [(String, String, [(String, Int)], [(String, Int)])] -> Html
+memSizePageHtml featureStateSizes =
+    hackagePage title content
+  where
+    title = "Server memory use"
+    descr = "This page lists the memory use all of the in-memory data stores "
+         ++ "and caches on the server."
+    content = [ h2 << title
+              , p  << descr
+              , sectionLinks
+              , totalSection
+              , bySizeList
+              , byFeatureList
+              ]
+
+    sectionLinks =
+      h3 << "Contents" +++
+      unordList
+        [ anchor ! [ href ('#' : ref) ] << section
+        | (section, ref) <- [("Total",      "total")
+                            ,("By size",    "by-size")
+                            ,("By feature", "by-feature")] ]
+
+    orderedStateSizes = sortBy (flip compare `on` (\(x,_,_,_) -> x))
+      [ (sz, isCanonical, cname, fname)
+      | (fname, _, canonical, caches) <- featureStateSizes
+      , ((cname, sz), isCanonical) <- zip canonical (repeat True)
+                                   ++ zip caches    (repeat False) ]
+
+    totalSize = sum [ sz | (sz,_,_,_) <- orderedStateSizes ]
+
+    totalSection =
+      h3 << (anchor ! [ name "total" ] << "Total")
+        +++ p << "Total memory use of all state components and all caches:"
+        +++ unordList [ show (memSizeMb totalSize) ++ "MB" ]
+        +++ p << ("Note that the real heap size is usually 2x-3x greater than "
+              ++ "this due to the way the GC works.")
+
+    bySizeList =
+      h3 << (anchor ! [ name "by-size" ] << "By size") +++
+      ordList
+        [ bold << (show (memSizeMb sz) ++ " MB: ")
+          +++ cname +++ " " +++ primHtmlChar "mdash" +++ " "
+           ++ (if isCanonical then "state component" else "cache")
+           ++ " from feature "
+          +++ anchor ! [ href ('#' : fname) ] << fname
+        | (sz, isCanonical, cname, fname) <- orderedStateSizes ]
+
+
+    byFeatureList =
+      h3 << (anchor ! [ name "by-feature" ] << "By feature") +++
+      concatHtml
+        [ anchor ! [ name fname ] << h4 << fname
+          +++ p << fdesc
+          +++ stateList "state"  "State components:" states
+          +++ stateList "caches" "Cache components:" caches
+        | (fname, fdesc, states, caches) <- featureStateSizes ]
+
+    stateList thing1 thing2 states =
+      if null states
+        then p << ("This feature does not have any " ++ thing1 ++ ".")
+        else p << emphasize << thing2
+              +++ unordList [ bold << (show (memSizeMb sz) ++ " MB: ")
+                                  +++ cname
+                            | (cname, sz) <- states ]

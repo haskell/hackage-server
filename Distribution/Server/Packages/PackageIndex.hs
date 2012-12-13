@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, DeriveDataTypeable #-}
+{-# LANGUAGE CPP, DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Server.Packages.PackageIndex
@@ -45,6 +45,7 @@ module Distribution.Server.Packages.PackageIndex (
     allPackagesByName
   ) where
 
+import Distribution.Server.Framework.MemSize
 import Distribution.Server.Util.Merge
 
 import Prelude hiding (lookup)
@@ -78,7 +79,7 @@ newtype PackageIndex pkg = PackageIndex
   --
   (Map PackageName [pkg])
 
-  deriving (Show, Read, Typeable)
+  deriving (Show, Read, Typeable, MemSize)
 
 instance Eq pkg => Eq (PackageIndex pkg) where
   PackageIndex m1 == PackageIndex m2 = flip Foldable.all (mergeMaps m1 m2) $ \mr -> case mr of

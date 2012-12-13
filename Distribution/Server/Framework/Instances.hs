@@ -11,9 +11,11 @@
 module Distribution.Server.Framework.Instances () where
 
 import Distribution.Text
+import Distribution.Server.Framework.MemSize
 
 import Distribution.Package (PackageIdentifier(..), PackageName(..))
-import Distribution.PackageDescription (GenericPackageDescription(..))
+import Distribution.PackageDescription
+         (GenericPackageDescription(..))
 import Distribution.Version (Version(..), VersionRange(..))
 
 import Data.Typeable
@@ -115,3 +117,16 @@ instance NFData Version where
 instance NFData Day where
     rnf (ModifiedJulianDay a) = rnf a
 #endif
+
+instance MemSize Response where
+    memSize (Response a b c d e) = memSize5 a b c d e
+    memSize (SendFile{})         = 42
+
+instance MemSize HeaderPair where
+    memSize (HeaderPair a b) = memSize2 a b
+
+instance MemSize RsFlags where
+    memSize (RsFlags a) = memSize1 a
+
+instance MemSize Length where
+    memSize _ = memSize0

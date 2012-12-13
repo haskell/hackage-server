@@ -3,6 +3,7 @@
 module Distribution.Server.Features.Upload.State where
 
 import Distribution.Server.Framework.Instances ()
+import Distribution.Server.Framework.MemSize
 
 import Distribution.Package
 import qualified Distribution.Server.Users.Group as Group
@@ -24,6 +25,9 @@ data PackageMaintainers = PackageMaintainers {
 } deriving (Eq, Show, Typeable)
 
 deriveSafeCopy 0 'base ''PackageMaintainers
+
+instance MemSize PackageMaintainers where
+    memSize (PackageMaintainers a) = memSize1 a
 
 initialPackageMaintainers :: PackageMaintainers
 initialPackageMaintainers = PackageMaintainers Map.empty
@@ -61,10 +65,13 @@ makeAcidic ''PackageMaintainers ['getPackageMaintainers
 -------------------------------- Trustee list
 -- this could be reasonably merged into the above, as a PackageGroups data structure
 data HackageTrustees = HackageTrustees {
-    trusteeList :: UserList
+    trusteeList :: !UserList
 } deriving (Show, Typeable, Eq)
 
 deriveSafeCopy 0 'base ''HackageTrustees
+
+instance MemSize HackageTrustees where
+    memSize (HackageTrustees a) = memSize1 a
 
 initialHackageTrustees :: HackageTrustees
 initialHackageTrustees = HackageTrustees Group.empty
@@ -96,10 +103,13 @@ makeAcidic ''HackageTrustees ['getHackageTrustees
 
 -------------------------------- Uploader list
 data HackageUploaders = HackageUploaders {
-    uploaderList :: UserList
+    uploaderList :: !UserList
 } deriving (Show, Typeable, Eq)
 
 $(deriveSafeCopy 0 'base ''HackageUploaders)
+
+instance MemSize HackageUploaders where
+    memSize (HackageUploaders a) = memSize1 a
 
 initialHackageUploaders :: HackageUploaders
 initialHackageUploaders = HackageUploaders Group.empty

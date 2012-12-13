@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable, TemplateHaskell #-}
 
-module Data.StringTable {-(
+module Data.StringTable (
 
     StringTable,
     lookup,
@@ -9,7 +9,7 @@ module Data.StringTable {-(
 
     prop,
 
- )-} where
+ ) where
 
 import Prelude hiding (lookup)
 import qualified Data.List as List
@@ -21,6 +21,7 @@ import qualified Data.ByteString.Char8 as BS
 import Data.Word (Word32)
 
 import Distribution.Server.Framework.Instances()
+import Distribution.Server.Framework.MemSize
 
 -- | An effecient mapping from strings to a dense set of integers.
 --
@@ -31,6 +32,9 @@ data StringTable id
   deriving (Show, Typeable)
 
 $(deriveSafeCopy 0 'base ''StringTable)
+
+instance MemSize (StringTable id) where
+    memSize (StringTable s o) = 3 + memSize s + memSizeUArray 4 o
 
 -- | Look up a string in the token table. If the string is present, return
 -- its corresponding index.
