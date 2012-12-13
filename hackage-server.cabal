@@ -202,7 +202,7 @@ executable hackage-server
     extra-libraries: crypt
 
   ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind
-               -threaded
+               -threaded -funbox-strict-fields
   if impl(ghc >= 7.0)
     ghc-options: -rtsopts -with-rtsopts=-I0
 
