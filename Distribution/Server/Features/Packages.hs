@@ -64,8 +64,9 @@ data PackagesResource = PackagesResource {
 }
 
 initPackagesFeature :: ServerEnv -> UserFeature -> CoreFeature -> IO PackagesFeature
-initPackagesFeature env@ServerEnv{serverCacheDelay}
+initPackagesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
                     user core@CoreFeature{packageIndexChange} = do
+    loginfo verbosity "Initialising packages feature, start"
 
     -- recent caches. in lieu of an ActionLog
     -- TODO: perhaps a hook, recentUpdated :: HookList ([PkgInfo] -> IO ())
@@ -76,11 +77,13 @@ initPackagesFeature env@ServerEnv{serverCacheDelay}
         cacheRecent <- newAsyncCacheNF updateRecentCache
                          defaultAsyncCachePolicy {
                            asyncCacheName = "recent uploads (html,rss)",
-                           asyncCacheUpdateDelay = serverCacheDelay
+                           asyncCacheUpdateDelay  = serverCacheDelay,
+                           asyncCacheLogVerbosity = verbosity
                          }
 
     registerHook packageIndexChange $ prodAsyncCache cacheRecent
 
+    loginfo verbosity "Initialising packages feature, end"
     return feature
 
 
@@ -90,7 +93,7 @@ packagesFeature :: ServerEnv
                 -> AsyncCache (Response, Response)
                 -> (PackagesFeature, IO (Response, Response))
 
-packagesFeature env@ServerEnv{serverBlobStore=store}
+packagesFeature env@ServerEnv{serverBlobStore = store}
                 UserFeature{..} CoreFeature{..}
                 cacheRecent
   = (PackagesFeature{..}, updateRecentCache)

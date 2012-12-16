@@ -5,6 +5,7 @@ module Main where
 import qualified Distribution.Server as Server
 import Distribution.Server (ListenOn(..), ServerConfig(..), Server)
 import Distribution.Server.Framework.Feature
+import Distribution.Server.Framework.Logging
 import Distribution.Server.Framework.BackupRestore (equalTarBall, importTar)
 import Distribution.Server.Framework.BackupDump (exportTar)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
@@ -87,14 +88,6 @@ main = topHandler $ do
           die $ "'" ++ commandName cmd
              ++ "' does not take any extra arguments: " ++ unwords extraArgs
         action flags
-
-
-
-info :: String -> IO ()
-info msg = do
-  pname <- getProgName
-  putStrLn (pname ++ ": " ++ msg)
-  hFlush stdout
 
 
 -------------------------------------------------------------------------------
@@ -220,8 +213,7 @@ runAction opts = do
     port <- checkPortOpt defaults (flagToMaybe (flagPort opts))
     ip   <- checkIPOpt   defaults (flagToMaybe (flagIP   opts))
     cacheDelay <- checkCacheDelay (confCacheDelay defaults) (flagToMaybe (flagCacheDelay opts))
-    let verbosity = fromFlag (flagVerbosity opts)
-        hostname  = fromFlagOrDefault (confHostName  defaults) (flagHost      opts)
+    let hostname  = fromFlagOrDefault (confHostName  defaults) (flagHost      opts)
         stateDir  = fromFlagOrDefault (confStateDir  defaults) (flagStateDir  opts)
         staticDir = fromFlagOrDefault (confStaticDir defaults) (flagStaticDir opts)
         tmpDir    = fromFlagOrDefault (confTmpDir    defaults) (flagTmpDir    opts)
@@ -246,12 +238,14 @@ runAction opts = do
     let useTempServer = fromFlag (flagTemp opts)
     withServer config useTempServer $ \server ->
       withCheckpointHandler server $ do
-        info $ "Ready! Point your browser at http://" ++ hostname
-            ++ if port == 80 then "/" else ":" ++ show port ++ "/"
+        lognotice verbosity $ "Ready! Point your browser at http://" ++ hostname
+                        ++ if port == 80 then "/" else ":" ++ show port ++ "/"
 
         Server.run server
 
   where
+    verbosity = fromFlag (flagVerbosity opts)
+
     -- Option handling:
     --
     checkPortOpt defaults Nothing    = return (loPortNum (confListenOn defaults))
@@ -295,9 +289,9 @@ runAction opts = do
         bracket (setHandler handler) setHandler (\_ -> action)
       where
         handler = Signal.Catch $ do
-          info "Writing checkpoint..."
+          lognotice verbosity "Writing checkpoint..."
           Server.checkpoint server
-          info "Done"
+          lognotice verbosity "Done"
         setHandler h =
           Signal.installHandler Signal.userDefinedSignal1 h Nothing
 
@@ -386,7 +380,8 @@ initAction opts = do
 
     let stateDir  = fromFlagOrDefault (confStateDir defaults)  (flagInitStateDir opts)
         staticDir = fromFlagOrDefault (confStaticDir defaults) (flagInitStaticDir opts)
-        config = defaults {
+        verbosity = confVerbosity defaults
+        config    = defaults {
             confStateDir  = stateDir,
             confStaticDir = staticDir
         }
@@ -404,13 +399,13 @@ initAction opts = do
     checkStaticDir staticDir (flagInitStaticDir opts)
 
     withServer config False $ \server -> do
-        info "Creating initial state..."
+        lognotice verbosity "Creating initial state..."
         Server.initState server admin
         createDirectory (stateDir </> "tmp")
         when (flagInitAdmin opts == NoFlag) $
-          info $ "Using default administrator account "
+          lognotice verbosity $ "Using default administrator account "
               ++ "(user admin, passwd admin)"
-        info "Done"
+        lognotice verbosity "Done"
 
 
 -------------------------------------------------------------------------------
@@ -454,18 +449,19 @@ backupAction :: BackupFlags -> IO ()
 backupAction opts = do
     defaults <- Server.defaultServerConfig
 
-    let stateDir = fromFlagOrDefault (confStateDir defaults) (flagBackupDir opts)
-        config = defaults { confStateDir = stateDir }
+    let stateDir   = fromFlagOrDefault (confStateDir defaults) (flagBackupDir opts)
+        verbosity  = confVerbosity defaults
+        config     = defaults { confStateDir = stateDir }
         exportPath = fromFlagOrDefault "export.tar" (flagBackup opts)
 
     withServer config False $ \server -> do
       let store = Server.serverBlobStore (Server.serverEnv server)
           state = Server.serverState server
-      info "Preparing export tarball"
+      lognotice verbosity "Preparing export tarball"
       tar <- exportTar store $ map (second abstractStateBackup) state
-      info "Saving export tarball"
+      lognotice verbosity "Saving export tarball"
       BS.writeFile exportPath tar
-      info "Done"
+      lognotice verbosity "Done"
 
 
 -------------------------------------------------------------------------------
@@ -514,9 +510,10 @@ testBackupAction :: TestBackupFlags -> IO ()
 testBackupAction opts = do
     defaults <- Server.defaultServerConfig
 
-    let stateDir = fromFlagOrDefault (confStateDir defaults) (flagTestBackupDir    opts)
-        tmpDir   = fromFlagOrDefault (stateDir </> "tmp")    (flagTestBackupTmpDir opts)
-        config = defaults {
+    let stateDir  = fromFlagOrDefault (confStateDir defaults) (flagTestBackupDir    opts)
+        tmpDir    = fromFlagOrDefault (stateDir </> "tmp")    (flagTestBackupTmpDir opts)
+        verbosity = confVerbosity defaults
+        config    = defaults {
             confStateDir = stateDir,
             confTmpDir   = tmpDir
           }
@@ -529,7 +526,7 @@ testBackupAction opts = do
       let state = Server.serverState server
           store = Server.serverBlobStore (Server.serverEnv server)
 
-      info "Preparing export tarball"
+      lognotice verbosity "Preparing export tarball"
       tar <- exportTar store $ map (second abstractStateBackup) state
       -- It is EXTREMELY IMPORTANT that we force the tarball to be constructed
       -- now. If we wait until it is demanded in the next withServer context
@@ -544,22 +541,22 @@ testBackupAction opts = do
                              return ((name, st'), liftM (map (\err -> name ++ ": " ++ err)) cmpSt)
       let compareAll :: IO [String] ; compareAll = liftM concat (sequence compares)
 
-      info "Parsing import tarball"
+      loginfo verbosity "Parsing import tarball"
       res <- importTar store' tar $ map (second abstractStateRestore) state'
       maybe (return ()) fail res
 
-      info "Checking snapshot"
+      loginfo verbosity "Checking snapshot"
       errs <- compareAll
       unless (null errs) $ do
-        mapM_ info errs
-      --   fail "Snapshot check failed!"
+        mapM_ (loginfo verbosity) errs
+        fail "Snapshot check failed!"
 
-      info "Preparing second export tarball"
+      loginfo verbosity "Preparing second export tarball"
       tar' <- exportTar store' $ map (second abstractStateBackup) state'
       case tar `equalTarBall` tar' of
-        [] -> info "Tarballs match"
+        [] -> loginfo verbosity "Tarballs match"
         tar_eq_errs -> do
-          mapM_ info tar_eq_errs
+          mapM_ (loginfo verbosity) tar_eq_errs
           BS.writeFile "export-before.tar" tar
           BS.writeFile "export-after.tar" tar'
           fail "Tarballs don't match! Written to export-before.tar and export-after.tar."
@@ -599,8 +596,9 @@ restoreAction _ [] = die "No restore tarball given."
 restoreAction opts [tarFile] = do
     defaults <- Server.defaultServerConfig
 
-    let stateDir = fromFlagOrDefault (confStateDir defaults) (flagRestoreDir opts)
-        config = defaults { confStateDir  = stateDir }
+    let stateDir  = fromFlagOrDefault (confStateDir defaults) (flagRestoreDir opts)
+        verbosity = confVerbosity defaults
+        config    = defaults { confStateDir  = stateDir }
 
     checkAccidentalDataLoss =<< Server.hasSavedState config
 
@@ -608,13 +606,13 @@ restoreAction opts [tarFile] = do
         let store = Server.serverBlobStore (Server.serverEnv server)
 
         tar <- BS.readFile tarFile
-        info "Parsing import tarball..."
+        loginfo verbosity "Parsing import tarball..."
         res <- importTar store tar $ map (second abstractStateRestore) (Server.serverState server)
         case res of
             Just err -> fail err
             _ ->
                 do createDirectory (stateDir </> "tmp")
-                   info "Successfully imported."
+                   lognotice verbosity "Successfully imported."
 restoreAction _ _ = die "There should be exactly one argument: the backup tarball."
 
 
@@ -628,22 +626,24 @@ withServer config doTemp = bracket initialise shutdown
     initialise = do
       mtemp <- case doTemp of
           True  -> do
-            info "Setting up temp sever"
+            loginfo verbosity "Setting up temp sever"
             fmap Just $ Server.setUpTemp config 1
           False -> return Nothing
-      info "Initializing happstack-state..."
+      loginfo verbosity "Initializing happstack-state..."
       server <- Server.initialise config
-      info "Server data loaded into memory"
+      loginfo verbosity "Server data loaded into memory"
       void $ forM mtemp $ \temp -> do
-        info "Tearing down temp server"
+        loginfo verbosity "Tearing down temp server"
         Server.tearDownTemp temp
       return server
 
     shutdown server = do
       -- This only shuts down happstack-state and writes a checkpoint;
       -- the HTTP part takes care of itself
-      info "Shutting down..."
+      loginfo verbosity "Shutting down..."
       Server.shutdown server
+
+    verbosity = confVerbosity config
 
 -- Import utilities
 checkAccidentalDataLoss :: Bool -> IO ()

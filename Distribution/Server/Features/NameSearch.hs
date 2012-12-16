@@ -48,7 +48,9 @@ data NamesResource = NamesResource {
 -- text search of package descriptions using Bayer-Moore. The results could also
 -- be ordered by download (see DownloadCount.hs sortByDownloads).
 initNamesFeature :: ServerEnv -> CoreFeature -> IO NamesFeature
-initNamesFeature env@ServerEnv{serverCacheDelay} core@CoreFeature{..} = do
+initNamesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
+                 core@CoreFeature{..} = do
+    loginfo verbosity "Initialising names feature, start"
 
     rec let (feature, getNameIndex, getTextIndex, getOpenSearch) =
               namesFeature env core
@@ -57,19 +59,22 @@ initNamesFeature env@ServerEnv{serverCacheDelay} core@CoreFeature{..} = do
         pkgCache  <- newAsyncCacheNF getNameIndex
                        defaultAsyncCachePolicy {
                          asyncCacheName = "pkg name index",
-                         asyncCacheUpdateDelay = serverCacheDelay
+                         asyncCacheUpdateDelay  = serverCacheDelay,
+                         asyncCacheLogVerbosity = verbosity
                        }
 
         textCache <- newAsyncCacheNF getTextIndex
                        defaultAsyncCachePolicy {
                          asyncCacheName = "text index",
-                         asyncCacheUpdateDelay = serverCacheDelay
+                         asyncCacheUpdateDelay  = serverCacheDelay,
+                         asyncCacheLogVerbosity = verbosity
                        }
 
         osdCache  <- newAsyncCacheNF getOpenSearch
                        defaultAsyncCachePolicy {
                          asyncCacheName = "osd, TODO not a cache",
-                         asyncCacheUpdateDelay = serverCacheDelay
+                         asyncCacheUpdateDelay  = serverCacheDelay,
+                         asyncCacheLogVerbosity = verbosity
                        }
 
     registerHook packageAddHook    $ \_   -> prodAsyncCache pkgCache
@@ -79,6 +84,7 @@ initNamesFeature env@ServerEnv{serverCacheDelay} core@CoreFeature{..} = do
     registerHook packageChangeHook $ \_ _ -> prodAsyncCache pkgCache
                                           >> prodAsyncCache textCache
 
+    loginfo verbosity "Initialising names feature, end"
     return feature
 
 hostUriStr :: ServerEnv -> String

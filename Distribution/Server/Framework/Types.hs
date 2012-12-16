@@ -1,6 +1,7 @@
 module Distribution.Server.Framework.Types where
 
 import Distribution.Server.Framework.BlobStorage (BlobStorage)
+import Distribution.Server.Framework.Logging (Verbosity)
 
 import Happstack.Server
 import qualified Network.URI as URI
@@ -42,7 +43,9 @@ data ServerEnv = ServerEnv {
     -- frequently than the time taken to update the cache, then we don't have
     -- to do as many cache updates as we do state updates. By artificially
     -- increasing the time taken to update the cache we can push this further.
-    serverCacheDelay :: Int
+    serverCacheDelay :: Int,
+
+    serverVerbosity  :: Verbosity
 }
 
 type DynamicPath = [(String, String)]

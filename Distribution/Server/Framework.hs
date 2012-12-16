@@ -16,6 +16,7 @@ module Distribution.Server.Framework (
     module Distribution.Server.Framework.Hook,
     module Distribution.Server.Framework.Error,
     module Distribution.Server.Framework.Validation,
+    module Distribution.Server.Framework.Logging,
     module Distribution.Server.Util.Happstack,
 
     module Data.Monoid,
@@ -41,6 +42,7 @@ import Distribution.Server.Framework.Resource
 import Distribution.Server.Framework.Hook
 import Distribution.Server.Framework.Error
 import Distribution.Server.Framework.Validation
+import Distribution.Server.Framework.Logging
 
 import Distribution.Server.Util.Happstack
 

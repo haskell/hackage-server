@@ -40,12 +40,14 @@ data PackageContentsResource = PackageContentsResource {
 }
 
 initPackageContentsFeature :: ServerEnv -> CoreFeature -> CheckFeature -> IO PackageContentsFeature
-initPackageContentsFeature env core check = do
+initPackageContentsFeature env@ServerEnv{serverVerbosity = verbosity} core check = do
+    loginfo verbosity "Initialising package-contents feature, start"
 
     -- currently no state
+    let feature = packageContentsFeature env core check
 
-    return $
-      packageContentsFeature env core check
+    loginfo verbosity "Initialising package-contents feature, end"
+    return feature
 
 
 packageContentsFeature :: ServerEnv

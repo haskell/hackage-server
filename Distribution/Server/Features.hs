@@ -10,7 +10,8 @@
 module Distribution.Server.Features where
 
 import Distribution.Server.Framework.Feature
-import Distribution.Server.Framework.Types   (ServerEnv)
+import Distribution.Server.Framework.Types   (ServerEnv(..))
+import Distribution.Server.Framework.Logging
 
 import Distribution.Server.Features.Users    (initUserFeature, UserFeature)
 import Distribution.Server.Features.Core     (initCoreFeature)
@@ -50,12 +51,12 @@ import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
 --     it away through non-HTTP means (somewhat more secure)
 
 initHackageFeatures :: ServerEnv -> IO ([HackageFeature], UserFeature)
-initHackageFeatures env = do
+initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
-    -- Arguments denote data dependencies, even if the feature objects are
-    -- themselves unused, functions from their modules are.
+    loginfo verbosity "Initialising features"
+
+    -- Arguments denote feature dependencies.
     -- What follows is a topological sort along those lines
-
 
     usersFeature    <- initUserFeature env
 
@@ -173,7 +174,9 @@ initHackageFeatures env = do
     -- Run all post init hooks, now that everyone's gotten a chance to register
     -- for them. This solution is iffy for initial feature hooks that rely on
     -- other features It also happens even in the backup/restore modes.
+    loginfo verbosity "Running feature post-init hooks"
     mapM_ featurePostInit allFeatures
+    loginfo verbosity "Initialising features done"
 
     return (allFeatures, usersFeature)
 

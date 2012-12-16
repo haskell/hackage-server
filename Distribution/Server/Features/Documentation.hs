@@ -47,9 +47,13 @@ data DocumentationResource = DocumentationResource {
 }
 
 initDocumentationFeature :: ServerEnv -> CoreFeature -> UploadFeature -> IO DocumentationFeature
-initDocumentationFeature env@ServerEnv{serverStateDir} core upload = do
+initDocumentationFeature env@ServerEnv{serverStateDir, serverVerbosity = verbosity}
+                         core upload = do
+    loginfo verbosity "Initialising documentation feature, start"
     documentationState <- documentationStateComponent serverStateDir
-    return $ documentationFeature env core upload documentationState
+    let feature = documentationFeature env core upload documentationState
+    loginfo verbosity "Initialising documentation feature, end"
+    return feature
 
 documentationStateComponent :: FilePath -> IO (StateComponent Documentation)
 documentationStateComponent stateDir = do

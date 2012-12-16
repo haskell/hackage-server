@@ -46,14 +46,16 @@ data DownloadResource = DownloadResource {
 }
 
 initDownloadFeature :: ServerEnv -> CoreFeature -> IO DownloadFeature
-initDownloadFeature ServerEnv{serverStateDir} core = do
+initDownloadFeature ServerEnv{serverStateDir, serverVerbosity = verbosity} core = do
+    loginfo verbosity "Initialising download feature, start"
     downloadState <- downloadStateComponent serverStateDir
     downChan      <- newChan
     downHist      <- newMemStateWHNF emptyHistogram
-
+    let feature   = downloadFeature core downloadState downChan downHist
     registerHook (tarballDownload core) $ writeChan downChan
 
-    return $ downloadFeature core downloadState downChan downHist
+    loginfo verbosity "Initialising download feature, end"
+    return feature
 
 downloadStateComponent :: FilePath -> IO (StateComponent DownloadCounts)
 downloadStateComponent stateDir = do

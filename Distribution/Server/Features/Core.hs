@@ -113,7 +113,9 @@ data CoreResource = CoreResource {
 }
 
 initCoreFeature :: ServerEnv -> UserFeature -> IO CoreFeature
-initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay} users = do
+initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
+                              serverVerbosity = verbosity} users = do
+    loginfo verbosity "Initialising core feature, start"
 
     -- Canonical state
     packagesState <- packagesStateComponent serverStateDir
@@ -142,11 +144,13 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay} users = do
         indexTar <- newAsyncCacheNF getIndexTarball
                       defaultAsyncCachePolicy {
                         asyncCacheName = "index tarball",
-                        asyncCacheUpdateDelay = serverCacheDelay
+                        asyncCacheUpdateDelay  = serverCacheDelay,
+                        asyncCacheLogVerbosity = verbosity
                       }
 
     registerHook indexHook (prodAsyncCache indexTar)
 
+    loginfo verbosity "Initialising core feature, end"
     return feature
 
 

@@ -83,7 +83,7 @@ initHtmlFeature :: ServerEnv -> UserFeature -> CoreFeature -> PackagesFeature
                 -> DocumentationFeature
                 -> IO HtmlFeature
 
-initHtmlFeature ServerEnv{serverCacheDelay}
+initHtmlFeature ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
                 user core@CoreFeature{packageIndexChange}
                 packages upload
                 check versions
@@ -92,6 +92,8 @@ initHtmlFeature ServerEnv{serverCacheDelay}
                 list@ListFeature{itemUpdate}
                 names mirror
                 distros docs = do
+
+    loginfo verbosity "Initialising html feature, start"
 
     -- do rec, tie the knot
     rec let (feature, packageIndex, packagesPage) =
@@ -107,13 +109,15 @@ initHtmlFeature ServerEnv{serverCacheDelay}
         mainCache  <- newAsyncCacheNF packageIndex
                         defaultAsyncCachePolicy {
                           asyncCacheName = "packages index page (by category)",
-                          asyncCacheUpdateDelay = serverCacheDelay
+                          asyncCacheUpdateDelay  = serverCacheDelay,
+                          asyncCacheLogVerbosity = verbosity
                         }
 
         namesCache <- newAsyncCacheNF packagesPage
                         defaultAsyncCachePolicy {
                           asyncCacheName = "packages index page (by name)",
-                          asyncCacheUpdateDelay = serverCacheDelay
+                          asyncCacheUpdateDelay  = serverCacheDelay,
+                          asyncCacheLogVerbosity = verbosity
                         }
 
     registerHook itemUpdate $ \_ ->   prodAsyncCache mainCache
@@ -121,6 +125,7 @@ initHtmlFeature ServerEnv{serverCacheDelay}
     registerHook packageIndexChange $ prodAsyncCache mainCache
                                    >> prodAsyncCache namesCache
 
+    loginfo verbosity "Initialising html feature, end"
     return feature
 
 htmlFeature :: UserFeature

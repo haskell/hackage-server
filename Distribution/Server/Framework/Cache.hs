@@ -18,6 +18,9 @@ import Control.DeepSeq (NFData, rnf)
 
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
 
+import Distribution.Server.Framework.Logging
+import qualified Distribution.Verbosity as Verbosity
+
 
 -- | An in-memory cache with asynchronous updates.
 --
@@ -46,12 +49,12 @@ data AsyncCachePolicy = AsyncCachePolicy {
        -- 'syncAsyncCache' to be sure the cache is ready.
        asyncCacheSyncInit    :: !Bool,
 
-       asyncCacheLogging     :: !Bool,
+       asyncCacheLogVerbosity:: !Verbosity,
        asyncCacheName        :: String
      }
 
 defaultAsyncCachePolicy :: AsyncCachePolicy
-defaultAsyncCachePolicy = AsyncCachePolicy 0 True True "(unnamed)"
+defaultAsyncCachePolicy = AsyncCachePolicy 0 True Verbosity.normal "(unnamed)"
 
 newAsyncCacheWHNF :: IO a -> AsyncCachePolicy -> IO (AsyncCache a)
 newAsyncCacheWHNF = newAsyncCache (\x -> seq x ())
@@ -60,9 +63,9 @@ newAsyncCacheNF :: NFData a => IO a -> AsyncCachePolicy -> IO (AsyncCache a)
 newAsyncCacheNF = newAsyncCache rnf
 
 newAsyncCache :: (a -> ()) -> IO a -> AsyncCachePolicy -> IO (AsyncCache a)
-newAsyncCache eval update (AsyncCachePolicy delay syncForce dolog logname) = do
+newAsyncCache eval update (AsyncCachePolicy delay syncForce verbosity logname) = do
   x <- update
-  avar <- newAsyncVar delay syncForce dolog logname eval x
+  avar <- newAsyncVar delay syncForce verbosity logname eval x
   return (AsyncCache avar update)
 
 readAsyncCache :: MonadIO m => AsyncCache a -> m a
@@ -86,9 +89,9 @@ syncAsyncCache c = readAsyncCache c >>= evaluate . rnf >> return ()
 data AsyncVar state = AsyncVar !(TChan state)
                                !(TVar (Either SomeException state))
 
-newAsyncVar :: Int -> Bool -> Bool -> String
+newAsyncVar :: Int -> Bool -> Verbosity -> String
             -> (state -> ()) -> state -> IO (AsyncVar state)
-newAsyncVar delay syncForce dolog logname force initial = do
+newAsyncVar delay syncForce verbosity logname force initial = do
 
     inChan <- atomically newTChan
     outVar <- atomically (newTVar (Right initial))
@@ -96,9 +99,8 @@ newAsyncVar delay syncForce dolog logname force initial = do
     if syncForce then do t  <- getCurrentTime
                          evaluate (force initial)
                          t'  <- getCurrentTime
-                         when dolog $
-                           putStrLn $ "Cache '" ++ logname ++ "' initialised. "
-                                   ++ "time: " ++ show (diffUTCTime t' t)
+                         loginfo verbosity $ "Cache '" ++ logname ++ "' initialised. "
+                                          ++ "time: " ++ show (diffUTCTime t' t)
 
                  else atomically (writeTChan inChan initial)
 
@@ -116,9 +118,8 @@ newAsyncVar delay syncForce dolog logname force initial = do
           atomically (writeTVar outVar res)
           t'  <- getCurrentTime
 
-          when dolog $
-            putStrLn $ "Cache '" ++ logname ++ "' updated. "
-                    ++ "time: " ++ show (diffUTCTime t' t)
+          loginfo verbosity $ "Cache '" ++ logname ++ "' updated. "
+                           ++ "time: " ++ show (diffUTCTime t' t)
 
           loop
 

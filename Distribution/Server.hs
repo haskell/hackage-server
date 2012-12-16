@@ -90,7 +90,6 @@ data Server = Server {
   serverFeatures    :: [HackageFeature],
   serverUserFeature :: UserFeature,
   serverListenOn    :: ListenOn,
-  serverVerbosity   :: Verbosity,
   serverEnv         :: ServerEnv
 }
 
@@ -122,7 +121,8 @@ initialise initConfig@(ServerConfig verbosity hostName listenOn
             serverBlobStore = store,
             serverTmpDir    = tmpDir,
             serverCacheDelay= cacheDelay * 1000000, --microseconds
-            serverHostURI   = hostURI
+            serverHostURI   = hostURI,
+            serverVerbosity = verbosity
          }
     -- do feature initialization
     (features, userFeature) <- Features.initHackageFeatures env
@@ -131,7 +131,6 @@ initialise initConfig@(ServerConfig verbosity hostName listenOn
         serverFeatures    = features,
         serverUserFeature = userFeature,
         serverListenOn    = listenOn,
-        serverVerbosity   = verbosity,
         serverEnv         = env
     }
 
@@ -178,7 +177,7 @@ run server = do
     setLogging =
         liftIO $ HsLogger.updateGlobalLogger
                    "Happstack.Server"
-                   (adjustLogLevel (serverVerbosity server))
+                   (adjustLogLevel (serverVerbosity (serverEnv server)))
       where
         adjustLogLevel v
           | v == Verbosity.normal    = HsLogger.setLevel HsLogger.WARNING

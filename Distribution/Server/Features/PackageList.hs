@@ -85,11 +85,13 @@ initListFeature :: ServerEnv -> CoreFeature
                 -- [reverse index disabled] -> ReverseFeature
                 -> DownloadFeature
                 -> TagsFeature -> VersionsFeature -> IO ListFeature
-initListFeature _ core@CoreFeature{..}
+initListFeature ServerEnv{serverVerbosity = verbosity} core@CoreFeature{..}
                 -- [reverse index disabled] revs
                 download
                 tagsf@TagsFeature{..}
                 versions@VersionsFeature{..} = do
+    loginfo verbosity "Initialising package list feature, start"
+
     itemCache  <- newMemStateWHNF Map.empty
     itemUpdate <- newHook
 
@@ -117,6 +119,7 @@ initListFeature _ core@CoreFeature{..}
         modifyItem pkgname (updateDeprecation mpkgs)
         runHook' itemUpdate $ Set.singleton pkgname
 
+    loginfo verbosity "Initialising package list feature, end"
     return feature
 
 

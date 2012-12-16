@@ -46,9 +46,12 @@ data PlatformResource = PlatformResource {
 }
 
 initPlatformFeature :: ServerEnv -> IO PlatformFeature
-initPlatformFeature ServerEnv{serverStateDir} = do
+initPlatformFeature ServerEnv{serverStateDir, serverVerbosity = verbosity} = do
+    loginfo verbosity "Initialising platform feature, start"
     platformState <- platformStateComponent serverStateDir
-    return $ platformFeature platformState
+    let feature    = platformFeature platformState
+    loginfo verbosity "Initialising platform feature, end"
+    return feature
 
 platformStateComponent :: FilePath -> IO (StateComponent PlatformPackages)
 platformStateComponent stateDir = do
