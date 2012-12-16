@@ -118,7 +118,7 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
     loginfo verbosity "Initialising core feature, start"
 
     -- Canonical state
-    packagesState <- packagesStateComponent serverStateDir
+    packagesState <- packagesStateComponent verbosity serverStateDir
 
     -- Ephemeral state
     -- Additional files to put in the index tarball like preferred-versions
@@ -155,9 +155,11 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
     return feature
 
 
-packagesStateComponent :: FilePath -> IO (StateComponent PackagesState)
-packagesStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "PackagesState") initialPackagesState
+packagesStateComponent :: Verbosity -> FilePath -> IO (StateComponent PackagesState)
+packagesStateComponent verbosity stateDir = do
+  let stateFile = stateDir </> "db" </> "PackagesState"
+  st <- logTiming verbosity "Loaded PackagesState" $
+          openLocalStateFrom stateFile initialPackagesState
   return StateComponent {
        stateDesc    = "Main package database"
      , acidState    = st
@@ -165,7 +167,7 @@ packagesStateComponent stateDir = do
      , putState     = update st . ReplacePackagesState
      , backupState  = indexToAllVersions
      , restoreState = packagesBackup
-     , resetState   = packagesStateComponent
+     , resetState   = packagesStateComponent verbosity
      , getStateSize = memSize <$> query st GetPackagesState
      }
 

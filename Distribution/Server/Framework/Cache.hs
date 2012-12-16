@@ -16,8 +16,6 @@ import Control.Monad
 import Control.Monad.Trans (MonadIO(liftIO))
 import Control.DeepSeq (NFData, rnf)
 
-import Data.Time.Clock (getCurrentTime, diffUTCTime)
-
 import Distribution.Server.Framework.Logging
 import qualified Distribution.Verbosity as Verbosity
 
@@ -96,13 +94,10 @@ newAsyncVar delay syncForce verbosity logname force initial = do
     inChan <- atomically newTChan
     outVar <- atomically (newTVar (Right initial))
 
-    if syncForce then do t  <- getCurrentTime
-                         evaluate (force initial)
-                         t'  <- getCurrentTime
-                         loginfo verbosity $ "Cache '" ++ logname ++ "' initialised. "
-                                          ++ "time: " ++ show (diffUTCTime t' t)
-
-                 else atomically (writeTChan inChan initial)
+    if syncForce
+      then logTiming verbosity ("Cache '" ++ logname ++ "' initialised") $
+             evaluate (force initial)
+      else atomically (writeTChan inChan initial)
 
     let loop = do
 
@@ -113,13 +108,9 @@ newAsyncVar delay syncForce verbosity logname force initial = do
           -- We want the last one, skipping all intermediate updates.
           let value = last avail
 
-          t   <- getCurrentTime
-          res <- try $ evaluate (force value `seq` value)
-          atomically (writeTVar outVar res)
-          t'  <- getCurrentTime
-
-          loginfo verbosity $ "Cache '" ++ logname ++ "' updated. "
-                           ++ "time: " ++ show (diffUTCTime t' t)
+          logTiming verbosity ("Cache '" ++ logname ++ "' updated") $ do
+            res <- try $ evaluate (force value `seq` value)
+            atomically (writeTVar outVar res)
 
           loop
 

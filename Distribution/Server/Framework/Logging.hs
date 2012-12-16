@@ -2,7 +2,8 @@ module Distribution.Server.Framework.Logging (
     Verbosity,
     lognotice,
     loginfo,
-    logdebug
+    logdebug,
+    logTiming,
   ) where
 
 import Distribution.Verbosity
@@ -10,6 +11,8 @@ import System.IO
 import qualified Data.ByteString.Char8 as BS
 import System.Environment
 import Control.Monad (when)
+import Data.Time.Clock (getCurrentTime, diffUTCTime)
+
 
 lognotice :: Verbosity -> String -> IO ()
 lognotice verbosity msg =
@@ -29,4 +32,12 @@ logdebug verbosity msg =
   when (verbosity >= deafening) $ do
     BS.hPutStrLn stderr (BS.pack msg)
     hFlush stderr
+
+logTiming :: Verbosity -> String -> IO a -> IO a
+logTiming verbosity msg action = do
+    t   <- getCurrentTime
+    res <- action
+    t'  <- getCurrentTime
+    loginfo verbosity (msg ++ ". time: " ++ show (diffUTCTime t' t))
+    return res
 
