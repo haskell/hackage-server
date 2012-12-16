@@ -67,6 +67,7 @@ initNamesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
                        defaultAsyncCachePolicy {
                          asyncCacheName = "text index",
                          asyncCacheUpdateDelay  = serverCacheDelay,
+                         asyncCacheSyncInit     = False,
                          asyncCacheLogVerbosity = verbosity
                        }
 
@@ -120,6 +121,7 @@ namesFeature env CoreFeature{..}
               getCacheMemSize = memSize <$> readAsyncCache packageTextIndex
             }
           ]
+      , featurePostInit = syncAsyncCache packageTextIndex
       }
 
     namesResource = NamesResource

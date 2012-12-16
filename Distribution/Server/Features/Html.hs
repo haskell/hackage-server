@@ -110,6 +110,7 @@ initHtmlFeature ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
                         defaultAsyncCachePolicy {
                           asyncCacheName = "packages index page (by category)",
                           asyncCacheUpdateDelay  = serverCacheDelay,
+                          asyncCacheSyncInit     = False,
                           asyncCacheLogVerbosity = verbosity
                         }
 
@@ -169,6 +170,7 @@ htmlFeature UserFeature{..} CoreFeature{..}
              getCacheMemSize = memSize <$> readAsyncCache cacheNamesPage
            }
          ]
+      , featurePostInit = syncAsyncCache cachePackagesPage
       }
 
     -- pages defined for the HTML feature in particular

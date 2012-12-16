@@ -145,6 +145,7 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
                       defaultAsyncCachePolicy {
                         asyncCacheName = "index tarball",
                         asyncCacheUpdateDelay  = serverCacheDelay,
+                        asyncCacheSyncInit     = False,
                         asyncCacheLogVerbosity = verbosity
                       }
 
@@ -211,6 +212,7 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir} UserFeature{..}
               getCacheMemSize = memSize <$> readMemState indexExtras
             }
           ]
+      , featurePostInit = syncAsyncCache cacheIndexTarball
       }
 
     -- the rudimentary HTML resources are for when we don't want an additional HTML feature
