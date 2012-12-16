@@ -109,10 +109,7 @@ instance Serialize PkgInfo where
 
   get = do
     infoId  <- Serialize.get
-    cabal <- Serialize.get
-    case parsePackageDescription . cabalFileString $ cabal of
-        ParseFailed e -> fail $ "Internal error: " ++ show e
-        ParseOk _ _   -> return ()
+    cabal   <- Serialize.get
     tarball <- Serialize.get
     old     <- Serialize.get
     updata  <- Serialize.get
