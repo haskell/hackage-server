@@ -63,7 +63,7 @@ serveTarball indices tarRoot tarball tarIndex = do
 
     msum $ concat
      [ serveFiles validPaths
-     , serveDirs (rqUri rq) paths validPaths
+     , serveDirs (rqUri rq) validPaths
      ]
   where
     serveFiles paths
@@ -77,7 +77,7 @@ serveTarball indices tarRoot tarball tarIndex = do
 
     action act m = method act >> m
 
-    serveDirs fullPath prefix paths
+    serveDirs fullPath paths
            = flip map paths $ \path ->
              case TarIndex.lookup tarIndex path of
                Just (TarIndex.TarDir fs)
@@ -88,8 +88,8 @@ serveTarball indices tarRoot tarball tarIndex = do
                  -> ok $ toResponse $ Resource.XHtml $ renderDirIndex fs
                _ -> mzero
 
-renderDirIndex :: [FilePath] -> [FilePath] -> XHtml.Html
-renderDirIndex paths entries = hackagePage "Directory Listing"
+renderDirIndex :: [FilePath] -> XHtml.Html
+renderDirIndex entries = hackagePage "Directory Listing"
     [ (XHtml.anchor XHtml.! [XHtml.href e] XHtml.<< e)
       XHtml.+++ XHtml.br
     | e <- entries ]
