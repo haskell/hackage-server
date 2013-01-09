@@ -137,7 +137,7 @@ serveArchiveTree = msum
       ]
   ]
   where
-    docPath pkgid file = "/package/" ++ display pkgid ++ "/" ++ "doc/" ++ file
+    docPath pkgid file = "/package/" ++ display pkgid ++ "/" ++ "docs/" ++ file
 
     cabalPath pkgid = "/package/" ++ display pkgid ++ "/"
                    ++ display (packageName pkgid) ++ ".cabal"

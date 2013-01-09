@@ -39,10 +39,8 @@ instance IsHackageFeature DocumentationFeature where
     getFeatureInterface = documentationFeatureInterface
 
 data DocumentationResource = DocumentationResource {
-    packageDocs :: Resource,
-    packageDocsUpload :: Resource,
-    packageDocTar :: Resource,
-    packageDocUri :: PackageId -> String -> String
+    packageDocsContent :: Resource,
+    packageDocsWhole   :: Resource
 }
 
 initDocumentationFeature :: ServerEnv -> CoreFeature -> UploadFeature -> IO DocumentationFeature
@@ -106,9 +104,8 @@ documentationFeature ServerEnv{serverBlobStore = store}
     documentationFeatureInterface = (emptyHackageFeature "documentation") {
         featureResources =
           map ($ documentationResource) [
-              packageDocs
-            , packageDocTar
-            , packageDocsUpload
+              packageDocsContent
+            , packageDocsWhole
             ]
         -- We don't really want to check that the tar index is the same (probably)
       , featureState = [abstractStateComponent' (compareState `on` (Map.map fst . documentation)) documentationState]
@@ -118,10 +115,13 @@ documentationFeature ServerEnv{serverBlobStore = store}
     queryHasDocumentation pkgid = queryState documentationState (HasDocumentation pkgid)
 
     documentationResource = DocumentationResource {
-        packageDocs = (resourceAt "/package/:package/doc/..") { resourceGet = [("", serveDocumentation)] }
-      , packageDocsUpload = (resourceAt "/package/:package/doc/.:format") { resourcePut = [("txt", uploadDocumentation)] }
-      , packageDocTar = (resourceAt "/package/:package/:doc.tar") { resourceGet = [("tar", serveDocumentationTar)] }
-      , packageDocUri = \pkgid str -> renderResource (packageDocs documentationResource) [display pkgid, str]
+        packageDocsContent = (resourceAt "/package/:package/docs/..") {
+                               resourceGet = [("", serveDocumentation)]
+                             }
+      , packageDocsWhole   = (resourceAt "/package/:package/docs.:format") {
+                               resourceGet = [("tar", serveDocumentationTar)],
+                               resourcePut = [("tar", uploadDocumentation)]
+                             }
       }
 
     serveDocumentationTar :: DynamicPath -> ServerPart Response
@@ -132,17 +132,20 @@ documentationFeature ServerEnv{serverBlobStore = store}
 
     -- return: not-found error or tarball
     serveDocumentation :: DynamicPath -> ServerPart Response
-    serveDocumentation dpath = runServerPartE $ withDocumentation dpath $ \pkgid blob index -> do
+    serveDocumentation dpath = do
+      runServerPartE $ withDocumentation dpath $ \pkgid blob index -> do
         let tarball = BlobStorage.filepath store blob
         -- if given a directory, the default page is index.html
-        -- the default directory prefix is the package name itself
-        TarIndex.serveTarball ["index.html"] (display $ packageName pkgid) tarball index
+        -- the root directory within the tarball is e.g. foo-1.0-docs/
+        TarIndex.serveTarball ["index.html"] (display pkgid ++ "-docs") tarball index
 
     -- return: not-found error (parsing) or see other uri
     uploadDocumentation :: DynamicPath -> ServerPart Response
-    uploadDocumentation dpath = runServerPartE $
-                                withPackageId dpath $ \pkgid ->
-                                withPackageAuth pkgid $ \_ _ -> do
+    uploadDocumentation dpath =
+      runServerPartE $
+        withPackagePath dpath $ \pkg _ -> do
+        let pkgid = packageId pkg
+        withPackageAuth pkgid $ \_ _ -> do
             -- The order of operations:
             -- * Insert new documentation into blob store
             -- * Generate the new index
@@ -150,9 +153,11 @@ documentationFeature ServerEnv{serverBlobStore = store}
             -- * Link the new documentation to the package
             fileContents <- expectUncompressedTarball
             blob <- liftIO $ BlobStorage.add store fileContents
+            --TODO: validate the tarball here.
+            -- Check all files in the tarball are under the dir foo-1.0-docs/
             tarIndex <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blob)
             void $ updateState documentationState $ InsertDocumentation pkgid blob tarIndex
-            seeOther ("/package/" ++ display pkgid) (toResponse ())
+            noContent (toResponse ())
 
     -- curl -u mgruen:admin -X PUT --data-binary @gtk.tar.gz http://localhost:8080/package/gtk-0.11.0
 

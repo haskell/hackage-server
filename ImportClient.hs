@@ -632,10 +632,14 @@ putDistroInfo baseURI distroname entries = do
 -- Documentation tarballs command
 --
 
-data DocsFlags = DocsFlags
+data DocsFlags = DocsFlags {
+    docsJobs :: Flag String
+  }
 
 defaultDocsFlags :: DocsFlags
-defaultDocsFlags = DocsFlags
+defaultDocsFlags = DocsFlags {
+    docsJobs = NoFlag
+  }
 
 docsCommand :: CommandUI DocsFlags
 docsCommand =
@@ -648,12 +652,18 @@ docsCommand =
     name       = "docs"
     shortDesc  = "Import package documentation tarballs"
     longDesc   = Just $ \_ ->
-                     "The package tarballs can be imported directly from\n"
-                  ++ " local .tar.gz files of the html bundle."
-    options _  = []
+                     "The package documentation can be imported directly from\n"
+                  ++ " local .tar or .tar.gz files of the html bundle."
+    options _  = [ option [] ["jobs"]
+                   "The level of concurrency to use when uploading documentation"
+                   docsJobs (\v flags -> flags { docsJobs = v })
+                   (reqArgFlag "N")
+                 ]
 
 docsAction :: DocsFlags -> [String] -> GlobalFlags -> IO ()
-docsAction _flags args _ = do
+docsAction flags args _ = do
+
+    jobs <- validateOptsJobs (docsJobs flags)
 
     (baseURI, docTarballFiles) <- validateOptsServerURI' args
 
@@ -663,9 +673,9 @@ docsAction _flags args _ = do
           , let pkgidstr = (dropExtension . dropExtension. takeFileName) file
                 ext      = takeExtension (dropExtension file)
                              <.> takeExtension file
-                mpkgid | ext == ".tar.gz" 
+                mpkgid | ext == ".tar" || ext == ".tar.gz"
                        , Just pkgid <- simpleParse pkgidstr
-                       , null (versionTags (packageVersion pkgid))
+                       , versionTags (packageVersion pkgid) == ["docs"]
                        = Just pkgid
                        | otherwise
                        = Nothing
@@ -674,25 +684,34 @@ docsAction _flags args _ = do
     case [ file | (Nothing, file) <- pkgidAndTarball ] of
       []    -> return ()
       files -> warn normal $ "the following files don't match the expected naming "
-                          ++ "convention of foo-1.0.tar.gz:\n" ++ unlines files
+                          ++ "convention of foo-1.0-docs.tar[.gz]:\n" ++ unlines files
 
-    httpSession $ do
-      setAuthorityFromURI baseURI
-      sequence_
-        [ putPackageDocsTarball baseURI pkgid tarballFilePath
-        |  (Just pkgid, tarballFilePath) <- pkgidAndTarball ]
+    let pkgidAndTarball' = [ (pkgid, tarballFilePath)
+                           | (Just pkgid, tarballFilePath) <- pkgidAndTarball ]
+
+    concForM_ jobs pkgidAndTarball' $ \tasks ->
+      httpSession $ do
+        setAuthorityFromURI baseURI
+        tasks $ \(pkgid, tarballFilePath) ->
+          putPackageDocsTarball baseURI pkgid tarballFilePath
 
 putPackageDocsTarball :: URI -> PackageId -> FilePath -> HttpSession ()
 putPackageDocsTarball baseURI pkgid tarballFilePath = do
 
     tarballContent <- liftIO $ BS.readFile tarballFilePath
-    rsp <- requestPUT pkgDocURI "application/x-gzip" tarballContent
+    let extraHeaders
+          | takeExtension tarballFilePath == ".gz"
+                      = [Header HdrContentEncoding "gzip"]
+          | otherwise = []
+
+    rsp <- requestPUTWithHeaders pkgDocURI "application/x-tar" extraHeaders
+                                 tarballContent
     case rsp of
       Nothing  -> return ()
       Just err -> fail (formatErrorResponse err)
 
   where
-    pkgDocURI = baseURI <//> "package" </> display pkgid </> "doc"
+    pkgDocURI = baseURI <//> "package" </> display pkgid </> "docs.tar"
 
 
 -------------------------
@@ -769,14 +788,21 @@ requestGET uri = do
     headers = []
 
 requestPUT :: URI -> String -> ByteString -> HttpSession (Maybe ErrorResponse)
-requestPUT uri mimetype body = do
+requestPUT uri mimetype body =
+    let extraHeaders = [] in
+    requestPUTWithHeaders uri mimetype extraHeaders body
+
+requestPUTWithHeaders :: URI -> String -> [Header] -> ByteString
+                      -> HttpSession (Maybe ErrorResponse)
+requestPUTWithHeaders uri mimetype extraHeaders body = do
     (_, rsp) <- request (Request uri PUT headers body)
     case rspCode rsp of
       (2,_,_) -> return Nothing
       _       -> return (Just (mkErrorResponse uri rsp))
   where
-    headers = [ Header HdrContentLength (show (BS.length body))
-              , Header HdrContentType mimetype ]
+    headers =   Header HdrContentLength (show (BS.length body))
+              : Header HdrContentType mimetype
+              : extraHeaders
 
 mkErrorResponse :: URI -> Response ByteString -> ErrorResponse
 mkErrorResponse uri rsp =

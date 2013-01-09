@@ -443,7 +443,7 @@ htmlFeature UserFeature{..} CoreFeature{..}
                                      ]
         -- bottom sections, currently only documentation
         hasDocs  <- queryHasDocumentation realpkg
-        let docURL | hasDocs   = Just $ "/package" <//> display realpkg <//> "doc"
+        let docURL | hasDocs   = Just $ "/package" <//> display realpkg <//> "docs"
                    | otherwise = Nothing
         -- extra features like tags and downloads
         tags <- queryTagsForPackage pkgname

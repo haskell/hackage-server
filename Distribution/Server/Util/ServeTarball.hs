@@ -44,26 +44,27 @@ import System.IO
 -- file. This is not a sustainable implementation,
 -- but it gives us something to test with.
 serveTarball :: MonadIO m
-             => [FilePath] -- indices
-             -> FilePath   -- prefix of paths in tar
-             -> FilePath   -- tarball
+             => [FilePath] -- dir index file names (e.g. ["index.html"])
+             -> FilePath   -- root dir in tar to serve
+             -> FilePath   -- the tarball
              -> TarIndex   -- index for tarball
              -> ServerPartT m Response
-serveTarball indices offset tarball tarIndex = do
+serveTarball indices tarRoot tarball tarIndex = do
+    rq <- askRq
     action GET $ remainingPath $ \paths -> do
 
     -- first we come up with the set of paths in the tarball that
     -- would match our request
     let validPaths :: [FilePath]
-        validPaths = (joinPath $ offset:paths) : map f indices
-        f index = joinPath $ offset:paths ++ [index]
+        validPaths = (joinPath $ tarRoot:paths)
+                   : [joinPath $ tarRoot:paths ++ [index] | index <- indices]
 
     msum $ concat
      [ serveFiles validPaths
-     , serveDirs paths validPaths
+     , serveDirs (rqUri rq) paths validPaths
      ]
-
- where serveFiles paths
+  where
+    serveFiles paths
            = flip map paths $ \path ->
              case TarIndex.lookup tarIndex path of
                Just (TarIndex.TarFileEntry off)
@@ -72,23 +73,24 @@ serveTarball indices offset tarball tarIndex = do
                  ok (toResponse tfe)
                _ -> mzero
 
-       action act m = method act >> m
+    action act m = method act >> m
 
-       serveDirs prefix paths
+    serveDirs fullPath prefix paths
            = flip map paths $ \path ->
              case TarIndex.lookup tarIndex path of
                Just (TarIndex.TarDir fs)
-                   -> do ok $ toResponse $ renderDirIndex prefix fs
+                 | not (hasTrailingPathSeparator fullPath)
+                 -> seeOther (addTrailingPathSeparator fullPath) (toResponse ())
+
+                 | otherwise
+                 -> ok $ toResponse $ renderDirIndex prefix fs
                _ -> mzero
 
 renderDirIndex :: [FilePath] -> [FilePath] -> XHtml.Html
 renderDirIndex paths entries = hackagePage "Directory Listing"
-    [ (XHtml.anchor XHtml.! [XHtml.href (mk_prefix e)] XHtml.<< e)
+    [ (XHtml.anchor XHtml.! [XHtml.href e] XHtml.<< e)
       XHtml.+++ XHtml.br
     | e <- entries ]
-  where -- We need to munge the paths to match the path prefix:
-        mk_prefix | null paths = id
-                  | otherwise  = (last paths </>)
 
 serveTarEntry :: FilePath -> Int -> FilePath -> IO Response
 serveTarEntry tarfile off fname = do

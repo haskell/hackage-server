@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, DeriveDataTypeable, TemplateHaskell #-}
 
-module Data.TarIndex {-(
+module Data.TarIndex (
 
     TarIndex,
     TarIndexEntry(..),
@@ -10,9 +10,10 @@ module Data.TarIndex {-(
     lookup,
     construct,
 
+#ifdef TESTS
     prop_lookup, prop,
-
-  )-} where
+#endif
+  ) where
 
 import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable (Typeable)
@@ -24,6 +25,9 @@ import qualified Data.IntTrie as IntTrie
 import Data.IntTrie (IntTrie)
 import qualified System.FilePath as FilePath
 import Prelude hiding (lookup)
+#ifdef TESTS
+import qualified Prelude
+#endif
 
 import Distribution.Server.Framework.MemSize
 
@@ -47,7 +51,7 @@ data TarIndex = TarIndex
   --
   -- We use a trie mapping sequences of 'PathComponentId's to the entry offset:
   --  { [PathComponentId 0, PathComponentId 1] -> offset 0
-  --  , [PathComponentId 0, PathComponentId 1] -> offset 1024 }
+  --  , [PathComponentId 0, PathComponentId 2] -> offset 1024 }
 
   -- | The mapping of filepath components as strings to ids.
   !(StringTable PathComponentId)
@@ -114,7 +118,7 @@ toComponentIds table = lookupComponents [] . FilePath.splitDirectories
 fromComponentIds :: StringTable PathComponentId -> [PathComponentId] -> FilePath
 fromComponentIds table = FilePath.joinPath . map (StringTable.index table)
 
-#if TESTS
+#ifdef TESTS
 
 -- properties of a finite mapping...
 
