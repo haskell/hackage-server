@@ -708,6 +708,9 @@ putPackageDocsTarball baseURI pkgid tarballFilePath = do
                                  tarballContent
     case rsp of
       Nothing  -> return ()
+      Just err | isErrNotFound err
+               -> liftIO $ info $ "Ignoring documentation for package "
+                               ++ display pkgid
       Just err -> fail (formatErrorResponse err)
 
   where
