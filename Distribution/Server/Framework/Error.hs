@@ -19,6 +19,7 @@ module Distribution.Server.Framework.Error (
     errBadRequest,
     errForbidden,
     errNotFound,
+    errBadMediaType,
     errInternalError,
     throwError,
 
@@ -80,6 +81,9 @@ errForbidden     title message = throwError (ErrorResponse 403 title message)
 
 errNotFound      :: String -> [MessageSpan] -> ServerPartE a
 errNotFound      title message = throwError (ErrorResponse 404 title message)
+
+errBadMediaType  :: String -> [MessageSpan] -> ServerPartE a
+errBadMediaType  title message = throwError (ErrorResponse 415 title message)
 
 errInternalError :: [MessageSpan] -> ServerPartE a
 errInternalError       message = throwError (ErrorResponse 500 title message)

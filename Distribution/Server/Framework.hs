@@ -11,11 +11,11 @@ module Distribution.Server.Framework (
     module Distribution.Server.Framework.Auth,
     module Distribution.Server.Framework.Feature,
     module Distribution.Server.Framework.Types,
-    module Distribution.Server.Framework.ResourceTypes,
     module Distribution.Server.Framework.Resource,
+    module Distribution.Server.Framework.RequestContentTypes,
+    module Distribution.Server.Framework.ResponseContentTypes,
     module Distribution.Server.Framework.Hook,
     module Distribution.Server.Framework.Error,
-    module Distribution.Server.Framework.Validation,
     module Distribution.Server.Framework.Logging,
     module Distribution.Server.Util.Happstack,
 
@@ -37,11 +37,11 @@ import Distribution.Server.Framework.MemSize
 import Distribution.Server.Framework.Auth
 import Distribution.Server.Framework.Feature
 import Distribution.Server.Framework.Types
-import Distribution.Server.Framework.ResourceTypes
 import Distribution.Server.Framework.Resource
+import Distribution.Server.Framework.RequestContentTypes
+import Distribution.Server.Framework.ResponseContentTypes
 import Distribution.Server.Framework.Hook
 import Distribution.Server.Framework.Error
-import Distribution.Server.Framework.Validation
 import Distribution.Server.Framework.Logging
 
 import Distribution.Server.Util.Happstack

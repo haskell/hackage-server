@@ -21,7 +21,7 @@ import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Types (UserId)
 import qualified Distribution.Server.Packages.Index as Packages.Index
 import qualified Codec.Compression.GZip as GZip
-import qualified Distribution.Server.Framework.ResourceTypes as Resource
+import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage

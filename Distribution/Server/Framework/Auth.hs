@@ -28,7 +28,7 @@ import Distribution.Server.Users.Types (UserId, UserName(..), UserAuth(..), User
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
-import qualified Distribution.Server.Framework.ResourceTypes as Resource
+import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Framework.AuthCrypt
 import Distribution.Server.Framework.AuthTypes
 import Distribution.Server.Framework.Error

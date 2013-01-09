@@ -11,7 +11,7 @@ module Distribution.Server.Features.Users (
 
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
-import qualified Distribution.Server.Framework.ResourceTypes as Resource
+import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
 import Distribution.Server.Users.Types
 import Distribution.Server.Users.State as State
@@ -322,8 +322,7 @@ userFeature  usersState adminsState
           admins <- queryState adminsState GetAdminList
           _admin <- guardAuthorised hackageRealm users admins
           withUserPath dpath $ \uid _ -> do
-            expectTextPlain
-            Body htpasswd <- consumeRequestBody
+            htpasswd <- expectTextPlain
             if validHtpasswd htpasswd
               then do let auth = OldUserAuth (HtPasswdHash (LBS.unpack htpasswd))
                       updateState usersState $ ReplaceUserAuth uid auth

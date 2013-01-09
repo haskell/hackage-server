@@ -12,7 +12,7 @@ import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
 
 import Distribution.Server.Framework.BackupRestore
-import qualified Distribution.Server.Framework.ResourceTypes as Resource
+import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Framework.BlobStorage (BlobId)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Util.ServeTarball as TarIndex
@@ -23,7 +23,6 @@ import Distribution.Package
 
 import Data.Function
 import qualified Data.Map as Map
-import qualified Codec.Compression.GZip as GZip
 
 -- TODO:
 -- 1. Write an HTML view for organizing uploads
@@ -149,8 +148,8 @@ documentationFeature ServerEnv{serverBlobStore = store}
             -- * Generate the new index
             -- * Drop the index for the old tar-file
             -- * Link the new documentation to the package
-            Body fileContents <- consumeRequestBody
-            blob <- liftIO $ BlobStorage.add store (GZip.decompress fileContents)
+            fileContents <- expectUncompressedTarball
+            blob <- liftIO $ BlobStorage.add store fileContents
             tarIndex <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blob)
             void $ updateState documentationState $ InsertDocumentation pkgid blob tarIndex
             seeOther ("/package/" ++ display pkgid) (toResponse ())

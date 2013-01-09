@@ -5,7 +5,7 @@ module Distribution.Server.Features.Html (
   ) where
 
 import Distribution.Server.Framework
-import qualified Distribution.Server.Framework.ResourceTypes as Resource
+import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Packages

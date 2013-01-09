@@ -26,6 +26,7 @@ import Control.Monad.Reader (runReaderT)
 import Control.Monad.Trans (MonadIO(..))
 import System.FilePath.Posix (takeExtension, (</>))
 import Control.Monad (liftM)
+import qualified Data.ByteString.Lazy as BS
 
 import System.IO.Unsafe (unsafePerformIO)
 
@@ -79,10 +80,10 @@ mime x  = Map.findWithDefault "text/plain" (drop 1 (takeExtension x)) mimeTypes
 -- Note that for performance reasons, this consumes the data and it cannot be
 -- called twice.
 --
-consumeRequestBody :: Happstack m => m RqBody
+consumeRequestBody :: Happstack m => m BS.ByteString
 consumeRequestBody = do
     mRq <- takeRequestBody =<< askRq
     case mRq of
       Nothing -> escape $ internalServerError $ toResponse
                    "consumeRequestBody cannot be called more than once."
-      Just rq -> return rq
+      Just (Body b) -> return b

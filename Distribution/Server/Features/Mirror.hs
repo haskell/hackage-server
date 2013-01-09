@@ -143,8 +143,7 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
     tarballPut dpath = runServerPartE $ do
         uid <- requireMirrorAuth
         withPackageTarball dpath $ \pkgid -> do
-          expectTarball
-          Body fileContent <- consumeRequestBody
+          fileContent <- expectCompressedTarball
           time <- liftIO getCurrentTime
           let uploadData = (time, uid)
           res <- liftIO $ BlobStorage.addWith store fileContent $ \fileContent' ->
@@ -183,8 +182,7 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
     uploaderPut dpath = runServerPartE $ do
         void requireMirrorAuth
         withPackageId dpath $ \pkgid -> do
-          expectTextPlain
-          Body nameContent <- consumeRequestBody
+          nameContent <- expectTextPlain
           let uname = UserName (unpackUTF8 nameContent)
           withUserName uname $ \uid _ -> do
             mb_err <- updateReplacePackageUploader pkgid uid
@@ -200,8 +198,7 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
     uploadTimePut dpath = runServerPartE $ do
         void requireMirrorAuth
         withPackageId dpath $ \pkgid -> do
-          expectTextPlain
-          Body timeContent <- consumeRequestBody
+          timeContent <- expectTextPlain
           case parseTime defaultTimeLocale "%c" (unpackUTF8 timeContent) of
             Nothing -> badRequest $ toResponse "Could not parse upload time"
             Just t  -> do
@@ -214,8 +211,7 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
     cabalPut dpath = runServerPartE $ do
         uid <- requireMirrorAuth
         withPackageId dpath $ \pkgid -> do
-          expectTextPlain
-          Body fileContent <- consumeRequestBody
+          fileContent <- expectTextPlain
           time <- liftIO getCurrentTime
           let uploadData = (time, uid)
           case parsePackageDescription . unpackUTF8 $ fileContent of

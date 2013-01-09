@@ -22,6 +22,7 @@ import Distribution.Package
 import Data.List (intercalate)
 import Text.CSV (parseCSV)
 import Data.Version (showVersion)
+import qualified Data.ByteString.Char8 as BS
 
 
 -- TODO:
@@ -158,9 +159,9 @@ distroFeature UserFeature{..} CoreFeature{..} distrosState
 
     -- result: ok repsonse or not-found error
     distroPackageListPut dpath =
-      withDistroPath dpath $ \dname _pkgs -> do
+      withDistroPath dpath $ \dname _pkgs ->
+        runServerPartE $ do
         -- FIXME: authenticate distro maintainer
---        expectMimeType "text/csv"
         lookCSVFile $ \csv ->
             case csvToPackageList csv of
                 Nothing -> fail $ "Could not parse CSV File to a distro package list"
@@ -233,9 +234,9 @@ maintainerDescription dname = nullDescription
   }
   where str = display dname
 
-lookCSVFile :: (CSVFile -> ServerPart Response) -> ServerPart Response
+lookCSVFile :: (CSVFile -> ServerPartE Response) -> ServerPartE Response
 lookCSVFile func = do
-    Body fileContents <- consumeRequestBody
+    fileContents <- expectContentType (BS.pack "text/csv")
     case parseCSV "PUT input" (unpackUTF8 fileContents) of
       Left err -> badRequest $ toResponse $ "Could not parse CSV File: " ++ show err
       Right csv -> func (CSVFile csv)

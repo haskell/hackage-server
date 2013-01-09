@@ -24,7 +24,7 @@ import qualified Distribution.Server.Users.Group as Group
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
-import qualified Distribution.Server.Framework.ResourceTypes as Resource
+import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Framework.BackupRestore (restoreBackupUnimplemented)
 
 import Distribution.Text

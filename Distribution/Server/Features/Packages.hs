@@ -23,7 +23,7 @@ import Distribution.Server.Util.ChangeLog (lookupChangeLog)
 
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
-import qualified Distribution.Server.Framework.ResourceTypes as Resource
+import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
 import Distribution.Package
 import Distribution.PackageDescription

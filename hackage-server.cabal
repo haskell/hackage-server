@@ -67,16 +67,17 @@ executable hackage-server
     Distribution.Server.Framework.BlobStorage
     Distribution.Server.Framework.Cache
     Distribution.Server.Framework.Error
+    Distribution.Server.Framework.Logging
     Distribution.Server.Framework.Feature
     Distribution.Server.Framework.Hook
     Distribution.Server.Framework.Instances
     Distribution.Server.Framework.MemState
     Distribution.Server.Framework.MemSize
     Distribution.Server.Framework.Resource
-    Distribution.Server.Framework.ResourceTypes
+    Distribution.Server.Framework.RequestContentTypes
+    Distribution.Server.Framework.ResponseContentTypes
     Distribution.Server.Framework.BackupDump
     Distribution.Server.Framework.BackupRestore
-    Distribution.Server.Framework.Validation
     
     Distribution.Server.Packages.Index
     Distribution.Server.Packages.ModuleForest

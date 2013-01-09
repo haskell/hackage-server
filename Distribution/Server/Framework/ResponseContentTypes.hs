@@ -2,18 +2,18 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Distribution.Server.Framework.ResourceTypes
+-- Module      :  Distribution.Server.Framework.ResponseContentTypes
 -- Copyright   :  (c) David Himmelstrup 2008
 --                    Duncan Coutts 2008
 -- License     :  BSD-like
 --
--- Maintainer  :  duncan@haskell.org
+-- Maintainer  :  duncan@community.haskell.org
 -- Stability   :  provisional
 -- Portability :  portable
 --
 -- Types for various kinds of resources we serve, xml, package tarballs etc.
 -----------------------------------------------------------------------------
-module Distribution.Server.Framework.ResourceTypes where
+module Distribution.Server.Framework.ResponseContentTypes where
 
 import Distribution.Server.Framework.BlobStorage
          ( BlobId, blobMd5 )
@@ -36,7 +36,7 @@ import Text.CSV (printCSV, CSV)
 data IndexTarball = IndexTarball BS.Lazy.ByteString
 
 instance ToMessage IndexTarball where
-  toContentType _ = BS.pack "application/gzip"
+  toContentType _ = BS.pack "application/x-gzip"
   toMessage (IndexTarball bs) = bs
 
 
@@ -44,7 +44,7 @@ data PackageTarball = PackageTarball BS.Lazy.ByteString BlobId UTCTime
 
 instance ToMessage PackageTarball where
   toResponse (PackageTarball bs blobid time) = mkResponse bs
-    [ ("Content-Type",  "application/gzip")
+    [ ("Content-Type",  "application/x-gzip")
     , ("Content-MD5",   blobMd5 blobid)
     , ("ETag",          '"' : blobMd5 blobid ++ ['"'])
     , ("Last-modified", formatTime time)
@@ -54,7 +54,7 @@ data DocTarball = DocTarball BS.Lazy.ByteString BlobId
 
 instance ToMessage DocTarball where
   toResponse (DocTarball bs blobid) = mkResponse bs
-    [ ("Content-Type",  "application/gzip")
+    [ ("Content-Type",  "application/x-tar")
     , ("Content-MD5",   blobMd5 blobid)
     , ("ETag",          '"' : blobMd5 blobid ++ ['"'])
     ]

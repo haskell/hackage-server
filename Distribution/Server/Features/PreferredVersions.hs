@@ -12,7 +12,7 @@ module Distribution.Server.Features.PreferredVersions (
   ) where
 
 import Distribution.Server.Framework
-import qualified Distribution.Server.Framework.ResourceTypes as Resource
+import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Framework.BackupRestore (restoreBackupUnimplemented)
 
 import Distribution.Server.Features.PreferredVersions.State

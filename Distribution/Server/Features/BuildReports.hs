@@ -15,7 +15,7 @@ import Distribution.Server.Features.BuildReports.State
 import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
 import Distribution.Server.Features.BuildReports.BuildReport (BuildReport(..))
 import Distribution.Server.Features.BuildReports.BuildReports (BuildReports, BuildReportId(..), BuildLog(..))
-import qualified Distribution.Server.Framework.ResourceTypes as Resource
+import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
 import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
@@ -140,7 +140,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
         -- require logged-in user
         void $ guardAuthenticated hackageRealm users
         let pkgid = pkgInfoId pkg
-        Body reportbody <- consumeRequestBody
+        reportbody <- expectTextPlain
         case BuildReport.parse $ unpack reportbody of
             Left err -> errBadRequest "Error submitting report" [MText err]
             Right report -> do
@@ -173,7 +173,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
         -- logged in users
         void $ guardAuthenticated hackageRealm users
         let pkgid = pkgInfoId pkg
-        Body blogbody <- consumeRequestBody
+        blogbody <- expectTextPlain
         buildLog <- liftIO $ BlobStorage.add store blogbody
         void $ updateState reportsState $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
         -- go to report page (linking the log)

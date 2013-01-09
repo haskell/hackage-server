@@ -4,7 +4,7 @@ module Distribution.Server.Features.ServerIntrospect (
   ) where
 
 import Distribution.Server.Framework
-import qualified Distribution.Server.Framework.ResourceTypes as Resource
+import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Pages.Template (hackagePage)
 
 import Text.XHtml.Strict

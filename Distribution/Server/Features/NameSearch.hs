@@ -11,7 +11,7 @@ import Distribution.Server.Features.Core
 
 import Distribution.Server.Util.NameIndex
 import Distribution.Server.Util.TextSearch
-import qualified Distribution.Server.Framework.ResourceTypes as Resource
+import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import Distribution.Server.Packages.Types
