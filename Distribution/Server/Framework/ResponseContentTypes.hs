@@ -85,7 +85,7 @@ instance ToMessage JSON where
 newtype CabalFile = CabalFile BS.Lazy.ByteString
 
 instance ToMessage CabalFile where
-    toContentType _ = BS.pack "text/plain"
+    toContentType _ = BS.pack "text/plain; charset=utf-8"
     toMessage (CabalFile bs) = bs
 
 newtype BuildLog = BuildLog BS.Lazy.ByteString

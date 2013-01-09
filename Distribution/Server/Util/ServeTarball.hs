@@ -25,6 +25,7 @@ import Happstack.Server.Response
 import Happstack.Server.FileServe as Happstack (mimeTypes)
 import Distribution.Server.Util.Happstack (remainingPath)
 import Distribution.Server.Pages.Template (hackagePage)
+import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
@@ -39,6 +40,7 @@ import Control.Monad.Trans (MonadIO, liftIO)
 import Control.Monad (msum, mzero)
 import System.IO
 
+--TODO: ETags!
 
 -- | Server the contents of a tar file
 -- file. TODO: This is not a sustainable implementation,
@@ -83,7 +85,7 @@ serveTarball indices tarRoot tarball tarIndex = do
                  -> seeOther (addTrailingPathSeparator fullPath) (toResponse ())
 
                  | otherwise
-                 -> ok $ toResponse $ renderDirIndex prefix fs
+                 -> ok $ toResponse $ Resource.XHtml $ renderDirIndex fs
                _ -> mzero
 
 renderDirIndex :: [FilePath] -> [FilePath] -> XHtml.Html
