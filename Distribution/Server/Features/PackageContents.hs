@@ -9,6 +9,9 @@ import Distribution.Server.Framework
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.PackageCandidates
+  ( PackageCandidatesFeature(PackageCandidatesFeature, withCandidatePath)
+  , CandPkgInfo(candPkgInfo)
+  )
 
 import Distribution.Server.Packages.Types
 import Distribution.Server.Util.ChangeLog (lookupTarball, lookupChangeLog)
@@ -40,11 +43,11 @@ data PackageContentsResource = PackageContentsResource {
 }
 
 initPackageContentsFeature :: ServerEnv -> CoreFeature -> PackageCandidatesFeature -> IO PackageContentsFeature
-initPackageContentsFeature env@ServerEnv{serverVerbosity = verbosity} core check = do
+initPackageContentsFeature env@ServerEnv{serverVerbosity = verbosity} core candidates = do
     loginfo verbosity "Initialising package-contents feature, start"
 
     -- currently no state
-    let feature = packageContentsFeature env core check
+    let feature = packageContentsFeature env core candidates
 
     loginfo verbosity "Initialising package-contents feature, end"
     return feature
@@ -56,7 +59,7 @@ packageContentsFeature :: ServerEnv
                        -> PackageContentsFeature
 
 packageContentsFeature ServerEnv{serverBlobStore = store}
-                       CoreFeature{..} PackageCandidatesFeature{..}
+                       CoreFeature{..} PackageCandidatesFeature{withCandidatePath}
   = PackageContentsFeature{..}
   where
     packageFeatureInterface = (emptyHackageFeature "package-contents") {

@@ -8,13 +8,13 @@ module Distribution.Server.Pages.Package (
     renderDownloads
   ) where
 
-import Distribution.Server.Features.RecentPackages
 import Distribution.Server.Features.PreferredVersions
 
 import Distribution.Server.Pages.Package.HaddockParse (parseHaddockParagraphs)
 import Distribution.Server.Pages.Package.HaddockLex  (tokenise)
 import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Packages.ModuleForest
+import Distribution.Server.Packages.Render
 import Distribution.Server.Users.Types (userStatus, userName, isActive)
 
 import Distribution.Package

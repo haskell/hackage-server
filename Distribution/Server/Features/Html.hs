@@ -25,6 +25,7 @@ import Distribution.Server.Features.Documentation
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Render
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Users.Group (UserGroup(..))
@@ -263,9 +264,9 @@ htmlFeature UserFeature{..} CoreFeature{..}
             resourceGet = [("html", serveUploadForm)]
           }
 
-      -- checks
+      -- candidates
         -- list of all packages which have candidates
-      , (extendResource $ candidatesPage checks) {
+      , (extendResource $ candidatesPage candidates) {
             resourceDesc = [ (GET, "Show all package candidates")
                            , (POST, "Upload a new candidate")
                            ]
@@ -273,7 +274,7 @@ htmlFeature UserFeature{..} CoreFeature{..}
           , resourcePost = [ ("html", \_ -> htmlResponse $ postCandidate) ]
           }
         -- TODO: use custom functions, not htmlResponse
-      , (extendResource $ packageCandidatesPage checks) {
+      , (extendResource $ packageCandidatesPage candidates) {
             resourceDesc = [ (GET, "Show candidate upload form")
                            , (POST, "Upload new package candidate")
                            ]
@@ -281,7 +282,7 @@ htmlFeature UserFeature{..} CoreFeature{..}
           , resourcePost = [ ("", htmlResponse . postPackageCandidate) ]
           }
         -- package page for a candidate
-      , (extendResource $ candidatePage checks) {
+      , (extendResource $ candidatePage candidates) {
             resourceDesc   = [ (GET, "Show candidate maintenance form")
                              , (PUT, "Upload new package candidate")
                              , (DELETE, "Delete a package candidate")
@@ -300,7 +301,7 @@ htmlFeature UserFeature{..} CoreFeature{..}
         -- maintenance for candidate packages
       , candMaintainForm
         -- form for publishing package
-      , (extendResource $ publishPage checks) {
+      , (extendResource $ publishPage candidates) {
            resourceDesc = [ (GET, "Show candidate publish form")
                           , (POST, "Publish a package candidate")
                           ]
@@ -403,7 +404,7 @@ htmlFeature UserFeature{..} CoreFeature{..}
     cores = coreResource
     users = userResource
     uploads = uploadResource
-    checks  = checkResource
+    candidates  = candidatesResource
     versions = versionsResource
     -- [reverse index disabled] reverses = reverseResource
     tags = tagsResource
@@ -740,7 +741,7 @@ htmlFeature UserFeature{..} CoreFeature{..}
             Just err -> throwError err
             Nothing  -> do
                 return $ toResponse $ Resource.XHtml $ hackagePage "Publishing candidates"
-                    [form ! [theclass "box", XHtml.method "post", action $ publishUri checkResource "" pkgid]
+                    [form ! [theclass "box", XHtml.method "post", action $ publishUri candidatesResource "" pkgid]
                         << input ! [thetype "submit", value "Publish package"]]
 
     serveCandidatesPage :: DynamicPath -> ServerPart Response
@@ -761,10 +762,10 @@ htmlFeature UserFeature{..} CoreFeature{..}
       where showCands pkgs =
                 let desc = packageDescription . pkgDesc . candPkgInfo $ last pkgs
                     pkgname = packageName desc
-                in  [ anchor ! [href $ packageCandidatesUri checks "" pkgname ] << display pkgname
+                in  [ anchor ! [href $ packageCandidatesUri candidates "" pkgname ] << display pkgname
                     , toHtml ": "
                     , toHtml $ intersperse (toHtml ", ") $ flip map pkgs $ \pkg ->
-                         anchor ! [href $ candidateUri checks "" (packageId pkg)] << display (packageVersion pkg)
+                         anchor ! [href $ candidateUri candidates "" (packageId pkg)] << display (packageVersion pkg)
                     , toHtml $ ". " ++ description desc
                     ]
 
@@ -782,7 +783,7 @@ htmlFeature UserFeature{..} CoreFeature{..}
                   , anchor ! [href $ "/packages/candidates/upload"] << "another"
                   , toHtml " package?"
                   ]
-            _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ candidateUri checks "" $ packageId pkg] << display (packageVersion pkg) ]
+            _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ candidateUri candidates "" $ packageId pkg] << display (packageVersion pkg) ]
 
     -- TODO: make publishCandidate a member of the PackageCandidates feature, just like
     -- putDeprecated and putPreferred are for the Versions feature.

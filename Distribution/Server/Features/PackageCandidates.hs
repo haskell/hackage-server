@@ -14,11 +14,11 @@ import Distribution.Server.Features.PackageCandidates.Types
 import Distribution.Server.Features.PackageCandidates.State
 
 import Distribution.Server.Features.Core
-import Distribution.Server.Features.RecentPackages
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Users
 
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Render
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Group as Group
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
@@ -37,11 +37,10 @@ import Data.List (find)
 import Data.Maybe (listToMaybe, catMaybes)
 import Data.Time.Clock (getCurrentTime)
 
-
 data PackageCandidatesFeature = PackageCandidatesFeature {
-    checkFeatureInterface :: HackageFeature,
+    candidatesFeatureInterface :: HackageFeature,
 
-    checkResource :: PackageCandidatesResource,
+    candidatesResource :: PackageCandidatesResource,
 
     -- queries
     queryGetCandidateIndex :: MonadIO m => m (PackageIndex CandPkgInfo),
@@ -61,7 +60,7 @@ data PackageCandidatesFeature = PackageCandidatesFeature {
 }
 
 instance IsHackageFeature PackageCandidatesFeature where
-    getFeatureInterface = checkFeatureInterface
+    getFeatureInterface = candidatesFeatureInterface
 
 
 data PackageCandidatesResource = PackageCandidatesResource {
@@ -105,7 +104,7 @@ initPackageCandidatesFeature :: ServerEnv
                  -> IO PackageCandidatesFeature
 initPackageCandidatesFeature env@ServerEnv{serverStateDir} user core upload = do
     candidatesState <- candidatesStateComponent serverStateDir
-    return $ checkFeature env user core upload candidatesState
+    return $ candidatesFeature env user core upload candidatesState
 
 candidatesStateComponent :: FilePath -> IO (StateComponent CandidatePackages)
 candidatesStateComponent stateDir = do
@@ -122,23 +121,23 @@ candidatesStateComponent stateDir = do
     , getStateSize = memSize <$> query st GetCandidatePackages
   }
 
-checkFeature :: ServerEnv
+candidatesFeature :: ServerEnv
              -> UserFeature
              -> CoreFeature
              -> UploadFeature
              -> StateComponent CandidatePackages
              -> PackageCandidatesFeature
 
-checkFeature ServerEnv{serverBlobStore = store}
+candidatesFeature ServerEnv{serverBlobStore = store}
              UserFeature{..} CoreFeature{..}
              UploadFeature{..}
              candidatesState
   = PackageCandidatesFeature{..}
   where
-    checkFeatureInterface = (emptyHackageFeature "check") {
+    candidatesFeatureInterface = (emptyHackageFeature "candidates") {
         featureDesc = "Support for package candidates"
       , featureResources =
-          map ($checkResource) [
+          map ($candidatesResource) [
               candidatesPage
             , candidatePage
             , publishPage
@@ -151,7 +150,7 @@ checkFeature ServerEnv{serverBlobStore = store}
     queryGetCandidateIndex :: MonadIO m => m (PackageIndex CandPkgInfo)
     queryGetCandidateIndex = return . candidateList =<< queryState candidatesState GetCandidatePackages
 
-    checkResource = fix $ \r -> PackageCandidatesResource {
+    candidatesResource = fix $ \r -> PackageCandidatesResource {
         candidatesPage = resourceAt "/packages/candidates/.:format"
       , candidatePage = (resourceAt "/package/:package/candidate.:format") {
             resourceDesc = [(GET, "Show basic package candidate page")]
@@ -201,13 +200,13 @@ checkFeature ServerEnv{serverBlobStore = store}
     postCandidate :: ServerPartE Response
     postCandidate = do
         pkgInfo <- uploadCandidate (const True)
-        seeOther (candidateUri checkResource "" $ packageId pkgInfo) (toResponse ())
+        seeOther (candidateUri candidatesResource "" $ packageId pkgInfo) (toResponse ())
 
     -- POST to /:package/candidates/
     postPackageCandidate :: DynamicPath -> ServerPartE Response
     postPackageCandidate dpath = withPackageName dpath $ \name -> do
         pkgInfo <- uploadCandidate ((==name) . packageName)
-        seeOther (candidateUri checkResource "" $ packageId pkgInfo) (toResponse ())
+        seeOther (candidateUri candidatesResource "" $ packageId pkgInfo) (toResponse ())
 
     -- PUT to /:package-version/candidate
     -- FIXME: like delete, PUT shouldn't redirect
@@ -215,14 +214,14 @@ checkFeature ServerEnv{serverBlobStore = store}
     putPackageCandidate dpath = withPackageId dpath $ \pkgid -> do
         guard (packageVersion pkgid /= Version [] [])
         pkgInfo <- uploadCandidate (==pkgid)
-        seeOther (candidateUri checkResource "" $ packageId pkgInfo) (toResponse ())
+        seeOther (candidateUri candidatesResource "" $ packageId pkgInfo) (toResponse ())
 
     -- FIXME: DELETE should not redirect, but rather return ServerPartE ()
     doDeleteCandidate :: DynamicPath -> ServerPartE Response
     doDeleteCandidate dpath = withCandidatePath dpath $ \_ candidate -> do
         withPackageAuth candidate $ \_ _ -> do
         void $ updateState candidatesState $ DeleteCandidate (packageId candidate)
-        seeOther (packageCandidatesUri checkResource "" $ packageName candidate) $ toResponse ()
+        seeOther (packageCandidatesUri candidatesResource "" $ packageName candidate) $ toResponse ()
 
     serveCandidateTarball :: DynamicPath -> ServerPart Response
     serveCandidateTarball dpath = runServerPartE $
@@ -326,12 +325,25 @@ checkFeature ServerEnv{serverBlobStore = store}
             Nothing  -> Nothing
 
     ------------------------------------------------------------------------------
+{-
+
+       changeLogRes <- lookupChangeLog store info
+        , rendChangeLogUri = case changeLogRes of
+                               Right _ -> Just (pkgUri </> "changelog")
+                               _ -> Nothing
+-}
 
     candidateRender :: CandPkgInfo -> IO CandidateRender
     candidateRender cand = do
            users  <- queryGetUserDb
            index  <- queryGetPackageIndex
-           render <- doPackageRender store users (candPkgInfo cand)
+           -- TODO: we should check if there is a changelog, but lookupChangelog
+           -- is a feature of PackageContents, so we cannot use it here. We
+           -- could duplicate it here, but there appears to be a *lot* of
+           -- duplication already between that feature and this one. We should
+           -- fix that.
+           let showChangeLogLink = True
+           render <- doPackageRender users (candPkgInfo cand) showChangeLogLink
            return $ CandidateRender {
              candPackageRender = render { rendPkgUri = rendPkgUri render ++ "/candidate" },
              renderWarnings = candWarnings cand,

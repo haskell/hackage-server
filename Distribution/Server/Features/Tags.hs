@@ -18,11 +18,11 @@ import Distribution.Server.Features.Tags.State
 import Distribution.Server.Features.Tags.Backup
 
 import Distribution.Server.Features.Core
-import Distribution.Server.Features.RecentPackages (categorySplit)
 
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Render (categorySplit)
 
 import Distribution.Text
 import Distribution.Package
