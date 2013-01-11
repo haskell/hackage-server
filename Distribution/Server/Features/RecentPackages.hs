@@ -1,8 +1,8 @@
 {-# LANGUAGE DoRec, RankNTypes, NamedFieldPuns, RecordWildCards #-}
-module Distribution.Server.Features.Packages (
-    PackagesFeature(..),
+module Distribution.Server.Features.RecentPackages (
+    RecentPackagesFeature(..),
     PackagesResource(..),
-    initPackagesFeature,
+    initRecentPackagesFeature,
 
     -- * Package render
     PackageRender(..),
@@ -46,7 +46,7 @@ import Data.Ord (comparing)
 -- the goal is to have the HTML modules import /this/ one, not the other way around
 import qualified Distribution.Server.Pages.Recent as Pages
 
-data PackagesFeature = PackagesFeature {
+data RecentPackagesFeature = RecentPackagesFeature {
     packagesFeatureInterface :: HackageFeature,
     packagesResource :: PackagesResource,
 
@@ -55,7 +55,7 @@ data PackagesFeature = PackagesFeature {
     -- other informational hooks: perhaps a simplified CondTree so a browser script can dynamically change the package page based on flags
 }
 
-instance IsHackageFeature PackagesFeature where
+instance IsHackageFeature RecentPackagesFeature where
     getFeatureInterface = packagesFeatureInterface
 
 data PackagesResource = PackagesResource {
@@ -63,8 +63,8 @@ data PackagesResource = PackagesResource {
     packagesRecent :: Resource
 }
 
-initPackagesFeature :: ServerEnv -> UserFeature -> CoreFeature -> IO PackagesFeature
-initPackagesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
+initRecentPackagesFeature :: ServerEnv -> UserFeature -> CoreFeature -> IO RecentPackagesFeature
+initRecentPackagesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
                     user core@CoreFeature{packageIndexChange} = do
     loginfo verbosity "Initialising packages feature, start"
 
@@ -91,12 +91,12 @@ packagesFeature :: ServerEnv
                 -> UserFeature
                 -> CoreFeature
                 -> AsyncCache (Response, Response)
-                -> (PackagesFeature, IO (Response, Response))
+                -> (RecentPackagesFeature, IO (Response, Response))
 
 packagesFeature env@ServerEnv{serverBlobStore = store}
                 UserFeature{..} CoreFeature{..}
                 cacheRecent
-  = (PackagesFeature{..}, updateRecentCache)
+  = (RecentPackagesFeature{..}, updateRecentCache)
   where
     packagesFeatureInterface = (emptyHackageFeature "packages") {
         featureResources = map ($packagesResource) [packagesRecent]

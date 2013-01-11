@@ -1,8 +1,8 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
-module Distribution.Server.Features.Check (
-    CheckFeature(..),
-    CheckResource(..),
-    initCheckFeature,
+module Distribution.Server.Features.PackageCandidates (
+    PackageCandidatesFeature(..),
+    PackageCandidatesResource(..),
+    initPackageCandidatesFeature,
 
     CandidateRender(..),
     CandPkgInfo(..),
@@ -10,11 +10,11 @@ module Distribution.Server.Features.Check (
 
 import Distribution.Server.Framework
 
-import Distribution.Server.Features.Check.Types
-import Distribution.Server.Features.Check.State
+import Distribution.Server.Features.PackageCandidates.Types
+import Distribution.Server.Features.PackageCandidates.State
 
 import Distribution.Server.Features.Core
-import Distribution.Server.Features.Packages
+import Distribution.Server.Features.RecentPackages
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Users
 
@@ -38,10 +38,10 @@ import Data.Maybe (listToMaybe, catMaybes)
 import Data.Time.Clock (getCurrentTime)
 
 
-data CheckFeature = CheckFeature {
+data PackageCandidatesFeature = PackageCandidatesFeature {
     checkFeatureInterface :: HackageFeature,
 
-    checkResource :: CheckResource,
+    checkResource :: PackageCandidatesResource,
 
     -- queries
     queryGetCandidateIndex :: MonadIO m => m (PackageIndex CandPkgInfo),
@@ -60,11 +60,11 @@ data CheckFeature = CheckFeature {
     withCandidates    :: forall a. PackageName -> (CandidatePackages -> [CandPkgInfo] -> ServerPartE a) -> ServerPartE a
 }
 
-instance IsHackageFeature CheckFeature where
+instance IsHackageFeature PackageCandidatesFeature where
     getFeatureInterface = checkFeatureInterface
 
 
-data CheckResource = CheckResource {
+data PackageCandidatesResource = PackageCandidatesResource {
     candidatesPage :: Resource,
     candidatePage :: Resource,
     packageCandidatesPage :: Resource,
@@ -100,10 +100,10 @@ data CandidateRender = CandidateRender {
 
 
 -- URI generation (string-based), using maps; user groups
-initCheckFeature :: ServerEnv
+initPackageCandidatesFeature :: ServerEnv
                  -> UserFeature -> CoreFeature -> UploadFeature
-                 -> IO CheckFeature
-initCheckFeature env@ServerEnv{serverStateDir} user core upload = do
+                 -> IO PackageCandidatesFeature
+initPackageCandidatesFeature env@ServerEnv{serverStateDir} user core upload = do
     candidatesState <- candidatesStateComponent serverStateDir
     return $ checkFeature env user core upload candidatesState
 
@@ -127,13 +127,13 @@ checkFeature :: ServerEnv
              -> CoreFeature
              -> UploadFeature
              -> StateComponent CandidatePackages
-             -> CheckFeature
+             -> PackageCandidatesFeature
 
 checkFeature ServerEnv{serverBlobStore = store}
              UserFeature{..} CoreFeature{..}
              UploadFeature{..}
              candidatesState
-  = CheckFeature{..}
+  = PackageCandidatesFeature{..}
   where
     checkFeatureInterface = (emptyHackageFeature "check") {
         featureDesc = "Support for package candidates"
@@ -151,7 +151,7 @@ checkFeature ServerEnv{serverBlobStore = store}
     queryGetCandidateIndex :: MonadIO m => m (PackageIndex CandPkgInfo)
     queryGetCandidateIndex = return . candidateList =<< queryState candidatesState GetCandidatePackages
 
-    checkResource = fix $ \r -> CheckResource {
+    checkResource = fix $ \r -> PackageCandidatesResource {
         candidatesPage = resourceAt "/packages/candidates/.:format"
       , candidatePage = (resourceAt "/package/:package/candidate.:format") {
             resourceDesc = [(GET, "Show basic package candidate page")]
@@ -181,7 +181,7 @@ checkFeature ServerEnv{serverBlobStore = store}
           renderResource (candidateCabal r) [display pkgid, display (packageName pkgid)]
       }
 
-    basicCandidatePage :: CheckResource -> DynamicPath -> ServerPart Response
+    basicCandidatePage :: PackageCandidatesResource -> DynamicPath -> ServerPart Response
     basicCandidatePage r dpath = runServerPartE $ --TODO: use something else for nice html error pages
                                  withPackageId dpath $ \pkgid ->
                                  withCandidate pkgid $ \_ mpkg _ ->
@@ -309,7 +309,7 @@ checkFeature ServerEnv{serverBlobStore = store}
                 if success
                   then do
                     -- delete when requested: "moving" the resource
-                    -- should this be required? (see notes in CheckResource)
+                    -- should this be required? (see notes in PackageCandidatesResource)
                     when doDelete $ updateState candidatesState $ DeleteCandidate (packageId candidate)
                     return uresult
                   else errForbidden "Upload failed" [MText "Package already exists."]

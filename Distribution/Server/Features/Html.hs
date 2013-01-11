@@ -8,9 +8,9 @@ import Distribution.Server.Framework
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
 import Distribution.Server.Features.Core
-import Distribution.Server.Features.Packages
+import Distribution.Server.Features.RecentPackages
 import Distribution.Server.Features.Upload
-import Distribution.Server.Features.Check
+import Distribution.Server.Features.PackageCandidates
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.NameSearch
@@ -74,8 +74,8 @@ instance IsHackageFeature HtmlFeature where
 --
 -- This means of generating HTML is somewhat temporary, in that a more advanced
 -- (and better-looking) HTML ajaxy scheme should come about later on.
-initHtmlFeature :: ServerEnv -> UserFeature -> CoreFeature -> PackagesFeature
-                -> UploadFeature -> CheckFeature -> VersionsFeature
+initHtmlFeature :: ServerEnv -> UserFeature -> CoreFeature -> RecentPackagesFeature
+                -> UploadFeature -> PackageCandidatesFeature -> VersionsFeature
                 -- [reverse index disabled] -> ReverseFeature
                 -> TagsFeature -> DownloadFeature
                 -> ListFeature -> NamesFeature
@@ -131,9 +131,9 @@ initHtmlFeature ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
 
 htmlFeature :: UserFeature
             -> CoreFeature
-            -> PackagesFeature
+            -> RecentPackagesFeature
             -> UploadFeature
-            -> CheckFeature
+            -> PackageCandidatesFeature
             -> VersionsFeature
             -> TagsFeature
             -> DownloadFeature
@@ -147,8 +147,8 @@ htmlFeature :: UserFeature
             -> (HtmlFeature, IO Response, IO Response)
 
 htmlFeature UserFeature{..} CoreFeature{..}
-            PackagesFeature{..} UploadFeature{..}
-            CheckFeature{..} VersionsFeature{..}
+            RecentPackagesFeature{..} UploadFeature{..}
+            PackageCandidatesFeature{..} VersionsFeature{..}
             -- [reverse index disabled] ReverseFeature{..}
             TagsFeature{..} DownloadFeature{..}
             ListFeature{..} NamesFeature{..}
@@ -784,7 +784,7 @@ htmlFeature UserFeature{..} CoreFeature{..}
                   ]
             _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ candidateUri checks "" $ packageId pkg] << display (packageVersion pkg) ]
 
-    -- TODO: make publishCandidate a member of the Check feature, just like
+    -- TODO: make publishCandidate a member of the PackageCandidates feature, just like
     -- putDeprecated and putPreferred are for the Versions feature.
     servePostPublish :: DynamicPath -> ServerPart Response
     servePostPublish dpath = htmlResponse $ do

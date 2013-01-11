@@ -1,8 +1,8 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell #-}
 
-module Distribution.Server.Features.Check.State where
+module Distribution.Server.Features.PackageCandidates.State where
 
-import Distribution.Server.Features.Check.Types
+import Distribution.Server.Features.PackageCandidates.Types
 import Distribution.Server.Framework.MemSize
 
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex

@@ -8,7 +8,7 @@ module Distribution.Server.Pages.Package (
     renderDownloads
   ) where
 
-import Distribution.Server.Features.Packages
+import Distribution.Server.Features.RecentPackages
 import Distribution.Server.Features.PreferredVersions
 
 import Distribution.Server.Pages.Package.HaddockParse (parseHaddockParagraphs)

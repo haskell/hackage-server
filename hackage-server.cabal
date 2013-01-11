@@ -135,9 +135,9 @@ executable hackage-server
       Distribution.Server.Features.BuildReports.BuildReports
       Distribution.Server.Features.BuildReports.Backup
       Distribution.Server.Features.BuildReports.State
-      Distribution.Server.Features.Check
-      Distribution.Server.Features.Check.Types
-      Distribution.Server.Features.Check.State
+      Distribution.Server.Features.PackageCandidates
+      Distribution.Server.Features.PackageCandidates.Types
+      Distribution.Server.Features.PackageCandidates.State
       Distribution.Server.Features.Distro
       Distribution.Server.Features.Distro.Distributions
       Distribution.Server.Features.Distro.Backup
@@ -149,7 +149,7 @@ executable hackage-server
       Distribution.Server.Features.DownloadCount.State
       Distribution.Server.Features.Html
       Distribution.Server.Features.NameSearch
-      Distribution.Server.Features.Packages
+      Distribution.Server.Features.RecentPackages
       Distribution.Server.Features.PreferredVersions
       Distribution.Server.Features.PreferredVersions.State
       -- [reverse index disabled] Distribution.Server.Features.ReverseDependencies

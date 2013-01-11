@@ -18,7 +18,7 @@ import Distribution.Server.Features.Tags.State
 import Distribution.Server.Features.Tags.Backup
 
 import Distribution.Server.Features.Core
-import Distribution.Server.Features.Packages (categorySplit)
+import Distribution.Server.Features.RecentPackages (categorySplit)
 
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)

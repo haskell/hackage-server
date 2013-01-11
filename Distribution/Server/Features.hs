@@ -19,10 +19,10 @@ import Distribution.Server.Features.Upload   (initUploadFeature)
 import Distribution.Server.Features.Mirror   (initMirrorFeature)
 
 #ifndef MINIMAL
-import Distribution.Server.Features.Html     (initHtmlFeature)
-import Distribution.Server.Features.Check    (initCheckFeature)
-import Distribution.Server.Features.Packages (initPackagesFeature)
-import Distribution.Server.Features.Distro   (initDistroFeature)
+import Distribution.Server.Features.Html                (initHtmlFeature)
+import Distribution.Server.Features.PackageCandidates   (initPackageCandidatesFeature)
+import Distribution.Server.Features.RecentPackages      (initRecentPackagesFeature)
+import Distribution.Server.Features.Distro              (initDistroFeature)
 import Distribution.Server.Features.PackageContents     (initPackageContentsFeature)
 import Distribution.Server.Features.Documentation       (initDocumentationFeature)
 import Distribution.Server.Features.BuildReports        (initBuildReportsFeature)
@@ -30,10 +30,10 @@ import Distribution.Server.Features.LegacyRedirects     (legacyRedirectsFeature)
 import Distribution.Server.Features.PreferredVersions   (initVersionsFeature)
 -- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies (initReverseFeature)
 import Distribution.Server.Features.DownloadCount       (initDownloadFeature)
-import Distribution.Server.Features.Tags            (initTagsFeature)
-import Distribution.Server.Features.NameSearch      (initNamesFeature)
-import Distribution.Server.Features.PackageList     (initListFeature)
-import Distribution.Server.Features.HaskellPlatform (initPlatformFeature)
+import Distribution.Server.Features.Tags                (initTagsFeature)
+import Distribution.Server.Features.NameSearch          (initNamesFeature)
+import Distribution.Server.Features.PackageList         (initListFeature)
+import Distribution.Server.Features.HaskellPlatform     (initPlatformFeature)
 #endif
 import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
 
@@ -72,7 +72,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          usersFeature
 
 #ifndef MINIMAL
-    packagesFeature <- initPackagesFeature env
+    packagesFeature <- initRecentPackagesFeature env
                          usersFeature
                          coreFeature
 
@@ -80,7 +80,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          usersFeature
                          coreFeature
 
-    checkFeature    <- initCheckFeature env
+    checkFeature    <- initPackageCandidatesFeature env
                          usersFeature
                          coreFeature
                          uploadFeature

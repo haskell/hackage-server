@@ -8,7 +8,7 @@ module Distribution.Server.Features.PackageContents (
 import Distribution.Server.Framework
 
 import Distribution.Server.Features.Core
-import Distribution.Server.Features.Check
+import Distribution.Server.Features.PackageCandidates
 
 import Distribution.Server.Packages.Types
 import Distribution.Server.Util.ChangeLog (lookupTarball, lookupChangeLog)
@@ -39,7 +39,7 @@ data PackageContentsResource = PackageContentsResource {
     packageContentsCandidateChangeLogUri :: PackageId -> String
 }
 
-initPackageContentsFeature :: ServerEnv -> CoreFeature -> CheckFeature -> IO PackageContentsFeature
+initPackageContentsFeature :: ServerEnv -> CoreFeature -> PackageCandidatesFeature -> IO PackageContentsFeature
 initPackageContentsFeature env@ServerEnv{serverVerbosity = verbosity} core check = do
     loginfo verbosity "Initialising package-contents feature, start"
 
@@ -52,11 +52,11 @@ initPackageContentsFeature env@ServerEnv{serverVerbosity = verbosity} core check
 
 packageContentsFeature :: ServerEnv
                        -> CoreFeature
-                       -> CheckFeature
+                       -> PackageCandidatesFeature
                        -> PackageContentsFeature
 
 packageContentsFeature ServerEnv{serverBlobStore = store}
-                       CoreFeature{..} CheckFeature{..}
+                       CoreFeature{..} PackageCandidatesFeature{..}
   = PackageContentsFeature{..}
   where
     packageFeatureInterface = (emptyHackageFeature "package-contents") {

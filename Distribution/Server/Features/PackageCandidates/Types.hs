@@ -7,7 +7,7 @@
 --
 -- Data types for the candidate feature
 -----------------------------------------------------------------------------
-module Distribution.Server.Features.Check.Types where
+module Distribution.Server.Features.PackageCandidates.Types where
 
 import Distribution.Server.Packages.Types (PkgInfo)
 import Distribution.Server.Framework.Instances ()
