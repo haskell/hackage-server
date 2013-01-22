@@ -155,7 +155,7 @@ documentationFeature ServerEnv{serverBlobStore = store}
             blob <- liftIO $ BlobStorage.add store fileContents
             --TODO: validate the tarball here.
             -- Check all files in the tarball are under the dir foo-1.0-docs/
-            tarIndex <- liftIO $ TarIndex.readTarIndex (BlobStorage.filepath store blob)
+            tarIndex <- liftIO $ TarIndex.constructTarIndexFromFile (BlobStorage.filepath store blob)
             void $ updateState documentationState $ InsertDocumentation pkgid blob tarIndex
             noContent (toResponse ())
 

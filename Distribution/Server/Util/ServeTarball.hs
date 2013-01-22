@@ -14,7 +14,7 @@
 module Distribution.Server.Util.ServeTarball
     ( serveTarball
     , serveTarEntry
-    , readTarIndex
+    , constructTarIndexFromFile
     , constructTarIndex
     ) where
 
@@ -115,8 +115,8 @@ mimeTypes' :: Map.Map String String
 mimeTypes' = Happstack.mimeTypes `Map.union` Map.fromList
   [("xhtml", "application/xhtml+xml")]
 
-readTarIndex :: FilePath -> IO TarIndex
-readTarIndex file = do
+constructTarIndexFromFile :: FilePath -> IO TarIndex
+constructTarIndexFromFile file = do
   tar <- BS.readFile file
   case constructTarIndex tar of
     Left err       -> fail err

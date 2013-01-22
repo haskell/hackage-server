@@ -14,7 +14,7 @@ import Distribution.Server.Features.PackageCandidates
   )
 
 import Distribution.Server.Packages.Types
-import Distribution.Server.Util.ChangeLog (lookupTarball, lookupChangeLog)
+import Distribution.Server.Util.ChangeLog (lookupTarballAndConstructTarIndex, lookupChangeLog)
 import qualified Distribution.Server.Util.ServeTarball as TarIndex
 import Data.TarIndex (TarIndex)
 
@@ -125,6 +125,6 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
       where
         withContents :: (PackageId -> FilePath -> TarIndex -> ServerPartE Response) -> ServerPartE Response
         withContents func = with_pkg_path dpath $ \pkg ->
-            case lookupTarball store pkg of
+            case lookupTarballAndConstructTarIndex store pkg of
                 Nothing -> fail "Could not serve package contents: no tarball exists."
                 Just io -> liftIO io >>= \(fp, index) -> func (packageId pkg) fp index
