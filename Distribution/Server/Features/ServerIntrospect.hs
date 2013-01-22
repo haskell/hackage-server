@@ -8,7 +8,7 @@ import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Pages.Template (hackagePage)
 
 import Text.XHtml.Strict
-         ( Html, (+++), concatHtml, noHtml, toHtml, (<<)
+         ( Html, URL, (+++), concatHtml, noHtml, toHtml, (<<)
          , h2, h3, h4, p, tt, emphasize, bold, primHtmlChar
          , blockquote, thespan, thestyle
          , anchor, (!), href, name
@@ -23,7 +23,7 @@ import Data.Function (on)
 -- amount of introspection.
 --
 -- In particular it provides:
--- 
+--
 -- * API introspection: let people find out what the API of this hackage server
 -- instance is. It lists all the active features and all the resources they
 -- serve, including what methods and formats they support.
@@ -124,20 +124,28 @@ apiDocPageHtml serverFeatures = hackagePage title content
 
     renderLocationTemplate :: Resource -> Html
     renderLocationTemplate resource =
-        tt << (renderComponents pathComponents
-           +++ renderTrailer (resourceFormat resource) (resourcePathEnd resource))
+        let (components, mUrl) = renderComponents pathComponents
+            trailer            = renderTrailer (resourceFormat resource) (resourcePathEnd resource)
+        in tt << case mUrl of
+             Nothing  -> components +++ trailer
+             Just url -> anchor ! [href (url ++ trailer)] << (components +++ trailer)
       where
         pathComponents = reverse (resourceLocation resource)
 
-        renderComponents (StaticBranch  sdir:cs) = "/" +++ sdir
-                                                       +++ renderComponents cs
+        renderComponents :: [BranchComponent] -> (Html, Maybe URL)
+        renderComponents (StaticBranch sdir:cs) =
+          let (rest, url) = renderComponents cs
+          in ("/" +++ sdir +++ rest, liftM (("/" ++ sdir) ++) url)
         renderComponents (DynamicBranch leaf:[])
-          | ResourceFormat _ (Just (StaticBranch _)) <- resourceFormat resource
-                                                 = "/" +++ leaf
-        renderComponents (DynamicBranch ddir:cs) = "/" +++ emphasize << (":" ++ ddir)
-                                                       +++ renderComponents cs
-        renderComponents (TrailingBranch    :_ ) = emphasize << "*"
-        renderComponents []                      = noHtml
+          | ResourceFormat _ (Just (StaticBranch _)) <- resourceFormat resource =
+              ("/" +++ leaf, Just ("/" ++ leaf))
+        renderComponents (DynamicBranch ddir:cs) =
+          let (rest, _) = renderComponents cs
+          in ("/" +++ emphasize << (":" ++ ddir) +++ rest, Nothing)
+        renderComponents (TrailingBranch :_ ) =
+          (emphasize << "*", Nothing)
+        renderComponents [] =
+          (noHtml, Just "")
 
         renderTrailer (ResourceFormat (StaticFormat ext) _) _ = "." ++ ext
         renderTrailer _ Slash                                 = "/"
@@ -247,7 +255,7 @@ serveMemSizeHtml serverFeatures =
             <*> pure (featureDesc feature)
             <*> mapM getCanonicalStateSizes (featureState feature)
             <*> mapM getCacheStateSizes     (featureCaches feature)
-    
+
     getCanonicalStateSizes component =
       (,)   <$> pure (abstractStateDesc component)
             <*> abstractStateSize component
