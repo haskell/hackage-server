@@ -80,10 +80,10 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          usersFeature
                          coreFeature
 
-    checkFeature    <- initPackageCandidatesFeature env
-                         usersFeature
-                         coreFeature
-                         uploadFeature
+    candidatesFeature <- initPackageCandidatesFeature env
+                           usersFeature
+                           coreFeature
+                           uploadFeature
 
     reportsFeature  <- initBuildReportsFeature env
                          usersFeature
@@ -91,7 +91,6 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
     packageContentsFeature <- initPackageContentsFeature env
                                 coreFeature
-                                checkFeature
 
     documentationFeature <- initDocumentationFeature env
                          coreFeature
@@ -131,7 +130,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          coreFeature
                          packagesFeature
                          uploadFeature
-                         checkFeature
+                         candidatesFeature
                          versionsFeature
                          -- [reverse index disabled] reverseFeature
                          tagsFeature
@@ -154,7 +153,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 #ifndef MINIMAL
          , getFeatureInterface packagesFeature
          , getFeatureInterface distroFeature
-         , getFeatureInterface checkFeature
+         , getFeatureInterface candidatesFeature
          , getFeatureInterface reportsFeature
          , getFeatureInterface packageContentsFeature
          , getFeatureInterface documentationFeature

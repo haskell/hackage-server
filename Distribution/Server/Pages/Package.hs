@@ -1,5 +1,5 @@
 -- Body of the HTML page for a package
-{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE PatternGuards, RecordWildCards #-}
 module Distribution.Server.Pages.Package (
     packagePage,
     renderDependencies,
@@ -97,27 +97,36 @@ paragraphs = map unlines . paras . lines
                         (para, xs'') -> para : paras xs''
 
 downloadSection :: PackageRender -> [Html]
-downloadSection render =
+downloadSection PackageRender{..} =
     [ h2 << "Downloads"
     , ulist << map (li <<) downloadItems
     ]
-  where downloadItems =
-            [if tarExists then [anchor ! [href downloadURL] << (display pkgId ++ ".tar.gz"),
-                                toHtml << " [", anchor ! [href (rendPkgUri render </> "src/")] << "browse" , toHtml << "]",
-                                toHtml << " (Cabal source package)"]
-                          else [toHtml << "Package tarball not uploaded"],
-             [anchor ! [href cabalURL] << "Package description",
-              toHtml $ if tarExists then " (included in the package)" else ""],
-             case (tarExists, mchangeLogURL) of
-               (True, Just changeLogURL) -> [anchor ! [href changeLogURL] << "Changelog",
-                                             toHtml << " (included in the package)"]
-               (True, Nothing) -> [toHtml << "No changelog available"]
-               _ -> [toHtml << "Package tarball not uploaded"]]
-        downloadURL = rendPkgUri render </> display pkgId <.> "tar.gz"
-        cabalURL = rendPkgUri render </> display (packageName pkgId) <.> "cabal"
-        mchangeLogURL = rendChangeLogUri render
-        tarExists = rendHasTarball render
-        pkgId = rendPkgId render
+  where
+    downloadItems =
+      [ if rendHasTarball
+          then [ anchor ! [href downloadURL] << tarGzFileName
+               , toHtml << " ["
+               , anchor ! [href srcURL] << "browse"
+               , toHtml << "]"
+               , toHtml << " (Cabal source package)"
+               ]
+          else [ toHtml << "Package tarball not uploaded" ]
+      , [ anchor ! [href cabalURL] << "Package description"
+        , toHtml $ if rendHasTarball then " (included in the package)" else ""
+        ]
+      , case (rendHasTarball, rendHasChangeLog) of
+         (True, True)  -> [ anchor ! [href changeLogURL] << "Changelog"
+                          , toHtml << " (included in the package)"
+                          ]
+         (True, False) -> [ toHtml << "No changelog available" ]
+         _             -> [ toHtml << "Package tarball not uploaded" ]
+      ]
+
+    downloadURL   = rendPkgUri </> display rendPkgId <.> "tar.gz"
+    cabalURL      = rendPkgUri </> display (packageName rendPkgId) <.> "cabal"
+    changeLogURL  = rendPkgUri </> "changelog"
+    srcURL        = rendPkgUri </> "src/"
+    tarGzFileName = display rendPkgId ++ ".tar.gz"
 
 moduleSection :: PackageRender -> Maybe URL -> [Html]
 moduleSection render docURL = maybeToList $ fmap msect (rendModules render)

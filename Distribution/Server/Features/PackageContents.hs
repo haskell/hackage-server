@@ -8,10 +8,6 @@ module Distribution.Server.Features.PackageContents (
 import Distribution.Server.Framework
 
 import Distribution.Server.Features.Core
-import Distribution.Server.Features.PackageCandidates
-  ( PackageCandidatesFeature(PackageCandidatesFeature, withCandidatePath)
-  , CandPkgInfo(candPkgInfo)
-  )
 
 import Distribution.Server.Packages.Types
 import Distribution.Server.Util.ChangeLog (lookupTarballAndConstructTarIndex, lookupChangeLog)
@@ -33,21 +29,17 @@ instance IsHackageFeature PackageContentsFeature where
     getFeatureInterface = packageFeatureInterface
 
 data PackageContentsResource = PackageContentsResource {
-    packageContents                   :: Resource,
-    packageContentsCandidate          :: Resource,
-    packageContentsChangeLog          :: Resource,
-    packageContentsCandidateChangeLog :: Resource,
-
-    packageContentsChangeLogUri          :: PackageId -> String,
-    packageContentsCandidateChangeLogUri :: PackageId -> String
+    packageContents             :: Resource,
+    packageContentsChangeLog    :: Resource,
+    packageContentsChangeLogUri :: PackageId -> String
 }
 
-initPackageContentsFeature :: ServerEnv -> CoreFeature -> PackageCandidatesFeature -> IO PackageContentsFeature
-initPackageContentsFeature env@ServerEnv{serverVerbosity = verbosity} core candidates = do
+initPackageContentsFeature :: ServerEnv -> CoreFeature -> IO PackageContentsFeature
+initPackageContentsFeature env@ServerEnv{serverVerbosity = verbosity} core = do
     loginfo verbosity "Initialising package-contents feature, start"
 
     -- currently no state
-    let feature = packageContentsFeature env core candidates
+    let feature = packageContentsFeature env core
 
     loginfo verbosity "Initialising package-contents feature, end"
     return feature
@@ -55,53 +47,41 @@ initPackageContentsFeature env@ServerEnv{serverVerbosity = verbosity} core candi
 
 packageContentsFeature :: ServerEnv
                        -> CoreFeature
-                       -> PackageCandidatesFeature
                        -> PackageContentsFeature
 
 packageContentsFeature ServerEnv{serverBlobStore = store}
-                       CoreFeature{..} PackageCandidatesFeature{withCandidatePath}
+                       CoreFeature{..}
   = PackageContentsFeature{..}
   where
     packageFeatureInterface = (emptyHackageFeature "package-contents") {
         featureResources =
           map ($ packageContentsResource) [
               packageContents
-            , packageContentsCandidate
             , packageContentsChangeLog
-            , packageContentsCandidateChangeLog
             ]
       , featureState = []
+      , featureDesc = "The PackageContents feature shows the contents of packages and caches their TarIndexes"
       }
 
     packageContentsResource = PackageContentsResource {
           packageContents = (resourceAt "/package/:package/src/..") {
               resourceGet = [("", serveContents)]
             }
-        , packageContentsCandidate = (resourceAt "/package/:package/candidate/src/..") {
-              resourceGet = [("", serveCandidateContents)]
-            }
         , packageContentsChangeLog = (resourceAt "/package/:package/changelog") {
               resourceGet = [("changelog", serveChangeLog)]
             }
-        , packageContentsCandidateChangeLog = (resourceAt "/package/:package/candidate/changelog") {
-              resourceGet = [("changelog", serveCandidateChangeLog)]
-            }
         , packageContentsChangeLogUri = \pkgid ->
             renderResource (packageContentsChangeLog packageContentsResource) [display pkgid, display (packageName pkgid)]
-        , packageContentsCandidateChangeLogUri = \pkgid ->
-            renderResource (packageContentsCandidateChangeLog packageContentsResource) [display pkgid, display (packageName pkgid)]
         }
 
     --TODO: use something other than runServerPartE for nice html error pages
 
-    withPackagePath', withCandidatePath' :: DynamicPath -> (PkgInfo -> ServerPartE a) -> ServerPartE a
+    withPackagePath' :: DynamicPath -> (PkgInfo -> ServerPartE a) -> ServerPartE a
     withPackagePath'   dpath k = withPackagePath   dpath $ \pkg _ -> k pkg
-    withCandidatePath' dpath k = withCandidatePath dpath $ \_ pkg -> k (candPkgInfo pkg)
 
     -- result: changelog or not-found error
-    serveChangeLog, serveCandidateChangeLog :: DynamicPath -> ServerPart Response
+    serveChangeLog :: DynamicPath -> ServerPart Response
     serveChangeLog = serveChangeLog' withPackagePath'
-    serveCandidateChangeLog = serveChangeLog' withCandidatePath'
 
     serveChangeLog' :: (DynamicPath -> ((PkgInfo -> ServerPartE Response) -> ServerPartE Response))
                     -> DynamicPath -> ServerPart Response
@@ -112,9 +92,8 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
           Right (fp, offset, name) -> liftIO $ TarIndex.serveTarEntry fp offset name
 
     -- return: not-found error or tarball
-    serveContents, serveCandidateContents :: DynamicPath -> ServerPart Response
+    serveContents :: DynamicPath -> ServerPart Response
     serveContents = serveContents' withPackagePath'
-    serveCandidateContents = serveContents' withCandidatePath'
 
     serveContents' :: (DynamicPath -> ((PkgInfo -> ServerPartE Response) -> ServerPartE Response))
                    -> DynamicPath -> ServerPart Response

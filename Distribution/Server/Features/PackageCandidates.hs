@@ -27,6 +27,10 @@ import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Framework.BackupRestore (restoreBackupUnimplemented)
 
+import Distribution.Server.Util.ChangeLog (lookupTarballAndConstructTarIndex, lookupChangeLog)
+import qualified Distribution.Server.Util.ServeTarball as TarIndex
+import Data.TarIndex (TarIndex)
+
 import Distribution.Text
 import Distribution.Package
 
@@ -64,12 +68,14 @@ instance IsHackageFeature PackageCandidatesFeature where
 
 
 data PackageCandidatesResource = PackageCandidatesResource {
-    candidatesPage :: Resource,
-    candidatePage :: Resource,
+    candidatesPage        :: Resource,
+    candidatePage         :: Resource,
     packageCandidatesPage :: Resource,
-    publishPage :: Resource,
-    candidateCabal :: Resource,
-    candidateTarball :: Resource,
+    publishPage           :: Resource,
+    candidateCabal        :: Resource,
+    candidateTarball      :: Resource,
+    candidateContents     :: Resource,
+    candidateChangeLog    :: Resource,
     -- There can also be build reports as well as documentation for proposed
     -- versions.
     -- These features check for existence of a package in the *main* index,
@@ -80,12 +86,13 @@ data PackageCandidatesResource = PackageCandidatesResource {
     -- of the same package exist simultaneously, so may want to hook into
     -- UploadFeature's canUploadPackage to ensure this won't happen, and to
     -- force deletion on publication.
-    candidatesUri :: String -> String,
-    candidateUri :: String -> PackageId -> String,
-    packageCandidatesUri :: String -> PackageName -> String,
-    publishUri :: String -> PackageId -> String,
-    candidateTarballUri :: PackageId -> String,
-    candidateCabalUri :: PackageId -> String
+    candidatesUri         :: String -> String,
+    candidateUri          :: String -> PackageId -> String,
+    packageCandidatesUri  :: String -> PackageName -> String,
+    publishUri            :: String -> PackageId -> String,
+    candidateTarballUri   :: PackageId -> String,
+    candidateCabalUri     :: PackageId -> String,
+    candidateChangeLogUri :: PackageId -> String
 }
 
 -- candidates can be published at any time; there can be multiple candidates per package
@@ -143,6 +150,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
             , publishPage
             , candidateCabal
             , candidateTarball
+            , candidateContents
+            , candidateChangeLog
             ]
       , featureState = [abstractStateComponent candidatesState]
       }
@@ -166,6 +175,12 @@ candidatesFeature ServerEnv{serverBlobStore = store}
             resourceDesc = [(GET, "Candidate tarball")]
           , resourceGet  = [("tarball", serveCandidateTarball)]
           }
+      , candidateContents = (resourceAt "/package/:package/candidate/src/..") {
+            resourceGet = [("", serveContents)]
+          }
+      , candidateChangeLog = (resourceAt "/package/:package/candidate/changelog") {
+            resourceGet = [("changelog", serveChangeLog)]
+          }
       , candidatesUri = \format ->
           renderResource (candidatesPage r) [format]
       , candidateUri  = \format pkgid ->
@@ -178,6 +193,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           renderResource (candidateTarball r) [display pkgid, display pkgid]
       , candidateCabalUri = \pkgid ->
           renderResource (candidateCabal r) [display pkgid, display (packageName pkgid)]
+      , candidateChangeLogUri = \pkgid ->
+          renderResource (candidateChangeLog candidatesResource) [display pkgid, display (packageName pkgid)]
       }
 
     basicCandidatePage :: PackageCandidatesResource -> DynamicPath -> ServerPart Response
@@ -365,3 +382,36 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     withCandidates :: PackageName -> (CandidatePackages -> [CandPkgInfo] -> ServerPartE a) -> ServerPartE a
     withCandidates name func = withCandidate (PackageIdentifier name $ Version [] []) $ \state _ infos -> func state infos
 
+    withCandidatePath' :: DynamicPath -> (PkgInfo -> ServerPartE a) -> ServerPartE a
+    withCandidatePath' dpath k = withCandidatePath dpath $ \_ pkg -> k (candPkgInfo pkg)
+
+    -- TODO: serveContents, serveChangeLog, serveChangeLog' and serveContents'
+    -- are all direct copies of the corresponding functions in PackageContents
+    -- We should factor out this common functionality.
+
+    serveContents :: DynamicPath -> ServerPart Response
+    serveContents = serveContents' withCandidatePath'
+
+    serveChangeLog :: DynamicPath -> ServerPart Response
+    serveChangeLog = serveChangeLog' withCandidatePath'
+
+    serveChangeLog' :: (DynamicPath -> ((PkgInfo -> ServerPartE Response) -> ServerPartE Response))
+                    -> DynamicPath -> ServerPart Response
+    serveChangeLog' with_pkg_path dpath = runServerPartE $ with_pkg_path dpath $ \pkg -> do
+        res <- liftIO $ lookupChangeLog store pkg
+        case res of
+          Left err -> errNotFound "Changelog not found" [MText err]
+          Right (fp, offset, name) -> liftIO $ TarIndex.serveTarEntry fp offset name
+
+    serveContents' :: (DynamicPath -> ((PkgInfo -> ServerPartE Response) -> ServerPartE Response))
+                   -> DynamicPath -> ServerPart Response
+    serveContents' with_pkg_path dpath = runServerPartE $ withContents $ \pkgid tarball index -> do
+        -- if given a directory, the default page is index.html
+        -- the default directory prefix is the package name itself (including the version)
+        TarIndex.serveTarball ["index.html"] (display pkgid) tarball index
+      where
+        withContents :: (PackageId -> FilePath -> TarIndex -> ServerPartE Response) -> ServerPartE Response
+        withContents func = with_pkg_path dpath $ \pkg ->
+            case lookupTarballAndConstructTarIndex store pkg of
+                Nothing -> fail "Could not serve package contents: no tarball exists."
+                Just io -> liftIO io >>= \(fp, index) -> func (packageId pkg) fp index

@@ -12,7 +12,6 @@ module Distribution.Server.Packages.Render (
 
 import Data.Maybe (catMaybes)
 import Control.Monad (guard, liftM2)
-import System.FilePath ((</>))
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
 import Data.Map (Map)
@@ -39,49 +38,54 @@ import Distribution.Server.Users.Types
 -- in its particular format (text, html, json) with minimal effort on its part.
 -- This is why some fields of PackageDescription are preprocessed, and others aren't.
 data PackageRender = PackageRender {
-    rendPkgId :: PackageIdentifier,
-    rendDepends :: [[Dependency]],
-    rendExecNames :: [String],
-    rendLicenseName :: String,
-    rendMaintainer :: Maybe String,
-    rendCategory :: [String],
-    rendRepoHeads :: [(RepoType, String, SourceRepo)],
-    rendModules :: Maybe ModuleForest,
-    rendHasTarball :: Bool,
-    rendChangeLogUri :: Maybe String,
-    rendUploadInfo :: (UTCTime, Maybe UserInfo),
-    rendPkgUri :: String,
+    rendPkgId        :: PackageIdentifier,
+    rendDepends      :: [[Dependency]],
+    rendExecNames    :: [String],
+    rendLicenseName  :: String,
+    rendMaintainer   :: Maybe String,
+    rendCategory     :: [String],
+    rendRepoHeads    :: [(RepoType, String, SourceRepo)],
+    rendModules      :: Maybe ModuleForest,
+    rendHasTarball   :: Bool,
+    rendHasChangeLog :: Bool,
+    rendUploadInfo   :: (UTCTime, Maybe UserInfo),
+    rendPkgUri       :: String,
     -- rendOther contains other useful fields which are merely strings, possibly empty
     --     for example: description, home page, copyright, author, stability
     -- If PackageRender is the One True Resource Representation, should they
     -- instead be fields of PackageRender?
-    rendOther :: PackageDescription
+    rendOther        :: PackageDescription
 } deriving (Show)
 
 doPackageRender :: Users.Users -> PkgInfo -> Bool -> IO PackageRender
-doPackageRender users info showChangeLogLink =
-    do let genDesc  = pkgDesc info
-           flatDesc = flattenPackageDescription genDesc
-           desc     = packageDescription genDesc
-           pkgUri   = "/package/" ++ display (pkgInfoId info)
-       return $ PackageRender
-        { rendPkgId = pkgInfoId info
-        , rendDepends   = flatDependencies genDesc
-        , rendExecNames = map exeName (executables flatDesc)
-        , rendLicenseName = display (license desc) -- maybe make this a bit more human-readable
-        , rendMaintainer  = case maintainer desc of "None" -> Nothing; "none" -> Nothing; "" -> Nothing; person -> Just person
-        , rendCategory = case category desc of [] -> []; str -> categorySplit str
-        , rendRepoHeads = catMaybes (map rendRepo $ sourceRepos desc)
-        , rendModules = fmap (moduleForest . exposedModules) (library flatDesc)
-        , rendHasTarball = not . null $ pkgTarball info
-        , rendChangeLogUri = if showChangeLogLink
-                               then Just (pkgUri </> "changelog")
-                               else Nothing
-        , rendUploadInfo = let (utime, uid) = pkgUploadData info in (utime, Users.lookupId uid users)
-        , rendPkgUri = pkgUri
-        , rendOther = desc
-        }
+doPackageRender users info hasChangeLog = return $ PackageRender
+    { rendPkgId        = pkgInfoId info
+    , rendDepends      = flatDependencies genDesc
+    , rendExecNames    = map exeName (executables flatDesc)
+    , rendLicenseName  = display (license desc) -- maybe make this a bit more human-readable
+    , rendMaintainer   = case maintainer desc of
+                           "None" -> Nothing
+                           "none" -> Nothing
+                           ""     -> Nothing
+                           person -> Just person
+    , rendCategory     = case category desc of
+                           []  -> []
+                           str -> categorySplit str
+    , rendRepoHeads    = catMaybes (map rendRepo $ sourceRepos desc)
+    , rendModules      = fmap (moduleForest . exposedModules) (library flatDesc)
+    , rendHasTarball   = not . null $ pkgTarball info
+    , rendHasChangeLog = hasChangeLog
+    , rendUploadInfo   = let (utime, uid) = pkgUploadData info
+                         in (utime, Users.lookupId uid users)
+    , rendPkgUri       = pkgUri
+    , rendOther        = desc
+    }
   where
+    genDesc  = pkgDesc info
+    flatDesc = flattenPackageDescription genDesc
+    desc     = packageDescription genDesc
+    pkgUri   = "/package/" ++ display (pkgInfoId info)
+
     rendRepo r = do
         guard $ repoKind r == RepoHead
         ty <- repoType r
