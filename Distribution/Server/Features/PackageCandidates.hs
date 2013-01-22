@@ -27,9 +27,10 @@ import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Framework.BackupRestore (restoreBackupUnimplemented)
 
-import Distribution.Server.Util.ChangeLog (lookupTarballAndConstructTarIndex, lookupChangeLog)
-import qualified Distribution.Server.Util.ServeTarball as TarIndex
+import qualified Distribution.Server.Util.ServeTarball as ServeTarball
 import Data.TarIndex (TarIndex)
+import qualified Data.TarIndex as TarIndex
+import qualified Text.PrettyPrint.HughesPJ as Pretty (render)
 
 import Distribution.Text
 import Distribution.Package
@@ -385,9 +386,10 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     withCandidatePath' :: DynamicPath -> (PkgInfo -> ServerPartE a) -> ServerPartE a
     withCandidatePath' dpath k = withCandidatePath dpath $ \_ pkg -> k (candPkgInfo pkg)
 
-    -- TODO: serveContents, serveChangeLog, serveChangeLog' and serveContents'
-    -- are all direct copies of the corresponding functions in PackageContents
-    -- We should factor out this common functionality.
+{-------------------------------------------------------------------------------
+  EVERYTHING BELOW IS A DIRECT DUPLICATE OF FUNCTIONALITY IN PACKAGECONTENTS.
+  WE SHOULD FACTOR THIS OUT.
+-------------------------------------------------------------------------------}
 
     serveContents :: DynamicPath -> ServerPart Response
     serveContents = serveContents' withCandidatePath'
@@ -401,17 +403,53 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         res <- liftIO $ lookupChangeLog store pkg
         case res of
           Left err -> errNotFound "Changelog not found" [MText err]
-          Right (fp, offset, name) -> liftIO $ TarIndex.serveTarEntry fp offset name
+          Right (fp, offset, name) -> liftIO $ ServeTarball.serveTarEntry fp offset name
 
     serveContents' :: (DynamicPath -> ((PkgInfo -> ServerPartE Response) -> ServerPartE Response))
                    -> DynamicPath -> ServerPart Response
     serveContents' with_pkg_path dpath = runServerPartE $ withContents $ \pkgid tarball index -> do
         -- if given a directory, the default page is index.html
         -- the default directory prefix is the package name itself (including the version)
-        TarIndex.serveTarball ["index.html"] (display pkgid) tarball index
+        ServeTarball.serveTarball ["index.html"] (display pkgid) tarball index
       where
         withContents :: (PackageId -> FilePath -> TarIndex -> ServerPartE Response) -> ServerPartE Response
         withContents func = with_pkg_path dpath $ \pkg ->
             case lookupTarballAndConstructTarIndex store pkg of
                 Nothing -> fail "Could not serve package contents: no tarball exists."
                 Just io -> liftIO io >>= \(fp, index) -> func (packageId pkg) fp index
+
+
+
+-- TODO: This should go completely. We should cache tar indices, not
+-- reconstruct them all the time.
+lookupTarballAndConstructTarIndex :: BlobStorage -> PkgInfo -> Maybe (IO (FilePath, TarIndex.TarIndex))
+lookupTarballAndConstructTarIndex store pkgInfo =
+    case pkgTarball pkgInfo of
+        [] -> Nothing
+        ((tb, _):_) -> Just $
+            do let blobId = pkgTarballNoGz tb
+                   fp = BlobStorage.filepath store blobId
+               index <- ServeTarball.constructTarIndexFromFile fp
+               return (fp, index)
+
+lookupChangeLog :: BlobStorage -> PkgInfo -> IO (Either String (FilePath, TarIndex.TarEntryOffset, String))
+lookupChangeLog store pkgInfo = case lookupTarballAndConstructTarIndex store pkgInfo of
+        Nothing -> return $ Left "Could not extract changelog: no tarball exists."
+        Just io ->
+            do (fp, index) <- io
+               case msum $ map (lookupFile index) candidates of
+                 Just (name, offset) -> return $ Right (fp, offset, name)
+                 Nothing ->
+                     do let msg = "No changelog found, files considered: " ++ show candidates
+                        return $ Left msg
+    where
+      lookupFile index fname =
+          do entry <- TarIndex.lookup index fname
+             case entry of
+               TarIndex.TarFileEntry offset -> return (fname, offset)
+               _ -> fail "is a directory"
+      candidates =
+          let l = ["ChangeLog", "CHANGELOG", "CHANGE_LOG", "Changelog", "changelog"]
+              pkgId = Pretty.render $ disp (pkgInfoId pkgInfo)
+          in map (pkgId </>) $ map (++ ".html") l ++ l
+

@@ -9,10 +9,10 @@ import Distribution.Server.Framework
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
+import Distribution.Server.Features.PackageContents (lookupChangeLog)
 
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.Render
-import Distribution.Server.Util.ChangeLog (lookupChangeLog)
 
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
