@@ -9,7 +9,7 @@ import Distribution.Server.Framework
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
-import Distribution.Server.Features.PackageContents (lookupChangeLog)
+import Distribution.Server.Features.PackageContents (PackageContentsFeature(..))
 
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.Render
@@ -42,16 +42,22 @@ data RecentPackagesResource = RecentPackagesResource {
     recentPackages :: Resource
 }
 
-initRecentPackagesFeature :: ServerEnv -> UserFeature -> CoreFeature -> IO RecentPackagesFeature
+initRecentPackagesFeature :: ServerEnv
+                          -> UserFeature
+                          -> CoreFeature
+                          -> PackageContentsFeature
+                          -> IO RecentPackagesFeature
 initRecentPackagesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
-                    user core@CoreFeature{packageIndexChange} = do
+                          user
+                          core@CoreFeature{packageIndexChange}
+                          packageContents = do
     loginfo verbosity "Initialising recentPackages feature, start"
 
     -- recent caches. in lieu of an ActionLog
     -- TODO: perhaps a hook, recentUpdated :: HookList ([PkgInfo] -> IO ())
     rec let (feature, updateRecentCache) =
-              recentPackagesFeature env user core
-                              cacheRecent
+              recentPackagesFeature env user core packageContents
+                                    cacheRecent
 
         cacheRecent <- newAsyncCacheNF updateRecentCache
                          defaultAsyncCachePolicy {
@@ -67,14 +73,17 @@ initRecentPackagesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verb
 
 
 recentPackagesFeature :: ServerEnv
-                -> UserFeature
-                -> CoreFeature
-                -> AsyncCache (Response, Response)
-                -> (RecentPackagesFeature, IO (Response, Response))
+                      -> UserFeature
+                      -> CoreFeature
+                      -> PackageContentsFeature
+                      -> AsyncCache (Response, Response)
+                      -> (RecentPackagesFeature, IO (Response, Response))
 
-recentPackagesFeature env@ServerEnv{serverBlobStore = store}
-                UserFeature{..} CoreFeature{..}
-                cacheRecent
+recentPackagesFeature env
+                      UserFeature{..}
+                      CoreFeature{..}
+                      PackageContentsFeature{packageChangeLog}
+                      cacheRecent
   = (RecentPackagesFeature{..}, updateRecentCache)
   where
     recentPackagesFeatureInterface = (emptyHackageFeature "recentPackages") {
@@ -99,7 +108,7 @@ recentPackagesFeature env@ServerEnv{serverBlobStore = store}
 
     packageRender pkg = do
       users <- queryGetUserDb
-      changeLog <- lookupChangeLog store pkg
+      changeLog <- packageChangeLog pkg
       let showChangeLogLink = case changeLog of Right _ -> True ; _ -> False
       doPackageRender users pkg showChangeLogLink
 

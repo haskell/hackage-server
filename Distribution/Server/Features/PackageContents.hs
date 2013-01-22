@@ -1,15 +1,14 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.PackageContents (
-    PackageContentsFeature,
+    PackageContentsFeature(..),
     PackageContentsResource(..),
-    initPackageContentsFeature,
-    lookupTarballAndConstructTarIndex,
-    lookupChangeLog
+    initPackageContentsFeature
   ) where
 
 import Distribution.Server.Framework
 
 import Distribution.Server.Features.Core
+import Distribution.Server.Features.PackageContents.State
 
 import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Util.ServeTarball as ServeTarball
@@ -26,7 +25,11 @@ import Distribution.Package
 
 data PackageContentsFeature = PackageContentsFeature {
     packageFeatureInterface :: HackageFeature,
-    packageContentsResource :: PackageContentsResource
+    packageContentsResource :: PackageContentsResource,
+
+    -- Functionality exported to other features
+    packageTarball   :: PkgInfo -> IO (Maybe (FilePath, TarIndex.TarIndex)),
+    packageChangeLog :: PkgInfo -> IO (Either String (FilePath, TarIndex.TarEntryOffset, String))
 }
 
 instance IsHackageFeature PackageContentsFeature where
@@ -39,22 +42,35 @@ data PackageContentsResource = PackageContentsResource {
 }
 
 initPackageContentsFeature :: ServerEnv -> CoreFeature -> IO PackageContentsFeature
-initPackageContentsFeature env@ServerEnv{serverVerbosity = verbosity} core = do
+initPackageContentsFeature env@ServerEnv{serverStateDir, serverVerbosity = verbosity} core = do
     loginfo verbosity "Initialising package-contents feature, start"
 
-    -- currently no state
-    let feature = packageContentsFeature env core
+    tarIndices <- tarIndicesStateComponent serverStateDir
+    let feature = packageContentsFeature env core tarIndices
 
     loginfo verbosity "Initialising package-contents feature, end"
     return feature
 
+tarIndicesStateComponent :: FilePath -> IO (StateComponent TarIndicesState)
+tarIndicesStateComponent stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "PackageContents") initialTarIndices
+  return StateComponent {
+      stateDesc    = "Cached tar indices"
+    , acidState    = st
+    , getState     = query st GetTarIndices
+    , putState     = update st . ReplaceTarIndices
+    , resetState   = tarIndicesStateComponent
+    , getStateSize = memSize <$> query st GetTarIndices
+    }
 
 packageContentsFeature :: ServerEnv
                        -> CoreFeature
+                       -> StateComponent TarIndicesState
                        -> PackageContentsFeature
 
 packageContentsFeature ServerEnv{serverBlobStore = store}
                        CoreFeature{..}
+                       tarIndices
   = PackageContentsFeature{..}
   where
     packageFeatureInterface = (emptyHackageFeature "package-contents") {
@@ -112,6 +128,14 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
                 Nothing -> fail "Could not serve package contents: no tarball exists."
                 Just io -> liftIO io >>= \(fp, index) -> func (packageId pkg) fp index
 
+    packageTarball :: PkgInfo -> IO (Maybe (FilePath, TarIndex.TarIndex))
+    packageTarball pkgInfo =
+      case lookupTarballAndConstructTarIndex store pkgInfo of
+        Nothing -> return Nothing
+        Just io -> Just <$> io
+
+    packageChangeLog :: PkgInfo -> IO (Either String (FilePath, TarIndex.TarEntryOffset, String))
+    packageChangeLog = lookupChangeLog store
 
 -- TODO: This should go completely. We should cache tar indices, not
 -- reconstruct them all the time.

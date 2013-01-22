@@ -72,9 +72,13 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          usersFeature
 
 #ifndef MINIMAL
+    packageContentsFeature <- initPackageContentsFeature env
+                                coreFeature
+
     packagesFeature <- initRecentPackagesFeature env
                          usersFeature
                          coreFeature
+                         packageContentsFeature
 
     distroFeature   <- initDistroFeature env
                          usersFeature
@@ -88,9 +92,6 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     reportsFeature  <- initBuildReportsFeature env
                          usersFeature
                          coreFeature
-
-    packageContentsFeature <- initPackageContentsFeature env
-                                coreFeature
 
     documentationFeature <- initDocumentationFeature env
                          coreFeature
