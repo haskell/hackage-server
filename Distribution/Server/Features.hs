@@ -92,6 +92,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                            usersFeature
                            coreFeature
                            uploadFeature
+                           tarIndexCacheFeature
 
     reportsFeature  <- initBuildReportsFeature env
                          usersFeature
