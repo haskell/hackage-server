@@ -128,7 +128,10 @@ executable hackage-server
     cpp-options: -DMINIMAL
   else
     other-modules:
+      Distribution.Server.Features.TarIndexCache
+      Distribution.Server.Features.TarIndexCache.State
       Distribution.Server.Features.LegacyRedirects
+      Distribution.Server.Features.PackageContents
       Distribution.Server.Features.BuildReports
       Distribution.Server.Features.BuildReports.BuildReport
       Distribution.Server.Features.BuildReports.BuildReports

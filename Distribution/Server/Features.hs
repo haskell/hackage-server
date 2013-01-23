@@ -19,6 +19,7 @@ import Distribution.Server.Features.Upload   (initUploadFeature)
 import Distribution.Server.Features.Mirror   (initMirrorFeature)
 
 #ifndef MINIMAL
+import Distribution.Server.Features.TarIndexCache       (initTarIndexCacheFeature)
 import Distribution.Server.Features.Html                (initHtmlFeature)
 import Distribution.Server.Features.PackageCandidates   (initPackageCandidatesFeature)
 import Distribution.Server.Features.RecentPackages      (initRecentPackagesFeature)
@@ -72,8 +73,11 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          usersFeature
 
 #ifndef MINIMAL
+    tarIndexCacheFeature <- initTarIndexCacheFeature env
+
     packageContentsFeature <- initPackageContentsFeature env
                                 coreFeature
+                                tarIndexCacheFeature
 
     packagesFeature <- initRecentPackagesFeature env
                          usersFeature
