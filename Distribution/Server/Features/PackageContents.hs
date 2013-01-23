@@ -11,24 +11,22 @@ import Distribution.Server.Features.Core
 import Distribution.Server.Features.TarIndexCache
 
 import Distribution.Server.Packages.Types
-import qualified Distribution.Server.Util.ServeTarball as ServeTarball
-import Data.TarIndex (TarIndex)
+import Distribution.Server.Packages.ChangeLog
+import Distribution.Server.Util.ServeTarball (serveTarEntry, serveTarball)
 import qualified Data.TarIndex as TarIndex
-import qualified Text.PrettyPrint.HughesPJ as Pretty (render)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
 import Distribution.Text
 import Distribution.Package
 
-
--- FIXME: cache TarIndexes?
+import Control.Monad.Error (ErrorT(..))
 
 data PackageContentsFeature = PackageContentsFeature {
     packageFeatureInterface :: HackageFeature,
     packageContentsResource :: PackageContentsResource,
 
     -- Functionality exported to other features
-    packageTarball   :: PkgInfo -> IO (Maybe (FilePath, TarIndex.TarIndex)),
+    packageTarball   :: PkgInfo -> IO (Either String (FilePath, TarIndex.TarIndex)),
     packageChangeLog :: PkgInfo -> IO (Either String (FilePath, TarIndex.TarEntryOffset, String))
 }
 
@@ -86,72 +84,42 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
             renderResource (packageContentsChangeLog packageContentsResource) [display pkgid, display (packageName pkgid)]
         }
 
-    --TODO: use something other than runServerPartE for nice html error pages
+{-------------------------------------------------------------------------------
+  TODO: everything below is duplicated in PackageCandidates.
+-------------------------------------------------------------------------------}
 
-    withPackagePath' :: DynamicPath -> (PkgInfo -> ServerPartE a) -> ServerPartE a
-    withPackagePath'   dpath k = withPackagePath   dpath $ \pkg _ -> k pkg
+    --TODO: use something other than runServerPartE for nice html error pages
 
     -- result: changelog or not-found error
     serveChangeLog :: DynamicPath -> ServerPart Response
-    serveChangeLog = serveChangeLog' withPackagePath'
-
-    serveChangeLog' :: (DynamicPath -> ((PkgInfo -> ServerPartE Response) -> ServerPartE Response))
-                    -> DynamicPath -> ServerPart Response
-    serveChangeLog' with_pkg_path dpath = runServerPartE $ with_pkg_path dpath $ \pkg -> do
-        mChangeLog <- liftIO $ packageChangeLog pkg
-        case mChangeLog of
-          Left err ->
-            errNotFound "Changelog not found" [MText err]
-          Right (fp, offset, name) ->
-            liftIO $ ServeTarball.serveTarEntry fp offset name
+    serveChangeLog dpath = runServerPartE $ withPackagePath dpath $ \pkg _ -> do
+      mChangeLog <- liftIO $ packageChangeLog pkg
+      case mChangeLog of
+        Left err ->
+          errNotFound "Changelog not found" [MText err]
+        Right (fp, offset, name) ->
+          liftIO $ serveTarEntry fp offset name
 
     -- return: not-found error or tarball
     serveContents :: DynamicPath -> ServerPart Response
-    serveContents = serveContents' withPackagePath'
+    serveContents dpath = runServerPartE $ withPackagePath dpath $ \pkg _ -> do
+      mTarball <- liftIO $ packageTarball pkg
+      case mTarball of
+        Left err ->
+          errNotFound "Could not serve package contents" [MText err]
+        Right (fp, index) ->
+          serveTarball ["index.html"] (display (packageId pkg)) fp index
 
-    serveContents' :: (DynamicPath -> ((PkgInfo -> ServerPartE Response) -> ServerPartE Response))
-                   -> DynamicPath -> ServerPart Response
-    serveContents' with_pkg_path dpath = runServerPartE $ withContents $ \pkgid tarball index -> do
-        -- if given a directory, the default page is index.html
-        -- the default directory prefix is the package name itself (including the version)
-        ServeTarball.serveTarball ["index.html"] (display pkgid) tarball index
-      where
-        withContents :: (PackageId -> FilePath -> TarIndex -> ServerPartE Response) -> ServerPartE Response
-        withContents func = with_pkg_path dpath $ \pkg -> do
-            mTarball <- liftIO $ packageTarball pkg
-            case mTarball of
-              Nothing ->
-                fail "Could not serve package contents: no tarball exists."
-              Just (fp, index) ->
-                func (packageId pkg) fp index
-
-    packageTarball :: PkgInfo -> IO (Maybe (FilePath, TarIndex.TarIndex))
+    packageTarball :: PkgInfo -> IO (Either String (FilePath, TarIndex.TarIndex))
     packageTarball PkgInfo{pkgTarball = (pkgTarball, _) : _} = do
       let fp = BlobStorage.filepath store (pkgTarballNoGz pkgTarball)
       index <- cachedPackageTarIndex pkgTarball
-      return $ Just (fp, index)
+      return $ Right (fp, index)
     packageTarball _ =
-      return Nothing
+      return $ Left "No tarball found"
 
     packageChangeLog :: PkgInfo -> IO (Either String (FilePath, TarIndex.TarEntryOffset, String))
-    packageChangeLog pkgInfo = do
-      mTarball <- packageTarball pkgInfo
-      case mTarball of
-        Nothing ->
-          return $ Left "Could not extract changelog: no tarball exists."
-        Just (fp, index) ->
-          case msum $ map (lookupFile index) candidates of
-            Just (name, offset) -> return $ Right (fp, offset, name)
-            Nothing ->
-                do let msg = "No changelog found, files considered: " ++ show candidates
-                   return $ Left msg
-      where
-        lookupFile index fname =
-            do entry <- TarIndex.lookup index fname
-               case entry of
-                 TarIndex.TarFileEntry offset -> return (fname, offset)
-                 _ -> fail "is a directory"
-        candidates =
-            let l = ["ChangeLog", "CHANGELOG", "CHANGE_LOG", "Changelog", "changelog"]
-                pkgId = Pretty.render $ disp (pkgInfoId pkgInfo)
-            in map (pkgId </>) $ map (++ ".html") l ++ l
+    packageChangeLog pkgInfo = runErrorT $ do
+      (fp, index)     <- ErrorT $ packageTarball pkgInfo
+      (offset, fname) <- ErrorT $ return (findChangeLog pkgInfo index)
+      return (fp, offset, fname)

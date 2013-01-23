@@ -41,7 +41,7 @@ import System.IO
 
 
 -- | Server the contents of a tar file
--- file. This is not a sustainable implementation,
+-- file. TODO: This is not a sustainable implementation,
 -- but it gives us something to test with.
 serveTarball :: MonadIO m
              => [FilePath] -- dir index file names (e.g. ["index.html"])

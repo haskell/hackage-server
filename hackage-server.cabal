@@ -84,6 +84,8 @@ executable hackage-server
     Distribution.Server.Packages.PackageIndex
     Distribution.Server.Packages.Types
     Distribution.Server.Packages.Unpack
+    Distribution.Server.Packages.Render
+    Distribution.Server.Packages.ChangeLog
 
     Distribution.Server.Pages.BuildReports
     Distribution.Server.Pages.Distributions
