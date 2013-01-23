@@ -4,7 +4,7 @@ module Distribution.Server.Features.Documentation.State where
 
 import Distribution.Package
 import Distribution.Server.Framework.BlobStorage (BlobId)
-import Data.TarIndex (TarIndex)
+import Data.TarIndex () -- For SafeCopy instances
 import Distribution.Server.Framework.MemSize
 
 import Data.Acid     (Query, Update, makeAcidic)
@@ -17,8 +17,8 @@ import qualified Data.Map as Map
 
 ---------------------------------- Documentation
 data Documentation = Documentation {
-     documentation :: !(Map.Map PackageIdentifier (BlobId, TarIndex))
-   } deriving (Typeable, Show)
+     documentation :: !(Map.Map PackageIdentifier BlobId)
+   } deriving (Typeable, Show, Eq)
 
 deriveSafeCopy 0 'base ''Documentation
 
@@ -28,7 +28,7 @@ instance MemSize Documentation where
 initialDocumentation :: Documentation
 initialDocumentation = Documentation Map.empty
 
-lookupDocumentation :: PackageIdentifier -> Query Documentation (Maybe (BlobId, TarIndex))
+lookupDocumentation :: PackageIdentifier -> Query Documentation (Maybe BlobId)
 lookupDocumentation pkgId
     = do m <- asks documentation
          return $ Map.lookup pkgId m
@@ -39,9 +39,9 @@ hasDocumentation pkgId
          Just{} -> return True
          _      -> return False
 
-insertDocumentation :: PackageIdentifier -> BlobId -> TarIndex -> Update Documentation ()
-insertDocumentation pkgId blob index
-    = State.modify $ \doc -> doc {documentation = Map.insert pkgId (blob, index) (documentation doc)}
+insertDocumentation :: PackageIdentifier -> BlobId -> Update Documentation ()
+insertDocumentation pkgId blob
+    = State.modify $ \doc -> doc {documentation = Map.insert pkgId blob (documentation doc)}
 
 getDocumentation :: Query Documentation Documentation
 getDocumentation = ask

@@ -101,6 +101,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     documentationFeature <- initDocumentationFeature env
                          coreFeature
                          uploadFeature
+                         tarIndexCacheFeature
 
     downloadFeature <- initDownloadFeature env
                          coreFeature

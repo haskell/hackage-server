@@ -10,18 +10,18 @@ import Distribution.Server.Framework
 import Distribution.Server.Features.Documentation.State
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
+import Distribution.Server.Features.TarIndexCache
 
 import Distribution.Server.Framework.BackupRestore
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Framework.BlobStorage (BlobId)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
-import qualified Distribution.Server.Util.ServeTarball as TarIndex
+import qualified Distribution.Server.Util.ServeTarball as ServerTarball
 import Data.TarIndex (TarIndex)
 
 import Distribution.Text
 import Distribution.Package
 
-import Data.Function
 import qualified Data.Map as Map
 
 -- TODO:
@@ -43,12 +43,18 @@ data DocumentationResource = DocumentationResource {
     packageDocsWhole   :: Resource
 }
 
-initDocumentationFeature :: ServerEnv -> CoreFeature -> UploadFeature -> IO DocumentationFeature
+initDocumentationFeature :: ServerEnv
+                         -> CoreFeature
+                         -> UploadFeature
+                         -> TarIndexCacheFeature
+                         -> IO DocumentationFeature
 initDocumentationFeature env@ServerEnv{serverStateDir, serverVerbosity = verbosity}
-                         core upload = do
+                         core
+                         upload
+                         tarIndexCache = do
     loginfo verbosity "Initialising documentation feature, start"
     documentationState <- documentationStateComponent serverStateDir
-    let feature = documentationFeature env core upload documentationState
+    let feature = documentationFeature env core upload tarIndexCache documentationState
     loginfo verbosity "Initialising documentation feature, end"
     return feature
 
@@ -67,7 +73,7 @@ documentationStateComponent stateDir = do
     }
   where
     dumpBackup doc =
-        let exportFunc (pkgid, (blob, _)) = BackupBlob ([display pkgid, "documentation.tar"]) blob
+        let exportFunc (pkgid, blob) = BackupBlob ([display pkgid, "documentation.tar"]) blob
         in map exportFunc . Map.toList $ documentation doc
 
     updateDocumentation :: Documentation -> RestoreBackup Documentation
@@ -83,21 +89,19 @@ documentationStateComponent stateDir = do
       }
 
     importDocumentation :: PackageId -> BlobId -> Documentation -> Restore Documentation
-    importDocumentation pkgId blobId (Documentation docs) = do
-      tar <- restoreGetBlob blobId
-      case TarIndex.constructTarIndex tar of
-        Left err ->
-          fail err
-        Right tarIndex ->
-          return (Documentation (Map.insert pkgId (blobId, tarIndex) docs))
+    importDocumentation pkgId blobId (Documentation docs) =
+      return (Documentation (Map.insert pkgId blobId docs))
 
 documentationFeature :: ServerEnv
                      -> CoreFeature
                      -> UploadFeature
+                     -> TarIndexCacheFeature
                      -> StateComponent Documentation
                      -> DocumentationFeature
 documentationFeature ServerEnv{serverBlobStore = store}
-                     CoreFeature{..} UploadFeature{..}
+                     CoreFeature{..}
+                     UploadFeature{..}
+                     TarIndexCacheFeature{cachedTarIndex}
                      documentationState
   = DocumentationFeature{..}
   where
@@ -107,8 +111,7 @@ documentationFeature ServerEnv{serverBlobStore = store}
               packageDocsContent
             , packageDocsWhole
             ]
-        -- We don't really want to check that the tar index is the same (probably)
-      , featureState = [abstractStateComponent' (compareState `on` (Map.map fst . documentation)) documentationState]
+      , featureState = [abstractStateComponent documentationState]
       }
 
     queryHasDocumentation :: MonadIO m => PackageIdentifier -> m Bool
@@ -137,11 +140,11 @@ documentationFeature ServerEnv{serverBlobStore = store}
         let tarball = BlobStorage.filepath store blob
         -- if given a directory, the default page is index.html
         -- the root directory within the tarball is e.g. foo-1.0-docs/
-        TarIndex.serveTarball ["index.html"] (display pkgid ++ "-docs") tarball index
+        ServerTarball.serveTarball ["index.html"] (display pkgid ++ "-docs") tarball index
 
     -- return: not-found error (parsing) or see other uri
     uploadDocumentation :: DynamicPath -> ServerPart Response
-    uploadDocumentation dpath =
+    uploadDocumentation dpath = do
       runServerPartE $
         withPackagePath dpath $ \pkg _ -> do
         let pkgid = packageId pkg
@@ -155,11 +158,23 @@ documentationFeature ServerEnv{serverBlobStore = store}
             blob <- liftIO $ BlobStorage.add store fileContents
             --TODO: validate the tarball here.
             -- Check all files in the tarball are under the dir foo-1.0-docs/
-            tarIndex <- liftIO $ TarIndex.constructTarIndexFromFile (BlobStorage.filepath store blob)
-            void $ updateState documentationState $ InsertDocumentation pkgid blob tarIndex
+            void $ updateState documentationState $ InsertDocumentation pkgid blob
             noContent (toResponse ())
 
-    -- curl -u mgruen:admin -X PUT --data-binary @gtk.tar.gz http://localhost:8080/package/gtk-0.11.0
+   {-
+     To upload documentation using curl:
+
+     curl -u admin:admin \
+          -X PUT \
+          -H "Content-Type: application/x-tar" \
+          --data-binary @transformers-0.3.0.0-docs.tar \
+          http://localhost:8080/package/transformers-0.3.0.0/docs
+
+     The tarfile is expected to have the structure
+
+        transformers-0.3.0.0-docs/index.html
+        ..
+   -}
 
     withDocumentation :: DynamicPath -> (PackageId -> BlobId -> TarIndex -> ServerPartE a) -> ServerPartE a
     withDocumentation dpath func =
@@ -168,5 +183,6 @@ documentationFeature ServerEnv{serverBlobStore = store}
         mdocs <- queryState documentationState $ LookupDocumentation pkgid
         case mdocs of
           Nothing -> errNotFound "Not Found" [MText $ "There is no documentation for " ++ display pkgid]
-          Just (blob, index) -> func pkgid blob index
-
+          Just blob -> do
+            index <- liftIO $ cachedTarIndex blob
+            func pkgid blob index
