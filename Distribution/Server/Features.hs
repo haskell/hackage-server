@@ -158,11 +158,12 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface mirrorFeature
          , getFeatureInterface uploadFeature
 #ifndef MINIMAL
+         , getFeatureInterface tarIndexCacheFeature
+         , getFeatureInterface packageContentsFeature
          , getFeatureInterface packagesFeature
          , getFeatureInterface distroFeature
          , getFeatureInterface candidatesFeature
          , getFeatureInterface reportsFeature
-         , getFeatureInterface packageContentsFeature
          , getFeatureInterface documentationFeature
          , getFeatureInterface downloadFeature
          , getFeatureInterface tagsFeature
