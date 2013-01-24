@@ -168,7 +168,6 @@ packagesStateComponent verbosity stateDir = do
      , backupState  = indexToAllVersions
      , restoreState = packagesBackup
      , resetState   = packagesStateComponent verbosity
-     , getStateSize = memSize <$> query st GetPackagesState
      }
 
 coreFeature :: ServerEnv

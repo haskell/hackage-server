@@ -106,7 +106,6 @@ tagsStateComponent stateDir = do
     , backupState  = \pkgTags -> [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]
     , restoreState = tagsBackup
     , resetState   = tagsStateComponent
-    , getStateSize = memSize <$> query st GetPackageTags
     }
 
 tagsFeature :: CoreFeature

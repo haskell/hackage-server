@@ -23,6 +23,8 @@ module Distribution.Server.Framework.Feature
 import Distribution.Server.Framework.BackupRestore (RestoreBackup(..), AbstractRestoreBackup(..), BackupEntry, abstractRestoreBackup)
 import Distribution.Server.Framework.Resource      (Resource)
 import Distribution.Server.Framework.BlobStorage   (BlobStorage)
+import Distribution.Server.Framework.MemSize
+
 import Data.Monoid
 import Control.Monad (liftM, liftM2)
 import Control.Monad.Trans (MonadIO)
@@ -93,8 +95,6 @@ data StateComponent st = StateComponent {
   , restoreState :: RestoreBackup st
     -- | Clone the state component in the given state directory
   , resetState   :: FilePath -> IO (StateComponent st)
-    -- | Get the current memory residency of the state
-  , getStateSize :: !(IO Int)
   }
 
 -- | 'AbstractStateComponent' abstracts away from a particular type of
@@ -136,10 +136,10 @@ compareState old new =
     dropCommonPrefix common (x:xs) (y:ys) | x == y = dropCommonPrefix (x:common) xs ys
     dropCommonPrefix common xs ys = (reverse common, xs, ys)
 
-abstractStateComponent :: (Eq st, Show st) => StateComponent st -> AbstractStateComponent
+abstractStateComponent :: (Eq st, Show st, MemSize st) => StateComponent st -> AbstractStateComponent
 abstractStateComponent = abstractStateComponent' compareState
 
-abstractStateComponent' :: (st -> st -> [String]) -> StateComponent st -> AbstractStateComponent
+abstractStateComponent' :: MemSize st => (st -> st -> [String]) -> StateComponent st -> AbstractStateComponent
 abstractStateComponent' cmp st = AbstractStateComponent {
     abstractStateDesc       = stateDesc st
   , abstractStateCheckpoint = createCheckpoint (acidState st)
@@ -150,7 +150,7 @@ abstractStateComponent' cmp st = AbstractStateComponent {
                                 st' <- resetState st stateDir
                                 let cmpSt = liftM2 cmp (getState st) (getState st')
                                 return (abstractStateComponent' cmp st', cmpSt)
-  , abstractStateSize       = getStateSize st
+  , abstractStateSize       = liftM memSize (getState st)
   }
 
 instance Monoid AbstractStateComponent where

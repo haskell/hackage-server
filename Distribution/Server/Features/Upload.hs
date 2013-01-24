@@ -130,7 +130,6 @@ trusteesStateComponent stateDir = do
     , backupState  = \(HackageTrustees trustees) -> [csvToBackup ["trustees.csv"] $ groupToCSV trustees]
     , restoreState = HackageTrustees <$> groupBackup ["trustees.csv"]
     , resetState   = trusteesStateComponent
-    , getStateSize = memSize <$> query st GetHackageTrustees
     }
 
 uploadersStateComponent :: FilePath -> IO (StateComponent HackageUploaders)
@@ -144,7 +143,6 @@ uploadersStateComponent stateDir = do
     , backupState  = \(HackageUploaders uploaders) -> [csvToBackup ["uploaders.csv"] $ groupToCSV uploaders]
     , restoreState = HackageUploaders <$> groupBackup ["uploaders.csv"]
     , resetState   = uploadersStateComponent
-    , getStateSize = memSize <$> query st GetHackageUploaders
     }
 
 maintainersStateComponent :: FilePath -> IO (StateComponent PackageMaintainers)
@@ -158,7 +156,6 @@ maintainersStateComponent stateDir = do
     , backupState  = \(PackageMaintainers mains) -> [maintToExport mains]
     , restoreState = maintainerBackup
     , resetState   = maintainersStateComponent
-    , getStateSize = memSize <$> query st AllPackageMaintainers
     }
 
 uploadFeature :: ServerEnv

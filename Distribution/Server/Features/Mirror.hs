@@ -80,7 +80,6 @@ mirrorersStateComponent stateDir = do
     , backupState  = \(MirrorClients clients) -> [csvToBackup ["clients.csv"] $ groupToCSV clients]
     , restoreState = MirrorClients <$> groupBackup ["clients.csv"]
     , resetState   = mirrorersStateComponent
-    , getStateSize = memSize <$> query st GetMirrorClients
     }
 
 mirrorFeature :: ServerEnv

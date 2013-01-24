@@ -41,7 +41,6 @@ tarIndexCacheStateComponent stateDir = do
     , getState     = query st GetTarIndexCache
     , putState     = update st . ReplaceTarIndexCache
     , resetState   = tarIndexCacheStateComponent
-    , getStateSize = memSize <$> query st GetTarIndexCache
     -- We don't backup the tar indices, but reconstruct them on demand
     , backupState  = \_ -> []
     , restoreState = RestoreBackup {
@@ -59,15 +58,12 @@ tarIndexCacheFeature ServerEnv{serverBlobStore = store} tarIndexCache =
     tarIndexCacheFeatureInterface :: HackageFeature
     tarIndexCacheFeatureInterface = (emptyHackageFeature "tarIndexCache") {
         featureDesc  = "Generic cache for tarball indices"
-      , featureState = [abstractStateComponent' compareState tarIndexCache]
+        -- We don't want to compare blob IDs
+        -- (TODO: We could potentially check that if a package occurs in both
+        -- packages then both caches point to identical tar indices, but for
+        -- that we would need to be in IO)
+      , featureState = [abstractStateComponent' (\_ _ -> []) tarIndexCache]
       }
-
-    -- We don't want to compare blob IDs
-    -- (TODO: We could potentially check that if a package occurs in both
-    -- packages then both caches point to identical tar indices, but for that
-    -- we would need to be in IO)
-    compareState :: TarIndexCache -> TarIndexCache -> [String]
-    compareState _ _ = []
 
     -- This is the heart of this feature
     cachedTarIndex :: BlobId -> IO TarIndex

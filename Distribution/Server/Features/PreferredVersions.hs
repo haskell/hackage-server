@@ -111,7 +111,6 @@ preferredStateComponent stateDir = do
     -- TODO: backup
     , backupState  = \_ -> []
     , restoreState = restoreBackupUnimplemented
-    , getStateSize = memSize <$> query st GetPreferredVersions
     }
 
 versionsFeature :: CoreFeature

@@ -65,7 +65,6 @@ distrosStateComponent stateDir = do
     , backupState  = dumpBackup
     , restoreState = restoreBackup
     , resetState   = distrosStateComponent
-    , getStateSize = memSize <$> query st GetDistributions
     }
 
 distroFeature :: UserFeature

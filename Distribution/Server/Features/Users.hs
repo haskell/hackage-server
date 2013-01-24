@@ -163,7 +163,6 @@ usersStateComponent stateDir = do
     , backupState  = \users -> [csvToBackup ["users.csv"] (usersToCSV users)]
     , restoreState = userBackup
     , resetState   = usersStateComponent
-    , getStateSize = memSize <$> query st GetUserDb
     }
 
 adminsStateComponent :: FilePath -> IO (StateComponent HackageAdmins)
@@ -177,7 +176,6 @@ adminsStateComponent stateDir = do
     , backupState  = \(HackageAdmins admins) -> [csvToBackup ["admins.csv"] (groupToCSV admins)]
     , restoreState = HackageAdmins <$> groupBackup ["admins.csv"]
     , resetState   = adminsStateComponent
-    , getStateSize = memSize <$> query st GetHackageAdmins
     }
 
 userFeature :: StateComponent Users.Users
