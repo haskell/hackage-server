@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, MultiParamTypeClasses, RecordWildCards, FlexibleInstances, StandaloneDeriving, KindSignatures, GADTs, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RankNTypes, RecordWildCards, GeneralizedNewtypeDeriving #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Distribution.Server.Framework.BackupRestore (
@@ -156,43 +156,76 @@ parseText label text = case simpleParse text of
     Nothing -> fail $ "Unable to parse " ++ label ++ ": " ++ show text
     Just a -> return a
 
---------------------------------------------------------------------------------
--- Restore Monad                                                              --
---------------------------------------------------------------------------------
+{-------------------------------------------------------------------------------
+  Restore Monad
 
-data Restore :: * -> * where
-  RestoreDone :: forall a. a -> Restore a
-  RestoreBind :: Restore a -> (a -> Restore b) -> Restore b
-  RestoreFail :: forall a. String -> Restore a
-  RestoreAddBlob :: ByteString -> Restore BlobId
-  RestoreGetBlob :: BlobId -> Restore ByteString
+  This is a free monad. Monad laws:
+
+  LEFT IDENTITY
+
+    return x >>= f
+  = RestoreDone x >>= f
+  = f x
+
+  RIGHT IDENTITY
+
+    m >>= return
+  = m >>= RestoreDone
+
+  Induction on m:
+
+    1.   RestoreDone x >>= RestoreDone
+       = RestoreDone x
+    2.   RestoreFail err >>= RestoreDone
+       = RestoreFail err
+    3.   RestoreAddBLob bs f >>= RestoreDone
+       = RestoreAddBlob bs $ \bid -> f bid >>= RestoreDone
+           { by induction }
+       = RestoreAddBlob bs $ \bid -> f bid
+           { eta reduction }
+       = RestoreAddBlob bs f
+    4. Analogous to (3).
+
+  ASSOCIATIVITY
+
+    You'll have to take my word for it :-)
+-------------------------------------------------------------------------------}
+
+
+data Restore a = RestoreDone a
+               | RestoreFail String
+               | RestoreAddBlob ByteString (BlobId -> Restore a)
+               | RestoreGetBlob BlobId (ByteString -> Restore a)
+
+instance Monad Restore where
+  return = RestoreDone
+  fail   = RestoreFail
+  RestoreDone x        >>= g = g x
+  RestoreFail err      >>= _ = RestoreFail err
+  RestoreAddBlob bs  f >>= g = RestoreAddBlob bs  $ \bid -> f bid >>= g
+  RestoreGetBlob bid f >>= g = RestoreGetBlob bid $ \bs  -> f bs  >>= g
 
 instance Functor Restore where
   fmap = liftM
 
-instance Monad Restore where
-  return = RestoreDone
-  (>>=)  = RestoreBind
-  fail   = RestoreFail
+instance Applicative Restore where
+  pure      = return
+  mf <*> mx = do f <- mf ; x <- mx ; return (f x)
 
 runRestore :: BlobStorage -> Restore a -> IO (Either String a)
 runRestore store = go
   where
     go :: forall a. Restore a -> IO (Either String a)
-    go (RestoreDone a)      = return (Right a)
-    go (RestoreBind x f)    = do mx' <- go x
-                                 case mx' of
-                                   Left err -> return (Left err)
-                                   Right x' -> go (f x')
-    go (RestoreFail err)    = return (Left err)
-    go (RestoreAddBlob bs)  = Right <$> add store bs
-    go (RestoreGetBlob bid) = Right <$> fetch store bid
+    go (RestoreDone a)        = return (Right a)
+    go (RestoreFail err)      = return (Left err)
+    go (RestoreAddBlob bs f)  = add store bs    >>= go . f
+    go (RestoreGetBlob bid f) = fetch store bid >>= go . f
 
 restoreAddBlob :: ByteString -> Restore BlobId
-restoreAddBlob = RestoreAddBlob
+restoreAddBlob = (`RestoreAddBlob` RestoreDone)
 
 restoreGetBlob :: BlobId -> Restore ByteString
-restoreGetBlob = RestoreGetBlob
+restoreGetBlob = (`RestoreGetBlob` RestoreDone)
 
 --------------------------------------------------------------------------------
 -- Import a backup                                                            --
