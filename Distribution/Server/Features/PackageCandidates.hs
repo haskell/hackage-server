@@ -329,6 +329,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                         pkgDataOld    = []
                     }
                 success <- liftIO $ doAddPackage pkgInfo'
+                --FIXME: share code here with upload
+                -- currently we do not create the initial maintainer group etc.
                 if success
                   then do
                     -- delete when requested: "moving" the resource

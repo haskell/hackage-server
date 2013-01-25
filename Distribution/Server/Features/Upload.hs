@@ -117,13 +117,6 @@ initUploadFeature env@ServerEnv{serverStateDir}
         (pkgGroup, pkgResource) <- groupResourcesAt
             "/package/:package/maintainers" getPkgMaintainers groupPaths
 
-    registerHook newPackageHook $ \pkg -> do
-        let group = pkgGroup [("package", display $ packageName pkg)]
-        exists <- groupExists group
-        -- create a maintainer group with the uploader if one didn't exist previously
-        --
-        when (not exists) $ addUserList group (pkgUploadUser pkg)
-
     return feature
 
 trusteesStateComponent :: FilePath -> IO (StateComponent HackageTrustees)
@@ -312,8 +305,8 @@ uploadFeature ServerEnv{serverBlobStore = store}
           then do
              -- make package maintainers group for new package
             let existedBefore = packageExists pkgIndex pkgInfo
-            when (not existedBefore) $ do
-                updateState maintainersState $ AddPackageMaintainer (packageName pkgInfo) (pkgUploadUser pkgInfo)
+            when (not existedBefore) $
+                liftIO $ addUserList (packageMaintainers [("package", display $ packageName pkgInfo)]) (pkgUploadUser pkgInfo)
             return uresult
           -- this is already checked in processUpload, and race conditions are highly unlikely but imaginable
           else errForbidden "Upload failed" [MText "Package already exists."]
