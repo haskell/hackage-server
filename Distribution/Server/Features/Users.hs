@@ -354,6 +354,9 @@ userFeature  usersState adminsState
             Nothing   -> userLost "Could not find user: internal server error"
             Just info -> func uid info
       where userLost = errNotFound "User not found" . return . MText
+            --FIXME: 404 is only the right error for operating on User resources
+            -- not when users are being looked up for other reasons, like setting
+            -- ownership of packages. In that case needs errBadRequest
 
     withUserPath :: DynamicPath -> (UserId -> UserInfo -> ServerPartE a) -> ServerPartE a
     withUserPath dpath func =
