@@ -138,9 +138,11 @@ documentationFeature ServerEnv{serverBlobStore = store}
     serveDocumentation dpath = do
       runServerPartE $ withDocumentation dpath $ \pkgid blob index -> do
         let tarball = BlobStorage.filepath store blob
+            etag    = blobETag blob
         -- if given a directory, the default page is index.html
         -- the root directory within the tarball is e.g. foo-1.0-docs/
-        ServerTarball.serveTarball ["index.html"] (display pkgid ++ "-docs") tarball index
+        ServerTarball.serveTarball ["index.html"] (display pkgid ++ "-docs")
+                                   tarball index etag
 
     -- return: not-found error (parsing) or see other uri
     uploadDocumentation :: DynamicPath -> ServerPart Response

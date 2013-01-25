@@ -33,6 +33,15 @@ import qualified Data.Time.Format as Time (formatTime)
 import System.Locale (defaultTimeLocale)
 import Text.CSV (printCSV, CSV)
 
+newtype ETag = ETag String
+  deriving (Eq, Ord, Show)
+
+blobETag :: BlobId -> ETag
+blobETag = ETag . blobMd5
+
+formatETag :: ETag -> String
+formatETag (ETag etag) = '"' : etag ++ ['"']
+
 data IndexTarball = IndexTarball BS.Lazy.ByteString
 
 instance ToMessage IndexTarball where
@@ -45,19 +54,21 @@ data PackageTarball = PackageTarball BS.Lazy.ByteString BlobId UTCTime
 instance ToMessage PackageTarball where
   toResponse (PackageTarball bs blobid time) = mkResponse bs
     [ ("Content-Type",  "application/x-gzip")
-    , ("Content-MD5",   blobMd5 blobid)
-    , ("ETag",          '"' : blobMd5 blobid ++ ['"'])
+    , ("Content-MD5",   md5sum)
+    , ("ETag",          formatETag (ETag md5sum))
     , ("Last-modified", formatTime time)
     ]
+    where md5sum = blobMd5 blobid
 
 data DocTarball = DocTarball BS.Lazy.ByteString BlobId
 
 instance ToMessage DocTarball where
   toResponse (DocTarball bs blobid) = mkResponse bs
     [ ("Content-Type",  "application/x-tar")
-    , ("Content-MD5",   blobMd5 blobid)
-    , ("ETag",          '"' : blobMd5 blobid ++ ['"'])
+    , ("Content-MD5",   md5sum)
+    , ("ETag",          formatETag (ETag md5sum))
     ]
+    where md5sum = blobMd5 blobid
 
 formatTime :: UTCTime -> String
 formatTime = Time.formatTime defaultTimeLocale rfc822DateFormat

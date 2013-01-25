@@ -6,6 +6,7 @@ module Distribution.Server.Features.PackageContents (
   ) where
 
 import Distribution.Server.Framework
+import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.TarIndexCache
@@ -14,7 +15,6 @@ import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.ChangeLog
 import Distribution.Server.Util.ServeTarball (serveTarEntry, serveTarball)
 import qualified Data.TarIndex as TarIndex
-import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
 import Distribution.Text
 import Distribution.Package
@@ -26,8 +26,8 @@ data PackageContentsFeature = PackageContentsFeature {
     packageContentsResource :: PackageContentsResource,
 
     -- Functionality exported to other features
-    packageTarball   :: PkgInfo -> IO (Either String (FilePath, TarIndex.TarIndex)),
-    packageChangeLog :: PkgInfo -> IO (Either String (FilePath, TarIndex.TarEntryOffset, String))
+    packageTarball   :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarIndex)),
+    packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarEntryOffset, FilePath))
 }
 
 instance IsHackageFeature PackageContentsFeature where
@@ -97,8 +97,8 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
       case mChangeLog of
         Left err ->
           errNotFound "Changelog not found" [MText err]
-        Right (fp, offset, name) ->
-          liftIO $ serveTarEntry fp offset name
+        Right (fp, etag, offset, name) ->
+          liftIO $ serveTarEntry fp offset name etag
 
     -- return: not-found error or tarball
     serveContents :: DynamicPath -> ServerPart Response
@@ -107,19 +107,21 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
       case mTarball of
         Left err ->
           errNotFound "Could not serve package contents" [MText err]
-        Right (fp, index) ->
-          serveTarball ["index.html"] (display (packageId pkg)) fp index
+        Right (fp, etag, index) ->
+          serveTarball ["index.html"] (display (packageId pkg)) fp index etag
 
-    packageTarball :: PkgInfo -> IO (Either String (FilePath, TarIndex.TarIndex))
+    packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarIndex))
     packageTarball PkgInfo{pkgTarball = (pkgTarball, _) : _} = do
-      let fp = BlobStorage.filepath store (pkgTarballNoGz pkgTarball)
+      let blobid = pkgTarballNoGz pkgTarball
+          fp     = BlobStorage.filepath store blobid
+          etag   = blobETag blobid
       index <- cachedPackageTarIndex pkgTarball
-      return $ Right (fp, index)
+      return $ Right (fp, etag, index)
     packageTarball _ =
       return $ Left "No tarball found"
 
-    packageChangeLog :: PkgInfo -> IO (Either String (FilePath, TarIndex.TarEntryOffset, String))
+    packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarEntryOffset, FilePath))
     packageChangeLog pkgInfo = runErrorT $ do
-      (fp, index)     <- ErrorT $ packageTarball pkgInfo
-      (offset, fname) <- ErrorT $ return (findChangeLog pkgInfo index)
-      return (fp, offset, fname)
+      (fp, etag, index) <- ErrorT $ packageTarball pkgInfo
+      (offset, fname)   <- ErrorT $ return (findChangeLog pkgInfo index)
+      return (fp, etag, offset, fname)

@@ -25,7 +25,7 @@ import Happstack.Server.Response
 import Happstack.Server.FileServe as Happstack (mimeTypes)
 import Distribution.Server.Util.Happstack (remainingPath)
 import Distribution.Server.Pages.Template (hackagePage)
-import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
+import Distribution.Server.Framework.ResponseContentTypes as Resource
 
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
@@ -40,9 +40,7 @@ import Control.Monad.Trans (MonadIO, liftIO)
 import Control.Monad (msum, mzero)
 import System.IO
 
---TODO: ETags!
-
--- | Server the contents of a tar file
+-- | Serve the contents of a tar file
 -- file. TODO: This is not a sustainable implementation,
 -- but it gives us something to test with.
 serveTarball :: MonadIO m
@@ -50,8 +48,9 @@ serveTarball :: MonadIO m
              -> FilePath   -- root dir in tar to serve
              -> FilePath   -- the tarball
              -> TarIndex   -- index for tarball
+             -> ETag       -- the etag
              -> ServerPartT m Response
-serveTarball indices tarRoot tarball tarIndex = do
+serveTarball indices tarRoot tarball tarIndex etag = do
     rq <- askRq
     action GET $ remainingPath $ \paths -> do
 
@@ -71,7 +70,7 @@ serveTarball indices tarRoot tarball tarIndex = do
              case TarIndex.lookup tarIndex path of
                Just (TarIndex.TarFileEntry off)
                    -> do
-                 tfe <- liftIO $ serveTarEntry tarball off path
+                 tfe <- liftIO $ serveTarEntry tarball off path etag
                  ok (toResponse tfe)
                _ -> mzero
 
@@ -85,7 +84,8 @@ serveTarball indices tarRoot tarball tarIndex = do
                  -> seeOther (addTrailingPathSeparator fullPath) (toResponse ())
 
                  | otherwise
-                 -> ok $ toResponse $ Resource.XHtml $ renderDirIndex fs
+                 -> ok $ setHeader "ETag" (formatETag etag) $
+                         toResponse $ Resource.XHtml $ renderDirIndex fs
                _ -> mzero
 
 renderDirIndex :: [FilePath] -> XHtml.Html
@@ -94,8 +94,8 @@ renderDirIndex entries = hackagePage "Directory Listing"
       XHtml.+++ XHtml.br
     | e <- entries ]
 
-serveTarEntry :: FilePath -> Int -> FilePath -> IO Response
-serveTarEntry tarfile off fname = do
+serveTarEntry :: FilePath -> Int -> FilePath -> ETag -> IO Response
+serveTarEntry tarfile off fname etag = do
   htar <- openFile tarfile ReadMode
   hSeek htar AbsoluteSeek (fromIntegral (off * 512))
   header <- BS.hGet htar 512
@@ -107,7 +107,8 @@ serveTarEntry tarfile off fname = do
                            ext       -> ext
              mimeType = Map.findWithDefault "text/plain" extension mimeTypes'
              response = ((setHeader "Content-Length" (show size)) .
-                         (setHeader "Content-Type" mimeType)) $
+                         (setHeader "Content-Type" mimeType) .
+                         (setHeader "ETag" (formatETag etag))) $
                          resultBS 200 body
          return response
     _ -> fail "oh noes!!"
