@@ -320,13 +320,24 @@ uploadFeature ServerEnv{serverBlobStore = store}
         let pkg = packageId (uploadDesc res)
         pkgGroup <- getPackageGroup $ packageName pkg
         if packageIdExists state pkg
-            then uploadError "Package name and version already exist in the database" --allow trustees to do this?
-            else -- This check is disabled for now: As long as you are in
-                 -- the uploaders group, you can upload any package
-                if packageExists state pkg && not (uid `Group.member` pkgGroup)
-                then uploadError "Not authorized to upload a new version of this package"
-                else return Nothing
-      where uploadError = return . Just . ErrorResponse 403 "Upload failed" . return . MText
+          then uploadError versionExists --allow trustees to do this?
+          else if packageExists state pkg && not (uid `Group.member` pkgGroup)
+                 then uploadError (notMaintainer pkg)
+                 else return Nothing
+      where
+        uploadError = return . Just . ErrorResponse 403 "Upload failed" . return . MText
+        versionExists = "This version of the package has already been uploaded.\n\nAs a matter of "
+                     ++ "policy we do not allow package tarballs to be changed after a release "
+                     ++ "(so we can guarantee stable md5sums etc). The usual recommendation is "
+                     ++ "to upload a new version, and if necessary blacklist the existing one. "
+                     ++ "In extraordinary circumstances, contact the administrators."
+        notMaintainer pkg = "You are not authorised to upload new versions of this package. The "
+                     ++ "package '" ++ display (packageName pkg) ++ "' exists already and you "
+                     ++ "are not a member of the maintainer group for this package.\n\n"
+                     ++ "If you believe you should be a member of the maintainer group for this "
+                     ++ "package, then ask an existing maintainer to add you to the group. If "
+                     ++ "this is a package name clash, please pick another name or talk to the "
+                     ++ "maintainers of the existing package."
 
     -- This function generically extracts a package, useful for uploading, checking,
     -- and anything else in the standard user-upload pipeline.
