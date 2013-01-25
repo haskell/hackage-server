@@ -4,7 +4,6 @@ module Distribution.Server.Features.Upload (
     UploadResource(..),
     initUploadFeature,
     UploadResult(..),
-    uploadsRestrictedToMaintainers,
   ) where
 
 import Distribution.Server.Framework
@@ -331,7 +330,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
             then uploadError "Package name and version already exist in the database" --allow trustees to do this?
             else -- This check is disabled for now: As long as you are in
                  -- the uploaders group, you can upload any package
-                if uploadsRestrictedToMaintainers && packageExists state pkg && not (uid `Group.member` pkgGroup)
+                if packageExists state pkg && not (uid `Group.member` pkgGroup)
                 then uploadError "Not authorized to upload a new version of this package"
                 else return Nothing
       where uploadError = return . Just . ErrorResponse 403 "Upload failed" . return . MText
@@ -380,8 +379,4 @@ uploadFeature ServerEnv{serverBlobStore = store}
                         pkgUploadData = uploadData,
                         pkgDataOld    = []
                     }, res)
-
---FIXME: reverse this
-uploadsRestrictedToMaintainers :: Bool
-uploadsRestrictedToMaintainers = False
 

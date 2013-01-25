@@ -295,7 +295,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           then uploadFailed "Name of package or package version does not match"
           else do
             pkgGroup <- getPackageGroup (packageName pkg)
-            if uploadsRestrictedToMaintainers && packageExists state pkg && not (uid `Group.member` pkgGroup)
+            if packageExists state pkg && not (uid `Group.member` pkgGroup)
               then uploadFailed "Not authorized to upload a candidate for this package"
               else return Nothing
       where uploadFailed = return . Just . ErrorResponse 403 "Upload failed" . return . MText
