@@ -104,6 +104,7 @@ initHtmlFeature ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
                           tags download
                           list names
                           mirror distros docs
+                          (htmlUtilities core tags)
                           mainCache namesCache
 
         -- Index page caches
@@ -143,6 +144,7 @@ htmlFeature :: UserFeature
             -> MirrorFeature
             -> DistroFeature
             -> DocumentationFeature
+            -> HtmlUtilities
             -> AsyncCache Response
             -> AsyncCache Response
             -> (HtmlFeature, IO Response, IO Response)
@@ -155,6 +157,7 @@ htmlFeature UserFeature{..} CoreFeature{..}
             ListFeature{..} NamesFeature{..}
             MirrorFeature{..} DistroFeature{..}
             DocumentationFeature{..}
+            HtmlUtilities{..}
             cachePackagesPage cacheNamesPage
   = (HtmlFeature{..}, packageIndex, packagesPage)
   where
@@ -1154,30 +1157,14 @@ htmlFeature UserFeature{..} CoreFeature{..}
     ----------------------------------------------------
     -- HTML utilities
 
-    htmlResponse :: ServerPartE a -> ServerPart a
-    htmlResponse part = runServerPartE (handleErrorResponse htmlError part)
-      where
-        htmlError :: ErrorResponse -> ServerPartE Response
-        htmlError (ErrorResponse errCode errTitle message) =
-            resp errCode $ toResponse
-                $ Resource.XHtml $ hackagePage errorStr [h2 << errorStr, paragraph << errorToHtml message]
-          where
-            errorStr = "Error: " ++ errTitle
-
-        errorToHtml :: [MessageSpan] -> [Html]
-        errorToHtml []               = []
-        errorToHtml (MText x    :xs) = toHtml x: errorToHtml xs
-        errorToHtml (MLink x url:xs) = (anchor ! [href url] << x): errorToHtml xs
-
+htmlUtilities :: CoreFeature -> TagsFeature -> HtmlUtilities
+htmlUtilities CoreFeature{..} TagsFeature{..} = HtmlUtilities{..}
+  where
     packageLink :: PackageId -> Html
     packageLink pkgid = anchor ! [href $ corePackageUri cores "" pkgid] << display pkgid
 
     packageNameLink :: PackageName -> Html
     packageNameLink pkgname = anchor ! [href $ corePackageName cores "" pkgname] << display pkgname
-
-    -- Prevents page indexing (e.g. for search pages).
-    noIndex :: Html
-    noIndex = meta ! [name "robots", content "noindex"]
 
     renderItem :: PackageItem -> Html
     renderItem item = li ! classes <<
@@ -1197,6 +1184,35 @@ htmlFeature UserFeature{..} CoreFeature{..}
     renderTags tags = intersperse (toHtml ", ")
         (map (\tg -> anchor ! [href $ tagUri tagsResource "" tg] << display tg)
           $ Set.toList tags)
+
+    cores = coreResource
+
+data HtmlUtilities = HtmlUtilities {
+    packageLink :: PackageId -> Html
+  , packageNameLink :: PackageName -> Html
+  , renderItem :: PackageItem -> Html
+  , renderTags :: Set Tag -> [Html]
+  }
+
+htmlResponse :: ServerPartE a -> ServerPart a
+htmlResponse part = runServerPartE (handleErrorResponse htmlError part)
+  where
+    htmlError :: ErrorResponse -> ServerPartE Response
+    htmlError (ErrorResponse errCode errTitle message) =
+        resp errCode $ toResponse
+            $ Resource.XHtml $ hackagePage errorStr [h2 << errorStr, paragraph << errorToHtml message]
+      where
+        errorStr = "Error: " ++ errTitle
+
+    errorToHtml :: [MessageSpan] -> [Html]
+    errorToHtml []               = []
+    errorToHtml (MText x    :xs) = toHtml x: errorToHtml xs
+    errorToHtml (MLink x url:xs) = (anchor ! [href url] << x): errorToHtml xs
+
+-- Prevents page indexing (e.g. for search pages).
+noIndex :: Html
+noIndex = meta ! [name "robots", content "noindex"]
+
 
 (<//>) :: String -> String -> String
 (<//>) = (System.FilePath.Posix.</>)
