@@ -181,14 +181,26 @@ htmlFeature user
 
     -- pages defined for the HTML feature in particular
 
-    htmlCore       = mkHtmlCore core versions upload tags docs download distros recent htmlTags htmlPreferred utilities cachePackagesPage cacheNamesPage
-    htmlUsers      = mkHtmlUsers user
-    htmlUploads    = mkHtmlUploads upload utilities
-    htmlCandidates = mkHtmlCandidates core upload versions candidates utilities
-    htmlPreferred  = mkHtmlPreferred core versions utilities
-    htmlDownloads  = mkHtmlDownloads download utilities
-    htmlTags       = mkHtmlTags core list tags utilities
-    htmlSearch     = mkHtmlSearch names list utilities
+    htmlCore       = mkHtmlCore       utilities
+                                      core
+                                      versions
+                                      upload
+                                      tags
+                                      docs
+                                      download
+                                      distros
+                                      recent
+                                      htmlTags
+                                      htmlPreferred
+                                      cachePackagesPage
+                                      cacheNamesPage
+    htmlUsers      = mkHtmlUsers      user
+    htmlUploads    = mkHtmlUploads    utilities upload
+    htmlDownloads  = mkHtmlDownloads  utilities download
+    htmlCandidates = mkHtmlCandidates utilities core versions upload candidates
+    htmlPreferred  = mkHtmlPreferred  utilities core versions
+    htmlTags       = mkHtmlTags       utilities core list tags
+    htmlSearch     = mkHtmlSearch     utilities      list names
 
     htmlResources = concat [
         htmlCoreResources       htmlCore
@@ -349,7 +361,8 @@ data HtmlCore = HtmlCore {
     htmlCoreResources :: [Resource]
   }
 
-mkHtmlCore :: CoreFeature
+mkHtmlCore :: HtmlUtilities
+           -> CoreFeature
            -> VersionsFeature
            -> UploadFeature
            -> TagsFeature
@@ -359,11 +372,11 @@ mkHtmlCore :: CoreFeature
            -> RecentPackagesFeature
            -> HtmlTags
            -> HtmlPreferred
-           -> HtmlUtilities
            -> AsyncCache Response
            -> AsyncCache Response
            -> HtmlCore
-mkHtmlCore CoreFeature{ coreResource
+mkHtmlCore HtmlUtilities{..}
+           CoreFeature{ coreResource
                       , withPackageAllPath
                       , withPackageId
                       }
@@ -380,7 +393,6 @@ mkHtmlCore CoreFeature{ coreResource
            RecentPackagesFeature{packageRender}
            HtmlTags{..}
            HtmlPreferred{..}
-           HtmlUtilities{..}
            cachePackagesPage
            cacheNamesPage = HtmlCore{..}
   where
@@ -643,8 +655,8 @@ data HtmlUploads = HtmlUploads {
     htmlUploadsResources :: [Resource]
   }
 
-mkHtmlUploads :: UploadFeature -> HtmlUtilities -> HtmlUploads
-mkHtmlUploads UploadFeature{..} HtmlUtilities{..} = HtmlUploads{..}
+mkHtmlUploads :: HtmlUtilities -> UploadFeature -> HtmlUploads
+mkHtmlUploads HtmlUtilities{..} UploadFeature{..} = HtmlUploads{..}
   where
     uploads = uploadResource
 
@@ -693,19 +705,19 @@ data HtmlCandidates = HtmlCandidates {
     htmlCandidatesResources :: [Resource]
   }
 
-mkHtmlCandidates :: CoreFeature
-                 -> UploadFeature
+mkHtmlCandidates :: HtmlUtilities
+                 -> CoreFeature
                  -> VersionsFeature
+                 -> UploadFeature
                  -> PackageCandidatesFeature
-                 -> HtmlUtilities
                  -> HtmlCandidates
-mkHtmlCandidates CoreFeature{ withPackageName
+mkHtmlCandidates HtmlUtilities{..}
+                 CoreFeature{ withPackageName
                             , queryGetPackageIndex
                             }
-                 UploadFeature{ withPackageAuth }
                  VersionsFeature{ queryGetPreferredInfo }
-                 PackageCandidatesFeature{..}
-                 HtmlUtilities{..} = HtmlCandidates{..}
+                 UploadFeature{ withPackageAuth }
+                 PackageCandidatesFeature{..} = HtmlCandidates{..}
   where
     candidates  = candidatesResource
 
@@ -891,16 +903,15 @@ data HtmlPreferred = HtmlPreferred {
   , editDeprecated :: Resource
   }
 
-mkHtmlPreferred :: CoreFeature
+mkHtmlPreferred :: HtmlUtilities
+                -> CoreFeature
                 -> VersionsFeature
-                -> HtmlUtilities
                 -> HtmlPreferred
-mkHtmlPreferred CoreFeature{ withPackageName
+mkHtmlPreferred HtmlUtilities{..} CoreFeature{ withPackageName
                            , withPackageAll
                            , withPackageAllPath
                            }
-                VersionsFeature{..}
-                HtmlUtilities{..} = HtmlPreferred{..}
+                VersionsFeature{..} = HtmlPreferred{..}
   where
     versions = versionsResource
 
@@ -1111,8 +1122,8 @@ data HtmlDownloads = HtmlDownloads {
     htmlDownloadsResources :: [Resource]
   }
 
-mkHtmlDownloads :: DownloadFeature -> HtmlUtilities -> HtmlDownloads
-mkHtmlDownloads DownloadFeature{..} HtmlUtilities{..} = HtmlDownloads{..}
+mkHtmlDownloads :: HtmlUtilities -> DownloadFeature -> HtmlDownloads
+mkHtmlDownloads HtmlUtilities{..} DownloadFeature{..} = HtmlDownloads{..}
   where
     downs = downloadResource
 
@@ -1147,15 +1158,15 @@ data HtmlTags = HtmlTags {
   , tagEdit :: Resource
   }
 
-mkHtmlTags :: CoreFeature
+mkHtmlTags :: HtmlUtilities
+           -> CoreFeature
            -> ListFeature
            -> TagsFeature
-           -> HtmlUtilities
            -> HtmlTags
-mkHtmlTags CoreFeature{withPackageName, withPackageAllPath}
+mkHtmlTags HtmlUtilities{..}
+           CoreFeature{withPackageName, withPackageAllPath}
            ListFeature{makeItemList}
-           TagsFeature{..}
-           HtmlUtilities{..} = HtmlTags{..}
+           TagsFeature{..} = HtmlTags{..}
   where
     tags = tagsResource
 
@@ -1197,7 +1208,6 @@ mkHtmlTags CoreFeature{withPackageName, withPackageAllPath}
     serveTagListing :: DynamicPath -> ServerPart Response
     serveTagListing dpath = withTagPath dpath $ \tg pkgnames -> do
         let tagd = "Packages tagged " ++ display tg
-            itemFunc = renderItem
             pkgs = Set.toList pkgnames
         items <- liftIO $ makeItemList pkgs
         let (mtag, histogram) = Map.updateLookupWithKey (\_ _ -> Nothing) tg $ tagHistogram items
@@ -1210,7 +1220,7 @@ mkHtmlTags CoreFeature{withPackageName, withPackageAllPath}
                 _  -> toHtml
                   [ paragraph << [if count==1 then "1 package has" else show count ++ " packages have", " this tag."]
                   , paragraph ! [theclass "toc"] << [toHtml "Related tags: ", toHtml $ showHistogram histogram]
-                  , ulist ! [theclass "packages"] << map itemFunc items ]
+                  , ulist ! [theclass "packages"] << map renderItem items ]
           ]
      where
       showHistogram hist = (++takeHtml) . intersperse (toHtml ", ") $
@@ -1252,13 +1262,13 @@ data HtmlSearch = HtmlSearch {
     htmlSearchResources :: [Resource]
   }
 
-mkHtmlSearch :: NamesFeature
+mkHtmlSearch :: HtmlUtilities
              -> ListFeature
-             -> HtmlUtilities
+             -> NamesFeature
              -> HtmlSearch
-mkHtmlSearch NamesFeature{..}
+mkHtmlSearch HtmlUtilities{..}
              ListFeature{makeItemList}
-             HtmlUtilities{..} = HtmlSearch{..}
+             NamesFeature{..} = HtmlSearch{..}
   where
     names = namesResource
 
@@ -1273,7 +1283,6 @@ mkHtmlSearch NamesFeature{..}
         Nothing -> return $ toResponse $ Resource.XHtml $
                             hackagePage "Text search" $ searchForm ""
         Just (str, texts) -> do
-            let itemFunc = renderItem
             (exact, text) <- searchFindPackage str texts
             exactItems <- liftIO $ makeItemList exact
             textItems <- liftIO $ makeItemList text
@@ -1281,11 +1290,11 @@ mkHtmlSearch NamesFeature{..}
               [ toHtml $ searchForm str
               , h2 << "Exact matches"
               , case exact of [] -> toHtml "None";
-                              _ -> ulist ! [theclass "packages"] << map itemFunc exactItems
+                              _ -> ulist ! [theclass "packages"] << map renderItem exactItems
               , h2 << "Text matches"
               , case texts of
                     False -> toHtml "Try a longer word."
-                    True  -> ulist ! [theclass "packages"] << map itemFunc textItems
+                    True  -> ulist ! [theclass "packages"] << map renderItem textItems
               ]
       where searchForm str =
               [ h2 << "Text search"
