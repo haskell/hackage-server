@@ -87,7 +87,7 @@ initHtmlFeature :: ServerEnv -> UserFeature -> CoreFeature -> RecentPackagesFeat
 initHtmlFeature ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
                 user core@CoreFeature{packageIndexChange}
                 packages upload
-                check versions
+                candidates versions
                 -- [reverse index disabled] reverse
                 tags download
                 list@ListFeature{itemUpdate}
@@ -100,7 +100,7 @@ initHtmlFeature ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
     rec let (feature, packageIndex, packagesPage) =
               htmlFeature user core
                           packages upload
-                          check versions
+                          candidates versions
                           tags download
                           list names
                           mirror distros docs
@@ -149,15 +149,17 @@ htmlFeature :: UserFeature
             -> AsyncCache Response
             -> (HtmlFeature, IO Response, IO Response)
 
-htmlFeature UserFeature{..} CoreFeature{..}
-            RecentPackagesFeature{..} UploadFeature{..}
-            PackageCandidatesFeature{..} VersionsFeature{..}
+htmlFeature user
+            core@CoreFeature{queryGetPackageIndex}
+            recent upload
+            candidates versions
             -- [reverse index disabled] ReverseFeature{..}
-            TagsFeature{..} DownloadFeature{..}
-            ListFeature{..} NamesFeature{..}
-            MirrorFeature{..} DistroFeature{..}
-            DocumentationFeature{..}
-            HtmlUtilities{..}
+            tags download
+            list@ListFeature{getAllLists}
+            names
+            mirror distros
+            docs
+            utilities@HtmlUtilities{..}
             cachePackagesPage cacheNamesPage
   = (HtmlFeature{..}, packageIndex, packagesPage)
   where
@@ -178,139 +180,35 @@ htmlFeature UserFeature{..} CoreFeature{..}
       }
 
     -- pages defined for the HTML feature in particular
-    editDeprecated    = (resourceAt "/package/:package/deprecated/edit") {
-                            resourceGet = [("html", serveDeprecateForm)]
-                          }
-    editPreferred     = (resourceAt "/package/:package/preferred/edit") {
-                            resourceGet = [("html", servePreferForm)]
-                          }
-    pkgCandUploadForm = (resourceAt "/package/:package/candidate/upload") {
-                            resourceGet = [("html", servePackageCandidateUpload)]
-                          }
-    candMaintainForm  = (resourceAt "/package/:package/candidate/maintain") {
-                            resourceGet = [("html", serveCandidateMaintain)]
-                          }
-    tagEdit           = (resourceAt "/package/:package/tags/edit") {
-                            resourceGet = [("html", serveTagsForm)]
-                          }
-    maintainPackage   = (resourceAt "/package/:package/maintain") {
-                            resourceGet = [("html", serveMaintainLinks editDeprecated editPreferred $ packageGroupResource uploads)]
-                          }
 
-    htmlResources = [
-      -- Core
-        (extendResource $ corePackagePage cores) {
-            resourceDesc = [(GET, "Show detailed package information")]
-          , resourceGet  = [("html", servePackagePage)]
-          }
-      {-
-      , (extendResource $ coreIndexPage cores) {
-            resourceGet = [("html", serveIndexPage)]
-          }, currently in 'core' feature
-      -}
-      , (resourceAt "/packages/names" ) {
-            resourceGet = [("html", const $ readAsyncCache cacheNamesPage)]
-          }
-      , (extendResource $ corePackagesPage cores) {
-            resourceDesc = [(GET, "Show package index")]
-          , resourceGet  = [("html", const $ readAsyncCache cachePackagesPage)]
-          }
-      , maintainPackage
+    htmlCore       = mkHtmlCore core versions upload tags docs download distros recent htmlTags htmlPreferred utilities cachePackagesPage cacheNamesPage
+    htmlUsers      = mkHtmlUsers user
+    htmlUploads    = mkHtmlUploads upload utilities
+    htmlCandidates = mkHtmlCandidates core upload versions candidates utilities
+    htmlPreferred  = mkHtmlPreferred core versions utilities
+    htmlDownloads  = mkHtmlDownloads download utilities
+    htmlTags       = mkHtmlTags core tags list utilities
+    htmlSearch     = mkHtmlSearch names list utilities
 
-      -- users
-        -- list of users with user links; if admin, a link to add user page
-      , (extendResource $ userList users) {
-            resourceDesc = [ (GET,  "list of users")
-                           , (POST, "create a new user")
-                           ]
-          , resourceGet  = [ ("html", serveUserList) ]
-          , resourcePost = [ ("html", \_ -> htmlResponse $ adminAddUser) ]
-          }
-        -- form to post to /users/
-      , (resourceAt "/users/register") {
-            resourceDesc = [ (GET, "show \"add user\" form") ]
-          , resourceGet  = [ ("html", addUserForm) ]
-          }
-        -- user page with link to password form and list of groups (how to do this?)
-      , (extendResource $ userPage users) {
-            resourceDesc   = [ (GET,    "show user page")
-                             , (DELETE, "delete the user")
-                             ]
-          , resourceGet    = [ ("html", serveUserPage) ]
-          , resourceDelete = [ ("html", serveDeleteUser) ]
-          }
-        -- form to PUT password
-      , (extendResource $ passwordResource users) {
-            resourceDesc = [ (GET, "show password change form")
-                           , (PUT, "change password")
-                           ]
-          , resourceGet  = [ ("html", servePasswordForm) ]
-          , resourcePut  = [ ("html", servePutPassword) ]
-          }
-        -- form to enable or disable users (admin only)
-      , (extendResource $ enabledResource users) {
-            resourceDesc = [ (GET, "return if the user is enabled")
-                           , (PUT, "set if the user is enabled")
-                           ]
-          , resourceGet  = [("html", serveEnabledForm)]
-          , resourcePut  = [("html", servePutEnabled)]
-          }
+    htmlResources = concat [
+        htmlCoreResources       htmlCore
+      , htmlUsersResources      htmlUsers
+      , htmlUploadsResources    htmlUploads
+      , htmlCandidatesResources htmlCandidates
+      , htmlPreferredResources  htmlPreferred
+      , htmlDownloadsResources  htmlDownloads
+      , htmlTagsResources       htmlTags
+      , htmlSearchResources     htmlSearch
+      -- and user groups. package maintainers, trustees, admins
+      , htmlGroupResource user (packageGroupResource . uploadResource $ upload)
+      , htmlGroupResource user (trusteeResource      . uploadResource $ upload)
+      , htmlGroupResource user (uploaderResource     . uploadResource $ upload)
+      , htmlGroupResource user (adminResource        . userResource   $ user)
+      , htmlGroupResource user (mirrorGroupResource  . mirrorResource $ mirror)
+      ]
 
-      -- uploads
-        -- serve upload result as HTML
-      , (extendResource $ uploadIndexPage uploads) {
-            resourceDesc = [(POST, "Upload package")]
-          , resourcePost = [("html", serveUploadResult)]
-          }
-        -- form for uploading
-      , (resourceAt "/packages/upload") {
-            resourceGet = [("html", serveUploadForm)]
-          }
 
-      -- candidates
-        -- list of all packages which have candidates
-      , (extendResource $ candidatesPage candidates) {
-            resourceDesc = [ (GET, "Show all package candidates")
-                           , (POST, "Upload a new candidate")
-                           ]
-          , resourceGet  = [ ("html", serveCandidatesPage) ]
-          , resourcePost = [ ("html", \_ -> htmlResponse $ postCandidate) ]
-          }
-        -- TODO: use custom functions, not htmlResponse
-      , (extendResource $ packageCandidatesPage candidates) {
-            resourceDesc = [ (GET, "Show candidate upload form")
-                           , (POST, "Upload new package candidate")
-                           ]
-          , resourceGet  = [ ("html", servePackageCandidates pkgCandUploadForm) ]
-          , resourcePost = [ ("", htmlResponse . postPackageCandidate) ]
-          }
-        -- package page for a candidate
-      , (extendResource $ candidatePage candidates) {
-            resourceDesc   = [ (GET, "Show candidate maintenance form")
-                             , (PUT, "Upload new package candidate")
-                             , (DELETE, "Delete a package candidate")
-                             ]
-          , resourceGet    = [("html", serveCandidatePage candMaintainForm)]
-          , resourcePut    = [("html", htmlResponse . putPackageCandidate)]
-          , resourceDelete = [("html", htmlResponse . doDeleteCandidate)]
-          }
-        -- form for uploading candidate
-      , (resourceAt "/packages/candidates/upload") {
-            resourceDesc = [ (GET, "Show package candidate upload form") ]
-          , resourceGet  = [ ("html", serveCandidateUploadForm) ]
-          }
-        -- form for uploading candidate for a specific package version
-      , pkgCandUploadForm
-        -- maintenance for candidate packages
-      , candMaintainForm
-        -- form for publishing package
-      , (extendResource $ publishPage candidates) {
-           resourceDesc = [ (GET, "Show candidate publish form")
-                          , (POST, "Publish a package candidate")
-                          ]
-         , resourceGet  = [ ("html", servePublishForm) ]
-         , resourcePost = [ ("html", servePostPublish) ]
-         }
+
 
       -- TODO: write HTML for reports and distros to display the information
       -- effectively reports
@@ -336,23 +234,6 @@ htmlFeature UserFeature{..} CoreFeature{..}
           }
       -}
 
-      -- preferred versions
-      , editDeprecated
-      , editPreferred
-      , (extendResource $ preferredResource versions) {
-            resourceGet = [("html", servePreferredSummary)]
-          }
-      , (extendResource $ preferredPackageResource versions) {
-            resourceGet = [("html", servePackagePreferred editPreferred)]
-          , resourcePut = [("html", servePutPreferred)]
-          }
-      , (extendResource $ deprecatedResource versions) {
-            resourceGet = [("html", serveDeprecatedSummary)]
-          }
-      , (extendResource $ deprecatedPackageResource versions) {
-            resourceGet = [("html", servePackageDeprecated editDeprecated)]
-          , resourcePut = [("html", servePutDeprecated )]
-          }
 
       -- reverse index (disabled)
       {-
@@ -373,49 +254,157 @@ htmlFeature UserFeature{..} CoreFeature{..}
           }
       -}
 
-      -- downloads
-      , (extendResource $ topDownloads downs) {
-            resourceGet = [("html", serveDownloadTop)]
-          }
 
-      -- tags
-      , (extendResource $ tagsListing tags) {
-            resourceGet = [("html", serveTagsListing)]
-          }
-      , (extendResource $ tagListing tags) {
-            resourceGet = [("html", serveTagListing)]
-          }
-      , (extendResource $ packageTagsListing tags) {
-            resourcePut = [("html", putPackageTags)], resourceGet = []
-          }
-      , tagEdit -- (extendResource $ packageTagsEdit tags) { resourceGet = [("html", serveTagsForm)] }
 
-      -- search
-      , (extendResource $ findPackageResource names) {
-            resourceGet = [("html", servePackageFind)]
-          }
-      ]
-
-      -- and user groups. package maintainers, trustees, admins
-      ++ htmlGroupResource (packageGroupResource uploadResource)
-      ++ htmlGroupResource (trusteeResource uploadResource)
-      ++ htmlGroupResource (uploaderResource uploadResource)
-      ++ htmlGroupResource (adminResource userResource)
-      ++ htmlGroupResource (mirrorGroupResource mirrorResource)
-
-    -- resources to extend
-    cores = coreResource
-    users = userResource
-    uploads = uploadResource
-    candidates  = candidatesResource
-    versions = versionsResource
     -- [reverse index disabled] reverses = reverseResource
-    tags = tagsResource
-    downs = downloadResource
-    names = namesResource
+
+
+
+
+
+
+    {- [reverse index disabled]
+    --------------------------------------------------------------------------------
+    -- Reverse
+    serveReverse :: Bool -> DynamicPath -> ServerPart Response
+    serveReverse isRecent dpath =
+      htmlResponse $
+      withPackageId dpath $ \pkgid -> do
+        let pkgname = packageName pkgid
+        rdisp <- case packageVersion pkgid of
+                  Version [] [] -> withPackageAll pkgname   $ \_ -> revPackageName pkgname
+                  _             -> withPackageVersion pkgid $ \_ -> revPackageId pkgid
+        render <- (if isRecent then renderReverseRecent else renderReverseOld) pkgname rdisp
+        return $ toResponse $ Resource.XHtml $ hackagePage (display pkgname ++ " - Reverse dependencies ") $
+            Pages.reversePackageRender pkgid (corePackageUri "") revr isRecent render
+
+    serveReverseFlat :: DynamicPath -> ServerPart Response
+    serveReverseFlat dpath = htmlResponse $
+                                      withPackageAllPath dpath $ \pkgname _ -> do
+        revCount <- query $ GetReverseCount pkgname
+        pairs <- revPackageFlat pkgname
+        return $ toResponse $ Resource.XHtml $ hackagePage (display pkgname ++ "Flattened reverse dependencies") $
+            Pages.reverseFlatRender pkgname (corePackageName "") revr revCount pairs
+
+    serveReverseStats :: DynamicPath -> ServerPart Response
+    serveReverseStats dpath = htmlResponse $
+                                       withPackageAllPath dpath $ \pkgname pkgs -> do
+        revCount <- query $ GetReverseCount pkgname
+        return $ toResponse $ Resource.XHtml $ hackagePage (display pkgname ++ "Reverse dependency statistics") $
+            Pages.reverseStatsRender pkgname (map packageVersion pkgs) (corePackageUri "") revr revCount
+
+    serveReverseList :: DynamicPath -> ServerPart Response
+    serveReverseList _ = do
+        let revr = reverseResource revs
+        triple <- sortedRevSummary revs
+        hackCount <- PackageIndex.indexSize <$> queryGetPackageIndex
+        return $ toResponse $ Resource.XHtml $ hackagePage "Reverse dependencies" $
+            Pages.reversePackagesRender (corePackageName "") revr hackCount triple
+    -}
 
     --------------------------------------------------------------------------------
-    ---- Core
+    -- Additional package indices
+
+    packageIndex :: IO Response
+    packageIndex = do
+       index <- queryGetPackageIndex
+       let htmlIndex = toResponse $ Resource.XHtml $ Pages.packageIndex index
+       return htmlIndex
+
+    packagesPage :: IO Response
+    packagesPage = do
+        items <- liftIO $ getAllLists
+        let htmlpage =
+              toResponse $ Resource.XHtml $ hackagePage "All packages by name" $
+                [ h2 << "All packages by name"
+                , ulist ! [theclass "packages"] << map renderItem (Map.elems items)
+                ]
+        return htmlpage
+
+
+    {-
+    -- Currently unused, mainly because not all web browsers use eager authentication-sending
+    -- Setting a cookie might work here, albeit one that's stateless for the server, is not
+    -- used for auth and only causes GUI changes, not permission overriding
+    loginWidget :: UserResource -> ServerPart Html
+    loginWidget user = do
+        users <- query State.GetUserDb
+        auth  <- Auth.getHackageAuth users
+        return . makeLoginWidget user $ case auth of
+            Left {} -> Nothing
+            Right (_, uinfo) -> Just $ userName uinfo
+
+    makeLoginWidget :: UserResource -> Maybe UserName -> Html
+    makeLoginWidget user mname = case mname of
+        Nothing -> anchor ! [href $ userLoginUri user Nothing] << "log in"
+        Just uname -> anchor ! [href $ userPageUri user "" uname] << display uname
+    -}
+
+
+{-------------------------------------------------------------------------------
+  Core
+-------------------------------------------------------------------------------}
+
+data HtmlCore = HtmlCore {
+    htmlCoreResources :: [Resource]
+  }
+
+mkHtmlCore :: CoreFeature
+           -> VersionsFeature
+           -> UploadFeature
+           -> TagsFeature
+           -> DocumentationFeature
+           -> DownloadFeature
+           -> DistroFeature
+           -> RecentPackagesFeature
+           -> HtmlTags
+           -> HtmlPreferred
+           -> HtmlUtilities
+           -> AsyncCache Response
+           -> AsyncCache Response
+           -> HtmlCore
+mkHtmlCore CoreFeature{..}
+           VersionsFeature{..}
+           UploadFeature{..}
+           TagsFeature{..}
+           DocumentationFeature{..}
+           DownloadFeature{..}
+           DistroFeature{..}
+           RecentPackagesFeature{..}
+           HtmlTags{..}
+           HtmlPreferred{..}
+           HtmlUtilities{..}
+           cachePackagesPage
+           cacheNamesPage = HtmlCore{..}
+  where
+    cores = coreResource
+    versions = versionsResource
+    uploads = uploadResource
+
+    maintainPackage   = (resourceAt "/package/:package/maintain") {
+                            resourceGet = [("html", serveMaintainLinks editDeprecated editPreferred $ packageGroupResource uploads)]
+                          }
+
+    htmlCoreResources = [
+        (extendResource $ corePackagePage cores) {
+            resourceDesc = [(GET, "Show detailed package information")]
+          , resourceGet  = [("html", servePackagePage)]
+          }
+      {-
+      , (extendResource $ coreIndexPage cores) {
+            resourceGet = [("html", serveIndexPage)]
+          }, currently in 'core' feature
+      -}
+      , (resourceAt "/packages/names" ) {
+            resourceGet = [("html", const $ readAsyncCache cacheNamesPage)]
+          }
+      , (extendResource $ corePackagesPage cores) {
+            resourceDesc = [(GET, "Show package index")]
+          , resourceGet  = [("html", const $ readAsyncCache cachePackagesPage)]
+          }
+      , maintainPackage
+      ]
+
     -- Currently the main package page is thrown together by querying a bunch
     -- of features about their attributes for the given package. It'll need
     -- reorganizing to look aesthetic, as opposed to the sleek and simple current
@@ -487,8 +476,59 @@ htmlFeature UserFeature{..} CoreFeature{..}
           ]
         -- upload documentation
 
-    --------------------------------------------------------------------------------
-    ---- Users
+{-------------------------------------------------------------------------------
+  Users
+-------------------------------------------------------------------------------}
+
+data HtmlUsers = HtmlUsers {
+    htmlUsersResources :: [Resource]
+  }
+
+mkHtmlUsers :: UserFeature -> HtmlUsers
+mkHtmlUsers UserFeature{..} = HtmlUsers{..}
+  where
+    users = userResource
+
+    htmlUsersResources = [
+        -- list of users with user links; if admin, a link to add user page
+        (extendResource $ userList users) {
+            resourceDesc = [ (GET,  "list of users")
+                           , (POST, "create a new user")
+                           ]
+          , resourceGet  = [ ("html", serveUserList) ]
+          , resourcePost = [ ("html", \_ -> htmlResponse $ adminAddUser) ]
+          }
+        -- form to post to /users/
+      , (resourceAt "/users/register") {
+            resourceDesc = [ (GET, "show \"add user\" form") ]
+          , resourceGet  = [ ("html", addUserForm) ]
+          }
+        -- user page with link to password form and list of groups (how to do this?)
+      , (extendResource $ userPage users) {
+            resourceDesc   = [ (GET,    "show user page")
+                             , (DELETE, "delete the user")
+                             ]
+          , resourceGet    = [ ("html", serveUserPage) ]
+          , resourceDelete = [ ("html", serveDeleteUser) ]
+          }
+        -- form to PUT password
+      , (extendResource $ passwordResource users) {
+            resourceDesc = [ (GET, "show password change form")
+                           , (PUT, "change password")
+                           ]
+          , resourceGet  = [ ("html", servePasswordForm) ]
+          , resourcePut  = [ ("html", servePutPassword) ]
+          }
+        -- form to enable or disable users (admin only)
+      , (extendResource $ enabledResource users) {
+            resourceDesc = [ (GET, "return if the user is enabled")
+                           , (PUT, "set if the user is enabled")
+                           ]
+          , resourceGet  = [("html", serveEnabledForm)]
+          , resourcePut  = [("html", servePutEnabled)]
+          }
+      ]
+
     serveUserList :: DynamicPath -> ServerPart Response
     serveUserList _ = do
         userlist <- Map.keys . Users.userNameMap <$> queryGetUserDb
@@ -588,73 +628,32 @@ htmlFeature UserFeature{..} CoreFeature{..}
         return $ toResponse $ Resource.XHtml $ hackagePage "Changed password"
             [toHtml "Changed password for ", anchor ! [href $ userPageUri users "" uname] << display uname]
 
-    htmlGroupResource :: GroupResource -> [Resource]
-    htmlGroupResource r@(GroupResource groupR userR groupGen) =
-      [ (extendResource groupR) {
-            resourceDesc = [ (GET, "Show list of users")
-                           , (POST, "Udd a user to the group")
-                           ]
-          , resourceGet  = [ ("html", htmlResponse . getList) ]
-          , resourcePost = [ ("html", htmlResponse . postUser) ]
+{-------------------------------------------------------------------------------
+  Uploads
+-------------------------------------------------------------------------------}
+
+data HtmlUploads = HtmlUploads {
+    htmlUploadsResources :: [Resource]
+  }
+
+mkHtmlUploads :: UploadFeature -> HtmlUtilities -> HtmlUploads
+mkHtmlUploads UploadFeature{..} HtmlUtilities{..} = HtmlUploads{..}
+  where
+    uploads = uploadResource
+
+    htmlUploadsResources = [
+      -- uploads
+        -- serve upload result as HTML
+        (extendResource $ uploadIndexPage uploads) {
+            resourceDesc = [(POST, "Upload package")]
+          , resourcePost = [("html", serveUploadResult)]
           }
-      , (extendResource userR) {
-            resourceDesc   = [ (DELETE, "Delete a user from the group") ]
-          , resourceDelete = [ ("html", htmlResponse . deleteFromGroup) ]
-          }
-      , (extendResourcePath "/edit" groupR) {
-            resourceDesc = [ (GET, "Show edit form for the group") ]
-          , resourceGet  = [ ("html", htmlResponse . getEditList) ]
+        -- form for uploading
+      , (resourceAt "/packages/upload") {
+            resourceGet = [("html", serveUploadForm)]
           }
       ]
-      where
-        getList dpath = withGroup (groupGen dpath) $ \group -> do
-            userDb   <- queryGetUserDb
-            userlist <- liftIO . queryUserList $ group
-            let unames = [ Users.idToName userDb uid
-                         | uid   <- Group.enumerate userlist ]
-            let baseUri = renderResource' groupR dpath
-            return . toResponse . Resource.XHtml $ Pages.groupPage
-                unames baseUri (False, False) (groupDesc group)
-        getEditList dpath = withGroup (groupGen dpath) $ \group ->
-                            withGroupEditAuth group $ \canAdd canDelete -> do
-            userDb   <- queryGetUserDb
-            userlist <- liftIO . queryUserList $ group
-            let unames = [ Users.idToName userDb uid
-                         | uid   <- Group.enumerate userlist ]
-            let baseUri = renderResource' groupR dpath
-            return . toResponse . Resource.XHtml $ Pages.groupPage
-                unames baseUri (canAdd, canDelete) (groupDesc group)
-        postUser dpath = withGroup (groupGen dpath) $ \group -> do
-            groupAddUser group dpath
-            goToList dpath
-        deleteFromGroup dpath = withGroup (groupGen dpath) $ \group -> do
-            groupDeleteUser group dpath
-            goToList dpath
-        withGroup group func = liftIO (groupExists group) >>= \exists -> case exists of
-            False -> errNotFound "User group doesn't exist" [MText "User group doesn't exist"]
-            True  -> func group
-        goToList dpath = seeOther (renderResource' (groupResource r) dpath) (toResponse ())
 
-    {-
-    -- Currently unused, mainly because not all web browsers use eager authentication-sending
-    -- Setting a cookie might work here, albeit one that's stateless for the server, is not
-    -- used for auth and only causes GUI changes, not permission overriding
-    loginWidget :: UserResource -> ServerPart Html
-    loginWidget user = do
-        users <- query State.GetUserDb
-        auth  <- Auth.getHackageAuth users
-        return . makeLoginWidget user $ case auth of
-            Left {} -> Nothing
-            Right (_, uinfo) -> Just $ userName uinfo
-
-    makeLoginWidget :: UserResource -> Maybe UserName -> Html
-    makeLoginWidget user mname = case mname of
-        Nothing -> anchor ! [href $ userLoginUri user Nothing] << "log in"
-        Just uname -> anchor ! [href $ userPageUri user "" uname] << display uname
-    -}
-
-    --------------------------------------------------------------------------------
-    ---- Upload
     serveUploadForm :: DynamicPath -> ServerPart Response
     serveUploadForm _ =
       htmlResponse $ do
@@ -679,8 +678,73 @@ htmlFeature UserFeature{..} CoreFeature{..}
             [] -> []
             _  -> [paragraph << "There were some warnings:", unordList warns]
 
-    --------------------------------------------------------------------------------
-    ---- Candidates
+{-------------------------------------------------------------------------------
+  Candidates
+-------------------------------------------------------------------------------}
+
+data HtmlCandidates = HtmlCandidates {
+    htmlCandidatesResources :: [Resource]
+  }
+
+mkHtmlCandidates :: CoreFeature -> UploadFeature -> VersionsFeature -> PackageCandidatesFeature -> HtmlUtilities -> HtmlCandidates
+mkHtmlCandidates CoreFeature{..} UploadFeature{..} VersionsFeature{..} PackageCandidatesFeature{..} HtmlUtilities{..} = HtmlCandidates{..}
+  where
+    candidates  = candidatesResource
+
+    pkgCandUploadForm = (resourceAt "/package/:package/candidate/upload") {
+                            resourceGet = [("html", servePackageCandidateUpload)]
+                          }
+    candMaintainForm  = (resourceAt "/package/:package/candidate/maintain") {
+                            resourceGet = [("html", serveCandidateMaintain)]
+                          }
+
+    htmlCandidatesResources = [
+      -- candidates
+        -- list of all packages which have candidates
+        (extendResource $ candidatesPage candidates) {
+            resourceDesc = [ (GET, "Show all package candidates")
+                           , (POST, "Upload a new candidate")
+                           ]
+          , resourceGet  = [ ("html", serveCandidatesPage) ]
+          , resourcePost = [ ("html", \_ -> htmlResponse $ postCandidate) ]
+          }
+        -- TODO: use custom functions, not htmlResponse
+      , (extendResource $ packageCandidatesPage candidates) {
+            resourceDesc = [ (GET, "Show candidate upload form")
+                           , (POST, "Upload new package candidate")
+                           ]
+          , resourceGet  = [ ("html", servePackageCandidates pkgCandUploadForm) ]
+          , resourcePost = [ ("", htmlResponse . postPackageCandidate) ]
+          }
+        -- package page for a candidate
+      , (extendResource $ candidatePage candidates) {
+            resourceDesc   = [ (GET, "Show candidate maintenance form")
+                             , (PUT, "Upload new package candidate")
+                             , (DELETE, "Delete a package candidate")
+                             ]
+          , resourceGet    = [("html", serveCandidatePage candMaintainForm)]
+          , resourcePut    = [("html", htmlResponse . putPackageCandidate)]
+          , resourceDelete = [("html", htmlResponse . doDeleteCandidate)]
+          }
+        -- form for uploading candidate
+      , (resourceAt "/packages/candidates/upload") {
+            resourceDesc = [ (GET, "Show package candidate upload form") ]
+          , resourceGet  = [ ("html", serveCandidateUploadForm) ]
+          }
+        -- form for uploading candidate for a specific package version
+      , pkgCandUploadForm
+        -- maintenance for candidate packages
+      , candMaintainForm
+        -- form for publishing package
+      , (extendResource $ publishPage candidates) {
+           resourceDesc = [ (GET, "Show candidate publish form")
+                          , (POST, "Publish a package candidate")
+                          ]
+         , resourceGet  = [ ("html", servePublishForm) ]
+         , resourcePost = [ ("html", servePostPublish) ]
+         }
+      ]
+
     serveCandidateUploadForm :: DynamicPath -> ServerPart Response
     serveCandidateUploadForm _ =
       htmlResponse $ do
@@ -799,8 +863,48 @@ htmlFeature UserFeature{..} CoreFeature{..}
             [] -> []
             warns -> [paragraph << "There were some warnings:", unordList warns]
 
-    --------------------------------------------------------------------------------
-    -- Preferred
+{-------------------------------------------------------------------------------
+  Preferred versions
+-------------------------------------------------------------------------------}
+
+data HtmlPreferred = HtmlPreferred {
+    htmlPreferredResources :: [Resource]
+  , editPreferred :: Resource
+  , editDeprecated :: Resource
+  }
+
+mkHtmlPreferred :: CoreFeature -> VersionsFeature -> HtmlUtilities -> HtmlPreferred
+mkHtmlPreferred CoreFeature{..} VersionsFeature{..} HtmlUtilities{..} = HtmlPreferred{..}
+  where
+    versions = versionsResource
+
+    editDeprecated    = (resourceAt "/package/:package/deprecated/edit") {
+                            resourceGet = [("html", serveDeprecateForm)]
+                          }
+    editPreferred     = (resourceAt "/package/:package/preferred/edit") {
+                            resourceGet = [("html", servePreferForm)]
+                          }
+
+    htmlPreferredResources = [
+      -- preferred versions
+        editDeprecated
+      , editPreferred
+      , (extendResource $ preferredResource versions) {
+            resourceGet = [("html", servePreferredSummary)]
+          }
+      , (extendResource $ preferredPackageResource versions) {
+            resourceGet = [("html", servePackagePreferred editPreferred)]
+          , resourcePut = [("html", servePutPreferred)]
+          }
+      , (extendResource $ deprecatedResource versions) {
+            resourceGet = [("html", serveDeprecatedSummary)]
+          }
+      , (extendResource $ deprecatedPackageResource versions) {
+            resourceGet = [("html", servePackageDeprecated editDeprecated)]
+          , resourcePut = [("html", servePutDeprecated )]
+          }
+      ]
+
     -- This feature is in great need of a Pages module
     serveDeprecatedSummary :: DynamicPath -> ServerPart Response
     serveDeprecatedSummary _ = doDeprecatedsRender >>= \renders -> do
@@ -973,48 +1077,26 @@ htmlFeature UserFeature{..} CoreFeature{..}
               , paragraph << input ! [thetype "submit", value "Set status"]
               ]]
 
-    {- [reverse index disabled]
-    --------------------------------------------------------------------------------
-    -- Reverse
-    serveReverse :: Bool -> DynamicPath -> ServerPart Response
-    serveReverse isRecent dpath =
-      htmlResponse $
-      withPackageId dpath $ \pkgid -> do
-        let pkgname = packageName pkgid
-        rdisp <- case packageVersion pkgid of
-                  Version [] [] -> withPackageAll pkgname   $ \_ -> revPackageName pkgname
-                  _             -> withPackageVersion pkgid $ \_ -> revPackageId pkgid
-        render <- (if isRecent then renderReverseRecent else renderReverseOld) pkgname rdisp
-        return $ toResponse $ Resource.XHtml $ hackagePage (display pkgname ++ " - Reverse dependencies ") $
-            Pages.reversePackageRender pkgid (corePackageUri "") revr isRecent render
+{-------------------------------------------------------------------------------
+  Downloads
+-------------------------------------------------------------------------------}
 
-    serveReverseFlat :: DynamicPath -> ServerPart Response
-    serveReverseFlat dpath = htmlResponse $
-                                      withPackageAllPath dpath $ \pkgname _ -> do
-        revCount <- query $ GetReverseCount pkgname
-        pairs <- revPackageFlat pkgname
-        return $ toResponse $ Resource.XHtml $ hackagePage (display pkgname ++ "Flattened reverse dependencies") $
-            Pages.reverseFlatRender pkgname (corePackageName "") revr revCount pairs
+data HtmlDownloads = HtmlDownloads {
+    htmlDownloadsResources :: [Resource]
+  }
 
-    serveReverseStats :: DynamicPath -> ServerPart Response
-    serveReverseStats dpath = htmlResponse $
-                                       withPackageAllPath dpath $ \pkgname pkgs -> do
-        revCount <- query $ GetReverseCount pkgname
-        return $ toResponse $ Resource.XHtml $ hackagePage (display pkgname ++ "Reverse dependency statistics") $
-            Pages.reverseStatsRender pkgname (map packageVersion pkgs) (corePackageUri "") revr revCount
+mkHtmlDownloads :: DownloadFeature -> HtmlUtilities -> HtmlDownloads
+mkHtmlDownloads DownloadFeature{..} HtmlUtilities{..} = HtmlDownloads{..}
+  where
+    downs = downloadResource
 
-    serveReverseList :: DynamicPath -> ServerPart Response
-    serveReverseList _ = do
-        let revr = reverseResource revs
-        triple <- sortedRevSummary revs
-        hackCount <- PackageIndex.indexSize <$> queryGetPackageIndex
-        return $ toResponse $ Resource.XHtml $ hackagePage "Reverse dependencies" $
-            Pages.reversePackagesRender (corePackageName "") revr hackCount triple
-    -}
+    -- downloads
+    htmlDownloadsResources = [
+        (extendResource $ topDownloads downs) {
+            resourceGet = [("html", serveDownloadTop)]
+          }
+      ]
 
-    --------------------------------------------------------------------------------
-    -- Downloads
-    -- presently just a dumb listing
     serveDownloadTop :: DynamicPath -> ServerPart Response
     serveDownloadTop _ = do
         pkgList <- liftIO $ sortedPackages
@@ -1030,27 +1112,37 @@ htmlFeature UserFeature{..} CoreFeature{..}
                 , td << [ toHtml $ (show count) ] ]
             | ((pkgname, count), n) <- zip pkgList [(1::Int)..] ]
 
-    --------------------------------------------------------------------------------
-    -- Additional package indices
+{-------------------------------------------------------------------------------
+  Tags
+-------------------------------------------------------------------------------}
 
-    packageIndex :: IO Response
-    packageIndex = do
-       index <- queryGetPackageIndex
-       let htmlIndex = toResponse $ Resource.XHtml $ Pages.packageIndex index
-       return htmlIndex
+data HtmlTags = HtmlTags {
+    htmlTagsResources :: [Resource]
+  , tagEdit :: Resource
+  }
 
-    packagesPage :: IO Response
-    packagesPage = do
-        items <- liftIO $ getAllLists
-        let htmlpage =
-              toResponse $ Resource.XHtml $ hackagePage "All packages by name" $
-                [ h2 << "All packages by name"
-                , ulist ! [theclass "packages"] << map renderItem (Map.elems items)
-                ]
-        return htmlpage
+mkHtmlTags :: CoreFeature -> TagsFeature -> ListFeature -> HtmlUtilities -> HtmlTags
+mkHtmlTags CoreFeature{..} TagsFeature{..} ListFeature{..} HtmlUtilities{..} = HtmlTags{..}
+  where
+    tags = tagsResource
 
-    --------------------------------------------------------------------------------
-    -- Tags
+    tagEdit           = (resourceAt "/package/:package/tags/edit") {
+                            resourceGet = [("html", serveTagsForm)]
+                          }
+
+    htmlTagsResources = [
+        (extendResource $ tagsListing tags) {
+            resourceGet = [("html", serveTagsListing)]
+          }
+      , (extendResource $ tagListing tags) {
+            resourceGet = [("html", serveTagListing)]
+          }
+      , (extendResource $ packageTagsListing tags) {
+            resourcePut = [("html", putPackageTags)], resourceGet = []
+          }
+      , tagEdit -- (extendResource $ packageTagsEdit tags) { resourceGet = [("html", serveTagsForm)] }
+      ]
+
     serveTagsListing :: DynamicPath -> ServerPart Response
     serveTagsListing _ = do
         tagList <- queryGetTagList
@@ -1119,8 +1211,25 @@ htmlFeature UserFeature{..} CoreFeature{..}
             , paragraph << input ! [thetype "submit", value "Set tags"]
             ]]
 
-    --------------------------------------------------------------------------------
-    -- Searching
+{-------------------------------------------------------------------------------
+  Search
+-------------------------------------------------------------------------------}
+
+data HtmlSearch = HtmlSearch {
+    htmlSearchResources :: [Resource]
+  }
+
+mkHtmlSearch :: NamesFeature -> ListFeature -> HtmlUtilities -> HtmlSearch
+mkHtmlSearch NamesFeature{..} ListFeature{..} HtmlUtilities{..} = HtmlSearch{..}
+  where
+    names = namesResource
+
+    htmlSearchResources = [
+        (extendResource $ findPackageResource names) {
+            resourceGet = [("html", servePackageFind)]
+          }
+      ]
+
     servePackageFind :: DynamicPath -> ServerPart Response
     servePackageFind _ = packageFindWith $ \mstr -> case mstr of
         Nothing -> return $ toResponse $ Resource.XHtml $
@@ -1154,8 +1263,60 @@ htmlFeature UserFeature{..} CoreFeature{..}
                   , toHtml " to fuzzily search type signatures and function names."]
               ]
 
-    ----------------------------------------------------
-    -- HTML utilities
+{-------------------------------------------------------------------------------
+  Groups
+-------------------------------------------------------------------------------}
+
+htmlGroupResource :: UserFeature -> GroupResource -> [Resource]
+htmlGroupResource UserFeature{..} r@(GroupResource groupR userR groupGen) =
+  [ (extendResource groupR) {
+        resourceDesc = [ (GET, "Show list of users")
+                       , (POST, "Udd a user to the group")
+                       ]
+      , resourceGet  = [ ("html", htmlResponse . getList) ]
+      , resourcePost = [ ("html", htmlResponse . postUser) ]
+      }
+  , (extendResource userR) {
+        resourceDesc   = [ (DELETE, "Delete a user from the group") ]
+      , resourceDelete = [ ("html", htmlResponse . deleteFromGroup) ]
+      }
+  , (extendResourcePath "/edit" groupR) {
+        resourceDesc = [ (GET, "Show edit form for the group") ]
+      , resourceGet  = [ ("html", htmlResponse . getEditList) ]
+      }
+  ]
+  where
+    getList dpath = withGroup (groupGen dpath) $ \group -> do
+        userDb   <- queryGetUserDb
+        userlist <- liftIO . queryUserList $ group
+        let unames = [ Users.idToName userDb uid
+                     | uid   <- Group.enumerate userlist ]
+        let baseUri = renderResource' groupR dpath
+        return . toResponse . Resource.XHtml $ Pages.groupPage
+            unames baseUri (False, False) (groupDesc group)
+    getEditList dpath = withGroup (groupGen dpath) $ \group ->
+                        withGroupEditAuth group $ \canAdd canDelete -> do
+        userDb   <- queryGetUserDb
+        userlist <- liftIO . queryUserList $ group
+        let unames = [ Users.idToName userDb uid
+                     | uid   <- Group.enumerate userlist ]
+        let baseUri = renderResource' groupR dpath
+        return . toResponse . Resource.XHtml $ Pages.groupPage
+            unames baseUri (canAdd, canDelete) (groupDesc group)
+    postUser dpath = withGroup (groupGen dpath) $ \group -> do
+        groupAddUser group dpath
+        goToList dpath
+    deleteFromGroup dpath = withGroup (groupGen dpath) $ \group -> do
+        groupDeleteUser group dpath
+        goToList dpath
+    withGroup group func = liftIO (groupExists group) >>= \exists -> case exists of
+        False -> errNotFound "User group doesn't exist" [MText "User group doesn't exist"]
+        True  -> func group
+    goToList dpath = seeOther (renderResource' (groupResource r) dpath) (toResponse ())
+
+{-------------------------------------------------------------------------------
+  Util
+-------------------------------------------------------------------------------}
 
 htmlUtilities :: CoreFeature -> TagsFeature -> HtmlUtilities
 htmlUtilities CoreFeature{..} TagsFeature{..} = HtmlUtilities{..}
@@ -1212,7 +1373,6 @@ htmlResponse part = runServerPartE (handleErrorResponse htmlError part)
 -- Prevents page indexing (e.g. for search pages).
 noIndex :: Html
 noIndex = meta ! [name "robots", content "noindex"]
-
 
 (<//>) :: String -> String -> String
 (<//>) = (System.FilePath.Posix.</>)
