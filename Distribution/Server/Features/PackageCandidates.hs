@@ -45,8 +45,8 @@ import Control.Monad.Error (ErrorT(..))
 
 data PackageCandidatesFeature = PackageCandidatesFeature {
     candidatesFeatureInterface :: HackageFeature,
-
-    candidatesResource :: PackageCandidatesResource,
+    candidatesCoreResource     :: CoreResource,
+    candidatesResource         :: PackageCandidatesResource,
 
     -- queries
     queryGetCandidateIndex :: MonadIO m => m (PackageIndex CandPkgInfo),
@@ -68,16 +68,6 @@ data PackageCandidatesFeature = PackageCandidatesFeature {
 instance IsHackageFeature PackageCandidatesFeature where
     getFeatureInterface = candidatesFeatureInterface
 
-
-data PackageCandidatesResource = PackageCandidatesResource {
-    candidatesPage        :: Resource,
-    candidatePage         :: Resource,
-    packageCandidatesPage :: Resource,
-    publishPage           :: Resource,
-    candidateCabal        :: Resource,
-    candidateTarball      :: Resource,
-    candidateContents     :: Resource,
-    candidateChangeLog    :: Resource,
     -- There can also be build reports as well as documentation for proposed
     -- versions.
     -- These features check for existence of a package in the *main* index,
@@ -88,12 +78,30 @@ data PackageCandidatesResource = PackageCandidatesResource {
     -- of the same package exist simultaneously, so may want to hook into
     -- UploadFeature's canUploadPackage to ensure this won't happen, and to
     -- force deletion on publication.
-    candidatesUri         :: String -> String,
-    candidateUri          :: String -> PackageId -> String,
+
+{-
+  Mapping:
+  candidatesPage      -> corePackagesPage
+  candidatePage       -> corePackagePage
+  candidateCabal      -> coreCabalFile
+  candidateTarball    -> corePackageTarball
+
+  candidatesUri       -> indexPackageUri
+  candidateUri        -> corePackageUri
+  candidateTarballUri -> coreTarballUri
+  candidateCabalUri   -> coreCabalUri
+-}
+
+data PackageCandidatesResource = PackageCandidatesResource {
+    packageCandidatesPage :: Resource,
+    publishPage           :: Resource,
     packageCandidatesUri  :: String -> PackageName -> String,
     publishUri            :: String -> PackageId -> String,
-    candidateTarballUri   :: PackageId -> String,
-    candidateCabalUri     :: PackageId -> String,
+
+    -- TODO: Why don't the following entries have a corresponding entry
+    -- in CoreResource?
+    candidateContents     :: Resource,
+    candidateChangeLog    :: Resource,
     candidateChangeLogUri :: PackageId -> String
 }
 
@@ -150,12 +158,14 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     candidatesFeatureInterface = (emptyHackageFeature "candidates") {
         featureDesc = "Support for package candidates"
       , featureResources =
+          map ($candidatesCoreResource) [
+              corePackagesPage
+            , corePackagePage
+            , coreCabalFile
+            , corePackageTarball
+            ] ++
           map ($candidatesResource) [
-              candidatesPage
-            , candidatePage
-            , publishPage
-            , candidateCabal
-            , candidateTarball
+              publishPage
             , candidateContents
             , candidateChangeLog
             ]
@@ -165,45 +175,57 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     queryGetCandidateIndex :: MonadIO m => m (PackageIndex CandPkgInfo)
     queryGetCandidateIndex = return . candidateList =<< queryState candidatesState GetCandidatePackages
 
-    candidatesResource = fix $ \r -> PackageCandidatesResource {
-        candidatesPage = resourceAt "/packages/candidates/.:format"
-      , candidatePage = (resourceAt "/package/:package/candidate.:format") {
+    candidatesCoreResource = fix $ \r -> CoreResource {
+--------------------------------------------------------------------------------
+-- TODO: Either add support for these or else split CoreResource
+        coreIndexPage       = error "coreIndexPage not supported for candidates"
+      , coreIndexTarball    = error "coreIndexTarball not supported for candidates"
+      , corePackageRedirect = error "corePackageRedirect not supported for candidates"
+      , indexTarballUri     = error "indexTarballUri not supported for candidates"
+      , corePackageName     = error "corePackageName not supported for candidates"
+--------------------------------------------------------------------------------
+-- TODO: There is significant overlap between this definition and the one in Core
+      , corePackagesPage = resourceAt "/packages/candidates/.:format"
+      , corePackagePage = (resourceAt "/package/:package/candidate.:format") {
             resourceDesc = [(GET, "Show basic package candidate page")]
           , resourceGet  = [("html", basicCandidatePage r)]
           }
-      , packageCandidatesPage = resourceAt "/package/:package/candidates/.:format"
-      , publishPage = resourceAt "/package/:package/candidate/publish.:format"
-      , candidateCabal = (resourceAt "/package/:package/candidate/:cabal.cabal") {
+      , coreCabalFile = (resourceAt "/package/:package/candidate/:cabal.cabal") {
             resourceDesc = [(GET, "Candidate .cabal file")]
           , resourceGet  = [("cabal", serveCandidateCabal)]
           }
-      , candidateTarball = (resourceAt "/package/:package/candidate/:tarball.tar.gz") {
+      , corePackageTarball = (resourceAt "/package/:package/candidate/:tarball.tar.gz") {
             resourceDesc = [(GET, "Candidate tarball")]
           , resourceGet  = [("tarball", serveCandidateTarball)]
           }
+      , indexPackageUri = \format ->
+          renderResource (corePackagesPage r) [format]
+      , corePackageUri  = \format pkgid ->
+          renderResource (corePackagePage r) [display pkgid, format]
+      , coreTarballUri = \pkgid ->
+          renderResource (corePackageTarball r) [display pkgid, display pkgid]
+      , coreCabalUri = \pkgid ->
+          renderResource (coreCabalFile r) [display pkgid, display (packageName pkgid)]
+      }
+
+    candidatesResource = fix $ \r -> PackageCandidatesResource {
+        packageCandidatesPage = resourceAt "/package/:package/candidates/.:format"
+      , publishPage = resourceAt "/package/:package/candidate/publish.:format"
       , candidateContents = (resourceAt "/package/:package/candidate/src/..") {
             resourceGet = [("", serveContents)]
           }
       , candidateChangeLog = (resourceAt "/package/:package/candidate/changelog") {
             resourceGet = [("changelog", serveChangeLog)]
           }
-      , candidatesUri = \format ->
-          renderResource (candidatesPage r) [format]
-      , candidateUri  = \format pkgid ->
-          renderResource (candidatePage r) [display pkgid, format]
       , packageCandidatesUri = \format pkgname ->
           renderResource (packageCandidatesPage r) [display pkgname, format]
       , publishUri = \format pkgid ->
           renderResource (publishPage r) [display pkgid, format]
-      , candidateTarballUri = \pkgid ->
-          renderResource (candidateTarball r) [display pkgid, display pkgid]
-      , candidateCabalUri = \pkgid ->
-          renderResource (candidateCabal r) [display pkgid, display (packageName pkgid)]
       , candidateChangeLogUri = \pkgid ->
           renderResource (candidateChangeLog candidatesResource) [display pkgid, display (packageName pkgid)]
       }
 
-    basicCandidatePage :: PackageCandidatesResource -> DynamicPath -> ServerPart Response
+    basicCandidatePage :: CoreResource -> DynamicPath -> ServerPart Response
     basicCandidatePage r dpath = runServerPartE $ --TODO: use something else for nice html error pages
                                  withPackageId dpath $ \pkgid ->
                                  withCandidate pkgid $ \_ mpkg _ ->
@@ -216,20 +238,20 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                                 [] -> toHtml "No warnings"
                                 warnings -> unordList warnings
                            ]
-      where section cand = basicPackageSection (candidateCabalUri r)
-                                               (candidateTarballUri r)
+      where section cand = basicPackageSection (coreCabalUri r)
+                                               (coreTarballUri r)
                                                (candPkgInfo cand)
 
     postCandidate :: ServerPartE Response
     postCandidate = do
         pkgInfo <- uploadCandidate (const True)
-        seeOther (candidateUri candidatesResource "" $ packageId pkgInfo) (toResponse ())
+        seeOther (corePackageUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
 
     -- POST to /:package/candidates/
     postPackageCandidate :: DynamicPath -> ServerPartE Response
     postPackageCandidate dpath = withPackageName dpath $ \name -> do
         pkgInfo <- uploadCandidate ((==name) . packageName)
-        seeOther (candidateUri candidatesResource "" $ packageId pkgInfo) (toResponse ())
+        seeOther (corePackageUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
 
     -- PUT to /:package-version/candidate
     -- FIXME: like delete, PUT shouldn't redirect
@@ -237,7 +259,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     putPackageCandidate dpath = withPackageId dpath $ \pkgid -> do
         guard (packageVersion pkgid /= Version [] [])
         pkgInfo <- uploadCandidate (==pkgid)
-        seeOther (candidateUri candidatesResource "" $ packageId pkgInfo) (toResponse ())
+        seeOther (corePackageUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
 
     -- FIXME: DELETE should not redirect, but rather return ServerPartE ()
     doDeleteCandidate :: DynamicPath -> ServerPartE Response

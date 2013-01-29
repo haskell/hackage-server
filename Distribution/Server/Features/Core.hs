@@ -96,10 +96,10 @@ instance IsHackageFeature CoreFeature where
     getFeatureInterface = coreFeatureInterface
 
 data CoreResource = CoreResource {
-    coreIndexPage    :: Resource,
-    coreIndexTarball :: Resource,
-    corePackagesPage :: Resource,
-    corePackagePage  :: Resource,
+    coreIndexPage       :: Resource,
+    coreIndexTarball    :: Resource,
+    corePackagesPage    :: Resource,
+    corePackagePage     :: Resource,
     corePackageRedirect :: Resource,
     coreCabalFile       :: Resource,
     corePackageTarball  :: Resource,

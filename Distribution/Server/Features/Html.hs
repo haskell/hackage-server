@@ -179,8 +179,6 @@ htmlFeature user
       , featurePostInit = syncAsyncCache cachePackagesPage
       }
 
-    -- pages defined for the HTML feature in particular
-
     htmlCore       = mkHtmlCore       utilities
                                       core
                                       versions
@@ -719,7 +717,8 @@ mkHtmlCandidates HtmlUtilities{..}
                  UploadFeature{ withPackageAuth }
                  PackageCandidatesFeature{..} = HtmlCandidates{..}
   where
-    candidates  = candidatesResource
+    candidates     = candidatesResource
+    candidatesCore = candidatesCoreResource
 
     pkgCandUploadForm = (resourceAt "/package/:package/candidate/upload") {
                             resourceGet = [("html", servePackageCandidateUpload)]
@@ -731,7 +730,7 @@ mkHtmlCandidates HtmlUtilities{..}
     htmlCandidatesResources = [
       -- candidates
         -- list of all packages which have candidates
-        (extendResource $ candidatesPage candidates) {
+        (extendResource $ corePackagesPage candidatesCore) {
             resourceDesc = [ (GET, "Show all package candidates")
                            , (POST, "Upload a new candidate")
                            ]
@@ -747,7 +746,7 @@ mkHtmlCandidates HtmlUtilities{..}
           , resourcePost = [ ("", htmlResponse . postPackageCandidate) ]
           }
         -- package page for a candidate
-      , (extendResource $ candidatePage candidates) {
+      , (extendResource $ corePackagePage candidatesCore) {
             resourceDesc   = [ (GET, "Show candidate maintenance form")
                              , (PUT, "Upload new package candidate")
                              , (DELETE, "Delete a package candidate")
@@ -862,7 +861,7 @@ mkHtmlCandidates HtmlUtilities{..}
                 in  [ anchor ! [href $ packageCandidatesUri candidates "" pkgname ] << display pkgname
                     , toHtml ": "
                     , toHtml $ intersperse (toHtml ", ") $ flip map pkgs $ \pkg ->
-                         anchor ! [href $ candidateUri candidates "" (packageId pkg)] << display (packageVersion pkg)
+                         anchor ! [href $ corePackageUri candidatesCore "" (packageId pkg)] << display (packageVersion pkg)
                     , toHtml $ ". " ++ description desc
                     ]
 
@@ -880,7 +879,7 @@ mkHtmlCandidates HtmlUtilities{..}
                   , anchor ! [href $ "/packages/candidates/upload"] << "another"
                   , toHtml " package?"
                   ]
-            _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ candidateUri candidates "" $ packageId pkg] << display (packageVersion pkg) ]
+            _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ corePackageUri candidatesCore "" $ packageId pkg] << display (packageVersion pkg) ]
 
     -- TODO: make publishCandidate a member of the PackageCandidates feature, just like
     -- putDeprecated and putPreferred are for the Versions feature.
