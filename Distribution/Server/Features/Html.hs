@@ -187,7 +187,7 @@ htmlFeature user
     htmlCandidates = mkHtmlCandidates core upload versions candidates utilities
     htmlPreferred  = mkHtmlPreferred core versions utilities
     htmlDownloads  = mkHtmlDownloads download utilities
-    htmlTags       = mkHtmlTags core tags list utilities
+    htmlTags       = mkHtmlTags core list tags utilities
     htmlSearch     = mkHtmlSearch names list utilities
 
     htmlResources = concat [
@@ -363,14 +363,21 @@ mkHtmlCore :: CoreFeature
            -> AsyncCache Response
            -> AsyncCache Response
            -> HtmlCore
-mkHtmlCore CoreFeature{..}
-           VersionsFeature{..}
-           UploadFeature{..}
-           TagsFeature{..}
-           DocumentationFeature{..}
-           DownloadFeature{..}
-           DistroFeature{..}
-           RecentPackagesFeature{..}
+mkHtmlCore CoreFeature{ coreResource
+                      , withPackageAllPath
+                      , withPackageId
+                      }
+           VersionsFeature{ versionsResource
+                          , queryGetDeprecatedFor
+                          , queryGetPreferredInfo
+                          , withPackagePreferred
+                          }
+           UploadFeature{uploadResource, withPackageNameAuth}
+           TagsFeature{queryTagsForPackage}
+           DocumentationFeature{queryHasDocumentation}
+           DownloadFeature{perVersionDownloads}
+           DistroFeature{queryPackageStatus}
+           RecentPackagesFeature{packageRender}
            HtmlTags{..}
            HtmlPreferred{..}
            HtmlUtilities{..}
@@ -686,8 +693,19 @@ data HtmlCandidates = HtmlCandidates {
     htmlCandidatesResources :: [Resource]
   }
 
-mkHtmlCandidates :: CoreFeature -> UploadFeature -> VersionsFeature -> PackageCandidatesFeature -> HtmlUtilities -> HtmlCandidates
-mkHtmlCandidates CoreFeature{..} UploadFeature{..} VersionsFeature{..} PackageCandidatesFeature{..} HtmlUtilities{..} = HtmlCandidates{..}
+mkHtmlCandidates :: CoreFeature
+                 -> UploadFeature
+                 -> VersionsFeature
+                 -> PackageCandidatesFeature
+                 -> HtmlUtilities
+                 -> HtmlCandidates
+mkHtmlCandidates CoreFeature{ withPackageName
+                            , queryGetPackageIndex
+                            }
+                 UploadFeature{ withPackageAuth }
+                 VersionsFeature{ queryGetPreferredInfo }
+                 PackageCandidatesFeature{..}
+                 HtmlUtilities{..} = HtmlCandidates{..}
   where
     candidates  = candidatesResource
 
@@ -873,8 +891,16 @@ data HtmlPreferred = HtmlPreferred {
   , editDeprecated :: Resource
   }
 
-mkHtmlPreferred :: CoreFeature -> VersionsFeature -> HtmlUtilities -> HtmlPreferred
-mkHtmlPreferred CoreFeature{..} VersionsFeature{..} HtmlUtilities{..} = HtmlPreferred{..}
+mkHtmlPreferred :: CoreFeature
+                -> VersionsFeature
+                -> HtmlUtilities
+                -> HtmlPreferred
+mkHtmlPreferred CoreFeature{ withPackageName
+                           , withPackageAll
+                           , withPackageAllPath
+                           }
+                VersionsFeature{..}
+                HtmlUtilities{..} = HtmlPreferred{..}
   where
     versions = versionsResource
 
@@ -1121,8 +1147,15 @@ data HtmlTags = HtmlTags {
   , tagEdit :: Resource
   }
 
-mkHtmlTags :: CoreFeature -> TagsFeature -> ListFeature -> HtmlUtilities -> HtmlTags
-mkHtmlTags CoreFeature{..} TagsFeature{..} ListFeature{..} HtmlUtilities{..} = HtmlTags{..}
+mkHtmlTags :: CoreFeature
+           -> ListFeature
+           -> TagsFeature
+           -> HtmlUtilities
+           -> HtmlTags
+mkHtmlTags CoreFeature{withPackageName, withPackageAllPath}
+           ListFeature{makeItemList}
+           TagsFeature{..}
+           HtmlUtilities{..} = HtmlTags{..}
   where
     tags = tagsResource
 
@@ -1219,8 +1252,13 @@ data HtmlSearch = HtmlSearch {
     htmlSearchResources :: [Resource]
   }
 
-mkHtmlSearch :: NamesFeature -> ListFeature -> HtmlUtilities -> HtmlSearch
-mkHtmlSearch NamesFeature{..} ListFeature{..} HtmlUtilities{..} = HtmlSearch{..}
+mkHtmlSearch :: NamesFeature
+             -> ListFeature
+             -> HtmlUtilities
+             -> HtmlSearch
+mkHtmlSearch NamesFeature{..}
+             ListFeature{makeItemList}
+             HtmlUtilities{..} = HtmlSearch{..}
   where
     names = namesResource
 
@@ -1319,7 +1357,8 @@ htmlGroupResource UserFeature{..} r@(GroupResource groupR userR groupGen) =
 -------------------------------------------------------------------------------}
 
 htmlUtilities :: CoreFeature -> TagsFeature -> HtmlUtilities
-htmlUtilities CoreFeature{..} TagsFeature{..} = HtmlUtilities{..}
+htmlUtilities CoreFeature{coreResource}
+              TagsFeature{tagsResource} = HtmlUtilities{..}
   where
     packageLink :: PackageId -> Html
     packageLink pkgid = anchor ! [href $ corePackageUri cores "" pkgid] << display pkgid
