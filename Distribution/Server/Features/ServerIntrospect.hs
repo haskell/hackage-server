@@ -143,7 +143,7 @@ apiDocPageHtml serverFeatures = hackagePage title content
           let (rest, _) = renderComponents cs
           in ("/" +++ emphasize << (":" ++ ddir) +++ rest, Nothing)
         renderComponents (TrailingBranch :_ ) =
-          (emphasize << "*", Nothing)
+          (emphasize << "/..", Nothing)
         renderComponents [] =
           (noHtml, Just "")
 
@@ -232,7 +232,7 @@ apiDocJSON serverFeatures = featureList
                                                  = "/" ++ leaf
         renderComponents (DynamicBranch ddir:cs) = "/" ++ ":" ++ ddir
                                                        ++ renderComponents cs
-        renderComponents (TrailingBranch    :_ ) = "*"
+        renderComponents (TrailingBranch    :_ ) = "/.."
         renderComponents []                      = ""
 
         renderTrailer (ResourceFormat (StaticFormat ext) _) _ = "." ++ ext
