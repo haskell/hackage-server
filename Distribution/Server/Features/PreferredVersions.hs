@@ -121,8 +121,17 @@ versionsFeature :: CoreFeature
                 -> Hook (PackageName -> Maybe [PackageName] -> IO ())
                 -> VersionsFeature
 
-versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
-                preferredState preferredHook deprecatedHook
+versionsFeature CoreFeature{ coreResource=CoreResource{withPackageInPath}
+                           , queryGetPackageIndex
+                           , withPackageAll
+                           , updateArchiveIndexEntry
+                           , withPackageAllPath
+                           }
+                UploadFeature{..}
+                TagsFeature{..}
+                preferredState
+                preferredHook
+                deprecatedHook
   = VersionsFeature{..}
   where
     versionsFeatureInterface = (emptyHackageFeature "versions") {
@@ -240,7 +249,7 @@ versionsFeature CoreFeature{..} UploadFeature{..} TagsFeature{..}
 
     withPackagePreferredPath :: DynamicPath -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a
     withPackagePreferredPath dpath func =
-      withPackageId dpath $ \pkgid ->
+      withPackageInPath dpath $ \(pkgid :: PackageId) ->
         withPackagePreferred pkgid func
 
     putPreferred :: PackageName -> ServerPartE ()

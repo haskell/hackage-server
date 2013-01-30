@@ -374,9 +374,8 @@ mkHtmlCore :: HtmlUtilities
            -> AsyncCache Response
            -> HtmlCore
 mkHtmlCore HtmlUtilities{..}
-           CoreFeature{ coreResource
+           CoreFeature{ coreResource = coreResource@CoreResource{withPackageInPath}
                       , withPackageAllPath
-                      , withPackageId
                       }
            VersionsFeature{ versionsResource
                           , queryGetDeprecatedFor
@@ -427,10 +426,9 @@ mkHtmlCore HtmlUtilities{..}
     -- reorganizing to look aesthetic, as opposed to the sleek and simple current
     -- design that takes the 1990s school of web design.
     servePackagePage :: DynamicPath -> ServerPart Response
-    servePackagePage dpath =
-                            htmlResponse $
-                            withPackageId dpath $ \pkgid  ->
-                            withPackagePreferred pkgid $ \pkg pkgs -> do
+    servePackagePage dpath = htmlResponse $
+      withPackageInPath dpath $ \(pkgid :: PackageId) ->
+      withPackagePreferred pkgid $ \pkg pkgs -> do
         -- get the PackageRender from the PkgInfo
         render <- liftIO $ packageRender pkg
         let realpkg = rendPkgId render
@@ -710,7 +708,7 @@ mkHtmlCandidates :: HtmlUtilities
                  -> PackageCandidatesFeature
                  -> HtmlCandidates
 mkHtmlCandidates HtmlUtilities{..}
-                 CoreFeature{ withPackageName
+                 CoreFeature{ coreResource = CoreResource{withPackageInPath}
                             , queryGetPackageIndex
                             }
                  VersionsFeature{ queryGetPreferredInfo }
@@ -866,9 +864,8 @@ mkHtmlCandidates HtmlUtilities{..}
                     ]
 
     servePackageCandidates :: Resource -> DynamicPath -> ServerPart Response
-    servePackageCandidates candPkgUp dpath =
-      htmlResponse $
-      withPackageName dpath $ \pkgname ->
+    servePackageCandidates candPkgUp dpath = htmlResponse $
+      withPackageInPath dpath $ \(pkgname :: PackageName) ->
       withCandidates pkgname $ \_ pkgs ->
         return $ toResponse $ Resource.XHtml $ hackagePage "Package candidates" $
           [ h3 << ("Candidates for " ++ display pkgname) ] ++
@@ -906,7 +903,8 @@ mkHtmlPreferred :: HtmlUtilities
                 -> CoreFeature
                 -> VersionsFeature
                 -> HtmlPreferred
-mkHtmlPreferred HtmlUtilities{..} CoreFeature{ withPackageName
+mkHtmlPreferred HtmlUtilities{..}
+                CoreFeature{ coreResource = CoreResource{withPackageInPath}
                            , withPackageAll
                            , withPackageAllPath
                            }
@@ -957,9 +955,8 @@ mkHtmlPreferred HtmlUtilities{..} CoreFeature{ withPackageName
       ]
 
     servePackageDeprecated :: Resource -> DynamicPath -> ServerPart Response
-    servePackageDeprecated deprEdit dpath =
-      htmlResponse $
-      withPackageName dpath $ \pkgname -> do
+    servePackageDeprecated deprEdit dpath = htmlResponse $
+      withPackageInPath dpath $ \(pkgname :: PackageName) -> do
         mpkg <- doDeprecatedRender pkgname
         return $ toResponse $ Resource.XHtml $ hackagePage "Deprecated status"
           [ h2 << "Deprecated status"
@@ -1044,9 +1041,8 @@ mkHtmlPreferred HtmlUtilities{..} CoreFeature{ withPackageName
           ]
 
     servePutPreferred :: DynamicPath -> ServerPart Response
-    servePutPreferred dpath =
-      htmlResponse $
-      withPackageName dpath $ \pkgname -> do
+    servePutPreferred dpath = htmlResponse $
+      withPackageInPath dpath $ \(pkgname :: PackageName) -> do
         putPreferred pkgname
         return $ toResponse $ Resource.XHtml $ hackagePage "Set preferred versions"
           [ h2 << "Set preferred versions"
@@ -1059,9 +1055,8 @@ mkHtmlPreferred HtmlUtilities{..} CoreFeature{ withPackageName
           ]
 
     servePutDeprecated :: DynamicPath -> ServerPart Response
-    servePutDeprecated dpath =
-            htmlResponse $
-            withPackageName dpath $ \pkgname -> do
+    servePutDeprecated dpath = htmlResponse $
+      withPackageInPath dpath $ \(pkgname :: PackageName) -> do
         wasDepr <- putDeprecated pkgname
         let dtitle = if wasDepr then "Package deprecated" else "Package undeprecated"
         return $ toResponse $ Resource.XHtml $ hackagePage dtitle
@@ -1076,9 +1071,8 @@ mkHtmlPreferred HtmlUtilities{..} CoreFeature{ withPackageName
 
     -- deprecated: checkbox, by: text field, space-separated list of packagenames
     serveDeprecateForm :: DynamicPath -> ServerPart Response
-    serveDeprecateForm dpath =
-      htmlResponse $
-      withPackageName dpath $ \pkgname -> do
+    serveDeprecateForm dpath = htmlResponse $
+      withPackageInPath dpath $ \(pkgname :: PackageName) -> do
         mpkg <- doDeprecatedRender pkgname
         let (isDepr, mfield) = case mpkg of
                 Just pkgs -> (True, unwords $ map display pkgs)
@@ -1096,7 +1090,7 @@ mkHtmlPreferred HtmlUtilities{..} CoreFeature{ withPackageName
     servePreferForm :: DynamicPath -> ServerPart Response
     servePreferForm dpath =
       htmlResponse $
-      withPackageName dpath $ \pkgname ->
+      withPackageInPath dpath $ \(pkgname :: PackageName) ->
       withPackageAll pkgname $ \pkgs -> do
         pref <- doPreferredRender pkgname
         let allVersions = map packageVersion pkgs
@@ -1163,7 +1157,9 @@ mkHtmlTags :: HtmlUtilities
            -> TagsFeature
            -> HtmlTags
 mkHtmlTags HtmlUtilities{..}
-           CoreFeature{withPackageName, withPackageAllPath}
+           CoreFeature{ coreResource = CoreResource{withPackageInPath}
+                      , withPackageAllPath
+                      }
            ListFeature{makeItemList}
            TagsFeature{..} = HtmlTags{..}
   where
@@ -1242,7 +1238,7 @@ mkHtmlTags HtmlUtilities{..}
     serveTagsForm :: DynamicPath -> ServerPart Response
     serveTagsForm dpath =
       htmlResponse $
-      withPackageName dpath $ \pkgname -> do
+      withPackageInPath dpath $ \(pkgname :: PackageName) -> do
         currTags <- queryTagsForPackage pkgname
         let tagsStr = concat . intersperse ", " . map display . Set.toList $ currTags
         return $ toResponse $ Resource.XHtml $ hackagePage "Edit package tags"

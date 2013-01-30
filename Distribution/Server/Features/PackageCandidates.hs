@@ -149,7 +149,11 @@ candidatesFeature :: ServerEnv
                   -> PackageCandidatesFeature
 candidatesFeature ServerEnv{serverBlobStore = store}
                   UserFeature{..}
-                  CoreFeature{..}
+                  CoreFeature{ coreResource=CoreResource{withPackageInPath}
+                             , queryGetPackageIndex
+                             , doAddPackage
+                             , withPackageTarball
+                             }
                   UploadFeature{..}
                   TarIndexCacheFeature{cachedPackageTarIndex}
                   candidatesState
@@ -227,7 +231,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
     basicCandidatePage :: CoreResource -> DynamicPath -> ServerPart Response
     basicCandidatePage r dpath = runServerPartE $ --TODO: use something else for nice html error pages
-                                 withPackageId dpath $ \pkgid ->
+                                 withPackageInPath dpath $ \(pkgid :: PackageId) ->
                                  withCandidate pkgid $ \_ mpkg _ ->
                                  ok . toResponse . Resource.XHtml $ case mpkg of
         Nothing  -> toHtml $ "A candidate for " ++ display pkgid ++ " doesn't exist"
@@ -249,14 +253,14 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
     -- POST to /:package/candidates/
     postPackageCandidate :: DynamicPath -> ServerPartE Response
-    postPackageCandidate dpath = withPackageName dpath $ \name -> do
+    postPackageCandidate dpath = withPackageInPath dpath $ \(name :: PackageName) -> do
         pkgInfo <- uploadCandidate ((==name) . packageName)
         seeOther (corePackageUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
 
     -- PUT to /:package-version/candidate
     -- FIXME: like delete, PUT shouldn't redirect
     putPackageCandidate :: DynamicPath -> ServerPartE Response
-    putPackageCandidate dpath = withPackageId dpath $ \pkgid -> do
+    putPackageCandidate dpath = withPackageInPath dpath $ \(pkgid :: PackageId) -> do
         guard (packageVersion pkgid /= Version [] [])
         pkgInfo <- uploadCandidate (==pkgid)
         seeOther (corePackageUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
@@ -388,7 +392,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
     ------------------------------------------------------------------------------
     withCandidatePath :: DynamicPath -> (CandidatePackages -> CandPkgInfo -> ServerPartE a) -> ServerPartE a
-    withCandidatePath dpath func = withPackageId dpath $ \pkgid -> withCandidate pkgid $ \state mpkg _ -> case mpkg of
+    withCandidatePath dpath func = withPackageInPath dpath $ \(pkgid :: PackageId) ->
+      withCandidate pkgid $ \state mpkg _ -> case mpkg of
         Nothing  -> errNotFound "Package not found" [MText $ "Candidate for " ++ display pkgid ++ " does not exist"]
         Just pkg -> func state pkg
 

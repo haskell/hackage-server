@@ -81,8 +81,6 @@ data CoreFeature = CoreFeature {
     -- For download counters
     tarballDownload :: Hook (PackageId -> IO ()),
 
-    withPackageId   :: forall   a.              DynamicPath -> (PackageId   -> ServerPartE a)   -> ServerPartE a,
-    withPackageName :: forall m a. MonadIO m => DynamicPath -> (PackageName -> ServerPartT m a) -> ServerPartT m a,
     withPackage     :: forall   a. PackageId -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a,
     withPackagePath :: forall   a. DynamicPath -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a,
     withPackageAll  :: forall   a.              PackageName -> ([PkgInfo]   -> ServerPartE a)   -> ServerPartE a,
@@ -109,7 +107,10 @@ data CoreResource = CoreResource {
     corePackageUri  :: String -> PackageId -> String,
     corePackageName :: String -> PackageName -> String,
     coreCabalUri    :: PackageId -> String,
-    coreTarballUri  :: PackageId -> String
+    coreTarballUri  :: PackageId -> String,
+
+    -- Find a PackageId or PackageName inside a path
+    withPackageInPath :: (MonadPlus m, FromReqURI a) => DynamicPath -> (a -> m b) -> m b
 }
 
 initCoreFeature :: ServerEnv -> UserFeature -> IO CoreFeature
@@ -259,6 +260,8 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir} UserFeature{..}
       renderResource corePackageTarball [display pkgid, display pkgid]
 
     indexPage staticDir _ = serveFile (const $ return "text/html") (staticDir ++ "/hackage.html")
+
+    withPackageInPath dpath f = maybe mzero f (lookup "package" dpath >>= fromReqURI)
 
 
     -- Queries

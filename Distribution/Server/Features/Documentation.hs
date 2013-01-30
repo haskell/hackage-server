@@ -98,14 +98,14 @@ documentationFeature :: ServerEnv
                      -> StateComponent Documentation
                      -> DocumentationFeature
 documentationFeature ServerEnv{serverBlobStore = store}
-                     CoreFeature{..}
+                     CoreFeature{withPackagePath}
                      UploadFeature{..}
                      TarIndexCacheFeature{cachedTarIndex}
                      documentationState
   = DocumentationFeature{..}
   where
     documentationFeatureInterface = (emptyHackageFeature "documentation") {
-        featureDesc = "Maintain and display (" ++ featureName coreFeatureInterface ++ ") documentation"
+        featureDesc = "Maintain and display documentation"
       , featureResources =
           map ($ documentationResource) [
               packageDocsContent

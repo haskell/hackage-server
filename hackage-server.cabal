@@ -206,6 +206,7 @@ executable hackage-server
   if !os(darwin)
     extra-libraries: crypt
 
+  extensions: ScopedTypeVariables
   ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind
                -threaded -funbox-strict-fields
   if impl(ghc >= 7.0)

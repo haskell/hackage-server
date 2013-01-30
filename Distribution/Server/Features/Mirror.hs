@@ -90,7 +90,15 @@ mirrorFeature :: ServerEnv
               -> GroupResource
               -> (MirrorFeature, UserGroup)
 
-mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
+mirrorFeature ServerEnv{serverBlobStore = store}
+              CoreFeature{ coreResource = coreResource@CoreResource{withPackageInPath}
+                         , doMergePackage
+                         , updateReplacePackageUploadTime
+                         , updateReplacePackageUploader
+                         , withPackagePath
+                         , withPackageTarball
+                         }
+              UserFeature{..}
               mirrorersState mirrorGroup mirrorGroupResource
   = (MirrorFeature{..}, mirrorersGroupDesc)
   where
@@ -180,7 +188,7 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
     uploaderPut :: DynamicPath -> ServerPart Response
     uploaderPut dpath = runServerPartE $ do
         void requireMirrorAuth
-        withPackageId dpath $ \pkgid -> do
+        withPackageInPath dpath $ \pkgid -> do
           nameContent <- expectTextPlain
           let uname = UserName (unpackUTF8 nameContent)
           withUserName uname $ \uid _ -> do
@@ -196,7 +204,7 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
     uploadTimePut :: DynamicPath -> ServerPart Response
     uploadTimePut dpath = runServerPartE $ do
         void requireMirrorAuth
-        withPackageId dpath $ \pkgid -> do
+        withPackageInPath dpath $ \pkgid -> do
           timeContent <- expectTextPlain
           case parseTime defaultTimeLocale "%c" (unpackUTF8 timeContent) of
             Nothing -> badRequest $ toResponse "Could not parse upload time"
@@ -209,7 +217,7 @@ mirrorFeature ServerEnv{serverBlobStore = store} CoreFeature{..} UserFeature{..}
     cabalPut :: DynamicPath -> ServerPart Response
     cabalPut dpath = runServerPartE $ do
         uid <- requireMirrorAuth
-        withPackageId dpath $ \pkgid -> do
+        withPackageInPath dpath $ \(pkgid :: PackageId) -> do
           fileContent <- expectTextPlain
           time <- liftIO getCurrentTime
           let uploadData = (time, uid)
