@@ -105,7 +105,8 @@ documentationFeature ServerEnv{serverBlobStore = store}
   = DocumentationFeature{..}
   where
     documentationFeatureInterface = (emptyHackageFeature "documentation") {
-        featureResources =
+        featureDesc = "Maintain and display (" ++ featureName coreFeatureInterface ++ ") documentation"
+      , featureResources =
           map ($ documentationResource) [
               packageDocsContent
             , packageDocsWhole
@@ -118,12 +119,16 @@ documentationFeature ServerEnv{serverBlobStore = store}
 
     documentationResource = DocumentationResource {
         packageDocsContent = (resourceAt "/package/:package/docs/..") {
-                               resourceGet = [("", serveDocumentation)]
-                             }
-      , packageDocsWhole   = (resourceAt "/package/:package/docs.:format") {
-                               resourceGet = [("tar", serveDocumentationTar)],
-                               resourcePut = [("tar", uploadDocumentation)]
-                             }
+            resourceDesc = [ (GET, "Browse documentation") ]
+          , resourceGet  = [ ("", serveDocumentation) ]
+          }
+      , packageDocsWhole = (resourceAt "/package/:package/docs.:format") {
+            resourceDesc = [ (GET, "Download documentation")
+                           , (PUT, "Upload documentation")
+                           ]
+          , resourceGet  = [ ("tar", serveDocumentationTar) ]
+          , resourcePut  = [ ("tar", uploadDocumentation) ]
+          }
       }
 
     serveDocumentationTar :: DynamicPath -> ServerPart Response
