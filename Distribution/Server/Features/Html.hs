@@ -794,46 +794,46 @@ mkHtmlCandidates HtmlUtilities{..}
           ]
 
     serveCandidateMaintain :: DynamicPath -> ServerPart Response
-    serveCandidateMaintain dpath = htmlResponse $
-      withCandidatePath dpath $ \candidate -> do
-        _ <- getPackageAuth candidate
-        return $ toResponse $ Resource.XHtml $ hackagePage "Maintain candidate"
-            [toHtml "Here, you can delete a candidate, publish it, upload a new one, and edit the maintainer group."]
+    serveCandidateMaintain dpath = htmlResponse $ do
+      candidate <- packageInPath dpath >>= lookupCandidateId
+      _ <- getPackageAuth candidate
+      return $ toResponse $ Resource.XHtml $ hackagePage "Maintain candidate"
+          [toHtml "Here, you can delete a candidate, publish it, upload a new one, and edit the maintainer group."]
     {-some useful URIs here: candidateUri check "" pkgid, packageCandidatesUri check "" pkgid, publishUri check "" pkgid-}
 
 
     serveCandidatePage :: Resource -> DynamicPath -> ServerPart Response
-    serveCandidatePage maintain dpath = htmlResponse $
-      withCandidatePath dpath $ \cand -> do
-        candRender <- liftIO $ candidateRender cand
-        let PackageIdentifier pkgname version = packageId cand
-            render = candPackageRender candRender
-        otherVersions <- map packageVersion
-                       . flip PackageIndex.lookupPackageName pkgname
-                     <$> queryGetPackageIndex
-        prefInfo <- queryGetPreferredInfo pkgname
-        let sectionHtml = [Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing,
-                           Pages.renderDependencies render] ++ Pages.renderFields render
-            maintainHtml = anchor ! [href $ renderResource maintain [display $ packageId cand]] << "maintain"
-        -- also utilize hasIndexedPackage :: Bool
-        let warningBox = case renderWarnings candRender of
-                [] -> []
-                warn -> [thediv ! [theclass "notification"] << [toHtml "Warnings:", unordList warn]]
-        return $ toResponse $ Resource.XHtml $ haddockPage (display $ packageId cand) $
-            Pages.packagePage render [maintainHtml] warningBox sectionHtml [] Nothing
+    serveCandidatePage maintain dpath = htmlResponse $ do
+      cand <- packageInPath dpath >>= lookupCandidateId
+      candRender <- liftIO $ candidateRender cand
+      let PackageIdentifier pkgname version = packageId cand
+          render = candPackageRender candRender
+      otherVersions <- map packageVersion
+                     . flip PackageIndex.lookupPackageName pkgname
+                   <$> queryGetPackageIndex
+      prefInfo <- queryGetPreferredInfo pkgname
+      let sectionHtml = [Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing,
+                         Pages.renderDependencies render] ++ Pages.renderFields render
+          maintainHtml = anchor ! [href $ renderResource maintain [display $ packageId cand]] << "maintain"
+      -- also utilize hasIndexedPackage :: Bool
+      let warningBox = case renderWarnings candRender of
+              [] -> []
+              warn -> [thediv ! [theclass "notification"] << [toHtml "Warnings:", unordList warn]]
+      return $ toResponse $ Resource.XHtml $ haddockPage (display $ packageId cand) $
+          Pages.packagePage render [maintainHtml] warningBox sectionHtml [] Nothing
 
     servePublishForm :: DynamicPath -> ServerPart Response
-    servePublishForm dpath = htmlResponse $
-      withCandidatePath dpath $ \candidate -> do
-        _ <- getPackageAuth candidate
-        let pkgid = packageId candidate
-        packages <- queryGetPackageIndex
-        case checkPublish packages candidate of
-            Just err -> throwError err
-            Nothing  -> do
-                return $ toResponse $ Resource.XHtml $ hackagePage "Publishing candidates"
-                    [form ! [theclass "box", XHtml.method "post", action $ publishUri candidatesResource "" pkgid]
-                        << input ! [thetype "submit", value "Publish package"]]
+    servePublishForm dpath = htmlResponse $ do
+      candidate <- packageInPath dpath >>= lookupCandidateId
+      _ <- getPackageAuth candidate
+      let pkgid = packageId candidate
+      packages <- queryGetPackageIndex
+      case checkPublish packages candidate of
+          Just err -> throwError err
+          Nothing  -> do
+              return $ toResponse $ Resource.XHtml $ hackagePage "Publishing candidates"
+                  [form ! [theclass "box", XHtml.method "post", action $ publishUri candidatesResource "" pkgid]
+                      << input ! [thetype "submit", value "Publish package"]]
 
     serveCandidatesPage :: DynamicPath -> ServerPart Response
     serveCandidatesPage _ = do
@@ -863,17 +863,17 @@ mkHtmlCandidates HtmlUtilities{..}
     servePackageCandidates :: Resource -> DynamicPath -> ServerPart Response
     servePackageCandidates candPkgUp dpath = htmlResponse $ do
       pkgname <- packageInPath dpath
-      withCandidates pkgname $ \pkgs ->
-        return $ toResponse $ Resource.XHtml $ hackagePage "Package candidates" $
-          [ h3 << ("Candidates for " ++ display pkgname) ] ++
-          case pkgs of
-            [] -> [ toHtml "No candidates exist for ", packageNameLink pkgname, toHtml ". Upload one for "
-                  , anchor ! [href $ renderResource candPkgUp [display pkgname]] << "this"
-                  , toHtml " or "
-                  , anchor ! [href $ "/packages/candidates/upload"] << "another"
-                  , toHtml " package?"
-                  ]
-            _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ corePackageUri candidatesCore "" $ packageId pkg] << display (packageVersion pkg) ]
+      pkgs <- lookupCandidateName pkgname
+      return $ toResponse $ Resource.XHtml $ hackagePage "Package candidates" $
+        [ h3 << ("Candidates for " ++ display pkgname) ] ++
+        case pkgs of
+          [] -> [ toHtml "No candidates exist for ", packageNameLink pkgname, toHtml ". Upload one for "
+                , anchor ! [href $ renderResource candPkgUp [display pkgname]] << "this"
+                , toHtml " or "
+                , anchor ! [href $ "/packages/candidates/upload"] << "another"
+                , toHtml " package?"
+                ]
+          _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ corePackageUri candidatesCore "" $ packageId pkg] << display (packageVersion pkg) ]
 
     -- TODO: make publishCandidate a member of the PackageCandidates feature, just like
     -- putDeprecated and putPreferred are for the Versions feature.

@@ -60,8 +60,8 @@ data PackageCandidatesFeature = PackageCandidatesFeature {
     checkPublish          :: PackageIndex PkgInfo -> CandPkgInfo -> Maybe ErrorResponse,
     candidateRender       :: CandPkgInfo -> IO CandidateRender,
 
-    withCandidatePath :: forall a. DynamicPath -> (CandPkgInfo -> ServerPartE a) -> ServerPartE a,
-    withCandidates    :: forall a. PackageName -> ([CandPkgInfo] -> ServerPartE a) -> ServerPartE a
+    lookupCandidateName :: PackageName -> ServerPartE [CandPkgInfo],
+    lookupCandidateId   :: PackageId -> ServerPartE CandPkgInfo
 }
 
 instance IsHackageFeature PackageCandidatesFeature where
@@ -208,6 +208,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           renderResource (corePackageTarball r) [display pkgid, display pkgid]
       , coreCabalUri = \pkgid ->
           renderResource (coreCabalFile r) [display pkgid, display (packageName pkgid)]
+      , packageInPath
+      , packageTarballInPath
       }
 
     candidatesResource = fix $ \r -> PackageCandidatesResource {
@@ -230,7 +232,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     basicCandidatePage :: CoreResource -> DynamicPath -> ServerPart Response
     basicCandidatePage r dpath = runServerPartE $ do --TODO: use something else for nice html error pages
       pkgid <- packageInPath dpath
-      withCandidate pkgid $ \mpkg _ ->
+      withCandidate pkgid $ \mpkg ->
         ok . toResponse . Resource.XHtml $ case mpkg of
           Nothing  -> toHtml $ "A candidate for " ++ display pkgid ++ " doesn't exist"
           Just pkg -> toHtml [ h3 << "Downloads"
@@ -267,7 +269,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
     -- FIXME: DELETE should not redirect, but rather return ServerPartE ()
     doDeleteCandidate :: DynamicPath -> ServerPartE Response
-    doDeleteCandidate dpath = withCandidatePath dpath $ \candidate -> do
+    doDeleteCandidate dpath = do
+      candidate <- packageInPath dpath >>= lookupCandidateId
       void $ getPackageAuth candidate
       void $ updateState candidatesState $ DeleteCandidate (packageId candidate)
       seeOther (packageCandidatesUri candidatesResource "" $ packageName candidate) $ toResponse ()
@@ -275,7 +278,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     serveCandidateTarball :: DynamicPath -> ServerPart Response
     serveCandidateTarball dpath = runServerPartE $ do
       pkgid <- packageTarballInPath dpath
-      withCandidate pkgid $ \mpkg _ -> case mpkg of
+      withCandidate pkgid $ \mpkg -> case mpkg of
         Nothing -> mzero -- candidate  does not exist
         Just pkg -> case pkgTarball (candPkgInfo pkg) of
             [] -> mzero --candidate's tarball does not exist
@@ -285,12 +288,12 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                 ok $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime $ candPkgInfo pkg)
 
     --withFormat :: DynamicPath -> (String -> a) -> a
+    --TODO: use something else for nice html error pages
     serveCandidateCabal :: DynamicPath -> ServerPart Response
-    serveCandidateCabal dpath =
-        runServerPartE $ --TODO: use something else for nice html error pages
-        withCandidatePath dpath $ \pkg -> do
-            guard (lookup "cabal" dpath == Just (display $ packageName pkg))
-            return $ toResponse (Resource.CabalFile (cabalFileByteString $ pkgData $ candPkgInfo pkg))
+    serveCandidateCabal dpath = runServerPartE $ do
+      pkg <- packageInPath dpath >>= lookupCandidateId
+      guard (lookup "cabal" dpath == Just (display $ packageName pkg))
+      return $ toResponse (Resource.CabalFile (cabalFileByteString $ pkgData $ candPkgInfo pkg))
 
     uploadCandidate :: (PackageId -> Bool) -> ServerPartE CandPkgInfo
     uploadCandidate isRight = do
@@ -327,42 +330,42 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
     publishCandidate :: DynamicPath -> Bool -> ServerPartE UploadResult
     publishCandidate dpath doDelete = do
-        packages <- queryGetPackageIndex
-        withCandidatePath dpath $ \candidate -> do
-        -- check authorization to upload - must already be a maintainer
-        (uid, _) <- getPackageAuth candidate
-        -- check if package or later already exists
-        case checkPublish packages candidate of
-          Just failed -> throwError failed
-          Nothing -> do
-            -- run filters
-            let pkgInfo = candPkgInfo candidate
-                uresult = UploadResult (pkgDesc pkgInfo) (cabalFileByteString $ pkgData pkgInfo) (candWarnings candidate)
-                uploadFilter = combineErrors $ runFilter'' canUploadPackage uid uresult
-            merror <- liftIO $ combineErrors $ sequence [runUserFilter uid, uploadFilter]
-            case merror of
-              Just failed -> throwError failed
-              Nothing -> do
-                uploadData <- fmap (flip (,) uid) (liftIO getCurrentTime)
-                let pkgInfo' = PkgInfo {
-                        pkgInfoId     = packageId candidate,
-                        pkgData       = pkgData pkgInfo,
-                        pkgTarball    = case pkgTarball pkgInfo of
-                            ((blobId, _):_) -> [(blobId, uploadData)]
-                            [] -> [], -- this shouldn't happen, but let's keep this part total anyway
-                        pkgUploadData = uploadData,
-                        pkgDataOld    = []
-                    }
-                success <- liftIO $ doAddPackage pkgInfo'
-                --FIXME: share code here with upload
-                -- currently we do not create the initial maintainer group etc.
-                if success
-                  then do
-                    -- delete when requested: "moving" the resource
-                    -- should this be required? (see notes in PackageCandidatesResource)
-                    when doDelete $ updateState candidatesState $ DeleteCandidate (packageId candidate)
-                    return uresult
-                  else errForbidden "Upload failed" [MText "Package already exists."]
+      packages <- queryGetPackageIndex
+      candidate <- packageInPath dpath >>= lookupCandidateId
+      -- check authorization to upload - must already be a maintainer
+      (uid, _) <- getPackageAuth candidate
+      -- check if package or later already exists
+      case checkPublish packages candidate of
+        Just failed -> throwError failed
+        Nothing -> do
+          -- run filters
+          let pkgInfo = candPkgInfo candidate
+              uresult = UploadResult (pkgDesc pkgInfo) (cabalFileByteString $ pkgData pkgInfo) (candWarnings candidate)
+              uploadFilter = combineErrors $ runFilter'' canUploadPackage uid uresult
+          merror <- liftIO $ combineErrors $ sequence [runUserFilter uid, uploadFilter]
+          case merror of
+            Just failed -> throwError failed
+            Nothing -> do
+              uploadData <- fmap (flip (,) uid) (liftIO getCurrentTime)
+              let pkgInfo' = PkgInfo {
+                      pkgInfoId     = packageId candidate,
+                      pkgData       = pkgData pkgInfo,
+                      pkgTarball    = case pkgTarball pkgInfo of
+                          ((blobId, _):_) -> [(blobId, uploadData)]
+                          [] -> [], -- this shouldn't happen, but let's keep this part total anyway
+                      pkgUploadData = uploadData,
+                      pkgDataOld    = []
+                  }
+              success <- liftIO $ doAddPackage pkgInfo'
+              --FIXME: share code here with upload
+              -- currently we do not create the initial maintainer group etc.
+              if success
+                then do
+                  -- delete when requested: "moving" the resource
+                  -- should this be required? (see notes in PackageCandidatesResource)
+                  when doDelete $ updateState candidatesState $ DeleteCandidate (packageId candidate)
+                  return uresult
+                else errForbidden "Upload failed" [MText "Package already exists."]
       where combineErrors = fmap (listToMaybe . catMaybes)
 
 
@@ -391,24 +394,32 @@ candidatesFeature ServerEnv{serverBlobStore = store}
            }
 
     ------------------------------------------------------------------------------
-    withCandidatePath :: DynamicPath -> (CandPkgInfo -> ServerPartE a) -> ServerPartE a
-    withCandidatePath dpath func = do
-      pkgid <- packageInPath dpath
-      withCandidate pkgid $ \mpkg _ -> case mpkg of
-        Nothing  -> errNotFound "Package not found" [MText $ "Candidate for " ++ display pkgid ++ " does not exist"]
-        Just pkg -> func pkg
 
-    withCandidate :: PackageId -> (Maybe CandPkgInfo -> [CandPkgInfo] -> ServerPartE a) -> ServerPartE a
+    -- Find all candidates for a package (there may be none)
+    -- TODO: this is different behaviour to lookupPackageName, which throws
+    -- an error if the package is invalid. Should we perhaps check that
+    -- at least the package is valid here (even though we might not have
+    -- any candidates?)
+    lookupCandidateName :: PackageName -> ServerPartE [CandPkgInfo]
+    lookupCandidateName pkgname = do
+      state <- queryState candidatesState GetCandidatePackages
+      return $ PackageIndex.lookupPackageName (candidateList state) pkgname
+
+    -- TODO: Unlike the corresponding function in core, we don't return the
+    -- "latest" candidate when Version is empty. Should we?
+    lookupCandidateId :: PackageId -> ServerPartE CandPkgInfo
+    lookupCandidateId pkgid = do
+      state <- queryState candidatesState GetCandidatePackages
+      case PackageIndex.lookupPackageId (candidateList state) pkgid of
+        Just pkg -> return pkg
+        _ -> errNotFound "Candidate not found" [MText $ "No such candidate version for " ++ display (packageName pkgid)]
+
+    withCandidate :: PackageId -> (Maybe CandPkgInfo -> ServerPartE a) -> ServerPartE a
     withCandidate pkgid func = do
         state <- queryState candidatesState GetCandidatePackages
         let pkgs = PackageIndex.lookupPackageName (candidateList state) (packageName pkgid)
-        func (find ((==pkgid) . packageId) pkgs) pkgs
+        func (find ((==pkgid) . packageId) pkgs)
 
-    withCandidates :: PackageName -> ([CandPkgInfo] -> ServerPartE a) -> ServerPartE a
-    withCandidates name func = withCandidate (PackageIdentifier name $ Version [] []) $ \_ infos -> func infos
-
-    withCandidatePath' :: DynamicPath -> (PkgInfo -> ServerPartE a) -> ServerPartE a
-    withCandidatePath' dpath k = withCandidatePath dpath $ \pkg -> k (candPkgInfo pkg)
 
 {-------------------------------------------------------------------------------
   TODO: everything below is an (almost) direct duplicate of corresponding
@@ -420,8 +431,9 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
     -- result: changelog or not-found error
     serveChangeLog :: DynamicPath -> ServerPart Response
-    serveChangeLog dpath = runServerPartE $ withCandidatePath' dpath $ \pkg -> do
-      mChangeLog <- liftIO $ packageChangeLog pkg
+    serveChangeLog dpath = runServerPartE $ do
+      pkg        <- packageInPath dpath >>= lookupCandidateId
+      mChangeLog <- liftIO $ packageChangeLog (candPkgInfo pkg)
       case mChangeLog of
         Left err ->
           errNotFound "Changelog not found" [MText err]
@@ -430,8 +442,9 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
     -- return: not-found error or tarball
     serveContents :: DynamicPath -> ServerPart Response
-    serveContents dpath = runServerPartE $ withCandidatePath' dpath $ \pkg -> do
-      mTarball <- liftIO $ packageTarball pkg
+    serveContents dpath = runServerPartE $ do
+      pkg      <- packageInPath dpath >>= lookupCandidateId
+      mTarball <- liftIO $ packageTarball (candPkgInfo pkg)
       case mTarball of
         Left err ->
           errNotFound "Could not serve package contents" [MText err]
