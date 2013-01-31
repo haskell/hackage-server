@@ -60,9 +60,8 @@ data PackageCandidatesFeature = PackageCandidatesFeature {
     checkPublish          :: PackageIndex PkgInfo -> CandPkgInfo -> Maybe ErrorResponse,
     candidateRender       :: CandPkgInfo -> IO CandidateRender,
 
-    withCandidatePath :: forall a. DynamicPath -> (CandidatePackages -> CandPkgInfo -> ServerPartE a) -> ServerPartE a,
-    withCandidate     :: forall a. PackageId -> (CandidatePackages -> Maybe CandPkgInfo -> [CandPkgInfo] -> ServerPartE a) -> ServerPartE a,
-    withCandidates    :: forall a. PackageName -> (CandidatePackages -> [CandPkgInfo] -> ServerPartE a) -> ServerPartE a
+    withCandidatePath :: forall a. DynamicPath -> (CandPkgInfo -> ServerPartE a) -> ServerPartE a,
+    withCandidates    :: forall a. PackageName -> ([CandPkgInfo] -> ServerPartE a) -> ServerPartE a
 }
 
 instance IsHackageFeature PackageCandidatesFeature where
@@ -231,7 +230,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     basicCandidatePage :: CoreResource -> DynamicPath -> ServerPart Response
     basicCandidatePage r dpath = runServerPartE $ do --TODO: use something else for nice html error pages
       pkgid <- packageInPath dpath
-      withCandidate pkgid $ \_ mpkg _ ->
+      withCandidate pkgid $ \mpkg _ ->
         ok . toResponse . Resource.XHtml $ case mpkg of
           Nothing  -> toHtml $ "A candidate for " ++ display pkgid ++ " doesn't exist"
           Just pkg -> toHtml [ h3 << "Downloads"
@@ -268,7 +267,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
     -- FIXME: DELETE should not redirect, but rather return ServerPartE ()
     doDeleteCandidate :: DynamicPath -> ServerPartE Response
-    doDeleteCandidate dpath = withCandidatePath dpath $ \_ candidate -> do
+    doDeleteCandidate dpath = withCandidatePath dpath $ \candidate -> do
       void $ getPackageAuth candidate
       void $ updateState candidatesState $ DeleteCandidate (packageId candidate)
       seeOther (packageCandidatesUri candidatesResource "" $ packageName candidate) $ toResponse ()
@@ -276,7 +275,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     serveCandidateTarball :: DynamicPath -> ServerPart Response
     serveCandidateTarball dpath = runServerPartE $ do
       pkgid <- packageTarballInPath dpath
-      withCandidate pkgid $ \_ mpkg _ -> case mpkg of
+      withCandidate pkgid $ \mpkg _ -> case mpkg of
         Nothing -> mzero -- candidate  does not exist
         Just pkg -> case pkgTarball (candPkgInfo pkg) of
             [] -> mzero --candidate's tarball does not exist
@@ -289,7 +288,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     serveCandidateCabal :: DynamicPath -> ServerPart Response
     serveCandidateCabal dpath =
         runServerPartE $ --TODO: use something else for nice html error pages
-        withCandidatePath dpath $ \_ pkg -> do
+        withCandidatePath dpath $ \pkg -> do
             guard (lookup "cabal" dpath == Just (display $ packageName pkg))
             return $ toResponse (Resource.CabalFile (cabalFileByteString $ pkgData $ candPkgInfo pkg))
 
@@ -329,7 +328,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     publishCandidate :: DynamicPath -> Bool -> ServerPartE UploadResult
     publishCandidate dpath doDelete = do
         packages <- queryGetPackageIndex
-        withCandidatePath dpath $ \_ candidate -> do
+        withCandidatePath dpath $ \candidate -> do
         -- check authorization to upload - must already be a maintainer
         (uid, _) <- getPackageAuth candidate
         -- check if package or later already exists
@@ -392,24 +391,24 @@ candidatesFeature ServerEnv{serverBlobStore = store}
            }
 
     ------------------------------------------------------------------------------
-    withCandidatePath :: DynamicPath -> (CandidatePackages -> CandPkgInfo -> ServerPartE a) -> ServerPartE a
+    withCandidatePath :: DynamicPath -> (CandPkgInfo -> ServerPartE a) -> ServerPartE a
     withCandidatePath dpath func = do
       pkgid <- packageInPath dpath
-      withCandidate pkgid $ \state mpkg _ -> case mpkg of
+      withCandidate pkgid $ \mpkg _ -> case mpkg of
         Nothing  -> errNotFound "Package not found" [MText $ "Candidate for " ++ display pkgid ++ " does not exist"]
-        Just pkg -> func state pkg
+        Just pkg -> func pkg
 
-    withCandidate :: PackageId -> (CandidatePackages -> Maybe CandPkgInfo -> [CandPkgInfo] -> ServerPartE a) -> ServerPartE a
+    withCandidate :: PackageId -> (Maybe CandPkgInfo -> [CandPkgInfo] -> ServerPartE a) -> ServerPartE a
     withCandidate pkgid func = do
         state <- queryState candidatesState GetCandidatePackages
         let pkgs = PackageIndex.lookupPackageName (candidateList state) (packageName pkgid)
-        func state (find ((==pkgid) . packageId) pkgs) pkgs
+        func (find ((==pkgid) . packageId) pkgs) pkgs
 
-    withCandidates :: PackageName -> (CandidatePackages -> [CandPkgInfo] -> ServerPartE a) -> ServerPartE a
-    withCandidates name func = withCandidate (PackageIdentifier name $ Version [] []) $ \state _ infos -> func state infos
+    withCandidates :: PackageName -> ([CandPkgInfo] -> ServerPartE a) -> ServerPartE a
+    withCandidates name func = withCandidate (PackageIdentifier name $ Version [] []) $ \_ infos -> func infos
 
     withCandidatePath' :: DynamicPath -> (PkgInfo -> ServerPartE a) -> ServerPartE a
-    withCandidatePath' dpath k = withCandidatePath dpath $ \_ pkg -> k (candPkgInfo pkg)
+    withCandidatePath' dpath k = withCandidatePath dpath $ \pkg -> k (candPkgInfo pkg)
 
 {-------------------------------------------------------------------------------
   TODO: everything below is an (almost) direct duplicate of corresponding

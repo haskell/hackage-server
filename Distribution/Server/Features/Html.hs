@@ -795,7 +795,7 @@ mkHtmlCandidates HtmlUtilities{..}
 
     serveCandidateMaintain :: DynamicPath -> ServerPart Response
     serveCandidateMaintain dpath = htmlResponse $
-      withCandidatePath dpath $ \_ candidate -> do
+      withCandidatePath dpath $ \candidate -> do
         _ <- getPackageAuth candidate
         return $ toResponse $ Resource.XHtml $ hackagePage "Maintain candidate"
             [toHtml "Here, you can delete a candidate, publish it, upload a new one, and edit the maintainer group."]
@@ -804,7 +804,7 @@ mkHtmlCandidates HtmlUtilities{..}
 
     serveCandidatePage :: Resource -> DynamicPath -> ServerPart Response
     serveCandidatePage maintain dpath = htmlResponse $
-      withCandidatePath dpath $ \_ cand -> do
+      withCandidatePath dpath $ \cand -> do
         candRender <- liftIO $ candidateRender cand
         let PackageIdentifier pkgname version = packageId cand
             render = candPackageRender candRender
@@ -824,7 +824,7 @@ mkHtmlCandidates HtmlUtilities{..}
 
     servePublishForm :: DynamicPath -> ServerPart Response
     servePublishForm dpath = htmlResponse $
-      withCandidatePath dpath $ \_ candidate -> do
+      withCandidatePath dpath $ \candidate -> do
         _ <- getPackageAuth candidate
         let pkgid = packageId candidate
         packages <- queryGetPackageIndex
@@ -863,7 +863,7 @@ mkHtmlCandidates HtmlUtilities{..}
     servePackageCandidates :: Resource -> DynamicPath -> ServerPart Response
     servePackageCandidates candPkgUp dpath = htmlResponse $ do
       pkgname <- packageInPath dpath
-      withCandidates pkgname $ \_ pkgs ->
+      withCandidates pkgname $ \pkgs ->
         return $ toResponse $ Resource.XHtml $ hackagePage "Package candidates" $
           [ h3 << ("Candidates for " ++ display pkgname) ] ++
           case pkgs of
