@@ -91,7 +91,7 @@ mirrorFeature :: ServerEnv
               -> (MirrorFeature, UserGroup)
 
 mirrorFeature ServerEnv{serverBlobStore = store}
-              CoreFeature{ coreResource = coreResource@CoreResource{withPackageInPath}
+              CoreFeature{ coreResource = coreResource@CoreResource{packageInPath}
                          , doMergePackage
                          , updateReplacePackageUploadTime
                          , updateReplacePackageUploader
@@ -188,13 +188,13 @@ mirrorFeature ServerEnv{serverBlobStore = store}
     uploaderPut :: DynamicPath -> ServerPart Response
     uploaderPut dpath = runServerPartE $ do
         void requireMirrorAuth
-        withPackageInPath dpath $ \pkgid -> do
-          nameContent <- expectTextPlain
-          let uname = UserName (unpackUTF8 nameContent)
-          withUserName uname $ \uid _ -> do
-            mb_err <- updateReplacePackageUploader pkgid uid
-            maybe (return ()) (\err -> errNotFound err []) mb_err
-            return $ toResponse "Updated uploader OK"
+        pkgid <- packageInPath dpath
+        nameContent <- expectTextPlain
+        let uname = UserName (unpackUTF8 nameContent)
+        withUserName uname $ \uid _ -> do
+          mb_err <- updateReplacePackageUploader pkgid uid
+          maybe (return ()) (\err -> errNotFound err []) mb_err
+          return $ toResponse "Updated uploader OK"
 
     uploadTimeGet :: DynamicPath -> ServerPart Response
     uploadTimeGet dpath = runServerPartE $ withPackagePath dpath $ \pkg _ ->
@@ -204,35 +204,35 @@ mirrorFeature ServerEnv{serverBlobStore = store}
     uploadTimePut :: DynamicPath -> ServerPart Response
     uploadTimePut dpath = runServerPartE $ do
         void requireMirrorAuth
-        withPackageInPath dpath $ \pkgid -> do
-          timeContent <- expectTextPlain
-          case parseTime defaultTimeLocale "%c" (unpackUTF8 timeContent) of
-            Nothing -> badRequest $ toResponse "Could not parse upload time"
-            Just t  -> do
-              mb_err <- updateReplacePackageUploadTime pkgid t
-              maybe (return ()) (\err -> errNotFound err []) mb_err
-              return $ toResponse "Updated upload time OK"
+        pkgid <- packageInPath dpath
+        timeContent <- expectTextPlain
+        case parseTime defaultTimeLocale "%c" (unpackUTF8 timeContent) of
+          Nothing -> badRequest $ toResponse "Could not parse upload time"
+          Just t  -> do
+            mb_err <- updateReplacePackageUploadTime pkgid t
+            maybe (return ()) (\err -> errNotFound err []) mb_err
+            return $ toResponse "Updated upload time OK"
 
     -- return: error from parsing, bad request error, or warning lines
     cabalPut :: DynamicPath -> ServerPart Response
     cabalPut dpath = runServerPartE $ do
         uid <- requireMirrorAuth
-        withPackageInPath dpath $ \(pkgid :: PackageId) -> do
-          fileContent <- expectTextPlain
-          time <- liftIO getCurrentTime
-          let uploadData = (time, uid)
-          case parsePackageDescription . unpackUTF8 $ fileContent of
-              ParseFailed err -> badRequest (toResponse $ show (locatedErrorMsg err))
-              ParseOk warnings pkg -> do
-                  liftIO $ doMergePackage $ PkgInfo {
-                      pkgInfoId     = packageId pkg,
-                      pkgData       = CabalFileText fileContent,
-                      pkgTarball    = [],
-                      pkgUploadData = uploadData,
-                      pkgDataOld    = []
-                  }
-                  let filename = display pkgid <.> "cabal"
-                  return . toResponse $ unlines $ map (showPWarning filename) warnings
+        pkgid :: PackageId <- packageInPath dpath
+        fileContent <- expectTextPlain
+        time <- liftIO getCurrentTime
+        let uploadData = (time, uid)
+        case parsePackageDescription . unpackUTF8 $ fileContent of
+            ParseFailed err -> badRequest (toResponse $ show (locatedErrorMsg err))
+            ParseOk warnings pkg -> do
+                liftIO $ doMergePackage $ PkgInfo {
+                    pkgInfoId     = packageId pkg,
+                    pkgData       = CabalFileText fileContent,
+                    pkgTarball    = [],
+                    pkgUploadData = uploadData,
+                    pkgDataOld    = []
+                }
+                let filename = display pkgid <.> "cabal"
+                return . toResponse $ unlines $ map (showPWarning filename) warnings
 
     requireMirrorAuth :: ServerPartE UserId
     requireMirrorAuth = do

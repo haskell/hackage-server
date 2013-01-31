@@ -110,7 +110,7 @@ data CoreResource = CoreResource {
     coreTarballUri  :: PackageId -> String,
 
     -- Find a PackageId or PackageName inside a path
-    withPackageInPath :: (MonadPlus m, FromReqURI a) => DynamicPath -> (a -> m b) -> m b
+    packageInPath :: (MonadPlus m, FromReqURI a) => DynamicPath -> m a
 }
 
 initCoreFeature :: ServerEnv -> UserFeature -> IO CoreFeature
@@ -261,7 +261,9 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir} UserFeature{..}
 
     indexPage staticDir _ = serveFile (const $ return "text/html") (staticDir ++ "/hackage.html")
 
-    withPackageInPath dpath f = maybe mzero f (lookup "package" dpath >>= fromReqURI)
+    packageInPath dpath = case lookup "package" dpath >>= fromReqURI of
+                            Just a  -> return a
+                            Nothing -> mzero
 
 
     -- Queries

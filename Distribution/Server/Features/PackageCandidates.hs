@@ -149,7 +149,7 @@ candidatesFeature :: ServerEnv
                   -> PackageCandidatesFeature
 candidatesFeature ServerEnv{serverBlobStore = store}
                   UserFeature{..}
-                  CoreFeature{ coreResource=CoreResource{withPackageInPath}
+                  CoreFeature{ coreResource=CoreResource{packageInPath}
                              , queryGetPackageIndex
                              , doAddPackage
                              , withPackageTarball
@@ -230,18 +230,18 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       }
 
     basicCandidatePage :: CoreResource -> DynamicPath -> ServerPart Response
-    basicCandidatePage r dpath = runServerPartE $ --TODO: use something else for nice html error pages
-                                 withPackageInPath dpath $ \(pkgid :: PackageId) ->
-                                 withCandidate pkgid $ \_ mpkg _ ->
-                                 ok . toResponse . Resource.XHtml $ case mpkg of
-        Nothing  -> toHtml $ "A candidate for " ++ display pkgid ++ " doesn't exist"
-        Just pkg -> toHtml [ h3 << "Downloads"
-                           , toHtml (section pkg)
-                           , h3 << "Warnings"
-                           , case candWarnings pkg of
-                                [] -> toHtml "No warnings"
-                                warnings -> unordList warnings
-                           ]
+    basicCandidatePage r dpath = runServerPartE $ do --TODO: use something else for nice html error pages
+      pkgid <- packageInPath dpath
+      withCandidate pkgid $ \_ mpkg _ ->
+        ok . toResponse . Resource.XHtml $ case mpkg of
+          Nothing  -> toHtml $ "A candidate for " ++ display pkgid ++ " doesn't exist"
+          Just pkg -> toHtml [ h3 << "Downloads"
+                             , toHtml (section pkg)
+                             , h3 << "Warnings"
+                             , case candWarnings pkg of
+                                  [] -> toHtml "No warnings"
+                                  warnings -> unordList warnings
+                             ]
       where section cand = basicPackageSection (coreCabalUri r)
                                                (coreTarballUri r)
                                                (candPkgInfo cand)
@@ -253,17 +253,19 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
     -- POST to /:package/candidates/
     postPackageCandidate :: DynamicPath -> ServerPartE Response
-    postPackageCandidate dpath = withPackageInPath dpath $ \(name :: PackageName) -> do
-        pkgInfo <- uploadCandidate ((==name) . packageName)
-        seeOther (corePackageUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
+    postPackageCandidate dpath = do
+      name <- packageInPath dpath
+      pkgInfo <- uploadCandidate ((==name) . packageName)
+      seeOther (corePackageUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
 
     -- PUT to /:package-version/candidate
     -- FIXME: like delete, PUT shouldn't redirect
     putPackageCandidate :: DynamicPath -> ServerPartE Response
-    putPackageCandidate dpath = withPackageInPath dpath $ \(pkgid :: PackageId) -> do
-        guard (packageVersion pkgid /= Version [] [])
-        pkgInfo <- uploadCandidate (==pkgid)
-        seeOther (corePackageUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
+    putPackageCandidate dpath = do
+      pkgid <- packageInPath dpath
+      guard (packageVersion pkgid /= Version [] [])
+      pkgInfo <- uploadCandidate (==pkgid)
+      seeOther (corePackageUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
 
     -- FIXME: DELETE should not redirect, but rather return ServerPartE ()
     doDeleteCandidate :: DynamicPath -> ServerPartE Response
@@ -392,7 +394,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
     ------------------------------------------------------------------------------
     withCandidatePath :: DynamicPath -> (CandidatePackages -> CandPkgInfo -> ServerPartE a) -> ServerPartE a
-    withCandidatePath dpath func = withPackageInPath dpath $ \(pkgid :: PackageId) ->
+    withCandidatePath dpath func = do
+      pkgid <- packageInPath dpath
       withCandidate pkgid $ \state mpkg _ -> case mpkg of
         Nothing  -> errNotFound "Package not found" [MText $ "Candidate for " ++ display pkgid ++ " does not exist"]
         Just pkg -> func state pkg

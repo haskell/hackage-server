@@ -121,7 +121,7 @@ versionsFeature :: CoreFeature
                 -> Hook (PackageName -> Maybe [PackageName] -> IO ())
                 -> VersionsFeature
 
-versionsFeature CoreFeature{ coreResource=CoreResource{withPackageInPath}
+versionsFeature CoreFeature{ coreResource=CoreResource{packageInPath}
                            , queryGetPackageIndex
                            , withPackageAll
                            , updateArchiveIndexEntry
@@ -248,9 +248,9 @@ versionsFeature CoreFeature{ coreResource=CoreResource{withPackageInPath}
       where packageError = errNotFound "Package not found"
 
     withPackagePreferredPath :: DynamicPath -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a
-    withPackagePreferredPath dpath func =
-      withPackageInPath dpath $ \(pkgid :: PackageId) ->
-        withPackagePreferred pkgid func
+    withPackagePreferredPath dpath func = do
+      pkgid <- packageInPath dpath
+      withPackagePreferred pkgid func
 
     putPreferred :: PackageName -> ServerPartE ()
     putPreferred pkgname =

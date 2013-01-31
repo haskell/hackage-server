@@ -72,7 +72,7 @@ distroFeature :: UserFeature
               -> StateComponent Distros
               -> DistroFeature
 distroFeature UserFeature{..}
-              CoreFeature{coreResource=CoreResource{withPackageInPath}}
+              CoreFeature{coreResource=CoreResource{packageInPath}}
               distrosState
   = DistroFeature{..}
   where
@@ -185,8 +185,8 @@ distroFeature UserFeature{..}
     -- guards on the distro existing, but not the package
     withDistroPackagePath :: DynamicPath -> (DistroName -> PackageName -> Maybe DistroPackageInfo -> ServerPart Response) -> ServerPart Response
     withDistroPackagePath dpath func =
-      withDistroNamePath dpath $ \dname ->
-      withPackageInPath dpath $ \(pkgname :: PackageName) -> do
+      withDistroNamePath dpath $ \dname -> do
+        pkgname <- packageInPath dpath
         isDist <- queryState distrosState (IsDistribution dname)
         case isDist of
           False -> notFound $ toResponse "Distribution does not exist"

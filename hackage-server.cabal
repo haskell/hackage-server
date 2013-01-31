@@ -207,7 +207,7 @@ executable hackage-server
     extra-libraries: crypt
 
   extensions: ScopedTypeVariables
-  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind
+  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fno-warn-deprecated-flags
                -threaded -funbox-strict-fields
   if impl(ghc >= 7.0)
     ghc-options: -rtsopts -with-rtsopts=-I0
