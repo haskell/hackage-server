@@ -44,7 +44,7 @@ data DocumentationResource = DocumentationResource {
 }
 
 initDocumentationFeature :: ServerEnv
-                         -> CoreFeature
+                         -> CoreResource
                          -> UploadFeature
                          -> TarIndexCacheFeature
                          -> IO DocumentationFeature
@@ -92,15 +92,13 @@ documentationStateComponent stateDir = do
       return (Documentation (Map.insert pkgId blobId docs))
 
 documentationFeature :: ServerEnv
-                     -> CoreFeature
+                     -> CoreResource
                      -> UploadFeature
                      -> TarIndexCacheFeature
                      -> StateComponent Documentation
                      -> DocumentationFeature
 documentationFeature ServerEnv{serverBlobStore = store}
-                     CoreFeature{ coreResource = CoreResource{packageInPath}
-                                , lookupPackageId
-                                }
+                     CoreResource{packageInPath, guardValidPackageId}
                      UploadFeature{..}
                      TarIndexCacheFeature{cachedTarIndex}
                      documentationState
@@ -153,8 +151,8 @@ documentationFeature ServerEnv{serverBlobStore = store}
     -- return: not-found error (parsing) or see other uri
     uploadDocumentation :: DynamicPath -> ServerPart Response
     uploadDocumentation dpath = runServerPartE $ do
-      pkg <- packageInPath dpath >>= lookupPackageId
-      let pkgid = packageId pkg
+      pkgid <- packageInPath dpath
+      guardValidPackageId pkgid
       _ <- getPackageAuth pkgid
       -- The order of operations:
       -- * Insert new documentation into blob store
@@ -185,8 +183,8 @@ documentationFeature ServerEnv{serverBlobStore = store}
 
     withDocumentation :: DynamicPath -> (PackageId -> BlobId -> TarIndex -> ServerPartE a) -> ServerPartE a
     withDocumentation dpath func = do
-      pkg <- packageInPath dpath >>= lookupPackageId
-      let pkgid = packageId pkg
+      pkgid <- packageInPath dpath
+      guardValidPackageId pkgid
       mdocs <- queryState documentationState $ LookupDocumentation pkgid
       case mdocs of
         Nothing -> errNotFound "Not Found" [MText $ "There is no documentation for " ++ display pkgid]
