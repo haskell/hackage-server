@@ -115,16 +115,17 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
     textPackageReport dpath = runServerPartE $ do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
-      withPackageReport dpath pkgid $ \reportId (report, mlog) ->
-        return . toResponse $ unlines [ "Report #" ++ display reportId, show report
-                                      , maybe "No build log" (const "Build log exists") mlog]
+      (reportId, report, mlog) <- packageReport dpath pkgid
+      return . toResponse $ unlines [ "Report #" ++ display reportId, show report
+                                    , maybe "No build log" (const "Build log exists") mlog]
 
     -- result: not-found error or text file
     serveBuildLog :: DynamicPath -> ServerPart Response
     serveBuildLog dpath = runServerPartE $ do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
-      withPackageReport dpath pkgid $ \repid (_, mlog) -> case mlog of
+      (repid, _, mlog) <- packageReport dpath pkgid
+      case mlog of
         Nothing -> errNotFound "Log not found" [MText $ "Build log for report " ++ display repid ++ " not found"]
         Just (BuildLog blobId) -> do
             file <- liftIO $ BlobStorage.fetch store blobId
@@ -151,56 +152,53 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
     deleteBuildReport dpath = runServerPartE $ do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
-      withReportId dpath $ \reportId -> do
-        users <- queryGetUserDb
-        -- restrict this to whom? currently logged in users.. a bad idea
-        void $ guardAuthenticated hackageRealm users
-        success <- updateState reportsState $ DeleteReport pkgid reportId
-        if success
-            then seeOther (reportsListUri reportsResource "" pkgid) $ toResponse ()
-            else errNotFound "Build report not found" [MText $ "Build report #" ++ display reportId ++ " not found"]
+      reportId <- reportIdInPath dpath
+      users <- queryGetUserDb
+      -- restrict this to whom? currently logged in users.. a bad idea
+      void $ guardAuthenticated hackageRealm users
+      success <- updateState reportsState $ DeleteReport pkgid reportId
+      if success
+          then seeOther (reportsListUri reportsResource "" pkgid) $ toResponse ()
+          else errNotFound "Build report not found" [MText $ "Build report #" ++ display reportId ++ " not found"]
 
     -- result: auth error, not-found error, or redirect
     putBuildLog :: DynamicPath -> ServerPart Response
     putBuildLog dpath = runServerPartE $ do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
-      withReportId dpath $ \reportId -> do
-        users <- queryGetUserDb
-        -- logged in users
-        void $ guardAuthenticated hackageRealm users
-        blogbody <- expectTextPlain
-        buildLog <- liftIO $ BlobStorage.add store blogbody
-        void $ updateState reportsState $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
-        -- go to report page (linking the log)
-        seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
+      reportId <- reportIdInPath dpath
+      users <- queryGetUserDb
+      -- logged in users
+      void $ guardAuthenticated hackageRealm users
+      blogbody <- expectTextPlain
+      buildLog <- liftIO $ BlobStorage.add store blogbody
+      void $ updateState reportsState $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
+      -- go to report page (linking the log)
+      seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
     -- result: auth error, not-found error or redirect
     deleteBuildLog :: DynamicPath -> ServerPart Response
     deleteBuildLog dpath = runServerPartE $ do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
-      withReportId dpath $ \reportId -> do
-        users <- queryGetUserDb
-        -- again, restrict this to whom?
-        void $ guardAuthenticated hackageRealm users
-        void $ updateState reportsState $ SetBuildLog pkgid reportId Nothing
-        -- go to report page (which should no longer link the log)
-        seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
+      reportId <- reportIdInPath dpath
+      users <- queryGetUserDb
+      -- again, restrict this to whom?
+      void $ guardAuthenticated hackageRealm users
+      void $ updateState reportsState $ SetBuildLog pkgid reportId Nothing
+      -- go to report page (which should no longer link the log)
+      seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
     ---------------------------------------------------------------------------
 
-    withReportId :: Monad m => DynamicPath -> (BuildReportId -> ServerPartT m a) -> ServerPartT m a
-    withReportId dpath func =
-      case simpleParse =<< lookup "id" dpath of
-        Nothing -> mzero
-        Just reportId -> func reportId
+    reportIdInPath :: MonadPlus m => DynamicPath -> m BuildReportId
+    reportIdInPath dpath = maybe mzero return (simpleParse =<< lookup "id" dpath)
 
-    withPackageReport :: DynamicPath -> PackageId -> (BuildReportId -> (BuildReport, Maybe BuildLog) -> ServerPartE a) -> ServerPartE a
-    withPackageReport dpath pkgid func =
-      withReportId dpath $ \reportId -> do
-        mreport <- queryState reportsState $ LookupReport pkgid reportId
-        case mreport of
-            Nothing -> errNotFound "Report not found" [MText "Build report does not exist"]
-            Just report -> func reportId report
+    packageReport :: DynamicPath -> PackageId -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog)
+    packageReport dpath pkgid = do
+      reportId <- reportIdInPath dpath
+      mreport  <- queryState reportsState $ LookupReport pkgid reportId
+      case mreport of
+        Nothing -> errNotFound "Report not found" [MText "Build report does not exist"]
+        Just (report, mlog) -> return (reportId, report, mlog)
 
