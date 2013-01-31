@@ -109,7 +109,11 @@ data CoreResource = CoreResource {
     packageInPath :: (MonadPlus m, FromReqURI a) => DynamicPath -> m a,
 
     -- TODO: This is a rather ad-hoc function. Do we really need it?
-    packageTarballInPath :: MonadPlus m => DynamicPath -> m PackageId
+    packageTarballInPath :: MonadPlus m => DynamicPath -> m PackageId,
+
+    -- Check that a package exists (guard fails if version is empty)
+    guardValidPackageId   :: PackageId   -> ServerPartE (),
+    guardValidPackageName :: PackageName -> ServerPartE ()
 }
 
 initCoreFeature :: ServerEnv -> UserFeature -> IO CoreFeature
@@ -273,6 +277,13 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir} UserFeature{..}
           -- * the package must either have no version or the same version as the tarball
           guard $ name == name' && version' /= Version [] [] && (version == version' || version == Version [] [])
           return pkgid
+
+    guardValidPackageId pkgid = do
+      guard (pkgVersion pkgid /= Version [] [])
+      void $ lookupPackageId pkgid
+
+    guardValidPackageName pkgname =
+      void $ lookupPackageName pkgname
 
     -- Queries
     --

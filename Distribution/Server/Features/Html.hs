@@ -180,7 +180,7 @@ htmlFeature user
       }
 
     htmlCore       = mkHtmlCore       utilities
-                                      core
+                                      (coreResource core)
                                       versions
                                       upload
                                       tags
@@ -360,7 +360,7 @@ data HtmlCore = HtmlCore {
   }
 
 mkHtmlCore :: HtmlUtilities
-           -> CoreFeature
+           -> CoreResource
            -> VersionsFeature
            -> UploadFeature
            -> TagsFeature
@@ -374,9 +374,7 @@ mkHtmlCore :: HtmlUtilities
            -> AsyncCache Response
            -> HtmlCore
 mkHtmlCore HtmlUtilities{..}
-           CoreFeature{ coreResource = coreResource@CoreResource{packageInPath}
-                      , lookupPackageName
-                      }
+           coreResource@CoreResource{packageInPath, guardValidPackageName}
            VersionsFeature{ versionsResource
                           , queryGetDeprecatedFor
                           , queryGetPreferredInfo
@@ -480,7 +478,7 @@ mkHtmlCore HtmlUtilities{..}
                        -> DynamicPath -> ServerPart Response
     serveMaintainLinks editDepr editPref mgroup dpath = htmlResponse $ do
       pkgname <- packageInPath dpath
-      _       <- lookupPackageName pkgname -- TODO: is this necessary?
+      guardValidPackageName pkgname
       withPackageNameAuth pkgname $ \_ _ -> do
         let dpath' = [("package", display pkgname)]
         return $ toResponse $ Resource.XHtml $ hackagePage "Maintain package"

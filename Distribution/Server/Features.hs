@@ -14,7 +14,7 @@ import Distribution.Server.Framework.Types   (ServerEnv(..))
 import Distribution.Server.Framework.Logging
 
 import Distribution.Server.Features.Users    (initUserFeature, UserFeature)
-import Distribution.Server.Features.Core     (initCoreFeature)
+import Distribution.Server.Features.Core     (initCoreFeature, coreResource)
 import Distribution.Server.Features.Upload   (initUploadFeature)
 import Distribution.Server.Features.Mirror   (initMirrorFeature)
 
@@ -96,7 +96,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
     reportsFeature  <- initBuildReportsFeature env
                          usersFeature
-                         coreFeature
+                         (coreResource coreFeature)
 
     documentationFeature <- initDocumentationFeature env
                          coreFeature

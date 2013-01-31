@@ -17,12 +17,10 @@ import Distribution.Server.Features.BuildReports.BuildReport (BuildReport(..))
 import Distribution.Server.Features.BuildReports.BuildReports (BuildReports, BuildReportId(..), BuildLog(..))
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
-import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
 import Distribution.Text
 import Distribution.Package
-import Distribution.Version
 
 import Data.ByteString.Lazy.Char8 (unpack)
 
@@ -49,7 +47,7 @@ data ReportsResource = ReportsResource {
 }
 
 
-initBuildReportsFeature :: ServerEnv -> UserFeature -> CoreFeature -> IO ReportsFeature
+initBuildReportsFeature :: ServerEnv -> UserFeature -> CoreResource -> IO ReportsFeature
 initBuildReportsFeature env@ServerEnv{serverStateDir} user core = do
     reportsState <- reportsStateComponent serverStateDir
     return $ buildReportsFeature env user core reportsState
@@ -69,14 +67,12 @@ reportsStateComponent stateDir = do
 
 buildReportsFeature :: ServerEnv
                     -> UserFeature
-                    -> CoreFeature
+                    -> CoreResource
                     -> StateComponent BuildReports
                     -> ReportsFeature
 buildReportsFeature ServerEnv{serverBlobStore = store}
                     UserFeature{..}
-                    CoreFeature{ coreResource = CoreResource{packageInPath}
-                               , lookupPackageId
-                               }
+                    CoreResource{packageInPath, guardValidPackageId}
                     reportsState
   = ReportsFeature{..}
   where
@@ -112,16 +108,14 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
 
     textPackageReports dpath = runServerPartE $ do
       pkgid <- packageInPath dpath
-      guard (pkgVersion pkgid /= Version [] [])
-      pkg <- lookupPackageId pkgid
-      reportList <- queryState reportsState $ LookupPackageReports (packageId pkg)
+      guardValidPackageId pkgid
+      reportList <- queryState reportsState $ LookupPackageReports pkgid
       return . toResponse $ show reportList
 
     textPackageReport dpath = runServerPartE $ do
       pkgid <- packageInPath dpath
-      guard (pkgVersion pkgid /= Version [] [])
-      pkg <- lookupPackageId pkgid
-      withPackageReport dpath (packageId pkg) $ \reportId (report, mlog) ->
+      guardValidPackageId pkgid
+      withPackageReport dpath pkgid $ \reportId (report, mlog) ->
         return . toResponse $ unlines [ "Report #" ++ display reportId, show report
                                       , maybe "No build log" (const "Build log exists") mlog]
 
@@ -129,9 +123,8 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
     serveBuildLog :: DynamicPath -> ServerPart Response
     serveBuildLog dpath = runServerPartE $ do
       pkgid <- packageInPath dpath
-      guard (pkgVersion pkgid /= Version [] [])
-      pkg <- lookupPackageId pkgid
-      withPackageReport dpath (pkgInfoId pkg) $ \repid (_, mlog) -> case mlog of
+      guardValidPackageId pkgid
+      withPackageReport dpath pkgid $ \repid (_, mlog) -> case mlog of
         Nothing -> errNotFound "Log not found" [MText $ "Build log for report " ++ display repid ++ " not found"]
         Just (BuildLog blobId) -> do
             file <- liftIO $ BlobStorage.fetch store blobId
@@ -141,8 +134,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
     submitBuildReport :: DynamicPath -> ServerPart Response
     submitBuildReport dpath = runServerPartE $ do
       pkgid <- packageInPath dpath
-      guard (pkgVersion pkgid /= Version [] [])
-      _ <- lookupPackageId pkgid
+      guardValidPackageId pkgid
       users <- queryGetUserDb
       -- require logged-in user
       void $ guardAuthenticated hackageRealm users
@@ -158,8 +150,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
     deleteBuildReport :: DynamicPath -> ServerPart Response
     deleteBuildReport dpath = runServerPartE $ do
       pkgid <- packageInPath dpath
-      guard (pkgVersion pkgid /= Version [] [])
-      _ <- lookupPackageId pkgid
+      guardValidPackageId pkgid
       withReportId dpath $ \reportId -> do
         users <- queryGetUserDb
         -- restrict this to whom? currently logged in users.. a bad idea
@@ -173,8 +164,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
     putBuildLog :: DynamicPath -> ServerPart Response
     putBuildLog dpath = runServerPartE $ do
       pkgid <- packageInPath dpath
-      guard (pkgVersion pkgid /= Version [] [])
-      _ <- lookupPackageId pkgid
+      guardValidPackageId pkgid
       withReportId dpath $ \reportId -> do
         users <- queryGetUserDb
         -- logged in users
@@ -189,8 +179,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
     deleteBuildLog :: DynamicPath -> ServerPart Response
     deleteBuildLog dpath = runServerPartE $ do
       pkgid <- packageInPath dpath
-      guard (pkgVersion pkgid /= Version [] [])
-      _ <- lookupPackageId pkgid
+      guardValidPackageId pkgid
       withReportId dpath $ \reportId -> do
         users <- queryGetUserDb
         -- again, restrict this to whom?

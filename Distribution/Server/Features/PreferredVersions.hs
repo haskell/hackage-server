@@ -121,7 +121,9 @@ versionsFeature :: CoreFeature
                 -> Hook (PackageName -> Maybe [PackageName] -> IO ())
                 -> VersionsFeature
 
-versionsFeature CoreFeature{ coreResource=CoreResource{packageInPath}
+versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
+                                                      , guardValidPackageName
+                                                      }
                            , queryGetPackageIndex
                            , lookupPackageName
                            , updateArchiveIndexEntry
@@ -196,8 +198,8 @@ versionsFeature CoreFeature{ coreResource=CoreResource{packageInPath}
 
     handlePackageDeprecatedGet dpath = runServerPartE $ do
       pkgname <- packageInPath dpath
-      _       <- lookupPackageName pkgname -- TODO: Necessary?
-      mdep    <- queryState preferredState (GetDeprecatedFor pkgname)
+      guardValidPackageName pkgname
+      mdep <- queryState preferredState (GetDeprecatedFor pkgname)
       return $ toResponse $ Resource.JSON $
         JSObject $ toJSObject
             [ ("is-deprecated", JSBool (isJust mdep))
@@ -207,7 +209,7 @@ versionsFeature CoreFeature{ coreResource=CoreResource{packageInPath}
 
     handlePackageDeprecatedPut dpath = runServerPartE $ do
       pkgname <- packageInPath dpath
-      _       <- lookupPackageName pkgname -- TODO: Necessary?
+      guardValidPackageName pkgname
       withPackageNameAuth pkgname $ \_ _ -> do
         jv <- expectJsonContent
         case jv of
@@ -277,7 +279,7 @@ versionsFeature CoreFeature{ coreResource=CoreResource{packageInPath}
 
     putDeprecated :: PackageName -> ServerPartE Bool
     putDeprecated pkgname = do
-      _ <- lookupPackageName pkgname
+      guardValidPackageName pkgname
       withPackageNameAuth pkgname $ \_ _ -> do
         index  <- queryGetPackageIndex
         isDepr <- optional $ look "deprecated"
@@ -312,13 +314,13 @@ versionsFeature CoreFeature{ coreResource=CoreResource{packageInPath}
 
     doPreferredRender :: PackageName -> ServerPartE PreferredRender
     doPreferredRender pkgname = do
-      _    <- lookupPackageName pkgname
+      guardValidPackageName pkgname
       pref <- queryState preferredState $ GetPreferredInfo pkgname
       return $ renderPrefInfo pref
 
     doDeprecatedRender :: PackageName -> ServerPartE (Maybe [PackageName])
     doDeprecatedRender pkgname = do
-      _ <- lookupPackageName pkgname
+      guardValidPackageName pkgname
       queryState preferredState $ GetDeprecatedFor pkgname
 
     doPreferredsRender :: MonadIO m => m [(PackageName, PreferredRender)]

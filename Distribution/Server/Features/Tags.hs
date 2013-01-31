@@ -115,7 +115,7 @@ tagsFeature :: CoreFeature
             -> TagsFeature
 
 tagsFeature CoreFeature{ queryGetPackageIndex
-                       , lookupPackageName
+                       , coreResource = CoreResource { guardValidPackageName }
                        }
             tagsState
             calculatedTags
@@ -186,7 +186,7 @@ tagsFeature CoreFeature{ queryGetPackageIndex
 
     putTags :: PackageName -> ServerPartE ()
     putTags pkgname = do
-      _ <- lookupPackageName pkgname
+      guardValidPackageName pkgname
       -- FIXME: anyone can edit tags for the moment. we should do:
       -- users <- queryGetUserDb
       -- void $ guardAuthenticated hackageRealm users
