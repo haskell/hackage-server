@@ -114,7 +114,9 @@ tagsFeature :: CoreFeature
             -> Hook (Set PackageName -> Set Tag -> IO ())
             -> TagsFeature
 
-tagsFeature CoreFeature{..}
+tagsFeature CoreFeature{ queryGetPackageIndex
+                       , lookupPackageName
+                       }
             tagsState
             calculatedTags
             tagsUpdated
@@ -183,19 +185,20 @@ tagsFeature CoreFeature{..}
         return $ Map.fromDistinctAscList . map (\pkg -> (pkg, Map.findWithDefault Set.empty pkg pkgMap)) $ Set.toList pkgs
 
     putTags :: PackageName -> ServerPartE ()
-    putTags pkgname = withPackageAll pkgname $ \_ -> do
-        -- FIXME: anyone can edit tags for the moment. we should do:
-        -- users <- queryGetUserDb
-        -- void $ guardAuthenticated hackageRealm users
-        mtags <- optional $ look "tags"
-        case simpleParse =<< mtags of
-            Just (TagList tags) -> do
-                calcTags <- fmap (packageToTags pkgname) $ readMemState calculatedTags
-                let tagSet = Set.fromList tags `Set.union` calcTags
-                void $ updateState tagsState $ SetPackageTags pkgname tagSet
-                runHook'' tagsUpdated (Set.singleton pkgname) tagSet
-                return ()
-            Nothing -> errBadRequest "Tags not recognized" [MText "Couldn't parse your tag list. It should be comma separated with any number of alphanumerical tags. Tags can also also have -+#*."]
+    putTags pkgname = do
+      _ <- lookupPackageName pkgname
+      -- FIXME: anyone can edit tags for the moment. we should do:
+      -- users <- queryGetUserDb
+      -- void $ guardAuthenticated hackageRealm users
+      mtags <- optional $ look "tags"
+      case simpleParse =<< mtags of
+          Just (TagList tags) -> do
+              calcTags <- fmap (packageToTags pkgname) $ readMemState calculatedTags
+              let tagSet = Set.fromList tags `Set.union` calcTags
+              void $ updateState tagsState $ SetPackageTags pkgname tagSet
+              runHook'' tagsUpdated (Set.singleton pkgname) tagSet
+              return ()
+          Nothing -> errBadRequest "Tags not recognized" [MText "Couldn't parse your tag list. It should be comma separated with any number of alphanumerical tags. Tags can also also have -+#*."]
 
 -- initial tags, on import
 constructTagIndex :: PackageIndex PkgInfo -> PackageTags

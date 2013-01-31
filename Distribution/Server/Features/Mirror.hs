@@ -91,12 +91,13 @@ mirrorFeature :: ServerEnv
               -> (MirrorFeature, UserGroup)
 
 mirrorFeature ServerEnv{serverBlobStore = store}
-              CoreFeature{ coreResource = coreResource@CoreResource{packageInPath}
+              CoreFeature{ coreResource = coreResource@CoreResource{ packageInPath
+                                                                   , packageTarballInPath
+                                                                   }
                          , doMergePackage
                          , updateReplacePackageUploadTime
                          , updateReplacePackageUploader
-                         , withPackagePath
-                         , withPackageTarball
+                         , lookupPackageId
                          }
               UserFeature{..}
               mirrorersState mirrorGroup mirrorGroupResource
@@ -148,42 +149,43 @@ mirrorFeature ServerEnv{serverBlobStore = store}
     -- result: error from unpacking, bad request error, or warning lines
     tarballPut :: DynamicPath -> ServerPart Response
     tarballPut dpath = runServerPartE $ do
-        uid <- requireMirrorAuth
-        withPackageTarball dpath $ \pkgid -> do
-          fileContent <- expectCompressedTarball
-          time <- liftIO getCurrentTime
-          let uploadData = (time, uid)
-          res <- liftIO $ BlobStorage.addWith store fileContent $ \fileContent' ->
-                   let filename = display pkgid <.> "tar.gz"
-                   in case Upload.unpackPackageRaw filename fileContent' of
-                        Left err -> return $ Left err
-                        Right x ->
-                            do let decompressedContent = GZip.decompress fileContent'
-                               blobIdDecompressed <- BlobStorage.add store decompressedContent
-                               return $ Right (x, blobIdDecompressed)
-          case res of
-              Left err -> badRequest (toResponse err)
-              Right ((((pkg, pkgStr), warnings), blobIdDecompressed), blobId) -> do
-                  -- doMergePackage runs the package hooks
-                  -- if the upload feature is enabled, it adds
-                  -- the user to the package's maintainer group
-                  -- the mirror client should probably do this itself,
-                  -- if it's able (if it's a trustee).
-                  liftIO $ doMergePackage $ PkgInfo {
-                      pkgInfoId     = packageId pkg,
-                      pkgData       = CabalFileText pkgStr,
-                      pkgTarball    = [(PkgTarball { pkgTarballGz = blobId,
-                                                     pkgTarballNoGz = blobIdDecompressed },
-                                        uploadData)],
-                      pkgUploadData = uploadData,
-                      pkgDataOld    = []
-                  }
-                  return . toResponse $ unlines warnings
+        uid         <- requireMirrorAuth
+        pkgid       <- packageTarballInPath dpath
+        fileContent <- expectCompressedTarball
+        time        <- liftIO getCurrentTime
+        let uploadData = (time, uid)
+        res <- liftIO $ BlobStorage.addWith store fileContent $ \fileContent' ->
+                 let filename = display pkgid <.> "tar.gz"
+                 in case Upload.unpackPackageRaw filename fileContent' of
+                      Left err -> return $ Left err
+                      Right x ->
+                          do let decompressedContent = GZip.decompress fileContent'
+                             blobIdDecompressed <- BlobStorage.add store decompressedContent
+                             return $ Right (x, blobIdDecompressed)
+        case res of
+            Left err -> badRequest (toResponse err)
+            Right ((((pkg, pkgStr), warnings), blobIdDecompressed), blobId) -> do
+                -- doMergePackage runs the package hooks
+                -- if the upload feature is enabled, it adds
+                -- the user to the package's maintainer group
+                -- the mirror client should probably do this itself,
+                -- if it's able (if it's a trustee).
+                liftIO $ doMergePackage $ PkgInfo {
+                    pkgInfoId     = packageId pkg,
+                    pkgData       = CabalFileText pkgStr,
+                    pkgTarball    = [(PkgTarball { pkgTarballGz = blobId,
+                                                   pkgTarballNoGz = blobIdDecompressed },
+                                      uploadData)],
+                    pkgUploadData = uploadData,
+                    pkgDataOld    = []
+                }
+                return . toResponse $ unlines warnings
 
 
-    uploaderGet dpath = runServerPartE $ withPackagePath dpath $ \pkg _ -> do
-        userdb <- queryGetUserDb
-        return $ toResponse $ display (idToName userdb (pkgUploadUser pkg))
+    uploaderGet dpath = runServerPartE $ do
+      pkg    <- packageInPath dpath >>= lookupPackageId
+      userdb <- queryGetUserDb
+      return $ toResponse $ display (idToName userdb (pkgUploadUser pkg))
 
     uploaderPut :: DynamicPath -> ServerPart Response
     uploaderPut dpath = runServerPartE $ do
@@ -197,8 +199,9 @@ mirrorFeature ServerEnv{serverBlobStore = store}
           return $ toResponse "Updated uploader OK"
 
     uploadTimeGet :: DynamicPath -> ServerPart Response
-    uploadTimeGet dpath = runServerPartE $ withPackagePath dpath $ \pkg _ ->
-        return $ toResponse $ formatTime defaultTimeLocale "%c" (pkgUploadTime pkg)
+    uploadTimeGet dpath = runServerPartE $ do
+      pkg <- packageInPath dpath >>= lookupPackageId
+      return $ toResponse $ formatTime defaultTimeLocale "%c" (pkgUploadTime pkg)
 
     -- curl -H 'Content-Type: text/plain' -u admin:admin -X PUT -d "Tue Oct 18 20:54:28 UTC 2010" http://localhost:8080/package/edit-distance-0.2.1/upload-time
     uploadTimePut :: DynamicPath -> ServerPart Response

@@ -123,9 +123,8 @@ versionsFeature :: CoreFeature
 
 versionsFeature CoreFeature{ coreResource=CoreResource{packageInPath}
                            , queryGetPackageIndex
-                           , withPackageAll
+                           , lookupPackageName
                            , updateArchiveIndexEntry
-                           , withPackageAllPath
                            }
                 UploadFeature{..}
                 TagsFeature{..}
@@ -195,20 +194,20 @@ versionsFeature CoreFeature{ coreResource=CoreResource{packageInPath}
               ]
           | (deprPkg, replacementPkgs) <- Map.toList deprPkgs ]
 
-    handlePackageDeprecatedGet dpath =
-      runServerPartE $
-      withPackageAllPath dpath $ \pkgname _ -> do
-        mdep <- queryState preferredState (GetDeprecatedFor pkgname)
-        return $ toResponse $ Resource.JSON $
-          JSObject $ toJSObject
-              [ ("is-deprecated", JSBool (isJust mdep))
-              , ("in-favour-of", JSArray [ JSString $ toJSString $ display pkg
-                                         | pkg <- fromMaybe [] mdep ])
-              ]
+    handlePackageDeprecatedGet dpath = runServerPartE $ do
+      pkgname <- packageInPath dpath
+      _       <- lookupPackageName pkgname -- TODO: Necessary?
+      mdep    <- queryState preferredState (GetDeprecatedFor pkgname)
+      return $ toResponse $ Resource.JSON $
+        JSObject $ toJSObject
+            [ ("is-deprecated", JSBool (isJust mdep))
+            , ("in-favour-of", JSArray [ JSString $ toJSString $ display pkg
+                                       | pkg <- fromMaybe [] mdep ])
+            ]
 
-    handlePackageDeprecatedPut dpath =
-      runServerPartE $
-      withPackageAllPath dpath $ \pkgname _ ->
+    handlePackageDeprecatedPut dpath = runServerPartE $ do
+      pkgname <- packageInPath dpath
+      _       <- lookupPackageName pkgname -- TODO: Necessary?
       withPackageNameAuth pkgname $ \_ _ -> do
         jv <- expectJsonContent
         case jv of
@@ -253,9 +252,9 @@ versionsFeature CoreFeature{ coreResource=CoreResource{packageInPath}
       withPackagePreferred pkgid func
 
     putPreferred :: PackageName -> ServerPartE ()
-    putPreferred pkgname =
-            withPackageAll pkgname $ \pkgs ->
-            withPackageNameAuth pkgname $ \_ _ -> do
+    putPreferred pkgname = do
+      pkgs <- lookupPackageName pkgname
+      withPackageNameAuth pkgname $ \_ _ -> do
         pref <- optional $ fmap lines $ look "preferred"
         depr <- optional $ fmap (rights . map snd . filter ((=="deprecated") . fst)) $ lookPairs
         case sequence . map simpleParse =<< pref of
@@ -277,9 +276,9 @@ versionsFeature CoreFeature{ coreResource=CoreResource{packageInPath}
         preferredError = errBadRequest "Preferred ranges failed" . return . MText
 
     putDeprecated :: PackageName -> ServerPartE Bool
-    putDeprecated pkgname =
-            withPackageAll pkgname $ \_ ->
-            withPackageNameAuth pkgname $ \_ _ -> do
+    putDeprecated pkgname = do
+      _ <- lookupPackageName pkgname
+      withPackageNameAuth pkgname $ \_ _ -> do
         index  <- queryGetPackageIndex
         isDepr <- optional $ look "deprecated"
         case isDepr of
@@ -312,12 +311,15 @@ versionsFeature CoreFeature{ coreResource=CoreResource{packageInPath}
     }
 
     doPreferredRender :: PackageName -> ServerPartE PreferredRender
-    doPreferredRender pkgname = withPackageAll pkgname $ \_ -> do
-        pref <- queryState preferredState $ GetPreferredInfo pkgname
-        return $ renderPrefInfo pref
+    doPreferredRender pkgname = do
+      _    <- lookupPackageName pkgname
+      pref <- queryState preferredState $ GetPreferredInfo pkgname
+      return $ renderPrefInfo pref
 
     doDeprecatedRender :: PackageName -> ServerPartE (Maybe [PackageName])
-    doDeprecatedRender pkgname = withPackageAll pkgname $ \_ -> queryState preferredState $ GetDeprecatedFor pkgname
+    doDeprecatedRender pkgname = do
+      _ <- lookupPackageName pkgname
+      queryState preferredState $ GetDeprecatedFor pkgname
 
     doPreferredsRender :: MonadIO m => m [(PackageName, PreferredRender)]
     doPreferredsRender = queryState preferredState GetPreferredVersions >>=

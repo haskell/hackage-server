@@ -98,7 +98,9 @@ documentationFeature :: ServerEnv
                      -> StateComponent Documentation
                      -> DocumentationFeature
 documentationFeature ServerEnv{serverBlobStore = store}
-                     CoreFeature{withPackagePath}
+                     CoreFeature{ coreResource = CoreResource{packageInPath}
+                                , lookupPackageId
+                                }
                      UploadFeature{..}
                      TarIndexCacheFeature{cachedTarIndex}
                      documentationState
@@ -150,22 +152,21 @@ documentationFeature ServerEnv{serverBlobStore = store}
 
     -- return: not-found error (parsing) or see other uri
     uploadDocumentation :: DynamicPath -> ServerPart Response
-    uploadDocumentation dpath = do
-      runServerPartE $
-        withPackagePath dpath $ \pkg _ -> do
-        let pkgid = packageId pkg
-        withPackageAuth pkgid $ \_ _ -> do
-            -- The order of operations:
-            -- * Insert new documentation into blob store
-            -- * Generate the new index
-            -- * Drop the index for the old tar-file
-            -- * Link the new documentation to the package
-            fileContents <- expectUncompressedTarball
-            blob <- liftIO $ BlobStorage.add store fileContents
-            --TODO: validate the tarball here.
-            -- Check all files in the tarball are under the dir foo-1.0-docs/
-            void $ updateState documentationState $ InsertDocumentation pkgid blob
-            noContent (toResponse ())
+    uploadDocumentation dpath = runServerPartE $ do
+      pkg <- packageInPath dpath >>= lookupPackageId
+      let pkgid = packageId pkg
+      withPackageAuth pkgid $ \_ _ -> do
+          -- The order of operations:
+          -- * Insert new documentation into blob store
+          -- * Generate the new index
+          -- * Drop the index for the old tar-file
+          -- * Link the new documentation to the package
+          fileContents <- expectUncompressedTarball
+          blob <- liftIO $ BlobStorage.add store fileContents
+          --TODO: validate the tarball here.
+          -- Check all files in the tarball are under the dir foo-1.0-docs/
+          void $ updateState documentationState $ InsertDocumentation pkgid blob
+          noContent (toResponse ())
 
    {-
      To upload documentation using curl:
@@ -183,12 +184,12 @@ documentationFeature ServerEnv{serverBlobStore = store}
    -}
 
     withDocumentation :: DynamicPath -> (PackageId -> BlobId -> TarIndex -> ServerPartE a) -> ServerPartE a
-    withDocumentation dpath func =
-        withPackagePath dpath $ \pkg _ -> do
-        let pkgid = packageId pkg
-        mdocs <- queryState documentationState $ LookupDocumentation pkgid
-        case mdocs of
-          Nothing -> errNotFound "Not Found" [MText $ "There is no documentation for " ++ display pkgid]
-          Just blob -> do
-            index <- liftIO $ cachedTarIndex blob
-            func pkgid blob index
+    withDocumentation dpath func = do
+      pkg <- packageInPath dpath >>= lookupPackageId
+      let pkgid = packageId pkg
+      mdocs <- queryState documentationState $ LookupDocumentation pkgid
+      case mdocs of
+        Nothing -> errNotFound "Not Found" [MText $ "There is no documentation for " ++ display pkgid]
+        Just blob -> do
+          index <- liftIO $ cachedTarIndex blob
+          func pkgid blob index

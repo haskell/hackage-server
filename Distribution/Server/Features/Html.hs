@@ -375,7 +375,7 @@ mkHtmlCore :: HtmlUtilities
            -> HtmlCore
 mkHtmlCore HtmlUtilities{..}
            CoreFeature{ coreResource = coreResource@CoreResource{packageInPath}
-                      , withPackageAllPath
+                      , lookupPackageName
                       }
            VersionsFeature{ versionsResource
                           , queryGetDeprecatedFor
@@ -478,9 +478,10 @@ mkHtmlCore HtmlUtilities{..}
     -- TODO: include delete link for admins
     serveMaintainLinks :: Resource -> Resource -> GroupResource
                        -> DynamicPath -> ServerPart Response
-    serveMaintainLinks editDepr editPref mgroup dpath = htmlResponse $
-                                   withPackageAllPath dpath $ \pkgname _ ->
-                                   withPackageNameAuth pkgname $ \_ _ -> do
+    serveMaintainLinks editDepr editPref mgroup dpath = htmlResponse $ do
+      pkgname <- packageInPath dpath
+      _       <- lookupPackageName pkgname -- TODO: is this necessary?
+      withPackageNameAuth pkgname $ \_ _ -> do
         let dpath' = [("package", display pkgname)]
         return $ toResponse $ Resource.XHtml $ hackagePage "Maintain package"
           [ unordList $
@@ -905,8 +906,7 @@ mkHtmlPreferred :: HtmlUtilities
                 -> HtmlPreferred
 mkHtmlPreferred HtmlUtilities{..}
                 CoreFeature{ coreResource = CoreResource{packageInPath}
-                           , withPackageAll
-                           , withPackageAllPath
+                           , lookupPackageName
                            }
                 VersionsFeature{..} = HtmlPreferred{..}
   where
@@ -1013,32 +1013,32 @@ mkHtmlPreferred HtmlUtilities{..}
       ]
 
     servePackagePreferred :: Resource -> DynamicPath -> ServerPart Response
-    servePackagePreferred prefEdit dpath =
-            htmlResponse $
-            withPackageAllPath dpath $ \pkgname pkgs -> do
-        pref <- doPreferredRender pkgname
-        let dtitle = display pkgname ++ ": preferred and deprecated versions"
-        prefInfo <- queryGetPreferredInfo pkgname
-        return $ toResponse $ Resource.XHtml $ hackagePage dtitle --needs core, preferredVersions, pkgname
-          [ h2 << dtitle
-          , concatHtml $ packagePrefAbout (Just prefEdit) pkgname
-          , h4 << "Stored information"
-          , case rendRanges pref of
-                [] -> paragraph << [display pkgname ++ " has no preferred version ranges."]
-                prefs -> paragraph << ["Preferred versions for " ++ display pkgname ++ ":"]
-                             +++ unordList prefs
-          , case rendVersions pref of
-                [] -> paragraph << ["It has no deprecated versions."]
-                deprs -> paragraph <<
-                    [ "Explicitly deprecated versions for " ++ display pkgname ++ " include: "
-                    , intercalate ", " (map display deprs)]
-          , toHtml "The version range given to this package, therefore, is " +++ strong (toHtml $ rendSumRange pref)
-          , h4 << "Versions affected"
-          , paragraph << "Blue versions are normal versions. Green are those out of any preferred version ranges. Gray are deprecated."
-          , paragraph << (snd $ Pages.renderVersion
-                                    (PackageIdentifier pkgname $ Version [] [])
-                                    (classifyVersions prefInfo $ map packageVersion pkgs) Nothing)
-          ]
+    servePackagePreferred prefEdit dpath = htmlResponse $ do
+      pkgname <- packageInPath dpath
+      pkgs    <- lookupPackageName pkgname
+      pref    <- doPreferredRender pkgname
+      let dtitle = display pkgname ++ ": preferred and deprecated versions"
+      prefInfo <- queryGetPreferredInfo pkgname
+      return $ toResponse $ Resource.XHtml $ hackagePage dtitle --needs core, preferredVersions, pkgname
+        [ h2 << dtitle
+        , concatHtml $ packagePrefAbout (Just prefEdit) pkgname
+        , h4 << "Stored information"
+        , case rendRanges pref of
+              [] -> paragraph << [display pkgname ++ " has no preferred version ranges."]
+              prefs -> paragraph << ["Preferred versions for " ++ display pkgname ++ ":"]
+                           +++ unordList prefs
+        , case rendVersions pref of
+              [] -> paragraph << ["It has no deprecated versions."]
+              deprs -> paragraph <<
+                  [ "Explicitly deprecated versions for " ++ display pkgname ++ " include: "
+                  , intercalate ", " (map display deprs)]
+        , toHtml "The version range given to this package, therefore, is " +++ strong (toHtml $ rendSumRange pref)
+        , h4 << "Versions affected"
+        , paragraph << "Blue versions are normal versions. Green are those out of any preferred version ranges. Gray are deprecated."
+        , paragraph << (snd $ Pages.renderVersion
+                                  (PackageIdentifier pkgname $ Version [] [])
+                                  (classifyVersions prefInfo $ map packageVersion pkgs) Nothing)
+        ]
 
     servePutPreferred :: DynamicPath -> ServerPart Response
     servePutPreferred dpath = htmlResponse $ do
@@ -1090,21 +1090,21 @@ mkHtmlPreferred HtmlUtilities{..}
     servePreferForm :: DynamicPath -> ServerPart Response
     servePreferForm dpath = htmlResponse $ do
       pkgname <- packageInPath dpath
-      withPackageAll pkgname $ \pkgs -> do
-        pref <- doPreferredRender pkgname
-        let allVersions = map packageVersion pkgs
-            rangesList  = rendRanges pref
-            deprVersions = rendVersions pref
-        return $ toResponse $ Resource.XHtml $ hackagePage "Adjust preferred versions"
-            [concatHtml $ packagePrefAbout Nothing pkgname,
-             form ! [theclass "box", XHtml.method "post", action $ preferredPackageUri versionsResource "" pkgname] <<
-              [ hidden "_method" "PUT"
-              , paragraph << "Preferred version ranges."
-              , paragraph << textarea ! [name "preferred", rows $ show (4::Int), cols $ show (80::Int)] << unlines rangesList
-              , paragraph << "Deprecated versions."
-              , toHtml $ intersperse (toHtml " ") $ map (\v -> toHtml $ makeCheckbox (v `elem` deprVersions) "deprecated" (display v) (display v)) allVersions
-              , paragraph << input ! [thetype "submit", value "Set status"]
-              ]]
+      pkgs    <- lookupPackageName pkgname
+      pref    <- doPreferredRender pkgname
+      let allVersions = map packageVersion pkgs
+          rangesList  = rendRanges pref
+          deprVersions = rendVersions pref
+      return $ toResponse $ Resource.XHtml $ hackagePage "Adjust preferred versions"
+          [concatHtml $ packagePrefAbout Nothing pkgname,
+           form ! [theclass "box", XHtml.method "post", action $ preferredPackageUri versionsResource "" pkgname] <<
+            [ hidden "_method" "PUT"
+            , paragraph << "Preferred version ranges."
+            , paragraph << textarea ! [name "preferred", rows $ show (4::Int), cols $ show (80::Int)] << unlines rangesList
+            , paragraph << "Deprecated versions."
+            , toHtml $ intersperse (toHtml " ") $ map (\v -> toHtml $ makeCheckbox (v `elem` deprVersions) "deprecated" (display v) (display v)) allVersions
+            , paragraph << input ! [thetype "submit", value "Set status"]
+            ]]
 
 {-------------------------------------------------------------------------------
   Downloads
@@ -1157,7 +1157,7 @@ mkHtmlTags :: HtmlUtilities
            -> HtmlTags
 mkHtmlTags HtmlUtilities{..}
            CoreFeature{ coreResource = CoreResource{packageInPath}
-                      , withPackageAllPath
+                      , lookupPackageName
                       }
            ListFeature{makeItemList}
            TagsFeature{..} = HtmlTags{..}
@@ -1226,12 +1226,12 @@ mkHtmlTags HtmlUtilities{..}
       histogramEntry (tg', count) = anchor ! [href $ tagUri tags "" tg'] << display tg' +++ (" (" ++ show count ++ ")")
 
     putPackageTags :: DynamicPath -> ServerPart Response
-    putPackageTags dpath =
-      htmlResponse $
-      withPackageAllPath dpath $ \pkgname _ -> do
-        putTags pkgname
-        return $ toResponse $ Resource.XHtml $ hackagePage "Set tags"
-            [toHtml "Put tags for ", packageNameLink pkgname]
+    putPackageTags dpath = htmlResponse $ do
+      pkgname <- packageInPath dpath
+      _       <- lookupPackageName pkgname -- TODO: necessary?
+      putTags pkgname
+      return $ toResponse $ Resource.XHtml $ hackagePage "Set tags"
+          [toHtml "Put tags for ", packageNameLink pkgname]
 
     -- serve form for editing, to be received by putTags
     serveTagsForm :: DynamicPath -> ServerPart Response

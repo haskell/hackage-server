@@ -32,7 +32,7 @@ import qualified Data.Map as Map
 --TODO: why are we importing xhtml here!?
 import Text.XHtml.Strict (Html, toHtml, unordList, h3, (<<), anchor, href, (!))
 import Data.Ord (comparing)
-import Data.List (sortBy, find)
+import Data.List (sortBy)
 import Data.ByteString.Lazy.Char8 (ByteString)
 
 import Distribution.Text (display)
@@ -81,13 +81,9 @@ data CoreFeature = CoreFeature {
     -- For download counters
     tarballDownload :: Hook (PackageId -> IO ()),
 
-    withPackage     :: forall   a. PackageId -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a,
-    withPackagePath :: forall   a. DynamicPath -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a,
-    withPackageAll  :: forall   a.              PackageName -> ([PkgInfo]   -> ServerPartE a)   -> ServerPartE a,
-    withPackageAllPath     :: forall a. DynamicPath -> (PackageName -> [PkgInfo] -> ServerPartE a) -> ServerPartE a,
-    withPackageVersion     :: forall a. PackageId   -> (PkgInfo   -> ServerPartE a) -> ServerPartE a,
-    withPackageVersionPath :: forall a. DynamicPath -> (PkgInfo   -> ServerPartE a) -> ServerPartE a,
-    withPackageTarball     :: forall a. DynamicPath -> (PackageId -> ServerPartE a) -> ServerPartE a
+    -- Find a package in the package DB
+    lookupPackageName :: PackageName -> ServerPartE [PkgInfo],
+    lookupPackageId   :: PackageId   -> ServerPartE PkgInfo
 }
 
 instance IsHackageFeature CoreFeature where
@@ -110,7 +106,10 @@ data CoreResource = CoreResource {
     coreTarballUri  :: PackageId -> String,
 
     -- Find a PackageId or PackageName inside a path
-    packageInPath :: (MonadPlus m, FromReqURI a) => DynamicPath -> m a
+    packageInPath :: (MonadPlus m, FromReqURI a) => DynamicPath -> m a,
+
+    -- TODO: This is a rather ad-hoc function. Do we really need it?
+    packageTarballInPath :: MonadPlus m => DynamicPath -> m PackageId
 }
 
 initCoreFeature :: ServerEnv -> UserFeature -> IO CoreFeature
@@ -261,10 +260,19 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir} UserFeature{..}
 
     indexPage staticDir _ = serveFile (const $ return "text/html") (staticDir ++ "/hackage.html")
 
-    packageInPath dpath = case lookup "package" dpath >>= fromReqURI of
-                            Just a  -> return a
-                            Nothing -> mzero
+    packageInPath dpath = maybe mzero return (lookup "package" dpath >>= fromReqURI)
 
+    packageTarballInPath dpath = do
+      PackageIdentifier name version <- packageInPath dpath
+      case lookup "tarball" dpath >>= fromReqURI of
+        Nothing -> mzero
+        Just pkgid@(PackageIdentifier name' version') -> do
+          -- rules:
+          -- * the package name and tarball name must be the same
+          -- * the tarball must specify a version
+          -- * the package must either have no version or the same version as the tarball
+          guard $ name == name' && version' /= Version [] [] && (version == version' || version == Version [] [])
+          return pkgid
 
     -- Queries
     --
@@ -300,11 +308,10 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir} UserFeature{..}
 
     -- Should probably look more like an Apache index page (Name / Last modified / Size / Content-type)
     basicPackagePage :: DynamicPath -> ServerPart Response
-    basicPackagePage dpath =
-      runServerPartE $
-        withPackagePath dpath $ \_ pkgs ->
-         return $ toResponse $ Resource.XHtml $
-           showAllP $ sortBy (flip $ comparing packageVersion) pkgs
+    basicPackagePage dpath = runServerPartE $ do
+      pkgs <- packageInPath dpath >>= lookupPackageName . pkgName
+      return $ toResponse $ Resource.XHtml $
+        showAllP $ sortBy (flip $ comparing packageVersion) pkgs
       where
         showAllP :: [PkgInfo] -> Html
         showAllP pkgs = toHtml [
@@ -314,60 +321,26 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir} UserFeature{..}
          ]
 
     ------------------------------------------------------------------------------
-    withPackageId :: DynamicPath -> (PackageId -> ServerPartE a) -> ServerPartE a
-    withPackageId dpath = require (return $ lookup "package" dpath >>= fromReqURI)
-
-    withPackageName :: MonadIO m => DynamicPath -> (PackageName -> ServerPartT m a) -> ServerPartT m a
-    withPackageName dpath = require (return $ lookup "package" dpath >>= fromReqURI)
-
     packageError :: [MessageSpan] -> ServerPartE a
     packageError = errNotFound "Package not found"
 
-    withPackage :: PackageId -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a
-    withPackage pkgid func = do
-        pkgIndex <- queryGetPackageIndex
-        case PackageIndex.lookupPackageName pkgIndex (packageName pkgid) of
-            []   ->  packageError [MText "No such package in package index"]
-            pkgs  | pkgVersion pkgid == Version [] [] ->
-                -- pkgs is sorted by version number and non-empty
-                func (last pkgs) pkgs
-            pkgs -> case find ((== packageVersion pkgid) . packageVersion) pkgs of
-                Nothing  -> packageError [MText $ "No such package version for " ++ display (packageName pkgid)]
-                Just pkg -> func pkg pkgs
+    lookupPackageName :: PackageName -> ServerPartE [PkgInfo]
+    lookupPackageName pkgname = do
+      pkgsIndex <- queryGetPackageIndex
+      case PackageIndex.lookupPackageName pkgsIndex pkgname of
+        []   -> packageError [MText "No such package in package index"]
+        pkgs -> return pkgs
 
-    withPackagePath :: DynamicPath -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a
-    withPackagePath dpath func = withPackageId dpath $ \pkgid -> withPackage pkgid func
-
-    withPackageAll :: PackageName -> ([PkgInfo] -> ServerPartE a) -> ServerPartE a
-    withPackageAll pkgname func = do
-        pkgsIndex <- queryGetPackageIndex
-        case PackageIndex.lookupPackageName pkgsIndex pkgname of
-            []   -> packageError [MText "No such package in package index"]
-            pkgs -> func pkgs
-
-    withPackageAllPath :: DynamicPath -> (PackageName -> [PkgInfo] -> ServerPartE a) -> ServerPartE a
-    withPackageAllPath dpath func = withPackageName dpath $ \pkgname -> withPackageAll pkgname (func pkgname)
-
-    withPackageVersion :: PackageId -> (PkgInfo -> ServerPartE a) -> ServerPartE a
-    withPackageVersion pkgid func = do
-        guard (packageVersion pkgid /= Version [] [])
-        pkgs <- queryGetPackageIndex
-        case PackageIndex.lookupPackageId pkgs pkgid of
-            Nothing -> packageError [MText $ "No such package version for " ++ display (packageName pkgid)]
-            Just pkg -> func pkg
-
-    withPackageVersionPath :: DynamicPath -> (PkgInfo -> ServerPartE a) -> ServerPartE a
-    withPackageVersionPath dpath func = withPackageId dpath $ \pkgid -> withPackageVersion pkgid func
-
-    withPackageTarball :: DynamicPath -> (PackageId -> ServerPartE a) -> ServerPartE a
-    withPackageTarball dpath func = withPackageId dpath $ \(PackageIdentifier name version) ->
-        require (return $ lookup "tarball" dpath >>= fromReqURI) $ \pkgid@(PackageIdentifier name' version') -> do
-        -- rules:
-        -- * the package name and tarball name must be the same
-        -- * the tarball must specify a version
-        -- * the package must either have no version or the same version as the tarball
-        guard $ name == name' && version' /= Version [] [] && (version == version' || version == Version [] [])
-        func pkgid
+    lookupPackageId :: PackageId -> ServerPartE PkgInfo
+    lookupPackageId (PackageIdentifier name (Version [] [])) = do
+      pkgs <- lookupPackageName name
+      -- pkgs is sorted by version number and non-empty
+      return (last pkgs)
+    lookupPackageId pkgid = do
+      pkgsIndex <- queryGetPackageIndex
+      case PackageIndex.lookupPackageId pkgsIndex pkgid of
+        Just pkg -> return pkg
+        _ -> packageError [MText $ "No such package version for " ++ display (packageName pkgid)]
 
     ------------------------------------------------------------------------
 
@@ -378,25 +351,26 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir} UserFeature{..}
 
     -- result: tarball or not-found error
     servePackageTarball :: DynamicPath -> ServerPartE Response
-    servePackageTarball dpath =
-        withPackageTarball dpath $ \pkgid ->
-        withPackageVersion pkgid $ \pkg ->
-        case pkgTarball pkg of
-            [] -> errNotFound "Tarball not found" [MText "No tarball exists for this package version."]
-            ((tb, _):_) -> do
-                let blobId = pkgTarballGz tb
-                file <- liftIO $ BlobStorage.fetch store blobId
-                liftIO $ runHook' tarballDownload pkgid
-                return $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)
+    servePackageTarball dpath = do
+      pkgid <- packageTarballInPath dpath
+      guard (pkgVersion pkgid /= Version [] [])
+      pkg <- lookupPackageId pkgid
+      case pkgTarball pkg of
+          [] -> errNotFound "Tarball not found" [MText "No tarball exists for this package version."]
+          ((tb, _):_) -> do
+              let blobId = pkgTarballGz tb
+              file <- liftIO $ BlobStorage.fetch store blobId
+              liftIO $ runHook' tarballDownload pkgid
+              return $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)
 
     -- result: cabal file or not-found error
     serveCabalFile :: DynamicPath -> ServerPartE Response
-    serveCabalFile dpath =
-        withPackagePath dpath $ \pkg _ ->
-        -- check that the cabal name matches the package
-        case lookup "cabal" dpath == Just (display $ packageName pkg) of
-            True  -> return $ toResponse (Resource.CabalFile (cabalFileByteString (pkgData pkg)))
-            False -> mzero
+    serveCabalFile dpath = do
+      pkg <- packageInPath dpath >>= lookupPackageId
+      -- check that the cabal name matches the package
+      case lookup "cabal" dpath == Just (display $ packageName pkg) of
+          True  -> return $ toResponse (Resource.CabalFile (cabalFileByteString (pkgData pkg)))
+          False -> mzero
 
 {-  Currently unused, should not be in ServerPartE
 

@@ -149,10 +149,9 @@ candidatesFeature :: ServerEnv
                   -> PackageCandidatesFeature
 candidatesFeature ServerEnv{serverBlobStore = store}
                   UserFeature{..}
-                  CoreFeature{ coreResource=CoreResource{packageInPath}
+                  CoreFeature{ coreResource=CoreResource{packageInPath, packageTarballInPath}
                              , queryGetPackageIndex
                              , doAddPackage
-                             , withPackageTarball
                              }
                   UploadFeature{..}
                   TarIndexCacheFeature{cachedPackageTarIndex}
@@ -275,9 +274,9 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         seeOther (packageCandidatesUri candidatesResource "" $ packageName candidate) $ toResponse ()
 
     serveCandidateTarball :: DynamicPath -> ServerPart Response
-    serveCandidateTarball dpath = runServerPartE $
-                                        withPackageTarball dpath $ \pkgid ->
-                                        withCandidate pkgid $ \_ mpkg _ -> case mpkg of
+    serveCandidateTarball dpath = runServerPartE $ do
+      pkgid <- packageTarballInPath dpath
+      withCandidate pkgid $ \_ mpkg _ -> case mpkg of
         Nothing -> mzero -- candidate  does not exist
         Just pkg -> case pkgTarball (candPkgInfo pkg) of
             [] -> mzero --candidate's tarball does not exist

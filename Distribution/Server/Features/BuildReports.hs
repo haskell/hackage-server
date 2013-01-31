@@ -22,6 +22,7 @@ import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
 import Distribution.Text
 import Distribution.Package
+import Distribution.Version
 
 import Data.ByteString.Lazy.Char8 (unpack)
 
@@ -72,7 +73,10 @@ buildReportsFeature :: ServerEnv
                     -> StateComponent BuildReports
                     -> ReportsFeature
 buildReportsFeature ServerEnv{serverBlobStore = store}
-                    UserFeature{..} CoreFeature{..}
+                    UserFeature{..}
+                    CoreFeature{ coreResource = CoreResource{packageInPath}
+                               , lookupPackageId
+                               }
                     reportsState
   = ReportsFeature{..}
   where
@@ -106,24 +110,27 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
           , reportsLogUri  = \pkgid repid -> renderResource (reportsLog reportsResource) [display pkgid, display repid]
           }
 
-    textPackageReports dpath =
-      runServerPartE $
-      withPackageVersionPath dpath $ \pkg -> do
-        reportList <- queryState reportsState $ LookupPackageReports (packageId pkg)
-        return . toResponse $ show reportList
+    textPackageReports dpath = runServerPartE $ do
+      pkgid <- packageInPath dpath
+      guard (pkgVersion pkgid /= Version [] [])
+      pkg <- lookupPackageId pkgid
+      reportList <- queryState reportsState $ LookupPackageReports (packageId pkg)
+      return . toResponse $ show reportList
 
-    textPackageReport dpath =
-      runServerPartE $
-      withPackageVersionPath dpath $ \pkg ->
+    textPackageReport dpath = runServerPartE $ do
+      pkgid <- packageInPath dpath
+      guard (pkgVersion pkgid /= Version [] [])
+      pkg <- lookupPackageId pkgid
       withPackageReport dpath (packageId pkg) $ \reportId (report, mlog) ->
         return . toResponse $ unlines [ "Report #" ++ display reportId, show report
                                       , maybe "No build log" (const "Build log exists") mlog]
 
     -- result: not-found error or text file
     serveBuildLog :: DynamicPath -> ServerPart Response
-    serveBuildLog dpath =
-      runServerPartE $
-      withPackageVersionPath dpath $ \pkg ->
+    serveBuildLog dpath = runServerPartE $ do
+      pkgid <- packageInPath dpath
+      guard (pkgVersion pkgid /= Version [] [])
+      pkg <- lookupPackageId pkgid
       withPackageReport dpath (pkgInfoId pkg) $ \repid (_, mlog) -> case mlog of
         Nothing -> errNotFound "Log not found" [MText $ "Build log for report " ++ display repid ++ " not found"]
         Just (BuildLog blobId) -> do
@@ -132,31 +139,31 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
 
     -- result: auth error, not-found error, parse error, or redirect
     submitBuildReport :: DynamicPath -> ServerPart Response
-    submitBuildReport dpath =
-      runServerPartE $
-      withPackageVersionPath dpath $ \pkg -> do
-        users <- queryGetUserDb
-        -- require logged-in user
-        void $ guardAuthenticated hackageRealm users
-        let pkgid = pkgInfoId pkg
-        reportbody <- expectTextPlain
-        case BuildReport.parse $ unpack reportbody of
-            Left err -> errBadRequest "Error submitting report" [MText err]
-            Right report -> do
-                reportId <- updateState reportsState $ AddReport pkgid (report, Nothing)
-                -- redirect to new reports page
-                seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
+    submitBuildReport dpath = runServerPartE $ do
+      pkgid <- packageInPath dpath
+      guard (pkgVersion pkgid /= Version [] [])
+      _ <- lookupPackageId pkgid
+      users <- queryGetUserDb
+      -- require logged-in user
+      void $ guardAuthenticated hackageRealm users
+      reportbody <- expectTextPlain
+      case BuildReport.parse $ unpack reportbody of
+          Left err -> errBadRequest "Error submitting report" [MText err]
+          Right report -> do
+              reportId <- updateState reportsState $ AddReport pkgid (report, Nothing)
+              -- redirect to new reports page
+              seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
     -- result: auth error, not-found error or redirect
     deleteBuildReport :: DynamicPath -> ServerPart Response
-    deleteBuildReport dpath =
-      runServerPartE $
-      withPackageVersionPath dpath $ \pkg ->
+    deleteBuildReport dpath = runServerPartE $ do
+      pkgid <- packageInPath dpath
+      guard (pkgVersion pkgid /= Version [] [])
+      _ <- lookupPackageId pkgid
       withReportId dpath $ \reportId -> do
         users <- queryGetUserDb
         -- restrict this to whom? currently logged in users.. a bad idea
         void $ guardAuthenticated hackageRealm users
-        let pkgid = pkgInfoId pkg
         success <- updateState reportsState $ DeleteReport pkgid reportId
         if success
             then seeOther (reportsListUri reportsResource "" pkgid) $ toResponse ()
@@ -164,14 +171,14 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
 
     -- result: auth error, not-found error, or redirect
     putBuildLog :: DynamicPath -> ServerPart Response
-    putBuildLog dpath =
-      runServerPartE $
-      withPackageVersionPath dpath $ \pkg ->
+    putBuildLog dpath = runServerPartE $ do
+      pkgid <- packageInPath dpath
+      guard (pkgVersion pkgid /= Version [] [])
+      _ <- lookupPackageId pkgid
       withReportId dpath $ \reportId -> do
         users <- queryGetUserDb
         -- logged in users
         void $ guardAuthenticated hackageRealm users
-        let pkgid = pkgInfoId pkg
         blogbody <- expectTextPlain
         buildLog <- liftIO $ BlobStorage.add store blogbody
         void $ updateState reportsState $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
@@ -180,14 +187,14 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
 
     -- result: auth error, not-found error or redirect
     deleteBuildLog :: DynamicPath -> ServerPart Response
-    deleteBuildLog dpath =
-      runServerPartE $
-      withPackageVersionPath dpath $ \pkg ->
+    deleteBuildLog dpath = runServerPartE $ do
+      pkgid <- packageInPath dpath
+      guard (pkgVersion pkgid /= Version [] [])
+      _ <- lookupPackageId pkgid
       withReportId dpath $ \reportId -> do
         users <- queryGetUserDb
         -- again, restrict this to whom?
         void $ guardAuthenticated hackageRealm users
-        let pkgid = pkgInfoId pkg
         void $ updateState reportsState $ SetBuildLog pkgid reportId Nothing
         -- go to report page (which should no longer link the log)
         seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()

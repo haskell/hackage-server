@@ -59,7 +59,9 @@ packageContentsFeature :: ServerEnv
                        -> PackageContentsFeature
 
 packageContentsFeature ServerEnv{serverBlobStore = store}
-                       CoreFeature{..}
+                       CoreFeature{ coreResource = CoreResource{packageInPath}
+                                  , lookupPackageId
+                                  }
                        TarIndexCacheFeature{cachedPackageTarIndex}
   = PackageContentsFeature{..}
   where
@@ -92,7 +94,8 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
 
     -- result: changelog or not-found error
     serveChangeLog :: DynamicPath -> ServerPart Response
-    serveChangeLog dpath = runServerPartE $ withPackagePath dpath $ \pkg _ -> do
+    serveChangeLog dpath = runServerPartE $ do
+      pkg        <- packageInPath dpath >>= lookupPackageId
       mChangeLog <- liftIO $ packageChangeLog pkg
       case mChangeLog of
         Left err ->
@@ -102,7 +105,8 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
 
     -- return: not-found error or tarball
     serveContents :: DynamicPath -> ServerPart Response
-    serveContents dpath = runServerPartE $ withPackagePath dpath $ \pkg _ -> do
+    serveContents dpath = runServerPartE $ do
+      pkg      <- packageInPath dpath >>= lookupPackageId
       mTarball <- liftIO $ packageTarball pkg
       case mTarball of
         Left err ->
