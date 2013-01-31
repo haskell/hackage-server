@@ -210,22 +210,22 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
     handlePackageDeprecatedPut dpath = runServerPartE $ do
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
-      withPackageNameAuth pkgname $ \_ _ -> do
-        jv <- expectJsonContent
-        case jv of
-          JSObject o
-            | fields <- fromJSObject o
-            , Just (JSBool deprecated) <- lookup "is-deprecated" fields
-            , Just (JSArray strs)      <- lookup "in-favour-of"  fields
-            , let asPackage (JSString s) = simpleParse (fromJSString s)
-                  asPackage _            = Nothing
-                  mpkgs = map asPackage strs
-            , all isJust mpkgs
-            -> do let deprecatedInfo | deprecated = Just (catMaybes mpkgs)
-                                     | otherwise  = Nothing
-                  updatePackageDeprecation pkgname deprecatedInfo
-                  ok $ toResponse ()
-          _ -> errBadRequest "bad json format or content" []
+      _ <- getPackageNameAuth pkgname
+      jv <- expectJsonContent
+      case jv of
+        JSObject o
+          | fields <- fromJSObject o
+          , Just (JSBool deprecated) <- lookup "is-deprecated" fields
+          , Just (JSArray strs)      <- lookup "in-favour-of"  fields
+          , let asPackage (JSString s) = simpleParse (fromJSString s)
+                asPackage _            = Nothing
+                mpkgs = map asPackage strs
+          , all isJust mpkgs
+          -> do let deprecatedInfo | deprecated = Just (catMaybes mpkgs)
+                                   | otherwise  = Nothing
+                updatePackageDeprecation pkgname deprecatedInfo
+                ok $ toResponse ()
+        _ -> errBadRequest "bad json format or content" []
 
     ---------------------------
     -- This is a function used by the HTML feature to select the version to display.
@@ -256,48 +256,48 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
     putPreferred :: PackageName -> ServerPartE ()
     putPreferred pkgname = do
       pkgs <- lookupPackageName pkgname
-      withPackageNameAuth pkgname $ \_ _ -> do
-        pref <- optional $ fmap lines $ look "preferred"
-        depr <- optional $ fmap (rights . map snd . filter ((=="deprecated") . fst)) $ lookPairs
-        case sequence . map simpleParse =<< pref of
-            Just prefs -> case sequence . map simpleParse =<< depr of
-                Just deprs -> case all (`elem` map packageVersion pkgs) deprs of
-                    True  -> do
-                        void $ updateState preferredState $ SetPreferredRanges pkgname prefs
-                        void $ updateState preferredState $ SetDeprecatedVersions pkgname deprs
-                        newInfo <- queryState preferredState $ GetPreferredInfo pkgname
-                        prefVersions <- makePreferredVersions
-                        now <- liftIO getCurrentTime
-                        updateArchiveIndexEntry "preferred-versions" (BS.pack prefVersions, now)
-                        runHook'' preferredHook pkgname newInfo
-                        return ()
-                    False -> preferredError "Not all of the selected versions are in the main index."
-                Nothing -> preferredError "Version could not be parsed."
-            Nothing -> preferredError "Expected format of the preferred ranges field is one version range per line, e.g. '<2.3 || 3.*' (see Cabal documentation for the syntax)."
+      _ <- getPackageNameAuth pkgname
+      pref <- optional $ fmap lines $ look "preferred"
+      depr <- optional $ fmap (rights . map snd . filter ((=="deprecated") . fst)) $ lookPairs
+      case sequence . map simpleParse =<< pref of
+          Just prefs -> case sequence . map simpleParse =<< depr of
+              Just deprs -> case all (`elem` map packageVersion pkgs) deprs of
+                  True  -> do
+                      void $ updateState preferredState $ SetPreferredRanges pkgname prefs
+                      void $ updateState preferredState $ SetDeprecatedVersions pkgname deprs
+                      newInfo <- queryState preferredState $ GetPreferredInfo pkgname
+                      prefVersions <- makePreferredVersions
+                      now <- liftIO getCurrentTime
+                      updateArchiveIndexEntry "preferred-versions" (BS.pack prefVersions, now)
+                      runHook'' preferredHook pkgname newInfo
+                      return ()
+                  False -> preferredError "Not all of the selected versions are in the main index."
+              Nothing -> preferredError "Version could not be parsed."
+          Nothing -> preferredError "Expected format of the preferred ranges field is one version range per line, e.g. '<2.3 || 3.*' (see Cabal documentation for the syntax)."
       where
         preferredError = errBadRequest "Preferred ranges failed" . return . MText
 
     putDeprecated :: PackageName -> ServerPartE Bool
     putDeprecated pkgname = do
       guardValidPackageName pkgname
-      withPackageNameAuth pkgname $ \_ _ -> do
-        index  <- queryGetPackageIndex
-        isDepr <- optional $ look "deprecated"
-        case isDepr of
-            Just {} -> do
-                depr <- optional $ fmap words $ look "by"
-                case sequence . map simpleParse =<< depr of
-                    Just deprs -> case filter (null . PackageIndex.lookupPackageName index) deprs of
-                        [] -> case any (== pkgname) deprs of
-                                True -> deprecatedError $ "You can not deprecate a package in favor of itself!"
-                                _ -> do
-                                  doUpdates (Just deprs)
-                                  return True
-                        pkgs -> deprecatedError $ "Some superseding packages aren't in the main index: " ++ intercalate ", " (map display pkgs)
-                    Nothing -> deprecatedError "Expected format of the 'superseded by' field is a list of package names separated by spaces."
-            Nothing -> do
-                doUpdates Nothing
-                return False
+      _ <- getPackageNameAuth pkgname
+      index  <- queryGetPackageIndex
+      isDepr <- optional $ look "deprecated"
+      case isDepr of
+          Just {} -> do
+              depr <- optional $ fmap words $ look "by"
+              case sequence . map simpleParse =<< depr of
+                  Just deprs -> case filter (null . PackageIndex.lookupPackageName index) deprs of
+                      [] -> case any (== pkgname) deprs of
+                              True -> deprecatedError $ "You can not deprecate a package in favor of itself!"
+                              _ -> do
+                                doUpdates (Just deprs)
+                                return True
+                      pkgs -> deprecatedError $ "Some superseding packages aren't in the main index: " ++ intercalate ", " (map display pkgs)
+                  Nothing -> deprecatedError "Expected format of the 'superseded by' field is a list of package names separated by spaces."
+          Nothing -> do
+              doUpdates Nothing
+              return False
       where
         deprecatedError = errBadRequest "Deprecation failed" . return . MText
         doUpdates deprs = do

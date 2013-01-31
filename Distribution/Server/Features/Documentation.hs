@@ -155,18 +155,18 @@ documentationFeature ServerEnv{serverBlobStore = store}
     uploadDocumentation dpath = runServerPartE $ do
       pkg <- packageInPath dpath >>= lookupPackageId
       let pkgid = packageId pkg
-      withPackageAuth pkgid $ \_ _ -> do
-          -- The order of operations:
-          -- * Insert new documentation into blob store
-          -- * Generate the new index
-          -- * Drop the index for the old tar-file
-          -- * Link the new documentation to the package
-          fileContents <- expectUncompressedTarball
-          blob <- liftIO $ BlobStorage.add store fileContents
-          --TODO: validate the tarball here.
-          -- Check all files in the tarball are under the dir foo-1.0-docs/
-          void $ updateState documentationState $ InsertDocumentation pkgid blob
-          noContent (toResponse ())
+      _ <- getPackageAuth pkgid
+      -- The order of operations:
+      -- * Insert new documentation into blob store
+      -- * Generate the new index
+      -- * Drop the index for the old tar-file
+      -- * Link the new documentation to the package
+      fileContents <- expectUncompressedTarball
+      blob <- liftIO $ BlobStorage.add store fileContents
+      --TODO: validate the tarball here.
+      -- Check all files in the tarball are under the dir foo-1.0-docs/
+      void $ updateState documentationState $ InsertDocumentation pkgid blob
+      noContent (toResponse ())
 
    {-
      To upload documentation using curl:

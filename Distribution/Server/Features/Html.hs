@@ -380,7 +380,7 @@ mkHtmlCore HtmlUtilities{..}
                           , queryGetPreferredInfo
                           , withPackagePreferred
                           }
-           UploadFeature{uploadResource, withPackageNameAuth}
+           UploadFeature{uploadResource, getPackageNameAuth}
            TagsFeature{queryTagsForPackage}
            DocumentationFeature{queryHasDocumentation}
            DownloadFeature{perVersionDownloads}
@@ -479,16 +479,16 @@ mkHtmlCore HtmlUtilities{..}
     serveMaintainLinks editDepr editPref mgroup dpath = htmlResponse $ do
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
-      withPackageNameAuth pkgname $ \_ _ -> do
-        let dpath' = [("package", display pkgname)]
-        return $ toResponse $ Resource.XHtml $ hackagePage "Maintain package"
-          [ unordList $
-              [ anchor ! [href $ renderResource' editPref dpath'] << "Edit preferred versions"
-              , anchor ! [href $ renderResource' editDepr dpath'] << "Edit deprecation"
-              , anchor ! [href $ renderResource' (groupResource mgroup) dpath'] << "Maintainer list"
-              ]
-          ]
-        -- upload documentation
+      _ <- getPackageNameAuth pkgname
+      let dpath' = [("package", display pkgname)]
+      return $ toResponse $ Resource.XHtml $ hackagePage "Maintain package"
+        [ unordList $
+            [ anchor ! [href $ renderResource' editPref dpath'] << "Edit preferred versions"
+            , anchor ! [href $ renderResource' editDepr dpath'] << "Edit deprecation"
+            , anchor ! [href $ renderResource' (groupResource mgroup) dpath'] << "Maintainer list"
+            ]
+        ]
+      -- upload documentation
 
 {-------------------------------------------------------------------------------
   Users
@@ -711,7 +711,7 @@ mkHtmlCandidates HtmlUtilities{..}
                             , queryGetPackageIndex
                             }
                  VersionsFeature{ queryGetPreferredInfo }
-                 UploadFeature{ withPackageAuth }
+                 UploadFeature{ getPackageAuth }
                  PackageCandidatesFeature{..} = HtmlCandidates{..}
   where
     candidates     = candidatesResource
@@ -794,18 +794,16 @@ mkHtmlCandidates HtmlUtilities{..}
           ]
 
     serveCandidateMaintain :: DynamicPath -> ServerPart Response
-    serveCandidateMaintain dpath =
-      htmlResponse $
-      withCandidatePath dpath $ \_ candidate ->
-      withPackageAuth candidate $ \_ _ -> do
+    serveCandidateMaintain dpath = htmlResponse $
+      withCandidatePath dpath $ \_ candidate -> do
+        _ <- getPackageAuth candidate
         return $ toResponse $ Resource.XHtml $ hackagePage "Maintain candidate"
             [toHtml "Here, you can delete a candidate, publish it, upload a new one, and edit the maintainer group."]
     {-some useful URIs here: candidateUri check "" pkgid, packageCandidatesUri check "" pkgid, publishUri check "" pkgid-}
 
 
     serveCandidatePage :: Resource -> DynamicPath -> ServerPart Response
-    serveCandidatePage maintain dpath =
-      htmlResponse $
+    serveCandidatePage maintain dpath = htmlResponse $
       withCandidatePath dpath $ \_ cand -> do
         candRender <- liftIO $ candidateRender cand
         let PackageIdentifier pkgname version = packageId cand
@@ -826,8 +824,8 @@ mkHtmlCandidates HtmlUtilities{..}
 
     servePublishForm :: DynamicPath -> ServerPart Response
     servePublishForm dpath = htmlResponse $
-                               withCandidatePath dpath $ \_ candidate ->
-                               withPackageAuth candidate $ \_ _ -> do
+      withCandidatePath dpath $ \_ candidate -> do
+        _ <- getPackageAuth candidate
         let pkgid = packageId candidate
         packages <- queryGetPackageIndex
         case checkPublish packages candidate of

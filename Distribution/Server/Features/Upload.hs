@@ -39,19 +39,19 @@ import qualified Codec.Compression.GZip as GZip
 data UploadFeature = UploadFeature {
     uploadFeatureInterface :: HackageFeature,
 
-    uploadResource   :: UploadResource,
-    uploadPackage    :: ServerPartE UploadResult,
+    uploadResource     :: UploadResource,
+    uploadPackage      :: ServerPartE UploadResult,
     packageMaintainers :: GroupGen,
-    trusteeGroup :: UserGroup,
-    uploaderGroup :: UserGroup,
-    canUploadPackage :: Filter (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)),
+    trusteeGroup       :: UserGroup,
+    uploaderGroup      :: UserGroup,
+    canUploadPackage   :: Filter (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)),
 
-    getPackageGroup :: forall m. MonadIO m => PackageName -> m Group.UserList,
-    withPackageAuth :: forall pkg a. Package pkg => pkg -> (Users.UserId -> Users.UserInfo -> ServerPartE a) -> ServerPartE a,
-    withPackageNameAuth :: forall a. PackageName -> (Users.UserId -> Users.UserInfo -> ServerPartE a) -> ServerPartE a,
-    withTrusteeAuth     :: forall a. (Users.UserId -> Users.UserInfo -> ServerPartE a) -> ServerPartE a,
+    getPackageGroup    :: forall m. MonadIO m => PackageName -> m Group.UserList,
+    getPackageAuth     :: forall pkg. Package pkg => pkg -> ServerPartE (Users.UserId, Users.UserInfo),
+    getPackageNameAuth :: PackageName -> ServerPartE (Users.UserId, Users.UserInfo),
+    getTrusteeAuth     :: ServerPartE (Users.UserId, Users.UserInfo),
 
-    extractPackage :: (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)) -> ServerPartE (PkgInfo, UploadResult)
+    extractPackage     :: (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)) -> ServerPartE (PkgInfo, UploadResult)
 }
 
 instance IsHackageFeature UploadFeature where
@@ -171,7 +171,11 @@ uploadFeature :: ServerEnv
                   [UserGroup] -> PackageName -> UserGroup)
 
 uploadFeature ServerEnv{serverBlobStore = store}
-              CoreFeature{..} UserFeature{..}
+              CoreFeature{ coreResource
+                         , queryGetPackageIndex
+                         , doAddPackage
+                         }
+              UserFeature{..}
               trusteesState    trusteeGroup       trustResource
               uploadersState   uploaderGroup      uploaderResource'
               maintainersState packageMaintainers pkgResource
@@ -259,29 +263,26 @@ uploadFeature ServerEnv{serverBlobStore = store}
     uploaderDescription :: GroupDescription
     uploaderDescription = nullDescription { groupTitle = "Package uploaders", groupPrologue = "Package uploaders allowed to upload packages. If a package already exists then you also need to be in the maintainer group for that package." }
 
-    withPackageAuth :: Package pkg => pkg -> (Users.UserId -> Users.UserInfo -> ServerPartE a) -> ServerPartE a
-    withPackageAuth pkg func =
-      withPackageNameAuth (packageName pkg) func
+    getPackageAuth :: forall pkg. Package pkg => pkg -> ServerPartE (Users.UserId, Users.UserInfo)
+    getPackageAuth = getPackageNameAuth . packageName
 
-    withPackageNameAuth :: PackageName -> (Users.UserId -> Users.UserInfo -> ServerPartE a) -> ServerPartE a
-    withPackageNameAuth pkgname func = do
-        userDb <- queryGetUserDb
-        groupSum <- getPackageGroup pkgname
-        (uid, uinfo) <- guardAuthorised hackageRealm userDb groupSum
-        func uid uinfo
+    getPackageNameAuth :: PackageName -> ServerPartE (Users.UserId, Users.UserInfo)
+    getPackageNameAuth pkgname = do
+      userDb   <- queryGetUserDb
+      groupSum <- getPackageGroup pkgname
+      guardAuthorised hackageRealm userDb groupSum
 
-    withTrusteeAuth :: (Users.UserId -> Users.UserInfo -> ServerPartE a) -> ServerPartE a
-    withTrusteeAuth func = do
-        userDb <- queryGetUserDb
-        trustee <- queryState trusteesState GetTrusteesList
-        (uid, uinfo) <- guardAuthorised hackageRealm userDb trustee
-        func uid uinfo
+    getTrusteeAuth :: ServerPartE (Users.UserId, Users.UserInfo)
+    getTrusteeAuth = do
+      userDb <- queryGetUserDb
+      trustee <- queryState trusteesState GetTrusteesList
+      guardAuthorised hackageRealm userDb trustee
 
     getPackageGroup :: MonadIO m => PackageName -> m Group.UserList
     getPackageGroup pkg = do
-        pkgm    <- queryState maintainersState (GetPackageMaintainers pkg)
-        trustee <- queryState trusteesState GetTrusteesList
-        return $ Group.unions [trustee, pkgm]
+      pkgm    <- queryState maintainersState (GetPackageMaintainers pkg)
+      trustee <- queryState trusteesState GetTrusteesList
+      return $ Group.unions [trustee, pkgm]
 
     ----------------------------------------------------
 

@@ -269,9 +269,9 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     -- FIXME: DELETE should not redirect, but rather return ServerPartE ()
     doDeleteCandidate :: DynamicPath -> ServerPartE Response
     doDeleteCandidate dpath = withCandidatePath dpath $ \_ candidate -> do
-        withPackageAuth candidate $ \_ _ -> do
-        void $ updateState candidatesState $ DeleteCandidate (packageId candidate)
-        seeOther (packageCandidatesUri candidatesResource "" $ packageName candidate) $ toResponse ()
+      void $ getPackageAuth candidate
+      void $ updateState candidatesState $ DeleteCandidate (packageId candidate)
+      seeOther (packageCandidatesUri candidatesResource "" $ packageName candidate) $ toResponse ()
 
     serveCandidateTarball :: DynamicPath -> ServerPart Response
     serveCandidateTarball dpath = runServerPartE $ do
@@ -331,7 +331,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         packages <- queryGetPackageIndex
         withCandidatePath dpath $ \_ candidate -> do
         -- check authorization to upload - must already be a maintainer
-        withPackageAuth candidate $ \uid _ -> do
+        (uid, _) <- getPackageAuth candidate
         -- check if package or later already exists
         case checkPublish packages candidate of
           Just failed -> throwError failed
