@@ -90,20 +90,17 @@ instance IsHackageFeature CoreFeature where
     getFeatureInterface = coreFeatureInterface
 
 data CoreResource = CoreResource {
-    coreIndexPage       :: Resource,
-    coreIndexTarball    :: Resource,
     corePackagesPage    :: Resource,
     corePackagePage     :: Resource,
-    corePackageRedirect :: Resource,
     coreCabalFile       :: Resource,
     corePackageTarball  :: Resource,
 
-    indexTarballUri :: String,
-    indexPackageUri :: String -> String,
-    corePackageUri  :: String -> PackageId -> String,
-    corePackageName :: String -> PackageName -> String,
-    coreCabalUri    :: PackageId -> String,
-    coreTarballUri  :: PackageId -> String,
+    -- Render resources
+    indexPackageUri    :: String -> String,
+    corePackageIdUri   :: String -> PackageId -> String,
+    corePackageNameUri :: String -> PackageName -> String,
+    coreCabalUri       :: PackageId -> String,
+    coreTarballUri     :: PackageId -> String,
 
     -- Find a PackageId or PackageName inside a path
     packageInPath :: (MonadPlus m, FromReqURI a) => DynamicPath -> m a,
@@ -249,13 +246,11 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir} UserFeature{..}
         resourceDesc = [(GET, "Get package .cabal file")]
       , resourceGet  = [("cabal", runServerPartE . serveCabalFile)]
       }
-    indexTarballUri =
-      renderResource coreIndexTarball []
     indexPackageUri = \format ->
       renderResource corePackagesPage [format]
-    corePackageUri  = \format pkgid ->
+    corePackageIdUri  = \format pkgid ->
       renderResource corePackagePage [display pkgid, format]
-    corePackageName = \format pkgname ->
+    corePackageNameUri = \format pkgname ->
       renderResource corePackagePage [display pkgname, format]
     coreCabalUri    = \pkgid ->
       renderResource coreCabalFile [display pkgid, display (packageName pkgid)]

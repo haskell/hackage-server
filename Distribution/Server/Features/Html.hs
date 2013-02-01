@@ -286,7 +286,7 @@ htmlFeature user
                   _             -> withPackageVersion pkgid $ \_ -> revPackageId pkgid
         render <- (if isRecent then renderReverseRecent else renderReverseOld) pkgname rdisp
         return $ toResponse $ Resource.XHtml $ hackagePage (display pkgname ++ " - Reverse dependencies ") $
-            Pages.reversePackageRender pkgid (corePackageUri "") revr isRecent render
+            Pages.reversePackageRender pkgid (corePackageIdUri "") revr isRecent render
 
     serveReverseFlat :: DynamicPath -> ServerPart Response
     serveReverseFlat dpath = htmlResponse $
@@ -294,14 +294,14 @@ htmlFeature user
         revCount <- query $ GetReverseCount pkgname
         pairs <- revPackageFlat pkgname
         return $ toResponse $ Resource.XHtml $ hackagePage (display pkgname ++ "Flattened reverse dependencies") $
-            Pages.reverseFlatRender pkgname (corePackageName "") revr revCount pairs
+            Pages.reverseFlatRender pkgname (corePackageNameUri "") revr revCount pairs
 
     serveReverseStats :: DynamicPath -> ServerPart Response
     serveReverseStats dpath = htmlResponse $
                                        withPackageAllPath dpath $ \pkgname pkgs -> do
         revCount <- query $ GetReverseCount pkgname
         return $ toResponse $ Resource.XHtml $ hackagePage (display pkgname ++ "Reverse dependency statistics") $
-            Pages.reverseStatsRender pkgname (map packageVersion pkgs) (corePackageUri "") revr revCount
+            Pages.reverseStatsRender pkgname (map packageVersion pkgs) (corePackageIdUri "") revr revCount
 
     serveReverseList :: DynamicPath -> ServerPart Response
     serveReverseList _ = do
@@ -309,7 +309,7 @@ htmlFeature user
         triple <- sortedRevSummary revs
         hackCount <- PackageIndex.indexSize <$> queryGetPackageIndex
         return $ toResponse $ Resource.XHtml $ hackagePage "Reverse dependencies" $
-            Pages.reversePackagesRender (corePackageName "") revr hackCount triple
+            Pages.reversePackagesRender (corePackageNameUri "") revr hackCount triple
     -}
 
     --------------------------------------------------------------------------------
@@ -464,7 +464,7 @@ mkHtmlCore HtmlUtilities{..}
               Just fors -> paragraph ! [thestyle "color: red"] << [toHtml "Deprecated", case fors of
                 [] -> noHtml
                 _  -> concatHtml . (toHtml " in favor of ":) . intersperse (toHtml ", ") .
-                      map (\for -> anchor ! [href $ corePackageName cores "" for] << display for) $ fors]
+                      map (\for -> anchor ! [href $ corePackageNameUri cores "" for] << display for) $ fors]
               Nothing -> noHtml
         -- and put it all together
         return $ toResponse $ Resource.XHtml $ haddockPage (display pkgid) $
@@ -856,7 +856,7 @@ mkHtmlCandidates HtmlUtilities{..}
                 in  [ anchor ! [href $ packageCandidatesUri candidates "" pkgname ] << display pkgname
                     , toHtml ": "
                     , toHtml $ intersperse (toHtml ", ") $ flip map pkgs $ \pkg ->
-                         anchor ! [href $ corePackageUri candidatesCore "" (packageId pkg)] << display (packageVersion pkg)
+                         anchor ! [href $ corePackageIdUri candidatesCore "" (packageId pkg)] << display (packageVersion pkg)
                     , toHtml $ ". " ++ description desc
                     ]
 
@@ -873,7 +873,7 @@ mkHtmlCandidates HtmlUtilities{..}
                 , anchor ! [href $ "/packages/candidates/upload"] << "another"
                 , toHtml " package?"
                 ]
-          _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ corePackageUri candidatesCore "" $ packageId pkg] << display (packageVersion pkg) ]
+          _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ corePackageIdUri candidatesCore "" $ packageId pkg] << display (packageVersion pkg) ]
 
     -- TODO: make publishCandidate a member of the PackageCandidates feature, just like
     -- putDeprecated and putPreferred are for the Versions feature.
@@ -1359,10 +1359,10 @@ htmlUtilities CoreFeature{coreResource}
               TagsFeature{tagsResource} = HtmlUtilities{..}
   where
     packageLink :: PackageId -> Html
-    packageLink pkgid = anchor ! [href $ corePackageUri cores "" pkgid] << display pkgid
+    packageLink pkgid = anchor ! [href $ corePackageIdUri cores "" pkgid] << display pkgid
 
     packageNameLink :: PackageName -> Html
-    packageNameLink pkgname = anchor ! [href $ corePackageName cores "" pkgname] << display pkgname
+    packageNameLink pkgname = anchor ! [href $ corePackageNameUri cores "" pkgname] << display pkgname
 
     renderItem :: PackageItem -> Html
     renderItem item = li ! classes <<

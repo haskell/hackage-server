@@ -178,16 +178,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     queryGetCandidateIndex = return . candidateList =<< queryState candidatesState GetCandidatePackages
 
     candidatesCoreResource = fix $ \r -> CoreResource {
---------------------------------------------------------------------------------
--- TODO: Either add support for these or else split CoreResource
-        coreIndexPage       = error "coreIndexPage not supported for candidates"
-      , coreIndexTarball    = error "coreIndexTarball not supported for candidates"
-      , corePackageRedirect = error "corePackageRedirect not supported for candidates"
-      , indexTarballUri     = error "indexTarballUri not supported for candidates"
-      , corePackageName     = error "corePackageName not supported for candidates"
---------------------------------------------------------------------------------
 -- TODO: There is significant overlap between this definition and the one in Core
-      , corePackagesPage = resourceAt "/packages/candidates/.:format"
+        corePackagesPage = resourceAt "/packages/candidates/.:format"
       , corePackagePage = (resourceAt "/package/:package/candidate.:format") {
             resourceDesc = [(GET, "Show basic package candidate page")]
           , resourceGet  = [("html", basicCandidatePage r)]
@@ -202,8 +194,10 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           }
       , indexPackageUri = \format ->
           renderResource (corePackagesPage r) [format]
-      , corePackageUri  = \format pkgid ->
+      , corePackageIdUri = \format pkgid ->
           renderResource (corePackagePage r) [display pkgid, format]
+      , corePackageNameUri = \format pkgname ->
+          renderResource (corePackagePage r) [display pkgname, format]
       , coreTarballUri = \pkgid ->
           renderResource (corePackageTarball r) [display pkgid, display pkgid]
       , coreCabalUri = \pkgid ->
@@ -249,14 +243,14 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     postCandidate :: ServerPartE Response
     postCandidate = do
         pkgInfo <- uploadCandidate (const True)
-        seeOther (corePackageUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
+        seeOther (corePackageIdUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
 
     -- POST to /:package/candidates/
     postPackageCandidate :: DynamicPath -> ServerPartE Response
     postPackageCandidate dpath = do
       name <- packageInPath dpath
       pkgInfo <- uploadCandidate ((==name) . packageName)
-      seeOther (corePackageUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
+      seeOther (corePackageIdUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
 
     -- PUT to /:package-version/candidate
     -- FIXME: like delete, PUT shouldn't redirect
@@ -265,7 +259,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       pkgid <- packageInPath dpath
       guard (packageVersion pkgid /= Version [] [])
       pkgInfo <- uploadCandidate (==pkgid)
-      seeOther (corePackageUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
+      seeOther (corePackageIdUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
 
     -- FIXME: DELETE should not redirect, but rather return ServerPartE ()
     doDeleteCandidate :: DynamicPath -> ServerPartE Response
