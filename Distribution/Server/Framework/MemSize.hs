@@ -16,6 +16,7 @@ import qualified Data.IntSet as IntSet
 import Data.IntSet (IntSet)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Text as T
 import Data.Time (UTCTime, Day)
 import Data.Array.Unboxed
 
@@ -130,6 +131,10 @@ instance MemSize BS.ByteString where
 
 instance MemSize LBS.ByteString where
   memSize s = sum [ 1 + memSize c | c <- LBS.toChunks s ]
+
+instance MemSize T.Text where
+  memSize s = let (w,t) = divMod (T.length s) (wordSize `div` 2)
+               in 5 + w + signum t
 
 memSizeUArray :: (Ix i, IArray a e) => Int -> a i e -> Int
 memSizeUArray sz a = 13 + (rangeSize (bounds a) * sz) `div` wordSize

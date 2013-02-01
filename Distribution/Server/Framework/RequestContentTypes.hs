@@ -24,6 +24,7 @@ module Distribution.Server.Framework.RequestContentTypes (
     expectUncompressedTarball,
     expectCompressedTarball,
     expectJsonContent,
+    expectAesonContent,
 
   ) where
 
@@ -32,8 +33,9 @@ import Distribution.Server.Util.Happstack
 import Distribution.Server.Framework.Error
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS
-import Text.JSON
 import qualified Codec.Compression.Zlib.Internal as GZip
+import qualified Text.JSON  as JSON
+import qualified Data.Aeson as Aeson
 
 -- | Expect the request body to have the given mime type (exact match),
 -- and to have either no content-encoding, or gzip encoding
@@ -123,11 +125,18 @@ expectCompressedTarball = do
         [MText $ "Expected either content-type application/x-tar "
               ++ " (with a content-encoding of gzip) or application/x-gzip."]
 
-expectJsonContent :: ServerPartE JSValue
+expectJsonContent :: JSON.JSON a => ServerPartE a
 expectJsonContent = do
   content <- expectContentType "application/json"
-  case decodeStrict (LBS.unpack content) of
-    Ok a      -> return a
-    Error msg -> errBadRequest "Malformed request"
-                   [MText $ "The JSON is malformed: " ++ msg]
+  case JSON.decodeStrict (LBS.unpack content) of
+    JSON.Ok a      -> return a
+    JSON.Error msg -> errBadRequest "Malformed request"
+                        [MText $ "The JSON is malformed: " ++ msg]
 
+expectAesonContent :: Aeson.FromJSON a => ServerPartE a
+expectAesonContent = do
+  content <- expectContentType "application/json"
+  case Aeson.eitherDecode' content of
+    Right a  -> return a
+    Left msg -> errBadRequest "Malformed request"
+                   [MText $ "The JSON data is not in the expected form: " ++ msg]

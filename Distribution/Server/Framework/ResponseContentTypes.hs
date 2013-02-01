@@ -28,6 +28,7 @@ import Text.RSS (RSS)
 import qualified Text.RSS as RSS (rssToXML, showXML)
 import qualified Text.XHtml.Strict as XHtml (Html, renderHtml)
 import qualified Text.JSON as JSON (JSValue, encode)
+import qualified Data.Aeson as Aeson (Value, encode)
 import Data.Time.Clock (UTCTime)
 import qualified Data.Time.Format as Time (formatTime)
 import System.Locale (defaultTimeLocale)
@@ -92,6 +93,10 @@ newtype JSON = JSON JSON.JSValue
 instance ToMessage JSON where
     toContentType _ = BS.pack "application/json"
     toMessage (JSON val) = BS.Lazy.pack $ JSON.encode val
+
+instance ToMessage Aeson.Value where
+    toContentType _ = BS.pack "application/json; charset=utf-8"
+    toMessage val = Aeson.encode val
 
 newtype CabalFile = CabalFile BS.Lazy.ByteString
 
