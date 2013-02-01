@@ -21,6 +21,7 @@ import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Mirror
 import Distribution.Server.Features.Distro
 import Distribution.Server.Features.Documentation
+import Distribution.Server.Features.UserDetails
 
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Group as Group
@@ -50,6 +51,7 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Maybe (fromMaybe)
+import qualified Data.Text as T
 
 import Text.XHtml.Strict
 import qualified Text.XHtml.Strict as XHtml
@@ -82,6 +84,7 @@ initHtmlFeature :: ServerEnv -> UserFeature -> CoreFeature -> RecentPackagesFeat
                 -> MirrorFeature -> DistroFeature
                 -> DocumentationFeature
                 -> DocumentationFeature
+                -> UserDetailsFeature
                 -> IO HtmlFeature
 
 initHtmlFeature ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
@@ -93,7 +96,7 @@ initHtmlFeature ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
                 list@ListFeature{itemUpdate}
                 names mirror
                 distros
-                docsCore docsCandidates = do
+                docsCore docsCandidates usersdetails = do
 
     loginfo verbosity "Initialising html feature, start"
 
@@ -106,6 +109,7 @@ initHtmlFeature ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
                           list names
                           mirror distros
                           docsCore docsCandidates
+                          usersdetails
                           (htmlUtilities core tags)
                           mainCache namesCache
 
@@ -147,6 +151,7 @@ htmlFeature :: UserFeature
             -> DistroFeature
             -> DocumentationFeature
             -> DocumentationFeature
+            -> UserDetailsFeature
             -> HtmlUtilities
             -> AsyncCache Response
             -> AsyncCache Response
@@ -161,7 +166,7 @@ htmlFeature user
             list@ListFeature{getAllLists}
             names
             mirror distros
-            docsCore docsCandidates
+            docsCore docsCandidates usersdetails
             utilities@HtmlUtilities{..}
             cachePackagesPage cacheNamesPage
   = (HtmlFeature{..}, packageIndex, packagesPage)
@@ -195,7 +200,7 @@ htmlFeature user
                                       htmlPreferred
                                       cachePackagesPage
                                       cacheNamesPage
-    htmlUsers      = mkHtmlUsers      user
+    htmlUsers      = mkHtmlUsers      user usersdetails
     htmlUploads    = mkHtmlUploads    utilities upload
     htmlDownloads  = mkHtmlDownloads  utilities download
     htmlCandidates = mkHtmlCandidates utilities core versions upload docsCandidates candidates
@@ -502,8 +507,8 @@ data HtmlUsers = HtmlUsers {
     htmlUsersResources :: [Resource]
   }
 
-mkHtmlUsers :: UserFeature -> HtmlUsers
-mkHtmlUsers UserFeature{..} = HtmlUsers{..}
+mkHtmlUsers :: UserFeature -> UserDetailsFeature -> HtmlUsers
+mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
   where
     users = userResource
 
@@ -557,13 +562,14 @@ mkHtmlUsers UserFeature{..} = HtmlUsers{..}
     serveUserPage dpath = htmlResponse $ do
       uname    <- userNameInPath dpath
       (uid, _) <- lookupUserName uname
+      udetails <- queryUserDetails uid
+      let realname = maybe (display uname) (T.unpack . accountName) udetails
       uris     <- getGroupIndex uid
       uriPairs <- forM uris $ \uri -> do
           desc <- getIndexDesc uri
           return $ Pages.renderGroupName desc (Just uri)
-      return $ toResponse $ Resource.XHtml $ hackagePage (display uname)
-        [ h2 << display uname
-      --, paragraph << [toHtml "[", anchor << [href $ userPasswordUri r "" uname] settings, toHtml "]"]
+      return $ toResponse $ Resource.XHtml $ hackagePage realname
+        [ h2 << realname
         , case uriPairs of
               [] -> noHtml
               _  -> toHtml

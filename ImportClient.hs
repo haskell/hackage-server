@@ -8,6 +8,7 @@ import Network.URI
          ( URI(..), URIAuth(..), parseURI, escapeURIString, isUnescapedInURI )
 
 import qualified Distribution.Client.HtPasswdDb as HtPasswdDb
+import qualified Distribution.Client.UserAddressesDb as UserAddressesDb
 import qualified Distribution.Client.UploadLog  as UploadLog
 import qualified Distribution.Client.TagsFile   as TagsFile
 import qualified Distribution.Client.DistroMap  as DistroMap
@@ -49,8 +50,9 @@ import Control.Monad
 import Control.Monad.Trans
 import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BS
+import qualified Data.Text as T
 import Text.JSON as JSON
-         ( JSValue(..), toJSObject, toJSString, encodeStrict )
+         ( JSValue(..), toJSObject, toJSString, encodeStrict, showJSON )
 import qualified Text.CSV as CSV
 
 import Control.Exception
@@ -118,14 +120,6 @@ main = topHandler $ do
       , deprecationCommand `commandAddAction` deprecationAction
       , docsCommand     `commandAddAction` docsAction
       ]
-
-    commandAddActionNoArgs cmd action =
-      commandAddAction cmd $ \flags extraArgs globalFlags -> do
-        when (not (null extraArgs)) $
-          die $ "'" ++ commandName cmd
-             ++ "' does not take any extra arguments: " ++ unwords extraArgs
-        action flags globalFlags
-
 
 
 -------------------------------------------------------------------------------
@@ -225,7 +219,7 @@ usersAction flags args _ = do
 
     case usersAddresses flags of
       NoFlag    -> return ()
-      Flag file -> importAddresses file baseURI
+      Flag file -> importAddresses jobs file baseURI
 
 importAccounts :: Int -> FilePath -> URI -> IO ()
 importAccounts jobs htpasswdFile baseURI = do
@@ -260,9 +254,59 @@ putUserAccount baseURI username mPasswdHash = do
     userURI   = baseURI <//> "user" </> display username
     passwdURI = userURI <//> "htpasswd"
 
-importAddresses :: FilePath -> URI -> IO ()
-importAddresses _addressesFile _baseURI =
-    die "--addresses flag not yet implemented"
+importAddresses :: Int -> FilePath -> URI -> IO ()
+importAddresses jobs addressesFile baseURI = do
+
+    addressesDb <- either die return =<< UserAddressesDb.parseFile addressesFile
+
+    concForM_ jobs addressesDb $ \tasks ->
+      httpSession $ do
+        setAuthorityFromURI baseURI
+        tasks $ \(username, realname, email) ->
+          putUserDetails baseURI username realname email
+
+putUserDetails :: URI -> UserName -> T.Text -> T.Text -> HttpSession ()
+putUserDetails baseURI username realname email = do
+
+    rsp <- requestPUT userNameAddressURI "application/json" (toBS nameAddressInfo)
+    case rsp of
+      Nothing  -> return ()
+      Just err | isErrNotFound err
+               -> liftIO $ info $ "Ignoring address info for user "
+                               ++ display username
+      Just err -> fail (formatErrorResponse err)
+
+    rsp <- requestPUT userAdminInfoURI "application/json" (toBS adminInfo)
+    case rsp of
+      Nothing  -> return ()
+      Just err | isErrNotFound err
+               -> liftIO $ info $ "Ignoring address info for user "
+                               ++ display username
+      Just err -> fail (formatErrorResponse err)
+
+  where
+    toBS   = BS.pack . toUTF8 . JSON.encodeStrict
+    userURI            = baseURI <//> "user" </> display username
+    userNameAddressURI = userURI <//> "name-contact.json"
+    userAdminInfoURI   = userURI <//> "admin-info.json"
+
+    nameAddressInfo =
+      JSObject $ toJSObject
+          [ ("name",                showJSON realname)
+          , ("contactEmailAddress", showJSON email)
+          ]
+
+    adminInfo =
+      JSObject $ toJSObject
+          [ ("accountKind", JSObject $ toJSObject [("AccountKindRealUser", JSArray [])])
+          , ("notes",       showJSON notes)
+          ]
+    notes = "" --TODO: add this info when importing, we have it in the hackage.addresses file.
+--  notes = "Original hackage account created by "
+--       ++ [] ++ " on " ++ [] ++ "\n"
+--       ++ "Account created on this server by the hackage-import client on "
+--       ++ timestamp
+
 
 
 -------------------------------------------------------------------------------
@@ -866,7 +910,7 @@ validateOptsJobs (Flag s)
   | [(n,"")] <- reads s
  , n >= 1 && n <= 16           = return n
 validateOptsJobs (Flag s)
-  | [(n :: Int,"")] <- reads s = die "not a sensible number for --jobs"
+  | [(_ :: Int,"")] <- reads s = die "not a sensible number for --jobs"
   | otherwise                  = die "expected a number for --jobs"
 
 

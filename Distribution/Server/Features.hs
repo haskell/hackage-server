@@ -35,6 +35,7 @@ import Distribution.Server.Features.Tags                (initTagsFeature)
 import Distribution.Server.Features.NameSearch          (initNamesFeature)
 import Distribution.Server.Features.PackageList         (initListFeature)
 import Distribution.Server.Features.HaskellPlatform     (initPlatformFeature)
+import Distribution.Server.Features.UserDetails         (initUserDetailsFeature)
 #endif
 import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
 
@@ -83,6 +84,10 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          usersFeature
                          coreFeature
                          packageContentsFeature
+
+    userDetailsFeature <- initUserDetailsFeature env
+                            usersFeature
+                            coreFeature
 
     distroFeature   <- initDistroFeature env
                          usersFeature
@@ -155,6 +160,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          distroFeature
                          documentationCoreFeature
                          documentationCandidatesFeature
+                         userDetailsFeature
 #endif
 
     -- The order of initialization above should be the same as
@@ -169,6 +175,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface tarIndexCacheFeature
          , getFeatureInterface packageContentsFeature
          , getFeatureInterface packagesFeature
+         , getFeatureInterface userDetailsFeature
          , getFeatureInterface distroFeature
          , getFeatureInterface candidatesFeature
          , getFeatureInterface reportsFeature
