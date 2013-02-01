@@ -550,22 +550,23 @@ mkHtmlUsers UserFeature{..} = HtmlUsers{..}
         ok $ toResponse $ Resource.XHtml $ hackagePage "Hackage users" [h2 << "Hackage users", hlist]
 
     serveUserPage :: DynamicPath -> ServerPart Response
-    serveUserPage dpath = htmlResponse $ withUserPath dpath $ \uid info -> do
-        let uname = userName info
-        uris <- getGroupIndex uid
-        uriPairs <- forM uris $ \uri -> do
-            desc <- getIndexDesc uri
-            return $ Pages.renderGroupName desc (Just uri)
-        return $ toResponse $ Resource.XHtml $ hackagePage (display uname)
-          [ h2 << display uname
-        --, paragraph << [toHtml "[", anchor << [href $ userPasswordUri r "" uname] settings, toHtml "]"]
-          , case uriPairs of
-                [] -> noHtml
-                _  -> toHtml
-                  [ toHtml $ display uname ++ " is part of the following groups:"
-                  , unordList uriPairs
-                  ]
-          ]
+    serveUserPage dpath = htmlResponse $ do
+      uname    <- userNameInPath dpath
+      (uid, _) <- lookupUserName uname
+      uris     <- getGroupIndex uid
+      uriPairs <- forM uris $ \uri -> do
+          desc <- getIndexDesc uri
+          return $ Pages.renderGroupName desc (Just uri)
+      return $ toResponse $ Resource.XHtml $ hackagePage (display uname)
+        [ h2 << display uname
+      --, paragraph << [toHtml "[", anchor << [href $ userPasswordUri r "" uname] settings, toHtml "]"]
+        , case uriPairs of
+              [] -> noHtml
+              _  -> toHtml
+                [ toHtml $ display uname ++ " is part of the following groups:"
+                , unordList uriPairs
+                ]
+        ]
 
     addUserForm :: DynamicPath -> ServerPart Response
     addUserForm _ = htmlResponse $ do
@@ -582,65 +583,64 @@ mkHtmlUsers UserFeature{..} = HtmlUsers{..}
           ]
 
     servePasswordForm :: DynamicPath -> ServerPart Response
-    servePasswordForm dpath = htmlResponse $
-                                withUserPath dpath $ \pathUid userInfo -> do
-        users <- queryGetUserDb
-        (uid, _) <- guardAuthenticated hackageRealm users
-        let uname = userName userInfo
-        canChange <- canChangePassword uid pathUid
-        case canChange of
-            False -> errForbidden "Can't change password" [MText "You're neither this user nor an admin."]
-            True -> return $ toResponse $ Resource.XHtml $ hackagePage "Change password"
-              [ toHtml "Change your password. You'll be prompted for authentication upon submission, if you haven't logged in already."
-              , form ! [theclass "box", XHtml.method "post", action $ userPasswordUri userResource "" uname] <<
-                    [ simpleTable [] []
-                        [ makeInput [thetype "password"] "password" "Password"
-                        , makeInput [thetype "password"] "repeat-password" "Confirm password"
-                        ]
-                    , paragraph << [ hidden "_method" "PUT" --method override
-                                   , input ! [thetype "submit", value "Change password"] ]
-                    ]
-              ]
+    servePasswordForm dpath = htmlResponse $ do
+      (pathUid, userInfo) <- userNameInPath dpath >>= lookupUserName
+      userDb <- queryGetUserDb
+      (uid, _) <- guardAuthenticated hackageRealm userDb
+      let uname = userName userInfo
+      canChange <- canChangePassword uid pathUid
+      case canChange of
+          False -> errForbidden "Can't change password" [MText "You're neither this user nor an admin."]
+          True -> return $ toResponse $ Resource.XHtml $ hackagePage "Change password"
+            [ toHtml "Change your password. You'll be prompted for authentication upon submission, if you haven't logged in already."
+            , form ! [theclass "box", XHtml.method "post", action $ userPasswordUri userResource "" uname] <<
+                  [ simpleTable [] []
+                      [ makeInput [thetype "password"] "password" "Password"
+                      , makeInput [thetype "password"] "repeat-password" "Confirm password"
+                      ]
+                  , paragraph << [ hidden "_method" "PUT" --method override
+                                 , input ! [thetype "submit", value "Change password"] ]
+                  ]
+            ]
 
     serveEnabledForm :: DynamicPath -> ServerPart Response
-    serveEnabledForm dpath = htmlResponse $
-                               withUserPath dpath $ \_ userInfo -> do
-        let uname = userName userInfo
-        return $ toResponse $ Resource.XHtml $ hackagePage "Change user status"
-        -- TODO: expose some of the functionality in changePassword function to determine if permissions are correct
-        -- before serving this form (either admin or user)
-          [ toHtml "Change the account status here."
-          , form ! [theclass "box", XHtml.method "post", action $ userEnabledUri users "" uname] <<
-                [ toHtml $ makeCheckbox (isEnabled userInfo) "enabled" "on" "Enable user account"
-                , hidden "_method" "PUT" --method override
-                , paragraph << input ! [thetype "submit", value "Change status"]
-                ]
-          ]
+    serveEnabledForm dpath = htmlResponse $ do
+      uname         <- userNameInPath dpath
+      (_, userInfo) <- lookupUserName uname
+      return $ toResponse $ Resource.XHtml $ hackagePage "Change user status"
+      -- TODO: expose some of the functionality in changePassword function to determine if permissions are correct
+      -- before serving this form (either admin or user)
+        [ toHtml "Change the account status here."
+        , form ! [theclass "box", XHtml.method "post", action $ userEnabledUri users "" uname] <<
+              [ toHtml $ makeCheckbox (isEnabled userInfo) "enabled" "on" "Enable user account"
+              , hidden "_method" "PUT" --method override
+              , paragraph << input ! [thetype "submit", value "Change status"]
+              ]
+        ]
       where isEnabled userInfo = case userStatus userInfo of
                 Active Enabled _ -> True
                 _ -> False
 
     servePutEnabled :: DynamicPath -> ServerPart Response
-    servePutEnabled dpath = htmlResponse $
-                                  withUserNamePath dpath $ \uname -> do
-        enabledAccount uname
-        return $ toResponse $ Resource.XHtml $ hackagePage "Account status set"
-            [toHtml "Account status set for ", anchor ! [href $ userPageUri users "" uname] << display uname]
+    servePutEnabled dpath = htmlResponse $ do
+      uname <- userNameInPath dpath
+      enabledAccount uname
+      return $ toResponse $ Resource.XHtml $ hackagePage "Account status set"
+          [toHtml "Account status set for ", anchor ! [href $ userPageUri users "" uname] << display uname]
 
     serveDeleteUser :: DynamicPath -> ServerPart Response
-    serveDeleteUser dpath =
-      htmlResponse $
-      withUserNamePath dpath $ \uname -> do
-        deleteAccount uname
-        let ntitle = "Deleted user"
-        return $ toResponse $ Resource.XHtml $ hackagePage ntitle [toHtml ntitle]
+    serveDeleteUser dpath = htmlResponse $ do
+      uname <- userNameInPath dpath
+      deleteAccount uname
+      let ntitle = "Deleted user"
+      return $ toResponse $ Resource.XHtml $ hackagePage ntitle [toHtml ntitle]
 
     servePutPassword :: DynamicPath -> ServerPart Response
-    servePutPassword dpath = htmlResponse $
-                                   withUserNamePath dpath $ \uname -> do
-        changePassword uname
-        return $ toResponse $ Resource.XHtml $ hackagePage "Changed password"
-            [toHtml "Changed password for ", anchor ! [href $ userPageUri users "" uname] << display uname]
+    servePutPassword dpath = htmlResponse $ do
+      uname <- userNameInPath dpath
+      changePassword uname
+      return $ toResponse $ Resource.XHtml $ hackagePage "Changed password"
+          [toHtml "Changed password for ", anchor ! [href $ userPageUri users "" uname] << display uname]
 
 {-------------------------------------------------------------------------------
   Uploads
@@ -1330,8 +1330,8 @@ htmlGroupResource UserFeature{..} r@(GroupResource groupR userR groupGen) =
         let baseUri = renderResource' groupR dpath
         return . toResponse . Resource.XHtml $ Pages.groupPage
             unames baseUri (False, False) (groupDesc group)
-    getEditList dpath = withGroup (groupGen dpath) $ \group ->
-                        withGroupEditAuth group $ \canAdd canDelete -> do
+    getEditList dpath = withGroup (groupGen dpath) $ \group -> do
+        (canAdd, canDelete) <- lookupGroupEditAuth group
         userDb   <- queryGetUserDb
         userlist <- liftIO . queryUserList $ group
         let unames = [ Users.idToName userDb uid

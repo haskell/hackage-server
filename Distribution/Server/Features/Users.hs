@@ -14,7 +14,7 @@ import Distribution.Server.Framework.BackupDump
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
 import Distribution.Server.Users.Types
-import Distribution.Server.Users.State as State
+import Distribution.Server.Users.State hiding (lookupUserName)
 import Distribution.Server.Users.Backup
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
@@ -52,24 +52,23 @@ data UserFeature = UserFeature {
     updateAddUser     :: forall m. MonadIO m => UserName -> UserAuth -> m (Either String UserId),
     updateRequireUserName :: forall m. MonadIO m => UserName -> m UserId,
 
-    groupAddUser      :: UserGroup -> DynamicPath -> ServerPartE (),
-    groupDeleteUser   :: UserGroup -> DynamicPath -> ServerPartE (),
+    groupAddUser        :: UserGroup -> DynamicPath -> ServerPartE (),
+    groupDeleteUser     :: UserGroup -> DynamicPath -> ServerPartE (),
 
-    withUserNamePath  :: forall a. DynamicPath -> (UserName -> ServerPartE a) -> ServerPartE a,
-    withUserPath      :: forall a. DynamicPath -> (UserId -> UserInfo -> ServerPartE a) -> ServerPartE a,
-    withUserName      :: forall a. UserName -> (UserId -> UserInfo -> ServerPartE a) -> ServerPartE a,
-    changePassword    :: UserName -> ServerPartE (),
-    canChangePassword :: forall m. MonadIO m => UserId -> UserId -> m Bool,
-    newUserWithAuth   :: String -> PasswdPlain -> PasswdPlain -> ServerPartE UserName,
-    adminAddUser      :: ServerPartE Response,
-    enabledAccount    :: UserName -> ServerPartE (),
-    deleteAccount     :: UserName -> ServerPartE (),
-    runUserFilter     :: UserId -> IO (Maybe ErrorResponse),
-    groupResourceAt   :: String -> UserGroup -> IO (UserGroup, GroupResource),
-    groupResourcesAt  :: String -> GroupGen -> [DynamicPath] -> IO (GroupGen, GroupResource),
-    withGroupEditAuth :: forall a. UserGroup -> (Bool -> Bool -> ServerPartE a) -> ServerPartE a,
-    getGroupIndex     :: forall m. (Functor m, MonadIO m) => UserId -> m [String],
-    getIndexDesc      :: forall m. MonadIO m => String -> m GroupDescription
+    userNameInPath      :: forall m. MonadPlus m => DynamicPath -> m UserName,
+    lookupUserName      :: UserName -> ServerPartE (UserId, UserInfo),
+    changePassword      :: UserName -> ServerPartE (),
+    canChangePassword   :: forall m. MonadIO m => UserId -> UserId -> m Bool,
+    newUserWithAuth     :: String -> PasswdPlain -> PasswdPlain -> ServerPartE UserName,
+    adminAddUser        :: ServerPartE Response,
+    enabledAccount      :: UserName -> ServerPartE (),
+    deleteAccount       :: UserName -> ServerPartE (),
+    runUserFilter       :: UserId -> IO (Maybe ErrorResponse),
+    groupResourceAt     :: String -> UserGroup -> IO (UserGroup, GroupResource),
+    groupResourcesAt    :: String -> GroupGen -> [DynamicPath] -> IO (GroupGen, GroupResource),
+    lookupGroupEditAuth :: UserGroup -> ServerPartE (Bool, Bool),
+    getGroupIndex       :: forall m. (Functor m, MonadIO m) => UserId -> m [String],
+    getIndexDesc        :: forall m. MonadIO m => String -> m GroupDescription
 }
 
 instance IsHackageFeature UserFeature where
@@ -265,67 +264,63 @@ userFeature  usersState adminsState
 
     -- result: either not-found, not-authenticated, or 204 (success)
     deleteAccount :: UserName -> ServerPartE ()
-    deleteAccount uname =
-      withUserName  uname $ \uid _ -> do
-        users  <- queryState usersState GetUserDb
-        admins <- queryState adminsState State.GetAdminList
-        void $ guardAuthorised hackageRealm users admins
-        void $ updateState usersState (DeleteUser uid)
+    deleteAccount uname = do
+      (uid, _) <- lookupUserName uname
+      users    <- queryState usersState GetUserDb
+      admins   <- queryState adminsState GetAdminList
+      void $ guardAuthorised hackageRealm users admins
+      void $ updateState usersState (DeleteUser uid)
 
     -- result: not-found, not authenticated, or ok (success)
     enabledAccount :: UserName -> ServerPartE ()
-    enabledAccount uname =
-      withUserName uname $ \uid _ -> do
-        users  <- queryState usersState GetUserDb
-        admins <- queryState adminsState GetAdminList
-        void $ guardAuthorised hackageRealm users admins
-        enabled <- optional $ look "enabled"
-        -- for a checkbox, prescence in data string means 'checked'
-        void $ case enabled of
+    enabledAccount uname = do
+      (uid, _) <- lookupUserName uname
+      users    <- queryState usersState GetUserDb
+      admins   <- queryState adminsState GetAdminList
+      _        <- guardAuthorised hackageRealm users admins
+      enabled  <- optional $ look "enabled"
+      -- for a checkbox, prescence in data string means 'checked'
+      void $ case enabled of
                Nothing -> updateState usersState (SetEnabledUser uid False)
                Just _  -> updateState usersState (SetEnabledUser uid True)
 
     handleUserPut :: DynamicPath -> ServerPart Response
-    handleUserPut dpath =
-        runServerPartE $ do
-          users  <- queryState usersState GetUserDb
-          admins <- queryState adminsState GetAdminList
-          _ <- guardAuthorised hackageRealm users admins
-          withUserNamePath dpath $ \username -> do
-            muid <- updateState usersState $ AddUser username NoUserAuth
-            case muid of
-              -- the only possible error is that the user exists already
-              -- but that's ok too
-              Left  _err -> noContent $ toResponse ()
-              Right _    -> noContent $ toResponse ()
-
+    handleUserPut dpath = runServerPartE $ do
+      users    <- queryState usersState GetUserDb
+      admins   <- queryState adminsState GetAdminList
+      _        <- guardAuthorised hackageRealm users admins
+      username <- userNameInPath dpath
+      muid     <- updateState usersState $ AddUser username NoUserAuth
+      case muid of
+        -- the only possible error is that the user exists already
+        -- but that's ok too
+        Left  _err -> noContent $ toResponse ()
+        Right _    -> noContent $ toResponse ()
 
     handleUserDelete :: DynamicPath -> ServerPart Response
-    handleUserDelete dpath =
-        runServerPartE $ do
-          users  <- queryState usersState GetUserDb
-          admins <- queryState adminsState GetAdminList
-          _ <- guardAuthorised hackageRealm users admins
-          withUserPath dpath $ \uid _uinfo -> do
-            merr <- updateState usersState $ DeleteUser uid
-            case merr of
-              Nothing   -> noContent $ toResponse ()
-              --TODO: need to be able to delete user by name to fix this race condition
-              Just _err -> errInternalError [MText "uid does not exist (but lookup was sucessful)"]
+    handleUserDelete dpath = runServerPartE $ do
+      users    <- queryState usersState GetUserDb
+      admins   <- queryState adminsState GetAdminList
+      _        <- guardAuthorised hackageRealm users admins
+      (uid, _) <- userNameInPath dpath >>= lookupUserName
+      merr     <- updateState usersState $ DeleteUser uid
+      case merr of
+        Nothing   -> noContent $ toResponse ()
+        --TODO: need to be able to delete user by name to fix this race condition
+        Just _err -> errInternalError [MText "uid does not exist (but lookup was sucessful)"]
 
     handleUserHtpasswdPut :: DynamicPath -> ServerPart Response
-    handleUserHtpasswdPut dpath =
-        runServerPartE $ do
-          users  <- queryState usersState GetUserDb
-          admins <- queryState adminsState GetAdminList
-          _admin <- guardAuthorised hackageRealm users admins
-          withUserPath dpath $ \uid _ -> do
-            htpasswd <- expectTextPlain
-            if validHtpasswd htpasswd
-              then do let auth = OldUserAuth (HtPasswdHash (LBS.unpack htpasswd))
-                      updateState usersState $ ReplaceUserAuth uid auth
-                      noContent $ toResponse ()
-              else badRequest (toResponse "invalid htpasswd hash")
+    handleUserHtpasswdPut dpath = runServerPartE $ do
+      users    <- queryState usersState GetUserDb
+      admins   <- queryState adminsState GetAdminList
+      _admin   <- guardAuthorised hackageRealm users admins
+      (uid, _) <- userNameInPath dpath >>= lookupUserName
+      htpasswd <- expectTextPlain
+      if validHtpasswd htpasswd
+        then do let auth = OldUserAuth (HtPasswdHash (LBS.unpack htpasswd))
+                updateState usersState $ ReplaceUserAuth uid auth
+                noContent $ toResponse ()
+        else badRequest (toResponse "invalid htpasswd hash")
       where
         validHtpasswd str = LBS.length str == 13
 
@@ -339,27 +334,21 @@ userFeature  usersState adminsState
     -- * changing user's name and password
     --
 
-    withUserNamePath :: DynamicPath -> (UserName -> ServerPartE a) -> ServerPartE a
-    withUserNamePath dpath =
-      require (return $ simpleParse =<< lookup "username" dpath)
+    userNameInPath :: forall m. MonadPlus m => DynamicPath -> m UserName
+    userNameInPath dpath = maybe mzero return (simpleParse =<< lookup "username" dpath)
 
-    withUserName :: UserName -> (UserId -> UserInfo -> ServerPartE a) -> ServerPartE a
-    withUserName uname func = do
+    lookupUserName :: UserName -> ServerPartE (UserId, UserInfo)
+    lookupUserName uname = do
         users <- queryState usersState GetUserDb
         case Users.lookupName uname users of
           Nothing  -> userLost "Could not find user: not presently registered"
           Just uid -> case Users.lookupId uid users of
             Nothing   -> userLost "Could not find user: internal server error"
-            Just info -> func uid info
+            Just info -> return (uid, info)
       where userLost = errNotFound "User not found" . return . MText
             --FIXME: 404 is only the right error for operating on User resources
             -- not when users are being looked up for other reasons, like setting
             -- ownership of packages. In that case needs errBadRequest
-
-    withUserPath :: DynamicPath -> (UserId -> UserInfo -> ServerPartE a) -> ServerPartE a
-    withUserPath dpath func =
-      withUserNamePath dpath $ \name ->
-        withUserName name func
 
     adminAddUser :: ServerPartE Response
     adminAddUser = do
@@ -394,12 +383,12 @@ userFeature  usersState adminsState
     -- Arguments: the auth'd user id, the user path id (derived from the :username)
     canChangePassword :: MonadIO m => UserId -> UserId -> m Bool
     canChangePassword uid userPathId = do
-        admins <- queryState adminsState State.GetAdminList
+        admins <- queryState adminsState GetAdminList
         return $ uid == userPathId || (uid `Group.member` admins)
 
     changePassword :: UserName -> ServerPartE ()
     changePassword userPathName = do
-        users  <- queryState usersState State.GetUserDb
+        users  <- queryState usersState GetUserDb
         pwd <- either (const $ return $ ChangePassword "not" "valid" True) return =<< getData
         if (first pwd == second pwd && first pwd /= "")
          then do
@@ -460,24 +449,23 @@ userFeature  usersState adminsState
        where addError = errBadRequest "Failed to add user" . return . MText
 
     groupDeleteUser :: UserGroup -> DynamicPath -> ServerPartE ()
-    groupDeleteUser group dpath =
-      withUserPath dpath $ \uid _ -> do
-        users <- queryState usersState GetUserDb
-        ulist <- liftIO . Group.queryGroups $ canRemoveGroup group
-        void $ guardAuthorised hackageRealm users ulist
-        liftIO $ removeUserList group uid
+    groupDeleteUser group dpath = do
+      (uid, _) <- userNameInPath dpath >>= lookupUserName
+      users    <- queryState usersState GetUserDb
+      ulist    <- liftIO . Group.queryGroups $ canRemoveGroup group
+      void $ guardAuthorised hackageRealm users ulist
+      liftIO $ removeUserList group uid
 
-    withGroupEditAuth :: UserGroup -> (Bool -> Bool -> ServerPartE a) -> ServerPartE a
-    withGroupEditAuth group func = do
-        users  <- queryState usersState GetUserDb
-        addList    <- liftIO . Group.queryGroups $ canAddGroup group
-        removeList <- liftIO . Group.queryGroups $ canRemoveGroup group
-        (uid, _) <- guardAuthenticated hackageRealm users
-        let (canAdd, canDelete) = (uid `Group.member` addList, uid `Group.member` removeList)
-        if not (canAdd || canDelete)
-            then errForbidden "Forbidden" [MText "Can't edit permissions for user group"]
-            else func canAdd canDelete
-
+    lookupGroupEditAuth :: UserGroup -> ServerPartE (Bool, Bool)
+    lookupGroupEditAuth group = do
+      users  <- queryState usersState GetUserDb
+      addList    <- liftIO . Group.queryGroups $ canAddGroup group
+      removeList <- liftIO . Group.queryGroups $ canRemoveGroup group
+      (uid, _) <- guardAuthenticated hackageRealm users
+      let (canAdd, canDelete) = (uid `Group.member` addList, uid `Group.member` removeList)
+      if not (canAdd || canDelete)
+          then errForbidden "Forbidden" [MText "Can't edit permissions for user group"]
+          else return (canAdd, canDelete)
 
     ------------ Encapsulation of resources related to editing a user group.
 
@@ -564,57 +552,53 @@ userFeature  usersState adminsState
               }
         return (getGroupFunc, groupr)
 
-    handleUserGroupGet group _dpath =
-      runServerPartE $
-      withGroup group $ \g -> do
-        userDb   <- queryGetUserDb
-        userlist <- liftIO $ queryUserList g
-        let unames = [ Users.idToName userDb uid
-                     | uid <- Group.enumerate userlist ]
-        return . toResponse . Resource.JSON $
-            JSObject $ toJSObject [
-              ("title",       JSString $ toJSString $ groupTitle $ groupDesc g)
-            , ("description", JSString $ toJSString $ groupPrologue $ groupDesc g)
-            , ("members",     JSArray [ JSString $ toJSString $ display uname
-                                      | uname <- unames ])
-            ]
+    handleUserGroupGet group _dpath = runServerPartE $ do
+      guardGroupExists group
+      userDb   <- queryGetUserDb
+      userlist <- liftIO $ queryUserList group
+      let unames = [ Users.idToName userDb uid
+                   | uid <- Group.enumerate userlist ]
+      return . toResponse . Resource.JSON $
+          JSObject $ toJSObject [
+            ("title",       JSString $ toJSString $ groupTitle $ groupDesc group)
+          , ("description", JSString $ toJSString $ groupPrologue $ groupDesc group)
+          , ("members",     JSArray [ JSString $ toJSString $ display uname
+                                    | uname <- unames ])
+          ]
 
-    handleUserGroupUserPut group groupr dpath =
-      runServerPartE $
-      withGroup group $ \g ->
-        withUserNamePath dpath $ \uname -> do
+    handleUserGroupUserPut group groupr dpath = runServerPartE $ do
+      guardGroupExists group
+      uname <- userNameInPath dpath
 
-          -- check the acting user is authorised to modify this group
-          users <- queryGetUserDb
-          ulist <- liftIO . Group.queryGroups $ canAddGroup g
-          guardAuthorised hackageRealm users ulist
+      -- check the acting user is authorised to modify this group
+      users <- queryGetUserDb
+      ulist <- liftIO . Group.queryGroups $ canAddGroup group
+      guardAuthorised hackageRealm users ulist
 
-          withUserName uname $ \uid _ ->
-            liftIO $ addUserList g uid
+      (uid, _) <- lookupUserName uname
+      liftIO $ addUserList group uid
 
-          goToList groupr dpath
+      goToList groupr dpath
 
-    handleUserGroupUserDelete group groupr dpath =
-      runServerPartE $
-      withUserNamePath dpath $ \uname -> do
+    handleUserGroupUserDelete group groupr dpath = runServerPartE $ do
+      uname <- userNameInPath dpath
 
-          -- check the acting user is authorised to modify this group
-        users <- queryGetUserDb
-        ulist <- liftIO . Group.queryGroups $ canRemoveGroup group
-        guardAuthorised hackageRealm users ulist
+        -- check the acting user is authorised to modify this group
+      users <- queryGetUserDb
+      ulist <- liftIO . Group.queryGroups $ canRemoveGroup group
+      guardAuthorised hackageRealm users ulist
 
-        withUserName uname $ \uid _ ->
-          liftIO $ removeUserList group uid
+      (uid, _) <- lookupUserName uname
+      liftIO $ removeUserList group uid
 
-        goToList groupr dpath
+      goToList groupr dpath
 
     goToList group dpath = seeOther (renderResource' (groupResource group) dpath)
                                     (toResponse ())
 
-    withGroup group func = do
-        exists <- liftIO (groupExists group)
-        if exists then func group
-                  else errNotFound "User group doesn't exist" [MText "User group doesn't exist"]
+    guardGroupExists group = do
+      exists <- liftIO (groupExists group)
+      unless exists $ errNotFound "User group doesn't exist" [MText "User group doesn't exist"]
 
     ---------------------------------------------------------------
     addGroupIndex :: MonadIO m => UserId -> String -> GroupDescription -> m ()

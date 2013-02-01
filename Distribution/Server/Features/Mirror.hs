@@ -10,7 +10,7 @@ import Distribution.Server.Framework hiding (formatTime)
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 
-import Distribution.Server.Users.State
+import Distribution.Server.Users.State hiding (lookupUserName)
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Backup
 import Distribution.Server.Users.Types
@@ -193,10 +193,10 @@ mirrorFeature ServerEnv{serverBlobStore = store}
         pkgid <- packageInPath dpath
         nameContent <- expectTextPlain
         let uname = UserName (unpackUTF8 nameContent)
-        withUserName uname $ \uid _ -> do
-          mb_err <- updateReplacePackageUploader pkgid uid
-          maybe (return ()) (\err -> errNotFound err []) mb_err
-          return $ toResponse "Updated uploader OK"
+        (uid, _) <- lookupUserName uname
+        mb_err <- updateReplacePackageUploader pkgid uid
+        maybe (return ()) (\err -> errNotFound err []) mb_err
+        return $ toResponse "Updated uploader OK"
 
     uploadTimeGet :: DynamicPath -> ServerPart Response
     uploadTimeGet dpath = runServerPartE $ do
