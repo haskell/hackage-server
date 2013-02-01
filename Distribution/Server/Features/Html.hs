@@ -383,7 +383,7 @@ mkHtmlCore HtmlUtilities{..}
                           , queryGetPreferredInfo
                           , withPackagePreferred
                           }
-           UploadFeature{uploadResource, getPackageNameAuth}
+           UploadFeature{uploadResource, guardAuthorisedAsMaintainer}
            TagsFeature{queryTagsForPackage}
            DocumentationFeature{documentationResource, queryHasDocumentation}
            DownloadFeature{perVersionDownloads}
@@ -483,7 +483,7 @@ mkHtmlCore HtmlUtilities{..}
     serveMaintainLinks editDepr editPref mgroup dpath = htmlResponse $ do
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
-      _ <- getPackageNameAuth pkgname
+      guardAuthorisedAsMaintainer pkgname
       let dpath' = [("package", display pkgname)]
       return $ toResponse $ Resource.XHtml $ hackagePage "Maintain package"
         [ unordList $
@@ -589,8 +589,7 @@ mkHtmlUsers UserFeature{..} = HtmlUsers{..}
     servePasswordForm :: DynamicPath -> ServerPart Response
     servePasswordForm dpath = htmlResponse $ do
       (pathUid, userInfo) <- userNameInPath dpath >>= lookupUserName
-      userDb <- queryGetUserDb
-      (uid, _) <- guardAuthenticated hackageRealm userDb
+      uid <- guardAuthenticated -- FIXME: why are we duplicating auth decisions in this feature?
       let uname = userName userInfo
       canChange <- canChangePassword uid pathUid
       case canChange of
@@ -716,7 +715,7 @@ mkHtmlCandidates HtmlUtilities{..}
                             , queryGetPackageIndex
                             }
                  VersionsFeature{ queryGetPreferredInfo }
-                 UploadFeature{ getPackageAuth }
+                 UploadFeature{ guardAuthorisedAsMaintainer }
                  DocumentationFeature{documentationResource, queryHasDocumentation}
                  PackageCandidatesFeature{..} = HtmlCandidates{..}
   where
@@ -803,7 +802,7 @@ mkHtmlCandidates HtmlUtilities{..}
     serveCandidateMaintain :: DynamicPath -> ServerPart Response
     serveCandidateMaintain dpath = htmlResponse $ do
       candidate <- packageInPath dpath >>= lookupCandidateId
-      _ <- getPackageAuth candidate
+      guardAuthorisedAsMaintainer (packageName candidate)
       return $ toResponse $ Resource.XHtml $ hackagePage "Maintain candidate"
           [toHtml "Here, you can delete a candidate, publish it, upload a new one, and edit the maintainer group."]
     {-some useful URIs here: candidateUri check "" pkgid, packageCandidatesUri check "" pkgid, publishUri check "" pkgid-}
@@ -836,7 +835,7 @@ mkHtmlCandidates HtmlUtilities{..}
     servePublishForm :: DynamicPath -> ServerPart Response
     servePublishForm dpath = htmlResponse $ do
       candidate <- packageInPath dpath >>= lookupCandidateId
-      _ <- getPackageAuth candidate
+      guardAuthorisedAsMaintainer (packageName candidate)
       let pkgid = packageId candidate
       packages <- queryGetPackageIndex
       case checkPublish packages candidate of

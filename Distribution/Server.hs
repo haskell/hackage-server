@@ -26,11 +26,12 @@ module Distribution.Server (
 import Distribution.Server.Framework
 import qualified Distribution.Server.Framework.BackupRestore as Import
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
+import qualified Distribution.Server.Framework.Auth as Auth
+import Distribution.Server.Framework.AuthTypes (PasswdPlain(..))
 
 import Distribution.Server.Framework.Feature as Feature
 import qualified Distribution.Server.Features as Features
 import Distribution.Server.Features.Users
-import Distribution.Server.Framework.AuthTypes (PasswdPlain(..))
 
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Group as Group
@@ -232,7 +233,7 @@ initState server (admin, pass) = do
     let UserFeature{updateAddUser, adminGroup} = serverUserFeature server
     muid <- case simpleParse admin of
         Just uname -> do
-            let userAuth = newPasswdHash hackageRealm uname (PasswdPlain pass)
+            let userAuth = Auth.newPasswdHash Auth.hackageRealm uname (PasswdPlain pass)
             updateAddUser uname (Users.NewUserAuth userAuth)
         Nothing -> fail "Couldn't parse admin name (should be alphanumeric)"
     case muid of

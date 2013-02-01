@@ -168,7 +168,7 @@ documentationFeature name
     uploadDocumentation dpath = runServerPartE $ do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
-      _ <- getPackageAuth pkgid
+      guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
       -- The order of operations:
       -- * Insert new documentation into blob store
       -- * Generate the new index

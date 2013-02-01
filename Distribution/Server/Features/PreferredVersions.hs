@@ -210,7 +210,7 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
     handlePackageDeprecatedPut dpath = runServerPartE $ do
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
-      _ <- getPackageNameAuth pkgname
+      guardAuthorisedAsMaintainerOrTrustee pkgname
       jv <- expectJsonContent
       case jv of
         JSObject o
@@ -256,7 +256,7 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
     putPreferred :: PackageName -> ServerPartE ()
     putPreferred pkgname = do
       pkgs <- lookupPackageName pkgname
-      _ <- getPackageNameAuth pkgname
+      guardAuthorisedAsMaintainerOrTrustee pkgname
       pref <- optional $ fmap lines $ look "preferred"
       depr <- optional $ fmap (rights . map snd . filter ((=="deprecated") . fst)) $ lookPairs
       case sequence . map simpleParse =<< pref of
@@ -280,7 +280,7 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
     putDeprecated :: PackageName -> ServerPartE Bool
     putDeprecated pkgname = do
       guardValidPackageName pkgname
-      _ <- getPackageNameAuth pkgname
+      guardAuthorisedAsMaintainerOrTrustee pkgname
       index  <- queryGetPackageIndex
       isDepr <- optional $ look "deprecated"
       case isDepr of

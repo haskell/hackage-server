@@ -96,6 +96,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
     reportsFeature  <- initBuildReportsFeature env
                          usersFeature
+                         uploadFeature
                          (coreResource coreFeature)
 
     documentationCoreFeature <- initDocumentationFeature "documentation-core" env
@@ -113,6 +114,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
     tagsFeature     <- initTagsFeature env
                          coreFeature
+                         uploadFeature
 
     versionsFeature <- initVersionsFeature env
                          coreFeature

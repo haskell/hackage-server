@@ -11,6 +11,7 @@ module Distribution.Server.Features.Users (
 
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
+import qualified Distribution.Server.Framework.Auth as Auth
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
 import Distribution.Server.Users.Types
@@ -46,6 +47,11 @@ data UserFeature = UserFeature {
     adminGroup :: UserGroup,
     -- Filters for all features modifying the package index
     packageMutate :: Filter (UserId -> IO Bool),
+
+    -- Authorisation
+    guardAuthorised_   :: [PrivilegeCondition] -> ServerPartE (),
+    guardAuthorised    :: [PrivilegeCondition] -> ServerPartE UserId,
+    guardAuthenticated :: ServerPartE UserId,
 
     queryGetUserDb    :: forall m. MonadIO m => m Users.Users,
 
@@ -254,41 +260,44 @@ userFeature  usersState adminsState
     updateAddUser :: MonadIO m => UserName -> UserAuth -> m (Either String UserId)
     updateAddUser uname auth = updateState usersState (AddUser uname auth)
 
-    {- result: see-other for user page or authentication error
-    requireAuth :: ServerPartE Response
-    requireAuth = do
-        users <- query' usersState GetUserDb
-        (_, info) <- Auth.guardAuthenticated hackageRealm users
-        fmap Right $ seeOther ("/user/" ++ display (userName info)) $ toResponse ()
-    -}
+    --
+    -- Authorisation: authentication checks and privilege checks
+    --
+    guardAuthorised_ :: [PrivilegeCondition] -> ServerPartE ()
+    guardAuthorised_ = void . guardAuthorised
+
+    guardAuthorised :: [PrivilegeCondition] -> ServerPartE UserId
+    guardAuthorised privconds = do
+        users <- queryGetUserDb
+        Auth.guardAuthorised Auth.hackageRealm users privconds
+
+    guardAuthenticated :: ServerPartE UserId
+    guardAuthenticated = do
+        users   <- queryGetUserDb
+        (uid,_) <- Auth.guardAuthenticated Auth.hackageRealm users
+        return uid
 
     -- result: either not-found, not-authenticated, or 204 (success)
     deleteAccount :: UserName -> ServerPartE ()
     deleteAccount uname = do
+      void $ guardAuthorised [InGroup adminGroup]
       (uid, _) <- lookupUserName uname
-      users    <- queryState usersState GetUserDb
-      admins   <- queryState adminsState GetAdminList
-      void $ guardAuthorised hackageRealm users admins
       void $ updateState usersState (DeleteUser uid)
 
     -- result: not-found, not authenticated, or ok (success)
     enabledAccount :: UserName -> ServerPartE ()
     enabledAccount uname = do
+      _        <- guardAuthorised [InGroup adminGroup]
       (uid, _) <- lookupUserName uname
-      users    <- queryState usersState GetUserDb
-      admins   <- queryState adminsState GetAdminList
-      _        <- guardAuthorised hackageRealm users admins
       enabled  <- optional $ look "enabled"
-      -- for a checkbox, prescence in data string means 'checked'
+      -- for a checkbox, presence in data string means 'checked'
       void $ case enabled of
                Nothing -> updateState usersState (SetEnabledUser uid False)
                Just _  -> updateState usersState (SetEnabledUser uid True)
 
     handleUserPut :: DynamicPath -> ServerPart Response
     handleUserPut dpath = runServerPartE $ do
-      users    <- queryState usersState GetUserDb
-      admins   <- queryState adminsState GetAdminList
-      _        <- guardAuthorised hackageRealm users admins
+      _        <- guardAuthorised [InGroup adminGroup]
       username <- userNameInPath dpath
       muid     <- updateState usersState $ AddUser username NoUserAuth
       case muid of
@@ -299,10 +308,8 @@ userFeature  usersState adminsState
 
     handleUserDelete :: DynamicPath -> ServerPart Response
     handleUserDelete dpath = runServerPartE $ do
-      users    <- queryState usersState GetUserDb
-      admins   <- queryState adminsState GetAdminList
-      _        <- guardAuthorised hackageRealm users admins
-      (uid, _) <- userNameInPath dpath >>= lookupUserName
+      _        <- guardAuthorised [InGroup adminGroup]
+      (uid, _) <- lookupUserName =<< userNameInPath dpath
       merr     <- updateState usersState $ DeleteUser uid
       case merr of
         Nothing   -> noContent $ toResponse ()
@@ -311,10 +318,8 @@ userFeature  usersState adminsState
 
     handleUserHtpasswdPut :: DynamicPath -> ServerPart Response
     handleUserHtpasswdPut dpath = runServerPartE $ do
-      users    <- queryState usersState GetUserDb
-      admins   <- queryState adminsState GetAdminList
-      _admin   <- guardAuthorised hackageRealm users admins
-      (uid, _) <- userNameInPath dpath >>= lookupUserName
+      _        <- guardAuthorised [InGroup adminGroup]
+      (uid, _) <- lookupUserName =<< userNameInPath dpath
       htpasswd <- expectTextPlain
       if validHtpasswd htpasswd
         then do let auth = OldUserAuth (HtPasswdHash (LBS.unpack htpasswd))
@@ -352,10 +357,8 @@ userFeature  usersState adminsState
 
     adminAddUser :: ServerPartE Response
     adminAddUser = do
-        -- with these lines commented out, self-registration is allowed
-      --admins <- query State.GetAdminList
-      --users <- query State.GetUserDb
-      --void $ guardAuthorised hackageRealm users admins
+        -- with this line commented out, self-registration is allowed
+      --void $ guardAuthorised [InGroup adminGroup]
         reqData <- getDataFn lookUserNamePasswords
         case reqData of
             (Left errs) -> errBadRequest "Error registering user"
@@ -386,6 +389,8 @@ userFeature  usersState adminsState
         admins <- queryState adminsState GetAdminList
         return $ uid == userPathId || (uid `Group.member` admins)
 
+    --FIXME: this thing is a total mess!
+    -- Do admins need to change user's passwords? Why not just reset passwords & (de)activate accounts.
     changePassword :: UserName -> ServerPartE ()
     changePassword userPathName = do
         users  <- queryState usersState GetUserDb
@@ -399,7 +404,7 @@ userFeature  usersState adminsState
                       | tryUpgrade pwd -> do
                         updateState usersState $ UpgradeUserAuth userPathId passwd auth
                       | otherwise -> do
-                        (uid, _) <- guardAuthenticated hackageRealm users
+                        (uid, _) <- Auth.guardAuthenticated Auth.hackageRealm users
                         -- if this user's id corresponds to the one in the path, or is an admin
                         canChange <- canChangePassword uid userPathId
                         if canChange
@@ -413,7 +418,7 @@ userFeature  usersState adminsState
         forbidChange = errForbidden "Error changing password" . return . MText
 
     newDigestPass :: UserName -> PasswdPlain -> UserAuth
-    newDigestPass name pwd = NewUserAuth (newPasswdHash hackageRealm name pwd)
+    newDigestPass name pwd = NewUserAuth (Auth.newPasswdHash Auth.hackageRealm name pwd)
 
     --
     runUserFilter :: UserId -> IO (Maybe ErrorResponse)
@@ -436,32 +441,27 @@ userFeature  usersState adminsState
 
     groupAddUser :: UserGroup -> DynamicPath -> ServerPartE ()
     groupAddUser group _ = do
+        guardAuthorised_ (map InGroup (canAddGroup group))
         users <- queryState usersState GetUserDb
         muser <- optional $ look "user"
         case muser of
             Nothing -> addError "Bad request (could not find 'user' argument)"
             Just ustr -> case simpleParse ustr >>= \uname -> Users.lookupName uname users of
                 Nothing -> addError $ "No user with name " ++ show ustr ++ " found"
-                Just uid -> do
-                    ulist <- liftIO . Group.queryGroups $ canAddGroup group
-                    void $ guardAuthorised hackageRealm users ulist
-                    liftIO $ addUserList group uid
+                Just uid -> liftIO $ addUserList group uid
        where addError = errBadRequest "Failed to add user" . return . MText
 
     groupDeleteUser :: UserGroup -> DynamicPath -> ServerPartE ()
     groupDeleteUser group dpath = do
-      (uid, _) <- userNameInPath dpath >>= lookupUserName
-      users    <- queryState usersState GetUserDb
-      ulist    <- liftIO . Group.queryGroups $ canRemoveGroup group
-      void $ guardAuthorised hackageRealm users ulist
+      guardAuthorised_ (map InGroup (canRemoveGroup group))
+      (uid, _) <- lookupUserName =<< userNameInPath dpath
       liftIO $ removeUserList group uid
 
     lookupGroupEditAuth :: UserGroup -> ServerPartE (Bool, Bool)
     lookupGroupEditAuth group = do
-      users  <- queryState usersState GetUserDb
       addList    <- liftIO . Group.queryGroups $ canAddGroup group
       removeList <- liftIO . Group.queryGroups $ canRemoveGroup group
-      (uid, _) <- guardAuthenticated hackageRealm users
+      uid <- guardAuthenticated
       let (canAdd, canDelete) = (uid `Group.member` addList, uid `Group.member` removeList)
       if not (canAdd || canDelete)
           then errForbidden "Forbidden" [MText "Can't edit permissions for user group"]
@@ -566,31 +566,20 @@ userFeature  usersState adminsState
                                     | uname <- unames ])
           ]
 
+    --TODO: add handleUserGroupUserPost for the sake of the html frontend
+    --      and then remove groupAddUser & groupDeleteUser
     handleUserGroupUserPut group groupr dpath = runServerPartE $ do
       guardGroupExists group
-      uname <- userNameInPath dpath
-
-      -- check the acting user is authorised to modify this group
-      users <- queryGetUserDb
-      ulist <- liftIO . Group.queryGroups $ canAddGroup group
-      guardAuthorised hackageRealm users ulist
-
-      (uid, _) <- lookupUserName uname
+      guardAuthorised_ (map InGroup (canAddGroup group))
+      (uid, _) <- lookupUserName =<< userNameInPath dpath
       liftIO $ addUserList group uid
-
       goToList groupr dpath
 
     handleUserGroupUserDelete group groupr dpath = runServerPartE $ do
-      uname <- userNameInPath dpath
-
-        -- check the acting user is authorised to modify this group
-      users <- queryGetUserDb
-      ulist <- liftIO . Group.queryGroups $ canRemoveGroup group
-      guardAuthorised hackageRealm users ulist
-
-      (uid, _) <- lookupUserName uname
+      guardGroupExists group
+      guardAuthorised_ (map InGroup (canRemoveGroup group))
+      (uid, _) <- lookupUserName =<< userNameInPath dpath
       liftIO $ removeUserList group uid
-
       goToList groupr dpath
 
     goToList group dpath = seeOther (renderResource' (groupResource group) dpath)

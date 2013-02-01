@@ -149,7 +149,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
     -- result: error from unpacking, bad request error, or warning lines
     tarballPut :: DynamicPath -> ServerPart Response
     tarballPut dpath = runServerPartE $ do
-        uid         <- requireMirrorAuth
+        uid         <- guardAuthorised [InGroup mirrorGroup]
         pkgid       <- packageTarballInPath dpath
         fileContent <- expectCompressedTarball
         time        <- liftIO getCurrentTime
@@ -189,7 +189,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
 
     uploaderPut :: DynamicPath -> ServerPart Response
     uploaderPut dpath = runServerPartE $ do
-        void requireMirrorAuth
+        guardAuthorised_ [InGroup mirrorGroup]
         pkgid <- packageInPath dpath
         nameContent <- expectTextPlain
         let uname = UserName (unpackUTF8 nameContent)
@@ -206,7 +206,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
     -- curl -H 'Content-Type: text/plain' -u admin:admin -X PUT -d "Tue Oct 18 20:54:28 UTC 2010" http://localhost:8080/package/edit-distance-0.2.1/upload-time
     uploadTimePut :: DynamicPath -> ServerPart Response
     uploadTimePut dpath = runServerPartE $ do
-        void requireMirrorAuth
+        guardAuthorised_ [InGroup mirrorGroup]
         pkgid <- packageInPath dpath
         timeContent <- expectTextPlain
         case parseTime defaultTimeLocale "%c" (unpackUTF8 timeContent) of
@@ -219,7 +219,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
     -- return: error from parsing, bad request error, or warning lines
     cabalPut :: DynamicPath -> ServerPart Response
     cabalPut dpath = runServerPartE $ do
-        uid <- requireMirrorAuth
+        uid <- guardAuthorised [InGroup mirrorGroup]
         pkgid :: PackageId <- packageInPath dpath
         fileContent <- expectTextPlain
         time <- liftIO getCurrentTime
@@ -237,9 +237,3 @@ mirrorFeature ServerEnv{serverBlobStore = store}
                 let filename = display pkgid <.> "cabal"
                 return . toResponse $ unlines $ map (showPWarning filename) warnings
 
-    requireMirrorAuth :: ServerPartE UserId
-    requireMirrorAuth = do
-        ulist   <- queryState mirrorersState GetMirrorClientsList
-        userdb  <- queryGetUserDb
-        (uid, _) <- guardAuthorised hackageRealm userdb ulist
-        return uid

@@ -22,6 +22,7 @@ module Distribution.Server.Framework.Auth (
     -- ** Special cases
     guardAuthenticated,
     guardPriviledged,
+    PrivilegeCondition(..),
   ) where
 
 import Distribution.Server.Users.Types (UserId, UserName(..), UserAuth(..), UserInfo(userName))
@@ -79,12 +80,12 @@ adminRealm   = RealmName "Hackage admin"
 --   * is a member of a given group of users who are permitted to perform
 --     certain priviledged actions.
 --
-guardAuthorised :: RealmName -> Users.Users -> Group.UserList
-                -> ServerPartE (UserId, UserInfo)
-guardAuthorised realm users group = do
-    (uid, uinfo) <- guardAuthenticated realm users
-    guardPriviledged group uid
-    return (uid, uinfo)
+guardAuthorised :: RealmName -> Users.Users -> [PrivilegeCondition]
+                -> ServerPartE UserId
+guardAuthorised realm users privconds = do
+    (uid, _) <- guardAuthenticated realm users
+    guardPriviledged users uid privconds
+    return uid
 
 
 -- | Check that the client is authenticated. Returns the information about the
@@ -119,6 +120,10 @@ guardAuthenticated realm users = do
 data AuthType = BasicAuth | DigestAuth
 
 
+data PrivilegeCondition = InGroup    Group.UserGroup
+                        | IsUserId   UserId
+                        | AnyKnownUser
+
 -- | Check that a given user is permitted to perform certain priviledged
 -- actions.
 --
@@ -128,10 +133,22 @@ data AuthType = BasicAuth | DigestAuth
 -- It only checks if the user is in the priviledged user group, it does not
 -- imply that the current client has been authenticated, see 'guardAuthorised'.
 --
-guardPriviledged :: Group.UserList -> UserId -> ServerPartE ()
-guardPriviledged ugroup uid
-  | Group.member uid ugroup = return ()
-  | otherwise = errForbidden "Forbidden" [MText "No access for this page."]
+guardPriviledged :: Users.Users -> UserId -> [PrivilegeCondition] -> ServerPartE ()
+guardPriviledged _users _uid [] =
+  errForbidden "Forbidden" [MText "No access for this resource."]
+
+guardPriviledged users uid (InGroup ugroup:others) = do
+  uset <- liftIO $ Group.queryUserList ugroup
+  if Group.member uid uset
+    then return ()
+    else guardPriviledged users uid others
+
+guardPriviledged users uid (IsUserId uid':others) =
+  if uid == uid'
+    then return ()
+    else guardPriviledged users uid others
+
+guardPriviledged _ _ (AnyKnownUser:_) = return ()
 
 
 ------------------------------------------------------------------------

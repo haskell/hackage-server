@@ -34,7 +34,7 @@ import Distribution.Server.Framework.MemState
 import Distribution.Server.Framework.Cache
 import Distribution.Server.Framework.MemSize
 
-import Distribution.Server.Framework.Auth
+import Distribution.Server.Framework.Auth (PrivilegeCondition(..))
 import Distribution.Server.Framework.Feature
 import Distribution.Server.Framework.Types
 import Distribution.Server.Framework.Resource

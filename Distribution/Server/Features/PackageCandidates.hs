@@ -265,7 +265,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     doDeleteCandidate :: DynamicPath -> ServerPartE Response
     doDeleteCandidate dpath = do
       candidate <- packageInPath dpath >>= lookupCandidateId
-      void $ getPackageAuth candidate
+      guardAuthorisedAsMaintainer (packageName candidate)
       void $ updateState candidatesState $ DeleteCandidate (packageId candidate)
       seeOther (packageCandidatesUri candidatesResource "" $ packageName candidate) $ toResponse ()
 
@@ -301,7 +301,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                 candPublic = True -- do withDataFn
             }
         void $ updateState candidatesState $ AddCandidate candidate
-        let group = packageMaintainers [("package", display $ packageName pkgInfo)]
+        let group = maintainerGroup (packageName pkgInfo)
         exists <- liftIO $ Group.groupExists group
         when (not exists) $ liftIO $ Group.addUserList group (pkgUploadUser pkgInfo)
         return candidate
@@ -314,7 +314,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         if not (isRight pkg)
           then uploadFailed "Name of package or package version does not match"
           else do
-            pkgGroup <- getPackageGroup (packageName pkg)
+            pkgGroup <- Group.queryUserList (maintainerGroup (packageName pkg))
             if packageExists state pkg && not (uid `Group.member` pkgGroup)
               then uploadFailed "Not authorized to upload a candidate for this package"
               else return Nothing
@@ -325,7 +325,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       packages <- queryGetPackageIndex
       candidate <- packageInPath dpath >>= lookupCandidateId
       -- check authorization to upload - must already be a maintainer
-      (uid, _) <- getPackageAuth candidate
+      uid <- guardAuthorised [InGroup (maintainerGroup (packageName candidate))]
       -- check if package or later already exists
       case checkPublish packages candidate of
         Just failed -> throwError failed

@@ -8,6 +8,7 @@ module Distribution.Server.Features.BuildReports (
 import Distribution.Server.Framework hiding (BuildLog)
 
 import Distribution.Server.Features.Users
+import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
 
 import Distribution.Server.Features.BuildReports.Backup
@@ -47,10 +48,13 @@ data ReportsResource = ReportsResource {
 }
 
 
-initBuildReportsFeature :: ServerEnv -> UserFeature -> CoreResource -> IO ReportsFeature
-initBuildReportsFeature env@ServerEnv{serverStateDir} user core = do
+initBuildReportsFeature :: ServerEnv
+                        -> UserFeature -> UploadFeature
+                        -> CoreResource
+                        -> IO ReportsFeature
+initBuildReportsFeature env@ServerEnv{serverStateDir} user upload core = do
     reportsState <- reportsStateComponent serverStateDir
-    return $ buildReportsFeature env user core reportsState
+    return $ buildReportsFeature env user upload core reportsState
 
 reportsStateComponent :: FilePath -> IO (StateComponent BuildReports)
 reportsStateComponent stateDir = do
@@ -67,11 +71,12 @@ reportsStateComponent stateDir = do
 
 buildReportsFeature :: ServerEnv
                     -> UserFeature
+                    -> UploadFeature
                     -> CoreResource
                     -> StateComponent BuildReports
                     -> ReportsFeature
 buildReportsFeature ServerEnv{serverBlobStore = store}
-                    UserFeature{..}
+                    UserFeature{..} UploadFeature{trusteeGroup}
                     CoreResource{packageInPath, guardValidPackageId}
                     reportsState
   = ReportsFeature{..}
@@ -136,9 +141,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
     submitBuildReport dpath = runServerPartE $ do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
-      users <- queryGetUserDb
-      -- require logged-in user
-      void $ guardAuthenticated hackageRealm users
+      guardAuthorised_ [AnyKnownUser] -- allow any logged-in user
       reportbody <- expectTextPlain
       case BuildReport.parse $ unpack reportbody of
           Left err -> errBadRequest "Error submitting report" [MText err]
@@ -153,9 +156,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       reportId <- reportIdInPath dpath
-      users <- queryGetUserDb
-      -- restrict this to whom? currently logged in users.. a bad idea
-      void $ guardAuthenticated hackageRealm users
+      guardAuthorised_ [InGroup trusteeGroup]
       success <- updateState reportsState $ DeleteReport pkgid reportId
       if success
           then seeOther (reportsListUri reportsResource "" pkgid) $ toResponse ()
@@ -167,9 +168,8 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       reportId <- reportIdInPath dpath
-      users <- queryGetUserDb
       -- logged in users
-      void $ guardAuthenticated hackageRealm users
+      guardAuthorised_ [AnyKnownUser]
       blogbody <- expectTextPlain
       buildLog <- liftIO $ BlobStorage.add store blogbody
       void $ updateState reportsState $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
@@ -182,9 +182,7 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       reportId <- reportIdInPath dpath
-      users <- queryGetUserDb
-      -- again, restrict this to whom?
-      void $ guardAuthenticated hackageRealm users
+      guardAuthorised_ [InGroup trusteeGroup]
       void $ updateState reportsState $ SetBuildLog pkgid reportId Nothing
       -- go to report page (which should no longer link the log)
       seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()

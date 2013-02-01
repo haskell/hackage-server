@@ -18,6 +18,7 @@ import Distribution.Server.Features.Tags.State
 import Distribution.Server.Features.Tags.Backup
 
 import Distribution.Server.Features.Core
+import Distribution.Server.Features.Upload
 
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
@@ -80,13 +81,13 @@ data TagsResource = TagsResource {
     packageTagsUri :: String -> PackageName -> String
 }
 
-initTagsFeature :: ServerEnv -> CoreFeature -> IO TagsFeature
-initTagsFeature ServerEnv{serverStateDir} core@CoreFeature{..} = do
+initTagsFeature :: ServerEnv -> CoreFeature -> UploadFeature -> IO TagsFeature
+initTagsFeature ServerEnv{serverStateDir} core@CoreFeature{..} upload = do
     tagsState <- tagsStateComponent serverStateDir
     specials  <- newMemStateWHNF emptyPackageTags
     updateTag <- newHook
 
-    let feature = tagsFeature core tagsState specials updateTag
+    let feature = tagsFeature core upload tagsState specials updateTag
 
     registerHook packageAddHook $ \pkginfo -> do
       let pkgname = packageName . packageDescription . pkgDesc $ pkginfo
@@ -109,6 +110,7 @@ tagsStateComponent stateDir = do
     }
 
 tagsFeature :: CoreFeature
+            -> UploadFeature
             -> StateComponent PackageTags
             -> MemState PackageTags
             -> Hook (Set PackageName -> Set Tag -> IO ())
@@ -117,6 +119,7 @@ tagsFeature :: CoreFeature
 tagsFeature CoreFeature{ queryGetPackageIndex
                        , coreResource = CoreResource { guardValidPackageName }
                        }
+            UploadFeature{ guardAuthorisedAsMaintainerOrTrustee }
             tagsState
             calculatedTags
             tagsUpdated
@@ -187,9 +190,7 @@ tagsFeature CoreFeature{ queryGetPackageIndex
     putTags :: PackageName -> ServerPartE ()
     putTags pkgname = do
       guardValidPackageName pkgname
-      -- FIXME: anyone can edit tags for the moment. we should do:
-      -- users <- queryGetUserDb
-      -- void $ guardAuthenticated hackageRealm users
+      guardAuthorisedAsMaintainerOrTrustee pkgname
       mtags <- optional $ look "tags"
       case simpleParse =<< mtags of
           Just (TagList tags) -> do

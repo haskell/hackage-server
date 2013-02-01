@@ -41,15 +41,18 @@ data UploadFeature = UploadFeature {
 
     uploadResource     :: UploadResource,
     uploadPackage      :: ServerPartE UploadResult,
-    packageMaintainers :: GroupGen,
+
+    --TODO: consider moving the trustee and/or per-package maintainer groups
+    --      lower down in the feature hierarchy; many other features want to
+    --      use the trustee group purely for auth decisions
     trusteeGroup       :: UserGroup,
     uploaderGroup      :: UserGroup,
+    maintainerGroup    :: PackageName -> UserGroup,
+
     canUploadPackage   :: Filter (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)),
 
-    getPackageGroup    :: forall m. MonadIO m => PackageName -> m Group.UserList,
-    getPackageAuth     :: forall pkg. Package pkg => pkg -> ServerPartE (Users.UserId, Users.UserInfo),
-    getPackageNameAuth :: PackageName -> ServerPartE (Users.UserId, Users.UserInfo),
-    getTrusteeAuth     :: ServerPartE (Users.UserId, Users.UserInfo),
+    guardAuthorisedAsMaintainer          :: PackageName -> ServerPartE (),
+    guardAuthorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE (),
 
     extractPackage     :: (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)) -> ServerPartE (PkgInfo, UploadResult)
 }
@@ -263,35 +266,23 @@ uploadFeature ServerEnv{serverBlobStore = store}
     uploaderDescription :: GroupDescription
     uploaderDescription = nullDescription { groupTitle = "Package uploaders", groupPrologue = "Package uploaders allowed to upload packages. If a package already exists then you also need to be in the maintainer group for that package." }
 
-    getPackageAuth :: forall pkg. Package pkg => pkg -> ServerPartE (Users.UserId, Users.UserInfo)
-    getPackageAuth = getPackageNameAuth . packageName
+    guardAuthorisedAsMaintainer :: PackageName -> ServerPartE ()
+    guardAuthorisedAsMaintainer pkgname =
+      guardAuthorised_ [InGroup (maintainerGroup pkgname)]
 
-    getPackageNameAuth :: PackageName -> ServerPartE (Users.UserId, Users.UserInfo)
-    getPackageNameAuth pkgname = do
-      userDb   <- queryGetUserDb
-      groupSum <- getPackageGroup pkgname
-      guardAuthorised hackageRealm userDb groupSum
+    guardAuthorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE ()
+    guardAuthorisedAsMaintainerOrTrustee pkgname =
+      guardAuthorised_ [InGroup (maintainerGroup pkgname), InGroup trusteeGroup]
 
-    getTrusteeAuth :: ServerPartE (Users.UserId, Users.UserInfo)
-    getTrusteeAuth = do
-      userDb <- queryGetUserDb
-      trustee <- queryState trusteesState GetTrusteesList
-      guardAuthorised hackageRealm userDb trustee
-
-    getPackageGroup :: MonadIO m => PackageName -> m Group.UserList
-    getPackageGroup pkg = do
-      pkgm    <- queryState maintainersState (GetPackageMaintainers pkg)
-      trustee <- queryState trusteesState GetTrusteesList
-      return $ Group.unions [trustee, pkgm]
+    maintainerGroup :: PackageName -> UserGroup
+    maintainerGroup pkgname = packageMaintainers [("package", display pkgname)]
 
     ----------------------------------------------------
 
     -- This is the upload function. It returns a generic result for multiple formats.
     uploadPackage :: ServerPartE UploadResult
     uploadPackage = do
-        users     <- queryGetUserDb
-        uploaders <- queryState uploadersState GetUploadersList
-        void $ guardAuthorised hackageRealm users uploaders
+        guardAuthorised_ [InGroup uploaderGroup]
         pkgIndex <- queryGetPackageIndex
         let uploadFilter uid info = combineErrors $ runFilter'' canUploadPackage uid info
         (pkgInfo, uresult) <- extractPackage (\uid info -> combineErrors $ sequence
@@ -304,7 +295,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
              -- make package maintainers group for new package
             let existedBefore = packageExists pkgIndex pkgInfo
             when (not existedBefore) $
-                liftIO $ addUserList (packageMaintainers [("package", display $ packageName pkgInfo)]) (pkgUploadUser pkgInfo)
+                liftIO $ addUserList (maintainerGroup (packageName pkgInfo)) (pkgUploadUser pkgInfo)
             return uresult
           -- this is already checked in processUpload, and race conditions are highly unlikely but imaginable
           else errForbidden "Upload failed" [MText "Package already exists."]
@@ -316,7 +307,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
     processUpload :: PackageIndex PkgInfo -> Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)
     processUpload state uid res = do
         let pkg = packageId (uploadDesc res)
-        pkgGroup <- getPackageGroup $ packageName pkg
+        pkgGroup <- queryUserList (maintainerGroup (packageName pkg))
         if packageIdExists state pkg
           then uploadError versionExists --allow trustees to do this?
           else if packageExists state pkg && not (uid `Group.member` pkgGroup)
@@ -349,9 +340,9 @@ uploadFeature ServerEnv{serverBlobStore = store}
                   in upload fileName file
       where
         upload name file =
-         do users <- queryGetUserDb
-            -- initial check to ensure logged in.
-            (uid, _) <- guardAuthenticated hackageRealm users
+         do -- initial check to ensure logged in.
+            --FIXME: this should have been covered earlier
+            uid <- guardAuthenticated
             let processPackage :: ByteString -> IO (Either ErrorResponse (UploadResult, BlobStorage.BlobId))
                 processPackage content' = do
                     -- as much as it would be nice to do requirePackageAuth in here,
