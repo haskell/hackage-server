@@ -148,7 +148,7 @@ candidatesFeature :: ServerEnv
                   -> PackageCandidatesFeature
 candidatesFeature ServerEnv{serverBlobStore = store}
                   UserFeature{..}
-                  CoreFeature{ coreResource=CoreResource{packageInPath, packageTarballInPath}
+                  CoreFeature{ coreResource=core@CoreResource{packageInPath, packageTarballInPath}
                              , queryGetPackageIndex
                              , doAddPackage
                              }
@@ -210,6 +210,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           renderResource (coreCabalFile r) [display pkgid, display (packageName pkgid)]
       , packageInPath
       , packageTarballInPath
+      , guardValidPackageId   = void . lookupCandidateId
+      , guardValidPackageName = void . lookupCandidateName
       }
 
     candidatesResource = fix $ \r -> PackageCandidatesResource {
@@ -231,17 +233,15 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
     basicCandidatePage :: CoreResource -> DynamicPath -> ServerPart Response
     basicCandidatePage r dpath = runServerPartE $ do --TODO: use something else for nice html error pages
-      pkgid <- packageInPath dpath
-      withCandidate pkgid $ \mpkg ->
-        ok . toResponse . Resource.XHtml $ case mpkg of
-          Nothing  -> toHtml $ "A candidate for " ++ display pkgid ++ " doesn't exist"
-          Just pkg -> toHtml [ h3 << "Downloads"
-                             , toHtml (section pkg)
-                             , h3 << "Warnings"
-                             , case candWarnings pkg of
-                                  [] -> toHtml "No warnings"
-                                  warnings -> unordList warnings
-                             ]
+      pkg <- packageInPath dpath >>= lookupCandidateId
+      ok . toResponse . Resource.XHtml . toHtml $
+        [ h3 << "Downloads"
+        , toHtml (section pkg)
+        , h3 << "Warnings"
+        , case candWarnings pkg of
+             [] -> toHtml "No warnings"
+             warnings -> unordList warnings
+        ]
       where section cand = basicPackageSection (coreCabalUri r)
                                                (coreTarballUri r)
                                                (candPkgInfo cand)
@@ -277,15 +277,13 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
     serveCandidateTarball :: DynamicPath -> ServerPart Response
     serveCandidateTarball dpath = runServerPartE $ do
-      pkgid <- packageTarballInPath dpath
-      withCandidate pkgid $ \mpkg -> case mpkg of
-        Nothing -> mzero -- candidate  does not exist
-        Just pkg -> case pkgTarball (candPkgInfo pkg) of
-            [] -> mzero --candidate's tarball does not exist
-            ((tb, _):_) -> do
-                let blobId = pkgTarballGz tb
-                file <- liftIO $ BlobStorage.fetch store blobId
-                ok $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime $ candPkgInfo pkg)
+      pkg <- packageTarballInPath dpath >>= lookupCandidateId
+      case pkgTarball (candPkgInfo pkg) of
+        [] -> mzero --candidate's tarball does not exist
+        ((tb, _):_) -> do
+            let blobId = pkgTarballGz tb
+            file <- liftIO $ BlobStorage.fetch store blobId
+            ok $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime $ candPkgInfo pkg)
 
     --withFormat :: DynamicPath -> (String -> a) -> a
     --TODO: use something else for nice html error pages
@@ -396,30 +394,25 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     ------------------------------------------------------------------------------
 
     -- Find all candidates for a package (there may be none)
-    -- TODO: this is different behaviour to lookupPackageName, which throws
-    -- an error if the package is invalid. Should we perhaps check that
-    -- at least the package is valid here (even though we might not have
-    -- any candidates?)
+    -- It is not an error if a package has no candidates, but it is an error
+    -- when the package itself does not exist. We therefore check the Core
+    -- package database to check if the package exists.
     lookupCandidateName :: PackageName -> ServerPartE [CandPkgInfo]
     lookupCandidateName pkgname = do
+      guardValidPackageName core pkgname
       state <- queryState candidatesState GetCandidatePackages
       return $ PackageIndex.lookupPackageName (candidateList state) pkgname
 
     -- TODO: Unlike the corresponding function in core, we don't return the
     -- "latest" candidate when Version is empty. Should we?
+    -- (If we change that, we should move the 'guard' to 'guardValidPackageId')
     lookupCandidateId :: PackageId -> ServerPartE CandPkgInfo
     lookupCandidateId pkgid = do
+      guard (pkgVersion pkgid /= Version [] [])
       state <- queryState candidatesState GetCandidatePackages
       case PackageIndex.lookupPackageId (candidateList state) pkgid of
         Just pkg -> return pkg
         _ -> errNotFound "Candidate not found" [MText $ "No such candidate version for " ++ display (packageName pkgid)]
-
-    withCandidate :: PackageId -> (Maybe CandPkgInfo -> ServerPartE a) -> ServerPartE a
-    withCandidate pkgid func = do
-        state <- queryState candidatesState GetCandidatePackages
-        let pkgs = PackageIndex.lookupPackageName (candidateList state) (packageName pkgid)
-        func (find ((==pkgid) . packageId) pkgs)
-
 
 {-------------------------------------------------------------------------------
   TODO: everything below is an (almost) direct duplicate of corresponding
