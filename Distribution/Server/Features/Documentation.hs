@@ -23,6 +23,7 @@ import Distribution.Text
 import Distribution.Package
 
 import qualified Data.Map as Map
+import Data.Function (fix)
 
 -- TODO:
 -- 1. Write an HTML view for organizing uploads
@@ -40,27 +41,32 @@ instance IsHackageFeature DocumentationFeature where
 
 data DocumentationResource = DocumentationResource {
     packageDocsContent :: Resource,
-    packageDocsWhole   :: Resource
+    packageDocsWhole   :: Resource,
+
+    packageDocsContentUri :: PackageId -> String,
+    packageDocsWholeUri   :: String -> PackageId -> String
 }
 
-initDocumentationFeature :: ServerEnv
+initDocumentationFeature :: String
+                         -> ServerEnv
                          -> CoreResource
                          -> UploadFeature
                          -> TarIndexCacheFeature
                          -> IO DocumentationFeature
-initDocumentationFeature env@ServerEnv{serverStateDir, serverVerbosity = verbosity}
+initDocumentationFeature name
+                         env@ServerEnv{serverStateDir, serverVerbosity = verbosity}
                          core
                          upload
                          tarIndexCache = do
     loginfo verbosity "Initialising documentation feature, start"
-    documentationState <- documentationStateComponent serverStateDir
-    let feature = documentationFeature env core upload tarIndexCache documentationState
+    documentationState <- documentationStateComponent name serverStateDir
+    let feature = documentationFeature name env core upload tarIndexCache documentationState
     loginfo verbosity "Initialising documentation feature, end"
     return feature
 
-documentationStateComponent :: FilePath -> IO (StateComponent Documentation)
-documentationStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "Documentation") initialDocumentation
+documentationStateComponent :: String -> FilePath -> IO (StateComponent Documentation)
+documentationStateComponent name stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> name) initialDocumentation
   return StateComponent {
       stateDesc    = "Package documentation"
     , acidState    = st
@@ -68,7 +74,7 @@ documentationStateComponent stateDir = do
     , putState     = update st . ReplaceDocumentation
     , backupState  = dumpBackup
     , restoreState = updateDocumentation (Documentation Map.empty)
-    , resetState   = documentationStateComponent
+    , resetState   = documentationStateComponent name
     }
   where
     dumpBackup doc =
@@ -91,20 +97,25 @@ documentationStateComponent stateDir = do
     importDocumentation pkgId blobId (Documentation docs) =
       return (Documentation (Map.insert pkgId blobId docs))
 
-documentationFeature :: ServerEnv
+documentationFeature :: String
+                     -> ServerEnv
                      -> CoreResource
                      -> UploadFeature
                      -> TarIndexCacheFeature
                      -> StateComponent Documentation
                      -> DocumentationFeature
-documentationFeature ServerEnv{serverBlobStore = store}
-                     CoreResource{packageInPath, guardValidPackageId}
+documentationFeature name
+                     ServerEnv{serverBlobStore = store}
+                     CoreResource{ packageInPath
+                                 , guardValidPackageId
+                                 , corePackagePage
+                                 }
                      UploadFeature{..}
                      TarIndexCacheFeature{cachedTarIndex}
                      documentationState
   = DocumentationFeature{..}
   where
-    documentationFeatureInterface = (emptyHackageFeature "documentation") {
+    documentationFeatureInterface = (emptyHackageFeature name) {
         featureDesc = "Maintain and display documentation"
       , featureResources =
           map ($ documentationResource) [
@@ -117,18 +128,22 @@ documentationFeature ServerEnv{serverBlobStore = store}
     queryHasDocumentation :: MonadIO m => PackageIdentifier -> m Bool
     queryHasDocumentation pkgid = queryState documentationState (HasDocumentation pkgid)
 
-    documentationResource = DocumentationResource {
-        packageDocsContent = (resourceAt "/package/:package/docs/..") {
+    documentationResource = fix $ \r -> DocumentationResource {
+        packageDocsContent = (extendResourcePath "/docs/.." corePackagePage) {
             resourceDesc = [ (GET, "Browse documentation") ]
           , resourceGet  = [ ("", serveDocumentation) ]
           }
-      , packageDocsWhole = (resourceAt "/package/:package/docs.:format") {
+      , packageDocsWhole = (extendResourcePath "/docs.:format" corePackagePage) {
             resourceDesc = [ (GET, "Download documentation")
                            , (PUT, "Upload documentation")
                            ]
           , resourceGet  = [ ("tar", serveDocumentationTar) ]
           , resourcePut  = [ ("tar", uploadDocumentation) ]
           }
+      , packageDocsContentUri = \pkgid ->
+          renderResource (packageDocsContent r) [display pkgid]
+      , packageDocsWholeUri = \format pkgid ->
+          renderResource (packageDocsWhole r) [display pkgid, format]
       }
 
     serveDocumentationTar :: DynamicPath -> ServerPart Response

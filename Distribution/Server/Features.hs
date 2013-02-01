@@ -21,7 +21,7 @@ import Distribution.Server.Features.Mirror   (initMirrorFeature)
 #ifndef MINIMAL
 import Distribution.Server.Features.TarIndexCache       (initTarIndexCacheFeature)
 import Distribution.Server.Features.Html                (initHtmlFeature)
-import Distribution.Server.Features.PackageCandidates   (initPackageCandidatesFeature)
+import Distribution.Server.Features.PackageCandidates   (initPackageCandidatesFeature, candidatesCoreResource)
 import Distribution.Server.Features.RecentPackages      (initRecentPackagesFeature)
 import Distribution.Server.Features.Distro              (initDistroFeature)
 import Distribution.Server.Features.PackageContents     (initPackageContentsFeature)
@@ -98,8 +98,13 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          usersFeature
                          (coreResource coreFeature)
 
-    documentationFeature <- initDocumentationFeature env
+    documentationCoreFeature <- initDocumentationFeature "documentation-core" env
                          (coreResource coreFeature)
+                         uploadFeature
+                         tarIndexCacheFeature
+
+    documentationCandidatesFeature <- initDocumentationFeature "documentation-candidates" env
+                         (candidatesCoreResource candidatesFeature)
                          uploadFeature
                          tarIndexCacheFeature
 
@@ -146,7 +151,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          namesFeature
                          mirrorFeature
                          distroFeature
-                         documentationFeature
+                         documentationCoreFeature
+                         documentationCandidatesFeature
 #endif
 
     -- The order of initialization above should be the same as
@@ -164,7 +170,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface distroFeature
          , getFeatureInterface candidatesFeature
          , getFeatureInterface reportsFeature
-         , getFeatureInterface documentationFeature
+         , getFeatureInterface documentationCoreFeature
+         , getFeatureInterface documentationCandidatesFeature
          , getFeatureInterface downloadFeature
          , getFeatureInterface tagsFeature
          , getFeatureInterface versionsFeature

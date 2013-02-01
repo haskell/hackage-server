@@ -50,7 +50,6 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Maybe (fromMaybe)
-import System.FilePath.Posix ((</>))
 
 import Text.XHtml.Strict
 import qualified Text.XHtml.Strict as XHtml
@@ -82,6 +81,7 @@ initHtmlFeature :: ServerEnv -> UserFeature -> CoreFeature -> RecentPackagesFeat
                 -> ListFeature -> NamesFeature
                 -> MirrorFeature -> DistroFeature
                 -> DocumentationFeature
+                -> DocumentationFeature
                 -> IO HtmlFeature
 
 initHtmlFeature ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
@@ -92,7 +92,8 @@ initHtmlFeature ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
                 tags download
                 list@ListFeature{itemUpdate}
                 names mirror
-                distros docs = do
+                distros
+                docsCore docsCandidates = do
 
     loginfo verbosity "Initialising html feature, start"
 
@@ -103,7 +104,8 @@ initHtmlFeature ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
                           candidates versions
                           tags download
                           list names
-                          mirror distros docs
+                          mirror distros
+                          docsCore docsCandidates
                           (htmlUtilities core tags)
                           mainCache namesCache
 
@@ -144,6 +146,7 @@ htmlFeature :: UserFeature
             -> MirrorFeature
             -> DistroFeature
             -> DocumentationFeature
+            -> DocumentationFeature
             -> HtmlUtilities
             -> AsyncCache Response
             -> AsyncCache Response
@@ -158,7 +161,7 @@ htmlFeature user
             list@ListFeature{getAllLists}
             names
             mirror distros
-            docs
+            docsCore docsCandidates
             utilities@HtmlUtilities{..}
             cachePackagesPage cacheNamesPage
   = (HtmlFeature{..}, packageIndex, packagesPage)
@@ -184,7 +187,7 @@ htmlFeature user
                                       versions
                                       upload
                                       tags
-                                      docs
+                                      docsCore
                                       download
                                       distros
                                       recent
@@ -195,7 +198,7 @@ htmlFeature user
     htmlUsers      = mkHtmlUsers      user
     htmlUploads    = mkHtmlUploads    utilities upload
     htmlDownloads  = mkHtmlDownloads  utilities download
-    htmlCandidates = mkHtmlCandidates utilities core versions upload candidates
+    htmlCandidates = mkHtmlCandidates utilities core versions upload docsCandidates candidates
     htmlPreferred  = mkHtmlPreferred  utilities core versions
     htmlTags       = mkHtmlTags       utilities core list tags
     htmlSearch     = mkHtmlSearch     utilities      list names
@@ -382,7 +385,7 @@ mkHtmlCore HtmlUtilities{..}
                           }
            UploadFeature{uploadResource, getPackageNameAuth}
            TagsFeature{queryTagsForPackage}
-           DocumentationFeature{queryHasDocumentation}
+           DocumentationFeature{documentationResource, queryHasDocumentation}
            DownloadFeature{perVersionDownloads}
            DistroFeature{queryPackageStatus}
            RecentPackagesFeature{packageRender}
@@ -391,9 +394,10 @@ mkHtmlCore HtmlUtilities{..}
            cachePackagesPage
            cacheNamesPage = HtmlCore{..}
   where
-    cores = coreResource
+    cores    = coreResource
     versions = versionsResource
-    uploads = uploadResource
+    uploads  = uploadResource
+    docs     = documentationResource
 
     maintainPackage   = (resourceAt "/package/:package/maintain") {
                             resourceGet = [("html", serveMaintainLinks editDeprecated editPreferred $ packageGroupResource uploads)]
@@ -449,7 +453,7 @@ mkHtmlCore HtmlUtilities{..}
                                      ]
         -- bottom sections, currently only documentation
         hasDocs  <- queryHasDocumentation realpkg
-        let docURL | hasDocs   = Just $ "/package" <//> display realpkg <//> "docs"
+        let docURL | hasDocs   = Just $ packageDocsContentUri docs realpkg -- Just $ "/package" <//> display realpkg <//> "docs"
                    | otherwise = Nothing
         -- extra features like tags and downloads
         tags <- queryTagsForPackage pkgname
@@ -704,6 +708,7 @@ mkHtmlCandidates :: HtmlUtilities
                  -> CoreFeature
                  -> VersionsFeature
                  -> UploadFeature
+                 -> DocumentationFeature
                  -> PackageCandidatesFeature
                  -> HtmlCandidates
 mkHtmlCandidates HtmlUtilities{..}
@@ -712,10 +717,12 @@ mkHtmlCandidates HtmlUtilities{..}
                             }
                  VersionsFeature{ queryGetPreferredInfo }
                  UploadFeature{ getPackageAuth }
+                 DocumentationFeature{documentationResource, queryHasDocumentation}
                  PackageCandidatesFeature{..} = HtmlCandidates{..}
   where
     candidates     = candidatesResource
     candidatesCore = candidatesCoreResource
+    docs           = documentationResource
 
     pkgCandUploadForm = (resourceAt "/package/:package/candidate/upload") {
                             resourceGet = [("html", servePackageCandidateUpload)]
@@ -815,12 +822,16 @@ mkHtmlCandidates HtmlUtilities{..}
       let sectionHtml = [Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing,
                          Pages.renderDependencies render] ++ Pages.renderFields render
           maintainHtml = anchor ! [href $ renderResource maintain [display $ packageId cand]] << "maintain"
+      -- bottom sections, currently only documentation
+      hasDocs  <- queryHasDocumentation (packageId cand)
+      let docURL | hasDocs   = Just $ packageDocsContentUri docs (packageId cand) -- Just $ "/package" <//> display realpkg <//> "docs"
+                 | otherwise = Nothing
       -- also utilize hasIndexedPackage :: Bool
       let warningBox = case renderWarnings candRender of
               [] -> []
               warn -> [thediv ! [theclass "notification"] << [toHtml "Warnings:", unordList warn]]
       return $ toResponse $ Resource.XHtml $ haddockPage (display $ packageId cand) $
-          Pages.packagePage render [maintainHtml] warningBox sectionHtml [] Nothing
+          Pages.packagePage render [maintainHtml] warningBox sectionHtml [] docURL
 
     servePublishForm :: DynamicPath -> ServerPart Response
     servePublishForm dpath = htmlResponse $ do
@@ -1410,6 +1421,3 @@ htmlResponse part = runServerPartE (handleErrorResponse htmlError part)
 -- Prevents page indexing (e.g. for search pages).
 noIndex :: Html
 noIndex = meta ! [name "robots", content "noindex"]
-
-(<//>) :: String -> String -> String
-(<//>) = (System.FilePath.Posix.</>)
