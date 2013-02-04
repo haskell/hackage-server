@@ -156,20 +156,12 @@ data2 - upload0 (upload time of earliest version is at top)
 
 --from data/upload-time format to pkgInfo format (on import)
 shiftUploadTimes :: [(a, b)] -> [(a, b)]
-shiftUploadTimes [] = []
-shiftUploadTimes times@((cabal', _):_) = case go times of (shifted, info') -> ((cabal', info'):shifted)
-    where go ((_, info):xs@((cabal, _):_)) = case go xs of (xs', info') -> ((cabal, info):xs', info') -- not a tail recursive 'go'
-          go [(_, info')] = ([], info')
-          go [] = undefined
+shiftUploadTimes list = let (xs, ys) = unzip list in zip xs (last ys : init ys)
 
 -- from pkgInfo formats to data/upload-time format (on export, and maybe for displaying to a web interface)
 -- if a non-empty list is passed in, a non-empty list /will/ be passed out
 unshiftUploadTimes :: [(a, b)] -> [(a, b)]
-unshiftUploadTimes [] = []
-unshiftUploadTimes times@((_, info'):_) = go times
-    where go ((cabal, _):xs@((_, info):_)) = (cabal, info):go xs
-          go [(cabal', _)] = [(cabal', info')]
-          go [] = undefined
+unshiftUploadTimes list = let (xs, ys) = unzip list in zip xs (tail ys ++ [head ys])
 
 --------------------------------------------------------------------------------
 -- Every tarball and cabal file ever uploaded for every single package name and version
