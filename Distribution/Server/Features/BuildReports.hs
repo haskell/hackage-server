@@ -48,17 +48,18 @@ data ReportsResource = ReportsResource {
 }
 
 
-initBuildReportsFeature :: ServerEnv
+initBuildReportsFeature :: String
+                        -> ServerEnv
                         -> UserFeature -> UploadFeature
                         -> CoreResource
                         -> IO ReportsFeature
-initBuildReportsFeature env@ServerEnv{serverStateDir} user upload core = do
-    reportsState <- reportsStateComponent serverStateDir
-    return $ buildReportsFeature env user upload core reportsState
+initBuildReportsFeature name env@ServerEnv{serverStateDir} user upload core = do
+    reportsState <- reportsStateComponent name serverStateDir
+    return $ buildReportsFeature name env user upload core reportsState
 
-reportsStateComponent :: FilePath -> IO (StateComponent BuildReports)
-reportsStateComponent stateDir = do
-  st  <- openLocalStateFrom (stateDir </> "db" </> "BuildReports") initialBuildReports
+reportsStateComponent :: String -> FilePath -> IO (StateComponent BuildReports)
+reportsStateComponent name stateDir = do
+  st  <- openLocalStateFrom (stateDir </> "db" </> name) initialBuildReports
   return StateComponent {
       stateDesc    = "Build reports"
     , acidState    = st
@@ -66,23 +67,29 @@ reportsStateComponent stateDir = do
     , putState     = update st . ReplaceBuildReports
     , backupState  = dumpBackup
     , restoreState = restoreBackup
-    , resetState   = reportsStateComponent
+    , resetState   = reportsStateComponent name
     }
 
-buildReportsFeature :: ServerEnv
+buildReportsFeature :: String
+                    -> ServerEnv
                     -> UserFeature
                     -> UploadFeature
                     -> CoreResource
                     -> StateComponent BuildReports
                     -> ReportsFeature
-buildReportsFeature ServerEnv{serverBlobStore = store}
+buildReportsFeature name
+                    ServerEnv{serverBlobStore = store}
                     UserFeature{..} UploadFeature{trusteeGroup}
-                    CoreResource{packageInPath, guardValidPackageId}
+                    CoreResource{ packageInPath
+                                , guardValidPackageId
+                                , corePackagePage
+                                }
                     reportsState
   = ReportsFeature{..}
   where
-    reportsFeatureInterface = (emptyHackageFeature "reports") {
-        featureResources =
+    reportsFeatureInterface = (emptyHackageFeature name) {
+        featureDesc = "Build reports and build logs"
+      , featureResources =
           map ($ reportsResource) [
               reportsList
             , reportsPage
@@ -92,20 +99,29 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
       }
 
     reportsResource = ReportsResource
-          { reportsList = (resourceAt "/package/:package/reports/.:format") {
-                            resourceGet =  [("txt", textPackageReports)],
-                            resourcePost = [("",    submitBuildReport)]
-                          }
-          , reportsPage = (resourceAt "/package/:package/reports/:id.:format") {
-                            resourceGet    = [("txt", textPackageReport)],
-                            resourceDelete = [("",    deleteBuildReport)]
-                          }
-          , reportsLog  = (resourceAt "/package/:package/reports/:id/log") {
-                            resourceGet    = [("txt", serveBuildLog)],
-                            resourceDelete = [("",    deleteBuildLog)],
-                            resourcePut    = [("",    putBuildLog)]
-                          }
-
+          { reportsList = (extendResourcePath "/reports/.:format" corePackagePage) {
+                resourceDesc = [ (GET, "List available build reports")
+                               , (POST, "Upload a new build report")
+                               ]
+              , resourceGet  = [ ("txt", textPackageReports) ]
+              , resourcePost = [ ("",    submitBuildReport) ]
+              }
+          , reportsPage = (extendResourcePath "/reports/:id.:format" corePackagePage) {
+                resourceDesc   = [ (GET, "Get a specific build report")
+                                 , (DELETE, "Delete a specific build report")
+                                 ]
+              , resourceGet    = [ ("txt", textPackageReport) ]
+              , resourceDelete = [ ("",    deleteBuildReport) ]
+              }
+          , reportsLog  = (extendResourcePath "/reports/:id/log" corePackagePage) {
+                resourceDesc   = [ (GET, "Get the build log associated with a build report")
+                                 , (DELETE, "Delete a build log")
+                                 , (PUT, "Upload a build log for a build report")
+                                 ]
+              , resourceGet    = [ ("txt", serveBuildLog) ]
+              , resourceDelete = [ ("",    deleteBuildLog )]
+              , resourcePut    = [ ("",    putBuildLog) ]
+              }
           , reportsListUri = \format pkgid -> renderResource (reportsList reportsResource) [display pkgid, format]
           , reportsPageUri = \format pkgid repid -> renderResource (reportsPage reportsResource) [display pkgid, display repid, format]
           , reportsLogUri  = \pkgid repid -> renderResource (reportsLog reportsResource) [display pkgid, display repid]
@@ -150,6 +166,16 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
               -- redirect to new reports page
               seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
+    {-
+      Example using curl:
+
+        curl -u admin:admin \
+             -X POST \
+             -H "Content-Type: text/plain" \
+             --data-binary @reports/nats-0.1 \
+             http://localhost:8080/package/nats-0.1/reports/
+    -}
+
     -- result: auth error, not-found error or redirect
     deleteBuildReport :: DynamicPath -> ServerPart Response
     deleteBuildReport dpath = runServerPartE $ do
@@ -175,6 +201,16 @@ buildReportsFeature ServerEnv{serverBlobStore = store}
       void $ updateState reportsState $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
       -- go to report page (linking the log)
       seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
+
+    {-
+      Example using curl: (TODO: why is this PUT, while logs are POST?)
+
+        curl -u admin:admin \
+             -X PUT \
+             -H "Content-Type: text/plain" \
+             --data-binary @logs/nats-0.1 \
+             http://localhost:8080/package/nats-0.1/reports/1/log
+    -}
 
     -- result: auth error, not-found error or redirect
     deleteBuildLog :: DynamicPath -> ServerPart Response

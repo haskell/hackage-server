@@ -99,10 +99,15 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                            uploadFeature
                            tarIndexCacheFeature
 
-    reportsFeature  <- initBuildReportsFeature env
+    reportsCoreFeature <- initBuildReportsFeature "reports-core" env
                          usersFeature
                          uploadFeature
                          (coreResource coreFeature)
+
+    reportsCandidatesFeature <- initBuildReportsFeature "reports-candidates" env
+                         usersFeature
+                         uploadFeature
+                         (candidatesCoreResource candidatesFeature)
 
     documentationCoreFeature <- initDocumentationFeature "documentation-core" env
                          (coreResource coreFeature)
@@ -178,7 +183,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface userDetailsFeature
          , getFeatureInterface distroFeature
          , getFeatureInterface candidatesFeature
-         , getFeatureInterface reportsFeature
+         , getFeatureInterface reportsCoreFeature
+         , getFeatureInterface reportsCandidatesFeature
          , getFeatureInterface documentationCoreFeature
          , getFeatureInterface documentationCandidatesFeature
          , getFeatureInterface downloadFeature
