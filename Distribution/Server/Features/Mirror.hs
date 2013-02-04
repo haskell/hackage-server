@@ -104,7 +104,8 @@ mirrorFeature ServerEnv{serverBlobStore = store}
   = (MirrorFeature{..}, mirrorersGroupDesc)
   where
     mirrorFeatureInterface = (emptyHackageFeature "mirror") {
-        featureResources =
+        featureDesc = "Support direct (PUT) tarball uploads and overrides"
+      , featureResources =
           map ($mirrorResource) [
               mirrorPackageTarball
             , mirrorPackageUploadTime
@@ -119,19 +120,27 @@ mirrorFeature ServerEnv{serverBlobStore = store}
 
     mirrorResource = MirrorResource {
         mirrorPackageTarball = (extendResource $ corePackageTarball coreResource) {
-                                 resourcePut = [("", tarballPut)]
-                               }
+            resourceDesc = [ (PUT, "Upload or replace a package tarball") ]
+          , resourcePut  = [ ("", tarballPut) ]
+          }
       , mirrorPackageUploadTime = (extendResourcePath "/upload-time" $ corePackagePage coreResource) {
-                                 resourceGet = [("", uploadTimeGet)],
-                                 resourcePut = [("", uploadTimePut)]
-                               }
+            resourceDesc = [ (GET, "Get a package upload time")
+                           , (PUT, "Replace package upload time")
+                           ]
+          , resourceGet  = [ ("", uploadTimeGet) ]
+          , resourcePut  = [ ("", uploadTimePut) ]
+          }
       , mirrorPackageUploader = (extendResourcePath "/uploader" $ corePackagePage coreResource) {
-                                 resourceGet = [("", uploaderGet)],
-                                 resourcePut = [("", uploaderPut)]
-                               }
-      , mirrorCabalFile      = (extendResource $ coreCabalFile coreResource) {
-                                 resourcePut = [("", cabalPut)]
-                               }
+            resourceDesc = [ (GET, "Get a package uploader (username)")
+                           , (PUT, "Replace a package uploader")
+                           ]
+          , resourceGet  = [ ("", uploaderGet) ]
+          , resourcePut  = [ ("", uploaderPut) ]
+          }
+      , mirrorCabalFile = (extendResource $ coreCabalFile coreResource) {
+            resourceDesc = [ (PUT, "Replace a package tarball" ) ]
+          , resourcePut  = [ ("", cabalPut) ]
+          }
       , mirrorGroupResource
       }
 
@@ -147,6 +156,12 @@ mirrorFeature ServerEnv{serverBlobStore = store}
 
 
     -- result: error from unpacking, bad request error, or warning lines
+    --
+    -- curl -u admin:admin \
+    --      -X PUT \
+    --      -H "Content-Type: application/x-gzip" \
+    --      --data-binary @$1 \
+    --      http://localhost:8080/package/$PACKAGENAME/$PACKAGEID.tar.gz
     tarballPut :: DynamicPath -> ServerPart Response
     tarballPut dpath = runServerPartE $ do
         uid         <- guardAuthorised [InGroup mirrorGroup]
