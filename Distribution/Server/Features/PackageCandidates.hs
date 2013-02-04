@@ -295,7 +295,6 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           [ processCandidate isRight regularIndex uid info
           , runUserFilter uid])
         let candidate = CandPkgInfo {
-                candInfoId = packageId pkgInfo,
                 candPkgInfo = pkgInfo,
                 candWarnings = uploadWarnings uresult,
                 candPublic = True -- do withDataFn

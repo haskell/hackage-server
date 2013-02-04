@@ -9,7 +9,7 @@
 -----------------------------------------------------------------------------
 module Distribution.Server.Features.PackageCandidates.Types where
 
-import Distribution.Server.Packages.Types (PkgInfo)
+import Distribution.Server.Packages.Types (PkgInfo(..))
 import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.MemSize
 
@@ -28,7 +28,6 @@ import Data.SafeCopy
 -- It's currently possible to have candidates for packages which don't exist yet.
 --
 data CandPkgInfo = CandPkgInfo {
-    candInfoId  :: !PackageIdentifier,
     -- there should be one ByteString and one BlobId per candidate.
     -- this was enforced in the types.. but it's easier to just
     -- reuse PkgInfo for the task.
@@ -39,28 +38,28 @@ data CandPkgInfo = CandPkgInfo {
     candPublic :: !Bool
 } deriving (Show, Typeable, Eq)
 
+candInfoId :: CandPkgInfo -> PackageIdentifier
+candInfoId = pkgInfoId . candPkgInfo
+
 deriveSafeCopy 0 'base ''CandPkgInfo
 
 instance Package CandPkgInfo where packageId = candInfoId
 
 instance Serialize CandPkgInfo where
   put pkgInfo = do
-    Serialize.put (candInfoId pkgInfo)
     Serialize.put (candPkgInfo pkgInfo)
     Serialize.put (candWarnings pkgInfo)
     Serialize.put (candPublic pkgInfo)
 
   get = do
-    infoId  <- Serialize.get
     pkgInfo <- Serialize.get
     warning <- Serialize.get
     public  <- Serialize.get
     return CandPkgInfo {
-        candInfoId  = infoId,
         candPkgInfo = pkgInfo,
         candWarnings = warning,
         candPublic = public
     }
 
 instance MemSize CandPkgInfo where
-    memSize (CandPkgInfo a b c d) = memSize4 a b c d
+    memSize (CandPkgInfo a b c) = memSize3 a b c
