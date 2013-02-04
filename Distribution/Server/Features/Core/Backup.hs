@@ -117,7 +117,7 @@ partialToFullPkg (pkgId, partial) = do
                          partialCabal partialCabalUpload partial
     tarballDex <- liftM2 (makeRecord $ "tarball for " ++ display pkgId)
                          partialTarball partialTarballUpload partial
-    case shiftUploadTimes (descendUploadTimes cabalDex) of
+    case descendUploadTimes cabalDex of
       [] -> fail $ "No cabal files found for " ++ display pkgId
       ((cabal, info):cabalOld) -> case parsePackageDescription (cabalFileString cabal) of
         ParseFailed err -> fail $ show (locatedErrorMsg err)
@@ -143,25 +143,6 @@ partialToFullPkg (pkgId, partial) = do
                                                ++ ") found without matching upload log entry"
     makeRecord' item _ (OnlyInRight y:_) = fail $ "Upload log entry for " ++ item ++ " (index "
                                                ++ show (fst y) ++") found, but file itself missing"
-
-{-
-How data is stored in PkgInfo:
-[(data1, upload1), (data2, upload2)]
-current: (data0, upload0)
-How it is correlated in the tarball:
-data0 - upload1 (upload time of data0 is stored with the data that replaced it, in this case data1)
-data1 - upload2
-data2 - upload0 (upload time of earliest version is at top)
--}
-
---from data/upload-time format to pkgInfo format (on import)
-shiftUploadTimes :: [(a, b)] -> [(a, b)]
-shiftUploadTimes list = let (xs, ys) = unzip list in zip xs (last ys : init ys)
-
--- from pkgInfo formats to data/upload-time format (on export, and maybe for displaying to a web interface)
--- if a non-empty list is passed in, a non-empty list /will/ be passed out
-unshiftUploadTimes :: [(a, b)] -> [(a, b)]
-unshiftUploadTimes list = let (xs, ys) = unzip list in zip xs (tail ys ++ [head ys])
 
 --------------------------------------------------------------------------------
 -- Every tarball and cabal file ever uploaded for every single package name and version
@@ -189,7 +170,7 @@ indexToCurrentVersions st =
 infoToAllEntries :: PkgInfo -> [BackupEntry]
 infoToAllEntries pkg =
     let pkgId = pkgInfoId pkg
-        cabals   = cabalListToExport pkgId $ unshiftUploadTimes ((pkgData pkg, pkgUploadData pkg):pkgDataOld pkg)
+        cabals   = cabalListToExport pkgId $ ((pkgData pkg, pkgUploadData pkg):pkgDataOld pkg)
         tarballs = tarballListToExport pkgId (pkgTarball pkg)
     in cabals ++ tarballs
 
