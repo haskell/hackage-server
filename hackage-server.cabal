@@ -142,6 +142,7 @@ executable hackage-server
       Distribution.Server.Features.PackageCandidates
       Distribution.Server.Features.PackageCandidates.Types
       Distribution.Server.Features.PackageCandidates.State
+      Distribution.Server.Features.PackageCandidates.Backup
       Distribution.Server.Features.Distro
       Distribution.Server.Features.Distro.Distributions
       Distribution.Server.Features.Distro.Backup

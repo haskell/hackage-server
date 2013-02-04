@@ -12,6 +12,7 @@ import Distribution.Server.Framework
 
 import Distribution.Server.Features.PackageCandidates.Types
 import Distribution.Server.Features.PackageCandidates.State
+import Distribution.Server.Features.PackageCandidates.Backup
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Upload
@@ -135,7 +136,7 @@ candidatesStateComponent stateDir = do
     , acidState    = st
     , resetState   = candidatesStateComponent
       -- TODO: backup
-    , backupState  = \_ -> []
+    , backupState  = backupCandidates
     , restoreState = restoreBackupUnimplemented
   }
 
