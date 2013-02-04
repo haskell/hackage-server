@@ -71,8 +71,9 @@ import Distribution.Simple.Utils (lowercase, comparing)
 -- It can be searched effeciently by package name and version.
 --
 newtype PackageIndex pkg = PackageIndex
-  -- This index package names to all the package records matching that package
-  -- name case-sensitively. It includes all versions.
+  -- A mapping from package names to a non-empty list of  versions of that
+  -- package, in ascending order (most recent package last)
+  -- TODO: Wouldn't it make more sense to store the most recent package first?
   --
   -- This allows us to find all versions satisfying a dependency.
   -- Most queries are a map lookup followed by a linear scan of the bucket.
