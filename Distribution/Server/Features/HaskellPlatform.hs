@@ -6,7 +6,7 @@ module Distribution.Server.Features.HaskellPlatform (
   ) where
 
 import Distribution.Server.Framework
-import Distribution.Server.Framework.BackupRestore (restoreBackupUnimplemented)
+import Distribution.Server.Framework.BackupRestore
 
 import Distribution.Server.Features.HaskellPlatform.State
 
@@ -63,8 +63,13 @@ platformStateComponent stateDir = do
     , putState     = update st . ReplacePlatformPackages
     , resetState   = platformStateComponent
     -- TODO: backup
+    -- For now backup is just empty, as this package is basically featureless
+    -- It defines state, but there is no way at all to modify this state
     , backupState  = \_ -> []
-    , restoreState = restoreBackupUnimplemented
+    , restoreState = RestoreBackup {
+                         restoreEntry    = error "Unexpected backup entry for platform"
+                       , restoreFinalize = return initialPlatformPackages
+                       }
     }
 
 platformFeature :: StateComponent PlatformPackages
@@ -73,7 +78,8 @@ platformFeature platformState
   = PlatformFeature{..}
   where
     platformFeatureInterface = (emptyHackageFeature "platform") {
-        featureResources =
+        featureDesc = "List packages which are part of the Haskell platform (this is work in progress)"
+      , featureResources =
           map ($platformResource) [
               platformPackage
             , platformPackages
@@ -82,12 +88,21 @@ platformFeature platformState
       }
 
     platformResource = fix $ \r -> PlatformResource
-          { platformPackage  = (resourceAt "/platform/package/:package.:format") { resourceGet = [], resourceDelete = [], resourcePut = [] }
-          , platformPackages = (resourceAt "/platform/.:format") { resourceGet = [], resourcePost = [] }
-          , platformPackageUri = \format pkgid -> renderResource (platformPackage r) [display pkgid, format]
-          , platformPackagesUri = \format -> renderResource (platformPackages r) [format]
-        -- and maybe "/platform/haskell-platform.cabal"
+      { platformPackage = (resourceAt "/platform/package/:package.:format") {
+            resourceGet    = []
+          , resourceDelete = []
+          , resourcePut    = []
           }
+      , platformPackages = (resourceAt "/platform/.:format") {
+            resourceGet  = []
+          , resourcePost = []
+          }
+      , platformPackageUri = \format pkgid ->
+          renderResource (platformPackage r) [display pkgid, format]
+      , platformPackagesUri = \format ->
+          renderResource (platformPackages r) [format]
+       -- and maybe "/platform/haskell-platform.cabal"
+      }
 
     ------------------------------------------
     -- functionality: showing status for a single package, and for all packages, adding a package, deleting a package
