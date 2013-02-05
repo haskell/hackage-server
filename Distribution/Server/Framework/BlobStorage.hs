@@ -169,16 +169,23 @@ fetch store blobid = BS.readFile (filepath store blobid)
 --
 open :: FilePath -> IO BlobStorage
 open storeDir = do
-    let store = BlobStorage storeDir
+    let store   = BlobStorage storeDir
+        chars   = ['0' .. '9'] ++ ['a' .. 'f']
+        subdirs = incomingDir store
+                : [storeDir </> [x, y] | x <- chars, y <- chars]
 
     exists <- doesDirectoryExist storeDir
-    unless exists $ do
-        let chars = ['0' .. '9'] ++ ['a' .. 'f']
-            chars2 = [ [x, y] | x <- chars, y <- chars ]
+    if not exists
+      then do
         createDirectory storeDir
-        sequence_ [ createDirectory (storeDir </> x)
-                  | x <- chars2 ]
-        createDirectory (incomingDir store)
-
+        forM_ subdirs createDirectory
+      else
+        forM_ subdirs $ \d -> do
+          subdirExists <- doesDirectoryExist d
+          unless subdirExists $
+            fail $ "Store directory \""
+                ++ storeDir
+                ++ "\" exists but \""
+                ++ d
+                ++ "\" does not"
     return store
-
