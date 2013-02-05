@@ -6,12 +6,77 @@ import Distribution.Server.Features.PackageCandidates.State
 import Distribution.Server.Features.PackageCandidates.Types
 import Distribution.Server.Features.Core.Backup as CoreBackup
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
-import Distribution.Package (packageId)
+import Distribution.Package (PackageId, packageId)
 import Text.CSV (CSV)
 import Data.Version (Version(Version), showVersion)
+import Data.Map (Map)
+import qualified Data.Map as Map
 
 {-------------------------------------------------------------------------------
-  Backup
+  Restore backup
+-------------------------------------------------------------------------------}
+
+data PartialCandidate = PartialCandidate {
+    partialWarnings :: [String]
+  , partialPublic   :: Bool
+  }
+
+type PartialCandidates = Map PackageId PartialCandidate
+
+restoreCandidates :: RestoreBackup CandidatePackages
+restoreCandidates = updateCandidates Map.empty Map.empty
+
+-- We keep the partial packages separate from the rest of the candidate info
+-- so that we can reuse more of CoreBackup
+updateCandidates :: PartialIndex -> PartialCandidates -> RestoreBackup CandidatePackages
+updateCandidates packageMap candidateMap = RestoreBackup {
+    restoreEntry = \entry -> do
+      packageMap'   <- doPackageImport   packageMap   entry
+      candidateMap' <- doCandidateImport candidateMap entry
+      return (updateCandidates packageMap' candidateMap')
+  , restoreFinalize = do
+      let combined = combineMaps packageMap candidateMap
+      results <- mapM mkCandidate (Map.toList combined)
+      return $ CandidatePackages (PackageIndex.fromList results)
+  }
+  where
+    mkCandidate :: (PackageId, (Maybe PartialPkg, Maybe PartialCandidate)) -> Restore CandPkgInfo
+    mkCandidate (pkgId, (Just partialPkg, Just partialCand)) = do
+      pkg <- CoreBackup.partialToFullPkg (pkgId, partialPkg)
+      return CandPkgInfo { candPkgInfo  = pkg
+                         , candWarnings = partialWarnings partialCand
+                         , candPublic   = partialPublic   partialCand
+                         }
+    mkCandidate (pkgId, (Nothing, Just _)) =
+      fail $ show pkgId ++ ": candidate.csv without corresponding package"
+    mkCandidate (pkgId, (Just _, Nothing)) =
+      fail $ show pkgId ++ ": missing candidate.csv"
+    mkCandidate _ =
+      fail "mkCandidate: the impossible happened"
+
+combineMaps :: Ord k => Map k a -> Map k b -> Map k (Maybe a, Maybe b)
+combineMaps map1 map2 =
+  let map1' = Map.map (\x -> (Just x, Nothing)) map1
+      map2' = Map.map (\y -> (Nothing, Just y)) map2
+  in Map.unionWith (\e1 e2 -> (fst e1, snd e2)) map1' map2'
+
+doCandidateImport :: PartialCandidates -> BackupEntry -> Restore PartialCandidates
+doCandidateImport candidates (BackupByteString ["package", pkgStr, "candidate.csv"] bs) = do
+  pkgId <- CoreBackup.parsePackageId pkgStr
+  csv <- importCSV "candidate.csv" bs
+  partial <- case csv of
+    [_version, ["public", public], "warnings" : warnings] ->
+      return PartialCandidate { partialWarnings = warnings
+                              , partialPublic   = read public
+                              }
+    _ ->
+      fail "candidate.csv has an invalid format"
+  return (Map.insert pkgId partial candidates)
+doCandidateImport candidates _ =
+  return candidates
+
+{-------------------------------------------------------------------------------
+  Create backup
 -------------------------------------------------------------------------------}
 
 backupCandidates :: CandidatePackages -> [BackupEntry]

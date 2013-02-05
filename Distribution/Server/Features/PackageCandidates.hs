@@ -28,7 +28,6 @@ import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
-import Distribution.Server.Framework.BackupRestore (restoreBackupUnimplemented)
 
 import Distribution.Server.Util.ServeTarball (serveTarEntry, serveTarball)
 import qualified Data.TarIndex as TarIndex
@@ -135,9 +134,8 @@ candidatesStateComponent stateDir = do
     , putState     = update st . ReplaceCandidatePackages
     , acidState    = st
     , resetState   = candidatesStateComponent
-      -- TODO: backup
     , backupState  = backupCandidates
-    , restoreState = restoreBackupUnimplemented
+    , restoreState = restoreCandidates
   }
 
 candidatesFeature :: ServerEnv

@@ -7,7 +7,12 @@ module Distribution.Server.Features.Core.Backup (
     indexToCurrentVersions,
     infoToAllEntries,
     infoToCurrentEntries,
-    pkgPath
+    pkgPath,
+    PartialIndex,
+    PartialPkg,
+    partialToFullPkg,
+    parsePackageId,
+    doPackageImport
   ) where
 
 import Distribution.Server.Features.Core.State
