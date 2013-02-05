@@ -16,6 +16,7 @@ import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Framework.BackupRestore (restoreBackupUnimplemented)
 
 import Distribution.Server.Features.PreferredVersions.State
+import Distribution.Server.Features.PreferredVersions.Backup
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Upload
@@ -109,7 +110,7 @@ preferredStateComponent stateDir = do
     , putState     = update st . ReplacePreferredVersions
     , resetState   = preferredStateComponent
     -- TODO: backup
-    , backupState  = \_ -> []
+    , backupState  = backupPreferredVersions
     , restoreState = restoreBackupUnimplemented
     }
 
@@ -166,22 +167,27 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
       updateDeprecatedTags
 
     versionsResource = fix $ \r -> VersionsResource
-          { preferredResource = resourceAt "/packages/preferred.:format"
-          , preferredText = (resourceAt "/packages/preferred-versions") { resourceGet = [("txt", \_ -> textPreferred)] }
-          , preferredPackageResource = resourceAt "/package/:package/preferred.:format"
-          , deprecatedResource = (resourceAt "/packages/deprecated.:format") {
-                                   resourceGet = [("json", handlePackagesDeprecatedGet)]
-                                 }
-          , deprecatedPackageResource = (resourceAt "/package/:package/deprecated.:format") {
-                                          resourceGet = [("json", handlePackageDeprecatedGet) ],
-                                          resourcePut = [("json", handlePackageDeprecatedPut) ]
-                                        }
-
-          , preferredUri = \format -> renderResource (preferredResource r) [format]
-          , preferredPackageUri = \format pkgid -> renderResource (preferredPackageResource r) [display pkgid, format]
-          , deprecatedUri = \format -> renderResource (deprecatedResource r) [format]
-          , deprecatedPackageUri = \format pkgid -> renderResource (deprecatedPackageResource r) [display pkgid, format]
+      { preferredResource        = resourceAt "/packages/preferred.:format"
+      , preferredPackageResource = resourceAt "/package/:package/preferred.:format"
+      , preferredText = (resourceAt "/packages/preferred-versions") {
+            resourceGet = [("txt", \_ -> textPreferred)]
           }
+      , deprecatedResource = (resourceAt "/packages/deprecated.:format") {
+            resourceGet = [("json", handlePackagesDeprecatedGet)]
+          }
+      , deprecatedPackageResource = (resourceAt "/package/:package/deprecated.:format") {
+            resourceGet = [("json", handlePackageDeprecatedGet) ],
+            resourcePut = [("json", handlePackageDeprecatedPut) ]
+          }
+      , preferredUri = \format ->
+          renderResource (preferredResource r) [format]
+      , preferredPackageUri = \format pkgid ->
+          renderResource (preferredPackageResource r) [display pkgid, format]
+      , deprecatedUri = \format ->
+          renderResource (deprecatedResource r) [format]
+      , deprecatedPackageUri = \format pkgid ->
+          renderResource (deprecatedPackageResource r) [display pkgid, format]
+      }
 
     textPreferred = fmap toResponse makePreferredVersions
 

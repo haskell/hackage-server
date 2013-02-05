@@ -157,6 +157,7 @@ executable hackage-server
       Distribution.Server.Features.RecentPackages
       Distribution.Server.Features.PreferredVersions
       Distribution.Server.Features.PreferredVersions.State
+      Distribution.Server.Features.PreferredVersions.Backup
       -- [reverse index disabled] Distribution.Server.Features.ReverseDependencies
     -- [reverse index disabled] Distribution.Server.Features.ReverseDependencies.State
       Distribution.Server.Features.Tags
