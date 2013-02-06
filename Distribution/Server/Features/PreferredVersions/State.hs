@@ -25,6 +25,7 @@ data PreferredVersions = PreferredVersions {
     preferredMap  :: Map PackageName PreferredInfo,
     deprecatedMap :: Map PackageName [PackageName]
 } deriving (Typeable, Show, Eq)
+
 emptyPreferredVersions :: PreferredVersions
 emptyPreferredVersions = PreferredVersions Map.empty Map.empty
 
