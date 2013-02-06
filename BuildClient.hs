@@ -1,5 +1,5 @@
 {-# LANGUAGE PatternGuards #-}
-module Main where
+module Main (main) where
 
 import Network.Browser
 import Network.URI (URI(..), URIAuth(..))

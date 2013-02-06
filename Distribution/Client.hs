@@ -1,5 +1,21 @@
 {-# LANGUAGE PatternGuards #-}
-module Distribution.Client where
+module Distribution.Client
+  ( -- * Command line handling
+    validateHackageURI
+  , validatePackageIds
+    -- * Fetching info from source and destination servers
+  , PkgIndexInfo(..)
+  , downloadIndex
+  , readNewIndex
+    -- * HTTP utilities
+  , HttpSession
+  , uriHostName
+  , httpSession
+  , requestGET'
+  , requestPUT
+  , (<//>)
+  , provideAuthInfo
+  ) where
 
 import Network.HTTP
 import Network.Browser
