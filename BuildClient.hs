@@ -65,7 +65,8 @@ main = topHandler $ do
         Help strs ->
             do let usageHeader = intercalate "\n" [
                        "Usage: hackage-build init URL [options]",
-                       "Usage: hackage-build build [packages] [options]",
+                       "       hackage-build build [packages] [options]",
+                       "       hackage-build stats",
                        "Options:"]
                mapM_ putStrLn $ strs
                putStrLn $ usageInfo usageHeader buildFlagDescrs
@@ -142,9 +143,10 @@ stats opts = do
 
     httpSession verbosity $ do
         liftIO $ notice verbosity "Getting index"
-        index <- readNewIndex cacheDir
+        index <- downloadIndex (bc_srcURI config) cacheDir
+        -- index <- readNewIndex cacheDir
         let pkgIds = [ pkg_id | PkgIndexInfo pkg_id _ _ _ <- index ]
-            checkHasDocs pkgId = do hasDocs <- liftM isJust $ requestGET' (bc_srcURI config <//> "package" </> display pkgId </> "doc/")
+            checkHasDocs pkgId = do hasDocs <- liftM isJust $ requestGET' (bc_srcURI config <//> "package" </> display pkgId </> "docs")
                                     return (pkgId, hasDocs)
         liftIO $ putStrLn ("Total package versions: " ++
                            show (length pkgIds))
