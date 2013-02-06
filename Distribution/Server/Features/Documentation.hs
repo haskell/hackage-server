@@ -190,6 +190,15 @@ documentationFeature name
           --data-binary @transformers-0.3.0.0-docs.tar \
           http://localhost:8080/package/transformers-0.3.0.0/docs
 
+     or
+
+     curl -u admin:admin \
+          -X PUT \
+          -H "Content-Type: application/x-tar" \
+          -H "Content-Encoding: gzip" \
+          --data-binary @transformers-0.3.0.0-docs.tar.gz \
+          http://localhost:8080/package/transformers-0.3.0.0/docs
+
      The tarfile is expected to have the structure
 
         transformers-0.3.0.0-docs/index.html

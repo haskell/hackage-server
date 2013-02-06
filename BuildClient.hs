@@ -318,7 +318,7 @@ buildPackage verbosity opts config pkg_id = do
     -- set a prefix while installing
     let doc_root = installDirectory opts </> "share" </> "doc"
         doc_dir      = doc_root </> display pkg_id </> "html"
-        temp_doc_dir = doc_root </> display pkg_id </> display (pkgName pkg_id)
+        temp_doc_dir = doc_root </> display pkg_id </> display pkg_id ++ "-docs"
         --versionless_pkg_url = srcURI opts <//> "package" </> "$pkg"
         pkg_url = bc_srcURI config <//> "package" </> "$pkg-$version"
 
@@ -381,7 +381,7 @@ buildPackage verbosity opts config pkg_id = do
                 notice verbosity $ "Docs generated for " ++ display pkg_id
                 liftM Just $
                     -- We need the files in the documentation .tar.gz
-                    -- to have paths like foo/index.html
+                    -- to have paths like foo-x.y.z-docs/index.html
                     -- Unfortunately, on disk they have paths like
                     -- foo-x.y.z/html/index.html. This hack resolves
                     -- the problem:
@@ -394,7 +394,7 @@ buildPackage verbosity opts config pkg_id = do
     case mb_docs of
         Nothing       -> return ()
         Just docs_tgz -> do
-            requestPUT (bc_srcURI config <//> "package" </> display pkg_id </> "doc") "application/x-gzip" docs_tgz
+            requestPUT (bc_srcURI config <//> "package" </> display pkg_id </> "docs") "application/x-tar" (Just "gzip") docs_tgz
 
 cabal :: BuildOpts -> String -> [String] -> IO ExitCode
 cabal opts cmd args = do

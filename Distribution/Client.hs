@@ -316,28 +316,36 @@ requestGET' uri = do
     headers = []
 
 
-requestPUTFile :: URI -> String -> FilePath -> HttpSession ()
-requestPUTFile uri mime_type file = do
+requestPUTFile :: URI -> String -> Maybe String -> FilePath -> HttpSession ()
+requestPUTFile uri mime_type mEncoding file = do
     content <- liftIO $ BS.readFile file
-    requestPUT uri mime_type content
+    requestPUT uri mime_type mEncoding content
 
-requestPOST, requestPUT :: URI -> String -> ByteString -> HttpSession ()
+requestPOST, requestPUT :: URI -> String -> Maybe String -> ByteString -> HttpSession ()
 requestPOST = requestPOSTPUT POST
 requestPUT = requestPOSTPUT PUT
 
-requestPOSTPUT :: RequestMethod -> URI -> String -> ByteString -> HttpSession ()
-requestPOSTPUT meth uri mimetype body = do
+requestPOSTPUT :: RequestMethod -> URI -> String -> Maybe String -> ByteString -> HttpSession ()
+requestPOSTPUT meth uri mimetype mEncoding body = do
     (_, rsp) <- request (Request uri meth headers body)
     checkStatus uri rsp
   where
     headers = [ Header HdrContentLength (show (BS.length body))
               , Header HdrContentType mimetype ]
+              ++ case mEncoding of
+                Nothing       -> []
+                Just encoding -> [ Header HdrContentEncoding encoding ]
 
 
 checkStatus :: URI -> Response ByteString -> HttpSession ()
 checkStatus uri rsp = case rspCode rsp of
+  -- 200 OK
   (2,0,0) -> return ()
+  -- 204 No Content
+  (2,0,4) -> return ()
+  -- 400 Bad Request
   (4,0,0) -> liftIO (warn normal (showFailure uri rsp)) >> return ()
+  -- Other
   _code   -> err (showFailure uri rsp)
 
 showFailure :: URI -> Response ByteString -> String
