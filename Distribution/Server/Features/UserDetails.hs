@@ -8,7 +8,7 @@ module Distribution.Server.Features.UserDetails (
   ) where
 
 import Distribution.Server.Framework
---import Distribution.Server.Framework.BackupDump
+import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
 
 import Distribution.Server.Features.Users
@@ -29,6 +29,9 @@ import Data.Typeable (Typeable)
 import Control.Monad.Reader (ask)
 import Control.Monad.State (get, put)
 
+import Distribution.Text (display)
+import Data.Version
+import Text.CSV (CSV, Record)
 
 
 -- | A feature to store extra information about users like email addresses.
@@ -42,6 +45,7 @@ data UserDetailsFeature = UserDetailsFeature {
 
 instance IsHackageFeature UserDetailsFeature where
   getFeatureInterface = userDetailsFeatureInterface
+
 
 -------------------------
 -- Types of stored data
@@ -79,6 +83,7 @@ instance MemSize AccountKind where
 
 instance MemSize UserDetailsTable where
     memSize (UserDetailsTable a) = memSize1 a
+
 
 ------------------------------
 -- State queries and updates
@@ -136,6 +141,96 @@ makeAcidic ''UserDetailsTable [
     'deleteUserDetails
   ]
 
+
+---------------------
+-- State components
+--
+
+userDetailsStateComponent :: FilePath -> IO (StateComponent UserDetailsTable)
+userDetailsStateComponent stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "UserDetails") emptyUserDetailsTable
+  return StateComponent {
+      stateDesc    = "Extra details associated with user accounts, email addresses etc"
+    , acidState    = st
+    , getState     = query st GetUserDetailsTable
+    , putState     = update st . ReplaceUserDetailsTable
+    , backupState  = \users -> [csvToBackup ["users.csv"] (userDetailsToCSV users)]
+    , restoreState = userDetailsBackup
+    , resetState   = userDetailsStateComponent
+    }
+
+----------------------------
+-- Data backup and restore
+--
+
+userDetailsBackup :: RestoreBackup UserDetailsTable
+userDetailsBackup = updateUserBackup emptyUserDetailsTable
+
+updateUserBackup :: UserDetailsTable -> RestoreBackup UserDetailsTable
+updateUserBackup users = RestoreBackup {
+    restoreEntry = \entry -> case entry of
+      BackupByteString ["users.csv"] bs -> do
+        csv <- importCSV "users.csv" bs
+        users' <- importUserDetails csv users
+        return (updateUserBackup users')
+      _ ->
+        return (updateUserBackup users)
+  , restoreFinalize =
+     return users
+  }
+
+importUserDetails :: CSV -> UserDetailsTable -> Restore UserDetailsTable
+importUserDetails = concatM . map fromRecord . drop 2
+  where
+    fromRecord :: Record -> UserDetailsTable -> Restore UserDetailsTable
+    fromRecord [idStr, nameStr, emailStr, kindStr, notesStr] (UserDetailsTable tbl) = do
+        UserId uid <- parseText "user id" idStr
+        akind      <- parseKind kindStr
+        let udetails = AccountDetails {
+                        accountName         = T.pack nameStr,
+                        accountContactEmail = T.pack emailStr,
+                        accountKind         = akind,
+                        accountAdminNotes   = T.pack notesStr
+                      }
+        return $! UserDetailsTable (IntMap.insert uid udetails tbl)
+
+    fromRecord x _ = fail $ "Error processing user details record: " ++ show x
+
+    parseKind ""        = return Nothing
+    parseKind "real"    = return (Just AccountKindRealUser)
+    parseKind "special" = return (Just AccountKindSpecial)
+    parseKind sts       = fail $ "unable to parse account kind: " ++ sts
+
+userDetailsToCSV :: UserDetailsTable -> CSV
+userDetailsToCSV (UserDetailsTable tbl)
+    = ([showVersion userCSVVer]:) $
+      (userdetailsCSVKey:) $
+
+      flip map (IntMap.toList tbl) $ \(uid, udetails) ->
+      [ display (UserId uid)
+      , T.unpack (accountName udetails)  --FIXME: apparently the csv lib doesn't do unicode properly
+      , T.unpack (accountContactEmail udetails)
+      , infoToAccountKind udetails
+      , T.unpack (accountAdminNotes udetails)
+      ]
+
+ where
+    userdetailsCSVKey =
+       [ "uid"
+       , "realname"
+       , "email"
+       , "kind"
+       , "notes"
+       ]
+    userCSVVer = Version [0,2] []
+
+    -- one of "enabled" "disabled" or "deleted"
+    infoToAccountKind :: AccountDetails -> String
+    infoToAccountKind udetails = case accountKind udetails of
+      Nothing                  -> ""
+      Just AccountKindRealUser -> "real"
+      Just AccountKindSpecial  -> "special"
+
 ----------------------------------------
 -- Feature definition & initialisation
 --
@@ -148,20 +243,10 @@ initUserDetailsFeature ServerEnv{serverStateDir} users core = do
 
   let feature = userDetailsFeature usersDetailsState users core
 
+  --TODO: link up to user feature to delete
+
   return feature
 
-userDetailsStateComponent :: FilePath -> IO (StateComponent UserDetailsTable)
-userDetailsStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "UserDetails") emptyUserDetailsTable
-  return StateComponent {
-      stateDesc    = "Extra details associated with user accounts, email addresses etc"
-    , acidState    = st
-    , getState     = query st GetUserDetailsTable
-    , putState     = update st . ReplaceUserDetailsTable
-    , backupState  = \_ -> [] -- \users -> [csvToBackup ["users.csv"] (usersToCSV users)]
-    , restoreState = restoreBackupUnimplemented
-    , resetState   = userDetailsStateComponent
-    }
 
 userDetailsFeature :: StateComponent UserDetailsTable
                    -> UserFeature
@@ -280,6 +365,4 @@ data AdminInfo      = AdminInfo      { ui_accountKind :: Maybe AccountKind, ui_n
 $(deriveJSON (drop 3) ''NameAndContact)
 $(deriveJSON (drop 3) ''AdminInfo)
 $(deriveJSON id       ''AccountKind)
-
-    --TODO: link up to user feature to delete 
 
