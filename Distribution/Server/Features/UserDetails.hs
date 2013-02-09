@@ -218,7 +218,7 @@ userDetailsFeature userDetailsState UserFeature{..} CoreFeature{..}
 
     handlerGetUserNameContact :: DynamicPath -> ServerPart Response
     handlerGetUserNameContact dpath = runServerPartE $ do
-        (uid, _) <- lookupUserName =<< userNameInPath dpath
+        uid <- lookupUserName =<< userNameInPath dpath
         guardAuthorised_ [IsUserId uid, InGroup adminGroup]
         udetails <- queryUserDetails uid
         return $ toResponse (Aeson.toJSON (render udetails))
@@ -232,7 +232,7 @@ userDetailsFeature userDetailsState UserFeature{..} CoreFeature{..}
 
     handlerPutUserNameContact :: DynamicPath -> ServerPart Response
     handlerPutUserNameContact dpath = runServerPartE $ do
-        (uid, _) <- lookupUserName =<< userNameInPath dpath
+        uid <- lookupUserName =<< userNameInPath dpath
         guardAuthorised_ [IsUserId uid, InGroup adminGroup]
         NameAndContact name email <- expectAesonContent
         updateState userDetailsState (SetUserNameContact uid name email)
@@ -240,7 +240,7 @@ userDetailsFeature userDetailsState UserFeature{..} CoreFeature{..}
 
     handlerDeleteUserNameContact :: DynamicPath -> ServerPart Response
     handlerDeleteUserNameContact dpath = runServerPartE $ do
-        (uid, _) <- lookupUserName =<< userNameInPath dpath
+        uid <- lookupUserName =<< userNameInPath dpath
         guardAuthorised_ [IsUserId uid, InGroup adminGroup]
         updateState userDetailsState (SetUserNameContact uid T.empty T.empty)
         noContent $ toResponse ()
@@ -248,7 +248,7 @@ userDetailsFeature userDetailsState UserFeature{..} CoreFeature{..}
     handlerGetAdminInfo :: DynamicPath -> ServerPart Response
     handlerGetAdminInfo dpath = runServerPartE $ do
         guardAuthorised_ [InGroup adminGroup]
-        (uid, _) <- lookupUserName =<< userNameInPath dpath
+        uid <- lookupUserName =<< userNameInPath dpath
         udetails <- queryUserDetails uid
         return $ toResponse (Aeson.toJSON (render udetails))
       where
@@ -262,7 +262,7 @@ userDetailsFeature userDetailsState UserFeature{..} CoreFeature{..}
     handlerPutAdminInfo :: DynamicPath -> ServerPart Response
     handlerPutAdminInfo dpath = runServerPartE $ do
         guardAuthorised_ [InGroup adminGroup]
-        (uid, _) <- lookupUserName =<< userNameInPath dpath
+        uid <- lookupUserName =<< userNameInPath dpath
         AdminInfo akind notes <- expectAesonContent
         updateState userDetailsState (SetUserAdminInfo uid akind notes)
         noContent $ toResponse ()
@@ -270,7 +270,7 @@ userDetailsFeature userDetailsState UserFeature{..} CoreFeature{..}
     handlerDeleteAdminInfo :: DynamicPath -> ServerPart Response
     handlerDeleteAdminInfo dpath = runServerPartE $ do
         guardAuthorised_ [InGroup adminGroup]
-        (uid, _) <- lookupUserName =<< userNameInPath dpath
+        uid <- lookupUserName =<< userNameInPath dpath
         updateState userDetailsState (SetUserAdminInfo uid Nothing T.empty)
         noContent $ toResponse ()
 

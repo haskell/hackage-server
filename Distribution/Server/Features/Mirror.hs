@@ -10,11 +10,11 @@ import Distribution.Server.Framework hiding (formatTime)
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 
-import Distribution.Server.Users.State hiding (lookupUserName)
+import Distribution.Server.Users.State
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Backup
 import Distribution.Server.Users.Types
-import Distribution.Server.Users.Users
+import Distribution.Server.Users.Users hiding (lookupUserName)
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nullDescription)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Packages.Unpack as Upload
@@ -200,7 +200,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
     uploaderGet dpath = runServerPartE $ do
       pkg    <- packageInPath dpath >>= lookupPackageId
       userdb <- queryGetUserDb
-      return $ toResponse $ display (idToName userdb (pkgUploadUser pkg))
+      return $ toResponse $ display (userIdToName userdb (pkgUploadUser pkg))
 
     uploaderPut :: DynamicPath -> ServerPart Response
     uploaderPut dpath = runServerPartE $ do
@@ -208,7 +208,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
         pkgid <- packageInPath dpath
         nameContent <- expectTextPlain
         let uname = UserName (unpackUTF8 nameContent)
-        (uid, _) <- lookupUserName uname
+        uid    <- lookupUserName uname
         mb_err <- updateReplacePackageUploader pkgid uid
         maybe (return ()) (\err -> errNotFound err []) mb_err
         return $ toResponse "Updated uploader OK"

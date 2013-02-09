@@ -15,7 +15,7 @@ import Distribution.Server.Pages.Package.HaddockLex  (tokenise)
 import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Packages.ModuleForest
 import Distribution.Server.Packages.Render
-import Distribution.Server.Users.Types (userStatus, userName, isActive)
+import Distribution.Server.Users.Types (userStatus, userName, isActiveAccount)
 
 import Distribution.Package
 import Distribution.PackageDescription as P
@@ -213,7 +213,7 @@ renderFields render = [
   where desc = rendOther render
         (utime, uinfo) = rendUploadInfo render
         uname = maybe "Unknown" (display . userName) uinfo
-        uactive = maybe False (isActive . userStatus) uinfo
+        uactive = maybe False (isActiveAccount . userStatus) uinfo
         userField | uactive   = anchor ! [href $ "/user/" ++ uname] << uname
                   | otherwise = toHtml uname
         linkField url = case url of

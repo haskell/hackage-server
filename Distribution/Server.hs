@@ -34,6 +34,7 @@ import qualified Distribution.Server.Features as Features
 import Distribution.Server.Features.Users
 
 import qualified Distribution.Server.Users.Types as Users
+import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
 
 import Distribution.Text
@@ -234,11 +235,11 @@ initState server (admin, pass) = do
     muid <- case simpleParse admin of
         Just uname -> do
             let userAuth = Auth.newPasswdHash Auth.hackageRealm uname (PasswdPlain pass)
-            updateAddUser uname (Users.NewUserAuth userAuth)
+            updateAddUser uname (Users.UserAuth userAuth)
         Nothing -> fail "Couldn't parse admin name (should be alphanumeric)"
     case muid of
         Right uid -> Group.addUserList adminGroup uid
-        Left err  -> fail $ "Failed to create admin user: " ++ err
+        Left Users.ErrUserNameClash -> fail $ "Inconceivable!! failed to create admin user"
 
 -- The top-level server part.
 -- It collects resources from Distribution.Server.Features, collects

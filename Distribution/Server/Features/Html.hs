@@ -554,14 +554,16 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
 
     serveUserList :: DynamicPath -> ServerPart Response
     serveUserList _ = do
-        userlist <- Map.keys . Users.userNameMap <$> queryGetUserDb
-        let hlist = unordList $ map (\uname -> anchor ! [href $ userPageUri users "" uname] << display uname) userlist
+        userlist <- Users.enumerateEnabledUsers <$> queryGetUserDb
+        let hlist = unordList
+                      [ anchor ! [href $ userPageUri users "" uname] << display uname
+                      | (_, uinfo) <- userlist, let uname = userName uinfo ]
         ok $ toResponse $ Resource.XHtml $ hackagePage "Hackage users" [h2 << "Hackage users", hlist]
 
     serveUserPage :: DynamicPath -> ServerPart Response
     serveUserPage dpath = htmlResponse $ do
       uname    <- userNameInPath dpath
-      (uid, _) <- lookupUserName uname
+      uid      <- lookupUserName uname
       udetails <- queryUserDetails uid
       let realname = maybe (display uname) (T.unpack . accountName) udetails
       uris     <- getGroupIndex uid
@@ -594,9 +596,9 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
 
     servePasswordForm :: DynamicPath -> ServerPart Response
     servePasswordForm dpath = htmlResponse $ do
-      (pathUid, userInfo) <- userNameInPath dpath >>= lookupUserName
+      uname   <- userNameInPath dpath
+      pathUid <- lookupUserName uname
       uid <- guardAuthenticated -- FIXME: why are we duplicating auth decisions in this feature?
-      let uname = userName userInfo
       canChange <- canChangePassword uid pathUid
       case canChange of
           False -> errForbidden "Can't change password" [MText "You're neither this user nor an admin."]
@@ -614,8 +616,11 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
 
     serveEnabledForm :: DynamicPath -> ServerPart Response
     serveEnabledForm dpath = htmlResponse $ do
-      uname         <- userNameInPath dpath
-      (_, userInfo) <- lookupUserName uname
+      usersdb <- queryGetUserDb
+      uname <- userNameInPath dpath
+      (_, userInfo) <- case Users.lookupUserName uname usersdb of
+          Just (uid, uinfo) -> return (uid, uinfo)
+          Nothing           -> errNotFound "No such user" [MText "No such user"]
       return $ toResponse $ Resource.XHtml $ hackagePage "Change user status"
       -- TODO: expose some of the functionality in changePassword function to determine if permissions are correct
       -- before serving this form (either admin or user)
@@ -627,8 +632,8 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
               ]
         ]
       where isEnabled userInfo = case userStatus userInfo of
-                Active Enabled _ -> True
-                _ -> False
+                AccountEnabled _ -> True
+                _                -> False
 
     servePutEnabled :: DynamicPath -> ServerPart Response
     servePutEnabled dpath = htmlResponse $ do
@@ -1341,7 +1346,7 @@ htmlGroupResource UserFeature{..} r@(GroupResource groupR userR groupGen) =
     getList dpath = withGroup (groupGen dpath) $ \group -> do
         userDb   <- queryGetUserDb
         userlist <- liftIO . queryUserList $ group
-        let unames = [ Users.idToName userDb uid
+        let unames = [ Users.userIdToName userDb uid
                      | uid   <- Group.enumerate userlist ]
         let baseUri = renderResource' groupR dpath
         return . toResponse . Resource.XHtml $ Pages.groupPage
@@ -1350,7 +1355,7 @@ htmlGroupResource UserFeature{..} r@(GroupResource groupR userR groupGen) =
         (canAdd, canDelete) <- lookupGroupEditAuth group
         userDb   <- queryGetUserDb
         userlist <- liftIO . queryUserList $ group
-        let unames = [ Users.idToName userDb uid
+        let unames = [ Users.userIdToName userDb uid
                      | uid   <- Group.enumerate userlist ]
         let baseUri = renderResource' groupR dpath
         return . toResponse . Resource.XHtml $ Pages.groupPage

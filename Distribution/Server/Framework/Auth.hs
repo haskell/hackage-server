@@ -25,29 +25,19 @@ module Distribution.Server.Framework.Auth (
     PrivilegeCondition(..),
   ) where
 
-import Distribution.Server.Users.Types (UserId, UserName(..), UserAuth(..), UserInfo(userName))
+import Distribution.Server.Users.Types (UserId, UserName(..), UserAuth(..), UserInfo)
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
-import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Framework.AuthCrypt
 import Distribution.Server.Framework.AuthTypes
 import Distribution.Server.Framework.Error
-import Distribution.Server.Pages.Template (hackagePage)
-import Distribution.Server.Pages.Util (makeInput)
 import Distribution.Server.Util.Happstack (rqRealMethod)
-import Distribution.Server.Util.ContentType
-
-import Distribution.Text (display)
 
 import Happstack.Server
 
 import Control.Monad.Trans (MonadIO, liftIO)
 import qualified Data.ByteString.Char8 as BS
-
-import Text.XHtml.Table (simpleTable)
-import Text.XHtml.Strict
-import qualified Text.XHtml.Strict as XHtml
 
 import Control.Monad
 import Control.Monad.Error.Class (Error, noMsg)
@@ -160,13 +150,12 @@ guardPriviledged _ _ (AnyKnownUser:_) = return ()
 checkBasicAuth :: Users.Users -> RealmName -> BS.ByteString
                -> Either AuthError (UserId, UserInfo)
 checkBasicAuth users realm ahdr = do
-    authInfo   <- getBasicAuthInfo realm ahdr       ?! UnrecognizedAuthError
-    let uname  = basicUsername authInfo
-    uid        <- Users.lookupName uname users      ?! NoSuchUserError
-    uinfo      <- Users.lookupId   uid   users      ?! NoSuchUserError
-    uauth      <- getUserAuth uinfo                 ?! NoSuchUserError
-    passwdhash <- getPasswdHash uauth               ?! OldAuthError (userName uinfo)
-    guard (checkBasicAuthInfo passwdhash authInfo)  ?! PasswordMismatchError
+    authInfo     <- getBasicAuthInfo realm ahdr       ?! UnrecognizedAuthError
+    let uname    = basicUsername authInfo
+    (uid, uinfo) <- Users.lookupUserName uname users  ?! NoSuchUserError
+    uauth        <- getUserAuth uinfo                 ?! NoSuchUserError
+    let passwdhash = getPasswdHash uauth
+    guard (checkBasicAuthInfo passwdhash authInfo)    ?! PasswordMismatchError
     return (uid, uinfo)
 
 getBasicAuthInfo :: RealmName -> BS.ByteString -> Maybe BasicAuthInfo
@@ -211,13 +200,12 @@ setBasicAuthChallenge (RealmName realmName) = do
 checkDigestAuth :: Users.Users -> BS.ByteString -> Request
                 -> Either AuthError (UserId, UserInfo)
 checkDigestAuth users ahdr req = do
-    authInfo   <- getDigestAuthInfo ahdr req         ?! UnrecognizedAuthError
-    let uname  = digestUsername authInfo
-    uid        <- Users.lookupName uname users       ?! NoSuchUserError
-    uinfo      <- Users.lookupId uid users           ?! NoSuchUserError
-    uauth      <- getUserAuth uinfo                  ?! NoSuchUserError
-    passwdhash <- getPasswdHash uauth                ?! OldAuthError (userName uinfo)
-    guard (checkDigestAuthInfo passwdhash authInfo)  ?! PasswordMismatchError
+    authInfo     <- getDigestAuthInfo ahdr req         ?! UnrecognizedAuthError
+    let uname    = digestUsername authInfo
+    (uid, uinfo) <- Users.lookupUserName uname users   ?! NoSuchUserError
+    uauth        <- getUserAuth uinfo                  ?! NoSuchUserError
+    let passwdhash = getPasswdHash uauth
+    guard (checkDigestAuthInfo passwdhash authInfo)    ?! PasswordMismatchError
     -- TODO: if we want to prevent replay attacks, then we must check the
     -- nonce and nonce count and issue stale=true replies.
     return (uid, uinfo)
@@ -302,12 +290,11 @@ setDigestAuthChallenge (RealmName realmName) = do
 getUserAuth :: UserInfo -> Maybe UserAuth
 getUserAuth userInfo =
   case Users.userStatus userInfo of
-    Users.Active _ auth -> Just auth
-    _                   -> Nothing
+    Users.AccountEnabled auth -> Just auth
+    _                         -> Nothing
 
-getPasswdHash :: UserAuth -> Maybe PasswdHash
-getPasswdHash (NewUserAuth hash) = Just hash
-getPasswdHash _                  = Nothing
+getPasswdHash :: UserAuth -> PasswdHash
+getPasswdHash (UserAuth hash) = hash
 
 -- | The \"oh noes?!\" operator
 --
@@ -324,44 +311,20 @@ authError realm err = do
   -- we want basic first, but addHeaderM makes them come out reversed
   setDigestAuthChallenge realm
 --  setBasicAuthChallenge  realm
-  req <- askRq
-  let accepts = maybe [] (parseContentAccept . BS.unpack) (getHeader "Accept" req)
-      want_text = foldr (\ct rest_want_text -> case ct of ContentType { ctType = "text", ctSubtype = st }
-                                                            | st `elem` ["html", "xhtml"] -> False
-                                                            | st == "plain"               -> True
-                                                          _ -> rest_want_text) True accepts
-  finishWith $ (showAuthError want_text (rqPeer req) err) {
-                     rsCode = case err of
-                                UnrecognizedAuthError -> 400
-                                OldAuthError _        -> 403 -- Fits in that authenticating will make no difference...
-                                _                     -> 401
-                   }
+  finishWith (showAuthError err)
 
 data AuthError = NoAuthError | UnrecognizedAuthError | NoSuchUserError
-               | PasswordMismatchError | OldAuthError UserName
+               | PasswordMismatchError
   deriving Show
 
 instance Error AuthError where
     noMsg = NoAuthError
 
-showAuthError :: Bool -> Host -> AuthError -> Response
-showAuthError want_text (hostname, thePort) err = case err of
-    NoAuthError           -> toResponse "No authorization provided."
-    UnrecognizedAuthError -> toResponse "Authorization scheme not recognized."
-    NoSuchUserError       -> toResponse "Username or password incorrect."
-    PasswordMismatchError -> toResponse "Username or password incorrect."
-    OldAuthError uname
-      | want_text -> toResponse $ "Hackage has been upgraded to use more secure passwords. You need login to Hackage and reenter your password at http://" ++ hostname ++ ":" ++ show thePort ++ rel_url
-      | otherwise -> toResponse $ Resource.XHtml $ hackagePage "Change password"
-          [ toHtml "You haven't logged in since Hackage was upgraded. Please reenter your password below to upgrade your account."
-          , form ! [theclass "box", XHtml.method "post", action rel_url] <<
-                [ simpleTable [] []
-                    [ makeInput [thetype "password"] "password" "Old password"
-                    , makeInput [thetype "password"] "repeat-password" "Repeat old password"
-                    ]
-                , paragraph << [ hidden "try-upgrade" "1"
-                               , hidden "_method" "PUT" --method override
-                               , input ! [thetype "submit", value "Upgrade password"] ]
-                ]
-          ]
-      where rel_url = "/user/" ++ display uname ++ "/password"
+showAuthError :: AuthError -> Response
+showAuthError err = case err of
+    NoAuthError           -> withRsCode 401 $ toResponse "No authorization provided."
+    UnrecognizedAuthError -> withRsCode 400 $ toResponse "Authorization scheme not recognized."
+    NoSuchUserError       -> withRsCode 401 $ toResponse "Username or password incorrect."
+    PasswordMismatchError -> withRsCode 401 $ toResponse "Username or password incorrect."
+  where
+    withRsCode c r = r { rsCode = c }

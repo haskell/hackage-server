@@ -19,77 +19,56 @@ import Control.Monad.Reader
 import qualified Control.Monad.State as State
 
 initialUsers :: Users
-initialUsers = Users.empty
+initialUsers = Users.emptyUsers
 
 --------------------------------------------
 
 -- Returns 'Nothing' if the user name is in use
-addUser :: UserName -> UserAuth -> Update Users (Either String UserId)
-addUser uname auth = updateUsers' updateFn
-  where updateFn = Users.add uname auth
+addUserEnabled :: UserName -> UserAuth -> Update Users (Either Users.ErrUserNameClash UserId)
+addUserEnabled uname auth =
+  updateUsers $ Users.addUserEnabled uname auth
 
--- Requires that a user name exists, either by returning
--- a reference to an active one, returning a reference to
--- an historical one, or creating an historical one,
--- in order of precedence.
-requireUserName :: UserName -> Update Users UserId
-requireUserName uname = do
-    users <- State.get
-    let (musers, uid) = Users.requireName uname users
-    case musers of
-        Just users' -> State.put users'
-        Nothing -> return ()
-    return uid
+addUserDisabled :: UserName -> Update Users (Either Users.ErrUserNameClash UserId)
+addUserDisabled uname =
+  updateUsers $ Users.addUserDisabled uname
 
--- Disables the indicated user
-setEnabledUser :: UserId -> Bool -> Update Users (Maybe String)
-setEnabledUser uid en = updateUsers $ Users.setEnabled en uid
+-- Enables or disables the indicated user's account
+setUserEnabledStatus :: UserId -> Bool -> Update Users (Maybe (Either ErrNoSuchUserId ErrDeletedUser))
+setUserEnabledStatus uid en =
+  updateUsers_ $ Users.setUserEnabledStatus uid en
 
 -- Deletes the indicated user. Cannot be re-enabled. The associated
 -- user name is available for re-use
-deleteUser :: UserId -> Update Users (Maybe String)
-deleteUser = updateUsers . Users.delete
+deleteUser :: UserId -> Update Users (Maybe ErrNoSuchUserId)
+deleteUser uid =
+  updateUsers_ $ Users.deleteUser uid
 
--- Re-set the user autenication info
-replaceUserAuth :: UserId -> UserAuth -> Update Users (Maybe String)
-replaceUserAuth userId auth
-    = updateUsers $ \users -> Users.replaceAuth users userId auth
+-- Set the user autenication info
+setUserAuth :: UserId -> UserAuth -> Update Users (Maybe (Either ErrNoSuchUserId ErrDeletedUser))
+setUserAuth userId auth =
+  updateUsers_ $ Users.setUserAuth userId auth
 
-upgradeUserAuth :: UserId -> PasswdPlain -> UserAuth -> Update Users (Maybe String)
-upgradeUserAuth userId passwd auth
-    = updateUsers $ \users -> Users.upgradeAuth users userId passwd auth
-
-renameUser :: UserId -> UserName -> Update Users (Maybe (Maybe UserId))
-renameUser uid uname = do
-  users <- State.get
-  case Users.rename users uid uname of
-    Left err -> return $ Just err
-    Right users' -> do
-      State.put users'
-      return Nothing
+setUserName :: UserId -> UserName -> Update Users (Maybe (Either ErrNoSuchUserId ErrUserNameClash))
+setUserName uid uname =
+  updateUsers_ $ Users.setUserName uid uname
 
 -- updates the user db with a simpler function
-updateUsers :: (Users -> Either String Users) -> Update Users (Maybe String)
-updateUsers f = liftM finish $ updateUsers' updateFn
-    where updateFn users = fmap (flip (,) ()) $ f users
-          finish (Left msg) = Just msg
-          finish (Right ()) = Nothing
+updateUsers_ :: (Users -> Either err Users) -> Update Users (Maybe err)
+updateUsers_ upd = do
+  users <- State.get
+  case upd users of
+    Left err     -> return (Just err)
+    Right users' -> do State.put users'
+                       return Nothing
 
 -- Helper function for updating the users db
-updateUsers' :: (Users -> Either String (Users, a)) -> Update Users (Either String a)
-updateUsers' f = do
+updateUsers :: (Users -> Either err (Users, a)) -> Update Users (Either err a)
+updateUsers upd = do
   users <- State.get
-  case (f users) of
-    Left err -> return (Left err)
-    Right (users',a) -> do
-      State.put users'
-      return (Right a)
-
-lookupUserName :: UserName -> Query Users (Maybe UserId)
-lookupUserName = queryUsers . Users.lookupName
-
-queryUsers :: (Users -> a) -> Query Users a
-queryUsers queryFn = liftM queryFn ask
+  case upd users of
+    Left err         -> return (Left err)
+    Right (users',a) -> do State.put users'
+                           return (Right a)
 
 getUserDb :: Query Users Users
 getUserDb = ask
@@ -97,14 +76,12 @@ getUserDb = ask
 replaceUserDb :: Users -> Update Users ()
 replaceUserDb = State.put
 
-$(makeAcidic ''Users ['addUser
-                     ,'requireUserName
-                     ,'setEnabledUser
+$(makeAcidic ''Users ['addUserEnabled
+                     ,'addUserDisabled
+                     ,'setUserEnabledStatus
+                     ,'setUserAuth
+                     ,'setUserName
                      ,'deleteUser
-                     ,'replaceUserAuth
-                     ,'upgradeUserAuth
-                     ,'renameUser
-                     ,'lookupUserName
                      ,'getUserDb
                      ,'replaceUserDb
                      ])
@@ -186,33 +163,3 @@ $(makeAcidic ''MirrorClients
                     ,'removeMirrorClient
                     ,'replaceMirrorClients])
 
---------------------------------------------------------------------------
-data IndexUsers = IndexUsers {
-    indexUsers :: !Group.UserList
-} deriving (Typeable)
-
-$(deriveSafeCopy 0 'base ''IndexUsers)
-
-getIndexUsers :: Query IndexUsers UserList
-getIndexUsers = asks indexUsers
-
-modifyIndexUsers :: (UserList -> UserList) -> Update IndexUsers ()
-modifyIndexUsers func = State.modify (\users -> users { indexUsers = func (indexUsers users) })
-
-addIndexUser :: UserId -> Update IndexUsers ()
-addIndexUser uid = modifyIndexUsers (Group.add uid)
-
-removeIndexUser :: UserId -> Update IndexUsers ()
-removeIndexUser uid = modifyIndexUsers (Group.remove uid)
-
-replaceIndexUsers :: UserList -> Update IndexUsers ()
-replaceIndexUsers ulist = modifyIndexUsers (const ulist)
-
-initialIndexUsers :: IndexUsers
-initialIndexUsers = IndexUsers Group.empty
-
-$(makeAcidic ''IndexUsers
-                    ['getIndexUsers
-                    ,'addIndexUser
-                    ,'removeIndexUser
-                    ,'replaceIndexUsers])

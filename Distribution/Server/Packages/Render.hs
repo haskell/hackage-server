@@ -76,7 +76,7 @@ doPackageRender users info hasChangeLog = return $ PackageRender
     , rendHasTarball   = not . null $ pkgTarball info
     , rendHasChangeLog = hasChangeLog
     , rendUploadInfo   = let (utime, uid) = pkgUploadData info
-                         in (utime, Users.lookupId uid users)
+                         in (utime, Users.lookupUserId uid users)
     , rendPkgUri       = pkgUri
     , rendOther        = desc
     }

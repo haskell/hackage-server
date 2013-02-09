@@ -61,7 +61,7 @@ makeRow users PkgInfo {
             [nbsp, nbsp, XHtml.anchor !
                            [XHtml.href (packageURL pkgid)] << display pkgid]]
   where nbsp = XHtml.primHtmlChar "nbsp"
-        user = Users.idToName users userId
+        user = Users.userIdToName users userId
 
 showTime :: UTCTime -> String
 showTime = formatTime defaultTimeLocale "%c"
@@ -119,7 +119,7 @@ releaseItem users host pkgInfo@(PkgInfo {
     body  = synopsis (packageDescription (pkgDesc pkgInfo))
     desc  = "<i>Added by " ++ display user ++ ", " ++ showTime time ++ ".</i>"
          ++ if null body then "" else "<p>" ++ body
-    user = Users.idToName users userId
+    user = Users.userIdToName users userId
 
 unPackageName :: PackageName -> String
 unPackageName (PackageName name) = name
