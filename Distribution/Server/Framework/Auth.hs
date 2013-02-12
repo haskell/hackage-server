@@ -20,9 +20,13 @@ module Distribution.Server.Framework.Auth (
     PasswdHash,
 
     -- ** Special cases
-    guardAuthenticated,
-    guardPriviledged,
+    guardAuthenticated, checkAuthenticated,
+    guardPriviledged,   checkPriviledged,
     PrivilegeCondition(..),
+    
+    -- ** Errors
+    AuthError(..),
+    authErrorResponse,
   ) where
 
 import Distribution.Server.Users.Types (UserId, UserName(..), UserAuth(..), UserInfo)
@@ -40,7 +44,6 @@ import Control.Monad.Trans (MonadIO, liftIO)
 import qualified Data.ByteString.Char8 as BS
 
 import Control.Monad
-import Control.Monad.Error.Class (Error, noMsg)
 import qualified Data.ByteString.Base64 as Base64
 import Data.Char (intToDigit, isAsciiLower)
 import System.Random (randomRs, newStdGen)
@@ -89,12 +92,18 @@ guardAuthorised realm users privconds = do
 --
 guardAuthenticated :: RealmName -> Users.Users -> ServerPartE (UserId, UserInfo)
 guardAuthenticated realm users = do
+    authres <- checkAuthenticated realm users
+    case authres of
+      Left  autherr -> finishWith =<< authErrorResponse realm autherr
+      Right info    -> return info
+
+checkAuthenticated :: ServerMonad m => RealmName -> Users.Users -> m (Either AuthError (UserId, UserInfo))
+checkAuthenticated realm users = do
     req <- askRq
-    either (authError realm) return $
-      case getHeaderAuth req of
-        Just (BasicAuth,  ahdr) -> checkBasicAuth  users realm ahdr
-        Just (DigestAuth, ahdr) -> checkDigestAuth users       ahdr req
-        Nothing                 -> Left NoAuthError
+    return $ case getHeaderAuth req of
+      Just (BasicAuth,  ahdr) -> checkBasicAuth  users realm ahdr
+      Just (DigestAuth, ahdr) -> checkDigestAuth users       ahdr req
+      Nothing                 -> Left NoAuthError
   where
     getHeaderAuth :: Request -> Maybe (AuthType, BS.ByteString)
     getHeaderAuth req =
@@ -124,21 +133,26 @@ data PrivilegeCondition = InGroup    Group.UserGroup
 -- imply that the current client has been authenticated, see 'guardAuthorised'.
 --
 guardPriviledged :: Users.Users -> UserId -> [PrivilegeCondition] -> ServerPartE ()
-guardPriviledged _users _uid [] =
-  errForbidden "Forbidden" [MText "No access for this resource."]
+guardPriviledged users uid privconds = do
+  allok <- checkPriviledged users uid privconds
+  when (not allok) $
+    errForbidden "Forbidden" [MText "No access for this resource."]
 
-guardPriviledged users uid (InGroup ugroup:others) = do
+checkPriviledged :: MonadIO m => Users.Users -> UserId -> [PrivilegeCondition] -> m Bool
+checkPriviledged _users _uid [] = return False
+
+checkPriviledged users uid (InGroup ugroup:others) = do
   uset <- liftIO $ Group.queryUserList ugroup
   if Group.member uid uset
-    then return ()
-    else guardPriviledged users uid others
+    then return True
+    else checkPriviledged users uid others
 
-guardPriviledged users uid (IsUserId uid':others) =
+checkPriviledged users uid (IsUserId uid':others) =
   if uid == uid'
-    then return ()
-    else guardPriviledged users uid others
+    then return True
+    else checkPriviledged users uid others
 
-guardPriviledged _ _ (AnyKnownUser:_) = return ()
+checkPriviledged _ _ (AnyKnownUser:_) = return True
 
 
 ------------------------------------------------------------------------
@@ -152,10 +166,10 @@ checkBasicAuth :: Users.Users -> RealmName -> BS.ByteString
 checkBasicAuth users realm ahdr = do
     authInfo     <- getBasicAuthInfo realm ahdr       ?! UnrecognizedAuthError
     let uname    = basicUsername authInfo
-    (uid, uinfo) <- Users.lookupUserName uname users  ?! NoSuchUserError
-    uauth        <- getUserAuth uinfo                 ?! NoSuchUserError
+    (uid, uinfo) <- Users.lookupUserName uname users  ?! NoSuchUserError uname
+    uauth        <- getUserAuth uinfo                 ?! UserStatusError uid uinfo
     let passwdhash = getPasswdHash uauth
-    guard (checkBasicAuthInfo passwdhash authInfo)    ?! PasswordMismatchError
+    guard (checkBasicAuthInfo passwdhash authInfo)    ?! PasswordMismatchError uid uinfo
     return (uid, uinfo)
 
 getBasicAuthInfo :: RealmName -> BS.ByteString -> Maybe BasicAuthInfo
@@ -175,9 +189,9 @@ getBasicAuthInfo realm authHeader
                         (username, ':' : pass) -> Just (username, pass)
                         _ -> Nothing
 
-setBasicAuthChallenge :: RealmName -> ServerPartE ()
-setBasicAuthChallenge (RealmName realmName) = do
-    addHeaderM headerName headerValue
+headerBasicAuthChallenge :: RealmName -> Response -> Response
+headerBasicAuthChallenge (RealmName realmName) =
+    addHeader headerName headerValue
   where
     headerName  = "WWW-Authenticate"
     headerValue = "Basic realm=\"" ++ realmName ++ "\""
@@ -202,10 +216,10 @@ checkDigestAuth :: Users.Users -> BS.ByteString -> Request
 checkDigestAuth users ahdr req = do
     authInfo     <- getDigestAuthInfo ahdr req         ?! UnrecognizedAuthError
     let uname    = digestUsername authInfo
-    (uid, uinfo) <- Users.lookupUserName uname users   ?! NoSuchUserError
-    uauth        <- getUserAuth uinfo                  ?! NoSuchUserError
+    (uid, uinfo) <- Users.lookupUserName uname users   ?! NoSuchUserError uname
+    uauth        <- getUserAuth uinfo                  ?! UserStatusError uid uinfo
     let passwdhash = getPasswdHash uauth
-    guard (checkDigestAuthInfo passwdhash authInfo)    ?! PasswordMismatchError
+    guard (checkDigestAuthInfo passwdhash authInfo)    ?! PasswordMismatchError uid uinfo
     -- TODO: if we want to prevent replay attacks, then we must check the
     -- nonce and nonce count and issue stale=true replies.
     return (uid, uinfo)
@@ -262,10 +276,10 @@ getDigestAuthInfo authHeader req = do
                (Parse.many $ (Parse.char '\\' >> Parse.get) Parse.<++ Parse.satisfy (/='"'))
               Parse.<++ (liftM2 (:) (Parse.satisfy (/='"')) (Parse.munch (/=',')))
 
-setDigestAuthChallenge :: RealmName -> ServerPartE ()
-setDigestAuthChallenge (RealmName realmName) = do
+headerDigestAuthChallenge :: RealmName -> IO (Response -> Response)
+headerDigestAuthChallenge (RealmName realmName) = do
     nonce <- liftIO generateNonce
-    addHeaderM headerName (headerValue nonce)
+    return (addHeader headerName (headerValue nonce))
   where
     headerName = "WWW-Authenticate"
     -- Note that offering both qop=\"auth,auth-int\" can confuse some browsers
@@ -306,25 +320,29 @@ ma ?! e = maybe (Left e) Right ma
 -- Errors
 --
 
-authError :: RealmName -> AuthError -> ServerPartE a
-authError realm err = do
-  -- we want basic first, but addHeaderM makes them come out reversed
-  setDigestAuthChallenge realm
---  setBasicAuthChallenge  realm
-  finishWith (showAuthError err)
-
-data AuthError = NoAuthError | UnrecognizedAuthError | NoSuchUserError
-               | PasswordMismatchError
+data AuthError = NoAuthError
+               | UnrecognizedAuthError
+               | NoSuchUserError       UserName
+               | UserStatusError       UserId UserInfo
+               | PasswordMismatchError UserId UserInfo
   deriving Show
 
-instance Error AuthError where
-    noMsg = NoAuthError
-
-showAuthError :: AuthError -> Response
-showAuthError err = case err of
-    NoAuthError           -> withRsCode 401 $ toResponse "No authorization provided."
-    UnrecognizedAuthError -> withRsCode 400 $ toResponse "Authorization scheme not recognized."
-    NoSuchUserError       -> withRsCode 401 $ toResponse "Username or password incorrect."
-    PasswordMismatchError -> withRsCode 401 $ toResponse "Username or password incorrect."
+authErrorResponse :: MonadIO m => RealmName -> AuthError -> m Response
+authErrorResponse realm autherr = do
+    addDigest   <- liftIO (headerDigestAuthChallenge realm)
+    let addBasic = headerBasicAuthChallenge  realm
+        response = addDigest . addBasic . showAuthError $ autherr
+        -- The order here ensures that the digest header appears first, like:
+        -- WWW-Authenticate: Digest realm="Hackage", qop="", ... etc
+        -- WWW-Authenticate: Basic realm="Hackage"
+        -- We want this order because some http clients just pick the
+        -- first rather than the best, and we'd prefer them to use digest.
+    return $! response
   where
+    showAuthError :: AuthError -> Response
+    showAuthError err = case err of
+        NoAuthError           -> withRsCode 401 $ toResponse "No authorization provided."
+        UnrecognizedAuthError -> withRsCode 400 $ toResponse "Authorization scheme not recognized."
+        -- we don't want to leak info for the other cases, so same message for them all:
+        _                     -> withRsCode 401 $ toResponse "Username or password incorrect."
     withRsCode c r = r { rsCode = c }

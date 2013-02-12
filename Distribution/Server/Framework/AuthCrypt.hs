@@ -1,14 +1,12 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
 module Distribution.Server.Framework.AuthCrypt (
    PasswdPlain(..),
-   checkCryptAuthInfo,
    PasswdHash(..),
    newPasswdHash,
    checkBasicAuthInfo,
    BasicAuthInfo(..),
+   checkDigestAuthInfo,
    DigestAuthInfo(..),
    QopInfo(..),
-   checkDigestAuthInfo,
   ) where
 
 import Distribution.Server.Framework.AuthTypes
@@ -17,11 +15,6 @@ import Distribution.Server.Users.Types (UserName(..))
 import Data.Digest.Pure.MD5 (md5)
 import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
 import Data.List (intercalate)
-
-import Foreign.C.String
-import System.IO.Unsafe (unsafePerformIO)
-
-import Control.Concurrent.MVar (MVar, newMVar, withMVar)
 
 -- Hashed passwords are stored in the format:
 --
@@ -35,28 +28,6 @@ import Control.Concurrent.MVar (MVar, newMVar, withMVar)
 newPasswdHash :: RealmName -> UserName -> PasswdPlain -> PasswdHash
 newPasswdHash (RealmName realmName) (UserName userName) (PasswdPlain passwd) =
     PasswdHash $ md5HexDigest [userName, realmName, passwd]
-
-------------------
--- Crypt auth
---
-
-checkCryptAuthInfo :: HtPasswdHash -> PasswdPlain -> Bool
-checkCryptAuthInfo (HtPasswdHash hash) (PasswdPlain passwd)
-  = crypt passwd hash == hash
-
-foreign import ccall unsafe "crypt" cCrypt :: CString-> CString -> CString
-
-crypt :: String -- ^ Payload
-      -> String -- ^ Salt
-      -> String -- ^ Hash
-crypt key seed = unsafePerformIO $ withMVar cryptMVar $ \_ -> do
-    k <- newCAString key
-    s <- newCAString seed
-    peekCAString $ cCrypt k s
-
-cryptMVar :: MVar ()
-cryptMVar = unsafePerformIO $ newMVar ()
-{-# NOINLINE cryptMVar #-}
 
 ------------------
 -- HTTP Basic auth

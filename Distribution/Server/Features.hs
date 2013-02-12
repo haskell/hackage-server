@@ -36,6 +36,7 @@ import Distribution.Server.Features.NameSearch          (initNamesFeature)
 import Distribution.Server.Features.PackageList         (initListFeature)
 import Distribution.Server.Features.HaskellPlatform     (initPlatformFeature)
 import Distribution.Server.Features.UserDetails         (initUserDetailsFeature)
+import Distribution.Server.Features.LegacyPasswds       (initLegacyPasswdsFeature)
 #endif
 import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
 
@@ -88,6 +89,9 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     userDetailsFeature <- initUserDetailsFeature env
                             usersFeature
                             coreFeature
+
+    legacyPasswdsFeature <- initLegacyPasswdsFeature env
+                              usersFeature
 
     distroFeature   <- initDistroFeature env
                          usersFeature
@@ -181,6 +185,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface packageContentsFeature
          , getFeatureInterface packagesFeature
          , getFeatureInterface userDetailsFeature
+         , getFeatureInterface legacyPasswdsFeature
          , getFeatureInterface distroFeature
          , getFeatureInterface candidatesFeature
          , getFeatureInterface reportsCoreFeature

@@ -27,6 +27,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Maybe (fromMaybe)
 import Data.Function (fix)
 import Control.Applicative (optional)
 import Text.JSON
@@ -51,6 +52,7 @@ data UserFeature = UserFeature {
     guardAuthorised_   :: [PrivilegeCondition] -> ServerPartE (),
     guardAuthorised    :: [PrivilegeCondition] -> ServerPartE UserId,
     guardAuthenticated :: ServerPartE UserId,
+    authFailHook       :: Hook (Auth.AuthError -> IO (Maybe Response)),
 
     queryGetUserDb    :: forall m. MonadIO m => m Users.Users,
 
@@ -135,6 +137,7 @@ initUserFeature ServerEnv{serverStateDir} = do
   -- Extension hooks
   userAdded     <- newHook
   packageMutate <- newHook
+  authFailHook  <- newHook
 
   -- Slightly tricky: we have an almost recursive knot between the group
   -- resource management functions, and creating the admin group
@@ -145,7 +148,8 @@ initUserFeature ServerEnv{serverStateDir} = do
   rec let (feature@UserFeature{groupResourceAt}, adminGroupDesc)
             = userFeature usersState
                           adminsState
-                          groupIndex userAdded packageMutate
+                          groupIndex
+                          userAdded packageMutate authFailHook
                           adminG adminR
 
       (adminG, adminR) <- groupResourceAt "/users/admins/" adminGroupDesc
@@ -183,11 +187,12 @@ userFeature :: StateComponent Users.Users
             -> MemState GroupIndex
             -> Hook (IO ())
             -> Filter (UserId -> IO Bool)
+            -> Filter (Auth.AuthError -> IO (Maybe Response))
             -> UserGroup
             -> GroupResource
             -> (UserFeature, UserGroup)
 userFeature  usersState adminsState
-             groupIndex userAdded packageMutate
+             groupIndex userAdded packageMutate authFailHook
              adminGroup adminResource
   = (UserFeature {..}, adminGroupDesc)
   where
@@ -266,8 +271,19 @@ userFeature  usersState adminsState
 
     guardAuthorised :: [PrivilegeCondition] -> ServerPartE UserId
     guardAuthorised privconds = do
-        users <- queryGetUserDb
-        Auth.guardAuthorised Auth.hackageRealm users privconds
+        users    <- queryGetUserDb
+        (uid, _) <- Auth.checkAuthenticated realm users
+                >>= either handleAuthError return
+        Auth.guardPriviledged users uid privconds
+        return uid
+      where
+        realm = Auth.hackageRealm --TODO: should be configurable
+
+        handleAuthError :: Auth.AuthError -> ServerPartE a
+        handleAuthError err = do
+          defaultResponse  <- Auth.authErrorResponse realm err
+          overrideResponse <- msum <$> runFilter' authFailHook err
+          finishWith $! fromMaybe defaultResponse overrideResponse
 
     guardAuthenticated :: ServerPartE UserId
     guardAuthenticated = do

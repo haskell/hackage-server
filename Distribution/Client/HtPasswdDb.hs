@@ -1,14 +1,16 @@
 -- | Parsing @.htpasswd@ files
 --
 module Distribution.Client.HtPasswdDb (
-    HtPasswdDb,
+    HtPasswdDb, HtPasswdHash(..),
     parse,
   ) where
 
 import Distribution.Server.Users.Types (UserName(..))
-import Distribution.Server.Framework.AuthTypes (HtPasswdHash(..))
 
 type HtPasswdDb = [(UserName, Maybe HtPasswdHash)]
+
+newtype HtPasswdHash = HtPasswdHash String
+  deriving (Eq, Show)
 
 parse :: String -> Either String HtPasswdDb
 parse = accum 0 [] . map parseLine . lines

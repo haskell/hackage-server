@@ -15,7 +15,6 @@ import qualified Distribution.Client.DistroMap  as DistroMap
 import qualified Distribution.Client.PkgIndex   as PkgIndex
 
 import Distribution.Server.Users.Types (UserName(..))
-import Distribution.Server.Framework.AuthTypes (HtPasswdHash(..))
 
 import Distribution.Package
          ( PackageId, PackageName, packageName, packageVersion )
@@ -234,7 +233,7 @@ importAccounts jobs htpasswdFile baseURI = do
         putUserAccount baseURI username mPasswdhash
 
 
-putUserAccount :: URI -> UserName -> Maybe HtPasswdHash -> HttpSession ()
+putUserAccount :: URI -> UserName -> Maybe HtPasswdDb.HtPasswdHash -> HttpSession ()
 putUserAccount baseURI username mPasswdHash = do
 
     rsp <- requestPUT userURI "" BS.empty
@@ -244,7 +243,7 @@ putUserAccount baseURI username mPasswdHash = do
 
     case mPasswdHash of
       Nothing -> return ()
-      Just (HtPasswdHash passwdHash) -> do
+      Just (HtPasswdDb.HtPasswdHash passwdHash) -> do
         rsp <- requestPUT passwdURI "text/plain" (BS.pack passwdHash)
         case rsp of
           Nothing  -> return ()
