@@ -554,7 +554,7 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
 
     serveUserList :: DynamicPath -> ServerPart Response
     serveUserList _ = do
-        userlist <- Users.enumerateEnabledUsers <$> queryGetUserDb
+        userlist <- Users.enumerateActiveUsers <$> queryGetUserDb
         let hlist = unordList
                       [ anchor ! [href $ userPageUri users "" uname] << display uname
                       | (_, uinfo) <- userlist, let uname = userName uinfo ]

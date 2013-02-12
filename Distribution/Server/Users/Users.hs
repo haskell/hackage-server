@@ -25,7 +25,7 @@ module Distribution.Server.Users.Users (
 
     -- * Enumeration
     enumerateAllUsers,
-    enumerateEnabledUsers,
+    enumerateActiveUsers,
 
     -- * Error codes
     ErrUserNameClash(..),
@@ -304,10 +304,8 @@ enumerateAllUsers :: Users -> [(UserId, UserInfo)]
 enumerateAllUsers users =
     [ (UserId uid, uinfo) | (uid, uinfo) <- IntMap.assocs (userIdMap users) ]
 
-enumerateEnabledUsers :: Users -> [(UserId, UserInfo)]
-enumerateEnabledUsers users =
+enumerateActiveUsers :: Users -> [(UserId, UserInfo)]
+enumerateActiveUsers users =
     [ (UserId uid, uinfo) | (uid, uinfo) <- IntMap.assocs (userIdMap users)
-                          , isEnabled (userStatus uinfo) ]
-  where
-    isEnabled (AccountEnabled _) = True
-    isEnabled _                  = False
+                          , isActiveAccount (userStatus uinfo) ]
+
