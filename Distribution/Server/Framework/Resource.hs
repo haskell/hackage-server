@@ -436,8 +436,8 @@ serveResource (Resource _ rget rput rpost rdelete rformat rend _) = \dpath -> ms
         (if met == HEAD || met == GET
             then redirCanonicalSlash dpath
             else id) $ do
-        -- "Find " ++ show (lookup "format" dpath) ++ " in " ++ show (map fst res)
-        case lookup "format" dpath of
+          -- "Find " ++ show (lookup "format" dpath) ++ " in " ++ show (map fst res)
+          case lookup "format" dpath of
             Just format@(_:_) -> case lookup format res of
                                -- return a specific format if it is found
                 Just answer -> answer dpath

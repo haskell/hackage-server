@@ -1,4 +1,5 @@
-{-# LANGUAGE DoRec, RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE DoRec, RankNTypes, ScopedTypeVariables,
+             NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.Mirror (
     MirrorFeature(..),
     MirrorResource(..),

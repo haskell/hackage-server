@@ -217,10 +217,11 @@ intersectConjunct :: Conjunct -> Conjunct -> Maybe Conjunct
 intersectConjunct m1 m2 =
     Traversable.sequence $
         Map.unionWith inters (fmap Just m1) (fmap Just m2)
-  where inters mx my = do
-        x <- mx
-        y <- my
-        intersectInterval x y
+  where
+    inters mx my = do
+      x <- mx
+      y <- my
+      intersectInterval x y
 
 subConjunct :: Conjunct -> Conjunct -> Bool
 subConjunct m1 m2 =

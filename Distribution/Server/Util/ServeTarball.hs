@@ -54,16 +54,16 @@ serveTarball indices tarRoot tarball tarIndex etag = do
     rq <- askRq
     action GET $ remainingPath $ \paths -> do
 
-    -- first we come up with the set of paths in the tarball that
-    -- would match our request
-    let validPaths :: [FilePath]
-        validPaths = (joinPath $ tarRoot:paths)
-                   : [joinPath $ tarRoot:paths ++ [index] | index <- indices]
+      -- first we come up with the set of paths in the tarball that
+      -- would match our request
+      let validPaths :: [FilePath]
+          validPaths = (joinPath $ tarRoot:paths)
+                     : [joinPath $ tarRoot:paths ++ [index] | index <- indices]
 
-    msum $ concat
-     [ serveFiles validPaths
-     , serveDirs (rqUri rq) validPaths
-     ]
+      msum $ concat
+       [ serveFiles validPaths
+       , serveDirs (rqUri rq) validPaths
+       ]
   where
     serveFiles paths
            = flip map paths $ \path ->
