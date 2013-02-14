@@ -164,6 +164,8 @@ executable hackage-server
     -- [reverse index disabled] Distribution.Server.Features.ReverseDependencies.State
       Distribution.Server.Features.Tags
       Distribution.Server.Features.Tags.State
+      Distribution.Server.Features.UserDetails
+      Distribution.Server.Features.UserSignup
 
   build-depends:
     base       == 4.*,
@@ -174,6 +176,7 @@ executable hackage-server
     containers >= 0.4,
     pretty     >= 1.0,
     base64-bytestring ==0.1.* || == 1.0.*,
+    base16-bytestring ==0.1.*,
     bytestring >= 0.9,
     text       >= 0.11,
     time       >= 1.1 && < 1.5,

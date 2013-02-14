@@ -56,6 +56,7 @@ data UserFeature = UserFeature {
 
     queryGetUserDb    :: forall m. MonadIO m => m Users.Users,
 
+    newUserAuth       :: UserName -> PasswdPlain -> UserAuth,
     updateAddUser     :: forall m. MonadIO m => UserName -> UserAuth -> m (Either Users.ErrUserNameClash UserId),
     updateSetUserEnabledStatus :: MonadIO m => UserId -> Bool
                                -> m (Maybe (Either Users.ErrNoSuchUserId Users.ErrDeletedUser)),
@@ -376,7 +377,7 @@ userFeature  usersState adminsState
       case simpleParse userNameStr of
         Nothing -> errBadRequest "Error registering user" [MText "Not a valid user name!"]
         Just uname -> do
-          let auth = newDigestPass uname password
+          let auth = newUserAuth uname password
           muid <- updateState usersState $ AddUserEnabled uname auth
           case muid of
             Left Users.ErrUserNameClash -> errForbidden "Error registering user" [MText "A user account with that user name already exists."]
@@ -399,7 +400,7 @@ userFeature  usersState adminsState
         when (passwd1 /= passwd2) $
           forbidChange "Copies of new password do not match or is an invalid password (ex: blank)"
         let passwd = PasswdPlain passwd1
-            auth   = newDigestPass username passwd
+            auth   = newUserAuth username passwd
         res <- updateState usersState (SetUserAuth uid auth)
         case res of
           Nothing -> return ()
@@ -408,8 +409,8 @@ userFeature  usersState adminsState
       where
         forbidChange = errForbidden "Error changing password" . return . MText
 
-    newDigestPass :: UserName -> PasswdPlain -> UserAuth
-    newDigestPass name pwd = UserAuth (Auth.newPasswdHash Auth.hackageRealm name pwd)
+    newUserAuth :: UserName -> PasswdPlain -> UserAuth
+    newUserAuth name pwd = UserAuth (Auth.newPasswdHash Auth.hackageRealm name pwd)
 
     --
     runUserFilter :: UserId -> IO (Maybe ErrorResponse)
