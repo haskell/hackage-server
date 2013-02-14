@@ -117,7 +117,7 @@ instance ToMessage RSS where
 newtype XHtml = XHtml XHtml.Html
 
 instance ToMessage XHtml where
-    toContentType _ = BS.pack "application/xhtml+xml"
+    toContentType _ = BS.pack "application/xhtml+xml; charset=utf-8"
     toMessage (XHtml xhtml) = BS.Lazy.pack (XHtml.renderHtml xhtml)
 
 -- Like XHtml, but don't bother calculating length
