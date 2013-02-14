@@ -499,7 +499,9 @@ serverTreeEmpty = ServerTree Nothing Map.empty
 -- essentially a ReaderT DynamicPath ServerPart Response
 -- this always renders parent URIs, but usually we guard against remaining path segments, so it's fine
 renderServerTree :: DynamicPath -> ServerTree ServerResponse -> ServerPart Response
-renderServerTree dpath (ServerTree func forest) = msum $ maybeToList (fmap (\fun -> fun dpath) func) ++ map (uncurry renderBranch) (Map.toList forest)
+renderServerTree dpath (ServerTree func forest) =
+    msum $ maybeToList (fmap (\fun -> fun dpath) func)
+        ++ map (uncurry renderBranch) (Map.toList forest)
   where
     renderBranch :: BranchComponent -> ServerTree ServerResponse -> ServerPart Response
     renderBranch (StaticBranch  sdir) tree = dir sdir $ renderServerTree dpath tree

@@ -246,16 +246,21 @@ initState server (admin, pass) = do
 -- them into a path hierarchy, and serves them.
 impl :: Server -> ServerPart Response
 impl server =
-      flip mplus (serveDirectory DisableBrowsing ["hackage.html"] . serverStaticDir $ serverEnv server)
-    -- ServerPart Response
-    . renderServerTree []
-    -- ServerTree ServerResponse
-    . fmap serveResource
-    -- ServerTree Resource
-    . foldl' (\acc res -> addServerNode (resourceLocation res) res acc) serverTreeEmpty
-    -- [Resource]
-    $ concatMap Feature.featureResources (serverFeatures server)
--- where showServerTree tree = trace (drawServerTree tree (Just $ show . resourceMethods)) tree
+    renderServerTree [] serverTree
+      `mplus`
+    serveDirectory DisableBrowsing ["hackage.html"] staticDir
+  where
+    staticDir = serverStaticDir (serverEnv server)
+
+    serverTree :: ServerTree ServerResponse
+    serverTree =
+        fmap serveResource
+      -- ServerTree Resource
+      . foldl' (\acc res -> addServerNode (resourceLocation res) res acc) serverTreeEmpty
+      -- [Resource]
+      $ concatMap Feature.featureResources (serverFeatures server)
+
+    --showServerTree tree = trace (drawServerTree tree (Just $ show . resourceMethods)) tree
 
 data TempServer = TempServer ThreadId
 
