@@ -357,7 +357,7 @@ userFeature  usersState adminsState
     adminAddUser :: ServerPartE Response
     adminAddUser = do
         -- with this line commented out, self-registration is allowed
-      --void $ guardAuthorised [InGroup adminGroup]
+        guardAuthorised_ [InGroup adminGroup]
         reqData <- getDataFn lookUserNamePasswords
         case reqData of
             (Left errs) -> errBadRequest "Error registering user"

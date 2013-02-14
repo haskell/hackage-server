@@ -583,7 +583,7 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
     addUserForm :: DynamicPath -> ServerPart Response
     addUserForm _ = htmlResponse $ do
         return $ toResponse $ Resource.XHtml $ hackagePage "Register account"
-          [ paragraph << "Register a user account here!"
+          [ paragraph << "Administrators can register new user accounts here."
           , form ! [theclass "box", XHtml.method "post", action $ userListUri users ""] <<
                 [ simpleTable [] []
                     [ makeInput [thetype "text"] "username" "User name"
