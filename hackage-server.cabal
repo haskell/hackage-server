@@ -203,7 +203,8 @@ executable hackage-server
     stm        >= 2.2 && < 2.5,
     acid-state == 0.8.*,
     happstack-server == 7.0.* || ==7.1.* && >= 7.0.6,
-    hslogger
+    hslogger,
+    mime-mail  ==0.4.*
 
   if ! flag(minimal)
     build-depends:

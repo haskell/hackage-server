@@ -29,6 +29,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy.Char8 as LBS
 import qualified Data.ByteString.Base16 as Base16
 
 import Data.Typeable (Typeable)
@@ -41,6 +42,8 @@ import Data.Version
 import Data.Time (UTCTime, getCurrentTime)
 import Text.CSV (CSV, Record)
 import System.IO
+import Network.Mail.Mime
+import Network.URI (URIAuth(..))
 
 
 -- | A feature to allow open account signup, and password reset,
@@ -380,7 +383,7 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..} signupResetState
 
     handlerPostSignupRequestNew :: DynamicPath -> ServerPart Response
     handlerPostSignupRequestNew _ = do
-        (uname, rname, email) <- lookUserNameEmail
+        (username, realname, useremail) <- lookUserNameEmail
         --TODO: basic sanity check on username, real name and email
         -- we probably want usernames to remain ascii
         -- and real names to be printable + space chars
@@ -388,15 +391,49 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..} signupResetState
         nonce     <- liftIO newRandomNonce
         timestamp <- liftIO getCurrentTime
         let signupInfo = SignupInfo {
-                           signupUserName     = uname,
-                           signupRealName     = rname,
-                           signupContactEmail = email,
-                           nonceTimestamp     = timestamp
-                         }
+              signupUserName     = username,
+              signupRealName     = realname,
+              signupContactEmail = useremail,
+              nonceTimestamp     = timestamp
+            }
         updateAddSignupResetInfo nonce signupInfo
-        --TODO: send out email
-        liftIO $ putStrLn $ "User signup request. Go to: /users/register-request/" ++ renderNonce nonce
-        resp 202 $ toResponse $ Resource.XHtml $ confirmPage email
+        let mailFrom = Address (Just (T.pack "Hackage website"))
+                               (T.pack ("noreply@" ++ uriRegName ourURI))
+            mail     = (emptyMail mailFrom) {
+              mailTo      = [Address (Just realname) useremail],
+              mailHeaders = [(BS.pack "Subject",
+                              T.pack "Hackage account confirmation")],
+              mailParts   = [[Part (T.pack "text/plain; charset=utf-8")
+                                    None Nothing [] mailBody]]
+            }
+            --TODO: this should be a template:
+            mailBody = LBS.unlines $ map LBS.pack
+              [ "Dear " ++ T.unpack realname ++ ","
+              , ""
+              , "We received a request to create a Hackage account"
+              , "for you. To create a Hackage account, please follow"
+              , "this link:"
+              , ""
+              , "http://" ++ ourURIStr ++ "/users/register-request/"
+                                       ++ renderNonce nonce
+              , ""
+              , "If you were not expecting this email, our apologies,"
+              , "please ignore it."
+              , ""
+              , "From,"
+              , "  The Hackage website at " ++ ourURIStr
+              , "  (and on behalf of the site administrators)"
+              , "______________________________________________"
+              , "Please do not reply to this email. This email"
+              , "address is used only for sending email so you"
+              , "will not receive a response."
+              ]
+            ourURI    = serverHostURI env
+            ourURIStr = uriRegName ourURI ++ uriPort ourURI
+
+        --TODO: if we need any configuration of sendmail stuff, has to go here
+        liftIO $ renderSendMail mail
+        resp 202 $ toResponse $ Resource.XHtml $ confirmPage useremail
       where
         lookUserNameEmail = body $ (,,) <$> lookText' "username"
                                         <*> lookText' "realname"
@@ -404,8 +441,8 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..} signupResetState
         confirmPage useremail =
           hackagePage "Register a new account"
           [ h2 << "Confirmation email sent"
-          , paragraph << ("An email has been sent to " +++ T.unpack useremail)
-          , paragraph << "FIXME: not true! currently it's only printed in the server log ;-)"
+          , paragraph << ("An email has been sent to "
+                          +++ bold << T.unpack useremail)
           , paragraph << ("The email will contain a link to a page where you "
                      +++ "can set your password and activate your account. ")
           , paragraph << ("Note that these activation links do eventually "
