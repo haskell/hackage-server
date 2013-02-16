@@ -63,6 +63,7 @@ initRecentPackagesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verb
                          defaultAsyncCachePolicy {
                            asyncCacheName = "recent uploads (html,rss)",
                            asyncCacheUpdateDelay  = serverCacheDelay,
+                           asyncCacheSyncInit     = False,
                            asyncCacheLogVerbosity = verbosity
                          }
 
@@ -95,6 +96,7 @@ recentPackagesFeature env
               getCacheMemSize = memSize <$> readAsyncCache cacheRecent
             }
           ]
+      , featurePostInit = syncAsyncCache cacheRecent
       }
 
     recentPackagesResource = RecentPackagesResource {
