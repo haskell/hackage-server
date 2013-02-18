@@ -310,11 +310,6 @@ getUserAuth userInfo =
 getPasswdHash :: UserAuth -> PasswdHash
 getPasswdHash (UserAuth hash) = hash
 
--- | The \"oh noes?!\" operator
---
-(?!) :: Maybe a -> e -> Either e a
-ma ?! e = maybe (Left e) Right ma
-
 
 ------------------------------------------------------------------------
 -- Errors

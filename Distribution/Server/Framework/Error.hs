@@ -28,10 +28,19 @@ module Distribution.Server.Framework.Error (
     runServerPartE,
     handleErrorResponse,
     messageToText,
+
+    -- * Handy error message operator
+    (?!)
   ) where
 
 import Happstack.Server
 import Control.Monad.Error
+
+-- | The \"oh noes?!\" operator
+--
+(?!) :: Maybe a -> e -> Either e a
+ma ?! e = maybe (Left e) Right ma
+
 
 -- | A derivative of the 'ServerPartT' monad with an extra error monad layer.
 --

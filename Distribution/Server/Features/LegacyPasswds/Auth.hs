@@ -92,11 +92,6 @@ checkBasicAuth users getHtPasswdHash realm ahdr = do
     guard (checkCryptAuthInfo passwdhash authInfo)    ?! PasswordMismatchError
     return (uid, uinfo, basicPasswd authInfo)
 
--- | The \"oh noes?!\" operator
---
-(?!) :: Maybe a -> e -> Either e a
-ma ?! e = maybe (Left e) Right ma
-
 getBasicAuthInfo :: RealmName -> BS.ByteString -> Maybe BasicAuthInfo
 getBasicAuthInfo realm authHeader
   | Just (username, pass) <- splitHeader authHeader
