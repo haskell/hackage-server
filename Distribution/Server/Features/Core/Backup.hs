@@ -27,8 +27,6 @@ import Distribution.PackageDescription.Parse (parsePackageDescription)
 import Distribution.ParseUtils (ParseResult(..), locatedErrorMsg)
 import Distribution.Text
 import Data.Version
-import Data.Time.Format (formatTime)
-import System.Locale (defaultTimeLocale)
 import Text.CSV
 
 import Data.Map (Map)
@@ -109,8 +107,8 @@ importVersionList = mapM fromRecord . drop 2
     fromRecord :: Record -> Restore (Int, UploadInfo)
     fromRecord [indexStr, timeStr, idStr] = do
        index <- parseRead "index" indexStr
-       utcTime <- parseTime timeStr
-       user <- parseText "user id" idStr
+       utcTime <- parseUTCTime "time" timeStr
+       user <- parseText "user-id" idStr
        return (index, (utcTime, user))
     fromRecord x = fail $ "Error processing versions list: " ++ show x
 
@@ -212,7 +210,7 @@ pkgPath pkgId file = ["package", display pkgId, file]
 versionListToCSV :: [UploadInfo] -> CSV
 versionListToCSV infos = [showVersion versionCSVVer]:versionCSVKey:
     map (\(index, (time, user)) -> [ show (index :: Int)
-                                   , formatTime defaultTimeLocale timeFormatSpec time
+                                   , formatUTCTime time
                                    , display user]) (zip [0..] infos)
   where
     versionCSVVer = Version [0,1] ["unstable"]

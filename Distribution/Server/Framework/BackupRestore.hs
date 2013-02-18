@@ -8,9 +8,8 @@ module Distribution.Server.Framework.BackupRestore (
 
     importCSV,
     parseText,
-    parseTime,
-    timeFormatSpec,
     parseRead,
+    parseUTCTime, formatUTCTime,
 
     equalTarBall,
 
@@ -140,15 +139,14 @@ parseRead label str = case reads str of
     [(value, "")] -> return value
     _ -> fail $ "Unable to parse " ++ label ++ ": " ++ show str
 
-parseTime :: Monad m => String -> m UTCTime
-parseTime str = case Time.parseTime defaultTimeLocale timeFormatSpec str of
-    Nothing -> fail $ "Unable to parse time: " ++ str
-    Just x  -> return x
+parseUTCTime :: Monad m => String -> String -> m UTCTime
+parseUTCTime label str =
+    case Time.parseTime defaultTimeLocale "%c" str of
+      Nothing -> fail $ "Unable to parse UTC timestamp " ++ label ++ ": " ++ str
+      Just x  -> return x
 
--- | Time/Date format used in exported files.
--- Variant on ISO formatted date, with time and time zone.
-timeFormatSpec :: String
-timeFormatSpec = "%Y-%m-%d %H:%M:%S%Q %z"
+formatUTCTime :: UTCTime -> String
+formatUTCTime = Time.formatTime defaultTimeLocale "%c"
 
 -- Parse a string, throw an error if it's bad
 parseText :: (Text a, Monad m) => String -> String -> m a
