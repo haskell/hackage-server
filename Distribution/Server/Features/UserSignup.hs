@@ -23,7 +23,6 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Lazy.Char8 as LBS
 import qualified Data.ByteString.Base16 as Base16
 
 import Data.Typeable (Typeable)
@@ -32,7 +31,6 @@ import Control.Monad.State (get, put)
 import Data.SafeCopy (base, deriveSafeCopy)
 
 import Distribution.Text (display)
-import Data.Version
 import Data.Time (UTCTime, getCurrentTime)
 import Text.CSV (CSV, Record)
 import System.IO
@@ -174,83 +172,93 @@ signupResetStateComponent stateDir = do
     , acidState    = st
     , getState     = query st GetSignupResetTable
     , putState     = update st . ReplaceSignupResetTable
-    , backupState  = \users -> [] -- [csvToBackup ["users.csv"] (userDetailsToCSV users)]
-    , restoreState = restoreBackupUnimplemented -- userDetailsBackup
+    , backupState  = \tbl -> [csvToBackup ["signups.csv"] (signupInfoToCSV tbl)
+                             ,csvToBackup ["resets.csv"]  (resetInfoToCSV  tbl)]
+    , restoreState = signupResetBackup
     , resetState   = signupResetStateComponent
     }
 
 ----------------------------
 -- Data backup and restore
 --
-{-
-userDetailsBackup :: RestoreBackup UserDetailsTable
-userDetailsBackup = updateUserBackup emptyUserDetailsTable
 
-updateUserBackup :: UserDetailsTable -> RestoreBackup UserDetailsTable
-updateUserBackup users = RestoreBackup {
-    restoreEntry = \entry -> case entry of
-      BackupByteString ["users.csv"] bs -> do
-        csv <- importCSV "users.csv" bs
-        users' <- importUserDetails csv users
-        return (updateUserBackup users')
-      _ ->
-        return (updateUserBackup users)
-  , restoreFinalize =
-     return users
-  }
-
-importUserDetails :: CSV -> UserDetailsTable -> Restore UserDetailsTable
-importUserDetails = concatM . map fromRecord . drop 2
+signupResetBackup :: RestoreBackup SignupResetTable
+signupResetBackup = go []
   where
-    fromRecord :: Record -> UserDetailsTable -> Restore UserDetailsTable
-    fromRecord [idStr, nameStr, emailStr, kindStr, notesStr] (UserDetailsTable tbl) = do
-        UserId uid <- parseText "user id" idStr
-        akind      <- parseKind kindStr
-        let udetails = AccountDetails {
-                        accountName         = T.pack nameStr,
-                        accountContactEmail = T.pack emailStr,
-                        accountKind         = akind,
-                        accountAdminNotes   = T.pack notesStr
-                      }
-        return $! UserDetailsTable (IntMap.insert uid udetails tbl)
+   go :: [(Nonce, SignupResetInfo)] -> RestoreBackup SignupResetTable
+   go st =
+     RestoreBackup {
+       restoreEntry = \entry -> case entry of
+         BackupByteString ["signups.csv"] bs -> do
+           csv <- importCSV "signups.csv" bs
+           signups <- importSignupInfo csv
+           return (go (signups ++ st))
 
-    fromRecord x _ = fail $ "Error processing user details record: " ++ show x
+         BackupByteString ["resets.csv"] bs -> do
+           csv <- importCSV "resets.csv" bs
+           resets <- importResetInfo csv
+           return (go (resets ++ st))
 
-    parseKind ""        = return Nothing
-    parseKind "real"    = return (Just AccountKindRealUser)
-    parseKind "special" = return (Just AccountKindSpecial)
-    parseKind sts       = fail $ "unable to parse account kind: " ++ sts
+         _ -> return (go st)
 
-userDetailsToCSV :: UserDetailsTable -> CSV
-userDetailsToCSV (UserDetailsTable tbl)
-    = ([showVersion userCSVVer]:) $
-      (userdetailsCSVKey:) $
+     , restoreFinalize =
+        return (SignupResetTable (Map.fromList st))
+     }
 
-      flip map (IntMap.toList tbl) $ \(uid, udetails) ->
-      [ display (UserId uid)
-      , T.unpack (accountName udetails)  --FIXME: apparently the csv lib doesn't do unicode properly
-      , T.unpack (accountContactEmail udetails)
-      , infoToAccountKind udetails
-      , T.unpack (accountAdminNotes udetails)
-      ]
+importSignupInfo :: CSV -> Restore [(Nonce, SignupResetInfo)]
+importSignupInfo = sequence . map fromRecord . drop 2
+  where
+    fromRecord :: Record -> Restore (Nonce, SignupResetInfo)
+    fromRecord [nonceStr, usernameStr, realnameStr, emailStr, timestampStr] = do
+        timestamp <- parseUTCTime "timestamp" timestampStr
+        let nonce      = Nonce (BS.pack nonceStr)
+            signupinfo = SignupInfo {
+              signupUserName     = T.pack usernameStr,
+              signupRealName     = T.pack realnameStr,
+              signupContactEmail = T.pack emailStr,
+              nonceTimestamp     = timestamp
+            }
+        return (nonce, signupinfo)
+    fromRecord x = fail $ "Error processing signup info record: " ++ show x
 
- where
-    userdetailsCSVKey =
-       [ "uid"
-       , "realname"
-       , "email"
-       , "kind"
-       , "notes"
-       ]
-    userCSVVer = Version [0,2] []
+signupInfoToCSV :: SignupResetTable -> CSV
+signupInfoToCSV (SignupResetTable tbl)
+    = ["0.1"]
+    : [ "token", "username", "realname", "email", "timestamp" ]
+    : [ [ renderNonce nonce
+        , T.unpack signupUserName
+        , T.unpack signupRealName
+        , T.unpack signupContactEmail
+        , formatUTCTime nonceTimestamp
+        ]
+      | (nonce, SignupInfo{..}) <- Map.toList tbl ]
 
-    -- one of "enabled" "disabled" or "deleted"
-    infoToAccountKind :: AccountDetails -> String
-    infoToAccountKind udetails = case accountKind udetails of
-      Nothing                  -> ""
-      Just AccountKindRealUser -> "real"
-      Just AccountKindSpecial  -> "special"
--}
+importResetInfo :: CSV -> Restore [(Nonce, SignupResetInfo)]
+importResetInfo = sequence . map fromRecord . drop 2
+  where
+    fromRecord :: Record -> Restore (Nonce, SignupResetInfo)
+    fromRecord [nonceStr, useridStr, timestampStr] = do
+        userid <- parseText "userid" useridStr
+        timestamp <- parseUTCTime "timestamp" timestampStr
+        let nonce      = Nonce (BS.pack nonceStr)
+            signupinfo = ResetInfo {
+              resetUserId    = userid,
+              nonceTimestamp = timestamp
+            }
+        return (nonce, signupinfo)
+    fromRecord x = fail $ "Error processing signup info record: " ++ show x
+
+resetInfoToCSV :: SignupResetTable -> CSV
+resetInfoToCSV (SignupResetTable tbl)
+    = ["0.1"]
+    : [ "token", "userid", "timestamp" ]
+    : [ [ renderNonce nonce
+        , display resetUserId
+        , formatUTCTime nonceTimestamp
+        ]
+      | (nonce, ResetInfo{..}) <- Map.toList tbl ]
+
+
 ----------------------------------------
 -- Feature definition & initialisation
 --
