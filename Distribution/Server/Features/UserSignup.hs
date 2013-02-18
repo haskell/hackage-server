@@ -24,6 +24,7 @@ import qualified Data.Text as T
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Base16 as Base16
+import Data.Char (isSpace, isPrint)
 
 import Data.Typeable (Typeable)
 import Control.Monad.Reader (ask)
@@ -392,12 +393,12 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..}
       ok $ toResponse $ template []
 
     handlerPostSignupRequestNew :: DynamicPath -> ServerPart Response
-    handlerPostSignupRequestNew _ = do
+    handlerPostSignupRequestNew _ = runServerPartE $ do
+        templateEmail        <- getTemplate templates "ConfirmationEmail"
+        templateConfirmation <- getTemplate templates "SignupEmailSent"
+
         (username, realname, useremail) <- lookUserNameEmail
-        --TODO: basic sanity check on username, real name and email
-        -- we probably want usernames to remain ascii
-        -- and real names to be printable + space chars
-        -- examples: JanNovak vs Jan Novák
+
         nonce     <- liftIO newRandomNonce
         timestamp <- liftIO getCurrentTime
         let signupInfo = SignupInfo {
@@ -406,8 +407,7 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..}
               signupContactEmail = useremail,
               nonceTimestamp     = timestamp
             }
-        templateEmail        <- getTemplate templates "ConfirmationEmail"
-        templateConfirmation <- getTemplate templates "SignupEmailSent"
+
         let mailFrom = Address (Just (T.pack "Hackage website"))
                                (T.pack ("noreply@" ++ uriRegName ourURI))
             mail     = (emptyMail mailFrom) {
@@ -428,16 +428,55 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..}
             ourURIStr = uriRegName ourURI ++ uriPort ourURI
 
         updateAddSignupResetInfo nonce signupInfo
-        --TODO: if we need any configuration of sendmail stuff, has to go here
-        liftIO $ renderSendMail mail
-        --liftIO $ LBS.putStrLn =<< renderMail' mail
+
+        liftIO $ renderSendMail mail --TODO: if we need any configuration of
+                                     -- sendmail stuff, has to go here
+
         resp 202 $ toResponse $
           templateConfirmation
             [ "useremail" $= useremail ]
       where
-        lookUserNameEmail = body $ (,,) <$> lookText' "username"
-                                        <*> lookText' "realname"
-                                        <*> lookText' "email"
+        lookUserNameEmail = do
+          (username, realname, useremail) <-
+            msum [ body $ (,,) <$> lookText' "username"
+                               <*> lookText' "realname"
+                               <*> lookText' "email"
+                 , errBadRequest "Missing form fields" [] ]
+
+          guardValidLookingUserName username
+          guardValidLookingName     realname
+          guardValidLookingEmail    useremail
+
+          return (username, realname, useremail)
+
+        guardValidLookingName str = either errBadUserName return $ do
+          guard (T.length str <= 70) ?! "Sorry, we didn't expect names to be longer than 70 characters."
+          guard (T.all isPrint str)  ?! "Unexpected character in name, please use only printable Unicode characters."
+
+        guardValidLookingUserName str = either errBadRealName return $ do
+          guard (T.length str <= 50)    ?! "Sorry, we didn't expect login names to be longer than 50 characters."
+          guard (T.all isAsciiChar str) ?! "Sorry, login names have to be ASCII characters only, no spaces or symbols."
+          where
+            isAsciiChar c = (c >= 'A' && c <= 'Z')
+                         || (c >= 'a' && c <= 'z')
+
+        guardValidLookingEmail str = either errBadEmail return $ do
+          guard (T.length str <= 100)     ?! "Sorry, we didn't expect email addresses to be longer than 100 characters."
+          guard (T.all isPrint str)       ?! "Unexpected character in email address, please use only printable Unicode characters."
+          guard hasAtSomewhere            ?! "Oops, that doesn't look like an email address."
+          guard (T.all (not.isSpace) str) ?! "Oops, no spaces in email addresses please."
+          guard (T.all (not.isAngle) str) ?! "Please use just the email address, not \"name\" <person@example.com> style."
+          where
+            isAngle c = c == '<' || c == '>'
+            hasAtSomewhere =
+              let (before, after) = T.span (/= '@') str
+               in T.length before >= 1
+               && T.length after  >  1
+
+        errBadUserName err = errBadRequest "Problem with login name" [MText err]
+        errBadRealName err = errBadRequest "Problem with name"[MText err]
+        errBadEmail    err = errBadRequest "Problem with email address" [MText err]
+
 
     handlerGetSignupRequestOutstanding :: DynamicPath -> ServerPart Response
     handlerGetSignupRequestOutstanding dpath = runServerPartE $ do
