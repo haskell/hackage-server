@@ -7,21 +7,15 @@ module Distribution.Server.Features.UserSignup (
   ) where
 
 import Distribution.Server.Framework
+import Distribution.Server.Framework.Templating
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
-import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.UserDetails
 
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Users as Users
-
-import Distribution.Server.Pages.Template (hackagePage)
-import Distribution.Server.Pages.Util (makeInput)
-import Text.XHtml.Strict hiding (base, body)
-import qualified Text.XHtml.Strict as XHtml
-import Text.XHtml.Table (simpleTable)
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -265,13 +259,19 @@ initUserSignupFeature :: ServerEnv
                       -> UserFeature
                       -> UserDetailsFeature
                       -> IO UserSignupFeature
-initUserSignupFeature env@ServerEnv{serverStateDir} users userdetails = do
+initUserSignupFeature env@ServerEnv{serverStateDir, serverStaticDir}
+                      users userdetails = do
 
   -- Canonical state
   signupResetState <- signupResetStateComponent serverStateDir
 
+  -- Page templates
+  templates <- loadTemplates NormalMode {- use DesignMode when working on templates -}
+                 [serverStaticDir, serverStaticDir </> "UserSignupReset"]
+                 ["SignupRequest", "ConfirmationEmail", "SignupEmailSent", "SignupConfirm"]
+
   let feature = userSignupFeature env users userdetails
-                                  signupResetState
+                                  signupResetState templates
 
   return feature
 
@@ -280,8 +280,10 @@ userSignupFeature :: ServerEnv
                   -> UserFeature
                   -> UserDetailsFeature
                   -> StateComponent SignupResetTable
+                  -> Templates
                   -> UserSignupFeature
-userSignupFeature env UserFeature{..} UserDetailsFeature{..} signupResetState
+userSignupFeature env UserFeature{..} UserDetailsFeature{..}
+                  signupResetState templates
   = UserSignupFeature {..}
 
   where
@@ -377,9 +379,9 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..} signupResetState
             ++ "has been used already, or that it has expired."]
 
     handlerGetSignupRequestNew :: DynamicPath -> ServerPart Response
-    handlerGetSignupRequestNew _ =
-      serveFile (asContentType "text/html")
-                (serverStaticDir env </> "account-request.html")
+    handlerGetSignupRequestNew _ = do
+      template <- getTemplate templates "SignupRequest"
+      ok $ toResponse $ template []
 
     handlerPostSignupRequestNew :: DynamicPath -> ServerPart Response
     handlerPostSignupRequestNew _ = do
@@ -396,7 +398,8 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..} signupResetState
               signupContactEmail = useremail,
               nonceTimestamp     = timestamp
             }
-        updateAddSignupResetInfo nonce signupInfo
+        templateEmail        <- getTemplate templates "ConfirmationEmail"
+        templateConfirmation <- getTemplate templates "SignupEmailSent"
         let mailFrom = Address (Just (T.pack "Hackage website"))
                                (T.pack ("noreply@" ++ uriRegName ourURI))
             mail     = (emptyMail mailFrom) {
@@ -406,77 +409,41 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..} signupResetState
               mailParts   = [[Part (T.pack "text/plain; charset=utf-8")
                                     None Nothing [] mailBody]]
             }
-            --TODO: this should be a template:
-            mailBody = LBS.unlines $ map LBS.pack
-              [ "Dear " ++ T.unpack realname ++ ","
-              , ""
-              , "We received a request to create a Hackage account"
-              , "for you. To create a Hackage account, please follow"
-              , "this link:"
-              , ""
-              , "http://" ++ ourURIStr ++ "/users/register-request/"
-                                       ++ renderNonce nonce
-              , ""
-              , "If you were not expecting this email, our apologies,"
-              , "please ignore it."
-              , ""
-              , "From,"
-              , "  The Hackage website at " ++ ourURIStr
-              , "  (and on behalf of the site administrators)"
-              , "______________________________________________"
-              , "Please do not reply to this email. This email"
-              , "address is used only for sending email so you"
-              , "will not receive a response."
+            mailBody = renderTemplate $ templateEmail
+              [ "realname"    $= realname
+              , "confirmlink" $= "http://" ++ ourURIStr
+                              ++ "/users/register-request/"
+                              ++ renderNonce nonce
+              , "serverhost"  $= ourURIStr
               ]
             ourURI    = serverHostURI env
             ourURIStr = uriRegName ourURI ++ uriPort ourURI
 
+        updateAddSignupResetInfo nonce signupInfo
         --TODO: if we need any configuration of sendmail stuff, has to go here
         liftIO $ renderSendMail mail
-        resp 202 $ toResponse $ Resource.XHtml $ confirmPage useremail
+        --liftIO $ LBS.putStrLn =<< renderMail' mail
+        resp 202 $ toResponse $
+          templateConfirmation
+            [ "useremail" $= useremail ]
       where
         lookUserNameEmail = body $ (,,) <$> lookText' "username"
                                         <*> lookText' "realname"
                                         <*> lookText' "email"
-        confirmPage useremail =
-          hackagePage "Register a new account"
-          [ h2 << "Confirmation email sent"
-          , paragraph << ("An email has been sent to "
-                          +++ bold << T.unpack useremail)
-          , paragraph << ("The email will contain a link to a page where you "
-                     +++ "can set your password and activate your account. ")
-          , paragraph << ("Note that these activation links do eventually "
-                     +++ "expire, so don't leave it too long!")
-          ]
 
     handlerGetSignupRequestOutstanding :: DynamicPath -> ServerPart Response
     handlerGetSignupRequestOutstanding dpath = runServerPartE $ do
         nonce <- nonceInPath dpath
         SignupInfo {..} <- lookupSignupInfo nonce
-        ok $ toResponse $ Resource.XHtml $
-             signupSetPasswordPage nonce
-               signupRealName signupUserName signupContactEmail
-      where
-        signupSetPasswordPage nonce username realname useremail =
-          hackagePage "Register a new account"
-          [ h2 << "Register a new account"
-          , paragraph << "Email confirmation done! "
-          , paragraph << "Now you can set your password and create the account."
-          , form !
-              [theclass "box",
-                    XHtml.method "post",
-                    action $ renderResource signupRequestResource 
-                                [renderNonce nonce]]
-            << [ simpleTable [] []
-                 [ [toHtml "Your name:",  toHtml $ T.unpack realname]
-                 , [toHtml "Login username:",  toHtml $ T.unpack username]
-                 , [toHtml "Contact email address:", toHtml $ T.unpack useremail]
-                 , makeInput [thetype "password"] "password" "Password"
-                 , makeInput [thetype "password"] "repeat-password" "Confirm password"
-                 ]
-               , paragraph << input ! [thetype "submit", value "Create account"]
-               ]
-          ]
+        template <- getTemplate templates "SignupConfirm"
+        resp 202 $ toResponse $
+          template
+            [ "realname"  $= signupRealName
+            , "username"  $= signupUserName
+            , "useremail" $= signupContactEmail
+            , "posturl"   $= renderResource signupRequestResource 
+                                [renderNonce nonce]
+            ]
 
     handlerPostSignupRequestOutstanding :: DynamicPath -> ServerPart Response
     handlerPostSignupRequestOutstanding dpath = runServerPartE $ do
