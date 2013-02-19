@@ -22,16 +22,17 @@ permission to upload packages requires an extra step from an administrator.
 <tr>
 <td><label for="realname">Your name</label>
 <td><input type="text" name="realname" id="realname">
-<td>This is what will be displayed on the site, e.g. "Jan Novák"
+<td>This is what will be displayed on the site, e.g. Jan Novák
 
 <tr>
 <td><label for="username">Login username</label>
 <td><input type="text" name="username" id="username">
-<td>This has to be ASCII with no spaces, e.g. "JanNovak"
+<td>This has to be ASCII with no spaces, e.g. JanNovak
 
 <tr>
 <td><label for="email">Your email address</label>
 <td><input type="text" name="email" id="email">
+<td>e.g. jnovak@example.com (but do <b>not</b> use the style "Jan Novák" &lt;jnovak@example.com&gt;)
 </table>
 
 <p>Your email address will be used to confirm your account (and if you ever

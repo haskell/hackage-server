@@ -68,6 +68,9 @@ data UserFeature = UserFeature {
 
     userNameInPath      :: forall m. MonadPlus m => DynamicPath -> m UserName,
     lookupUserName      :: UserName -> ServerPartE UserId,
+    lookupUserNameFull  :: UserName -> ServerPartE (UserId, UserInfo),
+    lookupUserInfo      :: UserId -> ServerPartE UserInfo,
+
     changePassword      :: UserName -> ServerPartE (),
     canChangePassword   :: forall m. MonadIO m => UserId -> UserId -> m Bool,
     newUserWithAuth     :: String -> PasswdPlain -> PasswdPlain -> ServerPartE UserName,
@@ -345,15 +348,25 @@ userFeature  usersState adminsState
     userNameInPath dpath = maybe mzero return (simpleParse =<< lookup "username" dpath)
 
     lookupUserName :: UserName -> ServerPartE UserId
-    lookupUserName uname = do
+    lookupUserName = fmap fst . lookupUserNameFull
+
+    lookupUserNameFull :: UserName -> ServerPartE (UserId, UserInfo)
+    lookupUserNameFull uname = do
         users <- queryState usersState GetUserDb
         case Users.lookupUserName uname users of
-          Just (uid, _) -> return uid
-          Nothing       -> userLost "Could not find user: not presently registered"
+          Just u  -> return u
+          Nothing -> userLost "Could not find user: not presently registered"
       where userLost = errNotFound "User not found" . return . MText
             --FIXME: 404 is only the right error for operating on User resources
             -- not when users are being looked up for other reasons, like setting
             -- ownership of packages. In that case needs errBadRequest
+
+    lookupUserInfo :: UserId -> ServerPartE UserInfo
+    lookupUserInfo uid = do
+        users <- queryState usersState GetUserDb
+        case Users.lookupUserId uid users of
+          Just uinfo -> return uinfo
+          Nothing    -> errInternalError [MText "user id does not exist"]
 
     adminAddUser :: ServerPartE Response
     adminAddUser = do

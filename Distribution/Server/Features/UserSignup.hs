@@ -24,7 +24,7 @@ import qualified Data.Text as T
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Base16 as Base16
-import Data.Char (isSpace, isPrint)
+import Data.Char (isSpace, isPrint, isAlphaNum)
 
 import Data.Typeable (Typeable)
 import Control.Monad.Reader (ask)
@@ -277,7 +277,10 @@ initUserSignupFeature env@ServerEnv{serverStateDir, serverStaticDir}
   -- Page templates
   templates <- loadTemplates NormalMode {- use DesignMode when working on templates -}
                  [serverStaticDir, serverStaticDir </> "UserSignupReset"]
-                 ["SignupRequest", "ConfirmationEmail", "SignupEmailSent", "SignupConfirm"]
+                 [ "SignupRequest", "SignupConfirmationEmail"
+                 , "SignupEmailSent", "SignupConfirm"
+                 , "ResetRequest", "ResetConfirmationEmail"
+                 , "ResetEmailSent", "ResetConfirm" ]
 
   let feature = userSignupFeature env users userdetails
                                   signupResetState templates
@@ -389,8 +392,8 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..}
 
     handlerGetSignupRequestNew :: DynamicPath -> ServerPart Response
     handlerGetSignupRequestNew _ = do
-      template <- getTemplate templates "SignupRequest"
-      ok $ toResponse $ template []
+        template <- getTemplate templates "SignupRequest"
+        ok $ toResponse $ template []
 
     handlerPostSignupRequestNew :: DynamicPath -> ServerPart Response
     handlerPostSignupRequestNew _ = runServerPartE $ do
@@ -457,8 +460,7 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..}
           guard (T.length str <= 50)    ?! "Sorry, we didn't expect login names to be longer than 50 characters."
           guard (T.all isAsciiChar str) ?! "Sorry, login names have to be ASCII characters only, no spaces or symbols."
           where
-            isAsciiChar c = (c >= 'A' && c <= 'Z')
-                         || (c >= 'a' && c <= 'z')
+            isAsciiChar c = c < '\127' && isAlphaNum c
 
         guardValidLookingEmail str = either errBadEmail return $ do
           guard (T.length str <= 100)     ?! "Sorry, we didn't expect email addresses to be longer than 100 characters."
@@ -528,15 +530,125 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..}
                   ++ "You can make a new account request at "
             ,MLink "/users/signup-request" "/users/signup-request"]
 
+    -- Password reset handlers
+
     handlerGetResetRequestNew :: DynamicPath -> ServerPart Response
-    handlerGetResetRequestNew _ = fail "TODO"
+    handlerGetResetRequestNew _ = do
+        template <- getTemplate templates "ResetRequest"
+        ok $ toResponse $ template []
 
     handlerPostResetRequestNew :: DynamicPath -> ServerPart Response
-    handlerPostResetRequestNew _ = fail "TODO"
+    handlerPostResetRequestNew _ = runServerPartE $ do
+        templateEmail        <- getTemplate templates "ResetConfirmationEmail"
+        templateConfirmation <- getTemplate templates "ResetEmailSent"
+
+        (supplied_username, supplied_useremail) <- lookUserNameEmail
+        (uid, uinfo) <- lookupUserNameFull supplied_username
+        mudetails    <- queryUserDetails uid
+
+        guardEmailMatches mudetails supplied_useremail
+        AccountDetails{..} <- guardSuitableAccountType uinfo mudetails
+
+        nonce     <- liftIO newRandomNonce
+        timestamp <- liftIO getCurrentTime
+        let resetInfo = ResetInfo {
+              resetUserId    = uid,
+              nonceTimestamp = timestamp
+            }
+        let mailFrom = Address (Just (T.pack "Hackage website"))
+                               (T.pack ("noreply@" ++ uriRegName ourURI))
+            mail     = (emptyMail mailFrom) {
+              mailTo      = [Address (Just accountName) accountContactEmail],
+              mailHeaders = [(BS.pack "Subject",
+                              T.pack "Hackage password reset confirmation")],
+              mailParts   = [[Part (T.pack "text/plain; charset=utf-8")
+                                    None Nothing [] mailBody]]
+            }
+            mailBody = renderTemplate $ templateEmail
+              [ "realname"    $= accountName
+              , "confirmlink" $= "http://" ++ ourURIStr
+                              ++ "/users/password-reset/" ++ renderNonce nonce
+              , "serverhost"  $= ourURIStr
+              ]
+            ourURI    = serverHostURI env
+            ourURIStr = uriRegName ourURI ++ uriPort ourURI
+
+        updateAddSignupResetInfo nonce resetInfo
+
+        liftIO $ renderSendMail mail --TODO: if we need any configuration of
+                                     -- sendmail stuff, has to go here
+
+        resp 202 $ toResponse $
+          templateConfirmation
+            [ "useremail" $= accountContactEmail ]
+      where
+        lookUserNameEmail :: ServerPartE (UserName, Text)
+        lookUserNameEmail =
+          msum [ body $ (,) <$> (UserName <$> look "username")
+                            <*> lookText' "email"
+               , errBadRequest "Missing form fields" [] ]
+
+        guardEmailMatches (Just AccountDetails {accountContactEmail}) useremail
+          | accountContactEmail == useremail = return ()
+        guardEmailMatches _ _ =
+          errForbidden "Wrong account details"
+            [MText "Sorry, that does not match any account details we have on file."]
+
+    guardSuitableAccountType (UserInfo { userStatus = AccountEnabled{} })
+                             (Just udetails@AccountDetails {
+                               accountKind = Just AccountKindRealUser
+                              }) = return udetails
+    guardSuitableAccountType _ _ =
+      errForbidden "Cannot reset password for this account"
+        [MText $ "Sorry, the self-service password reset system cannot be "
+              ++ "used for this account at this time."]
+
 
     handlerGetResetRequestOutstanding :: DynamicPath -> ServerPart Response
-    handlerGetResetRequestOutstanding _ = fail "TODO"
+    handlerGetResetRequestOutstanding dpath = runServerPartE $ do
+        nonce                    <- nonceInPath dpath
+        ResetInfo{resetUserId}   <- lookupResetInfo nonce
+        uinfo@UserInfo{userName} <- lookupUserInfo resetUserId
+        mudetails                <- queryUserDetails resetUserId
+        AccountDetails{..}       <- guardSuitableAccountType uinfo mudetails
+
+        template <- getTemplate templates "ResetConfirm"
+        resp 202 $ toResponse $
+          template
+            [ "realname"  $= accountName
+            , "username"  $= display userName
+            , "useremail" $= accountContactEmail
+            , "posturl"   $= renderResource resetRequestResource
+                                [renderNonce nonce]
+            ]
 
     handlerPostResetRequestOutstanding :: DynamicPath -> ServerPart Response
-    handlerPostResetRequestOutstanding _ = fail "TODO"
+    handlerPostResetRequestOutstanding dpath = runServerPartE $ do
+        nonce                    <- nonceInPath dpath
+        ResetInfo{resetUserId}   <- lookupResetInfo nonce
+        uinfo@UserInfo{userName} <- lookupUserInfo resetUserId
+        mudetails                <- queryUserDetails resetUserId
+        AccountDetails{..}       <- guardSuitableAccountType uinfo mudetails
 
+        (passwd, passwdRepeat) <- lookPasswd
+        when (passwd /= passwdRepeat) errPasswdMismatch
+
+        let userauth = newUserAuth userName (PasswdPlain passwd)
+
+        updateDeleteSignupResetInfo nonce
+        updateSetUserAuth resetUserId userauth >>= maybe (return ()) errDeleted
+        --TODO: confirmation page?
+        seeOther (userPageUri userResource "" userName) (toResponse ())
+      where
+        lookPasswd = body $ (,) <$> look "password"
+                                <*> look "repeat-password"
+        errPasswdMismatch =
+          errBadRequest "Password mismatch"
+            [MText $ "The two copies of the password did not match. "
+                  ++ "Check and try again."]
+
+        errDeleted (Right Users.ErrDeletedUser) =
+          errForbidden "Account deleted"
+            [MText "Cannot set a new password as the user account has just been deleted."]
+        errDeleted (Left Users.ErrNoSuchUserId) =
+          errInternalError [MText "No such user id!"]
