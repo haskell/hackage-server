@@ -36,8 +36,7 @@ echo "Making 'admin' user a member of the mirrorers group"
 curl -u admin:${ADMIN_PASSWD} -X PUT ${SERVER_URL}/packages/mirrorers/user/admin > ${IMPORT_LOG} 2>&1
 
 echo "importing users..."
-#FIXME: allow spaces in user names? or just fix that one account?
-time hackage-import users ${SERVER_URL} --htpasswd=${IMPORTDATA_DIR}/passwd/hackage.htpasswd --jobs=${JOBS} >> ${IMPORT_LOG}
+time hackage-import users ${SERVER_URL} --htpasswd=${IMPORTDATA_DIR}/passwd/hackage.htpasswd --all-uploaders --addresses=${IMPORTDATA_DIR}/passwd/hackage.addresses --jobs=${JOBS} >> ${IMPORT_LOG}
 
 echo "importing package metadata..."
 time hackage-import metadata ${SERVER_URL} --index=${IMPORTDATA_DIR}/archive/00-index.tar.gz --jobs=${JOBS} >> ${IMPORT_LOG}
@@ -47,6 +46,9 @@ time hackage-import metadata ${SERVER_URL} --upload-log=${IMPORTDATA_DIR}/archiv
 
 echo "importing package tarballs..."
 time hackage-import tarball ${SERVER_URL} ${IMPORTDATA_DIR}/archive/*/*/*.tar.gz --jobs=${JOBS}  >> ${IMPORT_LOG}
+
+echo "importing package documentation..."
+time hackage-import docs ${SERVER_URL} ${IMPORTDATA_DIR}/cache/docs/*-docs.tar.gz --jobs=${JOBS}  >> ${IMPORT_LOG}
 
 echo "importing package deprecation info..."
 time hackage-import deprecation ${SERVER_URL} ${IMPORTDATA_DIR}/archive/*/*/tags >> ${IMPORT_LOG}
