@@ -180,7 +180,7 @@ legacyPasswdsFeature legacyPasswdsState UserFeature{..}
 
   where
     legacyPasswdsFeatureInterface = (emptyHackageFeature "legacy-passwds") {
-        featureDesc      = "Extra information about user accounts, email addresses etc."
+        featureDesc      = "Support for upgrading accounts from htpasswd-style passwords"
       , featureResources = [htpasswordResource, htpasswordUpgradeResource]
       , featureState     = [abstractStateComponent legacyPasswdsState]
       , featureCaches    = []
@@ -232,13 +232,18 @@ legacyPasswdsFeature legacyPasswdsState UserFeature{..}
                                   (RealmName "Old Hackage site")
                                   users
                                   (lookupUserLegacyPasswd legacyPasswds)
+        when (userStatus uinfo /= Users.AccountDisabled Nothing) errHasAuth
         let auth = Users.UserAuth (Auth.newPasswdHash Auth.hackageRealm (userName uinfo) passwd)
-        --TODO: check userStatus uinfo == AccountDisabled Nothing
         updateSetUserAuth uid auth
         updateSetUserEnabledStatus uid True
         updateState legacyPasswdsState (DeleteUserLegacyPasswd uid)
         --TODO: return success result page?
         seeOther ("/user/" ++ display (userName uinfo)) (toResponse ())
+      where
+        errHasAuth = errForbidden "Cannot set new password"
+          [MText $ "The account is not in a state where upgrading the "
+                ++ "authentication is allowed. If this is unexpected, "
+                ++ "please contact an administrator."]
 
     interceptUserAuthFail :: IO ()
     interceptUserAuthFail = do
