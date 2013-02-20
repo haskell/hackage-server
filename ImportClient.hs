@@ -163,6 +163,7 @@ globalCommand = CommandUI {
 
 data UsersFlags = UsersFlags {
     usersHtPasswd  :: Flag FilePath,
+    usersUploaders :: Flag Bool,
     usersAddresses :: Flag FilePath,
     usersJobs      :: Flag String
   }
@@ -170,6 +171,7 @@ data UsersFlags = UsersFlags {
 defaultUsersFlags :: UsersFlags
 defaultUsersFlags = UsersFlags {
     usersHtPasswd  = NoFlag,
+    usersUploaders = Flag False,
     usersAddresses = NoFlag,
     usersJobs      = NoFlag
   }
@@ -192,6 +194,10 @@ usersCommand =
           "Import an apache 'htpasswd' user account database file"
           usersHtPasswd (\v flags -> flags { usersHtPasswd = v })
           (reqArgFlag "HTPASSWD")
+      , option [] ["all-uploaders"]
+          "Add all new accounts to the uploaders group (use with --htpasswd)"
+          usersUploaders (\v flags -> flags { usersUploaders = v })
+          (noArg (Flag True))
       , option [] ["addresses"]
           "Import user email addresses"
           usersAddresses (\v flags -> flags { usersAddresses = v })
@@ -212,16 +218,18 @@ usersAction flags args _ = do
       die $ "specify what to import using one or more of the flags:\n"
          ++ "  --htpasswd=  --addresses="
 
+    let makeUploader = fromFlag (usersUploaders flags)
+
     case usersHtPasswd flags of
       NoFlag    -> return ()
-      Flag file -> importAccounts jobs file baseURI
+      Flag file -> importAccounts jobs file makeUploader baseURI
 
     case usersAddresses flags of
       NoFlag    -> return ()
       Flag file -> importAddresses jobs file baseURI
 
-importAccounts :: Int -> FilePath -> URI -> IO ()
-importAccounts jobs htpasswdFile baseURI = do
+importAccounts :: Int -> FilePath -> Bool -> URI -> IO ()
+importAccounts jobs htpasswdFile makeUploader baseURI = do
 
   htpasswdDb <- either die return . HtPasswdDb.parse
             =<< readFile htpasswdFile
@@ -230,11 +238,13 @@ importAccounts jobs htpasswdFile baseURI = do
     httpSession $ do
       setAuthorityFromURI baseURI
       tasks $ \(username, mPasswdhash) ->
-        putUserAccount baseURI username mPasswdhash
+        putUserAccount baseURI username mPasswdhash makeUploader
 
 
-putUserAccount :: URI -> UserName -> Maybe HtPasswdDb.HtPasswdHash -> HttpSession ()
-putUserAccount baseURI username mPasswdHash = do
+putUserAccount :: URI -> UserName 
+               -> Maybe HtPasswdDb.HtPasswdHash -> Bool
+               -> HttpSession ()
+putUserAccount baseURI username mPasswdHash makeUploader = do
 
     rsp <- requestPUT userURI "" BS.empty
     case rsp of
@@ -249,9 +259,16 @@ putUserAccount baseURI username mPasswdHash = do
           Nothing  -> return ()
           Just err -> fail (formatErrorResponse err)
 
+    when makeUploader $ do
+      rsp <- requestPUT userUploaderURI "" BS.empty
+      case rsp of
+        Nothing  -> return ()
+        Just err -> fail (formatErrorResponse err)
+
   where
     userURI   = baseURI <//> "user" </> display username
     passwdURI = userURI <//> "htpasswd"
+    userUploaderURI = baseURI <//> "packages/uploaders/user" </> display username
 
 importAddresses :: Int -> FilePath -> URI -> IO ()
 importAddresses jobs addressesFile baseURI = do
