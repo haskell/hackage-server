@@ -44,7 +44,8 @@ import qualified System.FilePath.Posix as Posix
 import Data.List
 import Data.Maybe
 import Data.Ord (comparing)
-import Data.Time (UTCTime, formatTime)
+import Data.Time (UTCTime, formatTime, getCurrentTime)
+import System.Locale (defaultTimeLocale)
 import Control.Monad
 import Control.Monad.Trans
 import Data.ByteString.Lazy.Char8 (ByteString)
@@ -278,11 +279,12 @@ importAddresses jobs addressesFile baseURI = do
     concForM_ jobs addressesDb $ \tasks ->
       httpSession $ do
         setAuthorityFromURI baseURI
-        tasks $ \(username, realname, email) ->
-          putUserDetails baseURI username realname email
+        tasks $ \(username, realname, email, timestamp, adminname) ->
+          putUserDetails baseURI username realname email timestamp adminname
 
-putUserDetails :: URI -> UserName -> T.Text -> T.Text -> HttpSession ()
-putUserDetails baseURI username realname email = do
+putUserDetails :: URI -> UserName -> T.Text -> T.Text
+               -> UTCTime -> UserName -> HttpSession ()
+putUserDetails baseURI username realname email timestamp adminname = do
 
     rsp <- requestPUT userNameAddressURI "application/json" (toBS nameAddressInfo)
     case rsp of
@@ -292,7 +294,8 @@ putUserDetails baseURI username realname email = do
                                ++ display username
       Just err -> fail (formatErrorResponse err)
 
-    rsp <- requestPUT userAdminInfoURI "application/json" (toBS adminInfo)
+    now <- liftIO getCurrentTime
+    rsp <- requestPUT userAdminInfoURI "application/json" (toBS (adminInfo now))
     case rsp of
       Nothing  -> return ()
       Just err | isErrNotFound err
@@ -312,17 +315,15 @@ putUserDetails baseURI username realname email = do
           , ("contactEmailAddress", showJSON email)
           ]
 
-    adminInfo =
+    adminInfo now =
       JSObject $ toJSObject
           [ ("accountKind", JSObject $ toJSObject [("AccountKindRealUser", JSArray [])])
-          , ("notes",       showJSON notes)
+          , ("notes",       showJSON (notes now))
           ]
-    notes = "" --TODO: add this info when importing, we have it in the hackage.addresses file.
---  notes = "Original hackage account created by "
---       ++ [] ++ " on " ++ [] ++ "\n"
---       ++ "Account created on this server by the hackage-import client on "
---       ++ timestamp
-
+    notes now = "Original hackage account created by "
+             ++ display adminname ++ " on " ++ showUTCTime timestamp ++ "\n"
+             ++ "Account created on this server by the hackage-import client on "
+             ++ showUTCTime now
 
 
 -------------------------------------------------------------------------------
@@ -447,7 +448,7 @@ putUploadInfo baseURI pkgid time uname = do
 
     liftIO $ info $ "setting upload info for " ++ display pkgid
 
-    let timeStr = formatTime defaultTimeLocale "%c" time
+    let timeStr = showUTCTime time
     rsp <- requestPUT (pkgURI <//> "upload-time") "text/plain" (toBS timeStr)
     case rsp of
       Nothing  -> return ()
@@ -886,6 +887,9 @@ formatErrorResponse (ErrorResponse uri (a,b,c) reason mBody) =
 -------------------------------------------------------------------------------
 -- Utils
 --
+
+showUTCTime :: UTCTime -> String
+showUTCTime = formatTime defaultTimeLocale "%c"
 
 -- option utility
 reqArgFlag :: ArgPlaceHolder -> SFlags -> LFlags -> Description

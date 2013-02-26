@@ -36,7 +36,7 @@ import Distribution.Simple.Utils
 import Data.Time.Clock
          ( UTCTime )
 import Data.Time.LocalTime
-         ( ZonedTime(..), TimeZone(..), zonedTimeToUTC )
+         ( zonedTimeToUTC )
 import Data.Time.Format
          ( readsTime, formatTime )
 import System.Locale
@@ -62,7 +62,7 @@ instance Text Entry where
     Parse.skipSpaces
     ver  <- parse
     let pkgid = PackageIdentifier pkg ver
-    return (Entry (zonedTimeToUTC (fixupTimeZone time)) user pkgid)
+    return (Entry (zonedTimeToUTC time) user pkgid)
 
 -- | Returns a list of log entries, however some packages have been uploaded
 -- more than once, so each entry is paired with any older entries for the same
@@ -106,13 +106,3 @@ collectMaintainerInfo =
         Entry _ _ pkgid = head entries
         maintainers     = nub [ uname | Entry _ uname _ <- entries ]
 
--- | The time lib doesn't know the time offsets of standard time zones so we
--- have to do it ourselves for a couple zones we're interested in. Sigh.
-fixupTimeZone :: ZonedTime -> ZonedTime
-fixupTimeZone zt@ZonedTime { zonedTimeZone = tz }
-  | timeZoneName tz == "PST" = zt { zonedTimeZone = pst }
-  | timeZoneName tz == "PDT" = zt { zonedTimeZone = pdt }
-  | otherwise                = zt
-  where
-    pst = TimeZone (-8 * 60) False "PST"
-    pdt = TimeZone (-7 * 60) True  "PDT"

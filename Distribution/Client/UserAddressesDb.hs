@@ -18,9 +18,11 @@ import qualified Data.Text.Encoding.Error as T
 import qualified Data.Text.Read           as T
 import Data.Functor
 import Data.Char (chr)
+import Data.Time (UTCTime, parseTime, zonedTimeToUTC)
+import System.Locale (defaultTimeLocale)
 
 type UserAddressesDb = [UserEntry]
-type UserEntry    = (UserName, UserRealName, UserAddress)
+type UserEntry    = (UserName, UserRealName, UserAddress, UTCTime, UserName)
 type UserRealName = Text
 type UserAddress  = Text
 
@@ -30,29 +32,42 @@ parseFile fn = parse <$> BS.readFile fn
 parse :: ByteString -> Either String UserAddressesDb
 parse = accum 0 [] . map parseLine . BS.lines
   where
-    accum  _ entries []                = Right (reverse entries)
-    accum !n entries (Just entry:rest) = accum (n+1) (entry:entries) rest
-    accum  n _       (Nothing   :_   ) = Left errmsg
+    accum  _ entries []                 = Right (reverse entries)
+    accum !n entries (Right entry:rest) = accum (n+1) (entry:entries) rest
+    accum  n _       (Left line  :_   ) = Left errmsg
       where
         errmsg = "parse error in addresses file on line " ++ show (n :: Int)
+              ++ "\n" ++ BS.unpack line
 
-parseLine :: ByteString -> Maybe UserEntry
-parseLine line = case splitOn ':' line of
+parseLine :: ByteString -> Either ByteString UserEntry
+parseLine line
   -- entries like:
   -- DuncanCoutts:Duncan Coutts:duncan.coutts@worc.ox.ac.uk:RossPaterson:Wed Jan 10 16:00:00 PDT 2007
-  (username:realname:email:_) -> Just ( UserName (BS.unpack username)
-                                      , decodeMixed realname
-                                      , decodeMixed email )
-  _                           -> Nothing
+  | [username,realname,email,adminname,timestr] <- splitFields line
+  , Just timestamp <- readTime (BS.unpack timestr)
+  = Right ( UserName (BS.unpack username)
+          , decodeMixed realname
+          , decodeMixed email
+          , timestamp
+          , UserName (BS.unpack adminname) )
+  | otherwise
+  = Left line
 
-{-
-test = T.unlines . map transLine . BS.lines
+  where
+    splitFields = fixTimeBreakage . fixUrlBreakage . splitOn ':'
+      where
+        fixUrlBreakage [] = []
+        fixUrlBreakage (f:f':fs) | f == BS.pack "http"
+                                 = BS.concat [f, BS.singleton ':', f']
+                                     : fixUrlBreakage fs
+        fixUrlBreakage (f:fs)    = f : fixUrlBreakage fs
 
-transLine :: ByteString -> Text
-transLine line = case splitOn ':' line of
-  (username:realname:email:rest) ->
-    T.intercalate ":" (T.decodeUtf8 username:decodeMixed realname:decodeMixed email: map T.decodeUtf8 rest)
--}
+        fixTimeBreakage [a,b,c,d,t1,t2,t3] =
+          [a,b,c,d, BS.intercalate (BS.singleton ':') [t1,t2,t3] ]
+        fixTimeBreakage fs = fs
+
+    readTime = fmap zonedTimeToUTC
+             . parseTime defaultTimeLocale "%c"
 
 -- Unfortunately the file uses mixed encoding, mostly UTF8
 -- but some Latin1 and some Html escape sequences
@@ -77,5 +92,4 @@ splitOn :: Char -> ByteString -> [ByteString]
 splitOn c = unfoldr $ \s -> if BS.null s then Nothing
                                          else case BS.break (==c) s of
                                                 (x,s') -> Just (x, BS.drop 1 s')
-
 
