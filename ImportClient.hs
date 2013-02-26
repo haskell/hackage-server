@@ -818,18 +818,21 @@ isErrNotFound :: ErrorResponse -> Bool
 isErrNotFound (ErrorResponse _ (4,0,4) _ _) = True
 isErrNotFound _                             = False
 
+-- | We can do http digest auth, however currently the Network.Browser module
+-- does not cache the auth info so it has to re-auth for every single request.
+-- So instead here we just make it pre-emptively supply basic auth info.
+-- We assume this is fine since we're probably working with localhost anyway.
+--
 setAuthorityFromURI :: URI -> HttpSession ()
-setAuthorityFromURI uri = do
-   setAuthorityGen provideAuthInfo
-  where
-    credentials = extractCredentials uri
-
-    provideAuthInfo :: URI -> String -> IO (Maybe (String, String))
-    provideAuthInfo uri' _realm
-      | hostName uri' == hostName uri = return credentials
-      | otherwise                     = return Nothing
-      where
-        hostName = fmap uriRegName . uriAuthority
+setAuthorityFromURI uri
+    | Just (username, passwd) <- extractCredentials uri
+    = addAuthority AuthBasic {
+        auRealm    = "Hackage",
+        auUsername = username,
+        auPassword = passwd,
+        auSite     = uri
+      }
+    | otherwise = return ()
 
 extractCredentials :: URI -> Maybe (String, String)
 extractCredentials uri
