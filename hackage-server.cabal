@@ -1,5 +1,5 @@
 name:         hackage-server
-version:      0.2
+version:      0.3
 category:     Distribution
 synopsis:     A prototype Hackage web server
 description:  A prototype Hackage web server based on the Happstack architecture.
@@ -9,8 +9,10 @@ author:       Duncan Coutts <duncan@community.haskell.org>,
               Matthew Gruen <wikigracenotes@gmail.com>
 maintainer:   Duncan Coutts <duncan@community.haskell.org>,
               Matthew Gruen <wikigracenotes@gmail.com>
-copyright:    2008-2011 Duncan Coutts,
+copyright:    2008-2013 Duncan Coutts,
+              2012-2013 Edsko de Vries,
               2010-2011 Matthew Gruen,
+              2009-2010 Antoine Latter,
               2008 David Himmelstrup,
               2007 Ross Paterson
 license:      BSD3
