@@ -252,7 +252,7 @@ impl server =
   where
     staticDir = serverStaticDir (serverEnv server)
 
-    serverTree :: ServerTree ServerResponse
+    serverTree :: ServerTree (DynamicPath -> ServerPart Response)
     serverTree =
         fmap serveResource
       -- ServerTree Resource

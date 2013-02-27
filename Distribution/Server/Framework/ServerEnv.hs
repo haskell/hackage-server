@@ -1,9 +1,8 @@
-module Distribution.Server.Framework.Types where
+module Distribution.Server.Framework.ServerEnv where
 
 import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import Distribution.Server.Framework.Logging (Verbosity)
 
-import Happstack.Server
 import qualified Network.URI as URI
 
 -- | The internal server environment as used by 'HackageFeature's.
@@ -47,8 +46,4 @@ data ServerEnv = ServerEnv {
 
     serverVerbosity  :: Verbosity
 }
-
-type DynamicPath = [(String, String)]
-
-type ServerResponse = DynamicPath -> ServerPart Response
 

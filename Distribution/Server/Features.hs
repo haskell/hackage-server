@@ -10,7 +10,7 @@
 module Distribution.Server.Features where
 
 import Distribution.Server.Framework.Feature
-import Distribution.Server.Framework.Types   (ServerEnv(..))
+import Distribution.Server.Framework.ServerEnv (ServerEnv(..))
 import Distribution.Server.Framework.Logging
 
 import Distribution.Server.Features.Users    (initUserFeature, UserFeature)

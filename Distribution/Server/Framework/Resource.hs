@@ -2,6 +2,7 @@
 
 module Distribution.Server.Framework.Resource (
     -- | Paths
+    DynamicPath,
     BranchComponent(..),
     BranchPath,
     trunkAt,
@@ -33,7 +34,6 @@ module Distribution.Server.Framework.Resource (
 
 import Happstack.Server
 import Distribution.Server.Util.Happstack (remainingPathString)
-import Distribution.Server.Framework.Types
 
 import Data.Monoid
 import Data.Map (Map)
@@ -49,6 +49,10 @@ import System.FilePath.Posix ((</>))
 import qualified Data.Tree as Tree (Tree(..), drawTree)
 
 type Content = String
+
+type DynamicPath = [(String, String)]
+
+type ServerResponse = DynamicPath -> ServerPart Response
 
 -- | A resource is an object that handles requests at a given URI. Best practice
 -- is to construct it by calling resourceAt and then setting the method fields

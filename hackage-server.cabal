@@ -78,6 +78,7 @@ executable hackage-server
     Distribution.Server.Framework.ResponseContentTypes
     Distribution.Server.Framework.BackupDump
     Distribution.Server.Framework.BackupRestore
+    Distribution.Server.Framework.ServerEnv
     
     Distribution.Server.Packages.Index
     Distribution.Server.Packages.ModuleForest

@@ -10,7 +10,7 @@ module Distribution.Server.Framework (
 
     module Distribution.Server.Framework.Auth,
     module Distribution.Server.Framework.Feature,
-    module Distribution.Server.Framework.Types,
+    module Distribution.Server.Framework.ServerEnv,
     module Distribution.Server.Framework.Resource,
     module Distribution.Server.Framework.RequestContentTypes,
     module Distribution.Server.Framework.ResponseContentTypes,
@@ -36,7 +36,7 @@ import Distribution.Server.Framework.MemSize
 
 import Distribution.Server.Framework.Auth (PrivilegeCondition(..))
 import Distribution.Server.Framework.Feature
-import Distribution.Server.Framework.Types
+import Distribution.Server.Framework.ServerEnv
 import Distribution.Server.Framework.Resource
 import Distribution.Server.Framework.RequestContentTypes
 import Distribution.Server.Framework.ResponseContentTypes
