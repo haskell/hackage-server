@@ -67,9 +67,12 @@ data ServerConfig = ServerConfig {
   confCacheDelay:: Int
 } deriving (Show)
 
-confDbStateDir, confBlobStoreDir :: ServerConfig -> FilePath
+confDbStateDir, confBlobStoreDir,
+  confStaticFilesDir, confTemplatesDir :: ServerConfig -> FilePath
 confDbStateDir   config = confStateDir config </> "db"
 confBlobStoreDir config = confStateDir config </> "blobs"
+confStaticFilesDir config = confStaticDir config </> "static"
+confTemplatesDir   config = confStaticDir config </> "templates"
 
 defaultServerConfig :: IO ServerConfig
 defaultServerConfig = do
@@ -83,7 +86,7 @@ defaultServerConfig = do
                         loIP = "0.0.0.0"
                     },
     confStateDir  = "state",
-    confStaticDir = dataDir </> "static",
+    confStaticDir = dataDir,
     confTmpDir    = "state" </> "tmp",
     confCacheDelay= 0
   }
@@ -112,19 +115,25 @@ hasSavedState = doesDirectoryExist . confDbStateDir
 -- with stale lock files.
 --
 initialise :: ServerConfig -> IO Server
-initialise initConfig@(ServerConfig verbosity hostName listenOn
-                                    stateDir staticDir tmpDir cacheDelay) = do
+initialise config@(ServerConfig verbosity hostName listenOn
+                                    stateDir _ tmpDir
+                                    cacheDelay) = do
     createDirectoryIfMissing False stateDir
+    let blobStoreDir  = confBlobStoreDir   config
+        staticDir     = confStaticFilesDir config
+        templatesDir  = confTemplatesDir   config
+
     store   <- BlobStorage.open blobStoreDir
 
     let env = ServerEnv {
-            serverStaticDir = staticDir,
-            serverStateDir  = stateDir,
-            serverBlobStore = store,
-            serverTmpDir    = tmpDir,
-            serverCacheDelay= cacheDelay * 1000000, --microseconds
-            serverHostURI   = hostURI,
-            serverVerbosity = verbosity
+            serverStaticDir    = staticDir,
+            serverTemplatesDir = templatesDir,
+            serverStateDir     = stateDir,
+            serverBlobStore    = store,
+            serverTmpDir       = tmpDir,
+            serverCacheDelay   = cacheDelay * 1000000, --microseconds
+            serverHostURI      = hostURI,
+            serverVerbosity    = verbosity
          }
     -- do feature initialization
     (features, userFeature) <- Features.initHackageFeatures env
@@ -137,7 +146,6 @@ initialise initConfig@(ServerConfig verbosity hostName listenOn
     }
 
   where
-    blobStoreDir  = confBlobStoreDir  initConfig
     hostURI       = URIAuth "" hostName portStr
       where portNum = loPortNum listenOn
             portStr | portNum == 80 = ""
@@ -247,11 +255,7 @@ initState server (admin, pass) = do
 impl :: Server -> ServerPart Response
 impl server =
     renderServerTree [] serverTree
-      `mplus`
-    serveDirectory DisableBrowsing ["hackage.html"] staticDir
   where
-    staticDir = serverStaticDir (serverEnv server)
-
     serverTree :: ServerTree (DynamicPath -> ServerPart Response)
     serverTree =
         fmap serveResource

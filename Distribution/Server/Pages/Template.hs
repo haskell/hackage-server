@@ -74,7 +74,7 @@ navigationBar =
     ]
 
 stylesheetURL :: URL
-stylesheetURL = "/hackage.css"
+stylesheetURL = "/static/hackage.css"
 
 -- URL of the package list
 pkgListURL :: URL
@@ -86,15 +86,15 @@ introductionURL = "/"
 
 -- URL of the upload form
 uploadURL :: URL
-uploadURL = "/upload.html"
+uploadURL = "/upload"
 
 -- URL about user accounts, including the form to change passwords
 accountsURL :: URL
-accountsURL = "/accounts.html"
+accountsURL = "/accounts"
 
 -- URL of the admin front end
 adminURL :: URL
-adminURL = "/admin.html"
+adminURL = "/admin"
 
 -- URL of the list of recent additions to the database
 recentAdditionsURL :: URL
@@ -102,7 +102,7 @@ recentAdditionsURL = "/recent"
 
 -- URL of haddock specifgic HTML
 haddockJSURL :: URL
-haddockJSURL = "/haddock/haddock-util.js"
+haddockJSURL = "/static/haddock/haddock-util.js"
 
 -- | Haddock themes we have avaliable, name and path
 haddockThemes :: [(String, String)]
@@ -113,4 +113,4 @@ haddockThemes =
 
 -- | URL directory of haddock theme CSS files
 haddockThemesDir :: URL
-haddockThemesDir = "/haddock"
+haddockThemesDir = "/static/haddock"

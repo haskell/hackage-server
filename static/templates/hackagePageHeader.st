@@ -5,10 +5,10 @@
 <tr>
 <td><a href="/">Introduction</a></td>
 <td><a href="/packages/">Packages</a></td>
-<td><a href="/recent.html">What's new</a></td>
-<td><a href="/upload.html">Upload</a></td>
-<td><a href="/accounts.html">User accounts</a></td>
-<td><a href="/admin.html">Admin</a></td>
+<td><a href="/recent">What's new</a></td>
+<td><a href="/upload">Upload</a></td>
+<td><a href="/accounts">User accounts</a></td>
+<td><a href="/admin">Admin</a></td>
 </tr>
 </table>
 </div>

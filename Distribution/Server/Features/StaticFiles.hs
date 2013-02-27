@@ -1,26 +1,74 @@
+{-# LANGUAGE NamedFieldPuns, RecordWildCards, BangPatterns #-}
 module Distribution.Server.Features.StaticFiles (
-    staticFilesFeature
+    initStaticFilesFeature
   ) where
 
 import Distribution.Server.Framework
+import Distribution.Server.Framework.Templating
 
--- | The feature to serve the static html files.
+-- | A feature to provide the top level files on the site (using templates)
+-- and also serve the genuinely static files.
 --
--- Don't think this is going to be used that much, as it's not too modular, and
--- must be last in order. Top-level handling seems more appropriate.
-staticFilesFeature :: HackageFeature
-staticFilesFeature = HackageFeature {
+initStaticFilesFeature :: ServerEnv
+                       -> IO HackageFeature
+initStaticFilesFeature env@ServerEnv{serverTemplatesDir} = do
 
-    featureName = "static files",
+  -- Page templates
+  templates <- loadTemplates DesignMode {- use DesignMode when working on templates -}
+                 [serverTemplatesDir] ["index.html"]
 
-    serverPart  = serveStaticFiles,
+  let feature = staticFilesFeature env templates
 
-    -- There is no persistent state for this feature,
-    -- so nothing needs to be backed up.
-    dumpBackup    = Nothing,
-    restoreBackup = Nothing
-}
+  return feature
 
-serveStaticFiles :: ServerEnv -> ServerPart Response
-serveStaticFiles env =
-  fileServe ["hackage.html"] (serverStaticDir env)
+
+staticFilesFeature :: ServerEnv -> Templates -> HackageFeature
+staticFilesFeature ServerEnv{serverStaticDir} templates =
+  (emptyHackageFeature "static-files") {
+    featureResources =
+      [ (resourceAt "/") {
+            resourceGet  = [("", \_ -> serveStaticIndexTemplate)]
+          }
+      , (resourceAt "/..") {
+            resourceGet  = [("", \_ -> serveStaticTemplates)]
+          }
+      , (resourceAt "/static/..") {
+            resourceGet  = [("", \_ -> serveStaticDirFiles)]
+          }
+      ] ++
+      [ (resourceAt ("/" ++ filename)) {
+            resourceGet  = [("", \_ -> serveStaticToplevelFile mimetype filename)]
+          }
+      | (filename, mimetype) <- toplevelFiles ]
+  , featureState = []
+  }
+
+  where
+    serveStaticDirFiles :: ServerPart Response
+    serveStaticDirFiles =
+      serveDirectory DisableBrowsing [] serverStaticDir
+
+    serveStaticToplevelFile :: String -> FilePath -> ServerPart Response
+    serveStaticToplevelFile mimetype filename =
+      serveFile (asContentType mimetype) (serverStaticDir </> filename)
+
+    toplevelFiles = [("favicon.ico", "image/x-icon")]
+
+    serveStaticTemplates :: ServerPart Response
+    serveStaticTemplates =
+      path $ \name -> do
+        nullDir
+        noTrailingSlash --TODO: redirect to non-slash version
+        serveTemplate (name ++ ".html")
+
+    serveStaticIndexTemplate :: ServerPart Response
+    serveStaticIndexTemplate =
+      serveTemplate "index.html"
+
+    serveTemplate :: String -> ServerPart Response
+    serveTemplate name = do
+      mtemplate <- tryGetTemplate templates name
+      case mtemplate of
+        Nothing       -> mzero
+        Just template -> ok $ toResponse $ template []
+

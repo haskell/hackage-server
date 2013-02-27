@@ -16,6 +16,9 @@ data ServerEnv = ServerEnv {
     -- | The location of the server's static files
     serverStaticDir :: FilePath,
 
+    -- | The location of the server's template files
+    serverTemplatesDir :: FilePath,
+
     -- | The location of the server's state directory. This is where the
     -- server's persistent state is kept, e.g. using ACID state.
     serverStateDir  :: FilePath,

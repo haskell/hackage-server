@@ -1,25 +1,12 @@
-<?xml version="1.0" encoding="utf-8" ?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml">
+<!DOCTYPE html>
+<html>
 <head>
+$hackageCssTheme()$
 <title>HackageDB: user administartion</title>
-<link rel="stylesheet" href="/hackage.css" type="text/css" />
 </head>
 
 <body>
-<div class="header">
-<h1>hackageDB :: [Package]</h1>
-<table class="navigation">
-<tr>
-<td><a href="/">Introduction</a></td>
-<td><a href="/packages/">Packages</a></td>
-<td><a href="/recent.html">What's new</a></td>
-<td><a href="/upload.html">Upload</a></td>
-<td><a href="/accounts.html">User accounts</a></td>
-<td><a href="/admin.html">Admin</a></td>
-</tr>
-</table>
-</div>
+$hackagePageHeader()$
 
 <div class="content">
 <h2>Admin front-end</h2>

@@ -268,7 +268,7 @@ initUserSignupFeature :: ServerEnv
                       -> UserFeature
                       -> UserDetailsFeature
                       -> IO UserSignupFeature
-initUserSignupFeature env@ServerEnv{serverStateDir, serverStaticDir}
+initUserSignupFeature env@ServerEnv{serverStateDir, serverTemplatesDir}
                       users userdetails = do
 
   -- Canonical state
@@ -276,7 +276,7 @@ initUserSignupFeature env@ServerEnv{serverStateDir, serverStaticDir}
 
   -- Page templates
   templates <- loadTemplates NormalMode {- use DesignMode when working on templates -}
-                 [serverStaticDir, serverStaticDir </> "UserSignupReset"]
+                 [serverTemplatesDir, serverTemplatesDir </> "UserSignupReset"]
                  [ "SignupRequest", "SignupConfirmationEmail"
                  , "SignupEmailSent", "SignupConfirm"
                  , "ResetRequest", "ResetConfirmationEmail"

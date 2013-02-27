@@ -189,11 +189,11 @@ runCommand = makeCommand name shortDesc longDesc defaultRunFlags options
           flagStateDir (\v flags -> flags { flagStateDir = v })
           (reqArgFlag "DIR")
       , option [] ["static-dir"]
-          "Directory in which to find the html and other static files (default: cabal location)"
+          "Directory in which to find the html templates and static files (default: cabal location)"
           flagStaticDir (\v flags -> flags { flagStaticDir = v })
           (reqArgFlag "DIR")
       , option [] ["tmp-dir"]
-          "Temporary directory in which to store file uploads until they are moved to a permanent location."
+          "Temporary directory in which to store file uploads (default state/tmp/)"
           flagTmpDir (\v flags -> flags { flagTmpDir = v })
           (reqArgFlag "DIR")
       , option [] ["temp-run"]

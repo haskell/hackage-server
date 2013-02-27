@@ -13,6 +13,7 @@ import Distribution.Server.Framework.Feature
 import Distribution.Server.Framework.ServerEnv (ServerEnv(..))
 import Distribution.Server.Framework.Logging
 
+import Distribution.Server.Features.StaticFiles (initStaticFilesFeature)
 import Distribution.Server.Features.Users    (initUserFeature, UserFeature)
 import Distribution.Server.Features.Core     (initCoreFeature, coreResource)
 import Distribution.Server.Features.Upload   (initUploadFeature)
@@ -61,6 +62,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
     -- Arguments denote feature dependencies.
     -- What follows is a topological sort along those lines
+    staticFilesFeature <- initStaticFilesFeature env
 
     usersFeature    <- initUserFeature env
 
@@ -208,6 +210,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface htmlFeature
          , legacyRedirectsFeature uploadFeature
 #endif
+         , staticFilesFeature
          , serverIntrospectFeature allFeatures
          ]
 

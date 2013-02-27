@@ -167,6 +167,7 @@ executable hackage-server
       Distribution.Server.Features.Tags.State
       Distribution.Server.Features.UserDetails
       Distribution.Server.Features.UserSignup
+      Distribution.Server.Features.StaticFiles
 
   build-depends:
     base       == 4.*,

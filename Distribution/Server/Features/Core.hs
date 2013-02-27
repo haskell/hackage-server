@@ -186,7 +186,7 @@ coreFeature :: ServerEnv
             -> ( CoreFeature
                , IO ByteString )
 
-coreFeature ServerEnv{serverBlobStore = store, serverStaticDir} UserFeature{..}
+coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
             packagesState indexExtras cacheIndexTarball
             tarballDownload packageAddHook packageRemoveHook packageChangeHook
             packageIndexChange newPackageHook noPackageHook
@@ -195,8 +195,7 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir} UserFeature{..}
     coreFeatureInterface = (emptyHackageFeature "core") {
         featureDesc = "Core functionality"
       , featureResources = [
-            coreIndexPage
-          , coreIndexTarball
+            coreIndexTarball
           , corePackagesPage
           , corePackagePage
           , corePackageRedirect
@@ -219,10 +218,6 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir} UserFeature{..}
 
     -- the rudimentary HTML resources are for when we don't want an additional HTML feature
     coreResource = CoreResource {..}
-    coreIndexPage = (resourceAt "/.:format") {
-        resourceDesc = [(GET, "The (static) index page")]
-      , resourceGet  = [("html", indexPage serverStaticDir)]
-      }
     coreIndexTarball = (resourceAt "/packages/index.tar.gz") {
         resourceDesc = [(GET, "tarball of package descriptions")]
       , resourceGet  = [("tarball", servePackagesIndex)]
@@ -256,8 +251,6 @@ coreFeature ServerEnv{serverBlobStore = store, serverStaticDir} UserFeature{..}
       renderResource coreCabalFile [display pkgid, display (packageName pkgid)]
     coreTarballUri  = \pkgid ->
       renderResource corePackageTarball [display pkgid, display pkgid]
-
-    indexPage staticDir _ = serveFile (const $ return "text/html") (staticDir ++ "/hackage.html")
 
     packageInPath dpath = maybe mzero return (lookup "package" dpath >>= fromReqURI)
 
