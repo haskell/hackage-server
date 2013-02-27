@@ -13,6 +13,9 @@ rsync -r -v hackage.haskell.org:/srv/www/hackage.haskell.org/passwd/ ${IMPORTDAT
 echo "Syncing archive..."
 rsync -r -v -z --skip-compress=gz -f'- latest/' -f'- logs/' hackage.haskell.org:/srv/www/hackage.haskell.org/public_html/packages/archive/ ${IMPORTDATA_DIR}/archive/
 
+echo "Syncing apache access logs..."
+rsync -r -v -z --skip-compress=gz -f'- error.log*' hackage.haskell.org:/var/log/apache2/ ${IMPORTDATA_DIR}/download-logs/
+
 
 echo "Updating doc tarballs..."
 pushd ${IMPORTDATA_DIR}/docs

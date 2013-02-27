@@ -12,7 +12,6 @@ STATIC_DIR=./static-files
 
 IMPORTDATA_DIR=./import-data
 ADMIN_PASSWD=admin
-#IMPORTER_PASSWD=importer
 
 SERVER_HOST=localhost
 SERVER_PORT=8080
@@ -30,10 +29,10 @@ hackage-server run -v3 --static=${STATIC_DIR} --state=${STATE_DIR} --delay-cache
 echo "Waiting a sec for the server to start..."
 sleep 2
 
-#curl -u admin:${ADMIN_PASSWD} -X PUT http://localhost:8080/users/importclient
-#curl -u admin:${ADMIN_PASSWD} -X PUT http://localhost:8080/users/importclient/htpasswd -d "${IMPORTER_PASSWD}"
 echo "Making 'admin' user a member of the mirrorers group"
 curl -u admin:${ADMIN_PASSWD} -X PUT ${SERVER_URL}/packages/mirrorers/user/admin > ${IMPORT_LOG} 2>&1
+echo "Making 'admin' user a member of the trustees group"
+curl -u admin:${ADMIN_PASSWD} -X PUT ${SERVER_URL}/packages/trustees/user/admin >> ${IMPORT_LOG} 2>&1
 
 echo "importing users..."
 time hackage-import users ${SERVER_URL} --htpasswd=${IMPORTDATA_DIR}/passwd/hackage.htpasswd --all-uploaders --addresses=${IMPORTDATA_DIR}/passwd/hackage.addresses --jobs=${JOBS} >> ${IMPORT_LOG}
