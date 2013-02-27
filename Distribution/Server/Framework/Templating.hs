@@ -15,6 +15,7 @@ module Distribution.Server.Framework.Templating (
     TemplatesMode(..),
     loadTemplates,
     getTemplate,
+    tryGetTemplate,
     TemplateAttr,
     ($=),
   ) where
@@ -23,7 +24,6 @@ import Text.StringTemplate
 import Happstack.Server (ToMessage(..), toResponseBS)
 
 import qualified Data.ByteString.Char8 as BS
-import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as LBS
 
 --TODO: switch to bytestring builder, once we can depend on bytestring-0.10
@@ -71,28 +71,33 @@ loadTemplates templateMode templateDirs expectedTemplates = do
     templateGroup <- loadTemplateGroup templateDirs
     checkTemplates templateGroup templateDirs expectedTemplates
     case templateMode of
-      NormalMode -> return $  TemplatesDesignMode templateDirs expectedTemplates
-      DesignMode -> return $! TemplatesNormalMode templateGroup
+      NormalMode -> return $  TemplatesNormalMode templateGroup
+      DesignMode -> return $! TemplatesDesignMode templateDirs expectedTemplates
 
 getTemplate :: MonadIO m => Templates -> String -> m ([TemplateAttr] -> Template)
-getTemplate (TemplatesNormalMode templateGroup) name = do
-    case getStringTemplate name templateGroup of
-      Nothing -> failMissingTemplate name
-      Just t  -> return (Template . applyTemplateAttrs t)
+getTemplate templates@(TemplatesNormalMode _) name =
+    tryGetTemplate templates name >>= maybe (failMissingTemplate name) return
 
-getTemplate (TemplatesDesignMode templateDirs expectedTemplates) name = do
+getTemplate templates@(TemplatesDesignMode _ expectedTemplates) name = do
     when (name `notElem` expectedTemplates) $
       failMissingTemplate name
+    tryGetTemplate templates name >>= maybe (failMissingTemplate name) return
+
+tryGetTemplate :: MonadIO m => Templates -> String -> m (Maybe ([TemplateAttr] -> Template))
+tryGetTemplate (TemplatesNormalMode templateGroup) name =
+    let mtemplate = fmap (\t -> Template . applyTemplateAttrs t)
+                         (getStringTemplate name templateGroup)
+    in return mtemplate
+
+tryGetTemplate (TemplatesDesignMode templateDirs expectedTemplates) name = do
     templateGroup <- liftIO $ loadTemplateGroup templateDirs
     checkTemplates templateGroup templateDirs expectedTemplates
-    case getStringTemplate name templateGroup of
-      Nothing -> fail $ "Missing template file: " ++ name
-                     ++ ". Search path was: " ++ intercalate " " templateDirs
-      Just t  -> return (Template . applyTemplateAttrs t)
+    let mtemplate = fmap (\t -> Template . applyTemplateAttrs t)
+                         (getStringTemplate name templateGroup)
+    return mtemplate
 
 applyTemplateAttrs :: RawTemplate -> [TemplateAttr] -> RawTemplate
 applyTemplateAttrs = foldl' (\t' (TemplateAttr a) -> a t')
-
 
 failMissingTemplate :: Monad m => String -> m a
 failMissingTemplate name =
@@ -113,7 +118,7 @@ checkTemplates templateGroup templateDirs expectedTemplates = do
                                (getStringTemplate t templateGroup))
                     | t <- expectedTemplates ]
         missing   = [ t | (t,Nothing) <- checks ]
-        problems  = [ (t, p) | (t,Just p@(es,ma,mt)) <- checks
+        problems  = [ (t, p) | (t,Just p@(es,_ma,mt)) <- checks
                              , isJust es || {-isJust ma ||-} isJust mt ]
 
     when (not (null missing)) $
