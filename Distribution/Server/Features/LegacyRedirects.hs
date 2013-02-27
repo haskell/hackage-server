@@ -62,7 +62,8 @@ serveLegacyPosts upload = msum
 -- | GETs, both for cabal-install to use, and for links scattered throughout the web.
 serveLegacyGets :: ServerPart Response
 serveLegacyGets = msum
-  [ dir "packages" $ msum
+  [ simpleMove "00-index.tar.gz" "/packages/index.tar.gz"
+  , dir "packages" $ msum
       [ dir "archive" $ serveArchiveTree
       , simpleMove "hackage.html"    "/"
       , simpleMove "00-index.tar.gz" "/packages/index.tar.gz"

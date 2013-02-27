@@ -29,9 +29,11 @@ staticFilesFeature ServerEnv{serverStaticDir} templates =
       [ (resourceAt "/") {
             resourceGet  = [("", \_ -> serveStaticIndexTemplate)]
           }
-      , (resourceAt "/..") {
-            resourceGet  = [("", \_ -> serveStaticTemplates)]
-          }
+-- TODO: we currently cannot use /.. here because then we cannot use it for
+-- the legacy redirects feature.
+--      , (resourceAt "/..") {
+--            resourceGet  = [("", \_ -> serveStaticTemplates)]
+--          }
       , (resourceAt "/static/..") {
             resourceGet  = [("", \_ -> serveStaticDirFiles)]
           }
@@ -40,6 +42,11 @@ staticFilesFeature ServerEnv{serverStaticDir} templates =
             resourceGet  = [("", \_ -> serveStaticToplevelFile mimetype filename)]
           }
       | (filename, mimetype) <- toplevelFiles ]
+        ++
+      [ (resourceAt ("/" ++ name)) {
+            resourceGet  = [("", \_ -> serveStaticTemplate name)]
+          }
+      | name <- toplevelTemplates ]
   , featureState = []
   }
 
@@ -54,12 +61,19 @@ staticFilesFeature ServerEnv{serverStaticDir} templates =
 
     toplevelFiles = [("favicon.ico", "image/x-icon")]
 
-    serveStaticTemplates :: ServerPart Response
-    serveStaticTemplates =
-      path $ \name -> do
-        nullDir
-        noTrailingSlash --TODO: redirect to non-slash version
-        serveTemplate (name ++ ".html")
+-- TODO: we currently have to list the templates explicitly, rather than
+-- just discovering them, see above
+    toplevelTemplates = ["accounts.html", "admin.html", "upload.html"
+                        ,"account-upgrade.html"]
+
+    serveStaticTemplate = serveTemplate
+
+--    serveStaticTemplates :: ServerPart Response
+--    serveStaticTemplates =
+--      path $ \name -> do
+--        nullDir
+--        noTrailingSlash --TODO: redirect to non-slash version
+--        serveTemplate (name ++ ".html")
 
     serveStaticIndexTemplate :: ServerPart Response
     serveStaticIndexTemplate =
