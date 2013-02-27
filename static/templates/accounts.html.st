@@ -2,14 +2,14 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>HackageDB: User accounts</title>
+<title>Hackage: User accounts</title>
 </head>
 
 <body>
 $hackagePageHeader()$
 
 <h2>User accounts</h2>
-<p>Most of the functions of the HackageDB web interface
+<p>Most of the functions of the Hackage web interface
 (including browsing and checking packages) are available to all.
 However, uploading packages requires a HackageDB username and password.
 </p>

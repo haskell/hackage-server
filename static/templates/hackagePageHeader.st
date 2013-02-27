@@ -1,5 +1,5 @@
 <div class="header">
-<h1>hackageDB :: [Package]</h1>
+<h1>hackage :: [Package]</h1>
 
 <table class="navigation">
 <tr>

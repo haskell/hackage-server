@@ -10,6 +10,8 @@ import System.FilePath.Posix ( (</>) )
 
 import Text.XHtml.Strict    hiding ( p, name )
 
+--TODO: replace all this with external templates
+
 -- | Create top-level HTML document by wrapping the Html with boilerplate.
 hackagePage :: String -> [Html] -> Html
 hackagePage = hackagePageWith []
@@ -18,7 +20,7 @@ hackagePageWith :: [Html] -> String -> [Html] -> Html
 hackagePageWith links heading docs = toHtml [header << docHead, body << docBody]
   where
     docHead =
-        thetitle << ("HackageDB: " ++ heading) :
+        thetitle << ("Hackage: " ++ heading) :
         thelink ! [rel "stylesheet", href stylesheetURL,
             thetype "text/css"] << noHtml :
         -- if NameSearch is enabled
@@ -29,7 +31,7 @@ hackagePageWith links heading docs = toHtml [header << docHead, body << docBody]
         thediv ! [identifier "content"] << docs]
     docHeader = [h1 << hackageTitle,
         table ! [theclass "navigation"] << navigation]
-    hackageTitle = "hackageDB :: [Package]"
+    hackageTitle = "hackage :: [Package]"
     navigation = tr << [td << (anchor ! [href url] << lab) |
                 (lab, url) <- navigationBar]
 
@@ -39,7 +41,7 @@ haddockPage pkgname doc = toHtml [header << docHead, body << doc]
   where docHead = [
                 meta ! [httpequiv "Content-type",
                         content "text/html; charset=ISO-8859-1"],
-                thetitle << ("HackageDB: " ++ pkgname),
+                thetitle << ("Hackage: " ++ pkgname),
                 haddockThemesLinks,
                 script ! [thetype "text/javascript",
                         src haddockJSURL] << noHtml,

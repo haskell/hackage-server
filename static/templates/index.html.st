@@ -2,26 +2,26 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>HackageDB: introduction</title>
+<title>Hackage: introduction</title>
 </head>
 
 <body>
 $hackagePageHeader()$
 
 <div class="content">
-<h2>About HackageDB</h2>
+<h2>About Hackage</h2>
 
-<p>HackageDB is a collection of released
+<p>Hackage is a collection of released
 <a href="http://www.haskell.org/">Haskell</a> packages.
 Each package is in the <a href="http://www.haskell.org/cabal">Cabal</a> format,
 a standard way of packaging Haskell source code that makes it easy to build
 and install.
-(HackageDB and Cabal are components of a broader Haskell infrastructure effort
+(Hackage and Cabal are components of a broader Haskell infrastructure effort
 called <a href="http://hackage.haskell.org/trac/hackage/">Hackage</a>.)
 These pages are a basic web interface to the Hackage package database.
 </p>
 
-<p>This isn't the <em>official</em> HackageDB. It's an in-progress
+<p>This isn't the <em>official</em> Hackage. It's an in-progress
 rewrite of the server using the <a href="/package/happstack">happstack</a> web
 framework. <!-- links to places to comment -->
 </p>
@@ -55,13 +55,13 @@ search of package descriptions:
 
 <p>See <a href="http://www.haskell.org/haskellwiki/Cabal/How_to_install_a_Cabal_package">How to install a Cabal package</a> for instructions on installing the packages you find here.</p>
 
-<h3>Releasing packages through HackageDB</h3>
+<h3>Releasing packages through Hackage</h3>
 <p>To upload your own releases, you'll first need to package them as Cabal
 source packages.
 See <a href="http://www.haskell.org/haskellwiki/How_to_write_a_Haskell_program">How to create a Haskell package</a>
 for a tutorial.
 You can check and upload your package using the <em>Upload</em> link above,
-though you'll need a HackageDB <a href="accounts.html">username</a> and password.
+though you'll need a Hackage <a href="accounts.html">username</a> and password.
 </p>
 
 <h3>Getting the raw data</h3>
@@ -71,7 +71,7 @@ though you'll need a HackageDB <a href="accounts.html">username</a> and password
 
 <h3>Development</h3>
 <p>See the
-<a href="http://hackage.haskell.org/trac/hackage/wiki/HackageDB">HackageDB wiki page</a>.
+<a href="http://hackage.haskell.org/trac/hackage/wiki/HackageDB">Hackage wiki page</a>.
 There is also a <a href="http://hackage.haskell.org/trac/hackage/wiki/HackageDB/2.0/Architecture">document in progress</a> summarizing the architecture of the new hackage-server. Check out the code yourself:
 </p>
 

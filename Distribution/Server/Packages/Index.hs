@@ -47,7 +47,7 @@ write users = PackageIndex.write (cabalFileByteString . pkgData) setModTime . ex
       Tar.entryTime      = utcToUnixTime utime,
       Tar.entryOwnership = Tar.Ownership {
         Tar.ownerName = userName uuser,
-        Tar.groupName = "HackageDB",
+        Tar.groupName = "Hackage",
         Tar.ownerId = 0,
         Tar.groupId = 0
       }

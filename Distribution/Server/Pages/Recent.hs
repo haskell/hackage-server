@@ -44,7 +44,7 @@ recentPage users pkgs =
           XHtml.table ! [XHtml.align "center"] << log_rows]
       rss_link = XHtml.thelink ! [XHtml.rel "alternate",
                                   XHtml.thetype "application/rss+xml",
-                                  XHtml.title "HackageDB RSS Feed",
+                                  XHtml.title "Hackage RSS Feed",
                                   XHtml.href rssFeedURL] << XHtml.noHtml
    in hackagePageWith [rss_link] "recent additions" docBody
 
@@ -84,7 +84,7 @@ recentFeed users host now pkgs = RSS
   (channel now)
   [ releaseItem users host pkg | pkg <- take 20 pkgs ]
   where
-    desc = "The 20 most recent additions to HackageDB, the Haskell package database."
+    desc = "The 20 most recent additions to Hackage, the Haskell package database."
 
 hackageURI :: URIAuth -> String -> URI
 hackageURI host path =

@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>HackageDB: Uploading packages and package candidates</title>
+<title>Hackage: Uploading packages and package candidates</title>
 </head>
 
 <body>
@@ -46,7 +46,7 @@ determine the best approach for this.
 </p>
 
 <h3>Upload forms</h3>
-<p>Some last formalities: to upload a package, you'll need a HackageDB
+<p>Some last formalities: to upload a package, you'll need a Hackage
 <a href="accounts.html">username</a> and password. (Alternatively, there's a
 command-line interface via cabal-install, which also needs the same username
 and password.)

@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>HackageDB: Register a new account</title>
+<title>Hackage: Register a new account</title>
 </head>
 
 <body>

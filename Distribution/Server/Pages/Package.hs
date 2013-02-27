@@ -41,7 +41,7 @@ packagePage render headLinks top sections bottom docURL =
 
     docHeader = [
                 ulist ! [theclass "links", identifier "page-menu"] <<
-                        li << anchor ! [href "/"] << "hackageDB",
+                        li << anchor ! [href "/"] << "hackage",
                 paragraph ! [theclass "caption"] << docTitle]
 
     docTitle = display (packageName pkgid) ++ case synopsis (rendOther render) of
@@ -68,7 +68,7 @@ packagePage render headLinks top sections bottom docURL =
 
     docFooter = paragraph << [
                 toHtml "Produced by ",
-                anchor ! [href "/"] << "hackageDB",
+                anchor ! [href "/"] << "hackage",
                 toHtml " and ",
                 anchor ! [href cabalHomeURL] << "Cabal",
                 toHtml (" " ++ display cabalVersion)]
