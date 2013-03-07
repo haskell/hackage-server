@@ -60,7 +60,7 @@ main = topHandler $ do
       CommandErrors errs  -> printErrors errs
       CommandReadyToGo (flags, commandParse) ->
         case commandParse of
-          _ | fromFlag (flagVersion flags) -> printVersion
+          _ | fromFlag (flagGlobalVersion flags) -> printVersion
           CommandHelp      help    -> printHelp help
           CommandList      opts    -> printOptionsList opts
           CommandErrors    errs    -> printErrors errs
@@ -95,12 +95,12 @@ main = topHandler $ do
 --
 
 data GlobalFlags = GlobalFlags {
-    flagVersion :: Flag Bool
+    flagGlobalVersion :: Flag Bool
   }
 
 defaultGlobalFlags :: GlobalFlags
 defaultGlobalFlags = GlobalFlags {
-    flagVersion = Flag False
+    flagGlobalVersion = Flag False
   }
 
 globalCommand :: CommandUI GlobalFlags
@@ -119,7 +119,7 @@ globalCommand = CommandUI {
     commandOptions      = \_ ->
       [option ['V'] ["version"]
          "Print version information"
-         flagVersion (\v flags -> flags { flagVersion = v })
+         flagGlobalVersion (\v flags -> flags { flagGlobalVersion = v })
          (noArg (Flag True))
       ]
   }
@@ -129,28 +129,28 @@ globalCommand = CommandUI {
 --
 
 data RunFlags = RunFlags {
-    flagVerbosity :: Flag Verbosity,
-    flagPort      :: Flag String,
-    flagIP        :: Flag String,
-    flagHost      :: Flag String,
-    flagStateDir  :: Flag FilePath,
-    flagStaticDir :: Flag FilePath,
-    flagTmpDir    :: Flag FilePath,
-    flagTemp      :: Flag Bool,
-    flagCacheDelay:: Flag String
+    flagRunVerbosity :: Flag Verbosity,
+    flagRunPort      :: Flag String,
+    flagRunIP        :: Flag String,
+    flagRunHost      :: Flag String,
+    flagRunStateDir  :: Flag FilePath,
+    flagRunStaticDir :: Flag FilePath,
+    flagRunTmpDir    :: Flag FilePath,
+    flagRunTemp      :: Flag Bool,
+    flagRunCacheDelay:: Flag String
   }
 
 defaultRunFlags :: RunFlags
 defaultRunFlags = RunFlags {
-    flagVerbosity = Flag Verbosity.normal,
-    flagPort      = NoFlag,
-    flagIP        = NoFlag,
-    flagHost      = NoFlag,
-    flagStateDir  = NoFlag,
-    flagStaticDir = NoFlag,
-    flagTmpDir    = NoFlag,
-    flagTemp      = Flag False,
-    flagCacheDelay= NoFlag
+    flagRunVerbosity = Flag Verbosity.normal,
+    flagRunPort      = NoFlag,
+    flagRunIP        = NoFlag,
+    flagRunHost      = NoFlag,
+    flagRunStateDir  = NoFlag,
+    flagRunStaticDir = NoFlag,
+    flagRunTmpDir    = NoFlag,
+    flagRunTemp      = Flag False,
+    flagRunCacheDelay= NoFlag
   }
 
 runCommand :: CommandUI RunFlags
@@ -166,43 +166,39 @@ runCommand = makeCommand name shortDesc longDesc defaultRunFlags options
                ++ " $ kill -USR1 $the_pid\n"
                ++ "where $the_pid is the process id of the running server.\n"
     options _  =
-      [ option "v" ["verbose"]
-          "Control verbosity (n is 0--3, default verbosity level is 1)"
-          flagVerbosity (\v flags -> flags { flagVerbosity = v })
-          (optArg "n" (fmap Flag Verbosity.flagToVerbosity)
-                (Flag Verbosity.verbose)
-                (fmap (Just . showForCabal) . flagToList))
+      [ optionVerbosity
+          flagRunVerbosity (\v flags -> flags { flagRunVerbosity = v })
       , option [] ["port"]
           "Port number to serve on (default 8080)"
-          flagPort (\v flags -> flags { flagPort = v })
+          flagRunPort (\v flags -> flags { flagRunPort = v })
           (reqArgFlag "PORT")
       , option [] ["ip"]
           "IPv4 address to listen on (default 0.0.0.0)"
-          flagIP (\v flags -> flags { flagIP = v })
+          flagRunIP (\v flags -> flags { flagRunIP = v })
           (reqArgFlag "IP")
       , option [] ["host"]
           "Server's host name (defaults to machine name)"
-          flagHost (\v flags -> flags { flagHost = v })
+          flagRunHost (\v flags -> flags { flagRunHost = v })
           (reqArgFlag "NAME")
       , option [] ["state-dir"]
           "Directory in which to store the persistent state of the server (default state/)"
-          flagStateDir (\v flags -> flags { flagStateDir = v })
+          flagRunStateDir (\v flags -> flags { flagRunStateDir = v })
           (reqArgFlag "DIR")
       , option [] ["static-dir"]
           "Directory in which to find the html templates and static files (default: cabal location)"
-          flagStaticDir (\v flags -> flags { flagStaticDir = v })
+          flagRunStaticDir (\v flags -> flags { flagRunStaticDir = v })
           (reqArgFlag "DIR")
       , option [] ["tmp-dir"]
           "Temporary directory in which to store file uploads (default state/tmp/)"
-          flagTmpDir (\v flags -> flags { flagTmpDir = v })
+          flagRunTmpDir (\v flags -> flags { flagRunTmpDir = v })
           (reqArgFlag "DIR")
       , option [] ["temp-run"]
           "Set up a temporary server while initializing state for maintenance restarts"
-          flagTemp (\v flags -> flags { flagTemp = v })
+          flagRunTemp (\v flags -> flags { flagRunTemp = v })
           (noArg (Flag True))
       , option [] ["delay-cache-updates"]
           "Save time during bulk imports by delaying cache updates."
-          flagCacheDelay (\v flags -> flags { flagCacheDelay = v })
+          flagRunCacheDelay (\v flags -> flags { flagRunCacheDelay = v })
           (reqArgFlag "SECONDS")
       ]
 
@@ -210,42 +206,41 @@ runAction :: RunFlags -> IO ()
 runAction opts = do
     defaults <- Server.defaultServerConfig
 
-    port <- checkPortOpt defaults (flagToMaybe (flagPort opts))
-    ip   <- checkIPOpt   defaults (flagToMaybe (flagIP   opts))
-    cacheDelay <- checkCacheDelay (confCacheDelay defaults) (flagToMaybe (flagCacheDelay opts))
-    let hostname  = fromFlagOrDefault (confHostName  defaults) (flagHost      opts)
-        stateDir  = fromFlagOrDefault (confStateDir  defaults) (flagStateDir  opts)
-        staticDir = fromFlagOrDefault (confStaticDir defaults) (flagStaticDir opts)
-        tmpDir    = fromFlagOrDefault (confTmpDir    defaults) (flagTmpDir    opts)
-        listenOn = (confListenOn defaults) {
+    port <- checkPortOpt defaults (flagToMaybe (flagRunPort opts))
+    ip   <- checkIPOpt   defaults (flagToMaybe (flagRunIP   opts))
+    cacheDelay <- checkCacheDelay (confCacheDelay defaults) (flagToMaybe (flagRunCacheDelay opts))
+    let hostname  = fromFlagOrDefault (confHostName  defaults) (flagRunHost      opts)
+        stateDir  = fromFlagOrDefault (confStateDir  defaults) (flagRunStateDir  opts)
+        staticDir = fromFlagOrDefault (confStaticDir defaults) (flagRunStaticDir opts)
+        tmpDir    = fromFlagOrDefault (confTmpDir    defaults) (flagRunTmpDir    opts)
+        listenOn  = (confListenOn defaults) {
                        loPortNum = port,
                        loIP      = ip
-                   }
-        config = defaults {
-            confVerbosity = verbosity,
-            confHostName  = hostname,
-            confListenOn  = listenOn,
-            confStateDir  = stateDir,
-            confStaticDir = staticDir,
-            confTmpDir    = tmpDir,
-            confCacheDelay=cacheDelay
-        }
+                    }
+        verbosity = fromFlag (flagRunVerbosity opts)
+        config    = defaults {
+                        confHostName   = hostname,
+                        confListenOn   = listenOn,
+                        confStateDir   = stateDir,
+                        confStaticDir  = staticDir,
+                        confTmpDir     = tmpDir,
+                        confCacheDelay = cacheDelay,
+                        confVerbosity  = verbosity
+                    }
 
     checkBlankServerState =<< Server.hasSavedState config
-    checkStaticDir staticDir (flagStaticDir opts)
+    checkStaticDir staticDir (flagRunStaticDir opts)
     checkTmpDir    tmpDir
 
-    let useTempServer = fromFlag (flagTemp opts)
+    let useTempServer = fromFlag (flagRunTemp opts)
     withServer config useTempServer $ \server ->
-      withCheckpointHandler server $ do
+      withCheckpointHandler verbosity server $ do
         lognotice verbosity $ "Ready! Point your browser at http://" ++ hostname
                         ++ if port == 80 then "/" else ":" ++ show port ++ "/"
 
         Server.run server
 
   where
-    verbosity = fromFlag (flagVerbosity opts)
-
     -- Option handling:
     --
     checkPortOpt defaults Nothing    = return (loPortNum (confListenOn defaults))
@@ -284,8 +279,8 @@ runAction opts = do
     -- Useage:
     -- > kill -USR1 $the_pid
     --
-    withCheckpointHandler :: Server -> IO () -> IO ()
-    withCheckpointHandler server action =
+    withCheckpointHandler :: Verbosity -> Server -> IO () -> IO ()
+    withCheckpointHandler verbosity server action =
         bracket (setHandler handler) setHandler (\_ -> action)
       where
         handler = Signal.Catch $ do
@@ -338,6 +333,7 @@ checkStaticDir staticDir staticDirFlag = do
 --
 
 data InitFlags = InitFlags {
+    flagInitVerbosity :: Flag Verbosity,
     flagInitAdmin     :: Flag String,
     flagInitStateDir  :: Flag FilePath,
     flagInitStaticDir :: Flag FilePath
@@ -345,6 +341,7 @@ data InitFlags = InitFlags {
 
 defaultInitFlags :: InitFlags
 defaultInitFlags = InitFlags {
+    flagInitVerbosity = Flag Verbosity.normal,
     flagInitAdmin     = NoFlag,
     flagInitStateDir  = NoFlag,
     flagInitStaticDir = NoFlag
@@ -360,7 +357,9 @@ initCommand = makeCommand name shortDesc longDesc defaultInitFlags options
               ++ "account so that you\ncan log in via the web interface and "
               ++ "bootstrap from there.\n"
     options _  =
-      [ option [] ["admin"]
+      [ optionVerbosity
+          flagInitVerbosity (\v flags -> flags { flagInitVerbosity = v })
+      , option [] ["admin"]
           "New server's administrator, name:password (default: admin:admin)"
           flagInitAdmin (\v flags -> flags { flagInitAdmin = v })
           (reqArgFlag "NAME:PASS")
@@ -380,11 +379,12 @@ initAction opts = do
 
     let stateDir  = fromFlagOrDefault (confStateDir defaults)  (flagInitStateDir opts)
         staticDir = fromFlagOrDefault (confStaticDir defaults) (flagInitStaticDir opts)
-        verbosity = confVerbosity defaults
+        verbosity = fromFlag (flagInitVerbosity opts)
         config    = defaults {
-            confStateDir  = stateDir,
-            confStaticDir = staticDir
-        }
+                        confVerbosity = verbosity,
+                        confStateDir  = stateDir,
+                        confStaticDir = staticDir
+                    }
         parseAdmin adminStr = case break (==':') adminStr of
             (uname, ':':pass) -> Just (uname, pass)
             _                 -> Nothing
@@ -413,14 +413,16 @@ initAction opts = do
 --
 
 data BackupFlags = BackupFlags {
-    flagBackup    :: Flag FilePath,
-    flagBackupDir :: Flag FilePath
+    flagBackupVerbosity   :: Flag Verbosity,
+    flagBackupTarballDir  :: Flag FilePath,
+    flagBackupStateDir    :: Flag FilePath
   }
 
 defaultBackupFlags :: BackupFlags
 defaultBackupFlags = BackupFlags {
-    flagBackup    = NoFlag,
-    flagBackupDir = NoFlag
+    flagBackupVerbosity   = Flag Verbosity.normal,
+    flagBackupTarballDir  = NoFlag,
+    flagBackupStateDir    = NoFlag
   }
 
 backupCommand :: CommandUI BackupFlags
@@ -435,13 +437,15 @@ backupCommand = makeCommand name shortDesc longDesc defaultBackupFlags options
               ++ "standard formats or simple text formats.\nThe backup can be "
               ++ "restored using the 'restore' command.\n"
     options _  =
-      [ option ['o'] ["output"]
+      [ optionVerbosity
+          flagBackupVerbosity (\v flags -> flags { flagBackupVerbosity = v })
+      , option ['o'] ["output"]
           "The path to write the backup tarball (default export.tar)"
-          flagBackup (\v flags -> flags { flagBackup = v })
+          flagBackupTarballDir (\v flags -> flags { flagBackupTarballDir = v })
           (reqArgFlag "TARBALL")
       , option [] ["state-dir"]
           "Directory from which to read persistent state of the server (default state/)"
-          flagBackupDir (\v flags -> flags { flagBackupDir = v })
+          flagBackupStateDir (\v flags -> flags { flagBackupStateDir = v })
           (reqArgFlag "DIR")
       ]
 
@@ -449,10 +453,13 @@ backupAction :: BackupFlags -> IO ()
 backupAction opts = do
     defaults <- Server.defaultServerConfig
 
-    let stateDir   = fromFlagOrDefault (confStateDir defaults) (flagBackupDir opts)
-        verbosity  = confVerbosity defaults
-        config     = defaults { confStateDir = stateDir }
-        exportPath = fromFlagOrDefault "export.tar" (flagBackup opts)
+    let stateDir   = fromFlagOrDefault (confStateDir defaults) (flagBackupStateDir opts)
+        exportPath = fromFlagOrDefault "export.tar" (flagBackupTarballDir opts)
+        verbosity  = fromFlag (flagBackupVerbosity opts)
+        config     = defaults {
+                       confVerbosity = verbosity,
+                       confStateDir  = stateDir
+                      }
 
     withServer config False $ \server -> do
       let store = Server.serverBlobStore (Server.serverEnv server)
@@ -469,14 +476,16 @@ backupAction opts = do
 --
 
 data TestBackupFlags = TestBackupFlags {
-    flagTestBackupDir     :: Flag FilePath,
-    flagTestBackupTmpDir  :: Flag FilePath
+    flagTestBackupVerbosity :: Flag Verbosity,
+    flagTestBackupDir       :: Flag FilePath,
+    flagTestBackupTmpDir    :: Flag FilePath
   }
 
 defaultTestBackupFlags :: TestBackupFlags
 defaultTestBackupFlags = TestBackupFlags {
-    flagTestBackupDir    = NoFlag,
-    flagTestBackupTmpDir = NoFlag
+    flagTestBackupVerbosity = Flag Verbosity.normal,
+    flagTestBackupDir       = NoFlag,
+    flagTestBackupTmpDir    = NoFlag
   }
 
 testBackupCommand :: CommandUI TestBackupFlags
@@ -489,7 +498,9 @@ testBackupCommand = makeCommand name shortDesc longDesc defaultTestBackupFlags o
               ++ "server state,\n and that restoring and then backing up is the identity function"
               ++ "on the backup tarball.\n"
     options _  =
-      [ option [] ["state-dir"]
+      [ optionVerbosity
+          flagTestBackupVerbosity (\v flags -> flags { flagTestBackupVerbosity = v })
+      , option [] ["state-dir"]
           "Directory from which to read persistent state of the server (default state/)"
           flagTestBackupDir (\v flags -> flags { flagTestBackupDir = v })
           (reqArgFlag "DIR")
@@ -510,14 +521,15 @@ testBackupAction :: TestBackupFlags -> IO ()
 testBackupAction opts = do
     defaults <- Server.defaultServerConfig
 
-    let stateDir  = fromFlagOrDefault (confStateDir defaults) (flagTestBackupDir    opts)
-        tmpDir    = fromFlagOrDefault (stateDir </> "tmp")    (flagTestBackupTmpDir opts)
-        verbosity = confVerbosity defaults
-        config    = defaults {
-            confStateDir = stateDir,
-            confTmpDir   = tmpDir
-          }
+    let stateDir    = fromFlagOrDefault (confStateDir defaults) (flagTestBackupDir    opts)
+        tmpDir      = fromFlagOrDefault (stateDir </> "tmp")    (flagTestBackupTmpDir opts)
         tmpStateDir = tmpDir </> "state"
+        verbosity   = fromFlag (flagTestBackupVerbosity opts)
+        config      = defaults {
+                        confStateDir  = stateDir,
+                        confTmpDir    = tmpDir,
+                        confVerbosity = verbosity
+                      }
 
     checkTmpDir tmpDir
     createDirectoryIfMissing True tmpStateDir
@@ -566,14 +578,14 @@ testBackupAction opts = do
 --
 
 data RestoreFlags = RestoreFlags {
-    flagRestore    :: Flag FilePath,
-    flagRestoreDir :: Flag FilePath
+    flagRestoreVerbosity :: Flag Verbosity,
+    flagRestoreStateDir  :: Flag FilePath
   }
 
 defaultRestoreFlags :: RestoreFlags
 defaultRestoreFlags = RestoreFlags {
-    flagRestore    = NoFlag,
-    flagRestoreDir = NoFlag
+    flagRestoreVerbosity = Flag Verbosity.normal,
+    flagRestoreStateDir  = NoFlag
   }
 
 restoreCommand :: CommandUI RestoreFlags
@@ -585,9 +597,11 @@ restoreCommand = makeCommand name shortDesc longDesc defaultRestoreFlags options
                  "Note that this creates a new server state, so for safety "
               ++ "it requires that the\nserver not be initialised already.\n"
     options _  =
-      [ option [] ["state-dir"]
+      [ optionVerbosity
+          flagRestoreVerbosity (\v flags -> flags { flagRestoreVerbosity = v })
+      , option [] ["state-dir"]
         "Directory in which to store the persistent state of the server (default state/)"
-        flagRestoreDir (\v flags -> flags { flagRestoreDir = v })
+        flagRestoreStateDir (\v flags -> flags { flagRestoreStateDir = v })
         (reqArgFlag "DIR")
       ]
 
@@ -596,9 +610,12 @@ restoreAction _ [] = die "No restore tarball given."
 restoreAction opts [tarFile] = do
     defaults <- Server.defaultServerConfig
 
-    let stateDir  = fromFlagOrDefault (confStateDir defaults) (flagRestoreDir opts)
-        verbosity = confVerbosity defaults
-        config    = defaults { confStateDir  = stateDir }
+    let stateDir  = fromFlagOrDefault (confStateDir defaults) (flagRestoreStateDir opts)
+        verbosity = fromFlag (flagRestoreVerbosity opts)
+        config    = defaults {
+                      confStateDir  = stateDir,
+                      confVerbosity = verbosity
+                    }
 
     checkAccidentalDataLoss =<< Server.hasSavedState config
 
@@ -658,3 +675,14 @@ reqArgFlag :: ArgPlaceHolder -> SFlags -> LFlags -> Description
            -> (a -> Flag String) -> (Flag String -> a -> a)
            -> OptDescr a
 reqArgFlag ad = reqArg' ad Flag flagToList
+
+optionVerbosity :: (a -> Flag Verbosity)
+                -> (Flag Verbosity -> a -> a)
+                -> OptionField a
+optionVerbosity getter setter =
+  option "v" ["verbose"]
+    "Control verbosity (n is 0--3, default verbosity level is 1)"
+    getter setter
+    (optArg "n" (fmap Flag Verbosity.flagToVerbosity)
+          (Flag Verbosity.verbose)
+          (fmap (Just . showForCabal) . flagToList))
