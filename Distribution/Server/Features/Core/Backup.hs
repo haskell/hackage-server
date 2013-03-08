@@ -35,6 +35,7 @@ import Data.List
 import Data.Ord (comparing)
 import Control.Monad.State
 import qualified Codec.Compression.GZip as GZip
+import qualified Data.ByteString.Lazy as BS
 
 packagesBackup :: RestoreBackup PackagesState
 packagesBackup = updatePackages Map.empty
@@ -80,7 +81,7 @@ doPackageImport packages entry = case entry of
     partial' <- case extractVersion other pkgId ".tar.gz" of
       Just version -> do
         bs <- restoreGetBlob blobId
-        blobIdUncompressed <- restoreAddBlob $ GZip.decompress bs
+        blobIdUncompressed <- restoreAddBlob $ GZip.decompress (forceLast bs)
         let tb = PkgTarball { pkgTarballGz = blobId,
                               pkgTarballNoGz = blobIdUncompressed }
         return $ partial { partialTarball = (version, tb):partialTarball partial }
@@ -95,6 +96,15 @@ doPackageImport packages entry = case entry of
           [(version, "")] -> Just version
           _ -> Nothing
       _ -> Nothing
+
+    -- Workaround: in zlib prior to 0.5.4.1, GZip.decompress would not fully
+    -- consume the input data (because the gzip format means it knows when
+    -- it has got to the end of the expected data). As a consequence the bs
+    -- we get from restoreGetBlob would not have its file handle closed.
+    forceLast = BS.fromChunks . forceLastBlock . BS.toChunks
+    forceLastBlock []     = []
+    forceLastBlock (c:[]) = c : []
+    forceLastBlock (c:cs) = c : forceLastBlock cs
 
 parsePackageId :: String -> Restore PackageId
 parsePackageId pkgStr = case simpleParse pkgStr of

@@ -6,8 +6,8 @@ import qualified Distribution.Server as Server
 import Distribution.Server (ListenOn(..), ServerConfig(..), Server)
 import Distribution.Server.Framework.Feature
 import Distribution.Server.Framework.Logging
-import Distribution.Server.Framework.BackupRestore (equalTarBall, importTar)
-import Distribution.Server.Framework.BackupDump (exportTar)
+import Distribution.Server.Framework.BackupRestore (equalTarBall, restoreServerBackup)
+import Distribution.Server.Framework.BackupDump (dumpServerBackup)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
 import Distribution.Text
@@ -21,27 +21,30 @@ import System.Environment
 import System.Exit
          ( exitWith, ExitCode(..) )
 import Control.Exception
-         ( bracket, evaluate )
+         ( bracket )
 import System.Posix.Signals as Signal
          ( installHandler, Handler(Catch), userDefinedSignal1 )
 import System.IO
 import System.Directory
          ( createDirectory, createDirectoryIfMissing, doesDirectoryExist
-         , Permissions(..), getPermissions )
+         , getDirectoryContents, Permissions(..), getPermissions )
 import System.FilePath
-         ( (</>) )
+         ( (</>), (<.>) )
 import Distribution.Simple.Command
 import Distribution.Simple.Setup
          ( Flag(..), fromFlag, fromFlagOrDefault, flagToList, flagToMaybe )
 import Data.List
-         ( intersperse )
+         ( intercalate )
 import Data.Traversable
          ( forM )
 import Control.Monad
-         ( void, unless, when, liftM )
+         ( void, unless, when )
+import Control.Applicative
+         ( (<$>) )
 import Control.Arrow
          ( second )
 import qualified Data.ByteString.Lazy as BS
+import qualified Codec.Compression.GZip as GZip
 import qualified Text.Parsec as Parse
 
 import Paths_hackage_server as Paths (version)
@@ -70,7 +73,7 @@ main = topHandler $ do
     printHelp help = getProgName >>= putStr . help
     printOptionsList = putStr . unlines
     printErrors errs = do
-      putStr (concat (intersperse "\n" errs))
+      putStr (intercalate "\n" errs)
       exitWith (ExitFailure 1)
     printVersion = putStrLn $ "hackage-server " ++ display version
 
@@ -415,38 +418,46 @@ initAction opts = do
 data BackupFlags = BackupFlags {
     flagBackupVerbosity   :: Flag Verbosity,
     flagBackupTarballDir  :: Flag FilePath,
-    flagBackupStateDir    :: Flag FilePath
+    flagBackupStateDir    :: Flag FilePath,
+    flagBackupLinkBlobs   :: Flag Bool
   }
 
 defaultBackupFlags :: BackupFlags
 defaultBackupFlags = BackupFlags {
     flagBackupVerbosity   = Flag Verbosity.normal,
     flagBackupTarballDir  = NoFlag,
-    flagBackupStateDir    = NoFlag
+    flagBackupStateDir    = NoFlag,
+    flagBackupLinkBlobs   = Flag False
   }
 
 backupCommand :: CommandUI BackupFlags
 backupCommand = makeCommand name shortDesc longDesc defaultBackupFlags options
   where
     name       = "backup"
-    shortDesc  = "Create a backup tarball of the server's database."
+    shortDesc  = "Create a backup of the server's database."
     longDesc   = Just $ \_ ->
-                 "Creates a tarball containing all of the data that the server "
+                 "Creates a backup containing all of the data that the server "
               ++ "manages.\nThe purpose is for backup and for data integrity "
-              ++ "across server upgrades.\nThe tarball contains files in "
-              ++ "standard formats or simple text formats.\nThe backup can be "
-              ++ "restored using the 'restore' command.\n"
+              ++ "across server upgrades.\nThe backup consists of a per-backup "
+              ++ "tarball plus a shared directory of static files. The tarball "
+              ++ "contains files in standard formats or simple text formats.\n"
+              ++ "The backup can be restored using the 'restore' command.\n"
     options _  =
       [ optionVerbosity
           flagBackupVerbosity (\v flags -> flags { flagBackupVerbosity = v })
-      , option ['o'] ["output"]
-          "The path to write the backup tarball (default export.tar)"
-          flagBackupTarballDir (\v flags -> flags { flagBackupTarballDir = v })
-          (reqArgFlag "TARBALL")
       , option [] ["state-dir"]
           "Directory from which to read persistent state of the server (default state/)"
           flagBackupStateDir (\v flags -> flags { flagBackupStateDir = v })
           (reqArgFlag "DIR")
+      , option ['o'] ["output-dir"]
+          "The directory in which to create the backup (default ./backups/)"
+          flagBackupTarballDir (\v flags -> flags { flagBackupTarballDir = v })
+          (reqArgFlag "TARBALL")
+      , option [] ["hardlink-blobs"]
+          ("Hard-link the blob files in the backup rather than copying them "
+           ++ " (reduces disk space and I/O but is less robust to errors).")
+          flagBackupLinkBlobs (\v flags -> flags { flagBackupLinkBlobs = v })
+          (noArg (Flag True))
       ]
 
 backupAction :: BackupFlags -> IO ()
@@ -454,7 +465,8 @@ backupAction opts = do
     defaults <- Server.defaultServerConfig
 
     let stateDir   = fromFlagOrDefault (confStateDir defaults) (flagBackupStateDir opts)
-        exportPath = fromFlagOrDefault "export.tar" (flagBackupTarballDir opts)
+        exportPath = fromFlagOrDefault "backups" (flagBackupTarballDir opts)
+        linkBlobs  = fromFlag (flagBackupLinkBlobs opts)
         verbosity  = fromFlag (flagBackupVerbosity opts)
         config     = defaults {
                        confVerbosity = verbosity,
@@ -464,11 +476,8 @@ backupAction opts = do
     withServer config False $ \server -> do
       let store = Server.serverBlobStore (Server.serverEnv server)
           state = Server.serverState server
-      lognotice verbosity "Preparing export tarball"
-      tar <- exportTar store $ map (second abstractStateBackup) state
-      lognotice verbosity "Saving export tarball"
-      BS.writeFile exportPath tar
-      lognotice verbosity "Done"
+      dumpServerBackup verbosity exportPath Nothing store linkBlobs
+                       (map (second abstractStateBackup) state)
 
 
 -------------------------------------------------------------------------------
@@ -477,22 +486,24 @@ backupAction opts = do
 
 data TestBackupFlags = TestBackupFlags {
     flagTestBackupVerbosity :: Flag Verbosity,
-    flagTestBackupDir       :: Flag FilePath,
-    flagTestBackupTmpDir    :: Flag FilePath
+    flagTestBackupStateDir  :: Flag FilePath,
+    flagTestBackupTestDir   :: Flag FilePath,
+    flagTestBackupLinkBlobs :: Flag Bool
   }
 
 defaultTestBackupFlags :: TestBackupFlags
 defaultTestBackupFlags = TestBackupFlags {
     flagTestBackupVerbosity = Flag Verbosity.normal,
-    flagTestBackupDir       = NoFlag,
-    flagTestBackupTmpDir    = NoFlag
+    flagTestBackupStateDir  = NoFlag,
+    flagTestBackupTestDir   = Flag "test-backup",
+    flagTestBackupLinkBlobs = Flag False
   }
 
 testBackupCommand :: CommandUI TestBackupFlags
 testBackupCommand = makeCommand name shortDesc longDesc defaultTestBackupFlags options
   where
     name       = "test-backup"
-    shortDesc  = "Test backup and restore of the server's database."
+    shortDesc  = "A self-test of the server's database backup/restore system."
     longDesc   = Just $ \_ ->
                  "Checks that backing up and then restoring is the identity function on the"
               ++ "server state,\n and that restoring and then backing up is the identity function"
@@ -502,12 +513,17 @@ testBackupCommand = makeCommand name shortDesc longDesc defaultTestBackupFlags o
           flagTestBackupVerbosity (\v flags -> flags { flagTestBackupVerbosity = v })
       , option [] ["state-dir"]
           "Directory from which to read persistent state of the server (default state/)"
-          flagTestBackupDir (\v flags -> flags { flagTestBackupDir = v })
+          flagTestBackupStateDir (\v flags -> flags { flagTestBackupStateDir = v })
           (reqArgFlag "DIR")
-      , option [] ["tmp-dir"]
-          "Temporary directory in which to store temporary information generated by the test."
-          flagTestBackupTmpDir (\v flags -> flags { flagTestBackupTmpDir = v })
+      , option [] ["test-dir"]
+          "Temporary directory in which to store temporary information generated by the test (default test-backup/)."
+          flagTestBackupTestDir (\v flags -> flags { flagTestBackupTestDir = v })
           (reqArgFlag "DIR")
+      , option [] ["hardlink-blobs"]
+          ("Do a partial test, short-circuting the reading and writing of the "
+           ++ "blob files (saves on disk I/O, but less test coverage).")
+          flagTestBackupLinkBlobs (\v flags -> flags { flagTestBackupLinkBlobs = v })
+          (noArg (Flag True))
       ]
 
 -- FIXME: the following acidic types are neither backed up nor tested:
@@ -521,57 +537,117 @@ testBackupAction :: TestBackupFlags -> IO ()
 testBackupAction opts = do
     defaults <- Server.defaultServerConfig
 
-    let stateDir    = fromFlagOrDefault (confStateDir defaults) (flagTestBackupDir    opts)
-        tmpDir      = fromFlagOrDefault (stateDir </> "tmp")    (flagTestBackupTmpDir opts)
-        tmpStateDir = tmpDir </> "state"
+    let stateDir    = fromFlagOrDefault (confStateDir defaults) (flagTestBackupStateDir opts)
+        testDir     = fromFlag (flagTestBackupTestDir  opts)
+        linkBlobs   = fromFlag (flagTestBackupLinkBlobs opts)
         verbosity   = fromFlag (flagTestBackupVerbosity opts)
         config      = defaults {
                         confStateDir  = stateDir,
-                        confTmpDir    = tmpDir,
+                        confTmpDir    = testDir,
                         confVerbosity = verbosity
                       }
 
-    checkTmpDir tmpDir
-    createDirectoryIfMissing True tmpStateDir
+    let dump1Dir    = testDir </> "dump-1"
+        restoreDir  = testDir </> "restore"
+        dump2Dir    = testDir </> "dump-2"
+        tarDumpName = "test-dump"
+        dump1Tar    = dump1Dir </> tarDumpName <.> "tar.gz"
+        dump2Tar    = dump2Dir </> tarDumpName <.> "tar.gz"
+
+    existsAlready <- doesDirectoryExist testDir
+    when existsAlready $ do
+      entries <- filter (`notElem` [".", ".."]) <$> getDirectoryContents testDir
+      unless (null entries) $
+        fail $ "The directory " ++ testDir ++ " contains files. Please remove "
+            ++ "or clear it, or select a different one with the --test-dir "
+            ++ "flag. (The test procedure needs a clean working area.)"
+    mapM_ (createDirectoryIfMissing False) [testDir, dump1Dir, restoreDir, dump2Dir]
 
     withServer config False $ \server -> do
       let state = Server.serverState server
           store = Server.serverBlobStore (Server.serverEnv server)
 
-      lognotice verbosity "Preparing export tarball"
-      tar <- exportTar store $ map (second abstractStateBackup) state
-      -- It is EXTREMELY IMPORTANT that we force the tarball to be constructed
-      -- now. If we wait until it is demanded in the next withServer context
-      -- then the tar gets filled with entirely wrong files!
-      evaluate (BS.length tar)
+      -- We want to check that our dump/restore correctly preserves all the
+      -- data. So we want to do a round trip test, and though it's nice to do
+      -- QC tests on each feature's backingup, it adds a lot of confidence to
+      -- be able to do a self-test using the full data of your server instance.
+      --
+      -- Ok, so there are two ways to do a round trip test: compare the internal
+      -- representations or compare the external representations. Our strategy
+      -- is to do both.
+      --
+      -- We start with all the data in the server in the internal
+      -- representation. We start by writing it all out in the external
+      -- representation.
+      -- 
+      dumpServerBackup verbosity dump1Dir (Just tarDumpName) store linkBlobs
+                       (map (second abstractStateBackup) state)
 
-      -- Reset all the state components, then run the import against the cloned
-      -- components and check that the states got restored.
-      store' <- BlobStorage.open (tmpDir </> "blobs")
-      (state', compares) <- liftM unzip . forM state $ \(name, st) -> do
-                             (st', cmpSt) <- abstractStateReset st tmpStateDir
-                             return ((name, st'), liftM (map (\err -> name ++ ": " ++ err)) cmpSt)
-      let compareAll :: IO [String] ; compareAll = liftM concat (sequence compares)
+      -- Now what we need to do is to keep hold of our current internal state
+      -- and construct an extra internal state by restoring from the external
+      -- representation that we wrote out previously.
+      --
+      -- And we can do just that. We've set things up so that every feature in
+      -- the server has the capability to initialise a new empty copy of
+      -- it's state. That's what abstractStateEmptyCopy does. In addition to
+      -- that we get back a comparison action, that when executed will look at
+      -- the current value of the state and compare the two, reporting any
+      -- mismatches.
+      --
+      -- So we initialise all these new empty copies, (collecting the comparison
+      -- actions)
+      --
+      (state', compareSts) <-
+        unzip <$> sequence
+                    [ do (st', cmpSt) <- abstractStateNewEmpty st restoreDir
+                         let annotateErr err = featurename ++ ": " ++ err
+                         return ((featurename, st'), map annotateErr <$> cmpSt)
 
-      loginfo verbosity "Parsing import tarball"
-      res <- importTar store' tar $ map (second abstractStateRestore) state'
-      maybe (return ()) fail res
+                    | (featurename, st) <- state ]
 
-      loginfo verbosity "Checking snapshot"
-      errs <- compareAll
-      unless (null errs) $ do
-        mapM_ (loginfo verbosity) errs
-        fail "Snapshot check failed!"
+      -- We also need a corresponding empty blob store
+      store' <- BlobStorage.open (restoreDir </> "blobs")
 
-      loginfo verbosity "Preparing second export tarball"
-      tar' <- exportTar store' $ map (second abstractStateBackup) state'
-      case tar `equalTarBall` tar' of
-        [] -> loginfo verbosity "Tarballs match"
-        tar_eq_errs -> do
-          mapM_ (loginfo verbosity) tar_eq_errs
-          BS.writeFile "export-before.tar" tar
-          BS.writeFile "export-after.tar" tar'
-          fail "Tarballs don't match! Written to export-before.tar and export-after.tar."
+      -- And then restore from the external representation into these new empty
+      -- copies.
+      loginfo verbosity "Restoring from backup tarball"
+      res <- restoreServerBackup store' dump1Tar linkBlobs
+                                 (map (second abstractStateRestore) state')
+      case res of
+        Nothing  -> return ()
+        Just err -> fail $ "Error while restoring the backup:\n" ++ err
+
+      -- Now we are in a position to check that the original internal state and
+      -- the new internal state we get from a dump/restore do actually match up.
+      lognotice verbosity "Comparing snapshots before and after dump/restore..."
+      stErrs <- concat <$> sequence compareSts
+      unless (null stErrs) $ do
+        mapM_ (loginfo verbosity) stErrs
+        let failLogfile = testDir </> "round-trip-failure.log"
+        writeFile failLogfile (intercalate "\n\n" stErrs)
+        fail $ "Snapshot check failed!  Log written to " ++ failLogfile
+      loginfo verbosity "Snapshots match"
+
+      -- So that was all checking the internal representations matched up after
+      -- a round trip. We can also check the external representations match
+      -- after a round trip. We take the new restored state and write it out.
+      -- Then we just compare the two external representations.
+      lognotice verbosity "Preparing second export tarball"
+      dumpServerBackup verbosity dump2Dir (Just tarDumpName) store' linkBlobs
+                       (map (second abstractStateBackup) state')
+
+      lognotice verbosity "Comparing export tarballs..."
+      tar  <- GZip.decompress <$> BS.readFile dump1Tar
+      tar' <- GZip.decompress <$> BS.readFile dump2Tar
+      let tarErrs = tar `equalTarBall` tar'
+      unless (null tarErrs) $ do
+        mapM_ (loginfo verbosity) tarErrs
+        let failLogfile = testDir </> "round-trip-failure.log"
+        writeFile failLogfile (intercalate "\n\n" tarErrs)
+        fail $ "Tarballs don't match! Tarballs written to "
+            ++ dump1Tar ++ " and " ++ dump2Tar
+            ++ " and log written to " ++ failLogfile
+      lognotice verbosity "Tarballs match"
 
 -------------------------------------------------------------------------------
 -- Restore command
@@ -620,11 +696,12 @@ restoreAction opts [tarFile] = do
     checkAccidentalDataLoss =<< Server.hasSavedState config
 
     withServer config False $ \server -> do
-        let store = Server.serverBlobStore (Server.serverEnv server)
+        let state = Server.serverState server
+            store = Server.serverBlobStore (Server.serverEnv server)
 
-        tar <- BS.readFile tarFile
         loginfo verbosity "Parsing import tarball..."
-        res <- importTar store tar $ map (second abstractStateRestore) (Server.serverState server)
+        res <- restoreServerBackup store tarFile False
+                                   (map (second abstractStateRestore) state)
         case res of
             Just err -> fail err
             _ ->

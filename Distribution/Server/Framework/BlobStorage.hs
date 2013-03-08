@@ -17,7 +17,8 @@ module Distribution.Server.Framework.BlobStorage (
     open,
     add,
     addWith,
-    addFileWith,
+    consumeFile,
+    consumeFileWith,
     fetch,
     filepath,
   ) where
@@ -30,7 +31,7 @@ import Data.Digest.Pure.MD5 (MD5Digest, md5)
 import Data.Typeable (Typeable)
 import Data.Serialize
 import System.FilePath ((</>))
-import Control.Exception (handle, throwIO, evaluate)
+import Control.Exception (handle, throwIO, evaluate, bracket)
 import Control.Monad
 import Data.SafeCopy
 import System.Directory
@@ -94,10 +95,18 @@ addWith store content check =
       Left  err -> return (Left  err,          False)
       Right res -> return (Right (res, blobId), True)
 
-addFileWith :: BlobStorage -> FilePath
-        -> (ByteString -> IO (Either error result))
-        -> IO (Either error (result, BlobId))
-addFileWith store filePath check =
+-- | Similar to 'add' but by /moving/ a file into the blob store. So this
+-- is a destructive operation. Since it works by renaming the file, the input
+-- file must live in the same file system as the blob store. 
+--
+consumeFile :: BlobStorage -> FilePath -> IO BlobId
+consumeFile store filePath =
+  withIncomingFile store filePath $ \_ blobId -> return (blobId, True)
+
+consumeFileWith :: BlobStorage -> FilePath
+                -> (ByteString -> IO (Either error result))
+                -> IO (Either error (result, BlobId))
+consumeFileWith store filePath check =
   withIncomingFile store filePath $ \file blobId -> do
     content' <- BS.readFile file
     result <- check content'
@@ -108,12 +117,8 @@ addFileWith store filePath check =
 hBlobId :: Handle -> IO BlobId
 hBlobId hnd = evaluate . BlobId . md5 =<< BS.hGetContents hnd
 
-fpBlobId :: FilePath -> IO BlobId
-fpBlobId file =
-    do hnd <- openBinaryFile file ReadMode
-       blobId <- hBlobId hnd
-       hClose hnd
-       return blobId
+fileBlobId :: FilePath -> IO BlobId
+fileBlobId file = bracket (openBinaryFile file ReadMode) hClose hBlobId
 
 withIncoming :: BlobStorage -> ByteString
               -> (FilePath -> BlobId -> IO (a, Bool))
@@ -135,11 +140,11 @@ withIncoming store content action = do
         throwIO (err :: IOError)
 
 withIncomingFile :: BlobStorage
-                     -> FilePath
-                     -> (FilePath -> BlobId -> IO (a, Bool))
-                     -> IO a
+                 -> FilePath
+                 -> (FilePath -> BlobId -> IO (a, Bool))
+                 -> IO a
 withIncomingFile store file action =
-    do blobId <- fpBlobId file
+    do blobId <- fileBlobId file
        withIncoming' store file blobId action
 
 withIncoming' :: BlobStorage -> FilePath -> BlobId -> (FilePath -> BlobId -> IO (a, Bool)) -> IO a

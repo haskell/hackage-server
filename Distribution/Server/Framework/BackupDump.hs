@@ -5,7 +5,7 @@ Create a tarball with the structured defined by each individual feature.
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Distribution.Server.Framework.BackupDump (
-    exportTar,
+    dumpServerBackup,
     csvToBackup,
     blobToBackup,
 
@@ -15,71 +15,167 @@ module Distribution.Server.Framework.BackupDump (
   ) where
 
 import Distribution.Simple.Utils (toUTF8)
-import qualified Data.ByteString.Lazy.Char8 as BSL
 
 import Text.CSV hiding (csv)
 
 import Distribution.Server.Framework.BackupRestore (BackupEntry(..))
 import qualified Distribution.Server.Framework.BlobStorage as Blob
-
-import Distribution.Server.Framework.BlobStorage
-
---import Distribution.Text
+import Distribution.Server.Framework.BlobStorage (BlobStorage, BlobId)
+import Distribution.Server.Framework.Logging
 
 import qualified Data.ByteString.Lazy.Char8 as BS
-import Codec.Compression.GZip (compress)
+import qualified Codec.Compression.GZip as GZip (compress)
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
 
 import Control.Exception as Exception
-import Control.Monad (liftM, forM)
+import Control.Concurrent.MVar
+import Control.Concurrent.Async as Async
+
+import Control.Monad (liftM, forM, unless)
 import System.FilePath
+import System.Directory
+import System.Posix.Files as Posix (createLink)
 import System.Locale
 import System.IO.Unsafe (unsafeInterleaveIO)
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, fromMaybe)
 import Data.Time
 
-exportTar :: BlobStorage -> [(String, IO [BackupEntry])] -> IO BS.ByteString
-exportTar store = fmap (compress . Tar.write) . toEntries store
+-- Making backups is rather expensive in terms of disk I/O because we have
+-- a lot of large static files (like package tarballs and docs).
+--
+-- So we use backup scheme where we share the static blob files between all
+-- the backups. We use a tarball file per backup plus a shared directory of
+-- blob files. We don't overwrite the blobs if they already exist. That way,
+-- backups only pay the disk I/O cost of new blobs and of the other non-blob
+-- data. we can end up writing as little as 10Mb rather than 20Gb.
+--
+-- The layout looks like this:
+--
+-- > backups/blobs/${blobid}
+-- > backups/backup-2013-03-01.tar.gz
+--
+-- Then inside the tar.gz we have entries like:
+--
+-- > backup-2013-03-01/core/package/zlib-0.2/zlib.cabal
+-- > backup-2013-03-01/core/package/zlib-0.2/zlib-0.2.tar.gz
+-- >   -> ../../../../blobs/ecfdf802c16bab706b6985de57c73663
+--
+-- If you were to unpack the .tar.gz, that symlink would point to the file
+--
+-- > backups/blobs/ecfdf802c16bab706b6985de57c73663
+--
 
--- this is probably insufficiently lazy. use unsafeInterleaveIO to avoid loading /everything/ into memory
-toEntries :: BlobStorage -> [(String, IO [BackupEntry])] -> IO [Tar.Entry]
-toEntries store featureMap = do
-    baseDir <- mkBaseDir `fmap` getCurrentTime
-    let exportEntries :: (String, IO [BackupEntry]) -> IO [Tar.Entry]
-        exportEntries (name, ioEntries) = do
-            backupEntries <- ioEntries
-            tarEntries <- forM backupEntries $ backupToTar store baseDir name
-            return (concat tarEntries)
-    unsafeInterleaveConcatMap exportEntries featureMap
+dumpServerBackup :: Verbosity -> FilePath -> Maybe String -> BlobStorage -> Bool
+                 -> [(String, IO [BackupEntry])] -> IO ()
+dumpServerBackup verbosity backupDir tarfileTemplate store linkBlobs backupActions = do
 
-backupToTar :: BlobStorage -> FilePath -> String -> BackupEntry -> IO [Tar.Entry]
-backupToTar _store baseDir featureName (BackupByteString path bs) =
-  case Tar.toTarPath False (mkTarPath baseDir featureName path) of
-    Right tarPath -> return [Tar.fileEntry tarPath bs]
-    Left err -> error $ "Error in export: " ++ err
-backupToTar store baseDir featureName (BackupBlob path blobId) = do
-  contents <- unsafeInterleaveIO $ Blob.fetch store blobId
-  let blobPath = baseDir </> "blobs" </> blobMd5 blobId
-      -- go back to the root of the tarball. 'path' here would be something like
-      -- a/b/c/filename, which we store in feature/a/b/c/filename; in this
-      -- example, we want to go back 4 directories (feature/a/b/c), which is
-      -- @length path@ (because 'path' includes the filename)
-      blobLink = joinPath (replicate (length path) "..") </> "blobs" </> blobMd5 blobId
-  -- Sigh. Lots of annoying tar path conversions
-  case Tar.toTarPath False (mkTarPath baseDir featureName path) of
-    Left err -> error $ "Error in export: " ++ err
-    Right tarPath -> case Tar.toTarPath False blobPath of
-      Left err -> error $ "Error in export: " ++ err
-      Right blobTarPath -> case Tar.toLinkTarget blobLink of
-        Nothing -> error "Could not generate link target"
-        Just linkTarget ->
-          return [ Tar.fileEntry blobTarPath contents
-                 , Tar.simpleEntry tarPath (Tar.SymbolicLink linkTarget)
-                 ]
+    now <- getCurrentTime
+    let template    = fromMaybe defaultTarfileTemplate tarfileTemplate
+        tarfileName = substTemplate template now
+        tarfilePath = backupDir </> tarfileName <.> "tar.gz"
+        blobDir     = backupDir </> "blobs"
+
+    lognotice verbosity $ "Writing backup tarball " ++ tarfilePath ++ "\n"
+                       ++ "with blob files in " ++ blobDir
+
+    createDirectoryIfMissing False backupDir
+    createDirectoryIfMissing False blobDir
+
+    entriesChan <- newChan
+    let writeEntry = writeChan entriesChan
+
+    let writeTarEntries = do
+          entries <- getChanContents entriesChan
+          BS.writeFile tarfilePath (GZip.compress (Tar.write entries))
+
+    Async.withAsync writeTarEntries $ \tarWriter -> do
+      Async.link tarWriter
+
+      processEntries verbosity store tarfileName blobDir linkBlobs
+                               writeEntry backupActions
+      closeChan entriesChan
+
+      Async.wait tarWriter
+    lognotice verbosity "Backup complete"
+
+  where
+    defaultTarfileTemplate = "backup-" ++ iso8601DateFormat Nothing
+    substTemplate = formatTime defaultTimeLocale
+
+    -- MVar as 1-place chan
+    newChan      = newEmptyMVar
+    writeChan ch = putMVar ch . Just
+    closeChan ch = putMVar ch Nothing
+    getChanContents :: MVar (Maybe a) -> IO [a]
+    getChanContents ch = unsafeInterleaveIO $ do
+        mx <- takeMVar ch
+        case mx of
+          Nothing -> return []
+          Just x  -> do xs <- getChanContents ch
+                        return (x:xs)
+
+processEntries :: Verbosity
+               -> BlobStorage -> FilePath -> FilePath -> Bool
+               -> (Tar.Entry -> IO ())
+               -> [(String, IO [BackupEntry])]
+               -> IO ()
+processEntries verbosity store tarfileName blobDir linkBlobs writeEntry featureMap =
+    sequence_
+      [ do loginfo verbosity $ "Exporting " ++ featureName ++ " feature state"
+           entries <- ioEntries
+           sequence_
+             [ processEntry store tarfileName blobDir linkBlobs featureName
+                            writeEntry entry
+             | entry <- entries ]
+      | (featureName, ioEntries) <- featureMap ]
+
+
+processEntry :: BlobStorage -> FilePath -> FilePath -> Bool -> String
+             -> (Tar.Entry -> IO ())
+             -> BackupEntry
+             -> IO ()
+processEntry _store tarfileName _blobDir _linkBlobs featureName writeEntry
+  (BackupByteString path bs) = do
+
+  tarPath <- either exportError return $
+             Tar.toTarPath False (mkTarPath tarfileName featureName path)
+  writeEntry (Tar.fileEntry tarPath bs)
+
+processEntry store tarfileName blobDir linkBlobs featureName writeEntry
+    (BackupBlob path blobId) = do
+
+    let blobName = Blob.blobMd5 blobId
+        blobPath = blobDir </> blobName
+        -- go back to the root of the tarball. 'path' here would be something like
+        -- a/b/c/filename, which we store in
+        -- backup-2013-03-01/feature/a/b/c/filename; in this example, we want
+        -- to go back 4 directories, which is @length path + 1@
+        -- (because 'path' includes the filename)
+        relRoot  = joinPath (replicate (length path + 1) "..")
+        blobLink = relRoot </> "blobs" </> blobName
+
+    entryPath   <- either exportError return $
+                   Tar.toTarPath False (mkTarPath tarfileName featureName path)
+    linkTarget  <- maybe (fail "Could not generate link target") return $
+                   Tar.toLinkTarget blobLink
+
+    writeBlob blobPath blobId
+    writeEntry (Tar.simpleEntry entryPath (Tar.SymbolicLink linkTarget))
+
+  where
+    writeBlob blobPath blobid = do
+      exists <- doesFileExist blobPath
+      unless exists $
+        if linkBlobs
+          then Posix.createLink (Blob.filepath store blobid) blobPath
+          else Blob.fetch store blobid >>= BS.writeFile blobPath
+
+exportError :: String -> IO a
+exportError err = fail $ "Error in export: " ++ err
 
 mkTarPath :: FilePath -> String -> [FilePath] -> FilePath
-mkTarPath baseDir featureName ps = joinPath $ baseDir : featureName : ps
+mkTarPath tarfileName featureName ps = joinPath (tarfileName : featureName : ps)
 
 csvToBackup :: [String] -> CSV -> BackupEntry
 csvToBackup fpath csv = BackupByteString fpath $ BS.pack (printCSV csv)
@@ -87,29 +183,9 @@ csvToBackup fpath csv = BackupByteString fpath $ BS.pack (printCSV csv)
 blobToBackup :: [String] -> BlobId -> BackupEntry
 blobToBackup = BackupBlob
 
-mkBaseDir :: UTCTime -> FilePath
-mkBaseDir time = "export-" ++ formatTime defaultTimeLocale (iso8601DateFormat Nothing) time
-
-{- let's be crazy lazy
-
-   The only non-pure operations we do are reading files
-   from the blob-storage, which is already lazy IO.
-
-   So we may as well not force the spine of the tar-ball
-   before we need to.
--}
-unsafeInterleaveConcatMap :: (a -> IO [b]) -> [a] -> IO [b]
-unsafeInterleaveConcatMap f = go
-  where
-    go [] = return []
-    go (x:xs) = do
-        ys <- f x
-        yss <- unsafeInterleaveIO $ go xs
-        return (ys++yss)
-
 -- via UTF8 conversion.
-stringToBytes :: String -> BSL.ByteString
-stringToBytes = BSL.pack . toUTF8
+stringToBytes :: String -> BS.ByteString
+stringToBytes = BS.pack . toUTF8
 
 testBlobsExist :: BlobStorage -> [Blob.BlobId] -> IO [String]
 testBlobsExist store blobs

@@ -104,7 +104,7 @@ data AbstractStateComponent = AbstractStateComponent {
   , abstractStateClose      :: IO ()
   , abstractStateBackup     :: IO [BackupEntry]
   , abstractStateRestore    :: AbstractRestoreBackup
-  , abstractStateReset      :: FilePath -> IO (AbstractStateComponent, IO [String])
+  , abstractStateNewEmpty   :: FilePath -> IO (AbstractStateComponent, IO [String])
   , abstractStateSize       :: IO Int
   }
 
@@ -145,7 +145,7 @@ abstractStateComponent' cmp st = AbstractStateComponent {
   , abstractStateClose      = closeAcidState (acidState st)
   , abstractStateBackup     = liftM (backupState st) (getState st)
   , abstractStateRestore    = abstractRestoreBackup (putState st) (restoreState st)
-  , abstractStateReset      = \stateDir -> do
+  , abstractStateNewEmpty   = \stateDir -> do
                                 st' <- resetState st stateDir
                                 let cmpSt = liftM2 cmp (getState st) (getState st')
                                 return (abstractStateComponent' cmp st', cmpSt)
@@ -159,7 +159,7 @@ instance Monoid AbstractStateComponent where
     , abstractStateClose      = return ()
     , abstractStateBackup     = return []
     , abstractStateRestore    = mempty
-    , abstractStateReset      = \_stateDir -> return (mempty, return [])
+    , abstractStateNewEmpty   = \_stateDir -> return (mempty, return [])
     , abstractStateSize       = return 0
     }
   a `mappend` b = AbstractStateComponent {
@@ -168,9 +168,9 @@ instance Monoid AbstractStateComponent where
     , abstractStateClose      = abstractStateClose a >> abstractStateClose b
     , abstractStateBackup     = liftM2 (++) (abstractStateBackup a) (abstractStateBackup b)
     , abstractStateRestore    = abstractStateRestore a `mappend` abstractStateRestore b
-    , abstractStateReset      = \stateDir -> do
-                                 (a', cmpA) <- abstractStateReset a stateDir
-                                 (b', cmpB) <- abstractStateReset b stateDir
+    , abstractStateNewEmpty   = \stateDir -> do
+                                 (a', cmpA) <- abstractStateNewEmpty a stateDir
+                                 (b', cmpB) <- abstractStateNewEmpty b stateDir
                                  return (a' `mappend` b', liftM2 (++) cmpA cmpB)
     , abstractStateSize       = liftM2 (+) (abstractStateSize a)
                                            (abstractStateSize b)

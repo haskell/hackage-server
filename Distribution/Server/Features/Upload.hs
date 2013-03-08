@@ -358,7 +358,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
                                    blobIdDecompressed <- BlobStorage.add store decompressedContent
                                    return . Right $ (uresult, blobIdDecompressed)
                             Just err -> return . Left $ err
-            mres <- liftIO $ BlobStorage.addFileWith store file processPackage
+            mres <- liftIO $ BlobStorage.consumeFileWith store file processPackage
             case mres of
                 Left  err -> throwError err
                 Right ((res@(UploadResult pkg pkgStr _), blobIdDecompressed), blobId) -> do
