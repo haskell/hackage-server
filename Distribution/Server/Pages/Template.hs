@@ -2,11 +2,8 @@
 module Distribution.Server.Pages.Template
     ( hackagePage
     , hackagePageWith
-    , haddockPage
+    , hackagePageWithHead
     ) where
-
-import Data.Monoid
-import System.FilePath.Posix ( (</>) )
 
 import Text.XHtml.Strict    hiding ( p, name )
 
@@ -14,55 +11,36 @@ import Text.XHtml.Strict    hiding ( p, name )
 
 -- | Create top-level HTML document by wrapping the Html with boilerplate.
 hackagePage :: String -> [Html] -> Html
-hackagePage = hackagePageWith []
+hackagePage = hackagePageWithHead []
 
-hackagePageWith :: [Html] -> String -> [Html] -> Html
-hackagePageWith links heading docs = toHtml [header << docHead, body << docBody]
+hackagePageWithHead :: [Html] -> String -> [Html] -> Html
+hackagePageWithHead headExtra docTitle docContent =
+    hackagePageWith headExtra docTitle docSubtitle docContent bodyExtra
   where
-    docHead =
-        thetitle << ("Hackage: " ++ heading) :
-        thelink ! [rel "stylesheet", href stylesheetURL,
-            thetype "text/css"] << noHtml :
-        -- if NameSearch is enabled
-        thelink ! [rel "search", href "/opensearch.xml", title "Hackage",
-           thetype "application/opensearchdescription+xml"] << noHtml :
-        links
-    docBody = [thediv ! [theclass "header"] << docHeader,
-        thediv ! [identifier "content"] << docs]
-    docHeader = [h1 << hackageTitle,
-        table ! [theclass "navigation"] << navigation]
-    hackageTitle = "hackage :: [Package]"
-    navigation = tr << [td << (anchor ! [href url] << lab) |
-                (lab, url) <- navigationBar]
+    docSubtitle = anchor ! [href introductionURL] << "Hackage :: [Package]"
+    bodyExtra   = []
 
--- | Wrapper for pages with haddock styling
-haddockPage :: HTML doc => String -> doc -> Html
-haddockPage pkgname doc = toHtml [header << docHead, body << doc]
-  where docHead = [
-                meta ! [httpequiv "Content-type",
-                        content "text/html; charset=ISO-8859-1"],
-                thetitle << ("Hackage: " ++ pkgname),
-                haddockThemesLinks,
-                script ! [thetype "text/javascript",
-                        src haddockJSURL] << noHtml,
-                script ! [thetype "text/javascript"] <<
-                        "window.onload = function() {pageLoad();};"]
-
-haddockThemesLinks :: Html
-haddockThemesLinks =
-    case haddockThemes of
-      [] -> mempty
-      (x:xs) ->
-          first x `mappend` rest xs
-
- where
-   first (name, url) =
-       thelink ! [rel "stylesheet", thetype "text/css",
-                      href url, title name] << noHtml
-   rest xs =
-       mconcat $ flip map xs $ \(name, url) ->
-           thelink ! [rel "alternate stylesheet", thetype "text/css",
-                          href url, title name] << noHtml
+hackagePageWith :: [Html] -> String -> Html -> [Html] -> [Html] -> Html
+hackagePageWith headExtra docTitle docSubtitle docContent bodyExtra =
+    toHtml [ header << (docHead ++ headExtra)
+           , body   << (docBody ++ bodyExtra) ]
+  where
+    docHead   = [ thetitle << ("Hackage: " ++ docTitle)
+                , thelink ! [ rel "stylesheet"
+                            , href stylesheetURL
+                            , thetype "text/css"] << noHtml
+                -- if NameSearch is enabled
+                , thelink ! [ rel "search", href "/opensearch.xml"
+                            , thetype "application/opensearchdescription+xml"
+                            , title "Hackage" ] << noHtml
+                ]
+    docBody   = [ thediv ! [identifier "page-header"] << docHeader
+                , thediv ! [identifier "content"] << docContent ]
+    docHeader = [ menubar
+                , paragraph ! [theclass "caption"] << docSubtitle ]
+    menubar   = ulist ! [theclass "links", identifier "page-menu"]
+                  << [ li << (anchor ! [href url] << lab)
+                     | (lab, url) <- navigationBar]
 
 navigationBar :: [(String, URL)]
 navigationBar =
@@ -102,17 +80,3 @@ adminURL = "/admin"
 recentAdditionsURL :: URL
 recentAdditionsURL = "/recent"
 
--- URL of haddock specifgic HTML
-haddockJSURL :: URL
-haddockJSURL = "/static/haddock/haddock-util.js"
-
--- | Haddock themes we have avaliable, name and path
-haddockThemes :: [(String, String)]
-haddockThemes =
-    [ ("Ocean", haddockThemesDir </> "ocean.css")
-    , ("Classic", haddockThemesDir </> "xhaddock.css")
-    ]
-
--- | URL directory of haddock theme CSS files
-haddockThemesDir :: URL
-haddockThemesDir = "/static/haddock"

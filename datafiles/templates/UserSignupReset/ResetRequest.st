@@ -8,6 +8,7 @@ $hackageCssTheme()$
 <body>
 $hackagePageHeader()$
 
+<div id="content">
 <h2>Account recovery for forgotten passwords</h2>
 
 <p>If you have forgotten the password you use to log in to Hackage, you can
@@ -36,4 +37,5 @@ to set a new password.
 can set a new password.
 </form>
 
+</div>
 </body></html>

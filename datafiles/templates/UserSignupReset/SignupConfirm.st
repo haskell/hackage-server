@@ -8,6 +8,7 @@ $hackageCssTheme()$
 <body>
 $hackagePageHeader()$
 
+<div id="content">
 <h2>Register a new account</h2>
 
 <p>Email confirmation done!
@@ -28,5 +29,6 @@ $hackagePageHeader()$
   <p><input type="submit" value="Create account"/>
 </form>
 
+</div>
 </body></html>
 

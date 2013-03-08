@@ -8,7 +8,7 @@ $hackageCssTheme()$
 <body>
 $hackagePageHeader()$
 
-<div class="content">
+<div id="content">
 <h2>About Hackage</h2>
 
 <p>Hackage is a collection of released

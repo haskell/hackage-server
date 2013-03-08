@@ -8,6 +8,7 @@ $hackageCssTheme()$
 <body>
 $hackagePageHeader()$
 
+<div id="content">
 <h2>Register a new account</h2>
 
 <p>Certain actions on this website require you to have an account.
@@ -47,4 +48,5 @@ upload are public).
 can set your password and activate your account.
 </form>
 
+</div>
 </body></html>

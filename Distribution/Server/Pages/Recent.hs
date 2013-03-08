@@ -9,7 +9,7 @@ import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users)
 import Distribution.Server.Pages.Template
-         ( hackagePageWith )
+         ( hackagePageWithHead )
 
 import Distribution.Package
          ( PackageIdentifier, packageName, packageVersion, PackageName(..) )
@@ -46,7 +46,7 @@ recentPage users pkgs =
                                   XHtml.thetype "application/rss+xml",
                                   XHtml.title "Hackage RSS Feed",
                                   XHtml.href rssFeedURL] << XHtml.noHtml
-   in hackagePageWith [rss_link] "recent additions" docBody
+   in hackagePageWithHead [rss_link] "recent additions" docBody
 
 makeRow :: Users -> PkgInfo -> Html
 makeRow users PkgInfo {

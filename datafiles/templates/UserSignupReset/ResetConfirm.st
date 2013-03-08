@@ -8,6 +8,7 @@ $hackageCssTheme()$
 <body>
 $hackagePageHeader()$
 
+<div id="content">
 <h2>Account recovery</h2>
 
 <p>Email confirmation done!
@@ -28,5 +29,6 @@ $hackagePageHeader()$
   <p><input type="submit" value="Set new password"/>
 </form>
 
+</div>
 </body></html>
 

@@ -8,6 +8,7 @@ $hackageCssTheme()$
 <body>
 $hackagePageHeader()$
 
+<div id="content">
 <h2>Users moving from the old Hackage</h2>
 <p>This new Hackage implementation uses a somewhat more secure system
 for logging in. Because of this change, users who had accounts on the
@@ -44,4 +45,5 @@ was never stored. So by authenticating once using the old account
 information &ndash; using HTTP basic authentication &ndash; we can
 generate and store password digest for the new system.
 
+</div>
 </body></html>

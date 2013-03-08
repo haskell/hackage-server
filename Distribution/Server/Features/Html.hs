@@ -34,7 +34,7 @@ import Distribution.Server.Features.Distro.Distributions (DistroPackageInfo(..))
 -- [reverse index disabled] import Distribution.Server.Packages.Reverse
 
 import qualified Distribution.Server.Pages.Package as Pages
-import Distribution.Server.Pages.Template (hackagePage, hackagePageWith, haddockPage)
+import Distribution.Server.Pages.Template
 import Distribution.Server.Pages.Util
 import qualified Distribution.Server.Pages.Group as Pages
 -- [reverse index disabled] import qualified Distribution.Server.Pages.Reverse as Pages
@@ -476,7 +476,7 @@ mkHtmlCore HtmlUtilities{..}
                       map (\for -> anchor ! [href $ corePackageNameUri cores "" for] << display for) $ fors]
               Nothing -> noHtml
         -- and put it all together
-        return $ toResponse $ Resource.XHtml $ haddockPage (display pkgid) $
+        return $ toResponse $ Resource.XHtml $
             Pages.packagePage render [tagLinks, maintainLink, backHackage] [deprHtml] (beforeHtml ++ middleHtml ++ afterHtml) [] docURL
       where
         showDist (dname, info) = toHtml (display dname ++ ":") +++
@@ -840,7 +840,7 @@ mkHtmlCandidates HtmlUtilities{..}
       let warningBox = case renderWarnings candRender of
               [] -> []
               warn -> [thediv ! [theclass "notification"] << [toHtml "Warnings:", unordList warn]]
-      return $ toResponse $ Resource.XHtml $ haddockPage (display $ packageId cand) $
+      return $ toResponse $ Resource.XHtml $
           Pages.packagePage render [maintainHtml] warningBox sectionHtml [] docURL
 
     servePublishForm :: DynamicPath -> ServerPart Response
@@ -1296,7 +1296,8 @@ mkHtmlSearch HtmlUtilities{..}
             (exact, text) <- searchFindPackage str texts
             exactItems <- liftIO $ makeItemList exact
             textItems <- liftIO $ makeItemList text
-            return $ toResponse $ Resource.XHtml $ hackagePageWith [noIndex] "Text search" $
+            return $ toResponse $ Resource.XHtml $
+              hackagePageWithHead [noIndex] "Text search" $
               [ toHtml $ searchForm str
               , h2 << "Exact matches"
               , case exact of [] -> toHtml "None";

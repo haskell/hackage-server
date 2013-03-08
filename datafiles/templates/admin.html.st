@@ -8,7 +8,7 @@ $hackageCssTheme()$
 <body>
 $hackagePageHeader()$
 
-<div class="content">
+<div id="content">
 <h2>Admin front-end</h2>
 
 <ul>

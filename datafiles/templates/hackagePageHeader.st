@@ -1,14 +1,11 @@
-<div class="header">
-<h1>hackage :: [Package]</h1>
-
-<table class="navigation">
-<tr>
-<td><a href="/">Introduction</a></td>
-<td><a href="/packages/">Packages</a></td>
-<td><a href="/recent">What's new</a></td>
-<td><a href="/upload">Upload</a></td>
-<td><a href="/accounts">User accounts</a></td>
-<td><a href="/admin">Admin</a></td>
-</tr>
-</table>
+<div id="page-header">
+<ul class="links" id="page-menu">
+<li><a href="/">Introduction</a></li>
+<li><a href="/packages/">Packages</a></li>
+<li><a href="/recent">What's new</a></li>
+<li><a href="/upload">Upload</a></li>
+<li><a href="/accounts">User accounts</a></li>
+<li><a href="/admin">Admin</a></li>
+</ul>
+<a class="caption" href="/">Hackage :: [Package]</a>
 </div>

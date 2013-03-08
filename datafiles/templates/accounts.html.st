@@ -8,6 +8,7 @@ $hackageCssTheme()$
 <body>
 $hackagePageHeader()$
 
+<div id="content">
 <h2>User accounts</h2>
 <p>Most of the functions of the Hackage web interface
 (including browsing and checking packages) are available to all.
@@ -29,4 +30,5 @@ packages, like comments and submitting build logs.</p>
 so long as you know your user login name and the email address you
 originally registered with. The system will send you an email with a
 link you can use to set a new password.</p>
+</div>
 </body></html>

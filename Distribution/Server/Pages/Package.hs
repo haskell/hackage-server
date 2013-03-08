@@ -10,6 +10,7 @@ module Distribution.Server.Pages.Package (
 
 import Distribution.Server.Features.PreferredVersions
 
+import Distribution.Server.Pages.Template (hackagePageWith)
 import Distribution.Server.Pages.Package.HaddockParse (parseHaddockParagraphs)
 import Distribution.Server.Pages.Package.HaddockLex  (tokenise)
 import Distribution.Server.Pages.Package.HaddockHtml
@@ -30,23 +31,17 @@ import System.FilePath.Posix    ((</>), (<.>))
 import System.Locale            (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
 
-packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)] -> [(String, Html)] -> Maybe URL -> [Html]
+packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)] -> [(String, Html)] -> Maybe URL -> Html
 packagePage render headLinks top sections bottom docURL =
-    [ thediv ! [identifier "package-header"] << docHeader
-    , thediv ! [identifier "content"] << docBody
-    , thediv ! [identifier "footer"] << docFooter
-    ]
+    hackagePageWith [] docTitle docSubtitle docBody [docFooter]
   where
     pkgid = rendPkgId render
 
-    docHeader = [
-                ulist ! [theclass "links", identifier "page-menu"] <<
-                        li << anchor ! [href "/"] << "hackage",
-                paragraph ! [theclass "caption"] << docTitle]
-
-    docTitle = display (packageName pkgid) ++ case synopsis (rendOther render) of
-        "" -> ""
-        short  -> ": " ++ short
+    docTitle = display (packageName pkgid)
+            ++ case synopsis (rendOther render) of
+                 ""    -> ""
+                 short -> ": " ++ short
+    docSubtitle = toHtml docTitle
 
     docBody =
         h1 <<
@@ -66,12 +61,13 @@ packagePage render headLinks top sections bottom docURL =
         items -> [thediv ! [thestyle "font-size: small"] <<
             (map (\item -> "[" +++ item +++ "] ") items)]
 
-    docFooter = paragraph << [
-                toHtml "Produced by ",
-                anchor ! [href "/"] << "hackage",
-                toHtml " and ",
-                anchor ! [href cabalHomeURL] << "Cabal",
-                toHtml (" " ++ display cabalVersion)]
+    docFooter = thediv ! [identifier "footer"]
+                  << paragraph
+                       << [ toHtml "Produced by "
+                          , anchor ! [href "/"] << "hackage"
+                          , toHtml " and "
+                          , anchor ! [href cabalHomeURL] << "Cabal"
+                          , toHtml (" " ++ display cabalVersion) ]
 
     pair (title, content) =
         toHtml [ h2 << title, content ]

@@ -8,7 +8,7 @@ $hackageCssTheme()$
 <body>
 $hackagePageHeader()$
 
-<div class="content">
+<div id="content">
 <h2>Uploading packages and package candidates</h2>
 <p>Uploading a package puts it in the <a href="/packages/">main package index</a>
 so that anyone can download it and view information about it. You can only
