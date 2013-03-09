@@ -29,10 +29,6 @@ data-files:
   static/*.css
   static/*.ico
   static/*.png
-  static/haddock/*.css
-  static/haddock/*.js
-  static/haddock/*.gif
-  static/haddock/*.png
 
 source-repository head
   type: darcs
