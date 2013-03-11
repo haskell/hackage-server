@@ -117,7 +117,7 @@ instance ToMessage RSS where
 newtype XHtml = XHtml XHtml.Html
 
 instance ToMessage XHtml where
-    toContentType _ = BS.pack "application/xhtml+xml; charset=utf-8"
+    toContentType _ = BS.pack "text/html; charset=utf-8"
     toMessage (XHtml xhtml) = BS.Lazy.pack (XHtml.renderHtml xhtml)
 
 -- Like XHtml, but don't bother calculating length
@@ -126,7 +126,7 @@ newtype LongXHtml = LongXHtml XHtml.Html
 instance ToMessage LongXHtml where
     toResponse (LongXHtml xhtml) = noContentLength $ mkResponse
         (BS.Lazy.pack (XHtml.renderHtml xhtml))
-        [("Content-Type", "application/xhtml+xml")]
+        [("Content-Type", "text/html")]
 
 newtype ExportTarball = ExportTarball BS.Lazy.ByteString
 
