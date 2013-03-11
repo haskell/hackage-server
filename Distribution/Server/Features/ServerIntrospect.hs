@@ -54,10 +54,10 @@ serverIntrospectFeature serverFeatures = (emptyHackageFeature "serverapi") {
 -- Server API stuff
 --
 
-serveApiDocHtml :: [HackageFeature] -> ServerPart Response
+serveApiDocHtml :: [HackageFeature] -> ServerPartE Response
 serveApiDocHtml = return . toResponse . Resource.XHtml . apiDocPageHtml
 
-serveApiDocJSON :: [HackageFeature] -> ServerPart Response
+serveApiDocJSON :: [HackageFeature] -> ServerPartE Response
 serveApiDocJSON = return . toResponse . Resource.JSON . apiDocJSON
 
 
@@ -243,7 +243,7 @@ apiDocJSON serverFeatures = featureList
 -- Memory consumption
 --
 
-serveMemSizeHtml :: [HackageFeature] -> ServerPart Response
+serveMemSizeHtml :: [HackageFeature] -> ServerPartE Response
 serveMemSizeHtml serverFeatures =
       toResponse
     . Resource.XHtml

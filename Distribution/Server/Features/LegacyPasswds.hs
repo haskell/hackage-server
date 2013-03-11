@@ -206,8 +206,8 @@ legacyPasswdsFeature legacyPasswdsState UserFeature{..}
     queryLegacyPasswds :: MonadIO m => m LegacyPasswdsTable
     queryLegacyPasswds = queryState legacyPasswdsState GetLegacyPasswdsTable
 
-    handleUserHtpasswdPut :: DynamicPath -> ServerPart Response
-    handleUserHtpasswdPut dpath = runServerPartE $ do
+    handleUserHtpasswdPut :: DynamicPath -> ServerPartE Response
+    handleUserHtpasswdPut dpath = do
         _            <- guardAuthorised [InGroup adminGroup]
         users        <- queryGetUserDb
         uname        <- userNameInPath dpath
@@ -224,8 +224,8 @@ legacyPasswdsFeature legacyPasswdsState UserFeature{..}
         errHasAuth    = errBadRequest "Clashing auth details" [MText "The user already has auth info"]
         errBadHash    = errBadRequest "Invalid htpasswd hash" [MText "Only classic htpasswd crypt() passwords are supported."]
 
-    handleUserAuthUpgradePost :: DynamicPath -> ServerPart Response
-    handleUserAuthUpgradePost _ = runServerPartE $ do
+    handleUserAuthUpgradePost :: DynamicPath -> ServerPartE Response
+    handleUserAuthUpgradePost _ = do
         users              <- queryGetUserDb
         legacyPasswds      <- queryLegacyPasswds
         (uid, uinfo, passwd) <- LegacyAuth.guardAuthenticated

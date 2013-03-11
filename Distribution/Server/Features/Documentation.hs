@@ -146,16 +146,17 @@ documentationFeature name
           renderResource (packageDocsWhole r) [display pkgid, format]
       }
 
-    serveDocumentationTar :: DynamicPath -> ServerPart Response
-    serveDocumentationTar dpath = runServerPartE $ withDocumentation dpath $ \_ blob _ -> do
+    serveDocumentationTar :: DynamicPath -> ServerPartE Response
+    serveDocumentationTar dpath =
+      withDocumentation dpath $ \_ blob _ -> do
         file <- liftIO $ BlobStorage.fetch store blob
         return $ toResponse $ Resource.DocTarball file blob
 
 
     -- return: not-found error or tarball
-    serveDocumentation :: DynamicPath -> ServerPart Response
+    serveDocumentation :: DynamicPath -> ServerPartE Response
     serveDocumentation dpath = do
-      runServerPartE $ withDocumentation dpath $ \pkgid blob index -> do
+      withDocumentation dpath $ \pkgid blob index -> do
         let tarball = BlobStorage.filepath store blob
             etag    = blobETag blob
         -- if given a directory, the default page is index.html
@@ -164,8 +165,8 @@ documentationFeature name
                                    tarball index etag
 
     -- return: not-found error (parsing) or see other uri
-    uploadDocumentation :: DynamicPath -> ServerPart Response
-    uploadDocumentation dpath = runServerPartE $ do
+    uploadDocumentation :: DynamicPath -> ServerPartE Response
+    uploadDocumentation dpath = do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)

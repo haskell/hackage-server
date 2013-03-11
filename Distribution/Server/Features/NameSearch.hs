@@ -31,7 +31,7 @@ data NamesFeature = NamesFeature {
     namesFeatureInterface :: HackageFeature,
     namesResource :: NamesResource,
 
-    packageFindWith :: forall a. (Maybe (String, Bool) -> ServerPart a) -> ServerPart a,
+    packageFindWith :: forall a. (Maybe (String, Bool) -> ServerPartE a) -> ServerPartE a,
     searchFindPackage :: MonadIO m => String -> Bool -> m ([PackageName], [PackageName])
 }
 
@@ -163,7 +163,7 @@ namesFeature env CoreFeature{..}
             textRes = if doTextSearch then searchText txIndex str else []
         return $ (map PackageName $ Set.toList nameRes, map (PackageName . fst) textRes)
 
-    packageFindWith :: (Maybe (String, Bool) -> ServerPart a) -> ServerPart a
+    packageFindWith :: (Maybe (String, Bool) -> ServerPartE a) -> ServerPartE a
     packageFindWith func = do
         mname <- optional (look "name")
         func $ fmap (\n -> (n, length n >= 3)) mname
@@ -172,10 +172,10 @@ namesFeature env CoreFeature{..}
     getOpenSearch = return $ toResponse (Resource.OpenSearchXml xmlstr)
       where xmlstr = BS.pack (mungeSearchXml (hostUriStr env))
 
-    opensearchGet :: ServerPart Response
+    opensearchGet :: ServerPartE Response
     opensearchGet = return . toResponse =<< readAsyncCache openSearchCache
 
-    suggestJson :: ServerPart Response
+    suggestJson :: ServerPartE Response
     suggestJson = do
         queryStr <- look "name" <|> pure ""
         -- There are a few ways to improve this.

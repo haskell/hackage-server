@@ -390,13 +390,13 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..}
       [MText $ "The " ++ thing ++ " token does not exist. It could be that it "
             ++ "has been used already, or that it has expired."]
 
-    handlerGetSignupRequestNew :: DynamicPath -> ServerPart Response
+    handlerGetSignupRequestNew :: DynamicPath -> ServerPartE Response
     handlerGetSignupRequestNew _ = do
         template <- getTemplate templates "SignupRequest"
         ok $ toResponse $ template []
 
-    handlerPostSignupRequestNew :: DynamicPath -> ServerPart Response
-    handlerPostSignupRequestNew _ = runServerPartE $ do
+    handlerPostSignupRequestNew :: DynamicPath -> ServerPartE Response
+    handlerPostSignupRequestNew _ = do
         templateEmail        <- getTemplate templates "ConfirmationEmail"
         templateConfirmation <- getTemplate templates "SignupEmailSent"
 
@@ -480,8 +480,8 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..}
         errBadEmail    err = errBadRequest "Problem with email address" [MText err]
 
 
-    handlerGetSignupRequestOutstanding :: DynamicPath -> ServerPart Response
-    handlerGetSignupRequestOutstanding dpath = runServerPartE $ do
+    handlerGetSignupRequestOutstanding :: DynamicPath -> ServerPartE Response
+    handlerGetSignupRequestOutstanding dpath = do
         nonce <- nonceInPath dpath
         SignupInfo {..} <- lookupSignupInfo nonce
         template <- getTemplate templates "SignupConfirm"
@@ -494,8 +494,8 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..}
                                 [renderNonce nonce]
             ]
 
-    handlerPostSignupRequestOutstanding :: DynamicPath -> ServerPart Response
-    handlerPostSignupRequestOutstanding dpath = runServerPartE $ do
+    handlerPostSignupRequestOutstanding :: DynamicPath -> ServerPartE Response
+    handlerPostSignupRequestOutstanding dpath = do
         nonce <- nonceInPath dpath
         SignupInfo {..} <- lookupSignupInfo nonce
         (passwd, passwdRepeat) <- lookPasswd
@@ -532,13 +532,13 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..}
 
     -- Password reset handlers
 
-    handlerGetResetRequestNew :: DynamicPath -> ServerPart Response
+    handlerGetResetRequestNew :: DynamicPath -> ServerPartE Response
     handlerGetResetRequestNew _ = do
         template <- getTemplate templates "ResetRequest"
         ok $ toResponse $ template []
 
-    handlerPostResetRequestNew :: DynamicPath -> ServerPart Response
-    handlerPostResetRequestNew _ = runServerPartE $ do
+    handlerPostResetRequestNew :: DynamicPath -> ServerPartE Response
+    handlerPostResetRequestNew _ = do
         templateEmail        <- getTemplate templates "ResetConfirmationEmail"
         templateConfirmation <- getTemplate templates "ResetEmailSent"
 
@@ -604,8 +604,8 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..}
               ++ "used for this account at this time."]
 
 
-    handlerGetResetRequestOutstanding :: DynamicPath -> ServerPart Response
-    handlerGetResetRequestOutstanding dpath = runServerPartE $ do
+    handlerGetResetRequestOutstanding :: DynamicPath -> ServerPartE Response
+    handlerGetResetRequestOutstanding dpath = do
         nonce                    <- nonceInPath dpath
         ResetInfo{resetUserId}   <- lookupResetInfo nonce
         uinfo@UserInfo{userName} <- lookupUserInfo resetUserId
@@ -622,8 +622,8 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..}
                                 [renderNonce nonce]
             ]
 
-    handlerPostResetRequestOutstanding :: DynamicPath -> ServerPart Response
-    handlerPostResetRequestOutstanding dpath = runServerPartE $ do
+    handlerPostResetRequestOutstanding :: DynamicPath -> ServerPartE Response
+    handlerPostResetRequestOutstanding dpath = do
         nonce                    <- nonceInPath dpath
         ResetInfo{resetUserId}   <- lookupResetInfo nonce
         uinfo@UserInfo{userName} <- lookupUserInfo resetUserId

@@ -224,8 +224,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           renderResource (candidateChangeLog candidatesResource) [display pkgid, display (packageName pkgid)]
       }
 
-    basicCandidatePage :: CoreResource -> DynamicPath -> ServerPart Response
-    basicCandidatePage r dpath = runServerPartE $ do --TODO: use something else for nice html error pages
+    basicCandidatePage :: CoreResource -> DynamicPath -> ServerPartE Response
+    basicCandidatePage r dpath = do --TODO: use something else for nice html error pages
       pkg <- packageInPath dpath >>= lookupCandidateId
       ok . toResponse . Resource.XHtml . toHtml $
         [ h3 << "Downloads"
@@ -268,8 +268,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       void $ updateState candidatesState $ DeleteCandidate (packageId candidate)
       seeOther (packageCandidatesUri candidatesResource "" $ packageName candidate) $ toResponse ()
 
-    serveCandidateTarball :: DynamicPath -> ServerPart Response
-    serveCandidateTarball dpath = runServerPartE $ do
+    serveCandidateTarball :: DynamicPath -> ServerPartE Response
+    serveCandidateTarball dpath = do
       pkg <- packageTarballInPath dpath >>= lookupCandidateId
       case pkgTarball (candPkgInfo pkg) of
         [] -> mzero --candidate's tarball does not exist
@@ -280,8 +280,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
     --withFormat :: DynamicPath -> (String -> a) -> a
     --TODO: use something else for nice html error pages
-    serveCandidateCabal :: DynamicPath -> ServerPart Response
-    serveCandidateCabal dpath = runServerPartE $ do
+    serveCandidateCabal :: DynamicPath -> ServerPartE Response
+    serveCandidateCabal dpath = do
       pkg <- packageInPath dpath >>= lookupCandidateId
       guard (lookup "cabal" dpath == Just (display $ packageName pkg))
       return $ toResponse (Resource.CabalFile (cabalFileByteString $ pkgData $ candPkgInfo pkg))
@@ -412,11 +412,9 @@ candidatesFeature ServerEnv{serverBlobStore = store}
   isn't any "interesting" code here.
 -------------------------------------------------------------------------------}
 
-    --TODO: use something other than runServerPartE for nice html error pages
-
     -- result: changelog or not-found error
-    serveChangeLog :: DynamicPath -> ServerPart Response
-    serveChangeLog dpath = runServerPartE $ do
+    serveChangeLog :: DynamicPath -> ServerPartE Response
+    serveChangeLog dpath = do
       pkg        <- packageInPath dpath >>= lookupCandidateId
       mChangeLog <- liftIO $ packageChangeLog (candPkgInfo pkg)
       case mChangeLog of
@@ -426,8 +424,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           liftIO $ serveTarEntry fp offset name etag
 
     -- return: not-found error or tarball
-    serveContents :: DynamicPath -> ServerPart Response
-    serveContents dpath = runServerPartE $ do
+    serveContents :: DynamicPath -> ServerPartE Response
+    serveContents dpath = do
       pkg      <- packageInPath dpath >>= lookupCandidateId
       mTarball <- liftIO $ packageTarball (candPkgInfo pkg)
       case mTarball of

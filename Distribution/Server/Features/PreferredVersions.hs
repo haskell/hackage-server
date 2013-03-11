@@ -200,7 +200,7 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
               ]
           | (deprPkg, replacementPkgs) <- Map.toList deprPkgs ]
 
-    handlePackageDeprecatedGet dpath = runServerPartE $ do
+    handlePackageDeprecatedGet dpath = do
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
       mdep <- queryState preferredState (GetDeprecatedFor pkgname)
@@ -211,7 +211,7 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
                                        | pkg <- fromMaybe [] mdep ])
             ]
 
-    handlePackageDeprecatedPut dpath = runServerPartE $ do
+    handlePackageDeprecatedPut dpath = do
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
       guardAuthorisedAsMaintainerOrTrustee pkgname

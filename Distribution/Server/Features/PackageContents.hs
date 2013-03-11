@@ -90,11 +90,9 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
   TODO: everything below is duplicated in PackageCandidates.
 -------------------------------------------------------------------------------}
 
-    --TODO: use something other than runServerPartE for nice html error pages
-
     -- result: changelog or not-found error
-    serveChangeLog :: DynamicPath -> ServerPart Response
-    serveChangeLog dpath = runServerPartE $ do
+    serveChangeLog :: DynamicPath -> ServerPartE Response
+    serveChangeLog dpath = do
       pkg        <- packageInPath dpath >>= lookupPackageId
       mChangeLog <- liftIO $ packageChangeLog pkg
       case mChangeLog of
@@ -104,8 +102,8 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
           liftIO $ serveTarEntry fp offset name etag
 
     -- return: not-found error or tarball
-    serveContents :: DynamicPath -> ServerPart Response
-    serveContents dpath = runServerPartE $ do
+    serveContents :: DynamicPath -> ServerPartE Response
+    serveContents dpath = do
       pkg      <- packageInPath dpath >>= lookupPackageId
       mTarball <- liftIO $ packageTarball pkg
       case mTarball of

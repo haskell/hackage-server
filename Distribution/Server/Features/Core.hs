@@ -235,11 +235,11 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       }
     corePackageTarball = (resourceAt "/package/:package/:tarball.tar.gz") {
         resourceDesc = [(GET, "Get package tarball")]
-      , resourceGet  = [("tarball", runServerPartE . servePackageTarball)]
+      , resourceGet  = [("tarball", servePackageTarball)]
       }
     coreCabalFile = (resourceAt "/package/:package/:cabal.cabal") {
         resourceDesc = [(GET, "Get package .cabal file")]
-      , resourceGet  = [("cabal", runServerPartE . serveCabalFile)]
+      , resourceGet  = [("cabal", serveCabalFile)]
       }
     indexPackageUri = \format ->
       renderResource corePackagesPage [format]
@@ -306,8 +306,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       return indexTarball'
 
     -- Should probably look more like an Apache index page (Name / Last modified / Size / Content-type)
-    basicPackagePage :: DynamicPath -> ServerPart Response
-    basicPackagePage dpath = runServerPartE $ do
+    basicPackagePage :: DynamicPath -> ServerPartE Response
+    basicPackagePage dpath = do
       pkgs <- packageInPath dpath >>= lookupPackageName . pkgName
       return $ toResponse $ Resource.XHtml $
         showAllP $ sortBy (flip $ comparing packageVersion) pkgs
@@ -343,7 +343,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     ------------------------------------------------------------------------
 
-    servePackagesIndex :: DynamicPath -> ServerPart Response
+    servePackagesIndex :: DynamicPath -> ServerPartE Response
     servePackagesIndex _ = do
       indexTarball <- readAsyncCache cacheIndexTarball
       return $ toResponse (Resource.IndexTarball indexTarball)

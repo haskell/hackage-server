@@ -160,8 +160,7 @@ distroFeature UserFeature{..}
 
     -- result: ok repsonse or not-found error
     distroPackageListPut dpath =
-      withDistroPath dpath $ \dname _pkgs ->
-        runServerPartE $ do
+      withDistroPath dpath $ \dname _pkgs -> do
         -- FIXME: authenticate distro maintainer
         lookCSVFile $ \csv ->
             case csvToPackageList csv of
@@ -170,10 +169,10 @@ distroFeature UserFeature{..}
                     void $ updateState distrosState $ PutDistroPackageList dname list
                     ok $ toResponse "Ok!"
 
-    withDistroNamePath :: DynamicPath -> (DistroName -> ServerPart Response) -> ServerPart Response
+    withDistroNamePath :: DynamicPath -> (DistroName -> ServerPartE Response) -> ServerPartE Response
     withDistroNamePath dpath = require (return $ simpleParse =<< lookup "distro" dpath)
 
-    withDistroPath :: DynamicPath -> (DistroName -> [(PackageName, DistroPackageInfo)] -> ServerPart Response) -> ServerPart Response
+    withDistroPath :: DynamicPath -> (DistroName -> [(PackageName, DistroPackageInfo)] -> ServerPartE Response) -> ServerPartE Response
     withDistroPath dpath func = withDistroNamePath dpath $ \dname -> do
         isDist <- queryState distrosState (IsDistribution dname)
         case isDist of
@@ -183,7 +182,7 @@ distroFeature UserFeature{..}
             func dname pkgs
 
     -- guards on the distro existing, but not the package
-    withDistroPackagePath :: DynamicPath -> (DistroName -> PackageName -> Maybe DistroPackageInfo -> ServerPart Response) -> ServerPart Response
+    withDistroPackagePath :: DynamicPath -> (DistroName -> PackageName -> Maybe DistroPackageInfo -> ServerPartE Response) -> ServerPartE Response
     withDistroPackagePath dpath func =
       withDistroNamePath dpath $ \dname -> do
         pkgname <- packageInPath dpath
@@ -194,7 +193,7 @@ distroFeature UserFeature{..}
             pkgInfo <- queryState distrosState (DistroPackageStatus dname pkgname)
             func dname pkgname pkgInfo
 
-    lookPackageInfo :: (DistroPackageInfo -> ServerPart Response) -> ServerPart Response
+    lookPackageInfo :: (DistroPackageInfo -> ServerPartE Response) -> ServerPartE Response
     lookPackageInfo func = do
         mInfo <- getDataFn $ do
             pVerStr <- look "version"
@@ -206,7 +205,7 @@ distroFeature UserFeature{..}
             (Left errs) -> ok $ toResponse $ unlines $ "Sorry, something went wrong there." : errs
             (Right pInfo) -> func pInfo
 
-    lookDistroName :: (DistroName -> ServerPart Response) -> ServerPart Response
+    lookDistroName :: (DistroName -> ServerPartE Response) -> ServerPartE Response
     lookDistroName func = withDataFn (look "distro") $ \dname -> case simpleParse dname of
         Just distro -> func distro
         _ -> badRequest $ toResponse "Not a valid distro name"

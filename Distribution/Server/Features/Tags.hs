@@ -61,7 +61,7 @@ data TagsFeature = TagsFeature {
     -- initial import.
     setCalculatedTag :: Tag -> Set PackageName -> IO (),
 
-    withTagPath :: forall a. DynamicPath -> (Tag -> Set PackageName -> ServerPart a) -> ServerPart a,
+    withTagPath :: forall a. DynamicPath -> (Tag -> Set PackageName -> ServerPartE a) -> ServerPartE a,
     collectTags :: forall m. MonadIO m => Set PackageName -> m (Map PackageName (Set Tag)),
     putTags     :: PackageName -> ServerPartE ()
 
@@ -175,7 +175,7 @@ tagsFeature CoreFeature{ queryGetPackageIndex
       void $ updateState tagsState $ SetTagPackages tag pkgs
       runHook'' tagsUpdated pkgs (Set.singleton tag)
 
-    withTagPath :: DynamicPath -> (Tag -> Set PackageName -> ServerPart a) -> ServerPart a
+    withTagPath :: DynamicPath -> (Tag -> Set PackageName -> ServerPartE a) -> ServerPartE a
     withTagPath dpath func = case simpleParse =<< lookup "tag" dpath of
         Nothing -> mzero
         Just tag -> do

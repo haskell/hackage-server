@@ -163,8 +163,8 @@ mirrorFeature ServerEnv{serverBlobStore = store}
     --      -H "Content-Type: application/x-gzip" \
     --      --data-binary @$1 \
     --      http://localhost:8080/package/$PACKAGENAME/$PACKAGEID.tar.gz
-    tarballPut :: DynamicPath -> ServerPart Response
-    tarballPut dpath = runServerPartE $ do
+    tarballPut :: DynamicPath -> ServerPartE Response
+    tarballPut dpath = do
         uid         <- guardAuthorised [InGroup mirrorGroup]
         pkgid       <- packageTarballInPath dpath
         fileContent <- expectCompressedTarball
@@ -198,13 +198,13 @@ mirrorFeature ServerEnv{serverBlobStore = store}
                 return . toResponse $ unlines warnings
 
 
-    uploaderGet dpath = runServerPartE $ do
+    uploaderGet dpath = do
       pkg    <- packageInPath dpath >>= lookupPackageId
       userdb <- queryGetUserDb
       return $ toResponse $ display (userIdToName userdb (pkgUploadUser pkg))
 
-    uploaderPut :: DynamicPath -> ServerPart Response
-    uploaderPut dpath = runServerPartE $ do
+    uploaderPut :: DynamicPath -> ServerPartE Response
+    uploaderPut dpath = do
         guardAuthorised_ [InGroup mirrorGroup]
         pkgid <- packageInPath dpath
         nameContent <- expectTextPlain
@@ -214,14 +214,14 @@ mirrorFeature ServerEnv{serverBlobStore = store}
         maybe (return ()) (\err -> errNotFound err []) mb_err
         return $ toResponse "Updated uploader OK"
 
-    uploadTimeGet :: DynamicPath -> ServerPart Response
-    uploadTimeGet dpath = runServerPartE $ do
+    uploadTimeGet :: DynamicPath -> ServerPartE Response
+    uploadTimeGet dpath = do
       pkg <- packageInPath dpath >>= lookupPackageId
       return $ toResponse $ formatTime defaultTimeLocale "%c" (pkgUploadTime pkg)
 
     -- curl -H 'Content-Type: text/plain' -u admin:admin -X PUT -d "Tue Oct 18 20:54:28 UTC 2010" http://localhost:8080/package/edit-distance-0.2.1/upload-time
-    uploadTimePut :: DynamicPath -> ServerPart Response
-    uploadTimePut dpath = runServerPartE $ do
+    uploadTimePut :: DynamicPath -> ServerPartE Response
+    uploadTimePut dpath = do
         guardAuthorised_ [InGroup mirrorGroup]
         pkgid <- packageInPath dpath
         timeContent <- expectTextPlain
@@ -233,8 +233,8 @@ mirrorFeature ServerEnv{serverBlobStore = store}
             return $ toResponse "Updated upload time OK"
 
     -- return: error from parsing, bad request error, or warning lines
-    cabalPut :: DynamicPath -> ServerPart Response
-    cabalPut dpath = runServerPartE $ do
+    cabalPut :: DynamicPath -> ServerPartE Response
+    cabalPut dpath = do
         uid <- guardAuthorised [InGroup mirrorGroup]
         pkgid :: PackageId <- packageInPath dpath
         fileContent <- expectTextPlain

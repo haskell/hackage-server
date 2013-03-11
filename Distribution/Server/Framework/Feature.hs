@@ -21,7 +21,7 @@ module Distribution.Server.Framework.Feature
   ) where
 
 import Distribution.Server.Framework.BackupRestore (RestoreBackup(..), AbstractRestoreBackup(..), BackupEntry, abstractRestoreBackup)
-import Distribution.Server.Framework.Resource      (Resource)
+import Distribution.Server.Framework.Resource      (Resource, ServerErrorResponse)
 import Distribution.Server.Framework.BlobStorage   (BlobStorage)
 import Distribution.Server.Framework.MemSize
 
@@ -38,13 +38,11 @@ import Data.Acid.Advanced
 -- Features can hold their own canonical state and caches, and can provide a
 -- set of resources.
 --
--- Features that hold canonical state must support dump/restore by defining
--- 'featureDumpRestore' appropriately.
---
 data HackageFeature = HackageFeature {
     featureName        :: String
   , featureDesc        :: String
   , featureResources   :: [Resource]
+  , featureErrHandlers :: [(String, ServerErrorResponse)]
 
   , featurePostInit    :: IO ()
 
@@ -65,6 +63,7 @@ emptyHackageFeature name = HackageFeature {
     featureName      = name,
     featureDesc      = "",
     featureResources = [],
+    featureErrHandlers= [],
 
     featurePostInit  = return (),
 

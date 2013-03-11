@@ -301,8 +301,8 @@ userDetailsFeature userDetailsState UserFeature{..} CoreFeature{..}
     -- Request handlers
     --
 
-    handlerGetUserNameContact :: DynamicPath -> ServerPart Response
-    handlerGetUserNameContact dpath = runServerPartE $ do
+    handlerGetUserNameContact :: DynamicPath -> ServerPartE Response
+    handlerGetUserNameContact dpath = do
         uid <- lookupUserName =<< userNameInPath dpath
         guardAuthorised_ [IsUserId uid, InGroup adminGroup]
         udetails <- queryUserDetails uid
@@ -315,23 +315,23 @@ userDetailsFeature userDetailsState UserFeature{..} CoreFeature{..}
               ui_contactEmailAddress = accountContactEmail
             }
 
-    handlerPutUserNameContact :: DynamicPath -> ServerPart Response
-    handlerPutUserNameContact dpath = runServerPartE $ do
+    handlerPutUserNameContact :: DynamicPath -> ServerPartE Response
+    handlerPutUserNameContact dpath = do
         uid <- lookupUserName =<< userNameInPath dpath
         guardAuthorised_ [IsUserId uid, InGroup adminGroup]
         NameAndContact name email <- expectAesonContent
         updateState userDetailsState (SetUserNameContact uid name email)
         noContent $ toResponse ()
 
-    handlerDeleteUserNameContact :: DynamicPath -> ServerPart Response
-    handlerDeleteUserNameContact dpath = runServerPartE $ do
+    handlerDeleteUserNameContact :: DynamicPath -> ServerPartE Response
+    handlerDeleteUserNameContact dpath = do
         uid <- lookupUserName =<< userNameInPath dpath
         guardAuthorised_ [IsUserId uid, InGroup adminGroup]
         updateState userDetailsState (SetUserNameContact uid T.empty T.empty)
         noContent $ toResponse ()
 
-    handlerGetAdminInfo :: DynamicPath -> ServerPart Response
-    handlerGetAdminInfo dpath = runServerPartE $ do
+    handlerGetAdminInfo :: DynamicPath -> ServerPartE Response
+    handlerGetAdminInfo dpath = do
         guardAuthorised_ [InGroup adminGroup]
         uid <- lookupUserName =<< userNameInPath dpath
         udetails <- queryUserDetails uid
@@ -344,16 +344,16 @@ userDetailsFeature userDetailsState UserFeature{..} CoreFeature{..}
               ui_notes       = accountAdminNotes
             }
 
-    handlerPutAdminInfo :: DynamicPath -> ServerPart Response
-    handlerPutAdminInfo dpath = runServerPartE $ do
+    handlerPutAdminInfo :: DynamicPath -> ServerPartE Response
+    handlerPutAdminInfo dpath = do
         guardAuthorised_ [InGroup adminGroup]
         uid <- lookupUserName =<< userNameInPath dpath
         AdminInfo akind notes <- expectAesonContent
         updateState userDetailsState (SetUserAdminInfo uid akind notes)
         noContent $ toResponse ()
 
-    handlerDeleteAdminInfo :: DynamicPath -> ServerPart Response
-    handlerDeleteAdminInfo dpath = runServerPartE $ do
+    handlerDeleteAdminInfo :: DynamicPath -> ServerPartE Response
+    handlerDeleteAdminInfo dpath = do
         guardAuthorised_ [InGroup adminGroup]
         uid <- lookupUserName =<< userNameInPath dpath
         updateState userDetailsState (SetUserAdminInfo uid Nothing T.empty)

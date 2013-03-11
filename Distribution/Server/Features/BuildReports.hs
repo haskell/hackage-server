@@ -127,13 +127,13 @@ buildReportsFeature name
           , reportsLogUri  = \pkgid repid -> renderResource (reportsLog reportsResource) [display pkgid, display repid]
           }
 
-    textPackageReports dpath = runServerPartE $ do
+    textPackageReports dpath = do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       reportList <- queryState reportsState $ LookupPackageReports pkgid
       return . toResponse $ show reportList
 
-    textPackageReport dpath = runServerPartE $ do
+    textPackageReport dpath = do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       (reportId, report, mlog) <- packageReport dpath pkgid
@@ -141,8 +141,8 @@ buildReportsFeature name
                                     , maybe "No build log" (const "Build log exists") mlog]
 
     -- result: not-found error or text file
-    serveBuildLog :: DynamicPath -> ServerPart Response
-    serveBuildLog dpath = runServerPartE $ do
+    serveBuildLog :: DynamicPath -> ServerPartE Response
+    serveBuildLog dpath = do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       (repid, _, mlog) <- packageReport dpath pkgid
@@ -153,8 +153,8 @@ buildReportsFeature name
             return . toResponse $ Resource.BuildLog file
 
     -- result: auth error, not-found error, parse error, or redirect
-    submitBuildReport :: DynamicPath -> ServerPart Response
-    submitBuildReport dpath = runServerPartE $ do
+    submitBuildReport :: DynamicPath -> ServerPartE Response
+    submitBuildReport dpath = do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       guardAuthorised_ [AnyKnownUser] -- allow any logged-in user
@@ -177,8 +177,8 @@ buildReportsFeature name
     -}
 
     -- result: auth error, not-found error or redirect
-    deleteBuildReport :: DynamicPath -> ServerPart Response
-    deleteBuildReport dpath = runServerPartE $ do
+    deleteBuildReport :: DynamicPath -> ServerPartE Response
+    deleteBuildReport dpath = do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       reportId <- reportIdInPath dpath
@@ -189,8 +189,8 @@ buildReportsFeature name
           else errNotFound "Build report not found" [MText $ "Build report #" ++ display reportId ++ " not found"]
 
     -- result: auth error, not-found error, or redirect
-    putBuildLog :: DynamicPath -> ServerPart Response
-    putBuildLog dpath = runServerPartE $ do
+    putBuildLog :: DynamicPath -> ServerPartE Response
+    putBuildLog dpath = do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       reportId <- reportIdInPath dpath
@@ -213,8 +213,8 @@ buildReportsFeature name
     -}
 
     -- result: auth error, not-found error or redirect
-    deleteBuildLog :: DynamicPath -> ServerPart Response
-    deleteBuildLog dpath = runServerPartE $ do
+    deleteBuildLog :: DynamicPath -> ServerPartE Response
+    deleteBuildLog dpath = do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       reportId <- reportIdInPath dpath

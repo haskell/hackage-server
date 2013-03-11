@@ -312,8 +312,8 @@ userFeature  usersState adminsState
       let isenabled = maybe False (const True) enabled
       void $ updateState usersState (SetUserEnabledStatus uid isenabled)
 
-    handleUserPut :: DynamicPath -> ServerPart Response
-    handleUserPut dpath = runServerPartE $ do
+    handleUserPut :: DynamicPath -> ServerPartE Response
+    handleUserPut dpath = do
       _        <- guardAuthorised [InGroup adminGroup]
       username <- userNameInPath dpath
       muid     <- updateState usersState $ AddUserDisabled username
@@ -323,8 +323,8 @@ userFeature  usersState adminsState
         Left  _ -> noContent $ toResponse ()
         Right _ -> noContent $ toResponse ()
 
-    handleUserDelete :: DynamicPath -> ServerPart Response
-    handleUserDelete dpath = runServerPartE $ do
+    handleUserDelete :: DynamicPath -> ServerPartE Response
+    handleUserDelete dpath = do
       _    <- guardAuthorised [InGroup adminGroup]
       uid  <- lookupUserName =<< userNameInPath dpath
       merr <- updateState usersState $ DeleteUser uid
@@ -557,7 +557,7 @@ userFeature  usersState adminsState
               }
         return (getGroupFunc, groupr)
 
-    handleUserGroupGet group _dpath = runServerPartE $ do
+    handleUserGroupGet group _dpath = do
       guardGroupExists group
       userDb   <- queryGetUserDb
       userlist <- liftIO $ queryUserList group
@@ -573,14 +573,14 @@ userFeature  usersState adminsState
 
     --TODO: add handleUserGroupUserPost for the sake of the html frontend
     --      and then remove groupAddUser & groupDeleteUser
-    handleUserGroupUserPut group groupr dpath = runServerPartE $ do
+    handleUserGroupUserPut group groupr dpath = do
       guardGroupExists group
       guardAuthorised_ (map InGroup (canAddGroup group))
       uid <- lookupUserName =<< userNameInPath dpath
       liftIO $ addUserList group uid
       goToList groupr dpath
 
-    handleUserGroupUserDelete group groupr dpath = runServerPartE $ do
+    handleUserGroupUserDelete group groupr dpath = do
       guardGroupExists group
       guardAuthorised_ (map InGroup (canRemoveGroup group))
       uid <- lookupUserName =<< userNameInPath dpath

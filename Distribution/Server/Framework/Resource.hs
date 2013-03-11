@@ -1,4 +1,5 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, StandaloneDeriving, FlexibleContexts, FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, StandaloneDeriving,
+             FlexibleContexts, FlexibleInstances, NamedFieldPuns #-}
 
 module Distribution.Server.Framework.Resource (
     -- | Paths
@@ -29,11 +30,17 @@ module Distribution.Server.Framework.Resource (
     serverTreeEmpty,
     addServerNode,
     renderServerTree,
-    drawServerTree
+    drawServerTree,
+
+    -- | Error page serving
+    serveErrorResponse,
+    ServerErrorResponse,
   ) where
 
 import Happstack.Server
 import Distribution.Server.Util.Happstack (remainingPathString)
+import Distribution.Server.Util.ContentType (parseContentAccept)
+import Distribution.Server.Framework.Error
 
 import Data.Monoid
 import Data.Map (Map)
@@ -41,18 +48,20 @@ import qualified Data.Map as Map
 import Control.Monad
 import Data.Maybe
 import Data.Function (on)
-import Data.List (intercalate, unionBy, findIndices)
+import Data.List (intercalate, unionBy, findIndices, find)
 import qualified Text.ParserCombinators.Parsec as Parse
 
 import qualified Happstack.Server.SURI as SURI
 import System.FilePath.Posix ((</>))
 import qualified Data.Tree as Tree (Tree(..), drawTree)
+import qualified Data.ByteString.Char8 as BS
 
 type Content = String
 
 type DynamicPath = [(String, String)]
 
-type ServerResponse = DynamicPath -> ServerPart Response
+type ServerResponse = DynamicPath -> ServerPartE Response
+type ServerErrorResponse = ErrorResponse -> ServerPartE Response
 
 -- | A resource is an object that handles requests at a given URI. Best practice
 -- is to construct it by calling resourceAt and then setting the method fields
@@ -368,8 +377,8 @@ parseFormatTrunkAt = do
 -- For a small curl-based testing mini-suite of [Resource]:
 -- [res "/foo" ["json"], res "/foo/:bar.:format" ["html", "json"], res "/baz/test/.:format" ["html", "text", "json"], res "/package/:package/:tarball.tar.gz" ["tarball"], res "/a/:a/:b/" ["html", "json"], res "/mon/..." [""], res "/wiki/path.:format" [], res "/hi.:format" ["yaml", "blah"]]
 --     where res field formats = (resourceAt field) { resourceGet = map (\format -> (format, \_ -> return . toResponse . (++"\n") . ((show format++" - ")++) . show)) formats }
-serveResource :: Resource -> ServerResponse
-serveResource (Resource _ rget rput rpost rdelete rformat rend _) = \dpath -> msum $
+serveResource :: [(Content, ServerErrorResponse)] -> Resource -> ServerResponse
+serveResource errRes (Resource _ rget rput rpost rdelete rformat rend _) = \dpath -> msum $
     map (\func -> func dpath) $ methodPart ++ [optionPart]
   where
     optionPart = makeOptions $ concat [ met | ((_:_), met) <- zip methods methodsList]
@@ -444,11 +453,16 @@ serveResource (Resource _ rget rput rpost rdelete rformat rend _) = \dpath -> ms
           case lookup "format" dpath of
             Just format@(_:_) -> case lookup format res of
                                -- return a specific format if it is found
-                Just answer -> answer dpath
+                Just answer -> handleErrors (Just format) $ answer dpath
                 Nothing -> mzero -- return 404 if the specific format is not found
                   -- return default response when format is empty or non-existent
-            _ -> (snd $ head res) dpath
-    redirCanonicalSlash :: DynamicPath -> ServerPart Response -> ServerPart Response
+            _ -> do (format,answer) <- negotiateContent (head res) res
+                    handleErrors (Just format) $ answer dpath
+
+    handleErrors format =
+      handleErrorResponse (serveErrorResponse errRes format)
+
+    redirCanonicalSlash :: DynamicPath -> ServerPartE Response -> ServerPartE Response
     redirCanonicalSlash dpath trueRes = case rformat of
         ResourceFormat format Nothing | format /= NoFormat -> case lookup "format" dpath of
             Just {} -> requireNoSlash `mplus` trueRes
@@ -481,6 +495,40 @@ resourceMethods (Resource _ rget rput rpost rdelete _ _ _) = [ met | ((_:_), met
   where methods = [rget, rput, rpost, rdelete]
         methodsList = [GET, PUT, POST, DELETE]
 
+serveErrorResponse :: [(Content, ServerErrorResponse)] -> Maybe Content -> ServerErrorResponse
+serveErrorResponse errRes mformat err = do
+    -- So our strategy is to give priority to a content type requested by
+    -- the client, then secondly any format implied by the requested url
+    -- e.g. requesting a .html file, or html being default for the resource
+    -- and finally just fall through to using text/plain
+    (_, errHandler) <- negotiateContent ("", defHandler) errRes
+    errHandler err
+  where
+    defHandler = fromMaybe throwError $ do
+      format <- mformat
+      lookup format errRes
+
+negotiateContent :: ServerMonad m => (Content, a) -> [(Content, a)] -> m (Content, a)
+negotiateContent def available = do
+    maccept <- getHeaderM "Accept"
+    case maccept of
+      Nothing -> return def
+      Just accept ->
+        return $ fromMaybe def $ listToMaybe $ catMaybes
+                   [ simpleContentTypeMapping ct
+                       >>= \f -> find (\x -> fst x == f) available
+                   | let acceptable = parseContentAccept (BS.unpack accept)
+                   , ct <- acceptable ]
+  where
+    -- This is rather a non-extensible hack
+    simpleContentTypeMapping ContentType {ctType, ctSubtype, ctParameters = []} =
+      case (ctType, ctSubtype) of
+        ("text",        "html")  -> Just "html"
+        ("text",        "plain") -> Just "txt"
+        ("application", "json")  -> Just "json"
+        _                        -> Nothing
+    simpleContentTypeMapping _    = Nothing
+
 ----------------------------------------------------------------------------
 
 data ServerTree a = ServerTree {
@@ -502,12 +550,12 @@ serverTreeEmpty = ServerTree Nothing Map.empty
 
 -- essentially a ReaderT DynamicPath ServerPart Response
 -- this always renders parent URIs, but usually we guard against remaining path segments, so it's fine
-renderServerTree :: DynamicPath -> ServerTree ServerResponse -> ServerPart Response
+renderServerTree :: DynamicPath -> ServerTree ServerResponse -> ServerPartE Response
 renderServerTree dpath (ServerTree func forest) =
     msum $ maybeToList (fmap (\fun -> fun dpath) func)
         ++ map (uncurry renderBranch) (Map.toList forest)
   where
-    renderBranch :: BranchComponent -> ServerTree ServerResponse -> ServerPart Response
+    renderBranch :: BranchComponent -> ServerTree ServerResponse -> ServerPartE Response
     renderBranch (StaticBranch  sdir) tree = dir sdir $ renderServerTree dpath tree
     renderBranch (DynamicBranch sdir) tree = path $ \pname -> renderServerTree ((sdir, pname):dpath) tree
     renderBranch TrailingBranch tree = renderServerTree dpath tree

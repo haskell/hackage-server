@@ -37,7 +37,7 @@ legacyRedirectsFeature upload = (emptyHackageFeature "legacy") {
 --
 -- "check" no longer exists; it's now "candidates", and probably
 -- provides too different functionality to redirect
-serveLegacyPosts :: UploadFeature -> ServerPart Response
+serveLegacyPosts :: UploadFeature -> ServerPartE Response
 serveLegacyPosts upload = msum
   [ dir "packages" $ msum
       [ dir "upload" $ movedUpload
@@ -52,15 +52,15 @@ serveLegacyPosts upload = msum
   where
 
     -- We assume we don't need to serve a fancy HTML response
-    movedUpload :: ServerPart Response
+    movedUpload :: ServerPartE Response
     movedUpload = nullDir >> do
-      upResult <- runServerPartE (uploadPackage upload)
+      upResult <- uploadPackage upload
       ok $ toResponse $ unlines $ uploadWarnings upResult
 
 
 
 -- | GETs, both for cabal-install to use, and for links scattered throughout the web.
-serveLegacyGets :: ServerPart Response
+serveLegacyGets :: ServerPartE Response
 serveLegacyGets = msum
   [ simpleMove "00-index.tar.gz" "/packages/index.tar.gz"
   , dir "packages" $ msum
@@ -104,7 +104,7 @@ volToVersion :: VersionOrLatest -> Version
 volToVersion Latest = Version [] []
 volToVersion (V v)  = v
 
-serveArchiveTree :: ServerPart Response
+serveArchiveTree :: ServerPartE Response
 serveArchiveTree = msum
   [ dir "pkg-list.html" $ method GET >> nullDir >> movedPermanently "/packages/" (toResponse "")
   , dir "package" $ path $ \fileName -> method GET >> nullDir >>

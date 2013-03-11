@@ -44,9 +44,10 @@ import System.Directory (createDirectoryIfMissing, doesDirectoryExist)
 import Control.Concurrent
 import Network.URI (URIAuth(URIAuth))
 import Network.BSD (getHostName)
-import Data.List (foldl')
+import Data.List (foldl', nubBy)
 import Data.Int  (Int64)
 import Control.Arrow (second)
+import Data.Function (on)
 import qualified System.Log.Logger as HsLogger
 
 import Paths_hackage_server (getDataDir)
@@ -254,17 +255,34 @@ initState server (admin, pass) = do
 -- them into a path hierarchy, and serves them.
 impl :: Server -> ServerPart Response
 impl server =
-    renderServerTree [] serverTree
+    runServerPartE $
+      handleErrorResponse (serveErrorResponse errHandlers Nothing) $
+        renderServerTree [] serverTree
+          `mplus`
+        fallbackNotFound
   where
-    serverTree :: ServerTree (DynamicPath -> ServerPart Response)
+    serverTree :: ServerTree (DynamicPath -> ServerPartE Response)
     serverTree =
-        fmap serveResource
+        fmap (serveResource errHandlers)
       -- ServerTree Resource
       . foldl' (\acc res -> addServerNode (resourceLocation res) res acc) serverTreeEmpty
       -- [Resource]
       $ concatMap Feature.featureResources (serverFeatures server)
 
-    --showServerTree tree = trace (drawServerTree tree (Just $ show . resourceMethods)) tree
+    errHandlers = nubBy ((==) `on` fst)
+                . reverse
+                . (("txt", textErrorPage):)
+                . concatMap Feature.featureErrHandlers
+                $ serverFeatures server
+
+    textErrorPage (ErrorResponse errCode errTitle message) =
+      let formattedMessage = errTitle ++ ": " ++ messageToText message ++ "\n"
+       in resp errCode $ toResponse formattedMessage
+
+    fallbackNotFound =
+      errNotFound "Page not found"
+        [MText "Sorry, it's just not here."]
+
 
 data TempServer = TempServer ThreadId
 
