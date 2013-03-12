@@ -50,7 +50,6 @@ import qualified Data.Map as Map
 import Data.Ord (comparing)
 import System.FilePath ((</>), takeDirectory, splitDirectories)
 import System.Directory (doesFileExist, doesDirectoryExist)
-import System.Posix.Files as Posix (createLink)
 import Text.CSV hiding (csv)
 import Distribution.Text
 import Data.Map (Map)
@@ -302,7 +301,11 @@ data ImportState = ImportState {
     -- from the blob dir when adding them into the blob store. You might want
     -- to do this is to reduce the amount of disk I\/O, but you obviously have
     -- to be rather careful with it.
-    importConsumeBlobs :: Bool
+    importConsumeBlobs :: Bool,
+
+    -- | We often read the same blob more than once, so this caches
+    -- the blobs we've written as a map from blobid-string to blobid.
+    importBlobsWritten :: Map String BlobId
   }
 
 initialImportState :: BlobStorage -> FilePath -> Bool
@@ -312,13 +315,24 @@ initialImportState store blobdir consumeBlobs featureBackups = ImportState {
     importStates    = Map.fromList featureBackups,
     importBlobStore = store,
     importBlobDir   = blobdir,
-    importConsumeBlobs = consumeBlobs
+    importConsumeBlobs = consumeBlobs,
+    importBlobsWritten = Map.empty
   }
 
 updateImportState :: String -> AbstractRestoreBackup -> Import ()
 updateImportState feature !backup = do
   st <- get
   put $! st { importStates = Map.insert feature backup (importStates st) }
+
+lookupBlobWritten :: String -> Import (Maybe BlobId)
+lookupBlobWritten blobidstr = gets (Map.lookup blobidstr . importBlobsWritten)
+
+addBlobsWritten :: String -> BlobId -> Import ()
+addBlobsWritten blobidstr !blobid = do
+  st <- get
+  put $! st {
+    importBlobsWritten = Map.insert blobidstr blobid (importBlobsWritten st)
+  }
 
 
 fromEntries :: Tar.Entries Tar.FormatError -> Import ()
@@ -338,33 +352,44 @@ fromFile :: FilePath -> ByteString -> Import ()
 fromFile path contents = fromBackupEntry path (`BackupByteString` contents)
 
 fromLink :: FilePath -> FilePath -> Import ()
-fromLink path linkTarget =
+fromLink path linkTarget
   -- links have format "../../../blobs/${blobId}" (for some number of "../"s)
-  case reverse (splitDirectories linkTarget) of
-    (blobIdStr : "blobs" : _) -> do
+  | (blobIdStr : "blobs" : _) <- reverse (splitDirectories linkTarget) = do
       blobdir <- gets importBlobDir
-      store   <- gets importBlobStore
       let blobFile = blobdir </> blobIdStr
+      blobId <- checkBlobWrittenCache blobIdStr
+                  (checkBlobFileExists blobFile >> importBlobFile blobFile)
+      checkBlobIdAsExpected blobId blobIdStr blobFile
+      fromBackupEntry path (`BackupBlob` blobId)
 
-      exists  <- liftIO $ doesFileExist blobFile
+  | otherwise = fail $ "Unexpected tar link entry: " ++ path
+                                           ++ " -> " ++ linkTarget
+  where
+    checkBlobWrittenCache blobIdStr getBlobId = do
+      mblobId <- lookupBlobWritten blobIdStr
+      case mblobId of
+        Just blobId -> return blobId
+        Nothing     -> do
+          blobId <- getBlobId
+          addBlobsWritten blobIdStr blobId
+          return blobId
+
+    importBlobFile blobFile = do
+      store        <- gets importBlobStore
+      consumeBlobs <- gets importConsumeBlobs
+      if consumeBlobs
+        then liftIO $ Blob.consumeFile store blobFile
+        else liftIO $ Blob.add store =<< BS.readFile blobFile
+
+    checkBlobFileExists blobFile = do
+      exists <- liftIO $ doesFileExist blobFile
       when (not exists) $ fail $ "Missing blob file " ++ blobFile
-                              ++ "\nneeded by backup entry " ++ path
+                       ++ "\nneeded by backup entry " ++ path
 
-      blobId <- do
-        consumeBlobs <- gets importConsumeBlobs
-        if consumeBlobs
-          then liftIO $ do blobid <- Blob.consumeFile store blobFile
-                           Posix.createLink (Blob.filepath store blobid) blobFile
-                           return blobid
-          else liftIO $ Blob.add store =<< BS.readFile blobFile
-
+    checkBlobIdAsExpected blobId blobIdStr blobFile =
       when (Blob.blobMd5 blobId /= blobIdStr) $
         fail $ "Incorrect blob file " ++ blobFile
             ++ "\nit actually has an md5sum of " ++ Blob.blobMd5 blobId
-
-      fromBackupEntry path (`BackupBlob` blobId)
-
-    _ -> fail $ "Unexpected tar link entry: " ++ path ++ " -> " ++ linkTarget
 
 
 fromBackupEntry :: FilePath -> ([FilePath] -> BackupEntry) -> Import ()
