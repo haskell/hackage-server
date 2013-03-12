@@ -5,6 +5,7 @@ module Distribution.Server.Features.LegacyPasswds (
   ) where
 
 import Distribution.Server.Framework
+import Distribution.Server.Framework.Templating
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
 
@@ -29,7 +30,7 @@ import Control.Monad.State (get, put)
 import Distribution.Text (display)
 import Data.Version
 import Text.CSV (CSV, Record)
-
+import Network.URI (URI(..), nullURI, uriToString)
 
 
 -- | A feature to help porting accounts from the old central
@@ -163,19 +164,26 @@ legacyPasswdsToCSV (LegacyPasswdsTable tbl)
 --
 
 initLegacyPasswdsFeature :: ServerEnv -> UserFeature -> IO LegacyPasswdsFeature
-initLegacyPasswdsFeature ServerEnv{serverStateDir} users = do
+initLegacyPasswdsFeature env@ServerEnv{serverStateDir, serverTemplatesDir} users = do
 
   -- Canonical state
   legacyPasswdsState <- legacyPasswdsStateComponent serverStateDir
 
-  let feature = legacyPasswdsFeature legacyPasswdsState users
+  -- Page templates
+  templates <- loadTemplates NormalMode {- use DesignMode when working on templates -}
+                 [serverTemplatesDir, serverTemplatesDir </> "LegacyPasswds"]
+                 ["htpasswd-upgrade.html", "htpasswd-upgrade-success.html"]
+
+  let feature = legacyPasswdsFeature env legacyPasswdsState templates users
 
   return feature
 
-legacyPasswdsFeature :: StateComponent LegacyPasswdsTable
+legacyPasswdsFeature :: ServerEnv
+                     -> StateComponent LegacyPasswdsTable
+                     -> Templates
                      -> UserFeature
                      -> LegacyPasswdsFeature
-legacyPasswdsFeature legacyPasswdsState UserFeature{..}
+legacyPasswdsFeature env legacyPasswdsState templates UserFeature{..}
   = LegacyPasswdsFeature {..}
 
   where
@@ -196,12 +204,18 @@ legacyPasswdsFeature legacyPasswdsState UserFeature{..}
           }
 
     htpasswordUpgradeResource = (resourceAt "/users/htpasswd-upgrade") {
-            resourceDesc = [ (POST, "Upgrade a user account with a legacy password") ],
+            resourceDesc = [ (GET, "Upgrade a user account with a legacy password") ],
+            resourceGet  = [ ("html", handleUserAuthUpgradeGet) ],
             resourcePost = [ ("", handleUserAuthUpgradePost) ]
           }
 
     -- Request handlers
     --
+
+    handleUserAuthUpgradeGet :: DynamicPath -> ServerPartE Response
+    handleUserAuthUpgradeGet _ = do
+        template <- getTemplate templates "htpasswd-upgrade.html"
+        ok $ toResponse $ template []
 
     queryLegacyPasswds :: MonadIO m => m LegacyPasswdsTable
     queryLegacyPasswds = queryState legacyPasswdsState GetLegacyPasswdsTable
@@ -237,8 +251,8 @@ legacyPasswdsFeature legacyPasswdsState UserFeature{..}
         updateSetUserAuth uid auth
         updateSetUserEnabledStatus uid True
         updateState legacyPasswdsState (DeleteUserLegacyPasswd uid)
-        --TODO: return success result page?
-        seeOther ("/user/" ++ display (userName uinfo)) (toResponse ())
+        template <- getTemplate templates "htpasswd-upgrade-success.html"
+        ok $ toResponse $ template []
       where
         errHasAuth = errForbidden "Cannot set new password"
           [MText $ "The account is not in a state where upgrading the "
@@ -264,8 +278,17 @@ legacyPasswdsFeature legacyPasswdsState UserFeature{..}
           Nothing -> return Nothing
           Just _  -> return (Just err)
       where
-        err = ErrorResponse 401 [] "Username or password incorrect" [MText msg]
-        msg = "Note: for users who had accounts on the old system, Hackage has been upgraded to use a more secure login system. "
-           ++ "Please go to /account-upgrade.html to re-enable your account and for more details about this change."
+        err = ErrorResponse 401 [] "Account needs to be re-enabled" msg
+        msg = [ MText $ "Hackage has been upgraded to use a more secure login "
+                     ++ "system. Please go to "
+              , MLink uri uri
+              , MText $ " to re-enable your account and for more details about "
+                     ++ "this change." ]
+        uri = uriToString id (nullURI {
+                uriScheme    = "http:",
+                uriAuthority = Just (serverHostURI env),
+                uriPath      = renderResource htpasswordUpgradeResource []
+              }) ""
+
     onAuthFail _ = return Nothing
 

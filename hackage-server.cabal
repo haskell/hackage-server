@@ -25,6 +25,7 @@ data-files:
   templates/*.st
   templates/*.html.st
   templates/UserSignupReset/*.st
+  templates/LegacyPasswds/*.st
 
   static/*.css
   static/*.ico

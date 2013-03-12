@@ -2,31 +2,16 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: User accounts</title>
+<title>Hackage: Account upgrade successful</title>
 </head>
 
 <body>
 $hackagePageHeader()$
 
 <div id="content">
-<h2>Users moving from the old Hackage</h2>
-<p>This new Hackage implementation uses a somewhat more secure system
-for logging in. Because of this change, users who had accounts on the
-old system need to do a one-time upgrade step.
+<h2>Account upgrade successful</h2>
+<p>Your account has been re-enabled.
 </p>
-
-<form class="box" action="/users/htpasswd-upgrade" method="post" enctype="multipart/form-data">
-<p>You will be prompted to enter your existing username and password.
-Your account will be re-enabled and you will then be able to use the
-new site normally.
-</p>
-<input type="submit" value="Upgrade account">
-</form>
-
-<p><small>Note that if the upgrade is successful then the old auth
-information will be deleted and trying to upgrade again will fail.
-</small></p>
-
 
 <h3>Technical details for the curious</h3>
 

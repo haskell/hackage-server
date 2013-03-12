@@ -36,6 +36,7 @@ import Control.Monad (when)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.List
 import Data.Maybe (isJust)
+import System.FilePath ((<.>))
 
 
 type RawTemplate = StringTemplate Builder
@@ -122,7 +123,7 @@ checkTemplates templateGroup templateDirs expectedTemplates = do
                              , isJust es || {-isJust ma ||-} isJust mt ]
 
     when (not (null missing)) $
-      fail $ "Missing template files: " ++ intercalate ", " missing
+      fail $ "Missing template files: " ++ intercalate ", " (map (<.> "st") missing)
          ++ ". Search path was: " ++ intercalate " " templateDirs
 
     when (not (null problems)) $
