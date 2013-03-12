@@ -36,6 +36,8 @@ module Distribution.Server.Framework.Error (
 import Happstack.Server
 import Control.Monad.Error
 
+import qualified Data.ByteString.Lazy.Char8 as BS
+
 -- | The \"oh noes?!\" operator
 --
 (?!) :: Maybe a -> e -> Either e a
@@ -53,15 +55,28 @@ type ServerPartE a = ServerPartT (ErrorT ErrorResponse IO) a
 --
 data ErrorResponse = ErrorResponse {
     errorCode   :: Int,
+    errorHeaders:: [(String, String)],
     errorTitle  :: String,
     errorDetail :: [MessageSpan]
-}
+} deriving (Eq, Show)
+
+instance ToMessage ErrorResponse where
+  toResponse (ErrorResponse code hdrs title detail) =
+    let rspbody = title ++ ": " ++ messageToText detail ++ "\n"
+     in Response {
+          rsCode      = code,
+          rsHeaders   = mkHeaders (("Content-Type",  "text/plain") : reverse hdrs),
+          rsFlags     = nullRsFlags { rsfLength = ContentLength },
+          rsBody      = BS.pack rspbody,
+          rsValidator = Nothing
+        }
 
 -- | A message possibly including hypertext links.
 --
 -- The point is to be able to render error messages either as text or as html.
 --
 data MessageSpan = MLink String String | MText String
+  deriving (Eq, Show)
 
 -- | Format a message as simple text.
 --
@@ -74,28 +89,28 @@ messageToText (MText x  :xs) = x ++ messageToText xs
 
 -- We don't want to use these methods directly anyway.
 instance Error ErrorResponse where
-    noMsg      = ErrorResponse 500 "Internal server error" []
-    strMsg str = ErrorResponse 500 "Internal server error" [MText str]
+    noMsg      = ErrorResponse 500 [] "Internal server error" []
+    strMsg str = ErrorResponse 500 [] "Internal server error" [MText str]
 
 
 errBadRequest    :: String -> [MessageSpan] -> ServerPartE a
-errBadRequest    title message = throwError (ErrorResponse 400 title message)
+errBadRequest    title message = throwError (ErrorResponse 400 [] title message)
 
 -- note: errUnauthorized is deliberately not provided because exceptions thrown
 -- in this way bypass the FilterMonad stuff and so setHeaderM etc are ignored
 -- but setHeaderM are usually needed for responding to auth errors.
 
 errForbidden     :: String -> [MessageSpan] -> ServerPartE a
-errForbidden     title message = throwError (ErrorResponse 403 title message)
+errForbidden     title message = throwError (ErrorResponse 403 [] title message)
 
 errNotFound      :: String -> [MessageSpan] -> ServerPartE a
-errNotFound      title message = throwError (ErrorResponse 404 title message)
+errNotFound      title message = throwError (ErrorResponse 404 [] title message)
 
 errBadMediaType  :: String -> [MessageSpan] -> ServerPartE a
-errBadMediaType  title message = throwError (ErrorResponse 415 title message)
+errBadMediaType  title message = throwError (ErrorResponse 415 [] title message)
 
 errInternalError :: [MessageSpan] -> ServerPartE a
-errInternalError       message = throwError (ErrorResponse 500 title message)
+errInternalError       message = throwError (ErrorResponse 500 [] title message)
   where
     title = "Internal server error"
 
@@ -110,10 +125,7 @@ runServerPartE :: ServerPartE a -> ServerPart a
 runServerPartE = mapServerPartT' (spUnwrapErrorT fallbackHandler)
   where
     fallbackHandler :: ErrorResponse -> ServerPart a
-    fallbackHandler err = finishWith response
-      where
-        response = (toResponse message) { rsCode = errorCode err }
-        message  = errorTitle err ++ ": " ++ messageToText (errorDetail err)
+    fallbackHandler err = finishWith (toResponse err)
 
 handleErrorResponse :: (ErrorResponse -> ServerPartE Response)
                     -> ServerPartE a -> ServerPartE a

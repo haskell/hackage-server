@@ -315,7 +315,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
             if packageExists state pkg && not (uid `Group.member` pkgGroup)
               then uploadFailed "Not authorized to upload a candidate for this package"
               else return Nothing
-      where uploadFailed = return . Just . ErrorResponse 403 "Upload failed" . return . MText
+      where uploadFailed = return . Just . ErrorResponse 403 [] "Upload failed" . return . MText
 
     publishCandidate :: DynamicPath -> Bool -> ServerPartE UploadResult
     publishCandidate dpath doDelete = do
@@ -364,7 +364,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         let pkgs = PackageIndex.lookupPackageName packages (packageName candidate)
             candVersion = packageVersion candidate
         case find ((== candVersion) . packageVersion) pkgs of
-            Just {} -> Just $ ErrorResponse 403 "Publish failed" [MText "Package name and version already exist in the database"]
+            Just {} -> Just $ ErrorResponse 403 [] "Publish failed" [MText "Package name and version already exist in the database"]
             Nothing  -> Nothing
 
     ------------------------------------------------------------------------------

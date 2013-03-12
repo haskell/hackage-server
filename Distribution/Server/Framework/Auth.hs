@@ -94,7 +94,7 @@ guardAuthenticated :: RealmName -> Users.Users -> ServerPartE (UserId, UserInfo)
 guardAuthenticated realm users = do
     authres <- checkAuthenticated realm users
     case authres of
-      Left  autherr -> finishWith =<< authErrorResponse realm autherr
+      Left  autherr -> throwError =<< authErrorResponse realm autherr
       Right info    -> return info
 
 checkAuthenticated :: ServerMonad m => RealmName -> Users.Users -> m (Either AuthError (UserId, UserInfo))
@@ -189,9 +189,9 @@ getBasicAuthInfo realm authHeader
                         (username, ':' : pass) -> Just (username, pass)
                         _ -> Nothing
 
-headerBasicAuthChallenge :: RealmName -> Response -> Response
+headerBasicAuthChallenge :: RealmName -> (String, String)
 headerBasicAuthChallenge (RealmName realmName) =
-    addHeader headerName headerValue
+    (headerName, headerValue)
   where
     headerName  = "WWW-Authenticate"
     headerValue = "Basic realm=\"" ++ realmName ++ "\""
@@ -276,10 +276,10 @@ getDigestAuthInfo authHeader req = do
                (Parse.many $ (Parse.char '\\' >> Parse.get) Parse.<++ Parse.satisfy (/='"'))
               Parse.<++ (liftM2 (:) (Parse.satisfy (/='"')) (Parse.munch (/=',')))
 
-headerDigestAuthChallenge :: RealmName -> IO (Response -> Response)
+headerDigestAuthChallenge :: RealmName -> IO (String, String)
 headerDigestAuthChallenge (RealmName realmName) = do
     nonce <- liftIO generateNonce
-    return (addHeader headerName (headerValue nonce))
+    return (headerName, headerValue nonce)
   where
     headerName = "WWW-Authenticate"
     -- Note that offering both qop=\"auth,auth-int\" can confuse some browsers
@@ -322,22 +322,27 @@ data AuthError = NoAuthError
                | PasswordMismatchError UserId UserInfo
   deriving Show
 
-authErrorResponse :: MonadIO m => RealmName -> AuthError -> m Response
+authErrorResponse :: MonadIO m => RealmName -> AuthError -> m ErrorResponse
 authErrorResponse realm autherr = do
-    addDigest   <- liftIO (headerDigestAuthChallenge realm)
-    let addBasic = headerBasicAuthChallenge  realm
-        response = addDigest . addBasic . showAuthError $ autherr
-        -- The order here ensures that the digest header appears first, like:
+    digestHeader   <- liftIO (headerDigestAuthChallenge realm)
+    let basicHeader = headerBasicAuthChallenge realm
+        -- We want the digest header to appear first, like:
         -- WWW-Authenticate: Digest realm="Hackage", qop="", ... etc
         -- WWW-Authenticate: Basic realm="Hackage"
         -- We want this order because some http clients just pick the
         -- first rather than the best, and we'd prefer them to use digest.
-    return $! response
+    return $! (toErrorResponse autherr) {
+                errorHeaders = [digestHeader, basicHeader]
+              }
   where
-    showAuthError :: AuthError -> Response
-    showAuthError err = case err of
-        NoAuthError           -> withRsCode 401 $ toResponse "No authorization provided."
-        UnrecognizedAuthError -> withRsCode 400 $ toResponse "Authorization scheme not recognized."
-        -- we don't want to leak info for the other cases, so same message for them all:
-        _                     -> withRsCode 401 $ toResponse "Username or password incorrect."
-    withRsCode c r = r { rsCode = c }
+    toErrorResponse :: AuthError -> ErrorResponse
+    toErrorResponse NoAuthError =
+      ErrorResponse 401 [] "No authorization provided" []
+
+    toErrorResponse UnrecognizedAuthError =
+      ErrorResponse 400 [] "Authorization scheme not recognized" []
+
+    -- we don't want to leak info for the other cases, so same message for them all:
+    toErrorResponse _ =
+      ErrorResponse 401 [] "Username or password incorrect" []
+

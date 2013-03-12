@@ -9,6 +9,7 @@ import Distribution.Server.Framework.Templating
 import Text.XHtml.Strict (Html, toHtml, anchor, (<<), (!), href, paragraph)
 import qualified Text.XHtml.Strict as XHtml
 
+import Data.List
 import System.FilePath
 
 -- | A feature to provide the top level files on the site (using templates)
@@ -94,22 +95,33 @@ staticFilesFeature ServerEnv{serverStaticDir} templates =
         Nothing       -> mzero
         Just template -> ok $ toResponse $ template []
 
-    textErrorPage (ErrorResponse errCode errTitle message) = do
+    textErrorPage (ErrorResponse errCode hdrs errTitle message) = do
         template <- getTemplate templates "hackageErrorPage.txt"
         let formattedMessage = messageToText message
-        resp errCode $ toResponse $ template
-          [ "errorTitle"   $= errTitle
-          , "errorMessage" $= formattedMessage
-          ]
+            response = toResponse $ template
+              [ "errorTitle"   $= errTitle
+              , "errorMessage" $= formattedMessage
+              ]
+        return $ response {
+          rsCode    = errCode,
+          rsHeaders = addHeaders (rsHeaders response) hdrs
+        }
 
     htmlErrorPage :: ErrorResponse -> ServerPartE Response
-    htmlErrorPage (ErrorResponse errCode errTitle message) = do
+    htmlErrorPage (ErrorResponse errCode hdrs errTitle message) = do
         template <- getTemplate templates "hackageErrorPage.html"
         let formattedMessage = paragraph << errorToHtml message
-        resp errCode $ toResponse $ template
-          [ "errorTitle"   $= errTitle
-          , "errorMessage" $= XHtml.renderHtml formattedMessage
-          ]
+            response = toResponse $ template
+              [ "errorTitle"   $= errTitle
+              , "errorMessage" $= XHtml.renderHtml formattedMessage
+              ]
+        return $ response {
+          rsCode    = errCode,
+          rsHeaders = addHeaders (rsHeaders response) hdrs
+        }
+
+addHeaders :: Headers -> [(String, String)] -> Headers
+addHeaders hdrs hdrs' = foldl' (\h (k,v) -> addHeader k v h) hdrs (reverse hdrs')
 
 errorToHtml :: [MessageSpan] -> [Html]
 errorToHtml []               = []

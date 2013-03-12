@@ -275,9 +275,10 @@ impl server =
                 . concatMap Feature.featureErrHandlers
                 $ serverFeatures server
 
-    textErrorPage (ErrorResponse errCode errTitle message) =
-      let formattedMessage = errTitle ++ ": " ++ messageToText message ++ "\n"
-       in resp errCode $ toResponse formattedMessage
+    -- This basic one be overridden in another feature but means even in a
+    -- minimal server we can provide content-negoticated text/plain errors
+    textErrorPage :: ErrorResponse -> ServerPartE Response
+    textErrorPage = return . toResponse
 
     fallbackNotFound =
       errNotFound "Page not found"

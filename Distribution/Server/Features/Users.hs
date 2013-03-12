@@ -51,7 +51,7 @@ data UserFeature = UserFeature {
     guardAuthorised_   :: [PrivilegeCondition] -> ServerPartE (),
     guardAuthorised    :: [PrivilegeCondition] -> ServerPartE UserId,
     guardAuthenticated :: ServerPartE UserId,
-    authFailHook       :: Hook (Auth.AuthError -> IO (Maybe Response)),
+    authFailHook       :: Hook (Auth.AuthError -> IO (Maybe ErrorResponse)),
 
     queryGetUserDb    :: forall m. MonadIO m => m Users.Users,
 
@@ -192,7 +192,7 @@ userFeature :: StateComponent Users.Users
             -> MemState GroupIndex
             -> Hook (IO ())
             -> Filter (UserId -> IO Bool)
-            -> Filter (Auth.AuthError -> IO (Maybe Response))
+            -> Filter (Auth.AuthError -> IO (Maybe ErrorResponse))
             -> UserGroup
             -> GroupResource
             -> (UserFeature, UserGroup)
@@ -276,10 +276,20 @@ userFeature  usersState adminsState
 
     guardAuthorised :: [PrivilegeCondition] -> ServerPartE UserId
     guardAuthorised privconds = do
-        users    <- queryGetUserDb
-        (uid, _) <- Auth.checkAuthenticated realm users
-                >>= either handleAuthError return
+        users <- queryGetUserDb
+        uid   <- guardAuthenticatedWithErrHook users
         Auth.guardPriviledged users uid privconds
+        return uid
+
+    guardAuthenticated :: ServerPartE UserId
+    guardAuthenticated = do
+        users   <- queryGetUserDb
+        guardAuthenticatedWithErrHook users
+
+    guardAuthenticatedWithErrHook :: Users.Users -> ServerPartE UserId
+    guardAuthenticatedWithErrHook users = do
+        (uid,_) <- Auth.checkAuthenticated realm users
+                   >>= either handleAuthError return
         return uid
       where
         realm = Auth.hackageRealm --TODO: should be configurable
@@ -288,13 +298,7 @@ userFeature  usersState adminsState
         handleAuthError err = do
           defaultResponse  <- Auth.authErrorResponse realm err
           overrideResponse <- msum <$> runFilter' authFailHook err
-          finishWith $! fromMaybe defaultResponse overrideResponse
-
-    guardAuthenticated :: ServerPartE UserId
-    guardAuthenticated = do
-        users   <- queryGetUserDb
-        (uid,_) <- Auth.guardAuthenticated Auth.hackageRealm users
-        return uid
+          throwError (fromMaybe defaultResponse overrideResponse)
 
     -- result: either not-found, not-authenticated, or 204 (success)
     deleteAccount :: UserName -> ServerPartE ()
@@ -430,7 +434,7 @@ userFeature  usersState adminsState
     runUserFilter :: UserId -> IO (Maybe ErrorResponse)
     runUserFilter uid =
       runFilter' packageMutate uid >>= \bs -> case or bs of
-        True  -> return . Just $ ErrorResponse 403 "Upload failed" [MText "Your account can't upload packages."]
+        True  -> return . Just $ ErrorResponse 403 [] "Upload failed" [MText "Your account can't upload packages."]
         False -> return Nothing
 
     ------ User group management

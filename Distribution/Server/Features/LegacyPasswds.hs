@@ -249,7 +249,7 @@ legacyPasswdsFeature legacyPasswdsState UserFeature{..}
     interceptUserAuthFail = do
       registerHook authFailHook onAuthFail
 
-    onAuthFail :: Auth.AuthError -> IO (Maybe Response)
+    onAuthFail :: Auth.AuthError -> IO (Maybe ErrorResponse)
     -- For the case where a user tries to authenticate as a user who's account
     -- is disabled with no password, we check if that user has a legacy
     -- htpassword. If so, we direct them to a page where they can log in with
@@ -262,12 +262,10 @@ legacyPasswdsFeature legacyPasswdsState UserFeature{..}
         legacyPasswds <- queryLegacyPasswds
         case lookupUserLegacyPasswd legacyPasswds uid of
           Nothing -> return Nothing
-          --TODO: return in a format that can be either text or html.
-          Just _  -> let response = (toResponse msg) { rsCode = 401 }
-                      in return (Just response)
+          Just _  -> return (Just err)
       where
-        msg = "Username or password incorrect.\n\n"
-           ++ "Note: for users who had accounts on the old system, Hackage has been upgraded to use a more secure login system. "
+        err = ErrorResponse 401 [] "Username or password incorrect" [MText msg]
+        msg = "Note: for users who had accounts on the old system, Hackage has been upgraded to use a more secure login system. "
            ++ "Please go to /account-upgrade.html to re-enable your account and for more details about this change."
     onAuthFail _ = return Nothing
 

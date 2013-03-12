@@ -303,7 +303,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
                  then uploadError (notMaintainer pkg)
                  else return Nothing
       where
-        uploadError = return . Just . ErrorResponse 403 "Upload failed" . return . MText
+        uploadError = return . Just . ErrorResponse 403 [] "Upload failed" . return . MText
         versionExists = "This version of the package has already been uploaded.\n\nAs a matter of "
                      ++ "policy we do not allow package tarballs to be changed after a release "
                      ++ "(so we can guarantee stable md5sums etc). The usual recommendation is "
@@ -337,7 +337,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
                     -- as much as it would be nice to do requirePackageAuth in here,
                     -- processPackage is run in a handle bracket
                     case Upload.unpackPackage name content' of
-                      Left err -> return . Left $ ErrorResponse 400 "Invalid package" [MText err]
+                      Left err -> return . Left $ ErrorResponse 400 [] "Invalid package" [MText err]
                       Right ((pkg, pkgStr), warnings) -> do
                         let uresult = UploadResult pkg pkgStr warnings
                         res <- processFunc uid uresult
