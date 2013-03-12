@@ -144,12 +144,15 @@ parseRead label str = case reads str of
 
 parseUTCTime :: Monad m => String -> String -> m UTCTime
 parseUTCTime label str =
-    case Time.parseTime defaultTimeLocale "%c" str of
+    case Time.parseTime defaultTimeLocale timeFormatSpec str of
       Nothing -> fail $ "Unable to parse UTC timestamp " ++ label ++ ": " ++ str
       Just x  -> return x
 
 formatUTCTime :: UTCTime -> String
-formatUTCTime = Time.formatTime defaultTimeLocale "%c"
+formatUTCTime = Time.formatTime defaultTimeLocale timeFormatSpec
+
+timeFormatSpec :: String
+timeFormatSpec = "%Y-%m-%d %H:%M:%S%Q %z"
 
 -- Parse a string, throw an error if it's bad
 parseText :: (Text a, Monad m) => String -> String -> m a
