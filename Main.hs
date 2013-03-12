@@ -145,7 +145,7 @@ optionStateDir :: (a -> Flag FilePath)
                -> (Flag FilePath -> a -> a)
                -> OptionField a
 optionStateDir getter setter =
-  option [] ["state"]
+  option [] ["state-dir"]
     "Directory in which to store the persistent state of the server (default state/)"
     getter setter
     (reqArgFlag "DIR")
@@ -154,7 +154,7 @@ optionStaticDir :: (a -> Flag FilePath)
                 -> (Flag FilePath -> a -> a)
                 -> OptionField a
 optionStaticDir getter setter =
-  option [] ["static"]
+  option [] ["static-dir"]
     "Directory in which to find the html templates and static files (default: cabal location)"
     getter setter
     (reqArgFlag "DIR")
