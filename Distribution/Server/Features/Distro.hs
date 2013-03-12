@@ -220,7 +220,6 @@ distroFeature UserFeature{..}
             , queryUserList  = queryState distrosState $ GetDistroMaintainers dname
             , addUserList    = updateState distrosState . AddDistroMaintainer dname
             , removeUserList = updateState distrosState . RemoveDistroMaintainer dname
-            , groupExists    = queryState distrosState (IsDistribution dname)
             , canAddGroup    = [admins]
             , canRemoveGroup = [admins]
             }

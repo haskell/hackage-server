@@ -150,7 +150,6 @@ mirrorFeature ServerEnv{serverBlobStore = store}
         queryUserList  = queryState  mirrorersState   GetMirrorClientsList,
         addUserList    = updateState mirrorersState . AddMirrorClient,
         removeUserList = updateState mirrorersState . RemoveMirrorClient,
-        groupExists    = return True,
         canRemoveGroup = [adminGroup],
         canAddGroup    = [adminGroup]
     }

@@ -75,10 +75,6 @@ data UserGroup = UserGroup {
     -- dynamically remove a member (does nothing if not present)
     -- creates the group if it didn't exist previously
     removeUserList :: UserId -> IO (),
-    -- is the user group actually stored in server data? it's possible for
-    -- a group to exist even if it's empty, and likewise to get a UserGroup
-    -- that does't exisit *yet*
-    groupExists :: IO Bool,
     -- user groups which can remove from one
     canRemoveGroup :: [UserGroup],
     -- user groups which can add to this one  (use 'fix' to add to self)

@@ -23,16 +23,16 @@ import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), nul
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Packages.Unpack as Upload
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
+import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Data.Maybe (fromMaybe, listToMaybe, catMaybes)
-import qualified Data.Map as Map
 import Data.Time.Clock (getCurrentTime)
 import Data.Function (fix)
 import Data.ByteString.Lazy.Char8 (ByteString)
 
 import Distribution.Package
 import Distribution.PackageDescription (GenericPackageDescription)
-import Distribution.Text (display, simpleParse)
+import Distribution.Text (display)
 import qualified Codec.Compression.GZip as GZip
 
 
@@ -45,9 +45,9 @@ data UploadFeature = UploadFeature {
     --TODO: consider moving the trustee and/or per-package maintainer groups
     --      lower down in the feature hierarchy; many other features want to
     --      use the trustee group purely for auth decisions
-    trusteeGroup       :: UserGroup,
-    uploaderGroup      :: UserGroup,
-    maintainerGroup    :: PackageName -> UserGroup,
+    trusteesGroup      :: UserGroup,
+    uploadersGroup     :: UserGroup,
+    maintainersGroup   :: PackageName -> UserGroup,
 
     canUploadPackage   :: Filter (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)),
 
@@ -63,11 +63,11 @@ instance IsHackageFeature UploadFeature where
 data UploadResource = UploadResource {
     uploadIndexPage :: Resource,
     deletePackagePage  :: Resource,
-    packageGroupResource :: GroupResource,
-    trusteeResource :: GroupResource,
-    uploaderResource :: GroupResource,
+    maintainersGroupResource :: GroupResource,
+    trusteesGroupResource    :: GroupResource,
+    uploadersGroupResource   :: GroupResource,
     packageMaintainerUri :: String -> PackageId -> String,
-    trusteeUri :: String -> String,
+    trusteeUri  :: String -> String,
     uploaderUri :: String -> String
 }
 
@@ -86,10 +86,7 @@ initUploadFeature env@ServerEnv{serverStateDir}
     uploadersState   <- uploadersStateComponent   serverStateDir
     maintainersState <- maintainersStateComponent serverStateDir
 
-    -- some shared tasks
-    let admins = adminGroup
-        UserResource{..} = userResource
-
+    -- TODO: Why do we have this at all?
     uploadFilter <- newHook
 
     -- Recusively tie the knot: the feature contains new user group resources
@@ -98,27 +95,24 @@ initUploadFeature env@ServerEnv{serverStateDir}
     rec let (feature,
              getTrusteesGroup, getUploadersGroup, makeMaintainersGroup)
               = uploadFeature env core user
-                              trusteesState    trustees  trustResource
-                              uploadersState   uploaders uploaderResource'
-                              maintainersState pkgGroup  pkgResource
+                              trusteesState    trusteesGroup    trusteesGroupResource
+                              uploadersState   uploadersGroup   uploadersGroupResource
+                              maintainersState maintainersGroup maintainersGroupResource
                               uploadFilter
 
-        (trustees,  trustResource) <-
-          groupResourceAt "/packages/trustees"  (getTrusteesGroup  [admins])
-        (uploaders, uploaderResource') <-
-          groupResourceAt "/packages/uploaders" (getUploadersGroup [admins])
+        (trusteesGroup,  trusteesGroupResource) <-
+          groupResourceAt "/packages/trustees"  (getTrusteesGroup  [adminGroup])
 
-        groupPkgs <- fmap (Map.keys . maintainers) $ queryState maintainersState AllPackageMaintainers
-        --TODO: move this local function inside uploadFeature,
-        --      like getTrusteesGroup, getUploadersGroup etc.
-        let getPkgMaintainers dpath =
-                let pkgname = case simpleParse =<< lookup "package" dpath of
-                        Just name -> name
-                        Nothing   -> error "Invalid package name"
-                in  makeMaintainersGroup [admins, trustees] pkgname
-            groupPaths = map (\pkgname -> [("package", display pkgname)]) groupPkgs
-        (pkgGroup, pkgResource) <- groupResourcesAt
-            "/package/:package/maintainers" getPkgMaintainers groupPaths
+        (uploadersGroup, uploadersGroupResource) <-
+          groupResourceAt "/packages/uploaders" (getUploadersGroup [adminGroup])
+
+        pkgNames <- PackageIndex.packageNames <$> queryGetPackageIndex
+        (maintainersGroup, maintainersGroupResource) <-
+          groupResourcesAt "/package/:package/maintainers"
+                           (makeMaintainersGroup [adminGroup, trusteesGroup])
+                           (\pkgname -> [("package", display pkgname)])
+                           (packageInPath coreResource)
+                           pkgNames
 
     return feature
 
@@ -166,7 +160,7 @@ uploadFeature :: ServerEnv
               -> UserFeature
               -> StateComponent HackageTrustees    -> UserGroup -> GroupResource
               -> StateComponent HackageUploaders   -> UserGroup -> GroupResource
-              -> StateComponent PackageMaintainers -> GroupGen  -> GroupResource
+              -> StateComponent PackageMaintainers -> (PackageName -> UserGroup) -> GroupResource
               -> Filter (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse))
               -> (UploadFeature,
                   [UserGroup] -> UserGroup,
@@ -179,9 +173,9 @@ uploadFeature ServerEnv{serverBlobStore = store}
                          , doAddPackage
                          }
               UserFeature{..}
-              trusteesState    trusteeGroup       trustResource
-              uploadersState   uploaderGroup      uploaderResource'
-              maintainersState packageMaintainers pkgResource
+              trusteesState    trusteesGroup    trusteesGroupResource
+              uploadersState   uploadersGroup   uploadersGroupResource
+              maintainersState maintainersGroup maintainersGroupResource
               canUploadPackage
    = ( UploadFeature {..}
      , getTrusteesGroup, getUploadersGroup, makeMaintainersGroup)
@@ -189,14 +183,13 @@ uploadFeature ServerEnv{serverBlobStore = store}
     uploadFeatureInterface = (emptyHackageFeature "upload") {
         featureDesc = "Support for package uploads, and define groups for trustees, uploaders, and package maintainers"
       , featureResources =
-          map ($uploadResource) [
-              uploadIndexPage
-            , groupResource . packageGroupResource
-            , groupUserResource . packageGroupResource
-            , groupResource . trusteeResource
-            , groupUserResource . trusteeResource
-            , groupResource . uploaderResource
-            , groupUserResource . uploaderResource
+            [ uploadIndexPage uploadResource
+            , groupResource     maintainersGroupResource
+            , groupUserResource maintainersGroupResource
+            , groupResource     trusteesGroupResource
+            , groupUserResource trusteesGroupResource
+            , groupResource     uploadersGroupResource
+            , groupUserResource uploadersGroupResource
             ]
       , featureState = [
             abstractStateComponent trusteesState
@@ -208,13 +201,14 @@ uploadFeature ServerEnv{serverBlobStore = store}
     uploadResource = UploadResource
           { uploadIndexPage      = (extendResource (corePackagesPage coreResource)) { resourcePost = [] }
           , deletePackagePage    = (extendResource (corePackagePage coreResource))  { resourceDelete = [] }
-          , packageGroupResource = pkgResource
-          , trusteeResource      = trustResource
-          , uploaderResource     = uploaderResource'
+          , maintainersGroupResource = maintainersGroupResource
+          , trusteesGroupResource    = trusteesGroupResource
+          , uploadersGroupResource   = uploadersGroupResource
 
-          , packageMaintainerUri = \format pkgname -> renderResource (groupResource pkgResource) [display pkgname, format]
-          , trusteeUri  = \format -> renderResource (groupResource trustResource)     [format]
-          , uploaderUri = \format -> renderResource (groupResource uploaderResource') [format]
+          , packageMaintainerUri = \format pkgname -> renderResource
+                                     (groupResource maintainersGroupResource) [display pkgname, format]
+          , trusteeUri  = \format -> renderResource (groupResource trusteesGroupResource)  [format]
+          , uploaderUri = \format -> renderResource (groupResource uploadersGroupResource) [format]
           }
 
     --------------------------------------------------------------------------------
@@ -225,7 +219,6 @@ uploadFeature ServerEnv{serverBlobStore = store}
         queryUserList  = queryState  trusteesState   GetTrusteesList,
         addUserList    = updateState trusteesState . AddHackageTrustee,
         removeUserList = updateState trusteesState . RemoveHackageTrustee,
-        groupExists    = return True,
         canAddGroup    = [u] ++ canModify,
         canRemoveGroup = canModify
     }
@@ -236,7 +229,6 @@ uploadFeature ServerEnv{serverBlobStore = store}
         queryUserList  = queryState  uploadersState   GetUploadersList,
         addUserList    = updateState uploadersState . AddHackageUploader,
         removeUserList = updateState uploadersState . RemoveHackageUploader,
-        groupExists    = return True,
         canAddGroup    = canModify,
         canRemoveGroup = canModify
     }
@@ -247,7 +239,6 @@ uploadFeature ServerEnv{serverBlobStore = store}
         queryUserList  = queryState  maintainersState $ GetPackageMaintainers name,
         addUserList    = updateState maintainersState . AddPackageMaintainer name,
         removeUserList = updateState maintainersState . RemovePackageMaintainer name,
-        groupExists    = fmap (Map.member name . maintainers) $ queryState maintainersState AllPackageMaintainers,
         canAddGroup    = [u] ++ canModify,
         canRemoveGroup = [u] ++ canModify
       }
@@ -268,21 +259,19 @@ uploadFeature ServerEnv{serverBlobStore = store}
 
     guardAuthorisedAsMaintainer :: PackageName -> ServerPartE ()
     guardAuthorisedAsMaintainer pkgname =
-      guardAuthorised_ [InGroup (maintainerGroup pkgname)]
+      guardAuthorised_ [InGroup (maintainersGroup pkgname)]
 
     guardAuthorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE ()
     guardAuthorisedAsMaintainerOrTrustee pkgname =
-      guardAuthorised_ [InGroup (maintainerGroup pkgname), InGroup trusteeGroup]
+      guardAuthorised_ [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
 
-    maintainerGroup :: PackageName -> UserGroup
-    maintainerGroup pkgname = packageMaintainers [("package", display pkgname)]
 
     ----------------------------------------------------
 
     -- This is the upload function. It returns a generic result for multiple formats.
     uploadPackage :: ServerPartE UploadResult
     uploadPackage = do
-        guardAuthorised_ [InGroup uploaderGroup]
+        guardAuthorised_ [InGroup uploadersGroup]
         pkgIndex <- queryGetPackageIndex
         let uploadFilter uid info = combineErrors $ runFilter'' canUploadPackage uid info
         (pkgInfo, uresult) <- extractPackage (\uid info -> combineErrors $ sequence
@@ -295,7 +284,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
              -- make package maintainers group for new package
             let existedBefore = packageExists pkgIndex pkgInfo
             when (not existedBefore) $
-                liftIO $ addUserList (maintainerGroup (packageName pkgInfo)) (pkgUploadUser pkgInfo)
+                liftIO $ addUserList (maintainersGroup (packageName pkgInfo)) (pkgUploadUser pkgInfo)
             return uresult
           -- this is already checked in processUpload, and race conditions are highly unlikely but imaginable
           else errForbidden "Upload failed" [MText "Package already exists."]
@@ -307,7 +296,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
     processUpload :: PackageIndex PkgInfo -> Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)
     processUpload state uid res = do
         let pkg = packageId (uploadDesc res)
-        pkgGroup <- queryUserList (maintainerGroup (packageName pkg))
+        pkgGroup <- queryUserList (maintainersGroup (packageName pkg))
         if packageIdExists state pkg
           then uploadError versionExists --allow trustees to do this?
           else if packageExists state pkg && not (uid `Group.member` pkgGroup)

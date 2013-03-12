@@ -299,9 +299,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                 candPublic = True -- do withDataFn
             }
         void $ updateState candidatesState $ AddCandidate candidate
-        let group = maintainerGroup (packageName pkgInfo)
-        exists <- liftIO $ Group.groupExists group
-        when (not exists) $ liftIO $ Group.addUserList group (pkgUploadUser pkgInfo)
+        let group = maintainersGroup (packageName pkgInfo)
+        liftIO $ Group.addUserList group (pkgUploadUser pkgInfo)
         return candidate
       where combineErrors = fmap (listToMaybe . catMaybes)
 
@@ -312,7 +311,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         if not (isRight pkg)
           then uploadFailed "Name of package or package version does not match"
           else do
-            pkgGroup <- Group.queryUserList (maintainerGroup (packageName pkg))
+            pkgGroup <- Group.queryUserList (maintainersGroup (packageName pkg))
             if packageExists state pkg && not (uid `Group.member` pkgGroup)
               then uploadFailed "Not authorized to upload a candidate for this package"
               else return Nothing
@@ -323,7 +322,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       packages <- queryGetPackageIndex
       candidate <- packageInPath dpath >>= lookupCandidateId
       -- check authorization to upload - must already be a maintainer
-      uid <- guardAuthorised [InGroup (maintainerGroup (packageName candidate))]
+      uid <- guardAuthorised [InGroup (maintainersGroup (packageName candidate))]
       -- check if package or later already exists
       case checkPublish packages candidate of
         Just failed -> throwError failed

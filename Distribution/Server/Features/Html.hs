@@ -218,11 +218,11 @@ htmlFeature user
       , htmlTagsResources       htmlTags
       , htmlSearchResources     htmlSearch
       -- and user groups. package maintainers, trustees, admins
-      , htmlGroupResource user (packageGroupResource . uploadResource $ upload)
-      , htmlGroupResource user (trusteeResource      . uploadResource $ upload)
-      , htmlGroupResource user (uploaderResource     . uploadResource $ upload)
-      , htmlGroupResource user (adminResource        . userResource   $ user)
-      , htmlGroupResource user (mirrorGroupResource  . mirrorResource $ mirror)
+      , htmlGroupResource user (maintainersGroupResource . uploadResource $ upload)
+      , htmlGroupResource user (trusteesGroupResource    . uploadResource $ upload)
+      , htmlGroupResource user (uploadersGroupResource   . uploadResource $ upload)
+      , htmlGroupResource user (adminResource            . userResource   $ user)
+      , htmlGroupResource user (mirrorGroupResource      . mirrorResource $ mirror)
       ]
 
 
@@ -405,7 +405,7 @@ mkHtmlCore HtmlUtilities{..}
     docs     = documentationResource
 
     maintainPackage   = (resourceAt "/package/:package/maintain") {
-                            resourceGet = [("html", serveMaintainLinks editDeprecated editPreferred $ packageGroupResource uploads)]
+                            resourceGet = [("html", serveMaintainLinks editDeprecated editPreferred $ maintainersGroupResource uploads)]
                           }
 
     htmlCoreResources = [
@@ -1323,7 +1323,7 @@ mkHtmlSearch HtmlUtilities{..}
 -------------------------------------------------------------------------------}
 
 htmlGroupResource :: UserFeature -> GroupResource -> [Resource]
-htmlGroupResource UserFeature{..} r@(GroupResource groupR userR groupGen) =
+htmlGroupResource UserFeature{..} r@(GroupResource groupR userR getGroup) =
   [ (extendResource groupR) {
         resourceDesc = [ (GET, "Show list of users")
                        , (POST, "Udd a user to the group")
@@ -1341,7 +1341,8 @@ htmlGroupResource UserFeature{..} r@(GroupResource groupR userR groupGen) =
       }
   ]
   where
-    getList dpath = withGroup (groupGen dpath) $ \group -> do
+    getList dpath = do
+        group    <- getGroup dpath
         userDb   <- queryGetUserDb
         userlist <- liftIO . queryUserList $ group
         let unames = [ Users.userIdToName userDb uid
@@ -1349,7 +1350,8 @@ htmlGroupResource UserFeature{..} r@(GroupResource groupR userR groupGen) =
         let baseUri = renderResource' groupR dpath
         return . toResponse . Resource.XHtml $ Pages.groupPage
             unames baseUri (False, False) (groupDesc group)
-    getEditList dpath = withGroup (groupGen dpath) $ \group -> do
+    getEditList dpath = do
+        group    <- getGroup dpath
         (canAdd, canDelete) <- lookupGroupEditAuth group
         userDb   <- queryGetUserDb
         userlist <- liftIO . queryUserList $ group
@@ -1358,15 +1360,14 @@ htmlGroupResource UserFeature{..} r@(GroupResource groupR userR groupGen) =
         let baseUri = renderResource' groupR dpath
         return . toResponse . Resource.XHtml $ Pages.groupPage
             unames baseUri (canAdd, canDelete) (groupDesc group)
-    postUser dpath = withGroup (groupGen dpath) $ \group -> do
+    postUser dpath = do
+        group <- getGroup dpath
         groupAddUser group dpath
         goToList dpath
-    deleteFromGroup dpath = withGroup (groupGen dpath) $ \group -> do
+    deleteFromGroup dpath = do
+        group <- getGroup dpath
         groupDeleteUser group dpath
         goToList dpath
-    withGroup group func = liftIO (groupExists group) >>= \exists -> case exists of
-        False -> errNotFound "User group doesn't exist" [MText "User group doesn't exist"]
-        True  -> func group
     goToList dpath = seeOther (renderResource' (groupResource r) dpath) (toResponse ())
 
 {-------------------------------------------------------------------------------

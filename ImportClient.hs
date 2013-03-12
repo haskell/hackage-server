@@ -475,7 +475,7 @@ putMaintainersInfo baseURI pkgname maintainers =
       rsp <- requestPUT (pkgURI <//> "maintainers" </> "user" </> display uname) "" BS.empty
       case rsp of
         Nothing  -> return ()
-        Just err | isErrNotFound err -> liftIO $ info $ "Ignoring upload log entry for package " ++ display pkgname
+        Just err | isErrNotFound err -> liftIO $ info $ "Cannot make " ++ display uname ++ " a maintainer for package " ++ display pkgname
         Just err -> fail (formatErrorResponse err)
 
   where

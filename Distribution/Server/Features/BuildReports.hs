@@ -79,7 +79,7 @@ buildReportsFeature :: String
                     -> ReportsFeature
 buildReportsFeature name
                     ServerEnv{serverBlobStore = store}
-                    UserFeature{..} UploadFeature{trusteeGroup}
+                    UserFeature{..} UploadFeature{trusteesGroup}
                     CoreResource{ packageInPath
                                 , guardValidPackageId
                                 , corePackagePage
@@ -182,7 +182,7 @@ buildReportsFeature name
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       reportId <- reportIdInPath dpath
-      guardAuthorised_ [InGroup trusteeGroup]
+      guardAuthorised_ [InGroup trusteesGroup]
       success <- updateState reportsState $ DeleteReport pkgid reportId
       if success
           then seeOther (reportsListUri reportsResource "" pkgid) $ toResponse ()
@@ -218,7 +218,7 @@ buildReportsFeature name
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       reportId <- reportIdInPath dpath
-      guardAuthorised_ [InGroup trusteeGroup]
+      guardAuthorised_ [InGroup trusteesGroup]
       void $ updateState reportsState $ SetBuildLog pkgid reportId Nothing
       -- go to report page (which should no longer link the log)
       seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()

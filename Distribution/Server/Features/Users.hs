@@ -6,7 +6,6 @@ module Distribution.Server.Features.Users (
     UserResource(..),
 
     GroupResource(..),
-    GroupGen,
   ) where
 
 import Distribution.Server.Framework
@@ -79,7 +78,11 @@ data UserFeature = UserFeature {
     deleteAccount       :: UserName -> ServerPartE (),
     runUserFilter       :: UserId -> IO (Maybe ErrorResponse),
     groupResourceAt     :: String -> UserGroup -> IO (UserGroup, GroupResource),
-    groupResourcesAt    :: String -> GroupGen -> [DynamicPath] -> IO (GroupGen, GroupResource),
+    groupResourcesAt    :: forall a. String -> (a -> UserGroup)
+                                            -> (a -> DynamicPath)
+                                            -> (DynamicPath -> ServerPartE a)
+                                            -> [a]
+                                            -> IO (a -> UserGroup, GroupResource),
     lookupGroupEditAuth :: UserGroup -> ServerPartE (Bool, Bool),
     getGroupIndex       :: forall m. (Functor m, MonadIO m) => UserId -> m [String],
     getIndexDesc        :: forall m. MonadIO m => String -> m GroupDescription
@@ -108,10 +111,8 @@ instance FromReqURI UserName where
 data GroupResource = GroupResource {
     groupResource :: Resource,
     groupUserResource :: Resource,
-    getGroup :: GroupGen
+    getGroup :: DynamicPath -> ServerPartE UserGroup
 }
-
-type GroupGen = DynamicPath -> UserGroup
 
 -- This is a mapping of UserId -> group URI and group URI -> description.
 -- Like many reverse mappings, it is probably rather volatile. Still, it is
@@ -439,7 +440,6 @@ userFeature  usersState adminsState
           queryUserList  = queryState adminsState GetAdminList,
           addUserList    = updateState adminsState . AddHackageAdmin,
           removeUserList = updateState adminsState . RemoveHackageAdmin,
-          groupExists    = return True,
           canAddGroup    = [adminGroupDesc],
           canRemoveGroup = [adminGroupDesc]
         }
@@ -498,16 +498,16 @@ userFeature  usersState adminsState
         let groupr = GroupResource {
                 groupResource = (extendResourcePath "/.:format" mainr) {
                     resourceDesc = [ (GET, "Description of the group and a list of its members (defined in 'users' feature)") ]
-                  , resourceGet  = [ ("json", handleUserGroupGet group') ]
+                  , resourceGet  = [ ("json", handleUserGroupGet groupr) ]
                   }
               , groupUserResource = (extendResourcePath "/user/:username.:format" mainr) {
                     resourceDesc   = [ (PUT, "Add a user to the group (defined in 'users' feature)")
                                      , (DELETE, "Remove a user from the group (defined in 'users' feature)")
                                      ]
-                  , resourcePut    = [ ("", handleUserGroupUserPut group groupr) ]
-                  , resourceDelete = [ ("", handleUserGroupUserDelete group groupr) ]
+                  , resourcePut    = [ ("", handleUserGroupUserPut groupr) ]
+                  , resourceDelete = [ ("", handleUserGroupUserDelete groupr) ]
                   }
-              , getGroup = \_ -> group'
+              , getGroup = \_ -> return group'
               }
         return (group', groupr)
 
@@ -519,46 +519,50 @@ userFeature  usersState adminsState
     -- list of DynamicPaths to build the initial group index. Like groupResourceAt,
     -- this function returns an adaptor function that keeps the index updated.
     groupResourcesAt :: String
-                     -> GroupGen -> [DynamicPath]
-                     -> IO (GroupGen, GroupResource)
-    groupResourcesAt uri groupGen dpaths = do
+                     -> (a -> UserGroup)
+                     -> (a -> DynamicPath)
+                     -> (DynamicPath -> ServerPartE a)
+                     -> [a]
+                     -> IO (a -> UserGroup, GroupResource)
+    groupResourcesAt uri mkGroup mkPath getGroupData initialGroupData = do
         let mainr = resourceAt uri
-            collectUserList genpath = do
-                let group = groupGen genpath
-                exists <- groupExists group
-                case exists of
-                    False -> return ()
-                    True  -> queryUserList group >>= \ulist ->
-                        initGroupIndex ulist (renderResource' mainr genpath) (groupDesc group)
-            getGroupFunc dpath =
-                let group = groupGen dpath
-                in  group
-                  { addUserList = \uid -> do
+        sequence_
+          [ do let group = mkGroup x
+                   dpath = mkPath x
+               ulist <- queryUserList group
+               initGroupIndex ulist (renderResource' mainr dpath) (groupDesc group)
+          | x <- initialGroupData ]
+
+        let mkGroup' x =
+              let group = mkGroup x
+                  dpath = mkPath x
+               in group {
+                    addUserList = \uid -> do
                         addGroupIndex uid (renderResource' mainr dpath) (groupDesc group)
                         addUserList group uid
                   , removeUserList = \uid -> do
                         removeGroupIndex uid (renderResource' mainr dpath)
                         removeUserList group uid
                   }
-        mapM_ collectUserList dpaths
-        let groupr = GroupResource {
+
+            groupr = GroupResource {
                 groupResource = (extendResourcePath "/.:format" mainr) {
                     resourceDesc = [ (GET, "Description of the group and a list of the members (defined in 'users' feature)") ]
-                  , resourceGet  = [ ("json", \dpath -> handleUserGroupGet (getGroupFunc dpath) dpath) ]
+                  , resourceGet  = [ ("json", handleUserGroupGet groupr) ]
                   }
               , groupUserResource = (extendResourcePath "/user/:username.:format" mainr) {
                     resourceDesc   = [ (PUT,    "Add a user to the group (defined in 'users' feature)")
                                      , (DELETE, "Delete a user from the group (defined in 'users' feature)")
                                      ]
-                  , resourcePut    = [ ("", \dpath -> handleUserGroupUserPut    (getGroupFunc dpath) groupr dpath) ]
-                  , resourceDelete = [ ("", \dpath -> handleUserGroupUserDelete (getGroupFunc dpath) groupr dpath) ]
+                  , resourcePut    = [ ("", handleUserGroupUserPut groupr) ]
+                  , resourceDelete = [ ("", handleUserGroupUserDelete groupr) ]
                   }
-              , getGroup = getGroupFunc
+              , getGroup = \dpath -> mkGroup' <$> getGroupData dpath
               }
-        return (getGroupFunc, groupr)
+        return (mkGroup', groupr)
 
-    handleUserGroupGet group _dpath = do
-      guardGroupExists group
+    handleUserGroupGet groupr dpath = do
+      group    <- getGroup groupr dpath
       userDb   <- queryGetUserDb
       userlist <- liftIO $ queryUserList group
       let unames = [ Users.userIdToName userDb uid
@@ -573,15 +577,15 @@ userFeature  usersState adminsState
 
     --TODO: add handleUserGroupUserPost for the sake of the html frontend
     --      and then remove groupAddUser & groupDeleteUser
-    handleUserGroupUserPut group groupr dpath = do
-      guardGroupExists group
+    handleUserGroupUserPut groupr dpath = do
+      group <- getGroup groupr dpath
       guardAuthorised_ (map InGroup (canAddGroup group))
       uid <- lookupUserName =<< userNameInPath dpath
       liftIO $ addUserList group uid
       goToList groupr dpath
 
-    handleUserGroupUserDelete group groupr dpath = do
-      guardGroupExists group
+    handleUserGroupUserDelete groupr dpath = do
+      group <- getGroup groupr dpath
       guardAuthorised_ (map InGroup (canRemoveGroup group))
       uid <- lookupUserName =<< userNameInPath dpath
       liftIO $ removeUserList group uid
@@ -589,10 +593,6 @@ userFeature  usersState adminsState
 
     goToList group dpath = seeOther (renderResource' (groupResource group) dpath)
                                     (toResponse ())
-
-    guardGroupExists group = do
-      exists <- liftIO (groupExists group)
-      unless exists $ errNotFound "User group doesn't exist" [MText "User group doesn't exist"]
 
     ---------------------------------------------------------------
     addGroupIndex :: MonadIO m => UserId -> String -> GroupDescription -> m ()
