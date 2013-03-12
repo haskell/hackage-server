@@ -127,6 +127,39 @@ globalCommand = CommandUI {
       ]
   }
 
+-- Common options
+--
+
+optionVerbosity :: (a -> Flag Verbosity)
+                -> (Flag Verbosity -> a -> a)
+                -> OptionField a
+optionVerbosity getter setter =
+  option "v" ["verbose"]
+    "Control verbosity (n is 0--3, default verbosity level is 1)"
+    getter setter
+    (optArg "n" (fmap Flag Verbosity.flagToVerbosity)
+          (Flag Verbosity.verbose)
+          (fmap (Just . showForCabal) . flagToList))
+
+optionStateDir :: (a -> Flag FilePath)
+               -> (Flag FilePath -> a -> a)
+               -> OptionField a
+optionStateDir getter setter =
+  option [] ["state"]
+    "Directory in which to store the persistent state of the server (default state/)"
+    getter setter
+    (reqArgFlag "DIR")
+
+optionStaticDir :: (a -> Flag FilePath)
+                -> (Flag FilePath -> a -> a)
+                -> OptionField a
+optionStaticDir getter setter =
+  option [] ["static"]
+    "Directory in which to find the html templates and static files (default: cabal location)"
+    getter setter
+    (reqArgFlag "DIR")
+
+
 -------------------------------------------------------------------------------
 -- Run command
 --
@@ -183,14 +216,10 @@ runCommand = makeCommand name shortDesc longDesc defaultRunFlags options
           "Server's host name (defaults to machine name)"
           flagRunHost (\v flags -> flags { flagRunHost = v })
           (reqArgFlag "NAME")
-      , option [] ["state-dir"]
-          "Directory in which to store the persistent state of the server (default state/)"
+      , optionStateDir
           flagRunStateDir (\v flags -> flags { flagRunStateDir = v })
-          (reqArgFlag "DIR")
-      , option [] ["static-dir"]
-          "Directory in which to find the html templates and static files (default: cabal location)"
+      , optionStaticDir
           flagRunStaticDir (\v flags -> flags { flagRunStaticDir = v })
-          (reqArgFlag "DIR")
       , option [] ["tmp-dir"]
           "Temporary directory in which to store file uploads (default state/tmp/)"
           flagRunTmpDir (\v flags -> flags { flagRunTmpDir = v })
@@ -366,14 +395,10 @@ initCommand = makeCommand name shortDesc longDesc defaultInitFlags options
           "New server's administrator, name:password (default: admin:admin)"
           flagInitAdmin (\v flags -> flags { flagInitAdmin = v })
           (reqArgFlag "NAME:PASS")
-      , option [] ["state-dir"]
-          "Directory in which to store the persistent state of the server (default state/)"
+      , optionStateDir
           flagInitStateDir (\v flags -> flags { flagInitStateDir = v })
-          (reqArgFlag "DIR")
-      , option [] ["static-dir"]
-          "Directory in which to find the html and other static files (default: cabal location)"
+      , optionStaticDir
           flagInitStaticDir (\v flags -> flags { flagInitStaticDir = v })
-          (reqArgFlag "DIR")
       ]
 
 initAction :: InitFlags -> IO ()
@@ -417,16 +442,18 @@ initAction opts = do
 
 data BackupFlags = BackupFlags {
     flagBackupVerbosity   :: Flag Verbosity,
-    flagBackupTarballDir  :: Flag FilePath,
+    flagBackupOutputDir   :: Flag FilePath,
     flagBackupStateDir    :: Flag FilePath,
+    flagBackupStaticDir   :: Flag FilePath,
     flagBackupLinkBlobs   :: Flag Bool
   }
 
 defaultBackupFlags :: BackupFlags
 defaultBackupFlags = BackupFlags {
     flagBackupVerbosity   = Flag Verbosity.normal,
-    flagBackupTarballDir  = NoFlag,
+    flagBackupOutputDir   = Flag "backups",
     flagBackupStateDir    = NoFlag,
+    flagBackupStaticDir   = NoFlag,
     flagBackupLinkBlobs   = Flag False
   }
 
@@ -445,13 +472,13 @@ backupCommand = makeCommand name shortDesc longDesc defaultBackupFlags options
     options _  =
       [ optionVerbosity
           flagBackupVerbosity (\v flags -> flags { flagBackupVerbosity = v })
-      , option [] ["state-dir"]
-          "Directory from which to read persistent state of the server (default state/)"
+      , optionStateDir
           flagBackupStateDir (\v flags -> flags { flagBackupStateDir = v })
-          (reqArgFlag "DIR")
+      , optionStaticDir
+          flagBackupStaticDir (\v flags -> flags { flagBackupStaticDir = v })
       , option ['o'] ["output-dir"]
           "The directory in which to create the backup (default ./backups/)"
-          flagBackupTarballDir (\v flags -> flags { flagBackupTarballDir = v })
+          flagBackupOutputDir (\v flags -> flags { flagBackupOutputDir = v })
           (reqArgFlag "TARBALL")
       , option [] ["hardlink-blobs"]
           ("Hard-link the blob files in the backup rather than copying them "
@@ -464,19 +491,21 @@ backupAction :: BackupFlags -> IO ()
 backupAction opts = do
     defaults <- Server.defaultServerConfig
 
-    let stateDir   = fromFlagOrDefault (confStateDir defaults) (flagBackupStateDir opts)
-        exportPath = fromFlagOrDefault "backups" (flagBackupTarballDir opts)
-        linkBlobs  = fromFlag (flagBackupLinkBlobs opts)
-        verbosity  = fromFlag (flagBackupVerbosity opts)
-        config     = defaults {
-                       confVerbosity = verbosity,
-                       confStateDir  = stateDir
-                      }
+    let stateDir  = fromFlagOrDefault (confStateDir defaults)  (flagBackupStateDir  opts)
+        staticDir = fromFlagOrDefault (confStaticDir defaults) (flagBackupStaticDir opts)
+        outputDir = fromFlag (flagBackupOutputDir opts)
+        linkBlobs = fromFlag (flagBackupLinkBlobs opts)
+        verbosity = fromFlag (flagBackupVerbosity opts)
+        config    = defaults {
+                      confVerbosity = verbosity,
+                      confStateDir  = stateDir,
+                      confStaticDir = staticDir
+                     }
 
     withServer config False $ \server -> do
       let store = Server.serverBlobStore (Server.serverEnv server)
           state = Server.serverState server
-      dumpServerBackup verbosity exportPath Nothing store linkBlobs
+      dumpServerBackup verbosity outputDir Nothing store linkBlobs
                        (map (second abstractStateBackup) state)
 
 
@@ -487,6 +516,7 @@ backupAction opts = do
 data TestBackupFlags = TestBackupFlags {
     flagTestBackupVerbosity :: Flag Verbosity,
     flagTestBackupStateDir  :: Flag FilePath,
+    flagTestBackupStaticDir :: Flag FilePath,
     flagTestBackupTestDir   :: Flag FilePath,
     flagTestBackupLinkBlobs :: Flag Bool
   }
@@ -495,6 +525,7 @@ defaultTestBackupFlags :: TestBackupFlags
 defaultTestBackupFlags = TestBackupFlags {
     flagTestBackupVerbosity = Flag Verbosity.normal,
     flagTestBackupStateDir  = NoFlag,
+    flagTestBackupStaticDir = NoFlag,
     flagTestBackupTestDir   = Flag "test-backup",
     flagTestBackupLinkBlobs = Flag False
   }
@@ -511,10 +542,10 @@ testBackupCommand = makeCommand name shortDesc longDesc defaultTestBackupFlags o
     options _  =
       [ optionVerbosity
           flagTestBackupVerbosity (\v flags -> flags { flagTestBackupVerbosity = v })
-      , option [] ["state-dir"]
-          "Directory from which to read persistent state of the server (default state/)"
+      , optionStateDir
           flagTestBackupStateDir (\v flags -> flags { flagTestBackupStateDir = v })
-          (reqArgFlag "DIR")
+      , optionStaticDir
+          flagTestBackupStaticDir (\v flags -> flags { flagTestBackupStaticDir = v })
       , option [] ["test-dir"]
           "Temporary directory in which to store temporary information generated by the test (default test-backup/)."
           flagTestBackupTestDir (\v flags -> flags { flagTestBackupTestDir = v })
@@ -537,12 +568,14 @@ testBackupAction :: TestBackupFlags -> IO ()
 testBackupAction opts = do
     defaults <- Server.defaultServerConfig
 
-    let stateDir    = fromFlagOrDefault (confStateDir defaults) (flagTestBackupStateDir opts)
+    let stateDir    = fromFlagOrDefault (confStateDir  defaults) (flagTestBackupStateDir  opts)
+        staticDir   = fromFlagOrDefault (confStaticDir defaults) (flagTestBackupStaticDir opts)
         testDir     = fromFlag (flagTestBackupTestDir  opts)
         linkBlobs   = fromFlag (flagTestBackupLinkBlobs opts)
         verbosity   = fromFlag (flagTestBackupVerbosity opts)
         config      = defaults {
                         confStateDir  = stateDir,
+                        confStaticDir = staticDir,
                         confTmpDir    = testDir,
                         confVerbosity = verbosity
                       }
@@ -655,13 +688,15 @@ testBackupAction opts = do
 
 data RestoreFlags = RestoreFlags {
     flagRestoreVerbosity :: Flag Verbosity,
-    flagRestoreStateDir  :: Flag FilePath
+    flagRestoreStateDir  :: Flag FilePath,
+    flagRestoreStaticDir :: Flag FilePath
   }
 
 defaultRestoreFlags :: RestoreFlags
 defaultRestoreFlags = RestoreFlags {
     flagRestoreVerbosity = Flag Verbosity.normal,
-    flagRestoreStateDir  = NoFlag
+    flagRestoreStateDir  = NoFlag,
+    flagRestoreStaticDir = NoFlag
   }
 
 restoreCommand :: CommandUI RestoreFlags
@@ -675,10 +710,10 @@ restoreCommand = makeCommand name shortDesc longDesc defaultRestoreFlags options
     options _  =
       [ optionVerbosity
           flagRestoreVerbosity (\v flags -> flags { flagRestoreVerbosity = v })
-      , option [] ["state-dir"]
-        "Directory in which to store the persistent state of the server (default state/)"
-        flagRestoreStateDir (\v flags -> flags { flagRestoreStateDir = v })
-        (reqArgFlag "DIR")
+      , optionStateDir
+          flagRestoreStateDir (\v flags -> flags { flagRestoreStateDir = v })
+      , optionStaticDir
+          flagRestoreStaticDir (\v flags -> flags { flagRestoreStaticDir = v })
       ]
 
 restoreAction :: RestoreFlags -> [String] -> IO ()
@@ -686,10 +721,12 @@ restoreAction _ [] = die "No restore tarball given."
 restoreAction opts [tarFile] = do
     defaults <- Server.defaultServerConfig
 
-    let stateDir  = fromFlagOrDefault (confStateDir defaults) (flagRestoreStateDir opts)
+    let stateDir  = fromFlagOrDefault (confStateDir  defaults) (flagRestoreStateDir  opts)
+        staticDir = fromFlagOrDefault (confStaticDir defaults) (flagRestoreStaticDir opts)
         verbosity = fromFlag (flagRestoreVerbosity opts)
         config    = defaults {
                       confStateDir  = stateDir,
+                      confStaticDir = staticDir,
                       confVerbosity = verbosity
                     }
 
@@ -753,13 +790,3 @@ reqArgFlag :: ArgPlaceHolder -> SFlags -> LFlags -> Description
            -> OptDescr a
 reqArgFlag ad = reqArg' ad Flag flagToList
 
-optionVerbosity :: (a -> Flag Verbosity)
-                -> (Flag Verbosity -> a -> a)
-                -> OptionField a
-optionVerbosity getter setter =
-  option "v" ["verbose"]
-    "Control verbosity (n is 0--3, default verbosity level is 1)"
-    getter setter
-    (optArg "n" (fmap Flag Verbosity.flagToVerbosity)
-          (Flag Verbosity.verbose)
-          (fmap (Just . showForCabal) . flagToList))
