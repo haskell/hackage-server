@@ -34,7 +34,7 @@ data ServerEnv = ServerEnv {
     -- | The base URI of the server, just the hostname (and perhaps port).
     -- Use this if you need to construct absolute URIs pointing to the
     -- current server (e.g. as required in RSS feeds).
-    serverHostURI   :: URI.URIAuth,
+    serverBaseURI   :: URI.URI,
 
     -- | A tunable parameter for cache policy. Setting this parameter high
     -- during bulk imports can very significantly improve performance. During

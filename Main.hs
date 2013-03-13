@@ -30,9 +30,13 @@ import System.Directory
          , getDirectoryContents, Permissions(..), getPermissions )
 import System.FilePath
          ( (</>), (<.>) )
+import Network.URI
+         ( URI(..), URIAuth(..), parseAbsoluteURI )
 import Distribution.Simple.Command
 import Distribution.Simple.Setup
          ( Flag(..), fromFlag, fromFlagOrDefault, flagToList, flagToMaybe )
+import Data.Maybe
+         ( isNothing )
 import Data.List
          ( intercalate )
 import Data.Traversable
@@ -168,7 +172,7 @@ data RunFlags = RunFlags {
     flagRunVerbosity :: Flag Verbosity,
     flagRunPort      :: Flag String,
     flagRunIP        :: Flag String,
-    flagRunHost      :: Flag String,
+    flagRunHostURI   :: Flag String,
     flagRunStateDir  :: Flag FilePath,
     flagRunStaticDir :: Flag FilePath,
     flagRunTmpDir    :: Flag FilePath,
@@ -181,7 +185,7 @@ defaultRunFlags = RunFlags {
     flagRunVerbosity = Flag Verbosity.normal,
     flagRunPort      = NoFlag,
     flagRunIP        = NoFlag,
-    flagRunHost      = NoFlag,
+    flagRunHostURI   = NoFlag,
     flagRunStateDir  = NoFlag,
     flagRunStaticDir = NoFlag,
     flagRunTmpDir    = NoFlag,
@@ -212,9 +216,9 @@ runCommand = makeCommand name shortDesc longDesc defaultRunFlags options
           "IPv4 address to listen on (default 0.0.0.0)"
           flagRunIP (\v flags -> flags { flagRunIP = v })
           (reqArgFlag "IP")
-      , option [] ["host"]
-          "Server's host name (defaults to machine name)"
-          flagRunHost (\v flags -> flags { flagRunHost = v })
+      , option [] ["base-uri"]
+          "Server's public base URI (defaults to machine name)"
+          flagRunHostURI (\v flags -> flags { flagRunHostURI = v })
           (reqArgFlag "NAME")
       , optionStateDir
           flagRunStateDir (\v flags -> flags { flagRunStateDir = v })
@@ -238,20 +242,19 @@ runAction :: RunFlags -> IO ()
 runAction opts = do
     defaults <- Server.defaultServerConfig
 
-    port <- checkPortOpt defaults (flagToMaybe (flagRunPort opts))
-    ip   <- checkIPOpt   defaults (flagToMaybe (flagRunIP   opts))
-    cacheDelay <- checkCacheDelay (confCacheDelay defaults) (flagToMaybe (flagRunCacheDelay opts))
-    let hostname  = fromFlagOrDefault (confHostName  defaults) (flagRunHost      opts)
-        stateDir  = fromFlagOrDefault (confStateDir  defaults) (flagRunStateDir  opts)
+    port       <- checkPortOpt defaults (flagToMaybe (flagRunPort opts))
+    ip         <- checkIPOpt   defaults (flagToMaybe (flagRunIP   opts))
+    hosturi    <- checkHostURI defaults (flagToMaybe (flagRunHostURI opts)) port
+    cacheDelay <- checkCacheDelay defaults (flagToMaybe (flagRunCacheDelay opts))
+    let stateDir  = fromFlagOrDefault (confStateDir  defaults) (flagRunStateDir  opts)
         staticDir = fromFlagOrDefault (confStaticDir defaults) (flagRunStaticDir opts)
         tmpDir    = fromFlagOrDefault (confTmpDir    defaults) (flagRunTmpDir    opts)
         listenOn  = (confListenOn defaults) {
                        loPortNum = port,
                        loIP      = ip
                     }
-        verbosity = fromFlag (flagRunVerbosity opts)
         config    = defaults {
-                        confHostName   = hostname,
+                        confHostUri    = hosturi,
                         confListenOn   = listenOn,
                         confStateDir   = stateDir,
                         confStaticDir  = staticDir,
@@ -266,13 +269,14 @@ runAction opts = do
 
     let useTempServer = fromFlag (flagRunTemp opts)
     withServer config useTempServer $ \server ->
-      withCheckpointHandler verbosity server $ do
-        lognotice verbosity $ "Ready! Point your browser at http://" ++ hostname
-                        ++ if port == 80 then "/" else ":" ++ show port ++ "/"
+      withCheckpointHandler server $ do
+        lognotice verbosity $ "Ready! Point your browser at " ++ show hosturi
 
         Server.run server
 
   where
+    verbosity = fromFlag (flagRunVerbosity opts)
+
     -- Option handling:
     --
     checkPortOpt defaults Nothing    = return (loPortNum (confListenOn defaults))
@@ -280,6 +284,30 @@ runAction opts = do
       [(n,"")]  | n >= 1 && n <= 65535
                -> return n
       _        -> fail $ "bad port number " ++ show str
+
+    checkHostURI defaults Nothing port = do
+      let guessURI       = confHostUri defaults
+          Just authority = uriAuthority guessURI
+          portStr | port == 80 = ""
+                  | otherwise  = ':' : show port
+          guessURI' = guessURI { uriAuthority = Just authority { uriPort = portStr } }
+      lognotice verbosity $ "Guessing public URI as " ++ show guessURI'
+                        ++ "\n(you can override with the --base-uri= flag)"
+      return guessURI'
+
+    checkHostURI _        (Just str) _ = case parseAbsoluteURI str of
+      Nothing -> fail $ "Cannot parse as a URI: " ++ str ++ "\n"
+                     ++ "Make sure you include the http:// part"
+      Just uri
+        | uriScheme uri `notElem` ["http:", "https:"] ->
+          fail $ "Sorry, the server assumes it will be served (or proxied) "
+              ++ " via http or https, so cannot use uri scheme " ++ uriScheme uri
+        | isNothing (uriAuthority uri) ->
+          fail $ "The base-uri has to include the full host name"
+        | uriPath uri `notElem` ["", "/"] ->
+          fail $ "Sorry, the server assumes the base-uri to be at the root of "
+              ++ " the domain, so cannot use " ++ uriPath uri
+        | otherwise -> return uri { uriPath = "" }
 
     checkIPOpt defaults Nothing    = return (loIP (confListenOn defaults))
     checkIPOpt _        (Just str) =
@@ -300,8 +328,8 @@ runAction opts = do
          Left err -> fail (show err)
          Right _ -> return str
 
-    checkCacheDelay def Nothing    = return def
-    checkCacheDelay _   (Just str) = case reads str of
+    checkCacheDelay defaults Nothing    = return (confCacheDelay defaults)
+    checkCacheDelay _        (Just str) = case reads str of
       [(n,"")]  | n >= 0 && n <= 3600
                -> return n
       _        -> fail $ "bad cache delay number " ++ show str
@@ -311,8 +339,8 @@ runAction opts = do
     -- Useage:
     -- > kill -USR1 $the_pid
     --
-    withCheckpointHandler :: Verbosity -> Server -> IO () -> IO ()
-    withCheckpointHandler verbosity server action =
+    withCheckpointHandler :: Server -> IO () -> IO ()
+    withCheckpointHandler server action =
         bracket (setHandler handler) setHandler (\_ -> action)
       where
         handler = Signal.Catch $ do

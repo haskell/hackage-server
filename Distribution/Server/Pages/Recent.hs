@@ -26,7 +26,7 @@ import qualified Text.RSS as RSS
 import Text.RSS
          ( RSS(RSS) )
 import Network.URI
-         ( URI(..), URIAuth(..), uriToString )
+         ( URI(..), uriToString )
 import Data.Time.Clock
          ( UTCTime )
 import Data.Time.Format
@@ -76,19 +76,15 @@ rssFeedURL = "/recent.rss"
 recentAdditionsURL :: URL
 recentAdditionsURL = "/recent.html"
 
-recentFeed :: Users -> URIAuth -> UTCTime -> [PkgInfo] -> RSS
-recentFeed users host now pkgs = RSS
+recentFeed :: Users -> URI -> UTCTime -> [PkgInfo] -> RSS
+recentFeed users hostURI now pkgs = RSS
   "Recent additions"
-  (hackageURI host recentAdditionsURL)
+  (hostURI { uriPath = recentAdditionsURL})
   desc
   (channel now)
-  [ releaseItem users host pkg | pkg <- take 20 pkgs ]
+  [ releaseItem users hostURI pkg | pkg <- take 20 pkgs ]
   where
     desc = "The 20 most recent additions to Hackage, the Haskell package database."
-
-hackageURI :: URIAuth -> String -> URI
-hackageURI host path =
-        URI "http:" (Just host) path "" ""
 
 channel :: UTCTime -> [RSS.ChannelElem]
 channel now =
@@ -102,8 +98,8 @@ channel now =
   where
     email = "duncan@haskell.org (Duncan Coutts)"
 
-releaseItem :: Users -> URIAuth -> PkgInfo -> [RSS.ItemElem]
-releaseItem users host pkgInfo@(PkgInfo {
+releaseItem :: Users -> URI -> PkgInfo -> [RSS.ItemElem]
+releaseItem users hostURI pkgInfo@(PkgInfo {
       pkgInfoId = pkgId
     , pkgUploadData = (time, userId)
   }) =
@@ -114,7 +110,7 @@ releaseItem users host pkgInfo@(PkgInfo {
   , RSS.Description desc
   ]
   where
-    uri   = hackageURI host (packageURL pkgId)
+    uri   = hostURI { uriPath = packageURL pkgId }
     title = unPackageName (packageName pkgId) ++ " " ++ display (packageVersion pkgId)
     body  = synopsis (packageDescription (pkgDesc pkgInfo))
     desc  = "<i>Added by " ++ display user ++ ", " ++ showTime time ++ ".</i>"

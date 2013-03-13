@@ -281,14 +281,11 @@ legacyPasswdsFeature env legacyPasswdsState templates UserFeature{..}
         err = ErrorResponse 401 [] "Account needs to be re-enabled" msg
         msg = [ MText $ "Hackage has been upgraded to use a more secure login "
                      ++ "system. Please go to "
-              , MLink uri uri
+              , MLink abs rel
               , MText $ " to re-enable your account and for more details about "
                      ++ "this change." ]
-        uri = uriToString id (nullURI {
-                uriScheme    = "http:",
-                uriAuthority = Just (serverHostURI env),
-                uriPath      = renderResource htpasswordUpgradeResource []
-              }) ""
+        rel = renderResource htpasswordUpgradeResource []
+        abs = uriToString id ((serverBaseURI env) { uriPath = rel }) ""
 
     onAuthFail _ = return Nothing
 

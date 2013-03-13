@@ -42,7 +42,7 @@ import Distribution.Verbosity as Verbosity
 
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist)
 import Control.Concurrent
-import Network.URI (URIAuth(URIAuth))
+import Network.URI (URI(..), URIAuth(URIAuth), nullURI)
 import Network.BSD (getHostName)
 import Data.List (foldl', nubBy)
 import Data.Int  (Int64)
@@ -60,7 +60,7 @@ data ListenOn = ListenOn {
 
 data ServerConfig = ServerConfig {
   confVerbosity :: Verbosity,
-  confHostName  :: String,
+  confHostUri   :: URI,
   confListenOn  :: ListenOn,
   confStateDir  :: FilePath,
   confStaticDir :: FilePath,
@@ -79,9 +79,13 @@ defaultServerConfig :: IO ServerConfig
 defaultServerConfig = do
   hostName <- getHostName
   dataDir  <- getDataDir
+  let portnum = 8080 :: Int
   return ServerConfig {
     confVerbosity = Verbosity.normal,
-    confHostName  = hostName,
+    confHostUri   = nullURI {
+                      uriScheme    = "http:",
+                      uriAuthority = Just (URIAuth "" hostName (':' : show portnum))
+                    },
     confListenOn  = ListenOn {
                         loPortNum = 8080,
                         loIP = "0.0.0.0"
@@ -116,7 +120,7 @@ hasSavedState = doesDirectoryExist . confDbStateDir
 -- with stale lock files.
 --
 initialise :: ServerConfig -> IO Server
-initialise config@(ServerConfig verbosity hostName listenOn
+initialise config@(ServerConfig verbosity hostURI listenOn
                                     stateDir _ tmpDir
                                     cacheDelay) = do
     createDirectoryIfMissing False stateDir
@@ -133,7 +137,7 @@ initialise config@(ServerConfig verbosity hostName listenOn
             serverBlobStore    = store,
             serverTmpDir       = tmpDir,
             serverCacheDelay   = cacheDelay * 1000000, --microseconds
-            serverHostURI      = hostURI,
+            serverBaseURI      = hostURI,
             serverVerbosity    = verbosity
          }
     -- do feature initialization
@@ -145,12 +149,6 @@ initialise config@(ServerConfig verbosity hostName listenOn
         serverListenOn    = listenOn,
         serverEnv         = env
     }
-
-  where
-    hostURI       = URIAuth "" hostName portStr
-      where portNum = loPortNum listenOn
-            portStr | portNum == 80 = ""
-                    | otherwise     = ':':show portNum
 
 -- | Actually run the server, i.e. start accepting client http connections.
 --

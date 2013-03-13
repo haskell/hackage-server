@@ -23,7 +23,7 @@ import Distribution.PackageDescription
 import Control.Applicative ((<|>), optional)
 import qualified Data.Set as Set
 import qualified Data.ByteString.Lazy.Char8 as BS
-import Network.URI (URI(..), uriToString)
+import Network.URI (URI(..))
 import Text.JSON
 
 
@@ -88,9 +88,6 @@ initNamesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
     loginfo verbosity "Initialising names feature, end"
     return feature
 
-hostUriStr :: ServerEnv -> String
-hostUriStr ServerEnv{serverHostURI} = uriToString id (URI "http:" (Just serverHostURI) "" "" "") ""
-
 namesFeature :: ServerEnv
              -> CoreFeature
              -> AsyncCache NameIndex
@@ -98,7 +95,7 @@ namesFeature :: ServerEnv
              -> AsyncCache Response
              -> (NamesFeature, IO NameIndex, IO TextSearch, IO Response)
 
-namesFeature env CoreFeature{..}
+namesFeature ServerEnv{serverBaseURI} CoreFeature{..}
              packageNameIndex packageTextIndex
              openSearchCache
   = (NamesFeature{..}, getNameIndex, getTextIndex, getOpenSearch)
@@ -170,7 +167,7 @@ namesFeature env CoreFeature{..}
 
     getOpenSearch :: IO Response
     getOpenSearch = return $ toResponse (Resource.OpenSearchXml xmlstr)
-      where xmlstr = BS.pack (mungeSearchXml (hostUriStr env))
+      where xmlstr = BS.pack (mungeSearchXml (show serverBaseURI))
 
     opensearchGet :: ServerPartE Response
     opensearchGet = return . toResponse =<< readAsyncCache openSearchCache
@@ -182,7 +179,7 @@ namesFeature env CoreFeature{..}
         -- 1. Group similarly prefixed items, so user can see more breadth and less depth
         -- 2. Sort by revdeps, downloads, etc. (create a general "hotness" index)
         results <- fmap (take 20 . Set.toList . lookupPrefix queryStr) $ readAsyncCache packageNameIndex
-        let packagePrefix = hostUriStr env ++ "/package/"
+        let packagePrefix = show (serverBaseURI { uriPath = "/package/" })
         return . toResponse $ Resource.SuggestJson $ JSArray
           [ JSString $ toJSString queryStr
           , JSArray $ map (JSString . toJSString) results

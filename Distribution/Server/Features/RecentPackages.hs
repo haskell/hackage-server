@@ -121,7 +121,7 @@ recentPackagesFeature env
         now   <- getCurrentTime
         let recentChanges = reverse $ sortBy (comparing pkgUploadTime) (PackageIndex.allPackages pkgIndex)
             xmlRepresentation = toResponse $ Resource.XHtml $ Pages.recentPage users recentChanges
-            rssRepresentation = toResponse $ Pages.recentFeed users (serverHostURI env) now recentChanges
+            rssRepresentation = toResponse $ Pages.recentFeed users (serverBaseURI env) now recentChanges
         return (xmlRepresentation, rssRepresentation)
 
 {-

@@ -36,7 +36,7 @@ import Data.Time (UTCTime, getCurrentTime)
 import Text.CSV (CSV, Record)
 import System.IO
 import Network.Mail.Mime
-import Network.URI (URIAuth(..))
+import Network.URI (URI(..), URIAuth(..))
 
 
 -- | A feature to allow open account signup, and password reset,
@@ -294,7 +294,7 @@ userSignupFeature :: ServerEnv
                   -> StateComponent SignupResetTable
                   -> Templates
                   -> UserSignupFeature
-userSignupFeature env UserFeature{..} UserDetailsFeature{..}
+userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..}
                   signupResetState templates
   = UserSignupFeature {..}
 
@@ -412,7 +412,7 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..}
             }
 
         let mailFrom = Address (Just (T.pack "Hackage website"))
-                               (T.pack ("noreply@" ++ uriRegName ourURI))
+                               (T.pack ("noreply@" ++ uriRegName ourHost))
             mail     = (emptyMail mailFrom) {
               mailTo      = [Address (Just realname) useremail],
               mailHeaders = [(BS.pack "Subject",
@@ -422,13 +422,13 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..}
             }
             mailBody = renderTemplate $ templateEmail
               [ "realname"    $= realname
-              , "confirmlink" $= "http://" ++ ourURIStr
-                              ++ "/users/register-request/"
-                              ++ renderNonce nonce
-              , "serverhost"  $= ourURIStr
+              , "confirmlink" $= show serverBaseURI {
+                                   uriPath = "/users/register-request/"
+                                          ++ renderNonce nonce
+                                 }
+              , "serverhost"  $= show serverBaseURI
               ]
-            ourURI    = serverHostURI env
-            ourURIStr = uriRegName ourURI ++ uriPort ourURI
+            Just ourHost = uriAuthority serverBaseURI
 
         updateAddSignupResetInfo nonce signupInfo
 
@@ -556,7 +556,7 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..}
               nonceTimestamp = timestamp
             }
         let mailFrom = Address (Just (T.pack "Hackage website"))
-                               (T.pack ("noreply@" ++ uriRegName ourURI))
+                               (T.pack ("noreply@" ++ uriRegName ourHost))
             mail     = (emptyMail mailFrom) {
               mailTo      = [Address (Just accountName) accountContactEmail],
               mailHeaders = [(BS.pack "Subject",
@@ -566,12 +566,13 @@ userSignupFeature env UserFeature{..} UserDetailsFeature{..}
             }
             mailBody = renderTemplate $ templateEmail
               [ "realname"    $= accountName
-              , "confirmlink" $= "http://" ++ ourURIStr
-                              ++ "/users/password-reset/" ++ renderNonce nonce
-              , "serverhost"  $= ourURIStr
+              , "confirmlink" $= show serverBaseURI {
+                                   uriPath = "/users/password-reset/"
+                                          ++ renderNonce nonce
+                                 }
+              , "serverhost"  $= show serverBaseURI
               ]
-            ourURI    = serverHostURI env
-            ourURIStr = uriRegName ourURI ++ uriPort ourURI
+            Just ourHost = uriAuthority serverBaseURI
 
         updateAddSignupResetInfo nonce resetInfo
 
