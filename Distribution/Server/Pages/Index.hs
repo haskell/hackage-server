@@ -52,7 +52,6 @@ data Category = Category String | NoCategory
 formatPkgGroups :: [PackageIndexInfo] -> Html
 formatPkgGroups pkgs = hackagePage "packages by category" docBody
   where docBody =
-                (thediv ! [theclass "floatright"] << searchBox) :
                 (h2 << "Packages by category") :
                 -- table of contents
                 paragraph ! [theclass "toc"] <<
@@ -63,13 +62,6 @@ formatPkgGroups pkgs = hackagePage "packages by category" docBody
                 [formatCategory cat +++
                         formatPkgList (sortBy (comparing sortKey) sub_pkgs) |
                         (cat, sub_pkgs) <- cat_pkgs]
-        searchBox =
-                [form ! [method "get", action "http://www.google.co.uk/search"] <<
-                        (thediv << [input ! [thetype "hidden", XHtml.name "hl", value "en"],
-                         input ! [thetype "hidden", XHtml.name "as_sitesearch", value "hackage.haskell.org/packages"],
-                         input ! [thetype "text", size "20", XHtml.name "as_q", value ""],
-                         input ! [thetype "submit", value "Search package pages"]
-                        ])]
         catLink (cat, sub_pkgs) =
                 (anchor ! [href ("#" ++ catLabel catName)] << catName) +++
                 spaceHtml +++
