@@ -19,8 +19,6 @@ body {
 
 p {
   margin: 0.8em 0;
-  max-width: 55em;
-  text-align: justify; 
 }
 
 ul, ol {
@@ -53,7 +51,7 @@ a[href]:hover { text-decoration:underline; }
  */
  
 body {
-	font:13px/1.4 sans-serif;
+	font:11pt/1.4 sans-serif;
 	*font-size:small; /* for IE */
 	*font:x-small; /* for IE in quirks mode */
 }
@@ -182,6 +180,7 @@ pre {
 #content {
   margin: 0 auto;
   padding: 0 2em 6em;
+  max-width: 60em;
 }
 
 #page-header {
