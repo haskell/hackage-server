@@ -42,6 +42,7 @@ import Distribution.Server.Util.Happstack (remainingPathString)
 import Distribution.Server.Util.ContentType (parseContentAccept)
 import Distribution.Server.Framework.Error
 
+import Data.List (isSuffixOf)
 import Data.Monoid
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -52,7 +53,7 @@ import Data.List (intercalate, unionBy, findIndices, find)
 import qualified Text.ParserCombinators.Parsec as Parse
 
 import qualified Happstack.Server.SURI as SURI
-import System.FilePath.Posix ((</>))
+import System.FilePath.Posix ((</>), (<.>))
 import qualified Data.Tree as Tree (Tree(..), drawTree)
 import qualified Data.ByteString.Char8 as BS
 
@@ -216,6 +217,11 @@ renderURI bpath dpath = renderGenURI bpath (flip lookup dpath)
 renderGenURI :: BranchPath -> (String -> Maybe String) -> String
 renderGenURI bpath pathFunc = "/" </> go (reverse bpath)
   where go (StaticBranch  sdir:rest) = SURI.escape sdir </> go rest
+        go (DynamicBranch sdir:rest)
+          | (ddir, sformat@('.':_)) <- break (=='.') sdir
+          = case pathFunc ddir of
+            Nothing  -> ""
+            Just str -> SURI.escape str <.> SURI.escape sformat </> go rest
         go (DynamicBranch sdir:rest) = case pathFunc sdir of
             Nothing  -> ""
             Just str -> SURI.escape str </> go rest
@@ -309,6 +315,7 @@ trunkToResource' [(branch, NoFormat), (StaticBranch "", format)] = pathFormatSep
         pathFormatSep NoFormat = ([branch], Slash, noFormat) -- /foo/
 -- /foo.format/[...] (rewrite into next case)
 trunkToResource' ((StaticBranch sdir, StaticFormat format):xs) = trunkToResource' ((StaticBranch (sdir ++ "." ++ format), NoFormat):xs)
+trunkToResource' ((DynamicBranch ddir, StaticFormat format):xs) = trunkToResource' ((DynamicBranch (ddir ++ "." ++ format), NoFormat):xs)
 -- /foo/[...]
 trunkToResource' ((branch, NoFormat):xs) = case trunkToResource' xs of (xs', slash, res) -> (branch:xs', slash, res)
 -- /foo.format
@@ -557,7 +564,12 @@ renderServerTree dpath (ServerTree func forest) =
   where
     renderBranch :: BranchComponent -> ServerTree ServerResponse -> ServerPartE Response
     renderBranch (StaticBranch  sdir) tree = dir sdir $ renderServerTree dpath tree
-    renderBranch (DynamicBranch sdir) tree = path $ \pname -> renderServerTree ((sdir, pname):dpath) tree
+    renderBranch (DynamicBranch sdir) tree
+      | (ddir, sformat@('.':_)) <- break (=='.') sdir
+                   = path $ \pname -> do guard (sformat `isSuffixOf` pname)
+                                         let pname' = take (length pname - length sformat) pname
+                                         renderServerTree ((ddir, pname'):dpath) tree
+      | otherwise  = path $ \pname -> renderServerTree ((sdir, pname):dpath) tree
     renderBranch TrailingBranch tree = renderServerTree dpath tree
 
 reinsert :: Monoid a => BranchComponent -> ServerTree a -> Map BranchComponent (ServerTree a) -> Map BranchComponent (ServerTree a)

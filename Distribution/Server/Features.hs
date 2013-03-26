@@ -39,6 +39,7 @@ import Distribution.Server.Features.HaskellPlatform     (initPlatformFeature)
 import Distribution.Server.Features.UserDetails         (initUserDetailsFeature)
 import Distribution.Server.Features.UserSignup          (initUserSignupFeature)
 import Distribution.Server.Features.LegacyPasswds       (initLegacyPasswdsFeature)
+import Distribution.Server.Features.EditCabalFiles      (initEditCabalFilesFeature)
 #endif
 import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
 
@@ -177,6 +178,11 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          documentationCoreFeature
                          documentationCandidatesFeature
                          userDetailsFeature
+
+    editCabalFeature <- initEditCabalFilesFeature env
+                          usersFeature
+                          coreFeature
+                          uploadFeature
 #endif
 
     -- The order of initialization above should be the same as
@@ -209,6 +215,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface platformFeature
          , getFeatureInterface htmlFeature
          , legacyRedirectsFeature uploadFeature
+         , editCabalFeature
 #endif
          , staticFilesFeature
          , serverIntrospectFeature allFeatures
