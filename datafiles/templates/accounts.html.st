@@ -12,7 +12,7 @@ $hackagePageHeader()$
 <h2>User accounts</h2>
 <p>Most of the functions of the Hackage web interface
 (including browsing and checking packages) are available to all.
-However, uploading packages requires a HackageDB username and password.
+However, uploading packages requires a Hackage username and password.
 </p>
 
 <p>The current policy is that anyone can register an account but an
