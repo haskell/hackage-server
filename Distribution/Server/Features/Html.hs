@@ -6,6 +6,7 @@ module Distribution.Server.Features.Html (
 
 import Distribution.Server.Framework
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
+import Distribution.Server.Framework.Templating
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.RecentPackages
@@ -87,7 +88,8 @@ initHtmlFeature :: ServerEnv -> UserFeature -> CoreFeature -> RecentPackagesFeat
                 -> UserDetailsFeature
                 -> IO HtmlFeature
 
-initHtmlFeature ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
+initHtmlFeature ServerEnv{serverTemplatesDir, serverCacheDelay,
+                          serverVerbosity = verbosity}
                 user core@CoreFeature{packageIndexChange}
                 packages upload
                 candidates versions
@@ -99,6 +101,11 @@ initHtmlFeature ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
                 docsCore docsCandidates usersdetails = do
 
     loginfo verbosity "Initialising html feature, start"
+
+    -- Page templates
+    templates <- loadTemplates DesignMode {- use DesignMode when working on templates -}
+                   [serverTemplatesDir, serverTemplatesDir </> "Html"]
+                   [ "maintain.html" ]
 
     -- do rec, tie the knot
     rec let (feature, packageIndex, packagesPage) =
@@ -112,6 +119,7 @@ initHtmlFeature ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
                           usersdetails
                           (htmlUtilities core tags)
                           mainCache namesCache
+                          templates
 
         -- Index page caches
         mainCache  <- newAsyncCacheNF packageIndex
@@ -155,6 +163,7 @@ htmlFeature :: UserFeature
             -> HtmlUtilities
             -> AsyncCache Response
             -> AsyncCache Response
+            -> Templates
             -> (HtmlFeature, IO Response, IO Response)
 
 htmlFeature user
@@ -169,6 +178,7 @@ htmlFeature user
             docsCore docsCandidates usersdetails
             utilities@HtmlUtilities{..}
             cachePackagesPage cacheNamesPage
+            templates
   = (HtmlFeature{..}, packageIndex, packagesPage)
   where
     htmlFeatureInterface = (emptyHackageFeature "html") {
@@ -188,7 +198,7 @@ htmlFeature user
       }
 
     htmlCore       = mkHtmlCore       utilities
-                                      (coreResource core)
+                                      core
                                       versions
                                       upload
                                       tags
@@ -200,6 +210,7 @@ htmlFeature user
                                       htmlPreferred
                                       cachePackagesPage
                                       cacheNamesPage
+                                      templates
     htmlUsers      = mkHtmlUsers      user usersdetails
     htmlUploads    = mkHtmlUploads    utilities upload
     htmlDownloads  = mkHtmlDownloads  utilities download
@@ -368,7 +379,7 @@ data HtmlCore = HtmlCore {
   }
 
 mkHtmlCore :: HtmlUtilities
-           -> CoreResource
+           -> CoreFeature
            -> VersionsFeature
            -> UploadFeature
            -> TagsFeature
@@ -380,15 +391,16 @@ mkHtmlCore :: HtmlUtilities
            -> HtmlPreferred
            -> AsyncCache Response
            -> AsyncCache Response
+           -> Templates
            -> HtmlCore
 mkHtmlCore HtmlUtilities{..}
-           coreResource@CoreResource{packageInPath, guardValidPackageName}
+           CoreFeature{lookupPackageName,coreResource}
            VersionsFeature{ versionsResource
                           , queryGetDeprecatedFor
                           , queryGetPreferredInfo
                           , withPackagePreferred
                           }
-           UploadFeature{uploadResource, guardAuthorisedAsMaintainer}
+           UploadFeature{guardAuthorisedAsMaintainerOrTrustee}
            TagsFeature{queryTagsForPackage}
            DocumentationFeature{documentationResource, queryHasDocumentation}
            DownloadFeature{perVersionDownloads}
@@ -397,15 +409,16 @@ mkHtmlCore HtmlUtilities{..}
            HtmlTags{..}
            HtmlPreferred{..}
            cachePackagesPage
-           cacheNamesPage = HtmlCore{..}
+           cacheNamesPage
+           templates
+  = HtmlCore{..}
   where
-    cores    = coreResource
+    cores@CoreResource{packageInPath} = coreResource
     versions = versionsResource
-    uploads  = uploadResource
     docs     = documentationResource
 
     maintainPackage   = (resourceAt "/package/:package/maintain") {
-                            resourceGet = [("html", serveMaintainLinks editDeprecated editPreferred $ maintainersGroupResource uploads)]
+                            resourceGet = [("html", serveMaintainPage)]
                           }
 
     htmlCoreResources = [
@@ -463,11 +476,8 @@ mkHtmlCore HtmlUtilities{..}
         -- extra features like tags and downloads
         tags <- queryTagsForPackage pkgname
 
-        let maintainLink = anchor ! [href $ renderResource maintainPackage [display pkgname]] << toHtml "maintain"
-            tagLinks = toHtml [anchor ! [href "/packages/tags"] << "Tags", toHtml ": ",
-                               toHtml (renderTags tags), toHtml " | ",
-                               anchor ! [href $ renderResource tagEdit [display pkgname]] << "edit"]
-            backHackage = anchor ! [href $ "http://hackage.haskell.org/package/" ++ display pkgid] << "on hackage"
+        let tagLinks = toHtml [anchor ! [href "/packages/tags"] << "Tags", toHtml ": ",
+                               toHtml (renderTags tags)]
         deprs <- queryGetDeprecatedFor pkgname
         let deprHtml = case deprs of
               Just fors -> paragraph ! [thestyle "color: red"] << [toHtml "Deprecated", case fors of
@@ -477,27 +487,22 @@ mkHtmlCore HtmlUtilities{..}
               Nothing -> noHtml
         -- and put it all together
         return $ toResponse $ Resource.XHtml $
-            Pages.packagePage render [tagLinks, maintainLink, backHackage] [deprHtml] (beforeHtml ++ middleHtml ++ afterHtml) [] docURL
+            Pages.packagePage render [tagLinks] [deprHtml] (beforeHtml ++ middleHtml ++ afterHtml) [] docURL
       where
         showDist (dname, info) = toHtml (display dname ++ ":") +++
             anchor ! [href $ distroUrl info] << toHtml (display $ distroVersion info)
 
-    -- TODO: include delete link for admins
-    serveMaintainLinks :: Resource -> Resource -> GroupResource
-                       -> DynamicPath -> ServerPartE Response
-    serveMaintainLinks editDepr editPref mgroup dpath = do
+    serveMaintainPage :: DynamicPath -> ServerPartE Response
+    serveMaintainPage dpath = do
       pkgname <- packageInPath dpath
-      guardValidPackageName pkgname
-      guardAuthorisedAsMaintainer pkgname
-      let dpath' = [("package", display pkgname)]
-      return $ toResponse $ Resource.XHtml $ hackagePage "Maintain package"
-        [ unordList $
-            [ anchor ! [href $ renderResource' editPref dpath'] << "Edit preferred versions"
-            , anchor ! [href $ renderResource' editDepr dpath'] << "Edit deprecation"
-            , anchor ! [href $ renderResource' (groupResource mgroup) dpath'] << "Maintainer list"
-            ]
+      pkgs <- lookupPackageName pkgname
+      guardAuthorisedAsMaintainerOrTrustee (pkgname :: PackageName)
+      template <- getTemplate templates "maintain.html"
+      return $ toResponse $ template
+        [ "pkgname"  $= display pkgname
+        , "versions" $= map (display . packageId) pkgs
         ]
-      -- upload documentation
+
 
 {-------------------------------------------------------------------------------
   Users

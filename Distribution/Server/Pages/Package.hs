@@ -52,6 +52,7 @@ packagePage render headLinks top sections bottom docURL =
              pkgBody render sections,
              moduleSection render docURL,
              downloadSection render,
+             maintainerSection pkgid,
              map pair bottom
            ]
     bodyTitle = "The " ++ display (pkgName pkgid) ++ " package"
@@ -123,6 +124,16 @@ downloadSection PackageRender{..} =
     changeLogURL  = rendPkgUri </> "changelog"
     srcURL        = rendPkgUri </> "src/"
     tarGzFileName = display rendPkgId ++ ".tar.gz"
+
+maintainerSection :: PackageId -> [Html]
+maintainerSection pkgid =
+    [ h4 << "Maintainers' corner"
+    , paragraph << "For package maintainers and hackage trustees"
+    , ulist << li << anchor ! [href maintainURL]
+                  << "edit package information"
+    ]
+  where
+    maintainURL = display (packageName pkgid) </> "maintain"
 
 moduleSection :: PackageRender -> Maybe URL -> [Html]
 moduleSection render docURL = maybeToList $ fmap msect (rendModules render)
