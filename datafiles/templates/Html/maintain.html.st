@@ -38,5 +38,10 @@ package after its been released.
       Existing members can add other users into the maintainer group.
   </dd>
 
+<dt>Cabal file metadata</dt>
+  <dd>You can edit certain bits of package metadata after a release, without uploading a new tarball.
+  <p>$versions:{pkgid|<a href="/package/$pkgid$/$pkgname$.cabal/edit">$pkgid$</a>}; separator=", "$</p>
+  </dd>
+
 </div>
 </body></html>
