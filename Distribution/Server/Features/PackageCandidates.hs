@@ -36,7 +36,6 @@ import Distribution.Text
 import Distribution.Package
 
 import Data.Version
-import Text.XHtml.Strict (unordList, h3, (<<), toHtml)
 import Data.Function (fix)
 import Data.List (find)
 import Data.Maybe (listToMaybe, catMaybes)
@@ -179,10 +178,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     candidatesCoreResource = fix $ \r -> CoreResource {
 -- TODO: There is significant overlap between this definition and the one in Core
         corePackagesPage = resourceAt "/packages/candidates/.:format"
-      , corePackagePage = (resourceAt "/package/:package/candidate.:format") {
-            resourceDesc = [(GET, "Show basic package candidate page")]
-          , resourceGet  = [("html", basicCandidatePage r)]
-          }
+      , corePackagePage = resourceAt "/package/:package/candidate.:format"
       , coreCabalFile = (resourceAt "/package/:package/candidate/:cabal.cabal") {
             resourceDesc = [(GET, "Candidate .cabal file")]
           , resourceGet  = [("cabal", serveCandidateCabal)]
@@ -223,21 +219,6 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       , candidateChangeLogUri = \pkgid ->
           renderResource (candidateChangeLog candidatesResource) [display pkgid, display (packageName pkgid)]
       }
-
-    basicCandidatePage :: CoreResource -> DynamicPath -> ServerPartE Response
-    basicCandidatePage r dpath = do --TODO: use something else for nice html error pages
-      pkg <- packageInPath dpath >>= lookupCandidateId
-      ok . toResponse . Resource.XHtml . toHtml $
-        [ h3 << "Downloads"
-        , toHtml (section pkg)
-        , h3 << "Warnings"
-        , case candWarnings pkg of
-             [] -> toHtml "No warnings"
-             warnings -> unordList warnings
-        ]
-      where section cand = basicPackageSection (coreCabalUri r)
-                                               (coreTarballUri r)
-                                               (candPkgInfo cand)
 
     postCandidate :: ServerPartE Response
     postCandidate = do

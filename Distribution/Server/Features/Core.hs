@@ -5,7 +5,6 @@ module Distribution.Server.Features.Core (
     initCoreFeature,
 
     -- Misc other utils?
-    basicPackageSection,
     packageExists,
     packageIdExists,
   ) where
@@ -29,10 +28,6 @@ import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Data.Time.Clock (UTCTime)
 import Data.Map (Map)
 import qualified Data.Map as Map
---TODO: why are we importing xhtml here!?
-import Text.XHtml.Strict (Html, toHtml, unordList, h3, (<<), anchor, href, (!))
-import Data.Ord (comparing)
-import Data.List (sortBy)
 import Data.ByteString.Lazy.Char8 (ByteString)
 
 import Distribution.Text (display)
@@ -225,10 +220,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     corePackagesPage = (resourceAt "/packages/.:format") {
         resourceGet = [] -- have basic packages listing?
       }
-    corePackagePage = (resourceAt "/package/:package.:format") {
-        resourceDesc = [(GET, "Show basic package information")]
-      , resourceGet  = [("html", basicPackagePage)]
-      }
+    corePackagePage = resourceAt "/package/:package.:format"
     corePackageRedirect = (resourceAt "/package/") {
         resourceDesc = [(GET,  "Redirect to /packages/")]
       , resourceGet  = [("", \_ -> seeOther "/packages/" $ toResponse ())]
@@ -304,20 +296,6 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       extras <- readMemState indexExtras
       let indexTarball' = GZip.compress (Packages.Index.write users extras index)
       return indexTarball'
-
-    -- Should probably look more like an Apache index page (Name / Last modified / Size / Content-type)
-    basicPackagePage :: DynamicPath -> ServerPartE Response
-    basicPackagePage dpath = do
-      pkgs <- packageInPath dpath >>= lookupPackageName . pkgName
-      return $ toResponse $ Resource.XHtml $
-        showAllP $ sortBy (flip $ comparing packageVersion) pkgs
-      where
-        showAllP :: [PkgInfo] -> Html
-        showAllP pkgs = toHtml [
-            h3 << "Downloads",
-            unordList $ map (basicPackageSection coreCabalUri
-                                                 coreTarballUri) pkgs
-         ]
 
     ------------------------------------------------------------------------------
     packageError :: [MessageSpan] -> ServerPartE a
@@ -417,20 +395,4 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 packageExists, packageIdExists :: (Package pkg, Package pkg') => PackageIndex pkg -> pkg' -> Bool
 packageExists   pkgs pkg = not . null $ PackageIndex.lookupPackageName pkgs (packageName pkg)
 packageIdExists pkgs pkg = maybe False (const True) $ PackageIndex.lookupPackageId pkgs (packageId pkg)
-
-basicPackageSection :: (PackageId -> String)
-                    -> (PackageId -> String)
-                    -> PkgInfo -> [Html]
-basicPackageSection cabalUrl tarUrl pkgInfo =
-    let pkgId = packageId pkgInfo; pkgStr = display pkgId in [
-    toHtml pkgStr,
-    unordList $ [
-        [anchor ! [href (cabalUrl pkgId)] << "Package description",
-         toHtml " (included in the package)"],
-        case pkgTarball pkgInfo of
-            [] -> [toHtml "Package not available"];
-            _ ->  [anchor ! [href (tarUrl pkgId)] << (pkgStr ++ ".tar.gz"),
-                   toHtml " (Cabal source package)"]
-    ]
- ]
 
