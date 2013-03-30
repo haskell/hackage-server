@@ -52,7 +52,7 @@ initDownloadFeature ServerEnv{serverStateDir, serverVerbosity = verbosity} core 
     downChan      <- newChan
     downHist      <- newMemStateWHNF emptyHistogram
     let feature   = downloadFeature core downloadState downChan downHist
-    registerHook (tarballDownload core) $ writeChan downChan
+    registerHook (packageDownloadHook core) (writeChan downChan)
 
     loginfo verbosity "Initialising download feature, end"
     return feature

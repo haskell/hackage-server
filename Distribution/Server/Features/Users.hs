@@ -42,16 +42,14 @@ data UserFeature = UserFeature {
 
     userResource :: UserResource,
 
-    userAdded :: Hook (IO ()),
+    userAdded :: Hook () (), --TODO: delete, other status changes?
     adminGroup :: UserGroup,
-    -- Filters for all features modifying the package index
-    packageMutate :: Filter (UserId -> IO Bool),
 
     -- Authorisation
     guardAuthorised_   :: [PrivilegeCondition] -> ServerPartE (),
     guardAuthorised    :: [PrivilegeCondition] -> ServerPartE UserId,
     guardAuthenticated :: ServerPartE UserId,
-    authFailHook       :: Hook (Auth.AuthError -> IO (Maybe ErrorResponse)),
+    authFailHook       :: Hook Auth.AuthError (Maybe ErrorResponse),
 
     queryGetUserDb    :: forall m. MonadIO m => m Users.Users,
 
@@ -76,7 +74,6 @@ data UserFeature = UserFeature {
     adminAddUser        :: ServerPartE Response,
     enabledAccount      :: UserName -> ServerPartE (),
     deleteAccount       :: UserName -> ServerPartE (),
-    runUserFilter       :: UserId -> IO (Maybe ErrorResponse),
     groupResourceAt     :: String -> UserGroup -> IO (UserGroup, GroupResource),
     groupResourcesAt    :: forall a. String -> (a -> UserGroup)
                                             -> (a -> DynamicPath)
@@ -141,7 +138,6 @@ initUserFeature ServerEnv{serverStateDir} = do
 
   -- Extension hooks
   userAdded     <- newHook
-  packageMutate <- newHook
   authFailHook  <- newHook
 
   -- Slightly tricky: we have an almost recursive knot between the group
@@ -154,7 +150,7 @@ initUserFeature ServerEnv{serverStateDir} = do
             = userFeature usersState
                           adminsState
                           groupIndex
-                          userAdded packageMutate authFailHook
+                          userAdded authFailHook
                           adminG adminR
 
       (adminG, adminR) <- groupResourceAt "/users/admins/" adminGroupDesc
@@ -190,14 +186,13 @@ adminsStateComponent stateDir = do
 userFeature :: StateComponent Users.Users
             -> StateComponent HackageAdmins
             -> MemState GroupIndex
-            -> Hook (IO ())
-            -> Filter (UserId -> IO Bool)
-            -> Filter (Auth.AuthError -> IO (Maybe ErrorResponse))
+            -> Hook () ()
+            -> Hook Auth.AuthError (Maybe ErrorResponse)
             -> UserGroup
             -> GroupResource
             -> (UserFeature, UserGroup)
 userFeature  usersState adminsState
-             groupIndex userAdded packageMutate authFailHook
+             groupIndex userAdded authFailHook
              adminGroup adminResource
   = (UserFeature {..}, adminGroupDesc)
   where
@@ -297,7 +292,7 @@ userFeature  usersState adminsState
         handleAuthError :: Auth.AuthError -> ServerPartE a
         handleAuthError err = do
           defaultResponse  <- Auth.authErrorResponse realm err
-          overrideResponse <- msum <$> runFilter' authFailHook err
+          overrideResponse <- msum <$> runHook authFailHook err
           throwError (fromMaybe defaultResponse overrideResponse)
 
     -- result: either not-found, not-authenticated, or 204 (success)
@@ -429,13 +424,6 @@ userFeature  usersState adminsState
 
     newUserAuth :: UserName -> PasswdPlain -> UserAuth
     newUserAuth name pwd = UserAuth (Auth.newPasswdHash Auth.hackageRealm name pwd)
-
-    --
-    runUserFilter :: UserId -> IO (Maybe ErrorResponse)
-    runUserFilter uid =
-      runFilter' packageMutate uid >>= \bs -> case or bs of
-        True  -> return . Just $ ErrorResponse 403 [] "Upload failed" [MText "Your account can't upload packages."]
-        False -> return Nothing
 
     ------ User group management
     adminGroupDesc :: UserGroup

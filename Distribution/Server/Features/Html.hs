@@ -137,10 +137,10 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverCacheDelay,
                           asyncCacheLogVerbosity = verbosity
                         }
 
-    registerHook itemUpdate $ \_ ->   prodAsyncCache mainCache
-                                   >> prodAsyncCache namesCache
-    registerHook packageIndexChange $ prodAsyncCache mainCache
-                                   >> prodAsyncCache namesCache
+    registerHook itemUpdate         $ \_ -> prodAsyncCache mainCache
+                                         >> prodAsyncCache namesCache
+    registerHook packageIndexChange $ \_ -> prodAsyncCache mainCache
+                                         >> prodAsyncCache namesCache
 
     loginfo verbosity "Initialising html feature, end"
     return feature

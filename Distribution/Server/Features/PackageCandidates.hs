@@ -38,7 +38,6 @@ import Distribution.Package
 import Data.Version
 import Data.Function (fix)
 import Data.List (find)
-import Data.Maybe (listToMaybe, catMaybes)
 import Data.Time.Clock (getCurrentTime)
 import Control.Monad.Error (ErrorT(..))
 
@@ -271,9 +270,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     uploadCandidate isRight = do
         regularIndex <- queryGetPackageIndex
         -- ensure that the user has proper auth if the package exists
-        (pkgInfo, uresult) <- extractPackage (\uid info -> combineErrors $ sequence
-          [ processCandidate isRight regularIndex uid info
-          , runUserFilter uid])
+        (pkgInfo, uresult) <- extractPackage $ \uid info ->
+                                processCandidate isRight regularIndex uid info
         let candidate = CandPkgInfo {
                 candPkgInfo = pkgInfo,
                 candWarnings = uploadWarnings uresult,
@@ -283,7 +281,6 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         let group = maintainersGroup (packageName pkgInfo)
         liftIO $ Group.addUserList group (pkgUploadUser pkgInfo)
         return candidate
-      where combineErrors = fmap (listToMaybe . catMaybes)
 
     -- | Helper function for uploadCandidate.
     processCandidate :: (PackageId -> Bool) -> PackageIndex PkgInfo -> Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)
@@ -311,32 +308,26 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           -- run filters
           let pkgInfo = candPkgInfo candidate
               uresult = UploadResult (pkgDesc pkgInfo) (cabalFileByteString $ pkgData pkgInfo) (candWarnings candidate)
-              uploadFilter = combineErrors $ runFilter'' canUploadPackage uid uresult
-          merror <- liftIO $ combineErrors $ sequence [runUserFilter uid, uploadFilter]
-          case merror of
-            Just failed -> throwError failed
-            Nothing -> do
-              uploadData <- fmap (flip (,) uid) (liftIO getCurrentTime)
-              let pkgInfo' = PkgInfo {
-                      pkgInfoId     = packageId candidate,
-                      pkgData       = pkgData pkgInfo,
-                      pkgTarball    = case pkgTarball pkgInfo of
-                          ((blobId, _):_) -> [(blobId, uploadData)]
-                          [] -> [], -- this shouldn't happen, but let's keep this part total anyway
-                      pkgUploadData = uploadData,
-                      pkgDataOld    = []
-                  }
-              success <- liftIO $ doAddPackage pkgInfo'
-              --FIXME: share code here with upload
-              -- currently we do not create the initial maintainer group etc.
-              if success
-                then do
-                  -- delete when requested: "moving" the resource
-                  -- should this be required? (see notes in PackageCandidatesResource)
-                  when doDelete $ updateState candidatesState $ DeleteCandidate (packageId candidate)
-                  return uresult
-                else errForbidden "Upload failed" [MText "Package already exists."]
-      where combineErrors = fmap (listToMaybe . catMaybes)
+          uploadData <- fmap (flip (,) uid) (liftIO getCurrentTime)
+          let pkgInfo' = PkgInfo {
+                  pkgInfoId     = packageId candidate,
+                  pkgData       = pkgData pkgInfo,
+                  pkgTarball    = case pkgTarball pkgInfo of
+                      ((blobId, _):_) -> [(blobId, uploadData)]
+                      [] -> [], -- this shouldn't happen, but let's keep this part total anyway
+                  pkgUploadData = uploadData,
+                  pkgDataOld    = []
+              }
+          success <- liftIO $ doAddPackage pkgInfo'
+          --FIXME: share code here with upload
+          -- currently we do not create the initial maintainer group etc.
+          if success
+            then do
+              -- delete when requested: "moving" the resource
+              -- should this be required? (see notes in PackageCandidatesResource)
+              when doDelete $ updateState candidatesState $ DeleteCandidate (packageId candidate)
+              return uresult
+            else errForbidden "Upload failed" [MText "Package already exists."]
 
 
     -- | Helper function for publishCandidate that ensures it's safe to insert into the main index.

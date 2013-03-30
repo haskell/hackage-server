@@ -51,7 +51,7 @@ data TagsFeature = TagsFeature {
     -- All package names that were modified, and all tags that were modified
     -- In almost all cases, one of these will be a singleton. Happstack
     -- functions should be used to query the resultant state.
-    tagsUpdated :: Hook (Set PackageName -> Set Tag -> IO ()),
+    tagsUpdated :: Hook (Set PackageName, Set Tag) (),
     -- Calculated tags are used so that other features can reserve a
     -- tag for their own use (a calculated, rather than freely
     -- assignable, tag). It is a subset of the main mapping.
@@ -113,7 +113,7 @@ tagsFeature :: CoreFeature
             -> UploadFeature
             -> StateComponent PackageTags
             -> MemState PackageTags
-            -> Hook (Set PackageName -> Set Tag -> IO ())
+            -> Hook (Set PackageName, Set Tag) ()
             -> TagsFeature
 
 tagsFeature CoreFeature{ queryGetPackageIndex
@@ -173,7 +173,7 @@ tagsFeature CoreFeature{ queryGetPackageIndex
     setCalculatedTag tag pkgs = do
       modifyMemState calculatedTags (setTag tag pkgs)
       void $ updateState tagsState $ SetTagPackages tag pkgs
-      runHook'' tagsUpdated pkgs (Set.singleton tag)
+      runHook_ tagsUpdated (pkgs, Set.singleton tag)
 
     withTagPath :: DynamicPath -> (Tag -> Set PackageName -> ServerPartE a) -> ServerPartE a
     withTagPath dpath func = case simpleParse =<< lookup "tag" dpath of
@@ -197,7 +197,7 @@ tagsFeature CoreFeature{ queryGetPackageIndex
               calcTags <- fmap (packageToTags pkgname) $ readMemState calculatedTags
               let tagSet = Set.fromList tags `Set.union` calcTags
               void $ updateState tagsState $ SetPackageTags pkgname tagSet
-              runHook'' tagsUpdated (Set.singleton pkgname) tagSet
+              runHook_ tagsUpdated (Set.singleton pkgname, tagSet)
               return ()
           Nothing -> errBadRequest "Tags not recognized" [MText "Couldn't parse your tag list. It should be comma separated with any number of alphanumerical tags. Tags can also also have -+#*."]
 

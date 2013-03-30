@@ -61,20 +61,17 @@ data CoreFeature = CoreFeature {
 
     -- Updating top-level packages
     -- This is run after a package is added
-    packageAddHook    :: Hook (PkgInfo -> IO ()),
+    packageAddHook    :: Hook PkgInfo (),
     -- This is run after a package is removed (but the PkgInfo is retained just for the hook)
-    packageRemoveHook :: Hook (PkgInfo -> IO ()),
+    packageRemoveHook :: Hook PkgInfo (),
     -- This is run after a package is changed in some way (essentially added, then removed)
-    packageChangeHook :: Hook (PkgInfo -> PkgInfo -> IO ()),
+    packageChangeHook :: Hook (PkgInfo, PkgInfo) (),
     -- This is called whenever any of the above three hooks is called, but
     -- also for other updates of the index tarball  (e.g. when indexExtras is updated)
-    packageIndexChange :: Hook (IO ()),
-    -- A package is added where no package by that name existed previously.
-    newPackageHook :: Hook (PkgInfo -> IO ()),
-    -- A package is removed such that no more versions of that package exists.
-    noPackageHook :: Hook (PkgInfo -> IO ()),
+    packageIndexChange :: Hook () (),
+
     -- For download counters
-    tarballDownload :: Hook (PackageId -> IO ()),
+    packageDownloadHook :: Hook PackageId (),
 
     -- Find a package in the package DB
     lookupPackageName :: PackageName -> ServerPartE [PkgInfo],
@@ -126,14 +123,12 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
     removeHook <- newHook
     changeHook <- newHook
     indexHook  <- newHook
-    newPkgHook <- newHook
-    noPkgHook  <- newHook
 
     rec let (feature, getIndexTarball)
               = coreFeature env users
                             packagesState extraMap indexTar
                             downHook addHook removeHook changeHook
-                            indexHook newPkgHook noPkgHook
+                            indexHook
 
         -- Caches
         -- The index.tar.gz file
@@ -145,7 +140,7 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
                         asyncCacheLogVerbosity = verbosity
                       }
 
-    registerHook indexHook (prodAsyncCache indexTar)
+    registerHook indexHook (\() -> prodAsyncCache indexTar)
 
     loginfo verbosity "Initialising core feature, end"
     return feature
@@ -171,20 +166,18 @@ coreFeature :: ServerEnv
             -> StateComponent PackagesState
             -> MemState (Map String (ByteString, UTCTime))
             -> AsyncCache ByteString
-            -> Hook (PackageId -> IO ())
-            -> Hook (PkgInfo -> IO ())
-            -> Hook (PkgInfo -> IO ())
-            -> Hook (PkgInfo -> PkgInfo -> IO ())
-            -> Hook (IO ())
-            -> Hook (PkgInfo -> IO ())
-            -> Hook (PkgInfo -> IO ())
+            -> Hook PackageId ()
+            -> Hook PkgInfo ()
+            -> Hook PkgInfo ()
+            -> Hook (PkgInfo, PkgInfo) ()
+            -> Hook () ()
             -> ( CoreFeature
                , IO ByteString )
 
 coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
             packagesState indexExtras cacheIndexTarball
-            tarballDownload packageAddHook packageRemoveHook packageChangeHook
-            packageIndexChange newPackageHook noPackageHook
+            packageDownloadHook packageAddHook packageRemoveHook packageChangeHook
+            packageIndexChange
   = (CoreFeature{..}, getIndexTarball)
   where
     coreFeatureInterface = (emptyHackageFeature "core") {
@@ -285,7 +278,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     updateArchiveIndexEntry :: MonadIO m => String -> (ByteString, UTCTime) -> m ()
     updateArchiveIndexEntry entryName entryDetails = do
       modifyMemState indexExtras (Map.insert entryName entryDetails)
-      runHook packageIndexChange
+      runHook_ packageIndexChange ()
 
     -- Cache updates
     --
@@ -337,7 +330,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           ((tb, _):_) -> do
               let blobId = pkgTarballGz tb
               file <- liftIO $ BlobStorage.fetch store blobId
-              liftIO $ runHook' tarballDownload pkgid
+              runHook_ packageDownloadHook pkgid
               return $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)
 
     -- result: cabal file or not-found error
@@ -366,14 +359,10 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     -- This is a wrapper around InsertPkgIfAbsent that runs the necessary hooks in core.
     doAddPackage :: PkgInfo -> IO Bool
     doAddPackage pkgInfo = do
-        pkgs    <- queryGetPackageIndex
         success <- updateState packagesState $ InsertPkgIfAbsent pkgInfo
         when success $ do
-            let existedBefore = packageExists pkgs pkgInfo
-            when (not existedBefore) $ do
-                runHook' newPackageHook pkgInfo
-            runHook' packageAddHook pkgInfo
-            runHook packageIndexChange
+          runHook_ packageAddHook pkgInfo
+          runHook_ packageIndexChange ()
         return success
 
     -- A wrapper around MergePkg.
@@ -381,16 +370,13 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     doMergePackage pkgInfo = do
         pkgs <- queryGetPackageIndex
         let mprev = PackageIndex.lookupPackageId pkgs (packageId pkgInfo)
-            nameExists = packageExists pkgs pkgInfo
         -- TODO: Is there a thread-safety issue here?
         void $ updateState packagesState $ MergePkg pkgInfo
-        when (not nameExists) $ do
-            runHook' newPackageHook pkgInfo
         case mprev of
             -- TODO: modify MergePkg to get the newly merged package info, not the pre-merge argument
-            Just prev -> runHook'' packageChangeHook prev pkgInfo
-            Nothing -> runHook' packageAddHook pkgInfo
-        runHook packageIndexChange
+            Just prev -> runHook_ packageChangeHook (prev, pkgInfo)
+            Nothing -> runHook_ packageAddHook pkgInfo
+        runHook_ packageIndexChange ()
 
 packageExists, packageIdExists :: (Package pkg, Package pkg') => PackageIndex pkg -> pkg' -> Bool
 packageExists   pkgs pkg = not . null $ PackageIndex.lookupPackageName pkgs (packageName pkg)

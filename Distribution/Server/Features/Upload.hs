@@ -25,7 +25,7 @@ import qualified Distribution.Server.Packages.Unpack as Upload
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
-import Data.Maybe (fromMaybe, listToMaybe, catMaybes)
+import Data.Maybe (fromMaybe)
 import Data.Time.Clock (getCurrentTime)
 import Data.Function (fix)
 import Data.ByteString.Lazy.Char8 (ByteString)
@@ -48,8 +48,6 @@ data UploadFeature = UploadFeature {
     trusteesGroup      :: UserGroup,
     uploadersGroup     :: UserGroup,
     maintainersGroup   :: PackageName -> UserGroup,
-
-    canUploadPackage   :: Filter (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)),
 
     guardAuthorisedAsMaintainer          :: PackageName -> ServerPartE (),
     guardAuthorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE (),
@@ -86,9 +84,6 @@ initUploadFeature env@ServerEnv{serverStateDir}
     uploadersState   <- uploadersStateComponent   serverStateDir
     maintainersState <- maintainersStateComponent serverStateDir
 
-    -- TODO: Why do we have this at all?
-    uploadFilter <- newHook
-
     -- Recusively tie the knot: the feature contains new user group resources
     -- but we make the functions needed to create those resources along with
     -- the feature
@@ -98,7 +93,6 @@ initUploadFeature env@ServerEnv{serverStateDir}
                               trusteesState    trusteesGroup    trusteesGroupResource
                               uploadersState   uploadersGroup   uploadersGroupResource
                               maintainersState maintainersGroup maintainersGroupResource
-                              uploadFilter
 
         (trusteesGroup,  trusteesGroupResource) <-
           groupResourceAt "/packages/trustees"  (getTrusteesGroup  [adminGroup])
@@ -161,7 +155,6 @@ uploadFeature :: ServerEnv
               -> StateComponent HackageTrustees    -> UserGroup -> GroupResource
               -> StateComponent HackageUploaders   -> UserGroup -> GroupResource
               -> StateComponent PackageMaintainers -> (PackageName -> UserGroup) -> GroupResource
-              -> Filter (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse))
               -> (UploadFeature,
                   [UserGroup] -> UserGroup,
                   [UserGroup] -> UserGroup,
@@ -176,7 +169,6 @@ uploadFeature ServerEnv{serverBlobStore = store}
               trusteesState    trusteesGroup    trusteesGroupResource
               uploadersState   uploadersGroup   uploadersGroupResource
               maintainersState maintainersGroup maintainersGroupResource
-              canUploadPackage
    = ( UploadFeature {..}
      , getTrusteesGroup, getUploadersGroup, makeMaintainersGroup)
    where
@@ -273,11 +265,8 @@ uploadFeature ServerEnv{serverBlobStore = store}
     uploadPackage = do
         guardAuthorised_ [InGroup uploadersGroup]
         pkgIndex <- queryGetPackageIndex
-        let uploadFilter uid info = combineErrors $ runFilter'' canUploadPackage uid info
-        (pkgInfo, uresult) <- extractPackage (\uid info -> combineErrors $ sequence
-           [ processUpload pkgIndex uid info
-           , uploadFilter uid info
-           , runUserFilter uid ])
+        (pkgInfo, uresult) <- extractPackage $ \uid info ->
+                                processUpload pkgIndex uid info
         success <- liftIO $ doAddPackage pkgInfo
         if success
           then do
@@ -288,7 +277,6 @@ uploadFeature ServerEnv{serverBlobStore = store}
             return uresult
           -- this is already checked in processUpload, and race conditions are highly unlikely but imaginable
           else errForbidden "Upload failed" [MText "Package already exists."]
-      where combineErrors = fmap (listToMaybe . catMaybes)
 
     -- This is a processing funtion for extractPackage that checks upload-specific requirements.
     -- Does authentication, though not with requirePackageAuth, because it has to be IO.

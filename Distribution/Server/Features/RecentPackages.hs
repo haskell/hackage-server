@@ -67,7 +67,7 @@ initRecentPackagesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verb
                            asyncCacheLogVerbosity = verbosity
                          }
 
-    registerHook packageIndexChange $ prodAsyncCache cacheRecent
+    registerHook packageIndexChange (\() -> prodAsyncCache cacheRecent)
 
     loginfo verbosity "Initialising recentPackages feature, end"
     return feature

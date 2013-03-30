@@ -48,8 +48,8 @@ data VersionsFeature = VersionsFeature {
     queryGetDeprecatedFor :: MonadIO m => PackageName -> m (Maybe [PackageName]),
 
     versionsResource :: VersionsResource,
-    preferredHook  :: Hook (PackageName -> PreferredInfo -> IO ()),
-    deprecatedHook :: Hook (PackageName -> Maybe [PackageName] -> IO ()),
+    preferredHook  :: Hook (PackageName, PreferredInfo) (),
+    deprecatedHook :: Hook (PackageName, Maybe [PackageName]) (),
     putDeprecated :: PackageName -> ServerPartE Bool,
     putPreferred  :: PackageName -> ServerPartE (),
     updateDeprecatedTags :: IO (),
@@ -116,8 +116,8 @@ versionsFeature :: CoreFeature
                 -> UploadFeature
                 -> TagsFeature
                 -> StateComponent PreferredVersions
-                -> Hook (PackageName -> PreferredInfo -> IO ())
-                -> Hook (PackageName -> Maybe [PackageName] -> IO ())
+                -> Hook (PackageName, PreferredInfo) ()
+                -> Hook (PackageName, Maybe [PackageName]) ()
                 -> VersionsFeature
 
 versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
@@ -161,7 +161,7 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
     updatePackageDeprecation :: MonadIO m => PackageName -> Maybe [PackageName] -> m ()
     updatePackageDeprecation pkgname deprs = liftIO $ do
       updateState preferredState $ SetDeprecatedFor pkgname deprs
-      runHook'' deprecatedHook pkgname deprs
+      runHook_ deprecatedHook (pkgname, deprs)
       updateDeprecatedTags
 
     versionsResource = fix $ \r -> VersionsResource
@@ -273,7 +273,7 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
                       prefVersions <- makePreferredVersions
                       now <- liftIO getCurrentTime
                       updateArchiveIndexEntry "preferred-versions" (BS.pack prefVersions, now)
-                      runHook'' preferredHook pkgname newInfo
+                      runHook_ preferredHook (pkgname, newInfo)
                       return ()
                   False -> preferredError "Not all of the selected versions are in the main index."
               Nothing -> preferredError "Version could not be parsed."
@@ -306,7 +306,7 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
         deprecatedError = errBadRequest "Deprecation failed" . return . MText
         doUpdates deprs = do
             void $ updateState preferredState $ SetDeprecatedFor pkgname deprs
-            runHook'' deprecatedHook pkgname deprs
+            runHook_ deprecatedHook (pkgname, deprs)
             liftIO $ updateDeprecatedTags
 
     renderPrefInfo :: PreferredInfo -> PreferredRender

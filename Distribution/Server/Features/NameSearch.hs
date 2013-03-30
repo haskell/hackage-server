@@ -78,12 +78,12 @@ initNamesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
                          asyncCacheLogVerbosity = verbosity
                        }
 
-    registerHook packageAddHook    $ \_   -> prodAsyncCache pkgCache
-                                          >> prodAsyncCache textCache
-    registerHook packageRemoveHook $ \_   -> prodAsyncCache pkgCache
-                                          >> prodAsyncCache textCache
-    registerHook packageChangeHook $ \_ _ -> prodAsyncCache pkgCache
-                                          >> prodAsyncCache textCache
+    registerHook packageAddHook    $ \_ -> prodAsyncCache pkgCache
+                                        >> prodAsyncCache textCache
+    registerHook packageRemoveHook $ \_ -> prodAsyncCache pkgCache
+                                        >> prodAsyncCache textCache
+    registerHook packageChangeHook $ \_ -> prodAsyncCache pkgCache
+                                        >> prodAsyncCache textCache
 
     loginfo verbosity "Initialising names feature, end"
     return feature

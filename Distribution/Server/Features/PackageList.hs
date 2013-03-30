@@ -34,7 +34,7 @@ import qualified Data.Set as Set
 data ListFeature = ListFeature {
     listFeatureInterface :: HackageFeature,
 
-    itemUpdate :: Hook (Set PackageName -> IO ()),
+    itemUpdate :: Hook (Set PackageName) (),
 
     constructItemIndex :: IO (Map PackageName PackageItem),
     makeItemList :: [PackageName] -> IO [PackageItem],
@@ -101,7 +101,7 @@ initListFeature ServerEnv{serverVerbosity = verbosity} core@CoreFeature{..}
 
     registerHook packageAddHook    $ updateDesc . packageName
     registerHook packageRemoveHook $ updateDesc . packageName
-    registerHook packageChangeHook $ \_ -> updateDesc . packageName
+    registerHook packageChangeHook $ updateDesc . packageName . fst
     {- [reverse index disabled]
     registerHook (reverseUpdateHook revs) $ \mrev -> do
         let pkgs = Map.keys mrev
@@ -110,14 +110,14 @@ initListFeature ServerEnv{serverVerbosity = verbosity} core@CoreFeature{..}
             modifyItem pkgname (updateReverseItem revCount)
         runHook' itemUpdate $ Set.fromDistinctAscList pkgs
     -}
-    registerHook tagsUpdated $ \pkgs _ -> do
+    registerHook tagsUpdated $ \(pkgs, _) -> do
         forM_ (Set.toList pkgs) $ \pkgname -> do
             tags <- queryTagsForPackage pkgname
             modifyItem pkgname (updateTagItem tags)
-        runHook' itemUpdate pkgs
-    registerHook deprecatedHook $ \pkgname mpkgs -> do
+        runHook_ itemUpdate pkgs
+    registerHook deprecatedHook $ \(pkgname, mpkgs) -> do
         modifyItem pkgname (updateDeprecation mpkgs)
-        runHook' itemUpdate $ Set.singleton pkgname
+        runHook_ itemUpdate (Set.singleton pkgname)
 
     loginfo verbosity "Initialising package list feature, end"
     return feature
@@ -128,7 +128,7 @@ listFeature :: CoreFeature
             -> TagsFeature
             -> VersionsFeature
             -> MemState (Map PackageName PackageItem)
-            -> Hook (Set PackageName -> IO ())
+            -> Hook (Set PackageName) ()
             -> (ListFeature,
                 PackageName -> (PackageItem -> PackageItem) -> IO (),
                 PackageName -> IO ())
@@ -173,14 +173,14 @@ listFeature CoreFeature{..}
         case pkgs of
            [] -> modifyMemState itemCache (Map.delete pkgname)
            _  -> modifyItem pkgname (updateDescriptionItem $ pkgDesc $ last pkgs)
-        runHook' itemUpdate $ Set.singleton pkgname
+        runHook_ itemUpdate (Set.singleton pkgname)
 
     refreshDownloads = do
             hist <- getDownloadHistogram
             modifyMemState itemCache $ Map.mapWithKey (\pkg item -> updateDownload (getCount hist pkg) item)
             -- Say all packages were updated here (detecting this is more laborious)
             mainMap <- readMemState itemCache
-            runHook' itemUpdate (Set.fromDistinctAscList $ Map.keys mainMap)
+            runHook_ itemUpdate (Set.fromDistinctAscList $ Map.keys mainMap)
 
     constructItemIndex :: IO (Map PackageName PackageItem)
     constructItemIndex = do
