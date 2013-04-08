@@ -397,7 +397,7 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
 
     handlerPostSignupRequestNew :: DynamicPath -> ServerPartE Response
     handlerPostSignupRequestNew _ = do
-        templateEmail        <- getTemplate templates "ConfirmationEmail"
+        templateEmail        <- getTemplate templates "SignupConfirmationEmail"
         templateConfirmation <- getTemplate templates "SignupEmailSent"
 
         (username, realname, useremail) <- lookUserNameEmail
