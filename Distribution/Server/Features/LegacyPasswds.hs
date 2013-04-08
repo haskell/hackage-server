@@ -278,7 +278,7 @@ legacyPasswdsFeature env legacyPasswdsState templates UserFeature{..}
           Nothing -> return Nothing
           Just _  -> return (Just err)
       where
-        err = ErrorResponse 401 [] "Account needs to be re-enabled" msg
+        err = ErrorResponse 403 [] "Account needs to be re-enabled" msg
         msg = [ MText $ "Hackage has been upgraded to use a more secure login "
                      ++ "system. Please go to "
               , MLink abs rel
