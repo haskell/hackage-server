@@ -189,13 +189,22 @@ getBasicAuthInfo realm authHeader
                         (username, ':' : pass) -> Just (username, pass)
                         _ -> Nothing
 
+{-
+We don't actually want to offer basic auth. It's not something we want to
+encourage and some browsers (like firefox) end up prompting the user for
+failing auth once for each auth method that the server offers. So if we offer
+both digest and auth then the user gets prompted twice when they try to cancel
+the auth.
+
+Note that we still accept basic auth if the client offers it pre-emptively.
+
 headerBasicAuthChallenge :: RealmName -> (String, String)
 headerBasicAuthChallenge (RealmName realmName) =
     (headerName, headerValue)
   where
     headerName  = "WWW-Authenticate"
     headerValue = "Basic realm=\"" ++ realmName ++ "\""
-
+-}
 
 ------------------------------------------------------------------------
 -- Digest auth method
@@ -325,15 +334,7 @@ data AuthError = NoAuthError
 authErrorResponse :: MonadIO m => RealmName -> AuthError -> m ErrorResponse
 authErrorResponse realm autherr = do
     digestHeader   <- liftIO (headerDigestAuthChallenge realm)
-    let basicHeader = headerBasicAuthChallenge realm
-        -- We want the digest header to appear first, like:
-        -- WWW-Authenticate: Digest realm="Hackage", qop="", ... etc
-        -- WWW-Authenticate: Basic realm="Hackage"
-        -- We want this order because some http clients just pick the
-        -- first rather than the best, and we'd prefer them to use digest.
-    return $! (toErrorResponse autherr) {
-                errorHeaders = [digestHeader, basicHeader]
-              }
+    return $! (toErrorResponse autherr) { errorHeaders = [digestHeader] }
   where
     toErrorResponse :: AuthError -> ErrorResponse
     toErrorResponse NoAuthError =
