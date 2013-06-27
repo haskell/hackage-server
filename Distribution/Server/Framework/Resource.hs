@@ -38,7 +38,7 @@ module Distribution.Server.Framework.Resource (
   ) where
 
 import Happstack.Server
-import Distribution.Server.Util.Happstack (remainingPathString)
+import Distribution.Server.Util.Happstack (remainingPathString, uriEscape)
 import Distribution.Server.Util.ContentType (parseContentAccept)
 import Distribution.Server.Framework.Error
 
@@ -52,7 +52,6 @@ import Data.Function (on)
 import Data.List (intercalate, unionBy, findIndices, find)
 import qualified Text.ParserCombinators.Parsec as Parse
 
-import qualified Happstack.Server.SURI as SURI
 import System.FilePath.Posix ((</>), (<.>))
 import qualified Data.Tree as Tree (Tree(..), drawTree)
 import qualified Data.ByteString.Char8 as BS
@@ -216,15 +215,15 @@ renderURI bpath dpath = renderGenURI bpath (flip lookup dpath)
 -- this is better than having a function that doesn't return *some* result.
 renderGenURI :: BranchPath -> (String -> Maybe String) -> String
 renderGenURI bpath pathFunc = "/" </> go (reverse bpath)
-  where go (StaticBranch  sdir:rest) = SURI.escape sdir </> go rest
+  where go (StaticBranch  sdir:rest) = uriEscape sdir </> go rest
         go (DynamicBranch sdir:rest)
           | (ddir, sformat@('.':_)) <- break (=='.') sdir
           = case pathFunc ddir of
             Nothing  -> ""
-            Just str -> SURI.escape str <.> SURI.escape sformat </> go rest
+            Just str -> uriEscape str <.> uriEscape sformat </> go rest
         go (DynamicBranch sdir:rest) = case pathFunc sdir of
             Nothing  -> ""
-            Just str -> SURI.escape str </> go rest
+            Just str -> uriEscape str </> go rest
         go (TrailingBranch:_) = fromMaybe "" $ pathFunc ".."
         go [] = ""
 
@@ -234,8 +233,8 @@ renderGenURI bpath pathFunc = "/" </> go (reverse bpath)
 -- Trailing branches currently are assumed to be complete escaped URI paths.
 renderListURI :: BranchPath -> [String] -> (String, [String])
 renderListURI bpath list = let (res, extra) = go (reverse bpath) list in ("/" </> res, extra)
-    where go (StaticBranch  sdir:rest) xs  = let (res, extra) = go rest xs in (SURI.escape sdir </> res, extra)
-          go (DynamicBranch _:rest) (x:xs) = let (res, extra) = go rest xs in (SURI.escape x </> res, extra)
+    where go (StaticBranch  sdir:rest) xs  = let (res, extra) = go rest xs in (uriEscape sdir </> res, extra)
+          go (DynamicBranch _:rest) (x:xs) = let (res, extra) = go rest xs in (uriEscape x </> res, extra)
           go (TrailingBranch:_) xs = case xs of [] -> ("", []); (x:rest) -> (x, rest)
           go _ rest = ("", rest)
 

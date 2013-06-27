@@ -14,11 +14,12 @@ module Distribution.Server.Util.Happstack (
     remainingPath,
     remainingPathString,
     mime,
-    consumeRequestBody
+    consumeRequestBody,
+
+    uriEscape
   ) where
 
 import Happstack.Server
-import qualified Happstack.Server.SURI as SURI
 import Happstack.Server.Internal.Monads
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
@@ -27,6 +28,7 @@ import Control.Monad.Trans (MonadIO(..))
 import System.FilePath.Posix (takeExtension, (</>))
 import Control.Monad (liftM)
 import qualified Data.ByteString.Lazy as BS
+import qualified Network.URI as URI
 
 import System.IO.Unsafe (unsafePerformIO)
 
@@ -67,7 +69,11 @@ remainingPath handle = do
 remainingPathString :: Monad m => ServerPartT m String
 remainingPathString = do
     strs <- liftM rqPaths askRq
-    return $ if null strs then "" else foldr1 (</>) . map SURI.escape $ strs
+    return $ if null strs then "" else foldr1 (</>) . map uriEscape $ strs
+
+-- This disappeared from happstack in 7.1.7
+uriEscape :: String -> String
+uriEscape = URI.escapeURIString URI.isAllowedInURI
 
 -- |Returns a mime-type string based on the extension of the passed in
 -- file.
