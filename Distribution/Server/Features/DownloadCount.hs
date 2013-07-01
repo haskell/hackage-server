@@ -22,14 +22,11 @@ import Distribution.Server.Features.Core
 
 import Distribution.Package
 
-import Control.Monad (void)
 import Data.Time.Calendar (Day)
 import Data.Time.Clock (getCurrentTime, utctDay)
-import Control.Arrow (second)
 import Control.Concurrent.Chan
 import Control.Concurrent (forkIO)
 import Data.Map (Map)
-import qualified Data.Map as Map
 
 data DownloadFeature = DownloadFeature {
     downloadFeatureInterface :: HackageFeature

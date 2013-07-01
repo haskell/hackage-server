@@ -44,6 +44,7 @@ import Control.Applicative ((<$>))
 import Control.Exception (throwIO)
 import System.Directory (doesFileExist)
 import Control.DeepSeq (force)
+import Control.Monad.Trans (MonadIO)
 
 {------------------------------------------------------------------------------
   Data types
@@ -175,8 +176,8 @@ initTotalsCache histFile  = do
   let totals = Map.map (allDownloads . packageDownloads) (downloadMap onDisk)
   newMemStateWHNF (force totals) -- Ensure we don't retain the on-disk stats
 
-updateTotalsCache :: MonadIO m => PackageId -> MemState (Map PackageName Int) -> m ()
-updateTotalsCache pkgId cache =
+updateTotalsCache :: MonadIO m => MemState (Map PackageName Int) -> PackageId -> m ()
+updateTotalsCache cache pkgId =
   modifyMemState cache $ adjustFrom (+ 1) (pkgName pkgId) 0
 
 {------------------------------------------------------------------------------
