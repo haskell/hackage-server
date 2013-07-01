@@ -48,6 +48,7 @@ import Distribution.PackageDescription
 
 import Data.List (intercalate, intersperse, insert, sortBy)
 import Data.Function (on)
+import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -403,7 +404,7 @@ mkHtmlCore HtmlUtilities{..}
            UploadFeature{guardAuthorisedAsMaintainerOrTrustee}
            TagsFeature{queryTagsForPackage}
            DocumentationFeature{documentationResource, queryHasDocumentation}
-           DownloadFeature{perVersionDownloads}
+           DownloadFeature{totalPackageDownloads}
            DistroFeature{queryPackageStatus}
            RecentPackagesFeature{packageRender}
            HtmlTags{..}
@@ -462,11 +463,13 @@ mkHtmlCore HtmlUtilities{..}
         -- and other package indices
         distributions <- queryPackageStatus pkgname
         -- [reverse index disabled] revCount <- revPackageSummary realpkg
-        (totalDown, versionDown) <- perVersionDownloads pkg
+        -- We don't currently keep per-version downloads in memory
+        -- (totalDown, versionDown) <- perVersionDownloads pkg
+        totalDown <- Map.findWithDefault 0 pkgname `liftM` totalPackageDownloads
         let distHtml = case distributions of
                 [] -> []
                 _  -> [("Distributions", concatHtml . intersperse (toHtml ", ") $ map showDist distributions)]
-            afterHtml  = distHtml ++ [Pages.renderDownloads totalDown versionDown $ packageVersion realpkg
+            afterHtml  = distHtml ++ [Pages.renderDownloads totalDown {- versionDown $ packageVersion realpkg-}
                                      -- [reverse index disabled] ,Pages.reversePackageSummary realpkg revr revCount
                                      ]
         -- bottom sections, currently only documentation
@@ -1146,7 +1149,7 @@ mkHtmlDownloads HtmlUtilities{..} DownloadFeature{..} = HtmlDownloads{..}
 
     serveDownloadTop :: DynamicPath -> ServerPartE Response
     serveDownloadTop _ = do
-        pkgList <- liftIO $ sortedPackages
+        pkgList <- sortedPackages `liftM` totalPackageDownloads
         return $ toResponse $ Resource.XHtml $ hackagePage "Total downloads" $
           [ h2 << "Downloaded packages"
           , thediv << table << downTableRows pkgList
@@ -1158,6 +1161,9 @@ mkHtmlDownloads HtmlUtilities{..} DownloadFeature{..} = HtmlDownloads{..}
                 [ td << packageNameLink pkgname
                 , td << [ toHtml $ (show count) ] ]
             | ((pkgname, count), n) <- zip pkgList [(1::Int)..] ]
+
+    sortedPackages :: Map PackageName Int -> [(PackageName, Int)]
+    sortedPackages = sortBy (compare `on` snd) . Map.toList
 
 {-------------------------------------------------------------------------------
   Tags

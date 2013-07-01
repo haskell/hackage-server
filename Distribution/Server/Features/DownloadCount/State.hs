@@ -1,9 +1,28 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell #-}
-
-module Distribution.Server.Features.DownloadCount.State where
+module Distribution.Server.Features.DownloadCount.State (
+    -- * In-memory statistics
+    InMemStats(..)
+  , initInMemStats
+    -- * On-disk statistics
+  , OnDiskStats(..)
+  , DownloadInfo(..)
+  , PackageDownloads(..)
+  , updateOnDiskStats
+  , readOnDiskStats
+  , writeOnDiskStats
+    -- * Totals cache
+  , initTotalsCache
+  , updateTotalsCache
+    -- * ACID stuff
+  , GetInMemStats(..)
+  , ReplaceInMemStats(..)
+  , RecordedToday(..)
+  , RegisterDownload(..)
+  ) where
 
 import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.MemSize
+import Distribution.Server.Framework.MemState
 
 import Distribution.Package
 import Distribution.Version
@@ -17,53 +36,89 @@ import Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
 import Control.Monad.State (put, get)
 import Control.Monad.Reader (ask, asks)
-import Control.DeepSeq
 
------------------------------------------
--- DownloadCounts is where the download records are converted to an historical
--- format at leisure
-data DownloadCounts = DownloadCounts {
-    totalDownloads :: Int,
-    downloadMap :: Map PackageName DownloadInfo
-} deriving (Eq, Show, Typeable)
+import qualified Data.ByteString.Lazy as BSL
+import Data.Serialize (runGetLazy, runPutLazy)
+import Data.SafeCopy (safeGet, safePut)
+import Control.Applicative ((<$>))
+import Control.Exception (throwIO)
+import System.Directory (doesFileExist)
+import Control.DeepSeq (force)
 
-emptyDownloadCounts :: DownloadCounts
-emptyDownloadCounts = DownloadCounts 0 Map.empty
+{------------------------------------------------------------------------------
+  Data types
+------------------------------------------------------------------------------}
+
+data InMemStats = InMemStats {
+    -- The day we are currently keep statistics for
+    inMemToday  :: Day
+    -- Per-version download count for today only
+  , inMemCounts :: Map PackageId Int
+  } deriving (Eq, Show, Typeable)
+
+data OnDiskStats = OnDiskStats {
+    totalDownloads :: Int
+  , downloadMap    :: Map PackageName DownloadInfo
+  } deriving (Eq, Show, Typeable)
 
 data DownloadInfo = DownloadInfo {
-    monthDownloads :: Map (Int, Int) PackageDownloads,
-    dayDownloads :: Map Day PackageDownloads,
-    packageDownloads :: PackageDownloads
-} deriving (Eq, Show, Typeable)
-
-emptyDownloadInfo :: DownloadInfo
-emptyDownloadInfo = DownloadInfo Map.empty Map.empty emptyPackageDownloads
+    monthDownloads   :: Map (Int, Int) PackageDownloads
+  , dayDownloads     :: Map Day PackageDownloads
+  , packageDownloads :: PackageDownloads
+  } deriving (Eq, Show, Typeable)
 
 data PackageDownloads = PackageDownloads {
-    allDownloads :: Int,
-    versionDownloads :: Map Version Int
-} deriving (Eq, Show, Typeable)
+    allDownloads     :: Int
+  , versionDownloads :: Map Version Int
+  } deriving (Eq, Show, Typeable)
 
-emptyPackageDownloads :: PackageDownloads
-emptyPackageDownloads = PackageDownloads 0 Map.empty
+deriveSafeCopy 0 'base ''InMemStats
 
-packageDowns :: DownloadInfo -> Int
-packageDowns = allDownloads . packageDownloads
+deriveSafeCopy 0 'base ''OnDiskStats
+deriveSafeCopy 0 'base ''DownloadInfo
+deriveSafeCopy 0 'base ''PackageDownloads
 
-lookupPackageDowns :: DownloadCounts -> PackageName -> Int
-lookupPackageDowns dcs pkgname = maybe 0 packageDowns $ Map.lookup pkgname (downloadMap dcs)
+instance MemSize InMemStats where
+    memSize (InMemStats a b) = memSize2 a b
 
-incrementCounts :: Day -> PackageName -> Version -> Int -> DownloadCounts -> DownloadCounts
-incrementCounts day pkgname version count (DownloadCounts total perPackage) =
-    DownloadCounts
+{------------------------------------------------------------------------------
+  Initial instances
+------------------------------------------------------------------------------}
+
+initOnDiskStats :: OnDiskStats
+initOnDiskStats = OnDiskStats 0 Map.empty
+
+initDownloadInfo :: DownloadInfo
+initDownloadInfo = DownloadInfo Map.empty Map.empty initPackageDownloads
+
+initPackageDownloads :: PackageDownloads
+initPackageDownloads = PackageDownloads 0 Map.empty
+
+initInMemStats :: Day -> InMemStats
+initInMemStats today = InMemStats today Map.empty
+
+{------------------------------------------------------------------------------
+  Pure updates
+------------------------------------------------------------------------------}
+
+updateHistory :: InMemStats -> OnDiskStats -> OnDiskStats
+updateHistory (InMemStats today counts) =
+    foldr (.) id $ map (uncurry aux) (Map.toList counts)
+  where
+    aux :: PackageId -> Int -> OnDiskStats -> OnDiskStats
+    aux pkgId = incrementCounts today (packageName pkgId) (packageVersion pkgId)
+
+incrementCounts :: Day -> PackageName -> Version -> Int -> OnDiskStats -> OnDiskStats
+incrementCounts day pkgname version count (OnDiskStats total perPackage) =
+    OnDiskStats
       (total + count)
-      (adjustFrom (incrementInfo day version count) pkgname emptyDownloadInfo perPackage)
+      (adjustFrom (incrementInfo day version count) pkgname initDownloadInfo perPackage)
 
 incrementInfo :: Day -> Version -> Int -> DownloadInfo -> DownloadInfo
 incrementInfo day version count (DownloadInfo perMonth perDay total) =
     DownloadInfo
-      (adjustFrom (incrementPackage version count) (fromIntegral year, month) emptyPackageDownloads perMonth)
-      (adjustFrom (incrementPackage version count) day emptyPackageDownloads perDay)
+      (adjustFrom (incrementPackage version count) (fromIntegral year, month) initPackageDownloads perMonth)
+      (adjustFrom (incrementPackage version count) day initPackageDownloads perDay)
       (incrementPackage version count total)
   where
     (year, month, _) = toGregorian day
@@ -72,53 +127,71 @@ incrementPackage :: Version -> Int -> PackageDownloads -> PackageDownloads
 incrementPackage version count (PackageDownloads total perVersion) =
     PackageDownloads (total + count) (adjustFrom (+count) version 0 perVersion)
 
+{------------------------------------------------------------------------------
+  Stateful queries/updates
+------------------------------------------------------------------------------}
+
+readOnDiskStats :: FilePath -> IO OnDiskStats
+readOnDiskStats histFile = do
+  histExists <- doesFileExist histFile
+  mHistory   <- if histExists
+                  then runGetLazy safeGet <$> BSL.readFile histFile
+                  else return . Right $ initOnDiskStats
+  case mHistory of
+    Left  err     -> throwIO . userError $ "recordToday: " ++ err
+    Right history -> return history
+
+writeOnDiskStats :: FilePath -> OnDiskStats -> IO ()
+writeOnDiskStats histFile = BSL.writeFile histFile . runPutLazy . safePut
+
+updateOnDiskStats :: FilePath -> InMemStats -> IO ()
+updateOnDiskStats path inMemStats =
+  readOnDiskStats path >>= writeOnDiskStats path . updateHistory inMemStats
+
+recordedToday :: Query InMemStats Day
+recordedToday = asks inMemToday
+
+registerDownload :: PackageId -> Update InMemStats ()
+registerDownload pkgId = do
+  InMemStats today counts <- get
+  put $ InMemStats {
+      inMemToday  = today
+    , inMemCounts = adjustFrom (+ 1) pkgId 0 counts
+    }
+
+getInMemStats :: Query InMemStats InMemStats
+getInMemStats = ask
+
+replaceInMemStats :: InMemStats -> Update InMemStats ()
+replaceInMemStats = put
+
+{------------------------------------------------------------------------------
+  Totals cache
+------------------------------------------------------------------------------}
+
+initTotalsCache :: FilePath -> IO (MemState (Map PackageName Int))
+initTotalsCache histFile  = do
+  onDisk <- readOnDiskStats histFile
+  let totals = Map.map (allDownloads . packageDownloads) (downloadMap onDisk)
+  newMemStateWHNF (force totals) -- Ensure we don't retain the on-disk stats
+
+updateTotalsCache :: MonadIO m => PackageId -> MemState (Map PackageName Int) -> m ()
+updateTotalsCache pkgId cache =
+  modifyMemState cache $ adjustFrom (+ 1) (pkgName pkgId) 0
+
+{------------------------------------------------------------------------------
+  Auxiliary
+------------------------------------------------------------------------------}
+
 adjustFrom :: Ord k => (a -> a) -> k -> a -> Map k a -> Map k a
 adjustFrom func key value = Map.alter (Just . func . fromMaybe value) key
 
-----
-replacePackageDownloads :: DownloadCounts -> Update DownloadCounts ()
-replacePackageDownloads = put
-
-registerDownload :: Day -> PackageId -> Int -> Update DownloadCounts (Int, Int)
-registerDownload day pkgid count = do
-    dc <- get
-    let pkgname = packageName pkgid
-        dc' = incrementCounts day pkgname (packageVersion pkgid) count dc
-    put dc'
-    return (lookupPackageDowns dc pkgname, lookupPackageDowns dc' pkgname)
-
-getDownloadCounts :: Query DownloadCounts DownloadCounts
-getDownloadCounts = ask
-
-getDownloadInfo :: PackageName -> Query DownloadCounts DownloadInfo
-getDownloadInfo pkgname = asks (Map.findWithDefault emptyDownloadInfo pkgname . downloadMap)
-
---------------------------------------------------------------------------------
-
-deriveSafeCopy 0 'base ''DownloadCounts
-deriveSafeCopy 0 'base ''DownloadInfo
-deriveSafeCopy 0 'base ''PackageDownloads
-
-instance NFData PackageDownloads where
-    rnf (PackageDownloads a b) = rnf a `seq` rnf b
-instance NFData DownloadInfo where
-    rnf (DownloadInfo a b c) = rnf a `seq` rnf b `seq` rnf c
-instance NFData DownloadCounts where
-    rnf (DownloadCounts a b) = rnf a `seq` rnf b
-
-instance MemSize PackageDownloads where
-    memSize (PackageDownloads a b) = memSize2 a b
-instance MemSize DownloadInfo where
-    memSize (DownloadInfo a b c) = memSize3 a b c
-instance MemSize DownloadCounts where
-    memSize (DownloadCounts a b) = memSize2 a b
-
-initialDownloadCounts :: DownloadCounts
-initialDownloadCounts = emptyDownloadCounts
-
-makeAcidic ''DownloadCounts ['replacePackageDownloads
-                            ,'registerDownload
-                            ,'getDownloadCounts
-                            ,'getDownloadInfo
-                            ]
-
+{------------------------------------------------------------------------------
+  Generate acid-state infrastructure
+------------------------------------------------------------------------------}
+--
+makeAcidic ''InMemStats [ 'registerDownload
+                        , 'getInMemStats
+                        , 'replaceInMemStats
+                        , 'recordedToday
+                        ]

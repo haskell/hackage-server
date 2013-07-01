@@ -4,6 +4,11 @@ module Distribution.Server.Features.DownloadCount.Backup (
     downloadsToRecord
   ) where
 
+downloadsBackup   = undefined
+downloadsToCSV    = undefined
+downloadsToRecord = undefined
+
+{-
 import Distribution.Server.Framework.BackupRestore
 
 import Distribution.Server.Features.DownloadCount.State
@@ -54,3 +59,4 @@ downloadsToCSV dcs
 
 downloadsToRecord :: Day -> PackageName -> Version -> Int -> Record -- [String]
 downloadsToRecord day pkg_name pkg_ver count = [show (toModifiedJulianDay day), display pkg_name, display pkg_ver, show count]
+-}

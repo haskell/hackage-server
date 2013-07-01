@@ -17,7 +17,6 @@ import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Distribution.Server.Packages.Types
 -- [reverse index disabled] import Distribution.Server.Packages.Reverse
-import Distribution.Server.Util.Histogram
 
 import Distribution.Package
 import Distribution.PackageDescription
@@ -176,8 +175,9 @@ listFeature CoreFeature{..}
         runHook_ itemUpdate (Set.singleton pkgname)
 
     refreshDownloads = do
-            hist <- getDownloadHistogram
-            modifyMemState itemCache $ Map.mapWithKey (\pkg item -> updateDownload (getCount hist pkg) item)
+            downs <- totalPackageDownloads
+            modifyMemState itemCache $ Map.mapWithKey $ \pkg item ->
+              updateDownload (Map.findWithDefault 0 pkg downs) item
             -- Say all packages were updated here (detecting this is more laborious)
             mainMap <- readMemState itemCache
             runHook_ itemUpdate (Set.fromDistinctAscList $ Map.keys mainMap)
@@ -192,15 +192,15 @@ listFeature CoreFeature{..}
     constructItem pkg = do
         let pkgname = packageName pkg
         -- [reverse index disabled] revCount <- query . GetReverseCount $ pkgname
-        tags <- queryTagsForPackage pkgname
-        infos <- queryGetDownloadInfo pkgname
-        deprs <- queryGetDeprecatedFor  pkgname
+        tags  <- queryTagsForPackage pkgname
+        downs <- totalPackageDownloads
+        deprs <- queryGetDeprecatedFor pkgname
         return $ (,) pkgname $ (updateDescriptionItem (pkgDesc pkg) $ emptyPackageItem pkgname) {
-            itemTags = tags,
-            itemDeprecated = deprs,
-            itemDownloads = packageDowns infos
+            itemTags       = tags
+          , itemDeprecated = deprs
+          , itemDownloads  = Map.findWithDefault 0 pkgname downs
             -- [reverse index disabled] , itemRevDepsCount = directReverseCount revCount
-        }
+          }
 
     ------------------------------
     makeItemList :: [PackageName] -> IO [PackageItem]
@@ -256,4 +256,3 @@ updateDownload count item =
     item {
         itemDownloads = count
     }
-

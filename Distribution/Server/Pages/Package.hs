@@ -196,10 +196,12 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
             UnpreferredVersion -> [theclass "unpreferred"]
         infoHtml = case info of Nothing -> noHtml; Just str -> " (" +++ (anchor ! [href str] << "info") +++ ")"
 
-renderDownloads :: Int -> Int -> Version -> (String, Html)
-renderDownloads totalDown versionDown version =
-    ("Downloads", toHtml $ show versionDown ++ " for " ++ display version ++
-                      " and " ++ show totalDown ++ " total")
+-- We don't keep currently per-version downloads in memory; if we decide that
+-- it is important to show this all the time, we can reenable
+renderDownloads :: Int -> {- Int -> Version -> -} (String, Html)
+renderDownloads totalDown {- versionDown version -} =
+    ("Downloads", toHtml $ {- show versionDown ++ " for " ++ display version ++
+                      " and " ++ -} show totalDown ++ " total")
 
 renderFields :: PackageRender -> [(String, Html)]
 renderFields render = [
