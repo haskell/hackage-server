@@ -110,12 +110,12 @@ initUploadFeature env@ServerEnv{serverStateDir}
 
     return feature
 
-trusteesStateComponent :: FilePath -> IO (StateComponent HackageTrustees)
+trusteesStateComponent :: FilePath -> IO (StateComponent AcidState HackageTrustees)
 trusteesStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "HackageTrustees") initialHackageTrustees
   return StateComponent {
       stateDesc    = "Trustees"
-    , acidState    = st
+    , stateHandle  = st
     , getState     = query st GetHackageTrustees
     , putState     = update st . ReplaceHackageTrustees . trusteeList
     , backupState  = \(HackageTrustees trustees) -> [csvToBackup ["trustees.csv"] $ groupToCSV trustees]
@@ -123,12 +123,12 @@ trusteesStateComponent stateDir = do
     , resetState   = trusteesStateComponent
     }
 
-uploadersStateComponent :: FilePath -> IO (StateComponent HackageUploaders)
+uploadersStateComponent :: FilePath -> IO (StateComponent AcidState HackageUploaders)
 uploadersStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "HackageUploaders") initialHackageUploaders
   return StateComponent {
       stateDesc    = "Uploaders"
-    , acidState    = st
+    , stateHandle  = st
     , getState     = query st GetHackageUploaders
     , putState     = update st . ReplaceHackageUploaders . uploaderList
     , backupState  = \(HackageUploaders uploaders) -> [csvToBackup ["uploaders.csv"] $ groupToCSV uploaders]
@@ -136,12 +136,12 @@ uploadersStateComponent stateDir = do
     , resetState   = uploadersStateComponent
     }
 
-maintainersStateComponent :: FilePath -> IO (StateComponent PackageMaintainers)
+maintainersStateComponent :: FilePath -> IO (StateComponent AcidState PackageMaintainers)
 maintainersStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "PackageMaintainers") initialPackageMaintainers
   return StateComponent {
       stateDesc    = "Package maintainers"
-    , acidState    = st
+    , stateHandle  = st
     , getState     = query st AllPackageMaintainers
     , putState     = update st . ReplacePackageMaintainers
     , backupState  = \(PackageMaintainers mains) -> [maintToExport mains]
@@ -152,9 +152,9 @@ maintainersStateComponent stateDir = do
 uploadFeature :: ServerEnv
               -> CoreFeature
               -> UserFeature
-              -> StateComponent HackageTrustees    -> UserGroup -> GroupResource
-              -> StateComponent HackageUploaders   -> UserGroup -> GroupResource
-              -> StateComponent PackageMaintainers -> (PackageName -> UserGroup) -> GroupResource
+              -> StateComponent AcidState HackageTrustees    -> UserGroup -> GroupResource
+              -> StateComponent AcidState HackageUploaders   -> UserGroup -> GroupResource
+              -> StateComponent AcidState PackageMaintainers -> (PackageName -> UserGroup) -> GroupResource
               -> (UploadFeature,
                   [UserGroup] -> UserGroup,
                   [UserGroup] -> UserGroup,
@@ -184,9 +184,9 @@ uploadFeature ServerEnv{serverBlobStore = store}
             , groupUserResource uploadersGroupResource
             ]
       , featureState = [
-            abstractStateComponent trusteesState
-          , abstractStateComponent uploadersState
-          , abstractStateComponent maintainersState
+            abstractAcidStateComponent trusteesState
+          , abstractAcidStateComponent uploadersState
+          , abstractAcidStateComponent maintainersState
           ]
       }
 

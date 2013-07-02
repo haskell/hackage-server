@@ -53,12 +53,12 @@ initPlatformFeature ServerEnv{serverStateDir, serverVerbosity = verbosity} = do
     loginfo verbosity "Initialising platform feature, end"
     return feature
 
-platformStateComponent :: FilePath -> IO (StateComponent PlatformPackages)
+platformStateComponent :: FilePath -> IO (StateComponent AcidState PlatformPackages)
 platformStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "PlatformPackages") initialPlatformPackages
   return StateComponent {
       stateDesc    = "Platform packages"
-    , acidState    = st
+    , stateHandle  = st
     , getState     = query st GetPlatformPackages
     , putState     = update st . ReplacePlatformPackages
     , resetState   = platformStateComponent
@@ -72,7 +72,7 @@ platformStateComponent stateDir = do
                        }
     }
 
-platformFeature :: StateComponent PlatformPackages
+platformFeature :: StateComponent AcidState PlatformPackages
                 -> PlatformFeature
 platformFeature platformState
   = PlatformFeature{..}
@@ -84,7 +84,7 @@ platformFeature platformState
               platformPackage
             , platformPackages
             ]
-      , featureState = [abstractStateComponent platformState]
+      , featureState = [abstractAcidStateComponent platformState]
       }
 
     platformResource = fix $ \r -> PlatformResource

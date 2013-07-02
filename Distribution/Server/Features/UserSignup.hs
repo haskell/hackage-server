@@ -143,7 +143,7 @@ addSignupResetInfo nonce info = do
       then do put $! SignupResetTable (Map.insert nonce info tbl)
               return True
       else return False
-    
+
 
 deleteSignupResetInfo :: Nonce -> Update SignupResetTable ()
 deleteSignupResetInfo nonce = do
@@ -165,12 +165,12 @@ makeAcidic ''SignupResetTable [
 -- State components
 --
 
-signupResetStateComponent :: FilePath -> IO (StateComponent SignupResetTable)
+signupResetStateComponent :: FilePath -> IO (StateComponent AcidState SignupResetTable)
 signupResetStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "UserSignupReset") emptySignupResetTable
   return StateComponent {
       stateDesc    = "State to keep track of outstanding requests for user signup and password resets"
-    , acidState    = st
+    , stateHandle  = st
     , getState     = query st GetSignupResetTable
     , putState     = update st . ReplaceSignupResetTable
     , backupState  = \tbl -> [csvToBackup ["signups.csv"] (signupInfoToCSV tbl)
@@ -291,7 +291,7 @@ initUserSignupFeature env@ServerEnv{serverStateDir, serverTemplatesDir}
 userSignupFeature :: ServerEnv
                   -> UserFeature
                   -> UserDetailsFeature
-                  -> StateComponent SignupResetTable
+                  -> StateComponent AcidState SignupResetTable
                   -> Templates
                   -> UserSignupFeature
 userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..}
@@ -305,7 +305,7 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
                             signupRequestResource,
                             resetRequestsResource,
                             resetRequestResource]
-      , featureState     = [abstractStateComponent signupResetState]
+      , featureState     = [abstractAcidStateComponent signupResetState]
       , featureCaches    = []
       }
 
@@ -490,7 +490,7 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
             [ "realname"  $= signupRealName
             , "username"  $= signupUserName
             , "useremail" $= signupContactEmail
-            , "posturl"   $= renderResource signupRequestResource 
+            , "posturl"   $= renderResource signupRequestResource
                                 [renderNonce nonce]
             ]
 

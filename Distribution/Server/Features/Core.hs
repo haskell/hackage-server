@@ -146,14 +146,14 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
     return feature
 
 
-packagesStateComponent :: Verbosity -> FilePath -> IO (StateComponent PackagesState)
+packagesStateComponent :: Verbosity -> FilePath -> IO (StateComponent AcidState PackagesState)
 packagesStateComponent verbosity stateDir = do
   let stateFile = stateDir </> "db" </> "PackagesState"
   st <- logTiming verbosity "Loaded PackagesState" $
           openLocalStateFrom stateFile initialPackagesState
   return StateComponent {
        stateDesc    = "Main package database"
-     , acidState    = st
+     , stateHandle  = st
      , getState     = query st GetPackagesState
      , putState     = update st . ReplacePackagesState
      , backupState  = indexToAllVersions
@@ -163,7 +163,7 @@ packagesStateComponent verbosity stateDir = do
 
 coreFeature :: ServerEnv
             -> UserFeature
-            -> StateComponent PackagesState
+            -> StateComponent AcidState PackagesState
             -> MemState (Map String (ByteString, UTCTime))
             -> AsyncCache ByteString
             -> Hook PackageId ()
@@ -190,7 +190,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           , corePackageTarball
           , coreCabalFile
           ]
-      , featureState    = [abstractStateComponent packagesState]
+      , featureState    = [abstractAcidStateComponent packagesState]
       , featureCaches   = [
             CacheComponent {
               cacheDesc       = "main package index tarball",

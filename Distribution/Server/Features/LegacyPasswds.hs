@@ -100,12 +100,12 @@ makeAcidic ''LegacyPasswdsTable [
 -- State components
 --
 
-legacyPasswdsStateComponent :: FilePath -> IO (StateComponent LegacyPasswdsTable)
+legacyPasswdsStateComponent :: FilePath -> IO (StateComponent AcidState LegacyPasswdsTable)
 legacyPasswdsStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "LegacyPasswds") emptyLegacyPasswdsTable
   return StateComponent {
       stateDesc    = "Support for upgrading accounts from htpasswd-style passwords"
-    , acidState    = st
+    , stateHandle  = st
     , getState     = query st GetLegacyPasswdsTable
     , putState     = update st . ReplaceLegacyPasswdsTable
     , backupState  = \users -> [csvToBackup ["htpasswd.csv"] (legacyPasswdsToCSV users)]
@@ -131,7 +131,7 @@ updatePasswdsBackup upasswds = RestoreBackup {
       _ ->
         return (updatePasswdsBackup upasswds)
   , restoreFinalize =
-      let tbl =  IntMap.fromList [ (uid, htpasswd) 
+      let tbl =  IntMap.fromList [ (uid, htpasswd)
                                  | (UserId uid, htpasswd) <- upasswds ] in
       return $! LegacyPasswdsTable tbl
   }
@@ -179,7 +179,7 @@ initLegacyPasswdsFeature env@ServerEnv{serverStateDir, serverTemplatesDir} users
   return feature
 
 legacyPasswdsFeature :: ServerEnv
-                     -> StateComponent LegacyPasswdsTable
+                     -> StateComponent AcidState LegacyPasswdsTable
                      -> Templates
                      -> UserFeature
                      -> LegacyPasswdsFeature
@@ -190,7 +190,7 @@ legacyPasswdsFeature env legacyPasswdsState templates UserFeature{..}
     legacyPasswdsFeatureInterface = (emptyHackageFeature "legacy-passwds") {
         featureDesc      = "Support for upgrading accounts from htpasswd-style passwords"
       , featureResources = [htpasswordResource, htpasswordUpgradeResource]
-      , featureState     = [abstractStateComponent legacyPasswdsState]
+      , featureState     = [abstractAcidStateComponent legacyPasswdsState]
       , featureCaches    = []
       , featurePostInit  = interceptUserAuthFail
       }

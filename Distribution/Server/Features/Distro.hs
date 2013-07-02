@@ -54,12 +54,12 @@ initDistroFeature ServerEnv{serverStateDir, serverVerbosity = verbosity} user co
     loginfo verbosity "Initialising distro feature, end"
     return feature
 
-distrosStateComponent :: FilePath -> IO (StateComponent Distros)
+distrosStateComponent :: FilePath -> IO (StateComponent AcidState Distros)
 distrosStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "Distros") initialDistros
   return StateComponent {
       stateDesc    = ""
-    , acidState    = st
+    , stateHandle  = st
     , getState     = query st GetDistributions
     , putState     = \(Distros dists versions) -> update st (ReplaceDistributions dists versions)
     , backupState  = dumpBackup
@@ -69,7 +69,7 @@ distrosStateComponent stateDir = do
 
 distroFeature :: UserFeature
               -> CoreFeature
-              -> StateComponent Distros
+              -> StateComponent AcidState Distros
               -> DistroFeature
 distroFeature UserFeature{..}
               CoreFeature{coreResource=CoreResource{packageInPath}}
@@ -84,7 +84,7 @@ distroFeature UserFeature{..}
             , distroPackages
             , distroPackage
             ]
-      , featureState = [abstractStateComponent distrosState]
+      , featureState = [abstractAcidStateComponent distrosState]
       }
 
     queryPackageStatus :: MonadIO m => PackageName -> m [(DistroName, DistroPackageInfo)]

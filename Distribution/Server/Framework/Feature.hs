@@ -9,8 +9,8 @@ module Distribution.Server.Framework.Feature
     -- * State components
   , StateComponent(..)
   , AbstractStateComponent(..)
-  , abstractStateComponent
-  , abstractStateComponent'
+  , abstractAcidStateComponent
+  , abstractAcidStateComponent'
   , queryState
   , updateState
   , compareState
@@ -79,11 +79,11 @@ class IsHackageFeature feature where
 --------------------------------------------------------------------------------
 
 -- | A state component encapsulates (part of) a feature's state
-data StateComponent st = StateComponent {
+data StateComponent f st = StateComponent {
     -- | Human readable description of the state component
     stateDesc    :: String
-    -- | The underlying AcidState handle
-  , acidState    :: AcidState st
+    -- | Handle required to access the state
+  , stateHandle  :: f st
     -- | Return the entire state
   , getState     :: IO st
     -- | Overwrite the state
@@ -93,8 +93,19 @@ data StateComponent st = StateComponent {
     -- | (Pure) backup restore
   , restoreState :: RestoreBackup st
     -- | Clone the state component in the given state directory
-  , resetState   :: FilePath -> IO (StateComponent st)
+  , resetState   :: FilePath -> IO (StateComponent f st)
   }
+
+{-
+data OnDiskStateComponent st = OnDiskStateComponent {
+    onDiskStateDesc    :: String
+  , onDiskStateGet     :: IO st
+  , onDiskStatePut     :: st -> IO ()
+  , onDiskStateBackup  :: st -> [BackupEntry]
+  , onDiskStateRestore :: RestoreBackup st
+  , onDiskStateReset   :: FilePath -> IO (OnDiskStateComponent st)
+  }
+-}
 
 -- | 'AbstractStateComponent' abstracts away from a particular type of
 -- 'StateComponent'
@@ -135,22 +146,41 @@ compareState old new =
     dropCommonPrefix common (x:xs) (y:ys) | x == y = dropCommonPrefix (x:common) xs ys
     dropCommonPrefix common xs ys = (reverse common, xs, ys)
 
-abstractStateComponent :: (Eq st, Show st, MemSize st) => StateComponent st -> AbstractStateComponent
-abstractStateComponent = abstractStateComponent' compareState
+abstractAcidStateComponent :: (Eq st, Show st, MemSize st)
+                           => StateComponent AcidState st -> AbstractStateComponent
+abstractAcidStateComponent = abstractAcidStateComponent' compareState
 
-abstractStateComponent' :: MemSize st => (st -> st -> [String]) -> StateComponent st -> AbstractStateComponent
-abstractStateComponent' cmp st = AbstractStateComponent {
+abstractAcidStateComponent' :: MemSize st
+                            => (st -> st -> [String])
+                            -> StateComponent AcidState st -> AbstractStateComponent
+abstractAcidStateComponent' cmp st = AbstractStateComponent {
     abstractStateDesc       = stateDesc st
-  , abstractStateCheckpoint = createCheckpoint (acidState st)
-  , abstractStateClose      = closeAcidState (acidState st)
+  , abstractStateCheckpoint = createCheckpoint (stateHandle st)
+  , abstractStateClose      = closeAcidState (stateHandle st)
   , abstractStateBackup     = liftM (backupState st) (getState st)
   , abstractStateRestore    = abstractRestoreBackup (putState st) (restoreState st)
   , abstractStateNewEmpty   = \stateDir -> do
                                 st' <- resetState st stateDir
                                 let cmpSt = liftM2 cmp (getState st) (getState st')
-                                return (abstractStateComponent' cmp st', cmpSt)
+                                return (abstractAcidStateComponent' cmp st', cmpSt)
   , abstractStateSize       = liftM memSize (getState st)
   }
+
+{-
+abstractOnDiskStateComponent :: (Show st, Eq st) => OnDiskStateComponent st -> AbstractStateComponent
+abstractOnDiskStateComponent st = AbstractStateComponent {
+    abstractStateDesc = onDiskStateDesc st
+  , abstractStateCheckpoint = return ()
+  , abstractStateClose      = return ()
+  , abstractStateBackup     = liftM (onDiskStateBackup st) (onDiskStateGet st)
+  , abstractStateRestore    = abstractRestoreBackup (onDiskStatePut st) (onDiskStateRestore st)
+  , abstractStateNewEmpty   = \stateDir -> do
+                                st' <- onDiskStateReset st stateDir
+                                let cmpSt = liftM2 compareState (onDiskStateGet st) (onDiskStateGet st')
+                                return (abstractOnDiskStateComponent st', cmpSt)
+  , abstractStateSize       = return 0 -- Not kept in memory
+  }
+-}
 
 instance Monoid AbstractStateComponent where
   mempty = AbstractStateComponent {
@@ -177,16 +207,16 @@ instance Monoid AbstractStateComponent where
     }
 
 queryState :: (MonadIO m, QueryEvent event)
-           => StateComponent (EventState event)
+           => StateComponent AcidState (EventState event)
            -> event
            -> m (EventResult event)
-queryState = query' . acidState
+queryState = query' . stateHandle
 
 updateState :: (MonadIO m, UpdateEvent event)
-            => StateComponent (EventState event)
+            => StateComponent AcidState (EventState event)
             -> event
             -> m (EventResult event)
-updateState = update' . acidState
+updateState = update' . stateHandle
 
 
 --------------------------------------------------------------------------------

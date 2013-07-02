@@ -32,12 +32,12 @@ initTarIndexCacheFeature env@ServerEnv{serverStateDir} = do
   tarIndexCache <- tarIndexCacheStateComponent serverStateDir
   return $ tarIndexCacheFeature env tarIndexCache
 
-tarIndexCacheStateComponent :: FilePath -> IO (StateComponent TarIndexCache)
+tarIndexCacheStateComponent :: FilePath -> IO (StateComponent AcidState TarIndexCache)
 tarIndexCacheStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "TarIndexCache") initialTarIndexCache
   return StateComponent {
       stateDesc    = "Mapping from tarball blob IDs to tarindex blob IDs"
-    , acidState    = st
+    , stateHandle  = st
     , getState     = query st GetTarIndexCache
     , putState     = update st . ReplaceTarIndexCache
     , resetState   = tarIndexCacheStateComponent
@@ -50,7 +50,7 @@ tarIndexCacheStateComponent stateDir = do
     }
 
 tarIndexCacheFeature :: ServerEnv
-                     -> StateComponent TarIndexCache
+                     -> StateComponent AcidState TarIndexCache
                      -> TarIndexCacheFeature
 tarIndexCacheFeature ServerEnv{serverBlobStore = store} tarIndexCache =
    TarIndexCacheFeature{..}
@@ -62,7 +62,7 @@ tarIndexCacheFeature ServerEnv{serverBlobStore = store} tarIndexCache =
         -- (TODO: We could potentially check that if a package occurs in both
         -- packages then both caches point to identical tar indices, but for
         -- that we would need to be in IO)
-      , featureState = [abstractStateComponent' (\_ _ -> []) tarIndexCache]
+      , featureState = [abstractAcidStateComponent' (\_ _ -> []) tarIndexCache]
       }
 
     -- This is the heart of this feature

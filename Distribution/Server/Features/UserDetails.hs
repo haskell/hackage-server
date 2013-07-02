@@ -146,12 +146,12 @@ makeAcidic ''UserDetailsTable [
 -- State components
 --
 
-userDetailsStateComponent :: FilePath -> IO (StateComponent UserDetailsTable)
+userDetailsStateComponent :: FilePath -> IO (StateComponent AcidState UserDetailsTable)
 userDetailsStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "UserDetails") emptyUserDetailsTable
   return StateComponent {
       stateDesc    = "Extra details associated with user accounts, email addresses etc"
-    , acidState    = st
+    , stateHandle  = st
     , getState     = query st GetUserDetailsTable
     , putState     = update st . ReplaceUserDetailsTable
     , backupState  = \users -> [csvToBackup ["users.csv"] (userDetailsToCSV users)]
@@ -248,7 +248,7 @@ initUserDetailsFeature ServerEnv{serverStateDir} users core = do
   return feature
 
 
-userDetailsFeature :: StateComponent UserDetailsTable
+userDetailsFeature :: StateComponent AcidState UserDetailsTable
                    -> UserFeature
                    -> CoreFeature
                    -> UserDetailsFeature
@@ -259,7 +259,7 @@ userDetailsFeature userDetailsState UserFeature{..} CoreFeature{..}
     userDetailsFeatureInterface = (emptyHackageFeature "user-details") {
         featureDesc      = "Extra information about user accounts, email addresses etc."
       , featureResources = [userNameContactResource, userAdminInfoResource]
-      , featureState     = [abstractStateComponent userDetailsState]
+      , featureState     = [abstractAcidStateComponent userDetailsState]
       , featureCaches    = []
       }
 

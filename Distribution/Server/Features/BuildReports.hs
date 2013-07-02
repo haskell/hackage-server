@@ -57,12 +57,12 @@ initBuildReportsFeature name env@ServerEnv{serverStateDir} user upload core = do
     reportsState <- reportsStateComponent name serverStateDir
     return $ buildReportsFeature name env user upload core reportsState
 
-reportsStateComponent :: String -> FilePath -> IO (StateComponent BuildReports)
+reportsStateComponent :: String -> FilePath -> IO (StateComponent AcidState BuildReports)
 reportsStateComponent name stateDir = do
   st  <- openLocalStateFrom (stateDir </> "db" </> name) initialBuildReports
   return StateComponent {
       stateDesc    = "Build reports"
-    , acidState    = st
+    , stateHandle  = st
     , getState     = query st GetBuildReports
     , putState     = update st . ReplaceBuildReports
     , backupState  = dumpBackup
@@ -75,7 +75,7 @@ buildReportsFeature :: String
                     -> UserFeature
                     -> UploadFeature
                     -> CoreResource
-                    -> StateComponent BuildReports
+                    -> StateComponent AcidState BuildReports
                     -> ReportsFeature
 buildReportsFeature name
                     ServerEnv{serverBlobStore = store}
@@ -95,7 +95,7 @@ buildReportsFeature name
             , reportsPage
             , reportsLog
             ]
-      , featureState = [abstractStateComponent reportsState]
+      , featureState = [abstractAcidStateComponent reportsState]
       }
 
     reportsResource = ReportsResource

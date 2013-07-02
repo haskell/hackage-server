@@ -64,13 +64,13 @@ inMemPath stateDir = stateDir </> "db" </> "InMemStats"
 onDiskPath :: FilePath -> FilePath
 onDiskPath stateDir = stateDir </> "db" </> "OnDiskStats"
 
-downloadStateComponent :: FilePath -> IO (StateComponent InMemStats)
+downloadStateComponent :: FilePath -> IO (StateComponent AcidState InMemStats)
 downloadStateComponent stateDir = do
   initSt <- initInMemStats <$> getToday
   st <- openLocalStateFrom (inMemPath stateDir) initSt
   return StateComponent {
       stateDesc    = "Download counts"
-    , acidState    = st
+    , stateHandle  = st
     , getState     = query st GetInMemStats
     , putState     = update st . ReplaceInMemStats
 --    , backupState  = \dc -> [csvToBackup ["downloads.csv"] $ downloadsToCSV dc]
@@ -80,7 +80,7 @@ downloadStateComponent stateDir = do
 
 downloadFeature :: CoreFeature
                 -> FilePath
-                -> StateComponent InMemStats
+                -> StateComponent AcidState InMemStats
                 -> Chan PackageId
                 -> MemState (Map PackageName Int)
                 -> DownloadFeature
@@ -95,7 +95,7 @@ downloadFeature CoreFeature{}
     downloadFeatureInterface = (emptyHackageFeature "download") {
         featureResources = map ($ downloadResource) [topDownloads]
       , featurePostInit  = void $ forkIO registerDownloads
-      , featureState     = [abstractStateComponent downloadState]
+      , featureState     = [abstractAcidStateComponent downloadState]
       , featureCaches    = [
             CacheComponent {
               cacheDesc       = "total package downloads cache",
@@ -110,7 +110,7 @@ downloadFeature CoreFeature{}
     registerDownloads = forever $ do
         pkg    <- readChan downloadStream
         today  <- getToday
-        today' <- query (acidState downloadState) RecordedToday
+        today' <- query (stateHandle downloadState) RecordedToday
 
         when (today /= today') $ do
           inMemStats <- getState downloadState

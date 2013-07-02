@@ -99,12 +99,12 @@ initVersionsFeature ServerEnv{serverStateDir, serverVerbosity = verbosity}
     loginfo verbosity "Initialising versions feature, end"
     return feature
 
-preferredStateComponent :: FilePath -> IO (StateComponent PreferredVersions)
+preferredStateComponent :: FilePath -> IO (StateComponent AcidState PreferredVersions)
 preferredStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "PreferredVersions") initialPreferredVersions
   return StateComponent {
       stateDesc    = "Preferred package versions"
-    , acidState    = st
+    , stateHandle  = st
     , getState     = query st GetPreferredVersions
     , putState     = update st . ReplacePreferredVersions
     , resetState   = preferredStateComponent
@@ -115,7 +115,7 @@ preferredStateComponent stateDir = do
 versionsFeature :: CoreFeature
                 -> UploadFeature
                 -> TagsFeature
-                -> StateComponent PreferredVersions
+                -> StateComponent AcidState PreferredVersions
                 -> Hook (PackageName, PreferredInfo) ()
                 -> Hook (PackageName, Maybe [PackageName]) ()
                 -> VersionsFeature
@@ -145,7 +145,7 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
             ]
         --FIXME: don't we need to set the preferred-versions on init?
       , featurePostInit = updateDeprecatedTags
-      , featureState    = [abstractStateComponent preferredState]
+      , featureState    = [abstractAcidStateComponent preferredState]
       }
 
     queryGetPreferredInfo :: MonadIO m => PackageName -> m PreferredInfo

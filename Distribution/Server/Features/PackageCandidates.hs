@@ -123,14 +123,14 @@ initPackageCandidatesFeature env@ServerEnv{serverStateDir} user core upload tarI
     candidatesState <- candidatesStateComponent serverStateDir
     return $ candidatesFeature env user core upload tarIndexCache candidatesState
 
-candidatesStateComponent :: FilePath -> IO (StateComponent CandidatePackages)
+candidatesStateComponent :: FilePath -> IO (StateComponent AcidState CandidatePackages)
 candidatesStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "CandidatePackages") initialCandidatePackages
   return StateComponent {
       stateDesc    = "Candidate packages"
+    , stateHandle  = st
     , getState     = query st GetCandidatePackages
     , putState     = update st . ReplaceCandidatePackages
-    , acidState    = st
     , resetState   = candidatesStateComponent
     , backupState  = backupCandidates
     , restoreState = restoreCandidates
@@ -141,7 +141,7 @@ candidatesFeature :: ServerEnv
                   -> CoreFeature
                   -> UploadFeature
                   -> TarIndexCacheFeature
-                  -> StateComponent CandidatePackages
+                  -> StateComponent AcidState CandidatePackages
                   -> PackageCandidatesFeature
 candidatesFeature ServerEnv{serverBlobStore = store}
                   UserFeature{..}
@@ -168,7 +168,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
             , candidateContents
             , candidateChangeLog
             ]
-      , featureState = [abstractStateComponent candidatesState]
+      , featureState = [abstractAcidStateComponent candidatesState]
       }
 
     queryGetCandidateIndex :: MonadIO m => m (PackageIndex CandPkgInfo)

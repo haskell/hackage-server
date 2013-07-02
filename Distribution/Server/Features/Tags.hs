@@ -96,12 +96,12 @@ initTagsFeature ServerEnv{serverStateDir} core@CoreFeature{..} upload = do
 
     return feature
 
-tagsStateComponent :: FilePath -> IO (StateComponent PackageTags)
+tagsStateComponent :: FilePath -> IO (StateComponent AcidState PackageTags)
 tagsStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "Tags") initialPackageTags
   return StateComponent {
       stateDesc    = "Package tags"
-    , acidState    = st
+    , stateHandle  = st
     , getState     = query st GetPackageTags
     , putState     = update st . ReplacePackageTags
     , backupState  = \pkgTags -> [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]
@@ -111,7 +111,7 @@ tagsStateComponent stateDir = do
 
 tagsFeature :: CoreFeature
             -> UploadFeature
-            -> StateComponent PackageTags
+            -> StateComponent AcidState PackageTags
             -> MemState PackageTags
             -> Hook (Set PackageName, Set Tag) ()
             -> TagsFeature
@@ -148,7 +148,7 @@ tagsFeature CoreFeature{ queryGetPackageIndex
             , packageTagsListing
             ]
       , featurePostInit = initImmutableTags
-      , featureState    = [abstractStateComponent tagsState]
+      , featureState    = [abstractAcidStateComponent tagsState]
       , featureCaches   = [
             CacheComponent {
               cacheDesc       = "calculated tags",

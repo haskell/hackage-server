@@ -70,12 +70,12 @@ initMirrorFeature env@ServerEnv{serverStateDir, serverVerbosity = verbosity}
     loginfo verbosity "Initialising mirror feature, end"
     return feature
 
-mirrorersStateComponent :: FilePath -> IO (StateComponent MirrorClients)
+mirrorersStateComponent :: FilePath -> IO (StateComponent AcidState MirrorClients)
 mirrorersStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "MirrorClients") initialMirrorClients
   return StateComponent {
       stateDesc    = "Mirror clients"
-    , acidState    = st
+    , stateHandle  = st
     , getState     = query st GetMirrorClients
     , putState     = update st . ReplaceMirrorClients . mirrorClients
     , backupState  = \(MirrorClients clients) -> [csvToBackup ["clients.csv"] $ groupToCSV clients]
@@ -86,7 +86,7 @@ mirrorersStateComponent stateDir = do
 mirrorFeature :: ServerEnv
               -> CoreFeature
               -> UserFeature
-              -> StateComponent MirrorClients
+              -> StateComponent AcidState MirrorClients
               -> UserGroup
               -> GroupResource
               -> (MirrorFeature, UserGroup)
@@ -116,7 +116,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
             [ groupResource     mirrorGroupResource
             , groupUserResource mirrorGroupResource
             ]
-      , featureState = [abstractStateComponent mirrorersState]
+      , featureState = [abstractAcidStateComponent mirrorersState]
       }
 
     mirrorResource = MirrorResource {

@@ -64,12 +64,12 @@ initDocumentationFeature name
     loginfo verbosity "Initialising documentation feature, end"
     return feature
 
-documentationStateComponent :: String -> FilePath -> IO (StateComponent Documentation)
+documentationStateComponent :: String -> FilePath -> IO (StateComponent AcidState Documentation)
 documentationStateComponent name stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> name) initialDocumentation
   return StateComponent {
       stateDesc    = "Package documentation"
-    , acidState    = st
+    , stateHandle  = st
     , getState     = query st GetDocumentation
     , putState     = update st . ReplaceDocumentation
     , backupState  = dumpBackup
@@ -102,7 +102,7 @@ documentationFeature :: String
                      -> CoreResource
                      -> UploadFeature
                      -> TarIndexCacheFeature
-                     -> StateComponent Documentation
+                     -> StateComponent AcidState Documentation
                      -> DocumentationFeature
 documentationFeature name
                      ServerEnv{serverBlobStore = store}
@@ -122,7 +122,7 @@ documentationFeature name
               packageDocsContent
             , packageDocsWhole
             ]
-      , featureState = [abstractStateComponent documentationState]
+      , featureState = [abstractAcidStateComponent documentationState]
       }
 
     queryHasDocumentation :: MonadIO m => PackageIdentifier -> m Bool

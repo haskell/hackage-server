@@ -157,12 +157,12 @@ initUserFeature ServerEnv{serverStateDir} = do
 
   return feature
 
-usersStateComponent :: FilePath -> IO (StateComponent Users.Users)
+usersStateComponent :: FilePath -> IO (StateComponent AcidState Users.Users)
 usersStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "Users") initialUsers
   return StateComponent {
       stateDesc    = "List of users"
-    , acidState    = st
+    , stateHandle  = st
     , getState     = query st GetUserDb
     , putState     = update st . ReplaceUserDb
     , backupState  = \users -> [csvToBackup ["users.csv"] (usersToCSV users)]
@@ -170,12 +170,12 @@ usersStateComponent stateDir = do
     , resetState   = usersStateComponent
     }
 
-adminsStateComponent :: FilePath -> IO (StateComponent HackageAdmins)
+adminsStateComponent :: FilePath -> IO (StateComponent AcidState HackageAdmins)
 adminsStateComponent stateDir = do
   st <- openLocalStateFrom (stateDir </> "db" </> "HackageAdmins") initialHackageAdmins
   return StateComponent {
       stateDesc    = "Admins"
-    , acidState    = st
+    , stateHandle  = st
     , getState     = query st GetHackageAdmins
     , putState     = update st . ReplaceHackageAdmins . adminList
     , backupState  = \(HackageAdmins admins) -> [csvToBackup ["admins.csv"] (groupToCSV admins)]
@@ -183,8 +183,8 @@ adminsStateComponent stateDir = do
     , resetState   = adminsStateComponent
     }
 
-userFeature :: StateComponent Users.Users
-            -> StateComponent HackageAdmins
+userFeature :: StateComponent AcidState Users.Users
+            -> StateComponent AcidState HackageAdmins
             -> MemState GroupIndex
             -> Hook () ()
             -> Hook Auth.AuthError (Maybe ErrorResponse)
@@ -210,8 +210,8 @@ userFeature  usersState adminsState
             , groupUserResource adminResource
             ]
       , featureState = [
-            abstractStateComponent usersState
-          , abstractStateComponent adminsState
+            abstractAcidStateComponent usersState
+          , abstractAcidStateComponent adminsState
           ]
       , featureCaches = [
             CacheComponent {
