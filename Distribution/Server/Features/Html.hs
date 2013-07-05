@@ -14,7 +14,7 @@ import Distribution.Server.Features.Upload
 import Distribution.Server.Features.PackageCandidates
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.DownloadCount
-import Distribution.Server.Features.NameSearch
+import Distribution.Server.Features.Search
 import Distribution.Server.Features.PreferredVersions
 -- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies
 import Distribution.Server.Features.PackageList
@@ -55,10 +55,12 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
+import Control.Applicative (optional)
 
 import Text.XHtml.Strict
 import qualified Text.XHtml.Strict as XHtml
 import Text.XHtml.Table (simpleTable)
+import Network.URI (escapeURIString, isUnreserved)
 
 
 -- TODO: move more of the below to Distribution.Server.Pages.*, it's getting
@@ -83,7 +85,7 @@ initHtmlFeature :: ServerEnv -> UserFeature -> CoreFeature -> RecentPackagesFeat
                 -> UploadFeature -> PackageCandidatesFeature -> VersionsFeature
                 -- [reverse index disabled] -> ReverseFeature
                 -> TagsFeature -> DownloadFeature
-                -> ListFeature -> NamesFeature
+                -> ListFeature -> SearchFeature
                 -> MirrorFeature -> DistroFeature
                 -> DocumentationFeature
                 -> DocumentationFeature
@@ -156,7 +158,7 @@ htmlFeature :: UserFeature
             -> TagsFeature
             -> DownloadFeature
             -> ListFeature
-            -> NamesFeature
+            -> SearchFeature
             -> MirrorFeature
             -> DistroFeature
             -> DocumentationFeature
@@ -1283,52 +1285,85 @@ data HtmlSearch = HtmlSearch {
 
 mkHtmlSearch :: HtmlUtilities
              -> ListFeature
-             -> NamesFeature
+             -> SearchFeature
              -> HtmlSearch
 mkHtmlSearch HtmlUtilities{..}
              ListFeature{makeItemList}
-             NamesFeature{..} = HtmlSearch{..}
+             SearchFeature{..} = HtmlSearch{..}
   where
-    names = namesResource
-
     htmlSearchResources = [
-        (extendResource $ findPackageResource names) {
+        (extendResource searchPackagesResource) {
             resourceGet = [("html", servePackageFind)]
           }
       ]
 
     servePackageFind :: DynamicPath -> ServerPartE Response
-    servePackageFind _ = packageFindWith $ \mstr -> case mstr of
-        Nothing -> return $ toResponse $ Resource.XHtml $
-                            hackagePage "Text search" $ searchForm ""
-        Just (str, texts) -> do
-            (exact, text) <- searchFindPackage str texts
-            exactItems <- liftIO $ makeItemList exact
-            textItems <- liftIO $ makeItemList text
+    servePackageFind _ = do
+        (mtermsStr, offset, limit) <-
+          queryString $ (,,) <$> optional (look "terms")
+                             <*> mplus (lookRead "offset") (pure 0)
+                             <*> mplus (lookRead "limit") (pure 10)
+        case mtermsStr of
+          Just termsStr | terms <- words termsStr, not (null terms) -> do
+            pkgnames <- searchPackages terms
+            let (pageResults, moreResults) = splitAt limit (drop offset pkgnames)
+            pkgDetails <- liftIO $ makeItemList pageResults
             return $ toResponse $ Resource.XHtml $
-              hackagePageWithHead [noIndex] "Text search" $
-              [ toHtml $ searchForm str
-              , h2 << "Exact matches"
-              , case exact of [] -> toHtml "None";
-                              _ -> ulist ! [theclass "packages"] << map renderItem exactItems
-              , h2 << "Text matches"
-              , case texts of
-                    False -> toHtml "Try a longer word."
-                    True  -> ulist ! [theclass "packages"] << map renderItem textItems
+              hackagePage "Package search" $
+                [ toHtml $ searchForm termsStr
+                , toHtml $ resultsArea pkgDetails offset limit moreResults termsStr
+                , alternativeSearch
+                ]
+
+          _ ->
+            return $ toResponse $ Resource.XHtml $
+              hackagePage "Text search" $
+                [ toHtml $ searchForm ""
+                , alternativeSearch
+                ]
+      where
+        resultsArea pkgDetails offset limit moreResults termsStr =
+            [ h2 << "Results"
+            , if offset == 0
+                then noHtml
+                else paragraph << ("(" ++ show (fst range + 1) ++ " to "
+                                       ++ show (snd range) ++ ")")
+            , case pkgDetails of
+                [] | offset == 0 -> toHtml "None"
+                   | otherwise   -> toHtml "No more results"
+                _ -> toHtml
+                      [ ulist ! [theclass "packages"]
+                             << map renderItem pkgDetails
+                      , if null moreResults
+                          then noHtml
+                          else anchor ! [href moreResultsLink]
+                                     << "More results..."
+                      ]
+            ]
+          where
+            range = (offset, offset + length pkgDetails)
+            moreResultsLink =
+                "/packages/search?"
+             ++ "terms="   ++ escapeURIString isUnreserved termsStr
+             ++ "&offset=" ++ show (offset + limit)
+             ++ "&limit="  ++ show limit
+
+        searchForm termsStr =
+          [ h2 << "Package search"
+          , form ! [theclass "box", XHtml.method "GET", action "/packages/search"] <<
+              [ input ! [value termsStr, name "terms", identifier "terms"]
+              , toHtml " "
+              , input ! [thetype "submit", value "Search"]
               ]
-      where searchForm str =
-              [ h2 << "Text search"
-              , paragraph << "Search for all package descriptions containing a given string. This looks for the search text anywhere it can find it, ignoring punctuation and letter case. It is mainly a replacement for Ctrl+F on the main packages page presently."
-              , form ! [theclass "box", XHtml.method "GET", action "/packages/find"] <<
-                    [ toHtml $ makeInput [value str] "name" "Look for "
-                    , input ! [thetype "submit", value "Go!"]
-                    ]
-              , paragraph <<
-                  [ toHtml "Use ", anchor ! [href "http://holumbus.fh-wedel.de/hayoo/hayoo.html"] << "Hayoo"
-                  , toHtml " to search module and function names and "
-                  , anchor ! [href "http://www.haskell.org/hoogle/"] << "Hoogle"
-                  , toHtml " to fuzzily search type signatures and function names."]
-              ]
+          ]
+
+        alternativeSearch =
+          paragraph <<
+            [ toHtml "Alternatively, if you are looking for a particular function then try "
+            , anchor ! [href "http://holumbus.fh-wedel.de/hayoo/hayoo.html"] << "Hayoo"
+            , toHtml " or "
+            , anchor ! [href "http://www.haskell.org/hoogle/"] << "Hoogle"
+            ]
 
 {-------------------------------------------------------------------------------
   Groups
@@ -1424,6 +1459,3 @@ data HtmlUtilities = HtmlUtilities {
   , renderTags :: Set Tag -> [Html]
   }
 
--- Prevents page indexing (e.g. for search pages).
-noIndex :: Html
-noIndex = meta ! [name "robots", content "noindex"]

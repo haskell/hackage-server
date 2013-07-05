@@ -33,7 +33,7 @@ import Distribution.Server.Features.PreferredVersions   (initVersionsFeature)
 -- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies (initReverseFeature)
 import Distribution.Server.Features.DownloadCount       (initDownloadFeature)
 import Distribution.Server.Features.Tags                (initTagsFeature)
-import Distribution.Server.Features.NameSearch          (initNamesFeature)
+import Distribution.Server.Features.Search              (initSearchFeature)
 import Distribution.Server.Features.PackageList         (initListFeature)
 import Distribution.Server.Features.HaskellPlatform     (initPlatformFeature)
 import Distribution.Server.Features.UserDetails         (initUserDetailsFeature)
@@ -149,7 +149,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          versionsFeature
                          -}
 
-    namesFeature    <- initNamesFeature env
+    searchFeature   <- initSearchFeature env
                          coreFeature
 
     listFeature     <- initListFeature env
@@ -172,7 +172,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          tagsFeature
                          downloadFeature
                          listFeature
-                         namesFeature
+                         searchFeature
                          mirrorFeature
                          distroFeature
                          documentationCoreFeature
@@ -210,7 +210,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface tagsFeature
          , getFeatureInterface versionsFeature
          -- [reverse index disabled] , getFeatureInterface reverseFeature
-         , getFeatureInterface namesFeature
+         , getFeatureInterface searchFeature
          , getFeatureInterface listFeature
          , getFeatureInterface platformFeature
          , getFeatureInterface htmlFeature

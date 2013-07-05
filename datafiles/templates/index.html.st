@@ -35,9 +35,9 @@ while <em>What's new</em> lists recent additions (also available
 search of package descriptions:
 </p>
 
-<form action="/packages/find" method="get">
+<form action="/packages/search" method="get">
 <p>
-<input name="name"/>
+<input name="terms"/>
 <input type="submit" value="Search"/>
 </p>
 </form>

@@ -3,9 +3,10 @@ module Distribution.Server.Framework.MemSize (
   memSizeMb, memSizeKb,
   memSize0, memSize1, memSize2, memSize3, memSize4,
   memSize5, memSize6, memSize7, memSize10,
-  memSizeUArray
+  memSizeUArray, memSizeUVector
   ) where
 
+import Data.Word
 import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.IntMap as IntMap
@@ -18,7 +19,10 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
 import Data.Time (UTCTime, Day)
-import Data.Array.Unboxed
+import Data.Ix
+import qualified Data.Array.Unboxed as A
+import qualified Data.Vector as V
+import qualified Data.Vector.Unboxed as V.U
 
 import Distribution.Package  (PackageIdentifier(..), PackageName(..))
 import Distribution.PackageDescription (FlagName(..))
@@ -79,6 +83,12 @@ instance MemSize (a -> b) where
 instance MemSize Int where
   memSize _ = 2
 
+instance MemSize Word where
+  memSize _ = 2
+
+instance MemSize Word32 where
+  memSize _ = 2
+
 instance MemSize Char where
   memSize _ = 0
 
@@ -136,8 +146,14 @@ instance MemSize T.Text where
   memSize s = let (w,t) = divMod (T.length s) (wordSize `div` 2)
                in 5 + w + signum t
 
-memSizeUArray :: (Ix i, IArray a e) => Int -> a i e -> Int
-memSizeUArray sz a = 13 + (rangeSize (bounds a) * sz) `div` wordSize
+memSizeUArray :: (Ix i, A.IArray a e) => Int -> a i e -> Int
+memSizeUArray sz a = 13 + (rangeSize (A.bounds a) * sz) `div` wordSize
+
+instance MemSize e => MemSize (V.Vector e) where
+  memSize a = 5 + V.length a + V.foldl' (\s e -> s + memSize e) 0 a
+
+memSizeUVector :: V.U.Unbox e => Int -> V.U.Vector e -> Int
+memSizeUVector sz a = 5 + (V.U.length a * sz) `div` wordSize
 
 
 ----
