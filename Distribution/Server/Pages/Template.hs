@@ -5,7 +5,7 @@ module Distribution.Server.Pages.Template
     , hackagePageWithHead
     ) where
 
-import Text.XHtml.Strict    hiding ( p, name )
+import Text.XHtml.Strict
 
 --TODO: replace all this with external templates
 
@@ -29,29 +29,30 @@ hackagePageWith headExtra docTitle docSubtitle docContent bodyExtra =
                 , thelink ! [ rel "stylesheet"
                             , href stylesheetURL
                             , thetype "text/css"] << noHtml
-                -- if NameSearch is enabled
-                , thelink ! [ rel "search", href "/opensearch.xml"
+                -- if Search is enabled
+                , thelink ! [ rel "search", href "/packages/opensearch.xml"
                             , thetype "application/opensearchdescription+xml"
                             , title "Hackage" ] << noHtml
                 ]
     docBody   = [ thediv ! [identifier "page-header"] << docHeader
                 , thediv ! [identifier "content"] << docContent ]
-    docHeader = [ menubar
+    docHeader = [ navigationBar
                 , paragraph ! [theclass "caption"] << docSubtitle ]
-    menubar   = ulist ! [theclass "links", identifier "page-menu"]
-                  << [ li << (anchor ! [href url] << lab)
-                     | (lab, url) <- navigationBar]
 
-navigationBar :: [(String, URL)]
+navigationBar :: Html
 navigationBar =
-    [ ("Introduction",  introductionURL)
-    , ("Packages",      pkgListURL)
-    -- , ("Search", searchURL)
-    , ("What's new",    recentAdditionsURL)
-    , ("Upload",        uploadURL)
-    , ("User accounts", accountsURL)
-    , ("Admin",         adminURL)
-    ]
+    ulist ! [theclass "links", identifier "page-menu"]
+      <<  map (li <<)
+          [ anchor ! [href introductionURL] << "Home"
+          , form   ! [action "/packages/search", theclass "search", method "get"]
+                  << [ button ! [thetype "submit"] << "Search"
+                     , input  ! [thetype "text", name "terms" ] ]
+          , anchor ! [href pkgListURL] << "Browse"
+          , anchor ! [href recentAdditionsURL] << "What's new"
+          , anchor ! [href uploadURL]   << "Upload"
+          , anchor ! [href accountsURL] << "User accounts"
+          , anchor ! [href adminURL]    << "Admin"
+          ]
 
 stylesheetURL :: URL
 stylesheetURL = "/static/hackage.css"

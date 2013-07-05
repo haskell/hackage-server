@@ -127,7 +127,7 @@ ul.links li {
   padding: 0;
 }
 
-ul.links li a {
+ul.links li a, ul.links li form {
   padding: 0.2em 0.5em;
 }
 
@@ -275,6 +275,30 @@ div#style-menu-holder {
   bottom: 0;
   width: 100%;
   height: 3em;
+}
+
+/* @end */
+
+/* @search box */
+
+ul.links li form {
+  display: inline;
+}
+ul.links li form input {
+	border:0px;
+  padding:1px;
+	width: 8em; 
+	background: rgb(235,235,235); /* url('/static/search.png') no-repeat 3px 4px; */
+}
+
+ul.links li form button {
+  border:0px;
+  cursor:pointer;
+  color: white;
+  background: rgb(41,56,69);
+}
+ul.links li form button:hover {
+  background: rgb(78,98,114);
 }
 
 /* @end */
