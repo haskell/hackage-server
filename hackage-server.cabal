@@ -203,7 +203,7 @@ executable hackage-server
     async      == 2.0.*,
     binary     == 0.5.*,
     cereal     == 0.3.*,
-    safecopy   >= 0.6 && < 0.8,
+    safecopy   >= 0.6 && < 0.9,
     pureMD5    >= 0.2,
     xhtml      >= 3000.1,
     json       >= 0.7 && < 0.8,
