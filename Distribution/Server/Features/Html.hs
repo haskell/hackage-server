@@ -40,6 +40,7 @@ import Distribution.Server.Pages.Util
 import qualified Distribution.Server.Pages.Group as Pages
 -- [reverse index disabled] import qualified Distribution.Server.Pages.Reverse as Pages
 import qualified Distribution.Server.Pages.Index as Pages
+import Distribution.Server.Util.CountingMap (cmFind, cmToList)
 
 import Distribution.Package
 import Distribution.Version
@@ -404,7 +405,7 @@ mkHtmlCore HtmlUtilities{..}
            UploadFeature{guardAuthorisedAsMaintainerOrTrustee}
            TagsFeature{queryTagsForPackage}
            DocumentationFeature{documentationResource, queryHasDocumentation}
-           DownloadFeature{totalPackageDownloads}
+           DownloadFeature{recentPackageDownloads}
            DistroFeature{queryPackageStatus}
            RecentPackagesFeature{packageRender}
            HtmlTags{..}
@@ -465,7 +466,7 @@ mkHtmlCore HtmlUtilities{..}
         -- [reverse index disabled] revCount <- revPackageSummary realpkg
         -- We don't currently keep per-version downloads in memory
         -- (totalDown, versionDown) <- perVersionDownloads pkg
-        totalDown <- Map.findWithDefault 0 pkgname `liftM` totalPackageDownloads
+        totalDown <- cmFind pkgname `liftM` recentPackageDownloads
         let distHtml = case distributions of
                 [] -> []
                 _  -> [("Distributions", concatHtml . intersperse (toHtml ", ") $ map showDist distributions)]
@@ -1149,7 +1150,7 @@ mkHtmlDownloads HtmlUtilities{..} DownloadFeature{..} = HtmlDownloads{..}
 
     serveDownloadTop :: DynamicPath -> ServerPartE Response
     serveDownloadTop _ = do
-        pkgList <- sortedPackages `liftM` totalPackageDownloads
+        pkgList <- sortedPackages `liftM` recentPackageDownloads
         return $ toResponse $ Resource.XHtml $ hackagePage "Total downloads" $
           [ h2 << "Downloaded packages"
           , thediv << table << downTableRows pkgList
@@ -1162,8 +1163,8 @@ mkHtmlDownloads HtmlUtilities{..} DownloadFeature{..} = HtmlDownloads{..}
                 , td << [ toHtml $ (show count) ] ]
             | ((pkgname, count), n) <- zip pkgList [(1::Int)..] ]
 
-    sortedPackages :: Map PackageName Int -> [(PackageName, Int)]
-    sortedPackages = sortBy (compare `on` snd) . Map.toList
+    sortedPackages :: RecentDownloads -> [(PackageName, Int)]
+    sortedPackages = sortBy (compare `on` snd) . cmToList
 
 {-------------------------------------------------------------------------------
   Tags

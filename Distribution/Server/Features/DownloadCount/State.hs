@@ -1,50 +1,179 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell #-}
-module Distribution.Server.Features.DownloadCount.State (
-    -- * In-memory statistics
-    InMemStats(..)
-  , initInMemStats
-    -- * On-disk statistics
-  , OnDiskStats(..)
-  , DownloadInfo(..)
-  , PackageDownloads(..)
-  , updateOnDiskStats
-  , readOnDiskStats
-  , writeOnDiskStats
-    -- * Totals cache
-  , initTotalsCache
-  , updateTotalsCache
-    -- * ACID stuff
-  , GetInMemStats(..)
-  , ReplaceInMemStats(..)
-  , RecordedToday(..)
-  , RegisterDownload(..)
-  ) where
+{-# LANGUAGE TypeFamilies, FlexibleContexts, ScopedTypeVariables, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, UndecidableInstances, GeneralizedNewtypeDeriving, TemplateHaskell, DeriveDataTypeable, StandaloneDeriving #-}
+module Distribution.Server.Features.DownloadCount.State where
+
+import Data.Time.Calendar (Day(..))
+import Data.Version (Version)
+import Data.Typeable (Typeable)
+import Data.Foldable (forM_)
+import Control.Monad (liftM)
+import Control.Monad.Reader (ask, asks)
+import Control.Monad.State (get, put, liftIO, execStateT, modify)
+-- import Control.Monad.IO.Class (liftIO)
+import qualified Text.PrettyPrint as PP (integer)
+import qualified Data.Map as Map
+import System.FilePath ((</>))
+import System.Directory (getDirectoryContents)
+import Control.Applicative ((<$>))
+import qualified Data.ByteString.Lazy as BSL
+import System.IO (withFile, IOMode (AppendMode), hPutStr)
+import Text.CSV (printCSV)
+
+import Data.Acid
+import Data.SafeCopy (base, deriveSafeCopy, safeGet, safePut)
+import Data.Serialize.Get (runGetLazy)
+import Data.Serialize.Put (runPutLazy)
+
+import Distribution.Package (
+    PackageIdentifier(..)
+  , PackageId
+  , PackageName
+  , packageName
+  , packageVersion
+  )
+import Distribution.Text (Text(..), simpleParse, display)
+import Distribution.Compat.ReadP (readS_to_P)
 
 import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.MemSize
-import Distribution.Server.Framework.MemState
+import Distribution.Server.Util.CountingMap
 
-import Distribution.Package
-import Distribution.Version
+data InMemStats = InMemStats {
+    inMemToday  :: Day
+  , inMemCounts :: SimpleCountingMap PackageId
+  }
+  deriving (Show, Eq, Typeable)
 
-import Data.Acid
-import Data.SafeCopy (base, deriveSafeCopy)
-import Data.Time.Calendar
-import Data.Typeable (Typeable)
-import Data.Map (Map)
-import Data.Maybe (fromMaybe)
-import qualified Data.Map as Map
-import Control.Monad.State (put, get)
-import Control.Monad.Reader (ask, asks)
+newtype OnDiskStats = OnDiskStats {
+    onDisk :: NestedCountingMap PackageName OnDiskPerPkg
+  }
+  deriving (CountingMap (PackageName, (Day, Version)), Show, Eq)
 
-import qualified Data.ByteString.Lazy as BSL
-import Data.Serialize (runGetLazy, runPutLazy)
-import Data.SafeCopy (safeGet, safePut)
-import Control.Applicative ((<$>))
-import Control.Exception (throwIO)
-import System.Directory (doesFileExist)
-import Control.DeepSeq (force)
-import Control.Monad.Trans (MonadIO)
+newtype OnDiskPerPkg = OnDiskPerPkg {
+    onDiskPerPkgCounts :: NestedCountingMap Day (SimpleCountingMap Version)
+  }
+  deriving (CountingMap (Day, Version), Show, Eq)
+
+newtype RecentDownloads = RecentDownloads {
+    recentDownloads :: SimpleCountingMap PackageName
+  }
+  deriving (CountingMap PackageName, Show, Eq)
+
+{------------------------------------------------------------------------------
+  Initial instances
+------------------------------------------------------------------------------}
+
+initInMemStats :: Day -> InMemStats
+initInMemStats day = InMemStats {
+    inMemToday  = day
+  , inMemCounts = cmEmpty
+  }
+
+type DayRange = [Day]
+
+initRecentDownloads :: DayRange -> OnDiskStats -> RecentDownloads
+initRecentDownloads dayRange (OnDiskStats (NCM _ perPackage)) =
+    foldr (.) id (map goDay dayRange) cmEmpty
+  where
+    goDay :: Day -> RecentDownloads -> RecentDownloads
+    goDay day = foldr (.) id $ map (goPackage day) (Map.toList perPackage)
+
+    goPackage :: Day -> (PackageName, OnDiskPerPkg) -> RecentDownloads -> RecentDownloads
+    goPackage day (pkgName, OnDiskPerPkg (NCM _ perDay)) =
+      case Map.lookup day perDay of
+        Nothing         -> id
+        Just perVersion -> cmInsert pkgName (cmTotal perVersion)
+
+{------------------------------------------------------------------------------
+  Pure updates/queries
+------------------------------------------------------------------------------}
+
+updateHistory :: InMemStats -> OnDiskStats -> OnDiskStats
+updateHistory (InMemStats day perPkg) =
+    foldr (.) id $ map goPackage (cmToList perPkg)
+  where
+    goPackage :: (PackageId, Int) -> OnDiskStats -> OnDiskStats
+    goPackage (pkgId, count) =
+      cmInsert (packageName pkgId, (day, packageVersion pkgId)) count
+
+instance Text Day where
+  disp  = PP.integer . toModifiedJulianDay
+  parse = ModifiedJulianDay `liftM` readS_to_P (reads :: ReadS Integer)
+
+{------------------------------------------------------------------------------
+  MemSize
+------------------------------------------------------------------------------}
+
+instance MemSize InMemStats where
+  memSize (InMemStats a b) = memSize2 a b
+
+deriving instance MemSize RecentDownloads
+
+{------------------------------------------------------------------------------
+  Serializing on-disk stats
+------------------------------------------------------------------------------}
+
+readOnDiskStats :: FilePath -> IO OnDiskStats
+readOnDiskStats stateDir = flip execStateT cmEmpty $ do
+    pkgs <- liftIO $ getDirectoryContents (stateDir </> "pkg")
+
+    forM_ pkgs $ \pkgStr -> forM_ (simpleParse pkgStr) $ \pkgName -> do
+      let pkgFile = stateDir </> "pkg" </> pkgStr
+      mPkgStats <- liftIO $ runGetLazy safeGet <$> BSL.readFile pkgFile
+      case mPkgStats of
+        Left  _        -> return () -- Ignore files with errors
+        Right pkgStats -> modify (aux pkgName pkgStats)
+  where
+    aux :: PackageName -> OnDiskPerPkg -> OnDiskStats -> OnDiskStats
+    aux pkgName pkgStats (OnDiskStats (NCM total perPkg)) =
+      -- This is correct only because we see each package name at most once
+      OnDiskStats $ NCM (total + cmTotal pkgStats)
+                        (Map.insert pkgName pkgStats perPkg)
+
+writeOnDiskStats :: FilePath -> OnDiskStats -> IO ()
+writeOnDiskStats stateDir (OnDiskStats (NCM _ onDisk)) =
+   forM_ (Map.toList onDisk) $ \(pkgName, perPkg) -> do
+     let pkgFile = stateDir </> "pkg" </> display pkgName
+     BSL.writeFile pkgFile $ runPutLazy (safePut perPkg)
+
+{------------------------------------------------------------------------------
+  The append-only all-time log
+------------------------------------------------------------------------------}
+
+appendToLog :: FilePath -> InMemStats -> IO ()
+appendToLog stateDir (InMemStats _ inMemStats) =
+  withFile (stateDir </> "log") AppendMode $ \h ->
+    hPutStr h $ printCSV (cmToCSV inMemStats)
+
+{------------------------------------------------------------------------------
+  ACID stuff
+------------------------------------------------------------------------------}
+
+deriveSafeCopy 0 'base ''InMemStats
+deriveSafeCopy 0 'base ''OnDiskPerPkg
+
+getInMemStats :: Query InMemStats InMemStats
+getInMemStats = ask
+
+replaceInMemStats :: InMemStats -> Update InMemStats ()
+replaceInMemStats = put
+
+recordedToday :: Query InMemStats Day
+recordedToday = asks inMemToday
+
+registerDownload :: PackageId -> Update InMemStats ()
+registerDownload pkgId = do
+  InMemStats day counts <- get
+  put $ InMemStats day (cmInsert pkgId 1 counts)
+
+makeAcidic ''InMemStats [ 'getInMemStats
+                        , 'replaceInMemStats
+                        , 'recordedToday
+                        , 'registerDownload
+                        ]
+
+
+
+{-
 
 {------------------------------------------------------------------------------
   Data types
@@ -145,13 +274,6 @@ readOnDiskStats histFile = do
 writeOnDiskStats :: FilePath -> OnDiskStats -> IO ()
 writeOnDiskStats histFile = BSL.writeFile histFile . runPutLazy . safePut
 
-updateOnDiskStats :: FilePath -> InMemStats -> IO ()
-updateOnDiskStats path inMemStats =
-  readOnDiskStats path >>= writeOnDiskStats path . updateHistory inMemStats
-
-recordedToday :: Query InMemStats Day
-recordedToday = asks inMemToday
-
 registerDownload :: PackageId -> Update InMemStats ()
 registerDownload pkgId = do
   InMemStats today counts <- get
@@ -160,20 +282,13 @@ registerDownload pkgId = do
     , inMemCounts = adjustFrom (+ 1) pkgId 0 counts
     }
 
-getInMemStats :: Query InMemStats InMemStats
-getInMemStats = ask
-
-replaceInMemStats :: InMemStats -> Update InMemStats ()
-replaceInMemStats = put
-
 {------------------------------------------------------------------------------
   Totals cache
 ------------------------------------------------------------------------------}
 
-initTotalsCache :: FilePath -> IO (MemState (Map PackageName Int))
-initTotalsCache histFile  = do
-  onDisk <- readOnDiskStats histFile
-  let totals = Map.map (allDownloads . packageDownloads) (downloadMap onDisk)
+initTotalsCache :: OnDiskStats -> IO (MemState (Map PackageName Int))
+initTotalsCache onDiskStats  = do
+  let totals = Map.map (allDownloads . packageDownloads) (downloadMap onDiskStats)
   newMemStateWHNF (force totals) -- Ensure we don't retain the on-disk stats
 
 updateTotalsCache :: MonadIO m => MemState (Map PackageName Int) -> PackageId -> m ()
@@ -184,9 +299,6 @@ updateTotalsCache cache pkgId =
   Auxiliary
 ------------------------------------------------------------------------------}
 
-adjustFrom :: Ord k => (a -> a) -> k -> a -> Map k a -> Map k a
-adjustFrom func key value = Map.alter (Just . func . fromMaybe value) key
-
 {------------------------------------------------------------------------------
   Generate acid-state infrastructure
 ------------------------------------------------------------------------------}
@@ -196,3 +308,5 @@ makeAcidic ''InMemStats [ 'registerDownload
                         , 'replaceInMemStats
                         , 'recordedToday
                         ]
+
+-}

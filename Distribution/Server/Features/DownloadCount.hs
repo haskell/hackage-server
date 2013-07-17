@@ -1,19 +1,31 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
 -- | Download counts
 --
--- We keep only the most recent data in memory, and store everything else on
--- disk. Specifically, we keep only download data for one day in memory, and
--- update the on-disk data structures once per day. We do this lazily: we write
--- to disk on the first new data of a new day. (We don't export a generic
--- "add download count for this specific day" at all.)
+-- We maintain
+--
+-- 1. In-memory (ACID): today's download counts per package version
+--
+-- 2. In-memory (cache): total download count over the last 30 days per package
+--    (across all versions). This is computed once per day from the on-disk
+--    statistics (3).
+--
+-- 3. On-disk: total download per package per version per day. These are stored
+--    in safe-copy format, one file per package; this allows to quickly load
+--    the statistics for a given package to compute custom reports.
+--
+-- 4. On-disk: total download per package per version per day, stored as a single
+--    CSV file that we append (1) to once per day. Strictly speaking this is
+--    redundant, as this information is also stored in (3).
+--
+-- TODO: Check all stateDir and related paths
 module Distribution.Server.Features.DownloadCount (
     DownloadFeature(..)
   , DownloadResource(..)
   , initDownloadFeature
+  , RecentDownloads
   ) where
 
 import Distribution.Server.Framework
-import Distribution.Server.Framework.BackupDump
 
 import Distribution.Server.Features.DownloadCount.State
 import Distribution.Server.Features.DownloadCount.Backup
@@ -22,7 +34,7 @@ import Distribution.Server.Features.Core
 
 import Distribution.Package
 
-import Data.Time.Calendar (Day)
+import Data.Time.Calendar (Day, addDays)
 import Data.Time.Clock (getCurrentTime, utctDay)
 import Control.Concurrent.Chan
 import Control.Concurrent (forkIO)
@@ -31,13 +43,7 @@ import Data.Map (Map)
 data DownloadFeature = DownloadFeature {
     downloadFeatureInterface :: HackageFeature
   , downloadResource         :: DownloadResource
-
-    -- Although we keep detailed statistics on disk, the only statistics we
-    -- keep in memory are the total download counts for each package. This
-    -- is used in the HTML feature to sort the packages by download count and
-    -- when displaying the basic information about a package, and it is used
-    -- in the PackageList feature for similar purposes.
-  , totalPackageDownloads :: MonadIO m => m (Map PackageName Int)
+  , recentPackageDownloads   :: MonadIO m => m RecentDownloads
   }
 
 instance IsHackageFeature DownloadFeature where
@@ -48,77 +54,97 @@ data DownloadResource = DownloadResource {
   }
 
 initDownloadFeature :: ServerEnv -> CoreFeature -> IO DownloadFeature
-initDownloadFeature ServerEnv{serverStateDir, serverVerbosity = verbosity} core = do
+initDownloadFeature serverEnv@ServerEnv{serverStateDir, serverVerbosity = verbosity} core = do
     loginfo verbosity "Initialising download feature, start"
-    downloadState <- downloadStateComponent serverStateDir
-    downChan      <- newChan
-    totalsCache   <- initTotalsCache (onDiskPath serverStateDir)
-    let feature   = downloadFeature core serverStateDir downloadState downChan totalsCache
+
+    recentRange    <- getRecentDayRange 30
+    inMemState     <- inMemStateComponent  serverStateDir
+    let onDiskState = onDiskStateComponent serverStateDir
+    totalsCache    <- newMemStateWHNF =<< initRecentDownloads recentRange `liftM` getState onDiskState
+    downChan       <- newChan
+
+    let feature   = downloadFeature core serverEnv inMemState onDiskState totalsCache downChan
+
     registerHook (packageDownloadHook core) (writeChan downChan)
     loginfo verbosity "Initialising download feature, end"
     return feature
 
-inMemPath :: FilePath -> FilePath
-inMemPath stateDir = stateDir </> "db" </> "InMemStats"
-
-onDiskPath :: FilePath -> FilePath
-onDiskPath stateDir = stateDir </> "db" </> "OnDiskStats"
-
-downloadStateComponent :: FilePath -> IO (StateComponent AcidState InMemStats)
-downloadStateComponent stateDir = do
+inMemStateComponent :: FilePath -> IO (StateComponent AcidState InMemStats)
+inMemStateComponent stateDir = do
   initSt <- initInMemStats <$> getToday
-  st <- openLocalStateFrom (inMemPath stateDir) initSt
+  st <- openLocalStateFrom inMemPath initSt
   return StateComponent {
-      stateDesc    = "Download counts"
+      stateDesc    = "Today's download counts"
     , stateHandle  = st
     , getState     = query st GetInMemStats
     , putState     = update st . ReplaceInMemStats
---    , backupState  = \dc -> [csvToBackup ["downloads.csv"] $ downloadsToCSV dc]
---    , restoreState = downloadsBackup
-    , resetState   = downloadStateComponent
+    , backupState  = inMemBackup
+    , restoreState = inMemRestore
+    , resetState   = inMemStateComponent
     }
+  where
+    inMemPath = stateDir </> "db" </> "InMemStats"
+
+onDiskStateComponent :: FilePath -> StateComponent OnDiskState OnDiskStats
+onDiskStateComponent stateDir = StateComponent {
+      stateDesc    = "All time download counts"
+    , stateHandle  = OnDiskState
+    , getState     = readOnDiskStats  onDiskPath
+    , putState     = writeOnDiskStats onDiskPath
+    , backupState  = onDiskBackup
+    , restoreState = onDiskRestore
+    , resetState   = return . onDiskStateComponent
+    }
+  where
+    onDiskPath = stateDir </> "db" </> "OnDiskStats"
 
 downloadFeature :: CoreFeature
-                -> FilePath
-                -> StateComponent AcidState InMemStats
+                -> ServerEnv
+                -> StateComponent AcidState   InMemStats
+                -> StateComponent OnDiskState OnDiskStats
+                -> MemState RecentDownloads
                 -> Chan PackageId
-                -> MemState (Map PackageName Int)
                 -> DownloadFeature
 
 downloadFeature CoreFeature{}
-                stateDir
-                downloadState
+                ServerEnv{serverStateDir}
+                inMemState
+                onDiskState
+                recentDownloadsCache
                 downloadStream
-                totalsCache
   = DownloadFeature{..}
   where
     downloadFeatureInterface = (emptyHackageFeature "download") {
         featureResources = map ($ downloadResource) [topDownloads]
       , featurePostInit  = void $ forkIO registerDownloads
-      , featureState     = [abstractAcidStateComponent downloadState]
+      , featureState     = [ abstractAcidStateComponent   inMemState
+                           , abstractOnDiskStateComponent onDiskState
+                           ]
       , featureCaches    = [
             CacheComponent {
-              cacheDesc       = "total package downloads cache",
-              getCacheMemSize = memSize <$> readMemState totalsCache
+              cacheDesc       = "recent package downloads cache",
+              getCacheMemSize = memSize <$> readMemState recentDownloadsCache
             }
           ]
       }
 
-    totalPackageDownloads :: MonadIO m => m (Map PackageName Int)
-    totalPackageDownloads = readMemState totalsCache
+    recentPackageDownloads :: MonadIO m => m RecentDownloads
+    recentPackageDownloads = readMemState recentDownloadsCache
 
     registerDownloads = forever $ do
         pkg    <- readChan downloadStream
         today  <- getToday
-        today' <- query (stateHandle downloadState) RecordedToday
+        today' <- query (stateHandle inMemState) RecordedToday
 
         when (today /= today') $ do
-          inMemStats <- getState downloadState
-          putState downloadState (initInMemStats today)
-          updateOnDiskStats (onDiskPath stateDir) inMemStats
+          inMemStats  <- getState inMemState
+          onDiskStats <- getState onDiskState
+          putState inMemState  $ initInMemStats today
+          putState onDiskState $ updateHistory inMemStats onDiskStats
+          appendToLog (serverStateDir </> "DownloadCounts") inMemStats
 
-        updateState downloadState $ RegisterDownload pkg
-        updateTotalsCache totalsCache pkg
+
+        updateState inMemState $ RegisterDownload pkg
 
     downloadResource = DownloadResource {
         topDownloads = resourceAt "/packages/top.:format"
@@ -130,3 +156,10 @@ downloadFeature CoreFeature{}
 
 getToday :: IO Day
 getToday = utctDay <$> getCurrentTime
+
+getRecentDayRange :: Integer -> IO DayRange
+getRecentDayRange numDays = do
+  lastDay <- getToday
+  let firstDay  = addDays (negate numDays) lastDay
+      secondDay = addDays 1 firstDay
+  return [firstDay, secondDay .. lastDay]

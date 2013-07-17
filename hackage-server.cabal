@@ -112,6 +112,7 @@ executable hackage-server
 
     Distribution.Server.Util.Happstack
     Distribution.Server.Util.Histogram
+    Distribution.Server.Util.CountingMap
     Distribution.Server.Util.Index
     Distribution.Server.Util.NameIndex
     Distribution.Server.Util.Parse

@@ -14,6 +14,7 @@ import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.PreferredVersions
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
+import Distribution.Server.Util.CountingMap (cmFind)
 
 import Distribution.Server.Packages.Types
 -- [reverse index disabled] import Distribution.Server.Packages.Reverse
@@ -175,9 +176,9 @@ listFeature CoreFeature{..}
         runHook_ itemUpdate (Set.singleton pkgname)
 
     refreshDownloads = do
-            downs <- totalPackageDownloads
+            downs <- recentPackageDownloads
             modifyMemState itemCache $ Map.mapWithKey $ \pkg item ->
-              updateDownload (Map.findWithDefault 0 pkg downs) item
+              updateDownload (cmFind pkg downs) item
             -- Say all packages were updated here (detecting this is more laborious)
             mainMap <- readMemState itemCache
             runHook_ itemUpdate (Set.fromDistinctAscList $ Map.keys mainMap)
@@ -193,12 +194,12 @@ listFeature CoreFeature{..}
         let pkgname = packageName pkg
         -- [reverse index disabled] revCount <- query . GetReverseCount $ pkgname
         tags  <- queryTagsForPackage pkgname
-        downs <- totalPackageDownloads
+        downs <- recentPackageDownloads
         deprs <- queryGetDeprecatedFor pkgname
         return $ (,) pkgname $ (updateDescriptionItem (pkgDesc pkg) $ emptyPackageItem pkgname) {
             itemTags       = tags
           , itemDeprecated = deprs
-          , itemDownloads  = Map.findWithDefault 0 pkgname downs
+          , itemDownloads  = cmFind pkgname downs
             -- [reverse index disabled] , itemRevDepsCount = directReverseCount revCount
           }
 
