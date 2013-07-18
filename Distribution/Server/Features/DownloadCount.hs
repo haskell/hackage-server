@@ -70,7 +70,7 @@ initDownloadFeature serverEnv@ServerEnv{serverStateDir, serverVerbosity = verbos
 inMemStateComponent :: FilePath -> IO (StateComponent AcidState InMemStats)
 inMemStateComponent stateDir = do
   initSt <- initInMemStats <$> getToday
-  st <- openLocalStateFrom inMemPath initSt
+  st <- openLocalStateFrom (dcPath stateDir </> "inmem") initSt
   return StateComponent {
       stateDesc    = "Today's download counts"
     , stateHandle  = st
@@ -80,21 +80,19 @@ inMemStateComponent stateDir = do
     , restoreState = inMemRestore
     , resetState   = inMemStateComponent
     }
-  where
-    inMemPath = stateDir </> "db" </> "DownloadCount" </> "inmem"
 
 onDiskStateComponent :: FilePath -> StateComponent OnDiskState OnDiskStats
 onDiskStateComponent stateDir = StateComponent {
       stateDesc    = "All time download counts"
     , stateHandle  = OnDiskState
-    , getState     = readOnDiskStats  onDiskPath
-    , putState     = writeOnDiskStats onDiskPath
+    , getState     = readOnDiskStats (dcPath stateDir </> "ondisk")
+    , putState     = \onDisk -> do
+                       writeOnDiskStats (dcPath stateDir </> "ondisk") onDisk
+                       reconstructLog (dcPath stateDir) onDisk
     , backupState  = onDiskBackup
     , restoreState = onDiskRestore
     , resetState   = return . onDiskStateComponent
     }
-  where
-    onDiskPath = stateDir </> "db" </> "DownloadCount" </> "ondisk"
 
 downloadFeature :: CoreFeature
                 -> ServerEnv
@@ -140,7 +138,7 @@ downloadFeature CoreFeature{}
           putState inMemState $ initInMemStats today
 
           -- 1. Write yesterday's downloads to the log
-          appendToLog (serverStateDir </> "db" </> "DownloadCount") inMemStats
+          appendToLog (dcPath serverStateDir) inMemStats
 
           -- 2. Update the on-disk statistics
           onDiskStats' <- updateHistory inMemStats <$> getState onDiskState
@@ -173,3 +171,6 @@ computeRecentDownloads :: OnDiskStats -> IO RecentDownloads
 computeRecentDownloads onDiskStats = do
   recentRange <- getRecentDayRange 30
   return $ initRecentDownloads recentRange onDiskStats
+
+dcPath :: FilePath -> FilePath
+dcPath stateDir = stateDir </> "db" </> "DownloadCount"

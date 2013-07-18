@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, FlexibleContexts, ScopedTypeVariables, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, UndecidableInstances, GeneralizedNewtypeDeriving, TemplateHaskell, DeriveDataTypeable, StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell, StandaloneDeriving, GeneralizedNewtypeDeriving, DeriveDataTypeable, TypeFamilies #-}
 module Distribution.Server.Features.DownloadCount.State where
 
 import Data.Time.Calendar (Day(..))
@@ -13,7 +13,7 @@ import System.FilePath ((</>))
 import System.Directory (getDirectoryContents, createDirectoryIfMissing)
 import Control.Applicative ((<$>))
 import qualified Data.ByteString.Lazy as BSL
-import System.IO (withFile, IOMode (AppendMode, ReadMode), hPutStr)
+import System.IO (withFile, IOMode (..), hPutStr)
 import Text.CSV (printCSV)
 import Control.Exception (evaluate)
 
@@ -145,6 +145,11 @@ appendToLog :: FilePath -> InMemStats -> IO ()
 appendToLog stateDir (InMemStats _ inMemStats) =
   withFile (stateDir </> "log") AppendMode $ \h ->
     hPutStr h $ printCSV (cmToCSV inMemStats)
+
+reconstructLog :: FilePath -> OnDiskStats -> IO ()
+reconstructLog stateDir onDisk =
+  withFile (stateDir </> "log") WriteMode $ \h ->
+    hPutStr h $ printCSV (cmToCSV onDisk)
 
 {------------------------------------------------------------------------------
   ACID stuff
