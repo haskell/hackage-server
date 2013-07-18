@@ -30,21 +30,6 @@ import Distribution.Server.Framework.BackupRestore (parseRead, parseText)
   We define SimpleCountingMap as a separate type from NestedCountingMap as
   a hint to the type checker (we get into trouble with the functional
   dependencies otherwise).
-
-  The CountingMap instance for NestedCountingMap assumes that the entries for
-  the same k as grouped together in CSV files. I.e.,
-
-    [Pkg1, Version1, ..]
-    [Pkg1, Version2, ..]
-    [Pkg2, Version1, ..]
-
-  is okay but
-
-    [Pkg1, Version1, ..]
-    [Pkg2, Version1, ..]
-    [Pkg1, Version2, ..]
-
-  is not.
 ------------------------------------------------------------------------------}
 
 data NestedCountingMap a b = NCM {
@@ -59,16 +44,13 @@ newtype SimpleCountingMap a = SCM {
   deriving (Show, Eq, Typeable)
 
 class CountingMap k a | a -> k where
-  cmEmpty   :: a
-  cmTotal   :: a -> Int
-  cmInsert  :: k -> Int -> a -> a
-  cmFind    :: k -> a -> Int
+  cmEmpty  :: a
+  cmTotal  :: a -> Int
+  cmInsert :: k -> Int -> a -> a
+  cmFind   :: k -> a -> Int
+  cmToList :: a -> [(k, Int)]
 
-  cmToList  :: a -> [(k, Int)]
-
-  cmToCSV   :: a -> CSV
---   cmFromCSV :: Monad m => CSV -> m a
-
+  cmToCSV        :: a -> CSV
   cmInsertRecord :: Monad m => Record -> a -> m (a, Int)
 
 instance (Ord k, Text k) => CountingMap k (SimpleCountingMap k) where
@@ -87,18 +69,6 @@ instance (Ord k, Text k) => CountingMap k (SimpleCountingMap k) where
     where
       aux :: (k, Int) -> Record
       aux (k, n) = [display k, show n]
-
-{-
-  cmFromCSV csv = do
-      entries <- mapM aux csv
-      return $ SCM (NCM (sum (map snd entries)) (Map.fromList entries))
-    where
-      aux :: Monad m => Record -> m (k, Int)
-      aux [k, n] = do key   <- parseText "key"   k
-                      count <- parseRead "count" n
-                      return (key, count)
-      aux _      = fail "Invalid record"
--}
 
   cmInsertRecord [k, n] m = do
      key   <- parseText "key"   k
@@ -127,26 +97,13 @@ instance (Text k, Ord k, Eq l, CountingMap l a) => CountingMap (k, l) (NestedCou
       aux :: (k, a) -> CSV
       aux (k, m') = map (display k:) (cmToCSV m')
 
-{-
-  cmFromCSV = \csv -> do csvs <- groupByM sameHead csv
-                         maps <- mapM aux csvs
-                         return (NCM (sum (map (cmTotal . snd) maps)) (Map.fromList maps))
-    where
-      aux :: Monad m => CSV -> m (k, a)
-      aux csv = do submap <- cmFromCSV (map tail csv)
-                   k <- parseText "key" (head (head csv))
-                   return (k, submap)
-
-      sameHead :: Monad m => Record -> Record -> m Bool
-      sameHead (x:_) (y:_) = return $ x == y
-      sameHead _     _     = fail "Invalid record"
--}
-
   cmInsertRecord (k : record) (NCM total m) = do
     key <- parseText "key" k
     let submap = Map.findWithDefault cmEmpty key m
     (submap', added) <- cmInsertRecord record submap
     return (NCM (total + added) (Map.insert key submap' m), added)
+  cmInsertRecord [] _ =
+    fail "cmInsertRecord: Invalid record"
 
 cmFromCSV :: (Monad m, CountingMap k a) => CSV -> m a
 cmFromCSV = go cmEmpty
@@ -162,19 +119,6 @@ cmFromCSV = go cmEmpty
 
 adjustFrom :: Ord k => (a -> a) -> k -> a -> Map k a -> Map k a
 adjustFrom func key value = Map.alter (Just . func . fromMaybe value) key
-
-spanM :: Monad m => (a -> m Bool) -> [a] -> m ([a], [a])
-spanM _ []     = return ([], [])
-spanM p (x:xs) = do px         <- p x
-                    (sat, rem) <- spanM p xs
-                    if px then return (x : sat, rem)
-                          else return (sat, x : rem)
-
-groupByM :: Monad m => (a -> a -> m Bool) -> [a] -> m [[a]]
-groupByM _ []     = return []
-groupByM p (x:xs) = do (firstGroup, rem) <- spanM (p x) xs
-                       otherGroups <- groupByM p rem
-                       return $ (x : firstGroup) : otherGroups
 
 {------------------------------------------------------------------------------
   Type classes instances

@@ -2,7 +2,7 @@
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
--- | 'Typeable', 'Binary', 'Serialize', and 'NFData' instances for various
+-- | 'Typeable', 'Binary', 'Serialize', 'Text', and 'NFData' instances for various
 -- types from Cabal, and other standard libraries.
 --
 -- Major version changes may break this module.
@@ -30,10 +30,11 @@ import Data.SafeCopy (SafeCopy(getCopy, putCopy), contain)
 
 import Happstack.Server
 
-import qualified Data.ByteString as SBS
-import qualified Data.ByteString.Lazy.Char8 as BS
-import Data.ByteString.Lazy.Char8 (ByteString)
 import Data.Maybe (fromJust)
+
+import qualified Text.PrettyPrint as PP (integer)
+import Distribution.Compat.ReadP (readS_to_P)
+import Control.Monad (liftM)
 
 deriving instance Typeable PackageIdentifier
 deriving instance Typeable GenericPackageDescription
@@ -130,3 +131,8 @@ instance MemSize RsFlags where
 
 instance MemSize Length where
     memSize _ = memSize0
+
+instance Text Day where
+  disp  = PP.integer . toModifiedJulianDay
+  parse = ModifiedJulianDay `liftM` readS_to_P (reads :: ReadS Integer)
+

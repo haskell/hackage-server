@@ -38,7 +38,6 @@ import Data.Time.Calendar (Day, addDays)
 import Data.Time.Clock (getCurrentTime, utctDay)
 import Control.Concurrent.Chan
 import Control.Concurrent (forkIO)
-import Data.Map (Map)
 
 data DownloadFeature = DownloadFeature {
     downloadFeatureInterface :: HackageFeature
@@ -57,10 +56,9 @@ initDownloadFeature :: ServerEnv -> CoreFeature -> IO DownloadFeature
 initDownloadFeature serverEnv@ServerEnv{serverStateDir, serverVerbosity = verbosity} core = do
     loginfo verbosity "Initialising download feature, start"
 
-    recentRange    <- getRecentDayRange 30
     inMemState     <- inMemStateComponent  serverStateDir
     let onDiskState = onDiskStateComponent serverStateDir
-    totalsCache    <- newMemStateWHNF =<< initRecentDownloads recentRange `liftM` getState onDiskState
+    totalsCache    <- newMemStateWHNF =<< computeRecentDownloads =<< getState onDiskState
     downChan       <- newChan
 
     let feature   = downloadFeature core serverEnv inMemState onDiskState totalsCache downChan
@@ -83,7 +81,7 @@ inMemStateComponent stateDir = do
     , resetState   = inMemStateComponent
     }
   where
-    inMemPath = stateDir </> "db" </> "InMemStats"
+    inMemPath = stateDir </> "db" </> "DownloadCount" </> "inmem"
 
 onDiskStateComponent :: FilePath -> StateComponent OnDiskState OnDiskStats
 onDiskStateComponent stateDir = StateComponent {
@@ -96,7 +94,7 @@ onDiskStateComponent stateDir = StateComponent {
     , resetState   = return . onDiskStateComponent
     }
   where
-    onDiskPath = stateDir </> "db" </> "OnDiskStats"
+    onDiskPath = stateDir </> "db" </> "DownloadCount" </> "ondisk"
 
 downloadFeature :: CoreFeature
                 -> ServerEnv
@@ -137,12 +135,19 @@ downloadFeature CoreFeature{}
         today' <- query (stateHandle inMemState) RecordedToday
 
         when (today /= today') $ do
-          inMemStats  <- getState inMemState
-          onDiskStats <- getState onDiskState
-          putState inMemState  $ initInMemStats today
-          putState onDiskState $ updateHistory inMemStats onDiskStats
-          appendToLog (serverStateDir </> "DownloadCounts") inMemStats
+          -- For the first download each day we reset the in-memory stats and..
+          inMemStats <- getState inMemState
+          putState inMemState $ initInMemStats today
 
+          -- 1. Write yesterday's downloads to the log
+          appendToLog (serverStateDir </> "db" </> "DownloadCount") inMemStats
+
+          -- 2. Update the on-disk statistics
+          onDiskStats' <- updateHistory inMemStats <$> getState onDiskState
+          putState onDiskState $ onDiskStats'
+
+          -- 3. Recompute the recent downloads
+          writeMemState recentDownloadsCache =<< computeRecentDownloads onDiskStats'
 
         updateState inMemState $ RegisterDownload pkg
 
@@ -163,3 +168,8 @@ getRecentDayRange numDays = do
   let firstDay  = addDays (negate numDays) lastDay
       secondDay = addDays 1 firstDay
   return [firstDay, secondDay .. lastDay]
+
+computeRecentDownloads :: OnDiskStats -> IO RecentDownloads
+computeRecentDownloads onDiskStats = do
+  recentRange <- getRecentDayRange 30
+  return $ initRecentDownloads recentRange onDiskStats

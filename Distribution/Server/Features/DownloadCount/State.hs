@@ -5,18 +5,17 @@ import Data.Time.Calendar (Day(..))
 import Data.Version (Version)
 import Data.Typeable (Typeable)
 import Data.Foldable (forM_)
-import Control.Monad (liftM)
 import Control.Monad.Reader (ask, asks)
 import Control.Monad.State (get, put, liftIO, execStateT, modify)
 -- import Control.Monad.IO.Class (liftIO)
-import qualified Text.PrettyPrint as PP (integer)
 import qualified Data.Map as Map
 import System.FilePath ((</>))
-import System.Directory (getDirectoryContents)
+import System.Directory (getDirectoryContents, createDirectoryIfMissing)
 import Control.Applicative ((<$>))
 import qualified Data.ByteString.Lazy as BSL
-import System.IO (withFile, IOMode (AppendMode), hPutStr)
+import System.IO (withFile, IOMode (AppendMode, ReadMode), hPutStr)
 import Text.CSV (printCSV)
+import Control.Exception (evaluate)
 
 import Data.Acid
 import Data.SafeCopy (base, deriveSafeCopy, safeGet, safePut)
@@ -24,18 +23,20 @@ import Data.Serialize.Get (runGetLazy)
 import Data.Serialize.Put (runPutLazy)
 
 import Distribution.Package (
-    PackageIdentifier(..)
-  , PackageId
+    PackageId
   , PackageName
   , packageName
   , packageVersion
   )
-import Distribution.Text (Text(..), simpleParse, display)
-import Distribution.Compat.ReadP (readS_to_P)
+import Distribution.Text (simpleParse, display)
 
 import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Util.CountingMap
+
+{------------------------------------------------------------------------------
+  Data types
+------------------------------------------------------------------------------}
 
 data InMemStats = InMemStats {
     inMemToday  :: Day
@@ -44,7 +45,7 @@ data InMemStats = InMemStats {
   deriving (Show, Eq, Typeable)
 
 newtype OnDiskStats = OnDiskStats {
-    onDisk :: NestedCountingMap PackageName OnDiskPerPkg
+    onDiskStats :: NestedCountingMap PackageName OnDiskPerPkg
   }
   deriving (CountingMap (PackageName, (Day, Version)), Show, Eq)
 
@@ -95,10 +96,6 @@ updateHistory (InMemStats day perPkg) =
     goPackage (pkgId, count) =
       cmInsert (packageName pkgId, (day, packageVersion pkgId)) count
 
-instance Text Day where
-  disp  = PP.integer . toModifiedJulianDay
-  parse = ModifiedJulianDay `liftM` readS_to_P (reads :: ReadS Integer)
-
 {------------------------------------------------------------------------------
   MemSize
 ------------------------------------------------------------------------------}
@@ -114,11 +111,15 @@ deriving instance MemSize RecentDownloads
 
 readOnDiskStats :: FilePath -> IO OnDiskStats
 readOnDiskStats stateDir = flip execStateT cmEmpty $ do
-    pkgs <- liftIO $ getDirectoryContents (stateDir </> "pkg")
+    pkgs <- liftIO $ do createDirectoryIfMissing True stateDir
+                        getDirectoryContents stateDir
 
     forM_ pkgs $ \pkgStr -> forM_ (simpleParse pkgStr) $ \pkgName -> do
-      let pkgFile = stateDir </> "pkg" </> pkgStr
-      mPkgStats <- liftIO $ runGetLazy safeGet <$> BSL.readFile pkgFile
+      let pkgFile = stateDir </> pkgStr
+      mPkgStats <- liftIO $ withFile pkgFile ReadMode $ \h ->
+        -- By evaluating the Either result from the parser we force
+        -- all contents to be read
+        evaluate =<< (runGetLazy safeGet <$> BSL.hGetContents h)
       case mPkgStats of
         Left  _        -> return () -- Ignore files with errors
         Right pkgStats -> modify (aux pkgName pkgStats)
@@ -130,9 +131,10 @@ readOnDiskStats stateDir = flip execStateT cmEmpty $ do
                         (Map.insert pkgName pkgStats perPkg)
 
 writeOnDiskStats :: FilePath -> OnDiskStats -> IO ()
-writeOnDiskStats stateDir (OnDiskStats (NCM _ onDisk)) =
+writeOnDiskStats stateDir (OnDiskStats (NCM _ onDisk)) = do
+   createDirectoryIfMissing True stateDir
    forM_ (Map.toList onDisk) $ \(pkgName, perPkg) -> do
-     let pkgFile = stateDir </> "pkg" </> display pkgName
+     let pkgFile = stateDir </> display pkgName
      BSL.writeFile pkgFile $ runPutLazy (safePut perPkg)
 
 {------------------------------------------------------------------------------
@@ -170,143 +172,3 @@ makeAcidic ''InMemStats [ 'getInMemStats
                         , 'recordedToday
                         , 'registerDownload
                         ]
-
-
-
-{-
-
-{------------------------------------------------------------------------------
-  Data types
-------------------------------------------------------------------------------}
-
-data InMemStats = InMemStats {
-    -- The day we are currently keep statistics for
-    inMemToday  :: Day
-    -- Per-version download count for today only
-  , inMemCounts :: Map PackageId Int
-  } deriving (Eq, Show, Typeable)
-
-data OnDiskStats = OnDiskStats {
-    totalDownloads :: Int
-  , downloadMap    :: Map PackageName DownloadInfo
-  } deriving (Eq, Show, Typeable)
-
-data DownloadInfo = DownloadInfo {
-    monthDownloads   :: Map (Int, Int) PackageDownloads
-  , dayDownloads     :: Map Day PackageDownloads
-  , packageDownloads :: PackageDownloads
-  } deriving (Eq, Show, Typeable)
-
-data PackageDownloads = PackageDownloads {
-    allDownloads     :: Int
-  , versionDownloads :: Map Version Int
-  } deriving (Eq, Show, Typeable)
-
-deriveSafeCopy 0 'base ''InMemStats
-
-deriveSafeCopy 0 'base ''OnDiskStats
-deriveSafeCopy 0 'base ''DownloadInfo
-deriveSafeCopy 0 'base ''PackageDownloads
-
-instance MemSize InMemStats where
-    memSize (InMemStats a b) = memSize2 a b
-
-{------------------------------------------------------------------------------
-  Initial instances
-------------------------------------------------------------------------------}
-
-initOnDiskStats :: OnDiskStats
-initOnDiskStats = OnDiskStats 0 Map.empty
-
-initDownloadInfo :: DownloadInfo
-initDownloadInfo = DownloadInfo Map.empty Map.empty initPackageDownloads
-
-initPackageDownloads :: PackageDownloads
-initPackageDownloads = PackageDownloads 0 Map.empty
-
-initInMemStats :: Day -> InMemStats
-initInMemStats today = InMemStats today Map.empty
-
-{------------------------------------------------------------------------------
-  Pure updates
-------------------------------------------------------------------------------}
-
-updateHistory :: InMemStats -> OnDiskStats -> OnDiskStats
-updateHistory (InMemStats today counts) =
-    foldr (.) id $ map (uncurry aux) (Map.toList counts)
-  where
-    aux :: PackageId -> Int -> OnDiskStats -> OnDiskStats
-    aux pkgId = incrementCounts today (packageName pkgId) (packageVersion pkgId)
-
-incrementCounts :: Day -> PackageName -> Version -> Int -> OnDiskStats -> OnDiskStats
-incrementCounts day pkgname version count (OnDiskStats total perPackage) =
-    OnDiskStats
-      (total + count)
-      (adjustFrom (incrementInfo day version count) pkgname initDownloadInfo perPackage)
-
-incrementInfo :: Day -> Version -> Int -> DownloadInfo -> DownloadInfo
-incrementInfo day version count (DownloadInfo perMonth perDay total) =
-    DownloadInfo
-      (adjustFrom (incrementPackage version count) (fromIntegral year, month) initPackageDownloads perMonth)
-      (adjustFrom (incrementPackage version count) day initPackageDownloads perDay)
-      (incrementPackage version count total)
-  where
-    (year, month, _) = toGregorian day
-
-incrementPackage :: Version -> Int -> PackageDownloads -> PackageDownloads
-incrementPackage version count (PackageDownloads total perVersion) =
-    PackageDownloads (total + count) (adjustFrom (+count) version 0 perVersion)
-
-{------------------------------------------------------------------------------
-  Stateful queries/updates
-------------------------------------------------------------------------------}
-
-readOnDiskStats :: FilePath -> IO OnDiskStats
-readOnDiskStats histFile = do
-  histExists <- doesFileExist histFile
-  mHistory   <- if histExists
-                  then runGetLazy safeGet <$> BSL.readFile histFile
-                  else return . Right $ initOnDiskStats
-  case mHistory of
-    Left  err     -> throwIO . userError $ "recordToday: " ++ err
-    Right history -> return history
-
-writeOnDiskStats :: FilePath -> OnDiskStats -> IO ()
-writeOnDiskStats histFile = BSL.writeFile histFile . runPutLazy . safePut
-
-registerDownload :: PackageId -> Update InMemStats ()
-registerDownload pkgId = do
-  InMemStats today counts <- get
-  put $ InMemStats {
-      inMemToday  = today
-    , inMemCounts = adjustFrom (+ 1) pkgId 0 counts
-    }
-
-{------------------------------------------------------------------------------
-  Totals cache
-------------------------------------------------------------------------------}
-
-initTotalsCache :: OnDiskStats -> IO (MemState (Map PackageName Int))
-initTotalsCache onDiskStats  = do
-  let totals = Map.map (allDownloads . packageDownloads) (downloadMap onDiskStats)
-  newMemStateWHNF (force totals) -- Ensure we don't retain the on-disk stats
-
-updateTotalsCache :: MonadIO m => MemState (Map PackageName Int) -> PackageId -> m ()
-updateTotalsCache cache pkgId =
-  modifyMemState cache $ adjustFrom (+ 1) (pkgName pkgId) 0
-
-{------------------------------------------------------------------------------
-  Auxiliary
-------------------------------------------------------------------------------}
-
-{------------------------------------------------------------------------------
-  Generate acid-state infrastructure
-------------------------------------------------------------------------------}
---
-makeAcidic ''InMemStats [ 'registerDownload
-                        , 'getInMemStats
-                        , 'replaceInMemStats
-                        , 'recordedToday
-                        ]
-
--}
