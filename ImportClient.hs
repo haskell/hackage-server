@@ -1,4 +1,5 @@
 {-# LANGUAGE PatternGuards, ScopedTypeVariables #-}
+{-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
 
 module Main where
 
@@ -25,7 +26,7 @@ import Distribution.Text
 import Distribution.Simple.Utils
          ( topHandler, die, {-warn, debug,-} wrapText, toUTF8 )
 import Distribution.Verbosity
-         ( Verbosity, normal, verbose )
+         ( Verbosity, normal )
 
 import Distribution.Simple.Command
 import Distribution.Simple.Setup
@@ -45,11 +46,9 @@ import Data.List
 import Data.Maybe
 import Data.Ord (comparing)
 import Data.Time (UTCTime, formatTime, getCurrentTime)
-import System.Locale (defaultTimeLocale)
 import Control.Monad
 import Control.Monad.Trans
 import Data.ByteString.Lazy.Char8 (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Data.Text as T
 import Text.JSON as JSON
          ( JSValue(..), toJSObject, toJSString, encodeStrict, showJSON )
@@ -60,6 +59,18 @@ import Control.Concurrent.Chan
 import Control.Concurrent.Async
 
 import Paths_hackage_server as Paths (version)
+
+-- Imports for the downloadcount option
+
+import Data.Attoparsec.Char8 (Parser)
+import Data.Map.Strict (Map)
+import Data.Time.Calendar (Day)
+import Data.Time.Format (parseTime)
+import qualified Data.ByteString.Char8      as SBS
+import qualified Data.Attoparsec.Char8      as Att
+import qualified Data.ByteString.Lazy.Char8 as LBS
+import qualified Codec.Compression.GZip     as GZip
+import qualified Data.Map.Strict            as Map
 
 --
 -- The following data can be imported:
@@ -113,12 +124,13 @@ main = topHandler $ do
     printVersion = putStrLn $ "hackage-import " ++ display version
 
     commands =
-      [ usersCommand    `commandAddAction` usersAction
-      , metadataCommand `commandAddAction` metadataAction
-      , tarballCommand  `commandAddAction` tarballAction
-      , distroCommand   `commandAddAction` distroAction
-      , deprecationCommand `commandAddAction` deprecationAction
-      , docsCommand     `commandAddAction` docsAction
+      [ usersCommand         `commandAddAction` usersAction
+      , metadataCommand      `commandAddAction` metadataAction
+      , tarballCommand       `commandAddAction` tarballAction
+      , distroCommand        `commandAddAction` distroAction
+      , deprecationCommand   `commandAddAction` deprecationAction
+      , docsCommand          `commandAddAction` docsAction
+      , downloadCountCommand `commandAddAction` downloadCountAction
       ]
 
 
@@ -242,12 +254,12 @@ importAccounts jobs htpasswdFile makeUploader baseURI = do
         putUserAccount baseURI username mPasswdhash makeUploader
 
 
-putUserAccount :: URI -> UserName 
+putUserAccount :: URI -> UserName
                -> Maybe HtPasswdDb.HtPasswdHash -> Bool
                -> HttpSession ()
 putUserAccount baseURI username mPasswdHash makeUploader = do
 
-    rsp <- requestPUT userURI "" BS.empty
+    rsp <- requestPUT userURI "" LBS.empty
     case rsp of
       Nothing  -> return ()
       Just err -> fail (formatErrorResponse err)
@@ -255,13 +267,13 @@ putUserAccount baseURI username mPasswdHash makeUploader = do
     case mPasswdHash of
       Nothing -> return ()
       Just (HtPasswdDb.HtPasswdHash passwdHash) -> do
-        rsp <- requestPUT passwdURI "text/plain" (BS.pack passwdHash)
+        rsp <- requestPUT passwdURI "text/plain" (LBS.pack passwdHash)
         case rsp of
           Nothing  -> return ()
           Just err -> fail (formatErrorResponse err)
 
     when makeUploader $ do
-      rsp <- requestPUT userUploaderURI "" BS.empty
+      rsp <- requestPUT userUploaderURI "" LBS.empty
       case rsp of
         Nothing  -> return ()
         Just err -> fail (formatErrorResponse err)
@@ -304,7 +316,7 @@ putUserDetails baseURI username realname email timestamp adminname = do
       Just err -> fail (formatErrorResponse err)
 
   where
-    toBS   = BS.pack . toUTF8 . JSON.encodeStrict
+    toBS   = LBS.pack . toUTF8 . JSON.encodeStrict
     userURI            = baseURI <//> "user" </> display username
     userNameAddressURI = userURI <//> "name-contact.json"
     userAdminInfoURI   = userURI <//> "admin-info.json"
@@ -395,7 +407,7 @@ importIndex jobs indexFile baseURI = do
     info $ "Reading index file " ++ indexFile
     pkgs  <- either fail return
            . PkgIndex.readPkgIndex
-         =<< BS.readFile indexFile
+         =<< LBS.readFile indexFile
 
     pkgs' <- evaluate (sortBy (comparing fst) pkgs)
     info $ "Uploading..."
@@ -464,7 +476,7 @@ putUploadInfo baseURI pkgid time uname = do
 
   where
     pkgURI = baseURI <//> "package" </> display pkgid
-    toBS   = BS.pack . toUTF8
+    toBS   = LBS.pack . toUTF8
 
 
 putMaintainersInfo :: URI -> PackageName -> [UserName] -> HttpSession ()
@@ -472,7 +484,7 @@ putMaintainersInfo baseURI pkgname maintainers =
 
     -- Add to the package's maintainers group
     forM_ maintainers $ \uname -> do
-      rsp <- requestPUT (pkgURI <//> "maintainers" </> "user" </> display uname) "" BS.empty
+      rsp <- requestPUT (pkgURI <//> "maintainers" </> "user" </> display uname) "" LBS.empty
       case rsp of
         Nothing  -> return ()
         Just err | isErrNotFound err -> liftIO $ info $ "Cannot make " ++ display uname ++ " a maintainer for package " ++ display pkgname
@@ -527,7 +539,7 @@ tarballAction flags args _ = do
           , let pkgidstr = (dropExtension . dropExtension . takeFileName) file
                 ext      = takeExtension (dropExtension file)
                              <.> takeExtension file
-                mpkgid | ext == ".tar.gz" 
+                mpkgid | ext == ".tar.gz"
                        , Just pkgid <- simpleParse pkgidstr
                        , null (versionTags (packageVersion pkgid))
                        = Just pkgid
@@ -554,7 +566,7 @@ tarballAction flags args _ = do
 putPackageTarball :: URI -> PackageId -> FilePath -> HttpSession ()
 putPackageTarball baseURI pkgid tarballFilePath = do
 
-    pkgContent <- liftIO $ BS.readFile tarballFilePath
+    pkgContent <- liftIO $ LBS.readFile tarballFilePath
     rsp <- requestPUT pkgURI "application/x-gzip" pkgContent
     case rsp of
       Nothing  -> return ()
@@ -617,7 +629,7 @@ putDeprecatedInfo baseURI pkgname replacement = do
 
   where
     pkgURI = baseURI <//> "package" </> display pkgname
-    toBS   = BS.pack . toUTF8 . JSON.encodeStrict
+    toBS   = LBS.pack . toUTF8 . JSON.encodeStrict
 
     deprecatedInfo =
       JSObject $ toJSObject
@@ -674,7 +686,7 @@ distroAction _flags args _ = do
 putDistroInfo :: URI -> String -> [DistroMap.Entry] -> HttpSession ()
 putDistroInfo baseURI distroname entries = do
 
-    rsp <- requestPUT distroURI "" BS.empty
+    rsp <- requestPUT distroURI "" LBS.empty
     case rsp of
       Nothing  -> return ()
       Just err -> fail (formatErrorResponse err)
@@ -686,7 +698,7 @@ putDistroInfo baseURI distroname entries = do
 
   where
     distroURI = baseURI <//> "distro" </> distroname
-    toBS      = BS.pack . toUTF8 . CSV.printCSV . DistroMap.toCSV
+    toBS      = LBS.pack . toUTF8 . CSV.printCSV . DistroMap.toCSV
 
 
 -------------------------------------------------------------------------------
@@ -759,7 +771,7 @@ docsAction flags args _ = do
 putPackageDocsTarball :: URI -> PackageId -> FilePath -> HttpSession ()
 putPackageDocsTarball baseURI pkgid tarballFilePath = do
 
-    tarballContent <- liftIO $ BS.readFile tarballFilePath
+    tarballContent <- liftIO $ LBS.readFile tarballFilePath
     let extraHeaders
           | takeExtension tarballFilePath == ".gz"
                       = [Header HdrContentEncoding "gzip"]
@@ -777,7 +789,126 @@ putPackageDocsTarball baseURI pkgid tarballFilePath = do
   where
     pkgDocURI = baseURI <//> "package" </> display pkgid </> "docs.tar"
 
+-------------------------------------------------------------------------------
+-- Download count command
+--
 
+data DownloadCountFlags = DownloadCountFlags
+
+defaultDownloadCountFlags :: DownloadCountFlags
+defaultDownloadCountFlags = DownloadCountFlags
+
+downloadCountCommand :: CommandUI DownloadCountFlags
+downloadCountCommand =
+    (makeCommand name shortDesc longDesc defaultDownloadCountFlags options) {
+      commandUsage = \pname ->
+           "Usage: cat apachelog.gz | " ++ pname ++ " " ++ name ++ " > downloadcounts.csv\n\n"
+        ++ "Flags for " ++ name ++ ":"
+      }
+  where
+    name = "downloads"
+    shortDesc = "Import download counts"
+    longDesc  = Just $ \_ -> unlines $ [
+        "This will convert Apache log files to .csv files. "
+      , "To import these download counts, create a backup of a Hackage server"
+      , "and then replace ondisk.csv with the .csv file created by this tool."
+      , ""
+      , "NOTE: Reads gzipped Apache logs from stdin and outputs .csv to stdout."
+      ]
+    options _ = []
+
+downloadCountAction :: DownloadCountFlags -> [String] -> GlobalFlags -> IO ()
+downloadCountAction _ _ _ = LBS.interact process
+  where
+    process = LBS.unlines
+            . map formatOutput
+            . Map.toList
+            . accumHist
+            . catMaybes
+            . map ((packageGET >=> parseGET) . parseLine . LBS.toStrict)
+            . LBS.lines
+            . GZip.decompress
+
+data LogLine = LogLine {
+      _getIP     :: !SBS.ByteString
+    , _getIdent  :: !SBS.ByteString
+    , _getUser   :: !SBS.ByteString
+    , getDate    :: !SBS.ByteString
+    , getReq     :: !SBS.ByteString
+    , _getStatus :: !SBS.ByteString
+    , _getBytes  :: !SBS.ByteString
+    , _getRef    :: !SBS.ByteString
+    , _getUA     :: !SBS.ByteString
+} deriving (Ord, Show, Eq)
+
+plainValue :: Parser SBS.ByteString
+plainValue = Att.takeWhile1 (\c -> c /= ' ' && c /= '\n') --many1' (noneOf " \n")
+
+bracketedValue :: Parser SBS.ByteString
+bracketedValue = do
+    Att.char '['
+    content <- Att.takeWhile1 (\c -> c /= ']') --many' (noneOf "]")
+    Att.char ']'
+    return content
+
+quotedValue :: Parser SBS.ByteString
+quotedValue = do
+    Att.char '"'
+    content <- Att.takeWhile1 (\c -> c /= '"') --many' (noneOf "\"")
+    Att.char '"'
+    return content
+
+logLine :: Parser LogLine
+logLine = do
+    ip     <- plainValue     ; Att.skipSpace
+    ident  <- plainValue     ; Att.skipSpace
+    user   <- plainValue     ; Att.skipSpace
+    date   <- bracketedValue ; Att.skipSpace
+    req    <- quotedValue    ; Att.skipSpace
+    status <- plainValue     ; Att.skipSpace
+    bytes  <- plainValue     ; Att.skipSpace
+    ref    <- quotedValue    ; Att.skipSpace
+    ua     <- quotedValue
+    return $! LogLine ip ident user date req status bytes ref ua
+
+parseLine :: SBS.ByteString -> Either SBS.ByteString LogLine
+parseLine line = case Att.parseOnly logLine line of
+                   Left _    -> Left line
+                   Right res -> Right res
+
+packageGET :: Either a LogLine -> Maybe (SBS.ByteString, SBS.ByteString, SBS.ByteString)
+packageGET (Right logline)
+  | [method, path, _] <- SBS.words (getReq logline)
+  , method == methodGET
+  , [root, dir1, dir2, name, ver, tarball] <- SBS.split '/' path
+  , SBS.null root, dir1 == packagesDir, dir2 == archiveDir
+  , SBS.isSuffixOf targzExt tarball
+  = Just (name, ver, getDate logline)
+packageGET _ = Nothing
+
+parseGET :: (SBS.ByteString, SBS.ByteString, SBS.ByteString) -> Maybe (PackageName, Version, Day)
+parseGET (pkgNameStr, pkgVersionStr, dayStr) = do
+  name    <- simpleParse . SBS.unpack $ pkgNameStr
+  version <- simpleParse . SBS.unpack $ pkgVersionStr
+  day     <- parseTime defaultTimeLocale "%d/%b/%Y:%T %z" . SBS.unpack $ dayStr
+  return (name, version, day)
+
+methodGET, packagesDir, archiveDir, targzExt :: SBS.ByteString
+methodGET   = SBS.pack "GET"
+packagesDir = SBS.pack "packages"
+archiveDir  = SBS.pack "archive"
+targzExt    = SBS.pack ".tar.gz"
+
+accumHist :: Ord k => [k] -> Map k Int
+accumHist es = Map.fromListWith (+) [ (pkgId,1) | pkgId <- es ]
+
+formatOutput :: ((PackageName, Version, Day), Int) -> LBS.ByteString
+formatOutput ((name, version, day), numDownloads) =
+  LBS.pack $ intercalate "," $ map show [ display name
+                                        , display version
+                                        , show day
+                                        , show numDownloads
+                                        ]
 -------------------------
 -- HTTP utilities
 -------------------------
@@ -847,7 +978,7 @@ extractCredentials _ = Nothing
 
 requestGET :: URI -> HttpSession (Either ErrorResponse ByteString)
 requestGET uri = do
-    (_, rsp) <- request (Request uri GET headers BS.empty)
+    (_, rsp) <- request (Request uri GET headers LBS.empty)
     case rspCode rsp of
       (2,0,0) -> return (Right (rspBody rsp))
       _       -> return (Left  (mkErrorResponse uri rsp))
@@ -867,7 +998,7 @@ requestPUTWithHeaders uri mimetype extraHeaders body = do
       (2,_,_) -> return Nothing
       _       -> return (Just (mkErrorResponse uri rsp))
   where
-    headers =   Header HdrContentLength (show (BS.length body))
+    headers =   Header HdrContentLength (show (LBS.length body))
               : Header HdrContentType mimetype
               : extraHeaders
 
@@ -877,7 +1008,7 @@ mkErrorResponse uri rsp =
   where
     mBody = case lookupHeader HdrContentType (rspHeaders rsp) of
       Just mimetype | "text/plain" `isPrefixOf` mimetype
-                   -> Just (BS.unpack (rspBody rsp))
+                   -> Just (LBS.unpack (rspBody rsp))
       _            -> Nothing
 
 formatErrorResponse :: ErrorResponse -> String
