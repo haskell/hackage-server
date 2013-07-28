@@ -31,6 +31,7 @@ import System.Console.GetOpt
 import System.Process
 import System.IO.Error
 
+import Text.JSON (decode, Result(..))
 
 data Mode = Help [String]
           | Init String
@@ -143,15 +144,11 @@ stats opts = do
 
     httpSession verbosity $ do
         liftIO $ notice verbosity "Getting index"
-        index <- downloadIndex (bc_srcURI config) cacheDir
-        -- index <- readNewIndex cacheDir
-        let pkgIds = [ pkg_id | PkgIndexInfo pkg_id _ _ _ <- index ]
-            checkHasDocs pkgId = do hasDocs <- liftM isJust $ requestGET' (bc_srcURI config <//> "package" </> display pkgId </> "docs")
-                                    return (pkgId, hasDocs)
+
+        pkgIdsHaveDocs <- getDocumentationStats config
+
         liftIO $ putStrLn ("Total package versions: " ++
-                           show (length pkgIds))
-        liftIO $ notice verbosity "Checking which packages have docs"
-        pkgIdsHaveDocs <- mapM checkHasDocs pkgIds
+                           show (length pkgIdsHaveDocs))
         liftIO $ putStrLn ("Total package versions with docs: " ++
                            show (length (filter snd pkgIdsHaveDocs)))
         let byPackage = map (sortBy (flip (comparing (pkgVersion . fst))))
@@ -177,6 +174,20 @@ stats opts = do
                              [count MostRecentHasDocs, "most recent has docs"],
                              [count SomeHaveDocs,      "some have docs"],
                              [count NoneHaveDocs,      "none have docs"]]
+
+getDocumentationStats :: BuildConfig -> HttpSession [(PackageIdentifier, Bool)] 
+getDocumentationStats config = do
+    mJSON <- requestGET' uri 
+    case mJSON of
+      Nothing   -> fail $ "Could not download " ++ show uri
+      Just json -> case decode (BS.unpack json) of
+                     Error e -> fail $ "Could not decode " ++ show uri ++ ": " ++ e
+                     Ok val  -> return $ map aux val
+  where
+    uri = bc_srcURI config <//> "packages" </> "docs.json"
+    
+    aux :: (String, Bool) -> (PackageIdentifier, Bool)
+    aux (pkgId, hasDocs) = (fromJust $ simpleParse pkgId, hasDocs)
 
 buildOnce :: BuildOpts -> [PackageId] -> IO ()
 buildOnce opts pkgs = do

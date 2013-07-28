@@ -25,6 +25,8 @@ import Distribution.Package
 import qualified Data.Map as Map
 import Data.Function (fix)
 
+import Text.JSON (showJSON)
+
 -- TODO:
 -- 1. Write an HTML view for organizing uploads
 -- 2. Have cabal generate a standard doc tarball, and serve that here
@@ -42,6 +44,7 @@ instance IsHackageFeature DocumentationFeature where
 data DocumentationResource = DocumentationResource {
     packageDocsContent :: Resource,
     packageDocsWhole   :: Resource,
+    packageDocsStats   :: Resource,
 
     packageDocsContentUri :: PackageId -> String,
     packageDocsWholeUri   :: String -> PackageId -> String
@@ -50,17 +53,19 @@ data DocumentationResource = DocumentationResource {
 initDocumentationFeature :: String
                          -> ServerEnv
                          -> CoreResource
+                         -> IO [PackageIdentifier] 
                          -> UploadFeature
                          -> TarIndexCacheFeature
                          -> IO DocumentationFeature
 initDocumentationFeature name
                          env@ServerEnv{serverStateDir, serverVerbosity = verbosity}
                          core
+                         getPackages
                          upload
                          tarIndexCache = do
     loginfo verbosity "Initialising documentation feature, start"
     documentationState <- documentationStateComponent name serverStateDir
-    let feature = documentationFeature name env core upload tarIndexCache documentationState
+    let feature = documentationFeature name env core getPackages upload tarIndexCache documentationState
     loginfo verbosity "Initialising documentation feature, end"
     return feature
 
@@ -100,16 +105,20 @@ documentationStateComponent name stateDir = do
 documentationFeature :: String
                      -> ServerEnv
                      -> CoreResource
+                     -> IO [PackageIdentifier]
                      -> UploadFeature
                      -> TarIndexCacheFeature
                      -> StateComponent AcidState Documentation
                      -> DocumentationFeature
 documentationFeature name
                      ServerEnv{serverBlobStore = store}
-                     CoreResource{ packageInPath
-                                 , guardValidPackageId
-                                 , corePackagePage
-                                 }
+                     CoreResource{ 
+                         packageInPath
+                       , guardValidPackageId
+                       , corePackagePage
+                       , corePackagesPage
+                       }
+                     getPackages
                      UploadFeature{..}
                      TarIndexCacheFeature{cachedTarIndex}
                      documentationState
@@ -121,6 +130,7 @@ documentationFeature name
           map ($ documentationResource) [
               packageDocsContent
             , packageDocsWhole
+            , packageDocsStats
             ]
       , featureState = [abstractAcidStateComponent documentationState]
       }
@@ -140,11 +150,23 @@ documentationFeature name
           , resourceGet  = [ ("tar", serveDocumentationTar) ]
           , resourcePut  = [ ("tar", uploadDocumentation) ]
           }
+      , packageDocsStats = (extendResourcePath "/docs.:format" corePackagesPage) {
+            resourceDesc = [ (GET, "Get information about which packages have documentation") ]
+          , resourceGet  = [ ("json", serveDocumentationStats) ]
+          }
       , packageDocsContentUri = \pkgid ->
           renderResource (packageDocsContent r) [display pkgid]
       , packageDocsWholeUri = \format pkgid ->
           renderResource (packageDocsWhole r) [display pkgid, format]
       }
+
+    serveDocumentationStats :: DynamicPath -> ServerPartE Response
+    serveDocumentationStats _dpath = do
+        pkgs <- mapParaM queryHasDocumentation =<< liftIO getPackages
+        return . toResponse . Resource.JSON . showJSON . map aux $ pkgs
+      where
+        aux :: (PackageIdentifier, Bool) -> (String, Bool) 
+        aux (pkgId, hasDocs) = (display pkgId, hasDocs)
 
     serveDocumentationTar :: DynamicPath -> ServerPartE Response
     serveDocumentationTar dpath =
@@ -216,3 +238,10 @@ documentationFeature name
         Just blob -> do
           index <- liftIO $ cachedTarIndex blob
           func pkgid blob index
+
+{------------------------------------------------------------------------------
+  Auxiliary
+------------------------------------------------------------------------------}
+
+mapParaM :: Monad m => (a -> m b) -> [a] -> m [(a, b)]
+mapParaM f = mapM (\x -> (,) x `liftM` f x) 

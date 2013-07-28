@@ -15,14 +15,14 @@ import Distribution.Server.Framework.Logging
 
 import Distribution.Server.Features.StaticFiles (initStaticFilesFeature)
 import Distribution.Server.Features.Users    (initUserFeature, UserFeature)
-import Distribution.Server.Features.Core     (initCoreFeature, coreResource)
+import Distribution.Server.Features.Core     (initCoreFeature, coreResource, queryGetPackageIndex)
 import Distribution.Server.Features.Upload   (initUploadFeature)
 import Distribution.Server.Features.Mirror   (initMirrorFeature)
 
 #ifndef MINIMAL
 import Distribution.Server.Features.TarIndexCache       (initTarIndexCacheFeature)
 import Distribution.Server.Features.Html                (initHtmlFeature)
-import Distribution.Server.Features.PackageCandidates   (initPackageCandidatesFeature, candidatesCoreResource)
+import Distribution.Server.Features.PackageCandidates   (initPackageCandidatesFeature, candidatesCoreResource, queryGetCandidateIndex)
 import Distribution.Server.Features.RecentPackages      (initRecentPackagesFeature)
 import Distribution.Server.Features.Distro              (initDistroFeature)
 import Distribution.Server.Features.PackageContents     (initPackageContentsFeature)
@@ -42,6 +42,10 @@ import Distribution.Server.Features.LegacyPasswds       (initLegacyPasswdsFeatur
 import Distribution.Server.Features.EditCabalFiles      (initEditCabalFilesFeature)
 #endif
 import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
+
+import Control.Applicative ((<$>))
+import Distribution.Server.Packages.PackageIndex (allPackages)
+import Distribution.Package (packageId)
 
 -- TODO:
 -- * PackageServe: serving from tarballs (most of the work is setting it up on import)
@@ -123,11 +127,13 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
     documentationCoreFeature <- initDocumentationFeature "documentation-core" env
                          (coreResource coreFeature)
+                         (map packageId . allPackages <$> queryGetPackageIndex coreFeature)
                          uploadFeature
                          tarIndexCacheFeature
 
     documentationCandidatesFeature <- initDocumentationFeature "documentation-candidates" env
                          (candidatesCoreResource candidatesFeature)
+                         (map packageId . allPackages <$> queryGetCandidateIndex candidatesFeature) 
                          uploadFeature
                          tarIndexCacheFeature
 
