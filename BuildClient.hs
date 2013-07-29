@@ -142,6 +142,9 @@ stats opts = do
 
     createDirectoryIfMissing False cacheDir
 
+    (_, _, _, num_failed) <- mkPackageFailed opts
+    failed <- num_failed
+
     httpSession verbosity $ do
         liftIO $ notice verbosity "Getting index"
 
@@ -175,9 +178,11 @@ stats opts = do
                              [count SomeHaveDocs,      "some have docs"],
                              [count NoneHaveDocs,      "none have docs"]]
 
-getDocumentationStats :: BuildConfig -> HttpSession [(PackageIdentifier, Bool)] 
+        liftIO $ putStrLn $ show failed ++ " package version(s) failed to build (remove " ++ show (bo_stateDir opts </> "failed") ++ " to reset)"
+
+getDocumentationStats :: BuildConfig -> HttpSession [(PackageIdentifier, Bool)]
 getDocumentationStats config = do
-    mJSON <- requestGET' uri 
+    mJSON <- requestGET' uri
     case mJSON of
       Nothing   -> fail $ "Could not download " ++ show uri
       Just json -> case decode (BS.unpack json) of
@@ -185,7 +190,7 @@ getDocumentationStats config = do
                      Ok val  -> return $ map aux val
   where
     uri = bc_srcURI config <//> "packages" </> "docs.json"
-    
+
     aux :: (String, Bool) -> (PackageIdentifier, Bool)
     aux (pkgId, hasDocs) = (fromJust $ simpleParse pkgId, hasDocs)
 
@@ -200,31 +205,32 @@ buildOnce opts pkgs = do
                      = error $ "unexpected URI " ++ show (bc_srcURI config)
 
     notice verbosity "Initialising"
-    (does_not_have_docs, mark_as_having_docs, persist) <- mkPackageHasDocs opts config
+    (has_failed, mark_as_failed, persist_failed, _num_failed) <- mkPackageFailed opts
 
     createDirectoryIfMissing False cacheDir
 
     configFileExists <- doesFileExist (bo_stateDir opts </> "cabal-config")
     unless configFileExists $ prepareBuildPackages opts config
 
-    flip finally persist $ httpSession verbosity $ do
+    flip finally persist_failed $ httpSession verbosity $ do
         -- Make sure we authenticate to Hackage
         setAuthorityGen $ provideAuthInfo (bc_srcURI config)
                         $ Just (bc_username config, bc_password config)
 
+        pkgIdsHaveDocs <- getDocumentationStats config
+
         -- Find those files *not* marked as having documentation in our cache
-        liftIO $ notice verbosity "Getting index"
-        index <- downloadIndex (bc_srcURI config) cacheDir
-        liftIO $ notice verbosity "Checking for packages without docs"
-        let pkgIds = [ pkg_id | PkgIndexInfo pkg_id _ _ _ <- index
-                     , null pkgs || pkg_id `elem` pkgs]
-            pkgIdss = map (sortBy (flip (comparing pkgVersion)))
+        let pkgIdss = map (sortBy (flip (comparing pkgVersion)))
                     $ groupBy (equating  pkgName)
-                    $ sortBy  (comparing pkgName) pkgIds
+                    $ sortBy  (comparing pkgName)
+                    $ mapMaybe shouldBuild
+                    $ pkgIdsHaveDocs
             pkgIds' = -- First build all of the latest versions of each package
                       map head pkgIdss
                       -- Then go back and build all the older versions
                    ++ concatMap tail pkgIdss
+
+        liftIO $ notice verbosity $ show (length pkgIds') ++ " package(s) to build"
 
         -- Try to build each of them, uploading the documentation and
         -- build reports along the way. We mark each package as having
@@ -233,10 +239,14 @@ buildOnce opts pkgs = do
         -- package!
         startTime <- liftIO $ getCurrentTime
         forM_ pkgIds' $ \pkg_id -> do
-            needsDocs <- does_not_have_docs pkg_id
-            when needsDocs $ do
-                buildPackage verbosity opts config pkg_id
-                liftIO $ mark_as_having_docs pkg_id
+            failed <- liftIO $ has_failed pkg_id
+            if failed
+              then liftIO . putStrLn $
+                                "Skipping " ++ display pkg_id
+                             ++ " because it failed to built previously"
+              else do
+                did_build <- buildPackage verbosity opts config pkg_id
+                unless did_build $ liftIO $ mark_as_failed pkg_id
                 -- We don't check the runtime until we've actually tried
                 -- to build a doc, so as to ensure we make progress.
                 case bo_runTime opts of
@@ -244,40 +254,39 @@ buildOnce opts pkgs = do
                     Just d ->
                         liftIO $ do currentTime <- getCurrentTime
                                     when ((currentTime `diffUTCTime` startTime) > d) exitSuccess
+  where
+    shouldBuild :: (PackageIdentifier, Bool) -> Maybe PackageIdentifier
+    shouldBuild (pkgId, alreadyBuilt) =
+      if (not alreadyBuilt) && (null pkgs || pkgId `elem` pkgs)
+        then Just pkgId
+        else Nothing
 
 -- Builds a little memoised function that can tell us whether a
--- particular package already has documentation
-mkPackageHasDocs :: BuildOpts -> BuildConfig
-                 -> IO (PackageId -> HttpSession Bool,
-                        PackageId -> IO (),
-                        IO ())
-mkPackageHasDocs opts config = do
-    init_already_built <- readBuiltCache (bo_stateDir opts)
-    cache_var <- newIORef init_already_built
+-- particular package failed to build its documentation
+mkPackageFailed :: BuildOpts
+                -> IO (PackageId -> IO Bool, PackageId -> IO (), IO (), IO Int)
+mkPackageFailed opts = do
+    init_failed <- readFailedCache (bo_stateDir opts)
+    cache_var   <- newIORef init_failed
 
-    let mark_as_having_docs pkg_id = atomicModifyIORef cache_var $ \already_built -> (S.insert pkg_id already_built, ())
-        does_not_have_docs pkg_id = do
-            has_docs <- liftIO $ liftM (pkg_id `S.member`) $ readIORef cache_var
-            if has_docs
-             then return False
-             else do
-              has_no_docs <- liftM isNothing $ requestGET' (bc_srcURI config <//> "package" </> display pkg_id </> "doc/")
-              unless has_no_docs $ liftIO $ mark_as_having_docs pkg_id
-              return has_no_docs
-        persist = readIORef cache_var >>= writeBuiltCache (bo_stateDir opts)
+    let mark_as_failed pkg_id = atomicModifyIORef cache_var $ \already_failed ->
+                                  (S.insert pkg_id already_failed, ())
+        has_failed     pkg_id = liftM (pkg_id `S.member`) $ readIORef cache_var
+        persist               = readIORef cache_var >>= writeFailedCache (bo_stateDir opts)
+        num_failed            = S.size `liftM` readIORef cache_var
 
-    return (does_not_have_docs, mark_as_having_docs, persist)
+    return (has_failed, mark_as_failed, persist, num_failed)
   where
-    readBuiltCache :: FilePath -> IO (S.Set PackageId)
-    readBuiltCache cache_dir = do
-        pkgstrs <- handleDoesNotExist (return []) $ liftM lines $ readFile (cache_dir </> "built")
+    readFailedCache :: FilePath -> IO (S.Set PackageId)
+    readFailedCache cache_dir = do
+        pkgstrs <- handleDoesNotExist (return []) $ liftM lines $ readFile (cache_dir </> "failed")
         case validatePackageIds pkgstrs of
             Left theError -> die theError
             Right pkgs -> return (S.fromList pkgs)
 
-    writeBuiltCache :: FilePath -> S.Set PackageId -> IO ()
-    writeBuiltCache cache_dir pkgs = writeFile (cache_dir </> "built") $ unlines $ map display $ S.toList pkgs
-
+    writeFailedCache :: FilePath -> S.Set PackageId -> IO ()
+    writeFailedCache cache_dir pkgs =
+      writeFile (cache_dir </> "failed") $ unlines $ map display $ S.toList pkgs
 
 prepareBuildPackages :: BuildOpts -> BuildConfig -> IO ()
 prepareBuildPackages opts config
@@ -297,7 +306,7 @@ prepareBuildPackages opts config
       ]
 
 buildPackage :: Verbosity -> BuildOpts -> BuildConfig -> PackageId
-             -> HttpSession ()
+             -> HttpSession Bool
 buildPackage verbosity opts config pkg_id = do
     liftIO $ do notice verbosity ("Building " ++ display pkg_id)
                 handleDoesNotExist (return ()) $
@@ -403,9 +412,10 @@ buildPackage verbosity opts config pkg_id = do
 
     -- Submit the generated docs, if possible
     case mb_docs of
-        Nothing       -> return ()
+        Nothing       -> return False
         Just docs_tgz -> do
             requestPUT (bc_srcURI config <//> "package" </> display pkg_id </> "docs") "application/x-tar" (Just "gzip") docs_tgz
+            return True
 
 cabal :: BuildOpts -> String -> [String] -> IO ExitCode
 cabal opts cmd args = do
