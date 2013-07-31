@@ -12,10 +12,11 @@ import qualified Data.Set as Set
 import Data.Char
 import qualified NLP.Tokenize as NLP
 import qualified NLP.Snowball as NLP
+import Control.Monad ((>=>))
 
 import Distribution.Server.Pages.Package.HaddockHtml  as Haddock
-import qualified Distribution.Server.Pages.Package.HaddockParse as Haddock
-import qualified Distribution.Server.Pages.Package.HaddockLex   as Haddock
+import qualified Distribution.Server.Pages.Package.HaddockParse as Haddock (parseHaddockParagraphs)
+import qualified Distribution.Server.Pages.Package.HaddockLex   as Haddock (tokenise)
 
 
 extractSynopsisTerms :: Set Text -> String -> [Text]
@@ -55,9 +56,7 @@ extractDescriptionTerms stopWords =
         (  filter (not . ignoreTok)
          . NLP.tokenize
          . concat . markup termsMarkup)
-    . Haddock.parseHaddockParagraphs
-    . Haddock.tokenise
-
+    . (Haddock.tokenise >=> Haddock.parseHaddockParagraphs)
 
 termsMarkup :: DocMarkup String [String]
 termsMarkup = Markup {

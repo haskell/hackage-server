@@ -21,6 +21,7 @@ module Distribution.Server.Pages.Package.HaddockLex (
 import Data.Char
 import Data.Word (Word8)
 import Numeric
+import Control.Monad (liftM)
 }
 
 $ws    = $white # \n
@@ -105,7 +106,7 @@ data Token
 -- Alex support stuff
 
 type StartCode = Int
-type Action = String -> StartCode -> (StartCode -> [Token]) -> [Token]
+type Action = String -> StartCode -> (StartCode -> Either String [Token]) -> Either String [Token]
 
 type AlexInput = (Char,String)
 
@@ -125,12 +126,12 @@ alexGetChar (_, c:cs) = Just (c, (c,cs))
 
 alexInputPrevChar (c,_) = c
 
-tokenise :: String -> [Token]
+tokenise :: String -> Either String [Token]
 tokenise str = let toks = go ('\n', eofHack str) para in {-trace (show toks)-} toks
   where go inp@(_,str') sc =
           case alexScan inp sc of
-                AlexEOF -> []
-                AlexError _ -> error "lexical error"
+                AlexEOF -> Right []
+                AlexError _ -> Left "lexical error"
                 AlexSkip  inp' _       -> go inp' sc
                 AlexToken inp' len act -> act (take len str') sc (\sc' -> go inp' sc')
 
@@ -142,10 +143,10 @@ andBegin  :: Action -> StartCode -> Action
 andBegin act new_sc = \str _ cont -> act str new_sc cont
 
 token :: Token -> Action
-token t = \_ sc cont -> t : cont sc
+token t = \_ sc cont -> liftM (t :) (cont sc)
 
 strtoken :: (String -> Token) -> Action
-strtoken t = \str sc cont -> t str : cont sc
+strtoken t = \str sc cont -> liftM (t str :) (cont sc)
 
 begin :: StartCode -> Action
 begin sc = \_ _ cont -> cont sc
@@ -154,5 +155,5 @@ begin sc = \_ _ cont -> cont sc
 -- Lex a string as a Haskell identifier
 
 ident :: Action
-ident str sc cont = TokIdent str : cont sc
+ident str sc cont = liftM (TokIdent str :) (cont sc)
 }
