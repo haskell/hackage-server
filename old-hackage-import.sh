@@ -1,14 +1,17 @@
 #!/bin/bash
 
+HACKAGE_SERVER=hackage-server
+HACKAGE_IMPORT=hackage-import
+
 # number of cores to run the server on
-CORES=4
+CORES=1
 
 # number of concurrent upload jobs
 JOBS=10
 
 
 STATE_DIR=./state
-STATIC_DIR=./static-files
+STATIC_DIR=./datafiles
 
 IMPORTDATA_DIR=./import-data
 ADMIN_PASSWD=admin
@@ -17,14 +20,14 @@ SERVER_HOST=localhost
 SERVER_PORT=8080
 SERVER_URL=http://admin:${ADMIN_PASSWD}@${SERVER_HOST}:${SERVER_PORT}
 
-LOG_DIR=./
+LOG_DIR=./logs
 SERVER_LOG=${LOG_DIR}/server.log
 IMPORT_LOG=${LOG_DIR}/import.log
 
 echo "initialising server..."
-hackage-server init --static=${STATIC_DIR} --state=${STATE_DIR} --admin=admin:${ADMIN_PASSWD} > ${SERVER_LOG}
+${HACKAGE_SERVER} init --static=${STATIC_DIR} --state=${STATE_DIR} --admin=admin:${ADMIN_PASSWD} > ${SERVER_LOG}
 echo "running server..."
-hackage-server run -v3 --static=${STATIC_DIR} --state=${STATE_DIR} --delay-cache-updates=60 +RTS -N${CORES} >> ${SERVER_LOG} 2>&1 &
+${HACKAGE_SERVER} run -v3 --port=${SERVER_PORT} --static=${STATIC_DIR} --state=${STATE_DIR} --delay-cache-updates=60 +RTS -N${CORES} >> ${SERVER_LOG} 2>&1 &
 
 echo "Waiting a sec for the server to start..."
 sleep 2
@@ -35,25 +38,31 @@ echo "Making 'admin' user a member of the trustees group"
 curl -u admin:${ADMIN_PASSWD} -X PUT ${SERVER_URL}/packages/trustees/user/admin >> ${IMPORT_LOG} 2>&1
 
 echo "importing users..."
-time hackage-import users ${SERVER_URL} --htpasswd=${IMPORTDATA_DIR}/passwd/hackage.htpasswd --all-uploaders --addresses=${IMPORTDATA_DIR}/passwd/hackage.addresses --jobs=${JOBS} >> ${IMPORT_LOG}
+time ${HACKAGE_IMPORT} users ${SERVER_URL} --htpasswd=${IMPORTDATA_DIR}/passwd/hackage.htpasswd --all-uploaders --addresses=${IMPORTDATA_DIR}/passwd/hackage.addresses --jobs=${JOBS} >> ${IMPORT_LOG}
 
 echo "importing package metadata..."
-time hackage-import metadata ${SERVER_URL} --index=${IMPORTDATA_DIR}/archive/00-index.tar.gz --jobs=${JOBS} >> ${IMPORT_LOG}
+time ${HACKAGE_IMPORT} metadata ${SERVER_URL} --index=${IMPORTDATA_DIR}/archive/00-index.tar.gz --jobs=${JOBS} >> ${IMPORT_LOG}
 
 echo "importing package owner data..."
-time hackage-import metadata ${SERVER_URL} --upload-log=${IMPORTDATA_DIR}/archive/log --jobs=${JOBS} >> ${IMPORT_LOG}
+time ${HACKAGE_IMPORT} metadata ${SERVER_URL} --upload-log=${IMPORTDATA_DIR}/archive/log --jobs=${JOBS} >> ${IMPORT_LOG}
 
 echo "importing package tarballs..."
-time hackage-import tarball ${SERVER_URL} ${IMPORTDATA_DIR}/archive/*/*/*.tar.gz --jobs=${JOBS}  >> ${IMPORT_LOG}
+time find ${IMPORTDATA_DIR}/archive -name '*.tar.gz' -print0 | xargs -0 \
+  ${HACKAGE_IMPORT} tarball ${SERVER_URL} --jobs=${JOBS}  >> ${IMPORT_LOG}
 
 echo "importing package documentation..."
-time hackage-import docs ${SERVER_URL} ${IMPORTDATA_DIR}/cache/docs/*-docs.tar.gz --jobs=${JOBS}  >> ${IMPORT_LOG}
+time find ${IMPORTDATA_DIR}/docs -name '*-docs.tar.gz' -print0 | xargs -0 \
+  ${HACKAGE_IMPORT} docs ${SERVER_URL} --jobs=${JOBS}  >> ${IMPORT_LOG}
 
 echo "importing package deprecation info..."
-time hackage-import deprecation ${SERVER_URL} ${IMPORTDATA_DIR}/archive/*/*/tags >> ${IMPORT_LOG}
+time find ${IMPORTDATA_DIR}/archive -name 'tags' -print0 | xargs -0 \
+  ${HACKAGE_IMPORT} deprecation ${SERVER_URL} >> ${IMPORT_LOG}
 
 echo "importing distro info..."
-time hackage-import distro ${SERVER_URL} ${IMPORTDATA_DIR}/archive/00-distromap/* >> ${IMPORT_LOG}
+time ${HACKAGE_IMPORT} distro ${SERVER_URL} ${IMPORTDATA_DIR}/archive/00-distromap/* >> ${IMPORT_LOG}
+
+echo "importing download counts..."
+time ${HACKAGE_IMPORT} downloads ${SERVER_URL} ${IMPORTDATA_DIR}/download-logs/*.gz >> ${IMPORT_LOG}
 
 echo "Checkpointing server state..."
 kill -USR1 `pidof hackage-server`
