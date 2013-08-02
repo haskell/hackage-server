@@ -71,6 +71,7 @@ import qualified Data.Attoparsec.Char8      as Att
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import qualified Codec.Compression.GZip     as GZip
 import qualified Data.Map.Strict            as Map
+import Control.Applicative ((<$>))
 
 --
 -- The following data can be imported:
@@ -802,33 +803,42 @@ downloadCountCommand :: CommandUI DownloadCountFlags
 downloadCountCommand =
     (makeCommand name shortDesc longDesc defaultDownloadCountFlags options) {
       commandUsage = \pname ->
-           "Usage: cat apachelog.gz | " ++ pname ++ " " ++ name ++ " > downloadcounts.csv\n\n"
+           "Usage: " ++ pname ++ " " ++ name ++ " URI [LOG.GZ]... \n\n"
         ++ "Flags for " ++ name ++ ":"
       }
   where
     name = "downloads"
     shortDesc = "Import download counts"
     longDesc  = Just $ \_ -> unlines $ [
-        "This will convert Apache log files to .csv files. "
-      , "To import these download counts, create a backup of a Hackage server"
-      , "and then replace ondisk.csv with the .csv file created by this tool."
-      , ""
-      , "NOTE: Reads gzipped Apache logs from stdin and outputs .csv to stdout."
+        "Replace the on-disk download statistics with the download statistics"
+      , "extracted from Apache log files (in .gz format)"
       ]
     options _ = []
 
 downloadCountAction :: DownloadCountFlags -> [String] -> GlobalFlags -> IO ()
-downloadCountAction _ _ _ = LBS.interact process
-  where
-    process = LBS.unlines
-            . map formatOutput
-            . Map.toList
-            . accumHist
-            . catMaybes
-            . map ((packageGET >=> parseGET) . parseLine . LBS.toStrict)
-            . LBS.lines
-            . GZip.decompress
+downloadCountAction _ args _ = do
+    (baseURI, logFiles) <- validateOptsServerURI' args
+    csv <- logToCSV <$> readLogs logFiles
 
+    -- Compute before we open the connection to the server
+    evaluate $ LBS.length csv
+
+    httpSession $ do
+      setAuthorityFromURI baseURI
+      void $ requestPUT (baseURI <//> "packages" </> "downloads.csv") "text/csv" csv 
+  where
+    logToCSV :: LBS.ByteString -> LBS.ByteString
+    logToCSV = LBS.unlines
+             . map formatOutput
+             . Map.toList
+             . accumHist
+             . catMaybes
+             . map ((packageGET >=> parseGET) . parseLine . LBS.toStrict)
+             . LBS.lines
+
+    readLogs :: [FilePath] -> IO LBS.ByteString
+    readLogs paths = (LBS.concat . map GZip.decompress) <$> mapM LBS.readFile paths 
+      
 data LogLine = LogLine {
       _getIP     :: !SBS.ByteString
     , _getIdent  :: !SBS.ByteString
@@ -905,8 +915,8 @@ accumHist es = Map.fromListWith (+) [ (pkgId,1) | pkgId <- es ]
 formatOutput :: ((PackageName, Version, Day), Int) -> LBS.ByteString
 formatOutput ((name, version, day), numDownloads) =
   LBS.pack $ intercalate "," $ map show [ display name
-                                        , display version
                                         , show day
+                                        , display version
                                         , show numDownloads
                                         ]
 -------------------------

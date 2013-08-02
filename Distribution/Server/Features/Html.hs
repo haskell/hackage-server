@@ -1166,7 +1166,7 @@ mkHtmlDownloads HtmlUtilities{..} DownloadFeature{..} = HtmlDownloads{..}
             | ((pkgname, count), n) <- zip pkgList [(1::Int)..] ]
 
     sortedPackages :: RecentDownloads -> [(PackageName, Int)]
-    sortedPackages = sortBy (compare `on` snd) . cmToList
+    sortedPackages = sortBy (flip compare `on` snd) . cmToList
 
 {-------------------------------------------------------------------------------
   Tags

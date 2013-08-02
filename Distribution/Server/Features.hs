@@ -139,6 +139,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
     downloadFeature <- initDownloadFeature env
                          coreFeature
+                         usersFeature
 
     tagsFeature     <- initTagsFeature env
                          coreFeature

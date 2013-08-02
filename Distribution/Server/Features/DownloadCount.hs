@@ -26,18 +26,21 @@ module Distribution.Server.Features.DownloadCount (
   ) where
 
 import Distribution.Server.Framework
+import Distribution.Server.Framework.BackupRestore
 
 import Distribution.Server.Features.DownloadCount.State
 import Distribution.Server.Features.DownloadCount.Backup
-
 import Distribution.Server.Features.Core
+import Distribution.Server.Features.Users
 
 import Distribution.Package
+import Distribution.Server.Util.CountingMap (cmFromCSV)
 
 import Data.Time.Calendar (Day, addDays)
 import Data.Time.Clock (getCurrentTime, utctDay)
 import Control.Concurrent.Chan
 import Control.Concurrent (forkIO)
+import qualified Data.ByteString.Char8 as BS
 
 data DownloadFeature = DownloadFeature {
     downloadFeatureInterface :: HackageFeature
@@ -52,8 +55,8 @@ data DownloadResource = DownloadResource {
     topDownloads :: Resource
   }
 
-initDownloadFeature :: ServerEnv -> CoreFeature -> IO DownloadFeature
-initDownloadFeature serverEnv@ServerEnv{serverStateDir, serverVerbosity = verbosity} core = do
+initDownloadFeature :: ServerEnv -> CoreFeature -> UserFeature -> IO DownloadFeature
+initDownloadFeature serverEnv@ServerEnv{serverStateDir, serverVerbosity = verbosity} core users = do
     loginfo verbosity "Initialising download feature, start"
 
     inMemState     <- inMemStateComponent  serverStateDir
@@ -61,7 +64,7 @@ initDownloadFeature serverEnv@ServerEnv{serverStateDir, serverVerbosity = verbos
     totalsCache    <- newMemStateWHNF =<< computeRecentDownloads =<< getState onDiskState
     downChan       <- newChan
 
-    let feature   = downloadFeature core serverEnv inMemState onDiskState totalsCache downChan
+    let feature   = downloadFeature core users serverEnv inMemState onDiskState totalsCache downChan
 
     registerHook (packageDownloadHook core) (writeChan downChan)
     loginfo verbosity "Initialising download feature, end"
@@ -86,15 +89,36 @@ onDiskStateComponent stateDir = StateComponent {
       stateDesc    = "All time download counts"
     , stateHandle  = OnDiskState
     , getState     = readOnDiskStats (dcPath stateDir </> "ondisk")
-    , putState     = \onDisk -> do
-                       writeOnDiskStats (dcPath stateDir </> "ondisk") onDisk
-                       reconstructLog (dcPath stateDir) onDisk
+    , putState     = writeOnDisk stateDir Nothing ReconstructLog
     , backupState  = onDiskBackup
     , restoreState = onDiskRestore
     , resetState   = return . onDiskStateComponent
     }
 
+data ReconstructLog = ReconstructLog | DontReconstructLog 
+
+writeOnDisk :: FilePath
+            -> Maybe (MemState RecentDownloads) 
+            -> ReconstructLog 
+            -> OnDiskStats 
+            -> IO ()
+writeOnDisk stateDir mRecentDownloads shouldReconstructLog onDiskStats = do
+  writeOnDiskStats (dcPath stateDir </> "ondisk") onDiskStats
+
+  case mRecentDownloads of
+    Just recentDownloads -> 
+      writeMemState recentDownloads =<< computeRecentDownloads onDiskStats
+    Nothing ->
+      return ()
+
+  case shouldReconstructLog of
+    ReconstructLog -> 
+      reconstructLog (dcPath stateDir) onDiskStats
+    DontReconstructLog ->
+      return ()
+
 downloadFeature :: CoreFeature
+                -> UserFeature
                 -> ServerEnv
                 -> StateComponent AcidState   InMemStats
                 -> StateComponent OnDiskState OnDiskStats
@@ -103,6 +127,7 @@ downloadFeature :: CoreFeature
                 -> DownloadFeature
 
 downloadFeature CoreFeature{}
+                UserFeature{..}
                 ServerEnv{serverStateDir}
                 inMemState
                 onDiskState
@@ -111,7 +136,9 @@ downloadFeature CoreFeature{}
   = DownloadFeature{..}
   where
     downloadFeatureInterface = (emptyHackageFeature "download") {
-        featureResources = map ($ downloadResource) [topDownloads]
+        featureResources = [ topDownloads downloadResource
+                           , downloadCSV
+                           ]
       , featurePostInit  = void $ forkIO registerDownloads
       , featureState     = [ abstractAcidStateComponent   inMemState
                            , abstractOnDiskStateComponent onDiskState
@@ -137,21 +164,41 @@ downloadFeature CoreFeature{}
           inMemStats <- getState inMemState
           putState inMemState $ initInMemStats today
 
-          -- 1. Write yesterday's downloads to the log
+          -- Write yesterday's downloads to the log
           appendToLog (dcPath serverStateDir) inMemStats
 
-          -- 2. Update the on-disk statistics
+          -- Update the on-disk statistics and recompute recent downloads
           onDiskStats' <- updateHistory inMemStats <$> getState onDiskState
-          putState onDiskState $ onDiskStats'
-
-          -- 3. Recompute the recent downloads
-          writeMemState recentDownloadsCache =<< computeRecentDownloads onDiskStats'
+          writeOnDisk serverStateDir (Just recentDownloadsCache) DontReconstructLog onDiskStats' 
 
         updateState inMemState $ RegisterDownload pkg
 
     downloadResource = DownloadResource {
         topDownloads = resourceAt "/packages/top.:format"
       }
+
+    downloadCSV = (resourceAt "/packages/downloads.:format") {
+        resourceDesc = [ (GET, "Get download counts")
+                       , (PUT, "Upload download counts (for import)")
+                       ]
+      , resourceGet  = [ ("csv", getDownloadCounts) ]
+      , resourcePut  = [ ("csv", putDownloadCounts) ]
+      }
+
+    getDownloadCounts :: DynamicPath -> ServerPartE Response 
+    getDownloadCounts _path = do
+      onDiskStats <- liftIO $ getState onDiskState
+      let [BackupByteString _ bs] = onDiskBackup onDiskStats
+      return $ toResponse bs 
+
+    putDownloadCounts :: DynamicPath -> ServerPartE Response 
+    putDownloadCounts _path = do 
+      guardAuthorised_ [InGroup adminGroup]
+      fileContents <- expectContentType (BS.pack "text/csv")
+      csv          <- importCSV "PUT input" fileContents  
+      onDiskStats  <- cmFromCSV csv
+      liftIO $ writeOnDisk serverStateDir (Just recentDownloadsCache) ReconstructLog onDiskStats
+      ok $ toResponse $ "Imported " ++ show (length csv) ++ " records\n"
 
 {------------------------------------------------------------------------------
   Auxiliary

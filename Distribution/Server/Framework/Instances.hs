@@ -32,9 +32,8 @@ import Happstack.Server
 
 import Data.Maybe (fromJust)
 
-import qualified Text.PrettyPrint as PP (integer)
+import qualified Text.PrettyPrint as PP (text)
 import Distribution.Compat.ReadP (readS_to_P)
-import Control.Monad (liftM)
 
 deriving instance Typeable PackageIdentifier
 deriving instance Typeable GenericPackageDescription
@@ -133,6 +132,6 @@ instance MemSize Length where
     memSize _ = memSize0
 
 instance Text Day where
-  disp  = PP.integer . toModifiedJulianDay
-  parse = ModifiedJulianDay `liftM` readS_to_P (reads :: ReadS Integer)
+  disp  = PP.text . show 
+  parse = readS_to_P (reads :: ReadS Day)
 

@@ -10,7 +10,11 @@ import Control.Monad.State (get, put, liftIO, execStateT, modify)
 -- import Control.Monad.IO.Class (liftIO)
 import qualified Data.Map as Map
 import System.FilePath ((</>))
-import System.Directory (getDirectoryContents, createDirectoryIfMissing)
+import System.Directory (
+    getDirectoryContents
+  , createDirectoryIfMissing
+  , removeDirectoryRecursive
+  )
 import Control.Applicative ((<$>))
 import qualified Data.ByteString.Lazy as BSL
 import System.IO (withFile, IOMode (..), hPutStr)
@@ -47,17 +51,17 @@ data InMemStats = InMemStats {
 newtype OnDiskStats = OnDiskStats {
     onDiskStats :: NestedCountingMap PackageName OnDiskPerPkg
   }
-  deriving (CountingMap (PackageName, (Day, Version)), Show, Eq)
+  deriving (CountingMap (PackageName, (Day, Version)), Show, Eq, MemSize)
 
 newtype OnDiskPerPkg = OnDiskPerPkg {
     onDiskPerPkgCounts :: NestedCountingMap Day (SimpleCountingMap Version)
   }
-  deriving (CountingMap (Day, Version), Show, Eq)
+  deriving (CountingMap (Day, Version), Show, Eq, MemSize)
 
 newtype RecentDownloads = RecentDownloads {
     recentDownloads :: SimpleCountingMap PackageName
   }
-  deriving (CountingMap PackageName, Show, Eq)
+  deriving (CountingMap PackageName, Show, Eq, MemSize)
 
 {------------------------------------------------------------------------------
   Initial instances
@@ -103,8 +107,6 @@ updateHistory (InMemStats day perPkg) =
 instance MemSize InMemStats where
   memSize (InMemStats a b) = memSize2 a b
 
-deriving instance MemSize RecentDownloads
-
 {------------------------------------------------------------------------------
   Serializing on-disk stats
 ------------------------------------------------------------------------------}
@@ -132,6 +134,9 @@ readOnDiskStats stateDir = flip execStateT cmEmpty $ do
 
 writeOnDiskStats :: FilePath -> OnDiskStats -> IO ()
 writeOnDiskStats stateDir (OnDiskStats (NCM _ onDisk)) = do
+   -- Remove old state
+   removeDirectoryRecursive stateDir
+   -- Write new state
    createDirectoryIfMissing True stateDir
    forM_ (Map.toList onDisk) $ \(pkgName, perPkg) -> do
      let pkgFile = stateDir </> display pkgName
