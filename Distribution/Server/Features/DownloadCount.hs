@@ -16,8 +16,6 @@
 -- 4. On-disk: total download per package per version per day, stored as a single
 --    CSV file that we append (1) to once per day. Strictly speaking this is
 --    redundant, as this information is also stored in (3).
---
--- TODO: Check all stateDir and related paths
 module Distribution.Server.Features.DownloadCount (
     DownloadFeature(..)
   , DownloadResource(..)

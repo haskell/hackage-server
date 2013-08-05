@@ -38,11 +38,11 @@ import Distribution.Simple.Setup
 import Data.Maybe
          ( isNothing )
 import Data.List
-         ( intercalate )
+         ( intercalate, isInfixOf )
 import Data.Traversable
          ( forM )
 import Control.Monad
-         ( void, unless, when )
+         ( void, unless, when, filterM )
 import Control.Applicative
          ( (<$>) )
 import Control.Arrow
@@ -546,7 +546,8 @@ data TestBackupFlags = TestBackupFlags {
     flagTestBackupStateDir  :: Flag FilePath,
     flagTestBackupStaticDir :: Flag FilePath,
     flagTestBackupTestDir   :: Flag FilePath,
-    flagTestBackupLinkBlobs :: Flag Bool
+    flagTestBackupLinkBlobs :: Flag Bool,
+    flagTestBackupFeatures  :: Flag String
   }
 
 defaultTestBackupFlags :: TestBackupFlags
@@ -555,7 +556,8 @@ defaultTestBackupFlags = TestBackupFlags {
     flagTestBackupStateDir  = NoFlag,
     flagTestBackupStaticDir = NoFlag,
     flagTestBackupTestDir   = Flag "test-backup",
-    flagTestBackupLinkBlobs = Flag False
+    flagTestBackupLinkBlobs = Flag False,
+    flagTestBackupFeatures  = NoFlag
   }
 
 testBackupCommand :: CommandUI TestBackupFlags
@@ -583,6 +585,10 @@ testBackupCommand = makeCommand name shortDesc longDesc defaultTestBackupFlags o
            ++ "blob files (saves on disk I/O, but less test coverage).")
           flagTestBackupLinkBlobs (\v flags -> flags { flagTestBackupLinkBlobs = v })
           (noArg (Flag True))
+      , option [] ["features"]
+          ("Only test the specified features")
+          flagTestBackupFeatures (\v flags -> flags { flagTestBackupFeatures = v })
+          (reqArgFlag "FEATURES")
       ]
 
 -- FIXME: the following acidic types are neither backed up nor tested:
@@ -595,6 +601,10 @@ testBackupCommand = makeCommand name shortDesc longDesc defaultTestBackupFlags o
 testBackupAction :: TestBackupFlags -> IO ()
 testBackupAction opts = do
     defaults <- Server.defaultServerConfig
+
+    let shouldTest  = fromFlagOrDefault (const True) (flip isInfixOf `fmap` flagTestBackupFeatures opts) 
+        shouldTestM = \(name, _) -> if shouldTest name then putStrLn ("Testing " ++ name) >> return True
+                                                       else putStrLn ("Skipping " ++ name) >> return False
 
     let stateDir    = fromFlagOrDefault (confStateDir  defaults) (flagTestBackupStateDir  opts)
         staticDir   = fromFlagOrDefault (confStaticDir defaults) (flagTestBackupStaticDir opts)
@@ -625,8 +635,10 @@ testBackupAction opts = do
     mapM_ (createDirectoryIfMissing False) [testDir, dump1Dir, restoreDir, dump2Dir]
 
     withServer config False $ \server -> do
-      let state = Server.serverState server
+      let fullState = Server.serverState server
           store = Server.serverBlobStore (Server.serverEnv server)
+
+      state <- filterM shouldTestM fullState
 
       -- We want to check that our dump/restore correctly preserves all the
       -- data. So we want to do a round trip test, and though it's nice to do
