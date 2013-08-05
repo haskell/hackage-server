@@ -19,7 +19,7 @@ import Control.Applicative ((<$>))
 import qualified Data.ByteString.Lazy as BSL
 import System.IO (withFile, IOMode (..), hPutStr)
 import Text.CSV (printCSV)
-import Control.Exception (evaluate)
+import Control.Exception (evaluate, handle, IOException)
 
 import Data.Acid
 import Data.SafeCopy (base, deriveSafeCopy, safeGet, safePut)
@@ -134,13 +134,17 @@ readOnDiskStats stateDir = flip execStateT cmEmpty $ do
 
 writeOnDiskStats :: FilePath -> OnDiskStats -> IO ()
 writeOnDiskStats stateDir (OnDiskStats (NCM _ onDisk)) = do
-   -- Remove old state
-   removeDirectoryRecursive stateDir
+   -- Remove old state (ignoring exceptions)
+   ignoreIOException $ removeDirectoryRecursive stateDir
    -- Write new state
    createDirectoryIfMissing True stateDir
    forM_ (Map.toList onDisk) $ \(pkgName, perPkg) -> do
      let pkgFile = stateDir </> display pkgName
      BSL.writeFile pkgFile $ runPutLazy (safePut perPkg)
+  where
+    ignoreIOException :: IO () -> IO ()
+    ignoreIOException = handle $ \e -> let _ = e :: IOException 
+                                       in return ()  
 
 {------------------------------------------------------------------------------
   The append-only all-time log
