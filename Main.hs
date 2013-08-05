@@ -699,7 +699,7 @@ testBackupAction opts = do
         let failLogfile = testDir </> "round-trip-failure.log"
         writeFile failLogfile (intercalate "\n\n" stErrs)
         fail $ "Snapshot check failed!  Log written to " ++ failLogfile
-      loginfo verbosity "Snapshots match"
+      lognotice verbosity "Snapshots match"
 
       -- So that was all checking the internal representations matched up after
       -- a round trip. We can also check the external representations match
