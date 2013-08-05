@@ -444,7 +444,7 @@ equalTarBall tar1 tar2 = do
                                  else []
   where
     readTar :: Monad m => String -> ByteString -> m [Tar.Entry]
-    readTar err = entriesToList err . Tar.read . decompressNamed err
+    readTar err = entriesToList err . Tar.read
 
     entriesToList :: (Monad m, Show a) => String -> Tar.Entries a -> m [Tar.Entry]
     entriesToList err (Tar.Next entry entries) = liftM (entry :) $ entriesToList err entries
