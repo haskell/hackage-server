@@ -48,7 +48,7 @@ import Control.Applicative
 import Control.Arrow
          ( second )
 import qualified Data.ByteString.Lazy as BS
-import qualified Codec.Compression.GZip as GZip
+import qualified Distribution.Server.Util.GZip as GZip
 import qualified Text.Parsec as Parse
 
 import Paths_hackage_server as Paths (version)
@@ -710,8 +710,8 @@ testBackupAction opts = do
                        (map (second abstractStateBackup) state')
 
       lognotice verbosity "Comparing export tarballs..."
-      tar  <- GZip.decompress <$> BS.readFile dump1Tar
-      tar' <- GZip.decompress <$> BS.readFile dump2Tar
+      tar  <- GZip.decompressNamed dump1Tar <$> BS.readFile dump1Tar
+      tar' <- GZip.decompressNamed dump2Tar <$> BS.readFile dump2Tar
       let tarErrs = tar `equalTarBall` tar'
       unless (null tarErrs) $ do
         mapM_ (loginfo verbosity) tarErrs

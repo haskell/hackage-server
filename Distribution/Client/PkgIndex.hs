@@ -20,7 +20,7 @@ import qualified Codec.Archive.Tar.Entry as Tar (Entry(..), EntryContent(..))
 import Distribution.Package
 
 import Data.ByteString.Lazy.Char8 (ByteString)
-import qualified Codec.Compression.GZip as GZip
+import qualified Distribution.Server.Util.GZip as GZip
 
 import Prelude hiding (read)
 
@@ -28,7 +28,7 @@ import Prelude hiding (read)
 readPkgIndex :: ByteString -> Either String [(PackageIdentifier, ByteString)]
 readPkgIndex = fmap extractCabalFiles
              . PackageIndex.read (,)
-             . GZip.decompress
+             . GZip.decompressNamed "<<package index>>"
   where
     extractCabalFiles entries =
       [ (pkgid, cabalFile)

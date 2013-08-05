@@ -66,11 +66,11 @@ import Data.Attoparsec.Char8 (Parser)
 import Data.Map.Strict (Map)
 import Data.Time.Calendar (Day)
 import Data.Time.Format (parseTime)
-import qualified Data.ByteString.Char8      as SBS
-import qualified Data.Attoparsec.Char8      as Att
-import qualified Data.ByteString.Lazy.Char8 as LBS
-import qualified Codec.Compression.GZip     as GZip
-import qualified Data.Map.Strict            as Map
+import qualified Data.ByteString.Char8         as SBS
+import qualified Data.Attoparsec.Char8         as Att
+import qualified Data.ByteString.Lazy.Char8    as LBS
+import qualified Distribution.Server.Util.GZip as GZip
+import qualified Data.Map.Strict               as Map
 import Control.Applicative ((<$>))
 
 --
@@ -837,7 +837,10 @@ downloadCountAction _ args _ = do
              . LBS.lines
 
     readLogs :: [FilePath] -> IO LBS.ByteString
-    readLogs paths = (LBS.concat . map GZip.decompress) <$> mapM LBS.readFile paths 
+    readLogs paths = LBS.concat <$> mapM decompress paths 
+
+    decompress :: FilePath -> IO LBS.ByteString
+    decompress path = GZip.decompressNamed path <$> LBS.readFile path 
       
 data LogLine = LogLine {
       _getIP     :: !SBS.ByteString

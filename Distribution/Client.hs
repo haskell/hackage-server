@@ -38,7 +38,7 @@ import Data.Time
 import Data.Time.Clock.POSIX
 import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BS
-import qualified Codec.Compression.GZip  as GZip
+import qualified Distribution.Server.Util.GZip as GZip
 import qualified Codec.Archive.Tar       as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
 
@@ -106,7 +106,7 @@ downloadOldIndex uri cacheDir = do
 
       pkgids <- withFile indexFile ReadMode $ \hnd -> do
         content <- BS.hGetContents hnd
-        case PackageIndex.read (\pkgid _ -> pkgid) (GZip.decompress content) of
+        case PackageIndex.read (\pkgid _ -> pkgid) (GZip.decompressNamed indexFile content) of
           Right pkgs     -> return pkgs
           Left  theError ->
               die $ "Error parsing index at " ++ show uri ++ ": " ++ theError
@@ -160,7 +160,7 @@ readNewIndex :: FilePath -> HttpSession [PkgIndexInfo]
 readNewIndex cacheDir = do
     liftIO $ withFile indexFile ReadMode $ \hnd -> do
       content <- BS.hGetContents hnd
-      case PackageIndex.read selectDetails (GZip.decompress content) of
+      case PackageIndex.read selectDetails (GZip.decompressNamed indexFile content) of
         Left theError ->
             error ("Error parsing index at " ++ show indexFile ++ ": "
                 ++ theError)

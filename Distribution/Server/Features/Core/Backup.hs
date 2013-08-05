@@ -34,8 +34,9 @@ import qualified Data.Map as Map
 import Data.List
 import Data.Ord (comparing)
 import Control.Monad.State
-import qualified Codec.Compression.GZip as GZip
+import qualified Distribution.Server.Util.GZip as GZip
 import qualified Data.ByteString.Lazy as BS
+import System.FilePath ((</>))
 
 packagesBackup :: RestoreBackup PackagesState
 packagesBackup = updatePackages Map.empty
@@ -75,13 +76,13 @@ doPackageImport packages entry = case entry of
         return $ partial { partialCabal = (version, CabalFileText bs):partialCabal partial }
       _ -> return partial
     return (Map.insert pkgId partial' packages)
-  BackupBlob ["package",pkgStr,other] blobId -> do
+  BackupBlob filename@["package",pkgStr,other] blobId -> do
     pkgId <- parsePackageId pkgStr
     let partial = Map.findWithDefault emptyPartialPkg pkgId packages
     partial' <- case extractVersion other pkgId ".tar.gz" of
       Just version -> do
         bs <- restoreGetBlob blobId
-        blobIdUncompressed <- restoreAddBlob $ GZip.decompress (forceLast bs)
+        blobIdUncompressed <- restoreAddBlob $ GZip.decompressNamed (foldr1 (</>) filename) (forceLast bs)
         let tb = PkgTarball { pkgTarballGz = blobId,
                               pkgTarballNoGz = blobIdUncompressed }
         return $ partial { partialTarball = (version, tb):partialTarball partial }

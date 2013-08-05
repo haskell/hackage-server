@@ -33,7 +33,7 @@ import Data.ByteString.Lazy.Char8 (ByteString)
 import Distribution.Package
 import Distribution.PackageDescription (GenericPackageDescription)
 import Distribution.Text (display)
-import qualified Codec.Compression.GZip as GZip
+import qualified Distribution.Server.Util.GZip as GZip
 
 
 data UploadFeature = UploadFeature {
@@ -331,7 +331,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
                         res <- processFunc uid uresult
                         case res of
                             Nothing ->
-                                do let decompressedContent = GZip.decompress content'
+                                do let decompressedContent = GZip.decompressNamed file content'
                                    blobIdDecompressed <- BlobStorage.add store decompressedContent
                                    return . Right $ (uresult, blobIdDecompressed)
                             Just err -> return . Left $ err

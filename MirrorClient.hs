@@ -28,7 +28,7 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BS
-import qualified Codec.Compression.GZip  as GZip
+import qualified Distribution.Server.Util.GZip as GZip
 import qualified Codec.Archive.Tar       as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
 import qualified Data.Set as Set
@@ -572,7 +572,7 @@ downloadOldIndex uri cacheDir = do
     res1 <- liftIO $
       withFile indexFile ReadMode $ \hnd ->
         evaluate . PackageIndex.read (\pkgid _ -> pkgid)
-                 . GZip.decompress
+                 . GZip.decompressNamed indexFile
                =<< BS.hGetContents hnd
     pkgids <- case res1 of
       Left  theError -> throwError (ParseEntityError EntityIndex uri theError)
@@ -623,7 +623,7 @@ downloadNewIndex uri cacheDir = do
         notifyResponse GetIndexOk
         res <- liftIO $ withFile indexFile ReadMode $ \hnd ->
                  evaluate . PackageIndex.read selectDetails
-                          . GZip.decompress
+                          . GZip.decompressNamed indexFile
                         =<< BS.hGetContents hnd
         case res of
           Left  theError -> throwError (ParseEntityError EntityIndex uri theError)

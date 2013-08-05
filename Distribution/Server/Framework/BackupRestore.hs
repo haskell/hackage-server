@@ -33,7 +33,7 @@ import Distribution.Server.Framework.BlobStorage (BlobStorage, BlobId)
 
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
-import Codec.Compression.GZip (decompress)
+import Distribution.Server.Util.GZip (decompressNamed)
 import Control.Applicative
 import Control.Monad.State
 import Control.Monad.Error
@@ -242,7 +242,7 @@ restoreServerBackup store tarFile consumeBlobs featureBackups = do
     checkBlobDirExists
     tar <- BS.readFile tarFile
     finalizers <- evalImport store blobdir consumeBlobs featureBackups $ do
-        fromEntries . Tar.read . decompress $ tar
+        fromEntries . Tar.read . decompressNamed tarFile $ tar
         finalizeBackups store (map fst featureBackups)
     completeBackups finalizers
   where
@@ -444,7 +444,7 @@ equalTarBall tar1 tar2 = do
                                  else []
   where
     readTar :: Monad m => String -> ByteString -> m [Tar.Entry]
-    readTar err = entriesToList err . Tar.read . decompress
+    readTar err = entriesToList err . Tar.read . decompressNamed err
 
     entriesToList :: (Monad m, Show a) => String -> Tar.Entries a -> m [Tar.Entry]
     entriesToList err (Tar.Next entry entries) = liftM (entry :) $ entriesToList err entries

@@ -39,7 +39,7 @@ import Control.Monad.Writer
          ( WriterT(..), MonadWriter, tell )
 import Control.Monad.Identity
          ( Identity(..) )
-import qualified Codec.Compression.GZip as GZip
+import qualified Distribution.Server.Util.GZip as GZip
 import Data.ByteString.Lazy.Char8
          ( ByteString )
 import qualified Data.ByteString.Lazy.Char8 as LBS
@@ -95,7 +95,7 @@ basicChecks lax tarGzFile contents = do
         _                  -> Nothing
       PackageName name  = packageName pkgid
       cabalFileName     = display pkgid </> name <.> "cabal"
-      entries           = Tar.read (GZip.decompress contents)
+      entries           = Tar.read (GZip.decompressNamed tarGzFile contents)
   cabalEntries <- selectEntries lax selectEntry entries
   cabalEntry   <- case cabalEntries of
     -- NB: tar files *can* contain more than one entry for the same filename.

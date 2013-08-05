@@ -28,7 +28,7 @@ import Distribution.ParseUtils (ParseResult(..), locatedErrorMsg, showPWarning)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (formatTime, parseTime)
 import System.Locale (defaultTimeLocale)
-import qualified Codec.Compression.GZip as GZip
+import qualified Distribution.Server.Util.GZip as GZip
 
 import Distribution.Package
 import Distribution.Text
@@ -174,7 +174,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
                  in case Upload.unpackPackageRaw filename fileContent' of
                       Left err -> return $ Left err
                       Right x ->
-                          do let decompressedContent = GZip.decompress fileContent'
+                          do let decompressedContent = GZip.decompressNamed filename fileContent'
                              blobIdDecompressed <- BlobStorage.add store decompressedContent
                              return $ Right (x, blobIdDecompressed)
         case res of
