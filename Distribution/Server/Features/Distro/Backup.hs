@@ -39,7 +39,7 @@ updateDistros :: Distributions -> DistroVersions -> Map DistroName UserList -> R
 updateDistros distros versions maintainers = RestoreBackup {
     restoreEntry = \entry ->
       case entry of
-        BackupByteString ["package", distro] bs | takeExtension distro == ".csv" -> do
+        BackupByteString ["packages", distro] bs | takeExtension distro == ".csv" -> do
           csv <- importCSV distro bs
           (distros', versions') <- importDistro csv distros versions
           return (updateDistros distros' versions' maintainers)
