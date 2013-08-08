@@ -690,6 +690,13 @@ testBackupAction opts = do
         Nothing  -> return ()
         Just err -> fail $ "Error while restoring the backup:\n" ++ err
 
+      -- Write second tarball so that if some of the comparisons go wrong,
+      -- we can look at the second backup tarball and manually do some
+      -- comparisons
+      lognotice verbosity "Preparing second export tarball"
+      dumpServerBackup verbosity dump2Dir (Just tarDumpName) store' linkBlobs
+                       (map (second abstractStateBackup) state')
+
       -- Now we are in a position to check that the original internal state and
       -- the new internal state we get from a dump/restore do actually match up.
       lognotice verbosity "Comparing snapshots before and after dump/restore..."
@@ -703,12 +710,7 @@ testBackupAction opts = do
 
       -- So that was all checking the internal representations matched up after
       -- a round trip. We can also check the external representations match
-      -- after a round trip. We take the new restored state and write it out.
-      -- Then we just compare the two external representations.
-      lognotice verbosity "Preparing second export tarball"
-      dumpServerBackup verbosity dump2Dir (Just tarDumpName) store' linkBlobs
-                       (map (second abstractStateBackup) state')
-
+      -- after a round trip.
       lognotice verbosity "Comparing export tarballs..."
       tar  <- GZip.decompressNamed dump1Tar <$> BS.readFile dump1Tar
       tar' <- GZip.decompressNamed dump2Tar <$> BS.readFile dump2Tar
