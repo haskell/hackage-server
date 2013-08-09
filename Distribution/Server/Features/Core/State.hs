@@ -48,15 +48,23 @@ insertPkgIfAbsent pkg = do
 mergePkg :: PkgInfo -> Update PackagesState ()
 mergePkg pkg = State.modify $ \pkgsState -> pkgsState { packageList = PackageIndex.insertWith mergeFunc pkg (packageList pkgsState) }
   where
-    mergeFunc newPkg oldPkg = oldPkg {
-        pkgData = pkgData newPkg,
-        pkgTarball = sortByDate $ pkgTarball newPkg ++ pkgTarball oldPkg,
-        -- the old package data paired with when and by whom it was replaced
-        pkgDataOld = sortByDate $ (pkgData oldPkg, pkgUploadData newPkg):(pkgDataOld oldPkg ++ pkgDataOld newPkg)
-      }
+    mergeFunc newPkg oldPkg =
+      let cabalH : cabalT = sortDesc $ (pkgData newPkg, pkgUploadData newPkg)
+                                     : (pkgData oldPkg, pkgUploadData oldPkg)
+                                     : pkgDataOld newPkg
+                                    ++ pkgDataOld oldPkg
+          tarballs        = sortDesc $ pkgTarball newPkg
+                                    ++ pkgTarball oldPkg
+      in PkgInfo {
+             pkgInfoId     = pkgInfoId oldPkg -- should equal pkgInfoId newPkg
+           , pkgData       = fst cabalH
+           , pkgTarball    = tarballs
+           , pkgDataOld    = cabalT
+           , pkgUploadData = snd cabalH
+           }
 
-    sortByDate :: Ord a => [(a1, (a, b))] -> [(a1, (a, b))]
-    sortByDate xs = sortBy (comparing (fst . snd)) xs
+    sortDesc :: Ord a => [(a1, (a, b))] -> [(a1, (a, b))]
+    sortDesc = sortBy $ flip (comparing (fst . snd))
 
 deletePackageVersion :: PackageId -> Update PackagesState ()
 deletePackageVersion pkg = State.modify $ \pkgsState -> pkgsState { packageList = deleteVersion (packageList pkgsState) }
