@@ -14,8 +14,6 @@ module Distribution.Server.Framework.BackupDump (
     testBlobsExist
   ) where
 
-import Distribution.Simple.Utils (toUTF8)
-
 import Text.CSV hiding (csv)
 
 import Distribution.Server.Framework.BackupRestore (BackupEntry(..))
@@ -23,7 +21,7 @@ import qualified Distribution.Server.Framework.BlobStorage as Blob
 import Distribution.Server.Framework.BlobStorage (BlobStorage, BlobId)
 import Distribution.Server.Framework.Logging
 
-import qualified Data.ByteString.Lazy.Char8 as BS
+import qualified Data.ByteString.Lazy as BS
 import qualified Codec.Compression.GZip as GZip (compress)
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
@@ -40,6 +38,9 @@ import System.Locale
 import System.IO.Unsafe (unsafeInterleaveIO)
 import Data.Maybe (catMaybes, fromMaybe)
 import Data.Time
+
+import qualified Data.Text.Lazy as Text (pack)
+import qualified Data.Text.Lazy.Encoding as Text (encodeUtf8)
 
 -- Making backups is rather expensive in terms of disk I/O because we have
 -- a lot of large static files (like package tarballs and docs).
@@ -178,14 +179,14 @@ mkTarPath :: FilePath -> String -> [FilePath] -> FilePath
 mkTarPath tarfileName featureName ps = joinPath (tarfileName : featureName : ps)
 
 csvToBackup :: [String] -> CSV -> BackupEntry
-csvToBackup fpath csv = BackupByteString fpath $ BS.pack (printCSV csv)
+csvToBackup fpath csv = BackupByteString fpath $ stringToBytes (printCSV csv)
 
 blobToBackup :: [String] -> BlobId -> BackupEntry
 blobToBackup = BackupBlob
 
 -- via UTF8 conversion.
 stringToBytes :: String -> BS.ByteString
-stringToBytes = BS.pack . toUTF8
+stringToBytes = Text.encodeUtf8 . Text.pack
 
 testBlobsExist :: BlobStorage -> [Blob.BlobId] -> IO [String]
 testBlobsExist store blobs
