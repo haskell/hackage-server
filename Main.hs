@@ -23,7 +23,12 @@ import System.Exit
 import Control.Exception
          ( bracket )
 import System.Posix.Signals as Signal
-         ( installHandler, Handler(Catch), userDefinedSignal1 )
+         ( Signal
+         , installHandler
+         , Handler(Catch)
+         , userDefinedSignal1
+         , userDefinedSignal2
+         )
 import System.IO
 import System.Directory
          ( createDirectory, createDirectoryIfMissing, doesDirectoryExist
@@ -169,28 +174,33 @@ optionStaticDir getter setter =
 --
 
 data RunFlags = RunFlags {
-    flagRunVerbosity :: Flag Verbosity,
-    flagRunPort      :: Flag String,
-    flagRunIP        :: Flag String,
-    flagRunHostURI   :: Flag String,
-    flagRunStateDir  :: Flag FilePath,
-    flagRunStaticDir :: Flag FilePath,
-    flagRunTmpDir    :: Flag FilePath,
-    flagRunTemp      :: Flag Bool,
-    flagRunCacheDelay:: Flag String
+    flagRunVerbosity       :: Flag Verbosity,
+    flagRunPort            :: Flag String,
+    flagRunIP              :: Flag String,
+    flagRunHostURI         :: Flag String,
+    flagRunStateDir        :: Flag FilePath,
+    flagRunStaticDir       :: Flag FilePath,
+    flagRunTmpDir          :: Flag FilePath,
+    flagRunTemp            :: Flag Bool,
+    flagRunCacheDelay      :: Flag String,
+    -- Online backup flags
+    flagRunBackupOutputDir :: Flag FilePath,
+    flagRunBackupLinkBlobs :: Flag Bool
   }
 
 defaultRunFlags :: RunFlags
 defaultRunFlags = RunFlags {
-    flagRunVerbosity = Flag Verbosity.normal,
-    flagRunPort      = NoFlag,
-    flagRunIP        = NoFlag,
-    flagRunHostURI   = NoFlag,
-    flagRunStateDir  = NoFlag,
-    flagRunStaticDir = NoFlag,
-    flagRunTmpDir    = NoFlag,
-    flagRunTemp      = Flag False,
-    flagRunCacheDelay= NoFlag
+    flagRunVerbosity       = Flag Verbosity.normal,
+    flagRunPort            = NoFlag,
+    flagRunIP              = NoFlag,
+    flagRunHostURI         = NoFlag,
+    flagRunStateDir        = NoFlag,
+    flagRunStaticDir       = NoFlag,
+    flagRunTmpDir          = NoFlag,
+    flagRunTemp            = Flag False,
+    flagRunCacheDelay      = NoFlag,
+    flagRunBackupOutputDir = Flag "backups",
+    flagRunBackupLinkBlobs = Flag False
   }
 
 runCommand :: CommandUI RunFlags
@@ -204,7 +214,10 @@ runCommand = makeCommand name shortDesc longDesc defaultRunFlags options
                ++ "On unix systems you can tell the server to checkpoint its "
                ++ "database state using:\n"
                ++ " $ kill -USR1 $the_pid\n"
-               ++ "where $the_pid is the process id of the running server.\n"
+               ++ "where $the_pid is the process id of the running server. "
+               ++ "Similarly,\n"
+               ++ " $ kill -USR2 $the_pid\n"
+               ++ "starts an online backup.\n"
     options _  =
       [ optionVerbosity
           flagRunVerbosity (\v flags -> flags { flagRunVerbosity = v })
@@ -236,6 +249,15 @@ runCommand = makeCommand name shortDesc longDesc defaultRunFlags options
           "Save time during bulk imports by delaying cache updates."
           flagRunCacheDelay (\v flags -> flags { flagRunCacheDelay = v })
           (reqArgFlag "SECONDS")
+      , option ['o'] ["output-dir"]
+          "The directory in which to create the backup (default ./backups/)"
+          flagRunBackupOutputDir (\v flags -> flags { flagRunBackupOutputDir = v })
+          (reqArgFlag "TARBALL")
+      , option [] ["hardlink-blobs"]
+          ("Hard-link the blob files in the backup rather than copying them "
+           ++ " (reduces disk space and I/O but is less robust to errors).")
+          flagRunBackupLinkBlobs (\v flags -> flags { flagRunBackupLinkBlobs = v })
+          (noArg (Flag True))
       ]
 
 runAction :: RunFlags -> IO ()
@@ -262,17 +284,29 @@ runAction opts = do
                         confCacheDelay = cacheDelay,
                         confVerbosity  = verbosity
                     }
+        outputDir = fromFlag (flagRunBackupOutputDir opts)
+        linkBlobs = fromFlag (flagRunBackupLinkBlobs opts)
 
     checkBlankServerState =<< Server.hasSavedState config
     checkStaticDir staticDir (flagRunStaticDir opts)
     checkTmpDir    tmpDir
 
+    let checkpointHandler server = do
+          lognotice verbosity "Writing checkpoint..."
+          Server.checkpoint server
+          lognotice verbosity "Done"
+
+    let backupHandler server = do
+          lognotice verbosity "Starting backup..."
+          startBackup verbosity outputDir linkBlobs server
+          lognotice verbosity "Done"
+
     let useTempServer = fromFlag (flagRunTemp opts)
     withServer config useTempServer $ \server ->
-      withCheckpointHandler server $ do
-        lognotice verbosity $ "Ready! Point your browser at " ++ show hosturi
-
-        Server.run server
+      withHandler userDefinedSignal1 (checkpointHandler server) $
+        withHandler userDefinedSignal2 (backupHandler server) $ do
+          lognotice verbosity $ "Ready! Point your browser at " ++ show hosturi
+          Server.run server
 
   where
     verbosity = fromFlag (flagRunVerbosity opts)
@@ -334,21 +368,13 @@ runAction opts = do
                -> return n
       _        -> fail $ "bad cache delay number " ++ show str
 
-
-    -- Set a Unix signal handler for SIG USR1 to create a state checkpoint.
-    -- Useage:
-    -- > kill -USR1 $the_pid
-    --
-    withCheckpointHandler :: Server -> IO () -> IO ()
-    withCheckpointHandler server action =
-        bracket (setHandler handler) setHandler (\_ -> action)
+    withHandler :: Signal -> IO () -> IO () -> IO ()
+    withHandler signal signalHandler mainAction =
+        bracket (setHandler $ Signal.Catch signalHandler)
+                setHandler
+                (const mainAction)
       where
-        handler = Signal.Catch $ do
-          lognotice verbosity "Writing checkpoint..."
-          Server.checkpoint server
-          lognotice verbosity "Done"
-        setHandler h =
-          Signal.installHandler Signal.userDefinedSignal1 h Nothing
+        setHandler h = Signal.installHandler signal h Nothing
 
     checkBlankServerState  hasSavedState = when (not hasSavedState) . die $
             "There is no existing server state.\nYou can either import "
@@ -530,12 +556,14 @@ backupAction opts = do
                       confStaticDir = staticDir
                      }
 
-    withServer config False $ \server -> do
-      let store = Server.serverBlobStore (Server.serverEnv server)
-          state = Server.serverState server
-      dumpServerBackup verbosity outputDir Nothing store linkBlobs
-                       (map (second abstractStateBackup) state)
+    withServer config False $ startBackup verbosity outputDir linkBlobs
 
+startBackup :: Verbosity -> FilePath -> Bool -> Server -> IO ()
+startBackup verbosity outputDir linkBlobs server = do
+  let store = Server.serverBlobStore (Server.serverEnv server)
+      state = Server.serverState server
+  dumpServerBackup verbosity outputDir Nothing store linkBlobs
+                   (map (second abstractStateBackup) state)
 
 -------------------------------------------------------------------------------
 -- Test backup command
@@ -602,7 +630,7 @@ testBackupAction :: TestBackupFlags -> IO ()
 testBackupAction opts = do
     defaults <- Server.defaultServerConfig
 
-    let shouldTest  = fromFlagOrDefault (const True) (flip isInfixOf `fmap` flagTestBackupFeatures opts) 
+    let shouldTest  = fromFlagOrDefault (const True) (flip isInfixOf `fmap` flagTestBackupFeatures opts)
         shouldTestM = \(name, _) -> if shouldTest name then putStrLn ("Testing " ++ name) >> return True
                                                        else putStrLn ("Skipping " ++ name) >> return False
 
@@ -652,7 +680,7 @@ testBackupAction opts = do
       -- We start with all the data in the server in the internal
       -- representation. We start by writing it all out in the external
       -- representation.
-      -- 
+      --
       dumpServerBackup verbosity dump1Dir (Just tarDumpName) store linkBlobs
                        (map (second abstractStateBackup) state)
 
