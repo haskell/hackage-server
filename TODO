@@ -3,6 +3,10 @@ General:
      We need a nice monadic style where we can fail with e.g. internal server
      errors without propagating Either blah blah all over the place.
      See for example how we cannot currently abstract over takeRequestBody.
+ * Audit the code for uses of Data.ByteString.*Char8 and make sure we don't truncate
+   unicode data.
+ * Log the contents of an exception in the log (so, for instance, if we have a
+   500 error because the disk is full, the log records that). 
 
 Backup:
  * Implement import for Documentation
