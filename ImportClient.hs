@@ -16,6 +16,7 @@ import qualified Distribution.Client.DistroMap  as DistroMap
 import qualified Distribution.Client.PkgIndex   as PkgIndex
 
 import Distribution.Server.Users.Types (UserName(..))
+import Distribution.Server.Util.Parse (packUTF8, unpackUTF8)
 
 import Distribution.Package
          ( PackageId, PackageName, packageName, packageVersion )
@@ -57,7 +58,6 @@ import Data.Aeson (Value(..), toJSON, encode)
 import Data.Text (Text)
 import qualified Data.HashMap.Strict  as HashMap
 import qualified Data.Text            as Text
-import qualified Data.Text.Encoding   as Text
 import qualified Data.Vector          as Vector
 import qualified Data.ByteString.Lazy as LBS
 
@@ -264,7 +264,7 @@ putUserAccount baseURI username mPasswdHash makeUploader = do
     case mPasswdHash of
       Nothing -> return ()
       Just (HtPasswdDb.HtPasswdHash passwdHash) -> do
-        rsp <- requestPUT passwdURI "text/plain" (stringToBytes passwdHash)
+        rsp <- requestPUT passwdURI "text/plain" (packUTF8 passwdHash)
         case rsp of
           Nothing  -> return ()
           Just err -> fail (formatErrorResponse err)
@@ -456,14 +456,14 @@ putUploadInfo baseURI pkgid time uname = do
     liftIO $ info $ "setting upload info for " ++ display pkgid
 
     do let timeStr = showUTCTime time
-       rsp <- requestPUT (pkgURI <//> "upload-time") "text/plain" (stringToBytes timeStr)
+       rsp <- requestPUT (pkgURI <//> "upload-time") "text/plain" (packUTF8 timeStr)
        case rsp of
          Nothing  -> return ()
          Just err | isErrNotFound err -> liftIO $ info $ "Ignoring upload log entry for package " ++ display pkgid
          Just err -> fail (formatErrorResponse err)
 
     do let nameStr = display uname
-       rsp <- requestPUT (pkgURI <//> "uploader") "text/plain" (stringToBytes nameStr)
+       rsp <- requestPUT (pkgURI <//> "uploader") "text/plain" (packUTF8 nameStr)
        case rsp of
          Nothing  -> return ()
          Just err | isErrNotFound err  -> liftIO $ info $ "Ignoring upload log entry for package " ++ display pkgid
@@ -690,7 +690,7 @@ putDistroInfo baseURI distroname entries = do
 
   where
     distroURI = baseURI <//> "distro" </> distroname
-    toBS      = stringToBytes . CSV.printCSV . DistroMap.toCSV
+    toBS      = packUTF8 . CSV.printCSV . DistroMap.toCSV
 
 -------------------------------------------------------------------------------
 -- Documentation tarballs command
@@ -922,7 +922,7 @@ mkErrorResponse uri rsp =
   where
     mBody = case lookupHeader HdrContentType (rspHeaders rsp) of
       Just mimetype | "text/plain" `isPrefixOf` mimetype
-                   -> Just (bytesToString (rspBody rsp))
+                   -> Just (unpackUTF8 (rspBody rsp))
       _            -> Nothing
 
 formatErrorResponse :: ErrorResponse -> String
@@ -1021,9 +1021,3 @@ object = Object . HashMap.fromList
 
 string :: String -> Value
 string = String . Text.pack
-
-stringToBytes :: String -> LBS.ByteString
-stringToBytes = LBS.fromStrict . Text.encodeUtf8 . Text.pack
-
-bytesToString :: LBS.ByteString -> String
-bytesToString = Text.unpack . Text.decodeUtf8 . LBS.toStrict

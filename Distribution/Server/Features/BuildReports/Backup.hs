@@ -14,7 +14,7 @@ import qualified Distribution.Server.Features.BuildReports.BuildReports as Repor
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
-import Distribution.Server.Util.Parse (unpackUTF8)
+import Distribution.Server.Util.Parse (unpackUTF8, packUTF8)
 
 import Distribution.Package
 import Distribution.Text (display, simpleParse)
@@ -94,7 +94,7 @@ packageReportsToExport pkgId pkgReports = concatMap (uncurry $ reportToExport pr
     where prefix = ["package", display pkgId]
 
 reportToExport :: [FilePath] -> BuildReportId -> (BuildReport, Maybe BuildLog) -> [BackupEntry]
-reportToExport prefix reportId (report, mlog) = BackupByteString (getPath ".txt") (stringToBytes $ Report.show report) :
+reportToExport prefix reportId (report, mlog) = BackupByteString (getPath ".txt") (packUTF8 $ Report.show report) :
     case mlog of Nothing -> []; Just (BuildLog blobId) -> [blobToBackup (getPath ".log") blobId]
   where
     getPath ext = prefix ++ [display reportId ++ ext]

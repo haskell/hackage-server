@@ -8,6 +8,7 @@ import Network.URI (URI(..), URIAuth(..))
 
 import Distribution.Client (validateHackageURI, validatePackageIds, PkgIndexInfo(..))
 import Distribution.Client.UploadLog as UploadLog (read, Entry(..))
+import Distribution.Server.Util.Parse (packUTF8, unpackUTF8)
 
 import Distribution.Server.Users.Types (UserId(..), UserName(UserName))
 import Distribution.Server.Util.Index as PackageIndex (read)
@@ -51,11 +52,7 @@ import System.Console.GetOpt
 import qualified System.FilePath.Posix as Posix
 import Prelude hiding (catch)
 
-import qualified Data.Text.Lazy          as Text
-import qualified Data.Text.Lazy.Encoding as Text
-
 import Paths_hackage_server (version)
-
 
 data MirrorOpts = MirrorOpts {
                     srcURI       :: URI,
@@ -362,14 +359,14 @@ putPackage baseURI (PkgIndexInfo pkgid mtime muname _muid) pkgFile = do
 
     putPackageUploadTime time = do
       let timeStr = formatTime defaultTimeLocale "%c" time
-      rsp <- browserAction $ requestPUT (baseURI <//> "upload-time") "text/plain" (stringToBytes timeStr)
+      rsp <- browserAction $ requestPUT (baseURI <//> "upload-time") "text/plain" (packUTF8 timeStr)
       case rsp of
         Just theError -> notifyResponse (PutPackageFailed theError pkgid)
         Nothing       -> notifyResponse PutPackageOk
 
     putPackageUploader uname = do
       let nameStr = display uname
-      rsp <- browserAction $ requestPUT (baseURI <//> "uploader") "text/plain" (stringToBytes nameStr)
+      rsp <- browserAction $ requestPUT (baseURI <//> "uploader") "text/plain" (packUTF8 nameStr)
       case rsp of
         Just theError -> notifyResponse (PutPackageFailed theError pkgid)
         Nothing       -> notifyResponse PutPackageOk
@@ -760,7 +757,7 @@ mkErrorResponse uri rsp =
   where
     mBody = case lookupHeader HdrContentType (rspHeaders rsp) of
       Just mimetype | "text/plain" `isPrefixOf` mimetype
-                   -> Just (bytesToString (rspBody rsp))
+                   -> Just (unpackUTF8 (rspBody rsp))
       _            -> Nothing
 
 formatErrorResponse :: ErrorResponse -> String
@@ -920,13 +917,3 @@ warn :: Verbosity -> String -> IO ()
 warn verbosity msg =
   when (verbosity >= normal) $
     putStrLn ("Warning: " ++ msg)
-
-{------------------------------------------------------------------------------
-  Auxiliary
-------------------------------------------------------------------------------}
-
-stringToBytes :: String -> ByteString
-stringToBytes = Text.encodeUtf8 . Text.pack
-
-bytesToString :: ByteString -> String
-bytesToString = Text.unpack . Text.decodeUtf8

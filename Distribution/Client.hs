@@ -33,6 +33,7 @@ import Distribution.Client.UploadLog as UploadLog (read, Entry(..))
 import Distribution.Server.Users.Types (UserId(..), UserName(UserName))
 import Distribution.Server.Util.Index as PackageIndex (read)
 import Distribution.Server.Util.Merge
+import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.Package
 import Distribution.Verbosity
 import Distribution.Simple.Utils
@@ -49,8 +50,6 @@ import qualified Data.ByteString.Lazy          as BS
 import qualified Distribution.Server.Util.GZip as GZip
 import qualified Codec.Archive.Tar             as Tar
 import qualified Codec.Archive.Tar.Entry       as Tar
-import qualified Data.Text.Lazy                as Text
-import qualified Data.Text.Lazy.Encoding       as Text
 
 import Control.Monad.Trans
 import System.IO
@@ -363,5 +362,5 @@ showFailure uri rsp =
     show (rspCode rsp) ++ " " ++ rspReason rsp ++ show uri
  ++ case lookupHeader HdrContentType (rspHeaders rsp) of
       Just mimetype | "text/plain" `isPrefixOf` mimetype
-                   -> '\n' : (Text.unpack . Text.decodeUtf8 . rspBody $ rsp)
+                   -> '\n' : (unpackUTF8 . rspBody $ rsp)
       _            -> ""

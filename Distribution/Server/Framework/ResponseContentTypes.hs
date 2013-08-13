@@ -17,6 +17,7 @@ module Distribution.Server.Framework.ResponseContentTypes where
 
 import Distribution.Server.Framework.BlobStorage
          ( BlobId, blobMd5 )
+import Distribution.Server.Util.Parse (packUTF8)
 
 import Happstack.Server
          ( ToMessage(..), Response(..), RsFlags(..), Length(NoContentLength), nullRsFlags, mkHeaders
@@ -31,9 +32,6 @@ import Data.Time.Clock (UTCTime)
 import qualified Data.Time.Format as Time (formatTime)
 import System.Locale (defaultTimeLocale)
 import Text.CSV (printCSV, CSV)
-
-import qualified Data.Text.Lazy          as Text
-import qualified Data.Text.Lazy.Encoding as Text
 
 newtype ETag = ETag String
   deriving (Eq, Ord, Show)
@@ -103,20 +101,20 @@ instance ToMessage BuildLog where
 
 instance ToMessage RSS where
     toContentType _ = "application/rss+xml"
-    toMessage = stringToBytes . RSS.showXML . RSS.rssToXML
+    toMessage = packUTF8 . RSS.showXML . RSS.rssToXML
 
 newtype XHtml = XHtml XHtml.Html
 
 instance ToMessage XHtml where
     toContentType _ = "text/html; charset=utf-8"
-    toMessage (XHtml xhtml) = stringToBytes (XHtml.renderHtml xhtml)
+    toMessage (XHtml xhtml) = packUTF8 (XHtml.renderHtml xhtml)
 
 -- Like XHtml, but don't bother calculating length
 newtype LongXHtml = LongXHtml XHtml.Html
 
 instance ToMessage LongXHtml where
     toResponse (LongXHtml xhtml) = noContentLength $ mkResponse
-        (stringToBytes (XHtml.renderHtml xhtml))
+        (packUTF8 (XHtml.renderHtml xhtml))
         [("Content-Type", "text/html")]
 
 newtype ExportTarball = ExportTarball BS.Lazy.ByteString
@@ -130,7 +128,7 @@ newtype CSVFile = CSVFile CSV
 
 instance ToMessage CSVFile where
     toContentType _ = "text/csv"
-    toMessage (CSVFile csv) = stringToBytes (printCSV csv)
+    toMessage (CSVFile csv) = packUTF8 (printCSV csv)
 
 mkResponse :: BS.Lazy.ByteString -> [(String, String)] -> Response
 mkResponse bs headers = Response {
@@ -149,6 +147,3 @@ mkResponseLen bs len headers = Response {
     rsBody    = bs,
     rsValidator = Nothing
   }
-
-stringToBytes :: String -> BS.Lazy.ByteString
-stringToBytes = Text.encodeUtf8 . Text.pack
