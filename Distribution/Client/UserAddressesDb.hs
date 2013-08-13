@@ -9,8 +9,8 @@ module Distribution.Client.UserAddressesDb (
 
 import Distribution.Server.Users.Types (UserName(..))
 import Data.List
-import Data.ByteString.Char8 (ByteString)
-import qualified Data.ByteString.Char8 as BS
+import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as BS -- Mixed encoding in old DB; Char8 intended
 import Data.Text (Text)
 import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T

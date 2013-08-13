@@ -22,8 +22,6 @@ import Distribution.Package
 import Data.List (intercalate)
 import Text.CSV (parseCSV)
 import Data.Version (showVersion)
-import qualified Data.ByteString.Char8 as BS
-
 
 -- TODO:
 -- 1. write an HTML view for this module, and delete the text
@@ -233,12 +231,12 @@ maintainerDescription dname = nullDescription
   }
   where str = display dname
 
--- TODO: This calls parseCSV rather that importCSV -- not sure if that 
+-- TODO: This calls parseCSV rather that importCSV -- not sure if that
 -- matters (in particular, importCSV chops off the last, extranenous,
 -- null entry that parseCSV adds)
 lookCSVFile :: (CSVFile -> ServerPartE Response) -> ServerPartE Response
 lookCSVFile func = do
-    fileContents <- expectContentType (BS.pack "text/csv")
+    fileContents <- expectCSV
     case parseCSV "PUT input" (unpackUTF8 fileContents) of
       Left err -> badRequest $ toResponse $ "Could not parse CSV File: " ++ show err
       Right csv -> func (CSVFile csv)

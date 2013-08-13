@@ -44,8 +44,8 @@ import System.Locale
 
 import Distribution.Server.Util.Merge
 import Distribution.Server.Util.Parse (unpackUTF8)
-import Data.ByteString.Lazy.Char8 (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as BS
+import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Lazy as BS (readFile)
 import qualified Data.Map as Map
 import Data.Ord (comparing)
 import System.FilePath ((</>), takeDirectory, splitDirectories)

@@ -25,7 +25,7 @@ import Distribution.Package
 import qualified Data.Map as Map
 import Data.Function (fix)
 
-import Text.JSON (showJSON)
+import Data.Aeson (toJSON)
 
 -- TODO:
 -- 1. Write an HTML view for organizing uploads
@@ -53,7 +53,7 @@ data DocumentationResource = DocumentationResource {
 initDocumentationFeature :: String
                          -> ServerEnv
                          -> CoreResource
-                         -> IO [PackageIdentifier] 
+                         -> IO [PackageIdentifier]
                          -> UploadFeature
                          -> TarIndexCacheFeature
                          -> IO DocumentationFeature
@@ -112,7 +112,7 @@ documentationFeature :: String
                      -> DocumentationFeature
 documentationFeature name
                      ServerEnv{serverBlobStore = store}
-                     CoreResource{ 
+                     CoreResource{
                          packageInPath
                        , guardValidPackageId
                        , corePackagePage
@@ -163,9 +163,9 @@ documentationFeature name
     serveDocumentationStats :: DynamicPath -> ServerPartE Response
     serveDocumentationStats _dpath = do
         pkgs <- mapParaM queryHasDocumentation =<< liftIO getPackages
-        return . toResponse . Resource.JSON . showJSON . map aux $ pkgs
+        return . toResponse . toJSON . map aux $ pkgs
       where
-        aux :: (PackageIdentifier, Bool) -> (String, Bool) 
+        aux :: (PackageIdentifier, Bool) -> (String, Bool)
         aux (pkgId, hasDocs) = (display pkgId, hasDocs)
 
     serveDocumentationTar :: DynamicPath -> ServerPartE Response
@@ -244,4 +244,4 @@ documentationFeature name
 ------------------------------------------------------------------------------}
 
 mapParaM :: Monad m => (a -> m b) -> [a] -> m [(a, b)]
-mapParaM f = mapM (\x -> (,) x `liftM` f x) 
+mapParaM f = mapM (\x -> (,) x `liftM` f x)

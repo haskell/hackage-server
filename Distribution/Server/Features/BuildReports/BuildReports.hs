@@ -27,7 +27,6 @@ import Distribution.Server.Framework.MemSize
 
 import Data.Map (Map)
 import qualified Data.Map as Map
-import qualified Data.ByteString.Char8 as BS.Char8
 import qualified Data.Serialize as Serialize
 import Data.Serialize (Serialize)
 import Data.Typeable (Typeable)
@@ -35,6 +34,8 @@ import Control.Applicative ((<$>))
 
 import qualified Distribution.Server.Util.Parse as Parse
 import qualified Text.PrettyPrint          as Disp
+
+import qualified Data.ByteString.Char8 as BS.Char8 -- Build reports are ASCII
 
 newtype BuildReportId = BuildReportId Int
   deriving (Eq, Ord, Serialize, Typeable, Show, MemSize)

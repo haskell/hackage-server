@@ -28,7 +28,7 @@ import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Data.Time.Clock (UTCTime)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.ByteString.Lazy.Char8 (ByteString)
+import Data.ByteString.Lazy (ByteString)
 
 import Distribution.Text (display)
 import Distribution.Package

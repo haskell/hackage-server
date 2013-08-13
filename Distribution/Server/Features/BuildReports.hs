@@ -23,7 +23,7 @@ import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Text
 import Distribution.Package
 
-import Data.ByteString.Lazy.Char8 (unpack)
+import Data.ByteString.Lazy.Char8 (unpack) -- Build reports are ASCII
 
 
 -- TODO:

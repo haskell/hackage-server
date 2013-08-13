@@ -4,6 +4,8 @@ module Distribution.Server.Features.LegacyPasswds (
     LegacyPasswdsFeature(..),
   ) where
 
+import Prelude hiding (abs)
+
 import Distribution.Server.Framework
 import Distribution.Server.Framework.Templating
 import Distribution.Server.Framework.BackupDump
@@ -20,7 +22,7 @@ import qualified Distribution.Server.Framework.Auth as Auth
 
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
-import qualified Data.ByteString.Lazy.Char8 as LBS
+import qualified Data.ByteString.Lazy.Char8 as LBS -- ASCII data only (password hashes)
 
 import Data.Typeable (Typeable)
 import Data.SafeCopy (base, deriveSafeCopy)
@@ -30,7 +32,7 @@ import Control.Monad.State (get, put)
 import Distribution.Text (display)
 import Data.Version
 import Text.CSV (CSV, Record)
-import Network.URI (URI(..), nullURI, uriToString)
+import Network.URI (URI(..), uriToString)
 
 
 -- | A feature to help porting accounts from the old central

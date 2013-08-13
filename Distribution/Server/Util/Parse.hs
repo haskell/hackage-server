@@ -3,10 +3,11 @@ module Distribution.Server.Util.Parse (
   ) where
 
 import qualified Distribution.Compat.ReadP as Parse
-import Distribution.Simple.Utils ( fromUTF8 )
 
-import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Data.Char as Char
+import Data.ByteString.Lazy (ByteString)
+import qualified Data.Text.Lazy          as Text
+import qualified Data.Text.Lazy.Encoding as Text
 
 -- | Parse a positive integer. No leading @0@'s allowed.
 --
@@ -18,12 +19,5 @@ int = do
     else do rest <- Parse.munch Char.isDigit
             return (read (first : rest))
 
--- | Ignore a Unicode byte order mark (BOM) at the beginning of the input
---
--- (Also in Distribution.Simple.Utils, but not exported)
-ignoreBOM :: String -> String
-ignoreBOM ('\xFEFF':string) = string
-ignoreBOM string            = string
-
-unpackUTF8 :: BS.ByteString -> String
-unpackUTF8 = ignoreBOM . fromUTF8 . BS.unpack
+unpackUTF8 :: ByteString -> String
+unpackUTF8 = Text.unpack . Text.decodeUtf8

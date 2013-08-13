@@ -49,7 +49,6 @@ import Distribution.PackageDescription
 
 import Data.List (intercalate, intersperse, insert, sortBy)
 import Data.Function (on)
-import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set

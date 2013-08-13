@@ -24,7 +24,7 @@ import Control.Monad (foldM)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import System.FilePath (splitExtension)
-import Data.ByteString.Lazy.Char8 (ByteString)
+import Data.ByteString.Lazy (ByteString)
 
 dumpBackup  :: BuildReports -> [BackupEntry]
 dumpBackup = buildReportsToExport

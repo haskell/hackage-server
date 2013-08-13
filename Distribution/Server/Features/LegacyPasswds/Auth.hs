@@ -14,7 +14,6 @@ import Distribution.Server.Framework.AuthCrypt (BasicAuthInfo(..))
 
 import Happstack.Server
 
-import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Base64 as Base64
 import Control.Monad
 import Data.SafeCopy (base, deriveSafeCopy)
@@ -23,6 +22,8 @@ import Data.Typeable (Typeable)
 import Foreign.C.String
 import System.IO.Unsafe (unsafePerformIO)
 import Control.Concurrent.MVar (MVar, newMVar, withMVar)
+
+import qualified Data.ByteString.Char8 as BS -- TODO: Verify that we don't need to worry about UTF8 here
 
 ---------------------------
 -- Old-style crypt() auth

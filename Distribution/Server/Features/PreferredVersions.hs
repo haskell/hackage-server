@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, PatternGuards #-}
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, PatternGuards, OverloadedStrings #-}
 module Distribution.Server.Features.PreferredVersions (
     VersionsFeature(..),
     VersionsResource(..),
@@ -12,7 +12,6 @@ module Distribution.Server.Features.PreferredVersions (
   ) where
 
 import Distribution.Server.Framework
-import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
 import Distribution.Server.Features.PreferredVersions.State
 import Distribution.Server.Features.PreferredVersions.Backup
@@ -37,9 +36,11 @@ import Control.Arrow (second)
 import Control.Applicative (optional)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import qualified Data.ByteString.Lazy.Char8 as BS
-import Text.JSON
-         ( JSValue(..), toJSObject, fromJSObject, toJSString, fromJSString )
+import qualified Data.ByteString.Lazy.Char8 as BS (pack) -- Only used for ASCII data
+import Data.Aeson (Value(..))
+import qualified Data.HashMap.Strict as HashMap
+import qualified Data.Text           as Text
+import qualified Data.Vector         as Vector
 
 data VersionsFeature = VersionsFeature {
     versionsFeatureInterface :: HackageFeature,
@@ -191,12 +192,11 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
 
     handlePackagesDeprecatedGet _ = do
       deprPkgs <- deprecatedMap <$> queryState preferredState GetPreferredVersions
-      return $ toResponse $ Resource.JSON $
-        JSArray
-          [ JSObject $ toJSObject
-              [ ("deprecated-package", JSString $ toJSString $ display deprPkg)
-              , ("in-favour-of", JSArray [ JSString $ toJSString $ display pkg
-                                         | pkg <- replacementPkgs ])
+      return $ toResponse $ array
+          [ object
+              [ ("deprecated-package", string $ display deprPkg)
+              , ("in-favour-of", array [ string $ display pkg
+                                       | pkg <- replacementPkgs ])
               ]
           | (deprPkg, replacementPkgs) <- Map.toList deprPkgs ]
 
@@ -204,26 +204,26 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
       mdep <- queryState preferredState (GetDeprecatedFor pkgname)
-      return $ toResponse $ Resource.JSON $
-        JSObject $ toJSObject
-            [ ("is-deprecated", JSBool (isJust mdep))
-            , ("in-favour-of", JSArray [ JSString $ toJSString $ display pkg
-                                       | pkg <- fromMaybe [] mdep ])
+      return $ toResponse $
+        object
+            [ ("is-deprecated", Bool (isJust mdep))
+            , ("in-favour-of", array [ string $ display pkg
+                                     | pkg <- fromMaybe [] mdep ])
             ]
 
     handlePackageDeprecatedPut dpath = do
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
       guardAuthorisedAsMaintainerOrTrustee pkgname
-      jv <- expectJsonContent
+      jv <- expectAesonContent
       case jv of
-        JSObject o
-          | fields <- fromJSObject o
-          , Just (JSBool deprecated) <- lookup "is-deprecated" fields
-          , Just (JSArray strs)      <- lookup "in-favour-of"  fields
-          , let asPackage (JSString s) = simpleParse (fromJSString s)
-                asPackage _            = Nothing
-                mpkgs = map asPackage strs
+        Object o
+          | fields <- HashMap.toList o
+          , Just (Bool deprecated) <- lookup "is-deprecated" fields
+          , Just (Array strs)      <- lookup "in-favour-of"  fields
+          , let asPackage (String s) = simpleParse (Text.unpack s)
+                asPackage _          = Nothing
+                mpkgs = map asPackage (Vector.toList strs)
           , all isJust mpkgs
           -> do let deprecatedInfo | deprecated = Just (catMaybes mpkgs)
                                    | otherwise  = Nothing
@@ -354,3 +354,15 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
           , "--"
           ]
 
+{------------------------------------------------------------------------------
+  Some aeson auxiliary functions
+------------------------------------------------------------------------------}
+
+array :: [Value] -> Value
+array = Array . Vector.fromList
+
+object :: [(Text.Text, Value)] -> Value
+object = Object . HashMap.fromList
+
+string :: String -> Value
+string = String . Text.pack

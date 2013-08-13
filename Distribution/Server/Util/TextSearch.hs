@@ -4,8 +4,8 @@ module Distribution.Server.Util.TextSearch (
     searchText
   ) where
 
-import Data.ByteString.Char8 (ByteString)
-import qualified Data.ByteString.Char8 as BS
+import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as BS -- TODO: Deal with UTF8
 import Data.ByteString.Search
 import Data.Map (Map)
 import qualified Data.Map as Map

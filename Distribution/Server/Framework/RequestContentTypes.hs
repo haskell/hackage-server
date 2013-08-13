@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, PatternGuards #-}
--- | 
+-- |
 --
 -----------------------------------------------------------------------------
 -- |
@@ -23,18 +23,17 @@ module Distribution.Server.Framework.RequestContentTypes (
     expectTextPlain,
     expectUncompressedTarball,
     expectCompressedTarball,
-    expectJsonContent,
     expectAesonContent,
+    expectCSV,
 
   ) where
 
 import Happstack.Server
 import Distribution.Server.Util.Happstack
 import Distribution.Server.Framework.Error
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Lazy.Char8 as LBS
+import qualified Data.ByteString.Char8 as BS (ByteString, unpack) -- Used for content-type headers only
+import qualified Data.ByteString.Lazy as LBS (ByteString)
 import qualified Codec.Compression.Zlib.Internal as GZip
-import qualified Text.JSON  as JSON
 import qualified Data.Aeson as Aeson
 
 -- | Expect the request body to have the given mime type (exact match),
@@ -113,7 +112,7 @@ expectCompressedTarball = do
     let contentType     = getHeader "Content-Type" req
         contentEncoding = getHeader "Content-Encoding" req
     case contentType of
-      Just actual 
+      Just actual
         | actual == "application/x-tar"
         , contentEncoding == Just "gzip" -> consumeRequestBody
         | actual == "application/x-gzip"
@@ -125,14 +124,6 @@ expectCompressedTarball = do
         [MText $ "Expected either content-type application/x-tar "
               ++ " (with a content-encoding of gzip) or application/x-gzip."]
 
-expectJsonContent :: JSON.JSON a => ServerPartE a
-expectJsonContent = do
-  content <- expectContentType "application/json"
-  case JSON.decodeStrict (LBS.unpack content) of
-    JSON.Ok a      -> return a
-    JSON.Error msg -> errBadRequest "Malformed request"
-                        [MText $ "The JSON is malformed: " ++ msg]
-
 expectAesonContent :: Aeson.FromJSON a => ServerPartE a
 expectAesonContent = do
   content <- expectContentType "application/json"
@@ -140,3 +131,6 @@ expectAesonContent = do
     Right a  -> return a
     Left msg -> errBadRequest "Malformed request"
                    [MText $ "The JSON data is not in the expected form: " ++ msg]
+
+expectCSV :: ServerPartE LBS.ByteString
+expectCSV = expectContentType "text/csv"

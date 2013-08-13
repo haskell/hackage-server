@@ -1,4 +1,4 @@
-{-# LANGUAGE PatternGuards, ScopedTypeVariables #-}
+{-# LANGUAGE PatternGuards, ScopedTypeVariables, OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
 
 module Main where
@@ -24,13 +24,16 @@ import Distribution.Version
 import Distribution.Text
          ( display, simpleParse )
 import Distribution.Simple.Utils
-         ( topHandler, die, {-warn, debug,-} wrapText, toUTF8 )
+         ( topHandler, die, {-warn, debug,-} wrapText )
 import Distribution.Verbosity
          ( Verbosity, normal )
 
 import Distribution.Simple.Command
 import Distribution.Simple.Setup
          ( Flag(..), fromFlag, flagToList )
+
+import Distribution.Client.ParseApacheLogs
+import qualified Distribution.Server.Util.GZip as GZip
 
 import System.Environment
          ( getArgs, getProgName )
@@ -48,30 +51,23 @@ import Data.Ord (comparing)
 import Data.Time (UTCTime, formatTime, getCurrentTime)
 import Control.Monad
 import Control.Monad.Trans
-import Data.ByteString.Lazy.Char8 (ByteString)
-import qualified Data.Text as T
-import Text.JSON as JSON
-         ( JSValue(..), toJSObject, toJSString, encodeStrict, showJSON )
+import Control.Applicative ((<$>))
+import Data.ByteString.Lazy (ByteString)
+import Data.Aeson (Value(..), toJSON, encode)
+import Data.Text (Text)
+import qualified Data.HashMap.Strict  as HashMap
+import qualified Data.Text            as Text
+import qualified Data.Text.Encoding   as Text
+import qualified Data.Vector          as Vector
+import qualified Data.ByteString.Lazy as LBS
+
 import qualified Text.CSV as CSV
 
 import Control.Exception
 import Control.Concurrent.Chan
 import Control.Concurrent.Async
 
-import Paths_hackage_server as Paths (version)
-
--- Imports for the downloadcount option
-
-import Data.Attoparsec.Char8 (Parser)
-import Data.Map.Strict (Map)
-import Data.Time.Calendar (Day)
-import Data.Time.Format (parseTime)
-import qualified Data.ByteString.Char8         as SBS
-import qualified Data.Attoparsec.Char8         as Att
-import qualified Data.ByteString.Lazy.Char8    as LBS
-import qualified Distribution.Server.Util.GZip as GZip
-import qualified Data.Map.Strict               as Map
-import Control.Applicative ((<$>))
+import qualified Paths_hackage_server as Paths (version)
 
 --
 -- The following data can be imported:
@@ -122,7 +118,7 @@ main = topHandler $ do
     printErrors errs = do
       putStr (concat (intersperse "\n" errs))
       exitWith (ExitFailure 1)
-    printVersion = putStrLn $ "hackage-import " ++ display version
+    printVersion = putStrLn $ "hackage-import " ++ display Paths.version
 
     commands =
       [ usersCommand         `commandAddAction` usersAction
@@ -260,15 +256,15 @@ putUserAccount :: URI -> UserName
                -> HttpSession ()
 putUserAccount baseURI username mPasswdHash makeUploader = do
 
-    rsp <- requestPUT userURI "" LBS.empty
-    case rsp of
-      Nothing  -> return ()
-      Just err -> fail (formatErrorResponse err)
+    do rsp <- requestPUT userURI "" LBS.empty
+       case rsp of
+        Nothing  -> return ()
+        Just err -> fail (formatErrorResponse err)
 
     case mPasswdHash of
       Nothing -> return ()
       Just (HtPasswdDb.HtPasswdHash passwdHash) -> do
-        rsp <- requestPUT passwdURI "text/plain" (LBS.pack passwdHash)
+        rsp <- requestPUT passwdURI "text/plain" (stringToBytes passwdHash)
         case rsp of
           Nothing  -> return ()
           Just err -> fail (formatErrorResponse err)
@@ -295,43 +291,41 @@ importAddresses jobs addressesFile baseURI = do
         tasks $ \(username, realname, email, timestamp, adminname) ->
           putUserDetails baseURI username realname email timestamp adminname
 
-putUserDetails :: URI -> UserName -> T.Text -> T.Text
+putUserDetails :: URI -> UserName -> Text -> Text
                -> UTCTime -> UserName -> HttpSession ()
 putUserDetails baseURI username realname email timestamp adminname = do
 
-    rsp <- requestPUT userNameAddressURI "application/json" (toBS nameAddressInfo)
-    case rsp of
-      Nothing  -> return ()
-      Just err | isErrNotFound err
-               -> liftIO $ info $ "Ignoring address info for user "
-                               ++ display username
-      Just err -> fail (formatErrorResponse err)
+    do rsp <- requestPUT userNameAddressURI "application/json" (encode nameAddressInfo)
+       case rsp of
+         Nothing  -> return ()
+         Just err | isErrNotFound err
+                  -> liftIO $ info $ "Ignoring address info for user "
+                                  ++ display username
+         Just err -> fail (formatErrorResponse err)
 
-    now <- liftIO getCurrentTime
-    rsp <- requestPUT userAdminInfoURI "application/json" (toBS (adminInfo now))
-    case rsp of
-      Nothing  -> return ()
-      Just err | isErrNotFound err
-               -> liftIO $ info $ "Ignoring address info for user "
-                               ++ display username
-      Just err -> fail (formatErrorResponse err)
+    do now <- liftIO getCurrentTime
+       rsp <- requestPUT userAdminInfoURI "application/json" (encode (adminInfo now))
+       case rsp of
+         Nothing  -> return ()
+         Just err | isErrNotFound err
+                  -> liftIO $ info $ "Ignoring address info for user "
+                                  ++ display username
+         Just err -> fail (formatErrorResponse err)
 
   where
-    toBS   = LBS.pack . toUTF8 . JSON.encodeStrict
     userURI            = baseURI <//> "user" </> display username
     userNameAddressURI = userURI <//> "name-contact.json"
     userAdminInfoURI   = userURI <//> "admin-info.json"
 
     nameAddressInfo =
-      JSObject $ toJSObject
-          [ ("name",                showJSON realname)
-          , ("contactEmailAddress", showJSON email)
+      object
+          [ ("name",                String realname)
+          , ("contactEmailAddress", String email)
           ]
-
     adminInfo now =
-      JSObject $ toJSObject
-          [ ("accountKind", JSObject $ toJSObject [("AccountKindRealUser", JSArray [])])
-          , ("notes",       showJSON (notes now))
+      object
+          [ ("accountKind", object [("AccountKindRealUser", array [])])
+          , ("notes",       toJSON (notes now))
           ]
     notes now = "Original hackage account created by "
              ++ display adminname ++ " on " ++ showUTCTime timestamp ++ "\n"
@@ -461,24 +455,22 @@ putUploadInfo baseURI pkgid time uname = do
 
     liftIO $ info $ "setting upload info for " ++ display pkgid
 
-    let timeStr = showUTCTime time
-    rsp <- requestPUT (pkgURI <//> "upload-time") "text/plain" (toBS timeStr)
-    case rsp of
-      Nothing  -> return ()
-      Just err | isErrNotFound err -> liftIO $ info $ "Ignoring upload log entry for package " ++ display pkgid
-      Just err -> fail (formatErrorResponse err)
+    do let timeStr = showUTCTime time
+       rsp <- requestPUT (pkgURI <//> "upload-time") "text/plain" (stringToBytes timeStr)
+       case rsp of
+         Nothing  -> return ()
+         Just err | isErrNotFound err -> liftIO $ info $ "Ignoring upload log entry for package " ++ display pkgid
+         Just err -> fail (formatErrorResponse err)
 
-    let nameStr = display uname
-    rsp <- requestPUT (pkgURI <//> "uploader") "text/plain" (toBS nameStr)
-    case rsp of
-      Nothing  -> return ()
-      Just err | isErrNotFound err  -> liftIO $ info $ "Ignoring upload log entry for package " ++ display pkgid
-      Just err -> fail (formatErrorResponse err)
+    do let nameStr = display uname
+       rsp <- requestPUT (pkgURI <//> "uploader") "text/plain" (stringToBytes nameStr)
+       case rsp of
+         Nothing  -> return ()
+         Just err | isErrNotFound err  -> liftIO $ info $ "Ignoring upload log entry for package " ++ display pkgid
+         Just err -> fail (formatErrorResponse err)
 
   where
     pkgURI = baseURI <//> "package" </> display pkgid
-    toBS   = LBS.pack . toUTF8
-
 
 putMaintainersInfo :: URI -> PackageName -> [UserName] -> HttpSession ()
 putMaintainersInfo baseURI pkgname maintainers =
@@ -623,20 +615,19 @@ deprecationAction _flags args _ = do
 putDeprecatedInfo :: URI -> PackageName -> Maybe PackageName -> HttpSession ()
 putDeprecatedInfo baseURI pkgname replacement = do
 
-    rsp <- requestPUT (pkgURI <//> "deprecated.json") "application/json" (toBS deprecatedInfo)
+    rsp <- requestPUT (pkgURI <//> "deprecated.json") "application/json" (encode deprecatedInfo)
     case rsp of
       Nothing  -> return ()
       Just err -> fail (formatErrorResponse err)
 
   where
     pkgURI = baseURI <//> "package" </> display pkgname
-    toBS   = LBS.pack . toUTF8 . JSON.encodeStrict
 
     deprecatedInfo =
-      JSObject $ toJSObject
-          [ ("is-deprecated", JSBool True)
-          , ("in-favour-of", JSArray [ JSString $ toJSString $ display pkg
-                                     | pkg <- maybeToList replacement ])
+      object
+          [ ("is-deprecated", Bool True)
+          , ("in-favour-of", array [ string $ display pkg
+                                   | pkg <- maybeToList replacement ])
           ]
 
 
@@ -687,20 +678,19 @@ distroAction _flags args _ = do
 putDistroInfo :: URI -> String -> [DistroMap.Entry] -> HttpSession ()
 putDistroInfo baseURI distroname entries = do
 
-    rsp <- requestPUT distroURI "" LBS.empty
-    case rsp of
-      Nothing  -> return ()
-      Just err -> fail (formatErrorResponse err)
+    do rsp <- requestPUT distroURI "" LBS.empty
+       case rsp of
+         Nothing  -> return ()
+         Just err -> fail (formatErrorResponse err)
 
-    rsp <- requestPUT (distroURI <//> "packages.csv") "text/csv" (toBS entries)
-    case rsp of
-      Nothing  -> return ()
-      Just err -> fail (formatErrorResponse err)
+    do rsp <- requestPUT (distroURI <//> "packages.csv") "text/csv" (toBS entries)
+       case rsp of
+         Nothing  -> return ()
+         Just err -> fail (formatErrorResponse err)
 
   where
     distroURI = baseURI <//> "distro" </> distroname
-    toBS      = LBS.pack . toUTF8 . CSV.printCSV . DistroMap.toCSV
-
+    toBS      = stringToBytes . CSV.printCSV . DistroMap.toCSV
 
 -------------------------------------------------------------------------------
 -- Documentation tarballs command
@@ -818,110 +808,21 @@ downloadCountCommand =
 downloadCountAction :: DownloadCountFlags -> [String] -> GlobalFlags -> IO ()
 downloadCountAction _ args _ = do
     (baseURI, logFiles) <- validateOptsServerURI' args
-    csv <- logToCSV <$> readLogs logFiles
+    csv <- logToDownloadCounts <$> readLogs logFiles
 
     -- Compute before we open the connection to the server
     evaluate $ LBS.length csv
 
     httpSession $ do
       setAuthorityFromURI baseURI
-      void $ requestPUT (baseURI <//> "packages" </> "downloads.csv") "text/csv" csv 
+      void $ requestPUT (baseURI <//> "packages" </> "downloads.csv") "text/csv" csv
   where
-    logToCSV :: LBS.ByteString -> LBS.ByteString
-    logToCSV = LBS.unlines
-             . map formatOutput
-             . Map.toList
-             . accumHist
-             . catMaybes
-             . map ((packageGET >=> parseGET) . parseLine . LBS.toStrict)
-             . LBS.lines
-
     readLogs :: [FilePath] -> IO LBS.ByteString
-    readLogs paths = LBS.concat <$> mapM decompress paths 
+    readLogs paths = LBS.concat <$> mapM decompress paths
 
     decompress :: FilePath -> IO LBS.ByteString
-    decompress path = GZip.decompressNamed path <$> LBS.readFile path 
-      
-data LogLine = LogLine {
-      _getIP     :: !SBS.ByteString
-    , _getIdent  :: !SBS.ByteString
-    , _getUser   :: !SBS.ByteString
-    , getDate    :: !SBS.ByteString
-    , getReq     :: !SBS.ByteString
-    , _getStatus :: !SBS.ByteString
-    , _getBytes  :: !SBS.ByteString
-    , _getRef    :: !SBS.ByteString
-    , _getUA     :: !SBS.ByteString
-} deriving (Ord, Show, Eq)
+    decompress path = GZip.decompressNamed path <$> LBS.readFile path
 
-plainValue :: Parser SBS.ByteString
-plainValue = Att.takeWhile1 (\c -> c /= ' ' && c /= '\n') --many1' (noneOf " \n")
-
-bracketedValue :: Parser SBS.ByteString
-bracketedValue = do
-    Att.char '['
-    content <- Att.takeWhile1 (\c -> c /= ']') --many' (noneOf "]")
-    Att.char ']'
-    return content
-
-quotedValue :: Parser SBS.ByteString
-quotedValue = do
-    Att.char '"'
-    content <- Att.takeWhile1 (\c -> c /= '"') --many' (noneOf "\"")
-    Att.char '"'
-    return content
-
-logLine :: Parser LogLine
-logLine = do
-    ip     <- plainValue     ; Att.skipSpace
-    ident  <- plainValue     ; Att.skipSpace
-    user   <- plainValue     ; Att.skipSpace
-    date   <- bracketedValue ; Att.skipSpace
-    req    <- quotedValue    ; Att.skipSpace
-    status <- plainValue     ; Att.skipSpace
-    bytes  <- plainValue     ; Att.skipSpace
-    ref    <- quotedValue    ; Att.skipSpace
-    ua     <- quotedValue
-    return $! LogLine ip ident user date req status bytes ref ua
-
-parseLine :: SBS.ByteString -> Either SBS.ByteString LogLine
-parseLine line = case Att.parseOnly logLine line of
-                   Left _    -> Left line
-                   Right res -> Right res
-
-packageGET :: Either a LogLine -> Maybe (SBS.ByteString, SBS.ByteString, SBS.ByteString)
-packageGET (Right logline)
-  | [method, path, _] <- SBS.words (getReq logline)
-  , method == methodGET
-  , [root, dir1, dir2, name, ver, tarball] <- SBS.split '/' path
-  , SBS.null root, dir1 == packagesDir, dir2 == archiveDir
-  , SBS.isSuffixOf targzExt tarball
-  = Just (name, ver, getDate logline)
-packageGET _ = Nothing
-
-parseGET :: (SBS.ByteString, SBS.ByteString, SBS.ByteString) -> Maybe (PackageName, Version, Day)
-parseGET (pkgNameStr, pkgVersionStr, dayStr) = do
-  name    <- simpleParse . SBS.unpack $ pkgNameStr
-  version <- simpleParse . SBS.unpack $ pkgVersionStr
-  day     <- parseTime defaultTimeLocale "%d/%b/%Y:%T %z" . SBS.unpack $ dayStr
-  return (name, version, day)
-
-methodGET, packagesDir, archiveDir, targzExt :: SBS.ByteString
-methodGET   = SBS.pack "GET"
-packagesDir = SBS.pack "packages"
-archiveDir  = SBS.pack "archive"
-targzExt    = SBS.pack ".tar.gz"
-
-accumHist :: Ord k => [k] -> Map k Int
-accumHist es = Map.fromListWith (+) [ (pkgId,1) | pkgId <- es ]
-
-formatOutput :: ((PackageName, Version, Day), Int) -> LBS.ByteString
-formatOutput ((name, version, day), numDownloads) =
-  LBS.pack $ intercalate "," $ map show [ display name
-                                        , show day
-                                        , display version
-                                        , show numDownloads
-                                        ]
 -------------------------
 -- HTTP utilities
 -------------------------
@@ -946,7 +847,7 @@ type HttpSession a = BrowserAction (HandleStream ByteString) a
 httpSession :: HttpSession a -> IO a
 httpSession action =
     browse $ do
-      setUserAgent  ("hackage-import/" ++ display version)
+      setUserAgent  ("hackage-import/" ++ display Paths.version)
       setErrHandler (warn  verbosity)
       setOutHandler (debug verbosity)
       setAllowBasicAuth True
@@ -1021,7 +922,7 @@ mkErrorResponse uri rsp =
   where
     mBody = case lookupHeader HdrContentType (rspHeaders rsp) of
       Just mimetype | "text/plain" `isPrefixOf` mimetype
-                   -> Just (LBS.unpack (rspBody rsp))
+                   -> Just (bytesToString (rspBody rsp))
       _            -> Nothing
 
 formatErrorResponse :: ErrorResponse -> String
@@ -1108,3 +1009,21 @@ concMapM_ n action xs = do
                       Nothing -> return ()
                       Just x  -> process x >> go
 
+{------------------------------------------------------------------------------
+  Auxiliary
+------------------------------------------------------------------------------}
+
+array :: [Value] -> Value
+array = Array . Vector.fromList
+
+object :: [(Text.Text, Value)] -> Value
+object = Object . HashMap.fromList
+
+string :: String -> Value
+string = String . Text.pack
+
+stringToBytes :: String -> LBS.ByteString
+stringToBytes = LBS.fromStrict . Text.encodeUtf8 . Text.pack
+
+bytesToString :: LBS.ByteString -> String
+bytesToString = Text.unpack . Text.decodeUtf8 . LBS.toStrict

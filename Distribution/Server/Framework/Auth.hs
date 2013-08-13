@@ -23,7 +23,7 @@ module Distribution.Server.Framework.Auth (
     guardAuthenticated, checkAuthenticated,
     guardPriviledged,   checkPriviledged,
     PrivilegeCondition(..),
-    
+
     -- ** Errors
     AuthError(..),
     authErrorResponse,
@@ -41,7 +41,7 @@ import Distribution.Server.Util.Happstack (rqRealMethod)
 import Happstack.Server
 
 import Control.Monad.Trans (MonadIO, liftIO)
-import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Char8 as BS -- Only used for Digest headers
 
 import Control.Monad
 import qualified Data.ByteString.Base64 as Base64

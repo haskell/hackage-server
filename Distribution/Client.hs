@@ -15,6 +15,14 @@ module Distribution.Client
   , requestPUT
   , (<//>)
   , provideAuthInfo
+    -- * TODO: Exported although they appear unusued
+  , extractURICredentials
+  , removeURICredentials
+  , getETag
+  , downloadFile'
+  , requestGET
+  , requestPUTFile
+  , requestPOST
   ) where
 
 import Network.HTTP
@@ -36,11 +44,13 @@ import Control.Applicative
 import Control.Exception
 import Data.Time
 import Data.Time.Clock.POSIX
-import Data.ByteString.Lazy.Char8 (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as BS
+import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Lazy          as BS
 import qualified Distribution.Server.Util.GZip as GZip
-import qualified Codec.Archive.Tar       as Tar
-import qualified Codec.Archive.Tar.Entry as Tar
+import qualified Codec.Archive.Tar             as Tar
+import qualified Codec.Archive.Tar.Entry       as Tar
+import qualified Data.Text.Lazy                as Text
+import qualified Data.Text.Lazy.Encoding       as Text
 
 import Control.Monad.Trans
 import System.IO
@@ -353,5 +363,5 @@ showFailure uri rsp =
     show (rspCode rsp) ++ " " ++ rspReason rsp ++ show uri
  ++ case lookupHeader HdrContentType (rspHeaders rsp) of
       Just mimetype | "text/plain" `isPrefixOf` mimetype
-                   -> '\n' : BS.unpack (rspBody rsp)
+                   -> '\n' : (Text.unpack . Text.decodeUtf8 . rspBody $ rsp)
       _            -> ""

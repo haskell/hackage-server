@@ -19,7 +19,7 @@ import qualified Codec.Archive.Tar.Entry as Tar (Entry(..), EntryContent(..))
 
 import Distribution.Package
 
-import Data.ByteString.Lazy.Char8 (ByteString)
+import Data.ByteString.Lazy (ByteString)
 import qualified Distribution.Server.Util.GZip as GZip
 
 import Prelude hiding (read)

@@ -40,9 +40,9 @@ import Control.Monad.Writer
 import Control.Monad.Identity
          ( Identity(..) )
 import qualified Distribution.Server.Util.GZip as GZip
-import Data.ByteString.Lazy.Char8
+import Data.ByteString.Lazy
          ( ByteString )
-import qualified Data.ByteString.Lazy.Char8 as LBS
+import qualified Data.ByteString.Lazy as LBS
 import System.FilePath
          ( (</>), (<.>), splitExtension, splitDirectories, normalise )
 import qualified System.FilePath.Windows

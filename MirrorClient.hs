@@ -26,8 +26,8 @@ import Control.Monad.Trans
 import Control.Monad.Error
 import Control.Monad.State
 import Control.Monad.Reader
-import Data.ByteString.Lazy.Char8 (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as BS
+import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Lazy as BS
 import qualified Distribution.Server.Util.GZip as GZip
 import qualified Codec.Archive.Tar       as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
@@ -50,6 +50,9 @@ import System.Directory
 import System.Console.GetOpt
 import qualified System.FilePath.Posix as Posix
 import Prelude hiding (catch)
+
+import qualified Data.Text.Lazy          as Text
+import qualified Data.Text.Lazy.Encoding as Text
 
 import Paths_hackage_server (version)
 
@@ -357,18 +360,16 @@ putPackage baseURI (PkgIndexInfo pkgid mtime muname _muid) pkgFile = do
       -- TODO: perhaps we shouldn't report failure for the whole package if
       -- we fail to set the upload time/uploader
 
-    toBS = BS.pack . toUTF8
-
     putPackageUploadTime time = do
       let timeStr = formatTime defaultTimeLocale "%c" time
-      rsp <- browserAction $ requestPUT (baseURI <//> "upload-time") "text/plain" (toBS timeStr)
+      rsp <- browserAction $ requestPUT (baseURI <//> "upload-time") "text/plain" (stringToBytes timeStr)
       case rsp of
         Just theError -> notifyResponse (PutPackageFailed theError pkgid)
         Nothing       -> notifyResponse PutPackageOk
 
     putPackageUploader uname = do
       let nameStr = display uname
-      rsp <- browserAction $ requestPUT (baseURI <//> "uploader") "text/plain" (toBS nameStr)
+      rsp <- browserAction $ requestPUT (baseURI <//> "uploader") "text/plain" (stringToBytes nameStr)
       case rsp of
         Just theError -> notifyResponse (PutPackageFailed theError pkgid)
         Nothing       -> notifyResponse PutPackageOk
@@ -759,7 +760,7 @@ mkErrorResponse uri rsp =
   where
     mBody = case lookupHeader HdrContentType (rspHeaders rsp) of
       Just mimetype | "text/plain" `isPrefixOf` mimetype
-                   -> Just (BS.unpack (rspBody rsp))
+                   -> Just (bytesToString (rspBody rsp))
       _            -> Nothing
 
 formatErrorResponse :: ErrorResponse -> String
@@ -919,3 +920,13 @@ warn :: Verbosity -> String -> IO ()
 warn verbosity msg =
   when (verbosity >= normal) $
     putStrLn ("Warning: " ++ msg)
+
+{------------------------------------------------------------------------------
+  Auxiliary
+------------------------------------------------------------------------------}
+
+stringToBytes :: String -> ByteString
+stringToBytes = Text.encodeUtf8 . Text.pack
+
+bytesToString :: ByteString -> String
+bytesToString = Text.unpack . Text.decodeUtf8

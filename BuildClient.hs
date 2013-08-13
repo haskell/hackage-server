@@ -17,7 +17,7 @@ import Data.Time
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans
-import qualified Data.ByteString.Lazy.Char8 as BS
+import qualified Data.ByteString.Lazy as BS
 import qualified Data.Set as S
 
 import qualified Codec.Compression.GZip  as GZip
@@ -31,7 +31,7 @@ import System.Console.GetOpt
 import System.Process
 import System.IO.Error
 
-import Text.JSON (decode, Result(..))
+import Data.Aeson (eitherDecode)
 
 data Mode = Help [String]
           | Init String
@@ -185,9 +185,9 @@ getDocumentationStats config = do
     mJSON <- requestGET' uri
     case mJSON of
       Nothing   -> fail $ "Could not download " ++ show uri
-      Just json -> case decode (BS.unpack json) of
-                     Error e -> fail $ "Could not decode " ++ show uri ++ ": " ++ e
-                     Ok val  -> return $ map aux val
+      Just json -> case eitherDecode json of
+                     Left e    -> fail $ "Could not decode " ++ show uri ++ ": " ++ e
+                     Right val -> return $ map aux val
   where
     uri = bc_srcURI config <//> "packages" </> "docs.json"
 

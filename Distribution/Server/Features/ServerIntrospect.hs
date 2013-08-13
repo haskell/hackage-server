@@ -13,10 +13,13 @@ import Text.XHtml.Strict
          , blockquote, thespan, thestyle
          , anchor, (!), href, name
          , ordList, unordList, defList )
-import Text.JSON
-         ( JSValue(..), toJSObject, toJSString )
+import Data.Aeson (Value(..))
+import qualified Data.HashMap.Strict as HashMap
+import qualified Data.Vector         as Vector
+import qualified Data.Text           as Text
 import Data.List
 import Data.Function (on)
+import Control.Arrow (first)
 
 -- | A feature to serve information and status about the server itself.
 -- It has access to all the other features on the server so can do some
@@ -58,7 +61,7 @@ serveApiDocHtml :: [HackageFeature] -> ServerPartE Response
 serveApiDocHtml = return . toResponse . Resource.XHtml . apiDocPageHtml
 
 serveApiDocJSON :: [HackageFeature] -> ServerPartE Response
-serveApiDocJSON = return . toResponse . Resource.JSON . apiDocJSON
+serveApiDocJSON = return . toResponse . apiDocJSON
 
 
 -- TODO: all-resources from all features combined
@@ -185,36 +188,36 @@ resourceMethodsAndFormats (Resource _ rget rput rpost rdelete _ _ desc) =
       | m == m'   = toHtml d
       | otherwise = descriptionFor m ds
 
-apiDocJSON :: [HackageFeature] -> JSValue
+apiDocJSON :: [HackageFeature] -> Value
 apiDocJSON serverFeatures = featureList
   where
     featureList =
-      JSArray
-        [ JSObject $ toJSObject
-            [ ("feature", JSString $ toJSString $ featureName feature)
+      array
+        [ object
+            [ ("feature", string $ featureName feature)
             , ("resources", resourceList feature) ]
         | feature <- serverFeatures ]
 
-    resourceList :: HackageFeature -> JSValue
+    resourceList :: HackageFeature -> Value
     resourceList feature =
-      JSArray
-        [ JSObject $ toJSObject
-            [ ("location", JSString $ toJSString $ renderLocationTemplate resource)
+      array
+        [ object
+            [ ("location", string $ renderLocationTemplate resource)
             , ("methods", methodList resource) ]
         | resource <- featureResources feature ]
 
-    methodList :: Resource -> JSValue
+    methodList :: Resource -> Value
     methodList resource =
-      JSArray
-        [ JSObject $ toJSObject
-            [ ("method", JSString $ toJSString $ show httpMethod)
+      array
+        [ object
+            [ ("method", string $ show httpMethod)
             , ("formats", formatList formats) ]
         | (httpMethod, formats, _) <- resourceMethodsAndFormats resource ]
 
     formatList formats =
-      JSArray
-        [ JSObject $ toJSObject
-            [ ("name", JSString (toJSString format))
+      array
+        [ object
+            [ ("name", string format)
             ] -- could add here ("mimetype", ...)
         | format <- formats ]
 
@@ -329,3 +332,16 @@ memSizePageHtml featureStateSizes =
               +++ unordList [ bold << (show (memSizeMb sz) ++ " MB: ")
                                   +++ cname
                             | (cname, sz) <- states ]
+
+{------------------------------------------------------------------------------
+  Some aeson auxiliary functions
+------------------------------------------------------------------------------}
+
+array :: [Value] -> Value
+array = Array . Vector.fromList
+
+object :: [(String, Value)] -> Value
+object = Object . HashMap.fromList . map (first Text.pack)
+
+string :: String -> Value
+string = String . Text.pack

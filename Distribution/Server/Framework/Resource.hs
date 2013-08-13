@@ -54,7 +54,7 @@ import qualified Text.ParserCombinators.Parsec as Parse
 
 import System.FilePath.Posix ((</>), (<.>))
 import qualified Data.Tree as Tree (Tree(..), drawTree)
-import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Char8 as BS -- Used for accept header only
 
 type Content = String
 

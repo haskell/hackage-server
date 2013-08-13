@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE NamedFieldPuns, RecordWildCards, BangPatterns,
              StandaloneDeriving, GeneralizedNewtypeDeriving #-}
 module Distribution.Server.Features.EditCabalFiles (
@@ -29,13 +30,13 @@ import Text.StringTemplate (ToSElem(..))
 
 import Data.List
 import qualified Data.Char as Char
-import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.Map as Map
 import Control.Monad.Error  (ErrorT, runErrorT)
 import Control.Monad.Writer (MonadWriter(..), Writer, runWriter)
 import Data.Time (getCurrentTime)
 
+import qualified Data.ByteString.Lazy.Char8 as BS -- TODO: Verify that we don't need to worry about UTF8
 
 -- | A feature to allow editing cabal files without uploading new tarballs.
 --
@@ -299,7 +300,7 @@ checkRevision customFieldsA customFieldsB =
     getRevision customFields =
       case lookup "x-revision" customFields of
         Just s  | [(n,"")] <- reads s -> n :: Int
-        _                             -> 0  
+        _                             -> 0
 
 
 checkCondTree :: Check a -> Check (CondTree ConfVar [Dependency] a)
@@ -309,7 +310,7 @@ checkCondTree checkElem
     checkDependencies constraintsA constraintsB
     checkList "Cannot add or remove 'if' conditionals"
               checkComponent componentsA componentsB
-    checkElem dataA dataB  
+    checkElem dataA dataB
   where
     checkComponent (condA, ifPartA, thenPartA)
                    (condB, ifPartB, thenPartB) = do

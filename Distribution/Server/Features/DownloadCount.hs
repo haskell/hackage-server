@@ -38,7 +38,6 @@ import Data.Time.Calendar (Day, addDays)
 import Data.Time.Clock (getCurrentTime, utctDay)
 import Control.Concurrent.Chan
 import Control.Concurrent (forkIO)
-import qualified Data.ByteString.Char8 as BS
 
 data DownloadFeature = DownloadFeature {
     downloadFeatureInterface :: HackageFeature
@@ -93,24 +92,24 @@ onDiskStateComponent stateDir = StateComponent {
     , resetState   = return . onDiskStateComponent
     }
 
-data ReconstructLog = ReconstructLog | DontReconstructLog 
+data ReconstructLog = ReconstructLog | DontReconstructLog
 
 writeOnDisk :: FilePath
-            -> Maybe (MemState RecentDownloads) 
-            -> ReconstructLog 
-            -> OnDiskStats 
+            -> Maybe (MemState RecentDownloads)
+            -> ReconstructLog
+            -> OnDiskStats
             -> IO ()
 writeOnDisk stateDir mRecentDownloads shouldReconstructLog onDiskStats = do
   writeOnDiskStats (dcPath stateDir </> "ondisk") onDiskStats
 
   case mRecentDownloads of
-    Just recentDownloads -> 
+    Just recentDownloads ->
       writeMemState recentDownloads =<< computeRecentDownloads onDiskStats
     Nothing ->
       return ()
 
   case shouldReconstructLog of
-    ReconstructLog -> 
+    ReconstructLog ->
       reconstructLog (dcPath stateDir) onDiskStats
     DontReconstructLog ->
       return ()
@@ -167,7 +166,7 @@ downloadFeature CoreFeature{}
 
           -- Update the on-disk statistics and recompute recent downloads
           onDiskStats' <- updateHistory inMemStats <$> getState onDiskState
-          writeOnDisk serverStateDir (Just recentDownloadsCache) DontReconstructLog onDiskStats' 
+          writeOnDisk serverStateDir (Just recentDownloadsCache) DontReconstructLog onDiskStats'
 
         updateState inMemState $ RegisterDownload pkg
 
@@ -183,17 +182,17 @@ downloadFeature CoreFeature{}
       , resourcePut  = [ ("csv", putDownloadCounts) ]
       }
 
-    getDownloadCounts :: DynamicPath -> ServerPartE Response 
+    getDownloadCounts :: DynamicPath -> ServerPartE Response
     getDownloadCounts _path = do
       onDiskStats <- liftIO $ getState onDiskState
       let [BackupByteString _ bs] = onDiskBackup onDiskStats
-      return $ toResponse bs 
+      return $ toResponse bs
 
-    putDownloadCounts :: DynamicPath -> ServerPartE Response 
-    putDownloadCounts _path = do 
+    putDownloadCounts :: DynamicPath -> ServerPartE Response
+    putDownloadCounts _path = do
       guardAuthorised_ [InGroup adminGroup]
-      fileContents <- expectContentType (BS.pack "text/csv")
-      csv          <- importCSV "PUT input" fileContents  
+      fileContents <- expectCSV
+      csv          <- importCSV "PUT input" fileContents
       onDiskStats  <- cmFromCSV csv
       liftIO $ writeOnDisk serverStateDir (Just recentDownloadsCache) ReconstructLog onDiskStats
       ok $ toResponse $ "Imported " ++ show (length csv) ++ " records\n"

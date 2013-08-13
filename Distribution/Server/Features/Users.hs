@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, DoRec, BangPatterns #-}
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, DoRec, BangPatterns, OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Features.Users (
     initUserFeature,
@@ -11,7 +11,6 @@ module Distribution.Server.Features.Users (
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
 import qualified Distribution.Server.Framework.Auth as Auth
-import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
 import Distribution.Server.Users.Types
 import Distribution.Server.Users.State
@@ -29,8 +28,10 @@ import qualified Data.Set as Set
 import Data.Maybe (fromMaybe)
 import Data.Function (fix)
 import Control.Applicative (optional)
-import Text.JSON
-         ( JSValue(..), toJSObject, toJSString )
+import Data.Aeson (Value(..))
+import qualified Data.HashMap.Strict as HashMap
+import qualified Data.Vector         as Vector
+import qualified Data.Text           as Text
 
 import Distribution.Text (display, simpleParse)
 
@@ -559,11 +560,11 @@ userFeature  usersState adminsState
       userlist <- liftIO $ queryUserList group
       let unames = [ Users.userIdToName userDb uid
                    | uid <- Group.enumerate userlist ]
-      return . toResponse . Resource.JSON $
-          JSObject $ toJSObject [
-            ("title",       JSString $ toJSString $ groupTitle $ groupDesc group)
-          , ("description", JSString $ toJSString $ groupPrologue $ groupDesc group)
-          , ("members",     JSArray [ JSString $ toJSString $ display uname
+      return . toResponse $
+          object [
+            ("title",       string $ groupTitle $ groupDesc group)
+          , ("description", string $ groupPrologue $ groupDesc group)
+          , ("members",     array [ string $ display uname
                                     | uname <- unames ])
           ]
 
@@ -625,3 +626,16 @@ userFeature  usersState adminsState
                      -> (Map String GroupDescription -> Map String GroupDescription)
                      -> GroupIndex -> GroupIndex
     adjustGroupIndex f g (GroupIndex a b) = GroupIndex (f a) (g b)
+
+{------------------------------------------------------------------------------
+  Some aeson auxiliary functions
+------------------------------------------------------------------------------}
+
+array :: [Value] -> Value
+array = Array . Vector.fromList
+
+object :: [(Text.Text, Value)] -> Value
+object = Object . HashMap.fromList
+
+string :: String -> Value
+string = String . Text.pack

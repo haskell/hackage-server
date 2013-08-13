@@ -8,6 +8,7 @@
 --
 -- Support for templates, html and text, based on @HStringTemplate@ package.
 -----------------------------------------------------------------------------
+{-# LANGUAGE OverloadedStrings #-}
 module Distribution.Server.Framework.Templating (
     Template,
     renderTemplate,
@@ -23,8 +24,8 @@ module Distribution.Server.Framework.Templating (
 import Text.StringTemplate
 import Happstack.Server (ToMessage(..), toResponseBS)
 
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Lazy.Char8 as LBS
+import qualified Data.ByteString      as BS
+import qualified Data.ByteString.Lazy as LBS
 
 --TODO: switch to bytestring builder, once we can depend on bytestring-0.10
 --import qualified Data.ByteString.Lazy.Builder as Builder
@@ -50,7 +51,7 @@ renderTemplate (Template st) = Builder.toLazyByteString (render st)
 instance ToMessage Template where
   toResponse t = toResponseBS contentType (renderTemplate t)
     where
-      contentType = BS.pack "text/html; charset=utf-8"
+      contentType = "text/html; charset=utf-8"
 
 newtype TemplateAttr = TemplateAttr (RawTemplate -> RawTemplate)
 
@@ -110,7 +111,7 @@ loadTemplateGroup :: [FilePath] -> IO RawTemplateGroup
 loadTemplateGroup [] = return nullGroup
 loadTemplateGroup templateDirs = do
     templateGroup <- mapM directoryGroup templateDirs
---                 `catchJust` IOError 
+--                 `catchJust` IOError
     return (foldr1 (flip addSuperGroup) templateGroup)
 
 checkTemplates :: Monad m => RawTemplateGroup -> [FilePath] -> [String] -> m ()

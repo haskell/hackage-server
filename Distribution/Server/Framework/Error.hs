@@ -36,7 +36,8 @@ module Distribution.Server.Framework.Error (
 import Happstack.Server
 import Control.Monad.Error
 
-import qualified Data.ByteString.Lazy.Char8 as BS
+import qualified Data.Text.Lazy          as Text
+import qualified Data.Text.Lazy.Encoding as Text
 
 -- | The \"oh noes?!\" operator
 --
@@ -67,7 +68,7 @@ instance ToMessage ErrorResponse where
           rsCode      = code,
           rsHeaders   = mkHeaders (("Content-Type",  "text/plain") : reverse hdrs),
           rsFlags     = nullRsFlags { rsfLength = ContentLength },
-          rsBody      = BS.pack rspbody,
+          rsBody      = Text.encodeUtf8 (Text.pack rspbody),
           rsValidator = Nothing
         }
 

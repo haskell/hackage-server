@@ -28,7 +28,7 @@ import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Data.Maybe (fromMaybe)
 import Data.Time.Clock (getCurrentTime)
 import Data.Function (fix)
-import Data.ByteString.Lazy.Char8 (ByteString)
+import Data.ByteString.Lazy (ByteString)
 
 import Distribution.Package
 import Distribution.PackageDescription (GenericPackageDescription)

@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, DeriveDataTypeable, StandaloneDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, DeriveDataTypeable, StandaloneDeriving, OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -----------------------------------------------------------------------------
 -- |
@@ -22,17 +22,18 @@ import Happstack.Server
          ( ToMessage(..), Response(..), RsFlags(..), Length(NoContentLength), nullRsFlags, mkHeaders
          , noContentLength )
 
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
+import qualified Data.ByteString.Lazy as BS.Lazy
 import Text.RSS (RSS)
 import qualified Text.RSS as RSS (rssToXML, showXML)
 import qualified Text.XHtml.Strict as XHtml (Html, renderHtml)
-import qualified Text.JSON as JSON (JSValue, encode)
 import qualified Data.Aeson as Aeson (Value, encode)
 import Data.Time.Clock (UTCTime)
 import qualified Data.Time.Format as Time (formatTime)
 import System.Locale (defaultTimeLocale)
 import Text.CSV (printCSV, CSV)
+
+import qualified Data.Text.Lazy          as Text
+import qualified Data.Text.Lazy.Encoding as Text
 
 newtype ETag = ETag String
   deriving (Eq, Ord, Show)
@@ -46,7 +47,7 @@ formatETag (ETag etag) = '"' : etag ++ ['"']
 data IndexTarball = IndexTarball BS.Lazy.ByteString
 
 instance ToMessage IndexTarball where
-  toContentType _ = BS.pack "application/x-gzip"
+  toContentType _ = "application/x-gzip"
   toMessage (IndexTarball bs) = bs
 
 
@@ -81,51 +82,41 @@ formatTime = Time.formatTime defaultTimeLocale rfc822DateFormat
 newtype OpenSearchXml = OpenSearchXml BS.Lazy.ByteString
 
 instance ToMessage OpenSearchXml where
-    toContentType _ = BS.pack "application/opensearchdescription+xml"
+    toContentType _ = "application/opensearchdescription+xml"
     toMessage (OpenSearchXml bs) = bs
 
-newtype SuggestJson = SuggestJson JSON.JSValue
-instance ToMessage SuggestJson where
-    toContentType _ = BS.pack "application/x-suggestions+json"
-    toMessage (SuggestJson val) = BS.Lazy.pack $ JSON.encode val
-
-newtype JSON = JSON JSON.JSValue
-instance ToMessage JSON where
-    toContentType _ = BS.pack "application/json"
-    toMessage (JSON val) = BS.Lazy.pack $ JSON.encode val
-
 instance ToMessage Aeson.Value where
-    toContentType _ = BS.pack "application/json; charset=utf-8"
+    toContentType _ = "application/json; charset=utf-8"
     toMessage val = Aeson.encode val
 
 newtype CabalFile = CabalFile BS.Lazy.ByteString
 
 instance ToMessage CabalFile where
-    toContentType _ = BS.pack "text/plain; charset=utf-8"
+    toContentType _ = "text/plain; charset=utf-8"
     toMessage (CabalFile bs) = bs
 
 newtype BuildLog = BuildLog BS.Lazy.ByteString
 
 instance ToMessage BuildLog where
-    toContentType _ = BS.pack "text/plain"
+    toContentType _ = "text/plain"
     toMessage (BuildLog bs) = bs
 
 instance ToMessage RSS where
-    toContentType _ = BS.pack "application/rss+xml"
-    toMessage = BS.Lazy.pack . RSS.showXML . RSS.rssToXML
+    toContentType _ = "application/rss+xml"
+    toMessage = stringToBytes . RSS.showXML . RSS.rssToXML
 
 newtype XHtml = XHtml XHtml.Html
 
 instance ToMessage XHtml where
-    toContentType _ = BS.pack "text/html; charset=utf-8"
-    toMessage (XHtml xhtml) = BS.Lazy.pack (XHtml.renderHtml xhtml)
+    toContentType _ = "text/html; charset=utf-8"
+    toMessage (XHtml xhtml) = stringToBytes (XHtml.renderHtml xhtml)
 
 -- Like XHtml, but don't bother calculating length
 newtype LongXHtml = LongXHtml XHtml.Html
 
 instance ToMessage LongXHtml where
     toResponse (LongXHtml xhtml) = noContentLength $ mkResponse
-        (BS.Lazy.pack (XHtml.renderHtml xhtml))
+        (stringToBytes (XHtml.renderHtml xhtml))
         [("Content-Type", "text/html")]
 
 newtype ExportTarball = ExportTarball BS.Lazy.ByteString
@@ -138,8 +129,8 @@ instance ToMessage ExportTarball where
 newtype CSVFile = CSVFile CSV
 
 instance ToMessage CSVFile where
-    toContentType _ = BS.pack "text/csv"
-    toMessage (CSVFile csv) = BS.Lazy.pack (printCSV csv)
+    toContentType _ = "text/csv"
+    toMessage (CSVFile csv) = stringToBytes (printCSV csv)
 
 mkResponse :: BS.Lazy.ByteString -> [(String, String)] -> Response
 mkResponse bs headers = Response {
@@ -159,3 +150,5 @@ mkResponseLen bs len headers = Response {
     rsValidator = Nothing
   }
 
+stringToBytes :: String -> BS.Lazy.ByteString
+stringToBytes = Text.encodeUtf8 . Text.pack

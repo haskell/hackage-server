@@ -8,7 +8,7 @@ module Distribution.Server.Framework.Logging (
 
 import Distribution.Verbosity
 import System.IO
-import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Char8 as BS -- No UTF8 in log messages
 import System.Environment
 import Control.Monad (when)
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
