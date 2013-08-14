@@ -274,9 +274,8 @@ buildOnce opts pkgs = do
         forM_ pkgIds' $ \pkg_id -> do
             failed <- liftIO $ has_failed pkg_id
             if failed
-              then liftIO . putStrLn $
-                                "Skipping " ++ display pkg_id
-                             ++ " because it failed to built previously"
+              then liftIO . notice verbosity $ "Skipping " ++ display pkg_id
+                                            ++ " because it failed to built previously"
               else do
                 did_build <- buildPackage verbosity opts config pkg_id
                 unless did_build $ liftIO $ mark_as_failed pkg_id
@@ -382,7 +381,9 @@ buildPackage verbosity opts config pkg_id = do
         -- We CANNOT build from an unpacked directory, because Cabal
         -- only generates build reports if you are building from a
         -- tarball that was verifiably downloaded from the server
-        -- TODO: Why do we ignore the result code here?
+
+        -- We ignore the result of calling @cabal install@ because
+        -- @cabal install@ succeeds even if the documentation fails to build.
         void $ cabal opts "install"
                      ["--enable-documentation",
                       -- We only care about docs, so we want to build as
@@ -431,7 +432,8 @@ buildPackage verbosity opts config pkg_id = do
             let simple_report_log = installDirectory opts </> "packages" </> srcName config </> "build-reports.log"
             handleDoesNotExist (return ()) $ removeFile simple_report_log
 
-        docs_generated <- doesDirectoryExist doc_dir
+        docs_generated <- liftM2 (&&) (doesDirectoryExist doc_dir)
+                                      (doesFileExist (doc_dir </> "doc-index.html"))
         if docs_generated
             then do
                 notice verbosity $ "Docs generated for " ++ display pkg_id
