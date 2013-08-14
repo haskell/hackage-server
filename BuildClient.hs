@@ -41,7 +41,8 @@ data Mode = Help [String]
 data BuildOpts = BuildOpts {
                      bo_verbosity :: Verbosity,
                      bo_runTime   :: Maybe NominalDiffTime,
-                     bo_stateDir  :: FilePath
+                     bo_stateDir  :: FilePath,
+                     bo_force     :: Bool
                  }
 
 data BuildConfig = BuildConfig {
@@ -289,9 +290,12 @@ buildOnce opts pkgs = do
   where
     shouldBuild :: (PackageIdentifier, Bool) -> Maybe PackageIdentifier
     shouldBuild (pkgId, alreadyBuilt) =
-      if (not alreadyBuilt) && (null pkgs || pkgId `elem` pkgs)
+      if (not alreadyBuilt || forceBuild) && (buildingAll || pkgId `elem` pkgs)
         then Just pkgId
         else Nothing
+
+    buildingAll = null pkgs
+    forceBuild  = bo_force opts && not buildingAll
 
 -- Builds a little memoised function that can tell us whether a
 -- particular package failed to build its documentation
@@ -494,11 +498,18 @@ data BuildFlags = BuildFlags {
     flagCacheDir  :: Maybe FilePath,
     flagVerbosity :: Verbosity,
     flagRunTime   :: Maybe NominalDiffTime,
-    flagHelp      :: Bool
+    flagHelp      :: Bool,
+    flagForce     :: Bool
 }
 
 emptyBuildFlags :: BuildFlags
-emptyBuildFlags = BuildFlags Nothing normal Nothing False
+emptyBuildFlags = BuildFlags {
+    flagCacheDir  = Nothing
+  , flagVerbosity = normal
+  , flagRunTime   = Nothing
+  , flagHelp      = False
+  , flagForce     = False
+  }
 
 buildFlagDescrs :: [OptDescr (BuildFlags -> BuildFlags)]
 buildFlagDescrs =
@@ -523,6 +534,10 @@ buildFlagDescrs =
   , Option [] ["cache-dir"]
       (ReqArg (\dir opts -> opts { flagCacheDir = Just dir }) "DIR")
       "Where to put files during building"
+
+  , Option [] ["force"]
+      (NoArg (\opts -> opts { flagForce = True }))
+      "Force rebuilding (of specified packages)"
   ]
 
 validateOpts :: [String] -> IO (Mode, BuildOpts)
@@ -535,7 +550,8 @@ validateOpts args = do
         opts = BuildOpts {
                    bo_verbosity = flagVerbosity flags,
                    bo_runTime   = flagRunTime flags,
-                   bo_stateDir  = stateDir
+                   bo_stateDir  = stateDir,
+                   bo_force     = flagForce flags
                }
 
         mode = case args' of
