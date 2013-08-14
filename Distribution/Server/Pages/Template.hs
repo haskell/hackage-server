@@ -45,7 +45,7 @@ navigationBar =
       <<  map (li <<)
           [ anchor ! [href introductionURL] << "Home"
           , form   ! [action "/packages/search", theclass "search", method "get"]
-                  << [ button ! [thetype "submit"] << "Search&nbsp;"
+                  << [ button ! [thetype "submit"] << "Search", spaceHtml
                      , input  ! [thetype "text", name "terms" ] ]
           , anchor ! [href pkgListURL] << "Browse"
           , anchor ! [href recentAdditionsURL] << "What's new"
