@@ -165,20 +165,52 @@ stats opts = do
             categorise [] = error "categorise: Can't happen: []"
             categorised = map categorise byPackage
             count c = show (length (filter (c ==) categorised))
-            printTable xss
-                = let col1Width = maximum (map (length . head) xss)
-                      f [x, y] = replicate (col1Width - length x) ' ' ++ x
-                              ++ "   " ++ y
-                      f _ = error "printTable: Can't happen"
-                  in mapM_ (putStrLn . f) xss
 
-        liftIO $ printTable [["Number of packages",    "Category"],
-                             [count AllHaveDocs,       "all have docs"],
-                             [count MostRecentHasDocs, "most recent has docs"],
-                             [count SomeHaveDocs,      "some have docs"],
-                             [count NoneHaveDocs,      "none have docs"]]
+        liftIO $ do
 
-        liftIO $ putStrLn $ show failed ++ " package version(s) failed to build (remove " ++ show (bo_stateDir opts </> "failed") ++ " to reset)"
+          let statsFile = bo_stateDir opts </> "stats"
+
+          let formatVersion :: (PackageId, Bool) -> [String]
+              formatVersion (version, hasDocs) = [display (pkgVersion version), show hasDocs]
+
+              formatPkg :: [(PackageId, Bool)] -> [[String]]
+              formatPkg ((firstVersion, firstHasDocs) : otherVersions) =
+                  (display (pkgName firstVersion) : formatVersion (firstVersion, firstHasDocs))
+                : (map (("" :) . formatVersion) otherVersions)
+              formatPkg _ = error "formatPkg: cannot happen"
+
+          writeFile statsFile $ printTable (["Package", "Version", "Has docs?"] : concatMap formatPkg byPackage)
+
+          putStr $ printTable
+            [["Number of packages",    "Category"],
+             [count AllHaveDocs,       "all have docs"],
+             [count MostRecentHasDocs, "most recent has docs"],
+             [count SomeHaveDocs,      "some have docs"],
+             [count NoneHaveDocs,      "none have docs"]]
+
+          putStrLn $ "Detailed statistics written to " ++ statsFile
+          putStrLn $ "Documentation for " ++ show failed ++ " package version(s) previously failed to build (remove " ++ show (bo_stateDir opts </> "failed") ++ " to reset)"
+
+-- | Formats a 2D table so that everything is nicely aligned
+--
+-- NOTE: Expects the same number of columns in every row!
+printTable :: [[String]] -> String
+printTable xss = unlines
+               . map (intercalate " ")
+               . map padCols
+               $ xss
+  where
+    colWidths :: [[Int]]
+    colWidths = map (map length) $ xss
+
+    maxColWidths :: [Int]
+    maxColWidths = foldr1 (\xs ys -> map (uncurry max) (zip xs ys)) colWidths
+
+    padCols :: [String] -> [String]
+    padCols cols = map (uncurry padTo) (zip maxColWidths cols)
+
+    padTo :: Int -> String -> String
+    padTo len str = str ++ replicate (len - length str) ' '
 
 getDocumentationStats :: BuildConfig -> HttpSession [(PackageIdentifier, Bool)]
 getDocumentationStats config = do
