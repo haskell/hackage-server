@@ -446,7 +446,9 @@ buildPackage verbosity opts config pkg_id = do
                     bracket_ (renameDirectory doc_dir      temp_doc_dir)
                              (renameDirectory temp_doc_dir doc_dir)
                              (tarGzDirectory temp_doc_dir)
-            else return Nothing
+            else do
+              notice verbosity $ "Docs for " ++ display pkg_id ++ " failed to build"
+              return Nothing
 
     -- Submit the generated docs, if possible
     case mb_docs of
