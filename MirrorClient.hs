@@ -1,5 +1,5 @@
 {-# LANGUAGE PatternGuards, GeneralizedNewtypeDeriving,
-             MultiParamTypeClasses, FlexibleInstances #-}
+             MultiParamTypeClasses, FlexibleInstances, CPP #-}
 module Main where
 
 import Network.HTTP
@@ -44,13 +44,18 @@ import System.Locale
 import System.Random
 import System.Environment
 import System.IO
-import System.IO.Error hiding (catch)
 import System.Exit
 import System.FilePath
 import System.Directory
 import System.Console.GetOpt
 import qualified System.FilePath.Posix as Posix
+
+#if __GLASGOW_HASKELL__ >= 706
+import System.IO.Error
+#else
+import System.IO.Error hiding (catch)
 import Prelude hiding (catch)
+#endif
 
 import Paths_hackage_server (version)
 
