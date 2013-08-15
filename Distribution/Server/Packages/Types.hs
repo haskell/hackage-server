@@ -85,6 +85,10 @@ data PkgTarball = PkgTarball {
    pkgTarballNoGz :: !BlobId
 } deriving (Eq, Typeable, Show)
 
+instance SafeCopy PkgTarball where
+  putCopy = contain . Serialize.put
+  getCopy = contain Serialize.get
+
 type UploadInfo = (UTCTime, UserId)
 
 pkgUploadTime :: PkgInfo -> UTCTime

@@ -50,6 +50,11 @@ data CoreFeature = CoreFeature {
     updateReplacePackageUploadTime :: MonadIO m
                                    => PackageId -> UTCTime
                                    -> m (Maybe String),
+    updateAddTarball :: MonadIO m
+                     => PackageId
+                     -> PkgTarball -> UploadInfo
+                     -> m (Maybe String),
+
     -- | Set an entry in the 00-index.tar file.
     -- The 00-index.tar file contains all the package entries, but it is an
     -- extensible format and we can add more stuff. E.g. version preferences
@@ -265,20 +270,39 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     -- Update transactions
     --
+    -- TODO: Why don't we need to call hooks here? (like packageChangeHook?)
+    -- Once we do, the eitherToMaybe can go
     updateReplacePackageUploader :: MonadIO m => PackageId -> UserId
                                  -> m (Maybe String)
-    updateReplacePackageUploader pkgid userid =
+    updateReplacePackageUploader pkgid userid = eitherToMaybe $
       updateState packagesState (ReplacePackageUploader pkgid userid)
 
     updateReplacePackageUploadTime :: MonadIO m => PackageId -> UTCTime
                                    -> m (Maybe String)
-    updateReplacePackageUploadTime pkgid time =
+    updateReplacePackageUploadTime pkgid time = eitherToMaybe $
       updateState packagesState (ReplacePackageUploadTime pkgid time)
 
     updateArchiveIndexEntry :: MonadIO m => String -> (ByteString, UTCTime) -> m ()
     updateArchiveIndexEntry entryName entryDetails = do
       modifyMemState indexExtras (Map.insert entryName entryDetails)
       runHook_ packageIndexChange ()
+
+    updateAddTarball :: MonadIO m => PackageId -> PkgTarball -> UploadInfo -> m (Maybe String)
+    updateAddTarball pkgId tarball uploadInfo = do
+      res <- updateState packagesState $ AddTarball pkgId tarball uploadInfo
+      case res of
+        Left err ->
+          return (Just err)
+        Right (prev, updated) -> do
+          runHook_ packageChangeHook (prev, updated)
+          runHook_ packageIndexChange ()
+          return Nothing
+
+    eitherToMaybe :: Monad m => m (Either String a) -> m (Maybe String)
+    eitherToMaybe io = do res <- io
+                          case res of
+                            Left err -> return (Just err)
+                            Right _  -> return Nothing
 
     -- Cache updates
     --

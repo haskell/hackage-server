@@ -98,6 +98,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
                          , doMergePackage
                          , updateReplacePackageUploadTime
                          , updateReplacePackageUploader
+                         , updateAddTarball
                          , lookupPackageId
                          }
               UserFeature{..}
@@ -179,23 +180,15 @@ mirrorFeature ServerEnv{serverBlobStore = store}
                              return $ Right (x, blobIdDecompressed)
         case res of
             Left err -> badRequest (toResponse err)
-            Right ((((pkg, pkgStr), warnings), blobIdDecompressed), blobId) -> do
-                -- doMergePackage runs the package hooks
-                -- if the upload feature is enabled, it adds
-                -- the user to the package's maintainer group
-                -- the mirror client should probably do this itself,
-                -- if it's able (if it's a trustee).
-                liftIO $ doMergePackage $ PkgInfo {
-                    pkgInfoId     = packageId pkg,
-                    pkgData       = CabalFileText pkgStr,
-                    pkgTarball    = [(PkgTarball { pkgTarballGz = blobId,
-                                                   pkgTarballNoGz = blobIdDecompressed },
-                                      uploadData)],
-                    pkgUploadData = uploadData,
-                    pkgDataOld    = []
-                }
-                return . toResponse $ unlines warnings
-
+            Right (((_, warnings), blobIdDecompressed), blobId) -> do
+                let pkgTarball = PkgTarball {
+                                     pkgTarballGz   = blobId
+                                   , pkgTarballNoGz = blobIdDecompressed
+                                   }
+                res' <- updateAddTarball pkgid pkgTarball uploadData
+                case res' of
+                  Just err -> badRequest . toResponse $ err
+                  Nothing  -> return     . toResponse $ unlines warnings
 
     uploaderGet dpath = do
       pkg    <- packageInPath dpath >>= lookupPackageId

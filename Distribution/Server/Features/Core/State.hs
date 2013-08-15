@@ -5,7 +5,7 @@ module Distribution.Server.Features.Core.State where
 import Distribution.Package
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
-import Distribution.Server.Packages.Types (PkgInfo(..), pkgUploadUser, pkgUploadTime)
+import Distribution.Server.Packages.Types (PkgInfo(..), pkgUploadUser, pkgUploadTime, PkgTarball, UploadInfo)
 import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Framework.MemSize
 
@@ -70,20 +70,24 @@ deletePackageVersion :: PackageId -> Update PackagesState ()
 deletePackageVersion pkg = State.modify $ \pkgsState -> pkgsState { packageList = deleteVersion (packageList pkgsState) }
     where deleteVersion = PackageIndex.deletePackageId pkg
 
-replacePackageUploader :: PackageId -> UserId -> Update PackagesState (Maybe String)
+replacePackageUploader :: PackageId -> UserId -> Update PackagesState (Either String (PkgInfo, PkgInfo))
 replacePackageUploader pkg uid = modifyPkgInfo pkg $ \pkgInfo -> pkgInfo { pkgUploadData = (pkgUploadTime pkgInfo, uid) }
 
-replacePackageUploadTime :: PackageId -> UTCTime -> Update PackagesState (Maybe String)
+replacePackageUploadTime :: PackageId -> UTCTime -> Update PackagesState (Either String (PkgInfo, PkgInfo))
 replacePackageUploadTime pkg time = modifyPkgInfo pkg $ \pkgInfo -> pkgInfo { pkgUploadData = (time, pkgUploadUser pkgInfo) }
 
-modifyPkgInfo :: PackageId -> (PkgInfo -> PkgInfo) -> Update PackagesState (Maybe String)
+addTarball :: PackageId -> PkgTarball -> UploadInfo -> Update PackagesState (Either String (PkgInfo, PkgInfo))
+addTarball pkg tarball uploadInfo = modifyPkgInfo pkg $ \pkgInfo -> pkgInfo { pkgTarball = (tarball, uploadInfo) : pkgTarball pkgInfo }
+
+modifyPkgInfo :: PackageId -> (PkgInfo -> PkgInfo) -> Update PackagesState (Either String (PkgInfo, PkgInfo))
 modifyPkgInfo pkg f = do
   pkgsState <- State.get
   case PackageIndex.lookupPackageId (packageList pkgsState) pkg of
-    Nothing -> return (Just "No such package")
+    Nothing -> return (Left "No such package")
     Just pkgInfo -> do
-      State.put $ pkgsState { packageList = PackageIndex.insert (f pkgInfo) (packageList pkgsState) }
-      return Nothing
+      let pkgInfo' = f pkgInfo
+      State.put $ pkgsState { packageList = PackageIndex.insert pkgInfo' (packageList pkgsState) }
+      return $ Right (pkgInfo, pkgInfo')
 
 -- |Replace all existing packages and reports
 replacePackagesState :: PackagesState -> Update PackagesState ()
@@ -96,6 +100,7 @@ makeAcidic ''PackagesState ['getPackagesState
                            ,'replacePackagesState
                            ,'replacePackageUploadTime
                            ,'replacePackageUploader
+                           ,'addTarball
                            ,'insertPkgIfAbsent
                            ,'mergePkg
                            ,'deletePackageVersion
