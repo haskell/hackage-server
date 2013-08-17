@@ -259,18 +259,21 @@ buildOnce opts pkgs = do
 
         pkgIdsHaveDocs <- getDocumentationStats config
 
-        -- Find those files *not* marked as having documentation in our cache
-        let pkgIdss = map (sortBy (flip (comparing pkgVersion)))
-                    $ groupBy (equating  pkgName)
-                    $ sortBy  (comparing pkgName)
-                    $ mapMaybe shouldBuild
-                    $ pkgIdsHaveDocs
-            pkgIds' = -- First build all of the latest versions of each package
-                      map head pkgIdss
-                      -- Then go back and build all the older versions
-                   ++ concatMap tail pkgIdss
+        -- First build all of the latest versions of each package
+        -- Then go back and build all the older versions
+        -- NOTE: assumes all these lists are non-empty
+        let latestFirst :: [[(PackageId, Bool)]] -> [(PackageId, Bool)]
+            latestFirst ids = map head ids ++ concatMap tail ids
 
-        liftIO $ notice verbosity $ show (length pkgIds') ++ " package(s) to build"
+        -- Find those files *not* marked as having documentation in our cache
+        let toBuild = mapMaybe shouldBuild
+                    . latestFirst
+                    . map (sortBy (flip (comparing (pkgVersion . fst))))
+                    . groupBy (equating  (pkgName . fst))
+                    . sortBy  (comparing (pkgName . fst))
+                    $ pkgIdsHaveDocs
+
+        liftIO $ notice verbosity $ show (length toBuild) ++ " package(s) to build"
 
         -- Try to build each of them, uploading the documentation and
         -- build reports along the way. We mark each package as having
@@ -278,7 +281,7 @@ buildOnce opts pkgs = do
         -- we don't want to keep continually trying to build a failing
         -- package!
         startTime <- liftIO $ getCurrentTime
-        forM_ pkgIds' $ \pkg_id -> do
+        forM_ toBuild $ \pkg_id -> do
             failed <- liftIO $ has_failed pkg_id
             if failed
               then liftIO . notice verbosity $ "Skipping " ++ display pkg_id
