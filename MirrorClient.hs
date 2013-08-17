@@ -319,62 +319,70 @@ mirrorPackages verbosity opts pkgsToMirror = do
     extractCredentials _ = Nothing
 
     mirrorPackage pkginfo@(PkgIndexInfo pkgid _ _ _) = do
-      let srcBasedir
-             | isOldHackageURI (srcURI opts) = "packages" </> "archive"
-             | otherwise                     = "packages"
-          srcPkgFile = display (packageName pkgid) </>
-                       display (packageVersion pkgid) </>
-                       display pkgid <.> "tar.gz"
-          src     = srcURI   opts <//> srcBasedir </> srcPkgFile
-          dst     = dstURI   opts <//> "package" </> display pkgid
-          pkgfile = stateDir opts </>  display pkgid <.> "tar.gz"
-          --TODO: pass env and srcCacheDir instead of opts
+      let srcBase = srcURI opts
+                    <//> (if isOldHackageURI (srcURI opts)
+                           then "packages" </> "archive"
+                           else "package")
+                    </> display (packageName pkgid)
+                    </> display (packageVersion pkgid)
+          dstBase = dstURI opts
+                    <//> "package"
+                    </> display pkgid
+
+          srcTgz  = srcBase <//> display pkgid <.> "tar.gz"
+          srcCab  = srcBase <//> display (packageName pkgid) <.> "cabal"
+
+          locTgz  = stateDir opts </> display pkgid <.> "tar.gz"
+          locCab  = stateDir opts </> display pkgid <.> "cabal"
 
       liftIO $ notice verbosity $ "mirroring " ++ display pkgid
-      rsp <- browserAction $ downloadFile' src pkgfile
+      rsp <- browserActions [
+                 downloadFile' srcCab locCab
+               , downloadFile' srcTgz locTgz
+               ]
       case rsp of
-        Just theError -> notifyResponse (GetPackageFailed theError pkgid)
+        Just theError ->
+          notifyResponse (GetPackageFailed theError pkgid)
+        Nothing -> do
+          notifyResponse GetPackageOk
+          putPackage dstBase pkginfo locCab locTgz
 
-        Nothing -> do notifyResponse GetPackageOk
-                      putPackage dst pkginfo pkgfile
+putPackage :: URI -> PkgIndexInfo -> FilePath -> FilePath -> MirrorSession ()
+putPackage baseURI (PkgIndexInfo pkgid mtime muname _muid) locCab locTgz = do
+    cab <- liftIO $ BS.readFile locCab
+    tgz <- liftIO $ BS.readFile locTgz
 
+    rsp <- browserActions [
+        requestPUT cabURI "text/plain" cab
+      , requestPUT tgzURI "application/x-gzip" tgz
+      , maybe (return Nothing) putPackageUploadTime mtime
+      , maybe (return Nothing) putPackageUploader muname
+      ]
 
+    case rsp of
+      Just theError ->
+        notifyResponse (PutPackageFailed theError pkgid)
+      Nothing -> do
+        notifyResponse PutPackageOk
+        liftIO $ removeFile locCab
+        liftIO $ removeFile locTgz
 
-putPackage :: URI -> PkgIndexInfo -> FilePath -> MirrorSession ()
-putPackage baseURI (PkgIndexInfo pkgid mtime muname _muid) pkgFile = do
-    putPackageTarball
-    maybe (return ()) putPackageUploadTime mtime
-    maybe (return ()) putPackageUploader muname
-  where
-    tarballURI = baseURI <//> display pkgid <.> "tar.gz"
-
-    putPackageTarball = do
-      pkgContent <- liftIO $ BS.readFile pkgFile
-      rsp <- browserAction $ requestPUT tarballURI "application/x-gzip" pkgContent
-      case rsp of
-        Just theError -> notifyResponse (PutPackageFailed theError pkgid)
-
-        Nothing -> do notifyResponse PutPackageOk
-                      liftIO $ removeFile pkgFile
-      --TODO: think about in what situations we delete the file
+      -- TODO: think about in what situations we delete the file
       -- and if we should actually cache it if we don't sucessfully upload.
 
       -- TODO: perhaps we shouldn't report failure for the whole package if
       -- we fail to set the upload time/uploader
+  where
+    cabURI = baseURI <//> display (packageName pkgid) <.> "cabal"
+    tgzURI = baseURI <//> display pkgid               <.> "tar.gz"
 
     putPackageUploadTime time = do
       let timeStr = formatTime defaultTimeLocale "%c" time
-      rsp <- browserAction $ requestPUT (baseURI <//> "upload-time") "text/plain" (packUTF8 timeStr)
-      case rsp of
-        Just theError -> notifyResponse (PutPackageFailed theError pkgid)
-        Nothing       -> notifyResponse PutPackageOk
+      requestPUT (baseURI <//> "upload-time") "text/plain" (packUTF8 timeStr)
 
     putPackageUploader uname = do
       let nameStr = display uname
-      rsp <- browserAction $ requestPUT (baseURI <//> "uploader") "text/plain" (packUTF8 nameStr)
-      case rsp of
-        Just theError -> notifyResponse (PutPackageFailed theError pkgid)
-        Nothing       -> notifyResponse PutPackageOk
+      requestPUT (baseURI <//> "uploader") "text/plain" (packUTF8 nameStr)
 
 -----------------------------
 -- Error handling strategy
@@ -433,6 +441,18 @@ instance MonadState ErrorState MirrorSession where
 
 browserAction :: BrowserAction (HandleStream ByteString) a -> MirrorSession a
 browserAction = MirrorSession . lift . lift
+
+browserActions :: [BrowserAction (HandleStream ByteString) (Maybe ErrorResponse)] -> MirrorSession (Maybe ErrorResponse)
+browserActions = foldr1 maybeThen . map browserAction
+  where
+    -- Bind for the strange not-quite-monad where errors are returned as
+    -- (Just err) and success is returned as Nothing
+    maybeThen :: Monad m => m (Maybe err) -> m (Maybe err) -> m (Maybe err)
+    maybeThen p q = do
+      res <- p
+      case res of
+        Just theError -> return (Just theError)
+        Nothing       -> q
 
 runMirrorSession :: Verbosity -> Bool -> ErrorState -> MirrorSession a
                  -> IO (Either MirrorError a, ErrorState)
