@@ -143,8 +143,8 @@ stats opts = do
 
     createDirectoryIfMissing False cacheDir
 
-    (_, _, _, num_failed) <- mkPackageFailed opts
-    failed <- num_failed
+    (didFail, _, _, getNumFailed) <- mkPackageFailed opts
+    numFailed <- getNumFailed
 
     httpSession verbosity $ do
         liftIO $ notice verbosity "Getting index"
@@ -171,16 +171,23 @@ stats opts = do
 
           let statsFile = bo_stateDir opts </> "stats"
 
-          let formatVersion :: (PackageId, Bool) -> [String]
-              formatVersion (version, hasDocs) = [display (pkgVersion version), show hasDocs]
+          let formatVersion :: (PackageId, Bool) -> IO [String]
+              formatVersion (version, hasDocs) = do
+                failed <- didFail version
+                return [ display (pkgVersion version)
+                       , show hasDocs ++ if failed then " (failed)" else ""
+                       ]
 
-              formatPkg :: [(PackageId, Bool)] -> [[String]]
-              formatPkg ((firstVersion, firstHasDocs) : otherVersions) =
-                  (display (pkgName firstVersion) : formatVersion (firstVersion, firstHasDocs))
-                : (map (("" :) . formatVersion) otherVersions)
+              formatPkg :: [(PackageId, Bool)] -> IO [[String]]
+              formatPkg ((firstVersion, firstHasDocs) : otherVersions) = do
+                  firstFormatted <- formatVersion (firstVersion, firstHasDocs)
+                  otherFormatted <- mapM formatVersion otherVersions
+                  return $ (display (pkgName firstVersion) : firstFormatted)
+                         : (map ("" :) otherFormatted)
               formatPkg _ = error "formatPkg: cannot happen"
 
-          writeFile statsFile $ printTable (["Package", "Version", "Has docs?"] : concatMap formatPkg byPackage)
+          formattedStats <- concat `liftM` mapM formatPkg byPackage
+          writeFile statsFile $ printTable (["Package", "Version", "Has docs?"] : formattedStats)
 
           putStr $ printTable
             [["Number of packages",    "Category"],
@@ -190,7 +197,7 @@ stats opts = do
              [count NoneHaveDocs,      "none have docs"]]
 
           putStrLn $ "Detailed statistics written to " ++ statsFile
-          putStrLn $ "Documentation for " ++ show failed ++ " package version(s) previously failed to build (remove " ++ show (bo_stateDir opts </> "failed") ++ " to reset)"
+          putStrLn $ "Documentation for " ++ show numFailed ++ " package version(s) previously failed to build (remove " ++ show (bo_stateDir opts </> "failed") ++ " to reset)"
 
 -- | Formats a 2D table so that everything is nicely aligned
 --
