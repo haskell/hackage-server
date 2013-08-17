@@ -187,7 +187,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
                                    }
                 res' <- updateAddTarball pkgid pkgTarball uploadData
                 case res' of
-                  Just err -> badRequest . toResponse $ err
+                  Just err -> notFound . toResponse $ err
                   Nothing  -> return     . toResponse $ unlines warnings
 
     uploaderGet dpath = do
