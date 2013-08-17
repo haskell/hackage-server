@@ -252,12 +252,9 @@ buildOnce opts pkgs = do
     configFileExists <- doesFileExist (bo_stateDir opts </> "cabal-config")
     unless configFileExists $ prepareBuildPackages opts config
 
-    flip finally persist_failed $ httpSession verbosity $ do
-        -- Make sure we authenticate to Hackage
-        setAuthorityGen $ provideAuthInfo (bc_srcURI config)
-                        $ Just (bc_username config, bc_password config)
-
-        pkgIdsHaveDocs <- getDocumentationStats config
+    flip finally persist_failed $ do
+        pkgIdsHaveDocs <- httpSession verbosity $
+          getDocumentationStats config
 
         -- First build all of the latest versions of each package
         -- Then go back and build all the older versions
@@ -287,8 +284,15 @@ buildOnce opts pkgs = do
               then liftIO . notice verbosity $ "Skipping " ++ display pkg_id
                                             ++ " because it failed to built previously"
               else do
-                did_build <- buildPackage verbosity opts config pkg_id
-                unless did_build $ liftIO $ mark_as_failed pkg_id
+                mTgz <- buildPackage verbosity opts config pkg_id
+                case mTgz of
+                  Nothing ->
+                    liftIO $ mark_as_failed pkg_id
+                  Just docs_tgz -> httpSession verbosity $ do
+                    -- Make sure we authenticate to Hackage
+                    setAuthorityGen $ provideAuthInfo (bc_srcURI config)
+                                    $ Just (bc_username config, bc_password config)
+                    requestPUT (bc_srcURI config <//> "package" </> display pkg_id </> "docs") "application/x-tar" (Just "gzip") docs_tgz
                 -- We don't check the runtime until we've actually tried
                 -- to build a doc, so as to ensure we make progress.
                 case bo_runTime opts of
@@ -350,8 +354,10 @@ prepareBuildPackages opts config
         "password: " ++ bc_password config
       ]
 
-buildPackage :: Verbosity -> BuildOpts -> BuildConfig -> PackageId
-             -> HttpSession Bool
+-- | Build documentation and return @(Just tgz)@ for the built tgz file
+-- on success, or @Nothing@ otherwise.
+buildPackage :: MonadIO m
+             => Verbosity -> BuildOpts -> BuildConfig -> PackageId -> m (Maybe BS.ByteString)
 buildPackage verbosity opts config pkg_id = do
     liftIO $ do notice verbosity ("Building " ++ display pkg_id)
                 handleDoesNotExist (return ()) $
@@ -387,7 +393,7 @@ buildPackage verbosity opts config pkg_id = do
         --versionless_pkg_url = srcURI opts <//> "package" </> "$pkg"
         pkg_url = bc_srcURI config <//> "package" </> "$pkg-$version"
 
-    mb_docs <- liftIO $ withCurrentDirectory (installDirectory opts) $ do
+    liftIO $ withCurrentDirectory (installDirectory opts) $ do
         -- We CANNOT build from an unpacked directory, because Cabal
         -- only generates build reports if you are building from a
         -- tarball that was verifiably downloaded from the server
@@ -459,13 +465,6 @@ buildPackage verbosity opts config pkg_id = do
             else do
               notice verbosity $ "Docs for " ++ display pkg_id ++ " failed to build"
               return Nothing
-
-    -- Submit the generated docs, if possible
-    case mb_docs of
-        Nothing       -> return False
-        Just docs_tgz -> do
-            requestPUT (bc_srcURI config <//> "package" </> display pkg_id </> "docs") "application/x-tar" (Just "gzip") docs_tgz
-            return True
 
 cabal :: BuildOpts -> String -> [String] -> IO ExitCode
 cabal opts cmd args = do
