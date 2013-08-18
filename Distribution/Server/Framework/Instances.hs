@@ -34,6 +34,11 @@ import Data.Maybe (fromJust)
 
 import qualified Text.PrettyPrint as PP (text)
 import Distribution.Compat.ReadP (readS_to_P)
+#if !(MIN_VERSION_bytestring(0,10,0))
+import qualified Data.ByteString as SBS
+import qualified Data.ByteString.Lazy as LBS
+#endif
+
 
 deriving instance Typeable PackageIdentifier
 deriving instance Typeable GenericPackageDescription
@@ -88,8 +93,8 @@ instance Serialize UTCTime where
 
 -- rough versions of RNF for these
 #if !(MIN_VERSION_bytestring(0,10,0))
-instance NFData ByteString where
-    rnf bs = BS.length bs `seq` ()
+instance NFData LBS.ByteString where
+    rnf bs = LBS.length bs `seq` ()
 
 instance NFData SBS.ByteString where
     rnf bs = bs `seq` ()
