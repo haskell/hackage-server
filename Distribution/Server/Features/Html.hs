@@ -93,7 +93,7 @@ initHtmlFeature :: ServerEnv -> UserFeature -> CoreFeature -> RecentPackagesFeat
 
 initHtmlFeature ServerEnv{serverTemplatesDir, serverCacheDelay,
                           serverVerbosity = verbosity}
-                user core@CoreFeature{packageIndexChange}
+                user core@CoreFeature{packageChangeHook}
                 packages upload
                 candidates versions
                 -- [reverse index disabled] reverse
@@ -142,7 +142,7 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverCacheDelay,
 
     registerHook itemUpdate         $ \_ -> prodAsyncCache mainCache
                                          >> prodAsyncCache namesCache
-    registerHook packageIndexChange $ \_ -> prodAsyncCache mainCache
+    registerHook packageChangeHook  $ \_ -> prodAsyncCache mainCache
                                          >> prodAsyncCache namesCache
 
     loginfo verbosity "Initialising html feature, end"

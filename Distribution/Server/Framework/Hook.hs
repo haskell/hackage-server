@@ -2,6 +2,7 @@ module Distribution.Server.Framework.Hook (
     Hook,
     newHook,
     registerHook,
+    registerHookJust,
 
     runHook,
     runHook_,
@@ -23,6 +24,12 @@ newHook = fmap Hook $ newIORef []
 registerHook :: Hook a b -> (a -> IO b) -> IO ()
 registerHook (Hook ref) action =
   atomicModifyIORef ref (\actions -> (action:actions, ())) 
+
+registerHookJust :: Hook a () -> (a -> Maybe b) -> (b -> IO ()) -> IO ()
+registerHookJust (Hook ref) predicate action =
+    atomicModifyIORef ref (\actions -> (action':actions, ())) 
+  where
+    action' x = maybe (return ()) action (predicate x)
 
 runHook :: MonadIO m => Hook a b -> a -> m [b]
 runHook (Hook ref) x = liftIO $ do

@@ -101,9 +101,8 @@ searchFeature ServerEnv{serverBaseURI} CoreFeature{..}
           se = SearchEngine.insertDocs pkgs initialPkgSearchEngine
       writeMemState searchEngineState se
 
-      registerHook packageAddHook    $ updatePackage . packageName
-      registerHook packageRemoveHook $ updatePackage . packageName
-      registerHook packageChangeHook $ updatePackage . packageName . snd
+      registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, _) ->
+        updatePackage (packageName pkgid)
 
     updatePackage :: PackageName -> IO ()
     updatePackage pkgname = do

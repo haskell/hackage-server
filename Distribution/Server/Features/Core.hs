@@ -4,7 +4,14 @@ module Distribution.Server.Features.Core (
     CoreResource(..),
     initCoreFeature,
 
-    -- Misc other utils?
+    -- * Change events
+    PackageChange(..),
+    isPackageChangeAny,
+    isPackageAdd,
+    isPackageDelete,
+    isPackageIndexChange,
+
+    -- * Misc other utils
     packageExists,
     packageIdExists,
   ) where
@@ -61,18 +68,10 @@ data CoreFeature = CoreFeature {
     -- or crypto signatures.
     updateArchiveIndexEntry  :: MonadIO m => String -> (ByteString, UTCTime) -> m (),
 
-    -- Updating top-level packages
-    -- This is run after a package is added
-    packageAddHook    :: Hook PkgInfo (),
-    -- This is run after a package is removed (but the PkgInfo is retained just for the hook)
-    packageRemoveHook :: Hook PkgInfo (),
-    -- This is run after a package is changed in some way (essentially added, then removed)
-    packageChangeHook :: Hook (PkgInfo, PkgInfo) (),
-    -- This is called whenever any of the above three hooks is called, but
-    -- also for other updates of the index tarball  (e.g. when indexExtras is updated)
-    packageIndexChange :: Hook () (),
+    -- | Notification of package or index changes
+    packageChangeHook :: Hook PackageChange (),
 
-    -- For download counters
+    -- | Notification of downloads
     packageDownloadHook :: Hook PackageId (),
 
     -- Find a package in the package DB
@@ -82,6 +81,40 @@ data CoreFeature = CoreFeature {
 
 instance IsHackageFeature CoreFeature where
     getFeatureInterface = coreFeatureInterface
+
+-- | This is designed so that you can pattern match on just the kinds of
+-- events you are interested in.
+data PackageChange = PackageChangeAdd    PkgInfo
+                   | PackageChangeDelete PkgInfo
+                   | PackageChangeInfo   PkgInfo PkgInfo
+                   | PackageChangeIndexExtra String ByteString UTCTime
+
+isPackageChangeAny :: PackageChange -> Maybe (PackageId, Maybe PkgInfo)
+isPackageChangeAny (PackageChangeAdd        pkginfo) = Just (packageId pkginfo, Just pkginfo)
+isPackageChangeAny (PackageChangeDelete     pkginfo) = Just (packageId pkginfo, Nothing)
+isPackageChangeAny (PackageChangeInfo     _ pkginfo) = Just (packageId pkginfo, Just pkginfo)
+isPackageChangeAny  PackageChangeIndexExtra {}       = Nothing
+
+isPackageAdd :: PackageChange -> Maybe PkgInfo
+isPackageAdd (PackageChangeAdd pkginfo) = Just pkginfo
+isPackageAdd _                          = Nothing
+
+isPackageDelete :: PackageChange -> Maybe PkgInfo
+isPackageDelete (PackageChangeDelete pkginfo) = Just pkginfo
+isPackageDelete _                             = Nothing
+
+isPackageIndexChange ::  PackageChange -> Maybe ()
+isPackageIndexChange _ = Just ()
+
+{-
+-- Other examples we may want later...
+isPackageAddVersion                :: Maybe PackageId,
+isPackageDeleteVersion             :: Maybe PackageId,
+isPackageChangeCabalFile           :: Maybe (PackageId, CabalFileText),
+isPackageChangeCabalFileUploadInfo :: Maybe (PackageId, UploadInfo),
+isPackageChangeTarball             :: Maybe (PackageId, PkgTarball),
+isPackageIndexExtraChange          :: Maybe (String, ByteString, UTCTime)
+-}
 
 data CoreResource = CoreResource {
     corePackagesPage    :: Resource,
@@ -120,17 +153,13 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
     extraMap <- newMemStateWHNF Map.empty
 
     -- Hooks
-    downHook   <- newHook
-    addHook    <- newHook
-    removeHook <- newHook
-    changeHook <- newHook
-    indexHook  <- newHook
+    packageChangeHook   <- newHook
+    packageDownloadHook <- newHook
 
     rec let (feature, getIndexTarball)
               = coreFeature env users
                             packagesState extraMap indexTar
-                            downHook addHook removeHook changeHook
-                            indexHook
+                            packageChangeHook packageDownloadHook
 
         -- Caches
         -- The index.tar.gz file
@@ -142,7 +171,8 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
                         asyncCacheLogVerbosity = verbosity
                       }
 
-    registerHook indexHook (\() -> prodAsyncCache indexTar)
+    registerHookJust packageChangeHook isPackageIndexChange $ \_ ->
+      prodAsyncCache indexTar
 
     loginfo verbosity "Initialising core feature, end"
     return feature
@@ -168,18 +198,14 @@ coreFeature :: ServerEnv
             -> StateComponent AcidState PackagesState
             -> MemState (Map String (ByteString, UTCTime))
             -> AsyncCache ByteString
+            -> Hook PackageChange ()
             -> Hook PackageId ()
-            -> Hook PkgInfo ()
-            -> Hook PkgInfo ()
-            -> Hook (PkgInfo, PkgInfo) ()
-            -> Hook () ()
             -> ( CoreFeature
                , IO ByteString )
 
 coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
             packagesState indexExtras cacheIndexTarball
-            packageDownloadHook packageAddHook packageRemoveHook packageChangeHook
-            packageIndexChange
+            packageChangeHook packageDownloadHook
   = (CoreFeature{..}, getIndexTarball)
   where
     coreFeatureInterface = (emptyHackageFeature "core") {
@@ -276,7 +302,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       case mpkginfo of
         Nothing -> return False
         Just pkginfo -> do
-          runHook_ packageAddHook pkginfo
+          runHook_ packageChangeHook (PackageChangeAdd pkginfo)
           return True
 
     updateDeletePackage :: MonadIO m => PackageId -> m Bool
@@ -285,7 +311,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       case mpkginfo of
         Nothing -> return False
         Just pkginfo -> do
-          runHook_ packageRemoveHook pkginfo
+          runHook_ packageChangeHook (PackageChangeDelete pkginfo)
           return True
 
     updateAddPackageRevision :: MonadIO m => PackageId -> CabalFileText -> UploadInfo -> m ()
@@ -293,10 +319,9 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       (moldpkginfo, newpkginfo) <- updateState packagesState (AddPackageRevision pkgid cabalfile uploadinfo)
       case moldpkginfo of
         Nothing ->
-          runHook_ packageAddHook newpkginfo
+          runHook_ packageChangeHook  (PackageChangeAdd newpkginfo)
         Just oldpkginfo ->
-          runHook_ packageChangeHook (oldpkginfo, newpkginfo)
-      runHook_ packageIndexChange ()
+          runHook_ packageChangeHook  (PackageChangeInfo oldpkginfo newpkginfo)
 
     updateAddPackageTarball :: MonadIO m => PackageId -> PkgTarball -> UploadInfo -> m Bool
     updateAddPackageTarball pkgid tarball uploadinfo = do
@@ -304,8 +329,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       case mpkginfo of
         Nothing -> return False
         Just (oldpkginfo, newpkginfo) -> do
-          runHook_ packageChangeHook (oldpkginfo, newpkginfo)
-          runHook_ packageIndexChange ()
+          runHook_ packageChangeHook  (PackageChangeInfo oldpkginfo newpkginfo)
           return True
 
     updateSetPackageUploader pkgid userid = do
@@ -313,8 +337,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       case mpkginfo of
         Nothing -> return False
         Just (oldpkginfo, newpkginfo) -> do
-          runHook_ packageChangeHook (oldpkginfo, newpkginfo)
-          runHook_ packageIndexChange ()
+          runHook_ packageChangeHook  (PackageChangeInfo oldpkginfo newpkginfo)
           return True
 
     updateSetPackageUploadTime pkgid time = do
@@ -322,14 +345,13 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       case mpkginfo of
         Nothing -> return False
         Just (oldpkginfo, newpkginfo) -> do
-          runHook_ packageChangeHook (oldpkginfo, newpkginfo)
-          runHook_ packageIndexChange ()
+          runHook_ packageChangeHook  (PackageChangeInfo oldpkginfo newpkginfo)
           return True
 
     updateArchiveIndexEntry :: MonadIO m => String -> (ByteString, UTCTime) -> m ()
-    updateArchiveIndexEntry entryName entryDetails = do
+    updateArchiveIndexEntry entryName entryDetails@(entryData, entryTime) = do
       modifyMemState indexExtras (Map.insert entryName entryDetails)
-      runHook_ packageIndexChange ()
+      runHook_ packageChangeHook (PackageChangeIndexExtra entryName entryData entryTime)
 
     -- Cache updates
     --

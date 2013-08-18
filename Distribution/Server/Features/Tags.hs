@@ -88,11 +88,13 @@ initTagsFeature ServerEnv{serverStateDir} core@CoreFeature{..} upload = do
     updateTag <- newHook
 
     let feature = tagsFeature core upload tagsState specials updateTag
-
-    registerHook packageAddHook $ \pkginfo -> do
-      let pkgname = packageName . packageDescription . pkgDesc $ pkginfo
-          tags = Set.fromList . constructImmutableTags . pkgDesc $ pkginfo
-      updateState tagsState . SetPackageTags pkgname $ tags
+    registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, mpkginfo) ->
+      case mpkginfo of
+        Nothing      -> return ()
+        Just pkginfo -> do
+          let pkgname = packageName pkgid
+              tags = Set.fromList . constructImmutableTags . pkgDesc $ pkginfo
+          updateState tagsState . SetPackageTags pkgname $ tags
 
     return feature
 

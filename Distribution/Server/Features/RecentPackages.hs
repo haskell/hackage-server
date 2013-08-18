@@ -49,7 +49,7 @@ initRecentPackagesFeature :: ServerEnv
                           -> IO RecentPackagesFeature
 initRecentPackagesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
                           user
-                          core@CoreFeature{packageIndexChange}
+                          core@CoreFeature{packageChangeHook}
                           packageContents = do
     loginfo verbosity "Initialising recentPackages feature, start"
 
@@ -67,7 +67,8 @@ initRecentPackagesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verb
                            asyncCacheLogVerbosity = verbosity
                          }
 
-    registerHook packageIndexChange (\() -> prodAsyncCache cacheRecent)
+    registerHookJust packageChangeHook isPackageChangeAny $ \_ ->
+      prodAsyncCache cacheRecent
 
     loginfo verbosity "Initialising recentPackages feature, end"
     return feature

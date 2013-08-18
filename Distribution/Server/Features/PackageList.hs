@@ -99,9 +99,9 @@ initListFeature ServerEnv{serverVerbosity = verbosity} core@CoreFeature{..}
           listFeature core download tagsf versions
                       itemCache itemUpdate
 
-    registerHook packageAddHook    $ updateDesc . packageName
-    registerHook packageRemoveHook $ updateDesc . packageName
-    registerHook packageChangeHook $ updateDesc . packageName . fst
+    registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, _) ->
+      updateDesc (packageName pkgid)
+
     {- [reverse index disabled]
     registerHook (reverseUpdateHook revs) $ \mrev -> do
         let pkgs = Map.keys mrev
