@@ -274,9 +274,7 @@ lookupPackageId index pkgid =
 -- The returned list should be ordered (strictly ascending) by version number.
 --
 lookupPackageName :: Package pkg => PackageIndex pkg -> PackageName -> [pkg]
-lookupPackageName index name =
-  [ pkg | pkg <- lookup index name
-        , packageName pkg == name ]
+lookupPackageName index name = lookup index name
 
 -- | Search by name of a package identifier, and further select a version if possible.
 --
