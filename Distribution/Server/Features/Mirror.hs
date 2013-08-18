@@ -140,7 +140,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
           , resourcePut  = [ ("", uploaderPut) ]
           }
       , mirrorCabalFile = (extendResource $ coreCabalFile coreResource) {
-            resourceDesc = [ (PUT, "Replace a package tarball" ) ]
+            resourceDesc = [ (PUT, "Replace a package description" ) ]
           , resourcePut  = [ ("", cabalPut) ]
           }
       , mirrorGroupResource
@@ -234,6 +234,10 @@ mirrorFeature ServerEnv{serverBlobStore = store}
         let uploadData = (time, uid)
         case parsePackageDescription . unpackUTF8 $ fileContent of
             ParseFailed err -> badRequest (toResponse $ show (locatedErrorMsg err))
+            ParseOk _ pkg | pkgid /= packageId pkg ->
+                errBadRequest "Wrong package Id"
+                  [MText $ "Expected " ++ display pkgid
+                        ++ " but found " ++ display (packageId pkg)]
             ParseOk warnings pkg -> do
                 updateAddPackageRevision (packageId pkg)
                                          (CabalFileText fileContent) uploadData
