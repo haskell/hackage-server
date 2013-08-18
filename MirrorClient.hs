@@ -555,7 +555,7 @@ notifyResponse e = do
         | otherwise -> throwError (GetEntityError (EntityPackage pkgid) rsp)
 
       PutPackageFailed rsp@(ErrorResponse _ code _ _) pkgid
-        | code == (4,0,4) -> do
+        | code == (4,0,0) || code = (4,0,4) -> do
             liftIO $ warn verbosity $
               formatMirrorError (PutPackageError pkgid rsp)
             return st {
