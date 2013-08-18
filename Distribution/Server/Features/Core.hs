@@ -44,25 +44,22 @@ data CoreFeature = CoreFeature {
     queryGetPackageIndex :: MonadIO m => m (PackageIndex PkgInfo),
 
     -- update transactions
-    updateReplacePackageUploader :: MonadIO m
-                                 => PackageId -> UserId
-                                 -> m (Maybe String),
-    updateReplacePackageUploadTime :: MonadIO m
-                                   => PackageId -> UTCTime
-                                   -> m (Maybe String),
-    updateAddTarball :: MonadIO m
-                     => PackageId
-                     -> PkgTarball -> UploadInfo
-                     -> m (Maybe String),
+    updateAddPackage         :: MonadIO m => PackageId ->
+                                CabalFileText -> UploadInfo ->
+                                Maybe PkgTarball -> m Bool,
+    updateDeletePackage      :: MonadIO m => PackageId -> m Bool,
+    updateAddPackageRevision :: MonadIO m => PackageId ->
+                                CabalFileText -> UploadInfo -> m (),
+    updateAddPackageTarball  :: MonadIO m => PackageId ->
+                                PkgTarball -> UploadInfo -> m Bool,
+    updateSetPackageUploader :: MonadIO m => PackageId -> UserId -> m Bool,
+    updateSetPackageUploadTime :: MonadIO m => PackageId -> UTCTime -> m Bool,
 
     -- | Set an entry in the 00-index.tar file.
     -- The 00-index.tar file contains all the package entries, but it is an
     -- extensible format and we can add more stuff. E.g. version preferences
     -- or crypto signatures.
     updateArchiveIndexEntry  :: MonadIO m => String -> (ByteString, UTCTime) -> m (),
-    --TODO: should be made into transactions
-    doAddPackage    :: PkgInfo -> IO Bool,
-    doMergePackage  :: PkgInfo -> IO (),
 
     -- Updating top-level packages
     -- This is run after a package is added
@@ -270,39 +267,69 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     -- Update transactions
     --
-    -- TODO: Why don't we need to call hooks here? (like packageChangeHook?)
-    -- Once we do, the eitherToMaybe can go
-    updateReplacePackageUploader :: MonadIO m => PackageId -> UserId
-                                 -> m (Maybe String)
-    updateReplacePackageUploader pkgid userid = eitherToMaybe $
-      updateState packagesState (ReplacePackageUploader pkgid userid)
+    updateAddPackage :: MonadIO m => PackageId
+                     -> CabalFileText -> UploadInfo
+                     -> Maybe PkgTarball -> m Bool
+    updateAddPackage pkgid cabalFile uploadinfo mtarball = do
+      mpkginfo <- updateState packagesState
+                   (AddPackage pkgid cabalFile uploadinfo mtarball)
+      case mpkginfo of
+        Nothing -> return False
+        Just pkginfo -> do
+          runHook_ packageAddHook pkginfo
+          return True
 
-    updateReplacePackageUploadTime :: MonadIO m => PackageId -> UTCTime
-                                   -> m (Maybe String)
-    updateReplacePackageUploadTime pkgid time = eitherToMaybe $
-      updateState packagesState (ReplacePackageUploadTime pkgid time)
+    updateDeletePackage :: MonadIO m => PackageId -> m Bool
+    updateDeletePackage pkgid = do
+      mpkginfo <- updateState packagesState (DeletePackage pkgid)
+      case mpkginfo of
+        Nothing -> return False
+        Just pkginfo -> do
+          runHook_ packageRemoveHook pkginfo
+          return True
+
+    updateAddPackageRevision :: MonadIO m => PackageId -> CabalFileText -> UploadInfo -> m ()
+    updateAddPackageRevision pkgid cabalfile uploadinfo = do
+      (moldpkginfo, newpkginfo) <- updateState packagesState (AddPackageRevision pkgid cabalfile uploadinfo)
+      case moldpkginfo of
+        Nothing ->
+          runHook_ packageAddHook newpkginfo
+        Just oldpkginfo ->
+          runHook_ packageChangeHook (oldpkginfo, newpkginfo)
+      runHook_ packageIndexChange ()
+
+    updateAddPackageTarball :: MonadIO m => PackageId -> PkgTarball -> UploadInfo -> m Bool
+    updateAddPackageTarball pkgid tarball uploadinfo = do
+      mpkginfo <- updateState packagesState (AddPackageTarball pkgid tarball uploadinfo)
+      case mpkginfo of
+        Nothing -> return False
+        Just (oldpkginfo, newpkginfo) -> do
+          runHook_ packageChangeHook (oldpkginfo, newpkginfo)
+          runHook_ packageIndexChange ()
+          return True
+
+    updateSetPackageUploader pkgid userid = do
+      mpkginfo <- updateState packagesState (SetPackageUploader pkgid userid)
+      case mpkginfo of
+        Nothing -> return False
+        Just (oldpkginfo, newpkginfo) -> do
+          runHook_ packageChangeHook (oldpkginfo, newpkginfo)
+          runHook_ packageIndexChange ()
+          return True
+
+    updateSetPackageUploadTime pkgid time = do
+      mpkginfo <- updateState packagesState (SetPackageUploadTime pkgid time)
+      case mpkginfo of
+        Nothing -> return False
+        Just (oldpkginfo, newpkginfo) -> do
+          runHook_ packageChangeHook (oldpkginfo, newpkginfo)
+          runHook_ packageIndexChange ()
+          return True
 
     updateArchiveIndexEntry :: MonadIO m => String -> (ByteString, UTCTime) -> m ()
     updateArchiveIndexEntry entryName entryDetails = do
       modifyMemState indexExtras (Map.insert entryName entryDetails)
       runHook_ packageIndexChange ()
-
-    updateAddTarball :: MonadIO m => PackageId -> PkgTarball -> UploadInfo -> m (Maybe String)
-    updateAddTarball pkgId tarball uploadInfo = do
-      res <- updateState packagesState $ AddTarball pkgId tarball uploadInfo
-      case res of
-        Left err ->
-          return (Just err)
-        Right (prev, updated) -> do
-          runHook_ packageChangeHook (prev, updated)
-          runHook_ packageIndexChange ()
-          return Nothing
-
-    eitherToMaybe :: Monad m => m (Either String a) -> m (Maybe String)
-    eitherToMaybe io = do res <- io
-                          case res of
-                            Left err -> return (Just err)
-                            Right _  -> return Nothing
 
     -- Cache updates
     --
@@ -365,42 +392,6 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       case lookup "cabal" dpath == Just (display $ packageName pkg) of
           True  -> return $ toResponse (Resource.CabalFile (cabalFileByteString (pkgData pkg)))
           False -> mzero
-
-{-  Currently unused, should not be in ServerPartE
-
-    -- A wrapper around DeletePackageVersion that runs the proper hooks.
-    -- (no authentication though)
-    doDeletePackage :: PackageId -> ServerPartE ()
-    doDeletePackage pkgid =
-      withPackageVersion pkgid $ \pkg -> do
-        void $ update $ DeletePackageVersion pkgid
-        nowPkgs <- fmap (flip PackageIndex.lookupPackageName (packageName pkgid) . packageList) $ query GetPackagesState
-        runHook' packageRemoveHook pkg
-        runHook packageIndexChange
-        when (null nowPkgs) $ runHook' noPackageHook pkg
-        return ()
--}
-    -- This is a wrapper around InsertPkgIfAbsent that runs the necessary hooks in core.
-    doAddPackage :: PkgInfo -> IO Bool
-    doAddPackage pkgInfo = do
-        success <- updateState packagesState $ InsertPkgIfAbsent pkgInfo
-        when success $ do
-          runHook_ packageAddHook pkgInfo
-          runHook_ packageIndexChange ()
-        return success
-
-    -- A wrapper around MergePkg.
-    doMergePackage :: PkgInfo -> IO ()
-    doMergePackage pkgInfo = do
-        pkgs <- queryGetPackageIndex
-        let mprev = PackageIndex.lookupPackageId pkgs (packageId pkgInfo)
-        -- TODO: Is there a thread-safety issue here?
-        void $ updateState packagesState $ MergePkg pkgInfo
-        case mprev of
-            -- TODO: modify MergePkg to get the newly merged package info, not the pre-merge argument
-            Just prev -> runHook_ packageChangeHook (prev, pkgInfo)
-            Nothing -> runHook_ packageAddHook pkgInfo
-        runHook_ packageIndexChange ()
 
 packageExists, packageIdExists :: (Package pkg, Package pkg') => PackageIndex pkg -> pkg' -> Bool
 packageExists   pkgs pkg = not . null $ PackageIndex.lookupPackageName pkgs (packageName pkg)

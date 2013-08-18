@@ -1,11 +1,11 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell #-}
+{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, BangPatterns #-}
 
 module Distribution.Server.Features.Core.State where
 
 import Distribution.Package
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
-import Distribution.Server.Packages.Types (PkgInfo(..), pkgUploadUser, pkgUploadTime, PkgTarball, UploadInfo)
+import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Framework.MemSize
 
@@ -18,6 +18,7 @@ import Data.Monoid
 import Data.Time (UTCTime)
 import Data.List (sortBy)
 import Data.Ord (comparing)
+import Data.Maybe (maybeToList)
 
 
 ---------------------------------- Index of metadata and tarballs
@@ -35,6 +36,100 @@ initialPackagesState :: PackagesState
 initialPackagesState = PackagesState {
     packageList = mempty
   }
+
+addPackage :: PackageId -> CabalFileText -> UploadInfo -> Maybe PkgTarball
+           -> Update PackagesState (Maybe PkgInfo)
+addPackage pkgid cabalfile uploadinfo mtarball = do 
+    PackagesState pkgindex <- State.get
+    case PackageIndex.lookupPackageId pkgindex pkgid of
+      Just _  -> return Nothing
+      Nothing -> do
+        let !pkginfo = PkgInfo {
+              pkgInfoId     = pkgid,
+              pkgData       = cabalfile,
+              pkgTarball    = [ (tarball, uploadinfo)
+                              | tarball <- maybeToList mtarball ],
+              pkgDataOld    = [],
+              pkgUploadData = uploadinfo
+            }
+            pkgindex' = PackageIndex.insert pkginfo pkgindex
+        State.put $! PackagesState pkgindex'
+        return (Just pkginfo)
+
+deletePackage :: PackageId -> Update PackagesState (Maybe PkgInfo)
+deletePackage pkgid = do
+    PackagesState pkgindex <- State.get
+    case PackageIndex.lookupPackageId pkgindex pkgid of
+      Nothing      -> return Nothing
+      Just pkginfo -> do
+        let pkgindex' = PackageIndex.deletePackageId pkgid pkgindex
+        State.put $! PackagesState pkgindex'
+        return (Just pkginfo)
+
+addPackageRevision :: PackageId -> CabalFileText -> UploadInfo
+                   -> Update PackagesState (Maybe PkgInfo, PkgInfo)
+addPackageRevision pkgid cabalfile uploadinfo = do
+    PackagesState pkgindex <- State.get
+    case PackageIndex.lookupPackageId pkgindex pkgid of
+      Just pkginfo -> do
+        let !pkginfo' = pkginfo {
+              pkgData       = cabalfile,
+              pkgUploadData = uploadinfo,
+              pkgDataOld    = (pkgData pkginfo, pkgUploadData pkginfo)
+                            : pkgDataOld pkginfo
+            }
+            pkgindex' = PackageIndex.insert pkginfo pkgindex
+        State.put $! PackagesState pkgindex'
+        return (Just pkginfo, pkginfo')
+      Nothing -> do
+        let !pkginfo = PkgInfo {
+              pkgInfoId     = pkgid,
+              pkgData       = cabalfile,
+              pkgTarball    = [],
+              pkgDataOld    = [],
+              pkgUploadData = uploadinfo
+            }
+            pkgindex' = PackageIndex.insert pkginfo pkgindex
+        State.put $! PackagesState pkgindex'
+        return (Nothing, pkginfo)
+
+addPackageTarball :: PackageId -> PkgTarball -> UploadInfo
+                  -> Update PackagesState (Maybe (PkgInfo, PkgInfo))
+addPackageTarball pkgid tarball uploadinfo =
+    alterPackage pkgid $ \pkginfo ->
+      pkginfo {
+        pkgTarball = (tarball, uploadinfo) : pkgTarball pkginfo
+      }
+
+setPackageUploader :: PackageId -> UserId
+                   -> Update PackagesState (Maybe (PkgInfo, PkgInfo))
+setPackageUploader pkgid uid =
+    alterPackage pkgid $ \pkginfo ->
+      pkginfo {
+        pkgUploadData = (pkgUploadTime pkginfo, uid)
+      }
+
+setPackageUploadTime :: PackageId -> UTCTime
+                     -> Update PackagesState (Maybe (PkgInfo, PkgInfo))
+setPackageUploadTime pkgid time =
+    alterPackage pkgid $ \pkginfo ->
+      pkginfo {
+        pkgUploadData = (time, pkgUploadUser pkginfo)
+      }
+
+alterPackage :: PackageId -> (PkgInfo -> PkgInfo)
+             -> Update PackagesState (Maybe (PkgInfo, PkgInfo))
+alterPackage pkgid alter = do
+    PackagesState pkgindex <- State.get
+    case PackageIndex.lookupPackageId pkgindex pkgid of
+      Nothing      -> return Nothing
+      Just pkginfo -> do
+        let !pkginfo' = alter pkginfo
+            pkgindex' = PackageIndex.insert pkginfo' pkgindex
+        State.put $! PackagesState pkgindex'
+        return (Just (pkginfo, pkginfo'))
+
+-- Keep old versions for a bit, for acid-state log compatability
 
 insertPkgIfAbsent :: PkgInfo -> Update PackagesState Bool
 insertPkgIfAbsent pkg = do
@@ -98,6 +193,15 @@ getPackagesState = ask
 
 makeAcidic ''PackagesState ['getPackagesState
                            ,'replacePackagesState
+                           ,'addPackage
+                           ,'deletePackage
+                           ,'addPackageRevision
+                           ,'addPackageTarball
+                           ,'setPackageUploader
+                           ,'setPackageUploadTime
+
+                             -- Keep old versions for a bit,
+                             -- for acid-state log compatability
                            ,'replacePackageUploadTime
                            ,'replacePackageUploader
                            ,'addTarball

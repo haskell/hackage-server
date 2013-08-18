@@ -52,7 +52,8 @@ data UploadFeature = UploadFeature {
     guardAuthorisedAsMaintainer          :: PackageName -> ServerPartE (),
     guardAuthorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE (),
 
-    extractPackage     :: (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)) -> ServerPartE (PkgInfo, UploadResult)
+    extractPackage     :: (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse))
+                       -> ServerPartE (Users.UserId, UploadResult, PkgTarball)
 }
 
 instance IsHackageFeature UploadFeature where
@@ -163,7 +164,7 @@ uploadFeature :: ServerEnv
 uploadFeature ServerEnv{serverBlobStore = store}
               CoreFeature{ coreResource
                          , queryGetPackageIndex
-                         , doAddPackage
+                         , updateAddPackage
                          }
               UserFeature{..}
               trusteesState    trusteesGroup    trusteesGroupResource
@@ -265,15 +266,20 @@ uploadFeature ServerEnv{serverBlobStore = store}
     uploadPackage = do
         guardAuthorised_ [InGroup uploadersGroup]
         pkgIndex <- queryGetPackageIndex
-        (pkgInfo, uresult) <- extractPackage $ \uid info ->
-                                processUpload pkgIndex uid info
-        success <- liftIO $ doAddPackage pkgInfo
+        (uid, uresult, tarball) <- extractPackage $ \uid info ->
+                                     processUpload pkgIndex uid info
+        now <- liftIO getCurrentTime
+        let (UploadResult pkg pkgStr _) = uresult
+            pkgid      = packageId pkg
+            cabalfile  = CabalFileText pkgStr
+            uploadinfo = (now, uid)
+        success <- updateAddPackage pkgid cabalfile uploadinfo (Just tarball)
         if success
           then do
              -- make package maintainers group for new package
-            let existedBefore = packageExists pkgIndex pkgInfo
+            let existedBefore = packageExists pkgIndex pkgid
             when (not existedBefore) $
-                liftIO $ addUserList (maintainersGroup (packageName pkgInfo)) (pkgUploadUser pkgInfo)
+                liftIO $ addUserList (maintainersGroup (packageName pkgid)) uid
             return uresult
           -- this is already checked in processUpload, and race conditions are highly unlikely but imaginable
           else errForbidden "Upload failed" [MText "Package already exists."]
@@ -307,7 +313,8 @@ uploadFeature ServerEnv{serverBlobStore = store}
 
     -- This function generically extracts a package, useful for uploading, checking,
     -- and anything else in the standard user-upload pipeline.
-    extractPackage :: (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)) -> ServerPartE (PkgInfo, UploadResult)
+    extractPackage :: (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse))
+                   -> ServerPartE (Users.UserId, UploadResult, PkgTarball)
     extractPackage processFunc =
         withDataFn (lookInput "package") $ \input ->
             case inputValue input of -- HS6 this has been updated to use the new file upload support in HS6, but has not been tested at all
@@ -338,15 +345,8 @@ uploadFeature ServerEnv{serverBlobStore = store}
             mres <- liftIO $ BlobStorage.consumeFileWith store file processPackage
             case mres of
                 Left  err -> throwError err
-                Right ((res@(UploadResult pkg pkgStr _), blobIdDecompressed), blobId) -> do
-                    uploadData <- fmap (flip (,) uid) (liftIO getCurrentTime)
-                    return $ (PkgInfo {
-                        pkgInfoId     = packageId pkg,
-                        pkgData       = CabalFileText pkgStr,
-                        pkgTarball    = [(PkgTarball { pkgTarballGz = blobId,
-                                                       pkgTarballNoGz = blobIdDecompressed },
-                                          uploadData)],
-                        pkgUploadData = uploadData,
-                        pkgDataOld    = []
-                    }, res)
-
+                Right ((res, blobIdDecompressed), blobId) ->
+                    return (uid, res, tarball)
+                  where
+                    tarball = PkgTarball { pkgTarballGz   = blobId,
+                                           pkgTarballNoGz = blobIdDecompressed }

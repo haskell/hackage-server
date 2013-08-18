@@ -113,13 +113,8 @@ editCabalFilesFeature _env templates
             | shouldPublish && not (null changes) -> do
                 template' <- getTemplate templates "cabalFilePublished.html"
                 time <- liftIO getCurrentTime
-                liftIO $ doMergePackage $ PkgInfo {
-                    pkgInfoId     = pkgid,
-                    pkgData       = CabalFileText newRevision,
-                    pkgTarball    = [],
-                    pkgUploadData = (time, uid),
-                    pkgDataOld    = []
-                }
+                updateAddPackageRevision pkgid (CabalFileText newRevision)
+                                               (time, uid)
                 ok $ toResponse $ template'
                   [ "pkgid"     $= display pkgid
                   , "cabalfile" $= newRevision

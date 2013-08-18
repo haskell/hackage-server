@@ -41,6 +41,10 @@ newtype CabalFileText = CabalFileText { cabalFileByteString :: ByteString }
 cabalFileString :: CabalFileText -> String
 cabalFileString = unpackUTF8 . cabalFileByteString
 
+instance SafeCopy CabalFileText where
+  putCopy = contain . Serialize.put
+  getCopy = contain Serialize.get
+
 instance Show CabalFileText where
     show cft = "CabalFileText (Data.ByteString.Lazy.Char8.pack (Distribution.Simple.Utils.toUTF8 " ++ show (cabalFileString cft) ++ "))"
 

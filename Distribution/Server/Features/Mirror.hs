@@ -95,10 +95,10 @@ mirrorFeature ServerEnv{serverBlobStore = store}
               CoreFeature{ coreResource = coreResource@CoreResource{ packageInPath
                                                                    , packageTarballInPath
                                                                    }
-                         , doMergePackage
-                         , updateReplacePackageUploadTime
-                         , updateReplacePackageUploader
-                         , updateAddTarball
+                         , updateAddPackageRevision
+                         , updateAddPackageTarball
+                         , updateSetPackageUploadTime
+                         , updateSetPackageUploader
                          , lookupPackageId
                          }
               UserFeature{..}
@@ -169,7 +169,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
         pkgid       <- packageTarballInPath dpath
         fileContent <- expectCompressedTarball
         time        <- liftIO getCurrentTime
-        let uploadData = (time, uid)
+        let uploadinfo = (time, uid)
         res <- liftIO $ BlobStorage.addWith store fileContent $ \fileContent' ->
                  let filename = display pkgid <.> "tar.gz"
                  in case Upload.unpackPackageRaw filename fileContent' of
@@ -179,16 +179,14 @@ mirrorFeature ServerEnv{serverBlobStore = store}
                              blobIdDecompressed <- BlobStorage.add store decompressedContent
                              return $ Right (x, blobIdDecompressed)
         case res of
-            Left err -> badRequest (toResponse err)
-            Right (((_, warnings), blobIdDecompressed), blobId) -> do
-                let pkgTarball = PkgTarball {
-                                     pkgTarballGz   = blobId
-                                   , pkgTarballNoGz = blobIdDecompressed
-                                   }
-                res' <- updateAddTarball pkgid pkgTarball uploadData
-                case res' of
-                  Just err -> notFound . toResponse $ err
-                  Nothing  -> return     . toResponse $ unlines warnings
+          Left err -> badRequest (toResponse err)
+          Right ((((pkg, _pkgStr), warnings), blobIdDecompressed), blobId) -> do
+            let tarball = PkgTarball { pkgTarballGz   = blobId,
+                                       pkgTarballNoGz = blobIdDecompressed }
+            existed <- updateAddPackageTarball (packageId pkg) tarball uploadinfo
+            if existed
+              then return . toResponse $ unlines warnings
+              else errNotFound "Package not found" []
 
     uploaderGet dpath = do
       pkg    <- packageInPath dpath >>= lookupPackageId
@@ -201,10 +199,11 @@ mirrorFeature ServerEnv{serverBlobStore = store}
         pkgid <- packageInPath dpath
         nameContent <- expectTextPlain
         let uname = UserName (unpackUTF8 nameContent)
-        uid    <- lookupUserName uname
-        mb_err <- updateReplacePackageUploader pkgid uid
-        maybe (return ()) (\err -> errNotFound err []) mb_err
-        return $ toResponse "Updated uploader OK"
+        uid <- lookupUserName uname
+        existed <- updateSetPackageUploader pkgid uid
+        if existed
+          then return $ toResponse "Updated uploader OK"
+          else errNotFound "Package not found" []
 
     uploadTimeGet :: DynamicPath -> ServerPartE Response
     uploadTimeGet dpath = do
@@ -218,11 +217,12 @@ mirrorFeature ServerEnv{serverBlobStore = store}
         pkgid <- packageInPath dpath
         timeContent <- expectTextPlain
         case parseTime defaultTimeLocale "%c" (unpackUTF8 timeContent) of
-          Nothing -> badRequest $ toResponse "Could not parse upload time"
+          Nothing -> errBadRequest "Could not parse upload time" []
           Just t  -> do
-            mb_err <- updateReplacePackageUploadTime pkgid t
-            maybe (return ()) (\err -> errNotFound err []) mb_err
-            return $ toResponse "Updated upload time OK"
+            existed <- updateSetPackageUploadTime pkgid t
+            if existed
+              then return $ toResponse "Updated upload time OK"
+              else errNotFound "Package not found" []
 
     -- return: error from parsing, bad request error, or warning lines
     cabalPut :: DynamicPath -> ServerPartE Response
@@ -235,13 +235,8 @@ mirrorFeature ServerEnv{serverBlobStore = store}
         case parsePackageDescription . unpackUTF8 $ fileContent of
             ParseFailed err -> badRequest (toResponse $ show (locatedErrorMsg err))
             ParseOk warnings pkg -> do
-                liftIO $ doMergePackage $ PkgInfo {
-                    pkgInfoId     = packageId pkg,
-                    pkgData       = CabalFileText fileContent,
-                    pkgTarball    = [],
-                    pkgUploadData = uploadData,
-                    pkgDataOld    = []
-                }
+                updateAddPackageRevision (packageId pkg)
+                                         (CabalFileText fileContent) uploadData
                 let filename = display pkgid <.> "cabal"
                 return . toResponse $ unlines $ map (showPWarning filename) warnings
 

@@ -147,7 +147,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                   UserFeature{..}
                   CoreFeature{ coreResource=core@CoreResource{packageInPath, packageTarballInPath}
                              , queryGetPackageIndex
-                             , doAddPackage
+                             , updateAddPackage
                              }
                   UploadFeature{..}
                   TarIndexCacheFeature{cachedPackageTarIndex}
@@ -270,16 +270,27 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     uploadCandidate isRight = do
         regularIndex <- queryGetPackageIndex
         -- ensure that the user has proper auth if the package exists
-        (pkgInfo, uresult) <- extractPackage $ \uid info ->
-                                processCandidate isRight regularIndex uid info
-        let candidate = CandPkgInfo {
-                candPkgInfo = pkgInfo,
+        (uid, uresult, tarball) <- extractPackage $ \uid info ->
+                                     processCandidate isRight regularIndex uid info
+        now <- liftIO getCurrentTime
+        let (UploadResult pkg pkgStr _) = uresult
+            pkgid      = packageId pkg
+            cabalfile  = CabalFileText pkgStr
+            uploadinfo = (now, uid)
+            candidate = CandPkgInfo {
+                candPkgInfo = PkgInfo {
+                                pkgInfoId     = pkgid,
+                                pkgData       = cabalfile,
+                                pkgTarball    = [(tarball, uploadinfo)],
+                                pkgUploadData = uploadinfo,
+                                pkgDataOld    = []
+                              },
                 candWarnings = uploadWarnings uresult,
                 candPublic = True -- do withDataFn
             }
         void $ updateState candidatesState $ AddCandidate candidate
-        let group = maintainersGroup (packageName pkgInfo)
-        liftIO $ Group.addUserList group (pkgUploadUser pkgInfo)
+        let group = maintainersGroup (packageName pkgid)
+        liftIO $ Group.addUserList group uid
         return candidate
 
     -- | Helper function for uploadCandidate.
@@ -308,17 +319,11 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           -- run filters
           let pkgInfo = candPkgInfo candidate
               uresult = UploadResult (pkgDesc pkgInfo) (cabalFileByteString $ pkgData pkgInfo) (candWarnings candidate)
-          uploadData <- fmap (flip (,) uid) (liftIO getCurrentTime)
-          let pkgInfo' = PkgInfo {
-                  pkgInfoId     = packageId candidate,
-                  pkgData       = pkgData pkgInfo,
-                  pkgTarball    = case pkgTarball pkgInfo of
-                      ((blobId, _):_) -> [(blobId, uploadData)]
-                      [] -> [], -- this shouldn't happen, but let's keep this part total anyway
-                  pkgUploadData = uploadData,
-                  pkgDataOld    = []
-              }
-          success <- liftIO $ doAddPackage pkgInfo'
+          time <- liftIO getCurrentTime
+          let uploadInfo = (time, uid)
+              ((tarball,_):_) = pkgTarball pkgInfo 
+          success <- updateAddPackage (packageId candidate) (pkgData pkgInfo)
+                                      uploadInfo (Just tarball)
           --FIXME: share code here with upload
           -- currently we do not create the initial maintainer group etc.
           if success
