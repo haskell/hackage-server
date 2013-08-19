@@ -202,22 +202,19 @@ stats opts = do
 
           let statsFile = bo_stateDir opts </> "stats"
 
-          let formatVersion :: (PackageId, HasDocs) -> IO [String]
-              formatVersion (version, hasDocs) = do
-                failed <- didFail version
-                return [ display (pkgVersion version)
-                       , show hasDocs ++ if failed then " (failed)" else ""
-                       ]
+          let formatVersion :: (PackageId, HasDocs) -> [String]
+              formatVersion (version, hasDocs) =
+                [ display (pkgVersion version)
+                , show hasDocs
+                ]
 
-              formatPkg :: [(PackageId, HasDocs)] -> IO [[String]]
-              formatPkg ((firstVersion, firstHasDocs) : otherVersions) = do
-                  firstFormatted <- formatVersion (firstVersion, firstHasDocs)
-                  otherFormatted <- mapM formatVersion otherVersions
-                  return $ (display (pkgName firstVersion) : firstFormatted)
-                         : (map ("" :) otherFormatted)
+              formatPkg :: [(PackageId, HasDocs)] -> [[String]]
+              formatPkg ((firstVersion, firstHasDocs) : otherVersions) =
+                  (display (pkgName firstVersion) : formatVersion (firstVersion, firstHasDocs))
+                : (indent (map formatVersion otherVersions))
               formatPkg _ = error "formatPkg: cannot happen"
 
-          formattedStats <- concat `liftM` mapM formatPkg byPackage
+          let formattedStats = concatMap formatPkg byPackage
           writeFile statsFile $ printTable (["Package", "Version", "Has docs?"] : formattedStats)
 
           putStrLn $ "Detailed statistics written to " ++ statsFile
