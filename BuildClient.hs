@@ -123,10 +123,11 @@ readConfig opts = do xs <- readFile $ configFile opts
 configFile :: BuildOpts -> FilePath
 configFile opts = bo_stateDir opts </> "hd-config"
 
-data StatResult = AllHaveDocs
-                | MostRecentHasDocs
-                | SomeHaveDocs
-                | NoneHaveDocs
+data StatResult = AllVersionsBuiltOk
+                | AllVersionsAttempted
+                | NoneBuilt
+                | SomeBuiltOk
+                | SomeFailed
     deriving Eq
 
 stats :: BuildOpts -> IO ()
@@ -142,43 +143,73 @@ stats opts = do
     notice verbosity "Initialising"
 
     createDirectoryIfMissing False cacheDir
-
-    (didFail, _, _, getNumFailed) <- mkPackageFailed opts
-    numFailed <- getNumFailed
+    (didFail, _, _)  <- mkPackageFailed opts
 
     httpSession verbosity $ do
         liftIO $ notice verbosity "Getting index"
 
-        pkgIdsHaveDocs <- getDocumentationStats config
+        pkgIdsHaveDocs <- getDocumentationStats config didFail
 
-        liftIO $ putStrLn ("Total package versions: " ++
-                           show (length pkgIdsHaveDocs))
-        liftIO $ putStrLn ("Total package versions with docs: " ++
-                           show (length (filter snd pkgIdsHaveDocs)))
         let byPackage = map (sortBy (flip (comparing (pkgVersion . fst))))
                       $ groupBy (equating  (pkgName . fst))
                       $ sortBy  (comparing (pkgName . fst)) pkgIdsHaveDocs
-            categorise xs@(x : _)
-             | and (map snd xs) = AllHaveDocs
-             | snd x            = MostRecentHasDocs
-             | or  (map snd xs) = SomeHaveDocs
-             | otherwise        = NoneHaveDocs
-            categorise [] = error "categorise: Can't happen: []"
+
+            mostRecentBuilt    = filter ((== HasDocs)      . snd . head) byPackage
+            mostRecentFailed   = filter ((== DocsFailed)   . snd . head) byPackage
+            mostRecentNotBuilt = filter ((== DocsNotBuilt) . snd . head) byPackage
+
+            indent :: [[String]] -> [[String]]
+            indent = map ("  " :)
+
+            attempted :: HasDocs -> Bool
+            attempted HasDocs      = True
+            attempted DocsFailed   = True
+            attempted DocsNotBuilt = False
+
+            categorise :: [(PackageId, HasDocs)] -> StatResult
+            categorise ps
+              | all (== HasDocs)      hd = AllVersionsBuiltOk
+              | all attempted         hd = AllVersionsAttempted
+              | all (== DocsNotBuilt) hd = NoneBuilt
+              | all (/= DocsFailed)   hd = SomeBuiltOk
+              | otherwise                = SomeFailed
+              where
+                hd = map snd ps
+
             categorised = map categorise byPackage
             count c = show (length (filter (c ==) categorised))
 
         liftIO $ do
+          putStrLn $ "There are "
+                  ++ show (length byPackage)
+                  ++ " packages with a total of "
+                  ++ show (length pkgIdsHaveDocs)
+                  ++ " package versions"
+          putStrLn $ "Considering the most recent version only:"
+          putStr . printTable . indent $ [
+              [show (length mostRecentBuilt)   , "built succesfully"]
+            , [show (length mostRecentFailed)  , "failed to build"]
+            , [show (length mostRecentNotBuilt), "not yet built"]
+            ]
+          putStrLn $ "Considering all versions:"
+          putStr . printTable . indent $ [
+              [count AllVersionsBuiltOk,   "all versions built successfully"]
+            , [count AllVersionsAttempted, "attempted to build all versions, but some failed"]
+            , [count SomeBuiltOk,          "not all versions built yet, but those that did were ok"]
+            , [count SomeFailed,           "not all versions built yet, and some failures"]
+            , [count NoneBuilt,            "no versions built yet"]
+            ]
 
           let statsFile = bo_stateDir opts </> "stats"
 
-          let formatVersion :: (PackageId, Bool) -> IO [String]
+          let formatVersion :: (PackageId, HasDocs) -> IO [String]
               formatVersion (version, hasDocs) = do
                 failed <- didFail version
                 return [ display (pkgVersion version)
                        , show hasDocs ++ if failed then " (failed)" else ""
                        ]
 
-              formatPkg :: [(PackageId, Bool)] -> IO [[String]]
+              formatPkg :: [(PackageId, HasDocs)] -> IO [[String]]
               formatPkg ((firstVersion, firstHasDocs) : otherVersions) = do
                   firstFormatted <- formatVersion (firstVersion, firstHasDocs)
                   otherFormatted <- mapM formatVersion otherVersions
@@ -189,15 +220,7 @@ stats opts = do
           formattedStats <- concat `liftM` mapM formatPkg byPackage
           writeFile statsFile $ printTable (["Package", "Version", "Has docs?"] : formattedStats)
 
-          putStr $ printTable
-            [["Number of packages",    "Category"],
-             [count AllHaveDocs,       "all have docs"],
-             [count MostRecentHasDocs, "most recent has docs"],
-             [count SomeHaveDocs,      "some have docs"],
-             [count NoneHaveDocs,      "none have docs"]]
-
           putStrLn $ "Detailed statistics written to " ++ statsFile
-          putStrLn $ "Documentation for " ++ show numFailed ++ " package version(s) previously failed to build (remove " ++ show (bo_stateDir opts </> "failed") ++ " to reset)"
 
 -- | Formats a 2D table so that everything is nicely aligned
 --
@@ -220,19 +243,30 @@ printTable xss = unlines
     padTo :: Int -> String -> String
     padTo len str = str ++ replicate (len - length str) ' '
 
-getDocumentationStats :: BuildConfig -> HttpSession [(PackageIdentifier, Bool)]
-getDocumentationStats config = do
+data HasDocs = HasDocs | DocsNotBuilt | DocsFailed
+  deriving (Eq, Show)
+
+getDocumentationStats :: BuildConfig
+                      -> (PackageId -> IO Bool)
+                      -> HttpSession [(PackageIdentifier, HasDocs)]
+getDocumentationStats config didFail = do
     mJSON <- requestGET' uri
     case mJSON of
       Nothing   -> fail $ "Could not download " ++ show uri
       Just json -> case eitherDecode json of
                      Left e    -> fail $ "Could not decode " ++ show uri ++ ": " ++ e
-                     Right val -> return $ map aux val
+                     Right val -> liftIO $ mapM aux val
   where
     uri = bc_srcURI config <//> "packages" </> "docs.json"
 
-    aux :: (String, Bool) -> (PackageIdentifier, Bool)
-    aux (pkgId, hasDocs) = (fromJust $ simpleParse pkgId, hasDocs)
+    aux :: (String, Bool) -> IO (PackageIdentifier, HasDocs)
+    aux (pkgId, docsBuilt) = do
+      let pkgId' = fromJust (simpleParse pkgId)
+      if docsBuilt
+        then return (pkgId', HasDocs)
+        else do failed <- didFail pkgId'
+                if failed then return (pkgId', DocsFailed)
+                          else return (pkgId', DocsNotBuilt)
 
 buildOnce :: BuildOpts -> [PackageId] -> IO ()
 buildOnce opts pkgs = do
@@ -245,7 +279,7 @@ buildOnce opts pkgs = do
                      = error $ "unexpected URI " ++ show (bc_srcURI config)
 
     notice verbosity "Initialising"
-    (has_failed, mark_as_failed, persist_failed, _num_failed) <- mkPackageFailed opts
+    (has_failed, mark_as_failed, persist_failed) <- mkPackageFailed opts
 
     createDirectoryIfMissing False cacheDir
 
@@ -254,16 +288,17 @@ buildOnce opts pkgs = do
 
     flip finally persist_failed $ do
         pkgIdsHaveDocs <- httpSession verbosity $
-          getDocumentationStats config
+          getDocumentationStats config has_failed
 
         -- First build all of the latest versions of each package
         -- Then go back and build all the older versions
         -- NOTE: assumes all these lists are non-empty
-        let latestFirst :: [[(PackageId, Bool)]] -> [(PackageId, Bool)]
+        let latestFirst :: [[(PackageId, a)]] -> [(PackageId, a)]
             latestFirst ids = map head ids ++ concatMap tail ids
 
         -- Find those files *not* marked as having documentation in our cache
-        let toBuild = mapMaybe shouldBuild
+        let toBuild = map fst
+                    . filter shouldBuild
                     . latestFirst
                     . map (sortBy (flip (comparing (pkgVersion . fst))))
                     . groupBy (equating  (pkgName . fst))
@@ -301,11 +336,10 @@ buildOnce opts pkgs = do
                         liftIO $ do currentTime <- getCurrentTime
                                     when ((currentTime `diffUTCTime` startTime) > d) exitSuccess
   where
-    shouldBuild :: (PackageIdentifier, Bool) -> Maybe PackageIdentifier
-    shouldBuild (pkgId, alreadyBuilt) =
-      if (not alreadyBuilt || forceBuild) && (buildingAll || pkgId `elem` pkgs)
-        then Just pkgId
-        else Nothing
+    shouldBuild :: (PackageIdentifier, HasDocs) -> Bool
+    shouldBuild (_,     HasDocs)      = forceBuild
+    shouldBuild (_,     DocsFailed)   = False
+    shouldBuild (pkgId, DocsNotBuilt) = buildingAll || pkgId `elem` pkgs
 
     buildingAll = null pkgs
     forceBuild  = bo_force opts && not buildingAll
@@ -313,7 +347,7 @@ buildOnce opts pkgs = do
 -- Builds a little memoised function that can tell us whether a
 -- particular package failed to build its documentation
 mkPackageFailed :: BuildOpts
-                -> IO (PackageId -> IO Bool, PackageId -> IO (), IO (), IO Int)
+                -> IO (PackageId -> IO Bool, PackageId -> IO (), IO ())
 mkPackageFailed opts = do
     init_failed <- readFailedCache (bo_stateDir opts)
     cache_var   <- newIORef init_failed
@@ -322,9 +356,8 @@ mkPackageFailed opts = do
                                   (S.insert pkg_id already_failed, ())
         has_failed     pkg_id = liftM (pkg_id `S.member`) $ readIORef cache_var
         persist               = readIORef cache_var >>= writeFailedCache (bo_stateDir opts)
-        num_failed            = S.size `liftM` readIORef cache_var
 
-    return (has_failed, mark_as_failed, persist, num_failed)
+    return (has_failed, mark_as_failed, persist)
   where
     readFailedCache :: FilePath -> IO (S.Set PackageId)
     readFailedCache cache_dir = do
