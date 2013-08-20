@@ -572,7 +572,7 @@ buildFlagDescrs =
       (ReqArg (\mins opts -> case reads mins of
                              [(mins', "")] -> opts { flagRunTime = Just (fromInteger mins' * 60) }
                              _ -> error "Can't parse minutes") "MINS")
-      "Verbose mode (can be listed multiple times e.g. -vv)"
+      "Limit the running time of the build client"
 
   , Option [] ["cache-dir"]
       (ReqArg (\dir opts -> opts { flagCacheDir = Just dir }) "DIR")
