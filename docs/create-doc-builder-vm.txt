@@ -1,0 +1,133 @@
+
+Instructions based on Debian 6.0 "squeeze":
+
+sudo apt-get install debootstrap qemu-kvm virtinst libvirt-bin
+(On Debian 5.0 "lenny":
+ use kvm instead of qemu-kvm,
+ install debootstrap from the latest Debian stable release)
+sudo adduser $USER libvirt
+dd if=/dev/zero of=hackage-docs.disk bs=1024 count=5242880
+/sbin/mke2fs -F hackage-docs.disk
+UUID=`/sbin/blkid -s UUID -o value hackage-docs.disk`
+mkdir mnt
+sudo mount hackage-docs.disk mnt -o loop
+sudo debootstrap stable mnt
+sudo UUID="$UUID" chroot mnt /bin/bash
+    apt-get update
+    apt-get install linux-image-amd64 extlinux openssh-server
+    extlinux-update
+    sed -i -e "s#^EXTLINUX_PARAMETERS.*#EXTLINUX_PARAMETERS=\"ro quiet root=UUID=$UUID console=ttyS0\"#" etc/default/extlinux
+    extlinux-update
+    sed -i -e "s/#\(.*ttyS0.*\)/\1/" etc/inittab
+    echo hackagedocs > /etc/hostname
+    passwd
+    echo "proc       /proc proc defaults                   0 0" >  /etc/fstab
+    echo "UUID=$UUID /     ext2 defaults,errors=remount-ro 0 1" >> /etc/fstab
+    echo "auto lo"                >> /etc/network/interfaces
+    echo "iface lo inet loopback" >> /etc/network/interfaces
+    echo "auto eth0"              >> /etc/network/interfaces
+    echo "iface eth0 inet dhcp"   >> /etc/network/interfaces
+(On Debian 5.0 "lenny":
+    echo "iface eth0 inet static"        >> /etc/network/interfaces
+    echo "    address   192.168.142.2"   >> /etc/network/interfaces
+    echo "    netmask   255.255.255.0"   >> /etc/network/interfaces
+    echo "    network   192.168.142.0"   >> /etc/network/interfaces
+    echo "    broadcast 192.168.142.255" >> /etc/network/interfaces
+    echo "    gateway   192.168.142.1"   >> /etc/network/interfaces
+)
+    touch /etc/udev/rules.d/75-persistent-net-generator.rules
+    mount /proc
+    extlinux --install boot/extlinux
+    umount /proc
+sudo umount mnt
+cat <<EOF > hackage_docs_network.xml
+<network>
+    <name>hackage_docs_network</name>
+    <bridge name="virbr1" />
+    <forward mode="nat" />
+    <ip address="192.168.142.1" netmask="255.255.255.0">
+        <dhcp>
+            <range start="192.168.142.2" end="192.168.142.2" />
+        </dhcp>
+    </ip>
+</network>
+EOF
+sudo virsh net-create hackage_docs_network.xml
+virt-install --connect qemu:///system -n hackage-docs-vm -r 1024 --vcpus=1 --nographics -w network=hackage_docs_network --os-type linux --os-variant debiansqueeze --disk path=hackage-docs.disk --hvm --import
+(On Debian 5.0 "lenny":
+cat <<EOF > hackage_docs_image.xml
+<image>
+    <name>hackage-docs-vm</name>
+    <domain>
+        <boot type="hvm">
+            <guest>
+                <arch>x86_64</arch>
+            </guest>
+            <os>
+                <loader dev="hd" />
+            </os>
+            <drive disk="hackage-docs.disk" target="hda" />
+        </boot>
+        <devices>
+            <vcpu>1</vcpu>
+            <memory>1048576</memory>
+            <interface />
+        </devices>
+    </domain>
+    <storage>
+        <disk file="hackage-docs.disk" />
+    </storage>
+</image>
+EOF
+virt-image   --connect qemu:///system -n hackage-docs-vm -r 1024 --vcpus=1 --nographics -w network=hackage_docs_network hackage_docs_image.xml
+)
+ssh root@192.168.142.2
+    apt-get install build-essential libgmp3-dev libz-dev darcs alex happy hscolour vim
+    apt-get clean
+    adduser hackage-docs --gecos "" --disabled-password
+    su - hackage-docs
+        mkdir .ssh
+        vi .ssh/authorized_keys
+ssh hackage-docs@192.168.142.2
+    mkdir downloads
+    cd downloads
+    wget http://www.haskell.org/ghc/dist/7.4.2/ghc-7.4.2-x86_64-unknown-linux.tar.bz2
+    tar -jxf ghc-7.4.2-x86_64-unknown-linux.tar.bz2
+    cd ghc-7.4.2
+    ./configure --prefix=$HOME/local/ghc-7.4.2
+    make install
+    echo "export PATH=\"$HOME/local/ghc-7.4.2/bin:\$PATH\"" >> ~/.bashrc
+    cd ..
+    rm ghc-7.4.2-x86_64-unknown-linux.tar.bz2
+    rm -r ghc-7.4.2
+ssh hackage-docs@192.168.142.2
+    cd downloads
+    # For now we need to use a snapshot. Once 1.16 is releases we should
+    # be able to just use that, and no need to build Cabal.
+    wget http://lambda.haskell.org/~igloo/cabal-1.16-snapshot.tar.bz2
+    tar -jxf cabal-1.16-snapshot.tar.bz2
+    cd cabal-1.16-snapshot/Cabal
+    ghc --make Setup
+    ./Setup configure --user
+    ./Setup build
+    ./Setup install
+    cd ../cabal-install
+    sh bootstrap.sh
+    echo "export PATH=\"$HOME/.cabal/bin:\$PATH\"" >> ~/.bashrc
+    cd ../..
+    rm cabal-1.16-snapshot.tar.bz2
+    rm -rf cabal-1.16-snapshot
+ssh hackage-docs@192.168.142.2
+    cabal update
+    cd downloads
+    darcs get http://code.haskell.org/hackage-server
+    cd hackage-server
+    cabal install -f-build-hackage-server -f-build-hackage-mirror
+    cd
+    mkdir hackage-docs
+    cd hackage-docs
+    hackage-build init http://192.168.142.1:8080/
+    sed -e "s#@PIDFILE@#$HOME/hackage-docs/hd.pid#" -e "s#@HACKAGEBUILD@#$HOME/.cabal/bin/hackage-build#" -e "s#@DIRECTORY@#$HOME/hackage-docs#" -e "s#@EXTRA@#export PATH=$HOME/local/ghc-7.4.2/bin:$HOME/.cabal/bin:\$PATH#" < ../downloads/hackage-server/docs/run-doc-builder.sh.example > run-doc-builder.sh
+    chmod +x run-doc-builder.sh
+    echo '*/5 * * * * '"$HOME/hackage-docs/run-doc-builder.sh" | crontab -
+

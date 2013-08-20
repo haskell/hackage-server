@@ -1,0 +1,61 @@
+General:
+ * Error handling style is horribly verbose.
+     We need a nice monadic style where we can fail with e.g. internal server
+     errors without propagating Either blah blah all over the place.
+     See for example how we cannot currently abstract over takeRequestBody.
+ * Log the contents of an exception in the log (so, for instance, if we have a
+   500 error because the disk is full, the log records that). 
+
+Backup:
+ * Implement import for Documentation
+ * Reduce space for import (enable garbage collection of more things)
+ * Bulk import should create tags and maintainer information automatically
+ * Create backup tarballs on a running server
+ * Create backup tarballs from selected features so others can set up their own Hackages
+
+Users:
+ * Expose renaming for the Users feature
+ * Expose user id information for mirrors and e.g. merging accounts with totalNameMap
+ * Decide on user registration policy and implement as a new feature (currently, admins register accounts)
+
+Other features:
+ * Improve text search, producing more intuitive results in less time
+ * Bring BuildReports, Distro up to par with other features
+
+Feature views:
+ * Implement JSON views for all the features
+ * Split up the HTML feature into smaller subpages
+ * Switch to BlazeHTML
+ * Use the JSON functionality in-browser for Ajax
+
+HTTP principles:
+ * DELETE, PUT, and (in some cases) POST should not redirect, but rather return
+     a document indicating the location of the new resource, if necessary, or other
+     cues to continue browsing. 
+
+Doc builder:
+ * Continuous mode
+ * When interrupting the doc builder with CTRL-C, the package currently being
+   built will be marked as failed.
+ * We need the -threaded option, or otherwise CTRL-C handling does not work correctly:
+   
+     <starting to build package X>
+     <notice that package X failed>
+     <continue with package Y>
+     <cabal starts to download a dependency of Y>
+     <CTRL-C during the download>
+
+   At this point both cabal process is interrupted, but the doc builder process
+   is not; a subsequent CTRL-C interrupts the doc builder but now the exception
+   handler (installed by "finally") which writes out the "failed" state does
+   not get run. With the -threaded option this does not happen: the CTRL-C
+   interrupts both cabal and the doc builder, and the finally handler does run.
+   Not necessarily a problem to need -threaded, but it would be nice to
+   understand why. 
+
+Miscellaneous
+ * Catch exceptions for asynchronous variables and hooks
+ * Add more links to [ErrorMessage]s throughout the application, particularly with authentication
+ * Decide how to coordinate a switchover basic to digest auth
+ * Send etag and last modified times, if possible
+
