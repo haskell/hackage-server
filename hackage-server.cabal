@@ -32,8 +32,8 @@ data-files:
   static/*.png
 
 source-repository head
-  type: darcs
-  location: http://code.haskell.org/hackage-server/
+  type: git 
+  location: https://github.com/haskell/hackage-server 
 
 flag minimal
   default: False
