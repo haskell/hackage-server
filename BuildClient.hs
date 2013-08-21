@@ -161,15 +161,10 @@ stats opts = do
             indent :: [[String]] -> [[String]]
             indent = map ("  " :)
 
-            attempted :: HasDocs -> Bool
-            attempted HasDocs      = True
-            attempted DocsFailed   = True
-            attempted DocsNotBuilt = False
-
             categorise :: [(PackageId, HasDocs)] -> StatResult
             categorise ps
               | all (== HasDocs)      hd = AllVersionsBuiltOk
-              | all attempted         hd = AllVersionsAttempted
+              | all (/= DocsNotBuilt) hd = AllVersionsAttempted
               | all (== DocsNotBuilt) hd = NoneBuilt
               | all (/= DocsFailed)   hd = SomeBuiltOk
               | otherwise                = SomeFailed
@@ -185,6 +180,11 @@ stats opts = do
                   ++ " packages with a total of "
                   ++ show (length pkgIdsHaveDocs)
                   ++ " package versions"
+          putStrLn $ "So far we have built or attempted to built "
+                  ++ show (length (filter ((/= DocsNotBuilt) . snd) pkgIdsHaveDocs))
+                  ++ " packages; only "
+                  ++ show (length (filter ((== DocsNotBuilt) . snd) pkgIdsHaveDocs))
+                  ++ " left!"
           putStrLn $ "Considering the most recent version only:"
           putStr . printTable . indent $ [
               [show (length mostRecentBuilt)   , "built succesfully"]
