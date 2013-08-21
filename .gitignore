@@ -2,3 +2,4 @@ build-cache
 mirror-cache
 state
 dist
+tags
