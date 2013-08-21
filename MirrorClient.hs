@@ -8,6 +8,7 @@ import Network.URI (URI(..), URIAuth(..))
 
 import Distribution.Client (validateHackageURI, validatePackageIds, PkgIndexInfo(..))
 import Distribution.Client.UploadLog as UploadLog (read, Entry(..))
+import Distribution.Client.Cron (cron)
 import Distribution.Server.Util.Parse (packUTF8, unpackUTF8)
 
 import Distribution.Server.Users.Types (UserId(..), UserName(UserName))
@@ -37,11 +38,9 @@ import Data.Set (Set)
 import Data.IORef
 
 import Control.Exception
-import Control.Concurrent
 import Data.Time
 import Data.Time.Clock.POSIX
 import System.Locale
-import System.Random
 import System.Environment
 import System.IO
 import System.Exit
@@ -152,36 +151,6 @@ readPkgProblemFile file = do
 writePkgProblemFile :: FilePath -> Set PackageId -> IO ()
 writePkgProblemFile file =
   writeFile file . unlines . map display . Set.toList
-
-
-cron :: Verbosity -> Int -> (a -> IO a) -> a -> IO ()
-cron verbosity interval action x = do
-    x' <- action x
-
-    interval' <- pertabate interval
-    logNextSyncMessage interval'
-    wait interval'
-    cron verbosity interval action x'
-
-  where
-    -- to stop all mirror clients hitting the server at exactly the same time
-    -- we randomly adjust the wait time by +/- 10%
-    pertabate i = let deviation = i `div` 10
-                   in randomRIO (i + deviation, i - deviation)
-
-    -- Annoyingly, threadDelay takes an Int number of microseconds, so we cannot
-    -- wait much longer than an hour. So have to wait repeatedly. Sigh.
-    wait minutes | minutes > 60 = do threadDelay (60 * 60 * 1000000)
-                                     wait (minutes - 60)
-                 | otherwise    = threadDelay (minutes * 60 * 1000000)
-
-    logNextSyncMessage minutes = do
-      now       <- getCurrentTime
-      tz        <- getCurrentTimeZone
-      let nextSync = addUTCTime (fromIntegral (60 * minutes)) now
-      notice verbosity $
-          "Next sync will be in " ++ show minutes ++ " minutes, at "
-       ++ formatTime defaultTimeLocale "%R %Z" (utcToZonedTime tz nextSync)
 
 
 ---------------------------

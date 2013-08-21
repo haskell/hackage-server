@@ -5,6 +5,8 @@ import Network.Browser
 import Network.URI (URI(..), URIAuth(..))
 
 import Distribution.Client
+import Distribution.Client.Cron (cron)
+
 import Distribution.Package
 import Distribution.Text
 import Distribution.Verbosity
@@ -39,10 +41,11 @@ data Mode = Help [String]
           | Build [PackageId]
 
 data BuildOpts = BuildOpts {
-                     bo_verbosity :: Verbosity,
-                     bo_runTime   :: Maybe NominalDiffTime,
-                     bo_stateDir  :: FilePath,
-                     bo_force     :: Bool
+                     bo_verbosity  :: Verbosity,
+                     bo_runTime    :: Maybe NominalDiffTime,
+                     bo_stateDir   :: FilePath,
+                     bo_force      :: Bool,
+                     bo_continuous :: Maybe Int
                  }
 
 data BuildConfig = BuildConfig {
@@ -85,8 +88,14 @@ main = topHandler $ do
                let opts' = opts {
                                bo_stateDir = stateDir
                            }
-               buildOnce opts' pkgs
-
+               case bo_continuous opts' of
+                 Nothing ->
+                   buildOnce opts' pkgs
+                 Just interval -> do
+                   cron (bo_verbosity opts')
+                        interval
+                        (const (buildOnce opts' pkgs))
+                        ()
 
 initialise :: BuildOpts -> String -> IO ()
 initialise opts uriStr
@@ -310,28 +319,36 @@ buildOnce opts pkgs = do
         -- we don't want to keep continually trying to build a failing
         -- package!
         startTime <- liftIO $ getCurrentTime
-        forM_ toBuild $ \pkg_id -> do
-            failed <- liftIO $ has_failed pkg_id
-            if failed
-              then liftIO . notice verbosity $ "Skipping " ++ display pkg_id
-                                            ++ " because it failed to built previously"
-              else do
-                mTgz <- buildPackage verbosity opts config pkg_id
-                case mTgz of
-                  Nothing ->
-                    liftIO $ mark_as_failed pkg_id
-                  Just docs_tgz -> httpSession verbosity $ do
-                    -- Make sure we authenticate to Hackage
-                    setAuthorityGen $ provideAuthInfo (bc_srcURI config)
-                                    $ Just (bc_username config, bc_password config)
-                    requestPUT (bc_srcURI config <//> "package" </> display pkg_id </> "docs") "application/x-tar" (Just "gzip") docs_tgz
-                -- We don't check the runtime until we've actually tried
-                -- to build a doc, so as to ensure we make progress.
-                case bo_runTime opts of
-                    Nothing -> return ()
-                    Just d ->
-                        liftIO $ do currentTime <- getCurrentTime
-                                    when ((currentTime `diffUTCTime` startTime) > d) exitSuccess
+
+        let go [] = return ()
+            go (pkg_id : toBuild') = do
+              failed <- liftIO $ has_failed pkg_id
+              if failed
+                then liftIO . notice verbosity $ "Skipping " ++ display pkg_id
+                                              ++ " because it failed to built previously"
+                else do
+                  mTgz <- buildPackage verbosity opts config pkg_id
+                  case mTgz of
+                    Nothing ->
+                      liftIO $ mark_as_failed pkg_id
+                    Just docs_tgz -> httpSession verbosity $ do
+                      -- Make sure we authenticate to Hackage
+                      setAuthorityGen $ provideAuthInfo (bc_srcURI config)
+                                      $ Just (bc_username config, bc_password config)
+                      requestPUT (bc_srcURI config <//> "package" </> display pkg_id </> "docs") "application/x-tar" (Just "gzip") docs_tgz
+
+              -- We don't check the runtime until we've actually tried
+              -- to build a doc, so as to ensure we make progress.
+              outOfTime <- case bo_runTime opts of
+                  Nothing -> return False
+                  Just d  -> liftIO $ do
+                    currentTime <- getCurrentTime
+                    return $ (currentTime `diffUTCTime` startTime) > d
+
+              if outOfTime then return ()
+                           else go toBuild'
+
+        go toBuild
   where
     shouldBuild :: (PackageIdentifier, HasDocs) -> Bool
     shouldBuild (_,     HasDocs)      = forceBuild
@@ -538,20 +555,24 @@ withCurrentDirectory cwd1 act
 -------------------------
 
 data BuildFlags = BuildFlags {
-    flagCacheDir  :: Maybe FilePath,
-    flagVerbosity :: Verbosity,
-    flagRunTime   :: Maybe NominalDiffTime,
-    flagHelp      :: Bool,
-    flagForce     :: Bool
+    flagCacheDir   :: Maybe FilePath,
+    flagVerbosity  :: Verbosity,
+    flagRunTime    :: Maybe NominalDiffTime,
+    flagHelp       :: Bool,
+    flagForce      :: Bool,
+    flagContinuous :: Bool,
+    flagInterval   :: Maybe String
 }
 
 emptyBuildFlags :: BuildFlags
 emptyBuildFlags = BuildFlags {
-    flagCacheDir  = Nothing
-  , flagVerbosity = normal
-  , flagRunTime   = Nothing
-  , flagHelp      = False
-  , flagForce     = False
+    flagCacheDir   = Nothing
+  , flagVerbosity  = normal
+  , flagRunTime    = Nothing
+  , flagHelp       = False
+  , flagForce      = False
+  , flagContinuous = False
+  , flagInterval   = Nothing
   }
 
 buildFlagDescrs :: [OptDescr (BuildFlags -> BuildFlags)]
@@ -581,6 +602,14 @@ buildFlagDescrs =
   , Option [] ["force"]
       (NoArg (\opts -> opts { flagForce = True }))
       "Force rebuilding (of specified packages)"
+
+  , Option [] ["continuous"]
+      (NoArg (\opts -> opts { flagContinuous = True }))
+      "Mirror continuously rather than just once."
+
+  , Option [] ["interval"]
+      (ReqArg (\int opts -> opts { flagInterval = Just int }) "MIN")
+      "Set the mirroring interval in minutes (default 30)"
   ]
 
 validateOpts :: [String] -> IO (Mode, BuildOpts)
@@ -591,10 +620,14 @@ validateOpts args = do
         stateDir = fromMaybe "build-cache" (flagCacheDir flags)
 
         opts = BuildOpts {
-                   bo_verbosity = flagVerbosity flags,
-                   bo_runTime   = flagRunTime flags,
-                   bo_stateDir  = stateDir,
-                   bo_force     = flagForce flags
+                   bo_verbosity  = flagVerbosity flags,
+                   bo_runTime    = flagRunTime flags,
+                   bo_stateDir   = stateDir,
+                   bo_force      = flagForce flags,
+                   bo_continuous = case (flagContinuous flags, flagInterval flags) of
+                                     (True, Just i)  -> Just (read i)
+                                     (True, Nothing) -> Just 30 -- default interval
+                                     (False, _)      -> Nothing
                }
 
         mode = case args' of

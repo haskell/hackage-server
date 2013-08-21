@@ -276,6 +276,7 @@ executable hackage-build
     Cabal,
     safecopy, cereal, binary, mtl,
     aeson,
+    random,
     -- Runtime dependency only:
     hscolour >= 1.8
   default-language: Haskell2010
