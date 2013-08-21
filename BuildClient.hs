@@ -155,84 +155,99 @@ stats opts = do
     (didFail, _, _)  <- mkPackageFailed opts
 
     httpSession verbosity $ do
-        liftIO $ notice verbosity "Getting index"
+      liftIO $ notice verbosity "Getting index"
+      infoStats verbosity (Just statsFile) =<< getDocumentationStats config didFail
+  where
+    statsFile = bo_stateDir opts </> "stats"
 
-        pkgIdsHaveDocs <- getDocumentationStats config didFail
+infoStats :: MonadIO m => Verbosity -> Maybe FilePath -> [(PackageIdentifier, HasDocs)] -> m ()
+infoStats verbosity mDetailedStats pkgIdsHaveDocs = liftIO $ do
+    nfo $ "There are "
+       ++ show (length byPackage)
+       ++ " packages with a total of "
+       ++ show (length pkgIdsHaveDocs)
+       ++ " package versions"
+    nfo $ "So far we have built or attempted to built "
+       ++ show (length (filter ((/= DocsNotBuilt) . snd) pkgIdsHaveDocs))
+       ++ " packages; only "
+       ++ show (length (filter ((== DocsNotBuilt) . snd) pkgIdsHaveDocs))
+       ++ " left!"
 
-        let byPackage = map (sortBy (flip (comparing (pkgVersion . fst))))
-                      $ groupBy (equating  (pkgName . fst))
-                      $ sortBy  (comparing (pkgName . fst)) pkgIdsHaveDocs
+    nfo "Considering the most recent version only:"
+    nfo . printTable . indent $ [
+        [show (length mostRecentBuilt)   , "built succesfully"]
+      , [show (length mostRecentFailed)  , "failed to build"]
+      , [show (length mostRecentNotBuilt), "not yet built"]
+      ]
 
-            mostRecentBuilt    = filter ((== HasDocs)      . snd . head) byPackage
-            mostRecentFailed   = filter ((== DocsFailed)   . snd . head) byPackage
-            mostRecentNotBuilt = filter ((== DocsNotBuilt) . snd . head) byPackage
+    nfo "Considering all versions:"
+    nfo . printTable . indent $ [
+        [count AllVersionsBuiltOk,   "all versions built successfully"]
+      , [count AllVersionsAttempted, "attempted to build all versions, but some failed"]
+      , [count SomeBuiltOk,          "not all versions built yet, but those that did were ok"]
+      , [count SomeFailed,           "not all versions built yet, and some failures"]
+      , [count NoneBuilt,            "no versions built yet"]
+      ]
 
-            indent :: [[String]] -> [[String]]
-            indent = map ("  " :)
+    case mDetailedStats of
+      Nothing        -> return ()
+      Just statsFile -> do
+        writeFile statsFile $ printTable (["Package", "Version", "Has docs?"] : formattedStats)
+        notice verbosity $ "Detailed statistics written to " ++ statsFile
+  where
+    -- | We avoid 'info' here because it re-wraps the text
+    nfo :: String -> IO ()
+    nfo str = when (verbosity >= verbose) $ putStrLn str
 
-            categorise :: [(PackageId, HasDocs)] -> StatResult
-            categorise ps
-              | all (== HasDocs)      hd = AllVersionsBuiltOk
-              | all (/= DocsNotBuilt) hd = AllVersionsAttempted
-              | all (== DocsNotBuilt) hd = NoneBuilt
-              | all (/= DocsFailed)   hd = SomeBuiltOk
-              | otherwise                = SomeFailed
-              where
-                hd = map snd ps
+    byPackage :: [[(PackageId, HasDocs)]]
+    byPackage = map (sortBy (flip (comparing (pkgVersion . fst))))
+              $ groupBy (equating  (pkgName . fst))
+              $ sortBy  (comparing (pkgName . fst)) pkgIdsHaveDocs
 
-            categorised = map categorise byPackage
-            count c = show (length (filter (c ==) categorised))
+    mostRecentBuilt, mostRecentFailed, mostRecentNotBuilt :: [[(PackageId, HasDocs)]]
+    mostRecentBuilt    = filter ((== HasDocs)      . snd . head) byPackage
+    mostRecentFailed   = filter ((== DocsFailed)   . snd . head) byPackage
+    mostRecentNotBuilt = filter ((== DocsNotBuilt) . snd . head) byPackage
 
-        liftIO $ do
-          putStrLn $ "There are "
-                  ++ show (length byPackage)
-                  ++ " packages with a total of "
-                  ++ show (length pkgIdsHaveDocs)
-                  ++ " package versions"
-          putStrLn $ "So far we have built or attempted to built "
-                  ++ show (length (filter ((/= DocsNotBuilt) . snd) pkgIdsHaveDocs))
-                  ++ " packages; only "
-                  ++ show (length (filter ((== DocsNotBuilt) . snd) pkgIdsHaveDocs))
-                  ++ " left!"
-          putStrLn $ "Considering the most recent version only:"
-          putStr . printTable . indent $ [
-              [show (length mostRecentBuilt)   , "built succesfully"]
-            , [show (length mostRecentFailed)  , "failed to build"]
-            , [show (length mostRecentNotBuilt), "not yet built"]
-            ]
-          putStrLn $ "Considering all versions:"
-          putStr . printTable . indent $ [
-              [count AllVersionsBuiltOk,   "all versions built successfully"]
-            , [count AllVersionsAttempted, "attempted to build all versions, but some failed"]
-            , [count SomeBuiltOk,          "not all versions built yet, but those that did were ok"]
-            , [count SomeFailed,           "not all versions built yet, and some failures"]
-            , [count NoneBuilt,            "no versions built yet"]
-            ]
+    categorise :: [(PackageId, HasDocs)] -> StatResult
+    categorise ps
+      | all (== HasDocs)      hd = AllVersionsBuiltOk
+      | all (/= DocsNotBuilt) hd = AllVersionsAttempted
+      | all (== DocsNotBuilt) hd = NoneBuilt
+      | all (/= DocsFailed)   hd = SomeBuiltOk
+      | otherwise                = SomeFailed
+      where
+        hd = map snd ps
 
-          let statsFile = bo_stateDir opts </> "stats"
+    categorised :: [StatResult]
+    categorised = map categorise byPackage
 
-          let formatVersion :: (PackageId, HasDocs) -> [String]
-              formatVersion (version, hasDocs) =
-                [ display (pkgVersion version)
-                , show hasDocs
-                ]
+    count :: StatResult -> String
+    count c = show (length (filter (c ==) categorised))
 
-              formatPkg :: [(PackageId, HasDocs)] -> [[String]]
-              formatPkg ((firstVersion, firstHasDocs) : otherVersions) =
-                  (display (pkgName firstVersion) : formatVersion (firstVersion, firstHasDocs))
-                : (indent (map formatVersion otherVersions))
-              formatPkg _ = error "formatPkg: cannot happen"
+    formatVersion :: (PackageId, HasDocs) -> [String]
+    formatVersion (version, hasDocs) =
+      [ display (pkgVersion version)
+      , show hasDocs
+      ]
 
-          let formattedStats = concatMap formatPkg byPackage
-          writeFile statsFile $ printTable (["Package", "Version", "Has docs?"] : formattedStats)
+    formatPkg :: [(PackageId, HasDocs)] -> [[String]]
+    formatPkg ((firstVersion, firstHasDocs) : otherVersions) =
+        (display (pkgName firstVersion) : formatVersion (firstVersion, firstHasDocs))
+      : (indent (map formatVersion otherVersions))
+    formatPkg _ = error "formatPkg: cannot happen"
 
-          putStrLn $ "Detailed statistics written to " ++ statsFile
+    formattedStats :: [[String]]
+    formattedStats = concatMap formatPkg byPackage
+
+    indent :: [[String]] -> [[String]]
+    indent = map ("  " :)
 
 -- | Formats a 2D table so that everything is nicely aligned
 --
 -- NOTE: Expects the same number of columns in every row!
 printTable :: [[String]] -> String
-printTable xss = unlines
+printTable xss = intercalate "\n"
                . map (intercalate " ")
                . map padCols
                $ xss
@@ -295,6 +310,7 @@ buildOnce opts pkgs = do
     flip finally persist_failed $ do
         pkgIdsHaveDocs <- httpSession verbosity $
           getDocumentationStats config has_failed
+        infoStats verbosity Nothing pkgIdsHaveDocs
 
         -- First build all of the latest versions of each package
         -- Then go back and build all the older versions
