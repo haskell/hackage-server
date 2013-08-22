@@ -1,17 +1,51 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 module Distribution.Client.Cron
   ( cron
+  , Signal(..)
+  , rethrowSignalsAsExceptions
   ) where
 
-import Control.Concurrent (threadDelay)
+import Control.Monad (forM_)
+import Control.Exception (Exception)
+import Control.Concurrent (myThreadId, threadDelay, throwTo)
 import System.Random (randomRIO)
 import System.Locale (defaultTimeLocale)
 import Data.Time.Format (formatTime)
-import Data.Time.Clock (getCurrentTime, addUTCTime)
+import Data.Time.Clock (UTCTime, getCurrentTime, addUTCTime)
 import Data.Time.LocalTime (getCurrentTimeZone, utcToZonedTime)
+import Data.Typeable (Typeable)
+
+import qualified System.Posix.Signals as Posix
 
 import Distribution.Verbosity (Verbosity)
 import Distribution.Simple.Utils hiding (warn)
 
+data ReceivedSignal = ReceivedSignal Signal UTCTime
+  deriving (Show, Typeable)
+
+data Signal = SIGTERM
+            | SIGKILL
+  deriving (Show, Typeable)
+
+instance Exception ReceivedSignal
+
+
+-- | "Re"throw signals as exceptions to the invoking thread
+rethrowSignalsAsExceptions :: [Signal] -> IO ()
+rethrowSignalsAsExceptions signals = do
+  tid <- myThreadId
+  forM_ signals $ \s ->
+    let handler = do
+          time <- getCurrentTime
+          throwTo tid (ReceivedSignal s time)
+    in Posix.installHandler (toPosixSignal s) (Posix.Catch handler) Nothing
+
+toPosixSignal :: Signal -> Posix.Signal
+toPosixSignal SIGTERM = Posix.sigTERM
+toPosixSignal SIGKILL = Posix.sigKILL
+
+-- | @cron verbosity interval act@ runs @act@ over and over with
+-- the specified interval.
 cron :: Verbosity -> Int -> (a -> IO a) -> (a -> IO ())
 cron verbosity interval action x = do
     x' <- action x

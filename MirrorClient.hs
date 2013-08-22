@@ -8,7 +8,7 @@ import Network.URI (URI(..), URIAuth(..))
 
 import Distribution.Client (validateHackageURI, validatePackageIds, PkgIndexInfo(..))
 import Distribution.Client.UploadLog as UploadLog (read, Entry(..))
-import Distribution.Client.Cron (cron)
+import Distribution.Client.Cron (cron, rethrowSignalsAsExceptions, Signal(..))
 import Distribution.Server.Util.Parse (packUTF8, unpackUTF8)
 
 import Distribution.Server.Users.Types (UserId(..), UserName(UserName))
@@ -81,15 +81,16 @@ data MirrorState = MirrorState {
                    }
   deriving (Eq, Show)
 
-
 main :: IO ()
 main = toplevelHandler $ do
+  rethrowSignalsAsExceptions [SIGTERM, SIGKILL]
   hSetBuffering stdout LineBuffering
 
   args <- getArgs
   (verbosity, opts) <- validateOpts args
 
   (env, st) <- mirrorInit verbosity opts
+
 
   case continuous opts of
     Nothing       -> mirrorOneShot verbosity opts env st

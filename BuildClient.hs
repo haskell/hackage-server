@@ -5,7 +5,7 @@ import Network.Browser
 import Network.URI (URI(..), URIAuth(..))
 
 import Distribution.Client
-import Distribution.Client.Cron (cron)
+import Distribution.Client.Cron (cron, rethrowSignalsAsExceptions, Signal(..))
 
 import Distribution.Package
 import Distribution.Text
@@ -63,6 +63,7 @@ installDirectory bo = bo_stateDir bo </> "inst"
 
 main :: IO ()
 main = topHandler $ do
+    rethrowSignalsAsExceptions [SIGTERM, SIGKILL]
     args <- getArgs
     (mode, opts) <- validateOpts args
 

@@ -3,3 +3,4 @@ mirror-cache
 state
 dist
 tags
+*.swp
