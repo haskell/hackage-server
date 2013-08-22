@@ -63,7 +63,7 @@ installDirectory bo = bo_stateDir bo </> "inst"
 
 main :: IO ()
 main = topHandler $ do
-    rethrowSignalsAsExceptions [SIGTERM, SIGKILL]
+    rethrowSignalsAsExceptions [SIGABRT, SIGINT, SIGQUIT, SIGTERM]
     args <- getArgs
     (mode, opts) <- validateOpts args
 

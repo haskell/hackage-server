@@ -23,8 +23,10 @@ import Distribution.Simple.Utils hiding (warn)
 data ReceivedSignal = ReceivedSignal Signal UTCTime
   deriving (Show, Typeable)
 
-data Signal = SIGTERM
-            | SIGKILL
+data Signal = SIGABRT
+            | SIGINT
+            | SIGQUIT
+            | SIGTERM
   deriving (Show, Typeable)
 
 instance Exception ReceivedSignal
@@ -41,8 +43,10 @@ rethrowSignalsAsExceptions signals = do
     in Posix.installHandler (toPosixSignal s) (Posix.Catch handler) Nothing
 
 toPosixSignal :: Signal -> Posix.Signal
+toPosixSignal SIGABRT = Posix.sigABRT
+toPosixSignal SIGINT  = Posix.sigINT
+toPosixSignal SIGQUIT = Posix.sigQUIT
 toPosixSignal SIGTERM = Posix.sigTERM
-toPosixSignal SIGKILL = Posix.sigKILL
 
 -- | @cron verbosity interval act@ runs @act@ over and over with
 -- the specified interval.

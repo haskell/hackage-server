@@ -83,7 +83,7 @@ data MirrorState = MirrorState {
 
 main :: IO ()
 main = toplevelHandler $ do
-  rethrowSignalsAsExceptions [SIGTERM, SIGKILL]
+  rethrowSignalsAsExceptions [SIGABRT, SIGINT, SIGQUIT, SIGTERM]
   hSetBuffering stdout LineBuffering
 
   args <- getArgs
