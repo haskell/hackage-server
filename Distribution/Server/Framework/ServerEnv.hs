@@ -2,6 +2,7 @@ module Distribution.Server.Framework.ServerEnv where
 
 import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import Distribution.Server.Framework.Logging (Verbosity)
+import Distribution.Server.Framework.Templating (TemplatesMode)
 
 import qualified Network.URI as URI
 
@@ -18,6 +19,9 @@ data ServerEnv = ServerEnv {
 
     -- | The location of the server's template files
     serverTemplatesDir :: FilePath,
+
+    -- | Default templates mode
+    serverTemplatesMode :: TemplatesMode,
 
     -- | The location of the server's state directory. This is where the
     -- server's persistent state is kept, e.g. using ACID state.
@@ -39,7 +43,7 @@ data ServerEnv = ServerEnv {
     -- | A tunable parameter for cache policy. Setting this parameter high
     -- during bulk imports can very significantly improve performance. During
     -- normal operation it probably doesn't help much.
-    
+
     -- By delaying cache updates we can sometimes save some effort: caches are
     -- based on a bit of changing state and if that state is updated more
     -- frequently than the time taken to update the cache, then we don't have

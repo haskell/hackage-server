@@ -268,14 +268,14 @@ initUserSignupFeature :: ServerEnv
                       -> UserFeature
                       -> UserDetailsFeature
                       -> IO UserSignupFeature
-initUserSignupFeature env@ServerEnv{serverStateDir, serverTemplatesDir}
+initUserSignupFeature env@ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode}
                       users userdetails = do
 
   -- Canonical state
   signupResetState <- signupResetStateComponent serverStateDir
 
   -- Page templates
-  templates <- loadTemplates NormalMode {- use DesignMode when working on templates -}
+  templates <- loadTemplates serverTemplatesMode
                  [serverTemplatesDir, serverTemplatesDir </> "UserSignupReset"]
                  [ "SignupRequest", "SignupConfirmationEmail"
                  , "SignupEmailSent", "SignupConfirm"

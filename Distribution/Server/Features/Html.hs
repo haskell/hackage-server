@@ -91,7 +91,8 @@ initHtmlFeature :: ServerEnv -> UserFeature -> CoreFeature -> RecentPackagesFeat
                 -> UserDetailsFeature
                 -> IO HtmlFeature
 
-initHtmlFeature ServerEnv{serverTemplatesDir, serverCacheDelay,
+initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
+                          serverCacheDelay,
                           serverVerbosity = verbosity}
                 user core@CoreFeature{packageChangeHook}
                 packages upload
@@ -106,7 +107,7 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverCacheDelay,
     loginfo verbosity "Initialising html feature, start"
 
     -- Page templates
-    templates <- loadTemplates DesignMode {- use DesignMode when working on templates -}
+    templates <- loadTemplates serverTemplatesMode
                    [serverTemplatesDir, serverTemplatesDir </> "Html"]
                    [ "maintain.html" ]
 

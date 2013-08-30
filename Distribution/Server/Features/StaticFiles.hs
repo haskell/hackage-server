@@ -17,10 +17,10 @@ import System.FilePath
 --
 initStaticFilesFeature :: ServerEnv
                        -> IO HackageFeature
-initStaticFilesFeature env@ServerEnv{serverTemplatesDir} = do
+initStaticFilesFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode} = do
 
   -- Page templates
-  templates <- loadTemplates DesignMode {- use DesignMode when working on templates -}
+  templates <- loadTemplates serverTemplatesMode
                  [serverTemplatesDir]
                  ["index.html", "hackageErrorPage.txt", "hackageErrorPage.html"]
 

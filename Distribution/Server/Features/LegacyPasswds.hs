@@ -166,13 +166,13 @@ legacyPasswdsToCSV (LegacyPasswdsTable tbl)
 --
 
 initLegacyPasswdsFeature :: ServerEnv -> UserFeature -> IO LegacyPasswdsFeature
-initLegacyPasswdsFeature env@ServerEnv{serverStateDir, serverTemplatesDir} users = do
+initLegacyPasswdsFeature env@ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode} users = do
 
   -- Canonical state
   legacyPasswdsState <- legacyPasswdsStateComponent serverStateDir
 
   -- Page templates
-  templates <- loadTemplates NormalMode {- use DesignMode when working on templates -}
+  templates <- loadTemplates serverTemplatesMode
                  [serverTemplatesDir, serverTemplatesDir </> "LegacyPasswds"]
                  ["htpasswd-upgrade.html", "htpasswd-upgrade-success.html"]
 

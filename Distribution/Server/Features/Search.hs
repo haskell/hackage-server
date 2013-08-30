@@ -34,11 +34,11 @@ instance IsHackageFeature SearchFeature where
 
 
 initSearchFeature :: ServerEnv -> CoreFeature -> IO SearchFeature
-initSearchFeature env@ServerEnv{serverTemplatesDir, serverVerbosity = verbosity}
+initSearchFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode, serverVerbosity = verbosity}
                  core@CoreFeature{..} = do
     loginfo verbosity "Initialising search feature, start"
 
-    templates <- loadTemplates NormalMode {- use DesignMode when working on templates -}
+    templates <- loadTemplates serverTemplatesMode
                    [serverTemplatesDir, serverTemplatesDir </> "Search"]
                    [ "opensearch.xml"]
 

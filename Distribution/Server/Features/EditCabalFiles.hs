@@ -43,10 +43,10 @@ import qualified Data.ByteString.Lazy.Char8 as BS -- TODO: Verify that we don't 
 initEditCabalFilesFeature :: ServerEnv
                           -> UserFeature -> CoreFeature -> UploadFeature
                           -> IO HackageFeature
-initEditCabalFilesFeature env@ServerEnv{serverTemplatesDir} user core upload = do
+initEditCabalFilesFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode} user core upload = do
 
   -- Page templates
-  templates <- loadTemplates DesignMode {- use DesignMode when working on templates -}
+  templates <- loadTemplates serverTemplatesMode
                  [serverTemplatesDir, serverTemplatesDir </> "EditCabalFile"]
                  ["cabalFileEditPage.html", "cabalFilePublished.html"]
 

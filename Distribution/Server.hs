@@ -27,6 +27,7 @@ import Distribution.Server.Framework
 import qualified Distribution.Server.Framework.BackupRestore as Import
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Framework.Auth as Auth
+import Distribution.Server.Framework.Templating (TemplatesMode(NormalMode))
 import Distribution.Server.Framework.AuthTypes (PasswdPlain(..))
 
 import Distribution.Server.Framework.Feature as Feature
@@ -131,14 +132,15 @@ initialise config@(ServerConfig verbosity hostURI listenOn
     store   <- BlobStorage.open blobStoreDir
 
     let env = ServerEnv {
-            serverStaticDir    = staticDir,
-            serverTemplatesDir = templatesDir,
-            serverStateDir     = stateDir,
-            serverBlobStore    = store,
-            serverTmpDir       = tmpDir,
-            serverCacheDelay   = cacheDelay * 1000000, --microseconds
-            serverBaseURI      = hostURI,
-            serverVerbosity    = verbosity
+            serverStaticDir     = staticDir,
+            serverTemplatesDir  = templatesDir,
+            serverTemplatesMode = NormalMode,
+            serverStateDir      = stateDir,
+            serverBlobStore     = store,
+            serverTmpDir        = tmpDir,
+            serverCacheDelay    = cacheDelay * 1000000, --microseconds
+            serverBaseURI       = hostURI,
+            serverVerbosity     = verbosity
          }
     -- do feature initialization
     (features, userFeature) <- Features.initHackageFeatures env
