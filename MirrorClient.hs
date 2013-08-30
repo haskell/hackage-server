@@ -814,28 +814,29 @@ validateOpts args = do
     when (not (null errs)) (printErrors errs)
 
     case args' of
-      (from:to:pkgstrs) -> case (validateHackageURI from, validateHackageURI to) of
-        (Left theError, _) -> die theError
-        (_, Left theError) -> die theError
-        (Right fromURI, Right toURI) -> case (mpkgs, minterval) of
-          (Left theError, _) -> die theError
-          (_, Left theError) -> die theError
-          (Right pkgs, Right interval) ->
-             return $ (,) (flagVerbosity flags) MirrorOpts {
-                 srcURI       = fromURI,
-                 dstURI       = toURI,
-                 stateDir     = fromMaybe "mirror-cache" (flagCacheDir flags),
-                 selectedPkgs = pkgs,
-                 continuous   = if flagContinuous flags
-                                  then Just interval
-                                  else Nothing,
-                 mo_keepGoing    = flagKeepGoing flags
-               }
+      (configFile:pkgstrs) -> do
+        mFromTo <- readConfigFile configFile
+        case mFromTo of
+          Left theError -> die theError
+          Right (fromURI, toURI) -> case (mpkgs, minterval) of
+            (Left theError, _) -> die theError
+            (_, Left theError) -> die theError
+            (Right pkgs, Right interval) ->
+               return $ (,) (flagVerbosity flags) MirrorOpts {
+                   srcURI       = fromURI,
+                   dstURI       = toURI,
+                   stateDir     = fromMaybe "mirror-cache" (flagCacheDir flags),
+                   selectedPkgs = pkgs,
+                   continuous   = if flagContinuous flags
+                                    then Just interval
+                                    else Nothing,
+                   mo_keepGoing    = flagKeepGoing flags
+                 }
           where
             mpkgs     = validatePackageIds pkgstrs
             minterval = validateInterval (flagInterval flags)
 
-      _ -> die $ "Expected two URLs, a source and destination.\n"
+      _ -> die $ "Expected path to a config file.\n"
               ++ "See hackage-mirror --help for details and an example."
 
   where
@@ -843,7 +844,10 @@ validateOpts args = do
       putStrLn $ usageInfo usageHeader mirrorFlagDescrs ++ helpExampleStr
       exitSuccess
     usageHeader = helpDescrStr
-               ++ "Usage: hackage-mirror fromURL toURL [packages] [options]\n"
+               ++ "Usage: hackage-mirror configFile [packages] [options]\n\n"
+               ++ "configFile should be a path to a file containing two lines:\n\n"
+               ++ "    fromURL\n"
+               ++ "    toURL\n\n"
                ++ "Options:"
     printErrors errs = die $ concat errs ++ "Try --help."
 
@@ -859,6 +863,19 @@ validateOpts args = do
       if int < 0
         then Left "a negative mirroring interval is meaningless"
         else return int
+
+readConfigFile :: FilePath -> IO (Either String (URI, URI))
+readConfigFile configFile = runErrorT $ do
+    config   <- ErrorT $ tryIO $ readFile configFile
+    [fr, to] <- case lines config of
+                  [fr, to] -> return [fr, to]
+                  _        -> fail "Invalid config file format"
+    frURI    <- ErrorT . return $ validateHackageURI fr
+    toURI    <- ErrorT . return $ validateHackageURI to
+    return (frURI, toURI)
+  where
+    tryIO :: IO a -> IO (Either String a)
+    tryIO io = catch (Right `liftM` io) (\e -> return . Left $ show (e :: IOException))
 
 helpDescrStr :: String
 helpDescrStr = unlines
@@ -882,8 +899,10 @@ helpExampleStr = unlines
   , "  To test that it is working without actually syncing a Gb of data from"
   , "  hackage.haskell.org, we will specify to mirror only the 'zlib' package."
   , "  So overall we run:"
-  , "    hackage-mirror http://hackage.haskell.org/ \\"
-  , "                   http://foo:bar@localhost:8080/  zlib"
+  , "    hackage-mirror ./mirror.cfg zlib"
+  , "  where ./mirror.cfg contains"
+  , "    http://hackage.haskell.org/"
+  , "    http://foo:bar@localhost:8080/"
   , "  This will synchronise all versions of the 'zlib' package and then exit."
   ]
 
