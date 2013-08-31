@@ -122,45 +122,51 @@ processEntries verbosity store tarfileName blobDir linkBlobs writeEntry featureM
       [ do loginfo verbosity $ "Exporting " ++ featureName ++ " feature state"
            entries <- ioEntries
            sequence_
-             [ processEntry store tarfileName blobDir linkBlobs featureName
+             [ processEntry verbosity store tarfileName blobDir linkBlobs featureName
                             writeEntry entry
              | entry <- entries ]
+           loginfo verbosity $ "Export for " ++ featureName ++ " complete"
       | (featureName, ioEntries) <- featureMap ]
 
 
-processEntry :: BlobStorage -> FilePath -> FilePath -> Bool -> String
+processEntry :: Verbosity -> BlobStorage -> FilePath -> FilePath -> Bool -> String
              -> (Tar.Entry -> IO ())
              -> BackupEntry
              -> IO ()
-processEntry _store tarfileName _blobDir _linkBlobs featureName writeEntry
+processEntry _verbosity _store tarfileName _blobDir _linkBlobs featureName writeEntry
   (BackupByteString path bs) = do
 
   tarPath <- either exportError return $
              Tar.toTarPath False (mkTarPath tarfileName featureName path)
   writeEntry (Tar.fileEntry tarPath bs)
 
-processEntry store tarfileName blobDir linkBlobs featureName writeEntry
+processEntry verbosity store tarfileName blobDir linkBlobs featureName writeEntry
     (BackupBlob path blobId) = do
 
-    let blobName = Blob.blobMd5 blobId
-        blobPath = blobDir </> blobName
-        -- go back to the root of the tarball. 'path' here would be something like
-        -- a/b/c/filename, which we store in
-        -- backup-2013-03-01/feature/a/b/c/filename; in this example, we want
-        -- to go back 4 directories, which is @length path + 1@
-        -- (because 'path' includes the filename)
-        relRoot  = joinPath (replicate (length path + 1) "..")
-        blobLink = relRoot </> "blobs" </> blobName
+    blobExists <- doesFileExist (Blob.filepath store blobId)
+    if blobExists
+      then do
+        let blobName = Blob.blobMd5 blobId
+            blobPath = blobDir </> blobName
+            -- go back to the root of the tarball. 'path' here would be something like
+            -- a/b/c/filename, which we store in
+            -- backup-2013-03-01/feature/a/b/c/filename; in this example, we want
+            -- to go back 4 directories, which is @length path + 1@
+            -- (because 'path' includes the filename)
+            relRoot  = joinPath (replicate (length path + 1) "..")
+            blobLink = relRoot </> "blobs" </> blobName
 
-    entryPath   <- either exportError return $
-                   Tar.toTarPath False (mkTarPath tarfileName featureName path)
-    linkTarget  <- maybe (fail "Could not generate link target") return $
-                   Tar.toLinkTarget blobLink
+        entryPath   <- either exportError return $
+                       Tar.toTarPath False (mkTarPath tarfileName featureName path)
+        linkTarget  <- maybe (fail "Could not generate link target") return $
+                       Tar.toLinkTarget blobLink
 
-    writeBlob blobPath blobId
-    writeEntry (Tar.simpleEntry entryPath (Tar.SymbolicLink linkTarget))
-
+        writeBlob blobPath blobId
+        writeEntry (Tar.simpleEntry entryPath (Tar.SymbolicLink linkTarget))
+      else
+        lognotice verbosity $ "Warning: skipping non-existent blob " ++ show blobId ++ " (" ++ foldr1 (</>) path ++ ")"
   where
+    -- blobPath is the path in the backup, not the original
     writeBlob blobPath blobid = do
       exists <- doesFileExist blobPath
       unless exists $
