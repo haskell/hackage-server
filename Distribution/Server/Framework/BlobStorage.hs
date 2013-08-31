@@ -1,4 +1,5 @@
-{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, ScopedTypeVariables #-}
+{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving,
+             ScopedTypeVariables, BangPatterns, CPP #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Server.BlobStorage
@@ -37,18 +38,17 @@ import System.Directory
 import System.IO
 
 -- For the lazy MD5 computation
-import Data.IORef
 import Data.Digest.Pure.MD5 (MD5Digest, MD5Context)
 import Crypto.Classes (initialCtx, updateCtx, finalize, blockLength)
 import Crypto.Types (ByteLength)
-import Crypto.Util ((.::.))
+import qualified Crypto.Util (for)
 import qualified Data.ByteString as BSS
-import System.IO.Unsafe (unsafeInterleaveIO)
 
 -- For fsync
+import System.Posix.Types (Fd(..))
+#ifndef mingw32_HOST_OS
 import Foreign.C.Error (throwErrnoIfMinus1_)
 import Foreign.C.Types (CInt(..))
-import System.Posix.Types (Fd(..))
 import System.Posix.IO (
     handleToFd
   , openFd
@@ -56,12 +56,7 @@ import System.Posix.IO (
   , defaultFileFlags
   , OpenMode(ReadOnly)
   )
-
-foreign import ccall "fsync" c_fsync :: CInt -> IO CInt
-
--- | Binding to the C @fsync@ function
-fsync :: Fd -> IO ()
-fsync (Fd fd) =  throwErrnoIfMinus1_ "fsync" $ c_fsync fd
+#endif
 
 -- | An id for a blob. The content of the blob is stable.
 --
@@ -156,14 +151,18 @@ withIncoming :: BlobStorage -> BSL.ByteString
 withIncoming store content action = do
     (file, hnd) <- openBinaryTempFile (incomingDir store) "new"
     handleExceptions file hnd $ do
-        (content', md5) <- lazyMD5 content
-        BSL.hPut hnd content'
-        blobId <- evaluate $ BlobId md5
+        md5 <- hPutGetMd5 hnd content
+        let blobId = BlobId md5
         fd <- handleToFd hnd -- This closes the handle, see docs for handleToFd
         fsync fd
         closeFd fd
         withIncoming' store file blobId action
   where
+    hPutGetMd5 hnd = go . lazyMD5
+      where
+        go (BsChunk bs cs) = BSS.hPut hnd bs >> go cs
+        go (BsEndMd5 md5)  = return md5
+
     handleExceptions tmpFile tmpHandle =
       handle $ \err -> do
         hClose tmpHandle
@@ -183,16 +182,19 @@ withIncoming' store file blobId action = do
         (res, commit) <- action file blobId
         if commit
             then do
+#ifndef mingw32_HOST_OS
+              fd <- openFd (directory store blobId) ReadOnly Nothing defaultFileFlags
+#endif
               -- TODO: if the target already exists then there is no need to overwrite
               -- it since it will have the same content. Checking and then renaming
               -- would give a race condition but that's ok since they have the same
               -- content.
               renameFile file (filepath store blobId)
-
-              -- fsync the directory so that we the write becomes 'durable'
-              fd <- openFd (directory store blobId) ReadOnly Nothing defaultFileFlags
+#ifndef mingw32_HOST_OS
+              -- fsync the directory so that the new directory entry becomes 'durable'
               fsync fd
               closeFd fd
+#endif
             else removeFile file
         return res
 
@@ -262,47 +264,48 @@ makeBlocks len = go . BSL.toChunks
 -- Example usage:
 --
 -- > do bs <- BSL.readFile srcPath
--- >   (bs', md5) <- lazyMD5 bs
--- >   BSL.writeFile destPath bs'
+-- >   md5 <- writeFileGetMd5 destPath bs'
 -- >   putStrLn $ "MD5 is " ++ show md5
+-- > where
+-- >   writeFileGetMd5 file content =
+-- >       withFile file WriteMode $ \hnd ->
+-- >         go hnd (lazyMD5 content)
+-- >     where
+-- >       go hnd (BsChunk bs cs) = BSS.hPut hnd bs >> go hnd cs
+-- >       go _   (BsEndMd5 md5)  = return md5
 --
 -- Note that this lazily reads the file, then lazily writes it again, and
 -- finally we get the MD5 checksum of the whole file. This example program
 -- will run in constant memory.
 --
--- Important: do not attempt to read the MD5 checksum until you are sure that
--- the entire bytestring has been confumsed (you will get an exception
--- otherwise).
-lazyMD5 :: BSL.ByteString -> IO (BSL.ByteString, MD5Digest)
-lazyMD5 = \inp -> do
-    md5ref <- newIORef (Left initialCtx)
-    md5    <- finalMD5 md5ref
-
-    let blockLen = (blockLength .::. md5) `div` 8
-
-    outp <- liftM BSL.fromChunks . go md5ref . makeBlocks blockLen $ inp
-    return (outp, md5)
+lazyMD5 :: BSL.ByteString -> ByteStringWithMd5
+lazyMD5 = go initialCtx . makeBlocks blockLen
   where
-    go :: IORef (Either MD5Context MD5Digest)
-       -> [BSS.ByteString]
-       -> IO [BSS.ByteString]
-    go md5ref blocks = unsafeInterleaveIO $ do
-      Left md5ctx <- readIORef md5ref
-      case blocks of
-        [lastBlock] -> do
-          md5ctx' <- evaluate $ finalize md5ctx lastBlock
-          writeIORef md5ref (Right md5ctx')
-          return [lastBlock]
-        (block : blocks') -> do
-          md5ctx' <- evaluate $ updateCtx md5ctx block
-          writeIORef md5ref (Left md5ctx')
-          outp <- go md5ref blocks'
-          return (block : outp)
-        [] -> error "impossible"
+    blockLen = (blockLength `Crypto.Util.for` (undefined :: MD5Digest)) `div` 8 
 
-    finalMD5 :: IORef (Either MD5Context MD5Digest) -> IO MD5Digest
-    finalMD5 md5ref = unsafeInterleaveIO $ do
-      m_md5 <- readIORef md5ref
-      case m_md5 of
-        Left  _   -> throwIO (userError "lazyMD5: attempt to read MD5 before bytestring was consumed")
-        Right md5 -> return md5
+    go :: MD5Context
+       -> [BSS.ByteString]
+       -> ByteStringWithMd5
+    go !md5ctx [lastBlock] =
+      BsChunk lastBlock $! (BsEndMd5 (finalize md5ctx lastBlock))
+    go !md5ctx (block : blocks') =
+      BsChunk block (go (updateCtx md5ctx block) blocks')
+    go _ [] = error "impossible"
+
+data ByteStringWithMd5 = BsChunk  !BSS.ByteString ByteStringWithMd5
+                       | BsEndMd5 !MD5Digest
+
+{------------------------------------------------------------------------------
+  Lazy MD5 computation
+------------------------------------------------------------------------------}
+
+-- | Binding to the C @fsync@ function
+fsync :: Fd -> IO ()
+fsync (Fd fd) = 
+#ifdef mingw32_HOST_OS
+  return ()
+#else
+ throwErrnoIfMinus1_ "fsync" $ c_fsync fd
+
+foreign import ccall "fsync" c_fsync :: CInt -> IO CInt
+#endif
