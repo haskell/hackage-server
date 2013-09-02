@@ -31,6 +31,7 @@ import System.FilePath
 import System.Directory
 import System.Console.GetOpt
 import System.Process
+import System.IO
 import System.IO.Error
 
 import Data.Aeson (eitherDecode)
@@ -64,6 +65,7 @@ installDirectory bo = bo_stateDir bo </> "inst"
 main :: IO ()
 main = topHandler $ do
     rethrowSignalsAsExceptions [SIGABRT, SIGINT, SIGQUIT, SIGTERM]
+    hSetBuffering stdout LineBuffering
     args <- getArgs
     (mode, opts) <- validateOpts args
 
