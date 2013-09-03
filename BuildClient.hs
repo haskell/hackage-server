@@ -487,7 +487,7 @@ buildPackage verbosity opts config pkg_id = do
                       -- to rehaddock some package when the dependent
                       -- packages get updated. However, this is NOT
                       -- what the Hackage v1 did, so ignore that:
-                      "--haddock-html-location=" ++ show (pkg_url <//> "doc"),
+                      "--haddock-html-location=" ++ show (pkg_url <//> "docs"),
                       -- Give the user a choice between themes:
                       "--haddock-option=--built-in-themes",
                       -- Link "Contents" to the package page:
