@@ -454,7 +454,8 @@ buildPackage verbosity opts config pkg_id = do
     -- The documentation is installed within the stateDir because we
     -- set a prefix while installing
     let doc_root = installDirectory opts </> "share" </> "doc"
-        doc_dir      = doc_root </> display pkg_id </> "html"
+        doc_dir      = doc_root </> display pkg_id
+        doc_dir_html = doc_dir </> "html"
         temp_doc_dir = doc_root </> display pkg_id </> display pkg_id ++ "-docs"
         --versionless_pkg_url = srcURI opts <//> "package" </> "$pkg"
         pkg_url = bc_srcURI config <//> "package" </> "$pkg-$version"
@@ -493,6 +494,8 @@ buildPackage verbosity opts config pkg_id = do
                       "--haddock-contents-location=" ++ show pkg_url,
                       -- Link to colourised source code:
                       "--haddock-hyperlink-source",
+                      -- The docdir can differ between Cabal versions
+                      "--docdir=" ++ doc_dir,
                       "--prefix=" ++ installDirectory opts,
                       display pkg_id]
 
@@ -514,8 +517,8 @@ buildPackage verbosity opts config pkg_id = do
             let simple_report_log = installDirectory opts </> "packages" </> srcName config </> "build-reports.log"
             handleDoesNotExist (return ()) $ removeFile simple_report_log
 
-        docs_generated <- liftM2 (&&) (doesDirectoryExist doc_dir)
-                                      (doesFileExist (doc_dir </> "doc-index.html"))
+        docs_generated <- liftM2 (&&) (doesDirectoryExist doc_dir_html)
+                                      (doesFileExist (doc_dir_html </> "doc-index.html"))
         if docs_generated
             then do
                 notice verbosity $ "Docs generated for " ++ display pkg_id
@@ -525,8 +528,8 @@ buildPackage verbosity opts config pkg_id = do
                     -- Unfortunately, on disk they have paths like
                     -- foo-x.y.z/html/index.html. This hack resolves
                     -- the problem:
-                    bracket_ (renameDirectory doc_dir      temp_doc_dir)
-                             (renameDirectory temp_doc_dir doc_dir)
+                    bracket_ (renameDirectory doc_dir_html temp_doc_dir)
+                             (renameDirectory temp_doc_dir doc_dir_html)
                              (tarGzDirectory temp_doc_dir)
             else do
               notice verbosity $ "Docs for " ++ display pkg_id ++ " failed to build"
