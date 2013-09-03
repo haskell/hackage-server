@@ -457,8 +457,7 @@ buildPackage verbosity opts config pkg_id = do
         doc_dir      = doc_root </> display pkg_id
         doc_dir_html = doc_dir </> "html"
         temp_doc_dir = doc_root </> display pkg_id </> display pkg_id ++ "-docs"
-        --versionless_pkg_url = srcURI opts <//> "package" </> "$pkg"
-        pkg_url = bc_srcURI config <//> "package" </> "$pkg-$version"
+        pkg_url      = "/package" </> "$pkg-$version"
 
     liftIO $ withCurrentDirectory (installDirectory opts) $ do
         -- We CANNOT build from an unpacked directory, because Cabal
@@ -487,11 +486,11 @@ buildPackage verbosity opts config pkg_id = do
                       -- to rehaddock some package when the dependent
                       -- packages get updated. However, this is NOT
                       -- what the Hackage v1 did, so ignore that:
-                      "--haddock-html-location=" ++ show (pkg_url <//> "docs"),
+                      "--haddock-html-location=" ++ pkg_url </> "docs",
                       -- Give the user a choice between themes:
                       "--haddock-option=--built-in-themes",
                       -- Link "Contents" to the package page:
-                      "--haddock-contents-location=" ++ show pkg_url,
+                      "--haddock-contents-location=" ++ pkg_url,
                       -- Link to colourised source code:
                       "--haddock-hyperlink-source",
                       -- The docdir can differ between Cabal versions
