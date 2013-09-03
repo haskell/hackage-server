@@ -1,7 +1,7 @@
 #!/bin/bash
 
-HACKAGE_SERVER=dist/build/hackage-server/hackage-server
-HACKAGE_IMPORT=dist/build/hackage-import/hackage-import
+HACKAGE_SERVER=hackage-server
+HACKAGE_IMPORT=hackage-import
 
 # number of cores to run the server on
 CORES=1
