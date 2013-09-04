@@ -336,20 +336,15 @@ buildOnce opts pkgs = do
 
         let go [] = return ()
             go (pkg_id : toBuild') = do
-              failed <- liftIO $ has_failed pkg_id
-              if failed
-                then liftIO . notice verbosity $ "Skipping " ++ display pkg_id
-                                              ++ " because it failed to built previously"
-                else do
-                  mTgz <- buildPackage verbosity opts config pkg_id
-                  case mTgz of
-                    Nothing ->
-                      liftIO $ mark_as_failed pkg_id
-                    Just docs_tgz -> httpSession verbosity $ do
-                      -- Make sure we authenticate to Hackage
-                      setAuthorityGen $ provideAuthInfo (bc_srcURI config)
-                                      $ Just (bc_username config, bc_password config)
-                      requestPUT (bc_srcURI config <//> "package" </> display pkg_id </> "docs") "application/x-tar" (Just "gzip") docs_tgz
+              mTgz <- buildPackage verbosity opts config pkg_id
+              case mTgz of
+                Nothing ->
+                  liftIO $ mark_as_failed pkg_id
+                Just docs_tgz -> httpSession verbosity $ do
+                  -- Make sure we authenticate to Hackage
+                  setAuthorityGen $ provideAuthInfo (bc_srcURI config)
+                                  $ Just (bc_username config, bc_password config)
+                  requestPUT (bc_srcURI config <//> "package" </> display pkg_id </> "docs") "application/x-tar" (Just "gzip") docs_tgz
 
               -- We don't check the runtime until we've actually tried
               -- to build a doc, so as to ensure we make progress.
