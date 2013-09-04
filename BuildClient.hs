@@ -366,8 +366,7 @@ buildOnce opts pkgs = do
   where
     shouldBuild :: (PackageIdentifier, HasDocs) -> Bool
     shouldBuild (pkgId, DocsNotBuilt) = buildingAll || pkgId `elem` pkgs
-    shouldBuild (pkgId, HasDocs)      = forceBuild  && pkgId `elem` pkgs
-    shouldBuild (_,     DocsFailed)   = False
+    shouldBuild (pkgId, _)            = forceBuild  && pkgId `elem` pkgs
 
     buildingAll = null pkgs
     forceBuild  = bo_force opts && not buildingAll
