@@ -228,17 +228,12 @@ infoStats verbosity mDetailedStats pkgIdsHaveDocs = liftIO $ do
     count :: StatResult -> String
     count c = show (length (filter (c ==) categorised))
 
-    formatVersion :: (PackageId, HasDocs) -> [String]
-    formatVersion (version, hasDocs) =
-      [ display (pkgVersion version)
-      , show hasDocs
-      ]
-
     formatPkg :: [(PackageId, HasDocs)] -> [[String]]
-    formatPkg ((firstVersion, firstHasDocs) : otherVersions) =
-        (display (pkgName firstVersion) : formatVersion (firstVersion, firstHasDocs))
-      : (indent (map formatVersion otherVersions))
-    formatPkg _ = error "formatPkg: cannot happen"
+    formatPkg = map $ \(pId, hasDocs) -> [
+                          display (pkgName pId)
+                        , display (pkgVersion pId)
+                        , show hasDocs
+                        ]
 
     formattedStats :: [[String]]
     formattedStats = concatMap formatPkg byPackage
