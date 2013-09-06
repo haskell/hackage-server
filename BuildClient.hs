@@ -483,6 +483,14 @@ buildPackage verbosity opts config pkg_id = do
                       "--prefix=" ++ installDirectory opts,
                       display pkg_id]
 
+        -- Remove reports for dependencies (so that we only submit the report
+        -- for the package we are currently building)
+        dotCabal <- getAppUserDataDirectory "cabal"
+        let reportsDir = dotCabal </> "reports" </> srcName config
+        withRecursiveContents_ reportsDir $ \path ->
+           unless ((display pkg_id ++ ".log") `isSuffixOf` path) $
+             removeFile path
+
         -- Submit a report even if installation/tests failed: all
         -- interesting data points!
         report_ec <- cabal opts "report"
@@ -494,9 +502,8 @@ buildPackage verbosity opts config pkg_id = do
         when (report_ec == ExitSuccess) $ do
             -- This seems like a bit of a mess: some data goes into the
             -- user directory:
-            dotCabal <- getAppUserDataDirectory "cabal"
-            handleDoesNotExist (return ()) $ removeDirectoryRecursive (dotCabal </> "reports" </> srcName config)
-            handleDoesNotExist (return ()) $ removeDirectoryRecursive (dotCabal </> "logs")
+            handleDoesNotExist (return ()) $ removeDirectoryRecursive reportsDir
+
             -- Other data goes into a local file storing build reports:
             let simple_report_log = installDirectory opts </> "packages" </> srcName config </> "build-reports.log"
             handleDoesNotExist (return ()) $ removeFile simple_report_log
@@ -667,6 +674,9 @@ validateOpts args = do
 
     accum flags = foldr (flip (.)) id flags
 
+{------------------------------------------------------------------------------
+  Auxiliary
+------------------------------------------------------------------------------}
 
 handleDoesNotExist :: IO a -> IO a -> IO a
 handleDoesNotExist handler act
@@ -674,3 +684,17 @@ handleDoesNotExist handler act
                  (\() -> handler)
                  act
 
+withRecursiveContents :: FilePath -> (FilePath -> IO a) -> IO [a]
+withRecursiveContents topdir act = do
+  names <- getDirectoryContents topdir
+  let properNames = filter (`notElem` [".", ".."]) names
+  ass <- forM properNames $ \name -> do
+    let path = topdir </> name
+    isDirectory <- doesDirectoryExist path
+    if isDirectory
+      then withRecursiveContents path act
+      else return `liftM` act path
+  return (concat ass)
+
+withRecursiveContents_ :: FilePath -> (FilePath -> IO ()) -> IO ()
+withRecursiveContents_ fp = void . withRecursiveContents fp
