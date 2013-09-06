@@ -45,7 +45,6 @@ data BuildOpts = BuildOpts {
                      bo_verbosity  :: Verbosity,
                      bo_runTime    :: Maybe NominalDiffTime,
                      bo_stateDir   :: FilePath,
-                     bo_force      :: Bool,
                      bo_continuous :: Maybe Int
                  }
 
@@ -360,11 +359,8 @@ buildOnce opts pkgs = do
         go toBuild
   where
     shouldBuild :: (PackageIdentifier, HasDocs) -> Bool
-    shouldBuild (pkgId, DocsNotBuilt) = buildingAll || pkgId `elem` pkgs
-    shouldBuild (pkgId, _)            = forceBuild  && pkgId `elem` pkgs
-
-    buildingAll = null pkgs
-    forceBuild  = bo_force opts && not buildingAll
+    shouldBuild (pkgId, DocsNotBuilt) = pkgId `elem` pkgs || null pkgs
+    shouldBuild (pkgId, _)            = pkgId `elem` pkgs
 
 -- Builds a little memoised function that can tell us whether a
 -- particular package failed to build its documentation
@@ -609,10 +605,6 @@ buildFlagDescrs =
       (ReqArg (\dir opts -> opts { flagCacheDir = Just dir }) "DIR")
       "Where to put files during building"
 
-  , Option [] ["force"]
-      (NoArg (\opts -> opts { flagForce = True }))
-      "Force rebuilding (of specified packages)"
-
   , Option [] ["continuous"]
       (NoArg (\opts -> opts { flagContinuous = True }))
       "Mirror continuously rather than just once."
@@ -633,7 +625,6 @@ validateOpts args = do
                    bo_verbosity  = flagVerbosity flags,
                    bo_runTime    = flagRunTime flags,
                    bo_stateDir   = stateDir,
-                   bo_force      = flagForce flags,
                    bo_continuous = case (flagContinuous flags, flagInterval flags) of
                                      (True, Just i)  -> Just (read i)
                                      (True, Nothing) -> Just 30 -- default interval
