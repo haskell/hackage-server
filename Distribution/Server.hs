@@ -182,7 +182,8 @@ run server = do
     handlePutPostQuotas = decodeBody bodyPolicy
       where
         tmpdir = serverTmpDir (serverEnv server)
-        quota  = 10 ^ (6 :: Int64)
+        quota  = 50 * (1024 ^ (2:: Int64))
+                -- setting quota at 50mb, though perhaps should be configurable?
         bodyPolicy = defaultBodyPolicy tmpdir quota quota quota
 
     setLogging =
