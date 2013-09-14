@@ -14,7 +14,4 @@ workdir /home/haskell/hackage-server-master
 run cabal install --only-dependencies
 run cabal configure && cabal build
 
-run ./dist/build/hackage-server/hackage-server init --static-dir=datafiles/
-
-entrypoint ["./dist/build/hackage-server/hackage-server", "run", "--static-dir=datafiles/"]
-expose 8080
+cmd echo "Binaries are in ./dist/build/hackage-*"
