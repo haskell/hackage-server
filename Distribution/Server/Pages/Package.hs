@@ -293,10 +293,13 @@ sourceRepositoryToHtml sr
                           Just sd -> toHtml ("(" ++ sd ++ ")")
                           Nothing   -> noHtml]
       Just Bazaar
-       | (Just url, Nothing, Nothing, Nothing) <-
-         (repoLocation sr, repoModule sr, repoBranch sr, repoTag sr) ->
+       | (Just url, Nothing, Nothing) <-
+         (repoLocation sr, repoModule sr, repoBranch sr) ->
           concatHtml [toHtml "bzr branch ",
                       anchor ! [href url] << toHtml url,
+                      case repoTag sr of
+                          Just tag' -> toHtml (" -r " ++ tag')
+                          Nothing -> noHtml,
                       case repoSubdir sr of
                           Just sd -> toHtml ("(" ++ sd ++ ")")
                           Nothing   -> noHtml]
