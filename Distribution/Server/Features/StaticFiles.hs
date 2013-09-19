@@ -113,7 +113,7 @@ staticFilesFeature ServerEnv{serverStaticDir} templates =
         let formattedMessage = paragraph << errorToHtml message
             response = toResponse $ template
               [ "errorTitle"   $= errTitle
-              , "errorMessage" $= XHtml.renderHtml formattedMessage
+              , "errorMessage" $= XHtml.showHtmlFragment formattedMessage
               ]
         return $ response {
           rsCode    = errCode,
