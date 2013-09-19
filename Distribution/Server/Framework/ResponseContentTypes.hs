@@ -26,7 +26,7 @@ import Happstack.Server
 import qualified Data.ByteString.Lazy as BS.Lazy
 import Text.RSS (RSS)
 import qualified Text.RSS as RSS (rssToXML, showXML)
-import qualified Text.XHtml.Strict as XHtml (Html, renderHtml)
+import qualified Text.XHtml.Strict as XHtml (Html, showHtml)
 import qualified Data.Aeson as Aeson (Value, encode)
 import Data.Time.Clock (UTCTime)
 import qualified Data.Time.Format as Time (formatTime)
@@ -107,14 +107,14 @@ newtype XHtml = XHtml XHtml.Html
 
 instance ToMessage XHtml where
     toContentType _ = "text/html; charset=utf-8"
-    toMessage (XHtml xhtml) = packUTF8 (XHtml.renderHtml xhtml)
+    toMessage (XHtml xhtml) = packUTF8 (XHtml.showHtml xhtml)
 
 -- Like XHtml, but don't bother calculating length
 newtype LongXHtml = LongXHtml XHtml.Html
 
 instance ToMessage LongXHtml where
     toResponse (LongXHtml xhtml) = noContentLength $ mkResponse
-        (packUTF8 (XHtml.renderHtml xhtml))
+        (packUTF8 (XHtml.showHtml xhtml))
         [("Content-Type", "text/html")]
 
 newtype ExportTarball = ExportTarball BS.Lazy.ByteString
