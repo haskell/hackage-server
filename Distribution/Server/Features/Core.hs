@@ -72,11 +72,7 @@ data CoreFeature = CoreFeature {
     packageChangeHook :: Hook PackageChange (),
 
     -- | Notification of downloads
-    packageDownloadHook :: Hook PackageId (),
-
-    -- Find a package in the package DB
-    lookupPackageName :: PackageName -> ServerPartE [PkgInfo],
-    lookupPackageId   :: PackageId   -> ServerPartE PkgInfo
+    packageDownloadHook :: Hook PackageId ()
 }
 
 instance IsHackageFeature CoreFeature where
@@ -137,7 +133,11 @@ data CoreResource = CoreResource {
 
     -- Check that a package exists (guard fails if version is empty)
     guardValidPackageId   :: PackageId   -> ServerPartE (),
-    guardValidPackageName :: PackageName -> ServerPartE ()
+    guardValidPackageName :: PackageName -> ServerPartE (),
+
+    -- Find a package in the package DB
+    lookupPackageName :: PackageName -> ServerPartE [PkgInfo],
+    lookupPackageId   :: PackageId   -> ServerPartE PkgInfo
 }
 
 initCoreFeature :: ServerEnv -> UserFeature -> IO CoreFeature

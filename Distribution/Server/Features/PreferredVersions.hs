@@ -123,9 +123,9 @@ versionsFeature :: CoreFeature
 
 versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
                                                       , guardValidPackageName
+                                                      , lookupPackageName
                                                       }
                            , queryGetPackageIndex
-                           , lookupPackageName
                            , updateArchiveIndexEntry
                            }
                 UploadFeature{..}

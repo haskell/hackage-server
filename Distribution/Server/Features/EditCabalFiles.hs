@@ -59,7 +59,8 @@ editCabalFilesFeature :: ServerEnv -> Templates
                       -> UserFeature -> CoreFeature -> UploadFeature
                       -> HackageFeature
 editCabalFilesFeature _env templates
-                      UserFeature{guardAuthorised} CoreFeature{..}
+                      UserFeature{guardAuthorised}
+                      CoreFeature{..}
                       UploadFeature{maintainersGroup, trusteesGroup} =
   (emptyHackageFeature "edit-cabal-files") {
     featureResources =
@@ -69,6 +70,7 @@ editCabalFilesFeature _env templates
   }
 
   where
+    CoreResource{..} = coreResource
     editCabalFileResource =
       (resourceAt "/package/:package/:cabal.cabal/edit")  {
         resourceDesc = [(GET,  "Page to edit package metadata")
@@ -80,7 +82,7 @@ editCabalFilesFeature _env templates
     serveEditCabalFileGet :: DynamicPath -> ServerPartE Response
     serveEditCabalFileGet dpath = do
         template <- getTemplate templates "cabalFileEditPage.html"
-        pkg <- packageInPath coreResource dpath >>= lookupPackageId
+        pkg <- packageInPath dpath >>= lookupPackageId
         let pkgname = packageName pkg
             pkgid   = packageId pkg
         -- check that the cabal name matches the package
@@ -94,7 +96,7 @@ editCabalFilesFeature _env templates
     serveEditCabalFilePost :: DynamicPath -> ServerPartE Response
     serveEditCabalFilePost dpath = do
         template <- getTemplate templates "cabalFileEditPage.html"
-        pkg <- packageInPath coreResource dpath >>= lookupPackageId
+        pkg <- packageInPath dpath >>= lookupPackageId
         let pkgname = packageName pkg
             pkgid   = packageId pkg
         -- check that the cabal name matches the package

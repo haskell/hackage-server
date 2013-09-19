@@ -398,7 +398,7 @@ mkHtmlCore :: HtmlUtilities
            -> Templates
            -> HtmlCore
 mkHtmlCore HtmlUtilities{..}
-           CoreFeature{lookupPackageName,coreResource}
+           CoreFeature{coreResource}
            VersionsFeature{ versionsResource
                           , queryGetDeprecatedFor
                           , queryGetPreferredInfo
@@ -417,7 +417,7 @@ mkHtmlCore HtmlUtilities{..}
            templates
   = HtmlCore{..}
   where
-    cores@CoreResource{packageInPath} = coreResource
+    cores@CoreResource{packageInPath, lookupPackageName} = coreResource
     versions = versionsResource
     docs     = documentationResource
 
@@ -929,8 +929,10 @@ mkHtmlPreferred :: HtmlUtilities
                 -> VersionsFeature
                 -> HtmlPreferred
 mkHtmlPreferred HtmlUtilities{..}
-                CoreFeature{ coreResource = CoreResource{packageInPath}
-                           , lookupPackageName
+                CoreFeature{ coreResource = CoreResource{
+                               packageInPath
+                             , lookupPackageName
+                             }
                            }
                 VersionsFeature{..} = HtmlPreferred{..}
   where
@@ -1183,8 +1185,10 @@ mkHtmlTags :: HtmlUtilities
            -> TagsFeature
            -> HtmlTags
 mkHtmlTags HtmlUtilities{..}
-           CoreFeature{ coreResource = CoreResource{packageInPath}
-                      , lookupPackageName
+           CoreFeature{ coreResource = CoreResource{
+                          packageInPath
+                        , lookupPackageName
+                        }
                       }
            ListFeature{makeItemList}
            TagsFeature{..} = HtmlTags{..}

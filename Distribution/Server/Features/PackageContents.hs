@@ -59,8 +59,10 @@ packageContentsFeature :: ServerEnv
                        -> PackageContentsFeature
 
 packageContentsFeature ServerEnv{serverBlobStore = store}
-                       CoreFeature{ coreResource = CoreResource{packageInPath}
-                                  , lookupPackageId
+                       CoreFeature{ coreResource = CoreResource{
+                                      packageInPath
+                                    , lookupPackageId
+                                    }
                                   }
                        TarIndexCacheFeature{cachedPackageTarIndex}
   = PackageContentsFeature{..}

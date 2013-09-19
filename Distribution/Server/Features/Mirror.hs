@@ -92,14 +92,15 @@ mirrorFeature :: ServerEnv
               -> (MirrorFeature, UserGroup)
 
 mirrorFeature ServerEnv{serverBlobStore = store}
-              CoreFeature{ coreResource = coreResource@CoreResource{ packageInPath
-                                                                   , packageTarballInPath
-                                                                   }
+              CoreFeature{ coreResource = coreResource@CoreResource{
+                             packageInPath
+                           , packageTarballInPath
+                           , lookupPackageId
+                           }
                          , updateAddPackageRevision
                          , updateAddPackageTarball
                          , updateSetPackageUploadTime
                          , updateSetPackageUploader
-                         , lookupPackageId
                          }
               UserFeature{..}
               mirrorersState mirrorGroup mirrorGroupResource

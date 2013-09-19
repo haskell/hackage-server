@@ -21,6 +21,7 @@ import Data.TarIndex (TarIndex)
 
 import Distribution.Text
 import Distribution.Package
+import Distribution.Version (Version(..))
 
 import qualified Data.Map as Map
 import Data.Function (fix)
@@ -117,6 +118,7 @@ documentationFeature name
                        , guardValidPackageId
                        , corePackagePage
                        , corePackagesPage
+                       , lookupPackageId
                        }
                      getPackages
                      UploadFeature{..}
@@ -170,7 +172,8 @@ documentationFeature name
 
     serveDocumentationTar :: DynamicPath -> ServerPartE Response
     serveDocumentationTar dpath =
-      withDocumentation dpath $ \_ blob _ -> do
+      withDocumentation (packageDocsWhole documentationResource)
+                        dpath $ \_ blob _ -> do
         file <- liftIO $ BlobStorage.fetch store blob
         return $ toResponse $ Resource.DocTarball file blob
 
@@ -178,7 +181,8 @@ documentationFeature name
     -- return: not-found error or tarball
     serveDocumentation :: DynamicPath -> ServerPartE Response
     serveDocumentation dpath = do
-      withDocumentation dpath $ \pkgid blob index -> do
+      withDocumentation (packageDocsContent documentationResource)
+                        dpath $ \pkgid blob index -> do
         let tarball = BlobStorage.filepath store blob
             etag    = blobETag blob
         -- if given a directory, the default page is index.html
@@ -228,16 +232,30 @@ documentationFeature name
         ..
    -}
 
-    withDocumentation :: DynamicPath -> (PackageId -> BlobId -> TarIndex -> ServerPartE a) -> ServerPartE a
-    withDocumentation dpath func = do
+    withDocumentation :: Resource -> DynamicPath
+                      -> (PackageId -> BlobId -> TarIndex -> ServerPartE Response)
+                      -> ServerPartE Response
+    withDocumentation self dpath func = do
       pkgid <- packageInPath dpath
-      guardValidPackageId pkgid
-      mdocs <- queryState documentationState $ LookupDocumentation pkgid
-      case mdocs of
-        Nothing -> errNotFound "Not Found" [MText $ "There is no documentation for " ++ display pkgid]
-        Just blob -> do
-          index <- liftIO $ cachedTarIndex blob
-          func pkgid blob index
+      -- lookupPackageId gives us the latest version if no version is specified:
+      pkginfo <- lookupPackageId pkgid
+      case pkgVersion pkgid of
+        -- if no version is given we want to redirect to the latest version
+        Version [] _ -> tempRedirect (renderResource' self dpath') (toResponse "")
+          where
+            latest = packageId pkginfo
+            dpath' = [ if var == "package"
+                         then (var, display latest)
+                         else e
+                     | e@(var, _) <- dpath ]
+        _ -> do
+          mdocs <- queryState documentationState $ LookupDocumentation pkgid
+          case mdocs of
+            Nothing -> errNotFound "Not Found"
+                         [MText $ "There is no documentation for " ++ display pkgid]
+            Just blob -> do
+              index <- liftIO $ cachedTarIndex blob
+              func pkgid blob index
 
 {------------------------------------------------------------------------------
   Auxiliary
