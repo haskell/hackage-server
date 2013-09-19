@@ -15,13 +15,13 @@ import System.Locale (defaultTimeLocale)
 import Data.List (intercalate)
 import Data.Maybe (catMaybes)
 import Data.Attoparsec.Char8 (Parser)
-import Data.Map.Strict (Map)
+import Data.Map (Map)
 import Data.Time.Calendar (Day)
 import Data.Time.Format (parseTime)
 import qualified Data.ByteString.Char8      as SBS
 import qualified Data.Attoparsec.Char8      as Att
 import qualified Data.ByteString.Lazy.Char8 as LBS
-import qualified Data.Map.Strict            as Map
+import qualified Data.Map                   as Map
 
 logToDownloadCounts :: LBS.ByteString -> LBS.ByteString
 logToDownloadCounts =
@@ -30,7 +30,7 @@ logToDownloadCounts =
   . Map.toList
   . accumHist
   . catMaybes
-  . map ((packageGET >=> parseGET) . parseLine . LBS.toStrict)
+  . map ((packageGET >=> parseGET) . parseLine . SBS.concat . LBS.toChunks)
   . LBS.lines
 
 data LogLine = LogLine {
