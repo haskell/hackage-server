@@ -200,6 +200,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       , packageTarballInPath
       , guardValidPackageId   = void . lookupCandidateId
       , guardValidPackageName = void . lookupCandidateName
+      , lookupPackageName     = fmap (map candPkgInfo) . lookupCandidateName
+      , lookupPackageId       = fmap candPkgInfo . lookupCandidateId
       }
 
     candidatesResource = fix $ \r -> PackageCandidatesResource {
