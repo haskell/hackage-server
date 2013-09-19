@@ -18,11 +18,14 @@ import Distribution.Server.Framework.BlobStorage (BlobId)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Util.ServeTarball as ServerTarball
 import Data.TarIndex (TarIndex)
+import qualified Codec.Archive.Tar       as Tar
+import qualified Codec.Archive.Tar.Check as Tar
 
 import Distribution.Text
 import Distribution.Package
 import Distribution.Version (Version(..))
 
+import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Map as Map
 import Data.Function (fix)
 
@@ -202,11 +205,13 @@ documentationFeature name
       -- * Drop the index for the old tar-file
       -- * Link the new documentation to the package
       fileContents <- expectUncompressedTarball
-      blob <- liftIO $ BlobStorage.add store fileContents
-      --TODO: validate the tarball here.
-      -- Check all files in the tarball are under the dir foo-1.0-docs/
-      void $ updateState documentationState $ InsertDocumentation pkgid blob
-      noContent (toResponse ())
+      mres <- liftIO $ BlobStorage.addWith store fileContents
+                         (\content -> return (checkDocTarball pkgid content))
+      case mres of
+        Left  err -> errBadRequest "Invalid documentation tarball" [MText err]
+        Right ((), blobid) -> do
+          updateState documentationState $ InsertDocumentation pkgid blobid
+          noContent (toResponse ())
 
    {-
      To upload documentation using curl:
@@ -256,6 +261,18 @@ documentationFeature name
             Just blob -> do
               index <- liftIO $ cachedTarIndex blob
               func pkgid blob index
+
+-- Check the tar file is well formed and all files are within foo-1.0-docs/
+checkDocTarball :: PackageId -> BSL.ByteString -> Either String ()
+checkDocTarball pkgid =
+     checkEntries
+   . fmapErr (either id show) . Tar.checkTarbomb (display pkgid ++ "-docs")
+   . fmapErr (either id show) . Tar.checkSecurity
+   . fmapErr (either id show) . Tar.checkPortability
+   . fmapErr show             . Tar.read
+  where
+    fmapErr f    = Tar.foldEntries Tar.Next Tar.Done (Tar.Fail . f)
+    checkEntries = Tar.foldEntries (\_ remainder -> remainder) (Right ()) Left
 
 {------------------------------------------------------------------------------
   Auxiliary
