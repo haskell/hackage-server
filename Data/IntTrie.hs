@@ -42,7 +42,7 @@ newtype IntTrie k v = IntTrie (A.UArray Word32 Word32)
 $(deriveSafeCopy 1 'base ''IntTrie)
 
 instance MemSize (IntTrie k v) where
-    memSize (IntTrie o) = memSizeUArray 2 o
+    memSize (IntTrie o) = memSizeUArray 4 o
 
 -- Compact, read-only implementation of a trie. It's intended for use with file
 -- paths, but we do that via string ids.
