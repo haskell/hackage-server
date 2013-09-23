@@ -9,8 +9,9 @@ import Distribution.Server.Framework.Templating
 import Text.XHtml.Strict (Html, toHtml, anchor, (<<), (!), href, paragraph)
 import qualified Text.XHtml.Strict as XHtml
 
-import Data.List
+import Data.List hiding (find)
 import System.FilePath
+import System.Directory (getDirectoryContents)
 
 -- | A feature to provide the top level files on the site (using templates)
 -- and also serve the genuinely static files.
@@ -24,13 +25,20 @@ initStaticFilesFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode} = 
                  [serverTemplatesDir]
                  ["index.html", "hackageErrorPage.txt", "hackageErrorPage.html"]
 
-  let feature = staticFilesFeature env templates
+  staticFiles <- find (isSuffixOf ".html.st") serverTemplatesDir
+
+  let feature = staticFilesFeature env templates staticFiles
 
   return feature
 
+-- Simpler version of Syhstem.FilePath.Find (which requires unix-compat)
+find :: (FilePath -> Bool) -> FilePath -> IO [FilePath]
+find p dirPath = do
+  contents <- getDirectoryContents dirPath
+  return (filter p contents)
 
-staticFilesFeature :: ServerEnv -> Templates -> HackageFeature
-staticFilesFeature ServerEnv{serverStaticDir} templates =
+staticFilesFeature :: ServerEnv -> Templates -> [FilePath] -> HackageFeature
+staticFilesFeature ServerEnv{serverStaticDir} templates staticFiles =
   (emptyHackageFeature "static-files") {
     featureResources =
       [ (resourceAt "/") {
@@ -68,13 +76,7 @@ staticFilesFeature ServerEnv{serverStaticDir} templates =
     serveStaticToplevelFile mimetype filename =
       serveFile (asContentType mimetype) (serverStaticDir </> filename)
 
-    toplevelFiles = [("favicon.ico", "image/x-icon")]
-
--- TODO: we currently have to list the templates explicitly, rather than
--- just discovering them, see above
-    toplevelTemplates = ["accounts.html", "admin.html", "upload.html"
-                        ,"account-upgrade.html"]
-
+    serveStaticTemplate :: String -> ServerPartE Response
     serveStaticTemplate = serveTemplate
 
 --    serveStaticTemplates :: ServerPartE Response
@@ -119,6 +121,9 @@ staticFilesFeature ServerEnv{serverStaticDir} templates =
           rsCode    = errCode,
           rsHeaders = addHeaders (rsHeaders response) hdrs
         }
+
+    toplevelFiles     = [("favicon.ico", "image/x-icon")]
+    toplevelTemplates = map dropExtension staticFiles
 
 addHeaders :: Headers -> [(String, String)] -> Headers
 addHeaders hdrs hdrs' = foldl' (\h (k,v) -> addHeader k v h) hdrs (reverse hdrs')
