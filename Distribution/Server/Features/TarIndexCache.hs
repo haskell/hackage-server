@@ -14,9 +14,13 @@ import Distribution.Server.Framework
 import Distribution.Server.Framework.BlobStorage
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Features.TarIndexCache.State
+import Distribution.Server.Features.Users
 import Distribution.Server.Packages.Types (PkgTarball(..))
 import Data.TarIndex
 import Distribution.Server.Util.ServeTarball (constructTarIndex)
+
+import qualified Data.Map as Map
+import Data.Aeson (toJSON)
 
 data TarIndexCacheFeature = TarIndexCacheFeature {
     tarIndexCacheFeatureInterface :: HackageFeature
@@ -27,10 +31,10 @@ data TarIndexCacheFeature = TarIndexCacheFeature {
 instance IsHackageFeature TarIndexCacheFeature where
   getFeatureInterface = tarIndexCacheFeatureInterface
 
-initTarIndexCacheFeature :: ServerEnv -> IO TarIndexCacheFeature
-initTarIndexCacheFeature env@ServerEnv{serverStateDir} = do
+initTarIndexCacheFeature :: ServerEnv -> UserFeature -> IO TarIndexCacheFeature
+initTarIndexCacheFeature env@ServerEnv{serverStateDir} users = do
   tarIndexCache <- tarIndexCacheStateComponent serverStateDir
-  return $ tarIndexCacheFeature env tarIndexCache
+  return $ tarIndexCacheFeature env users tarIndexCache
 
 tarIndexCacheStateComponent :: FilePath -> IO (StateComponent AcidState TarIndexCache)
 tarIndexCacheStateComponent stateDir = do
@@ -50,9 +54,12 @@ tarIndexCacheStateComponent stateDir = do
     }
 
 tarIndexCacheFeature :: ServerEnv
+                     -> UserFeature
                      -> StateComponent AcidState TarIndexCache
                      -> TarIndexCacheFeature
-tarIndexCacheFeature ServerEnv{serverBlobStore = store} tarIndexCache =
+tarIndexCacheFeature ServerEnv{serverBlobStore = store}
+                     UserFeature{..}
+                     tarIndexCache =
    TarIndexCacheFeature{..}
   where
     tarIndexCacheFeatureInterface :: HackageFeature
@@ -63,6 +70,15 @@ tarIndexCacheFeature ServerEnv{serverBlobStore = store} tarIndexCache =
         -- packages then both caches point to identical tar indices, but for
         -- that we would need to be in IO)
       , featureState = [abstractAcidStateComponent' (\_ _ -> []) tarIndexCache]
+      , featureResources = [
+            (resourceAt "/server-status/tarindices.:format") {
+                resourceDesc   = [ (GET,    "Which tar indices have been generated?")
+                                 , (DELETE, "Delete all tar indices (will be regenerated on the fly)")
+                                 ]
+              , resourceGet    = [ ("json", \_ -> serveTarIndicesStatus) ]
+              , resourceDelete = [ ("",     \_ -> deleteTarIndices) ]
+              }
+          ]
       }
 
     -- This is the heart of this feature
@@ -86,3 +102,19 @@ tarIndexCacheFeature ServerEnv{serverBlobStore = store} tarIndexCache =
 
     cachedPackageTarIndex :: PkgTarball -> IO TarIndex
     cachedPackageTarIndex = cachedTarIndex . pkgTarballNoGz
+
+    serveTarIndicesStatus :: ServerPartE Response
+    serveTarIndicesStatus = do
+      TarIndexCache state <- liftIO $ getState tarIndexCache
+      return . toResponse . toJSON . Map.toList $ state
+
+    -- | With curl:
+    --
+    -- > curl -X DELETE http://admin:admin@localhost:8080/server-status/tarindices
+    deleteTarIndices :: ServerPartE Response
+    deleteTarIndices = do
+      guardAuthorised_ [InGroup adminGroup]
+      -- TODO: This resets the tar indices _state_ only, we don't actually
+      -- remove any blobs
+      liftIO $ putState tarIndexCache initialTarIndexCache
+      ok $ toResponse "Ok!"

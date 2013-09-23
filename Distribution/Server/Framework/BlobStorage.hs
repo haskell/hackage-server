@@ -36,6 +36,7 @@ import Control.Monad
 import Data.SafeCopy
 import System.Directory
 import System.IO
+import Data.Aeson
 
 -- For the lazy MD5 computation
 import Data.Digest.Pure.MD5 (MD5Digest, MD5Context)
@@ -62,6 +63,9 @@ import System.Posix.IO (
 --
 newtype BlobId = BlobId MD5Digest
   deriving (Eq, Ord, Show, Serialize, Typeable)
+
+instance ToJSON BlobId where
+  toJSON (BlobId md5digest) = toJSON (show md5digest)
 
 blobMd5 :: BlobId -> String
 blobMd5 (BlobId digest) = show digest
@@ -281,7 +285,7 @@ makeBlocks len = go . BSL.toChunks
 lazyMD5 :: BSL.ByteString -> ByteStringWithMd5
 lazyMD5 = go initialCtx . makeBlocks blockLen
   where
-    blockLen = (blockLength `Crypto.Util.for` (undefined :: MD5Digest)) `div` 8 
+    blockLen = (blockLength `Crypto.Util.for` (undefined :: MD5Digest)) `div` 8
 
     go :: MD5Context
        -> [BSS.ByteString]
@@ -301,7 +305,7 @@ data ByteStringWithMd5 = BsChunk  !BSS.ByteString ByteStringWithMd5
 
 -- | Binding to the C @fsync@ function
 fsync :: Fd -> IO ()
-fsync (Fd fd) = 
+fsync (Fd fd) =
 #ifdef mingw32_HOST_OS
   return ()
 #else

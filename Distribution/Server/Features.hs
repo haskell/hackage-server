@@ -83,7 +83,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          usersFeature
 
 #ifndef MINIMAL
-    tarIndexCacheFeature <- initTarIndexCacheFeature env
+    tarIndexCacheFeature <- initTarIndexCacheFeature env usersFeature
 
     packageContentsFeature <- initPackageContentsFeature env
                                 coreFeature
@@ -133,7 +133,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
     documentationCandidatesFeature <- initDocumentationFeature "documentation-candidates" env
                          (candidatesCoreResource candidatesFeature)
-                         (map packageId . allPackages <$> queryGetCandidateIndex candidatesFeature) 
+                         (map packageId . allPackages <$> queryGetCandidateIndex candidatesFeature)
                          uploadFeature
                          tarIndexCacheFeature
 
