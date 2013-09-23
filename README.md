@@ -1,4 +1,4 @@
 hackage-server
 ==============
 
-Hackage 2
+This is the branch for the "official" Hackage server.
