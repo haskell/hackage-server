@@ -6,7 +6,6 @@
 ><li><a href="/recent">What's new</a></li
 ><li><a href="/upload">Upload</a></li
 ><li><a href="/accounts">User accounts</a></li
-><li><a href="/admin">Admin</a></li>
-</ul>
+></ul>
 <a class="caption" href="/">Hackage :: [Package]</a>
 </div>

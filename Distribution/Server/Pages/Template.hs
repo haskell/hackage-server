@@ -51,7 +51,6 @@ navigationBar =
           , anchor ! [href recentAdditionsURL] << "What's new"
           , anchor ! [href uploadURL]   << "Upload"
           , anchor ! [href accountsURL] << "User accounts"
-          , anchor ! [href adminURL]    << "Admin"
           ]
 
 stylesheetURL :: URL
