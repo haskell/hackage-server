@@ -697,7 +697,7 @@ mkHtmlUploads HtmlUtilities{..} UploadFeature{..} = HtmlUploads{..}
     serveUploadForm _ = do
         return $ toResponse $ Resource.XHtml $ hackagePage "Upload package"
           [ h2 << "Upload package"
-          , paragraph << [toHtml "See also the ", anchor ! [href "/upload.html"] << "upload help page", toHtml "."]
+          , paragraph << [toHtml "See also the ", anchor ! [href "/upload"] << "upload help page", toHtml "."]
           , form ! [theclass "box", XHtml.method "post", action "/packages/", enctype "multipart/form-data"] <<
                 [ input ! [thetype "file", name "package"]
                 , input ! [thetype "submit", value "Upload package"]
@@ -801,7 +801,7 @@ mkHtmlCandidates HtmlUtilities{..}
     serveCandidateUploadForm _ = do
         return $ toResponse $ Resource.XHtml $ hackagePage "Checking and uploading candidates"
           [ h2 << "Checking and uploading candidates"
-          , paragraph << [toHtml "See also the ", anchor ! [href "/upload.html"] << "upload help page", toHtml "."]
+          , paragraph << [toHtml "See also the ", anchor ! [href "/upload"] << "upload help page", toHtml "."]
           , form ! [theclass "box", XHtml.method "post", action "/packages/candidates/", enctype "multipart/form-data"] <<
                 [ input ! [thetype "file", name "package"]
                 , input ! [thetype "submit", value "Upload candidate"]
