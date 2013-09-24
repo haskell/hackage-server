@@ -9,20 +9,27 @@ $hackageCssTheme()$
 $hackagePageHeader()$
 
 <div id="content">
-<h2>Uploading packages and package candidates</h2>
+<h2>Upload a package</h2>
+
+<div style="font-size: large; text-align: center;"><a href="/packages/upload">Upload a package</a></div>
+
 <p>Uploading a package puts it in the <a href="/packages/">main package index</a>
 so that anyone can download it and view information about it. You can only
 upload a package version once, so try to get it right the first time!
 </p>
 
-<p>You can also upload a <a href="/packages/candidates">package <em>candidate</em></a>
-to preview the package page, view any warnings or possible errors you might
-encounter, and let others install it before publishing it to the main index.
-(Note: you can view these warnings with 'cabal check'.) You can have multiple
-candidates for each package at the same time so long as they each have different
-versions. Finally, you can publish a candidate to the main index if it's not
-there already.
+<p>Packages must be in the form produced by Cabal's
+<a href="http://www.haskell.org/ghc/docs/latest/html/Cabal/builders.html#setup-sdist">sdist</a> command:
+a gzipped tar file <em>package</em>-<em>version</em><tt>.tar.gz</tt>
+comprising a directory <em>package</em>-<em>version</em> containing a package
+of that name and version, including <em>package</em><tt>.cabal</tt>.
+See the notes at the bottom of the page.
 </p>
+
+<h3>Privileges</h3>
+
+<p>To upload a package, you'll need a Hackage <a href="/accounts">username</a>
+and password. </p>
 
 <p>If you upload a package or package candidate and no other versions exist
 in the package database, you become part of the maintainer group for that
@@ -44,24 +51,6 @@ available in the newer hackage-server. The <tt>Maintainer</tt> field has its use
 as does maintainer user groups. The libraries mailing list should probably
 determine the best approach for this.
 </p>
-
-<h3>Upload forms</h3>
-<p>Some last formalities: to upload a package, you'll need a Hackage
-<a href="accounts.html">username</a> and password. (Alternatively, there's a
-command-line interface via cabal-install, which also needs the same username
-and password.)
-</p>
-
-<p>Packages must be in the form produced by Cabal's
-<a href="http://www.haskell.org/ghc/docs/latest/html/Cabal/builders.html#setup-sdist">sdist</a> command:
-a gzipped tar file <em>package</em>-<em>version</em><tt>.tar.gz</tt>
-comprising a directory <em>package</em>-<em>version</em> containing a package
-of that name and version, including <em>package</em><tt>.cabal</tt>.
-See the notes at the bottom of the page.
-</p>
-
-<div style="font-size: large; text-align: center;"><a href="/packages/upload">Upload a package</a></div>
-<div style="font-size: large; text-align: center;"><a href="/packages/candidates/upload">Upload a package candidate</a></div>
 
 <h3>Notes</h3>
 <ul>
