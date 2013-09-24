@@ -207,7 +207,12 @@ executable hackage-server
     crypto-api >= 0.12 && < 0.13, 
     pureMD5    >= 0.2,
     xhtml      >= 3000.1,
-    aeson      >= 0.6.1,
+    -- The instances created by deriveJSON in later versions of Aeson are 
+    -- different from the instances created by this version; this would be ok
+    -- if we only used the Aeson-created instance, but we also hand-create
+    -- JSON in various places (for instance, in 'putUserDetails' in the import
+    -- client). 
+    aeson      == 0.6.1.*,
     unordered-containers >= 0.2.3.0,
     rss        == 3000.2.*,
     Cabal      >= 1.16 && < 1.17,
@@ -278,7 +283,8 @@ executable hackage-build
     network,  HTTP,
     Cabal,
     safecopy, cereal, binary, mtl,
-    aeson,
+    -- See comment above why we insist on this version of Aeson
+    aeson == 0.6.1.*, 
     random,
     unix,
     -- Runtime dependency only:
@@ -303,7 +309,9 @@ executable hackage-import
     Cabal,
     safecopy, cereal, binary, mtl,
     csv, async, attoparsec,
-    aeson, unordered-containers
+    -- See comment above why we insist on this version of Aeson
+    aeson == 0.6.1.*,
+    unordered-containers
   default-language: Haskell2010
   ghc-options: -Wall -fwarn-tabs
 
