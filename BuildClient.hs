@@ -11,6 +11,7 @@ import Distribution.Package
 import Distribution.Text
 import Distribution.Verbosity
 import Distribution.Simple.Utils hiding (intercalate)
+import Distribution.Version (Version)
 
 import Data.List
 import Data.Maybe
@@ -162,7 +163,7 @@ stats opts = do
   where
     statsFile = bo_stateDir opts </> "stats"
 
-infoStats :: MonadIO m => Verbosity -> Maybe FilePath -> [(PackageIdentifier, HasDocs)] -> m ()
+infoStats :: MonadIO m => Verbosity -> Maybe FilePath -> [DocInfo] -> m ()
 infoStats verbosity mDetailedStats pkgIdsHaveDocs = liftIO $ do
     nfo $ "There are "
        ++ show (length byPackage)
@@ -170,9 +171,9 @@ infoStats verbosity mDetailedStats pkgIdsHaveDocs = liftIO $ do
        ++ show (length pkgIdsHaveDocs)
        ++ " package versions"
     nfo $ "So far we have built or attempted to built "
-       ++ show (length (filter ((/= DocsNotBuilt) . snd) pkgIdsHaveDocs))
+       ++ show (length (filter ((/= DocsNotBuilt) . docInfoHasDocs) pkgIdsHaveDocs))
        ++ " packages; only "
-       ++ show (length (filter ((== DocsNotBuilt) . snd) pkgIdsHaveDocs))
+       ++ show (length (filter ((== DocsNotBuilt) . docInfoHasDocs) pkgIdsHaveDocs))
        ++ " left!"
 
     nfo "Considering the most recent version only:"
@@ -201,17 +202,17 @@ infoStats verbosity mDetailedStats pkgIdsHaveDocs = liftIO $ do
     nfo :: String -> IO ()
     nfo str = when (verbosity >= verbose) $ putStrLn str
 
-    byPackage :: [[(PackageId, HasDocs)]]
-    byPackage = map (sortBy (flip (comparing (pkgVersion . fst))))
-              $ groupBy (equating  (pkgName . fst))
-              $ sortBy  (comparing (pkgName . fst)) pkgIdsHaveDocs
+    byPackage :: [[DocInfo]]
+    byPackage = map (sortBy (flip (comparing docInfoPackageVersion)))
+              $ groupBy (equating  docInfoPackageName)
+              $ sortBy  (comparing docInfoPackageName) pkgIdsHaveDocs
 
-    mostRecentBuilt, mostRecentFailed, mostRecentNotBuilt :: [[(PackageId, HasDocs)]]
-    mostRecentBuilt    = filter ((== HasDocs)      . snd . head) byPackage
-    mostRecentFailed   = filter ((== DocsFailed)   . snd . head) byPackage
-    mostRecentNotBuilt = filter ((== DocsNotBuilt) . snd . head) byPackage
+    mostRecentBuilt, mostRecentFailed, mostRecentNotBuilt :: [[DocInfo]]
+    mostRecentBuilt    = filter ((== HasDocs)      . docInfoHasDocs . head) byPackage
+    mostRecentFailed   = filter ((== DocsFailed)   . docInfoHasDocs . head) byPackage
+    mostRecentNotBuilt = filter ((== DocsNotBuilt) . docInfoHasDocs . head) byPackage
 
-    categorise :: [(PackageId, HasDocs)] -> StatResult
+    categorise :: [DocInfo] -> StatResult
     categorise ps
       | all (== HasDocs)      hd = AllVersionsBuiltOk
       | all (/= DocsNotBuilt) hd = AllVersionsAttempted
@@ -219,7 +220,7 @@ infoStats verbosity mDetailedStats pkgIdsHaveDocs = liftIO $ do
       | all (/= DocsFailed)   hd = SomeBuiltOk
       | otherwise                = SomeFailed
       where
-        hd = map snd ps
+        hd = map docInfoHasDocs ps
 
     categorised :: [StatResult]
     categorised = map categorise byPackage
@@ -227,11 +228,11 @@ infoStats verbosity mDetailedStats pkgIdsHaveDocs = liftIO $ do
     count :: StatResult -> String
     count c = show (length (filter (c ==) categorised))
 
-    formatPkg :: [(PackageId, HasDocs)] -> [[String]]
-    formatPkg = map $ \(pId, hasDocs) -> [
-                          display (pkgName pId)
-                        , display (pkgVersion pId)
-                        , show hasDocs
+    formatPkg :: [DocInfo] -> [[String]]
+    formatPkg = map $ \docInfo -> [
+                          display (docInfoPackageName docInfo)
+                        , display (docInfoPackageVersion docInfo)
+                        , show (docInfoHasDocs docInfo)
                         ]
 
     formattedStats :: [[String]]
@@ -264,27 +265,69 @@ printTable xss = intercalate "\n"
 data HasDocs = HasDocs | DocsNotBuilt | DocsFailed
   deriving (Eq, Show)
 
+data DocInfo = DocInfo {
+    docInfoPackage     :: PackageIdentifier
+  , docInfoHasDocs     :: HasDocs
+  , docInfoIsCandidate :: Bool
+  }
+
+docInfoPackageName :: DocInfo -> PackageName
+docInfoPackageName = pkgName . docInfoPackage
+
+docInfoPackageVersion :: DocInfo -> Version
+docInfoPackageVersion = pkgVersion . docInfoPackage
+
+docInfoBaseURI :: BuildConfig -> DocInfo -> URI
+docInfoBaseURI config docInfo =
+  if not (docInfoIsCandidate docInfo)
+    then bc_srcURI config <//> "package" </> display (docInfoPackage docInfo)
+    else bc_srcURI config <//> "package" </> display (docInfoPackage docInfo) </> "candidate"
+
+docInfoDocsURI :: BuildConfig -> DocInfo -> URI
+docInfoDocsURI config docInfo = docInfoBaseURI config docInfo <//> "docs"
+
+docInfoTarGzURI :: BuildConfig -> DocInfo -> URI
+docInfoTarGzURI config docInfo = docInfoBaseURI config docInfo <//> display (docInfoPackage docInfo) <.> "tar.gz"
+
 getDocumentationStats :: BuildConfig
                       -> (PackageId -> IO Bool)
-                      -> HttpSession [(PackageIdentifier, HasDocs)]
+                      -> HttpSession [DocInfo]
 getDocumentationStats config didFail = do
-    mJSON <- requestGET' uri
-    case mJSON of
-      Nothing   -> fail $ "Could not download " ++ show uri
-      Just json -> case eitherDecode json of
-                     Left e    -> fail $ "Could not decode " ++ show uri ++ ": " ++ e
-                     Right val -> liftIO $ mapM aux val
-  where
-    uri = bc_srcURI config <//> "packages" </> "docs.json"
+    mPackages   <- liftM eitherDecode `liftM` requestGET' packagesUri
+    mCandidates <- liftM eitherDecode `liftM` requestGET' candidatesUri
 
-    aux :: (String, Bool) -> IO (PackageIdentifier, HasDocs)
-    aux (pkgId, docsBuilt) = do
+    case (mPackages, mCandidates) of
+      -- Download failure
+      (Nothing, _) -> fail $ "Could not download " ++ show packagesUri
+      (_, Nothing) -> fail $ "Could not download " ++ show candidatesUri
+      -- Decoding failure
+      (Just (Left e), _) -> fail $ "Could not decode " ++ show packagesUri   ++ ": " ++ e
+      (_, Just (Left e)) -> fail $ "Could not decode " ++ show candidatesUri ++ ": " ++ e
+      -- Success
+      (Just (Right packages), Just (Right candidates)) -> do
+        packages'   <- liftIO $ mapM checkFailed packages
+        candidates' <- liftIO $ mapM checkFailed candidates
+        return $ map (setIsCandidate False) packages'
+              ++ map (setIsCandidate True)  candidates'
+  where
+    packagesUri   = bc_srcURI config <//> "packages" </> "docs.json"
+    candidatesUri = bc_srcURI config <//> "packages" </> "candidates" </> "docs.json"
+
+    checkFailed :: (String, Bool) -> IO (PackageIdentifier, HasDocs)
+    checkFailed (pkgId, docsBuilt) = do
       let pkgId' = fromJust (simpleParse pkgId)
       if docsBuilt
         then return (pkgId', HasDocs)
         else do failed <- didFail pkgId'
                 if failed then return (pkgId', DocsFailed)
                           else return (pkgId', DocsNotBuilt)
+
+    setIsCandidate :: Bool -> (PackageIdentifier, HasDocs) -> DocInfo
+    setIsCandidate isCandidate (pId, hasDocs) = DocInfo {
+        docInfoPackage     = pId
+      , docInfoHasDocs     = hasDocs
+      , docInfoIsCandidate = isCandidate
+      }
 
 buildOnce :: BuildOpts -> [PackageId] -> IO ()
 buildOnce opts pkgs = do
@@ -312,16 +355,16 @@ buildOnce opts pkgs = do
         -- First build all of the latest versions of each package
         -- Then go back and build all the older versions
         -- NOTE: assumes all these lists are non-empty
-        let latestFirst :: [[(PackageId, a)]] -> [(PackageId, a)]
+        let latestFirst :: [[DocInfo]] -> [DocInfo]
             latestFirst ids = map head ids ++ concatMap tail ids
 
         -- Find those files *not* marked as having documentation in our cache
-        let toBuild = map fst
-                    . filter shouldBuild
+        let toBuild :: [DocInfo]
+            toBuild = filter shouldBuild
                     . latestFirst
-                    . map (sortBy (flip (comparing (pkgVersion . fst))))
-                    . groupBy (equating  (pkgName . fst))
-                    . sortBy  (comparing (pkgName . fst))
+                    . map (sortBy (flip (comparing docInfoPackageVersion)))
+                    . groupBy (equating  docInfoPackageName)
+                    . sortBy  (comparing docInfoPackageName)
                     $ pkgIdsHaveDocs
 
         liftIO $ notice verbosity $ show (length toBuild) ++ " package(s) to build"
@@ -333,17 +376,18 @@ buildOnce opts pkgs = do
         -- package!
         startTime <- liftIO $ getCurrentTime
 
-        let go [] = return ()
-            go (pkg_id : toBuild') = do
-              mTgz <- buildPackage verbosity opts config pkg_id
+        let go :: [DocInfo] -> IO ()
+            go [] = return ()
+            go (docInfo : toBuild') = do
+              mTgz <- buildPackage verbosity opts config docInfo
               case mTgz of
                 Nothing ->
-                  liftIO $ mark_as_failed pkg_id
+                  liftIO $ mark_as_failed (docInfoPackage docInfo)
                 Just docs_tgz -> httpSession verbosity $ do
                   -- Make sure we authenticate to Hackage
                   setAuthorityGen $ provideAuthInfo (bc_srcURI config)
                                   $ Just (bc_username config, bc_password config)
-                  requestPUT (bc_srcURI config <//> "package" </> display pkg_id </> "docs") "application/x-tar" (Just "gzip") docs_tgz
+                  requestPUT (docInfoDocsURI config docInfo) "application/x-tar" (Just "gzip") docs_tgz
 
               -- We don't check the runtime until we've actually tried
               -- to build a doc, so as to ensure we make progress.
@@ -358,9 +402,10 @@ buildOnce opts pkgs = do
 
         go toBuild
   where
-    shouldBuild :: (PackageIdentifier, HasDocs) -> Bool
-    shouldBuild (pkgId, DocsNotBuilt) = pkgId `elem` pkgs || null pkgs
-    shouldBuild (pkgId, _)            = pkgId `elem` pkgs
+    shouldBuild :: DocInfo -> Bool
+    shouldBuild docInfo = case docInfoHasDocs docInfo of
+      DocsNotBuilt -> docInfoPackage docInfo `elem` pkgs || null pkgs
+      _            -> docInfoPackage docInfo `elem` pkgs
 
 -- Builds a little memoised function that can tell us whether a
 -- particular package failed to build its documentation
@@ -408,9 +453,11 @@ prepareBuildPackages opts config
 -- | Build documentation and return @(Just tgz)@ for the built tgz file
 -- on success, or @Nothing@ otherwise.
 buildPackage :: MonadIO m
-             => Verbosity -> BuildOpts -> BuildConfig -> PackageId -> m (Maybe BS.ByteString)
-buildPackage verbosity opts config pkg_id = do
-    liftIO $ do notice verbosity ("Building " ++ display pkg_id)
+             => Verbosity -> BuildOpts -> BuildConfig
+             -> DocInfo
+             -> m (Maybe BS.ByteString)
+buildPackage verbosity opts config docInfo = do
+    liftIO $ do notice verbosity ("Building " ++ display (docInfoPackage docInfo))
                 handleDoesNotExist (return ()) $
                     removeDirectoryRecursive $ installDirectory opts
                 createDirectory $ installDirectory opts
@@ -439,9 +486,9 @@ buildPackage verbosity opts config pkg_id = do
     -- The documentation is installed within the stateDir because we
     -- set a prefix while installing
     let doc_root = installDirectory opts </> "share" </> "doc"
-        doc_dir      = doc_root </> display pkg_id
+        doc_dir      = doc_root </> display (docInfoPackage docInfo)
         doc_dir_html = doc_dir </> "html"
-        temp_doc_dir = doc_root </> display pkg_id </> display pkg_id ++ "-docs"
+        temp_doc_dir = doc_root </> display (docInfoPackage docInfo) </> display (docInfoPackage docInfo) ++ "-docs"
         pkg_url      = "/package" </> "$pkg-$version"
 
     liftIO $ withCurrentDirectory (installDirectory opts) $ do
@@ -481,14 +528,22 @@ buildPackage verbosity opts config pkg_id = do
                       -- The docdir can differ between Cabal versions
                       "--docdir=" ++ doc_dir,
                       "--prefix=" ++ installDirectory opts,
-                      display pkg_id]
+                      -- For candidates we need to use the full URL, because
+                      -- otherwise cabal-install will not find the package.
+                      -- For regular packages however we need to use just the
+                      -- package name, otherwise cabal-install will not
+                      -- generate a report
+                      if docInfoIsCandidate docInfo
+                        then show (docInfoTarGzURI config docInfo)
+                        else display (docInfoPackage docInfo)
+                      ]
 
         -- Remove reports for dependencies (so that we only submit the report
         -- for the package we are currently building)
         dotCabal <- getAppUserDataDirectory "cabal"
         let reportsDir = dotCabal </> "reports" </> srcName config
-        withRecursiveContents_ reportsDir $ \path ->
-           unless ((display pkg_id ++ ".log") `isSuffixOf` path) $
+        handleDoesNotExist (return ()) $ withRecursiveContents_ reportsDir $ \path ->
+           unless ((display (docInfoPackage docInfo) ++ ".log") `isSuffixOf` path) $
              removeFile path
 
         -- Submit a report even if installation/tests failed: all
@@ -512,7 +567,7 @@ buildPackage verbosity opts config pkg_id = do
                                       (doesFileExist (doc_dir_html </> "doc-index.html"))
         if docs_generated
             then do
-                notice verbosity $ "Docs generated for " ++ display pkg_id
+                notice verbosity $ "Docs generated for " ++ display (docInfoPackage docInfo)
                 liftM Just $
                     -- We need the files in the documentation .tar.gz
                     -- to have paths like foo-x.y.z-docs/index.html
@@ -523,7 +578,7 @@ buildPackage verbosity opts config pkg_id = do
                              (renameDirectory temp_doc_dir doc_dir_html)
                              (tarGzDirectory temp_doc_dir)
             else do
-              notice verbosity $ "Docs for " ++ display pkg_id ++ " failed to build"
+              notice verbosity $ "Docs for " ++ display (docInfoPackage docInfo) ++ " failed to build"
               return Nothing
 
 cabal :: BuildOpts -> String -> [String] -> IO ExitCode
