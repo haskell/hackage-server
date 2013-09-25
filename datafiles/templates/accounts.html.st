@@ -9,15 +9,19 @@ $hackageCssTheme()$
 $hackagePageHeader()$
 
 <div id="content">
-<h2>Create an Account</h2>
+<h2>Create an account</h2>
 
-<p>You should first <a href="/users/register-request">register a new user account</a> for yourself and then email <a href="mailto:admins@hackage.haskell.org">admins@hackage.haskell.org</a> to request upload privileges.</p>
+<p>To create an account, you should first <a href="/users/register-request">register a new user account</a> for yourself and then email <a href="mailto:admin@hackage.haskell.org">admin@hackage.haskell.org</a> to request upload privileges.</p>
 
 <p>If you want to upload a new version for a package uploaded by another user, you should contact that user and request to be added to the package's maintainer group.</p>
 
-<h3>Reset Password</h3>
+<h2>Upgrading an account from old Hackage</h2>
 
-<p>Passwords are <b>not</b> stored, just the digest.</p>
+<p>The way that the previous implementation of Hackage stored credentials is not compatible with the one used by Hackage 2. However, accounts created on Hackage before the above process existed are the ones to which older package uploads are attributed, and can continue to be used.</p>
+
+<p>Credentials can be upgraded in one of two automatic ways. One way, which requires knowing your username and password, is using the <a href="/users/htpasswd-upgrade">account upgrade</a> interface, which also has more information about the reasons for incompatibility. The other way, which requires knowing your username and being able to access the email address you originally used to request a Hackage account, is to use the automatic password reset below. (If you don't know your username, <a href="/users/">the complete list</a> may help.)</p>
+
+<h2>Reset password</h2>
 
 <p>If you forget your password you can <a href="/users/password-reset">reset it</a>
 so long as you know your user login name and the email address you
