@@ -22,11 +22,14 @@ build-type: Simple
 cabal-version: >=1.10
 data-dir: datafiles
 data-files:
-  templates/*.st
   templates/*.html.st
+  templates/*.st
   templates/*.txt.st
-  templates/UserSignupReset/*.st
+  templates/EditCabalFile/*.html.st
+  templates/Html/*.html.st
   templates/LegacyPasswds/*.html.st
+  templates/Search/*.xml.st
+  templates/UserSignupReset/*.st
 
   static/*.css
   static/*.ico
