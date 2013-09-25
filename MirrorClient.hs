@@ -289,12 +289,12 @@ mirrorPackages verbosity opts pkgsToMirror = do
     extractCredentials _ = Nothing
 
     mirrorPackage pkginfo@(PkgIndexInfo pkgid _ _ _) = do
-      let srcBase = srcURI opts
-                    <//> (if isOldHackageURI (srcURI opts)
-                           then "packages" </> "archive"
-                           else "package")
+      let srcPackage = if isOldHackageURI (srcURI opts)
+              then "packages" </> "archive"
                     </> display (packageName pkgid)
                     </> display (packageVersion pkgid)
+              else "package" </> display pkgid
+          srcBase = srcURI opts <//> srcPackage
           dstBase = dstURI opts
                     <//> "package"
                     </> display pkgid
