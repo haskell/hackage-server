@@ -15,7 +15,7 @@ $hackagePageHeader()$
 ><ul
 ><li
   ><p
-    >Package search: you can search by keywords that appear in the package name, synopsis or description. We expect this will be extend later to include tags, module names and author names.</p
+    >Package search: you can search by keywords that appear in the package name, synopsis or description. We expect this will be extend later to include tags, module names, author names, and metric-based ranking.</p
     ></li
   ><li
   ><p
@@ -35,7 +35,7 @@ $hackagePageHeader()$
     ></li
   ><li
   ><p
-    >Package changelogs, when they are included in the package tarball.</p
+    >Package changelogs, when they are included at top level in the package tarball.</p
     ></li
   ><li
   ><p
@@ -57,7 +57,7 @@ $hackagePageHeader()$
     ></li
   ></ul
 ><p
->There are also a number of new features that volunteers have partially implemented or that are in need of improvement.</p
+>There are also a number of new features that volunteers have partially implemented or that are in need of improvement. These are being tracked <a href="https://github.com/haskell/hackage-server/issues">on GitHub</a>.</p
 ><ul
 ><li
   ><p
