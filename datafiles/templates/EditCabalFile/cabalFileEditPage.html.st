@@ -9,7 +9,11 @@ $hackageCssTheme()$
 $hackagePageHeader()$
 
 <div id="content">
-<h1>Edit package metadata for $pkgid$</h1>
+<h1>Edit package metadata for $pkgid$ (Tech Preview)</h1>
+
+<p><b>NOTE</b>: This is work in progress. It's not currently actually possible
+to publish new revisions (see <a
+href="https://github.com/haskell/hackage-server/issues/52">Issue 52</a>).</p>
 
 <p>Package maintainers and Hackage trustees are allowed to edit certain bits
 of package metadata after a release, without uploading a new tarball.
@@ -17,7 +21,7 @@ of package metadata after a release, without uploading a new tarball.
 <form class="box" action="edit" method="post" enctype="multipart/form-data">
   <textarea autofocus style="font-family: monospace" name="cabalfile" rows="20" cols="80">$cabalfile$</textarea>
   <p><input type="submit" name="review" value="Review changes"/>
-     <input type="submit" name="publish" value="Publish new revision"/>
+     <input type="submit" name="publish" value="Publish new revision" disabled="disabled"/>
      <a href="edit">Reset</a>
 
 $if(publish)$
