@@ -10,9 +10,11 @@ $hackagePageHeader()$
 
 <div id="content">
 
-<h1>Hackage 2 public beta</h1>
+<h1>Hackage 2</h1>
 
-<p>Well-Typed and the <a href="http://industry.haskell.org/">Industrial Haskell Group</a> (IHG) are very pleased to announce that Hackage 2 is now available for public beta testing. The plan is to do the final switchover in late September, to coincide with ICFP.</p><p>Read on for details of how to help with the public beta, an overview of the new features and what the IHG has been doing to help.</p>
+<p>Well-Typed and the <a href="http://industry.haskell.org/">Industrial Haskell Group</a> (IHG) are very pleased to announce that Hackage 2 is now powering the official Hackage server.</p>
+
+<p>Read on for an overview of the new features and what the IHG has been doing to help, and for details of how you can help to make hackage 2 even better.</p>
 
 <h2 id="support-from-the-industrial-haskell-group">Support from the Industrial Haskell Group</h2>
 
@@ -24,25 +26,7 @@ $hackagePageHeader()$
 
 <p>The IHG is keen to increase its membership so that more resources can be dedicated to improving the Haskell development platform. If your organisation relies on Haskell in some way then you may want to consider joining. See the <a href="http://industry.haskell.org/">IHG website</a> for more details or contact <a href="mailto:info@industry.haskell.org">info@industry.haskell.org</a>.</p>
 
-<p>Despite the help of the IHG in getting to this point, Hackage is a community project, and its success depends on the community maintaining and further improving the new server. The code is now on github so it is easier to contribute, and now that the server is live there is more immediate gratification for volunteers contributing fixes and new features.</p>
-
-<h2 id="public-beta">Public beta</h2>
-<p>We would like to encourage you to take part in the public beta testing. We need help both from package authors as well as other users of the site.</p>
-
-<p><a href="http://beta.hackage.haskell.org/">http://beta.hackage.haskell.org/</a></p>
-
-<p>Please report any problems you find using the <a href="https://github.com/haskell/hackage-server/issues">issue tracker</a> on the <code>hackage-server</code> <a href="https://github.com/haskell/hackage-server">github site</a>.</p>
-
-<p>We are mirroring packages from the old server (every 30min) so it is suitable to use as your main hackage server with some caveats: we are allowing package authors to upload (as well as doing the mirroring) so you may find a slightly different set of packages on this server.</p>
-
-<p>If you are a package author then you are welcome to poke about and upload packages. We have imported user accounts from the old server (except for a small number of early adopters of the original server who will need to contact an administrator). Note that before we do the final switchover we will <strong>delete everything</strong> from the beta instance and do a fresh import from the old hackage server.</p>
-  
-<h3 id="configuring-cabal-install">Configuring cabal-install</h3>
-<p>Edit your <code>~/.cabal/config</code> file. Comment-out the existing <code>remote-repo</code> line near the top of the file and add in a new one like this:</p>
-
-<pre><code>--remote-repo: hackage.haskell.org:http://hackage.haskell.org/packages/archive
-
-remote-repo: beta.hackage.haskell.org:http://beta.hackage.haskell.org/</code></pre>
+<p>Despite the help of the IHG in getting to this point, Hackage is a community project, and its success depends on the community maintaining and further improving the new server. The code is <a href="http://github.com/haskell/hackage-server">now on github</a> so it is easier to contribute, and now that the server is live there is more immediate gratification for volunteers contributing fixes and new features.</p>
 
 <h2 id="new-features">New features</h2>
 <p>Though our main priority has been feature parity so that we can switch over, volunteers have contributed several new features, including better package search, a new site theme, improved security, the ability to fix package dependencies after a release, changelogs, and a REST-style interface.</p>
@@ -50,6 +34,8 @@ remote-repo: beta.hackage.haskell.org:http://beta.hackage.haskell.org/</code></p
 <p>See the <a href="/new-features">new features</a> page for more details on these, plus details of other features that are partially implemented or are in need of improvement.</p>
 
 <h2 id="contributing-to-the-development">Contributing to the development</h2>
+
+<p>Please report any problems you find using the <a href="https://github.com/haskell/hackage-server/issues">issue tracker</a> on the <code>hackage-server</code> <a href="https://github.com/haskell/hackage-server">github site</a>.</p>
 
 <p>The <a href="https://github.com/haskell/hackage-server">code</a> is on github and we welcome pull requests.</p>
 
@@ -82,6 +68,17 @@ remote-repo: beta.hackage.haskell.org:http://beta.hackage.haskell.org/</code></p
 </ul>
 
 <p>The new server has an automatically-generated <a href="/api">site api</a>. This is mainly intended as documentation for people working with the server, rather than as a user-oriented site map, but it can be interesting to see exactly what is available. This includes important resources like the machine-readable <a href="/packages/index.tar.gz">index of packages</a>, used by clients like <code>cabal-install</code>.</p>
+
+<h2>Old Hackage</h2>
+
+<p>We have imported user accounts from the old server (except for a small number of early adopters of the original server who will need to contact an administrator) and mirrored all packages.</p>
+
+<p>The old Hackage server is still available for a short amount of time. To use
+it change your <code>~/.cabal/config</code> file, comment-out the existing
+<code>remote-repo</code> line near the top of the file and add in a new one
+like this:</p>
+
+<pre><code>remote-repo: old.hackage.haskell.org:http://old.hackage.haskell.org/packages/archive</code></pre>
 
 </div>
 </body>
