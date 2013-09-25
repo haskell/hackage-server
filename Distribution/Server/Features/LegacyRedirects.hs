@@ -44,7 +44,7 @@ serveLegacyPosts upload = msum
     --, postedMove "check"  "/check"
       ]
   , dir "cgi-bin" $ dir "hackage-scripts" $ msum
-      [ dir "protected" $ dir "upload" $ movedUpload
+      [ dir "protected" $ dir "upload-pkg" $ movedUpload
     --, postedMove "check"  "/check"
       ]
   , dir "upload" movedUpload
