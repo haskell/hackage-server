@@ -14,7 +14,7 @@ $hackagePageHeader()$
 
 <p>Well-Typed and the <a href="http://industry.haskell.org/">Industrial Haskell Group</a> (IHG) are very pleased to announce that Hackage 2 is now powering the official Hackage server.</p>
 
-<p>Read on for an overview of the new features and what the IHG has been doing to help, and for details of how you can help to make hackage 2 even better.</p>
+<p>Read on for an overview of the new features and what the IHG has been doing to help, and for details of how you can help to make Hackage 2 even better.</p>
 
 <h2 id="support-from-the-industrial-haskell-group">Support from the Industrial Haskell Group</h2>
 
@@ -33,9 +33,15 @@ $hackagePageHeader()$
 
 <p>See the <a href="/new-features">new features</a> page for more details on these, plus details of other features that are partially implemented or are in need of improvement.</p>
 
-<h2 id="contributing-to-the-development">Contributing to the development</h2>
+<h2 id="reporting-problems">Reporting problems</h2>
 
-<p>Please report any problems you find using the <a href="https://github.com/haskell/hackage-server/issues">issue tracker</a> on the <code>hackage-server</code> <a href="https://github.com/haskell/hackage-server">github site</a>.</p>
+There are site administrators you can contact and there is an issue tracker.
+Please report bugs in the site <a
+href="https://github.com/haskell/hackage-server/issues">issue tracker</a>.  For
+issues with accounts or permissions please contact the administrators by email
+at <a href="mailto:admins@hackage.haskell.org">admins@hackage.haskell.org</a>
+
+<h2 id="contributing-to-the-development">Contributing to the development</h2>
 
 <p>The <a href="https://github.com/haskell/hackage-server">code</a> is on github and we welcome pull requests.</p>
 
@@ -69,6 +75,7 @@ $hackagePageHeader()$
 
 <p>The new server has an automatically-generated <a href="/api">site api</a>. This is mainly intended as documentation for people working with the server, rather than as a user-oriented site map, but it can be interesting to see exactly what is available. This includes important resources like the machine-readable <a href="/packages/index.tar.gz">index of packages</a>, used by clients like <code>cabal-install</code>.</p>
 
+<!--
 <h2>Old Hackage</h2>
 
 <p>We have imported user accounts from the old server (except for a small number of early adopters of the original server who will need to contact an administrator) and mirrored all packages.</p>
@@ -79,6 +86,7 @@ it change your <code>~/.cabal/config</code> file, comment-out the existing
 like this:</p>
 
 <pre><code>remote-repo: old.hackage.haskell.org:http://old.hackage.haskell.org/packages/archive</code></pre>
+-->
 
 </div>
 </body>
