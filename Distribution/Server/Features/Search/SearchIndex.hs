@@ -315,15 +315,16 @@ insertTermToDocIdEntries terms !docid si =
 
 -- | Delete an entry from the 'Term' to 'DocId' mapping.
 deleteTermToDocIdEntry :: Term -> DocId -> SearchIndex key field -> SearchIndex key field
-deleteTermToDocIdEntry term !docid si@SearchIndex{termMap} =
-    si { termMap = Map.alter upd term termMap }
-  where
-    upd Nothing                           = Nothing
-    upd (Just (TermInfo termId docIdSet)) =
-      let docIdSet' = DocIdSet.delete docid docIdSet
-       in if DocIdSet.null docIdSet'
-            then Nothing --FIXME: also remove termIdMap entry
-            else Just (TermInfo termId docIdSet')
+deleteTermToDocIdEntry term !docid si@SearchIndex{termMap, termIdMap} =
+    case  Map.lookup term termMap of
+      Nothing -> si
+      Just (TermInfo termId docIdSet) ->
+        let docIdSet' = DocIdSet.delete docid docIdSet
+            termInfo' = TermInfo termId docIdSet'
+        in if DocIdSet.null docIdSet'
+            then si { termMap = Map.delete term termMap
+                    , termIdMap = IntMap.delete (fromEnum termId) termIdMap }
+            else si { termMap = Map.insert term termInfo' termMap }
 
 -- | Delete multiple entries from the 'Term' to 'DocId' mapping: many terms
 -- that map to the same document.
