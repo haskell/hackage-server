@@ -50,6 +50,7 @@ import Data.Int  (Int64)
 import Control.Arrow (second)
 import Data.Function (on)
 import qualified System.Log.Logger as HsLogger
+import Control.Exception.Lifted as Lifted
 
 import Paths_hackage_server (getDataDir)
 
@@ -255,7 +256,7 @@ initState server (admin, pass) = do
 -- It collects resources from Distribution.Server.Features, collects
 -- them into a path hierarchy, and serves them.
 impl :: Server -> ServerPart Response
-impl server =
+impl server = logExceptions $
     runServerPartE $
       handleErrorResponse (serveErrorResponse errHandlers Nothing) $
         renderServerTree [] serverTree
@@ -285,6 +286,13 @@ impl server =
       errNotFound "Page not found"
         [MText "Sorry, it's just not here."]
 
+
+    logExceptions :: ServerPart Response -> ServerPart Response
+    logExceptions act = Lifted.catch act $ \e -> do
+                          liftIO . lognotice verbosity $ "WARNING: Received exception: " ++ show e
+                          Lifted.throwIO (e :: SomeException)
+
+    verbosity = serverVerbosity (serverEnv server)
 
 data TempServer = TempServer ThreadId
 

@@ -43,6 +43,10 @@ import Distribution.Server.Features.EditCabalFiles      (initEditCabalFilesFeatu
 #endif
 import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
 
+#ifdef DEBUG
+import Distribution.Server.Features.Crash
+#endif
+
 import Control.Applicative ((<$>))
 import Distribution.Server.Packages.PackageIndex (allPackages)
 import Distribution.Package (packageId)
@@ -226,6 +230,9 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 #endif
          , staticFilesFeature
          , serverIntrospectFeature allFeatures
+#ifdef DEBUG
+         , serverCrashFeature
+#endif
          ]
 
     -- Run all post init hooks, now that everyone's gotten a chance to register

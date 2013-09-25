@@ -44,6 +44,11 @@ flag minimal
   description: Include only the minimum feature set.
   manual: True
 
+flag debug
+  default: False
+  description: Include debugging features
+  manual: True
+
 flag build-hackage-server
   default: True
   manual: True
@@ -178,6 +183,11 @@ executable hackage-server
       Distribution.Server.Features.UserSignup
       Distribution.Server.Features.StaticFiles
 
+  if flag(debug)
+    cpp-options: -DDEBUG
+    other-modules:
+      Distribution.Server.Features.Crash
+
   build-depends:
     base       == 4.*,
     filepath   >= 1.1,
@@ -226,7 +236,8 @@ executable hackage-server
     happstack-server == 7.0.* || ==7.1.* && >= 7.0.6,
     hslogger,
     mime-mail  ==0.4.*,
-    HStringTemplate ==0.7.*
+    HStringTemplate ==0.7.*,
+    lifted-base >= 0.2.1 && < 0.3
 
   if ! flag(minimal)
     build-depends:
