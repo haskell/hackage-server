@@ -46,7 +46,8 @@ data BuildOpts = BuildOpts {
                      bo_verbosity  :: Verbosity,
                      bo_runTime    :: Maybe NominalDiffTime,
                      bo_stateDir   :: FilePath,
-                     bo_continuous :: Maybe Int
+                     bo_continuous :: Maybe Int,
+                     bo_keepGoing  :: Bool
                  }
 
 data BuildConfig = BuildConfig {
@@ -330,10 +331,9 @@ getDocumentationStats config didFail = do
       }
 
 buildOnce :: BuildOpts -> [PackageId] -> IO ()
-buildOnce opts pkgs = do
+buildOnce opts pkgs = keepGoing $ do
     config <- readConfig opts
-    let verbosity = bo_verbosity opts
-        cacheDir = bo_stateDir opts </> cacheDirName
+    let cacheDir = bo_stateDir opts </> cacheDirName
         cacheDirName | URI { uriAuthority = Just auth } <- bc_srcURI config
                      = makeValid (uriRegName auth ++ uriPort auth)
                      | otherwise
@@ -406,6 +406,18 @@ buildOnce opts pkgs = do
     shouldBuild docInfo = case docInfoHasDocs docInfo of
       DocsNotBuilt -> docInfoPackage docInfo `elem` pkgs || null pkgs
       _            -> docInfoPackage docInfo `elem` pkgs
+
+    keepGoing :: IO () -> IO ()
+    keepGoing act
+      | bo_keepGoing opts = catch act showExceptionAsWarning
+      | otherwise         = act
+
+    showExceptionAsWarning :: SomeException -> IO ()
+    showExceptionAsWarning e = do
+      warn verbosity (show e)
+      notice verbosity "Abandoning this build attempt."
+
+    verbosity = bo_verbosity opts
 
 -- Builds a little memoised function that can tell us whether a
 -- particular package failed to build its documentation
@@ -629,6 +641,7 @@ data BuildFlags = BuildFlags {
     flagHelp       :: Bool,
     flagForce      :: Bool,
     flagContinuous :: Bool,
+    flagKeepGoing  :: Bool,
     flagInterval   :: Maybe String
 }
 
@@ -640,6 +653,7 @@ emptyBuildFlags = BuildFlags {
   , flagHelp       = False
   , flagForce      = False
   , flagContinuous = False
+  , flagKeepGoing  = False
   , flagInterval   = Nothing
   }
 
@@ -669,11 +683,15 @@ buildFlagDescrs =
 
   , Option [] ["continuous"]
       (NoArg (\opts -> opts { flagContinuous = True }))
-      "Mirror continuously rather than just once."
+      "Build continuously rather than just once"
+
+  , Option [] ["keep-going"]
+      (NoArg (\opts -> opts { flagKeepGoing = True }))
+      "Keep going after errors"
 
   , Option [] ["interval"]
       (ReqArg (\int opts -> opts { flagInterval = Just int }) "MIN")
-      "Set the mirroring interval in minutes (default 30)"
+      "Set the building interval in minutes (default 30)"
   ]
 
 validateOpts :: [String] -> IO (Mode, BuildOpts)
@@ -690,7 +708,8 @@ validateOpts args = do
                    bo_continuous = case (flagContinuous flags, flagInterval flags) of
                                      (True, Just i)  -> Just (read i)
                                      (True, Nothing) -> Just 30 -- default interval
-                                     (False, _)      -> Nothing
+                                     (False, _)      -> Nothing,
+                   bo_keepGoing  = flagKeepGoing flags
                }
 
         mode = case args' of
