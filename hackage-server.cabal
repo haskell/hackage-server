@@ -24,6 +24,7 @@ data-dir: datafiles
 data-files:
   templates/*.st
   templates/*.html.st
+  templates/*.txt.st
   templates/UserSignupReset/*.st
   templates/LegacyPasswds/*.html.st
 
