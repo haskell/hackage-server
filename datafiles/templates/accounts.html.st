@@ -17,9 +17,7 @@ $hackagePageHeader()$
 
 <h2>Upgrading an account from old Hackage</h2>
 
-<p>The way that the previous implementation of Hackage stored credentials is not compatible with the one used by Hackage 2. However, accounts created on Hackage before the above process existed are the ones to which older package uploads are attributed, and can continue to be used.</p>
-
-<p>Credentials can be upgraded in one of two automatic ways. One way, which requires knowing your username and password, is using the <a href="/users/htpasswd-upgrade">account upgrade</a> interface, which also has more information about the reasons for incompatibility. The other way, which requires knowing your username and being able to access the email address you originally used to request a Hackage account, is to use the automatic password reset below. (If you don't know your username, <a href="/users/">the complete list</a> may help.)</p>
+<p>Accounts have been imported from the old Hackage server however a one-time upgrade is required. Use the <a href="/users/htpasswd-upgrade">account upgrade</a> page. (If you don't know your username, <a href="/users/">the complete list</a> may help.)</p>
 
 <h2>Reset password</h2>
 
