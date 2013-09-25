@@ -52,6 +52,23 @@ as does maintainer user groups. The libraries mailing list should probably
 determine the best approach for this.
 </p>
 
+<h3>Package Candidates (Tech Preview)</h3>
+
+<p><a href="/packages/candidates">Package <em>candidates</em></a> are a way 
+to preview the package page, view any warnings or possible errors you might
+encounter, and let others install it before publishing it to the main index.
+(Note: you can view these warnings with 'cabal check'.) You can have multiple
+candidates for each package at the same time so long as they each have different
+versions. Finally, you can publish a candidate to the main index if it's not
+there already.
+</p>
+
+<p>Package candidates have not yet been fully implemented; see <a
+href="https://github.com/haskell/hackage-server/issues/41#issuecomment-25005344">Issue
+41</a> for an overview of what still needs to be done.</p>
+
+<div style="font-size: large; text-align: center;"><a href="/packages/candidates/upload">Upload a package candidate</a></div>
+
 <h3>Notes</h3>
 <ul>
 <li>You should check that your source bundle builds,
