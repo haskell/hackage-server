@@ -234,7 +234,7 @@ executable hackage-server
     aeson      == 0.6.1.*,
     unordered-containers >= 0.2.3.0,
     rss        == 3000.2.*,
-    Cabal      >= 1.16 && < 1.17,
+    Cabal      >= 1.18.1 && < 1.19,
     csv        == 0.1.*,
     stm        >= 2.2 && < 2.5,
     acid-state == 0.8.*,
