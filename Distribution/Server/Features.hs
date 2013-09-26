@@ -64,6 +64,7 @@ import Distribution.Package (packageId)
 --     best approach is probably to write backup tarball to disk and transfer
 --     it away through non-HTTP means (somewhat more secure)
 
+-- | Initialize all features and run post-initialization hooks.
 initHackageFeatures :: ServerEnv -> IO ([HackageFeature], UserFeature)
 initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
@@ -244,15 +245,19 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
     return (allFeatures, usersFeature)
 
+-- | Checkpoint a feature's persistent state to disk.
 featureCheckpoint :: HackageFeature -> IO ()
 featureCheckpoint = mapM_ abstractStateCheckpoint . featureState
 
+-- | Checkpoint all features' persistent state.
 checkpointAllFeatures :: [HackageFeature] -> IO ()
 checkpointAllFeatures = mapM_ featureCheckpoint
 
+-- | Cleanly shut down a feature's state components.
 featureShutdown :: HackageFeature -> IO ()
 featureShutdown = mapM_ abstractStateClose . featureState
 
+-- | Cleanly shut down all features' state components.
 shutdownAllFeatures :: [HackageFeature] -> IO ()
 shutdownAllFeatures   = mapM_ featureShutdown . reverse
 
