@@ -75,18 +75,14 @@ at <a href="mailto:admin@hackage.haskell.org">admin@hackage.haskell.org</a>
 
 <p>The new server has an automatically-generated <a href="/api">site api</a>. This is mainly intended as documentation for people working with the server, rather than as a user-oriented site map, but it can be interesting to see exactly what is available. This includes important resources like the machine-readable <a href="/packages/index.tar.gz">index of packages</a>, used by clients like <code>cabal-install</code>.</p>
 
-<!--
 <h2>Old Hackage</h2>
 
-<p>We have imported user accounts from the old server (except for a small number of early adopters of the original server who will need to contact an administrator) and mirrored all packages.</p>
-
-<p>The old Hackage server is still available for a short amount of time. To use
-it change your <code>~/.cabal/config</code> file, comment-out the existing
+<p>The old Hackage server is still available for a while in case anyone needs it. To use
+it with cabal-install, change your <code>~/.cabal/config</code> file, comment-out the existing
 <code>remote-repo</code> line near the top of the file and add in a new one
 like this:</p>
 
-<pre><code>remote-repo: old.hackage.haskell.org:http://old.hackage.haskell.org/packages/archive</code></pre>
--->
+<pre><code>remote-repo: old.hackage.haskell.org:http://old.hackage.haskell.org/</code></pre>
 
 </div>
 </body>
