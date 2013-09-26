@@ -1,8 +1,13 @@
 name:         hackage-server
-version:      0.3
+version:      0.4
 category:     Distribution
-synopsis:     A prototype Hackage web server
-description:  A prototype Hackage web server based on the Happstack architecture.
+synopsis:     The Hackage web server
+description:  The new implementation of the Hackage web server, based on the
+              Happstack architecture. This is the implementation used to power
+              http://hackage.haskell.org/
+              .
+              It is designed to be easy to run your own instance.
+              It also includes a doc builder client and a mirroring client.
 author:       Duncan Coutts <duncan@community.haskell.org>,
               David Himmelstrup <lemmih@gmail.com>,
               Ross Paterson <ross@soi.city.ac.uk>,
