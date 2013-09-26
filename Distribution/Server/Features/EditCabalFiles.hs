@@ -143,10 +143,6 @@ editCabalFilesFeature _env templates
              , "changes"   $= changes
              ]
 
--- TODO: Add Eq instance at source
-deriving instance Eq PWarning
-deriving instance Eq PackageCheck
-
 instance ToSElem Change where
   toSElem (Change change from to) =
     toSElem (Map.fromList [("what", change)

@@ -39,12 +39,6 @@ import qualified Data.ByteString as SBS
 import qualified Data.ByteString.Lazy as LBS
 #endif
 
-
-deriving instance Typeable PackageIdentifier
-deriving instance Typeable GenericPackageDescription
-deriving instance Typeable PackageName
-deriving instance Typeable VersionRange
-
 instance Serialize PackageIdentifier where
   put = Serialize.put . show
   get = fmap read Serialize.get
@@ -106,12 +100,6 @@ instance NFData Response where
 
 instance NFData HeaderPair where
     rnf (HeaderPair a b) = rnf a `seq` rnf b
-
-instance NFData PackageName where
-    rnf (PackageName pkg) = rnf pkg
-
-instance NFData PackageIdentifier where
-    rnf (PackageIdentifier name version) = rnf name `seq` rnf version
 
 #if !(MIN_VERSION_deepseq(1,3,0))
 instance NFData Version where
