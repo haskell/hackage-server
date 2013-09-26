@@ -41,37 +41,79 @@ import Distribution.Text (display)
 import Distribution.Package
 import Distribution.Version (Version(..))
 
-
+-- | The core feature, responsible for the main package index and all access
+-- and modifications of it.
+--
+-- All packages must have a Cabal file, uploader, and upload time, and may have
+-- a source tarball.
 data CoreFeature = CoreFeature {
+    -- | The core `HackageFeature`.
     coreFeatureInterface :: HackageFeature,
 
-    coreResource     :: CoreResource,
+    -- | Core package resources and combinators.
+    coreResource :: CoreResource,
 
-    -- queries
+    -- Queries
+    -- | Retrieves the entire main package index.
     queryGetPackageIndex :: MonadIO m => m (PackageIndex PkgInfo),
 
-    -- update transactions
+    -- Update transactions
+    -- | Adds a version of a package which did not previously exist in the
+    -- index. This requires a Cabal file and context, and optionally a
+    -- reference to a tarball blob, and does not do any consistency checking
+    -- of these.
+    --
+    -- If a package was able to be newly added, runs a `PackageChangeAdd` hook
+    -- when done and returns True.
     updateAddPackage         :: MonadIO m => PackageId ->
                                 CabalFileText -> UploadInfo ->
                                 Maybe PkgTarball -> m Bool,
+    -- | Deletes a version of an existing package, deleting the package if it
+    -- was the last version.
+    --
+    -- If a package was found and deleted, runs a `PackageChangeDelete` hook
+    -- when done and returns True.
     updateDeletePackage      :: MonadIO m => PackageId -> m Bool,
+
+    -- | Adds a new Cabal file for this package version, creating it if
+    -- necessary. Previous Cabal files are kept around.
+    --
+    -- Runs either a `PackageChangeAdd` or `PackageChangeInfo` hook, depending
+    -- on whether a package with the given version already existed.
     updateAddPackageRevision :: MonadIO m => PackageId ->
                                 CabalFileText -> UploadInfo -> m (),
+    -- | Sets the source tarball for an existing package version. References to
+    -- previous tarballs, if any, are kept around.
+    --
+    -- If this package was found, runs a `PackageChangeInfo` hook when done and
+    -- returns True.
     updateAddPackageTarball  :: MonadIO m => PackageId ->
                                 PkgTarball -> UploadInfo -> m Bool,
+    -- | Sets the uploader of an existing package version.
+    --
+    -- If this package was found, runs a `PackageChangeInfo` hook when done and
+    -- returns True.
     updateSetPackageUploader :: MonadIO m => PackageId -> UserId -> m Bool,
+    -- | Sets the upload time of an existing package version.
+    --
+    -- If this package was found, runs a `PackageChangeInfo` hook when done and
+    -- returns True.
     updateSetPackageUploadTime :: MonadIO m => PackageId -> UTCTime -> m Bool,
 
     -- | Set an entry in the 00-index.tar file.
+    --
     -- The 00-index.tar file contains all the package entries, but it is an
     -- extensible format and we can add more stuff. E.g. version preferences
-    -- or crypto signatures.
+    -- or crypto signatures. This requires a file name, file contents, and
+    -- modification time for the tar entry.
+    --
+    -- This runs a `PackageChangeIndexExtra` hook when done.
     updateArchiveIndexEntry  :: MonadIO m => String -> (ByteString, UTCTime) -> m (),
 
-    -- | Notification of package or index changes
+    -- | Notification of package or index changes.
     packageChangeHook :: Hook PackageChange (),
 
-    -- | Notification of downloads
+    -- | Notification of tarball downloads.
     packageDownloadHook :: Hook PackageId ()
 }
 
@@ -80,25 +122,43 @@ instance IsHackageFeature CoreFeature where
 
 -- | This is designed so that you can pattern match on just the kinds of
 -- events you are interested in.
-data PackageChange = PackageChangeAdd    PkgInfo
-                   | PackageChangeDelete PkgInfo
-                   | PackageChangeInfo   PkgInfo PkgInfo
-                   | PackageChangeIndexExtra String ByteString UTCTime
+data PackageChange
+    -- | A package was newly added with this `PkgInfo`.
+    = PackageChangeAdd    PkgInfo
+    -- | A package was deleted, and this `PkgInfo` is no longer accessible in
+    -- the package index.
+    | PackageChangeDelete PkgInfo
+    -- | A package was updated from the first `PkgInfo` to the second.
+    | PackageChangeInfo   PkgInfo PkgInfo
+    -- | A file has changed in the package index tar not covered by any of the
+    -- other change types.
+    | PackageChangeIndexExtra String ByteString UTCTime
 
+-- | A predicate to use with `packageChangeHook` and `registerHookJust` for
+-- keeping other features synchronized with the main package index.
+--
+-- This indicates an update for a given `PackageId`, and the new `PkgInfo` if
+-- a new one has been added (`Nothing` in the case of deletion).
 isPackageChangeAny :: PackageChange -> Maybe (PackageId, Maybe PkgInfo)
 isPackageChangeAny (PackageChangeAdd        pkginfo) = Just (packageId pkginfo, Just pkginfo)
 isPackageChangeAny (PackageChangeDelete     pkginfo) = Just (packageId pkginfo, Nothing)
 isPackageChangeAny (PackageChangeInfo     _ pkginfo) = Just (packageId pkginfo, Just pkginfo)
 isPackageChangeAny  PackageChangeIndexExtra {}       = Nothing
 
+-- | A predicate to use with `packageChangeHook` and `registerHookJust` for
+-- newly added packages.
 isPackageAdd :: PackageChange -> Maybe PkgInfo
 isPackageAdd (PackageChangeAdd pkginfo) = Just pkginfo
 isPackageAdd _                          = Nothing
 
+-- | A predicate to use with `packageChangeHook` and `registerHookJust` for
+-- deleted packages.
 isPackageDelete :: PackageChange -> Maybe PkgInfo
 isPackageDelete (PackageChangeDelete pkginfo) = Just pkginfo
 isPackageDelete _                             = Nothing
 
+-- | A predicate to use with `packageChangeHook` and `registerHookJust` for
+-- any kind of change to packages or extras.
 isPackageIndexChange ::  PackageChange -> Maybe ()
 isPackageIndexChange _ = Just ()
 
@@ -113,30 +173,51 @@ isPackageIndexExtraChange          :: Maybe (String, ByteString, UTCTime)
 -}
 
 data CoreResource = CoreResource {
+    -- | The collection all packages.
     corePackagesPage    :: Resource,
+    -- | An individual package.
     corePackagePage     :: Resource,
+    -- | A Cabal file for a package version.
     coreCabalFile       :: Resource,
+    -- | A tarball for a package version.
     corePackageTarball  :: Resource,
 
-    -- Render resources
+    -- Rendering resources.
+    -- | URI for `corePackagesPage`, given a format (blank for none).
     indexPackageUri    :: String -> String,
+    -- | URI for `corePackagePage`, given a format and `PackageId`.
     corePackageIdUri   :: String -> PackageId -> String,
+    -- | URI for `corePackagePage`, given a format and `PackageName`.
     corePackageNameUri :: String -> PackageName -> String,
+    -- | URI for `coreCabalFile`, given a PackageId.
     coreCabalUri       :: PackageId -> String,
+    -- | URI for `corePackageTarball`, given a PackageId.
     coreTarballUri     :: PackageId -> String,
 
-    -- Find a PackageId or PackageName inside a path
+    -- | Find a PackageId or PackageName inside a path.
     packageInPath :: (MonadPlus m, FromReqURI a) => DynamicPath -> m a,
 
+    -- | Find a tarball's PackageId from inside a path, doing some checking
+    -- for consistency between the package and tarball.
+    --
     -- TODO: This is a rather ad-hoc function. Do we really need it?
     packageTarballInPath :: MonadPlus m => DynamicPath -> m PackageId,
 
-    -- Check that a package exists (guard fails if version is empty)
+    -- | Check that a particular version of a package exists (guard fails if
+    -- version is empty)
     guardValidPackageId   :: PackageId   -> ServerPartE (),
+    -- | Check that a package exists.
     guardValidPackageName :: PackageName -> ServerPartE (),
 
-    -- Find a package in the package DB
+    -- | Find a package in the package DB, failing if not found. This uses the
+    -- highest version number of a package.
+    --
+    -- In the presence of deprecation or preferred versions,
+    -- `withPackagePreferred` should generally be used instead for user-facing
+    -- version resolution.
     lookupPackageName :: PackageName -> ServerPartE [PkgInfo],
+    -- | Find a package version in the package DB, failing if not found. Behaves
+    -- like `lookupPackageName` if the version is empty.
     lookupPackageId   :: PackageId   -> ServerPartE PkgInfo
 }
 
@@ -416,6 +497,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           False -> mzero
 
 packageExists, packageIdExists :: (Package pkg, Package pkg') => PackageIndex pkg -> pkg' -> Bool
+-- | Whether a package exists in the given package index.
 packageExists   pkgs pkg = not . null $ PackageIndex.lookupPackageName pkgs (packageName pkg)
+-- | Whether a particular package version exists in the given package index.
 packageIdExists pkgs pkg = maybe False (const True) $ PackageIndex.lookupPackageId pkgs (packageId pkg)
 

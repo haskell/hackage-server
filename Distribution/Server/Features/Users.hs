@@ -38,51 +38,107 @@ import Distribution.Text (display, simpleParse)
 
 -- | A feature to allow manipulation of the database of users.
 --
+-- TODO: clean up mismatched and duplicate functionality (some noted below).
 data UserFeature = UserFeature {
+    -- | The users `HackageFeature`.
     userFeatureInterface :: HackageFeature,
 
+    -- | User resources.
     userResource :: UserResource,
 
+    -- | Notification that a user has been added. Currently unused.
     userAdded :: Hook () (), --TODO: delete, other status changes?
+    -- | The admin user group, including its description, members, and
+    -- modification thereof.
     adminGroup :: UserGroup,
 
     -- Authorisation
+    -- | Require any of a set of privileges.
     guardAuthorised_   :: [PrivilegeCondition] -> ServerPartE (),
+    -- | Require any of a set of privileges, giving the id of the current user.
     guardAuthorised    :: [PrivilegeCondition] -> ServerPartE UserId,
+    -- | Require being logged in, giving the id of the current user.
     guardAuthenticated :: ServerPartE UserId,
+    -- | A hook to override the default authentication error in particular
+    -- circumstances.
     authFailHook       :: Hook Auth.AuthError (Maybe ErrorResponse),
 
+    -- | Retrieves the entire user base.
     queryGetUserDb    :: forall m. MonadIO m => m Users.Users,
 
+    -- | Creates a Hackage 2 user credential.
     newUserAuth       :: UserName -> PasswdPlain -> UserAuth,
+    -- | Adds a user with a fresh name.
     updateAddUser     :: forall m. MonadIO m => UserName -> UserAuth -> m (Either Users.ErrUserNameClash UserId),
+    -- | Sets the account-enabled status of an existing user to True or False.
     updateSetUserEnabledStatus :: MonadIO m => UserId -> Bool
                                -> m (Maybe (Either Users.ErrNoSuchUserId Users.ErrDeletedUser)),
+    -- | Sets the credentials of an existing user.
     updateSetUserAuth :: MonadIO m => UserId -> UserAuth
                       -> m (Maybe (Either Users.ErrNoSuchUserId Users.ErrDeletedUser)),
 
+    -- | Adds a user to a group based on a "user" path component.
+    --
+    -- Use the UserGroup or GroupResource directly instead, as this is a hack.
     groupAddUser        :: UserGroup -> DynamicPath -> ServerPartE (),
+    -- | Likewise, deletes a user, will go away soon.
     groupDeleteUser     :: UserGroup -> DynamicPath -> ServerPartE (),
 
+    -- | Get a username from a path.
     userNameInPath      :: forall m. MonadPlus m => DynamicPath -> m UserName,
+    -- | Lookup a `UserId` from a name, if the name exists.
     lookupUserName      :: UserName -> ServerPartE UserId,
+    -- | Lookup full `UserInfo` from a name, if the name exists.
     lookupUserNameFull  :: UserName -> ServerPartE (UserId, UserInfo),
+    -- | Lookup full `UserInfo` from an id, if the id exists.
     lookupUserInfo      :: UserId -> ServerPartE UserInfo,
 
+    -- | An action to change a password directly, using "password" and
+    -- "repeat-password" form fields. Only admins and the user themselves
+    -- can do this. This is messy, as it was one of the first things writen
+    -- for the users feature.
+    --
+    -- TODO: update and make more usable.
     changePassword      :: UserName -> ServerPartE (),
+    -- | Determine if the first user can change the second user's password,
+    -- replicating auth functionality. Avoid using.
     canChangePassword   :: forall m. MonadIO m => UserId -> UserId -> m Bool,
+    -- | Action to create a new user with the given credentials. This takes the
+    -- desired name, a password, and a repeated password, validating all.
     newUserWithAuth     :: String -> PasswdPlain -> PasswdPlain -> ServerPartE UserName,
+    -- | Action for an admin to create a user with "username", "password", and
+    -- "repeat-password" username fields.
     adminAddUser        :: ServerPartE Response,
+    -- | Action to enable the given user based on an "enabled" form field.
     enabledAccount      :: UserName -> ServerPartE (),
+    -- | Action to delete the given user.
     deleteAccount       :: UserName -> ServerPartE (),
+
+    -- Create a group resource for the given resource path.
     groupResourceAt     :: String -> UserGroup -> IO (UserGroup, GroupResource),
+    -- | Create a parameretrized group resource for the given resource path.
+    -- The parameter `a` can here be called a group key, and there is
+    -- potentially a set of initial values.
+    --
+    -- This takes functions to create a user group on the fly for the given
+    -- key, go from a key to a DynamicPath (for URI generation), as well as
+    -- go from a DynamicPath to a key with some possibility of failure. This
+    -- should check key membership, as well.
+    --
+    -- When these parameretrized `UserGroup`s need to be modified, the returned
+    -- `a -> UserGroup` function should be used, as it wraps the given
+    -- `a -> UserGroup` function to keep user-to-group mappings up-to-date.
     groupResourcesAt    :: forall a. String -> (a -> UserGroup)
                                             -> (a -> DynamicPath)
                                             -> (DynamicPath -> ServerPartE a)
                                             -> [a]
                                             -> IO (a -> UserGroup, GroupResource),
+    -- | Look up whether the current user has (add, remove) capabilities for
+    -- the given group, erroring out if neither are present.
     lookupGroupEditAuth :: UserGroup -> ServerPartE (Bool, Bool),
+    -- | For a given user, return all of the URIs for groups they are in.
     getGroupIndex       :: forall m. (Functor m, MonadIO m) => UserId -> m [String],
+    -- | For a given URI, get a GroupDescription for it, if one can be found.
     getIndexDesc        :: forall m. MonadIO m => String -> m GroupDescription
 }
 
@@ -90,16 +146,26 @@ instance IsHackageFeature UserFeature where
   getFeatureInterface = userFeatureInterface
 
 data UserResource = UserResource {
+    -- | The list of all users.
     userList :: Resource,
+    -- | The main page for a given user.
     userPage :: Resource,
+    -- | A user's password.
     passwordResource :: Resource,
+    -- | A user's enabled status.
     enabledResource  :: Resource,
+    -- | The admin group.
     adminResource :: GroupResource,
 
+    -- | URI for `userList` given a format.
     userListUri :: String -> String,
+    -- | URI for `userPage` given a format and name.
     userPageUri :: String -> UserName -> String,
+    -- | URI for `passwordResource` given a format and name.
     userPasswordUri :: String -> UserName -> String,
+    -- | URI for `enabledResource` given a format and name.
     userEnabledUri  :: String -> UserName -> String,
+    -- | URI for `adminResource` given a format.
     adminPageUri :: String -> String
 }
 
@@ -107,15 +173,18 @@ instance FromReqURI UserName where
   fromReqURI = simpleParse
 
 data GroupResource = GroupResource {
+    -- | A group, potentially parametetrized over some collection.
     groupResource :: Resource,
+    -- | A user's presence in a group.
     groupUserResource :: Resource,
+    -- | A `UserGroup` for a group, with a `DynamicPath` for any parameterization.
     getGroup :: DynamicPath -> ServerPartE UserGroup
 }
 
 -- This is a mapping of UserId -> group URI and group URI -> description.
 -- Like many reverse mappings, it is probably rather volatile. Still, it is
 -- a secondary concern, as user groups should be defined by each feature
--- and not global, to be perfectly modular.
+-- and not globally, to be perfectly modular.
 data GroupIndex = GroupIndex {
     usersToGroupUri :: !(IntMap (Set String)),
     groupUrisToDesc :: !(Map String GroupDescription)
