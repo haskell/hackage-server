@@ -39,7 +39,7 @@ There are site administrators you can contact and there is an issue tracker.
 Please report bugs in the site <a
 href="https://github.com/haskell/hackage-server/issues">issue tracker</a>.  For
 issues with accounts or permissions please contact the administrators by email
-at <a href="mailto:admins@hackage.haskell.org">admins@hackage.haskell.org</a>
+at <a href="mailto:admin@hackage.haskell.org">admin@hackage.haskell.org</a>
 
 <h2 id="contributing-to-the-development">Contributing to the development</h2>
 
