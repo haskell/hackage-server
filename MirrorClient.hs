@@ -59,12 +59,13 @@ import Prelude hiding (catch)
 import Paths_hackage_server (version)
 
 data MirrorOpts = MirrorOpts {
-                    srcURI       :: URI,
-                    dstURI       :: URI,
-                    stateDir     :: FilePath,
-                    selectedPkgs :: [PackageId],
-                    continuous   :: Maybe Int, -- if so, interval in minutes
-                    mo_keepGoing    :: Bool
+                    srcURI          :: URI,
+                    dstURI          :: URI,
+                    stateDir        :: FilePath,
+                    selectedPkgs    :: [PackageId],
+                    continuous      :: Maybe Int, -- if so, interval in minutes
+                    mo_keepGoing    :: Bool,
+                    mirrorUploaders :: Bool
                   }
 
 data MirrorEnv = MirrorEnv {
@@ -315,19 +316,22 @@ mirrorPackages verbosity opts pkgsToMirror = do
           notifyResponse (GetPackageFailed theError pkgid)
         Nothing -> do
           notifyResponse GetPackageOk
-          putPackage dstBase pkginfo locCab locTgz
+          putPackage (mirrorUploaders opts) dstBase pkginfo locCab locTgz
 
-putPackage :: URI -> PkgIndexInfo -> FilePath -> FilePath -> MirrorSession ()
-putPackage baseURI (PkgIndexInfo pkgid mtime muname _muid) locCab locTgz = do
+putPackage :: Bool -> URI -> PkgIndexInfo -> FilePath -> FilePath -> MirrorSession ()
+putPackage doMirrorUploaders baseURI (PkgIndexInfo pkgid mtime muname _muid) locCab locTgz = do
     cab <- liftIO $ BS.readFile locCab
     tgz <- liftIO $ BS.readFile locTgz
 
-    rsp <- browserActions [
+    rsp <- browserActions $ [
         requestPUT cabURI "text/plain" cab
       , requestPUT tgzURI "application/x-gzip" tgz
       , maybe (return Nothing) putPackageUploadTime mtime
-      , maybe (return Nothing) putPackageUploader muname
-      ]
+      ] ++
+      (if doMirrorUploaders
+         then [maybe (return Nothing) putPackageUploader muname]
+         else []
+      )
 
     case rsp of
       Just theError ->
@@ -766,17 +770,25 @@ formatErrorResponse (ErrorResponse uri (a,b,c) reason mBody) =
 -------------------------
 
 data MirrorFlags = MirrorFlags {
-    flagCacheDir  :: Maybe FilePath,
-    flagContinuous:: Bool,
-    flagInterval  :: Maybe String,
-    flagKeepGoing :: Bool,
-    flagVerbosity :: Verbosity,
-    flagHelp      :: Bool
+    flagCacheDir        :: Maybe FilePath,
+    flagContinuous      :: Bool,
+    flagInterval        :: Maybe String,
+    flagKeepGoing       :: Bool,
+    flagMirrorUploaders :: Bool,
+    flagVerbosity       :: Verbosity,
+    flagHelp            :: Bool
 }
 
 defaultMirrorFlags :: MirrorFlags
 defaultMirrorFlags = MirrorFlags
-                       Nothing False Nothing False normal False
+  { flagCacheDir        = Nothing
+  , flagContinuous      = False
+  , flagInterval        = Nothing
+  , flagKeepGoing       = False
+  , flagMirrorUploaders = False
+  , flagVerbosity       = normal
+  , flagHelp            = False
+  }
 
 mirrorFlagDescrs :: [OptDescr (MirrorFlags -> MirrorFlags)]
 mirrorFlagDescrs =
@@ -803,6 +815,10 @@ mirrorFlagDescrs =
   , Option [] ["keep-going"]
       (NoArg (\opts -> opts { flagKeepGoing = True }))
       "Don't fail on mirroring errors, keep going."
+
+  , Option [] ["mirror-uploaders"]
+      (NoArg (\opts -> opts { flagMirrorUploaders = True }))
+      "Mirror the original uploaders which requires that they are already registered on the target hackage."
   ]
 
 validateOpts :: [String] -> IO (Verbosity, MirrorOpts)
@@ -830,7 +846,8 @@ validateOpts args = do
                    continuous   = if flagContinuous flags
                                     then Just interval
                                     else Nothing,
-                   mo_keepGoing    = flagKeepGoing flags
+                   mo_keepGoing = flagKeepGoing flags,
+                   mirrorUploaders = flagMirrorUploaders flags
                  }
           where
             mpkgs     = validatePackageIds pkgstrs
