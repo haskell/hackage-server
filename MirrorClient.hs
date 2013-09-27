@@ -65,7 +65,8 @@ data MirrorOpts = MirrorOpts {
                     selectedPkgs    :: [PackageId],
                     continuous      :: Maybe Int, -- if so, interval in minutes
                     mo_keepGoing    :: Bool,
-                    mirrorUploaders :: Bool
+                    mirrorUploaders :: Bool,
+                    srcIsOldHackage :: Bool
                   }
 
 data MirrorEnv = MirrorEnv {
@@ -113,7 +114,7 @@ mirrorInit verbosity opts = do
     when (continuous opts == Just 0) $
       warn verbosity "A sync interval of zero is a seriously bad idea!"
 
-    when (isOldHackageURI (srcURI opts)
+    when (isHackageURI (srcURI opts)
        && maybe False (<30) (continuous opts)) $
        die $ "Please don't hit the central hackage.haskell.org "
           ++ "more frequently than every 30 minutes."
@@ -202,8 +203,8 @@ mirrorOnce verbosity opts
 
     mirrorSession (mo_keepGoing opts) $ do
 
-      srcIndex <- downloadIndex (srcURI opts) srcCacheDir
-      dstIndex <- downloadIndex (dstURI opts) dstCacheDir
+      srcIndex <- downloadIndex (srcIsOldHackage opts) (srcURI opts) srcCacheDir
+      dstIndex <- downloadIndex (srcIsOldHackage opts) (dstURI opts) dstCacheDir
 
       let pkgsMissingFromDest = diffIndex srcIndex dstIndex
           pkgsToMirror
@@ -290,7 +291,7 @@ mirrorPackages verbosity opts pkgsToMirror = do
     extractCredentials _ = Nothing
 
     mirrorPackage pkginfo@(PkgIndexInfo pkgid _ _ _) = do
-      let srcPackage = if isOldHackageURI (srcURI opts)
+      let srcPackage = if srcIsOldHackage opts
               then "packages" </> "archive"
                     </> display (packageName pkgid)
                     </> display (packageVersion pkgid)
@@ -542,16 +543,15 @@ notifyResponse e = do
 -- Fetching info from source and destination servers
 ----------------------------------------------------
 
-downloadIndex :: URI -> FilePath -> MirrorSession [PkgIndexInfo]
-downloadIndex uri | isOldHackageURI uri = downloadOldIndex uri
-                  | otherwise           = downloadNewIndex uri
-  where
+downloadIndex :: Bool -> URI -> FilePath -> MirrorSession [PkgIndexInfo]
+downloadIndex isOldHackageURI
+    | isOldHackageURI = downloadOldIndex
+    | otherwise       = downloadNewIndex
 
-isOldHackageURI :: URI -> Bool
-isOldHackageURI uri
+isHackageURI :: URI -> Bool
+isHackageURI uri
   | Just auth <- uriAuthority uri = uriRegName auth == "hackage.haskell.org"
   | otherwise                     = False
-
 
 downloadOldIndex :: URI -> FilePath -> MirrorSession [PkgIndexInfo]
 downloadOldIndex uri cacheDir = do
@@ -775,6 +775,7 @@ data MirrorFlags = MirrorFlags {
     flagInterval        :: Maybe String,
     flagKeepGoing       :: Bool,
     flagMirrorUploaders :: Bool,
+    flagSrcIsOldHackage :: Bool,
     flagVerbosity       :: Verbosity,
     flagHelp            :: Bool
 }
@@ -786,6 +787,7 @@ defaultMirrorFlags = MirrorFlags
   , flagInterval        = Nothing
   , flagKeepGoing       = False
   , flagMirrorUploaders = False
+  , flagSrcIsOldHackage = False
   , flagVerbosity       = normal
   , flagHelp            = False
   }
@@ -819,6 +821,10 @@ mirrorFlagDescrs =
   , Option [] ["mirror-uploaders"]
       (NoArg (\opts -> opts { flagMirrorUploaders = True }))
       "Mirror the original uploaders which requires that they are already registered on the target hackage."
+
+  , Option [] ["src-is-old-hackage"]
+      (NoArg (\opts -> opts { flagSrcIsOldHackage = True }))
+      "Enable this when the source is the old Hackage server so that the correct URLs are used."
   ]
 
 validateOpts :: [String] -> IO (Verbosity, MirrorOpts)
@@ -847,7 +853,8 @@ validateOpts args = do
                                     then Just interval
                                     else Nothing,
                    mo_keepGoing = flagKeepGoing flags,
-                   mirrorUploaders = flagMirrorUploaders flags
+                   mirrorUploaders = flagMirrorUploaders flags,
+                   srcIsOldHackage = flagSrcIsOldHackage flags
                  }
           where
             mpkgs     = validatePackageIds pkgstrs
