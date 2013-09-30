@@ -4,3 +4,5 @@ state
 dist
 tags
 *.swp
+.cabal-sandbox
+cabal.sandbox.config
