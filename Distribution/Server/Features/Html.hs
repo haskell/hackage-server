@@ -443,8 +443,8 @@ mkHtmlCore HtmlUtilities{..}
           , resourceGet  = [("html", const $ readAsyncCache cachePackagesPage)]
           }
       , maintainPackage
-      , (resourceAt "/package/:package/debian-monitor") {
-            resourceGet = [("html", serveDebianMonitorPage)]
+      , (resourceAt "/package/:package/distro-monitor") {
+            resourceGet = [("html", serveDistroMonitorPage)]
           }
       ]
 
@@ -512,11 +512,11 @@ mkHtmlCore HtmlUtilities{..}
         , "versions" $= map (display . packageId) pkgs
         ]
 
-    serveDebianMonitorPage :: DynamicPath -> ServerPartE Response
-    serveDebianMonitorPage dpath = do
+    serveDistroMonitorPage :: DynamicPath -> ServerPartE Response
+    serveDistroMonitorPage dpath = do
       pkgname <- packageInPath dpath
       pkgs <- lookupPackageName pkgname
-      template <- getTemplate templates "debian-monitor.html"
+      template <- getTemplate templates "distro-monitor.html"
       return $ toResponse $ template
         [ "pkgname"  $= display pkgname
         , "versions" $= map (display . packageId) pkgs
