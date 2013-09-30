@@ -443,6 +443,9 @@ mkHtmlCore HtmlUtilities{..}
           , resourceGet  = [("html", const $ readAsyncCache cachePackagesPage)]
           }
       , maintainPackage
+      , (resourceAt "/package/:package/tarballs") {
+            resourceGet = [("html", serveTarballsPage)]
+          }
       ]
 
     -- Currently the main package page is thrown together by querying a bunch
@@ -504,6 +507,16 @@ mkHtmlCore HtmlUtilities{..}
       pkgs <- lookupPackageName pkgname
       guardAuthorisedAsMaintainerOrTrustee (pkgname :: PackageName)
       template <- getTemplate templates "maintain.html"
+      return $ toResponse $ template
+        [ "pkgname"  $= display pkgname
+        , "versions" $= map (display . packageId) pkgs
+        ]
+
+    serveTarballsPage :: DynamicPath -> ServerPartE Response
+    serveTarballsPage dpath = do
+      pkgname <- packageInPath dpath
+      pkgs <- lookupPackageName pkgname
+      template <- getTemplate templates "tarballs.html"
       return $ toResponse $ template
         [ "pkgname"  $= display pkgname
         , "versions" $= map (display . packageId) pkgs
