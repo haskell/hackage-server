@@ -59,12 +59,14 @@ import Prelude hiding (catch)
 import Paths_hackage_server (version)
 
 data MirrorOpts = MirrorOpts {
-                    srcURI       :: URI,
-                    dstURI       :: URI,
-                    stateDir     :: FilePath,
-                    selectedPkgs :: [PackageId],
-                    continuous   :: Maybe Int, -- if so, interval in minutes
-                    mo_keepGoing    :: Bool
+                    srcURI          :: URI,
+                    dstURI          :: URI,
+                    stateDir        :: FilePath,
+                    selectedPkgs    :: [PackageId],
+                    continuous      :: Maybe Int, -- if so, interval in minutes
+                    mo_keepGoing    :: Bool,
+                    mirrorUploaders :: Bool,
+                    srcIsOldHackage :: Bool
                   }
 
 data MirrorEnv = MirrorEnv {
@@ -112,7 +114,7 @@ mirrorInit verbosity opts = do
     when (continuous opts == Just 0) $
       warn verbosity "A sync interval of zero is a seriously bad idea!"
 
-    when (isOldHackageURI (srcURI opts)
+    when (isHackageURI (srcURI opts)
        && maybe False (<30) (continuous opts)) $
        die $ "Please don't hit the central hackage.haskell.org "
           ++ "more frequently than every 30 minutes."
@@ -201,8 +203,8 @@ mirrorOnce verbosity opts
 
     mirrorSession (mo_keepGoing opts) $ do
 
-      srcIndex <- downloadIndex (srcURI opts) srcCacheDir
-      dstIndex <- downloadIndex (dstURI opts) dstCacheDir
+      srcIndex <- downloadIndex (srcIsOldHackage opts) (srcURI opts) srcCacheDir
+      dstIndex <- downloadIndex (srcIsOldHackage opts) (dstURI opts) dstCacheDir
 
       let pkgsMissingFromDest = diffIndex srcIndex dstIndex
           pkgsToMirror
@@ -289,7 +291,7 @@ mirrorPackages verbosity opts pkgsToMirror = do
     extractCredentials _ = Nothing
 
     mirrorPackage pkginfo@(PkgIndexInfo pkgid _ _ _) = do
-      let srcPackage = if isOldHackageURI (srcURI opts)
+      let srcPackage = if srcIsOldHackage opts
               then "packages" </> "archive"
                     </> display (packageName pkgid)
                     </> display (packageVersion pkgid)
@@ -315,19 +317,22 @@ mirrorPackages verbosity opts pkgsToMirror = do
           notifyResponse (GetPackageFailed theError pkgid)
         Nothing -> do
           notifyResponse GetPackageOk
-          putPackage dstBase pkginfo locCab locTgz
+          putPackage (mirrorUploaders opts) dstBase pkginfo locCab locTgz
 
-putPackage :: URI -> PkgIndexInfo -> FilePath -> FilePath -> MirrorSession ()
-putPackage baseURI (PkgIndexInfo pkgid mtime muname _muid) locCab locTgz = do
+putPackage :: Bool -> URI -> PkgIndexInfo -> FilePath -> FilePath -> MirrorSession ()
+putPackage doMirrorUploaders baseURI (PkgIndexInfo pkgid mtime muname _muid) locCab locTgz = do
     cab <- liftIO $ BS.readFile locCab
     tgz <- liftIO $ BS.readFile locTgz
 
-    rsp <- browserActions [
+    rsp <- browserActions $ [
         requestPUT cabURI "text/plain" cab
       , requestPUT tgzURI "application/x-gzip" tgz
       , maybe (return Nothing) putPackageUploadTime mtime
-      , maybe (return Nothing) putPackageUploader muname
-      ]
+      ] ++
+      (if doMirrorUploaders
+         then [maybe (return Nothing) putPackageUploader muname]
+         else []
+      )
 
     case rsp of
       Just theError ->
@@ -538,16 +543,15 @@ notifyResponse e = do
 -- Fetching info from source and destination servers
 ----------------------------------------------------
 
-downloadIndex :: URI -> FilePath -> MirrorSession [PkgIndexInfo]
-downloadIndex uri | isOldHackageURI uri = downloadOldIndex uri
-                  | otherwise           = downloadNewIndex uri
-  where
+downloadIndex :: Bool -> URI -> FilePath -> MirrorSession [PkgIndexInfo]
+downloadIndex isOldHackageURI
+    | isOldHackageURI = downloadOldIndex
+    | otherwise       = downloadNewIndex
 
-isOldHackageURI :: URI -> Bool
-isOldHackageURI uri
+isHackageURI :: URI -> Bool
+isHackageURI uri
   | Just auth <- uriAuthority uri = uriRegName auth == "hackage.haskell.org"
   | otherwise                     = False
-
 
 downloadOldIndex :: URI -> FilePath -> MirrorSession [PkgIndexInfo]
 downloadOldIndex uri cacheDir = do
@@ -766,17 +770,27 @@ formatErrorResponse (ErrorResponse uri (a,b,c) reason mBody) =
 -------------------------
 
 data MirrorFlags = MirrorFlags {
-    flagCacheDir  :: Maybe FilePath,
-    flagContinuous:: Bool,
-    flagInterval  :: Maybe String,
-    flagKeepGoing :: Bool,
-    flagVerbosity :: Verbosity,
-    flagHelp      :: Bool
+    flagCacheDir        :: Maybe FilePath,
+    flagContinuous      :: Bool,
+    flagInterval        :: Maybe String,
+    flagKeepGoing       :: Bool,
+    flagMirrorUploaders :: Bool,
+    flagSrcIsOldHackage :: Bool,
+    flagVerbosity       :: Verbosity,
+    flagHelp            :: Bool
 }
 
 defaultMirrorFlags :: MirrorFlags
 defaultMirrorFlags = MirrorFlags
-                       Nothing False Nothing False normal False
+  { flagCacheDir        = Nothing
+  , flagContinuous      = False
+  , flagInterval        = Nothing
+  , flagKeepGoing       = False
+  , flagMirrorUploaders = False
+  , flagSrcIsOldHackage = False
+  , flagVerbosity       = normal
+  , flagHelp            = False
+  }
 
 mirrorFlagDescrs :: [OptDescr (MirrorFlags -> MirrorFlags)]
 mirrorFlagDescrs =
@@ -803,6 +817,14 @@ mirrorFlagDescrs =
   , Option [] ["keep-going"]
       (NoArg (\opts -> opts { flagKeepGoing = True }))
       "Don't fail on mirroring errors, keep going."
+
+  , Option [] ["mirror-uploaders"]
+      (NoArg (\opts -> opts { flagMirrorUploaders = True }))
+      "Mirror the original uploaders which requires that they are already registered on the target hackage."
+
+  , Option [] ["src-is-old-hackage"]
+      (NoArg (\opts -> opts { flagSrcIsOldHackage = True }))
+      "Enable this when the source is the old Hackage server so that the correct URLs are used."
   ]
 
 validateOpts :: [String] -> IO (Verbosity, MirrorOpts)
@@ -830,7 +852,9 @@ validateOpts args = do
                    continuous   = if flagContinuous flags
                                     then Just interval
                                     else Nothing,
-                   mo_keepGoing    = flagKeepGoing flags
+                   mo_keepGoing = flagKeepGoing flags,
+                   mirrorUploaders = flagMirrorUploaders flags,
+                   srcIsOldHackage = flagSrcIsOldHackage flags
                  }
           where
             mpkgs     = validatePackageIds pkgstrs
