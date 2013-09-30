@@ -443,8 +443,8 @@ mkHtmlCore HtmlUtilities{..}
           , resourceGet  = [("html", const $ readAsyncCache cachePackagesPage)]
           }
       , maintainPackage
-      , (resourceAt "/package/:package/tarballs") {
-            resourceGet = [("html", serveTarballsPage)]
+      , (resourceAt "/package/:package/debian-monitor") {
+            resourceGet = [("html", serveDebianMonitorPage)]
           }
       ]
 
@@ -512,11 +512,11 @@ mkHtmlCore HtmlUtilities{..}
         , "versions" $= map (display . packageId) pkgs
         ]
 
-    serveTarballsPage :: DynamicPath -> ServerPartE Response
-    serveTarballsPage dpath = do
+    serveDebianMonitorPage :: DynamicPath -> ServerPartE Response
+    serveDebianMonitorPage dpath = do
       pkgname <- packageInPath dpath
       pkgs <- lookupPackageName pkgname
-      template <- getTemplate templates "tarballs.html"
+      template <- getTemplate templates "debian-monitor.html"
       return $ toResponse $ template
         [ "pkgname"  $= display pkgname
         , "versions" $= map (display . packageId) pkgs
