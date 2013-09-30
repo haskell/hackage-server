@@ -545,7 +545,7 @@ downloadIndex uri | isOldHackageURI uri = downloadOldIndex uri
 
 isOldHackageURI :: URI -> Bool
 isOldHackageURI uri
-  | Just auth <- uriAuthority uri = uriRegName auth == "hackage.haskell.org"
+  | Just auth <- uriAuthority uri = uriRegName auth == "old.hackage.haskell.org"
   | otherwise                     = False
 
 
