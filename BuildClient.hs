@@ -409,7 +409,7 @@ buildOnce opts pkgs = keepGoing $ do
 
     keepGoing :: IO () -> IO ()
     keepGoing act
-      | bo_keepGoing opts = catch act showExceptionAsWarning
+      | bo_keepGoing opts = Control.Exception.catch act showExceptionAsWarning
       | otherwise         = act
 
     showExceptionAsWarning :: SomeException -> IO ()
