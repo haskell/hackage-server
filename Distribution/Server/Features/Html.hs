@@ -443,6 +443,9 @@ mkHtmlCore HtmlUtilities{..}
           , resourceGet  = [("html", const $ readAsyncCache cachePackagesPage)]
           }
       , maintainPackage
+      , (resourceAt "/package/:package/distro-monitor") {
+            resourceGet = [("html", serveDistroMonitorPage)]
+          }
       ]
 
     -- Currently the main package page is thrown together by querying a bunch
@@ -504,6 +507,16 @@ mkHtmlCore HtmlUtilities{..}
       pkgs <- lookupPackageName pkgname
       guardAuthorisedAsMaintainerOrTrustee (pkgname :: PackageName)
       template <- getTemplate templates "maintain.html"
+      return $ toResponse $ template
+        [ "pkgname"  $= display pkgname
+        , "versions" $= map (display . packageId) pkgs
+        ]
+
+    serveDistroMonitorPage :: DynamicPath -> ServerPartE Response
+    serveDistroMonitorPage dpath = do
+      pkgname <- packageInPath dpath
+      pkgs <- lookupPackageName pkgname
+      template <- getTemplate templates "distro-monitor.html"
       return $ toResponse $ template
         [ "pkgname"  $= display pkgname
         , "versions" $= map (display . packageId) pkgs
