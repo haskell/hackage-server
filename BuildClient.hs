@@ -1,4 +1,4 @@
-{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE CPP, PatternGuards #-}
 module Main (main) where
 
 import Network.Browser
@@ -34,6 +34,10 @@ import System.Console.GetOpt
 import System.Process
 import System.IO
 import System.IO.Error
+#if !MIN_VERSION_base(4,6,0)
+         hiding (catch)
+import Prelude hiding (catch)
+#endif
 
 import Data.Aeson (eitherDecode)
 
