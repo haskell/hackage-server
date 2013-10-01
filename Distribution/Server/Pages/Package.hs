@@ -285,10 +285,16 @@ sourceRepositoryToHtml sr
                           Just sd -> toHtml ("(" ++ sd ++ ")")
                           Nothing   -> noHtml]
       Just Mercurial
-       | (Just url, Nothing, Nothing, Nothing) <-
-         (repoLocation sr, repoModule sr, repoBranch sr, repoTag sr) ->
+       | (Just url, Nothing) <-
+         (repoLocation sr, repoModule sr) ->
           concatHtml [toHtml "hg clone ",
                       anchor ! [href url] << toHtml url,
+                      case repoBranch sr of
+                          Just branch -> toHtml (" -b " ++ branch)
+                          Nothing     -> noHtml,
+                      case repoTag sr of
+                          Just tag' -> toHtml (" -u " ++ tag')
+                          Nothing   -> noHtml,
                       case repoSubdir sr of
                           Just sd -> toHtml ("(" ++ sd ++ ")")
                           Nothing   -> noHtml]
