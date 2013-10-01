@@ -31,8 +31,8 @@ import System.FilePath.Posix    ((</>), (<.>))
 import System.Locale            (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
 
-packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)] -> [(String, Html)] -> Maybe URL -> Html
-packagePage render headLinks top sections bottom docURL =
+packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)] -> [(String, Html)] -> Maybe URL -> Bool -> Html
+packagePage render headLinks top sections bottom docURL isCandidate =
     hackagePageWith [] docTitle docSubtitle docBody [docFooter]
   where
     pkgid = rendPkgId render
@@ -52,7 +52,7 @@ packagePage render headLinks top sections bottom docURL =
              pkgBody render sections,
              moduleSection render docURL,
              downloadSection render,
-             maintainerSection pkgid,
+             maintainerSection pkgid isCandidate,
              map pair bottom
            ]
     bodyTitle = "The " ++ display (pkgName pkgid) ++ " package"
@@ -125,15 +125,16 @@ downloadSection PackageRender{..} =
     srcURL        = rendPkgUri </> "src/"
     tarGzFileName = display rendPkgId ++ ".tar.gz"
 
-maintainerSection :: PackageId -> [Html]
-maintainerSection pkgid =
+maintainerSection :: PackageId -> Bool -> [Html]
+maintainerSection pkgid isCandidate =
     [ h4 << "Maintainers' corner"
     , paragraph << "For package maintainers and hackage trustees"
     , ulist << li << anchor ! [href maintainURL]
                   << "edit package information"
     ]
   where
-    maintainURL = display (packageName pkgid) </> "maintain"
+    maintainURL | isCandidate = "candidate/maintain"
+                | otherwise   = display (packageName pkgid) </> "maintain"
 
 moduleSection :: PackageRender -> Maybe URL -> [Html]
 moduleSection render docURL = maybeToList $ fmap msect (rendModules render)
