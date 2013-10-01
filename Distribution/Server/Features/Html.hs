@@ -797,6 +797,13 @@ mkHtmlCandidates HtmlUtilities{..}
          , resourceGet  = [ ("html", servePublishForm) ]
          , resourcePost = [ ("html", servePostPublish) ]
          }
+      , (extendResource $ deletePage candidates) {
+           resourceDesc = [ (GET, "Show candidate deletion form")
+                          , (POST, "Delete a package candidate")
+                          ]
+         , resourceGet  = [ ("html", serveDeleteForm) ]
+         , resourcePost = [ ("html", doDeleteCandidate) ]
+         }
       ]
 
     serveCandidateUploadForm :: DynamicPath -> ServerPartE Response
@@ -917,6 +924,16 @@ mkHtmlCandidates HtmlUtilities{..}
           ] ++ case uploadWarnings uresult of
             [] -> []
             warns -> [paragraph << "There were some warnings:", unordList warns]
+
+    serveDeleteForm :: DynamicPath -> ServerPartE Response
+    serveDeleteForm dpath = do
+      candidate <- packageInPath dpath >>= lookupCandidateId
+      guardAuthorisedAsMaintainer (packageName candidate)
+      let pkgid = packageId candidate
+      return $ toResponse $ Resource.XHtml $ hackagePage "Deleting candidates"
+                  [form ! [theclass "box", XHtml.method "post", action $ deleteUri candidatesResource "" pkgid]
+                      << input ! [thetype "submit", value "Delete package candidate"]]
+
 
 {-------------------------------------------------------------------------------
   Preferred versions
