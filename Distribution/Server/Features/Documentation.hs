@@ -145,19 +145,21 @@ documentationFeature name
 
     documentationResource = fix $ \r -> DocumentationResource {
         packageDocsContent = (extendResourcePath "/docs/.." corePackagePage) {
-            resourceDesc = [ (GET, "Browse documentation") ]
-          , resourceGet  = [ ("", serveDocumentation) ]
+            resourceDesc   = [ (GET, "Browse documentation") ]
+          , resourceGet    = [ ("", serveDocumentation) ]
           }
       , packageDocsWhole = (extendResourcePath "/docs.:format" corePackagePage) {
             resourceDesc = [ (GET, "Download documentation")
                            , (PUT, "Upload documentation")
+                           , (DELETE, "Delete documentation")
                            ]
-          , resourceGet  = [ ("tar", serveDocumentationTar) ]
-          , resourcePut  = [ ("tar", uploadDocumentation) ]
+          , resourceGet    = [ ("tar", serveDocumentationTar) ]
+          , resourcePut    = [ ("tar", uploadDocumentation) ]
+          , resourceDelete = [ ("", deleteDocumentation) ]
           }
       , packageDocsStats = (extendResourcePath "/docs.:format" corePackagesPage) {
-            resourceDesc = [ (GET, "Get information about which packages have documentation") ]
-          , resourceGet  = [ ("json", serveDocumentationStats) ]
+            resourceDesc   = [ (GET, "Get information about which packages have documentation") ]
+          , resourceGet    = [ ("json", serveDocumentationStats) ]
           }
       , packageDocsContentUri = \pkgid ->
           renderResource (packageDocsContent r) [display pkgid]
@@ -236,6 +238,14 @@ documentationFeature name
         transformers-0.3.0.0-docs/index.html
         ..
    -}
+
+    deleteDocumentation :: DynamicPath -> ServerPartE Response
+    deleteDocumentation dpath = do
+      pkgid <- packageInPath dpath
+      guardValidPackageId pkgid
+      guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
+      updateState documentationState $ RemoveDocumentation pkgid
+      ok $ toResponse "Ok!"
 
     withDocumentation :: Resource -> DynamicPath
                       -> (PackageId -> BlobId -> TarIndex -> ServerPartE Response)
