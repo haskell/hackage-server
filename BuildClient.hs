@@ -38,7 +38,7 @@ import System.IO.Error
 import Data.Aeson (eitherDecode)
 
 data Mode = Help [String]
-          | Init String
+          | Init String [String]
           | Stats
           | Build [PackageId]
 
@@ -52,13 +52,13 @@ data BuildOpts = BuildOpts {
 
 data BuildConfig = BuildConfig {
                        bc_srcURI   :: URI,
+                       bc_auxURIs  :: [URI],
                        bc_username :: String,
                        bc_password :: String
                    }
 
-srcName :: BuildConfig -> String
-srcName config = fromMaybe (show (bc_srcURI config))
-                           (uriHostName (bc_srcURI config))
+srcName :: URI -> String
+srcName uri = fromMaybe (show uri) (uriHostName uri)
 
 installDirectory :: BuildOpts -> FilePath
 installDirectory bo = bo_stateDir bo </> "inst"
@@ -73,14 +73,14 @@ main = topHandler $ do
     case mode of
         Help strs ->
             do let usageHeader = intercalate "\n" [
-                       "Usage: hackage-build init URL [options]",
+                       "Usage: hackage-build init URL [auxiliary URLs] [options]",
                        "       hackage-build build [packages] [options]",
                        "       hackage-build stats",
                        "Options:"]
                mapM_ putStrLn $ strs
                putStrLn $ usageInfo usageHeader buildFlagDescrs
                unless (null strs) exitFailure
-        Init uri -> initialise opts uri
+        Init uri auxUris -> initialise opts uri auxUris
         Stats ->
             do stateDir <- canonicalizePath $ bo_stateDir opts
                let opts' = opts {
@@ -101,8 +101,8 @@ main = topHandler $ do
                         (const (buildOnce opts' pkgs))
                         ()
 
-initialise :: BuildOpts -> String -> IO ()
-initialise opts uriStr
+initialise :: BuildOpts -> String -> [String] -> IO ()
+initialise opts uriStr auxUrisStrs
     = do putStrLn "Enter hackage username"
          username <- getLine
          putStrLn "Enter hackage password"
@@ -113,25 +113,27 @@ initialise opts uriStr
          -- have Show/Read, so that doesn't work. So instead, we write
          -- out a tuple containing the uri as a string, and parse it
          -- each time we read it.
-         writeFile (configFile opts) (show (uriStr, username, password))
+         writeFile (configFile opts) (show (uriStr, auxUrisStrs, username, password))
 
 readConfig :: BuildOpts -> IO BuildConfig
 readConfig opts = do xs <- readFile $ configFile opts
                      case reads xs of
-                         [((uriStr, username, password), "")] ->
-                             case validateHackageURI uriStr of
+                         [((uriStr, auxUriStrs, username, password), "")] ->
+                             case mapM validateHackageURI (uriStr : auxUriStrs) of
                              -- Shouldn't happen: We check that this
                              -- returns Right when we create the
                              -- config file. See [Note: Show/Read URI].
-                             Left theError -> die theError
-                             Right uri ->
-                                 return $ BuildConfig {
-                                              bc_srcURI   = uri,
-                                              bc_username = username,
-                                              bc_password = password
-                                          }
+                               Left theError -> die theError
+                               Right (uri : auxUris) ->
+                                   return $ BuildConfig {
+                                                bc_srcURI   = uri,
+                                                bc_auxURIs  = auxUris,
+                                                bc_username = username,
+                                                bc_password = password
+                                            }
+                               Right _ -> error "The impossible happened"
                          _ ->
-                             die "Can't parse config file"
+                             die "Can't parse config file (maybe re-run \"hackage-build init\")"
 
 configFile :: BuildOpts -> FilePath
 configFile opts = bo_stateDir opts </> "hd-config"
@@ -448,8 +450,8 @@ mkPackageFailed opts = do
 prepareBuildPackages :: BuildOpts -> BuildConfig -> IO ()
 prepareBuildPackages opts config
  = withCurrentDirectory (bo_stateDir opts) $ do
-    writeFile "cabal-config" $ unlines [
-        "remote-repo: " ++ srcName config ++ ":" ++ show (bc_srcURI config <//> "packages" </> "archive"),
+    writeFile "cabal-config" . unlines $
+      remoteRepos ++ [
         "remote-repo-cache: " ++ installDirectory opts </> "packages",
         "logs-dir: " ++ installDirectory opts </> "logs",
         "library-for-ghci: False",
@@ -461,6 +463,12 @@ prepareBuildPackages opts config
         "username: " ++ bc_username config,
         "password: " ++ bc_password config
       ]
+ where
+  remoteRepo :: URI -> String
+  remoteRepo uri = "remote-repo: " ++ srcName uri ++ ":" ++ show uri
+
+  remoteRepos :: [String]
+  remoteRepos = map remoteRepo (bc_srcURI config : bc_auxURIs config)
 
 -- | Build documentation and return @(Just tgz)@ for the built tgz file
 -- on success, or @Nothing@ otherwise.
@@ -553,7 +561,7 @@ buildPackage verbosity opts config docInfo = do
         -- Remove reports for dependencies (so that we only submit the report
         -- for the package we are currently building)
         dotCabal <- getAppUserDataDirectory "cabal"
-        let reportsDir = dotCabal </> "reports" </> srcName config
+        let reportsDir = dotCabal </> "reports" </> srcName (bc_srcURI config)
         handleDoesNotExist (return ()) $ withRecursiveContents_ reportsDir $ \path ->
            unless ((display (docInfoPackage docInfo) ++ ".log") `isSuffixOf` path) $
              removeFile path
@@ -572,7 +580,10 @@ buildPackage verbosity opts config docInfo = do
             handleDoesNotExist (return ()) $ removeDirectoryRecursive reportsDir
 
             -- Other data goes into a local file storing build reports:
-            let simple_report_log = installDirectory opts </> "packages" </> srcName config </> "build-reports.log"
+            let simple_report_log = installDirectory opts
+                                </> "packages"
+                                </> srcName (bc_srcURI config)
+                                </> "build-reports.log"
             handleDoesNotExist (return ()) $ removeFile simple_report_log
 
         docs_generated <- liftM2 (&&) (doesDirectoryExist doc_dir_html)
@@ -715,14 +726,12 @@ validateOpts args = do
         mode = case args' of
                _ | flagHelp flags -> Help []
                  | not (null errs) -> Help errs
-               ["init", uri] ->
+               "init" : uri : auxUris ->
                    -- We don't actually want the URI at this point
                    -- (see [Note: Show/Read URI])
-                   case validateHackageURI uri of
-                   Left  theError -> Help [theError]
-                   Right _        -> Init uri
-               "init" : _ ->
-                   Help ["init takes a single argument (repo URL)"]
+                   case mapM validateHackageURI (uri : auxUris) of
+                     Left  theError -> Help [theError]
+                     Right _        -> Init uri auxUris
                ["stats"] ->
                    Stats
                "stats" : _ ->
