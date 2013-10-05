@@ -1,0 +1,12 @@
+language: haskell
+
+notifications:
+  email: false
+  irc: "chat.freenode.net#hackage"
+
+install:
+  - sudo apt-get install libicu-dev
+  - cabal install --only-dependencies --enable-tests --disable-optimization --ghc-options=-w
+
+script:
+  - cabal configure --enable-tests --disable-optimization && cabal build

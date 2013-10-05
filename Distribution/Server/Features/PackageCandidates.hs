@@ -92,8 +92,10 @@ instance IsHackageFeature PackageCandidatesFeature where
 data PackageCandidatesResource = PackageCandidatesResource {
     packageCandidatesPage :: Resource,
     publishPage           :: Resource,
+    deletePage            :: Resource,
     packageCandidatesUri  :: String -> PackageName -> String,
     publishUri            :: String -> PackageId -> String,
+    deleteUri             :: String -> PackageId -> String,
 
     -- TODO: Why don't the following entries have a corresponding entry
     -- in CoreResource?
@@ -207,6 +209,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     candidatesResource = fix $ \r -> PackageCandidatesResource {
         packageCandidatesPage = resourceAt "/package/:package/candidates/.:format"
       , publishPage = resourceAt "/package/:package/candidate/publish.:format"
+      , deletePage = resourceAt "/package/:package/candidate/delete.:format"
       , candidateContents = (resourceAt "/package/:package/candidate/src/..") {
             resourceGet = [("", serveContents)]
           }
@@ -217,6 +220,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           renderResource (packageCandidatesPage r) [display pkgname, format]
       , publishUri = \format pkgid ->
           renderResource (publishPage r) [display pkgid, format]
+      , deleteUri = \format pkgid ->
+          renderResource (deletePage r) [display pkgid, format]
       , candidateChangeLogUri = \pkgid ->
           renderResource (candidateChangeLog candidatesResource) [display pkgid, display (packageName pkgid)]
       }

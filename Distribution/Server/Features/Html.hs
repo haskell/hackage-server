@@ -109,7 +109,7 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
     -- Page templates
     templates <- loadTemplates serverTemplatesMode
                    [serverTemplatesDir, serverTemplatesDir </> "Html"]
-                   [ "maintain.html" ]
+                   [ "maintain.html", "maintain-candidate.html" ]
 
     -- do rec, tie the knot
     rec let (feature, packageIndex, packagesPage) =
@@ -218,7 +218,7 @@ htmlFeature user
     htmlUsers      = mkHtmlUsers      user usersdetails
     htmlUploads    = mkHtmlUploads    utilities upload
     htmlDownloads  = mkHtmlDownloads  utilities download
-    htmlCandidates = mkHtmlCandidates utilities core versions upload docsCandidates candidates
+    htmlCandidates = mkHtmlCandidates utilities core versions upload docsCandidates candidates templates
     htmlPreferred  = mkHtmlPreferred  utilities core versions
     htmlTags       = mkHtmlTags       utilities core list tags
     htmlSearch     = mkHtmlSearch     utilities      list names
@@ -443,6 +443,9 @@ mkHtmlCore HtmlUtilities{..}
           , resourceGet  = [("html", const $ readAsyncCache cachePackagesPage)]
           }
       , maintainPackage
+      , (resourceAt "/package/:package/distro-monitor") {
+            resourceGet = [("html", serveDistroMonitorPage)]
+          }
       ]
 
     -- Currently the main package page is thrown together by querying a bunch
@@ -493,7 +496,7 @@ mkHtmlCore HtmlUtilities{..}
               Nothing -> noHtml
         -- and put it all together
         return $ toResponse $ Resource.XHtml $
-            Pages.packagePage render [tagLinks] [deprHtml] (beforeHtml ++ middleHtml ++ afterHtml) [] docURL
+            Pages.packagePage render [tagLinks] [deprHtml] (beforeHtml ++ middleHtml ++ afterHtml) [] docURL False
       where
         showDist (dname, info) = toHtml (display dname ++ ":") +++
             anchor ! [href $ distroUrl info] << toHtml (display $ distroVersion info)
@@ -504,6 +507,16 @@ mkHtmlCore HtmlUtilities{..}
       pkgs <- lookupPackageName pkgname
       guardAuthorisedAsMaintainerOrTrustee (pkgname :: PackageName)
       template <- getTemplate templates "maintain.html"
+      return $ toResponse $ template
+        [ "pkgname"  $= display pkgname
+        , "versions" $= map (display . packageId) pkgs
+        ]
+
+    serveDistroMonitorPage :: DynamicPath -> ServerPartE Response
+    serveDistroMonitorPage dpath = do
+      pkgname <- packageInPath dpath
+      pkgs <- lookupPackageName pkgname
+      template <- getTemplate templates "distro-monitor.html"
       return $ toResponse $ template
         [ "pkgname"  $= display pkgname
         , "versions" $= map (display . packageId) pkgs
@@ -729,6 +742,7 @@ mkHtmlCandidates :: HtmlUtilities
                  -> UploadFeature
                  -> DocumentationFeature
                  -> PackageCandidatesFeature
+                 -> Templates
                  -> HtmlCandidates
 mkHtmlCandidates HtmlUtilities{..}
                  CoreFeature{ coreResource = CoreResource{packageInPath}
@@ -737,7 +751,8 @@ mkHtmlCandidates HtmlUtilities{..}
                  VersionsFeature{ queryGetPreferredInfo }
                  UploadFeature{ guardAuthorisedAsMaintainer }
                  DocumentationFeature{documentationResource, queryHasDocumentation}
-                 PackageCandidatesFeature{..} = HtmlCandidates{..}
+                 PackageCandidatesFeature{..}
+                 templates = HtmlCandidates{..}
   where
     candidates     = candidatesResource
     candidatesCore = candidatesCoreResource
@@ -795,6 +810,13 @@ mkHtmlCandidates HtmlUtilities{..}
          , resourceGet  = [ ("html", servePublishForm) ]
          , resourcePost = [ ("html", servePostPublish) ]
          }
+      , (extendResource $ deletePage candidates) {
+           resourceDesc = [ (GET, "Show candidate deletion form")
+                          , (POST, "Delete a package candidate")
+                          ]
+         , resourceGet  = [ ("html", serveDeleteForm) ]
+         , resourcePost = [ ("html", doDeleteCandidate) ]
+         }
       ]
 
     serveCandidateUploadForm :: DynamicPath -> ServerPartE Response
@@ -821,10 +843,12 @@ mkHtmlCandidates HtmlUtilities{..}
     serveCandidateMaintain dpath = do
       candidate <- packageInPath dpath >>= lookupCandidateId
       guardAuthorisedAsMaintainer (packageName candidate)
-      return $ toResponse $ Resource.XHtml $ hackagePage "Maintain candidate"
-          [toHtml "Here, you can delete a candidate, publish it, upload a new one, and edit the maintainer group."]
+      template <- getTemplate templates "maintain-candidate.html"
+      return $ toResponse $ template
+        [ "pkgname"  $= display (packageName candidate)
+        , "pkgversion" $= display (packageVersion candidate)
+        ]
     {-some useful URIs here: candidateUri check "" pkgid, packageCandidatesUri check "" pkgid, publishUri check "" pkgid-}
-
 
     serveCandidatePage :: Resource -> DynamicPath -> ServerPartE Response
     serveCandidatePage maintain dpath = do
@@ -848,7 +872,7 @@ mkHtmlCandidates HtmlUtilities{..}
               [] -> []
               warn -> [thediv ! [theclass "notification"] << [toHtml "Warnings:", unordList warn]]
       return $ toResponse $ Resource.XHtml $
-          Pages.packagePage render [maintainHtml] warningBox sectionHtml [] docURL
+          Pages.packagePage render [maintainHtml] warningBox sectionHtml [] docURL True
 
     servePublishForm :: DynamicPath -> ServerPartE Response
     servePublishForm dpath = do
@@ -913,6 +937,16 @@ mkHtmlCandidates HtmlUtilities{..}
           ] ++ case uploadWarnings uresult of
             [] -> []
             warns -> [paragraph << "There were some warnings:", unordList warns]
+
+    serveDeleteForm :: DynamicPath -> ServerPartE Response
+    serveDeleteForm dpath = do
+      candidate <- packageInPath dpath >>= lookupCandidateId
+      guardAuthorisedAsMaintainer (packageName candidate)
+      let pkgid = packageId candidate
+      return $ toResponse $ Resource.XHtml $ hackagePage "Deleting candidates"
+                  [form ! [theclass "box", XHtml.method "post", action $ deleteUri candidatesResource "" pkgid]
+                      << input ! [thetype "submit", value "Delete package candidate"]]
+
 
 {-------------------------------------------------------------------------------
   Preferred versions

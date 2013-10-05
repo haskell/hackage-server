@@ -95,6 +95,7 @@ initTagsFeature ServerEnv{serverStateDir} core@CoreFeature{..} upload = do
           let pkgname = packageName pkgid
               tags = Set.fromList . constructImmutableTags . pkgDesc $ pkginfo
           updateState tagsState . SetPackageTags pkgname $ tags
+          runHook_ updateTag (Set.singleton pkgname, tags)
 
     return feature
 
