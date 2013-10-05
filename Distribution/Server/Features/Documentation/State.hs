@@ -43,6 +43,10 @@ insertDocumentation :: PackageIdentifier -> BlobId -> Update Documentation ()
 insertDocumentation pkgId blob
     = State.modify $ \doc -> doc {documentation = Map.insert pkgId blob (documentation doc)}
 
+removeDocumentation :: PackageIdentifier -> Update Documentation ()
+removeDocumentation pkgId
+    = State.modify $ \doc -> doc {documentation = Map.delete pkgId (documentation doc)}
+
 getDocumentation :: Query Documentation Documentation
 getDocumentation = ask
 
@@ -51,6 +55,7 @@ replaceDocumentation :: Documentation -> Update Documentation ()
 replaceDocumentation = State.put
 
 makeAcidic ''Documentation ['insertDocumentation
+                           ,'removeDocumentation
                            ,'lookupDocumentation
                            ,'hasDocumentation
                            ,'getDocumentation
