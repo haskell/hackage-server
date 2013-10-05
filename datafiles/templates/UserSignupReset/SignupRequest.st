@@ -42,6 +42,13 @@ administrators ever needs to contact you. It will not be displayed on
 the website (but note that email addresses in .cabal files that you
 upload are public).
 
+<p>Most contributors to Hackage attach their real name to their packages and
+contributions. However, we have no wish to discourage contributors with
+personal or professional reasons for wanting pseudonymity. We ask only that
+such people choose a name (and username) that looks at home among a collection
+of real names; we will be unwilling to add Kittenlover97 to the package
+uploader group.
+
 <p><input type="submit" value="Request account">
 
 <p>You will be sent an email containing a link to a page where you
