@@ -37,21 +37,33 @@ import qualified Distribution.Server.Util.GZip as GZip
 
 
 data UploadFeature = UploadFeature {
+    -- | The package upload `HackageFeature`.
     uploadFeatureInterface :: HackageFeature,
 
+    -- | Upload resources.
     uploadResource     :: UploadResource,
+    -- | The main upload routine. This uses extractPackage on a multipart
+    -- request to get contextual information.
     uploadPackage      :: ServerPartE UploadResult,
 
     --TODO: consider moving the trustee and/or per-package maintainer groups
     --      lower down in the feature hierarchy; many other features want to
     --      use the trustee group purely for auth decisions
+    -- | The group of Hackage trustees.
     trusteesGroup      :: UserGroup,
+    -- | The group of package uploaders.
     uploadersGroup     :: UserGroup,
+    -- | The group of maintainers for a given package.
     maintainersGroup   :: PackageName -> UserGroup,
 
+    -- | Requiring being logged in as the maintainer of a package.
     guardAuthorisedAsMaintainer          :: PackageName -> ServerPartE (),
+    -- | Requiring being logged in as the maintainer of a package or a trustee.
     guardAuthorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE (),
 
+    -- | Takes an upload request and, depending on the result of the
+    -- passed-in function, either commits the uploaded tarball to the blob
+    -- storage or throws it away and yields an error.
     extractPackage     :: (Users.UserId -> UploadResult -> IO (Maybe ErrorResponse))
                        -> ServerPartE (Users.UserId, UploadResult, PkgTarball)
 }
@@ -60,19 +72,35 @@ instance IsHackageFeature UploadFeature where
     getFeatureInterface = uploadFeatureInterface
 
 data UploadResource = UploadResource {
+    -- | The page for uploading a package, the same as `corePackagesPage`.
     uploadIndexPage :: Resource,
+    -- | The page for deleting a package, the same as `corePackagePage`.
+    --
+    -- This is fairly dangerous and is not currently used.
     deletePackagePage  :: Resource,
+    -- | The maintainers group for each package.
     maintainersGroupResource :: GroupResource,
+    -- | The trustee group.
     trusteesGroupResource    :: GroupResource,
+    -- | The allowed-uploaders group.
     uploadersGroupResource   :: GroupResource,
+
+    -- | URI for `maintainersGroupResource` given a format and `PackageId`.
     packageMaintainerUri :: String -> PackageId -> String,
+    -- | URI for `trusteesGroupResource` given a format.
     trusteeUri  :: String -> String,
+    -- | URI for `uploadersGroupResource` given a format.
     uploaderUri :: String -> String
 }
 
+-- | The representation of an intermediate result in the upload process,
+-- indicating a package which meets the requirements to go into Hackage.
 data UploadResult = UploadResult {
+    -- The parsed Cabal file.
     uploadDesc :: !GenericPackageDescription,
+    -- The text of the Cabal file.
     uploadCabal :: !ByteString,
+    -- Any warnings from unpacking the tarball.
     uploadWarnings :: ![String]
 }
 
