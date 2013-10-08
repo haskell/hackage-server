@@ -28,7 +28,7 @@ import qualified Data.Set as Set
 import Data.Maybe (fromMaybe)
 import Data.Function (fix)
 import Control.Applicative (optional)
-import Data.Aeson (Value(..))
+import Data.Aeson (Value(..), toJSON)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Vector         as Vector
 import qualified Data.Text           as Text
@@ -292,7 +292,10 @@ userFeature  usersState adminsState
       }
 
     userResource = fix $ \r -> UserResource {
-        userList = (resourceAt "/users/.:format")
+        userList = (resourceAt "/users/.:format") {
+            resourceDesc   = [ (GET, "list of users") ]
+          , resourceGet    = [ ("json", serveUserListJSON) ]
+          }
       , userPage = (resourceAt "/user/:username.:format") {
             resourceDesc   = [ (PUT,    "create user")
                              , (DELETE, "delete user")
@@ -695,6 +698,14 @@ userFeature  usersState adminsState
                      -> (Map String GroupDescription -> Map String GroupDescription)
                      -> GroupIndex -> GroupIndex
     adjustGroupIndex f g (GroupIndex a b) = GroupIndex (f a) (g b)
+
+    -- JSON resources ---------------------------------------------------------
+
+    serveUserListJSON :: DynamicPath -> ServerPartE Response
+    serveUserListJSON _ = do
+      userlist <- Users.enumerateActiveUsers <$> queryGetUserDb
+      let users = [display (userName uinfo) | (_, uinfo) <- userlist]
+      return . toResponse $ toJSON users
 
 {------------------------------------------------------------------------------
   Some aeson auxiliary functions
