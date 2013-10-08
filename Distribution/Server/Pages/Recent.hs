@@ -3,6 +3,7 @@
 module Distribution.Server.Pages.Recent (
     recentPage,
     recentFeed,
+    recentTxt
   ) where
 
 import Distribution.Server.Packages.Types
@@ -33,6 +34,7 @@ import Data.Time.Format
          ( formatTime )
 import System.Locale
          ( defaultTimeLocale )
+import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
 
 
 -- | Takes a list of package info, in reverse order by timestamp.
@@ -116,6 +118,17 @@ releaseItem users hostURI pkgInfo@(PkgInfo {
     desc  = "<i>Added by " ++ display user ++ ", " ++ showTime time ++ ".</i>"
          ++ if null body then "" else "<p>" ++ body
     user = Users.userIdToName users userId
+
+recentTxt :: Users -> [PkgInfo] -> BS.Lazy.ByteString
+recentTxt users = BS.Lazy.unlines . map go
+  where
+    go (PkgInfo {
+      pkgInfoId = pkgId
+    , pkgUploadData = (time, userId)
+    }) = BS.Lazy.pack $ unwords [ showTime time, display user, display (packageName pkgId), display (packageVersion pkgId) ]
+      where
+        user = Users.userIdToName users userId
+
 
 unPackageName :: PackageName -> String
 unPackageName (PackageName name) = name

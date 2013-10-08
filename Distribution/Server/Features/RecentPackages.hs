@@ -61,7 +61,7 @@ initRecentPackagesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verb
 
         cacheRecent <- newAsyncCacheNF updateRecentCache
                          defaultAsyncCachePolicy {
-                           asyncCacheName = "recent uploads (html,rss)",
+                           asyncCacheName = "recent uploads (html,rss,txt)",
                            asyncCacheUpdateDelay  = serverCacheDelay,
                            asyncCacheSyncInit     = False,
                            asyncCacheLogVerbosity = verbosity
@@ -78,8 +78,8 @@ recentPackagesFeature :: ServerEnv
                       -> UserFeature
                       -> CoreFeature
                       -> PackageContentsFeature
-                      -> AsyncCache (Response, Response)
-                      -> (RecentPackagesFeature, IO (Response, Response))
+                      -> AsyncCache (Response, Response, Response)
+                      -> (RecentPackagesFeature, IO (Response, Response, Response))
 
 recentPackagesFeature env
                       UserFeature{..}
@@ -103,8 +103,9 @@ recentPackagesFeature env
     recentPackagesResource = RecentPackagesResource {
         recentPackages = (resourceAt "/recent.:format") {
             resourceGet = [
-                ("html", const $ liftM fst $ readAsyncCache cacheRecent)
-              , ("rss",  const $ liftM snd $ readAsyncCache cacheRecent)
+                ("html", const $ liftM (\(h,_,_) -> h) $ readAsyncCache cacheRecent)
+              , ("rss",  const $ liftM (\(_,r,_) -> r) $ readAsyncCache cacheRecent)
+              , ("txt",  const $ liftM (\(_,_,t) -> t) $ readAsyncCache cacheRecent)
               ]
           }
       }
@@ -123,7 +124,8 @@ recentPackagesFeature env
         let recentChanges = reverse $ sortBy (comparing pkgUploadTime) (PackageIndex.allPackages pkgIndex)
             xmlRepresentation = toResponse $ Resource.XHtml $ Pages.recentPage users recentChanges
             rssRepresentation = toResponse $ Pages.recentFeed users (serverBaseURI env) now recentChanges
-        return (xmlRepresentation, rssRepresentation)
+            txtRepresentation = toResponse $ Pages.recentTxt users recentChanges
+        return (xmlRepresentation, rssRepresentation, txtRepresentation)
 
 {-
 data SimpleCondTree = SimpleCondNode [Dependency] [(Condition ConfVar, SimpleCondTree, SimpleCondTree)]
