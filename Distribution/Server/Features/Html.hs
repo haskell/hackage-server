@@ -1340,7 +1340,7 @@ mkHtmlSearch HtmlUtilities{..}
         (mtermsStr, offset, limit) <-
           queryString $ (,,) <$> optional (look "terms")
                              <*> mplus (lookRead "offset") (pure 0)
-                             <*> mplus (lookRead "limit") (pure 10)
+                             <*> mplus (lookRead "limit") (pure 100)
         case mtermsStr of
           Just termsStr | terms <- words termsStr, not (null terms) -> do
             pkgnames <- searchPackages terms
