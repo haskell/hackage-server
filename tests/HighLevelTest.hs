@@ -5,6 +5,7 @@ server instance, and then uses HTTP to run various requests on that
 server.
 -}
 
+{-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
 import qualified Codec.Archive.Tar as Tar
@@ -31,6 +32,14 @@ import System.Process
 import Package
 import Run
 
+-- For the html5.validator.nu API
+import Data.String ()
+import Data.Aeson (FromJSON(..), Value(..))
+import qualified Data.Aeson          as Aeson
+import qualified Data.Text           as Text
+import qualified Data.HashMap.Strict as HashMap
+import qualified Data.Vector         as Vector
+
 -- A random port, that hopefully won't clash with anything else
 testPort :: Int
 testPort = 8392
@@ -52,9 +61,9 @@ doit root
     = do info "initialising hackage database"
          runServerChecked True root ["init"]
          withServerRunning root $ do validate (mkUrl "/")
-                                     validate (mkUrl "/accounts.html")
-                                     validate (mkUrl "/admin.html")
-                                     validate (mkUrl "/upload.html")
+                                     validate (mkUrl "/accounts")
+                                     validate (mkUrl "/admin")
+                                     validate (mkUrl "/upload")
                                      runUserTests
                                      runPackageUploadTests
                                      runPackageTests
@@ -97,7 +106,7 @@ withServerRunning root f
                            info "Finished with server")
 
 serverRunningArgs :: [String]
-serverRunningArgs = ["run", "--disable-caches", "--ip", "127.0.0.1", "--port", show testPort]
+serverRunningArgs = ["run", "--ip", "127.0.0.1", "--port", show testPort]
 
 runUserTests :: IO ()
 runUserTests = do
@@ -417,13 +426,6 @@ badResponse rsp = die ("Bad response code: " ++ show (rspCode rsp) ++ "\n\n"
                     ++ show rsp ++ "\n\n"
                     ++ rspBody rsp)
 
--- validate is in the wdg-html-validator package on Debian
-validate :: String -> IO ()
-validate url = do putStrLn ("HTML validating " ++ show url)
-                  ec <- rawSystem "/usr/bin/validate" ["--warn", url]
-                  unless (ec == ExitSuccess) $
-                      die "Validate failed"
-
 waitForServer :: IO ()
 waitForServer = f 10
     where f :: Int -> IO ()
@@ -451,8 +453,8 @@ runServer :: Bool -> FilePath -> [String] -> IO (Maybe ExitCode)
 runServer withStatic root args = run server args'
     where server = root </> "dist/build/hackage-server/hackage-server"
           args' = if withStatic
-                  then ("--static-dir=" ++ root </> "static/") : args
-                  else                                           args
+                  then ("--static-dir=" ++ root </> "datafiles/") : args
+                  else                                              args
 
 info :: String -> IO ()
 info str = putStrLn ("= " ++ str)
@@ -461,3 +463,80 @@ die :: String -> IO a
 die err = do hPutStrLn stderr err
              exitFailure
 
+
+{------------------------------------------------------------------------------
+  Interface to html5.validator.nu
+
+  NOTE: We only parse bits of the information returned by html5.validator.nu
+------------------------------------------------------------------------------}
+
+data ValidateResult = ValidateResult {
+    validateMessages :: [ValidateMessage]
+  }
+  deriving Show
+
+data ValidateMessage = ValidateInfo {
+      validateMessage :: String
+    }
+  | ValidateError {
+      validateMessage :: String
+  }
+  deriving Show
+
+instance FromJSON ValidateResult where
+  parseJSON (Object obj) = do
+    msgVals <- case HashMap.lookup "messages" obj of
+                 Just (Array arr) -> return (Vector.toList arr)
+                 Nothing          -> fail "No messages"
+    msgs <- mapM parseJSON msgVals
+    return ValidateResult {
+        validateMessages = msgs
+      }
+
+instance FromJSON ValidateMessage where
+  parseJSON (Object obj) = do
+    msgType <- case HashMap.lookup "type" obj of
+                 Just (String str) -> return (Text.unpack str)
+                 Nothing           -> fail "No mesage type"
+    msgCtnt <- case HashMap.lookup "message" obj of
+                 Just (String str) -> return (Text.unpack str)
+                 Nothing           -> fail "No message content"
+    case msgType of
+      "info" ->
+        return ValidateInfo {
+            validateMessage = msgCtnt
+          }
+      "error" ->
+        return ValidateError {
+            validateMessage = msgCtnt
+          }
+      _ ->
+        fail $ "Unknown message type msgType"
+
+getValidateResult :: String -> IO ValidateResult
+getValidateResult url = do
+    body <- getReq (getRequest url)
+    json <- getReq (postRequestWithBody validatorURL "text/html" body)
+    case Aeson.decode (LBS.pack json) of
+      Nothing     -> fail "Failed to decode response from html5.validator.nu"
+      Just result -> return result
+  where
+    validatorURL = "http://html5.validator.nu?out=json&charset=UTF-8"
+
+validationErrors :: ValidateResult -> [String]
+validationErrors = aux [] . validateMessages
+  where
+    aux :: [String] -> [ValidateMessage] -> [String]
+    aux acc [] = reverse acc
+    aux acc (msg@(ValidateInfo {})  : msgs) = aux acc msgs
+    aux acc (msg@(ValidateError {}) : msgs) = aux (validateMessage msg : acc) msgs
+
+validate :: String -> IO ()
+validate url = do
+  putStr ("Validating " ++ show url ++ ": ") ; hFlush stdout
+  errs <- validationErrors `liftM` getValidateResult url
+  if null errs
+    then putStrLn "ok"
+    else do putStrLn $ "failed: " ++ show (length errs) ++ " error(s)"
+            forM_ (zip [1..] errs) $ \(i, err) ->
+              putStrLn $ show i ++ ".\t" ++ err

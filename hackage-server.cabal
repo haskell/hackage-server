@@ -353,5 +353,9 @@ Test-Suite HighLevelTest
                     process,
                     tar,
                     unix,
-                    zlib
+                    zlib,
+                    unordered-containers,
+                    aeson,
+                    text,
+                    vector
 
