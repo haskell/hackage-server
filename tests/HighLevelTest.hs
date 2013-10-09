@@ -1,11 +1,18 @@
-
 {-
-This is a very high-level test of the hackage server. It forks a fresh
-server instance, and then uses HTTP to run various requests on that
-server.
+  This is a very high-level test of the hackage server. It forks a fresh server
+  instance, and then uses HTTP to run various requests on that server.
+
+  System requirements:
+
+  1. Port `testPort` (currently 8392) must be available on localhost
+  2. You must have sendmail configured so that it can send emails to external
+     domains (for user registration) -- currently we use mailinator.com accounts
+  3. You must allow for outgoing HTTP traffic, as we POST to html5.validator.nu
+     for HTML validation.
 -}
 
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wall #-}
 module Main (main) where
 
 import qualified Codec.Archive.Tar as Tar
@@ -19,7 +26,7 @@ import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.Char
 import Data.List
 import Data.Maybe
-import Network.HTTP
+import Network.HTTP hiding (user)
 import Network.HTTP.Auth
 import Network.URI
 import System.Directory
@@ -27,18 +34,18 @@ import System.Exit
 import System.FilePath
 import System.IO
 import System.IO.Error
-import System.Process
 
 import Package
 import Run
 
 -- For the html5.validator.nu API
 import Data.String ()
-import Data.Aeson (FromJSON(..), Value(..))
-import qualified Data.Aeson          as Aeson
-import qualified Data.Text           as Text
-import qualified Data.HashMap.Strict as HashMap
-import qualified Data.Vector         as Vector
+import Data.Aeson (FromJSON(..), Value(..), (.:))
+import qualified Data.Aeson as Aeson
+
+-- For mail
+import qualified Text.XML.Light as XML
+import System.Random (randomIO)
 
 -- A random port, that hopefully won't clash with anything else
 testPort :: Int
@@ -111,62 +118,65 @@ serverRunningArgs = ["run", "--ip", "127.0.0.1", "--port", show testPort]
 runUserTests :: IO ()
 runUserTests = do
     do info "Getting user list"
-       xs <- getUrlStrings "/users/"
-       unless (xs == ["Hackage users","admin"]) $
+       xs <- getUsers
+       unless (xs == ["admin"]) $
            die ("Bad user list: " ++ show xs)
     do info "Getting admin user list"
-       xs <- getUrlStrings "/users/admins/"
-       unless (xs == ["Hackage admins","[","edit","]","admin"]) $
+       xs <- getAdmins
+       unless (groupMembers xs == ["admin"]) $
            die ("Bad admin user list: " ++ show xs)
-    do info "Creating user"
-       postToUrl "/users/" [("username", "testuser"),
-                            ("password", "testpass"),
-                            ("repeat-password", "testpass")]
-    do info "Creating user2"
-       postToUrl "/users/" [("username", "testuser2"),
-                            ("password", "testpass2"),
-                            ("repeat-password", "testpass2")]
+    do -- Create random test email addresses so that we don't confuse
+       -- confirmation emails from other sessions
+       testEmail1 <- mkTestEmail `liftM` randomIO
+       testEmail2 <- mkTestEmail `liftM` randomIO
+       createUser "HackageTestUser1" "Test User 1" testEmail1
+       createUser "HackageTestUser2" "Test User 2" testEmail2
+       confirmUser testEmail1 "testpass1"
+       confirmUser testEmail2 "testpass2"
     do info "Checking new users are now in user list"
-       xs <- getUrlStrings "/users/"
-       unless (xs == ["Hackage users","admin","testuser","testuser2"]) $
+       xs <- getUsers
+       unless (xs == ["admin","HackageTestUser1","HackageTestUser2"]) $
            die ("Bad user list: " ++ show xs)
     do info "Checking new users are not in admin list"
-       xs <- getUrlStrings "/users/admins/"
-       unless (xs == ["Hackage admins","[","edit","]","admin"]) $
+       xs <- getAdmins
+       unless (groupMembers xs == ["admin"]) $
            die ("Bad admin user list: " ++ show xs)
-    do info "Getting password change page for testuser"
-       void $ getAuthUrlStrings "testuser" "testpass" "/user/testuser/password"
-    do info "Getting password change page for testuser as an admin"
-       void $ getAuthUrlStrings "admin" "admin" "/user/testuser/password"
-    do info "Getting password change page for testuser as another user"
-       checkForbiddenUrl "testuser2" "testpass2" "/user/testuser/password"
-    do info "Getting password change page for testuser with bad password"
-       checkUnauthedUrl "testuser" "badpass" "/user/testuser/password"
-    do info "Getting password change page for testuser with bad username"
-       checkUnauthedUrl "baduser" "testpass" "/user/testuser/password"
-    do info "Changing password for testuser2"
-       void $ postAuthToUrl "testuser2" "testpass2" "/user/testuser2/password"
+    do info "Getting password change page for HackageTestUser1"
+       void $ getAuthUrlStrings "HackageTestUser1" "testpass" "/user/HackageTestUser1/password"
+    do info "Getting password change page for HackageTestUser1 as an admin"
+       void $ getAuthUrlStrings "admin" "admin" "/user/HackageTestUser1/password"
+    do info "Getting password change page for HackageTestUser1 as another user"
+       checkForbiddenUrl "HackageTestUser2" "testpass2" "/user/HackageTestUser1/password"
+    do info "Getting password change page for HackageTestUser1 with bad password"
+       checkUnauthedUrl "HackageTestUser1" "badpass" "/user/HackageTestUser1/password"
+    do info "Getting password change page for HackageTestUser1 with bad username"
+       checkUnauthedUrl "baduser" "testpass" "/user/HackageTestUser1/password"
+    do info "Changing password for HackageTestUser2"
+       void $ postAuthToUrl "HackageTestUser2" "testpass2" "/user/HackageTestUser2/password"
                   [("password", "newtestpass2"),
                    ("repeat-password", "newtestpass2"),
                    ("_method", "PUT")]
     do info "Checking password has changed"
-       void $ getAuthUrlStrings "testuser2" "newtestpass2"
-                                "/user/testuser2/password"
-       checkUnauthedUrl "testuser2" "testpass2" "/user/testuser2/password"
-    do info "Trying to delete testuser2 as testuser2"
-       deleteUrlRes ((4, 0, 3) ==) "testuser2" "newtestpass2" "/user/testuser2"
+       void $ getAuthUrlStrings "HackageTestUser2" "newtestpass2"
+                                "/user/HackageTestUser2/password"
+       checkUnauthedUrl "HackageTestUser2" "testpass2" "/user/HackageTestUser2/password"
+    do info "Trying to delete HackageTestUser2 as HackageTestUser2"
+       deleteUrlRes ((4, 0, 3) ==) "HackageTestUser2" "newtestpass2" "/user/HackageTestUser2"
        xs <- getUrlStrings "/users/"
-       unless (xs == ["Hackage users","admin","testuser","testuser2"]) $
+       unless (xs == ["Hackage users","admin","HackageTestUser1","HackageTestUser2"]) $
            die ("Bad user list: " ++ show xs)
-    do info "Deleting testuser2 as admin"
-       deleteUrlRes ((2, 0, 0) ==) "admin" "admin" "/user/testuser2"
+    do info "Deleting HackageTestUser2 as admin"
+       deleteUrlRes ((2, 0, 0) ==) "admin" "admin" "/user/HackageTestUser2"
        xs <- getUrlStrings "/users/"
-       unless (xs == ["Hackage users","admin","testuser"]) $
+       unless (xs == ["Hackage users","admin","HackageTestUser1"]) $
            die ("Bad user list: " ++ show xs)
-    do info "Getting user info for testuser"
-       xs <- getUrlStrings "/user/testuser"
-       unless (xs == ["testuser"]) $
+    do info "Getting user info for HackageTestUser1"
+       xs <- getUrlStrings "/user/HackageTestUser1"
+       unless (xs == ["HackageTestUser1"]) $
            die ("Bad user info: " ++ show xs)
+  where
+    mkTestEmail :: Int -> String
+    mkTestEmail n = "HackageTestUser" ++ show n
 
 runPackageUploadTests :: IO ()
 runPackageUploadTests = do
@@ -176,14 +186,14 @@ runPackageUploadTests = do
            die ("Bad package list: " ++ show xs)
     do info "Trying to upload testpackage"
        void $ postFileAuthToUrlRes ((4, 0, 3) ==)
-                  "testuser" "testpass" "/packages/" "package"
+                  "HackageTestUser1" "testpass" "/packages/" "package"
                   (testpackageTarFilename, testpackageTarFileContent)
-    do info "Adding testuser to uploaders"
+    do info "Adding HackageTestUser1 to uploaders"
        void $ postAuthToUrl "admin" "admin" "/packages/uploaders/"
-                  [("user", "testuser")]
+                  [("user", "HackageTestUser1")]
     do info "Uploading testpackage"
        void $ postFileAuthToUrlRes ((2, 0, 0) ==)
-                  "testuser" "testpass" "/packages/" "package"
+                  "HackageTestUser1" "testpass" "/packages/" "package"
                   (testpackageTarFilename, testpackageTarFileContent)
     where (testpackageTarFilename, testpackageTarFileContent, _, _, _, _)
               = testpackage
@@ -237,7 +247,7 @@ runPackageTests = do
        unless (xs == ["Maintainers for", "testpackage",
                       "Maintainers for a package can upload new versions and adjust other attributes in the package database.",
                       "[","edit","]",
-                      "testuser"]) $
+                      "HackageTestUser1"]) $
            die "Bad maintainers list"
     where (_,                             testpackageTarFileContent,
            testpackageCabalIndexFilename, testpackageCabalFile,
@@ -326,8 +336,6 @@ getReqStrings req
          let xs0 = lines body
              contentStart = ("<div id=\"content\"" `isSuffixOf`)
              xs1 = dropWhile (not . contentStart) xs0
-             trim = dropWhile isSpace . reverse
-                  . dropWhile isSpace . reverse
              tidy = filter (not . null) . map trim
          case getStrings 1 $ unlines xs1 of
              Nothing -> die ("Bad HTML?\n\n" ++ body)
@@ -363,8 +371,9 @@ mkPostReq url vals = setRequestBody (postRequest (mkUrl url))
                                     ("application/x-www-form-urlencoded",
                                      urlEncodeVars vals)
 
-postToUrl :: String -> [(String, String)] -> IO ()
-postToUrl url vals = checkReqGivesResponse ((3, 0, 3) ==) $ mkPostReq url vals
+postToUrl :: ((Int, Int, Int) -> Bool) -> String -> [(String, String)] -> IO ()
+postToUrl expectedResponse url vals = checkReqGivesResponse expectedResponse $
+  mkPostReq url vals
 
 postAuthToUrl :: String -> String -> String -> [(String, String)] -> IO ()
 postAuthToUrl u p url vals
@@ -463,6 +472,72 @@ die :: String -> IO a
 die err = do hPutStrLn stderr err
              exitFailure
 
+{------------------------------------------------------------------------------
+  Hackage-specific API
+------------------------------------------------------------------------------}
+
+type User  = String
+data Group = Group { groupMembers     :: [User]
+                   , groupTitle       :: String
+                   , groupDescription :: String
+                   }
+  deriving Show
+
+instance FromJSON Group where
+  parseJSON (Object obj) = do
+    members <- obj .: "members"
+    title   <- obj .: "title"
+    descr   <- obj .: "description"
+    return Group { groupMembers     = members
+                 , groupTitle       = title
+                 , groupDescription = descr
+                 }
+  parseJSON _ = fail "Expected object"
+
+getUsers :: IO [User]
+getUsers = getJSONStrings "/users/.json"
+
+getAdmins :: IO Group
+getAdmins = getGroup "/users/admins/.json"
+
+getGroup :: String -> IO Group
+getGroup url = getReq (getRequest (mkUrl url)) >>= decodeJSON
+
+createUser :: User -> String -> String -> IO ()
+createUser user real email = do
+  info $ "Creating user " ++ real ++ " with email address " ++ testEmailAddress email
+  postToUrl expectAccepted "/users/register-request" [
+      ("username", user)
+    , ("realname", real)
+    , ("email",    testEmailAddress email)
+    ]
+
+confirmUser :: String -> String -> IO ()
+confirmUser email pass = do
+  confirmation <- waitForEmailWithSubject email "Hackage account confirmation"
+  emailText    <- getEmail confirmation
+  let [urlWithNonce] = map (uriPath . fromJust . parseURI . trim)
+                     . filter ("users/register-request" `isInfixOf`)
+                     . lines
+                     $ emailText
+  info $ "Confirming new user at " ++ urlWithNonce
+  postToUrl expectSeeOther urlWithNonce [
+      ("password",        pass)
+    , ("repeat-password", pass)
+    ]
+
+{------------------------------------------------------------------------------
+  JSON utils
+------------------------------------------------------------------------------}
+
+getJSONStrings :: String -> IO [String]
+getJSONStrings url = getReq (getRequest (mkUrl url)) >>= decodeJSON
+
+decodeJSON :: FromJSON a => String -> IO a
+decodeJSON json =
+  case Aeson.decode (LBS.pack json) of
+    Nothing     -> fail "Could not decode JSON"
+    Just result -> return result
 
 {------------------------------------------------------------------------------
   Interface to html5.validator.nu
@@ -485,41 +560,31 @@ data ValidateMessage = ValidateInfo {
 
 instance FromJSON ValidateResult where
   parseJSON (Object obj) = do
-    msgVals <- case HashMap.lookup "messages" obj of
-                 Just (Array arr) -> return (Vector.toList arr)
-                 Nothing          -> fail "No messages"
-    msgs <- mapM parseJSON msgVals
+    msgs <- obj .: "messages"
     return ValidateResult {
         validateMessages = msgs
       }
+  parseJSON _ = fail "Expected object"
 
 instance FromJSON ValidateMessage where
   parseJSON (Object obj) = do
-    msgType <- case HashMap.lookup "type" obj of
-                 Just (String str) -> return (Text.unpack str)
-                 Nothing           -> fail "No mesage type"
-    msgCtnt <- case HashMap.lookup "message" obj of
-                 Just (String str) -> return (Text.unpack str)
-                 Nothing           -> fail "No message content"
+    msgType <- obj .: "type"
+    msgCtnt <- obj .: "message"
     case msgType of
-      "info" ->
-        return ValidateInfo {
-            validateMessage = msgCtnt
-          }
-      "error" ->
-        return ValidateError {
-            validateMessage = msgCtnt
-          }
-      _ ->
-        fail $ "Unknown message type msgType"
+      "info"  -> return ValidateInfo {
+                     validateMessage = msgCtnt
+                   }
+      "error" -> return ValidateError {
+                     validateMessage = msgCtnt
+                   }
+      _       -> fail $ "Unknown message type " ++ msgType
+  parseJSON _ = fail "Expected object"
 
 getValidateResult :: String -> IO ValidateResult
 getValidateResult url = do
     body <- getReq (getRequest url)
     json <- getReq (postRequestWithBody validatorURL "text/html" body)
-    case Aeson.decode (LBS.pack json) of
-      Nothing     -> fail "Failed to decode response from html5.validator.nu"
-      Just result -> return result
+    decodeJSON json
   where
     validatorURL = "http://html5.validator.nu?out=json&charset=UTF-8"
 
@@ -528,8 +593,8 @@ validationErrors = aux [] . validateMessages
   where
     aux :: [String] -> [ValidateMessage] -> [String]
     aux acc [] = reverse acc
-    aux acc (msg@(ValidateInfo {})  : msgs) = aux acc msgs
-    aux acc (msg@(ValidateError {}) : msgs) = aux (validateMessage msg : acc) msgs
+    aux acc (_msg@(ValidateInfo {})  : msgs) = aux acc msgs
+    aux acc ( msg@(ValidateError {}) : msgs) = aux (validateMessage msg : acc) msgs
 
 validate :: String -> IO ()
 validate url = do
@@ -539,4 +604,103 @@ validate url = do
     then putStrLn "ok"
     else do putStrLn $ "failed: " ++ show (length errs) ++ " error(s)"
             forM_ (zip [1..] errs) $ \(i, err) ->
-              putStrLn $ show i ++ ".\t" ++ err
+              putStrLn $ show (i :: Int) ++ ".\t" ++ err
+
+{------------------------------------------------------------------------------
+  Interface to mailinator.com
+
+  This is setup in such a way so that we can easily change what service we
+  use for temp email (or indeed non-temp email)
+------------------------------------------------------------------------------}
+
+testEmailAddress :: String -> String
+testEmailAddress user = user ++ "@mailinator.com"
+
+data Email = Email {
+    emailTitle  :: String
+  , emailLink   :: URI
+  , emailSender :: String
+  , emailDate   :: String
+  }
+  deriving Show
+
+checkEmail :: String -> IO [Email]
+checkEmail user = do
+    rss <- (XML.onlyElems . XML.parseXML) `liftM` getReq (getRequest rssUrl)
+    let items = concatMap (XML.filterElementsName $ simpleName "item") rss
+    return (map parseEmail items)
+  where
+    rssUrl = "http://www.mailinator.com/feed?to=" ++ user
+
+    parseEmail :: XML.Element -> Email
+    parseEmail e =
+      let [title]  = XML.filterElementsName (simpleName "title")   e
+          [link]   = XML.filterElementsName (simpleName "link")    e
+          [sender] = XML.filterElementsName (simpleName "creator") e
+          [date]   = XML.filterElementsName (simpleName "date")    e
+      in Email { emailTitle  = XML.strContent title
+               , emailLink   = fromJust . parseURI . XML.strContent $ link
+               , emailSender = XML.strContent sender
+               , emailDate   = XML.strContent date
+               }
+
+    simpleName :: String -> XML.QName -> Bool
+    simpleName n = (== n) . XML.qName
+
+emailWithSubject :: String -> String -> IO (Maybe Email)
+emailWithSubject user subject = do
+  emails <- checkEmail user
+  return . listToMaybe . filter ((== subject) . emailTitle) $ emails
+
+waitForEmailWithSubject :: String -> String -> IO Email
+waitForEmailWithSubject user subject = f 10
+  where
+    f :: Int -> IO Email
+    f n = do
+      info $ "Waiting for confirmation email at " ++ testEmailAddress user
+      mEmail <- emailWithSubject user subject
+      case mEmail of
+        Just email          -> return email
+        Nothing | n == 0    -> die "Didn't get confirmation email"
+                | otherwise -> do
+          info "No confirmation email yet; will try again in 30 sec"
+          threadDelay (30 * 1000000)
+          f (n - 1)
+
+getEmail :: Email -> IO String
+getEmail email = getReq (getRequest url)
+  where
+    msgid = fromJust . lookup "msgid" . parseQuery . uriQuery . emailLink $ email
+    url   = "http://mailinator.com/rendermail.jsp?msgid=" ++ msgid ++ "&text=true"
+
+{------------------------------------------------------------------------------
+  HTTP utils
+------------------------------------------------------------------------------}
+
+expectAccepted :: (Int, Int, Int) -> Bool
+expectAccepted = (== (2, 0, 2))
+
+expectSeeOther :: (Int, Int, Int) -> Bool
+expectSeeOther = (== (3, 0, 3))
+
+parseQuery :: String -> [(String, String)]
+parseQuery = map parseAssignment . explode '&'
+  where
+    parseAssignment :: String -> (String, String)
+    parseAssignment a = let [var, val] = explode '=' a
+                        in (var, val)
+
+{------------------------------------------------------------------------------
+  Misc util
+------------------------------------------------------------------------------}
+
+-- | > explode ',' "abc,def,ghi" == ["abc", "def", "ghi"]
+explode :: Eq a => a -> [a] -> [[a]]
+explode x xs = let (xs1, xs2) = span (/= x) xs
+               in xs1 : case xs2 of
+                          []        -> []
+                          (_ : xs') -> explode x xs'
+
+-- | Remove leading and trailing whitespace
+trim :: String -> String
+trim = reverse . dropWhile isSpace . reverse . dropWhile isSpace

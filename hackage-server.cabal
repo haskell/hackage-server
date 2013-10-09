@@ -357,5 +357,7 @@ Test-Suite HighLevelTest
                     unordered-containers,
                     aeson,
                     text,
-                    vector
+                    vector,
+                    xml,
+                    random
 
