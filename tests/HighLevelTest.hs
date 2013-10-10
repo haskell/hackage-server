@@ -20,14 +20,12 @@ import qualified Codec.Compression.GZip as GZip
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
--- import qualified Data.ByteString.Char8 as BS
--- import qualified Data.ByteString.Base64 as Base64
 import qualified Data.ByteString.Lazy.Char8 as LBS
--- import Data.Char
-import Data.List (isInfixOf) -- isSuffixOf
+import Data.List (isInfixOf, isSuffixOf)
 import Data.Maybe
+import Data.String ()
+import Data.Aeson (FromJSON(..), Value(..), (.:))
 import Network.HTTP hiding (user)
--- import Network.HTTP.Auth
 import Network.URI
 import System.Directory
 import System.Exit
@@ -50,27 +48,24 @@ import HttpUtils ( ExpectedCode
                  )
 import qualified HttpUtils as Http
 
--- For the html5.validator.nu API
-import Data.String ()
-import Data.Aeson (FromJSON(..), Value(..), (.:))
--- import qualified Data.Aeson as Aeson
-
 main :: IO ()
 main = do hSetBuffering stdout LineBuffering
           info "Initialising"
           root <- getCurrentDirectory
-          let testDir = "tests/HighLevelTestTemp"
           info "Setting up test directory"
-          exists <- doesDirectoryExist testDir
-          when exists $ removeDirectoryRecursive testDir
-          createDirectory testDir
-          (setCurrentDirectory testDir >> doit root)
-              `finally` removeDirectoryRecursive (root </> testDir)
+          exists <- doesDirectoryExist (testDir root)
+          when exists $ removeDirectoryRecursive (testDir root)
+          createDirectory (testDir root)
+          (setCurrentDirectory (testDir root) >> doit root)
+              `finally` removeDirectoryRecursive (testDir root)
+
+testDir :: FilePath -> FilePath
+testDir root = root </> "tests" </> "HighLevelTestTemp"
 
 doit :: FilePath -> IO ()
 doit root
     = do info "initialising hackage database"
-         runServerChecked True root ["init"]
+         runServerChecked root ["init"]
          withServerRunning root $ do void $ validate NoAuth "/"
                                      void $ validate NoAuth "/accounts"
                                      void $ validate NoAuth "/admin"
@@ -78,37 +73,38 @@ doit root
                                      runUserTests
                                      runPackageUploadTests
                                      runPackageTests
-         {-
          withServerRunning root $ runPackageTests
          info "Making database backup"
-         runServerChecked False root ["backup", "-o", "hlb.tar"]
+         tarGz1 <- createBackup root "1"
          info "Removing old state"
          removeDirectoryRecursive "state"
          info "Checking server doesn't work"
-         mec <- runServer True root serverRunningArgs
+         mec <- runServer root serverRunningArgs
          case mec of
              Just (ExitFailure 1) -> return ()
              Just (ExitFailure _) -> die "Server failed with wrong exit code"
              Just ExitSuccess     -> die "Server worked unexpectedly"
              Nothing              -> die "Got a signal?"
-         info "Restoring database"
-         runServerChecked False root ["restore", "hlb.tar"]
+         info $ "Restoring database from " ++ tarGz1
+         runServerChecked root ["restore", tarGz1]
          info "Making another database backup"
-         runServerChecked False root ["backup", "-o", "hlb2.tar"]
+         tarGz2 <- createBackup root "2"
          info "Checking databases match"
-         db1 <- LBS.readFile "hlb.tar"
-         db2 <- LBS.readFile "hlb2.tar"
+         db1 <- LBS.readFile tarGz1
+         db2 <- LBS.readFile tarGz2
          unless (db1 == db2) $ die "Databases don't match"
          info "Checking server still works, and data is intact"
          withServerRunning root $ runPackageTests
-         -}
+
+find :: FilePath -> (FilePath -> Bool) -> IO [FilePath]
+find dir p = (map (dir </>) . filter p) `liftM` getDirectoryContents dir
 
 withServerRunning :: FilePath -> IO () -> IO ()
 withServerRunning root f
     = do info "Forking server thread"
          mv <- newEmptyMVar
          bracket (forkIO (do info "Server thread started"
-                             void $ runServer True root serverRunningArgs
+                             void $ runServer root serverRunningArgs
                           `finally` putMVar mv ()))
                  (\t -> do killThread t
                            takeMVar mv
@@ -277,19 +273,28 @@ waitForServer = f 10
                               threadDelay 100000
                               f (n - 1)
 
-runServerChecked :: Bool -> FilePath -> [String] -> IO ()
-runServerChecked withStatic root args
-    = do mec <- runServer withStatic root args
-         case mec of
-             Just ExitSuccess -> return ()
-             _ -> die "Bad exit code from server"
+createBackup :: FilePath -> FilePath -> IO FilePath
+createBackup root suffix = do
+    runServerChecked root ["backup", "-o", testDir root </> suffix]
+    findTarGz (testDir root </> suffix)
+  where
+    findTarGz :: FilePath -> IO FilePath
+    findTarGz dir = do
+      [tarGz] <- find dir (".tar.gz" `isSuffixOf`)
+      return tarGz
 
-runServer :: Bool -> FilePath -> [String] -> IO (Maybe ExitCode)
-runServer withStatic root args = run server args'
-    where server = root </> "dist/build/hackage-server/hackage-server"
-          args' = if withStatic
-                  then ("--static-dir=" ++ root </> "datafiles/") : args
-                  else                                              args
+runServerChecked :: FilePath -> [String] -> IO ()
+runServerChecked root args = do
+    mec <- runServer root args
+    case mec of
+      Just ExitSuccess -> return ()
+      _                -> die "Bad exit code from server"
+
+runServer :: FilePath -> [String] -> IO (Maybe ExitCode)
+runServer root args = run server args'
+  where
+    server = root </> "dist/build/hackage-server/hackage-server"
+    args'  = ("--static-dir=" ++ root </> "datafiles/") : args
 
 {------------------------------------------------------------------------------
   Access to individual Hackage features
