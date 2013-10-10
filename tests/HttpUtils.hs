@@ -175,11 +175,12 @@ instance FromJSON ValidateMessage where
       _       -> fail $ "Unknown message type " ++ msgType
   parseJSON _ = fail "Expected object"
 
-getValidateResult :: Authorization -> String -> IO ValidateResult
+getValidateResult :: Authorization -> String -> IO (String, ValidateResult)
 getValidateResult auth url = do
-    body <- execRequest auth (getRequest url)
-    json <- execRequest NoAuth (postRequestWithBody validatorURL "text/html" body)
-    decodeJSON json
+    body   <- execRequest auth (getRequest url)
+    json   <- execRequest NoAuth (postRequestWithBody validatorURL "text/html" body)
+    result <- decodeJSON json
+    return (body, result)
   where
     validatorURL = "http://html5.validator.nu?out=json&charset=UTF-8"
 
@@ -192,5 +193,7 @@ validationErrors = aux [] . validateMessages
     aux acc ( msg@(ValidateError {}) : msgs) = aux (validateMessage msg : acc) msgs
 
 -- Validate and return the list of errors
-validate :: Authorization -> String -> IO [String]
-validate auth url = validationErrors `liftM` getValidateResult auth url
+validate :: Authorization -> String -> IO (String, [String])
+validate auth url = do
+  (body, result) <- getValidateResult auth url
+  return (body, validationErrors result)

@@ -15,14 +15,14 @@
 {-# OPTIONS_GHC -Wall #-}
 module Main (main) where
 
--- import qualified Codec.Archive.Tar as Tar
--- import qualified Codec.Compression.GZip as GZip
+import qualified Codec.Archive.Tar as Tar
+import qualified Codec.Compression.GZip as GZip
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
 -- import qualified Data.ByteString.Char8 as BS
 -- import qualified Data.ByteString.Base64 as Base64
--- import qualified Data.ByteString.Lazy.Char8 as LBS
+import qualified Data.ByteString.Lazy.Char8 as LBS
 -- import Data.Char
 import Data.List (isInfixOf) -- isSuffixOf
 import Data.Maybe
@@ -71,10 +71,10 @@ doit :: FilePath -> IO ()
 doit root
     = do info "initialising hackage database"
          runServerChecked True root ["init"]
-         withServerRunning root $ do validate NoAuth "/"
-                                     validate NoAuth "/accounts"
-                                     validate NoAuth "/admin"
-                                     validate NoAuth "/upload"
+         withServerRunning root $ do void $ validate NoAuth "/"
+                                     void $ validate NoAuth "/accounts"
+                                     void $ validate NoAuth "/admin"
+                                     void $ validate NoAuth "/upload"
                                      runUserTests
                                      runPackageUploadTests
                                      runPackageTests
@@ -148,9 +148,9 @@ runUserTests = do
        unless (groupMembers xs == ["admin"]) $
            die ("Bad admin user list: " ++ show xs)
     do info "Getting password change page for HackageTestUser1"
-       validate (Auth "HackageTestUser1" "testpass1") "/user/HackageTestUser1/password"
+       void $ validate (Auth "HackageTestUser1" "testpass1") "/user/HackageTestUser1/password"
     do info "Getting password change page for HackageTestUser1 as an admin"
-       validate (Auth "admin" "admin") "/user/HackageTestUser1/password"
+       void $ validate (Auth "admin" "admin") "/user/HackageTestUser1/password"
     do info "Getting password change page for HackageTestUser1 as another user"
        checkIsForbidden (Auth "HackageTestUser2" "testpass2") "/user/HackageTestUser1/password"
     do info "Getting password change page for HackageTestUser1 with bad password"
@@ -164,7 +164,7 @@ runUserTests = do
          , ("_method",         "PUT")
          ]
     do info "Checking password has changed"
-       validate (Auth "HackageTestUser2" "newtestpass2") "/user/HackageTestUser2/password"
+       void $ validate (Auth "HackageTestUser2" "newtestpass2") "/user/HackageTestUser2/password"
        checkIsUnauthorized (Auth "HackageTestUser2" "testpass2") "/user/HackageTestUser2/password"
     do info "Trying to delete HackageTestUser2 as HackageTestUser2"
        delete isForbidden (Auth "HackageTestUser2" "newtestpass2") "/user/HackageTestUser2"
@@ -176,50 +176,43 @@ runUserTests = do
        xs <- getUsers
        unless (xs == ["admin","HackageTestUser1"]) $
            die ("Bad user list: " ++ show xs)
-    {- TODO: Reenable this test (not 100% what it is testing though
     do info "Getting user info for HackageTestUser1"
-       xs <- getUrlStrings NoAuth "/user/HackageTestUser1"
-       unless (xs == ["HackageTestUser1"]) $
+       xs <- validate NoAuth "/user/HackageTestUser1"
+       unless ("Test User 1" `isInfixOf` xs) $
            die ("Bad user info: " ++ show xs)
-    -}
   where
     mkTestEmail :: Int -> String
     mkTestEmail n = "HackageTestUser" ++ show n
 
 runPackageUploadTests :: IO ()
 runPackageUploadTests = do
-{-
     do info "Getting package list"
-       xs <- getUrlStrings NoAuth "/packages/"
-       unless (xs == ["Packages by category","Categories:","."]) $
+       xs <- map packageName `liftM` getPackages
+       unless (xs == []) $
            die ("Bad package list: " ++ show xs)
     do info "Trying to upload testpackage"
-       void $ postFileToUrlRes ((4, 0, 3) ==)
-                  (Auth "HackageTestUser1" "testpass1")
-                  "/packages/" "package"
-                  (testpackageTarFilename, testpackageTarFileContent)
+       postFile isForbidden
+                (Auth "HackageTestUser1" "testpass1")
+                "/packages/" "package"
+                (testpackageTarFilename, testpackageTarFileContent)
     do info "Adding HackageTestUser1 to uploaders"
-       void $ postToUrl (Auth "admin" "admin") "/packages/uploaders/"
-                  [("user", "HackageTestUser1")]
+       post (Auth "admin" "admin") "/packages/uploaders/" [
+           ("user", "HackageTestUser1")
+         ]
     do info "Uploading testpackage"
-       void $ postFileToUrlRes ((2, 0, 0) ==)
-                  (Auth "HackageTestUser1" "testpass1")
-                  "/packages/" "package"
-                  (testpackageTarFilename, testpackageTarFileContent)
--}
-    return ()
+       postFile isOk
+                (Auth "HackageTestUser1" "testpass1")
+                "/packages/" "package"
+                (testpackageTarFilename, testpackageTarFileContent)
   where
     (testpackageTarFilename, testpackageTarFileContent, _, _, _, _) =
       testpackage
 
 runPackageTests :: IO ()
-runPackageTests = return () {- do
+runPackageTests = do
     do info "Getting package list"
-       xs <- getUrlStrings NoAuth "/packages/"
-       unless (xs == ["Packages by category",
-                      "Categories:","MyCategory","&nbsp;(1).",
-                      "MyCategory",
-                      "testpackage","library: test package testpackage"]) $
+       xs <- map packageName `liftM` getPackages
+       unless (xs == ["testpackage"]) $
            die ("Bad package list: " ++ show xs)
     do info "Getting package index"
        targz <- getUrl NoAuth "/packages/index.tar.gz"
@@ -236,12 +229,12 @@ runPackageTests = return () {- do
            _ ->
                die "Bad index contents"
     do info "Getting testpackage info"
-       xs <- getUrlStrings NoAuth "/package/testpackage"
-       unless (take 1 xs == ["The testpackage package"]) $
+       xs <- validate NoAuth "/package/testpackage"
+       unless ("The testpackage package" `isInfixOf` xs) $
            die ("Bad package info: " ++ show xs)
     do info "Getting testpackage-1.0.0.0 info"
-       xs <- getUrlStrings NoAuth "/package/testpackage-1.0.0.0"
-       unless (take 1 xs == ["The testpackage package"]) $
+       xs <- validate NoAuth "/package/testpackage-1.0.0.0"
+       unless ("The testpackage package" `isInfixOf` xs) $
            die ("Bad package info: " ++ show xs)
     do info "Getting testpackage Cabal file"
        cabalFile <- getUrl NoAuth "/package/testpackage-1.0.0.0/testpackage.cabal"
@@ -256,68 +249,17 @@ runPackageTests = return () {- do
        unless (hsFile == testpackageHaskellFileContent) $
            die "Bad Haskell file"
     do info "Getting testpackage maintainer info"
-       xs <- getUrlStrings NoAuth "/package/testpackage/maintainers/"
-       unless (xs == ["Maintainers for", "testpackage",
-                      "Maintainers for a package can upload new versions and adjust other attributes in the package database.",
-                      "[","edit","]",
-                      "HackageTestUser1"]) $
+       xs <- getGroup "/package/testpackage/maintainers/.json"
+       unless (groupMembers xs == ["HackageTestUser1"]) $
            die "Bad maintainers list"
-    where (_,                             testpackageTarFileContent,
-           testpackageCabalIndexFilename, testpackageCabalFile,
-           testpackageHaskellFilename,    testpackageHaskellFileContent)
-              = testpackage
--}
+  where
+    (_,                             testpackageTarFileContent,
+     testpackageCabalIndexFilename, testpackageCabalFile,
+     testpackageHaskellFilename,    testpackageHaskellFileContent)
+       = testpackage
 
 testpackage :: (FilePath, String, FilePath, String, FilePath, String)
 testpackage = mkPackage "testpackage"
-
-{-
-getUrlStrings :: Authorization -> String -> IO [String]
-getUrlStrings auth relPath = do
-    validate      auth url
-    getReqStrings auth (getRequest url)
-  where
-    url = mkUrl relPath
--}
-
-{-
--- This is a simple HTML screen-scraping function. It skips down to
--- a div with class "content", and then returns the list of strings
--- that are in the following HTML.
-getReqStrings :: Authorization -> Request_String -> IO [String]
-getReqStrings auth req = do
-    body <- getReq auth req
-    let xs0 = lines body
-        xs1 = dropWhile (not . contentStart) xs0
-    case getStrings 1 $ unlines xs1 of
-      Nothing      -> die ("Bad HTML?\n\n" ++ body)
-      Just strings -> return $ tidy strings
-  where
-    isAngleBracket :: Char -> Bool
-    isAngleBracket '<' = True
-    isAngleBracket '>' = True
-    isAngleBracket _   = False
-
-    getStrings :: Integer -> String -> Maybe [String]
-    getStrings 0 xs = case break isAngleBracket xs of
-                        (_,    '>' : _)   -> Nothing
-                        (pref, '<' : xs') -> fmap (pref :)
-                                           $ getStrings 1 xs'
-                        _                 -> Just [xs]
-    getStrings n xs = case break isAngleBracket xs of
-                        (_, '>' : xs') -> getStrings (n - 1) xs'
-                        (_, '<' : xs') -> getStrings (n + 1) xs'
-                        _              -> Nothing
-
-    tidy :: [String] -> [String]
-    tidy = filter (not . null) . map trim
-
-    contentStart :: String -> Bool
-    contentStart = ("<div id=\"content\"" `isSuffixOf`)
--}
-
-
-
 
 waitForServer :: IO ()
 waitForServer = f 10
@@ -403,6 +345,18 @@ confirmUser email pass = do
     , ("repeat-password", pass)
     ]
 
+data PackageInfo = PackageInfo { packageName :: String }
+  deriving Show
+
+instance FromJSON PackageInfo where
+  parseJSON (Object obj) = do
+    name <- obj .: "packageName"
+    return PackageInfo { packageName = name }
+  parseJSON _ = fail "Expected object"
+
+getPackages :: IO [PackageInfo]
+getPackages = getUrl NoAuth "/packages/.json" >>= decodeJSON
+
 {------------------------------------------------------------------------------
   Small layer on top of HttpUtils, specialized to our test server
 ------------------------------------------------------------------------------}
@@ -451,21 +405,20 @@ post auth url vals = void $
   where
     expectedCode code = isOk code || isSeeOther code || isAccepted code
 
-validate :: Authorization -> RelativeURL -> IO ()
-validate auth url = do
-  putStr ("= Validating " ++ show url ++ ": ") ; hFlush stdout
-  errs <- Http.validate auth (mkUrl url)
-  if null errs
-    then putStrLn "ok"
-    else do putStrLn $ "failed: " ++ show (length errs) ++ " error(s)"
-            forM_ (zip [1..] errs) $ \(i, err) ->
-              putStrLn $ show (i :: Int) ++ ".\t" ++ err
-
-{-
 postFile :: ExpectedCode
          -> Authorization -> RelativeURL
          -> String -> (FilePath, String)
          -> IO ()
 postFile expectedCode auth url field file =
-    execPostFile expectedCode auth (postRequest (mkUrl url)) field file
--}
+    Http.execPostFile expectedCode auth (postRequest (mkUrl url)) field file
+
+validate :: Authorization -> RelativeURL -> IO String
+validate auth url = do
+  putStr ("= Validating " ++ show url ++ ": ") ; hFlush stdout
+  (body, errs) <- Http.validate auth (mkUrl url)
+  if null errs
+    then do putStrLn "ok"
+    else do putStrLn $ "failed: " ++ show (length errs) ++ " error(s)"
+            forM_ (zip [1..] errs) $ \(i, err) ->
+              putStrLn $ show (i :: Int) ++ ".\t" ++ err
+  return body
