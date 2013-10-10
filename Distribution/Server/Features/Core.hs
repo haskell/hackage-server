@@ -41,6 +41,11 @@ import Distribution.Text (display)
 import Distribution.Package
 import Distribution.Version (Version(..))
 
+import Data.Aeson (Value(..))
+import qualified Data.HashMap.Strict as HashMap
+import qualified Data.Vector         as Vector
+import qualified Data.Text           as Text
+
 -- | The core feature, responsible for the main package index and all access
 -- and modifications of it.
 --
@@ -320,7 +325,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       , resourceGet  = [("tarball", servePackagesIndex)]
       }
     corePackagesPage = (resourceAt "/packages/.:format") {
-        resourceGet = [] -- have basic packages listing?
+        resourceDesc = [(GET, "List of all packages")]
+      , resourceGet  = [("json", servePackageList)]
       }
     corePackagePage = resourceAt "/package/:package.:format"
     corePackageRedirect = (resourceAt "/package/") {
@@ -472,6 +478,23 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     servePackagesIndex _ = do
       indexTarball <- readAsyncCache cacheIndexTarball
       return $ toResponse (Resource.IndexTarball indexTarball)
+
+    -- TODO: should we include more information here? description and
+    -- category for instance (but they are not readily available as long
+    -- as we don't keep the parsed cabal files in memory)
+    servePackageList :: DynamicPath -> ServerPartE Response
+    servePackageList _ = do
+      pkgIndex <- queryGetPackageIndex
+      let pkgs = PackageIndex.allPackagesByName pkgIndex
+          list = [display . pkgName . pkgInfoId $ pkg | pkg <- map head pkgs]
+      -- We construct the JSON manually so that we control what it looks like;
+      -- in particular, we use objects for the packages so that we can add
+      -- additional fields later without (hopefully) breaking clients
+      let json = flip map list $ \str ->
+            Object . HashMap.fromList $ [
+                (Text.pack "packageName", String (Text.pack str))
+              ]
+      return . toResponse $ Array (Vector.fromList json)
 
     -- result: tarball or not-found error
     servePackageTarball :: DynamicPath -> ServerPartE Response
