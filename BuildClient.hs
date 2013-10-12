@@ -586,8 +586,10 @@ buildPackage verbosity opts config docInfo = do
                                 </> "build-reports.log"
             handleDoesNotExist (return ()) $ removeFile simple_report_log
 
-        docs_generated <- liftM2 (&&) (doesDirectoryExist doc_dir_html)
-                                      (doesFileExist (doc_dir_html </> "doc-index.html"))
+        docs_generated <- fmap and $ sequence [
+            doesDirectoryExist doc_dir_html,
+            doesFileExist (doc_dir_html </> "doc-index.html"),
+            doesFileExist (doc_dir_html </> display (docInfoPackageName docInfo) <.> "haddock")]
         if docs_generated
             then do
                 notice verbosity $ "Docs generated for " ++ display (docInfoPackage docInfo)
