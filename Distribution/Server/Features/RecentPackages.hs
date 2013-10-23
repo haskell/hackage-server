@@ -101,7 +101,7 @@ recentPackagesFeature env
       }
 
     recentPackagesResource = RecentPackagesResource {
-        recentPackages = (resourceAt "/recent.:format") {
+        recentPackages = (extendResourcePath "/recent.:format" (corePackagesPage coreResource)) {
             resourceGet = [
                 ("html", const $ liftM fst $ readAsyncCache cacheRecent)
               , ("rss",  const $ liftM snd $ readAsyncCache cacheRecent)

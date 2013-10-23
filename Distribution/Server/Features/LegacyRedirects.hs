@@ -83,10 +83,10 @@ serveLegacyGets = msum
             _ -> mzero
           _ -> mzero
         _ -> mzero
+  , simpleMove "recent"      "/packages/recent"
+  , simpleMove "recent.html" "/packages/recent.html"
+  , simpleMove "recent.rss"  "/packages/recent.rss"
   ]
-  where
-    -- HTTP 301 is suitable for permanently redirecting pages
-    simpleMove from to = dir from $ method GET >> nullDir >> movedPermanently to (toResponse "")
 
 -- Some of the old-style paths may contain a version number
 -- or the text 'latest'. We represent the path '$pkgName/latest'
@@ -106,7 +106,7 @@ volToVersion (V v)  = v
 
 serveArchiveTree :: ServerPartE Response
 serveArchiveTree = msum
-  [ dir "pkg-list.html" $ method GET >> nullDir >> movedPermanently "/packages/" (toResponse "")
+  [ simpleMove "pkg-list.html" "/packages/"
   , dir "package" $ path $ \fileName -> method GET >> nullDir >>
    case Posix.splitExtension fileName of
     (fileName', ".gz") -> case Posix.splitExtension fileName' of
@@ -116,24 +116,20 @@ serveArchiveTree = msum
           _ -> mzero
        _ -> mzero
     _ -> mzero
-  , dir "00-index.tar.gz" $ method GET >> nullDir >> movedPermanently "/packages/index.tar.gz" (toResponse "")
+  , simpleMove "00-index.tar.gz" "/packages/index.tar.gz"
+  , simpleMove "recent.html" "/packages/recent"
+  , simpleMove "recent.rss"  "/packages/recent.rss"
   , path $ \name -> do
      msum
       [ path $ \version ->
         let pkgid = PackageIdentifier {pkgName = name, pkgVersion = volToVersion version}
         in msum
-         [ let dirName = display pkgid ++ ".tar.gz"
-           in dir dirName $ method GET >> nullDir >>
-              movedPermanently (packageTarball pkgid) (toResponse "")
-
-         , let fileName = display name ++ ".cabal"
-           in dir fileName $ method GET >> nullDir >>
-              movedPermanently (cabalPath pkgid) (toResponse "")
+         [ simpleMove (display pkgid ++ ".tar.gz") (packageTarball pkgid)
+         , simpleMove (display name ++ ".cabal")   (cabalPath pkgid)
 
          , dir "doc" $ dir "html" $ remainingPath $ \paths ->
              let doc = Posix.joinPath paths
-             in method GET >> nullDir >>
-                movedPermanently (docPath pkgid doc) (toResponse "")
+             in simpleMoveTo (docPath pkgid doc)
          ]
       ]
   ]
@@ -146,4 +142,11 @@ serveArchiveTree = msum
 packageTarball :: PackageId -> String
 packageTarball pkgid = "/package/" ++ display pkgid
                     ++ "/" ++ display pkgid ++ ".tar.gz"
+
+-- HTTP 301 is suitable for permanently redirecting pages
+simpleMove :: String -> String -> ServerPartE Response
+simpleMove from to = dir from $ simpleMoveTo to
+
+simpleMoveTo :: String -> ServerPartE Response
+simpleMoveTo to = method GET >> nullDir >> movedPermanently to (toResponse "")
 
