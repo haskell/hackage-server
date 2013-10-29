@@ -119,6 +119,7 @@ serveArchiveTree = msum
   , simpleMove "00-index.tar.gz" "/packages/index.tar.gz"
   , simpleMove "recent.html" "/packages/recent"
   , simpleMove "recent.rss"  "/packages/recent.rss"
+  , simpleMove "00-hoogle.tar.gz" "/packages/hoogle.tar.gz"
   , path $ \name -> do
      msum
       [ path $ \version ->

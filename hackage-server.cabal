@@ -176,6 +176,7 @@ executable hackage-server
       Distribution.Server.Features.DownloadCount.State
       Distribution.Server.Features.EditCabalFiles
       Distribution.Server.Features.Html
+      Distribution.Server.Features.HoogleData
       Distribution.Server.Features.Search
       Distribution.Server.Features.RecentPackages
       Distribution.Server.Features.PreferredVersions

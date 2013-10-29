@@ -37,9 +37,15 @@ import Data.Aeson (toJSON)
 data DocumentationFeature = DocumentationFeature {
     documentationFeatureInterface :: HackageFeature,
 
-    queryHasDocumentation :: MonadIO m => PackageIdentifier -> m Bool,
+    queryHasDocumentation   :: MonadIO m => PackageIdentifier -> m Bool,
+    queryDocumentation      :: MonadIO m => PackageIdentifier -> m (Maybe BlobId),
+    queryDocumentationIndex :: MonadIO m => m (Map.Map PackageId BlobId),
 
-    documentationResource :: DocumentationResource
+    documentationResource :: DocumentationResource,
+
+    -- | Notification of documentation changes
+    documentationChangeHook :: Hook PackageId ()
+
 }
 
 instance IsHackageFeature DocumentationFeature where
@@ -68,8 +74,18 @@ initDocumentationFeature name
                          upload
                          tarIndexCache = do
     loginfo verbosity "Initialising documentation feature, start"
+
+    -- Canonical state
     documentationState <- documentationStateComponent name serverStateDir
-    let feature = documentationFeature name env core getPackages upload tarIndexCache documentationState
+
+    -- Hooks
+    documentationChangeHook <- newHook
+
+    let feature = documentationFeature name env
+                                       core getPackages upload tarIndexCache
+                                       documentationState
+                                       documentationChangeHook
+
     loginfo verbosity "Initialising documentation feature, end"
     return feature
 
@@ -113,6 +129,7 @@ documentationFeature :: String
                      -> UploadFeature
                      -> TarIndexCacheFeature
                      -> StateComponent AcidState Documentation
+                     -> Hook PackageId ()
                      -> DocumentationFeature
 documentationFeature name
                      ServerEnv{serverBlobStore = store}
@@ -127,6 +144,7 @@ documentationFeature name
                      UploadFeature{..}
                      TarIndexCacheFeature{cachedTarIndex}
                      documentationState
+                     documentationChangeHook
   = DocumentationFeature{..}
   where
     documentationFeatureInterface = (emptyHackageFeature name) {
@@ -142,6 +160,13 @@ documentationFeature name
 
     queryHasDocumentation :: MonadIO m => PackageIdentifier -> m Bool
     queryHasDocumentation pkgid = queryState documentationState (HasDocumentation pkgid)
+
+    queryDocumentation :: MonadIO m => PackageIdentifier -> m (Maybe BlobId)
+    queryDocumentation pkgid = queryState documentationState (LookupDocumentation pkgid)
+
+    queryDocumentationIndex :: MonadIO m => m (Map.Map PackageId BlobId)
+    queryDocumentationIndex =
+      liftM documentation (queryState documentationState GetDocumentation)
 
     documentationResource = fix $ \r -> DocumentationResource {
         packageDocsContent = (extendResourcePath "/docs/.." corePackagePage) {
@@ -213,6 +238,7 @@ documentationFeature name
         Left  err -> errBadRequest "Invalid documentation tarball" [MText err]
         Right ((), blobid) -> do
           updateState documentationState $ InsertDocumentation pkgid blobid
+          runHook_ documentationChangeHook pkgid
           noContent (toResponse ())
 
    {-
@@ -245,6 +271,7 @@ documentationFeature name
       guardValidPackageId pkgid
       guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
       updateState documentationState $ RemoveDocumentation pkgid
+      runHook_ documentationChangeHook pkgid
       ok $ toResponse "Ok!"
 
     withDocumentation :: Resource -> DynamicPath

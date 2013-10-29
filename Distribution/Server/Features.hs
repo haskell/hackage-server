@@ -40,6 +40,7 @@ import Distribution.Server.Features.UserDetails         (initUserDetailsFeature)
 import Distribution.Server.Features.UserSignup          (initUserSignupFeature)
 import Distribution.Server.Features.LegacyPasswds       (initLegacyPasswdsFeature)
 import Distribution.Server.Features.EditCabalFiles      (initEditCabalFilesFeature)
+import Distribution.Server.Features.HoogleData          (initHoogleDataFeature)
 #endif
 import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
 
@@ -195,6 +196,11 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                           usersFeature
                           coreFeature
                           uploadFeature
+
+    hoogleDataFeature <- initHoogleDataFeature env
+                           coreFeature
+                           documentationCoreFeature
+                           tarIndexCacheFeature
 #endif
 
     -- The order of initialization above should be the same as
@@ -228,6 +234,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface htmlFeature
          , legacyRedirectsFeature uploadFeature
          , editCabalFeature
+         , getFeatureInterface hoogleDataFeature
 #endif
          , staticFilesFeature
          , serverIntrospectFeature allFeatures
