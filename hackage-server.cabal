@@ -119,6 +119,7 @@ executable hackage-server
     Distribution.Server.Pages.Package.HaddockHtml
     Distribution.Server.Pages.Package.HaddockLex
     Distribution.Server.Pages.Package.HaddockParse
+    Distribution.Server.Pages.Package.HaddockTypes
     Distribution.Server.Pages.Recent
     -- [reverse index disabled] Distribution.Server.Pages.Reverse
     Distribution.Server.Pages.Template

@@ -82,8 +82,8 @@ pkgBody render sections =
 prologue :: String -> [Html]
 prologue [] = []
 prologue desc = case tokenise desc >>= parseHaddockParagraphs of
-    Left _ -> [paragraph << p | p <- paragraphs desc]
-    Right doc -> [markup htmlMarkup doc]
+    Nothing  -> [paragraph << p | p <- paragraphs desc]
+    Just doc -> [markup htmlMarkup doc]
 
 -- Break text into paragraphs (separated by blank lines)
 paragraphs :: String -> [String]

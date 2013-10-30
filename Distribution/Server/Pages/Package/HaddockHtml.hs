@@ -1,58 +1,18 @@
--- stolen from Haddock's HsSyn.lhs and HaddockHtml.hs
+-- stolen from Haddock's Util.hs and Doc.hs
 module Distribution.Server.Pages.Package.HaddockHtml where
 
+import Distribution.Server.Pages.Package.HaddockTypes
 import Data.Char                (isSpace)
+import Data.Maybe               (fromMaybe)
 import Text.XHtml.Strict        hiding (p)
 import Network.URI              (escapeURIString, isUnreserved)
 
-data GenDoc id
-  = DocEmpty
-  | DocAppend (GenDoc id) (GenDoc id)
-  | DocString String
-  | DocParagraph (GenDoc id)
-  | DocIdentifier id
-  | DocModule String
-  | DocEmphasis (GenDoc id)
-  | DocMonospaced (GenDoc id)
-  | DocUnorderedList [GenDoc id]
-  | DocOrderedList [GenDoc id]
-  | DocDefList [(GenDoc id, GenDoc id)]
-  | DocCodeBlock (GenDoc id)
-  | DocURL String
-  | DocPic String
-  | DocAName String
-  deriving (Eq, Show)
-
-type Doc = GenDoc String
-
--- | DocMarkup is a set of instructions for marking up documentation.
--- In fact, it's really just a mapping from 'GenDoc' to some other
--- type [a], where [a] is usually the type of the output (HTML, say).
-
-data DocMarkup id a = Markup {
-  markupEmpty         :: a,
-  markupString        :: String -> a,
-  markupParagraph     :: a -> a,
-  markupAppend        :: a -> a -> a,
-  markupIdentifier    :: id -> a,
-  markupModule        :: String -> a,
-  markupEmphasis      :: a -> a,
-  markupMonospaced    :: a -> a,
-  markupUnorderedList :: [a] -> a,
-  markupOrderedList   :: [a] -> a,
-  markupDefList       :: [(a,a)] -> a,
-  markupCodeBlock     :: a -> a,
-  markupURL           :: String -> a,
-  markupPic           :: String -> a,
-  markupAName         :: String -> a
-  }
-
-markup :: DocMarkup id a -> GenDoc id -> a
+markup :: DocMarkup id a -> Doc id -> a
 markup m DocEmpty               = markupEmpty m
 markup m (DocAppend d1 d2)      = markupAppend m (markup m d1) (markup m d2)
 markup m (DocString s)          = markupString m s
 markup m (DocParagraph d)       = markupParagraph m (markup m d)
-markup m (DocIdentifier i)      = markupIdentifier m i
+markup m (DocIdentifier x)      = markupIdentifier m x
 markup m (DocModule mod0)       = markupModule m mod0
 markup m (DocEmphasis d)        = markupEmphasis m (markup m d)
 markup m (DocMonospaced d)      = markupMonospaced m (markup m d)
@@ -60,15 +20,16 @@ markup m (DocUnorderedList ds)  = markupUnorderedList m (map (markup m) ds)
 markup m (DocOrderedList ds)    = markupOrderedList m (map (markup m) ds)
 markup m (DocDefList ds)        = markupDefList m (map (markupPair m) ds)
 markup m (DocCodeBlock d)       = markupCodeBlock m (markup m d)
-markup m (DocURL url)           = markupURL m url
-markup m (DocPic url)           = markupPic m url
+markup m (DocHyperlink l)       = markupHyperlink m l
 markup m (DocAName ref)         = markupAName m ref
+markup m (DocPic img)           = markupPic m img
 
-markupPair :: DocMarkup id a -> (GenDoc id, GenDoc id) -> (a, a)
+markupPair :: DocMarkup id a -> (Doc id, Doc id) -> (a, a)
 markupPair m (a,b) = (markup m a, markup m b)
 
+
 -- | The identity markup
-idMarkup :: DocMarkup a (GenDoc a)
+idMarkup :: DocMarkup a (Doc a)
 idMarkup = Markup {
   markupEmpty         = DocEmpty,
   markupString        = DocString,
@@ -82,16 +43,16 @@ idMarkup = Markup {
   markupOrderedList   = DocOrderedList,
   markupDefList       = DocDefList,
   markupCodeBlock     = DocCodeBlock,
-  markupURL           = DocURL,
-  markupPic           = DocPic,
-  markupAName         = DocAName
+  markupHyperlink     = DocHyperlink,
+  markupAName         = DocAName,
+  markupPic           = DocPic
   }
 
 htmlMarkup :: DocMarkup String Html
 htmlMarkup = Markup {
-  markupParagraph     = paragraph,
-  markupEmpty         = toHtml "",
+  markupEmpty         = noHtml,
   markupString        = toHtml,
+  markupParagraph     = paragraph,
   markupAppend        = (+++),
   markupIdentifier    = tt . toHtml . init . tail,
   markupModule        = tt . toHtml,
@@ -101,9 +62,9 @@ htmlMarkup = Markup {
   markupOrderedList   = olist . concatHtml . map (li <<),
   markupDefList       = dlist . concatHtml . map markupDef,
   markupCodeBlock     = pre,
-  markupURL           = \url -> anchor ! [href url] << toHtml url,
-  markupPic           = \url -> image ! [src url],
-  markupAName         = \aname -> namedAnchor aname << toHtml ""
+  markupHyperlink     = \(Hyperlink url mLabel) -> anchor ! [href url] << toHtml (fromMaybe url mLabel),
+  markupAName         = \aname -> namedAnchor aname << toHtml "",
+  markupPic           = \path -> image ! [src path]
   }
   where markupDef (a,b) = dterm << a +++ ddef << b
 
@@ -117,7 +78,7 @@ escapeStr = escapeURIString isUnreserved
 -- ** Smart constructors
 
 -- used to make parsing easier; we group the list items later
-docAppend :: Doc -> Doc -> Doc
+docAppend :: Doc id -> Doc id -> Doc id
 docAppend (DocUnorderedList ds1) (DocUnorderedList ds2)
   = DocUnorderedList (ds1++ds2)
 docAppend (DocUnorderedList ds1) (DocAppend (DocUnorderedList ds2) d)
@@ -135,20 +96,39 @@ docAppend d DocEmpty = d
 docAppend d1 d2
   = DocAppend d1 d2
 
+
 -- again to make parsing easier - we spot a paragraph whose only item
 -- is a DocMonospaced and make it into a DocCodeBlock
-docParagraph :: Doc -> Doc
+docParagraph :: Doc id -> Doc id
 docParagraph (DocMonospaced p)
-  = DocCodeBlock p
+  = DocCodeBlock (docCodeBlock p)
 docParagraph (DocAppend (DocString s1) (DocMonospaced p))
   | all isSpace s1
-  = DocCodeBlock p
+  = DocCodeBlock (docCodeBlock p)
 docParagraph (DocAppend (DocString s1)
-                (DocAppend (DocMonospaced p) (DocString s2)))
+    (DocAppend (DocMonospaced p) (DocString s2)))
   | all isSpace s1 && all isSpace s2
-  = DocCodeBlock p
+  = DocCodeBlock (docCodeBlock p)
 docParagraph (DocAppend (DocMonospaced p) (DocString s2))
   | all isSpace s2
-  = DocCodeBlock p
+  = DocCodeBlock (docCodeBlock p)
 docParagraph p
   = DocParagraph p
+
+
+-- Drop trailing whitespace from @..@ code blocks.  Otherwise this:
+--
+--    -- @
+--    -- foo
+--    -- @
+--
+-- turns into (DocCodeBlock "\nfoo\n ") which when rendered in HTML
+-- gives an extra vertical space after the code block.  The single space
+-- on the final line seems to trigger the extra vertical space.
+--
+docCodeBlock :: Doc id -> Doc id
+docCodeBlock (DocString s)
+  = DocString (reverse $ dropWhile (`elem` " \t") $ reverse s)
+docCodeBlock (DocAppend l r)
+  = DocAppend l (docCodeBlock r)
+docCodeBlock d = d
