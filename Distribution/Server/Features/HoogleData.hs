@@ -22,6 +22,7 @@ import Distribution.Text
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
 import qualified Codec.Compression.GZip as GZip
+import qualified Codec.Compression.Zlib.Internal as Zlib
 
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -40,6 +41,7 @@ import System.FilePath
 import Control.Concurrent.MVar
 import Control.Concurrent.Async
 import Control.Exception
+import qualified System.IO.Error as IOError
 
 
 -- | A feature to serve up a tarball of hoogle files, for the hoogle client.
@@ -136,14 +138,12 @@ hoogleDataFeature docsUpdatedState hoogleBundleUpdateJob
     updateHoogleBundle = do
        docsUpdated <- readMemState  docsUpdatedState
        writeMemState docsUpdatedState Set.empty
-       createFileIfMissing bundleTarGzFile
-       createFileIfMissing bundleCacheFile
-       updated <- withFile bundleTarGzFile ReadMode $ \hOldTar -> do
+       updated <- maybeWithFile bundleTarGzFile $ \mhOldTar -> do
          mcache <- readCacheFile bundleCacheFile
          let docEntryCache = maybe Map.empty fst mcache
              oldTarPkgids  = maybe Set.empty snd mcache
              tmpdir = featureStateDir
-         updateTarBundle hOldTar tmpdir
+         updateTarBundle mhOldTar tmpdir
                          docEntryCache oldTarPkgids
                          docsUpdated
        case updated of
@@ -152,13 +152,13 @@ hoogleDataFeature docsUpdatedState hoogleBundleUpdateJob
            renameFile newTarFile bundleTarGzFile
            writeCacheFile bundleCacheFile (docEntryCache', newTarPkgids)
 
-    updateTarBundle :: Handle -> FilePath
+    updateTarBundle :: Maybe Handle -> FilePath
                     -> Map PackageId (Maybe (BlobId, TarEntryOffset))
                     -> Set PackageId
                     -> Set PackageId
                     -> IO (Maybe (Map PackageId (Maybe (BlobId, TarEntryOffset))
                                  ,Set PackageId, FilePath))
-    updateTarBundle hOldTar tmpdir docEntryCache oldTarPkgids docsUpdated = do
+    updateTarBundle mhOldTar tmpdir docEntryCache oldTarPkgids docsUpdated = do
 
       -- Invalidate cached info about any package docs that have been updated
       let docEntryCache' = docEntryCache `Map.difference` fromSet docsUpdated
@@ -205,9 +205,17 @@ hoogleDataFeature docsUpdatedState hoogleBundleUpdateJob
             -- We truncate on tar format errors. This works for the empty case
             -- and should be self-correcting for real errors. It just means we
             -- miss a few entries from the tarball 'til next time its updated.
-            oldEntries <- return . Tar.foldEntries (:) [] (const [])
-                                 . Tar.read . GZip.decompress
-                               =<< BS.hGetContents hOldTar
+            oldEntries <- case mhOldTar of
+              Nothing      -> return []
+              Just hOldTar -> 
+                return . Tar.foldEntries (:) [] (const [])
+                       . Tar.read
+                       . BS.fromChunks
+                       . Zlib.foldDecompressStream (:) [] (\_ _ -> [])
+                       . Zlib.decompressWithErrors
+                           Zlib.gzipFormat
+                           Zlib.defaultDecompressParams
+                     =<< BS.hGetContents hOldTar
 
             -- Write out the cached ones
             sequence_
@@ -266,19 +274,27 @@ withTempFile tmpdir template action =
       hClose hnd
       return x
 
-createFileIfMissing :: FilePath -> IO ()
-createFileIfMissing file = do
-    exists <- doesFileExist file
-    unless exists $
-      openFile file WriteMode >>= hClose
+maybeWithFile :: FilePath -> (Maybe Handle -> IO a) -> IO a
+maybeWithFile file action =
+  mask $ \unmask -> do
+    mhnd <- try $ openFile file ReadMode
+    case mhnd of
+      Right hnd -> unmask (action (Just hnd)) `finally` hClose hnd
+      Left  e    | IOError.isDoesNotExistError e
+                 , Just file == IOError.ioeGetFileName e
+                -> unmask (action Nothing)
+      Left  e   -> throw e
 
 readCacheFile :: SafeCopy a => FilePath -> IO (Maybe a)
 readCacheFile file =
-    withFile file ReadMode $ \hnd -> do
-      content <- BS.hGetContents hnd
-      case runGetLazy safeGet content of
-        Left  _ -> return Nothing
-        Right x -> return (Just x)
+    maybeWithFile file $ \mhnd ->
+      case mhnd of
+        Nothing  -> return Nothing
+        Just hnd -> do
+          content <- BS.hGetContents hnd
+          case runGetLazy safeGet content of
+            Left  _ -> return Nothing
+            Right x -> return (Just x)
 
 writeCacheFile :: SafeCopy a => FilePath -> a -> IO ()
 writeCacheFile file x =
