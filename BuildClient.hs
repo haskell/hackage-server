@@ -35,6 +35,9 @@ import System.Process
 import System.IO
 import System.IO.Error
 
+import Paths_hackage_server (version)
+
+
 import Data.Aeson (eitherDecode)
 
 data Mode = Help [String]
@@ -160,7 +163,7 @@ stats opts = do
     createDirectoryIfMissing False cacheDir
     (didFail, _, _)  <- mkPackageFailed opts
 
-    httpSession verbosity $ do
+    httpSession verbosity "hackage-build" version $ do
       liftIO $ notice verbosity "Getting index"
       infoStats verbosity (Just statsFile) =<< getDocumentationStats config didFail
   where
@@ -350,7 +353,7 @@ buildOnce opts pkgs = keepGoing $ do
     unless configFileExists $ prepareBuildPackages opts config
 
     flip finally persist_failed $ do
-        pkgIdsHaveDocs <- httpSession verbosity $
+        pkgIdsHaveDocs <- httpSession verbosity "hackage-build" version $
           getDocumentationStats config has_failed
         infoStats verbosity Nothing pkgIdsHaveDocs
 
@@ -385,7 +388,7 @@ buildOnce opts pkgs = keepGoing $ do
               case mTgz of
                 Nothing ->
                   liftIO $ mark_as_failed (docInfoPackage docInfo)
-                Just docs_tgz -> httpSession verbosity $ do
+                Just docs_tgz -> httpSession verbosity "hackage-build" version $ do
                   -- Make sure we authenticate to Hackage
                   setAuthorityGen $ provideAuthInfo (bc_srcURI config)
                                   $ Just (bc_username config, bc_password config)
