@@ -511,55 +511,62 @@ buildPackage verbosity opts config docInfo = do
     let doc_root = installDirectory opts </> "share" </> "doc"
         doc_dir      = doc_root </> display (docInfoPackage docInfo)
         doc_dir_html = doc_dir </> "html"
-        temp_doc_dir = doc_root </> display (docInfoPackage docInfo) </> display (docInfoPackage docInfo) ++ "-docs"
+        deps_doc_dir = doc_dir </> "deps"
+        temp_doc_dir = doc_dir </> display (docInfoPackage docInfo) ++ "-docs"
         pkg_url      = "/package" </> "$pkg-$version"
+        pkg_flags    =
+            ["--enable-documentation",
+             -- We only care about docs, so we want to build as
+             -- quickly as possible, and hence turn
+             -- optimisation off. Also explicitly pass -O0 as a
+             -- GHC option, in case it overrides a .cabal
+             -- setting or anything
+             "--disable-optimization", "--ghc-option", "-O0",
+             -- We don't want packages installed in the user
+             -- package.conf to affect things. In particular,
+             -- we don't want doc building to fail because
+             -- "packages are likely to be broken by the reinstalls"
+             "--ghc-pkg-option", "--no-user-package-conf",
+             -- We know where this documentation will
+             -- eventually be hosted, bake that in.
+             -- The wiki claims we shouldn't include the
+             -- version in the hyperlinks so we don't have
+             -- to rehaddock some package when the dependent
+             -- packages get updated. However, this is NOT
+             -- what the Hackage v1 did, so ignore that:
+             "--haddock-html-location=" ++ pkg_url </> "docs",
+             -- Give the user a choice between themes:
+             "--haddock-option=--built-in-themes",
+             -- Link "Contents" to the package page:
+             "--haddock-contents-location=" ++ pkg_url,
+             -- Link to colourised source code:
+             "--haddock-hyperlink-source",
+             "--prefix=" ++ installDirectory opts,
+             -- For candidates we need to use the full URL, because
+             -- otherwise cabal-install will not find the package.
+             -- For regular packages however we need to use just the
+             -- package name, otherwise cabal-install will not
+             -- generate a report
+             if docInfoIsCandidate docInfo
+               then show (docInfoTarGzURI config docInfo)
+               else display (docInfoPackage docInfo)
+             ]
 
     liftIO $ withCurrentDirectory (installDirectory opts) $ do
         -- We CANNOT build from an unpacked directory, because Cabal
         -- only generates build reports if you are building from a
         -- tarball that was verifiably downloaded from the server
 
+        -- We build any dependencies first so that their documention files can
+        -- be kept separate from the target package's.
+        void $ cabal opts "install" $
+            ["--only-dependencies",
+             "--docdir=" ++ deps_doc_dir] ++ pkg_flags
+
         -- We ignore the result of calling @cabal install@ because
         -- @cabal install@ succeeds even if the documentation fails to build.
-        void $ cabal opts "install"
-                     ["--enable-documentation",
-                      -- We only care about docs, so we want to build as
-                      -- quickly as possible, and hence turn
-                      -- optimisation off. Also explicitly pass -O0 as a
-                      -- GHC option, in case it overrides a .cabal
-                      -- setting or anything
-                      "--disable-optimization", "--ghc-option", "-O0",
-                      -- We don't want packages installed in the user
-                      -- package.conf to affect things. In particular,
-                      -- we don't want doc building to fail because
-                      -- "packages are likely to be broken by the reinstalls"
-                      "--ghc-pkg-option", "--no-user-package-conf",
-                      -- We know where this documentation will
-                      -- eventually be hosted, bake that in.
-                      -- The wiki claims we shouldn't include the
-                      -- version in the hyperlinks so we don't have
-                      -- to rehaddock some package when the dependent
-                      -- packages get updated. However, this is NOT
-                      -- what the Hackage v1 did, so ignore that:
-                      "--haddock-html-location=" ++ pkg_url </> "docs",
-                      -- Give the user a choice between themes:
-                      "--haddock-option=--built-in-themes",
-                      -- Link "Contents" to the package page:
-                      "--haddock-contents-location=" ++ pkg_url,
-                      -- Link to colourised source code:
-                      "--haddock-hyperlink-source",
-                      -- The docdir can differ between Cabal versions
-                      "--docdir=" ++ doc_dir,
-                      "--prefix=" ++ installDirectory opts,
-                      -- For candidates we need to use the full URL, because
-                      -- otherwise cabal-install will not find the package.
-                      -- For regular packages however we need to use just the
-                      -- package name, otherwise cabal-install will not
-                      -- generate a report
-                      if docInfoIsCandidate docInfo
-                        then show (docInfoTarGzURI config docInfo)
-                        else display (docInfoPackage docInfo)
-                      ]
+        void $ cabal opts "install" $
+            ["--docdir=" ++ doc_dir] ++ pkg_flags
 
         -- Remove reports for dependencies (so that we only submit the report
         -- for the package we are currently building)
