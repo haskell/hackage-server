@@ -40,6 +40,7 @@ import Distribution.Server.Features.UserDetails         (initUserDetailsFeature)
 import Distribution.Server.Features.UserSignup          (initUserSignupFeature)
 import Distribution.Server.Features.LegacyPasswds       (initLegacyPasswdsFeature)
 import Distribution.Server.Features.EditCabalFiles      (initEditCabalFilesFeature)
+import Distribution.Server.Features.HoogleData          (initHoogleDataFeature)
 #endif
 import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
 
@@ -64,6 +65,7 @@ import Distribution.Package (packageId)
 --     best approach is probably to write backup tarball to disk and transfer
 --     it away through non-HTTP means (somewhat more secure)
 
+-- | Initialize all features and run post-initialization hooks.
 initHackageFeatures :: ServerEnv -> IO ([HackageFeature], UserFeature)
 initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
@@ -194,6 +196,11 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                           usersFeature
                           coreFeature
                           uploadFeature
+
+    hoogleDataFeature <- initHoogleDataFeature env
+                           coreFeature
+                           documentationCoreFeature
+                           tarIndexCacheFeature
 #endif
 
     -- The order of initialization above should be the same as
@@ -227,6 +234,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface htmlFeature
          , legacyRedirectsFeature uploadFeature
          , editCabalFeature
+         , getFeatureInterface hoogleDataFeature
 #endif
          , staticFilesFeature
          , serverIntrospectFeature allFeatures
@@ -244,15 +252,19 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
     return (allFeatures, usersFeature)
 
+-- | Checkpoint a feature's persistent state to disk.
 featureCheckpoint :: HackageFeature -> IO ()
 featureCheckpoint = mapM_ abstractStateCheckpoint . featureState
 
+-- | Checkpoint all features' persistent state.
 checkpointAllFeatures :: [HackageFeature] -> IO ()
 checkpointAllFeatures = mapM_ featureCheckpoint
 
+-- | Cleanly shut down a feature's state components.
 featureShutdown :: HackageFeature -> IO ()
 featureShutdown = mapM_ abstractStateClose . featureState
 
+-- | Cleanly shut down all features' state components.
 shutdownAllFeatures :: [HackageFeature] -> IO ()
 shutdownAllFeatures   = mapM_ featureShutdown . reverse
 

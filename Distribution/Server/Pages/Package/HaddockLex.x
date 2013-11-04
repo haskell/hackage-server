@@ -20,8 +20,10 @@ module Distribution.Server.Pages.Package.HaddockLex (
 
 import Data.Char
 import Data.Word (Word8)
+import qualified Data.Bits
 import Numeric
 import Control.Monad (liftM)
+import Distribution.Server.Pages.Package.HaddockTypes (RdrName)
 }
 
 $ws    = $white # \n
@@ -29,7 +31,7 @@ $digit = [0-9]
 $hexdigit = [0-9a-fA-F]
 $special =  [\"\@]
 $alphanum = [A-Za-z0-9]
-$ident    = [$alphanum \'\_\.\!\#\$\%\&\*\+\/\<\=\>\?\@\\\\\^\|\-\~]
+$ident    = [$alphanum \'\_\.\!\#\$\%\&\*\+\/\<\=\>\?\@\\\\\^\|\-\~\:]
 
 :-
 
@@ -56,13 +58,13 @@ $ident    = [$alphanum \'\_\.\!\#\$\%\&\*\+\/\<\=\>\?\@\\\\\^\|\-\~]
   ()                    { begin string }
 }
 
-<birdtrack> .*  \n?     { strtoken TokBirdTrack `andBegin` line }
+<birdtrack> .*  \n?     { strtokenNL TokBirdTrack `andBegin` line }
 
 <string,def> {
   $special                      { strtoken $ \s -> TokSpecial (head s) }
-  \<\<.*\>\>                    { strtoken $ \s -> TokPic (init $ init $ tail $ tail s) }
-  \<.*\>                        { strtoken $ \s -> TokURL (init (tail s)) }
-  \#.*\#                        { strtoken $ \s -> TokAName (init (tail s)) }
+  \<\< [^\<\>]* \>\>            { strtoken $ \s -> TokPic (init $ init $ tail $ tail s) }
+  \< [^\<\>]* \>                { strtoken $ \s -> TokURL (init (tail s)) }
+  \# [^\#]* \#                  { strtoken $ \s -> TokAName (init (tail s)) }
   \/ [^\/]* \/                  { strtoken $ \s -> TokEmphasis (init (tail s)) }
   [\'\`] $ident+ [\'\`]         { ident }
   \\ .                          { strtoken (TokString . tail) }
@@ -71,7 +73,7 @@ $ident    = [$alphanum \'\_\.\!\#\$\%\&\*\+\/\<\=\>\?\@\\\\\^\|\-\~]
   -- allow special characters through if they don't fit one of the previous
   -- patterns.
   [\/\'\`\<\#\&\\]                      { strtoken TokString }
-  [^ $special \/ \< \# \n \'\` \& \\ \]]* \n { strtoken TokString `andBegin` line }
+  [^ $special \/ \< \# \n \'\` \& \\ \]]* \n { strtokenNL TokString `andBegin` line }
   [^ $special \/ \< \# \n \'\` \& \\ \]]+    { strtoken TokString }
 }
 
@@ -93,7 +95,7 @@ data Token
   | TokDefStart
   | TokDefEnd
   | TokSpecial Char
-  | TokIdent String
+  | TokIdent RdrName
   | TokString String
   | TokURL String
   | TokPic String
@@ -106,32 +108,58 @@ data Token
 -- Alex support stuff
 
 type StartCode = Int
-type Action = String -> StartCode -> (StartCode -> Either String [Token]) -> Either String [Token]
+type Action = String -> StartCode -> (StartCode -> Maybe [Token]) -> Maybe [Token]
 
-type AlexInput = (Char,String)
+--TODO: we ought to switch to ByteString input.
+type AlexInput = (Char, [Word8], String)
 
 -- | For alex >= 3
 --
 -- See also alexGetChar
-alexGetByte :: AlexInput -> Maybe (Word8, AlexInput)
-alexGetByte (_, [])   = Nothing
-alexGetByte (_, c:cs) = Just (fromIntegral (ord c), (c,cs))
+alexGetByte :: AlexInput -> Maybe (Word8,AlexInput)
+alexGetByte (c,(b:bs),s) = Just (b,(c,bs,s))
+alexGetByte (c,[],[])    = Nothing
+alexGetByte (_,[],(c:s)) = case utf8Encode c of
+                             (b:bs) -> Just (b, (c, bs, s))
+
+-- | Encode a Haskell String to a list of Word8 values, in UTF8 format.
+utf8Encode :: Char -> [Word8]
+utf8Encode = map fromIntegral . go . ord
+ where
+  go oc
+   | oc <= 0x7f       = [oc]
+
+   | oc <= 0x7ff      = [ 0xc0 + (oc `Data.Bits.shiftR` 6)
+                        , 0x80 + oc Data.Bits..&. 0x3f
+                        ]
+
+   | oc <= 0xffff     = [ 0xe0 + (oc `Data.Bits.shiftR` 12)
+                        , 0x80 + ((oc `Data.Bits.shiftR` 6) Data.Bits..&. 0x3f)
+                        , 0x80 + oc Data.Bits..&. 0x3f
+                        ]
+   | otherwise        = [ 0xf0 + (oc `Data.Bits.shiftR` 18)
+                        , 0x80 + ((oc `Data.Bits.shiftR` 12) Data.Bits..&. 0x3f)
+                        , 0x80 + ((oc `Data.Bits.shiftR` 6) Data.Bits..&. 0x3f)
+                        , 0x80 + oc Data.Bits..&. 0x3f
+                        ]
 
 -- | For alex < 3
 --
 -- See also alexGetByte
 alexGetChar :: AlexInput -> Maybe (Char, AlexInput)
-alexGetChar (_, [])   = Nothing
-alexGetChar (_, c:cs) = Just (c, (c,cs))
+alexGetChar (_, _, [])   = Nothing
+alexGetChar (_, _, c:cs) = Just (c, (c,[],cs))
 
 alexInputPrevChar (c,_) = c
 
-tokenise :: String -> Either String [Token]
-tokenise str = let toks = go ('\n', eofHack str) para in {-trace (show toks)-} toks
-  where go inp@(_,str') sc =
+tokenise :: String -> Maybe [Token]
+tokenise str =
+    go ('\n', [], eofHack str) para
+  where
+    go inp@(_,_,str') sc =
           case alexScan inp sc of
-                AlexEOF -> Right []
-                AlexError _ -> Left "lexical error"
+                AlexEOF -> Just []
+                AlexError _ -> Nothing
                 AlexSkip  inp' _       -> go inp' sc
                 AlexToken inp' len act -> act (take len str') sc (\sc' -> go inp' sc')
 
@@ -145,8 +173,11 @@ andBegin act new_sc = \str _ cont -> act str new_sc cont
 token :: Token -> Action
 token t = \_ sc cont -> liftM (t :) (cont sc)
 
-strtoken :: (String -> Token) -> Action
+strtoken, strtokenNL :: (String -> Token) -> Action
 strtoken t = \str sc cont -> liftM (t str :) (cont sc)
+strtokenNL t = \str sc cont -> liftM (t (filter (/= '\r') str) :) (cont sc)
+-- ^ We only want LF line endings in our internal doc string format, so we
+-- filter out all CRs.
 
 begin :: StartCode -> Action
 begin sc = \_ _ cont -> cont sc

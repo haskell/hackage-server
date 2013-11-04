@@ -7,6 +7,10 @@ module Distribution.Server.Framework.Cache (
     readAsyncCache,
     prodAsyncCache,
     syncAsyncCache,
+    
+    AsyncUpdate,
+    newAsyncUpdate,
+    asyncUpdate,
   ) where
 
 import Control.Concurrent (forkIO, threadDelay)
@@ -18,6 +22,8 @@ import Control.DeepSeq (NFData, rnf)
 
 import Distribution.Server.Framework.Logging
 import qualified Distribution.Verbosity as Verbosity
+
+import Prelude hiding (catch)
 
 
 -- | An in-memory cache with asynchronous updates.
@@ -138,3 +144,50 @@ writeAsyncVar :: AsyncVar state -> state -> IO ()
 writeAsyncVar (AsyncVar inChan _) value =
     atomically (writeTChan inChan value)
 
+
+-----------------------------------------------------------------
+-- A mechanism for async updates with multiple update prevention
+--
+
+newtype AsyncUpdate = AsyncUpdate (TChan (IO ()))
+
+newAsyncUpdate :: Int -> Verbosity -> String -> IO AsyncUpdate
+newAsyncUpdate delay verbosity logname = do
+
+    inChan <- atomically newTChan
+
+    let loop = do
+
+          when (delay > 0) (threadDelay delay)
+
+          avail   <- readAllAvailable inChan
+          -- We have a series of new actions.
+          -- We want the last one, skipping all intermediate updates.
+          let action = last avail
+
+          logTiming verbosity (logname ++ " updated") $
+            action `catch` \e ->
+               loginfo verbosity $ "Exception in update " ++ logname ++ ": "
+                                ++ show (e :: SomeException)
+
+          loop
+
+    void $ forkIO loop
+    return (AsyncUpdate inChan)
+  where
+    -- get a list of all the input states currently queued
+    readAllAvailable chan =
+      atomically $ do
+        x <- readTChan chan -- will block if queue is empty
+        readAll [x]         -- will never block, just gets what's available
+      where
+        readAll xs = do
+          empty <- isEmptyTChan chan
+          if empty
+            then return (reverse xs)
+            else do x <- readTChan chan
+                    readAll (x:xs)
+
+asyncUpdate :: AsyncUpdate -> IO () -> IO ()
+asyncUpdate (AsyncUpdate inChan) action =
+    atomically (writeTChan inChan action)

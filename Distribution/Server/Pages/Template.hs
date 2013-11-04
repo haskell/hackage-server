@@ -78,5 +78,5 @@ adminURL = "/admin"
 
 -- URL of the list of recent additions to the database
 recentAdditionsURL :: URL
-recentAdditionsURL = "/recent"
+recentAdditionsURL = "/packages/recent"
 

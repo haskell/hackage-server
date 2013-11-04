@@ -4,7 +4,7 @@ category:     Distribution
 synopsis:     The Hackage web server
 description:  The new implementation of the Hackage web server, based on the
               Happstack architecture. This is the implementation used to power
-              http://hackage.haskell.org/
+              <http://hackage.haskell.org/>
               .
               It is designed to be easy to run your own instance.
               It also includes a doc builder client and a mirroring client.
@@ -16,6 +16,7 @@ maintainer:   Duncan Coutts <duncan@community.haskell.org>,
               Matthew Gruen <wikigracenotes@gmail.com>
 copyright:    2008-2013 Duncan Coutts,
               2012-2013 Edsko de Vries,
+              2013 Google Inc.,
               2010-2011 Matthew Gruen,
               2009-2010 Antoine Latter,
               2008 David Himmelstrup,
@@ -66,6 +67,10 @@ flag build-hackage-build
   default: True
   manual: True
 
+flag build-hackage-import
+  default: False
+  manual: True
+
 executable hackage-server
   if ! flag(build-hackage-server)
     buildable: False
@@ -96,6 +101,7 @@ executable hackage-server
     Distribution.Server.Framework.BackupDump
     Distribution.Server.Framework.BackupRestore
     Distribution.Server.Framework.ServerEnv
+    Distribution.Server.Framework.Templating
     
     Distribution.Server.Packages.Index
     Distribution.Server.Packages.ModuleForest
@@ -113,6 +119,7 @@ executable hackage-server
     Distribution.Server.Pages.Package.HaddockHtml
     Distribution.Server.Pages.Package.HaddockLex
     Distribution.Server.Pages.Package.HaddockParse
+    Distribution.Server.Pages.Package.HaddockTypes
     Distribution.Server.Pages.Recent
     -- [reverse index disabled] Distribution.Server.Pages.Reverse
     Distribution.Server.Pages.Template
@@ -133,6 +140,8 @@ executable hackage-server
     Distribution.Server.Util.ServeTarball
     Distribution.Server.Util.TarIndex
     Distribution.Server.Util.TextSearch
+    Distribution.Server.Util.GZip
+    Distribution.Server.Util.ContentType
 
     Distribution.Server.Features
     Distribution.Server.Features.Core
@@ -164,6 +173,7 @@ executable hackage-server
       Distribution.Server.Features.PackageCandidates.Types
       Distribution.Server.Features.PackageCandidates.State
       Distribution.Server.Features.PackageCandidates.Backup
+      Distribution.Server.Features.PackageList
       Distribution.Server.Features.Distro
       Distribution.Server.Features.Distro.Distributions
       Distribution.Server.Features.Distro.Backup
@@ -173,9 +183,22 @@ executable hackage-server
       Distribution.Server.Features.Documentation.State
       Distribution.Server.Features.DownloadCount
       Distribution.Server.Features.DownloadCount.State
+      Distribution.Server.Features.DownloadCount.Backup
       Distribution.Server.Features.EditCabalFiles
       Distribution.Server.Features.Html
+      Distribution.Server.Features.HoogleData
+      Distribution.Server.Features.HaskellPlatform
+      Distribution.Server.Features.HaskellPlatform.State
       Distribution.Server.Features.Search
+      Distribution.Server.Features.Search.BM25F
+      Distribution.Server.Features.Search.DocIdSet
+      Distribution.Server.Features.Search.DocTermIds
+      Distribution.Server.Features.Search.ExtractDescriptionTerms
+      Distribution.Server.Features.Search.ExtractNameTerms
+      Distribution.Server.Features.Search.PkgSearch
+      Distribution.Server.Features.Search.SearchEngine
+      Distribution.Server.Features.Search.SearchIndex
+      Distribution.Server.Features.Search.TermBag
       Distribution.Server.Features.RecentPackages
       Distribution.Server.Features.PreferredVersions
       Distribution.Server.Features.PreferredVersions.State
@@ -183,10 +206,12 @@ executable hackage-server
       -- [reverse index disabled] Distribution.Server.Features.ReverseDependencies
     -- [reverse index disabled] Distribution.Server.Features.ReverseDependencies.State
       Distribution.Server.Features.Tags
+      Distribution.Server.Features.Tags.Backup
       Distribution.Server.Features.Tags.State
       Distribution.Server.Features.UserDetails
       Distribution.Server.Features.UserSignup
       Distribution.Server.Features.StaticFiles
+      Distribution.Server.Features.ServerIntrospect
 
   if flag(debug)
     cpp-options: -DDEBUG
@@ -234,7 +259,7 @@ executable hackage-server
     aeson      == 0.6.1.*,
     unordered-containers >= 0.2.3.0,
     rss        == 3000.2.*,
-    Cabal      >= 1.16 && < 1.17,
+    Cabal      >= 1.18.1 && < 1.19,
     csv        == 0.1.*,
     stm        >= 2.2 && < 2.5,
     acid-state == 0.8.*,
@@ -269,6 +294,8 @@ executable hackage-mirror
   main-is: MirrorClient.hs
   other-modules:
     Distribution.Client
+    Distribution.Client.Cron
+    Distribution.Client.UploadLog
     Distribution.Server.Users.Types
     Distribution.Server.Util.Index
     Distribution.Server.Util.Merge
@@ -315,10 +342,16 @@ executable hackage-build
   ghc-options: -Wall -fwarn-tabs -threaded
 
 executable hackage-import
-  if ! flag(build-hackage-mirror)
+  if ! flag(build-hackage-import)
     buildable: False
   main-is: ImportClient.hs
   other-modules:
+    Distribution.Client.DistroMap
+    Distribution.Client.HtPasswdDb
+    Distribution.Client.ParseApacheLogs
+    Distribution.Client.PkgIndex
+    Distribution.Client.TagsFile
+    Distribution.Client.UserAddressesDb
   build-depends:
     base,
     containers, array, vector, bytestring, text, pretty,
@@ -352,5 +385,11 @@ Test-Suite HighLevelTest
                     process,
                     tar,
                     unix,
-                    zlib
+                    zlib,
+                    unordered-containers,
+                    aeson,
+                    text,
+                    vector,
+                    xml,
+                    random
 

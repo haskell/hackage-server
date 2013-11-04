@@ -76,14 +76,25 @@ packagePage render headLinks top sections bottom docURL isCandidate =
 -- | Body of the package page
 pkgBody :: PackageRender -> [(String, Html)] -> [Html]
 pkgBody render sections =
-    prologue (description $ rendOther render) ++
-    propertySection sections
+    descriptionSection render
+ ++ propertySection sections
+
+descriptionSection :: PackageRender -> [Html]
+descriptionSection PackageRender{..} =
+    prologue (description rendOther)
+ ++ [ hr
+    , ulist << li << changelogLink]
+  where
+    changelogLink
+      | rendHasChangeLog = anchor ! [href changeLogURL] << "Changelog"
+      | otherwise        = toHtml << "No changelog available"
+    changeLogURL  = rendPkgUri </> "changelog"
 
 prologue :: String -> [Html]
 prologue [] = []
 prologue desc = case tokenise desc >>= parseHaddockParagraphs of
-    Left _ -> [paragraph << p | p <- paragraphs desc]
-    Right doc -> [markup htmlMarkup doc]
+    Nothing  -> [paragraph << p | p <- paragraphs desc]
+    Just doc -> [markup htmlMarkup doc]
 
 -- Break text into paragraphs (separated by blank lines)
 paragraphs :: String -> [String]
@@ -111,17 +122,10 @@ downloadSection PackageRender{..} =
       , [ anchor ! [href cabalURL] << "Package description"
         , toHtml $ if rendHasTarball then " (included in the package)" else ""
         ]
-      , case (rendHasTarball, rendHasChangeLog) of
-         (True, True)  -> [ anchor ! [href changeLogURL] << "Changelog"
-                          , toHtml << " (included in the package)"
-                          ]
-         (True, False) -> [ toHtml << "No changelog available" ]
-         _             -> [ toHtml << "Package tarball not uploaded" ]
       ]
 
     downloadURL   = rendPkgUri </> display rendPkgId <.> "tar.gz"
     cabalURL      = rendPkgUri </> display (packageName rendPkgId) <.> "cabal"
-    changeLogURL  = rendPkgUri </> "changelog"
     srcURL        = rendPkgUri </> "src/"
     tarGzFileName = display rendPkgId ++ ".tar.gz"
 

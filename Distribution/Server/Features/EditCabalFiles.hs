@@ -143,10 +143,6 @@ editCabalFilesFeature _env templates
              , "changes"   $= changes
              ]
 
--- TODO: Add Eq instance at source
-deriving instance Eq PWarning
-deriving instance Eq PackageCheck
-
 instance ToSElem Change where
   toSElem (Change change from to) =
     toSElem (Map.fromList [("what", change)
@@ -237,14 +233,14 @@ checkPackageDescriptions
      pkgUrlA bugReportsA sourceReposA synopsisA descriptionA
      categoryA customFieldsA _buildDependsA specVersionA buildTypeA
      _libraryA _executablesA _testSuitesA _benchmarksA dataFilesA dataDirA
-     extraSrcFilesA extraTmpFilesA {-_extraHtmlFilesA-})
+     extraSrcFilesA extraTmpFilesA extraDocFilesA)
   (PackageDescription
      packageIdB licenseB licenseFileB
      copyrightB maintainerB authorB stabilityB testedWithB homepageB
      pkgUrlB bugReportsB sourceReposB synopsisB descriptionB
      categoryB customFieldsB _buildDependsB specVersionB buildTypeB
      _libraryB _executablesB _testSuitesB _benchmarksB dataFilesB dataDirB
-     extraSrcFilesB extraTmpFilesB {-_extraHtmlFilesB-})
+     extraSrcFilesB extraTmpFilesB extraDocFilesB)
   = do
   checkSame "Don't be silly! You can't change the package name!"
             (packageName packageIdA) (packageName packageIdB)
@@ -278,6 +274,8 @@ checkPackageDescriptions
             extraTmpFilesA extraTmpFilesB
   checkSame "Changing extra-source-files would not make sense!"
             extraSrcFilesA extraSrcFilesB
+  checkSame "You can't change the extra-doc-files."
+            extraDocFilesA extraDocFilesB
 
   checkSame "Cannot change custom/extension fields"
             (filter (\(f,_) -> f /= "x-revision") customFieldsA)

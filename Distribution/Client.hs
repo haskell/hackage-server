@@ -35,6 +35,7 @@ import Distribution.Server.Util.Index as PackageIndex (read)
 import Distribution.Server.Util.Merge
 import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.Package
+import Distribution.Version
 import Distribution.Verbosity
 import Distribution.Simple.Utils
 import Distribution.Text
@@ -58,7 +59,6 @@ import System.FilePath
 import System.Directory
 import qualified System.FilePath.Posix as Posix
 
-import Paths_hackage_server (version)
 
 -------------------------
 -- Command line handling
@@ -229,10 +229,10 @@ uriHostName = fmap uriRegName . uriAuthority
 
 type HttpSession a = BrowserAction (HandleStream ByteString) a
 
-httpSession :: Verbosity -> HttpSession a -> IO a
-httpSession verbosity action =
+httpSession :: Verbosity -> String -> Version -> HttpSession a -> IO a
+httpSession verbosity agent version action =
     browse $ do
-      setUserAgent ("hackage-mirror/" ++ display version)
+      setUserAgent (agent ++ "/" ++ display version)
       setErrHandler die
       setOutHandler (debug verbosity)
       setAllowBasicAuth True

@@ -13,8 +13,10 @@ import Data.Char
 import qualified NLP.Tokenize as NLP
 import qualified NLP.Snowball as NLP
 import Control.Monad ((>=>))
+import Data.Maybe
 
-import Distribution.Server.Pages.Package.HaddockHtml  as Haddock
+import Distribution.Server.Pages.Package.HaddockHtml  as Haddock (markup)
+import Distribution.Server.Pages.Package.HaddockTypes as Haddock
 import qualified Distribution.Server.Pages.Package.HaddockParse as Haddock (parseHaddockParagraphs)
 import qualified Distribution.Server.Pages.Package.HaddockLex   as Haddock (tokenise)
 
@@ -51,8 +53,8 @@ extractDescriptionTerms stopWords =
       NLP.stems NLP.English
     . filter (`Set.notMember` stopWords)
     . map (T.toCaseFold . T.pack)
-    . either
-        (const []) -- --TODO: something here
+    . maybe
+        [] --TODO: something here
         (  filter (not . ignoreTok)
          . NLP.tokenize
          . concat . markup termsMarkup)
@@ -72,7 +74,8 @@ termsMarkup = Markup {
   markupOrderedList   = concat,
   markupDefList       = concatMap (\(d,t) -> d ++ t),
   markupCodeBlock     = const [],
-  markupURL           = const [], --TODO: extract main part of hostname
+  markupHyperlink     = \(Hyperlink _url mLabel) -> maybeToList mLabel,
+                        --TODO: extract main part of hostname
   markupPic           = const [],
   markupAName         = const []
   }

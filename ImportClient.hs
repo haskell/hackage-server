@@ -245,7 +245,7 @@ importAccounts jobs htpasswdFile makeUploader baseURI = do
             =<< readFile htpasswdFile
 
   concForM_ jobs htpasswdDb $ \tasks ->
-    httpSession $ do
+    httpSession "hackage-import" version $ do
       setAuthorityFromURI baseURI
       tasks $ \(username, mPasswdhash) ->
         putUserAccount baseURI username mPasswdhash makeUploader
