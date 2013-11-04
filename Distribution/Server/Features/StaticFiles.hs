@@ -7,7 +7,6 @@ import Distribution.Server.Framework
 import Distribution.Server.Framework.Templating
 
 import Text.XHtml.Strict (Html, toHtml, anchor, (<<), (!), href, paragraph)
-import qualified Text.XHtml.Strict as XHtml
 
 import Data.List hiding (find)
 import System.FilePath
@@ -115,7 +114,7 @@ staticFilesFeature ServerEnv{serverStaticDir} templates staticFiles =
         let formattedMessage = paragraph << errorToHtml message
             response = toResponse $ template
               [ "errorTitle"   $= errTitle
-              , "errorMessage" $= XHtml.showHtmlFragment formattedMessage
+              , "errorMessage" $= formattedMessage
               ]
         return $ response {
           rsCode    = errCode,

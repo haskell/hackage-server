@@ -20,7 +20,7 @@ import Distribution.PackageDescription.Parse
          (parsePackageDescription, sourceRepoFieldDescrs)
 import Distribution.PackageDescription.Check
 import Distribution.ParseUtils
-         ( ParseResult(..), locatedErrorMsg, PWarning(..), showPWarning )
+         ( ParseResult(..), locatedErrorMsg, showPWarning )
 import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.ParseUtils (FieldDescr(..))
 import Distribution.Text (Text(..))
@@ -88,7 +88,7 @@ editCabalFilesFeature _env templates
         -- check that the cabal name matches the package
         guard (lookup "cabal" dpath == Just (display pkgname))
         ok $ toResponse $ template
-          [ "pkgid"     $= display pkgid
+          [ "pkgid"     $= pkgid
           , "cabalfile" $= insertRevisionField (1 + length (pkgDataOld pkg))
                              (cabalFileByteString (pkgData pkg))
           ]
@@ -118,7 +118,7 @@ editCabalFilesFeature _env templates
                 updateAddPackageRevision pkgid (CabalFileText newRevision)
                                                (time, uid)
                 ok $ toResponse $ template'
-                  [ "pkgid"     $= display pkgid
+                  [ "pkgid"     $= pkgid
                   , "cabalfile" $= newRevision
                   , "changes"   $= changes
                   ]
@@ -136,7 +136,7 @@ editCabalFilesFeature _env templates
                           -> ServerPartE Response
          responseTemplate template pkgid cabalFile publish errors changes =
            ok $ toResponse $ template
-             [ "pkgid"     $= display pkgid
+             [ "pkgid"     $= pkgid
              , "cabalfile" $= cabalFile
              , "publish"   $= publish
              , "errors"    $= errors

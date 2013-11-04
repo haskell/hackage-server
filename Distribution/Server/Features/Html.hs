@@ -508,8 +508,8 @@ mkHtmlCore HtmlUtilities{..}
       guardAuthorisedAsMaintainerOrTrustee (pkgname :: PackageName)
       template <- getTemplate templates "maintain.html"
       return $ toResponse $ template
-        [ "pkgname"  $= display pkgname
-        , "versions" $= map (display . packageId) pkgs
+        [ "pkgname"  $= pkgname
+        , "versions" $= map packageId pkgs
         ]
 
     serveDistroMonitorPage :: DynamicPath -> ServerPartE Response
@@ -518,8 +518,8 @@ mkHtmlCore HtmlUtilities{..}
       pkgs <- lookupPackageName pkgname
       template <- getTemplate templates "distro-monitor.html"
       return $ toResponse $ template
-        [ "pkgname"  $= display pkgname
-        , "versions" $= map (display . packageId) pkgs
+        [ "pkgname"  $= pkgname
+        , "versions" $= map packageId pkgs
         ]
 
 
@@ -845,8 +845,8 @@ mkHtmlCandidates HtmlUtilities{..}
       guardAuthorisedAsMaintainer (packageName candidate)
       template <- getTemplate templates "maintain-candidate.html"
       return $ toResponse $ template
-        [ "pkgname"  $= display (packageName candidate)
-        , "pkgversion" $= display (packageVersion candidate)
+        [ "pkgname"    $= packageName candidate
+        , "pkgversion" $= packageVersion candidate
         ]
     {-some useful URIs here: candidateUri check "" pkgid, packageCandidatesUri check "" pkgid, publishUri check "" pkgid-}
 

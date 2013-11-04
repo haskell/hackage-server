@@ -9,6 +9,7 @@
 -- Support for templates, html and text, based on @HStringTemplate@ package.
 -----------------------------------------------------------------------------
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Framework.Templating (
     Template,
     renderTemplate,
@@ -22,36 +23,44 @@ module Distribution.Server.Framework.Templating (
   ) where
 
 import Text.StringTemplate
+import Text.StringTemplate.Classes
 import Happstack.Server (ToMessage(..), toResponseBS)
 
-import qualified Data.ByteString      as BS
-import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString.Char8      as BS
+import qualified Data.ByteString.Lazy.Char8 as LBS
 
 --TODO: switch to bytestring builder, once we can depend on bytestring-0.10
 --import qualified Data.ByteString.Lazy.Builder as Builder
 --import Data.ByteString.Lazy.Builder (Builder)
 import Blaze.ByteString.Builder (Builder)
 import qualified Blaze.ByteString.Builder as Builder
+import qualified Blaze.ByteString.Builder.Html.Utf8 as Builder
+import qualified Text.XHtml.Strict as XHtml
+import Network.URI (URI)
+
+import Distribution.Package (PackageName, PackageIdentifier)
+import Distribution.Version (Version)
+import Distribution.Text    (display)
 
 import Control.Monad (when)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.List
 import Data.Maybe (isJust)
-import System.FilePath ((<.>))
+import System.FilePath ((<.>), takeExtension)
 
 
 type RawTemplate = StringTemplate Builder
 type RawTemplateGroup = STGroup Builder
 
-newtype Template = Template RawTemplate
+data Template = Template !TemplateKind !RawTemplate
+data TemplateKind = TextTemplate | HtmlTemplate | XmlTemplate | OtherTemplate
 
 renderTemplate :: Template -> LBS.ByteString
-renderTemplate (Template st) = Builder.toLazyByteString (render st)
+renderTemplate (Template _ st) = Builder.toLazyByteString (render st)
 
 instance ToMessage Template where
-  toResponse t = toResponseBS contentType (renderTemplate t)
-    where
-      contentType = "text/html; charset=utf-8"
+  toResponse t@(Template tkind _) =
+    toResponseBS (templateContentType tkind) (renderTemplate t)
 
 newtype TemplateAttr = TemplateAttr (RawTemplate -> RawTemplate)
 
@@ -59,7 +68,14 @@ infix 0 $=
 ($=) :: ToSElem a => String -> a -> TemplateAttr
 ($=) k v = TemplateAttr (setAttribute k v)
 
+instance ToSElem XHtml.Html where
+    -- The use of SBLE here is to prevent the html being escaped
+    toSElem = SBLE . stFromString . XHtml.showHtmlFragment
 
+instance ToSElem URI               where toSElem = toSElem . show
+instance ToSElem PackageName       where toSElem = toSElem . display
+instance ToSElem Version           where toSElem = toSElem . display
+instance ToSElem PackageIdentifier where toSElem = toSElem . display
 
 
 data Templates = TemplatesNormalMode !RawTemplateGroup
@@ -67,7 +83,6 @@ data Templates = TemplatesNormalMode !RawTemplateGroup
 
 data TemplatesMode = NormalMode | DesignMode
 
---FIXME: for html template we have to do escaping, this is essential!
 loadTemplates :: TemplatesMode -> [FilePath] -> [String] -> IO Templates
 loadTemplates templateMode templateDirs expectedTemplates = do
     templateGroup <- loadTemplateGroup templateDirs
@@ -87,16 +102,47 @@ getTemplate templates@(TemplatesDesignMode _ expectedTemplates) name = do
 
 tryGetTemplate :: MonadIO m => Templates -> String -> m (Maybe ([TemplateAttr] -> Template))
 tryGetTemplate (TemplatesNormalMode templateGroup) name =
-    let mtemplate = fmap (\t -> Template . applyTemplateAttrs t)
+    let tkind     = templateKindFromExt name
+        mtemplate = fmap (\t -> Template tkind
+                              . applyEscaping tkind
+                              . applyTemplateAttrs t)
                          (getStringTemplate name templateGroup)
     in return mtemplate
 
 tryGetTemplate (TemplatesDesignMode templateDirs expectedTemplates) name = do
     templateGroup <- liftIO $ loadTemplateGroup templateDirs
     checkTemplates templateGroup templateDirs expectedTemplates
-    let mtemplate = fmap (\t -> Template . applyTemplateAttrs t)
+    let tkind     = templateKindFromExt name
+        mtemplate = fmap (\t -> Template tkind
+                              . applyEscaping tkind
+                              . applyTemplateAttrs t)
                          (getStringTemplate name templateGroup)
     return mtemplate
+
+templateKindFromExt :: FilePath -> TemplateKind
+templateKindFromExt tname =
+    case takeExtension tname of
+      ".txt"  -> TextTemplate
+      ".html" -> HtmlTemplate
+      ".xml"  -> XmlTemplate
+      _       -> OtherTemplate
+
+applyEscaping :: TemplateKind -> RawTemplate -> RawTemplate
+applyEscaping TextTemplate  = id
+applyEscaping HtmlTemplate  = setEncoder escapeHtml
+applyEscaping XmlTemplate   = setEncoder escapeHtml -- ok to reuse
+applyEscaping OtherTemplate = id
+
+escapeHtml :: Builder -> Builder
+escapeHtml = Builder.fromHtmlEscapedString
+           . LBS.unpack
+           . Builder.toLazyByteString
+
+templateContentType :: TemplateKind -> BS.ByteString
+templateContentType TextTemplate  = "text/plain; charset=utf-8"
+templateContentType HtmlTemplate  = "text/html; charset=utf-8"
+templateContentType XmlTemplate   = "application/xml"
+templateContentType OtherTemplate = "text/plain"
 
 applyTemplateAttrs :: RawTemplate -> [TemplateAttr] -> RawTemplate
 applyTemplateAttrs = foldl' (\t' (TemplateAttr a) -> a t')
@@ -143,3 +189,4 @@ checkTemplates templateGroup templateDirs expectedTemplates = do
 
     formatTemplateProblem (_es, _ma, Just mt) =
       "References to missing templates: " ++ intercalate ", " mt
+    formatTemplateProblem _ = "Unknown error with template"
