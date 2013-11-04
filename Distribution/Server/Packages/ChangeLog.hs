@@ -4,7 +4,7 @@ module Distribution.Server.Packages.ChangeLog (
   ) where
 
 import Control.Monad (msum)
-import System.FilePath ((</>))
+import System.FilePath ((</>), (<.>))
 import qualified Text.PrettyPrint.HughesPJ as Pretty (render)
 
 import Data.TarIndex (TarIndex, TarEntryOffset)
@@ -27,11 +27,14 @@ findChangeLog PkgInfo{pkgInfoId} index =
         _ -> fail "is a directory"
 
     candidates = let pkgId = Pretty.render $ disp pkgInfoId
-                 in map (pkgId </>) $ filenames ++ map (++ ".html") filenames
+                 in map (pkgId </>) $ [ fname <.> ext | fname <- filenames, ext <- exts ]
 
     filenames = [ "ChangeLog"
                 , "CHANGELOG"
                 , "CHANGE_LOG"
                 , "Changelog"
                 , "changelog"
+                , "CHANGES"
+                , "changes"
                 ]
+    exts = ["", "html", "md", "markdown"]
