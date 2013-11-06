@@ -3,35 +3,33 @@ module Distribution.Server.Packages.ChangeLog (
     findChangeLog
   ) where
 
-import Control.Monad (msum)
-import System.FilePath ((</>))
-import qualified Text.PrettyPrint.HughesPJ as Pretty (render)
-
 import Data.TarIndex (TarIndex, TarEntryOffset)
 import qualified Data.TarIndex as TarIndex
-import Distribution.Text (disp)
-import Distribution.Server.Packages.Types (PkgInfo(..))
+import Distribution.Server.Packages.Types (PkgInfo)
+import Distribution.Package (packageId)
+import Distribution.Text (display)
 
-findChangeLog :: PkgInfo -> TarIndex -> Either String (TarEntryOffset, String)
-findChangeLog PkgInfo{pkgInfoId} index =
-  case msum $ map lookupFile candidates of
-    Just (offset, name) ->
-      Right (offset, name)
-    Nothing -> do
-      Left $ "No changelog found, considered: " ++ show candidates
+import System.FilePath ((</>), splitExtension)
+import Data.Char as Char
+import Data.Maybe
+
+
+findChangeLog :: PkgInfo -> TarIndex -> Maybe (TarEntryOffset, String)
+findChangeLog pkg index = do
+    let topdir = display (packageId pkg)
+    TarIndex.TarDir fnames <- TarIndex.lookup index topdir
+    listToMaybe
+      [ (offset, fname')
+      | fname <- fnames
+      , isChangelogFile fname
+      , let fname' = topdir </> fname
+      , Just (TarIndex.TarFileEntry offset) <- [TarIndex.lookup index fname'] ]
   where
-    lookupFile fname = do
-      entry <- TarIndex.lookup index fname
-      case entry of
-        TarIndex.TarFileEntry offset -> return (offset, fname)
-        _ -> fail "is a directory"
+    isChangelogFile fname = 
+      let (base, ext) = splitExtension fname
+       in map Char.toLower base `elem` basenames
+       && ext `elem` extensions
 
-    candidates = let pkgId = Pretty.render $ disp pkgInfoId
-                 in map (pkgId </>) $ filenames ++ map (++ ".html") filenames
+    basenames  = ["changelog", "change_log"]
+    extensions = ["", ".txt", ".md"]
 
-    filenames = [ "ChangeLog"
-                , "CHANGELOG"
-                , "CHANGE_LOG"
-                , "Changelog"
-                , "changelog"
-                ]
