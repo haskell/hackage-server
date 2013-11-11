@@ -30,6 +30,6 @@ findChangeLog pkg index = do
        in map Char.toLower base `elem` basenames
        && ext `elem` extensions
 
-    basenames  = ["changelog", "change_log"]
-    extensions = ["", ".txt", ".md"]
+    basenames  = ["changelog", "change_log", "changes"]
+    extensions = ["", ".txt", ".md", ".markdown"]
 
