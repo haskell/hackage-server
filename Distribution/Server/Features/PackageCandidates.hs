@@ -430,5 +430,6 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarEntryOffset, FilePath))
     packageChangeLog pkgInfo = runErrorT $ do
       (fp, etag, index) <- ErrorT $ packageTarball pkgInfo
-      (offset, fname)   <- ErrorT $ return (findChangeLog pkgInfo index)
+      (offset, fname)   <- ErrorT $ return . maybe (Left "No changelog found") Right
+                                  $ findChangeLog pkgInfo index
       return (fp, etag, offset, fname)

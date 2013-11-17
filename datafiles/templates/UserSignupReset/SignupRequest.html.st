@@ -28,7 +28,7 @@ permission to upload packages requires an extra step from an administrator.
 <tr>
 <td><label for="username">Login username</label>
 <td><input type="text" name="username" id="username">
-<td>This has to be ASCII with no spaces, e.g. JanNovak
+<td>This has to be ASCII with no spaces or symbols (except '_'), e.g. JanNovak
 
 <tr>
 <td><label for="email">Your email address</label>

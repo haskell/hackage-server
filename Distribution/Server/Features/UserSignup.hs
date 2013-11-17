@@ -277,10 +277,10 @@ initUserSignupFeature env@ServerEnv{serverStateDir, serverTemplatesDir, serverTe
   -- Page templates
   templates <- loadTemplates serverTemplatesMode
                  [serverTemplatesDir, serverTemplatesDir </> "UserSignupReset"]
-                 [ "SignupRequest", "SignupConfirmationEmail"
-                 , "SignupEmailSent", "SignupConfirm"
-                 , "ResetRequest", "ResetConfirmationEmail"
-                 , "ResetEmailSent", "ResetConfirm" ]
+                 [ "SignupRequest.html", "SignupConfirmation.email"
+                 , "SignupEmailSent.html", "SignupConfirm.html"
+                 , "ResetRequest.html", "ResetConfirmation.email"
+                 , "ResetEmailSent.html", "ResetConfirm.html" ]
 
   let feature = userSignupFeature env users userdetails
                                   signupResetState templates
@@ -392,13 +392,13 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
 
     handlerGetSignupRequestNew :: DynamicPath -> ServerPartE Response
     handlerGetSignupRequestNew _ = do
-        template <- getTemplate templates "SignupRequest"
+        template <- getTemplate templates "SignupRequest.html"
         ok $ toResponse $ template []
 
     handlerPostSignupRequestNew :: DynamicPath -> ServerPartE Response
     handlerPostSignupRequestNew _ = do
-        templateEmail        <- getTemplate templates "SignupConfirmationEmail"
-        templateConfirmation <- getTemplate templates "SignupEmailSent"
+        templateEmail        <- getTemplate templates "SignupConfirmation.email"
+        templateConfirmation <- getTemplate templates "SignupEmailSent.html"
 
         (username, realname, useremail) <- lookUserNameEmail
 
@@ -422,11 +422,11 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
             }
             mailBody = renderTemplate $ templateEmail
               [ "realname"    $= realname
-              , "confirmlink" $= show serverBaseURI {
+              , "confirmlink" $= serverBaseURI {
                                    uriPath = "/users/register-request/"
                                           ++ renderNonce nonce
                                  }
-              , "serverhost"  $= show serverBaseURI
+              , "serverhost"  $= serverBaseURI
               ]
             Just ourHost = uriAuthority serverBaseURI
 
@@ -460,7 +460,7 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
           guard (T.length str <= 50)    ?! "Sorry, we didn't expect login names to be longer than 50 characters."
           guard (T.all isAsciiChar str) ?! "Sorry, login names have to be ASCII characters only, no spaces or symbols."
           where
-            isAsciiChar c = c < '\127' && isAlphaNum c
+            isAsciiChar c = (c < '\127' && isAlphaNum c) || (c == '_')
 
         guardValidLookingEmail str = either errBadEmail return $ do
           guard (T.length str <= 100)     ?! "Sorry, we didn't expect email addresses to be longer than 100 characters."
@@ -484,7 +484,7 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
     handlerGetSignupRequestOutstanding dpath = do
         nonce <- nonceInPath dpath
         SignupInfo {..} <- lookupSignupInfo nonce
-        template <- getTemplate templates "SignupConfirm"
+        template <- getTemplate templates "SignupConfirm.html"
         resp 202 $ toResponse $
           template
             [ "realname"  $= signupRealName
@@ -534,13 +534,13 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
 
     handlerGetResetRequestNew :: DynamicPath -> ServerPartE Response
     handlerGetResetRequestNew _ = do
-        template <- getTemplate templates "ResetRequest"
+        template <- getTemplate templates "ResetRequest.html"
         ok $ toResponse $ template []
 
     handlerPostResetRequestNew :: DynamicPath -> ServerPartE Response
     handlerPostResetRequestNew _ = do
-        templateEmail        <- getTemplate templates "ResetConfirmationEmail"
-        templateConfirmation <- getTemplate templates "ResetEmailSent"
+        templateEmail        <- getTemplate templates "ResetConfirmation.email"
+        templateConfirmation <- getTemplate templates "ResetEmailSent.html"
 
         (supplied_username, supplied_useremail) <- lookUserNameEmail
         (uid, uinfo) <- lookupUserNameFull supplied_username
@@ -566,11 +566,11 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
             }
             mailBody = renderTemplate $ templateEmail
               [ "realname"    $= accountName
-              , "confirmlink" $= show serverBaseURI {
+              , "confirmlink" $= serverBaseURI {
                                    uriPath = "/users/password-reset/"
                                           ++ renderNonce nonce
                                  }
-              , "serverhost"  $= show serverBaseURI
+              , "serverhost"  $= serverBaseURI
               ]
             Just ourHost = uriAuthority serverBaseURI
 
@@ -613,7 +613,7 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
         mudetails                <- queryUserDetails resetUserId
         AccountDetails{..}       <- guardSuitableAccountType uinfo mudetails
 
-        template <- getTemplate templates "ResetConfirm"
+        template <- getTemplate templates "ResetConfirm.html"
         resp 202 $ toResponse $
           template
             [ "realname"  $= accountName
