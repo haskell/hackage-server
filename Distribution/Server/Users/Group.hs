@@ -21,21 +21,17 @@ import Distribution.Server.Framework.MemSize
 import qualified Data.IntSet as IntSet
 import Data.Monoid (Monoid)
 import Data.SafeCopy (SafeCopy(..), contain)
-import Data.Serialize (Serialize)
 import qualified Data.Serialize as Serialize
 import Data.Typeable (Typeable)
 import Control.DeepSeq
+import Control.Applicative ((<$>))
 
 import Prelude hiding (id)
 
 -- | Some subset of users, eg those allowed to perform some action.
 --
 newtype UserList = UserList IntSet.IntSet
-  deriving (Eq, Monoid, Serialize, Typeable, Show, MemSize)
-
-instance SafeCopy UserList where
-  putCopy = contain . Serialize.put
-  getCopy = contain Serialize.get
+  deriving (Eq, Monoid, Typeable, Show, MemSize)
 
 empty :: UserList
 empty = UserList IntSet.empty
@@ -100,6 +96,11 @@ groupName desc = groupTitle desc ++ maybe "" (\(for, _) -> " for " ++ for) (grou
 
 queryGroups :: [UserGroup] -> IO UserList
 queryGroups = fmap unions . mapM queryUserList
+
+
+instance SafeCopy UserList where
+  putCopy (UserList x) = contain $ Serialize.put x
+  getCopy = contain $ UserList <$> Serialize.get
 
 -- for use in Caches, really...
 instance NFData GroupDescription where

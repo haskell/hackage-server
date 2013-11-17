@@ -1,4 +1,5 @@
-{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, TemplateHaskell,
+             TypeFamilies #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Features.BuildReports.BuildReports (
     BuildReport(..),
@@ -17,28 +18,29 @@ module Distribution.Server.Features.BuildReports.BuildReports (
   ) where
 
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
-import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
-import Distribution.Server.Features.BuildReports.BuildReport (BuildReport)
+import Distribution.Server.Features.BuildReports.BuildReport
+         (BuildReport(..), BuildReport_v0)
 
 import Distribution.Package (PackageId)
 import Distribution.Text (Text(..))
 
 import Distribution.Server.Framework.MemSize
+import Distribution.Server.Framework.Instances
 
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Serialize as Serialize
 import Data.Serialize (Serialize)
+import Data.SafeCopy
 import Data.Typeable (Typeable)
 import Control.Applicative ((<$>))
 
 import qualified Distribution.Server.Util.Parse as Parse
 import qualified Text.PrettyPrint          as Disp
 
-import qualified Data.ByteString.Char8 as BS.Char8 -- Build reports are ASCII
 
 newtype BuildReportId = BuildReportId Int
-  deriving (Eq, Ord, Serialize, Typeable, Show, MemSize)
+  deriving (Eq, Ord, Typeable, Show, MemSize)
 
 incrementReportId :: BuildReportId -> BuildReportId
 incrementReportId (BuildReportId n) = BuildReportId (n+1)
@@ -48,7 +50,7 @@ instance Text BuildReportId where
   parse = BuildReportId <$> Parse.int
 
 newtype BuildLog = BuildLog BlobStorage.BlobId
-  deriving (Eq, Serialize, Typeable, Show, MemSize)
+  deriving (Eq, Typeable, Show, MemSize)
 
 data PkgBuildReports = PkgBuildReports {
     -- for each report, other useful information: Maybe UserId, UTCTime
@@ -117,39 +119,90 @@ setBuildLog pkgid reportId buildLog buildReports = case Map.lookup pkgid (report
                          in Just $ buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
 
 -------------------
--- Serialize instances
+-- SafeCopy instances
 --
 
-instance Serialize BuildReport where
-  put = Serialize.put . BS.Char8.pack . BuildReport.show
-  get = (BuildReport.read . BS.Char8.unpack) `fmap` Serialize.get
-
-instance Serialize BuildReports where
-  put (BuildReports index) = Serialize.put index
-  get = do
-    rs <- Serialize.get
-    return BuildReports {
-      reportsIndex = rs
-    }
+deriveSafeCopy 2 'extension ''BuildReportId
+deriveSafeCopy 2 'extension ''BuildLog
+deriveSafeCopy 2 'extension ''BuildReports
 
 -- note: if the set of report ids is [1, 2, 3], then nextReportId = 4
 -- after calling deleteReport for 3, the set is [1, 2] and nextReportId is still 4.
 -- however, upon importing, nextReportId will = 3, one more than the maximum present
 -- this is also a problem in ReportsBackup.hs. but it's not a major issue I think.
-instance Serialize PkgBuildReports where
-    put (PkgBuildReports listing _) = Serialize.put listing
-    get = do
-        listing <- Serialize.get
-        return PkgBuildReports {
-            reports = listing,
-            nextReportId = if Map.null listing
-                              then BuildReportId 1
-                              else incrementReportId (fst $ Map.findMax listing)
-        }
-
+instance SafeCopy PkgBuildReports where
+    version = 2
+    kind    = extension
+    putCopy (PkgBuildReports x _) = contain $ safePut x
+    getCopy = contain $ mkReports <$> safeGet
+      where
+        mkReports rs = PkgBuildReports rs
+                         (if Map.null rs
+                            then BuildReportId 1
+                            else incrementReportId (fst $ Map.findMax rs))
 
 instance MemSize BuildReports where
     memSize (BuildReports a) = memSize1 a
 
 instance MemSize PkgBuildReports where
     memSize (PkgBuildReports a b) = memSize2 a b
+    
+    
+-------------------
+-- Old SafeCopy versions
+--
+
+newtype BuildReportId_v0 = BuildReportId_v0 Int deriving (Serialize, Enum, Eq, Ord)
+instance SafeCopy BuildReportId_v0
+
+instance Migrate BuildReportId where
+    type MigrateFrom BuildReportId = BuildReportId_v0
+    migrate (BuildReportId_v0 bid) = BuildReportId bid
+
+---
+
+newtype BuildLog_v0 = BuildLog_v0 BlobStorage.BlobId_v0 deriving Serialize
+instance SafeCopy BuildLog_v0
+
+instance Migrate BuildLog where
+    type MigrateFrom BuildLog = BuildLog_v0
+    migrate (BuildLog_v0 bl) = BuildLog (migrate bl)
+
+---
+
+data BuildReports_v0 = BuildReports_v0 
+                         !(Map.Map PackageIdentifier_v0 PkgBuildReports_v0)
+
+instance SafeCopy  BuildReports_v0
+instance Serialize BuildReports_v0 where
+    put (BuildReports_v0 index) = Serialize.put index
+    get = BuildReports_v0 <$> Serialize.get
+
+instance Migrate BuildReports where
+     type MigrateFrom BuildReports = BuildReports_v0
+     migrate (BuildReports_v0 m) =
+       BuildReports (Map.mapKeys migrate $ Map.map migrate m)
+
+---
+
+data PkgBuildReports_v0 = PkgBuildReports_v0
+                           !(Map BuildReportId_v0 (BuildReport_v0, Maybe BuildLog_v0))
+                           !BuildReportId_v0
+
+instance SafeCopy  PkgBuildReports_v0
+instance Serialize PkgBuildReports_v0 where
+    put (PkgBuildReports_v0 listing _) = Serialize.put listing
+    get = mkReports <$> Serialize.get
+      where
+        mkReports rs = PkgBuildReports_v0 rs
+                         (if Map.null rs
+                            then BuildReportId_v0 1
+                            else succ (fst $ Map.findMax rs))
+
+instance Migrate PkgBuildReports where
+     type MigrateFrom PkgBuildReports = PkgBuildReports_v0
+     migrate (PkgBuildReports_v0 m n) =
+         PkgBuildReports (migrateMap m) (migrate n)
+       where
+         migrateMap = Map.mapKeys migrate
+                    . Map.map (\(br, l) -> (migrate br, fmap migrate  l))

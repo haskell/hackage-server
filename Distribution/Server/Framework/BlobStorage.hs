@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving,
-             ScopedTypeVariables, BangPatterns, CPP #-}
+             ScopedTypeVariables, TypeFamilies, BangPatterns, CPP #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Server.BlobStorage
@@ -22,6 +22,7 @@ module Distribution.Server.Framework.BlobStorage (
     consumeFileWith,
     fetch,
     filepath,
+    BlobId_v0,
   ) where
 
 import Distribution.Server.Framework.MemSize
@@ -33,6 +34,7 @@ import Data.Serialize
 import System.FilePath ((</>))
 import Control.Exception (handle, throwIO, evaluate, bracket)
 import Control.Monad
+import Control.Applicative
 import Data.SafeCopy
 import System.Directory
 import System.IO
@@ -62,7 +64,7 @@ import System.Posix.IO (
 -- | An id for a blob. The content of the blob is stable.
 --
 newtype BlobId = BlobId MD5Digest
-  deriving (Eq, Ord, Show, Serialize, Typeable)
+  deriving (Eq, Ord, Show, Typeable)
 
 instance ToJSON BlobId where
   toJSON (BlobId md5digest) = toJSON (show md5digest)
@@ -71,8 +73,10 @@ blobMd5 :: BlobId -> String
 blobMd5 (BlobId digest) = show digest
 
 instance SafeCopy BlobId where
-  putCopy = contain . put
-  getCopy = contain get
+  version = 2
+  kind    = extension
+  putCopy (BlobId x) = contain $ put x
+  getCopy = contain $ BlobId <$> get
 
 instance MemSize BlobId where
   memSize _ = 7 --TODO: pureMD5 package wastes 5 words!
@@ -313,3 +317,15 @@ fsync (Fd fd) =
 
 foreign import ccall "fsync" c_fsync :: CInt -> IO CInt
 #endif
+
+--------------------------
+-- Old SafeCopy versions
+--
+
+newtype BlobId_v0 = BlobId_v0 MD5Digest deriving Serialize
+
+instance SafeCopy BlobId_v0
+instance Migrate BlobId where
+    type MigrateFrom BlobId = BlobId_v0
+    migrate (BlobId_v0 digest) = BlobId digest
+

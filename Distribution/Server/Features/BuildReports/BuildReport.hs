@@ -1,4 +1,5 @@
-{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, TemplateHaskell,
+             TypeFamilies #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Client.Reporting
@@ -23,6 +24,8 @@ module Distribution.Server.Features.BuildReports.BuildReport (
     parseList,
     show,
     showList,
+    
+    BuildReport_v0,
   ) where
 
 import Distribution.Package
@@ -53,15 +56,24 @@ import qualified Text.PrettyPrint.HughesPJ as Disp
          ( Doc, char, text )
 import Text.PrettyPrint.HughesPJ
          ( (<+>), (<>) )
+import Data.Serialize as Serialize
+         ( Serialize(..) )
+import Data.SafeCopy
+         ( SafeCopy(..), deriveSafeCopy, extension, base, Migrate(..) )
+import Test.QuickCheck
+         ( Arbitrary(..), elements, oneof )
 
 import Data.List
          ( unfoldr, sortBy )
 import Data.Char as Char
          ( isAlpha, isAlphaNum )
+import qualified Data.ByteString.Char8 as BS
 import Data.Typeable
          ( Typeable )
+import Control.Applicative
 
 import Prelude hiding (show, read)
+
 
 data BuildReport
    = BuildReport {
@@ -278,3 +290,52 @@ instance MemSize InstallOutcome where
 
 instance MemSize Outcome where
     memSize _ = memSize0
+
+-------------------
+-- Arbitrary instances
+--
+
+instance Arbitrary BuildReport where
+  arbitrary = BuildReport <$> arbitrary <*> arbitrary <*> arbitrary
+                          <*> arbitrary <*> arbitrary <*> arbitrary
+                          <*> arbitrary <*> arbitrary <*> arbitrary
+                          <*> arbitrary
+
+instance Arbitrary InstallOutcome where
+  arbitrary = oneof [ pure DependencyFailed <*> arbitrary
+                    , pure DownloadFailed
+                    , pure UnpackFailed
+                    , pure SetupFailed
+                    , pure ConfigureFailed
+                    , pure BuildFailed
+                    , pure InstallFailed
+                    , pure InstallOk
+                    ]
+
+instance Arbitrary Outcome where
+  arbitrary = elements [ NotTried, Failed, Ok ]
+
+
+-------------------
+-- SafeCopy instances
+--
+
+deriveSafeCopy 0 'base      ''Outcome
+deriveSafeCopy 0 'base      ''InstallOutcome
+deriveSafeCopy 2 'extension ''BuildReport
+    
+    
+-------------------
+-- Old SafeCopy versions
+--
+
+newtype BuildReport_v0 = BuildReport_v0 BuildReport
+
+instance SafeCopy  BuildReport_v0
+instance Serialize BuildReport_v0 where
+    put (BuildReport_v0 br) = Serialize.put . BS.pack . show $ br
+    get = (BuildReport_v0 . read . BS.unpack) `fmap` Serialize.get
+
+instance Migrate BuildReport where
+     type MigrateFrom BuildReport = BuildReport_v0
+     migrate (BuildReport_v0 br) = br
