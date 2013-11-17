@@ -460,7 +460,7 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
           guard (T.length str <= 50)    ?! "Sorry, we didn't expect login names to be longer than 50 characters."
           guard (T.all isAsciiChar str) ?! "Sorry, login names have to be ASCII characters only, no spaces or symbols."
           where
-            isAsciiChar c = c < '\127' && isAlphaNum c
+            isAsciiChar c = (c < '\127' && isAlphaNum c) || (c == '_')
 
         guardValidLookingEmail str = either errBadEmail return $ do
           guard (T.length str <= 100)     ?! "Sorry, we didn't expect email addresses to be longer than 100 characters."
