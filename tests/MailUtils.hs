@@ -15,12 +15,10 @@ module MailUtils (
   , waitForEmailWithSubject
   ) where
 
-import Control.Monad
 import Control.Concurrent (threadDelay)
 import Data.Maybe
 import Network.URI
-import Network.HTTP
-import System.Random (randomIO)
+import Network.HTTP hiding (user)
 
 import qualified Text.XML.Light as XML
 

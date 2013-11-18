@@ -72,6 +72,11 @@ flag build-hackage-import
   default: False
   manual: True
 
+-- Requires working local outgoing email
+flag test-create-user
+  default: False
+  manual: True
+
 executable hackage-server
   if ! flag(build-hackage-server)
     buildable: False
@@ -375,7 +380,34 @@ Test-Suite HighLevelTest
     main-is:        HighLevelTest.hs
     hs-source-dirs: tests
     default-language: Haskell2010
-    ghc-options:    -threaded
+    ghc-options:    -threaded -Wall
+    build-depends:  base,
+                    bytestring,
+                    base64-bytestring,
+                    Cabal,
+                    directory,
+                    filepath,
+                    HTTP,
+                    network,
+                    process,
+                    tar,
+                    unix,
+                    zlib,
+                    unordered-containers,
+                    aeson,
+                    text,
+                    vector,
+                    xml,
+                    random
+
+Test-Suite CreateUserTest
+    if ! flag(test-create-user)
+      buildable: False
+    type:           exitcode-stdio-1.0
+    main-is:        CreateUserTest.hs
+    hs-source-dirs: tests
+    default-language: Haskell2010
+    ghc-options:    -threaded -Wall
     build-depends:  base,
                     bytestring,
                     base64-bytestring,
