@@ -60,8 +60,8 @@ pkgSearchRankParameters =
       paramK1,
       paramB,
       paramFieldWeights,
-      paramResultsetSoftLimit = 100,
-      paramResultsetHardLimit = 200
+      paramResultsetSoftLimit = 200,
+      paramResultsetHardLimit = 400
     }
   where
     paramK1 :: Float

@@ -97,6 +97,8 @@ binarySearch vec !a !b !key
           GT -> binarySearch vec (mid+1) b key
 
 union :: DocIdSet -> DocIdSet -> DocIdSet
+union x y | null x = y
+          | null y = x
 union (DocIdSet xs) (DocIdSet ys) =
     DocIdSet (Vec.create (MVec.new sizeBound >>= writeMerged xs ys))
   where

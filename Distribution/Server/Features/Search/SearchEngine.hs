@@ -242,6 +242,9 @@ pruneRelevantResults softLimit hardLimit =
   where
     go !acc [] = acc
     go !acc (d:ds)
+        -- If this is the first one, we add it anyway, otherwise we're in
+        -- danger of returning no results at all.
+      | DocIdSet.null acc = go d ds
         -- We consider the size our docset would be if we add this extra one...
         -- If it puts us over the hard limit then stop.
       | size > hardLimit  = acc
