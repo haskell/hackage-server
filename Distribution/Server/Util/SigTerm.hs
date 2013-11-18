@@ -16,7 +16,9 @@ import Control.Concurrent
          ( myThreadId )
 #if MIN_VERSION_base(4,6,0)
 import Control.Concurrent
-         ( mkWeakThreadId )
+         ( ThreadId, mkWeakThreadId )
+import System.Mem.Weak
+         ( Weak )
 #else
 import GHC.Conc.Sync
          ( ThreadId(..) )
