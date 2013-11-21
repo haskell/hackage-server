@@ -2,6 +2,12 @@
 module Distribution.Server.Features.Search (
     SearchFeature(..),
     initSearchFeature,
+
+    -- * Search parameters
+    defaultSearchRankParameters,
+    SearchEngine.SearchRankParameters(..),
+    PkgDocField,
+    BM25F.Explanation(..),
   ) where
 
 import Distribution.Server.Framework
@@ -10,7 +16,9 @@ import Distribution.Server.Framework.Templating
 import Distribution.Server.Features.Core
 
 import Distribution.Server.Features.Search.PkgSearch
+import Distribution.Server.Features.Search.SearchEngine (SearchRankParameters(..))
 import qualified Distribution.Server.Features.Search.SearchEngine as SearchEngine
+import qualified Distribution.Server.Features.Search.BM25F as BM25F
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Distribution.Server.Packages.Types
@@ -26,7 +34,10 @@ data SearchFeature = SearchFeature {
 
     searchPackagesResource :: Resource,
 
-    searchPackages :: MonadIO m => [String] -> m [PackageName]
+    searchPackages        :: MonadIO m => [String] -> m [PackageName],
+    searchPackagesExplain :: MonadIO m => SearchRankParameters PkgDocField ->
+                                          [String] -> m [(BM25F.Explanation PkgDocField T.Text
+                                                        ,PackageName)]
 }
 
 instance IsHackageFeature SearchFeature where
@@ -119,6 +130,17 @@ searchFeature ServerEnv{serverBaseURI} CoreFeature{..}
     searchPackages terms = do
         se <- readMemState searchEngineState
         let results = SearchEngine.query se (map T.pack terms)
+        return results
+
+    searchPackagesExplain :: MonadIO m
+                          => SearchRankParameters PkgDocField
+                          -> [String]
+                          -> m [(BM25F.Explanation PkgDocField T.Text, PackageName)]
+    searchPackagesExplain params terms = do
+        se <- readMemState searchEngineState
+        let results = SearchEngine.queryExplain
+                        (SearchEngine.setRankParams params se)
+                        (map T.pack terms)
         return results
 
     handlerGetOpenSearch :: DynamicPath -> ServerPartE Response

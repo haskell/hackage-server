@@ -15,6 +15,7 @@ import Distribution.Server.Features.PackageCandidates
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.Search
+import Distribution.Server.Features.Search as Search
 import Distribution.Server.Features.PreferredVersions
 -- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies
 import Distribution.Server.Features.PackageList
@@ -52,9 +53,12 @@ import Data.Function (on)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust)
 import qualified Data.Text as T
 import Control.Applicative (optional)
+import Data.Array (Array, listArray)
+import qualified Data.Array as Array
+import qualified Data.Ix    as Ix
 
 import Text.XHtml.Strict
 import qualified Text.XHtml.Strict as XHtml
@@ -1337,18 +1341,31 @@ mkHtmlSearch HtmlUtilities{..}
 
     servePackageFind :: DynamicPath -> ServerPartE Response
     servePackageFind _ = do
-        (mtermsStr, offset, limit) <-
-          queryString $ (,,) <$> optional (look "terms")
-                             <*> mplus (lookRead "offset") (pure 0)
-                             <*> mplus (lookRead "limit") (pure 100)
+        (mtermsStr, offset, limit, mexplain) <-
+          queryString $ (,,,) <$> optional (look "terms")
+                              <*> mplus (lookRead "offset") (pure 0)
+                              <*> mplus (lookRead "limit") (pure 100)
+                              <*> optional (look "explain")
+        let explain = isJust mexplain
         case mtermsStr of
+          Just termsStr | explain
+                        , terms <- words termsStr, not (null terms) -> do
+            params  <- queryString getSearchRankParameters
+            results <- searchPackagesExplain params terms
+            return $ toResponse $ Resource.XHtml $
+              hackagePage "Package search" $
+                [ toHtml $ paramsForm params termsStr
+                ,          resetParamsForm termsStr
+                , toHtml $ explainResults results
+                ]
+
           Just termsStr | terms <- words termsStr, not (null terms) -> do
             pkgnames <- searchPackages terms
             let (pageResults, moreResults) = splitAt limit (drop offset pkgnames)
             pkgDetails <- liftIO $ makeItemList pageResults
             return $ toResponse $ Resource.XHtml $
               hackagePage "Package search" $
-                [ toHtml $ searchForm termsStr
+                [ toHtml $ searchForm termsStr False
                 , toHtml $ resultsArea pkgDetails offset limit moreResults termsStr
                 , alternativeSearch
                 ]
@@ -1356,7 +1373,7 @@ mkHtmlSearch HtmlUtilities{..}
           _ ->
             return $ toResponse $ Resource.XHtml $
               hackagePage "Text search" $
-                [ toHtml $ searchForm ""
+                [ toHtml $ searchForm "" explain
                 , alternativeSearch
                 ]
       where
@@ -1386,12 +1403,14 @@ mkHtmlSearch HtmlUtilities{..}
              ++ "&offset=" ++ show (offset + limit)
              ++ "&limit="  ++ show limit
 
-        searchForm termsStr =
+        searchForm termsStr explain =
           [ h2 << "Package search"
           , form ! [theclass "box", XHtml.method "GET", action "/packages/search"] <<
               [ input ! [value termsStr, name "terms", identifier "terms"]
               , toHtml " "
               , input ! [thetype "submit", value "Search"]
+              , if explain then input ! [thetype "hidden", name "explain"]
+                           else noHtml
               ]
           ]
 
@@ -1402,6 +1421,96 @@ mkHtmlSearch HtmlUtilities{..}
             , toHtml " or "
             , anchor ! [href "http://www.haskell.org/hoogle/"] << "Hoogle"
             ]
+
+        explainResults :: [(Search.Explanation PkgDocField T.Text, PackageName)] -> [Html]
+        explainResults results =
+            [ h2 << "Results"
+            , case results of
+                []          -> noHtml
+                ((explanation1, _):_) ->
+                  table ! [ border 1 ] <<
+                    ( ( tr << tableHeader explanation1)
+                    : [ tr << tableRow explanation pkgname
+                      | (explanation, pkgname) <- results ])
+            ]
+          where
+            tableHeader Search.Explanation{..} =
+                [ th << "package", th << "overall score" ]
+             ++ [ th << (show term ++ " score")
+                | (term, _score) <- termScores ]
+             ++ [ th << (show term ++ " " ++ show field ++ " score")
+                | (term, fieldScores) <- termFieldScores
+                , (field, _score) <- fieldScores ]
+
+            tableRow Search.Explanation{..} pkgname =
+                [ td << display pkgname, td << show overallScore ]
+             ++ [ td << show score
+                | (_term, score) <- termScores ]
+             ++ [ td << show score
+                | (_term, fieldScores) <- termFieldScores
+                , (_field, score) <- fieldScores ]
+
+        getSearchRankParameters = do
+          let defaults = defaultSearchRankParameters
+          k1 <- lookRead "k1" `mplus` pure (paramK1 defaults)
+          bs <- sequence
+                  [ lookRead ("b" ++ show field)
+                      `mplus` pure (paramB defaults field)
+                  | field <- Ix.range (minBound, maxBound :: PkgDocField) ]
+          ws <- sequence
+                  [ lookRead ("w" ++ show field)
+                      `mplus` pure (paramFieldWeights defaults field)
+                  | field <- Ix.range (minBound, maxBound :: PkgDocField) ]
+          let barr, warr :: Array PkgDocField Float
+              barr = listArray (minBound, maxBound) bs
+              warr = listArray (minBound, maxBound) ws
+          return defaults {
+            paramK1            = k1,
+            paramB             = (barr Array.!),
+            paramFieldWeights  = (warr Array.!)
+          }
+
+        paramsForm SearchRankParameters{..} termsStr =
+          [ h2 << "Package search (tuning & explanation)"
+          , form ! [theclass "box", XHtml.method "GET", action "/packages/search"] <<
+              [ input ! [value termsStr, name "terms", identifier "terms"]
+              , toHtml " "
+              , input ! [thetype "submit", value "Search"]
+              , input ! [thetype "hidden", name "explain"]
+              , simpleTable [] [] $
+                    makeInput [thetype "text", value (show paramK1)] "k1" "K1 parameter"
+                  : [    makeInput [thetype "text", value (show (paramB field))]
+                                   ("b" ++ fieldname)
+                                   ("B param for " ++ fieldname)
+                      ++ makeInput [thetype "text", value (show (paramFieldWeights field)) ]
+                                   ("w" ++ fieldname)
+                                   ("Weight for " ++ fieldname)
+                    | field <- Ix.range (minBound, maxBound :: PkgDocField)
+                    , let fieldname = show field
+                    ]
+              ]
+          ]
+        resetParamsForm termsStr =
+          let SearchRankParameters{..} = defaultSearchRankParameters in
+          form ! [theclass "box", XHtml.method "GET", action "/packages/search"] <<
+            (concat $
+              [ input ! [ thetype "submit", value "Reset parameters" ]
+              , input ! [ thetype "hidden", name "terms", value termsStr ]
+              , input ! [ thetype "hidden", name "explain" ]
+              , input ! [ thetype "hidden", name "k1", value (show paramK1) ] ]
+            : [ [ input ! [ thetype "hidden"
+                          , name ("b" ++ fieldname)
+                          , value (show (paramB field))
+                          ]
+                , input ! [ thetype "hidden"
+                          , name ("w" ++ fieldname)
+                          , value (show (paramFieldWeights field))
+                          ]
+                ]
+              | field <- Ix.range (minBound, maxBound :: PkgDocField)
+              , let fieldname = show field
+              ])
+
 
 {-------------------------------------------------------------------------------
   Groups

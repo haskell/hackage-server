@@ -13,7 +13,7 @@ module Distribution.Server.Features.Search.SearchEngine (
 
     queryExplain,
     BM25F.Explanation(..),
-    withRankParams,
+    setRankParams,
 
     invariant,
   ) where
@@ -83,8 +83,18 @@ initSearchEngine config params =
         bm25Context      = undefined
       }
 
-withRankParams :: SearchEngine doc key field -> SearchRankParameters field -> SearchEngine doc key field
-withRankParams se ps = se { searchRankParams = ps }
+setRankParams :: SearchRankParameters field -> 
+                 SearchEngine doc key field ->
+                 SearchEngine doc key field
+setRankParams params@SearchRankParameters{..} se =
+    se {
+      searchRankParams = params,
+      bm25Context      = (bm25Context se) {
+        BM25F.paramK1     = paramK1,
+        BM25F.paramB      = paramB,
+        BM25F.fieldWeight = paramFieldWeights
+      }
+    }
 
 invariant :: (Ord key, Ix field, Bounded field) => SearchEngine doc key field -> Bool
 invariant SearchEngine{searchIndex} =

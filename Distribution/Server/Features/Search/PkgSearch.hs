@@ -3,6 +3,8 @@
 module Distribution.Server.Features.Search.PkgSearch (
     PkgSearchEngine,
     initialPkgSearchEngine,
+    defaultSearchRankParameters,
+    PkgDocField(..),
   ) where
 
 import Distribution.Server.Features.Search.SearchEngine
@@ -30,7 +32,7 @@ data PkgDocField = NameField
 
 initialPkgSearchEngine :: PkgSearchEngine
 initialPkgSearchEngine =
-    initSearchEngine pkgSearchConfig pkgSearchRankParameters
+    initSearchEngine pkgSearchConfig defaultSearchRankParameters
 
 pkgSearchConfig :: SearchConfig PackageDescription PackageName PkgDocField
 pkgSearchConfig =
@@ -54,8 +56,8 @@ pkgSearchConfig =
                       SynopsisField    -> tokStem
                       DescriptionField -> tokStem
 
-pkgSearchRankParameters :: SearchRankParameters PkgDocField
-pkgSearchRankParameters =
+defaultSearchRankParameters :: SearchRankParameters PkgDocField
+defaultSearchRankParameters =
     SearchRankParameters {
       paramK1,
       paramB,
