@@ -6,7 +6,7 @@ module Distribution.Server.Features.Search (
     -- * Search parameters
     defaultSearchRankParameters,
     SearchEngine.SearchRankParameters(..),
-    PkgDocField,
+    PkgDocField, PkgDocFeatures,
     BM25F.Explanation(..),
   ) where
 
@@ -35,9 +35,11 @@ data SearchFeature = SearchFeature {
     searchPackagesResource :: Resource,
 
     searchPackages        :: MonadIO m => [String] -> m [PackageName],
-    searchPackagesExplain :: MonadIO m => SearchRankParameters PkgDocField ->
-                                          [String] -> m [(BM25F.Explanation PkgDocField T.Text
-                                                        ,PackageName)]
+    searchPackagesExplain :: MonadIO m
+                          => SearchRankParameters PkgDocField PkgDocFeatures
+                          -> [String]
+                          -> m [(BM25F.Explanation PkgDocField PkgDocFeatures T.Text
+                                ,PackageName)]
 }
 
 instance IsHackageFeature SearchFeature where
@@ -133,9 +135,9 @@ searchFeature ServerEnv{serverBaseURI} CoreFeature{..}
         return results
 
     searchPackagesExplain :: MonadIO m
-                          => SearchRankParameters PkgDocField
+                          => SearchRankParameters PkgDocField PkgDocFeatures
                           -> [String]
-                          -> m [(BM25F.Explanation PkgDocField T.Text, PackageName)]
+                          -> m [(BM25F.Explanation PkgDocField PkgDocFeatures T.Text, PackageName)]
     searchPackagesExplain params terms = do
         se <- readMemState searchEngineState
         let results = SearchEngine.queryExplain

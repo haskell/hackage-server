@@ -98,6 +98,9 @@ instance MemSize Bool where
 instance MemSize Integer where
   memSize _ = 2
 
+instance MemSize Float where
+  memSize _ = 2
+
 instance MemSize UTCTime where
   memSize _ = 7
 

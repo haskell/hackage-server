@@ -4,12 +4,16 @@ module Distribution.Server.Features.Search.SearchEngine (
     SearchEngine,
     SearchConfig(..),
     SearchRankParameters(..),
+    BM25F.FeatureFunction(..),
     Term,
     initSearchEngine,
-    insertDocs,
     insertDoc,
+    insertDocs,
     deleteDoc,
     query,
+
+    NoFeatures,
+    noFeatures,
 
     queryExplain,
     BM25F.Explanation(..),
@@ -24,6 +28,8 @@ import Distribution.Server.Features.Search.DocIdSet (DocIdSet, DocId)
 import qualified Distribution.Server.Features.Search.DocIdSet as DocIdSet
 import Distribution.Server.Features.Search.DocTermIds (DocTermIds)
 import qualified Distribution.Server.Features.Search.DocTermIds as DocTermIds
+import Distribution.Server.Features.Search.DocFeatVals (DocFeatVals)
+import qualified Distribution.Server.Features.Search.DocFeatVals as DocFeatVals
 import qualified Distribution.Server.Features.Search.BM25F as BM25F
 
 import Distribution.Server.Framework.MemSize
@@ -45,34 +51,37 @@ import Data.Maybe
 --  - transformations on the search terms
 --
 
-data SearchConfig doc key field = SearchConfig {
+data SearchConfig doc key field feature = SearchConfig {
        documentKey          :: doc -> key,
        extractDocumentTerms :: doc -> field -> [Term],
-       transformQueryTerm   :: Term -> field -> Term
+       transformQueryTerm   :: Term -> field -> Term,
+       documentFeatureValue :: doc -> feature -> Float
      }
 
-data SearchRankParameters field = SearchRankParameters {
+data SearchRankParameters field feature = SearchRankParameters {
        paramK1                 :: !Float,
        paramB                  :: field -> Float,
        paramFieldWeights       :: field -> Float,
+       paramFeatureWeights     :: feature -> Float,
+       paramFeatureFunctions   :: feature -> BM25F.FeatureFunction,
        paramResultsetSoftLimit :: !Int,
        paramResultsetHardLimit :: !Int
      }
 
-data SearchEngine doc key field = SearchEngine {
-       searchIndex      :: !(SearchIndex      key field),
-       searchConfig     :: !(SearchConfig doc key field),
-       searchRankParams :: !(SearchRankParameters field),
+data SearchEngine doc key field feature = SearchEngine {
+       searchIndex      :: !(SearchIndex      key field feature),
+       searchConfig     :: !(SearchConfig doc key field feature),
+       searchRankParams :: !(SearchRankParameters field feature),
 
        -- cached info
        sumFieldLengths :: !(UArray field Int),
-       bm25Context     :: BM25F.Context TermId field
+       bm25Context     :: BM25F.Context TermId field feature
      }
 
-initSearchEngine :: (Ix field, Bounded field) =>
-                    SearchConfig doc key field ->
-                    SearchRankParameters field ->
-                    SearchEngine doc key field
+initSearchEngine :: (Ix field, Bounded field, Ix feature, Bounded feature) =>
+                    SearchConfig doc key field feature ->
+                    SearchRankParameters field feature ->
+                    SearchEngine doc key field feature
 initSearchEngine config params =
     cacheBM25Context
       SearchEngine {
@@ -83,46 +92,54 @@ initSearchEngine config params =
         bm25Context      = undefined
       }
 
-setRankParams :: SearchRankParameters field -> 
-                 SearchEngine doc key field ->
-                 SearchEngine doc key field
+setRankParams :: SearchRankParameters field feature ->
+                 SearchEngine doc key field feature ->
+                 SearchEngine doc key field feature
 setRankParams params@SearchRankParameters{..} se =
     se {
       searchRankParams = params,
       bm25Context      = (bm25Context se) {
-        BM25F.paramK1     = paramK1,
-        BM25F.paramB      = paramB,
-        BM25F.fieldWeight = paramFieldWeights
+        BM25F.paramK1         = paramK1,
+        BM25F.paramB          = paramB,
+        BM25F.fieldWeight     = paramFieldWeights,
+        BM25F.featureWeight   = paramFeatureWeights,
+        BM25F.featureFunction = paramFeatureFunctions
       }
     }
 
-invariant :: (Ord key, Ix field, Bounded field) => SearchEngine doc key field -> Bool
+invariant :: (Ord key, Ix field, Bounded field) =>
+             SearchEngine doc key field feature -> Bool
 invariant SearchEngine{searchIndex} =
     SI.invariant searchIndex
 -- && check caches
 
-cacheBM25Context :: Ix field => SearchEngine doc key field -> SearchEngine doc key field
+cacheBM25Context :: Ix field =>
+                    SearchEngine doc key field feature ->
+                    SearchEngine doc key field feature
 cacheBM25Context
     se@SearchEngine {
-      searchRankParams = SearchRankParameters{paramK1, paramB, paramFieldWeights},
-      searchIndex      = si,
+      searchRankParams = SearchRankParameters{..},
+      searchIndex,
       sumFieldLengths
     }
   = se { bm25Context = bm25Context' }
   where
     bm25Context' = BM25F.Context {
-      BM25F.numDocsTotal    = SI.docCount si,
+      BM25F.numDocsTotal    = SI.docCount searchIndex,
       BM25F.avgFieldLength  = \f -> fromIntegral (sumFieldLengths ! f)
-                            / fromIntegral (SI.docCount si),
-      BM25F.numDocsWithTerm = DocIdSet.size . SI.lookupTermId si,
+                                  / fromIntegral (SI.docCount searchIndex),
+      BM25F.numDocsWithTerm = DocIdSet.size . SI.lookupTermId searchIndex,
       BM25F.paramK1         = paramK1,
       BM25F.paramB          = paramB,
-      BM25F.fieldWeight     = paramFieldWeights
+      BM25F.fieldWeight     = paramFieldWeights,
+      BM25F.featureWeight   = paramFeatureWeights,
+      BM25F.featureFunction = paramFeatureFunctions
     }
 
 updateCachedFieldLengths :: (Ix field, Bounded field) =>
                             Maybe (DocTermIds field) -> Maybe (DocTermIds field) ->
-                            SearchEngine doc key field -> SearchEngine doc key field
+                            SearchEngine doc key field feature ->
+                            SearchEngine doc key field feature
 updateCachedFieldLengths Nothing (Just newDoc) se@SearchEngine{sumFieldLengths} =
     se {
       sumFieldLengths =
@@ -147,14 +164,26 @@ updateCachedFieldLengths (Just oldDoc) Nothing se@SearchEngine{sumFieldLengths} 
     }
 updateCachedFieldLengths Nothing Nothing se = se
 
-insertDocs :: (Ord key, Ix field, Bounded field) => [doc] -> SearchEngine doc key field -> SearchEngine doc key field
+insertDocs :: (Ord key, Ix field, Bounded field, Ix feature, Bounded feature) =>
+              [doc] ->
+              SearchEngine doc key field feature ->
+              SearchEngine doc key field feature
 insertDocs docs se = foldl' (\se' doc -> insertDoc doc se') se docs
 
-insertDoc :: (Ord key, Ix field, Bounded field) => doc -> SearchEngine doc key field -> SearchEngine doc key field
-insertDoc doc se@SearchEngine{ searchConfig = SearchConfig{documentKey, extractDocumentTerms}
+insertDoc :: (Ord key, Ix field, Bounded field, Ix feature, Bounded feature) =>
+             doc ->
+             SearchEngine doc key field feature ->
+             SearchEngine doc key field feature
+insertDoc doc se@SearchEngine{ searchConfig = SearchConfig {
+                                 documentKey, 
+                                 extractDocumentTerms,
+                                 documentFeatureValue
+                               }
                              , searchIndex } =
     let key = documentKey doc
-        searchIndex' = SI.insertDoc key (extractDocumentTerms doc) searchIndex
+        searchIndex' = SI.insertDoc key (extractDocumentTerms doc)
+                                        (documentFeatureValue doc)
+                                        searchIndex
         oldDoc       = SI.lookupDocKey searchIndex  key
         newDoc       = SI.lookupDocKey searchIndex' key
 
@@ -162,7 +191,10 @@ insertDoc doc se@SearchEngine{ searchConfig = SearchConfig{documentKey, extractD
         updateCachedFieldLengths oldDoc newDoc $
           se { searchIndex = searchIndex' }
 
-deleteDoc :: (Ord key, Ix field, Bounded field) => key -> SearchEngine doc key field -> SearchEngine doc key field
+deleteDoc :: (Ord key, Ix field, Bounded field) =>
+             key ->
+             SearchEngine doc key field feature ->
+             SearchEngine doc key field feature
 deleteDoc key se@SearchEngine{searchIndex} =
     let searchIndex' = SI.deleteDoc key searchIndex
         oldDoc       = SI.lookupDocKey searchIndex key
@@ -171,7 +203,9 @@ deleteDoc key se@SearchEngine{searchIndex} =
         updateCachedFieldLengths oldDoc Nothing $
           se { searchIndex = searchIndex' }
 
-query :: (Ix field, Bounded field) => SearchEngine doc key field -> [Term] -> [key]
+query :: (Ix field, Bounded field, Ix feature, Bounded feature) =>
+         SearchEngine doc key field feature ->
+         [Term] -> [key]
 query se@SearchEngine{ searchIndex,
                        searchConfig     = SearchConfig{transformQueryTerm},
                        searchRankParams = SearchRankParameters{..} }
@@ -221,27 +255,33 @@ query se@SearchEngine{ searchIndex,
       -- consider them the "same" term.
    in rankResults se termids (DocIdSet.toList unrankedResults)
 
-rankResults :: (Ix field, Bounded field) => SearchEngine doc key field -> 
+rankResults :: (Ix field, Bounded field, Ix feature, Bounded feature) =>
+               SearchEngine doc key field feature ->
                [TermId] -> [DocId] -> [key]
 rankResults se@SearchEngine{searchIndex} queryTerms docids =
     map snd
   $ sortBy (flip compare `on` fst)
-      [ (relevanceScore se queryTerms doctermids, dockey)
+      [ (relevanceScore se queryTerms doctermids docfeatvals, dockey)
       | docid <- docids
-      , let (dockey, doctermids) = SI.lookupDocId searchIndex docid ]
+      , let (dockey, doctermids, docfeatvals) = SI.lookupDocId searchIndex docid ]
 
-relevanceScore :: (Ix field, Bounded field) => SearchEngine doc key field ->
-                  [TermId] -> DocTermIds field -> Float
-relevanceScore SearchEngine{bm25Context} queryTerms doctermids =
+relevanceScore :: (Ix field, Bounded field, Ix feature, Bounded feature) =>
+                  SearchEngine doc key field feature ->
+                  [TermId] -> DocTermIds field -> DocFeatVals feature -> Float
+relevanceScore SearchEngine{bm25Context} queryTerms doctermids docfeatvals =
     BM25F.score bm25Context doc queryTerms
   where
-    doc = indexDocToBM25Doc doctermids
+    doc = indexDocToBM25Doc doctermids docfeatvals
 
-indexDocToBM25Doc :: (Ix field, Bounded field) => DocTermIds field -> BM25F.Doc TermId field
-indexDocToBM25Doc doctermids =
+indexDocToBM25Doc :: (Ix field, Bounded field, Ix feature, Bounded feature) =>
+                     DocTermIds field ->
+                     DocFeatVals feature ->
+                     BM25F.Doc TermId field feature
+indexDocToBM25Doc doctermids docfeatvals =
     BM25F.Doc {
       BM25F.docFieldLength        = DocTermIds.fieldLength    doctermids,
-      BM25F.docFieldTermFrequency = DocTermIds.fieldTermCount doctermids
+      BM25F.docFieldTermFrequency = DocTermIds.fieldTermCount doctermids,
+      BM25F.docFeatureValue       = DocFeatVals.featureValue docfeatvals
     }
 
 pruneRelevantResults :: Int -> Int -> [DocIdSet] -> DocIdSet
@@ -267,7 +307,9 @@ pruneRelevantResults softLimit hardLimit =
 
 -----------------------------
 
-queryExplain :: (Ix field, Bounded field) => SearchEngine doc key field -> [Term] -> [(BM25F.Explanation field Term, key)]
+queryExplain :: (Ix field, Bounded field, Ix feature, Bounded feature) =>
+                SearchEngine doc key field feature ->
+                [Term] -> [(BM25F.Explanation field feature Term, key)]
 queryExplain se@SearchEngine{ searchIndex,
                               searchConfig     = SearchConfig{transformQueryTerm},
                               searchRankParams = SearchRankParameters{..} }
@@ -297,23 +339,44 @@ queryExplain se@SearchEngine{ searchIndex,
 
    in rankExplainResults se termids (DocIdSet.toList unrankedResults)
 
-rankExplainResults :: (Ix field, Bounded field) => SearchEngine doc key field -> 
-               [TermId] -> [DocId] -> [(BM25F.Explanation field Term, key)]
+rankExplainResults :: (Ix field, Bounded field, Ix feature, Bounded feature) =>
+                      SearchEngine doc key field feature -> 
+                      [TermId] ->
+                      [DocId] -> 
+                      [(BM25F.Explanation field feature Term, key)]
 rankExplainResults se@SearchEngine{searchIndex} queryTerms docids =
     sortBy (flip compare `on` (BM25F.overallScore . fst))
-      [ (explainRelevanceScore se queryTerms doctermids, dockey)
+      [ (explainRelevanceScore se queryTerms doctermids docfeatvals, dockey)
       | docid <- docids
-      , let (dockey, doctermids) = SI.lookupDocId searchIndex docid ]
+      , let (dockey, doctermids, docfeatvals) = SI.lookupDocId searchIndex docid ]
 
-explainRelevanceScore :: (Ix field, Bounded field) => SearchEngine doc key field ->
-                         [TermId] -> DocTermIds field -> BM25F.Explanation field Term
-explainRelevanceScore SearchEngine{bm25Context, searchIndex} queryTerms doctermids =
+explainRelevanceScore :: (Ix field, Bounded field, Ix feature, Bounded feature) =>
+                         SearchEngine doc key field feature ->
+                         [TermId] ->
+                         DocTermIds field ->
+                         DocFeatVals feature -> 
+                         BM25F.Explanation field feature Term
+explainRelevanceScore SearchEngine{bm25Context, searchIndex}
+                      queryTerms doctermids docfeatvals =
     fmap (SI.getTerm searchIndex) (BM25F.explain bm25Context doc queryTerms)
   where
-    doc = indexDocToBM25Doc doctermids
+    doc = indexDocToBM25Doc doctermids docfeatvals
 
 -----------------------------
 
-instance MemSize key => MemSize (SearchEngine doc key field) where
+data NoFeatures = NoFeatures
+  deriving (Eq, Ord, Bounded)
+
+instance Ix NoFeatures where
+  range   _   = []
+  inRange _ _ = False
+  index   _ _ = -1
+
+noFeatures :: NoFeatures -> a
+noFeatures _ = error "noFeatures"
+
+-----------------------------
+
+instance MemSize key => MemSize (SearchEngine doc key field feature) where
   memSize SearchEngine {searchIndex} = 25 + memSize searchIndex
 

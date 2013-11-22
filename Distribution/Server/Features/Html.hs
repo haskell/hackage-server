@@ -1422,7 +1422,7 @@ mkHtmlSearch HtmlUtilities{..}
             , anchor ! [href "http://www.haskell.org/hoogle/"] << "Hoogle"
             ]
 
-        explainResults :: [(Search.Explanation PkgDocField T.Text, PackageName)] -> [Html]
+        explainResults :: [(Search.Explanation PkgDocField PkgDocFeatures T.Text, PackageName)] -> [Html]
         explainResults results =
             [ h2 << "Results"
             , case results of

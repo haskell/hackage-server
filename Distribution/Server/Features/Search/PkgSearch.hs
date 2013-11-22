@@ -5,6 +5,7 @@ module Distribution.Server.Features.Search.PkgSearch (
     initialPkgSearchEngine,
     defaultSearchRankParameters,
     PkgDocField(..),
+    PkgDocFeatures,
   ) where
 
 import Distribution.Server.Features.Search.SearchEngine
@@ -23,23 +24,31 @@ import Distribution.PackageDescription
 import Distribution.Text (display)
 
 
-type PkgSearchEngine = SearchEngine PackageDescription PackageName PkgDocField
+type PkgSearchEngine = SearchEngine
+                         PackageDescription
+                         PackageName
+                         PkgDocField
+                         PkgDocFeatures
 
 data PkgDocField = NameField
                  | SynopsisField
                  | DescriptionField
   deriving (Eq, Ord, Enum, Bounded, Ix, Show)
 
+type PkgDocFeatures = NoFeatures
+
 initialPkgSearchEngine :: PkgSearchEngine
 initialPkgSearchEngine =
     initSearchEngine pkgSearchConfig defaultSearchRankParameters
 
-pkgSearchConfig :: SearchConfig PackageDescription PackageName PkgDocField
+pkgSearchConfig :: SearchConfig PackageDescription
+                                PackageName PkgDocField PkgDocFeatures
 pkgSearchConfig =
     SearchConfig {
       documentKey           = packageName,
       extractDocumentTerms  = extractTokens,
-      transformQueryTerm    = normaliseQueryToken
+      transformQueryTerm    = normaliseQueryToken,
+      documentFeatureValue  = const noFeatures
   }
   where
     extractTokens :: PackageDescription -> PkgDocField -> [Text]
@@ -56,12 +65,14 @@ pkgSearchConfig =
                       SynopsisField    -> tokStem
                       DescriptionField -> tokStem
 
-defaultSearchRankParameters :: SearchRankParameters PkgDocField
+defaultSearchRankParameters :: SearchRankParameters PkgDocField PkgDocFeatures
 defaultSearchRankParameters =
     SearchRankParameters {
       paramK1,
       paramB,
       paramFieldWeights,
+      paramFeatureWeights     = noFeatures,
+      paramFeatureFunctions   = noFeatures,
       paramResultsetSoftLimit = 200,
       paramResultsetHardLimit = 400
     }
