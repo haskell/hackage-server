@@ -25,30 +25,32 @@ import Distribution.Text (display)
 
 
 type PkgSearchEngine = SearchEngine
-                         PackageDescription
+                         (PackageDescription, DownloadCount)
                          PackageName
                          PkgDocField
                          PkgDocFeatures
+type DownloadCount = Int
 
 data PkgDocField = NameField
                  | SynopsisField
                  | DescriptionField
   deriving (Eq, Ord, Enum, Bounded, Ix, Show)
 
-type PkgDocFeatures = NoFeatures
+data PkgDocFeatures = Downloads
+  deriving (Eq, Ord, Enum, Bounded, Ix, Show)
 
 initialPkgSearchEngine :: PkgSearchEngine
 initialPkgSearchEngine =
     initSearchEngine pkgSearchConfig defaultSearchRankParameters
 
-pkgSearchConfig :: SearchConfig PackageDescription
+pkgSearchConfig :: SearchConfig (PackageDescription, DownloadCount)
                                 PackageName PkgDocField PkgDocFeatures
 pkgSearchConfig =
     SearchConfig {
-      documentKey           = packageName,
-      extractDocumentTerms  = extractTokens,
+      documentKey           = packageName . fst,
+      extractDocumentTerms  = extractTokens . fst,
       transformQueryTerm    = normaliseQueryToken,
-      documentFeatureValue  = const noFeatures
+      documentFeatureValue  = getFeatureValue
   }
   where
     extractTokens :: PackageDescription -> PkgDocField -> [Text]
@@ -65,14 +67,16 @@ pkgSearchConfig =
                       SynopsisField    -> tokStem
                       DescriptionField -> tokStem
 
+    getFeatureValue (_pkg, downloadcount) Downloads = fromIntegral downloadcount
+
 defaultSearchRankParameters :: SearchRankParameters PkgDocField PkgDocFeatures
 defaultSearchRankParameters =
     SearchRankParameters {
       paramK1,
       paramB,
       paramFieldWeights,
-      paramFeatureWeights     = noFeatures,
-      paramFeatureFunctions   = noFeatures,
+      paramFeatureWeights,
+      paramFeatureFunctions,
       paramResultsetSoftLimit = 200,
       paramResultsetHardLimit = 400
     }
@@ -89,6 +93,12 @@ defaultSearchRankParameters =
     paramFieldWeights NameField        = 20
     paramFieldWeights SynopsisField    = 5
     paramFieldWeights DescriptionField = 1
+
+    paramFeatureWeights :: PkgDocFeatures -> Float
+    paramFeatureWeights Downloads = 0.5
+
+    paramFeatureFunctions :: PkgDocFeatures -> FeatureFunction
+    paramFeatureFunctions Downloads = LogarithmicFunction 1
 
 
 stopWords :: Set Term
