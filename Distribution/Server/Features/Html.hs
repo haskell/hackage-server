@@ -1441,6 +1441,8 @@ mkHtmlSearch HtmlUtilities{..}
              ++ [ th << (show term ++ " " ++ show field ++ " score")
                 | (term, fieldScores) <- termFieldScores
                 , (field, _score) <- fieldScores ]
+             ++ [ th << (show feature ++ " score")
+                | (feature, _score) <- nonTermScores ]
 
             tableRow Search.Explanation{..} pkgname =
                 [ td << display pkgname, td << show overallScore ]
@@ -1449,6 +1451,8 @@ mkHtmlSearch HtmlUtilities{..}
              ++ [ td << show score
                 | (_term, fieldScores) <- termFieldScores
                 , (_field, score) <- fieldScores ]
+             ++ [ td << show score
+                | (_feature, score) <- nonTermScores ]
 
         getSearchRankParameters = do
           let defaults = defaultSearchRankParameters
@@ -1461,13 +1465,19 @@ mkHtmlSearch HtmlUtilities{..}
                   [ lookRead ("w" ++ show field)
                       `mplus` pure (paramFieldWeights defaults field)
                   | field <- Ix.range (minBound, maxBound :: PkgDocField) ]
+          fs <- sequence
+                  [ lookRead ("w" ++ show feature)
+                      `mplus` pure (paramFeatureWeights defaults feature)
+                  | feature <- Ix.range (minBound, maxBound :: PkgDocFeatures) ]
           let barr, warr :: Array PkgDocField Float
               barr = listArray (minBound, maxBound) bs
               warr = listArray (minBound, maxBound) ws
+              farr = listArray (minBound, maxBound) fs
           return defaults {
-            paramK1            = k1,
-            paramB             = (barr Array.!),
-            paramFieldWeights  = (warr Array.!)
+            paramK1             = k1,
+            paramB              = (barr Array.!),
+            paramFieldWeights   = (warr Array.!),
+            paramFeatureWeights = (farr Array.!)
           }
 
         paramsForm SearchRankParameters{..} termsStr =
@@ -1488,6 +1498,11 @@ mkHtmlSearch HtmlUtilities{..}
                     | field <- Ix.range (minBound, maxBound :: PkgDocField)
                     , let fieldname = show field
                     ]
+                 ++ [ makeInput [thetype "text", value (show (paramFeatureWeights feature)) ]
+                                   ("w" ++ featurename)
+                                   ("Weight for " ++ featurename)
+                    | feature <- Ix.range (minBound, maxBound :: PkgDocFeatures)
+                    , let featurename = show feature ] 
               ]
           ]
         resetParamsForm termsStr =
@@ -1509,6 +1524,14 @@ mkHtmlSearch HtmlUtilities{..}
                 ]
               | field <- Ix.range (minBound, maxBound :: PkgDocField)
               , let fieldname = show field
+              ]
+           ++ [ [ input ! [ thetype "hidden"
+                          , name ("w" ++ featurename)
+                          , value (show (paramFeatureWeights feature))
+                          ]
+                ]
+              | feature <- Ix.range (minBound, maxBound :: PkgDocFeatures)
+              , let featurename = show feature
               ])
 
 
