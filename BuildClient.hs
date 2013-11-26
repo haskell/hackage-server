@@ -104,6 +104,11 @@ main = topHandler $ do
                         (const (buildOnce opts' pkgs))
                         ()
 
+
+---------------------------------
+-- Initialisation & config file
+--
+
 initialise :: BuildOpts -> String -> [String] -> IO ()
 initialise opts uriStr auxUrisStrs
     = do putStrLn "Enter hackage username"
@@ -140,6 +145,11 @@ readConfig opts = do xs <- readFile $ configFile opts
 
 configFile :: BuildOpts -> FilePath
 configFile opts = bo_stateDir opts </> "hd-config"
+
+
+----------------------
+-- Displaying status
+--
 
 data StatResult = AllVersionsBuiltOk
                 | AllVersionsAttempted
@@ -335,6 +345,11 @@ getDocumentationStats config didFail = do
       , docInfoIsCandidate = isCandidate
       }
 
+
+----------------------
+-- Building packages
+--
+
 buildOnce :: BuildOpts -> [PackageId] -> IO ()
 buildOnce opts pkgs = keepGoing $ do
     config <- readConfig opts
@@ -372,14 +387,14 @@ buildOnce opts pkgs = keepGoing $ do
                     . sortBy  (comparing docInfoPackageName)
                     $ pkgIdsHaveDocs
 
-        liftIO $ notice verbosity $ show (length toBuild) ++ " package(s) to build"
+        notice verbosity $ show (length toBuild) ++ " package(s) to build"
 
         -- Try to build each of them, uploading the documentation and
         -- build reports along the way. We mark each package as having
         -- documentation in the cache even if the build fails because
         -- we don't want to keep continually trying to build a failing
         -- package!
-        startTime <- liftIO $ getCurrentTime
+        startTime <- getCurrentTime
 
         let go :: [DocInfo] -> IO ()
             go [] = return ()
@@ -387,7 +402,7 @@ buildOnce opts pkgs = keepGoing $ do
               mTgz <- buildPackage verbosity opts config docInfo
               case mTgz of
                 Nothing ->
-                  liftIO $ mark_as_failed (docInfoPackage docInfo)
+                  mark_as_failed (docInfoPackage docInfo)
                 Just docs_tgz -> httpSession verbosity "hackage-build" version $ do
                   -- Make sure we authenticate to Hackage
                   setAuthorityGen $ provideAuthInfo (bc_srcURI config)
@@ -398,7 +413,7 @@ buildOnce opts pkgs = keepGoing $ do
               -- to build a doc, so as to ensure we make progress.
               outOfTime <- case bo_runTime opts of
                   Nothing -> return False
-                  Just d  -> liftIO $ do
+                  Just d  -> do
                     currentTime <- getCurrentTime
                     return $ (currentTime `diffUTCTime` startTime) > d
 
@@ -475,36 +490,35 @@ prepareBuildPackages opts config
 
 -- | Build documentation and return @(Just tgz)@ for the built tgz file
 -- on success, or @Nothing@ otherwise.
-buildPackage :: MonadIO m
-             => Verbosity -> BuildOpts -> BuildConfig
+buildPackage :: Verbosity -> BuildOpts -> BuildConfig
              -> DocInfo
-             -> m (Maybe BS.ByteString)
+             -> IO (Maybe BS.ByteString)
 buildPackage verbosity opts config docInfo = do
-    liftIO $ do notice verbosity ("Building " ++ display (docInfoPackage docInfo))
-                handleDoesNotExist (return ()) $
-                    removeDirectoryRecursive $ installDirectory opts
-                createDirectory $ installDirectory opts
+    notice verbosity ("Building " ++ display (docInfoPackage docInfo))
+    handleDoesNotExist (return ()) $
+        removeDirectoryRecursive $ installDirectory opts
+    createDirectory $ installDirectory opts
 
-                -- Create cache for the empty configuration directory
-                let packageConf = installDirectory opts </> "local.conf.d"
-                local_conf_d_exists <- doesDirectoryExist packageConf
-                unless local_conf_d_exists $ do
-                    createDirectory packageConf
-                    ph <- runProcess "ghc-pkg"
-                                     ["recache",
-                                      "--package-conf=" ++ packageConf]
-                                     Nothing Nothing Nothing Nothing Nothing
-                    -- TODO: Why do we ignore the exit code here?
-                    _ <- waitForProcess ph
-                    return ()
+    -- Create cache for the empty configuration directory
+    let packageConf = installDirectory opts </> "local.conf.d"
+    local_conf_d_exists <- doesDirectoryExist packageConf
+    unless local_conf_d_exists $ do
+        createDirectory packageConf
+        ph <- runProcess "ghc-pkg"
+                         ["recache",
+                          "--package-conf=" ++ packageConf]
+                         Nothing Nothing Nothing Nothing Nothing
+        -- TODO: Why do we ignore the exit code here?
+        _ <- waitForProcess ph
+        return ()
 
-                -- We don't really want to be running "cabal update"
-                -- every time, but the index file and package cache
-                -- end up in the same place, so when re remove the
-                -- latter we also remove the former
-                update_ec <- cabal opts "update" []
-                unless (update_ec == ExitSuccess) $
-                    die "Could not 'cabal update' from specified server"
+    -- We don't really want to be running "cabal update"
+    -- every time, but the index file and package cache
+    -- end up in the same place, so when re remove the
+    -- latter we also remove the former
+    update_ec <- cabal opts "update" []
+    unless (update_ec == ExitSuccess) $
+        die "Could not 'cabal update' from specified server"
 
     -- The documentation is installed within the stateDir because we
     -- set a prefix while installing
@@ -552,69 +566,69 @@ buildPackage verbosity opts config docInfo = do
                else display (docInfoPackage docInfo)
              ]
 
-    liftIO $ withCurrentDirectory (installDirectory opts) $ do
-        -- We CANNOT build from an unpacked directory, because Cabal
-        -- only generates build reports if you are building from a
-        -- tarball that was verifiably downloaded from the server
+    withCurrentDirectory (installDirectory opts) $ do
+      -- We CANNOT build from an unpacked directory, because Cabal
+      -- only generates build reports if you are building from a
+      -- tarball that was verifiably downloaded from the server
 
-        -- We build any dependencies first so that their documention files can
-        -- be kept separate from the target package's.
-        void $ cabal opts "install" $
-            ["--only-dependencies",
-             "--docdir=" ++ deps_doc_dir] ++ pkg_flags
+      -- We build any dependencies first so that their documention files can
+      -- be kept separate from the target package's.
+      void $ cabal opts "install" $
+          ["--only-dependencies",
+           "--docdir=" ++ deps_doc_dir] ++ pkg_flags
 
-        -- We ignore the result of calling @cabal install@ because
-        -- @cabal install@ succeeds even if the documentation fails to build.
-        void $ cabal opts "install" $
-            ["--docdir=" ++ doc_dir] ++ pkg_flags
+      -- We ignore the result of calling @cabal install@ because
+      -- @cabal install@ succeeds even if the documentation fails to build.
+      void $ cabal opts "install" $
+          ["--docdir=" ++ doc_dir] ++ pkg_flags
 
-        -- Remove reports for dependencies (so that we only submit the report
-        -- for the package we are currently building)
-        dotCabal <- getAppUserDataDirectory "cabal"
-        let reportsDir = dotCabal </> "reports" </> srcName (bc_srcURI config)
-        handleDoesNotExist (return ()) $ withRecursiveContents_ reportsDir $ \path ->
-           unless ((display (docInfoPackage docInfo) ++ ".log") `isSuffixOf` path) $
-             removeFile path
+      -- Remove reports for dependencies (so that we only submit the report
+      -- for the package we are currently building)
+      dotCabal <- getAppUserDataDirectory "cabal"
+      let reportsDir = dotCabal </> "reports" </> srcName (bc_srcURI config)
+      handleDoesNotExist (return ()) $ withRecursiveContents_ reportsDir $ \path ->
+         unless ((display (docInfoPackage docInfo) ++ ".log") `isSuffixOf` path) $
+           removeFile path
 
-        -- Submit a report even if installation/tests failed: all
-        -- interesting data points!
-        report_ec <- cabal opts "report"
-                           ["--username", bc_username config,
-                            "--password", bc_password config]
+      -- Submit a report even if installation/tests failed: all
+      -- interesting data points!
+      report_ec <- cabal opts "report"
+                         ["--username", bc_username config,
+                          "--password", bc_password config]
 
-        -- Delete reports after submission because we don't want to
-        -- submit them *again* in the future
-        when (report_ec == ExitSuccess) $ do
-            -- This seems like a bit of a mess: some data goes into the
-            -- user directory:
-            handleDoesNotExist (return ()) $ removeDirectoryRecursive reportsDir
+      -- Delete reports after submission because we don't want to
+      -- submit them *again* in the future
+      when (report_ec == ExitSuccess) $ do
+          -- This seems like a bit of a mess: some data goes into the
+          -- user directory:
+          handleDoesNotExist (return ()) $ removeDirectoryRecursive reportsDir
 
-            -- Other data goes into a local file storing build reports:
-            let simple_report_log = installDirectory opts
-                                </> "packages"
-                                </> srcName (bc_srcURI config)
-                                </> "build-reports.log"
-            handleDoesNotExist (return ()) $ removeFile simple_report_log
+          -- Other data goes into a local file storing build reports:
+          let simple_report_log = installDirectory opts
+                              </> "packages"
+                              </> srcName (bc_srcURI config)
+                              </> "build-reports.log"
+          handleDoesNotExist (return ()) $ removeFile simple_report_log
 
-        docs_generated <- fmap and $ sequence [
-            doesDirectoryExist doc_dir_html,
-            doesFileExist (doc_dir_html </> "doc-index.html"),
-            doesFileExist (doc_dir_html </> display (docInfoPackageName docInfo) <.> "haddock")]
-        if docs_generated
-            then do
-                notice verbosity $ "Docs generated for " ++ display (docInfoPackage docInfo)
-                liftM Just $
-                    -- We need the files in the documentation .tar.gz
-                    -- to have paths like foo-x.y.z-docs/index.html
-                    -- Unfortunately, on disk they have paths like
-                    -- foo-x.y.z/html/index.html. This hack resolves
-                    -- the problem:
-                    bracket_ (renameDirectory doc_dir_html temp_doc_dir)
-                             (renameDirectory temp_doc_dir doc_dir_html)
-                             (tarGzDirectory temp_doc_dir)
-            else do
-              notice verbosity $ "Docs for " ++ display (docInfoPackage docInfo) ++ " failed to build"
-              return Nothing
+      docs_generated <- fmap and $ sequence [
+          doesDirectoryExist doc_dir_html,
+          doesFileExist (doc_dir_html </> "doc-index.html"),
+          doesFileExist (doc_dir_html </> display (docInfoPackageName docInfo) <.> "haddock")]
+      if docs_generated
+          then do
+              notice verbosity $ "Docs generated for " ++ display (docInfoPackage docInfo)
+              liftM Just $
+                  -- We need the files in the documentation .tar.gz
+                  -- to have paths like foo-x.y.z-docs/index.html
+                  -- Unfortunately, on disk they have paths like
+                  -- foo-x.y.z/html/index.html. This hack resolves
+                  -- the problem:
+                  bracket_ (renameDirectory doc_dir_html temp_doc_dir)
+                           (renameDirectory temp_doc_dir doc_dir_html)
+                           (tarGzDirectory temp_doc_dir)
+          else do
+            notice verbosity $ "Docs for " ++ display (docInfoPackage docInfo) ++ " failed to build"
+            return Nothing
 
 cabal :: BuildOpts -> String -> [String] -> IO ExitCode
 cabal opts cmd args = do
