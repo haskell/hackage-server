@@ -50,7 +50,8 @@ data BuildOpts = BuildOpts {
                      bo_runTime    :: Maybe NominalDiffTime,
                      bo_stateDir   :: FilePath,
                      bo_continuous :: Maybe Int,
-                     bo_keepGoing  :: Bool
+                     bo_keepGoing  :: Bool,
+                     bo_dryRun     :: Bool
                  }
 
 data BuildConfig = BuildConfig {
@@ -403,11 +404,14 @@ buildOnce opts pkgs = keepGoing $ do
               case mTgz of
                 Nothing ->
                   mark_as_failed (docInfoPackage docInfo)
-                Just docs_tgz -> httpSession verbosity "hackage-build" version $ do
-                  -- Make sure we authenticate to Hackage
-                  setAuthorityGen $ provideAuthInfo (bc_srcURI config)
-                                  $ Just (bc_username config, bc_password config)
-                  requestPUT (docInfoDocsURI config docInfo) "application/x-tar" (Just "gzip") docs_tgz
+                Just docs_tgz ->
+                  unless (bo_dryRun opts) $
+                  httpSession verbosity "hackage-build" version $ do
+                    -- Make sure we authenticate to Hackage
+                    setAuthorityGen (provideAuthInfo (bc_srcURI config)
+                                                     (Just (bc_username config, bc_password config)))
+                    requestPUT (docInfoDocsURI config docInfo)
+                               "application/x-tar" (Just "gzip") docs_tgz
 
               -- We don't check the runtime until we've actually tried
               -- to build a doc, so as to ensure we make progress.
@@ -592,23 +596,24 @@ buildPackage verbosity opts config docInfo = do
 
       -- Submit a report even if installation/tests failed: all
       -- interesting data points!
-      report_ec <- cabal opts "report"
-                         ["--username", bc_username config,
-                          "--password", bc_password config]
+      unless (bo_dryRun opts) $ do
+        report_ec <- cabal opts "report"
+                           ["--username", bc_username config,
+                            "--password", bc_password config]
 
-      -- Delete reports after submission because we don't want to
-      -- submit them *again* in the future
-      when (report_ec == ExitSuccess) $ do
-          -- This seems like a bit of a mess: some data goes into the
-          -- user directory:
-          handleDoesNotExist (return ()) $ removeDirectoryRecursive reportsDir
+        -- Delete reports after submission because we don't want to
+        -- submit them *again* in the future
+        when (report_ec == ExitSuccess) $ do
+            -- This seems like a bit of a mess: some data goes into the
+            -- user directory:
+            handleDoesNotExist (return ()) $ removeDirectoryRecursive reportsDir
 
-          -- Other data goes into a local file storing build reports:
-          let simple_report_log = installDirectory opts
-                              </> "packages"
-                              </> srcName (bc_srcURI config)
-                              </> "build-reports.log"
-          handleDoesNotExist (return ()) $ removeFile simple_report_log
+            -- Other data goes into a local file storing build reports:
+            let simple_report_log = installDirectory opts
+                                </> "packages"
+                                </> srcName (bc_srcURI config)
+                                </> "build-reports.log"
+            handleDoesNotExist (return ()) $ removeFile simple_report_log
 
       docs_generated <- fmap and $ sequence [
           doesDirectoryExist doc_dir_html,
@@ -679,6 +684,7 @@ data BuildFlags = BuildFlags {
     flagForce      :: Bool,
     flagContinuous :: Bool,
     flagKeepGoing  :: Bool,
+    flagDryRun     :: Bool,
     flagInterval   :: Maybe String
 }
 
@@ -691,6 +697,7 @@ emptyBuildFlags = BuildFlags {
   , flagForce      = False
   , flagContinuous = False
   , flagKeepGoing  = False
+  , flagDryRun     = False
   , flagInterval   = Nothing
   }
 
@@ -726,6 +733,10 @@ buildFlagDescrs =
       (NoArg (\opts -> opts { flagKeepGoing = True }))
       "Keep going after errors"
 
+  , Option [] ["dry-run"]
+      (NoArg (\opts -> opts { flagDryRun = True }))
+      "Don't record results or upload"
+
   , Option [] ["interval"]
       (ReqArg (\int opts -> opts { flagInterval = Just int }) "MIN")
       "Set the building interval in minutes (default 30)"
@@ -746,7 +757,8 @@ validateOpts args = do
                                      (True, Just i)  -> Just (read i)
                                      (True, Nothing) -> Just 30 -- default interval
                                      (False, _)      -> Nothing,
-                   bo_keepGoing  = flagKeepGoing flags
+                   bo_keepGoing  = flagKeepGoing flags,
+                   bo_dryRun     = flagDryRun flags
                }
 
         mode = case args' of
