@@ -52,7 +52,8 @@ data BuildOpts = BuildOpts {
                      bo_stateDir   :: FilePath,
                      bo_continuous :: Maybe Int,
                      bo_keepGoing  :: Bool,
-                     bo_dryRun     :: Bool
+                     bo_dryRun     :: Bool,
+                     bo_prune      :: Bool
                  }
 
 data BuildConfig = BuildConfig {
@@ -602,6 +603,7 @@ buildPackage verbosity opts config docInfo = do
         doesFileExist (doc_dir_pkg </> display (docInfoPackageName docInfo) <.> "haddock")]
     docs <- if docs_generated
               then do
+                when (bo_prune opts) (pruneHaddockFiles doc_dir_pkg)
                 BS.writeFile resultDocsTarball =<< tarGzDirectory doc_dir_pkg
                 return (Just resultDocsTarball)
               else return Nothing
@@ -631,6 +633,40 @@ cabal opts cmd args moutput = do
     ph <- runProcess "cabal" all_args Nothing
                      Nothing Nothing moutput moutput
     waitForProcess ph
+
+pruneHaddockFiles :: FilePath -> IO ()
+pruneHaddockFiles dir = do
+    -- Hackage doesn't support the haddock frames view, so remove it
+    -- both visually (no frames link) and save space too.
+    files <- getDirectoryContents dir
+    sequence_
+      [ removeFile (dir </> file)
+      | file <- files
+      , unwantedFile file ]
+    hackJsUtils
+  where
+    unwantedFile file
+      | "frames.html" == file             = True 
+      | "mini_" `isPrefixOf` file         = True
+        -- The .haddock file is haddock-version specific
+        -- so it is not useful to make available for download
+      | ".haddock" <- takeExtension file  = True
+      | otherwise                         = False
+
+    -- The "Frames" link is added by the JS, just comment it out.
+    hackJsUtils = do
+      content <- readFile (dir </> "haddock-util.js")
+      _ <- evaluate (length content)
+      writeFile (dir </> "haddock-util.js") (munge content)
+      where
+        munge = unlines
+              . map removeAddMenuItem
+              . lines
+        removeAddMenuItem l | (sp, l') <- span (==' ') l
+                            , "addMenuItem" `isPrefixOf` l'
+                            = sp ++ "//" ++ l'
+        removeAddMenuItem l = l
+
 
 tarGzDirectory :: FilePath -> IO BS.ByteString
 tarGzDirectory dir = do
@@ -720,7 +756,8 @@ data BuildFlags = BuildFlags {
     flagContinuous :: Bool,
     flagKeepGoing  :: Bool,
     flagDryRun     :: Bool,
-    flagInterval   :: Maybe String
+    flagInterval   :: Maybe String,
+    flagPrune      :: Bool
 }
 
 emptyBuildFlags :: BuildFlags
@@ -734,6 +771,7 @@ emptyBuildFlags = BuildFlags {
   , flagKeepGoing  = False
   , flagDryRun     = False
   , flagInterval   = Nothing
+  , flagPrune      = False
   }
 
 buildFlagDescrs :: [OptDescr (BuildFlags -> BuildFlags)]
@@ -775,6 +813,10 @@ buildFlagDescrs =
   , Option [] ["interval"]
       (ReqArg (\int opts -> opts { flagInterval = Just int }) "MIN")
       "Set the building interval in minutes (default 30)"
+
+  , Option [] ["prune-haddock-files"]
+      (NoArg (\opts -> opts { flagPrune = True }))
+      "Remove unnecessary haddock files (frames, .haddock file)"
   ]
 
 validateOpts :: [String] -> IO (Mode, BuildOpts)
@@ -793,7 +835,8 @@ validateOpts args = do
                                      (True, Nothing) -> Just 30 -- default interval
                                      (False, _)      -> Nothing,
                    bo_keepGoing  = flagKeepGoing flags,
-                   bo_dryRun     = flagDryRun flags
+                   bo_dryRun     = flagDryRun flags,
+                   bo_prune      = flagPrune flags
                }
 
         mode = case args' of
