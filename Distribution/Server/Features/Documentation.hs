@@ -272,7 +272,7 @@ documentationFeature name
       guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
       updateState documentationState $ RemoveDocumentation pkgid
       runHook_ documentationChangeHook pkgid
-      ok $ toResponse "Ok!"
+      noContent (toResponse ())
 
     withDocumentation :: Resource -> DynamicPath
                       -> (PackageId -> BlobId -> TarIndex -> ServerPartE Response)
