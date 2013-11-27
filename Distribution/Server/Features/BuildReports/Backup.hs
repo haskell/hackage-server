@@ -72,7 +72,7 @@ checkPackageVersion pkgStr pkgId =
 importReport :: PackageId -> String -> ByteString -> BuildReports -> PartialLogs -> Restore (BuildReports, PartialLogs)
 importReport pkgId repIdStr contents buildReps partialLogs = do
   reportId <- parseText "report id" repIdStr
-  report   <- Report.parse (unpackUTF8 contents)
+  report   <- either fail return $ Report.parse (unpackUTF8 contents)
   let (mlog, partialLogs') = Map.updateLookupWithKey (\_ _ -> Nothing) (pkgId, reportId) partialLogs
       buildReps' = Reports.unsafeSetReport pkgId reportId (report, mlog) buildReps --doesn't check for duplicates
   return (buildReps', partialLogs')

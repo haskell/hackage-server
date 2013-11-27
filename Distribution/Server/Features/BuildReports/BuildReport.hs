@@ -156,10 +156,10 @@ read s = case parse s of
   Left  err -> error $ "error parsing build report: " ++ err
   Right rpt -> rpt
 
-parse :: Monad m => String -> m BuildReport
+parse :: String -> Either String BuildReport
 parse s = case parseFields s of
-  ParseFailed perror -> fail msg where (_, msg) = locatedErrorMsg perror
-  ParseOk   _ report -> return report
+  ParseFailed perror -> Left msg where (_, msg) = locatedErrorMsg perror
+  ParseOk   _ report -> Right report
 
 --FIXME: this does not allow for optional or repeated fields
 parseFields :: String -> ParseResult BuildReport
