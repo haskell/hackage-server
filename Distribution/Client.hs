@@ -23,6 +23,7 @@ module Distribution.Client
   , requestGET
   , requestPUTFile
   , requestPOST
+  , checkStatus
   ) where
 
 import Network.HTTP
@@ -350,6 +351,10 @@ checkStatus :: URI -> Response ByteString -> HttpSession ()
 checkStatus uri rsp = case rspCode rsp of
   -- 200 OK
   (2,0,0) -> return ()
+  -- 201 Created
+  (2,0,1) -> return ()
+  -- 201 Created
+  (2,0,2) -> return ()
   -- 204 No Content
   (2,0,4) -> return ()
   -- 400 Bad Request
