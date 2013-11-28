@@ -6,7 +6,8 @@ import Network.Browser
 import Network.URI (URI(..), parseRelativeReference, relativeTo)
 
 import Distribution.Client
-import Distribution.Client.Cron (cron, rethrowSignalsAsExceptions, Signal(..))
+import Distribution.Client.Cron (cron, rethrowSignalsAsExceptions,
+                                 Signal(..), ReceivedSignal(..))
 
 import Distribution.Package
 import Distribution.Text
@@ -465,9 +466,17 @@ buildOnce opts pkgs = keepGoing $ do
       | otherwise         = act
 
     showExceptionAsWarning :: SomeException -> IO ()
-    showExceptionAsWarning e = do
-      warn verbosity (show e)
-      notice verbosity "Abandoning this build attempt."
+    showExceptionAsWarning e
+      -- except for signals telling us to really stop
+      | Just (ReceivedSignal {}) <- fromException e
+      = throwIO e
+
+      | Just UserInterrupt <- fromException e
+      = throwIO e
+
+      | otherwise
+      = do warn verbosity (show e)
+           notice verbosity "Abandoning this build attempt."
 
     verbosity = bo_verbosity opts
 
