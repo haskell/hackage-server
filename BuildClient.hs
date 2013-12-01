@@ -574,6 +574,9 @@ buildPackage verbosity opts config docInfo = do
              "--haddock-hyperlink-source",
              "--prefix=" ++ installDirectory opts,
              "--build-summary=" ++ installDirectory opts </> "reports" </> "$pkgid.report",
+             -- We want both html documentation and hoogle database generated
+             "--haddock-html",
+             "--haddock-hoogle",
              -- For candidates we need to use the full URL, because
              -- otherwise cabal-install will not find the package.
              -- For regular packages however we need to use just the
