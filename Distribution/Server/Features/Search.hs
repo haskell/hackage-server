@@ -2,15 +2,24 @@
 module Distribution.Server.Features.Search (
     SearchFeature(..),
     initSearchFeature,
+
+    -- * Search parameters
+    defaultSearchRankParameters,
+    SearchEngine.SearchRankParameters(..),
+    PkgDocField, PkgDocFeatures,
+    BM25F.Explanation(..),
   ) where
 
 import Distribution.Server.Framework
 import Distribution.Server.Framework.Templating
 
 import Distribution.Server.Features.Core
+import Distribution.Server.Features.PackageList
 
 import Distribution.Server.Features.Search.PkgSearch
+import Distribution.Server.Features.Search.SearchEngine (SearchRankParameters(..))
 import qualified Distribution.Server.Features.Search.SearchEngine as SearchEngine
+import qualified Distribution.Server.Features.Search.BM25F as BM25F
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Distribution.Server.Packages.Types
@@ -19,6 +28,7 @@ import Distribution.Package
 import Distribution.PackageDescription.Configuration (flattenPackageDescription)
 
 import qualified Data.Text as T
+import qualified Data.Map as Map
 
 
 data SearchFeature = SearchFeature {
@@ -26,16 +36,21 @@ data SearchFeature = SearchFeature {
 
     searchPackagesResource :: Resource,
 
-    searchPackages :: MonadIO m => [String] -> m [PackageName]
+    searchPackages        :: MonadIO m => [String] -> m [PackageName],
+    searchPackagesExplain :: MonadIO m
+                          => SearchRankParameters PkgDocField PkgDocFeatures
+                          -> [String]
+                          -> m [(BM25F.Explanation PkgDocField PkgDocFeatures T.Text
+                                ,PackageName)]
 }
 
 instance IsHackageFeature SearchFeature where
     getFeatureInterface = searchFeatureInterface
 
 
-initSearchFeature :: ServerEnv -> CoreFeature -> IO SearchFeature
+initSearchFeature :: ServerEnv -> CoreFeature -> ListFeature -> IO SearchFeature
 initSearchFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode, serverVerbosity = verbosity}
-                 core@CoreFeature{..} = do
+                 core@CoreFeature{..} list = do
     loginfo verbosity "Initialising search feature, start"
 
     templates <- loadTemplates serverTemplatesMode
@@ -44,7 +59,7 @@ initSearchFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode, serverV
 
     searchEngineState <- newMemStateWHNF initialPkgSearchEngine
 
-    let feature = searchFeature env core
+    let feature = searchFeature env core list
                                 searchEngineState templates
 
     loginfo verbosity "Initialising search feature, end"
@@ -53,11 +68,12 @@ initSearchFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode, serverV
 
 searchFeature :: ServerEnv
               -> CoreFeature
+              -> ListFeature
               -> MemState PkgSearchEngine
               -> Templates
               -> SearchFeature
 
-searchFeature ServerEnv{serverBaseURI} CoreFeature{..}
+searchFeature ServerEnv{serverBaseURI} CoreFeature{..} ListFeature{getAllLists}
               searchEngineState templates
   = SearchFeature{..}
   where
@@ -95,15 +111,19 @@ searchFeature ServerEnv{serverBaseURI} CoreFeature{..}
     getSearchDoc = flattenPackageDescription . pkgDesc
 
     postInit = do
-      pkgindex <- queryGetPackageIndex
-      let pkgs = map (getSearchDoc . last)
-               . PackageIndex.allPackagesByName $ pkgindex
+      pkgindex     <- queryGetPackageIndex
+      pkgdownloads <- getDownloadCounts
+      let pkgs = [ (getSearchDoc pkgLatestVer, pkgdownloads pkgname)
+                 | pkgVers <- PackageIndex.allPackagesByName pkgindex
+                 , let pkgLatestVer = last pkgVers
+                       pkgname      = packageName pkgLatestVer ]
           se = SearchEngine.insertDocs pkgs initialPkgSearchEngine
       writeMemState searchEngineState se
 
       registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, _) ->
         updatePackage (packageName pkgid)
 
+    --TODO: update periodically for download count changes
     updatePackage :: PackageName -> IO ()
     updatePackage pkgname = do
       index <- queryGetPackageIndex
@@ -111,14 +131,36 @@ searchFeature ServerEnv{serverBaseURI} CoreFeature{..}
       case reverse pkgs of
          []      -> modifyMemState searchEngineState
                       (SearchEngine.deleteDoc pkgname)
-         (pkg:_) -> modifyMemState searchEngineState
-                      (SearchEngine.insertDoc (getSearchDoc pkg))
+         (pkg:_) -> do downloads <- getDownloadCount pkgname
+                       modifyMemState searchEngineState
+                         (SearchEngine.insertDoc (getSearchDoc pkg, downloads))
+
+    getDownloadCount :: PackageName -> IO Int
+    getDownloadCount pkgname = do
+      pkginfomap <- getAllLists
+      return $ maybe 0 itemDownloads (Map.lookup pkgname pkginfomap)
+
+    getDownloadCounts :: IO (PackageName -> Int)
+    getDownloadCounts = do
+      pkginfomap <- getAllLists
+      return (\pkgname -> maybe 0 itemDownloads (Map.lookup pkgname pkginfomap))
 
     -- Returns list of query results
     searchPackages :: MonadIO m => [String] -> m [PackageName]
     searchPackages terms = do
         se <- readMemState searchEngineState
         let results = SearchEngine.query se (map T.pack terms)
+        return results
+
+    searchPackagesExplain :: MonadIO m
+                          => SearchRankParameters PkgDocField PkgDocFeatures
+                          -> [String]
+                          -> m [(BM25F.Explanation PkgDocField PkgDocFeatures T.Text, PackageName)]
+    searchPackagesExplain params terms = do
+        se <- readMemState searchEngineState
+        let results = SearchEngine.queryExplain
+                        (SearchEngine.setRankParams params se)
+                        (map T.pack terms)
         return results
 
     handlerGetOpenSearch :: DynamicPath -> ServerPartE Response

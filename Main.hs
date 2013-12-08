@@ -9,6 +9,7 @@ import Distribution.Server.Framework.Logging
 import Distribution.Server.Framework.BackupRestore (equalTarBall, restoreServerBackup)
 import Distribution.Server.Framework.BackupDump (dumpServerBackup)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
+import Distribution.Server.Util.SigTerm
 
 import Distribution.Text
          ( display )
@@ -290,6 +291,8 @@ runAction opts = do
     checkBlankServerState =<< Server.hasSavedState config
     checkStaticDir staticDir (flagRunStaticDir opts)
     checkTmpDir    tmpDir
+
+    onSigTermCleanShutdown
 
     let checkpointHandler server = do
           lognotice verbosity "Writing checkpoint..."

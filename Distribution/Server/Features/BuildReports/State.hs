@@ -4,41 +4,14 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Features.BuildReports.State where
 
-import Distribution.Server.Features.BuildReports.BuildReports (BuildReportId, BuildLog, BuildReport, BuildReports, PkgBuildReports)
+import Distribution.Server.Features.BuildReports.BuildReports (BuildReportId, BuildLog, BuildReport, BuildReports)
 import qualified Distribution.Server.Features.BuildReports.BuildReports as BuildReports
 
 import Distribution.Package
 
-import qualified Data.Serialize as Serialize
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import Data.Acid     (Query, Update, makeAcidic)
-import Data.SafeCopy (SafeCopy(..), contain)
-
--- BuildReportId
-instance SafeCopy BuildReportId where
-    putCopy = contain . Serialize.put
-    getCopy = contain Serialize.get
-
--- BuildLog
-instance SafeCopy BuildLog where
-    putCopy = contain . Serialize.put
-    getCopy = contain Serialize.get
-
--- BuildReport
-instance SafeCopy BuildReport where
-    putCopy = contain . Serialize.put
-    getCopy = contain Serialize.get
-
--- PkgBuildReports
-instance SafeCopy PkgBuildReports where
-    putCopy = contain . Serialize.put
-    getCopy = contain Serialize.get
-
--- BuildReports
-instance SafeCopy BuildReports where
-  putCopy = contain . Serialize.put
-  getCopy = contain Serialize.get
 
 initialBuildReports :: BuildReports
 initialBuildReports = BuildReports.emptyReports

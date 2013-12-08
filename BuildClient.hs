@@ -1,17 +1,19 @@
 {-# LANGUAGE PatternGuards #-}
 module Main (main) where
 
+import Network.HTTP hiding (password)
 import Network.Browser
-import Network.URI (URI(..), URIAuth(..))
+import Network.URI (URI(..), parseRelativeReference, relativeTo)
 
 import Distribution.Client
-import Distribution.Client.Cron (cron, rethrowSignalsAsExceptions, Signal(..))
+import Distribution.Client.Cron (cron, rethrowSignalsAsExceptions,
+                                 Signal(..), ReceivedSignal(..))
 
 import Distribution.Package
 import Distribution.Text
 import Distribution.Verbosity
 import Distribution.Simple.Utils hiding (intercalate)
-import Distribution.Version (Version)
+import Distribution.Version (Version(..))
 
 import Data.List
 import Data.Maybe
@@ -41,7 +43,7 @@ import Paths_hackage_server (version)
 import Data.Aeson (eitherDecode)
 
 data Mode = Help [String]
-          | Init String [String]
+          | Init URI [URI]
           | Stats
           | Build [PackageId]
 
@@ -50,7 +52,9 @@ data BuildOpts = BuildOpts {
                      bo_runTime    :: Maybe NominalDiffTime,
                      bo_stateDir   :: FilePath,
                      bo_continuous :: Maybe Int,
-                     bo_keepGoing  :: Bool
+                     bo_keepGoing  :: Bool,
+                     bo_dryRun     :: Bool,
+                     bo_prune      :: Bool
                  }
 
 data BuildConfig = BuildConfig {
@@ -64,7 +68,10 @@ srcName :: URI -> String
 srcName uri = fromMaybe (show uri) (uriHostName uri)
 
 installDirectory :: BuildOpts -> FilePath
-installDirectory bo = bo_stateDir bo </> "inst"
+installDirectory bo = bo_stateDir bo </> "tmp-install"
+
+resultsDirectory :: BuildOpts -> FilePath
+resultsDirectory bo = bo_stateDir bo </> "results"
 
 main :: IO ()
 main = topHandler $ do
@@ -104,42 +111,80 @@ main = topHandler $ do
                         (const (buildOnce opts' pkgs))
                         ()
 
-initialise :: BuildOpts -> String -> [String] -> IO ()
-initialise opts uriStr auxUrisStrs
+
+---------------------------------
+-- Initialisation & config file
+--
+
+initialise :: BuildOpts -> URI -> [URI] -> IO ()
+initialise opts uri auxUris
     = do putStrLn "Enter hackage username"
          username <- getLine
          putStrLn "Enter hackage password"
          password <- getLine
+         let config = BuildConfig {
+                        bc_srcURI   = uri,
+                        bc_auxURIs  = auxUris,
+                        bc_username = username,
+                        bc_password = password
+                      }
          createDirectoryIfMissing False $ bo_stateDir opts
-         -- [Note: Show/Read URI]
-         -- Ideally we'd just be showing a BuildConfig, but URI doesn't
-         -- have Show/Read, so that doesn't work. So instead, we write
-         -- out a tuple containing the uri as a string, and parse it
-         -- each time we read it.
-         writeFile (configFile opts) (show (uriStr, auxUrisStrs, username, password))
+         createDirectoryIfMissing False $ resultsDirectory opts
+         writeConfig opts config
+         writeCabalConfig opts config
+
+writeConfig :: BuildOpts -> BuildConfig -> IO ()
+writeConfig opts BuildConfig {
+                   bc_srcURI   = uri,
+                   bc_auxURIs  = auxUris,
+                   bc_username = username,
+                   bc_password = password
+                 } =
+    -- [Note: Show/Read URI]
+    -- Ideally we'd just be showing a BuildConfig, but URI doesn't
+    -- have Show/Read, so that doesn't work. So instead, we write
+    -- out a tuple containing the uri as a string, and parse it
+    -- each time we read it.
+    let confStr = show (show uri, map show auxUris, username, password) in
+    writeFile (configFile opts) confStr
 
 readConfig :: BuildOpts -> IO BuildConfig
-readConfig opts = do xs <- readFile $ configFile opts
-                     case reads xs of
-                         [((uriStr, auxUriStrs, username, password), "")] ->
-                             case mapM validateHackageURI (uriStr : auxUriStrs) of
-                             -- Shouldn't happen: We check that this
-                             -- returns Right when we create the
-                             -- config file. See [Note: Show/Read URI].
-                               Left theError -> die theError
-                               Right (uri : auxUris) ->
-                                   return $ BuildConfig {
-                                                bc_srcURI   = uri,
-                                                bc_auxURIs  = auxUris,
-                                                bc_username = username,
-                                                bc_password = password
-                                            }
-                               Right _ -> error "The impossible happened"
-                         _ ->
-                             die "Can't parse config file (maybe re-run \"hackage-build init\")"
+readConfig opts = do
+    xs <- readFile $ configFile opts
+    case reads xs of
+      [((uriStr, auxUriStrs, username, password), _)] ->
+         case mapM validateHackageURI (uriStr : auxUriStrs) of
+         -- Shouldn't happen: We check that this
+         -- returns Right when we create the
+         -- config file. See [Note: Show/Read URI].
+           Left theError -> die theError
+           Right (uri : auxUris) ->
+               return $ BuildConfig {
+                            bc_srcURI   = uri,
+                            bc_auxURIs  = auxUris,
+                            bc_username = username,
+                            bc_password = password
+                        }
+           Right _ -> error "The impossible happened"
+      _ ->
+         die "Can't parse config file (maybe re-run \"hackage-build init\")"
 
 configFile :: BuildOpts -> FilePath
-configFile opts = bo_stateDir opts </> "hd-config"
+configFile opts = bo_stateDir opts </> "hackage-build-config"
+
+writeCabalConfig :: BuildOpts -> BuildConfig -> IO ()
+writeCabalConfig opts config = do
+    let tarballsDir  = bo_stateDir opts </> "cached-tarballs"
+    writeFile (bo_stateDir opts </> "cabal-config") . unlines $
+        [ "remote-repo: " ++ srcName uri ++ ":" ++ show uri
+        | uri <- bc_srcURI config : bc_auxURIs config ]
+     ++ [ "remote-repo-cache: " ++ tarballsDir ]
+    createDirectoryIfMissing False tarballsDir
+
+
+----------------------
+-- Displaying status
+--
 
 data StatResult = AllVersionsBuiltOk
                 | AllVersionsAttempted
@@ -152,25 +197,18 @@ stats :: BuildOpts -> IO ()
 stats opts = do
     config <- readConfig opts
     let verbosity = bo_verbosity opts
-        cacheDir = bo_stateDir opts </> cacheDirName
-        cacheDirName | URI { uriAuthority = Just auth } <- bc_srcURI config
-                     = makeValid (uriRegName auth ++ uriPort auth)
-                     | otherwise
-                     = error $ "unexpected URI " ++ show (bc_srcURI config)
 
     notice verbosity "Initialising"
 
-    createDirectoryIfMissing False cacheDir
     (didFail, _, _)  <- mkPackageFailed opts
 
-    httpSession verbosity "hackage-build" version $ do
-      liftIO $ notice verbosity "Getting index"
-      infoStats verbosity (Just statsFile) =<< getDocumentationStats config didFail
+    pkgIdsHaveDocs <- getDocumentationStats verbosity config didFail
+    infoStats verbosity (Just statsFile) pkgIdsHaveDocs
   where
     statsFile = bo_stateDir opts </> "stats"
 
-infoStats :: MonadIO m => Verbosity -> Maybe FilePath -> [DocInfo] -> m ()
-infoStats verbosity mDetailedStats pkgIdsHaveDocs = liftIO $ do
+infoStats :: Verbosity -> Maybe FilePath -> [DocInfo] -> IO ()
+infoStats verbosity mDetailedStats pkgIdsHaveDocs = do
     nfo $ "There are "
        ++ show (length byPackage)
        ++ " packages with a total of "
@@ -295,26 +333,32 @@ docInfoDocsURI config docInfo = docInfoBaseURI config docInfo <//> "docs"
 docInfoTarGzURI :: BuildConfig -> DocInfo -> URI
 docInfoTarGzURI config docInfo = docInfoBaseURI config docInfo <//> display (docInfoPackage docInfo) <.> "tar.gz"
 
-getDocumentationStats :: BuildConfig
-                      -> (PackageId -> IO Bool)
-                      -> HttpSession [DocInfo]
-getDocumentationStats config didFail = do
-    mPackages   <- liftM eitherDecode `liftM` requestGET' packagesUri
-    mCandidates <- liftM eitherDecode `liftM` requestGET' candidatesUri
+docInfoReports :: BuildConfig -> DocInfo -> URI
+docInfoReports config docInfo = docInfoBaseURI config docInfo <//> "reports/"
 
-    case (mPackages, mCandidates) of
-      -- Download failure
-      (Nothing, _) -> fail $ "Could not download " ++ show packagesUri
-      (_, Nothing) -> fail $ "Could not download " ++ show candidatesUri
-      -- Decoding failure
-      (Just (Left e), _) -> fail $ "Could not decode " ++ show packagesUri   ++ ": " ++ e
-      (_, Just (Left e)) -> fail $ "Could not decode " ++ show candidatesUri ++ ": " ++ e
-      -- Success
-      (Just (Right packages), Just (Right candidates)) -> do
-        packages'   <- liftIO $ mapM checkFailed packages
-        candidates' <- liftIO $ mapM checkFailed candidates
-        return $ map (setIsCandidate False) packages'
-              ++ map (setIsCandidate True)  candidates'
+getDocumentationStats :: Verbosity 
+                      -> BuildConfig
+                      -> (PackageId -> IO Bool)
+                      -> IO [DocInfo]
+getDocumentationStats verbosity config didFail = do
+    notice verbosity "Downloading documentation index"
+    httpSession verbosity "hackage-build" version $ do
+      mPackages   <- liftM eitherDecode `liftM` requestGET' packagesUri
+      mCandidates <- liftM eitherDecode `liftM` requestGET' candidatesUri
+
+      case (mPackages, mCandidates) of
+        -- Download failure
+        (Nothing, _) -> fail $ "Could not download " ++ show packagesUri
+        (_, Nothing) -> fail $ "Could not download " ++ show candidatesUri
+        -- Decoding failure
+        (Just (Left e), _) -> fail $ "Could not decode " ++ show packagesUri   ++ ": " ++ e
+        (_, Just (Left e)) -> fail $ "Could not decode " ++ show candidatesUri ++ ": " ++ e
+        -- Success
+        (Just (Right packages), Just (Right candidates)) -> do
+          packages'   <- liftIO $ mapM checkFailed packages
+          candidates' <- liftIO $ mapM checkFailed candidates
+          return $ map (setIsCandidate False) packages'
+                ++ map (setIsCandidate True)  candidates'
   where
     packagesUri   = bc_srcURI config <//> "packages" </> "docs.json"
     candidatesUri = bc_srcURI config <//> "packages" </> "candidates" </> "docs.json"
@@ -335,26 +379,21 @@ getDocumentationStats config didFail = do
       , docInfoIsCandidate = isCandidate
       }
 
+
+----------------------
+-- Building packages
+--
+
 buildOnce :: BuildOpts -> [PackageId] -> IO ()
 buildOnce opts pkgs = keepGoing $ do
     config <- readConfig opts
-    let cacheDir = bo_stateDir opts </> cacheDirName
-        cacheDirName | URI { uriAuthority = Just auth } <- bc_srcURI config
-                     = makeValid (uriRegName auth ++ uriPort auth)
-                     | otherwise
-                     = error $ "unexpected URI " ++ show (bc_srcURI config)
 
     notice verbosity "Initialising"
     (has_failed, mark_as_failed, persist_failed) <- mkPackageFailed opts
 
-    createDirectoryIfMissing False cacheDir
-
-    configFileExists <- doesFileExist (bo_stateDir opts </> "cabal-config")
-    unless configFileExists $ prepareBuildPackages opts config
-
     flip finally persist_failed $ do
-        pkgIdsHaveDocs <- httpSession verbosity "hackage-build" version $
-          getDocumentationStats config has_failed
+        updatePackageIndex
+        pkgIdsHaveDocs <- getDocumentationStats verbosity config has_failed
         infoStats verbosity Nothing pkgIdsHaveDocs
 
         -- First build all of the latest versions of each package
@@ -372,33 +411,33 @@ buildOnce opts pkgs = keepGoing $ do
                     . sortBy  (comparing docInfoPackageName)
                     $ pkgIdsHaveDocs
 
-        liftIO $ notice verbosity $ show (length toBuild) ++ " package(s) to build"
+        notice verbosity $ show (length toBuild) ++ " package(s) to build"
 
         -- Try to build each of them, uploading the documentation and
         -- build reports along the way. We mark each package as having
         -- documentation in the cache even if the build fails because
         -- we don't want to keep continually trying to build a failing
         -- package!
-        startTime <- liftIO $ getCurrentTime
+        startTime <- getCurrentTime
 
         let go :: [DocInfo] -> IO ()
             go [] = return ()
             go (docInfo : toBuild') = do
-              mTgz <- buildPackage verbosity opts config docInfo
+              (mTgz, mRpt, logfile) <- buildPackage verbosity opts config docInfo
               case mTgz of
-                Nothing ->
-                  liftIO $ mark_as_failed (docInfoPackage docInfo)
-                Just docs_tgz -> httpSession verbosity "hackage-build" version $ do
-                  -- Make sure we authenticate to Hackage
-                  setAuthorityGen $ provideAuthInfo (bc_srcURI config)
-                                  $ Just (bc_username config, bc_password config)
-                  requestPUT (docInfoDocsURI config docInfo) "application/x-tar" (Just "gzip") docs_tgz
+                Nothing -> mark_as_failed (docInfoPackage docInfo)
+                Just _  -> return ()
+              case mRpt of
+                Just _  | bo_dryRun opts -> return ()
+                Just report -> uploadResults verbosity config docInfo
+                                              mTgz report logfile
+                _           -> return ()
 
               -- We don't check the runtime until we've actually tried
               -- to build a doc, so as to ensure we make progress.
               outOfTime <- case bo_runTime opts of
                   Nothing -> return False
-                  Just d  -> liftIO $ do
+                  Just d  -> do
                     currentTime <- getCurrentTime
                     return $ (currentTime `diffUTCTime` startTime) > d
 
@@ -408,9 +447,18 @@ buildOnce opts pkgs = keepGoing $ do
         go toBuild
   where
     shouldBuild :: DocInfo -> Bool
-    shouldBuild docInfo = case docInfoHasDocs docInfo of
-      DocsNotBuilt -> docInfoPackage docInfo `elem` pkgs || null pkgs
-      _            -> docInfoPackage docInfo `elem` pkgs
+    shouldBuild docInfo =
+        case docInfoHasDocs docInfo of
+          DocsNotBuilt -> null pkgs || any (isSelectedPackage pkgid) pkgs
+          _            -> False
+      where
+        pkgid = docInfoPackage docInfo
+
+    -- do versionless matching if no version was given
+    isSelectedPackage pkgid pkgid'@(PackageIdentifier _ (Version [] _)) =
+        packageName pkgid == packageName pkgid'
+    isSelectedPackage pkgid pkgid' =
+        pkgid == pkgid'
 
     keepGoing :: IO () -> IO ()
     keepGoing act
@@ -418,11 +466,25 @@ buildOnce opts pkgs = keepGoing $ do
       | otherwise         = act
 
     showExceptionAsWarning :: SomeException -> IO ()
-    showExceptionAsWarning e = do
-      warn verbosity (show e)
-      notice verbosity "Abandoning this build attempt."
+    showExceptionAsWarning e
+      -- except for signals telling us to really stop
+      | Just (ReceivedSignal {}) <- fromException e
+      = throwIO e
+
+      | Just UserInterrupt <- fromException e
+      = throwIO e
+
+      | otherwise
+      = do warn verbosity (show e)
+           notice verbosity "Abandoning this build attempt."
 
     verbosity = bo_verbosity opts
+
+    updatePackageIndex = do
+      update_ec <- cabal opts "update" [] Nothing
+      unless (update_ec == ExitSuccess) $
+          die "Could not 'cabal update' from specified server"
+
 
 -- Builds a little memoised function that can tell us whether a
 -- particular package failed to build its documentation
@@ -450,83 +512,54 @@ mkPackageFailed opts = do
     writeFailedCache cache_dir pkgs =
       writeFile (cache_dir </> "failed") $ unlines $ map display $ S.toList pkgs
 
-prepareBuildPackages :: BuildOpts -> BuildConfig -> IO ()
-prepareBuildPackages opts config
- = withCurrentDirectory (bo_stateDir opts) $ do
-    writeFile "cabal-config" . unlines $
-      remoteRepos ++ [
-        "remote-repo-cache: " ++ installDirectory opts </> "packages",
-        "logs-dir: " ++ installDirectory opts </> "logs",
-        "library-for-ghci: False",
-        "package-db: " ++ installDirectory opts </> "local.conf.d",
-        "documentation: True",
-        "remote-build-reporting: detailed",
-        -- TODO: These are currently only used for the "upload" commands
-        --       only, not "report"
-        "username: " ++ bc_username config,
-        "password: " ++ bc_password config
-      ]
- where
-  remoteRepo :: URI -> String
-  remoteRepo uri = "remote-repo: " ++ srcName uri ++ ":" ++ show uri
-
-  remoteRepos :: [String]
-  remoteRepos = map remoteRepo (bc_srcURI config : bc_auxURIs config)
 
 -- | Build documentation and return @(Just tgz)@ for the built tgz file
 -- on success, or @Nothing@ otherwise.
-buildPackage :: MonadIO m
-             => Verbosity -> BuildOpts -> BuildConfig
+buildPackage :: Verbosity -> BuildOpts -> BuildConfig
              -> DocInfo
-             -> m (Maybe BS.ByteString)
+             -> IO (Maybe FilePath, Maybe FilePath, FilePath)
 buildPackage verbosity opts config docInfo = do
-    liftIO $ do notice verbosity ("Building " ++ display (docInfoPackage docInfo))
-                handleDoesNotExist (return ()) $
-                    removeDirectoryRecursive $ installDirectory opts
-                createDirectory $ installDirectory opts
+    let pkgid = docInfoPackage docInfo
+    notice verbosity ("Building " ++ display pkgid)
+    handleDoesNotExist (return ()) $
+        removeDirectoryRecursive $ installDirectory opts
+    createDirectory $ installDirectory opts
 
-                -- Create cache for the empty configuration directory
-                let packageConf = installDirectory opts </> "local.conf.d"
-                local_conf_d_exists <- doesDirectoryExist packageConf
-                unless local_conf_d_exists $ do
-                    createDirectory packageConf
-                    ph <- runProcess "ghc-pkg"
-                                     ["recache",
-                                      "--package-conf=" ++ packageConf]
-                                     Nothing Nothing Nothing Nothing Nothing
-                    -- TODO: Why do we ignore the exit code here?
-                    _ <- waitForProcess ph
-                    return ()
-
-                -- We don't really want to be running "cabal update"
-                -- every time, but the index file and package cache
-                -- end up in the same place, so when re remove the
-                -- latter we also remove the former
-                update_ec <- cabal opts "update" []
-                unless (update_ec == ExitSuccess) $
-                    die "Could not 'cabal update' from specified server"
+    -- Create the local package db
+    let packageDb = installDirectory opts </> "packages.db"
+    -- TODO: use Distribution.Simple.Program.HcPkg
+    ph <- runProcess "ghc-pkg"
+                     ["init", packageDb]
+                     Nothing Nothing Nothing Nothing Nothing
+    init_ec <- waitForProcess ph
+    unless (init_ec == ExitSuccess) $
+        die $ "Could not initialise the package db " ++ packageDb
 
     -- The documentation is installed within the stateDir because we
     -- set a prefix while installing
-    let doc_root = installDirectory opts </> "share" </> "doc"
-        doc_dir      = doc_root </> display (docInfoPackage docInfo)
-        doc_dir_html = doc_dir </> "html"
-        deps_doc_dir = doc_dir </> "deps"
-        temp_doc_dir = doc_dir </> display (docInfoPackage docInfo) ++ "-docs"
+    let doc_root     = installDirectory opts </> "haddocks"
+        doc_dir_tmpl = doc_root </> "$pkgid-docs"
+        doc_dir_pkg  = doc_root </> display pkgid ++ "-docs"
+--        doc_dir_html = doc_dir </> "html"
+--        deps_doc_dir = doc_dir </> "deps"
+--        temp_doc_dir = doc_dir </> display (docInfoPackage docInfo) ++ "-docs"
         pkg_url      = "/package" </> "$pkg-$version"
         pkg_flags    =
             ["--enable-documentation",
+             "--htmldir=" ++ doc_dir_tmpl,
              -- We only care about docs, so we want to build as
              -- quickly as possible, and hence turn
              -- optimisation off. Also explicitly pass -O0 as a
              -- GHC option, in case it overrides a .cabal
              -- setting or anything
              "--disable-optimization", "--ghc-option", "-O0",
+             "--disable-library-for-ghci",
              -- We don't want packages installed in the user
              -- package.conf to affect things. In particular,
              -- we don't want doc building to fail because
              -- "packages are likely to be broken by the reinstalls"
-             "--ghc-pkg-option", "--no-user-package-conf",
+             "--package-db=clear", "--package-db=global",
+             "--package-db=" ++ packageDb,
              -- We know where this documentation will
              -- eventually be hosted, bake that in.
              -- The wiki claims we shouldn't include the
@@ -535,13 +568,12 @@ buildPackage verbosity opts config docInfo = do
              -- packages get updated. However, this is NOT
              -- what the Hackage v1 did, so ignore that:
              "--haddock-html-location=" ++ pkg_url </> "docs",
-             -- Give the user a choice between themes:
-             "--haddock-option=--built-in-themes",
              -- Link "Contents" to the package page:
              "--haddock-contents-location=" ++ pkg_url,
              -- Link to colourised source code:
              "--haddock-hyperlink-source",
              "--prefix=" ++ installDirectory opts,
+             "--build-summary=" ++ installDirectory opts </> "reports" </> "$pkgid.report",
              -- For candidates we need to use the full URL, because
              -- otherwise cabal-install will not find the package.
              -- For regular packages however we need to use just the
@@ -549,76 +581,54 @@ buildPackage verbosity opts config docInfo = do
              -- generate a report
              if docInfoIsCandidate docInfo
                then show (docInfoTarGzURI config docInfo)
-               else display (docInfoPackage docInfo)
+               else display pkgid
              ]
 
-    liftIO $ withCurrentDirectory (installDirectory opts) $ do
-        -- We CANNOT build from an unpacked directory, because Cabal
-        -- only generates build reports if you are building from a
-        -- tarball that was verifiably downloaded from the server
+    -- The installDirectory is purely temporary, while the resultsDirectory is
+    -- more persistent. We will grab various outputs from the tmp dir and stash
+    -- them for safe keeping (for later upload or manual inspection) in the
+    -- results dir.
+    let resultDir         = resultsDirectory opts
+        resultLogFile     = resultDir </> display pkgid <.> "log"
+        resultReportFile  = resultDir </> display pkgid <.> "report"
+        resultDocsTarball = resultDir </> (display pkgid ++ "-docs") <.> "tar.gz"
 
-        -- We build any dependencies first so that their documention files can
-        -- be kept separate from the target package's.
-        void $ cabal opts "install" $
-            ["--only-dependencies",
-             "--docdir=" ++ deps_doc_dir] ++ pkg_flags
+    buildLogHnd <- openFile resultLogFile WriteMode
 
-        -- We ignore the result of calling @cabal install@ because
-        -- @cabal install@ succeeds even if the documentation fails to build.
-        void $ cabal opts "install" $
-            ["--docdir=" ++ doc_dir] ++ pkg_flags
+    -- We ignore the result of calling @cabal install@ because
+    -- @cabal install@ succeeds even if the documentation fails to build.
+    void $ cabal opts "install" pkg_flags (Just buildLogHnd)
 
-        -- Remove reports for dependencies (so that we only submit the report
-        -- for the package we are currently building)
-        dotCabal <- getAppUserDataDirectory "cabal"
-        let reportsDir = dotCabal </> "reports" </> srcName (bc_srcURI config)
-        handleDoesNotExist (return ()) $ withRecursiveContents_ reportsDir $ \path ->
-           unless ((display (docInfoPackage docInfo) ++ ".log") `isSuffixOf` path) $
-             removeFile path
+    -- Grab the report for the package we want. Stash it for safe keeping.
+    report <- handleDoesNotExist (return Nothing) $ do
+                renameFile (installDirectory opts </> "reports"
+                                </> display pkgid <.> "report")
+                           resultReportFile
+                return (Just resultReportFile)
 
-        -- Submit a report even if installation/tests failed: all
-        -- interesting data points!
-        report_ec <- cabal opts "report"
-                           ["--username", bc_username config,
-                            "--password", bc_password config]
+    docs_generated <- fmap and $ sequence [
+        doesDirectoryExist doc_dir_pkg,
+        doesFileExist (doc_dir_pkg </> "doc-index.html"),
+        doesFileExist (doc_dir_pkg </> display (docInfoPackageName docInfo) <.> "haddock")]
+    docs <- if docs_generated
+              then do
+                when (bo_prune opts) (pruneHaddockFiles doc_dir_pkg)
+                BS.writeFile resultDocsTarball =<< tarGzDirectory doc_dir_pkg
+                return (Just resultDocsTarball)
+              else return Nothing
 
-        -- Delete reports after submission because we don't want to
-        -- submit them *again* in the future
-        when (report_ec == ExitSuccess) $ do
-            -- This seems like a bit of a mess: some data goes into the
-            -- user directory:
-            handleDoesNotExist (return ()) $ removeDirectoryRecursive reportsDir
+    notice verbosity $ unlines
+      [ "Build results for " ++ display pkgid ++ ":"
+      , fromMaybe "no report" report
+      , fromMaybe "no docs" docs
+      , resultLogFile
+      ]
 
-            -- Other data goes into a local file storing build reports:
-            let simple_report_log = installDirectory opts
-                                </> "packages"
-                                </> srcName (bc_srcURI config)
-                                </> "build-reports.log"
-            handleDoesNotExist (return ()) $ removeFile simple_report_log
+    return (docs, report, resultLogFile)
 
-        docs_generated <- fmap and $ sequence [
-            doesDirectoryExist doc_dir_html,
-            doesFileExist (doc_dir_html </> "doc-index.html"),
-            doesFileExist (doc_dir_html </> display (docInfoPackageName docInfo) <.> "haddock")]
-        if docs_generated
-            then do
-                notice verbosity $ "Docs generated for " ++ display (docInfoPackage docInfo)
-                liftM Just $
-                    -- We need the files in the documentation .tar.gz
-                    -- to have paths like foo-x.y.z-docs/index.html
-                    -- Unfortunately, on disk they have paths like
-                    -- foo-x.y.z/html/index.html. This hack resolves
-                    -- the problem:
-                    bracket_ (renameDirectory doc_dir_html temp_doc_dir)
-                             (renameDirectory temp_doc_dir doc_dir_html)
-                             (tarGzDirectory temp_doc_dir)
-            else do
-              notice verbosity $ "Docs for " ++ display (docInfoPackage docInfo) ++ " failed to build"
-              return Nothing
 
-cabal :: BuildOpts -> String -> [String] -> IO ExitCode
-cabal opts cmd args = do
-    cwd' <- getCurrentDirectory
+cabal :: BuildOpts -> String -> [String] -> Maybe Handle -> IO ExitCode
+cabal opts cmd args moutput = do
     let verbosity = bo_verbosity opts
         cabalConfigFile = bo_stateDir opts </> "cabal-config"
         verbosityArgs = if verbosity == silent
@@ -628,10 +638,44 @@ cabal opts cmd args = do
                  : cmd
                  : verbosityArgs
                 ++ args
-    notice verbosity $ "In " ++ cwd' ++ ":\n" ++ unwords ("cabal":all_args)
-    ph <- runProcess "cabal" all_args (Just cwd')
-                     Nothing Nothing Nothing Nothing
+    info verbosity $ unwords ("cabal":all_args)
+    ph <- runProcess "cabal" all_args Nothing
+                     Nothing Nothing moutput moutput
     waitForProcess ph
+
+pruneHaddockFiles :: FilePath -> IO ()
+pruneHaddockFiles dir = do
+    -- Hackage doesn't support the haddock frames view, so remove it
+    -- both visually (no frames link) and save space too.
+    files <- getDirectoryContents dir
+    sequence_
+      [ removeFile (dir </> file)
+      | file <- files
+      , unwantedFile file ]
+    hackJsUtils
+  where
+    unwantedFile file
+      | "frames.html" == file             = True 
+      | "mini_" `isPrefixOf` file         = True
+        -- The .haddock file is haddock-version specific
+        -- so it is not useful to make available for download
+      | ".haddock" <- takeExtension file  = True
+      | otherwise                         = False
+
+    -- The "Frames" link is added by the JS, just comment it out.
+    hackJsUtils = do
+      content <- readFile (dir </> "haddock-util.js")
+      _ <- evaluate (length content)
+      writeFile (dir </> "haddock-util.js") (munge content)
+      where
+        munge = unlines
+              . map removeAddMenuItem
+              . lines
+        removeAddMenuItem l | (sp, l') <- span (==' ') l
+                            , "addMenuItem" `isPrefixOf` l'
+                            = sp ++ "//" ++ l'
+        removeAddMenuItem l = l
+
 
 tarGzDirectory :: FilePath -> IO BS.ByteString
 tarGzDirectory dir = do
@@ -644,13 +688,68 @@ tarGzDirectory dir = do
     BS.length res `seq` return res
   where (containing_dir, nested_dir) = splitFileName dir
 
-withCurrentDirectory :: FilePath -> IO a -> IO a
-withCurrentDirectory cwd1 act
-    = bracket (do cwd2 <- getCurrentDirectory
-                  setCurrentDirectory cwd1
-                  return cwd2)
-              setCurrentDirectory
-              (const act)
+uploadResults :: Verbosity -> BuildConfig -> DocInfo
+              -> Maybe FilePath -> FilePath -> FilePath -> IO ()
+uploadResults verbosity config docInfo
+              mdocsTarballFile buildReportFile buildLogFile =
+    httpSession verbosity "hackage-build" version $ do
+      -- Make sure we authenticate to Hackage
+      setAuthorityGen (provideAuthInfo (bc_srcURI config)
+                                       (Just (bc_username config, bc_password config)))
+      case mdocsTarballFile of
+        Nothing              -> return ()
+        Just docsTarballFile ->
+          putDocsTarball config docInfo docsTarballFile
+
+      buildId <- postBuildReport config docInfo buildReportFile
+      putBuildLog buildId buildLogFile
+
+putDocsTarball :: BuildConfig -> DocInfo -> FilePath -> HttpSession ()
+putDocsTarball config docInfo docsTarballFile =
+    requestPUTFile (docInfoDocsURI config docInfo)
+      "application/x-tar" (Just "gzip") docsTarballFile
+
+type BuildReportId = URI
+
+postBuildReport :: BuildConfig -> DocInfo -> FilePath -> HttpSession BuildReportId
+postBuildReport config docInfo reportFile = do
+    let uri = docInfoReports config docInfo
+    body <- liftIO $ BS.readFile reportFile
+    setAllowRedirects False
+    (_, response) <- request Request {
+      rqURI     = uri,
+      rqMethod  = POST,
+      rqHeaders = [Header HdrContentType   ("text/plain"),
+                   Header HdrContentLength (show (BS.length body)),
+                   Header HdrAccept        ("text/plain")],
+      rqBody    = body
+    }
+    case rspCode response of
+      --TODO: fix server to not do give 303, 201 is more appropriate
+      (3,0,3) | [Just buildId] <- [ do rel <- parseRelativeReference location
+                                       return $ relativeTo rel uri
+                                  | Header HdrLocation location <- rspHeaders response ]
+                -> return buildId
+      _         -> do checkStatus uri response
+                      fail "Unexpected response from server."
+
+putBuildLog :: BuildReportId -> FilePath -> HttpSession ()
+putBuildLog reportId buildLogFile = do
+    body <- liftIO $ BS.readFile buildLogFile
+    let uri = reportId <//> "log"
+    setAllowRedirects False
+    (_, response) <- request Request {
+        rqURI     = uri,
+        rqMethod  = PUT,
+        rqHeaders = [Header HdrContentType   ("text/plain"),
+                     Header HdrContentLength (show (BS.length body)),
+                     Header HdrAccept        ("text/plain")],
+        rqBody    = body
+      }
+    case rspCode response of
+      --TODO: fix server to not to give 303, 201 is more appropriate
+      (3,0,3)   -> return ()
+      _         -> checkStatus uri response
 
 
 -------------------------
@@ -665,7 +764,9 @@ data BuildFlags = BuildFlags {
     flagForce      :: Bool,
     flagContinuous :: Bool,
     flagKeepGoing  :: Bool,
-    flagInterval   :: Maybe String
+    flagDryRun     :: Bool,
+    flagInterval   :: Maybe String,
+    flagPrune      :: Bool
 }
 
 emptyBuildFlags :: BuildFlags
@@ -677,7 +778,9 @@ emptyBuildFlags = BuildFlags {
   , flagForce      = False
   , flagContinuous = False
   , flagKeepGoing  = False
+  , flagDryRun     = False
   , flagInterval   = Nothing
+  , flagPrune      = False
   }
 
 buildFlagDescrs :: [OptDescr (BuildFlags -> BuildFlags)]
@@ -712,9 +815,17 @@ buildFlagDescrs =
       (NoArg (\opts -> opts { flagKeepGoing = True }))
       "Keep going after errors"
 
+  , Option [] ["dry-run"]
+      (NoArg (\opts -> opts { flagDryRun = True }))
+      "Don't record results or upload"
+
   , Option [] ["interval"]
       (ReqArg (\int opts -> opts { flagInterval = Just int }) "MIN")
       "Set the building interval in minutes (default 30)"
+
+  , Option [] ["prune-haddock-files"]
+      (NoArg (\opts -> opts { flagPrune = True }))
+      "Remove unnecessary haddock files (frames, .haddock file)"
   ]
 
 validateOpts :: [String] -> IO (Mode, BuildOpts)
@@ -732,18 +843,21 @@ validateOpts args = do
                                      (True, Just i)  -> Just (read i)
                                      (True, Nothing) -> Just 30 -- default interval
                                      (False, _)      -> Nothing,
-                   bo_keepGoing  = flagKeepGoing flags
+                   bo_keepGoing  = flagKeepGoing flags,
+                   bo_dryRun     = flagDryRun flags,
+                   bo_prune      = flagPrune flags
                }
 
         mode = case args' of
                _ | flagHelp flags -> Help []
                  | not (null errs) -> Help errs
-               "init" : uri : auxUris ->
+               "init" : uriStr : auxUriStrs ->
                    -- We don't actually want the URI at this point
                    -- (see [Note: Show/Read URI])
-                   case mapM validateHackageURI (uri : auxUris) of
-                     Left  theError -> Help [theError]
-                     Right _        -> Init uri auxUris
+                   case mapM validateHackageURI (uriStr : auxUriStrs) of
+                     Left  theError      -> Help [theError]
+                     Right (uri:auxUris) -> Init uri auxUris
+                     Right _             -> error "impossible"
                ["stats"] ->
                    Stats
                "stats" : _ ->
@@ -779,17 +893,3 @@ handleDoesNotExist handler act
                  (\() -> handler)
                  act
 
-withRecursiveContents :: FilePath -> (FilePath -> IO a) -> IO [a]
-withRecursiveContents topdir act = do
-  names <- getDirectoryContents topdir
-  let properNames = filter (`notElem` [".", ".."]) names
-  ass <- forM properNames $ \name -> do
-    let path = topdir </> name
-    isDirectory <- doesDirectoryExist path
-    if isDirectory
-      then withRecursiveContents path act
-      else return `liftM` act path
-  return (concat ass)
-
-withRecursiveContents_ :: FilePath -> (FilePath -> IO ()) -> IO ()
-withRecursiveContents_ fp = void . withRecursiveContents fp

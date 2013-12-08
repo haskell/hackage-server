@@ -25,6 +25,8 @@ import Distribution.Server.Features.Search.DocIdSet (DocIdSet, DocId)
 import qualified Distribution.Server.Features.Search.DocIdSet as DocIdSet
 import Distribution.Server.Features.Search.DocTermIds (DocTermIds, TermId, vecIndexIx, vecCreateIx)
 import qualified Distribution.Server.Features.Search.DocTermIds as DocTermIds
+import Distribution.Server.Features.Search.DocFeatVals (DocFeatVals)
+import qualified Distribution.Server.Features.Search.DocFeatVals as DocFeatVals
 
 import Distribution.Server.Framework.MemSize
 
@@ -68,11 +70,11 @@ type Term = Text
 -- the mapping from TermId to many DocIds is exposed via a 'DocIdSet',
 -- and the mapping from DocIds to TermIds is exposed via 'DocTermIds'.
 --
-data SearchIndex key field = SearchIndex {
+data SearchIndex key field feature = SearchIndex {
        -- the indexes
        termMap           :: !(Map Term TermInfo),
        termIdMap         :: !(IntMap Term),
-       docIdMap          :: !(IntMap (DocInfo key field)),
+       docIdMap          :: !(IntMap (DocInfo key field feature)),
        docKeyMap         :: !(Map key DocId),
 
        -- auto-increment key counters
@@ -84,7 +86,8 @@ data SearchIndex key field = SearchIndex {
 data TermInfo = TermInfo !TermId !DocIdSet
   deriving Show
 
-data DocInfo key field = DocInfo !key !(DocTermIds field)
+data DocInfo key field feature = DocInfo !key !(DocTermIds field)
+                                              !(DocFeatVals feature)
   deriving Show
 
 
@@ -92,7 +95,7 @@ data DocInfo key field = DocInfo !key !(DocTermIds field)
 -- SearchIndex basics
 --
 
-emptySearchIndex :: SearchIndex key field
+emptySearchIndex :: SearchIndex key field feature
 emptySearchIndex =
     SearchIndex
       Map.empty
@@ -102,10 +105,12 @@ emptySearchIndex =
       minBound
       minBound
 
-checkInvariant :: (Ord key, Ix field, Bounded field) => SearchIndex key field -> SearchIndex key field
+checkInvariant :: (Ord key, Ix field, Bounded field) =>
+                  SearchIndex key field feature -> SearchIndex key field feature
 checkInvariant si = assert (invariant si) si
 
-invariant :: (Ord key, Ix field, Bounded field) => SearchIndex key field -> Bool
+invariant :: (Ord key, Ix field, Bounded field) =>
+             SearchIndex key field feature -> Bool
 invariant SearchIndex{termMap, termIdMap, docKeyMap, docIdMap} =
       and [ IntMap.lookup (fromEnum termId) termIdMap == Just term
           | (term, (TermInfo termId _)) <- Map.assocs termMap ]
@@ -114,19 +119,19 @@ invariant SearchIndex{termMap, termIdMap, docKeyMap, docIdMap} =
               Nothing                   -> False
           | (termId, term) <- IntMap.assocs termIdMap ]
   &&  and [ case IntMap.lookup (fromEnum docId) docIdMap of
-              Just (DocInfo docKey' _) -> docKey == docKey'
+              Just (DocInfo docKey' _ _) -> docKey == docKey'
               Nothing                  -> False
           | (docKey, docId) <- Map.assocs docKeyMap ]
   &&  and [ Map.lookup docKey docKeyMap == Just (toEnum docId)
-          | (docId, DocInfo docKey _) <- IntMap.assocs docIdMap ]
+          | (docId, DocInfo docKey _ _) <- IntMap.assocs docIdMap ]
   &&  and [ DocIdSet.invariant docIdSet
           | (_term, (TermInfo _ docIdSet)) <- Map.assocs termMap ]
   &&  and [ any (\field -> DocTermIds.fieldTermCount docterms field termId > 0) fields
           | (_term, (TermInfo termId docIdSet)) <- Map.assocs termMap
           , docId <- DocIdSet.toList docIdSet
-          , let DocInfo _ docterms = docIdMap IntMap.! fromEnum docId ]
+          , let DocInfo _ docterms _ = docIdMap IntMap.! fromEnum docId ]
   &&  and [ IntMap.member (fromEnum termid) termIdMap
-          | (_docId, DocInfo _ docTerms) <- IntMap.assocs docIdMap
+          | (_docId, DocInfo _ docTerms _) <- IntMap.assocs docIdMap
           , field <- fields
           , termid <- DocTermIds.fieldElems docTerms field ]
   where
@@ -137,16 +142,16 @@ invariant SearchIndex{termMap, termIdMap, docKeyMap, docIdMap} =
 -- Lookups
 --
 
-docCount :: SearchIndex key field -> Int
+docCount :: SearchIndex key field feature -> Int
 docCount SearchIndex{docIdMap} = IntMap.size docIdMap
 
-lookupTerm :: SearchIndex key field -> Term -> Maybe (TermId, DocIdSet)
+lookupTerm :: SearchIndex key field feature -> Term -> Maybe (TermId, DocIdSet)
 lookupTerm SearchIndex{termMap} term =
     case Map.lookup term termMap of
       Nothing                         -> Nothing
       Just (TermInfo termid docidset) -> Just (termid, docidset)
 
-lookupTermId :: SearchIndex key field -> TermId -> DocIdSet
+lookupTermId :: SearchIndex key field feature -> TermId -> DocIdSet
 lookupTermId SearchIndex{termIdMap, termMap} termid =
     case IntMap.lookup (fromEnum termid) termIdMap of
       Nothing   -> error $ "lookupTermId: not found " ++ show termid
@@ -155,29 +160,37 @@ lookupTermId SearchIndex{termIdMap, termMap} termid =
           Nothing                    -> error "lookupTermId: internal error"
           Just (TermInfo _ docidset) -> docidset
 
-lookupDocId :: SearchIndex key field -> DocId -> (key, DocTermIds field)
+lookupDocId :: SearchIndex key field feature ->
+               DocId -> (key, DocTermIds field, DocFeatVals feature)
 lookupDocId SearchIndex{docIdMap} docid =
     case IntMap.lookup (fromEnum docid) docIdMap of
-      Nothing                       -> error $ "lookupDocId: not found " ++ show docid
-      Just (DocInfo key doctermids) -> (key, doctermids)
+      Nothing                                   -> errNotFound
+      Just (DocInfo key doctermids docfeatvals) -> (key, doctermids, docfeatvals)
+  where
+    errNotFound = error $ "lookupDocId: not found " ++ show docid
 
-lookupDocKey :: Ord key => SearchIndex key field -> key -> Maybe (DocTermIds field)
+lookupDocKey :: Ord key => SearchIndex key field feature -> key -> Maybe (DocTermIds field)
 lookupDocKey SearchIndex{docKeyMap, docIdMap} key = do
     case Map.lookup key docKeyMap of
       Nothing    -> Nothing
       Just docid ->
         case IntMap.lookup (fromEnum docid) docIdMap of
-          Nothing                        -> error "lookupDocKey: internal error"
-          Just (DocInfo _key doctermids) -> Just doctermids
+          Nothing                          -> error "lookupDocKey: internal error"
+          Just (DocInfo _key doctermids _) -> Just doctermids
 
 
-getTerm :: SearchIndex key field -> TermId -> Term
+getTerm :: SearchIndex key field feature -> TermId -> Term
 getTerm SearchIndex{termIdMap} termId =
     termIdMap IntMap.! fromEnum termId
 
-getTermId :: SearchIndex key field -> Term -> TermId
+getTermId :: SearchIndex key field feature -> Term -> TermId
 getTermId SearchIndex{termMap} term =
     case termMap Map.! term of TermInfo termid _ -> termid
+
+getDocTermIds :: SearchIndex key field feature -> DocId -> DocTermIds field
+getDocTermIds SearchIndex{docIdMap} docid =
+    case docIdMap IntMap.! fromEnum docid of
+      DocInfo _ doctermids _ -> doctermids
 
 --------------------
 -- Insert & delete
@@ -209,54 +222,55 @@ getTermId SearchIndex{termMap} term =
 -- | This is the representation for documents to be added to the index.
 -- Documents may 
 --
-type DocTerms field = field -> [Term]
+type DocTerms         field   = field   -> [Term]
+type DocFeatureValues feature = feature -> Float
 
-insertDoc :: (Ord key, Ix field, Bounded field) =>
-              key -> DocTerms field ->
-              SearchIndex key field -> SearchIndex key field
-insertDoc key userDoc si@SearchIndex{docKeyMap}
+insertDoc :: (Ord key, Ix field, Bounded field, Ix feature, Bounded feature) =>
+              key -> DocTerms field -> DocFeatureValues feature ->
+              SearchIndex key field feature -> SearchIndex key field feature
+insertDoc key userDocTerms userDocFeats si@SearchIndex{docKeyMap}
   | Just docid <- Map.lookup key docKeyMap
   = -- Some older version of the doc is already present in the index,
     -- So we keep its docid. Now have to update the doc itself
     -- and update the terms by removing old ones and adding new ones.
-    let (_,oldDoc)  = lookupDocId si docid
-        newDoc      = memoiseDocTerms userDoc
-        newTerms    = docTermSet newDoc
-        oldTerms    = docTermIdsTermSet si oldDoc
+    let oldTermsIds   = getDocTermIds si docid
+        userDocTerms' = memoiseDocTerms userDocTerms
+        newTerms      = docTermSet userDocTerms'
+        oldTerms      = docTermIdsTermSet si oldTermsIds
         -- We optimise for the typical case of significant overlap between
         -- the terms in the old and new versions of the document.
-        delTerms    = oldTerms `Set.difference` newTerms
-        addTerms    = newTerms `Set.difference` oldTerms
+        delTerms      = oldTerms `Set.difference` newTerms
+        addTerms      = newTerms `Set.difference` oldTerms
 
      -- Note: adding the doc relies on all the terms being in the termMap
      -- already, so we first add all the term occurences for the docid.
      in checkInvariant
-      . insertDocIdToDocEntry docid key newDoc
+      . insertDocIdToDocEntry docid key userDocTerms' userDocFeats
       . insertTermToDocIdEntries (Set.toList addTerms) docid
       . deleteTermToDocIdEntries (Set.toList delTerms) docid
       $ si
 
   | otherwise
   = -- We're dealing with a new doc, so allocate a docid for the key
-    let (si', docid) = allocFreshDocId si
-        newDoc       = memoiseDocTerms userDoc
-        addTerms     = docTermSet newDoc
+    let (si', docid)  = allocFreshDocId si
+        userDocTerms' = memoiseDocTerms userDocTerms
+        addTerms      = docTermSet userDocTerms'
 
      -- Note: adding the doc relies on all the terms being in the termMap
      -- already, so we first add all the term occurences for the docid.
      in checkInvariant
-      . insertDocIdToDocEntry docid key newDoc
-       -- (\si'' -> insertDocIdToDocEntry docid key (mkDocTermIds si'' newDoc) si'')
+      . insertDocIdToDocEntry docid key userDocTerms' userDocFeats
       . insertDocKeyToIdEntry key docid
       . insertTermToDocIdEntries (Set.toList addTerms) docid
       $ si'
 
 deleteDoc :: (Ord key, Ix field, Bounded field) =>
-             key -> SearchIndex key field -> SearchIndex key field
+             key ->
+             SearchIndex key field feature -> SearchIndex key field feature
 deleteDoc key si@SearchIndex{docKeyMap}
   | Just docid <- Map.lookup key docKeyMap
-  = let (_,oldDoc) = lookupDocId si docid
-        oldTerms   = docTermIdsTermSet si oldDoc
+  = let oldTermsIds = getDocTermIds si docid
+        oldTerms    = docTermIdsTermSet si oldTermsIds
      in checkInvariant
       . deleteDocEntry docid key
       . deleteTermToDocIdEntries (Set.toList oldTerms) docid
@@ -282,7 +296,8 @@ docTermSet docterms =
                | field <- Ix.range (minBound, maxBound) ]
 
 docTermIdsTermSet :: (Bounded field, Ix field) =>
-                     SearchIndex key field -> DocTermIds field -> Set.Set Term
+                     SearchIndex key field feature ->
+                     DocTermIds field -> Set.Set Term
 docTermIdsTermSet si doctermids =
     Set.unions [ Set.fromList terms
                | field <- Ix.range (minBound, maxBound)
@@ -294,7 +309,9 @@ docTermIdsTermSet si doctermids =
 --
 
 -- | Add an entry into the 'Term' to 'DocId' mapping.
-insertTermToDocIdEntry :: Term -> DocId -> SearchIndex key field -> SearchIndex key field
+insertTermToDocIdEntry :: Term -> DocId -> 
+                          SearchIndex key field feature ->
+                          SearchIndex key field feature
 insertTermToDocIdEntry term !docid si@SearchIndex{termMap, termIdMap, nextTermId} =
     case Map.lookup term termMap of
       Nothing ->
@@ -309,12 +326,16 @@ insertTermToDocIdEntry term !docid si@SearchIndex{termMap, termIdMap, nextTermId
 
 -- | Add multiple entries into the 'Term' to 'DocId' mapping: many terms that
 -- map to the same document.
-insertTermToDocIdEntries :: [Term] -> DocId -> SearchIndex key field -> SearchIndex key field
+insertTermToDocIdEntries :: [Term] -> DocId ->
+                            SearchIndex key field feature ->
+                            SearchIndex key field feature
 insertTermToDocIdEntries terms !docid si =
     foldl' (\si' term -> insertTermToDocIdEntry term docid si') si terms
 
 -- | Delete an entry from the 'Term' to 'DocId' mapping.
-deleteTermToDocIdEntry :: Term -> DocId -> SearchIndex key field -> SearchIndex key field
+deleteTermToDocIdEntry :: Term -> DocId ->
+                          SearchIndex key field feature ->
+                          SearchIndex key field feature
 deleteTermToDocIdEntry term !docid si@SearchIndex{termMap, termIdMap} =
     case  Map.lookup term termMap of
       Nothing -> si
@@ -328,7 +349,9 @@ deleteTermToDocIdEntry term !docid si@SearchIndex{termMap, termIdMap} =
 
 -- | Delete multiple entries from the 'Term' to 'DocId' mapping: many terms
 -- that map to the same document.
-deleteTermToDocIdEntries :: [Term] -> DocId -> SearchIndex key field -> SearchIndex key field
+deleteTermToDocIdEntries :: [Term] -> DocId ->
+                            SearchIndex key field feature ->
+                            SearchIndex key field feature
 deleteTermToDocIdEntries terms !docid si =
     foldl' (\si' term -> deleteTermToDocIdEntry term docid si') si terms
 
@@ -336,25 +359,34 @@ deleteTermToDocIdEntries terms !docid si =
 -- The DocId <-> Doc mapping
 --
 
-allocFreshDocId :: SearchIndex key field -> (SearchIndex key field, DocId)
+allocFreshDocId :: SearchIndex key field feature ->
+                  (SearchIndex key field feature, DocId)
 allocFreshDocId si@SearchIndex{nextDocId} =
     let !si' = si { nextDocId = succ nextDocId }
      in (si', nextDocId)
 
 insertDocKeyToIdEntry :: Ord key => key -> DocId ->
-                         SearchIndex key field -> SearchIndex key field
+                         SearchIndex key field feature ->
+                         SearchIndex key field feature
 insertDocKeyToIdEntry dockey !docid si@SearchIndex{docKeyMap} =
     si { docKeyMap = Map.insert dockey docid docKeyMap }
 
-insertDocIdToDocEntry :: (Ix field, Bounded field) => DocId -> key -> DocTerms field ->
-                         SearchIndex key field -> SearchIndex key field
-insertDocIdToDocEntry !docid dockey docterms si@SearchIndex{docIdMap} =
-    let doctermids = DocTermIds.create (map (getTermId si) . docterms)
-        !docinfo   = DocInfo dockey doctermids
+insertDocIdToDocEntry :: (Ix field, Bounded field,
+                          Ix feature, Bounded feature) =>
+                         DocId -> key ->
+                         DocTerms field ->
+                         DocFeatureValues feature ->
+                         SearchIndex key field feature ->
+                         SearchIndex key field feature
+insertDocIdToDocEntry !docid dockey userdocterms userdocfeats
+                       si@SearchIndex{docIdMap} =
+    let doctermids = DocTermIds.create (map (getTermId si) . userdocterms)
+        docfeatvals= DocFeatVals.create userdocfeats
+        !docinfo   = DocInfo dockey doctermids docfeatvals
      in si { docIdMap  = IntMap.insert (fromEnum docid) docinfo docIdMap }
 
 deleteDocEntry :: Ord key => DocId -> key ->
-                  SearchIndex key field -> SearchIndex key field
+                  SearchIndex key field feature -> SearchIndex key field feature
 deleteDocEntry docid key si@SearchIndex{docIdMap, docKeyMap} =
      si { docIdMap  = IntMap.delete (fromEnum docid) docIdMap
         , docKeyMap = Map.delete key docKeyMap }
@@ -363,12 +395,12 @@ deleteDocEntry docid key si@SearchIndex{docIdMap, docKeyMap} =
 ----------------------
 -- MemSize instances
 
-instance MemSize key => MemSize (SearchIndex key field) where
+instance MemSize key => MemSize (SearchIndex key field feature) where
   memSize (SearchIndex a b c d e f) = memSize6 a b c d e f
 
 instance MemSize TermInfo where
   memSize (TermInfo a b) = memSize2 a b
 
-instance MemSize key => MemSize (DocInfo key field) where
-  memSize (DocInfo a b) = memSize2 a b
+instance MemSize key => MemSize (DocInfo key field feature) where
+  memSize (DocInfo a b c) = memSize3 a b c
 

@@ -162,15 +162,16 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          versionsFeature
                          -}
 
-    searchFeature   <- initSearchFeature env
-                         coreFeature
-
     listFeature     <- initListFeature env
                          coreFeature
                          -- [reverse index disabled] reverseFeature
                          downloadFeature
                          tagsFeature
                          versionsFeature
+
+    searchFeature   <- initSearchFeature env
+                         coreFeature
+                         listFeature
 
     platformFeature <- initPlatformFeature env
 

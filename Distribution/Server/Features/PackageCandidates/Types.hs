@@ -16,8 +16,6 @@ import Distribution.Server.Framework.MemSize
 import Distribution.Package
          ( PackageIdentifier(..), Package(..) )
 
-import qualified Data.Serialize as Serialize
-import Data.Serialize (Serialize)
 import Data.Typeable (Typeable)
 import Data.SafeCopy
 
@@ -44,22 +42,6 @@ candInfoId = pkgInfoId . candPkgInfo
 deriveSafeCopy 0 'base ''CandPkgInfo
 
 instance Package CandPkgInfo where packageId = candInfoId
-
-instance Serialize CandPkgInfo where
-  put pkgInfo = do
-    Serialize.put (candPkgInfo pkgInfo)
-    Serialize.put (candWarnings pkgInfo)
-    Serialize.put (candPublic pkgInfo)
-
-  get = do
-    pkgInfo <- Serialize.get
-    warning <- Serialize.get
-    public  <- Serialize.get
-    return CandPkgInfo {
-        candPkgInfo = pkgInfo,
-        candWarnings = warning,
-        candPublic = public
-    }
 
 instance MemSize CandPkgInfo where
     memSize (CandPkgInfo a b c) = memSize3 a b c

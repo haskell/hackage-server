@@ -2,6 +2,7 @@
 module Distribution.Client.Cron
   ( cron
   , Signal(..)
+  , ReceivedSignal(..)
   , rethrowSignalsAsExceptions
   ) where
 
@@ -76,5 +77,5 @@ cron verbosity interval action x = do
       tz        <- getCurrentTimeZone
       let nextSync = addUTCTime (fromIntegral (60 * minutes)) now
       notice verbosity $
-          "Next sync will be in " ++ show minutes ++ " minutes, at "
+          "Next try will be in " ++ show minutes ++ " minutes, at "
        ++ formatTime defaultTimeLocale "%R %Z" (utcToZonedTime tz nextSync)

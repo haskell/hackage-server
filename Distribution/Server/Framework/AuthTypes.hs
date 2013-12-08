@@ -3,7 +3,6 @@ module Distribution.Server.Framework.AuthTypes where
 
 import Distribution.Server.Framework.MemSize
 
-import Data.Binary (Binary)
 import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable (Typeable)
 
@@ -20,7 +19,7 @@ newtype PasswdPlain = PasswdPlain String
 -- us to use either the basic or digest HTTP authentication methods.
 --
 newtype PasswdHash = PasswdHash String
-  deriving (Eq, Ord, Show, Binary, Typeable, MemSize)
+  deriving (Eq, Ord, Show, Typeable, MemSize)
 
 newtype RealmName = RealmName String
   deriving (Show, Eq)

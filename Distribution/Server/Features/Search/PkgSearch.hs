@@ -3,6 +3,9 @@
 module Distribution.Server.Features.Search.PkgSearch (
     PkgSearchEngine,
     initialPkgSearchEngine,
+    defaultSearchRankParameters,
+    PkgDocField(..),
+    PkgDocFeatures,
   ) where
 
 import Distribution.Server.Features.Search.SearchEngine
@@ -21,23 +24,33 @@ import Distribution.PackageDescription
 import Distribution.Text (display)
 
 
-type PkgSearchEngine = SearchEngine PackageDescription PackageName PkgDocField
+type PkgSearchEngine = SearchEngine
+                         (PackageDescription, DownloadCount)
+                         PackageName
+                         PkgDocField
+                         PkgDocFeatures
+type DownloadCount = Int
 
 data PkgDocField = NameField
                  | SynopsisField
                  | DescriptionField
   deriving (Eq, Ord, Enum, Bounded, Ix, Show)
 
+data PkgDocFeatures = Downloads
+  deriving (Eq, Ord, Enum, Bounded, Ix, Show)
+
 initialPkgSearchEngine :: PkgSearchEngine
 initialPkgSearchEngine =
-    initSearchEngine pkgSearchConfig pkgSearchRankParameters
+    initSearchEngine pkgSearchConfig defaultSearchRankParameters
 
-pkgSearchConfig :: SearchConfig PackageDescription PackageName PkgDocField
+pkgSearchConfig :: SearchConfig (PackageDescription, DownloadCount)
+                                PackageName PkgDocField PkgDocFeatures
 pkgSearchConfig =
     SearchConfig {
-      documentKey           = packageName,
-      extractDocumentTerms  = extractTokens,
-      transformQueryTerm    = normaliseQueryToken
+      documentKey           = packageName . fst,
+      extractDocumentTerms  = extractTokens . fst,
+      transformQueryTerm    = normaliseQueryToken,
+      documentFeatureValue  = getFeatureValue
   }
   where
     extractTokens :: PackageDescription -> PkgDocField -> [Text]
@@ -54,14 +67,18 @@ pkgSearchConfig =
                       SynopsisField    -> tokStem
                       DescriptionField -> tokStem
 
-pkgSearchRankParameters :: SearchRankParameters PkgDocField
-pkgSearchRankParameters =
+    getFeatureValue (_pkg, downloadcount) Downloads = fromIntegral downloadcount
+
+defaultSearchRankParameters :: SearchRankParameters PkgDocField PkgDocFeatures
+defaultSearchRankParameters =
     SearchRankParameters {
       paramK1,
       paramB,
       paramFieldWeights,
-      paramResultsetSoftLimit = 100,
-      paramResultsetHardLimit = 200
+      paramFeatureWeights,
+      paramFeatureFunctions,
+      paramResultsetSoftLimit = 200,
+      paramResultsetHardLimit = 400
     }
   where
     paramK1 :: Float
@@ -76,6 +93,12 @@ pkgSearchRankParameters =
     paramFieldWeights NameField        = 20
     paramFieldWeights SynopsisField    = 5
     paramFieldWeights DescriptionField = 1
+
+    paramFeatureWeights :: PkgDocFeatures -> Float
+    paramFeatureWeights Downloads = 0.5
+
+    paramFeatureFunctions :: PkgDocFeatures -> FeatureFunction
+    paramFeatureFunctions Downloads = LogarithmicFunction 1
 
 
 stopWords :: Set Term

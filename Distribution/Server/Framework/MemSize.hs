@@ -26,7 +26,7 @@ import qualified Data.Vector.Unboxed as V.U
 
 import Distribution.Package  (PackageIdentifier(..), PackageName(..))
 import Distribution.PackageDescription (FlagName(..))
-import Distribution.Version  (Version(..), VersionRange(..))
+import Distribution.Version  (Version(..), VersionRange, foldVersionRange')
 import Distribution.System   (Arch(..), OS(..))
 import Distribution.Compiler (CompilerFlavor(..), CompilerId(..))
 
@@ -55,7 +55,7 @@ memSize6 :: (MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize
 memSize7 :: (MemSize a6, MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> a3 -> a4 -> a5 -> a6 -> Int
 memSize10 :: (MemSize a9, MemSize a8, MemSize a7, MemSize a6, MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> a3 -> a4 -> a5 -> a6 -> a7 -> a8 -> a9 -> Int
 
-                           
+
 memSize0             = 0
 memSize1 a           = 2 + memSize a
 memSize2 a b         = 3 + memSize a + memSize b
@@ -96,6 +96,9 @@ instance MemSize Bool where
   memSize _ = 0
 
 instance MemSize Integer where
+  memSize _ = 2
+
+instance MemSize Float where
   memSize _ = 2
 
 instance MemSize UTCTime where
@@ -165,14 +168,17 @@ instance MemSize Version where
     memSize (Version a b) = memSize2 a b
 
 instance MemSize VersionRange where
-    memSize (AnyVersion)                   = memSize0
-    memSize (ThisVersion v)                = memSize1 v
-    memSize (LaterVersion v)               = memSize1 v
-    memSize (EarlierVersion v)             = memSize1 v
-    memSize (WildcardVersion v)            = memSize1 v
-    memSize (UnionVersionRanges v1 v2)     = memSize2 v1 v2
-    memSize (IntersectVersionRanges v1 v2) = memSize2 v1 v2
-    memSize (VersionRangeParens v)         = memSize1 v
+    memSize =
+      foldVersionRange' memSize0                  -- any
+                        memSize1                  -- == v
+                        memSize1                  -- > v
+                        memSize1                  -- < v
+                        (\v -> 7 + 2 * memSize v) -- >= v
+                        (\v -> 7 + 2 * memSize v) -- <= v
+                        (\v _v' -> memSize1 v)    -- == v.*
+                        memSize2                  -- _ || _
+                        memSize2                  -- _ && _
+                        memSize1                  -- (_)
 
 instance MemSize PackageIdentifier where
     memSize (PackageIdentifier a b) = memSize2 a b

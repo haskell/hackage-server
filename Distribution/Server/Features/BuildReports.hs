@@ -188,7 +188,6 @@ buildReportsFeature name
           then seeOther (reportsListUri reportsResource "" pkgid) $ toResponse ()
           else errNotFound "Build report not found" [MText $ "Build report #" ++ display reportId ++ " not found"]
 
-    -- result: auth error, not-found error, or redirect
     putBuildLog :: DynamicPath -> ServerPartE Response
     putBuildLog dpath = do
       pkgid <- packageInPath dpath
@@ -199,8 +198,7 @@ buildReportsFeature name
       blogbody <- expectTextPlain
       buildLog <- liftIO $ BlobStorage.add store blogbody
       void $ updateState reportsState $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
-      -- go to report page (linking the log)
-      seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
+      noContent (toResponse ())
 
     {-
       Example using curl: (TODO: why is this PUT, while logs are POST?)
@@ -212,7 +210,6 @@ buildReportsFeature name
              http://localhost:8080/package/nats-0.1/reports/1/log
     -}
 
-    -- result: auth error, not-found error or redirect
     deleteBuildLog :: DynamicPath -> ServerPartE Response
     deleteBuildLog dpath = do
       pkgid <- packageInPath dpath
@@ -220,8 +217,7 @@ buildReportsFeature name
       reportId <- reportIdInPath dpath
       guardAuthorised_ [InGroup trusteesGroup]
       void $ updateState reportsState $ SetBuildLog pkgid reportId Nothing
-      -- go to report page (which should no longer link the log)
-      seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
+      noContent (toResponse ())
 
     ---------------------------------------------------------------------------
 
