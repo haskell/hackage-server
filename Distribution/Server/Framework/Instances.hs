@@ -38,6 +38,7 @@ import Distribution.Compat.ReadP (readS_to_P)
 import qualified Data.ByteString as SBS
 import qualified Data.ByteString.Lazy as LBS
 #endif
+import Data.Digest.Pure.MD5 (MD5Digest)
 
 
 deriveSafeCopy 2 'extension ''PackageName
@@ -223,6 +224,12 @@ instance NFData Version where
 instance NFData Day where
     rnf (ModifiedJulianDay a) = rnf a
 #endif
+
+instance NFData MD5Digest where
+    rnf = rnf . show  --TODO: MD5Digest should be a newtype wrapper and an instance of NFData
+
+instance MemSize MD5Digest where
+  memSize _ = 7 --TODO: pureMD5 package wastes 5 words!
 
 instance MemSize Response where
     memSize (Response a b c d e) = memSize5 a b c d e

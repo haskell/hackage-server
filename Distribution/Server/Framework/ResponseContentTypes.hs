@@ -17,6 +17,8 @@ module Distribution.Server.Framework.ResponseContentTypes where
 
 import Distribution.Server.Framework.BlobStorage
          ( BlobId, blobMd5 )
+import Distribution.Server.Framework.MemSize
+import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Util.Parse (packUTF8)
 
 import Happstack.Server
@@ -24,6 +26,7 @@ import Happstack.Server
          , noContentLength )
 
 import qualified Data.ByteString.Lazy as BS.Lazy
+import Data.Digest.Pure.MD5 (MD5Digest)
 import Text.RSS (RSS)
 import qualified Text.RSS as RSS (rssToXML, showXML)
 import qualified Text.XHtml.Strict as XHtml (Html, showHtml)
@@ -32,6 +35,8 @@ import Data.Time.Clock (UTCTime)
 import qualified Data.Time.Format as Time (formatTime)
 import System.Locale (defaultTimeLocale)
 import Text.CSV (printCSV, CSV)
+import Control.DeepSeq
+
 
 newtype ETag = ETag String
   deriving (Eq, Ord, Show)
@@ -42,11 +47,23 @@ blobETag = ETag . blobMd5
 formatETag :: ETag -> String
 formatETag (ETag etag) = '"' : etag ++ ['"']
 
-data IndexTarball = IndexTarball BS.Lazy.ByteString
+
+data IndexTarball = IndexTarball !BS.Lazy.ByteString !Int !MD5Digest !UTCTime
 
 instance ToMessage IndexTarball where
-  toContentType _ = "application/x-gzip"
-  toMessage (IndexTarball bs) = bs
+  toResponse (IndexTarball bs len md5 time) = mkResponseLen bs len
+    [ ("Content-Type", "application/x-gzip")
+    , ("Content-MD5",   md5str)
+    , ("ETag",          formatETag (ETag md5str))
+    , ("Last-modified", formatTime time)
+    ]
+    where md5str = show md5
+
+instance NFData IndexTarball where
+  rnf (IndexTarball a b c d) = rnf (a,b,c,d)
+
+instance MemSize IndexTarball where
+  memSize (IndexTarball a b c d) = memSize4 a b c d
 
 
 data PackageTarball = PackageTarball BS.Lazy.ByteString BlobId UTCTime

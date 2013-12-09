@@ -27,15 +27,17 @@ import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Types (UserId)
 import qualified Distribution.Server.Packages.Index as Packages.Index
 import qualified Codec.Compression.GZip as GZip
+import Data.Digest.Pure.MD5 (md5)
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
-import Data.Time.Clock (UTCTime)
+import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Lazy as BS
 
 import Distribution.Text (display)
 import Distribution.Package
@@ -283,11 +285,11 @@ coreFeature :: ServerEnv
             -> UserFeature
             -> StateComponent AcidState PackagesState
             -> MemState (Map String (ByteString, UTCTime))
-            -> AsyncCache ByteString
+            -> AsyncCache IndexTarball
             -> Hook PackageChange ()
             -> Hook PackageId ()
             -> ( CoreFeature
-               , IO ByteString )
+               , IO IndexTarball )
 
 coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
             packagesState indexExtras cacheIndexTarball
@@ -442,13 +444,15 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     -- Cache updates
     --
-    getIndexTarball :: IO ByteString
+    getIndexTarball :: IO IndexTarball
     getIndexTarball = do
       users  <- queryGetUserDb  -- note, changes here don't automatically propagate
       index  <- queryGetPackageIndex
       extras <- readMemState indexExtras
-      let indexTarball' = GZip.compress (Packages.Index.write users extras index)
-      return indexTarball'
+      time   <- getCurrentTime
+      let indexTarball = GZip.compress (Packages.Index.write users extras index)
+      return $! IndexTarball indexTarball (fromIntegral $ BS.length indexTarball)
+                             (md5 indexTarball) time
 
     ------------------------------------------------------------------------------
     packageError :: [MessageSpan] -> ServerPartE a
@@ -475,9 +479,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     ------------------------------------------------------------------------
 
     servePackagesIndex :: DynamicPath -> ServerPartE Response
-    servePackagesIndex _ = do
-      indexTarball <- readAsyncCache cacheIndexTarball
-      return $ toResponse (Resource.IndexTarball indexTarball)
+    servePackagesIndex _ = toResponse <$> readAsyncCache cacheIndexTarball
 
     -- TODO: should we include more information here? description and
     -- category for instance (but they are not readily available as long
