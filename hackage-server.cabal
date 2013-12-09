@@ -200,6 +200,7 @@ executable hackage-server
       Distribution.Server.Features.Search.BM25F
       Distribution.Server.Features.Search.DocIdSet
       Distribution.Server.Features.Search.DocTermIds
+      Distribution.Server.Features.Search.DocFeatVals
       Distribution.Server.Features.Search.ExtractDescriptionTerms
       Distribution.Server.Features.Search.ExtractNameTerms
       Distribution.Server.Features.Search.PkgSearch
