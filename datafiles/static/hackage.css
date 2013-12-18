@@ -582,6 +582,10 @@ strong.warning { color: red; }
   color: #888;
 }
 
+p.tip {
+  font-size: 85%;
+}
+
 .code {
   font-family: monospace;
 }

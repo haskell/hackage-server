@@ -51,8 +51,8 @@ packagePage render headLinks top sections bottom docURL isCandidate =
              renderHeads,
              top,
              pkgBody render sections,
-             packageFlags render,
              moduleSection render docURL,
+             packageFlags render,
              downloadSection render,
              maintainerSection pkgid isCandidate,
              map pair bottom
@@ -150,13 +150,12 @@ packageFlags render =
     [] -> mempty
     flags ->
       [h2 << "Flags"
-      ,tip
-      ,flagsTable flags]
-
+      ,flagsTable flags
+      ,tip]
   where tip =
           paragraph ! [theclass "tip"] <<
           [thespan << "Use "
-          ,code "-f<flag>"
+          ,code "-f <flag>"
           ,thespan << " to enable a flag, or "
           ,code "-f -<flag>"
           ,thespan << " to disable that flag. "
