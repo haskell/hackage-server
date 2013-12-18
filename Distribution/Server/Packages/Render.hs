@@ -50,6 +50,7 @@ data PackageRender = PackageRender {
     rendHasChangeLog :: Bool,
     rendUploadInfo   :: (UTCTime, Maybe UserInfo),
     rendPkgUri       :: String,
+    rendFlags        :: [Flag],
     -- rendOther contains other useful fields which are merely strings, possibly empty
     --     for example: description, home page, copyright, author, stability
     -- If PackageRender is the One True Resource Representation, should they
@@ -78,6 +79,7 @@ doPackageRender users info hasChangeLog = return $ PackageRender
     , rendUploadInfo   = let (utime, uid) = pkgUploadData info
                          in (utime, Users.lookupUserId uid users)
     , rendPkgUri       = pkgUri
+    , rendFlags        = genPackageFlags genDesc
     , rendOther        = desc
     }
   where
@@ -241,4 +243,3 @@ unionDisjunct :: Disjunct -> Disjunct -> Disjunct
 unionDisjunct xs ys = xs' ++ ys'
   where ys' = [y | y <- ys, not (or [subConjunct y x | x <- xs])]
         xs' = [x | x <- xs, not (or [subConjunct x y | y <- ys'])]
-
