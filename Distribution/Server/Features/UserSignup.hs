@@ -11,9 +11,11 @@ import Distribution.Server.Framework.Templating
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
 
+import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.UserDetails
 
+import Distribution.Server.Users.Group
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Users as Users
 
@@ -267,9 +269,10 @@ resetInfoToCSV (SignupResetTable tbl)
 initUserSignupFeature :: ServerEnv
                       -> UserFeature
                       -> UserDetailsFeature
+                      -> UploadFeature
                       -> IO UserSignupFeature
 initUserSignupFeature env@ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode}
-                      users userdetails = do
+                      users userdetails upload = do
 
   -- Canonical state
   signupResetState <- signupResetStateComponent serverStateDir
@@ -283,7 +286,7 @@ initUserSignupFeature env@ServerEnv{serverStateDir, serverTemplatesDir, serverTe
                  , "ResetEmailSent.html", "ResetConfirm.html" ]
 
   let feature = userSignupFeature env users userdetails
-                                  signupResetState templates
+                                  upload signupResetState templates
 
   return feature
 
@@ -291,11 +294,12 @@ initUserSignupFeature env@ServerEnv{serverStateDir, serverTemplatesDir, serverTe
 userSignupFeature :: ServerEnv
                   -> UserFeature
                   -> UserDetailsFeature
+                  -> UploadFeature
                   -> StateComponent AcidState SignupResetTable
                   -> Templates
                   -> UserSignupFeature
 userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..}
-                  signupResetState templates
+                  UploadFeature{uploadersGroup} signupResetState templates
   = UserSignupFeature {..}
 
   where
@@ -515,6 +519,7 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
         uid <- updateAddUser username userauth
            >>= either errNameClash return
         updateUserDetails uid acctDetails
+        liftIO $ addUserList uploadersGroup uid
         seeOther (userPageUri userResource "" username) (toResponse ())
       where
         lookPasswd = body $ (,) <$> look "password"
