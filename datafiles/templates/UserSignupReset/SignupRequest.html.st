@@ -14,8 +14,7 @@ $hackagePageHeader()$
 <p>Certain actions on this website require you to have an account.
 In particular you need an account to be able to upload or help maintain packages.
 
-<p>Using the form below you can register an account. Note however that getting
-permission to upload packages requires an extra step from an administrator.
+<p>Using the form below you can register an account.
 
 <form class="box" action="/users/register-request" method="post" enctype="multipart/form-data">
 

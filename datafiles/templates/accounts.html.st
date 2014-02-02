@@ -15,13 +15,8 @@ $hackagePageHeader()$
 However, uploading packages requires a Hackage username and password.
 </p>
 
-<p>The current policy is that anyone can register an account but an
-administrator needs to grant upload priviledges before you can upload
-packages. In future this will make a bit more sense because there will
-be things you can do with an account other than uploading or managing
-packages, like comments and submitting build logs.</p>
-
 <p>So, you can <a href="/users/register-request">register a new user account</a>.</p>
+
 <p>You can also peruse the <a href="/users/">list of users</a>.</p>
 
 <p>Passwords are <b>not</b> stored, just the digest.</p>
