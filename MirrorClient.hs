@@ -31,6 +31,7 @@ import Control.Monad.Reader
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
 import qualified Distribution.Server.Util.GZip as GZip
+import qualified Codec.Compression.GZip as GZ
 import qualified Codec.Archive.Tar       as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
 import qualified Data.Set as Set
@@ -317,7 +318,30 @@ mirrorPackages verbosity opts pkgsToMirror = do
           notifyResponse (GetPackageFailed theError pkgid)
         Nothing -> do
           notifyResponse GetPackageOk
+          liftIO $ sanitiseTarball verbosity (stateDir opts) locTgz
           putPackage (mirrorUploaders opts) dstBase pkginfo locCab locTgz
+
+-- Some package tarballs have extraneous stuff in them that causes
+-- them to fail the "tarbomb" test in the server.  This cleans them
+-- up before uploading.
+sanitiseTarball :: Verbosity -> FilePath -> FilePath -> IO ()
+sanitiseTarball verbosity tmpdir tgzpath = do
+  tgz <- BS.readFile tgzpath
+  let allentries = Tar.foldEntries (:) [] (error . show) $
+                   Tar.read (GZip.decompressNamed tgzpath tgz)
+      okentries = filter dirOK allentries
+      newtgz = GZ.compress $ Tar.write $ reverse okentries
+  when (length allentries /= length okentries) $
+    warn verbosity $ "sanitising tarball for " ++ tgzpath
+  (tmpfp, tmph) <- openTempFile tmpdir "tmp.tgz"
+  hClose tmph
+  BS.writeFile tmpfp newtgz
+  renameFile tmpfp tgzpath
+  where
+    basedir = dropExtension $ takeBaseName tgzpath
+    dirOK entry = case splitDirectories (Tar.entryPath entry) of
+      (d:_) -> d == basedir
+      _     -> False
 
 putPackage :: Bool -> URI -> PkgIndexInfo -> FilePath -> FilePath -> MirrorSession ()
 putPackage doMirrorUploaders baseURI (PkgIndexInfo pkgid mtime muname _muid) locCab locTgz = do
