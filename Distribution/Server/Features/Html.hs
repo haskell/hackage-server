@@ -411,7 +411,7 @@ mkHtmlCore HtmlUtilities{..}
            UploadFeature{guardAuthorisedAsMaintainerOrTrustee}
            TagsFeature{queryTagsForPackage}
            DocumentationFeature{documentationResource, queryHasDocumentation}
-           DownloadFeature{recentPackageDownloads}
+           DownloadFeature{recentPackageDownloads,totalPackageDownloads}
            DistroFeature{queryPackageStatus}
            RecentPackagesFeature{packageRender}
            HtmlTags{..}
@@ -475,11 +475,12 @@ mkHtmlCore HtmlUtilities{..}
         -- [reverse index disabled] revCount <- revPackageSummary realpkg
         -- We don't currently keep per-version downloads in memory
         -- (totalDown, versionDown) <- perVersionDownloads pkg
-        totalDown <- cmFind pkgname `liftM` recentPackageDownloads
+        totalDown <- cmFind pkgname `liftM` totalPackageDownloads
+        recentDown <- cmFind pkgname `liftM` recentPackageDownloads
         let distHtml = case distributions of
                 [] -> []
                 _  -> [("Distributions", concatHtml . intersperse (toHtml ", ") $ map showDist distributions)]
-            afterHtml  = distHtml ++ [Pages.renderDownloads totalDown {- versionDown $ packageVersion realpkg-}
+            afterHtml  = distHtml ++ [Pages.renderDownloads totalDown recentDown {- versionDown $ packageVersion realpkg-}
                                      -- [reverse index disabled] ,Pages.reversePackageSummary realpkg revr revCount
                                      ]
         -- bottom sections, currently only documentation
