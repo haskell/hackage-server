@@ -18,10 +18,13 @@ import Distribution.Server.Features.BuildReports.BuildReport (BuildReport(..))
 import Distribution.Server.Features.BuildReports.BuildReports (BuildReports, BuildReportId(..), BuildLog(..))
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
+import Distribution.Server.Packages.Types
+
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
 import Distribution.Text
 import Distribution.Package
+import Distribution.Version (Version(..))
 
 import Data.ByteString.Lazy.Char8 (unpack) -- Build reports are ASCII
 
@@ -82,6 +85,7 @@ buildReportsFeature name
                     UserFeature{..} UploadFeature{trusteesGroup}
                     CoreResource{ packageInPath
                                 , guardValidPackageId
+                                , lookupPackageId
                                 , corePackagePage
                                 }
                     reportsState
@@ -129,9 +133,15 @@ buildReportsFeature name
 
     textPackageReports dpath = do
       pkgid <- packageInPath dpath
-      guardValidPackageId pkgid
-      reportList <- queryState reportsState $ LookupPackageReports pkgid
-      return . toResponse $ show reportList
+      case pkgVersion pkgid of
+        Version [] [] -> do
+          pkginfo <- lookupPackageId pkgid
+          seeOther (reportsListUri reportsResource "" (pkgInfoId pkginfo)) $
+            toResponse ()
+        _ -> do
+          guardValidPackageId pkgid
+          reportList <- queryState reportsState $ LookupPackageReports pkgid
+          return . toResponse $ show reportList
 
     textPackageReport dpath = do
       pkgid <- packageInPath dpath
