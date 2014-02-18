@@ -5,8 +5,9 @@ notifications:
   irc: "chat.freenode.net#hackage"
 
 install:
-  - sudo apt-get install libicu-dev
-  - cabal install --only-dependencies --enable-tests --disable-optimization --ghc-options=-w
+  - travis_retry sudo apt-get install libicu-dev
+  - travis_retry cabal install --only-dependencies --enable-tests --disable-optimization --ghc-options=-w
 
 script:
-  - cabal configure --enable-tests --disable-optimization && cabal build && cabal test
+  - cabal configure --enable-tests --disable-optimization && cabal build
+  - travis_retry cabal test
