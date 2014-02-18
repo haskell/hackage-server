@@ -29,6 +29,7 @@ import Control.Monad.Error
 import Control.Monad.State
 import Control.Monad.Reader
 import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString as Strict
 import qualified Data.ByteString.Lazy as BS
 import qualified Distribution.Server.Util.GZip as GZip
 import qualified Codec.Archive.Tar       as Tar
@@ -398,7 +399,7 @@ newtype MirrorSession a
       = MirrorSession {
           unMirror :: ErrorT MirrorError
                         (ReaderT (Verbosity, Bool, IORef ErrorState)
-                          (BrowserAction (HandleStream ByteString)))
+                          (BrowserAction (HandleStream Strict.ByteString)))
                         a
         }
   deriving (Functor, Monad, MonadIO,
@@ -414,10 +415,10 @@ instance MonadState ErrorState MirrorSession where
   get   = MirrorSession (ask >>= \(_,_,stRef) -> liftIO (readIORef stRef))
   put x = MirrorSession (ask >>= \(_,_,stRef) -> liftIO (writeIORef stRef x))
 
-browserAction :: BrowserAction (HandleStream ByteString) a -> MirrorSession a
+browserAction :: BrowserAction (HandleStream Strict.ByteString) a -> MirrorSession a
 browserAction = MirrorSession . lift . lift
 
-browserActions :: [BrowserAction (HandleStream ByteString) (Maybe ErrorResponse)] -> MirrorSession (Maybe ErrorResponse)
+browserActions :: [BrowserAction (HandleStream Strict.ByteString) (Maybe ErrorResponse)] -> MirrorSession (Maybe ErrorResponse)
 browserActions = foldr1 maybeThen . map browserAction
   where
     -- Bind for the strange not-quite-monad where errors are returned as
@@ -657,7 +658,7 @@ uri <//> path = uri { uriPath = Posix.addTrailingPathSeparator (uriPath uri)
                                 Posix.</> path }
 
 
-type HttpSession a = BrowserAction (HandleStream ByteString) a
+type HttpSession a = BrowserAction (HandleStream Strict.ByteString) a
 
 downloadFile :: URI -> FilePath -> HttpSession (Maybe ErrorResponse)
 downloadFile uri file = do
@@ -669,7 +670,7 @@ downloadFile uri file = do
   case metag of
     Just etag -> do
       let headers = [mkHeader HdrIfNoneMatch (quote etag)]
-      (_, rsp) <- request (Request uri GET headers BS.empty)
+      (_, rsp) <- request (Request uri GET headers Strict.empty)
       case rspCode rsp of
         (3,0,4) -> do out $ file ++ " unchanged with ETag " ++ etag
                       return Nothing
@@ -678,7 +679,7 @@ downloadFile uri file = do
         _       -> return (Just (mkErrorResponse uri rsp))
 
     Nothing -> do
-      (_, rsp) <- request (Request uri GET [] BS.empty)
+      (_, rsp) <- request (Request uri GET [] Strict.empty)
       case rspCode rsp of
         (2,0,0) -> do liftIO $ writeDowloadedFileAndEtag rsp
                       return Nothing
@@ -686,7 +687,7 @@ downloadFile uri file = do
 
   where
     writeDowloadedFileAndEtag rsp = do
-      BS.writeFile file (rspBody rsp)
+      BS.writeFile file (BS.fromStrict $ rspBody rsp)
       setETag file (unquote <$> findHeader HdrETag rsp)
 
 getETag :: FilePath -> IO (Maybe String)
@@ -729,9 +730,9 @@ downloadFile' uri file = do
 
 requestGET :: URI -> HttpSession (Either ErrorResponse ByteString)
 requestGET uri = do
-    (_, rsp) <- request (Request uri GET headers BS.empty)
+    (_, rsp) <- request (Request uri GET headers Strict.empty)
     case rspCode rsp of
-      (2,0,0) -> return (Right (rspBody rsp))
+      (2,0,0) -> return (Right (BS.fromStrict $ rspBody rsp))
       _       -> return (Left  (mkErrorResponse uri rsp))
   where
     headers = []
@@ -739,7 +740,7 @@ requestGET uri = do
 
 requestPUT :: URI -> String -> ByteString -> HttpSession (Maybe ErrorResponse)
 requestPUT uri mimetype body = do
-    (_, rsp) <- request (Request uri PUT headers body)
+    (_, rsp) <- request (Request uri PUT headers (BS.toStrict body))
     case rspCode rsp of
       (2,_,_) -> return Nothing
       _       -> return (Just (mkErrorResponse uri rsp))
@@ -750,13 +751,13 @@ requestPUT uri mimetype body = do
 data ErrorResponse = ErrorResponse URI ResponseCode String (Maybe String)
   deriving Show
 
-mkErrorResponse :: URI -> Response ByteString -> ErrorResponse
+mkErrorResponse :: URI -> Response Strict.ByteString -> ErrorResponse
 mkErrorResponse uri rsp =
     ErrorResponse uri (rspCode rsp) (rspReason rsp) mBody
   where
     mBody = case lookupHeader HdrContentType (rspHeaders rsp) of
       Just mimetype | "text/plain" `isPrefixOf` mimetype
-                   -> Just (unpackUTF8 (rspBody rsp))
+                   -> Just (unpackUTF8 (BS.fromStrict $ rspBody rsp))
       _            -> Nothing
 
 formatErrorResponse :: ErrorResponse -> String
