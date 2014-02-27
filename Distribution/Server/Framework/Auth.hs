@@ -248,6 +248,8 @@ getDigestAuthInfo authHeader req = do
                       nc     <- Map.lookup "nc"     authMap
                       cnonce <- Map.lookup "cnonce" authMap
                       return (QopAuth nc cnonce)
+                      `mplus`
+                      return QopNone
                     Nothing -> return QopNone
                     _       -> mzero
     return DigestAuthInfo {
@@ -293,12 +295,11 @@ headerDigestAuthChallenge (RealmName realmName) = do
     headerName = "WWW-Authenticate"
     -- Note that offering both qop=\"auth,auth-int\" can confuse some browsers
     -- e.g. see http://code.google.com/p/chromium/issues/detail?id=45194
-    -- TODO: can't even offer qop="auth" because the HTTP package does it wrong
     headerValue nonce =
       "Digest " ++
       intercalate ", "
         [ "realm="     ++ inQuotes realmName
-        , "qop="       ++ inQuotes ""
+        , "qop="       ++ inQuotes "auth"
         , "nonce="     ++ inQuotes nonce
         , "opaque="    ++ inQuotes ""
         ]
