@@ -44,7 +44,12 @@ methodOverrideHack rest
 -- | For use with 'methodOverrideHack': tries to report the original method
 -- of a request before the hack was applied.
 rqRealMethod :: Request -> Method
-rqRealMethod rq = fromMaybe (rqMethod rq) $ unsafePerformIO $ runServerPartT_hack rq $
+-- We want to look in the post data to find out if the method has been
+-- changed. But if the method has been changed to something other than
+-- POST or PUT, Happstack doesn't return any post data at all. So we
+-- set the method to POST temporarily before checking the post
+-- parameter.
+rqRealMethod rq = fromMaybe (rqMethod rq) $ unsafePerformIO $ runServerPartT_hack rq { rqMethod = POST } $
     withDataFn (liftM (not . null) $ lookInputs "_method") $ \mthd_exists ->
       return $ if mthd_exists then POST else rqMethod rq
 
