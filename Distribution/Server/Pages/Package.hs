@@ -25,6 +25,7 @@ import Distribution.Version
 import Distribution.Text        (display)
 import Text.XHtml.Strict hiding (p, name, title, content)
 
+import Data.Monoid              (Monoid(..))
 import Data.Maybe               (maybeToList)
 import Data.List                (intersperse, intercalate)
 import System.FilePath.Posix    ((</>), (<.>))
@@ -51,6 +52,7 @@ packagePage render headLinks top sections bottom docURL isCandidate =
              top,
              pkgBody render sections,
              moduleSection render docURL,
+             packageFlags render,
              downloadSection render,
              maintainerSection pkgid isCandidate,
              map pair bottom
@@ -139,6 +141,40 @@ maintainerSection pkgid isCandidate =
   where
     maintainURL | isCandidate = "candidate/maintain"
                 | otherwise   = display (packageName pkgid) </> "maintain"
+
+-- | Render a table of the package's flags and along side it a tip
+-- indicating how to enable/disable flags with Cabal.
+packageFlags :: PackageRender -> [Html]
+packageFlags render =
+  case rendFlags render of
+    [] -> mempty
+    flags ->
+      [h2 << "Flags"
+      ,flagsTable flags
+      ,tip]
+  where tip =
+          paragraph ! [theclass "tip"] <<
+          [thespan << "Use "
+          ,code "-f <flag>"
+          ,thespan << " to enable a flag, or "
+          ,code "-f -<flag>"
+          ,thespan << " to disable that flag. "
+          ,anchor ! [href tipLink] << "More info"
+          ]
+        tipLink = "http://www.haskell.org/cabal/users-guide/installing-packages.html#controlling-flag-assignments"
+        flagsTable flags =
+          table ! [theclass "flags-table"] <<
+          [thead << flagsHeadings
+          ,tbody << map flagRow flags]
+        flagsHeadings = [th << "Name"
+                        ,th << "Description"
+                        ,th << "Default"]
+        flagRow flag =
+          tr << [td ! [theclass "flag-name"]   << code (case flagName flag of FlagName name -> name)
+                ,td ! [theclass "flag-desc"]   << flagDescription flag
+                ,td ! [theclass (if flagDefault flag then "flag-enabled" else "flag-disabled")] <<
+                 if flagDefault flag then "Enabled" else "Disabled"]
+        code = (thespan ! [theclass "code"] <<)
 
 moduleSection :: PackageRender -> Maybe URL -> [Html]
 moduleSection render docURL = maybeToList $ fmap msect (rendModules render)

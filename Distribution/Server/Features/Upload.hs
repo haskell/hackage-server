@@ -355,11 +355,12 @@ uploadFeature ServerEnv{serverBlobStore = store}
          do -- initial check to ensure logged in.
             --FIXME: this should have been covered earlier
             uid <- guardAuthenticated
+            now <- liftIO getCurrentTime
             let processPackage :: ByteString -> IO (Either ErrorResponse (UploadResult, BlobStorage.BlobId))
                 processPackage content' = do
                     -- as much as it would be nice to do requirePackageAuth in here,
                     -- processPackage is run in a handle bracket
-                    case Upload.unpackPackage name content' of
+                    case Upload.unpackPackage now name content' of
                       Left err -> return . Left $ ErrorResponse 400 [] "Invalid package" [MText err]
                       Right ((pkg, pkgStr), warnings) -> do
                         let uresult = UploadResult pkg pkgStr warnings

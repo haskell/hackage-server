@@ -5,7 +5,9 @@ module Distribution.Server.Packages.Unpack (
     unpackPackageRaw,
   ) where
 
-import qualified Codec.Archive.Tar as Tar
+import qualified Codec.Archive.Tar       as Tar
+import qualified Codec.Archive.Tar.Entry as Tar
+import qualified Codec.Archive.Tar.Check as Tar
 
 import Distribution.Version
          ( Version(..) )
@@ -31,6 +33,10 @@ import Distribution.Server.Util.Parse
 
 import Data.List
          ( nub, (\\), partition, intercalate )
+import Data.Time
+         ( UTCTime(..), fromGregorian, addUTCTime )
+import Data.Time.Clock.POSIX
+         ( posixSecondsToUTCTime )
 import Control.Monad
          ( unless, when )
 import Control.Monad.Error
@@ -44,21 +50,21 @@ import Data.ByteString.Lazy
          ( ByteString )
 import qualified Data.ByteString.Lazy as LBS
 import System.FilePath
-         ( (</>), (<.>), splitExtension, splitDirectories, normalise )
+         ( (</>), (<.>), splitDirectories, splitExtension, normalise )
 import qualified System.FilePath.Windows
          ( takeFileName )
 
 -- | Upload or check a tarball containing a Cabal package.
 -- Returns either an fatal error or a package description and a list
 -- of warnings.
-unpackPackage :: FilePath -> ByteString
+unpackPackage :: UTCTime -> FilePath -> ByteString
               -> Either String
                         ((GenericPackageDescription, ByteString), [String])
-unpackPackage tarGzFile contents =
+unpackPackage now tarGzFile contents =
   runUploadMonad $ do
-    (entries, pkgDesc, warnings, cabalEntry) <- basicChecks False tarGzFile contents
+    (pkgDesc, warnings, cabalEntry) <- basicChecks False now tarGzFile contents
     mapM_ fail warnings
-    extraChecks entries pkgDesc
+    extraChecks pkgDesc
     return (pkgDesc, cabalEntry)
 
 unpackPackageRaw :: FilePath -> ByteString
@@ -66,12 +72,14 @@ unpackPackageRaw :: FilePath -> ByteString
                            ((GenericPackageDescription, ByteString), [String])
 unpackPackageRaw tarGzFile contents =
   runUploadMonad $ do
-    (_entries, pkgDesc, _warnings, cabalEntry) <- basicChecks True tarGzFile contents
+    (pkgDesc, _warnings, cabalEntry) <- basicChecks True noTime tarGzFile contents
     return (pkgDesc, cabalEntry)
+  where
+    noTime = UTCTime (fromGregorian 1970 1 1) 0
 
-basicChecks :: Bool -> FilePath -> ByteString
-            -> UploadMonad (Tar.Entries Tar.FormatError, GenericPackageDescription, [String], ByteString)
-basicChecks lax tarGzFile contents = do
+basicChecks :: Bool -> UTCTime -> FilePath -> ByteString
+            -> UploadMonad (GenericPackageDescription, [String], ByteString)
+basicChecks lax now tarGzFile contents = do
   let (pkgidStr, ext) = (base, tar ++ gz)
         where (tarFile, gz) = splitExtension (portableTakeFileName tarGzFile)
               (base,   tar) = splitExtension tarFile
@@ -80,13 +88,23 @@ basicChecks lax tarGzFile contents = do
 
   pkgid <- case simpleParse pkgidStr of
     Just pkgid
+      | null . versionBranch . packageVersion $ pkgid
+      -> fail $ "Invalid package id " ++ quote pkgidStr
+             ++ ". It must include the package version number, and not just "
+             ++ "the package name, e.g. 'foo-1.0'."
+
       | display pkgid == pkgidStr -> return (pkgid :: PackageIdentifier)
 
       | not . null . versionTags . packageVersion $ pkgid
       -> fail $ "Hackage no longer accepts packages with version tags: "
              ++ intercalate ", " (versionTags (packageVersion pkgid))
-    _ -> fail $ "Invalid package id " ++ show pkgidStr
+    _ -> fail $ "Invalid package id " ++ quote pkgidStr
              ++ ". The tarball must use the name of the package."
+
+  -- Extract entries and check the tar format / portability
+  let entries = tarballChecks lax now expectedDir
+              $ Tar.read (GZip.decompressNamed tarGzFile contents)
+      expectedDir = display pkgid
 
   -- Extract the .cabal file from the tarball
   let selectEntry entry = case Tar.entryContent entry of
@@ -95,8 +113,7 @@ basicChecks lax tarGzFile contents = do
         _                  -> Nothing
       PackageName name  = packageName pkgid
       cabalFileName     = display pkgid </> name <.> "cabal"
-      entries           = Tar.read (GZip.decompressNamed tarGzFile contents)
-  cabalEntries <- selectEntries lax selectEntry entries
+  cabalEntries <- selectEntries explainTarError selectEntry entries
   cabalEntry   <- case cabalEntries of
     -- NB: tar files *can* contain more than one entry for the same filename.
     -- (This was observed in practice with the package CoreErlang-0.0.1).
@@ -123,7 +140,7 @@ basicChecks lax tarGzFile contents = do
   when (packageVersion pkgDesc /= packageVersion pkgid) $
     fail "Package version in the cabal file does not match the file name."
 
-  return (entries, pkgDesc, warnings, cabalEntry)
+  return (pkgDesc, warnings, cabalEntry)
 
   where
     showError (Nothing, msg) = msg
@@ -138,8 +155,8 @@ portableTakeFileName :: FilePath -> String
 portableTakeFileName = System.FilePath.Windows.takeFileName
 
 -- Miscellaneous checks on package description
-extraChecks :: Tar.Entries Tar.FormatError -> GenericPackageDescription -> UploadMonad ()
-extraChecks entries genPkgDesc = do
+extraChecks :: GenericPackageDescription -> UploadMonad ()
+extraChecks genPkgDesc = do
   let pkgDesc = flattenPackageDescription genPkgDesc
   -- various checks
 
@@ -161,13 +178,6 @@ extraChecks entries genPkgDesc = do
       (errors, warnings) = partition isDistError checks
   mapM_ (fail . explanation) errors
   mapM_ (warn . explanation) warnings
-
-  -- Check sanity of the tarball. Some of the tarballs we import from
-  -- old Hackage fail this check because e.g. they contain files
-  -- using the ././@LongLink hack for long file names
-  let checkEntries f = Tar.foldEntries (\x mr -> case f x of Nothing -> mr; Just s -> fail (show s)) (return ()) (fail . show) entries
-  checkEntries (checkTarFilePath (package (packageDescription genPkgDesc)))
-  checkEntries checkTarFileType
 
   -- Check reasonableness of names of exposed modules
   let topLevel = case library pkgDesc of
@@ -199,58 +209,116 @@ allocatedTopLevelNodes = [
         "Distribution", "DotNet", "Foreign", "Graphics", "Language",
         "Network", "Numeric", "Prelude", "Sound", "System", "Test", "Text"]
 
-selectEntries :: Bool -> (Tar.Entry -> Maybe a)
-              -> Tar.Entries Tar.FormatError
+selectEntries :: (err -> String)
+              -> (Tar.Entry -> Maybe a)
+              -> Tar.Entries err
               -> UploadMonad [a]
-selectEntries lax select = extract []
+selectEntries formatErr select = extract []
   where
-    -- We ignore those errors that are present in the historical hackage
-    -- DB in lax mode (used when mirroring hackage)
-    extract selected (Tar.Fail Tar.ShortTrailer)
-     | lax                                    = return selected
-    extract _        (Tar.Fail err)           = fail (show err)
+    extract _        (Tar.Fail err)           = fail (formatErr err)
     extract selected  Tar.Done                = return selected
     extract selected (Tar.Next entry entries) =
       case select entry of
         Nothing    -> extract          selected  entries
         Just saved -> extract (saved : selected) entries
 
-checkTarFileType :: Tar.Entry -> Maybe String
-checkTarFileType entry
-  | case Tar.entryContent entry of
-      Tar.NormalFile _ _ -> True
-      Tar.Directory      -> True
-      Tar.SymbolicLink _ -> True
-      Tar.HardLink     _ -> True
-      _                  -> False
-  = Nothing
+data CombinedTarErrs =
+     FormatError      Tar.FormatError
+   | PortabilityError Tar.PortabilityError
+   | TarBombError     FilePath FilePath
+   | FutureTimeError  FilePath UTCTime
 
-  | otherwise
-  = Just $ "Bad file type in package tarball: " ++ Tar.entryPath entry
-        ++ "\nFor portability, package tarballs should use the 'ustar' format "
-        ++ "and only contain normal files, directories and file links. "
-        ++ "Your tar program may be using non-standard extensions. For "
-        ++ "example with GNU tar, use --format=ustar to get the portable "
-        ++ "format."
-
-checkTarFilePath :: PackageIdentifier -> Tar.Entry -> Maybe String
-checkTarFilePath pkgid entry
-  | not (all (/= "..") dirs)
-  = Just $ "Bad file name in package tarball: " ++ quote (Tar.entryPath entry)
-        ++ "\nFor security reasons, files in package tarballs may not use"
-        ++ " \"..\" components in their path."
-  | not (inPkgSubdir dirs)
-  = Just $ "Bad file name in package tarball: " ++ quote (Tar.entryPath entry)
-        ++ "\nAll the file in the package tarball must be in the subdirectory "
-        ++ quote pkgstr ++ "."
-  | otherwise
-  = Nothing
+tarballChecks :: Bool -> UTCTime -> FilePath
+              -> Tar.Entries Tar.FormatError
+              -> Tar.Entries CombinedTarErrs
+tarballChecks lax now expectedDir =
+    (if not lax then checkFutureTimes now else id)
+  . checkTarbomb expectedDir
+  . (if lax then ignoreShortTrailer
+            else fmapTarError (either id PortabilityError)
+               . Tar.checkPortability)
+  . fmapTarError FormatError
   where
-    dirs = splitDirectories (Tar.entryPath entry)
-    pkgstr = display pkgid
-    inPkgSubdir (".":pkgstr':_) = pkgstr == pkgstr'
-    inPkgSubdir (    pkgstr':_) = pkgstr == pkgstr'
-    inPkgSubdir _               = False
+    ignoreShortTrailer =
+      Tar.foldEntries Tar.Next Tar.Done
+                      (\e -> case e of
+                               FormatError Tar.ShortTrailer -> Tar.Done
+                               _                            -> Tar.Fail e)
+    fmapTarError f = Tar.foldEntries Tar.Next Tar.Done (Tar.Fail . f)
+
+checkFutureTimes :: UTCTime 
+                 -> Tar.Entries CombinedTarErrs
+                 -> Tar.Entries CombinedTarErrs
+checkFutureTimes now =
+    checkEntries checkEntry
+  where
+    -- Allow 30s for client clock skew
+    now' = addUTCTime 30 now 
+    checkEntry entry
+      | entryUTCTime > now'
+      = Just (FutureTimeError posixPath entryUTCTime)
+      where
+        entryUTCTime = posixSecondsToUTCTime (realToFrac (Tar.entryTime entry))
+        posixPath    = Tar.fromTarPathToPosixPath (Tar.entryTarPath entry)
+
+    checkEntry _ = Nothing
+
+checkTarbomb :: FilePath -> Tar.Entries CombinedTarErrs -> Tar.Entries CombinedTarErrs
+checkTarbomb expectedTopDir =
+    checkEntries checkEntry
+  where
+    checkEntry entry =
+      case splitDirectories (Tar.entryPath entry) of
+        (topDir:_) | topDir == expectedTopDir -> Nothing
+        _ -> Just $ TarBombError (Tar.entryPath entry) expectedTopDir
+
+checkEntries :: (Tar.Entry -> Maybe e) -> Tar.Entries e -> Tar.Entries e
+checkEntries checkEntry =
+  Tar.foldEntries (\entry rest -> maybe (Tar.Next entry rest) Tar.Fail
+                                        (checkEntry entry))
+                  Tar.Done Tar.Fail
+
+explainTarError :: CombinedTarErrs -> String
+explainTarError (TarBombError filename expectedDir) =
+    "Bad file name in package tarball: " ++ quote filename
+ ++ "\nAll the file in the package tarball must be in the subdirectory "
+ ++ quote expectedDir ++ "."
+explainTarError (PortabilityError (Tar.NonPortableFormat Tar.GnuFormat)) =
+    "This tarball is in the non-standard GNU tar format. "
+ ++ "For portability and long-term data preservation, hackage requires that "
+ ++ "package tarballs use the standard 'ustar' format. If you are using GNU "
+ ++ "tar, use --format=ustar to get the standard portable format."
+explainTarError (PortabilityError (Tar.NonPortableFormat Tar.V7Format)) =
+    "This tarball is in the old Unix V7 tar format. "
+ ++ "For portability and long-term data preservation, hackage requires that "
+ ++ "package tarballs use the standard 'ustar' format. Virtually all tar "
+ ++ "programs can now produce ustar format (POSIX 1988). For example if you "
+ ++ "are using GNU tar, use --format=ustar to get the standard portable format."
+explainTarError (PortabilityError (Tar.NonPortableFormat Tar.UstarFormat)) =
+    error "explainTarError: impossible UstarFormat"
+explainTarError (PortabilityError Tar.NonPortableFileType) =
+    "The package tarball contains a non-portable entry type. "
+ ++ "For portability, package tarballs should use the 'ustar' format "
+ ++ "and only contain normal files, directories and file links."
+explainTarError (PortabilityError (Tar.NonPortableEntryNameChar _)) =
+    "The package tarball contains an entry with a non-ASCII file name. "
+ ++ "For portability, package tarballs should contain only ASCII file names "
+ ++ "(e.g. not UTF8 encoded Unicode)."
+explainTarError (PortabilityError (err@Tar.NonPortableFileName {})) =
+    show err
+ ++ ". For portability, hackage requires that file names be valid on both Unix "
+ ++ "and Windows systems, and not refer outside of the tarball."
+explainTarError (FormatError formateror) =
+    "There is an error in the format of the tar file: " ++ show formateror
+ ++ ". Check that it is a valid tar file (e.g. 'tar -xtf thefile.tar'). "
+ ++ "You may need to re-create the package tarball and try again."
+explainTarError (FutureTimeError entryname time) =
+    "The tarball entry " ++ quote entryname ++ " has a file timestamp that is "
+ ++ "in the future (" ++ show time ++ "). This tends to cause problems "
+ ++ "for build systems and other tools, so hackage does not allow it. This "
+ ++ "problem can be caused by having a misconfigured system time, or by bugs "
+ ++ "in the tools (tarballs created by 'cabal sdist' on Windows with "
+ ++ "cabal-install-1.18.0.2 or older have this problem)."
 
 quote :: String -> String
 quote s = "'" ++ s ++ "'"

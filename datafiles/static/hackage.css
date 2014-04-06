@@ -568,3 +568,24 @@ ul.links li form button:hover {
 strong.warning { color: red; }
 
 /* @end */
+
+
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+/* Flags table */
+
+.flags-table td {
+  padding-right: 1em;
+  padding-bottom: 0.25em;
+}
+
+.flags-table .flag-disabled {
+  color: #888;
+}
+
+p.tip {
+  font-size: 85%;
+}
+
+.code {
+  font-family: monospace;
+}

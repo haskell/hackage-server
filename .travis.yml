@@ -9,4 +9,5 @@ install:
   - cabal install --only-dependencies --enable-tests --disable-optimization --ghc-options=-w
 
 script:
-  - cabal configure --enable-tests --disable-optimization && cabal build && cabal test
+  - cabal configure --enable-tests --disable-optimization && cabal build
+  - travis_retry cabal test

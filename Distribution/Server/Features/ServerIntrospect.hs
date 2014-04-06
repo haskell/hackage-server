@@ -12,7 +12,7 @@ import Text.XHtml.Strict
          , h2, h3, h4, p, tt, emphasize, bold, primHtmlChar
          , blockquote, thespan, thestyle
          , anchor, (!), href, name
-         , ordList, unordList, defList )
+         , ordList, unordList )
 import Data.Aeson (Value(..))
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Vector         as Vector
@@ -87,7 +87,7 @@ apiDocPageHtml serverFeatures = hackagePage title content
 
     featureList =
       concatHtml
-        [ anchor ! [ name (featureName feature) ] << h3 << featureName feature
+        [ anchor ! [ name (featureName feature) ] << h3 << ("The " +++ featureName feature +++ " feature")
           +++ p << (let desc = featureDesc feature
                     in if null desc then thespan ! [thestyle "color: red"] << "Feature description unavailable"
                                     else toHtml desc)
@@ -157,16 +157,13 @@ apiDocPageHtml serverFeatures = hackagePage title content
     extensionsElsewhere feature resource =
         if null matchingResources
           then mempty
-          else p << "Methods defined elsewhere:"
-               +++ blockquote << defList (renderMatching matchingResources)
+          else p << "Methods defined in other features:"
+               +++ blockquote << matchingResources
       where
-        renderMatching :: [(HackageFeature, Resource)] -> [(Html, Html)]
-        renderMatching = map $ \(f, r) ->
-          (toHtml $ featureName f, renderResourceWithExtensions Nothing r)
-
-        matchingResources :: [(HackageFeature, Resource)]
-        matchingResources = [
-            (feature', resource')
+        matchingResources :: [Html]
+        matchingResources =
+          [ toHtml [ p << ("In the " +++ featureName feature' +++ " feature")
+                   , p << renderResourceWithExtensions Nothing resource' ]
           | feature'  <- serverFeatures
           , featureName feature' /= featureName feature
           , resource' <- featureResources feature'

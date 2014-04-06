@@ -26,6 +26,7 @@ module Distribution.Server.Framework.BlobStorage (
   ) where
 
 import Distribution.Server.Framework.MemSize
+import Distribution.Server.Framework.Instances ()
 
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Digest.Pure.MD5 as MD5
@@ -64,7 +65,7 @@ import System.Posix.IO (
 -- | An id for a blob. The content of the blob is stable.
 --
 newtype BlobId = BlobId MD5Digest
-  deriving (Eq, Ord, Show, Typeable)
+  deriving (Eq, Ord, Show, Typeable, MemSize)
 
 instance ToJSON BlobId where
   toJSON (BlobId md5digest) = toJSON (show md5digest)
@@ -77,9 +78,6 @@ instance SafeCopy BlobId where
   kind    = extension
   putCopy (BlobId x) = contain $ put x
   getCopy = contain $ BlobId <$> get
-
-instance MemSize BlobId where
-  memSize _ = 7 --TODO: pureMD5 package wastes 5 words!
 
 -- | A persistent blob storage area. Blobs can be added and retrieved but
 -- not removed or modified.
