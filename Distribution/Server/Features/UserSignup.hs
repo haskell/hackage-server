@@ -311,6 +311,7 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
                             resetRequestResource]
       , featureState     = [abstractAcidStateComponent signupResetState]
       , featureCaches    = []
+      , featureReloadFiles = reloadTemplates templates
       }
 
     -- Resources

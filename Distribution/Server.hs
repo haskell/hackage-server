@@ -7,6 +7,7 @@ module Distribution.Server (
     run,
     shutdown,
     checkpoint,
+    reloadDatafiles,
 
     -- * Server configuration
     ListenOn(..),
@@ -228,6 +229,10 @@ shutdown server =
 checkpoint :: Server -> IO ()
 checkpoint server =
   Features.checkpointAllFeatures (serverFeatures server)
+
+reloadDatafiles :: Server -> IO ()
+reloadDatafiles server =
+  mapM_ Feature.featureReloadFiles (serverFeatures server)
 
 -- | Return /one/ abstract state component per feature
 serverState :: Server -> [(String, AbstractStateComponent)]

@@ -203,6 +203,7 @@ htmlFeature user
            }
          ]
       , featurePostInit = syncAsyncCache cachePackagesPage
+      , featureReloadFiles = reloadTemplates templates
       }
 
     htmlCore       = mkHtmlCore       utilities

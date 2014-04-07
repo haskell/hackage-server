@@ -64,6 +64,7 @@ staticFilesFeature ServerEnv{serverStaticDir} templates staticFiles =
   , featureState = []
   , featureErrHandlers = [("txt",  textErrorPage)
                          ,("html", htmlErrorPage)]
+  , featureReloadFiles = reloadTemplates templates
   }
 
   where

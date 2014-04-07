@@ -16,6 +16,7 @@ module Distribution.Server.Framework.Templating (
     Templates,
     TemplatesMode(..),
     loadTemplates,
+    reloadTemplates,
     getTemplate,
     tryGetTemplate,
     TemplateAttr,
@@ -46,6 +47,7 @@ import Control.Monad (when)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.List
 import Data.Maybe (isJust)
+import Data.IORef
 import System.FilePath ((<.>), takeExtension)
 
 
@@ -78,7 +80,8 @@ instance ToSElem Version           where toSElem = toSElem . display
 instance ToSElem PackageIdentifier where toSElem = toSElem . display
 
 
-data Templates = TemplatesNormalMode !RawTemplateGroup
+data Templates = TemplatesNormalMode !(IORef RawTemplateGroup)
+                                     [FilePath] [String]
                | TemplatesDesignMode [FilePath] [String]
 
 data TemplatesMode = NormalMode | DesignMode
@@ -88,11 +91,25 @@ loadTemplates templateMode templateDirs expectedTemplates = do
     templateGroup <- loadTemplateGroup templateDirs
     checkTemplates templateGroup templateDirs expectedTemplates
     case templateMode of
-      NormalMode -> return $  TemplatesNormalMode templateGroup
-      DesignMode -> return $! TemplatesDesignMode templateDirs expectedTemplates
+      NormalMode -> do
+        templateGroupRef <- newIORef templateGroup
+        return (TemplatesNormalMode templateGroupRef
+                                    templateDirs expectedTemplates)
+
+      DesignMode ->
+        return (TemplatesDesignMode templateDirs expectedTemplates)
+
+reloadTemplates :: Templates -> IO ()
+reloadTemplates (TemplatesNormalMode templateGroupRef
+                                     templateDirs expectedTemplates) = do
+  templateGroup' <- loadTemplateGroup templateDirs
+  checkTemplates templateGroup' templateDirs expectedTemplates
+  writeIORef templateGroupRef templateGroup'
+
+reloadTemplates (TemplatesDesignMode _ _) = return ()
 
 getTemplate :: MonadIO m => Templates -> String -> m ([TemplateAttr] -> Template)
-getTemplate templates@(TemplatesNormalMode _) name =
+getTemplate templates@(TemplatesNormalMode _ _ _) name =
     tryGetTemplate templates name >>= maybe (failMissingTemplate name) return
 
 getTemplate templates@(TemplatesDesignMode _ expectedTemplates) name = do
@@ -101,13 +118,14 @@ getTemplate templates@(TemplatesDesignMode _ expectedTemplates) name = do
     tryGetTemplate templates name >>= maybe (failMissingTemplate name) return
 
 tryGetTemplate :: MonadIO m => Templates -> String -> m (Maybe ([TemplateAttr] -> Template))
-tryGetTemplate (TemplatesNormalMode templateGroup) name =
+tryGetTemplate (TemplatesNormalMode templateGroupRef _ _) name = do
+    templateGroup <- liftIO $ readIORef templateGroupRef
     let tkind     = templateKindFromExt name
         mtemplate = fmap (\t -> Template tkind
                               . applyEscaping tkind
                               . applyTemplateAttrs t)
                          (getStringTemplate name templateGroup)
-    in return mtemplate
+    return mtemplate
 
 tryGetTemplate (TemplatesDesignMode templateDirs expectedTemplates) name = do
     templateGroup <- liftIO $ loadTemplateGroup templateDirs

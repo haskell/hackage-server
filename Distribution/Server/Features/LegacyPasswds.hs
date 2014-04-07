@@ -195,6 +195,7 @@ legacyPasswdsFeature env legacyPasswdsState templates UserFeature{..}
       , featureState     = [abstractAcidStateComponent legacyPasswdsState]
       , featureCaches    = []
       , featurePostInit  = interceptUserAuthFail
+      , featureReloadFiles = reloadTemplates templates
       }
 
     -- Resources

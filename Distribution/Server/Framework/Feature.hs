@@ -47,6 +47,7 @@ data HackageFeature = HackageFeature {
   , featureErrHandlers :: [(String, ServerErrorResponse)]
 
   , featurePostInit    :: IO ()
+  , featureReloadFiles :: IO ()
 
   , featureState       :: [AbstractStateComponent]
   , featureCaches      :: [CacheComponent]
@@ -68,6 +69,7 @@ emptyHackageFeature name = HackageFeature {
     featureErrHandlers= [],
 
     featurePostInit  = return (),
+    featureReloadFiles = return (),
 
     featureState     = error $ "'featureState' not defined for feature '" ++ name ++ "'",
     featureCaches    = []
