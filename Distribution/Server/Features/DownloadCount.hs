@@ -21,6 +21,7 @@ module Distribution.Server.Features.DownloadCount (
   , DownloadResource(..)
   , initDownloadFeature
   , RecentDownloads
+  , TotalDownloads
   ) where
 
 import Distribution.Server.Framework
@@ -42,6 +43,7 @@ import Control.Concurrent (forkIO)
 data DownloadFeature = DownloadFeature {
     downloadFeatureInterface :: HackageFeature
   , downloadResource         :: DownloadResource
+  , totalPackageDownloads   :: MonadIO m => m TotalDownloads
   , recentPackageDownloads   :: MonadIO m => m RecentDownloads
   }
 
@@ -58,10 +60,12 @@ initDownloadFeature serverEnv@ServerEnv{serverStateDir, serverVerbosity = verbos
 
     inMemState     <- inMemStateComponent  serverStateDir
     let onDiskState = onDiskStateComponent serverStateDir
-    totalsCache    <- newMemStateWHNF =<< computeRecentDownloads =<< getState onDiskState
+    recentCache    <- newMemStateWHNF =<< computeRecentDownloads =<< getState onDiskState
+    totalsCache    <- newMemStateWHNF =<< computeTotalDownloads =<< getState onDiskState
     downChan       <- newChan
 
-    let feature   = downloadFeature core users serverEnv inMemState onDiskState totalsCache downChan
+    let feature   = downloadFeature core users serverEnv inMemState
+                    onDiskState totalsCache recentCache downChan
 
     registerHook (packageDownloadHook core) (writeChan downChan)
     loginfo verbosity "Initialising download feature, end"
@@ -86,7 +90,7 @@ onDiskStateComponent stateDir = StateComponent {
       stateDesc    = "All time download counts"
     , stateHandle  = OnDiskState
     , getState     = readOnDiskStats (dcPath stateDir </> "ondisk")
-    , putState     = writeOnDisk stateDir Nothing ReconstructLog
+    , putState     = writeOnDisk stateDir Nothing Nothing ReconstructLog
     , backupState  = onDiskBackup
     , restoreState = onDiskRestore
     , resetState   = return . onDiskStateComponent
@@ -95,12 +99,20 @@ onDiskStateComponent stateDir = StateComponent {
 data ReconstructLog = ReconstructLog | DontReconstructLog
 
 writeOnDisk :: FilePath
+            -> Maybe (MemState TotalDownloads)
             -> Maybe (MemState RecentDownloads)
             -> ReconstructLog
             -> OnDiskStats
             -> IO ()
-writeOnDisk stateDir mRecentDownloads shouldReconstructLog onDiskStats = do
+writeOnDisk stateDir mTotalDownloads mRecentDownloads
+  shouldReconstructLog onDiskStats = do
   writeOnDiskStats (dcPath stateDir </> "ondisk") onDiskStats
+
+  case mTotalDownloads of
+    Just totalDownloads ->
+      writeMemState totalDownloads =<< computeTotalDownloads onDiskStats
+    Nothing ->
+      return ()
 
   case mRecentDownloads of
     Just recentDownloads ->
@@ -119,6 +131,7 @@ downloadFeature :: CoreFeature
                 -> ServerEnv
                 -> StateComponent AcidState   InMemStats
                 -> StateComponent OnDiskState OnDiskStats
+                -> MemState TotalDownloads
                 -> MemState RecentDownloads
                 -> Chan PackageId
                 -> DownloadFeature
@@ -128,6 +141,7 @@ downloadFeature CoreFeature{}
                 ServerEnv{serverStateDir}
                 inMemState
                 onDiskState
+                totalDownloadsCache
                 recentDownloadsCache
                 downloadStream
   = DownloadFeature{..}
@@ -144,12 +158,19 @@ downloadFeature CoreFeature{}
             CacheComponent {
               cacheDesc       = "recent package downloads cache",
               getCacheMemSize = memSize <$> readMemState recentDownloadsCache
+            },
+            CacheComponent {
+              cacheDesc       = "total package downloads cache",
+              getCacheMemSize = memSize <$> readMemState totalDownloadsCache
             }
           ]
       }
 
     recentPackageDownloads :: MonadIO m => m RecentDownloads
     recentPackageDownloads = readMemState recentDownloadsCache
+
+    totalPackageDownloads :: MonadIO m => m TotalDownloads
+    totalPackageDownloads = readMemState totalDownloadsCache
 
     registerDownloads = forever $ do
         pkg    <- readChan downloadStream
@@ -166,7 +187,8 @@ downloadFeature CoreFeature{}
 
           -- Update the on-disk statistics and recompute recent downloads
           onDiskStats' <- updateHistory inMemStats <$> getState onDiskState
-          writeOnDisk serverStateDir (Just recentDownloadsCache) DontReconstructLog onDiskStats'
+          writeOnDisk serverStateDir (Just totalDownloadsCache)
+            (Just recentDownloadsCache) DontReconstructLog onDiskStats'
 
         updateState inMemState $ RegisterDownload pkg
 
@@ -194,7 +216,8 @@ downloadFeature CoreFeature{}
       fileContents <- expectCSV
       csv          <- importCSV "PUT input" fileContents
       onDiskStats  <- cmFromCSV csv
-      liftIO $ writeOnDisk serverStateDir (Just recentDownloadsCache) ReconstructLog onDiskStats
+      liftIO $ writeOnDisk serverStateDir (Just totalDownloadsCache)
+        (Just recentDownloadsCache) ReconstructLog onDiskStats
       ok $ toResponse $ "Imported " ++ show (length csv) ++ " records\n"
 
 {------------------------------------------------------------------------------
@@ -215,6 +238,9 @@ computeRecentDownloads :: OnDiskStats -> IO RecentDownloads
 computeRecentDownloads onDiskStats = do
   recentRange <- getRecentDayRange 30
   return $ initRecentDownloads recentRange onDiskStats
+
+computeTotalDownloads :: OnDiskStats -> IO TotalDownloads
+computeTotalDownloads onDiskStats = return $ initTotalDownloads onDiskStats
 
 dcPath :: FilePath -> FilePath
 dcPath stateDir = stateDir </> "db" </> "DownloadCount"

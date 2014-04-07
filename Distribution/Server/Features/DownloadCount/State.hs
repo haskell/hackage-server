@@ -63,6 +63,11 @@ newtype RecentDownloads = RecentDownloads {
   }
   deriving (CountingMap PackageName, Show, Eq, MemSize)
 
+newtype TotalDownloads = TotalDownloads {
+    totalDownloads :: SimpleCountingMap PackageName
+  }
+  deriving (CountingMap PackageName, Show, Eq, MemSize)
+
 {------------------------------------------------------------------------------
   Initial instances
 ------------------------------------------------------------------------------}
@@ -87,6 +92,13 @@ initRecentDownloads dayRange (OnDiskStats (NCM _ perPackage)) =
       case Map.lookup day perDay of
         Nothing         -> id
         Just perVersion -> cmInsert pkgName (cmTotal perVersion)
+
+initTotalDownloads :: OnDiskStats -> TotalDownloads
+initTotalDownloads (OnDiskStats (NCM _ perPackage)) =
+    foldr (.) id (map goPackage (Map.toList perPackage)) cmEmpty
+  where
+    goPackage :: (PackageName, OnDiskPerPkg) -> TotalDownloads -> TotalDownloads
+    goPackage (pkgName, OnDiskPerPkg perPkg) = cmInsert pkgName (cmTotal perPkg)
 
 {------------------------------------------------------------------------------
   Pure updates/queries
