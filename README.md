@@ -1,16 +1,15 @@
-# Server for hackage.haskell.org
+# hackage-server
 
 [![Build Status](https://travis-ci.org/haskell/hackage-server.png?branch=master)](https://travis-ci.org/haskell/hackage-server)
 
-This is the server for <http://hackage.haskell.org>.
+This is the `hackage-server` code. This is what powers <http://hackage.haskell.org>, and many other private hackage instances.
 
 ## Running
 
-    cabal install --only-dependencies --enable-tests
+    cabal install
 
-    cabal build
-    cabal run hackage-server init
-    cabal run hackage-server run
+    hackage-server init
+    hackage-server run
 
 By default the server runs on port `8080` with the following settings:
 
@@ -18,10 +17,9 @@ By default the server runs on port `8080` with the following settings:
     username: admin
     password: admin
 
-To specify something different, see `cabal run hackage-server -- init
---help` for details.
+To specify something different, see `hackage-server init --help` for details.
 
-The server can be killed by using `Control-C`.
+The server can be stopped by using `Control-C`.
 
 This will save the current state and shutdown cleanly. Running again
 will resume with the same state.
@@ -35,12 +33,14 @@ rm -rf state/
 ```
 
 Note that the `datafiles/` and `state/` directories differ:
-`datafiles` is for static html and other files. The `state` directory
-holds information about the database, using `acid-state`.
+`datafiles` is for static html, templates and other files.
+The `state` directory holds the database (using `acid-state`
+and a separate blob store).
 
 ### Creating users & uploading packages
 
-* List of registered users: <http://localhost:8080/users/>
+* Admin front-end: <http://localhost:8080/admin>
+* List of users: <http://localhost:8080/users/>
 * Register new users: <http://localhost:8080/users/register>
 
 Currently there is no restriction on registering, but only an admin
@@ -69,7 +69,7 @@ hackage and uploading them to a local instance of a hackage-server.
 
 To try it out:
 
-1. Add a user to the mirrorers group by navigating to
+1. Add a user to the mirrorers group via
    http://localhost:8080/packages/mirrorers/
 1. Create a config file that contains the local and remote
    server. Assuming you are cloning the packages on
@@ -83,7 +83,7 @@ echo -e "http://hackage.haskell.org\nhttp://admin:admin@localhost:8080/" > serve
 1. Run the client, pointing to the config file:
 
 ```bash
-cabal run hackage-mirror -- servers.cfg
+hackage-mirror servers.cfg
 ```
 
 This will do a one-time sync, and will bail out at the first sign of
