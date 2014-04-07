@@ -313,7 +313,7 @@ executable hackage-mirror
     filepath, directory,
     time,     old-locale, random,
     tar,      zlib,
-    network,  HTTP >= 4000.1.3,
+    network,  HTTP >= 4000.2.11,
     Cabal,
     safecopy, cereal, binary, mtl,
     unix
@@ -366,7 +366,7 @@ executable hackage-import
     filepath, directory,
     time,     old-locale, random,
     tar,      zlib,
-    network,  HTTP >= 4000.1.3,
+    network,  HTTP >= 4000.2.11,
     Cabal,
     safecopy, cereal, binary, mtl,
     csv, async, attoparsec,
