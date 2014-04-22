@@ -40,6 +40,7 @@ import Distribution.Server.Features.UserDetails         (initUserDetailsFeature)
 import Distribution.Server.Features.UserSignup          (initUserSignupFeature)
 import Distribution.Server.Features.LegacyPasswds       (initLegacyPasswdsFeature)
 import Distribution.Server.Features.EditCabalFiles      (initEditCabalFilesFeature)
+import Distribution.Server.Features.AdminFrontend       (initAdminFrontendFeature)
 import Distribution.Server.Features.HoogleData          (initHoogleDataFeature)
 #endif
 import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
@@ -199,6 +200,10 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                           coreFeature
                           uploadFeature
 
+    adminFrontendFeature <- initAdminFrontendFeature env
+                              usersFeature
+                              userDetailsFeature
+
     hoogleDataFeature <- initHoogleDataFeature env
                            coreFeature
                            documentationCoreFeature
@@ -236,6 +241,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface htmlFeature
          , legacyRedirectsFeature uploadFeature
          , editCabalFeature
+         , adminFrontendFeature
          , getFeatureInterface hoogleDataFeature
 #endif
          , staticFilesFeature

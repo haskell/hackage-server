@@ -2,17 +2,42 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: user administartion</title>
+<title>Hackage: admin front-end</title>
 </head>
 
 <body>
 $hackagePageHeader()$
 
 <div id="content">
-<h2>Admin front-end</h2>
+<h1>Admin front-end</h1>
 
+<h2>User accounts</h2>
 <ul>
-<li><a href="/users/register">Add user</a></li>
+<li>
+  <form class="box" action="/admin" method="get">
+    <button type="submit">Search for account</button>
+    <input type="text" name="find-account" value="$findAccount$"/>
+  </form>
+  $if(first(accounts))$
+    <p>Found accounts:
+      <ul>
+      $accounts:{account|
+        <li>
+          $if(account.active)$
+          <a href="/admin/account/$account.id$">$account.name$</a>
+          $else$
+          <del><a href="/admin/account/$account.id$">$account.name$</a></del> (deleted)
+          $endif$
+        </li>
+      }$
+      </ul>
+    </p>
+  $elseif(findAccount)$
+    <p>No matching accounts found</p>
+  $endif$
+</li>
+<li><a href="/admin/accounts">Browse all accounts</li>
+<li><a href="/users/register">Create new account</a></li>
 <li>Edit groups: <a href="/users/admins/edit">admin</a>,
   <a href="/packages/mirrorers/edit">mirrorers</a>,
   <a href="/packages/trustees/edit">trustees</a>,
@@ -53,6 +78,11 @@ $hackagePageHeader()$
 </FORM>
 
   -->
+
+<h2>Server status</h2>
+<ul>
+<li><a href="/server-status/memory">Memory use</a> by data store/cache</a></li>
+</ul>
 
 </div> <!-- content -->
 </body>
