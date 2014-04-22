@@ -199,15 +199,14 @@ run server = do
           | v == Verbosity.deafening = HsLogger.setLevel HsLogger.DEBUG
           | otherwise                = id
 
-    -- This is a cunning hack to solve the problem that current web browsers
-    -- (non-HTML5 forms) do not support PUT, DELETE, etc, they only support GET
-    -- and POST. We don't want to compromise the design of the whole server
-    -- just because of browsers not supporting HTTP properly, so we allow
-    -- browsers to PUT/DELETE etc by POSTing with a query or body paramater of
-    -- _method=PUT/DELETE.
+    -- This is a cunning hack to solve the problem that HTML forms do not
+    -- support PUT, DELETE, etc, they only support GET and POST. We don't want
+    -- to compromise the design of the whole server just because HTML does not
+    -- support HTTP properly, so we allow browsers using HTML forms to do
+    -- PUT/DELETE etc by POSTing with special body parameters.
     fakeBrowserHttpMethods part =
       msum [ do method POST
-                methodOverrideHack part
+                htmlFormWrapperHack part
 
              -- or just do things the normal way
            , part
