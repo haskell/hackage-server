@@ -8,7 +8,7 @@
 --
 -- Support for templates, html and text, based on @HStringTemplate@ package.
 -----------------------------------------------------------------------------
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, RankNTypes #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Framework.Templating (
     Template,
@@ -21,6 +21,8 @@ module Distribution.Server.Framework.Templating (
     tryGetTemplate,
     TemplateAttr,
     ($=),
+    templateDict,
+    templateVal,
   ) where
 
 import Text.StringTemplate
@@ -49,6 +51,7 @@ import Data.List
 import Data.Maybe (isJust)
 import Data.IORef
 import System.FilePath ((<.>), takeExtension)
+import qualified Data.Map as Map
 
 
 type RawTemplate = StringTemplate Builder
@@ -69,6 +72,18 @@ newtype TemplateAttr = TemplateAttr (RawTemplate -> RawTemplate)
 infix 0 $=
 ($=) :: ToSElem a => String -> a -> TemplateAttr
 ($=) k v = TemplateAttr (setAttribute k v)
+
+newtype TemplateVal = TemplateVal (forall b. Stringable b => SElem b)
+
+instance ToSElem TemplateVal where
+    toSElem (TemplateVal se) = se
+
+templateDict :: [(String, TemplateVal)] -> TemplateVal
+templateDict kvs =
+    TemplateVal (SM (Map.fromList (fmap (\(k, TemplateVal v) -> (k, v)) kvs)))
+
+templateVal :: ToSElem a => String -> a -> (String, TemplateVal)
+templateVal k v = (k, TemplateVal (toSElem v))
 
 instance ToSElem XHtml.Html where
     -- The use of SBLE here is to prevent the html being escaped
