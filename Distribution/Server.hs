@@ -30,6 +30,7 @@ import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Framework.Auth as Auth
 import Distribution.Server.Framework.Templating (TemplatesMode(NormalMode))
 import Distribution.Server.Framework.AuthTypes (PasswdPlain(..))
+import Distribution.Server.Framework.HtmlFormWrapper (htmlFormWrapperHack)
 
 import Distribution.Server.Framework.Feature as Feature
 import qualified Distribution.Server.Features as Features

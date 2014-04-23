@@ -36,7 +36,7 @@ import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Framework.AuthCrypt
 import Distribution.Server.Framework.AuthTypes
 import Distribution.Server.Framework.Error
-import Distribution.Server.Util.Happstack (rqRealMethod)
+import Distribution.Server.Framework.HtmlFormWrapper (rqRealMethod)
 
 import Happstack.Server
 
