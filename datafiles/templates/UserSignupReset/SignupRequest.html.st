@@ -16,7 +16,7 @@ In particular you need an account to be able to upload or help maintain packages
 
 <p>Using the form below you can register an account.
 
-<form class="box" action="/users/register-request" method="post" enctype="multipart/form-data">
+<form action="/users/register-request" method="post" enctype="multipart/form-data">
 
 <table>
 <tr>

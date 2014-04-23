@@ -15,7 +15,7 @@ $hackagePageHeader()$
 
 <p>Now you can set your password and create the account.
 
-<form class="box" action="$posturl$" method="post" enctype="multipart/form-data">
+<form action="$posturl$" method="post" enctype="multipart/form-data">
   <table>
     <tr><td>Your name:<td>$realname$
     <tr><td>Login username:<td>$username$
