@@ -14,7 +14,7 @@ $hackagePageHeader()$
 <h2>User accounts</h2>
 <ul>
 <li>
-  <form class="box" action="/admin" method="get">
+  <form action="/admin" method="get">
     <button type="submit">Search for account</button>
     <input type="text" name="find-account" value="$findAccount$"/>
   </form>

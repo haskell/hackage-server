@@ -589,3 +589,13 @@ p.tip {
 .code {
   font-family: monospace;
 }
+
+/* Misc admin forms */
+
+form.box {
+  background: #faf9dc;
+  border: 1px solid #d8d7ad;
+  padding: 0.5em 1em;
+  max-width: 35em;
+  margin: 0.5em 0 1em 1em;
+}
