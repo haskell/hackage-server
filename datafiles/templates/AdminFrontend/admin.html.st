@@ -19,7 +19,7 @@ $hackagePageHeader()$
     <input type="text" name="find-account" value="$findAccount$"/>
   </form>
   $if(first(accounts))$
-    <p>Found accounts:
+    <p>Found accounts:</p>
       <ul>
       $accounts:{account|
         <li>
@@ -31,12 +31,12 @@ $hackagePageHeader()$
         </li>
       }$
       </ul>
-    </p>
   $elseif(findAccount)$
     <p>No matching accounts found</p>
   $endif$
 </li>
-<li><a href="/admin/accounts">Browse all accounts</li>
+<li><a href="/admin/accounts">Browse all accounts</a></li>
+<li><a href="/admin/legacy">Browse accounts that still have legacy passwords</a></li>
 <li><a href="/users/register">Create new account</a></li>
 <li>Edit groups: <a href="/users/admins/edit">admin</a>,
   <a href="/packages/mirrorers/edit">mirrorers</a>,
@@ -44,44 +44,53 @@ $hackagePageHeader()$
   <a href="/packages/uploaders/edit">uploaders</a></li>
 </ul>
 
-<!--
-<H3>Change Password</H3>
+<h2>Account signup and reset requests</h2>
 
-<FORM CLASS="box" action="/admin/users/change-password" method="post" enctype="multipart/form-data">
-<P>User name: <INPUT type="text" name="user-name"></P>
-<P>Password:  <INPUT type="password" name="password"></P>
-<P>Repeat password: <INPUT type="password" name="repeat-password"></P>
-<INPUT type="submit" value="Change Password">
-</FORM>
-
-<H3>Disable User</H3>
-
-<FORM CLASS="box" action="/admin/users/disable" method="post" enctype="multipart/form-data">
-<P>User name: <INPUT type="text" name="user-name"></P>
-<INPUT type="submit" value="Disable user">
-</FORM>
-
-
-<H3>Re-Enable User</H3>
-
-<FORM CLASS="box" action="/admin/users/enable" method="post" enctype="multipart/form-data">
-<P>User name: <INPUT type="text" name="user-name"></P>
-<INPUT type="submit" value="Enable user">
-</FORM>
-
-<H3>Delete User</H3>
-
-<P>THIS IS PERMANENT</P>
-<FORM CLASS="box" action="/admin/users/delete" method="post" enctype="multipart/form-data">
-<P>User name: <INPUT type="text" name="user-name"></P>
-<INPUT type="submit" value="Delete user">
-</FORM>
-
-  -->
+<ul>
+<li>
+<form action="/admin" method="get">
+  <button type="submit">Search for signup requests</button>
+  <input type="text" name="find-signup" value="$findSignup$"/>
+</form>
+$if(first(signups))$
+  <p>Found signup requests:</p>
+  <table class="simpletable">
+    <tr>
+      <th>User name</th>
+      <th>Real name</th>
+      <th>Email</th>
+      <th>Timestamp</th>
+    </tr>
+    $signups:{signup|
+    <tr>
+      <td>$signup.username$</td>
+      <td>$signup.realname$</td>
+      <td>$signup.email$</td>
+      <td>$signup.timestamp$</td>
+    </tr>
+    }$
+  </table>
+$elseif(findSignup)$
+  <p>No matching signup requests found</p>
+$endif$
+</li>
+<li><a href="/admin/signups">Browse all signup requests</a></li>
+<li><a href="/admin/resets">Browse all reset requests</a></li>
+</ul>
 
 <h2>Server status</h2>
 <ul>
-<li><a href="/server-status/memory">Memory use</a> by data store/cache</a></li>
+<li><a href="/server-status/memory">Memory use</a> by data store/cache</li>
+</ul>
+
+
+<h2>TODO</h2>
+
+<p>TODO list for this admin interface
+</p>
+<ul>
+<li>Account username change</li>
+<li>Account undelete</li>
 </ul>
 
 </div> <!-- content -->

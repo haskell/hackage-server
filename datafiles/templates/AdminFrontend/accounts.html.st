@@ -13,7 +13,7 @@ $hackagePageHeader()$
 
 <h2>Browse user accounts</h2>
 
-All user accounts, including disabled and deleted.
+<p>All user accounts, including disabled and deleted.</p>
 
 <ul>
 $accounts:{account|

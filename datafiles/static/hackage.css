@@ -599,3 +599,7 @@ form.box {
   max-width: 35em;
   margin: 0.5em 0 1em 1em;
 }
+
+table.simpletable th, table.simpletable td {
+  padding: 0.2em 1em;
+}

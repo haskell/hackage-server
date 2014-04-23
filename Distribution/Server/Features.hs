@@ -203,6 +203,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     adminFrontendFeature <- initAdminFrontendFeature env
                               usersFeature
                               userDetailsFeature
+                              userSignupFeature
+                              legacyPasswdsFeature
 
     hoogleDataFeature <- initHoogleDataFeature env
                            coreFeature

@@ -21,6 +21,7 @@ module Distribution.Server.Framework.Templating (
     tryGetTemplate,
     TemplateAttr,
     ($=),
+    TemplateVal,
     templateDict,
     templateVal,
     templateEnumDesriptor,
@@ -138,12 +139,12 @@ reloadTemplates (TemplatesNormalMode templateGroupRef
 reloadTemplates (TemplatesDesignMode _ _) = return ()
 
 getTemplate :: MonadIO m => Templates -> String -> m ([TemplateAttr] -> Template)
-getTemplate templates@(TemplatesNormalMode _ _ _) name =
+getTemplate templates@(TemplatesNormalMode _ _ expectedTemplates) name = do
+    when (name `notElem` expectedTemplates) $ failMissingTemplate name
     tryGetTemplate templates name >>= maybe (failMissingTemplate name) return
 
 getTemplate templates@(TemplatesDesignMode _ expectedTemplates) name = do
-    when (name `notElem` expectedTemplates) $
-      failMissingTemplate name
+    when (name `notElem` expectedTemplates) $ failMissingTemplate name
     tryGetTemplate templates name >>= maybe (failMissingTemplate name) return
 
 tryGetTemplate :: MonadIO m => Templates -> String -> m (Maybe ([TemplateAttr] -> Template))

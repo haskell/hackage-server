@@ -4,6 +4,7 @@
 module Distribution.Server.Features.UserSignup (
     initUserSignupFeature,
     UserSignupFeature(..),
+    SignupResetInfo(..),
     
     accountSuitableForPasswordReset
   ) where
@@ -47,7 +48,9 @@ import Network.URI (URI(..), URIAuth(..))
 -- both with email confirmation.
 --
 data UserSignupFeature = UserSignupFeature {
-    userSignupFeatureInterface :: HackageFeature
+    userSignupFeatureInterface :: HackageFeature,
+
+    queryAllSignupResetInfo :: MonadIO m => m [SignupResetInfo]
 }
 
 instance IsHackageFeature UserSignupFeature where
@@ -354,6 +357,11 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
 
     -- Queries and updates
     --
+
+    queryAllSignupResetInfo :: MonadIO m => m [SignupResetInfo]
+    queryAllSignupResetInfo =
+          queryState signupResetState GetSignupResetTable
+      >>= \(SignupResetTable tbl) -> return (Map.elems tbl)
 
     querySignupInfo :: Nonce -> MonadIO m => m (Maybe SignupResetInfo)
     querySignupInfo nonce =

@@ -2,6 +2,9 @@
 module Distribution.Server.Features.LegacyPasswds (
     initLegacyPasswdsFeature,
     LegacyPasswdsFeature(..),
+    LegacyPasswdsTable,
+    lookupUserLegacyPasswd,
+    enumerateAllUserLegacyPasswd,
   ) where
 
 import Prelude hiding (abs)
@@ -39,7 +42,10 @@ import Network.URI (URI(..), uriToString)
 -- hackage.haskell.org server. It is not needed by new installations.
 --
 data LegacyPasswdsFeature = LegacyPasswdsFeature {
-    legacyPasswdsFeatureInterface :: HackageFeature
+    legacyPasswdsFeatureInterface :: HackageFeature,
+
+    queryLegacyPasswds       :: MonadIO m => m LegacyPasswdsTable,
+    updateDeleteLegacyPasswd :: MonadIO m => UserId -> m Bool
 }
 
 instance IsHackageFeature LegacyPasswdsFeature where
@@ -55,9 +61,13 @@ newtype LegacyPasswdsTable = LegacyPasswdsTable (IntMap LegacyAuth.HtPasswdHash)
 emptyLegacyPasswdsTable :: LegacyPasswdsTable
 emptyLegacyPasswdsTable = LegacyPasswdsTable IntMap.empty
 
-lookupUserLegacyPasswd :: LegacyPasswdsTable -> UserId -> Maybe LegacyAuth.HtPasswdHash
-lookupUserLegacyPasswd (LegacyPasswdsTable tbl) (UserId uid) =
+lookupUserLegacyPasswd :: UserId -> LegacyPasswdsTable -> Maybe LegacyAuth.HtPasswdHash
+lookupUserLegacyPasswd (UserId uid) (LegacyPasswdsTable tbl) =
     IntMap.lookup uid tbl
+
+enumerateAllUserLegacyPasswd :: LegacyPasswdsTable -> [UserId]
+enumerateAllUserLegacyPasswd (LegacyPasswdsTable tbl) =
+    map UserId (IntMap.keys tbl)
 
 $(deriveSafeCopy 0 'base ''LegacyPasswdsTable)
 
@@ -202,8 +212,9 @@ legacyPasswdsFeature env legacyPasswdsState templates UserFeature{..}
     --
 
     htpasswordResource = (resourceAt "/user/:username/htpasswd") {
-            resourceDesc = [ (PUT, "Set a legacy password for a user account") ],
-            resourcePut  = [ ("", handleUserHtpasswdPut) ]
+            resourceDesc   = [ (PUT, "Set a legacy password for a user account") ],
+            resourcePut    = [ ("", handleUserHtpasswdPut) ],
+            resourceDelete = [ ("", handleUserHtpasswdDelete) ]
           }
 
     htpasswordUpgradeResource = (resourceAt "/users/htpasswd-upgrade") {
@@ -211,6 +222,16 @@ legacyPasswdsFeature env legacyPasswdsState templates UserFeature{..}
             resourceGet  = [ ("html", handleUserAuthUpgradeGet) ],
             resourcePost = [ ("", handleUserAuthUpgradePost) ]
           }
+
+    -- Queries and updates
+    --
+
+    queryLegacyPasswds :: MonadIO m => m LegacyPasswdsTable
+    queryLegacyPasswds = queryState legacyPasswdsState GetLegacyPasswdsTable
+
+    updateDeleteLegacyPasswd :: MonadIO m => UserId -> m Bool
+    updateDeleteLegacyPasswd uid =
+      updateState legacyPasswdsState (DeleteUserLegacyPasswd uid)
 
     -- Request handlers
     --
@@ -220,12 +241,9 @@ legacyPasswdsFeature env legacyPasswdsState templates UserFeature{..}
         template <- getTemplate templates "htpasswd-upgrade.html"
         ok $ toResponse $ template []
 
-    queryLegacyPasswds :: MonadIO m => m LegacyPasswdsTable
-    queryLegacyPasswds = queryState legacyPasswdsState GetLegacyPasswdsTable
-
     handleUserHtpasswdPut :: DynamicPath -> ServerPartE Response
     handleUserHtpasswdPut dpath = do
-        _            <- guardAuthorised [InGroup adminGroup]
+        guardAuthorised_ [InGroup adminGroup]
         users        <- queryGetUserDb
         uname        <- userNameInPath dpath
         (uid, uinfo) <- maybe errNoSuchUser return (Users.lookupUserName uname users)
@@ -241,6 +259,16 @@ legacyPasswdsFeature env legacyPasswdsState templates UserFeature{..}
         errHasAuth    = errBadRequest "Clashing auth details" [MText "The user already has auth info"]
         errBadHash    = errBadRequest "Invalid htpasswd hash" [MText "Only classic htpasswd crypt() passwords are supported."]
 
+    handleUserHtpasswdDelete :: DynamicPath -> ServerPartE Response
+    handleUserHtpasswdDelete dpath = do
+        guardAuthorised_ [InGroup adminGroup]
+        uid     <- lookupUserName =<< userNameInPath dpath
+        deleted <- updateState legacyPasswdsState (DeleteUserLegacyPasswd uid)
+        when (not deleted) errNoHtpasswd
+        noContent $ toResponse ()
+      where
+        errNoHtpasswd = errBadRequest "No htpasswd" [MText "The user has no htpasswd"]
+
     handleUserAuthUpgradePost :: DynamicPath -> ServerPartE Response
     handleUserAuthUpgradePost _ = do
         users              <- queryGetUserDb
@@ -248,7 +276,7 @@ legacyPasswdsFeature env legacyPasswdsState templates UserFeature{..}
         (uid, uinfo, passwd) <- LegacyAuth.guardAuthenticated
                                   (RealmName "Old Hackage site")
                                   users
-                                  (lookupUserLegacyPasswd legacyPasswds)
+                                  (flip lookupUserLegacyPasswd legacyPasswds)
         when (userStatus uinfo /= Users.AccountDisabled Nothing) errHasAuth
         let auth = Users.UserAuth (Auth.newPasswdHash Auth.hackageRealm (userName uinfo) passwd)
         updateSetUserAuth uid auth
@@ -277,7 +305,7 @@ legacyPasswdsFeature env legacyPasswdsState templates UserFeature{..}
     onAuthFail (Auth.UserStatusError uid
                   UserInfo { userStatus = AccountDisabled Nothing }) = do
         legacyPasswds <- queryLegacyPasswds
-        case lookupUserLegacyPasswd legacyPasswds uid of
+        case lookupUserLegacyPasswd uid legacyPasswds of
           Nothing -> return Nothing
           Just _  -> return (Just err)
       where

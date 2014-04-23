@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: browse user accounts</title>
+<title>Hackage: user account $account.name$</title>
 </head>
 
 <body>
@@ -11,24 +11,24 @@ $hackagePageHeader()$
 <div id="content">
 <h1>Admin front-end</h1>
 
-<h2>Account information</h2>
+<h2 id="account-info">Account information</h2>
 
 <table>
   <tr><td>Username:<td>$account.name$
   <tr><td>User ID:<td>$account.id$
-  <tr><td>Status:<td>$account.status$
-  <tr><td>Real name:<td>$details.realname$
-  <tr><td>Email:<td>$details.email$
-  <tr><td>Account type:<td>$details.kind$
-  <tr><td>Notes:<td>$details.notes$
+  <tr><td><a href="#account-status">Status:</a><td>$account.status$
+  <tr><td><a href="#passwd-legacy">Legacy password:</a><td>$if(hasLegacyPassword)$<strong>Yes</strong>$else$No$endif$
+  <tr><td><a href="#edit-details">Real name:</a><td>$details.realname$
+  <tr><td><a href="#edit-details">Email:</a><td>$details.email$
+  <tr><td><a href="#edit-details">Account type:</a><td>$details.kind$
+  <tr><td><a href="#edit-details">Notes:</a><td>$details.notes$
 </table>
 
-<h2>Account status</h2>
+<h2 id="account-status">Account status</h2>
 
 $if(account.enabled)$
 <p>The account is enabled for login.</p>
 
-<p>
 <form class="box" action="/user/$account.name$/enabled" method="post" enctype="multipart/form-data">
   <input type="hidden" name="_method" value="wrap-PUT-form"/>
   <input type="hidden" name="_return" value="/admin/account/$account.id$"/>
@@ -41,7 +41,6 @@ $if(account.enabled)$
 
   <button type="submit">Delete account</button>
 </form>
-</p>
 
 $elseif(account.hasAuth)$
 <p>The account is disabled, so cannot currently be used for login.
@@ -50,7 +49,6 @@ The username is still reserved.
 <p>The account still has a password set so it can be re-enabled.
 </p>
 
-<p>
 <form class="box" action="/user/$account.name$/enabled" method="post" enctype="multipart/form-data">
   <input type="hidden" name="_method" value="wrap-PUT-form"/>
   <input type="hidden" name="_return" value="/admin/account/$account.id$"/>
@@ -64,7 +62,7 @@ The username is still reserved.
 
   <button type="submit">Delete account</button>
 </form>
-</p>
+
 $elseif(account.active)$
 <p>The account is disabled, so cannot currently be used for login.
 The username is still reserved.
@@ -90,10 +88,10 @@ enable it then the account will need a password to be set).
 
 $endif$
 
-<h2>Password reset</h2>
+<h2 id="passwd-reset">Password reset</h2>
 
 <p>
-If the account has an associated email address <emph>and</emhp> the account is
+If the account has an associated email address <em>and</em> the account is
 already in the enabled state then you can issue a self-service password reset.
 </p>
 
@@ -116,7 +114,18 @@ used. The account must be enabled, and the account type must be "real user".
 Of course the account also needs a valid email address for it to work.
 $endif$
 
-<h2>Password set</h2>
+$if(first(resetRequests))$
+<p>
+This account has outstanding password reset requests, issued at:
+</p>
+<ul>$resetRequests:{resetRequest|<li>$resetRequest.timestamp$</li>}$</ul>
+$else$
+<p>
+This account has no outstanding password reset requests.
+</p>
+$endif$
+
+<h2 id="passwd-set" >Password set</h2>
 <p>
 Alternatively, as an administrator you can set account passwords directly.
 </p>
@@ -139,7 +148,37 @@ Alternatively, as an administrator you can set account passwords directly.
   <p><input type="submit" value="Change password" /></p>
 </form>
 
-<h2>Edit account details</h2>
+<h2 id="passwd-legacy">Legacy password</h2>
+
+<p>Legacy passwords are to enable a relatively smooth upgrade from
+<a href="/users/htpasswd-upgrade">old "htpasswd" style passwords</a>.
+</p>
+
+$if(hasLegacyPassword)$
+$if(!account.hasAuth)$
+<p>This account has a legacy "htpasswd" password set, and no new password set.
+It can be upgraded by the user that knows the old password. Alternatively
+you can simply delete the legacy "htpasswd" and set a new password.
+</p>
+$else$
+<p>This account has a new password set <em>but still has an legacy "htpasswd" password
+too</em>. The legacy one can safely be deleted. Indeed it is better to delete it as
+it otherwise prevents the account from being disabled should the need arise
+(the account could be reactivated by anyone knowing the legacy "htpasswd".)
+</p>
+$endif$
+<form class="box" action="/user/$account.name$/htpasswd" method="post" enctype="multipart/form-data">
+  <input type="hidden" name="_method" value="wrap-DELETE"/>
+  <input type="hidden" name="_return" value="/admin/account/$account.id$"/>
+
+  <button type="submit">Delete legacy password</button>
+</form>
+$else$
+<p>This account has no legacy password.
+</p>
+$endif$
+
+<h2 id="edit-details">Edit account details</h2>
 
 <form class="box" action="/user/$account.name$/name-contact" method="post" enctype="multipart/form-data">
   <input type="hidden" name="_method" value="wrap-PUT-form2json"/>
@@ -172,7 +211,7 @@ Alternatively, as an administrator you can set account passwords directly.
           <div><input type="radio" name="accountKind=%v" id="$enum.asstring$" value="$enum.asjson$"
                       $if(enum.selected)$checked$endif$ />
                <label for="$enum.asstring$">$label$</label>
-          </div>         
+          </div>
           }$
       </td>
     </tr>
@@ -184,19 +223,6 @@ Alternatively, as an administrator you can set account passwords directly.
  
   <p><input type="submit" value="Update" /></p>
 </form>
-
-
-<h2>TODO</h2>
-
-<p>TODO list for this admin interface
-<ul>
-<li>Account username change</li>
-<li>Account undelete</li>
-<li>Legacy passwords</li>
-<li>View outstanding password reset requests</li>
-<li>View outstanding account requests</li>
-</ul>
-</p>
 
 </div> <!-- content -->
 </body>
