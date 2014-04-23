@@ -10,6 +10,7 @@ import Distribution.Server.Framework.Templating
 
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.UserDetails
+import Distribution.Server.Features.UserSignup
 
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Users as Users
@@ -73,7 +74,7 @@ adminFrontendFeature _env templates
 
     serveAdminPortalGet :: DynamicPath -> ServerPartE Response
     serveAdminPortalGet _ = do
-        _           <- guardAuthorised [InGroup adminGroup]
+        guardAuthorised_ [InGroup adminGroup]
         template    <- getTemplate templates "admin.html"
 
         findAccount <- optional (look "find-account")
@@ -97,7 +98,7 @@ adminFrontendFeature _env templates
 
     serveAdminAccountsGet :: DynamicPath -> ServerPartE Response
     serveAdminAccountsGet _ = do
-        _        <- guardAuthorised [InGroup adminGroup]
+        guardAuthorised_ [InGroup adminGroup]
         template <- getTemplate templates "accounts.html"
         accounts <- Users.enumerateAllUsers <$> queryGetUserDb
 
@@ -108,14 +109,14 @@ adminFrontendFeature _env templates
 
     serveAdminAccountGet :: DynamicPath -> ServerPartE Response
     serveAdminAccountGet dpath = do
-        _         <- guardAuthorised [InGroup adminGroup]
+        guardAuthorised_ [InGroup adminGroup]
         template  <- getTemplate templates "account.html"
         uid       <- maybe mzero return (simpleParse =<< lookup "uid" dpath)
         uinfo     <- lookupUserInfo uid
         mudetails <- queryUserDetails uid
         ok $ toResponse $ template
           [ "account" $= accountBasicInfoToTemplate uid uinfo
-          , "details" $= accountDetailsToTemplate mudetails
+          , "details" $= accountDetailsToTemplate uinfo mudetails
           ]
 
     accountBasicInfoToTemplate uid uinfo =
@@ -137,63 +138,20 @@ adminFrontendFeature _env templates
                                    AccountDeleted           -> "deleted")
         ]
 
-    accountDetailsToTemplate Nothing         = templateDict []
-    accountDetailsToTemplate (Just udetails) =
+    accountDetailsToTemplate _ Nothing         = templateDict []
+    accountDetailsToTemplate uinfo (Just udetails) =
       templateDict
-        [ templateVal "realname" (show (accountName udetails))
-        , templateVal "email"    (show (accountContactEmail udetails))
-        , templateVal "kind"     (fmap show (accountKind udetails))
-        , templateVal "notes"    (show (accountAdminNotes udetails))
+        [ templateVal "realname" (accountName udetails)
+        , templateVal "email"    (accountContactEmail udetails)
+        , templateVal "kind"     (fmap showAccountKind (accountKind udetails))
+        , templateVal "kindenum" (templateEnumDesriptor
+                                    (maybe "notset" showAccountKind)
+                                    (Nothing : map Just [minBound..maxBound])
+                                    (accountKind udetails))
+        , templateVal "notes"    (accountAdminNotes udetails)
+        , templateVal "canreset" (accountSuitableForPasswordReset uinfo udetails)
         ]
+ 
+    showAccountKind AccountKindRealUser = "RealUser"
+    showAccountKind AccountKindSpecial  = "Special"
 
-{-
-    serveEditCabalFilePost :: DynamicPath -> ServerPartE Response
-    serveEditCabalFilePost dpath = do
-        template <- getTemplate templates "cabalFileEditPage.html"
-        pkg <- packageInPath dpath >>= lookupPackageId
-        let pkgname = packageName pkg
-            pkgid   = packageId pkg
-        -- check that the cabal name matches the package
-        guard (lookup "cabal" dpath == Just (display pkgname))
-        uid <- guardAuthorised [ InGroup (maintainersGroup pkgname)
-                               , InGroup trusteesGroup ]
-        let oldVersion = cabalFileByteString (pkgData pkg)
-        newRevision <- getCabalFile
-        shouldPublish <- getPublish
-        case runCheck $ checkCabalFileRevision pkgid oldVersion newRevision of
-          Left errs ->
-            responseTemplate template pkgid newRevision
-                             shouldPublish [errs] []
-
-          Right changes
-            | shouldPublish && not (null changes) -> do
-                template' <- getTemplate templates "cabalFilePublished.html"
-                time <- liftIO getCurrentTime
-                updateAddPackageRevision pkgid (CabalFileText newRevision)
-                                               (time, uid)
-                ok $ toResponse $ template'
-                  [ "pkgid"     $= pkgid
-                  , "cabalfile" $= newRevision
-                  , "changes"   $= changes
-                  ]
-            | otherwise ->
-                responseTemplate template pkgid newRevision
-                                 shouldPublish [] changes
-
-       where
-         getCabalFile = body (lookBS "cabalfile")
-         getPublish   = body $ (look "review" >> return False) `mplus`
-                               (look "publish" >> return True)
-
-         responseTemplate :: ([TemplateAttr] -> Template) -> PackageId
-                          -> ByteString -> Bool -> [String] -> [Change]
-                          -> ServerPartE Response
-         responseTemplate template pkgid cabalFile publish errors changes =
-           ok $ toResponse $ template
-             [ "pkgid"     $= pkgid
-             , "cabalfile" $= cabalFile
-             , "publish"   $= publish
-             , "errors"    $= errors
-             , "changes"   $= changes
-             ]
--}

@@ -4,6 +4,8 @@
 module Distribution.Server.Features.UserSignup (
     initUserSignupFeature,
     UserSignupFeature(..),
+    
+    accountSuitableForPasswordReset
   ) where
 
 import Distribution.Server.Framework
@@ -601,10 +603,9 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
           errForbidden "Wrong account details"
             [MText "Sorry, that does not match any account details we have on file."]
 
-    guardSuitableAccountType (UserInfo { userStatus = AccountEnabled{} })
-                             (Just udetails@AccountDetails {
-                               accountKind = Just AccountKindRealUser
-                              }) = return udetails
+    guardSuitableAccountType uinfo (Just udetails)
+      | accountSuitableForPasswordReset uinfo udetails
+                                 = return udetails
     guardSuitableAccountType _ _ =
       errForbidden "Cannot reset password for this account"
         [MText $ "Sorry, the self-service password reset system cannot be "
@@ -659,3 +660,11 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
             [MText "Cannot set a new password as the user account has just been deleted."]
         errDeleted (Left Users.ErrNoSuchUserId) =
           errInternalError [MText "No such user id!"]
+
+accountSuitableForPasswordReset :: UserInfo -> AccountDetails -> Bool
+accountSuitableForPasswordReset
+    (UserInfo { userStatus = AccountEnabled{} })
+    (AccountDetails { accountKind = Just AccountKindRealUser })
+                                    = True
+accountSuitableForPasswordReset _ _ = False
+
