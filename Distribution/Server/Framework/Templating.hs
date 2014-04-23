@@ -23,6 +23,7 @@ module Distribution.Server.Framework.Templating (
     ($=),
     templateDict,
     templateVal,
+    templateEnumDesriptor,
   ) where
 
 import Text.StringTemplate
@@ -40,6 +41,7 @@ import qualified Blaze.ByteString.Builder as Builder
 import qualified Blaze.ByteString.Builder.Html.Utf8 as Builder
 import qualified Text.XHtml.Strict as XHtml
 import Network.URI (URI)
+import qualified Data.Aeson as JSON
 
 import Distribution.Package (PackageName, PackageIdentifier)
 import Distribution.Version (Version)
@@ -84,6 +86,18 @@ templateDict kvs =
 
 templateVal :: ToSElem a => String -> a -> (String, TemplateVal)
 templateVal k v = (k, TemplateVal (toSElem v))
+
+-- | Helper to make it easier to construct forms that use enumeration types
+templateEnumDesriptor :: (Eq a, JSON.ToJSON a) => (a -> String) ->
+                         [a] -> a -> [TemplateVal]
+templateEnumDesriptor tostr xs x =
+    [ templateDict
+        [ templateVal "index"    i
+        , templateVal "selected" (x' == x)
+        , templateVal "asstring" (tostr x')
+        , templateVal "asjson"   (JSON.encode x')
+        ]
+    | (i, x') <- zip [0::Int ..] xs ]
 
 instance ToSElem XHtml.Html where
     -- The use of SBLE here is to prevent the html being escaped
