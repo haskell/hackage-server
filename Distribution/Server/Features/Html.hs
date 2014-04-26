@@ -113,7 +113,8 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
     -- Page templates
     templates <- loadTemplates serverTemplatesMode
                    [serverTemplatesDir, serverTemplatesDir </> "Html"]
-                   [ "maintain.html", "maintain-candidate.html" ]
+                   [ "maintain.html", "maintain-candidate.html"
+                   , "distro-monitor.html" ]
 
     -- do rec, tie the knot
     rec let (feature, packageIndex, packagesPage) =
