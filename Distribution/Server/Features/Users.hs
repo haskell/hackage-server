@@ -1,4 +1,5 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, DoRec, BangPatterns, OverloadedStrings #-}
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, DoRec,
+             BangPatterns, OverloadedStrings, CPP, TemplateHaskell #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Features.Users (
     initUserFeature,
@@ -28,10 +29,9 @@ import qualified Data.Set as Set
 import Data.Maybe (fromMaybe)
 import Data.Function (fix)
 import Control.Applicative (optional)
-import Data.Aeson (Value(..), toJSON)
-import qualified Data.HashMap.Strict as HashMap
-import qualified Data.Vector         as Vector
-import qualified Data.Text           as Text
+import Data.Aeson (toJSON)
+import Data.Aeson.TH
+import qualified Data.Text as T
 
 import Distribution.Text (display, simpleParse)
 
@@ -632,13 +632,12 @@ userFeature  usersState adminsState
       userlist <- liftIO $ queryUserList group
       let unames = [ Users.userIdToName userDb uid
                    | uid <- Group.enumerate userlist ]
-      return . toResponse $
-          object [
-            ("title",       string $ groupTitle $ groupDesc group)
-          , ("description", string $ groupPrologue $ groupDesc group)
-          , ("members",     array [ string $ display uname
-                                    | uname <- unames ])
-          ]
+      return . toResponse $ toJSON
+          UserGroupResource {
+            ui_title       = T.pack $ groupTitle (groupDesc group),
+            ui_description = T.pack $ groupPrologue (groupDesc group),
+            ui_members     = unames
+          }
 
     --TODO: add handleUserGroupUserPost for the sake of the html frontend
     --      and then remove groupAddUser & groupDeleteUser
@@ -708,14 +707,15 @@ userFeature  usersState adminsState
       return . toResponse $ toJSON users
 
 {------------------------------------------------------------------------------
-  Some aeson auxiliary functions
+  Some types for JSON resources
 ------------------------------------------------------------------------------}
 
-array :: [Value] -> Value
-array = Array . Vector.fromList
+data UserGroupResource  = UserGroupResource  { ui_title       :: T.Text,
+                                               ui_description :: T.Text,
+                                               ui_members     :: [UserName] }
 
-object :: [(Text.Text, Value)] -> Value
-object = Object . HashMap.fromList
-
-string :: String -> Value
-string = String . Text.pack
+#if MIN_VERSION_aeson(0,6,2)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''UserGroupResource)
+#else
+$(deriveJSON (drop 3) ''UserGroupResource)
+#endif
