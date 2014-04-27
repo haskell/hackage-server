@@ -30,14 +30,15 @@ $if(account.enabled)$
 <p>The account is enabled for login.</p>
 
 <form class="box" action="/user/$account.name$/enabled" method="post" enctype="multipart/form-data">
-  <input type="hidden" name="_method" value="wrap-PUT-form2json"/>
+  <input type="hidden" name="_method" value="PUT"/>
   <input type="hidden" name="_return" value="/admin/account/$account.id$"/>
-  <input type="hidden" name="enabled" value="false"/>
+  <input type="hidden" name="_transform" value="form2json"/>
 
+  <input type="hidden" name="enabled=%v" value="false"/>
   <button type="submit">Disable account</button>
 </form>
 <form class="box" action="/user/$account.name$" method="post" enctype="multipart/form-data">
-  <input type="hidden" name="_method" value="wrap-DELETE"/>
+  <input type="hidden" name="_method" value="DELETE"/>
   <input type="hidden" name="_return" value="/admin/account/$account.id$"/>
 
   <button type="submit">Delete account</button>
@@ -51,14 +52,15 @@ The username is still reserved.
 </p>
 
 <form class="box" action="/user/$account.name$/enabled" method="post" enctype="multipart/form-data">
-  <input type="hidden" name="_method" value="wrap-PUT-form2json"/>
+  <input type="hidden" name="_method" value="PUT"/>
   <input type="hidden" name="_return" value="/admin/account/$account.id$"/>
-  <input type="hidden" name="enabled" value="true"/>
+  <input type="hidden" name="_transform" value="form2json"/>
 
+  <input type="hidden" name="enabled=%v" value="true"/>
   <button type="submit">Enable account</button>
 </form>
 <form class="box" action="/user/$account.name$" method="post" enctype="multipart/form-data">
-  <input type="hidden" name="_method" value="wrap-DELETE"/>
+  <input type="hidden" name="_method" value="DELETE"/>
   <input type="hidden" name="_return" value="/admin/account/$account.id$"/>
 
   <button type="submit">Delete account</button>
@@ -74,7 +76,7 @@ self-service password reset can only be used with enabled accounts.)
 </p>
 
 <form class="box" action="/user/$account.name$" method="post" enctype="multipart/form-data">
-  <input type="hidden" name="_method" value="wrap-DELETE"/>
+  <input type="hidden" name="_method" value="DELETE"/>
   <input type="hidden" name="_return" value="/admin/account/$account.id$"/>
 
   <button type="submit">Delete account</button>
@@ -98,7 +100,7 @@ already in the enabled state then you can issue a self-service password reset.
 
 $if(details.canreset)$
 <form class="box" action="/users/password-reset" method="post" enctype="multipart/form-data">
-  <input type="hidden" name="_method" value="wrap-POST-form"/>
+  <input type="hidden" name="_method" value="POST"/>
   <input type="hidden" name="_return" value="/admin/account/$account.id$"/>
 
   <input type="hidden" name="username" value="$account.name$"/>
@@ -132,7 +134,7 @@ Alternatively, as an administrator you can set account passwords directly.
 </p>
 
 <form class="box" action="/user/$account.name$/password" method="post" enctype="multipart/form-data">
-  <input type="hidden" name="_method" value="wrap-PUT-form"/>
+  <input type="hidden" name="_method" value="PUT"/>
   <input type="hidden" name="_return" value="/admin/account/$account.id$"/>
 
   <table>
@@ -169,7 +171,7 @@ it otherwise prevents the account from being disabled should the need arise
 </p>
 $endif$
 <form class="box" action="/user/$account.name$/htpasswd" method="post" enctype="multipart/form-data">
-  <input type="hidden" name="_method" value="wrap-DELETE"/>
+  <input type="hidden" name="_method" value="DELETE"/>
   <input type="hidden" name="_return" value="/admin/account/$account.id$"/>
 
   <button type="submit">Delete legacy password</button>
@@ -182,8 +184,9 @@ $endif$
 <h2 id="edit-details">Edit account details</h2>
 
 <form class="box" action="/user/$account.name$/name-contact" method="post" enctype="multipart/form-data">
-  <input type="hidden" name="_method" value="wrap-PUT-form2json"/>
+  <input type="hidden" name="_method" value="PUT"/>
   <input type="hidden" name="_return" value="/admin/account/$account.id$"/>
+  <input type="hidden" name="_transform" value="form2json"/>
 
   <table>
     <tr>
@@ -200,8 +203,9 @@ $endif$
 </form>
 
 <form class="box" action="/user/$account.name$/admin-info" method="post" enctype="multipart/form-data">
-  <input type="hidden" name="_method" value="wrap-PUT-form2json"/>
+  <input type="hidden" name="_method" value="PUT"/>
   <input type="hidden" name="_return" value="/admin/account/$account.id$"/>
+  <input type="hidden" name="_transform" value="form2json"/>
 
   <table>
     <tr>
@@ -217,7 +221,7 @@ $endif$
       </td>
     </tr>
     <tr>
-      <td><label for="email">Notes</label></td>
+      <td><label for="notes">Notes</label></td>
       <td><textarea name="notes=%s" id="notes" rows=5 cols=40>$details.notes$</textarea></td>
     </tr>
   </table>

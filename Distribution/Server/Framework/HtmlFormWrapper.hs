@@ -7,6 +7,7 @@ import Happstack.Server
 import Data.Maybe (fromMaybe)
 import Control.Monad.Trans (MonadIO(..))
 import Control.Monad
+import Control.Applicative
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.Char8 as BS8
 import qualified Data.Aeson as JSON
@@ -82,30 +83,39 @@ import Control.Concurrent.MVar
 --
 htmlFormWrapperHack :: (Functor m, MonadIO m) => ServerPartT m Response -> ServerPartT m Response
 htmlFormWrapperHack rest = do
-    mthdStr <- body $ look "_method"
-    case mthdStr of
-      -- simple wrappers, just translate the method
-      "PUT"    -> setMethod PUT rest
-      "DELETE" -> setMethod DELETE rest
-      -- new full wrappers
-      "wrap-PUT-form"       -> setRedirect $                  setMethod PUT rest
-      "wrap-PUT-form2json"  -> setRedirect $ formDataToJSON $ setMethod PUT rest
-      "wrap-POST-form"      -> setRedirect $                  setMethod POST rest
-      "wrap-POST-form2json" -> setRedirect $ formDataToJSON $ setMethod POST rest
-      "wrap-DELETE"         -> setRedirect $                  setMethod DELETE rest
-      _                     -> mzero
+    res <- getDataFn $ body $
+      (,,) <$> optional (do m <- look "_method" 
+                            case m of
+                              "PUT"    -> return PUT
+                              "POST"   -> return POST
+                              "DELETE" -> return DELETE
+                              _        -> mzero)
+           <*> optional (look "_return")
+           <*> optional (look "_transform")
+    case res of
+      Right (Just mthd, mreturnLoc, mtransform)
+        -> setRedirect mreturnLoc $
+             doTransform mtransform $
+               setMethod mthd rest
+      _ -> mzero
   where
-    setMethod m action = localRq (\req -> setHeader "_method" ""
-                                          req { rqMethod = m }) action
-    setRedirect action = do loc <- body $ look "_return"
-                            rsp <- action
-                            composeFilter (redirectReturnLocation loc)
-                            return rsp
+    setMethod m = localRq (\req -> setHeader "_method" "" req { rqMethod = m })
+
+    setRedirect Nothing               action = action
+    setRedirect (Just returnLocation) action = do
+      rsp <- action
+      composeFilter (redirectReturnLocation returnLocation)
+      return rsp
 
     redirectReturnLocation returnLocation rsp@Response { rsCode = code }
       | code == 200 || code == 201 || code == 204
                                  = redirect 303 returnLocation rsp
     redirectReturnLocation _ rsp = rsp
+
+    doTransform Nothing            action = action
+    doTransform (Just "form2json") action = formDataToJSON action
+    doTransform (Just other)      _action = escape $ badRequest $ toResponse $
+                                            "Unknown _transform value " ++ other
 
     formDataToJSON action = do
       req <- askRq
@@ -117,7 +127,7 @@ htmlFormWrapperHack rest = do
         Left intermediate ->
           escape $ badRequest $
             toResponse $
-              "The form-data is not in the expected syntax for the form2json wrapper:\n\n"
+              "The form-data is not in the expected syntax for the form2json transform:\n\n"
               ++ unlines (map show intermediate)
 
 -- | Very simple translation from form-data key value pairs to a single JSON
