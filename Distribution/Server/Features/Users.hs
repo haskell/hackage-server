@@ -297,9 +297,11 @@ userFeature  usersState adminsState
           , resourceGet    = [ ("json", serveUsersGet) ]
           }
       , userPage = (resourceAt "/user/:username.:format") {
-            resourceDesc   = [ (PUT,    "create user")
+            resourceDesc   = [ (GET,    "user id info")
+                             , (PUT,    "create user")
                              , (DELETE, "delete user")
                              ]
+          , resourceGet    = [ ("json", serveUserGet) ]
           , resourcePut    = [ ("", serveUserPut) ]
           , resourceDelete = [ ("", serveUserDelete) ]
           }
@@ -411,9 +413,23 @@ userFeature  usersState adminsState
     serveUsersGet :: DynamicPath -> ServerPartE Response
     serveUsersGet _ = do
       userlist <- Users.enumerateActiveUsers <$> queryGetUserDb
-      let users = [display (userName uinfo) | (_, uinfo) <- userlist]
+      let users = [ UserNameIdResource {
+                      ui_username = userName uinfo,
+                      ui_userid   = uid
+                    }
+                  | (uid, uinfo) <- userlist ]
       return . toResponse $ toJSON users
 
+    serveUserGet :: DynamicPath -> ServerPartE Response
+    serveUserGet dpath = do
+      (uid, uinfo)  <- lookupUserNameFull =<< userNameInPath dpath
+      groups        <- getGroupIndex uid
+      return . toResponse $
+        toJSON UserInfoResource {
+                 ui1_username = userName uinfo,
+                 ui1_userid   = uid,
+                 ui1_groups   = map T.pack groups
+               }
 
     serveUserPut :: DynamicPath -> ServerPartE Response
     serveUserPut dpath = do
@@ -657,13 +673,15 @@ userFeature  usersState adminsState
       group    <- getGroup groupr dpath
       userDb   <- queryGetUserDb
       userlist <- liftIO $ queryUserList group
-      let unames = [ Users.userIdToName userDb uid
-                   | uid <- Group.enumerate userlist ]
       return . toResponse $ toJSON
           UserGroupResource {
             ui_title       = T.pack $ groupTitle (groupDesc group),
             ui_description = T.pack $ groupPrologue (groupDesc group),
-            ui_members     = unames
+            ui_members     = [ UserNameIdResource {
+                                 ui_username = Users.userIdToName userDb uid,
+                                 ui_userid   = uid
+                               }
+                             | uid <- Group.enumerate userlist ]
           }
 
     --TODO: add serveUserGroupUserPost for the sake of the html frontend
@@ -732,14 +750,20 @@ userFeature  usersState adminsState
 
 data UserNameIdResource = UserNameIdResource { ui_username    :: UserName,
                                                ui_userid      :: UserId }
+data UserInfoResource   = UserInfoResource   { ui1_username    :: UserName,
+                                               ui1_userid      :: UserId,
+                                               ui1_groups      :: [T.Text] }
 data UserGroupResource  = UserGroupResource  { ui_title       :: T.Text,
                                                ui_description :: T.Text,
-                                               ui_members     :: [UserName] }
+                                               ui_members     :: [UserNameIdResource] }
 
 #if MIN_VERSION_aeson(0,6,2)
 $(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''UserNameIdResource)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 4} ''UserInfoResource)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''EnabledResource)
 $(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''UserGroupResource)
 #else
 $(deriveJSON (drop 3) ''UserNameIdResource)
+$(deriveJSON (drop 4) ''UserInfoResource)
 $(deriveJSON (drop 3) ''UserGroupResource)
 #endif
