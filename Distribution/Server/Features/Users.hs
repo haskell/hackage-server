@@ -321,6 +321,8 @@ userFeature  usersState adminsState
           renderResource (groupResource adminResource) [format]
       }
 
+    -- Queries and updates
+    --
 
     queryGetUserDb :: MonadIO m => m Users.Users
     queryGetUserDb = queryState usersState GetUserDb
@@ -339,9 +341,14 @@ userFeature  usersState adminsState
     --
     -- Authorisation: authentication checks and privilege checks
     --
+
+    -- High level, all in one check that the client is authenticated as a
+    -- particular user and has an appropriate privilege, but then ignore the
+    -- identity of the user.
     guardAuthorised_ :: [PrivilegeCondition] -> ServerPartE ()
     guardAuthorised_ = void . guardAuthorised
 
+    -- As above but also return the identity of the client
     guardAuthorised :: [PrivilegeCondition] -> ServerPartE UserId
     guardAuthorised privconds = do
         users <- queryGetUserDb
@@ -349,11 +356,15 @@ userFeature  usersState adminsState
         Auth.guardPriviledged users uid privconds
         return uid
 
+    -- Simply check if the user is authenticated as some user, without any
+    -- check that they have any particular priveledges. Only useful as a
+    -- building block.
     guardAuthenticated :: ServerPartE UserId
     guardAuthenticated = do
         users   <- queryGetUserDb
         guardAuthenticatedWithErrHook users
 
+    -- As above but using the given userdb snapshot
     guardAuthenticatedWithErrHook :: Users.Users -> ServerPartE UserId
     guardAuthenticatedWithErrHook users = do
         (uid,_) <- Auth.checkAuthenticated realm users
@@ -368,6 +379,8 @@ userFeature  usersState adminsState
           overrideResponse <- msum <$> runHook authFailHook err
           throwError (fromMaybe defaultResponse overrideResponse)
 
+
+    --TODO: delete these two
     -- result: either not-found, not-authenticated, or 204 (success)
     deleteAccount :: UserName -> ServerPartE ()
     deleteAccount uname = do
@@ -384,6 +397,23 @@ userFeature  usersState adminsState
       -- for a checkbox, presence in data string means 'checked'
       let isenabled = maybe False (const True) enabled
       void $ updateState usersState (SetUserEnabledStatus uid isenabled)
+
+    -- | Resources representing the collection of known users.
+    --
+    -- Features:
+    --
+    -- * listing the collection of users
+    -- * adding and deleting users
+    -- * enabling and disabling accounts
+    -- * changing user's name and password
+    --
+
+    serveUserListJSON :: DynamicPath -> ServerPartE Response
+    serveUserListJSON _ = do
+      userlist <- Users.enumerateActiveUsers <$> queryGetUserDb
+      let users = [display (userName uinfo) | (_, uinfo) <- userlist]
+      return . toResponse $ toJSON users
+
 
     handleUserPut :: DynamicPath -> ServerPartE Response
     handleUserPut dpath = do
@@ -410,15 +440,8 @@ userFeature  usersState adminsState
         --TODO: need to be able to delete user by name to fix this race condition
         Just Users.ErrNoSuchUserId -> errInternalError [MText "uid does not exist"]
 
-
-    -- | Resources representing the collection of known users.
     --
-    -- Features:
-    --
-    -- * listing the collection of users
-    -- * adding and deleting users
-    -- * enabling and disabling accounts
-    -- * changing user's name and password
+    --  Exported utils for looking up user names in URLs\/paths
     --
 
     userNameInPath :: forall m. MonadPlus m => DynamicPath -> m UserName
@@ -702,13 +725,6 @@ userFeature  usersState adminsState
                      -> GroupIndex -> GroupIndex
     adjustGroupIndex f g (GroupIndex a b) = GroupIndex (f a) (g b)
 
-    -- JSON resources ---------------------------------------------------------
-
-    serveUserListJSON :: DynamicPath -> ServerPartE Response
-    serveUserListJSON _ = do
-      userlist <- Users.enumerateActiveUsers <$> queryGetUserDb
-      let users = [display (userName uinfo) | (_, uinfo) <- userlist]
-      return . toResponse $ toJSON users
 
 {------------------------------------------------------------------------------
   Some types for JSON resources
