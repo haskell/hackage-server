@@ -317,7 +317,7 @@ executable hackage-mirror
     network,  HTTP >= 4000.2.11,
     Cabal,
     safecopy, cereal, binary, mtl,
-    unix
+    unix, aeson
   default-language: Haskell2010
   ghc-options: -Wall -fwarn-tabs
 
