@@ -61,7 +61,7 @@ data AccountDetails = AccountDetails {
 
 
 data AccountKind = AccountKindRealUser | AccountKindSpecial
-  deriving (Eq, Show, Typeable)
+  deriving (Eq, Show, Typeable, Enum, Bounded)
 
 newtype UserDetailsTable = UserDetailsTable (IntMap AccountDetails)
   deriving (Eq, Show, Typeable)

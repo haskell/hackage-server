@@ -27,8 +27,9 @@ import System.Posix.Signals as Signal
          ( Signal
          , installHandler
          , Handler(Catch)
-         , userDefinedSignal1
-         , userDefinedSignal2
+         , sigUSR1
+         , sigUSR2
+         , sigHUP
          )
 import System.IO
 import System.Directory
@@ -304,12 +305,18 @@ runAction opts = do
           startBackup verbosity outputDir linkBlobs server
           lognotice verbosity "Done"
 
+    let reloadHandler server = do
+          lognotice verbosity "Dropping cached static files..."
+          Server.reloadDatafiles server
+          lognotice verbosity "Done"
+
     let useTempServer = fromFlag (flagRunTemp opts)
     withServer config useTempServer $ \server ->
-      withHandler userDefinedSignal1 (checkpointHandler server) $
-        withHandler userDefinedSignal2 (backupHandler server) $ do
-          lognotice verbosity $ "Ready! Point your browser at " ++ show hosturi
-          Server.run server
+      withHandler sigUSR1 (checkpointHandler server) $
+      withHandler sigUSR2 (backupHandler server) $
+      withHandler sigHUP  (reloadHandler server) $ do
+        lognotice verbosity $ "Ready! Point your browser at " ++ show hosturi
+        Server.run server
 
   where
     verbosity = fromFlag (flagRunVerbosity opts)

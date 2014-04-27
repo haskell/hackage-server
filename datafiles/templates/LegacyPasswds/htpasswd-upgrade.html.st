@@ -15,7 +15,7 @@ for logging in. Because of this change, users who had accounts on the
 old system need to do a one-time upgrade step.
 </p>
 
-<form class="box" action="/users/htpasswd-upgrade" method="post" enctype="multipart/form-data">
+<form action="/users/htpasswd-upgrade" method="post" enctype="multipart/form-data">
 <p>You will be prompted to enter your existing username and password.
 Your account will be re-enabled and you will then be able to use the
 new site normally.

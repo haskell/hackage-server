@@ -55,7 +55,7 @@ doit root
          runServerChecked root ["init"]
          withServerRunning root $ do void $ validate NoAuth "/"
                                      void $ validate NoAuth "/accounts"
-                                     void $ validate NoAuth "/admin"
+                                     void $ validate (Auth "admin" "admin") "/admin"
                                      void $ validate NoAuth "/upload"
                                      runUserTests
                                      runPackageUploadTests

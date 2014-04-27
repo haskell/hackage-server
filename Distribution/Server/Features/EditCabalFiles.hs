@@ -67,6 +67,7 @@ editCabalFilesFeature _env templates
       [ editCabalFileResource
       ]
   , featureState = []
+  , featureReloadFiles = reloadTemplates templates
   }
 
   where

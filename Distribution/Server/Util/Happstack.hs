@@ -8,9 +8,6 @@ of Hackage.
 -}
 
 module Distribution.Server.Util.Happstack (
-    rqRealMethod,
-    methodOverrideHack,
-
     remainingPath,
     remainingPathString,
     mime,
@@ -20,46 +17,11 @@ module Distribution.Server.Util.Happstack (
   ) where
 
 import Happstack.Server
-import Happstack.Server.Internal.Monads
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe)
-import Control.Monad.Reader (runReaderT)
-import Control.Monad.Trans (MonadIO(..))
 import System.FilePath.Posix (takeExtension, (</>))
-import Control.Monad (liftM)
+import Control.Monad
 import qualified Data.ByteString.Lazy as BS
 import qualified Network.URI as URI
-
-import System.IO.Unsafe (unsafePerformIO)
-
-
--- | Allows a hidden '_method' field on a form to override the apparent
--- method of a request. Useful until we can standardise on HTML 5.
-methodOverrideHack :: MonadIO m => ServerPartT m a -> ServerPartT m a
-methodOverrideHack rest
-  = withDataFn (look "_method") $ \mthdStr ->
-      let mthd = read mthdStr
-      in localRq (\req -> req { rqMethod = mthd }) rest
-
--- | For use with 'methodOverrideHack': tries to report the original method
--- of a request before the hack was applied.
-rqRealMethod :: Request -> Method
--- We want to look in the post data to find out if the method has been
--- changed. But if the method has been changed to something other than
--- POST or PUT, Happstack doesn't return any post data at all. So we
--- set the method to POST temporarily before checking the post
--- parameter.
-rqRealMethod rq = fromMaybe (rqMethod rq) $ unsafePerformIO $ runServerPartT_hack rq { rqMethod = POST } $
-    withDataFn (liftM (not . null) $ lookInputs "_method") $ \mthd_exists ->
-      return $ if mthd_exists then POST else rqMethod rq
-
-runServerPartT_hack :: Monad m => Request -> ServerPartT m a -> m (Maybe a)
-runServerPartT_hack rq mx
-  = liftM (\res -> case res of
-                     Nothing           -> Nothing
-                     Just (Left _,  _) -> Nothing
-                     Just (Right x, _) -> Just x)
-          (ununWebT (runReaderT (unServerPartT mx) rq))
 
 
 -- |Passes a list of remaining path segments in the URL. Does not

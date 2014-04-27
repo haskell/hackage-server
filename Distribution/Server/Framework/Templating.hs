@@ -8,7 +8,7 @@
 --
 -- Support for templates, html and text, based on @HStringTemplate@ package.
 -----------------------------------------------------------------------------
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, RankNTypes #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Framework.Templating (
     Template,
@@ -16,10 +16,15 @@ module Distribution.Server.Framework.Templating (
     Templates,
     TemplatesMode(..),
     loadTemplates,
+    reloadTemplates,
     getTemplate,
     tryGetTemplate,
     TemplateAttr,
     ($=),
+    TemplateVal,
+    templateDict,
+    templateVal,
+    templateEnumDesriptor,
   ) where
 
 import Text.StringTemplate
@@ -37,6 +42,7 @@ import qualified Blaze.ByteString.Builder as Builder
 import qualified Blaze.ByteString.Builder.Html.Utf8 as Builder
 import qualified Text.XHtml.Strict as XHtml
 import Network.URI (URI)
+import qualified Data.Aeson as JSON
 
 import Distribution.Package (PackageName, PackageIdentifier)
 import Distribution.Version (Version)
@@ -46,7 +52,9 @@ import Control.Monad (when)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.List
 import Data.Maybe (isJust)
+import Data.IORef
 import System.FilePath ((<.>), takeExtension)
+import qualified Data.Map as Map
 
 
 type RawTemplate = StringTemplate Builder
@@ -68,6 +76,30 @@ infix 0 $=
 ($=) :: ToSElem a => String -> a -> TemplateAttr
 ($=) k v = TemplateAttr (setAttribute k v)
 
+newtype TemplateVal = TemplateVal (forall b. Stringable b => SElem b)
+
+instance ToSElem TemplateVal where
+    toSElem (TemplateVal se) = se
+
+templateDict :: [(String, TemplateVal)] -> TemplateVal
+templateDict kvs =
+    TemplateVal (SM (Map.fromList (fmap (\(k, TemplateVal v) -> (k, v)) kvs)))
+
+templateVal :: ToSElem a => String -> a -> (String, TemplateVal)
+templateVal k v = (k, TemplateVal (toSElem v))
+
+-- | Helper to make it easier to construct forms that use enumeration types
+templateEnumDesriptor :: (Eq a, JSON.ToJSON a) => (a -> String) ->
+                         [a] -> a -> [TemplateVal]
+templateEnumDesriptor tostr xs x =
+    [ templateDict
+        [ templateVal "index"    i
+        , templateVal "selected" (x' == x)
+        , templateVal "asstring" (tostr x')
+        , templateVal "asjson"   (JSON.encode x')
+        ]
+    | (i, x') <- zip [0::Int ..] xs ]
+
 instance ToSElem XHtml.Html where
     -- The use of SBLE here is to prevent the html being escaped
     toSElem = SBLE . stFromString . XHtml.showHtmlFragment
@@ -78,7 +110,8 @@ instance ToSElem Version           where toSElem = toSElem . display
 instance ToSElem PackageIdentifier where toSElem = toSElem . display
 
 
-data Templates = TemplatesNormalMode !RawTemplateGroup
+data Templates = TemplatesNormalMode !(IORef RawTemplateGroup)
+                                     [FilePath] [String]
                | TemplatesDesignMode [FilePath] [String]
 
 data TemplatesMode = NormalMode | DesignMode
@@ -88,26 +121,41 @@ loadTemplates templateMode templateDirs expectedTemplates = do
     templateGroup <- loadTemplateGroup templateDirs
     checkTemplates templateGroup templateDirs expectedTemplates
     case templateMode of
-      NormalMode -> return $  TemplatesNormalMode templateGroup
-      DesignMode -> return $! TemplatesDesignMode templateDirs expectedTemplates
+      NormalMode -> do
+        templateGroupRef <- newIORef templateGroup
+        return (TemplatesNormalMode templateGroupRef
+                                    templateDirs expectedTemplates)
+
+      DesignMode ->
+        return (TemplatesDesignMode templateDirs expectedTemplates)
+
+reloadTemplates :: Templates -> IO ()
+reloadTemplates (TemplatesNormalMode templateGroupRef
+                                     templateDirs expectedTemplates) = do
+  templateGroup' <- loadTemplateGroup templateDirs
+  checkTemplates templateGroup' templateDirs expectedTemplates
+  writeIORef templateGroupRef templateGroup'
+
+reloadTemplates (TemplatesDesignMode _ _) = return ()
 
 getTemplate :: MonadIO m => Templates -> String -> m ([TemplateAttr] -> Template)
-getTemplate templates@(TemplatesNormalMode _) name =
+getTemplate templates@(TemplatesNormalMode _ _ expectedTemplates) name = do
+    when (name `notElem` expectedTemplates) $ failMissingTemplate name
     tryGetTemplate templates name >>= maybe (failMissingTemplate name) return
 
 getTemplate templates@(TemplatesDesignMode _ expectedTemplates) name = do
-    when (name `notElem` expectedTemplates) $
-      failMissingTemplate name
+    when (name `notElem` expectedTemplates) $ failMissingTemplate name
     tryGetTemplate templates name >>= maybe (failMissingTemplate name) return
 
 tryGetTemplate :: MonadIO m => Templates -> String -> m (Maybe ([TemplateAttr] -> Template))
-tryGetTemplate (TemplatesNormalMode templateGroup) name =
+tryGetTemplate (TemplatesNormalMode templateGroupRef _ _) name = do
+    templateGroup <- liftIO $ readIORef templateGroupRef
     let tkind     = templateKindFromExt name
         mtemplate = fmap (\t -> Template tkind
                               . applyEscaping tkind
                               . applyTemplateAttrs t)
                          (getStringTemplate name templateGroup)
-    in return mtemplate
+    return mtemplate
 
 tryGetTemplate (TemplatesDesignMode templateDirs expectedTemplates) name = do
     templateGroup <- liftIO $ loadTemplateGroup templateDirs

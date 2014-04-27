@@ -91,6 +91,7 @@ searchFeature ServerEnv{serverBaseURI} CoreFeature{..} ListFeature{getAllLists}
             }
           ]
       , featurePostInit = postInit
+      , featureReloadFiles = reloadTemplates templates
       }
 
     searchOpenSearchResource = (resourceAt "/packages/opensearch.xml") {

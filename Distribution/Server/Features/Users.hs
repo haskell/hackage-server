@@ -1,4 +1,5 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, DoRec, BangPatterns, OverloadedStrings #-}
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, DoRec,
+             BangPatterns, OverloadedStrings, CPP, TemplateHaskell #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Features.Users (
     initUserFeature,
@@ -28,10 +29,9 @@ import qualified Data.Set as Set
 import Data.Maybe (fromMaybe)
 import Data.Function (fix)
 import Control.Applicative (optional)
-import Data.Aeson (Value(..), toJSON)
-import qualified Data.HashMap.Strict as HashMap
-import qualified Data.Vector         as Vector
-import qualified Data.Text           as Text
+import Data.Aeson (toJSON)
+import Data.Aeson.TH
+import qualified Data.Text as T
 
 import Distribution.Text (display, simpleParse)
 
@@ -109,10 +109,6 @@ data UserFeature = UserFeature {
     -- | Action for an admin to create a user with "username", "password", and
     -- "repeat-password" username fields.
     adminAddUser        :: ServerPartE Response,
-    -- | Action to enable the given user based on an "enabled" form field.
-    enabledAccount      :: UserName -> ServerPartE (),
-    -- | Action to delete the given user.
-    deleteAccount       :: UserName -> ServerPartE (),
 
     -- Create a group resource for the given resource path.
     groupResourceAt     :: String -> UserGroup -> IO (UserGroup, GroupResource),
@@ -294,19 +290,27 @@ userFeature  usersState adminsState
     userResource = fix $ \r -> UserResource {
         userList = (resourceAt "/users/.:format") {
             resourceDesc   = [ (GET, "list of users") ]
-          , resourceGet    = [ ("json", serveUserListJSON) ]
+          , resourceGet    = [ ("json", serveUsersGet) ]
           }
       , userPage = (resourceAt "/user/:username.:format") {
-            resourceDesc   = [ (PUT,    "create user")
+            resourceDesc   = [ (GET,    "user id info")
+                             , (PUT,    "create user")
                              , (DELETE, "delete user")
                              ]
-          , resourcePut    = [ ("", handleUserPut) ]
-          , resourceDelete = [ ("", handleUserDelete) ]
+          , resourceGet    = [ ("json", serveUserGet) ]
+          , resourcePut    = [ ("", serveUserPut) ]
+          , resourceDelete = [ ("", serveUserDelete) ]
           }
       , passwordResource = resourceAt "/user/:username/password.:format"
                            --TODO: PUT
-      , enabledResource  = resourceAt "/user/:username/enabled.:format"
-                           --TODO: GET & PUT
+      , enabledResource  = (resourceAt "/user/:username/enabled.:format") {
+            resourceDesc = [ (GET, "return if the user is enabled")
+                           , (PUT, "set if the user is enabled")
+                           ]
+          , resourceGet  = [("json", serveUserEnabledGet)]
+          , resourcePut  = [("json", serveUserEnabledPut)]
+          }
+
       , adminResource = adminResource
 
       , userListUri = \format ->
@@ -321,6 +325,8 @@ userFeature  usersState adminsState
           renderResource (groupResource adminResource) [format]
       }
 
+    -- Queries and updates
+    --
 
     queryGetUserDb :: MonadIO m => m Users.Users
     queryGetUserDb = queryState usersState GetUserDb
@@ -339,9 +345,14 @@ userFeature  usersState adminsState
     --
     -- Authorisation: authentication checks and privilege checks
     --
+
+    -- High level, all in one check that the client is authenticated as a
+    -- particular user and has an appropriate privilege, but then ignore the
+    -- identity of the user.
     guardAuthorised_ :: [PrivilegeCondition] -> ServerPartE ()
     guardAuthorised_ = void . guardAuthorised
 
+    -- As above but also return the identity of the client
     guardAuthorised :: [PrivilegeCondition] -> ServerPartE UserId
     guardAuthorised privconds = do
         users <- queryGetUserDb
@@ -349,11 +360,15 @@ userFeature  usersState adminsState
         Auth.guardPriviledged users uid privconds
         return uid
 
+    -- Simply check if the user is authenticated as some user, without any
+    -- check that they have any particular priveledges. Only useful as a
+    -- building block.
     guardAuthenticated :: ServerPartE UserId
     guardAuthenticated = do
         users   <- queryGetUserDb
         guardAuthenticatedWithErrHook users
 
+    -- As above but using the given userdb snapshot
     guardAuthenticatedWithErrHook :: Users.Users -> ServerPartE UserId
     guardAuthenticatedWithErrHook users = do
         (uid,_) <- Auth.checkAuthenticated realm users
@@ -368,44 +383,6 @@ userFeature  usersState adminsState
           overrideResponse <- msum <$> runHook authFailHook err
           throwError (fromMaybe defaultResponse overrideResponse)
 
-    -- result: either not-found, not-authenticated, or 204 (success)
-    deleteAccount :: UserName -> ServerPartE ()
-    deleteAccount uname = do
-      void $ guardAuthorised [InGroup adminGroup]
-      uid <- lookupUserName uname
-      void $ updateState usersState (DeleteUser uid)
-
-    -- result: not-found, not authenticated, or ok (success)
-    enabledAccount :: UserName -> ServerPartE ()
-    enabledAccount uname = do
-      _        <- guardAuthorised [InGroup adminGroup]
-      uid      <- lookupUserName uname
-      enabled  <- optional $ look "enabled"
-      -- for a checkbox, presence in data string means 'checked'
-      let isenabled = maybe False (const True) enabled
-      void $ updateState usersState (SetUserEnabledStatus uid isenabled)
-
-    handleUserPut :: DynamicPath -> ServerPartE Response
-    handleUserPut dpath = do
-      _        <- guardAuthorised [InGroup adminGroup]
-      username <- userNameInPath dpath
-      muid     <- updateState usersState $ AddUserDisabled username
-      case muid of
-        -- the only possible error is that the user exists already
-        -- but that's ok too
-        Left  _ -> noContent $ toResponse ()
-        Right _ -> noContent $ toResponse ()
-
-    handleUserDelete :: DynamicPath -> ServerPartE Response
-    handleUserDelete dpath = do
-      _    <- guardAuthorised [InGroup adminGroup]
-      uid  <- lookupUserName =<< userNameInPath dpath
-      merr <- updateState usersState $ DeleteUser uid
-      case merr of
-        Nothing   -> noContent $ toResponse ()
-        --TODO: need to be able to delete user by name to fix this race condition
-        Just _err -> errInternalError [MText "uid does not exist (but lookup was sucessful)"]
-
 
     -- | Resources representing the collection of known users.
     --
@@ -415,6 +392,79 @@ userFeature  usersState adminsState
     -- * adding and deleting users
     -- * enabling and disabling accounts
     -- * changing user's name and password
+    --
+
+    serveUsersGet :: DynamicPath -> ServerPartE Response
+    serveUsersGet _ = do
+      userlist <- Users.enumerateActiveUsers <$> queryGetUserDb
+      let users = [ UserNameIdResource {
+                      ui_username = userName uinfo,
+                      ui_userid   = uid
+                    }
+                  | (uid, uinfo) <- userlist ]
+      return . toResponse $ toJSON users
+
+    serveUserGet :: DynamicPath -> ServerPartE Response
+    serveUserGet dpath = do
+      (uid, uinfo)  <- lookupUserNameFull =<< userNameInPath dpath
+      groups        <- getGroupIndex uid
+      return . toResponse $
+        toJSON UserInfoResource {
+                 ui1_username = userName uinfo,
+                 ui1_userid   = uid,
+                 ui1_groups   = map T.pack groups
+               }
+
+    serveUserPut :: DynamicPath -> ServerPartE Response
+    serveUserPut dpath = do
+      guardAuthorised_ [InGroup adminGroup]
+      username <- userNameInPath dpath
+      muid     <- updateState usersState $ AddUserDisabled username
+      case muid of
+        Left  Users.ErrUserNameClash ->
+          errBadRequest "Username already exists"
+            [MText "Cannot create a new user account with that username because already exists"]
+        Right uid -> return . toResponse $
+          toJSON UserNameIdResource {
+                   ui_username = username,
+                   ui_userid   = uid
+                 }
+
+    serveUserDelete :: DynamicPath -> ServerPartE Response
+    serveUserDelete dpath = do
+      guardAuthorised_ [InGroup adminGroup]
+      uid  <- lookupUserName =<< userNameInPath dpath
+      merr <- updateState usersState $ DeleteUser uid
+      case merr of
+        Nothing -> noContent $ toResponse ()
+        --TODO: need to be able to delete user by name to fix this race condition
+        Just Users.ErrNoSuchUserId -> errInternalError [MText "uid does not exist"]
+
+    serveUserEnabledGet :: DynamicPath -> ServerPartE Response
+    serveUserEnabledGet dpath = do
+      guardAuthorised_ [InGroup adminGroup]
+      (_uid, uinfo) <- lookupUserNameFull =<< userNameInPath dpath
+      let enabled = case userStatus uinfo of
+                      AccountEnabled _ -> True
+                      _                -> False
+      return . toResponse $ toJSON EnabledResource { ui_enabled = enabled }
+
+    serveUserEnabledPut :: DynamicPath -> ServerPartE Response
+    serveUserEnabledPut dpath = do
+      guardAuthorised_ [InGroup adminGroup]
+      uid  <- lookupUserName =<< userNameInPath dpath
+      EnabledResource enabled <- expectAesonContent
+      merr <- updateState usersState (SetUserEnabledStatus uid enabled)
+      case merr of
+        Nothing -> noContent $ toResponse ()
+        Just (Left Users.ErrNoSuchUserId) ->
+          errInternalError [MText "uid does not exist"]
+        Just (Right Users.ErrDeletedUser) ->
+          errBadRequest "User deleted"
+            [MText "Cannot disable account, it has already been deleted"]
+
+    --
+    --  Exported utils for looking up user names in URLs\/paths
     --
 
     userNameInPath :: forall m. MonadPlus m => DynamicPath -> m UserName
@@ -563,14 +613,14 @@ userFeature  usersState adminsState
         let groupr = GroupResource {
                 groupResource = (extendResourcePath "/.:format" mainr) {
                     resourceDesc = [ (GET, "Description of the group and a list of its members (defined in 'users' feature)") ]
-                  , resourceGet  = [ ("json", handleUserGroupGet groupr) ]
+                  , resourceGet  = [ ("json", serveUserGroupGet groupr) ]
                   }
               , groupUserResource = (extendResourcePath "/user/:username.:format" mainr) {
                     resourceDesc   = [ (PUT, "Add a user to the group (defined in 'users' feature)")
                                      , (DELETE, "Remove a user from the group (defined in 'users' feature)")
                                      ]
-                  , resourcePut    = [ ("", handleUserGroupUserPut groupr) ]
-                  , resourceDelete = [ ("", handleUserGroupUserDelete groupr) ]
+                  , resourcePut    = [ ("", serveUserGroupUserPut groupr) ]
+                  , resourceDelete = [ ("", serveUserGroupUserDelete groupr) ]
                   }
               , getGroup = \_ -> return group'
               }
@@ -613,43 +663,44 @@ userFeature  usersState adminsState
             groupr = GroupResource {
                 groupResource = (extendResourcePath "/.:format" mainr) {
                     resourceDesc = [ (GET, "Description of the group and a list of the members (defined in 'users' feature)") ]
-                  , resourceGet  = [ ("json", handleUserGroupGet groupr) ]
+                  , resourceGet  = [ ("json", serveUserGroupGet groupr) ]
                   }
               , groupUserResource = (extendResourcePath "/user/:username.:format" mainr) {
                     resourceDesc   = [ (PUT,    "Add a user to the group (defined in 'users' feature)")
                                      , (DELETE, "Delete a user from the group (defined in 'users' feature)")
                                      ]
-                  , resourcePut    = [ ("", handleUserGroupUserPut groupr) ]
-                  , resourceDelete = [ ("", handleUserGroupUserDelete groupr) ]
+                  , resourcePut    = [ ("", serveUserGroupUserPut groupr) ]
+                  , resourceDelete = [ ("", serveUserGroupUserDelete groupr) ]
                   }
               , getGroup = \dpath -> mkGroup' <$> getGroupData dpath
               }
         return (mkGroup', groupr)
 
-    handleUserGroupGet groupr dpath = do
+    serveUserGroupGet groupr dpath = do
       group    <- getGroup groupr dpath
       userDb   <- queryGetUserDb
       userlist <- liftIO $ queryUserList group
-      let unames = [ Users.userIdToName userDb uid
-                   | uid <- Group.enumerate userlist ]
-      return . toResponse $
-          object [
-            ("title",       string $ groupTitle $ groupDesc group)
-          , ("description", string $ groupPrologue $ groupDesc group)
-          , ("members",     array [ string $ display uname
-                                    | uname <- unames ])
-          ]
+      return . toResponse $ toJSON
+          UserGroupResource {
+            ui_title       = T.pack $ groupTitle (groupDesc group),
+            ui_description = T.pack $ groupPrologue (groupDesc group),
+            ui_members     = [ UserNameIdResource {
+                                 ui_username = Users.userIdToName userDb uid,
+                                 ui_userid   = uid
+                               }
+                             | uid <- Group.enumerate userlist ]
+          }
 
-    --TODO: add handleUserGroupUserPost for the sake of the html frontend
+    --TODO: add serveUserGroupUserPost for the sake of the html frontend
     --      and then remove groupAddUser & groupDeleteUser
-    handleUserGroupUserPut groupr dpath = do
+    serveUserGroupUserPut groupr dpath = do
       group <- getGroup groupr dpath
       guardAuthorised_ (map InGroup (canAddGroup group))
       uid <- lookupUserName =<< userNameInPath dpath
       liftIO $ addUserList group uid
       goToList groupr dpath
 
-    handleUserGroupUserDelete groupr dpath = do
+    serveUserGroupUserDelete groupr dpath = do
       group <- getGroup groupr dpath
       guardAuthorised_ (map InGroup (canRemoveGroup group))
       uid <- lookupUserName =<< userNameInPath dpath
@@ -699,23 +750,29 @@ userFeature  usersState adminsState
                      -> GroupIndex -> GroupIndex
     adjustGroupIndex f g (GroupIndex a b) = GroupIndex (f a) (g b)
 
-    -- JSON resources ---------------------------------------------------------
-
-    serveUserListJSON :: DynamicPath -> ServerPartE Response
-    serveUserListJSON _ = do
-      userlist <- Users.enumerateActiveUsers <$> queryGetUserDb
-      let users = [display (userName uinfo) | (_, uinfo) <- userlist]
-      return . toResponse $ toJSON users
 
 {------------------------------------------------------------------------------
-  Some aeson auxiliary functions
+  Some types for JSON resources
 ------------------------------------------------------------------------------}
 
-array :: [Value] -> Value
-array = Array . Vector.fromList
+data UserNameIdResource = UserNameIdResource { ui_username    :: UserName,
+                                               ui_userid      :: UserId }
+data UserInfoResource   = UserInfoResource   { ui1_username    :: UserName,
+                                               ui1_userid      :: UserId,
+                                               ui1_groups      :: [T.Text] }
+data EnabledResource    = EnabledResource    { ui_enabled     :: Bool }
+data UserGroupResource  = UserGroupResource  { ui_title       :: T.Text,
+                                               ui_description :: T.Text,
+                                               ui_members     :: [UserNameIdResource] }
 
-object :: [(Text.Text, Value)] -> Value
-object = Object . HashMap.fromList
-
-string :: String -> Value
-string = String . Text.pack
+#if MIN_VERSION_aeson(0,6,2)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''UserNameIdResource)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 4} ''UserInfoResource)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''EnabledResource)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''UserGroupResource)
+#else
+$(deriveJSON (drop 3) ''UserNameIdResource)
+$(deriveJSON (drop 4) ''UserInfoResource)
+$(deriveJSON (drop 3) ''EnabledResource)
+$(deriveJSON (drop 3) ''UserGroupResource)
+#endif

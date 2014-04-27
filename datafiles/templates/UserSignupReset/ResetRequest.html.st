@@ -18,7 +18,7 @@ recover the account and set a new password.
 signed up with. The system will send you an email with a link that you can use
 to set a new password.
 
-<form class="box" action="/users/password-reset" method="post" enctype="multipart/form-data">
+<form action="/users/password-reset" method="post" enctype="multipart/form-data">
 
 <table>
 <tr>

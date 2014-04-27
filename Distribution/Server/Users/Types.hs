@@ -15,16 +15,16 @@ import qualified Text.PrettyPrint          as Disp
 import qualified Data.Char as Char
 
 import Control.Applicative ((<$>))
-
+import Data.Aeson (ToJSON, FromJSON)
 import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable (Typeable)
 
 
 newtype UserId = UserId Int
-  deriving (Eq, Ord, Show, Typeable, MemSize)
+  deriving (Eq, Ord, Show, Typeable, MemSize, ToJSON, FromJSON)
 
 newtype UserName  = UserName String
-  deriving (Eq, Ord, Show, Typeable, MemSize)
+  deriving (Eq, Ord, Show, Typeable, MemSize, ToJSON, FromJSON)
 
 data UserInfo = UserInfo {
                   userName   :: !UserName,

@@ -4,6 +4,9 @@
 module Distribution.Server.Features.UserSignup (
     initUserSignupFeature,
     UserSignupFeature(..),
+    SignupResetInfo(..),
+    
+    accountSuitableForPasswordReset
   ) where
 
 import Distribution.Server.Framework
@@ -45,7 +48,9 @@ import Network.URI (URI(..), URIAuth(..))
 -- both with email confirmation.
 --
 data UserSignupFeature = UserSignupFeature {
-    userSignupFeatureInterface :: HackageFeature
+    userSignupFeatureInterface :: HackageFeature,
+
+    queryAllSignupResetInfo :: MonadIO m => m [SignupResetInfo]
 }
 
 instance IsHackageFeature UserSignupFeature where
@@ -311,6 +316,7 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
                             resetRequestResource]
       , featureState     = [abstractAcidStateComponent signupResetState]
       , featureCaches    = []
+      , featureReloadFiles = reloadTemplates templates
       }
 
     -- Resources
@@ -351,6 +357,11 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
 
     -- Queries and updates
     --
+
+    queryAllSignupResetInfo :: MonadIO m => m [SignupResetInfo]
+    queryAllSignupResetInfo =
+          queryState signupResetState GetSignupResetTable
+      >>= \(SignupResetTable tbl) -> return (Map.elems tbl)
 
     querySignupInfo :: Nonce -> MonadIO m => m (Maybe SignupResetInfo)
     querySignupInfo nonce =
@@ -600,10 +611,9 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
           errForbidden "Wrong account details"
             [MText "Sorry, that does not match any account details we have on file."]
 
-    guardSuitableAccountType (UserInfo { userStatus = AccountEnabled{} })
-                             (Just udetails@AccountDetails {
-                               accountKind = Just AccountKindRealUser
-                              }) = return udetails
+    guardSuitableAccountType uinfo (Just udetails)
+      | accountSuitableForPasswordReset uinfo udetails
+                                 = return udetails
     guardSuitableAccountType _ _ =
       errForbidden "Cannot reset password for this account"
         [MText $ "Sorry, the self-service password reset system cannot be "
@@ -658,3 +668,11 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
             [MText "Cannot set a new password as the user account has just been deleted."]
         errDeleted (Left Users.ErrNoSuchUserId) =
           errInternalError [MText "No such user id!"]
+
+accountSuitableForPasswordReset :: UserInfo -> AccountDetails -> Bool
+accountSuitableForPasswordReset
+    (UserInfo { userStatus = AccountEnabled{} })
+    (AccountDetails { accountKind = Just AccountKindRealUser })
+                                    = True
+accountSuitableForPasswordReset _ _ = False
+

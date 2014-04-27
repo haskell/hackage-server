@@ -37,6 +37,7 @@ data-files:
   templates/Search/*.xml.st
   templates/UserSignupReset/*.html.st
   templates/UserSignupReset/*.email.st
+  templates/AdminFrontend/*.html.st
 
   static/*.css
   static/*.ico

@@ -18,7 +18,7 @@ href="https://github.com/haskell/hackage-server/issues/52">Issue 52</a>).</p>
 <p>Package maintainers and Hackage trustees are allowed to edit certain bits
 of package metadata after a release, without uploading a new tarball.
 
-<form class="box" action="edit" method="post" enctype="multipart/form-data">
+<form action="edit" method="post" enctype="multipart/form-data">
   <textarea autofocus style="font-family: monospace" name="cabalfile" rows="20" cols="80">$cabalfile$</textarea>
   <p><input type="submit" name="review" value="Review changes"/>
      <input type="submit" name="publish" value="Publish new revision" disabled="disabled"/>
