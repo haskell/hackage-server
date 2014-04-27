@@ -294,14 +294,14 @@ userFeature  usersState adminsState
     userResource = fix $ \r -> UserResource {
         userList = (resourceAt "/users/.:format") {
             resourceDesc   = [ (GET, "list of users") ]
-          , resourceGet    = [ ("json", serveUserListJSON) ]
+          , resourceGet    = [ ("json", serveUsersGet) ]
           }
       , userPage = (resourceAt "/user/:username.:format") {
             resourceDesc   = [ (PUT,    "create user")
                              , (DELETE, "delete user")
                              ]
-          , resourcePut    = [ ("", handleUserPut) ]
-          , resourceDelete = [ ("", handleUserDelete) ]
+          , resourcePut    = [ ("", serveUserPut) ]
+          , resourceDelete = [ ("", serveUserDelete) ]
           }
       , passwordResource = resourceAt "/user/:username/password.:format"
                            --TODO: PUT
@@ -408,15 +408,15 @@ userFeature  usersState adminsState
     -- * changing user's name and password
     --
 
-    serveUserListJSON :: DynamicPath -> ServerPartE Response
-    serveUserListJSON _ = do
+    serveUsersGet :: DynamicPath -> ServerPartE Response
+    serveUsersGet _ = do
       userlist <- Users.enumerateActiveUsers <$> queryGetUserDb
       let users = [display (userName uinfo) | (_, uinfo) <- userlist]
       return . toResponse $ toJSON users
 
 
-    handleUserPut :: DynamicPath -> ServerPartE Response
-    handleUserPut dpath = do
+    serveUserPut :: DynamicPath -> ServerPartE Response
+    serveUserPut dpath = do
       guardAuthorised_ [InGroup adminGroup]
       username <- userNameInPath dpath
       muid     <- updateState usersState $ AddUserDisabled username
@@ -430,8 +430,8 @@ userFeature  usersState adminsState
                    ui_userid   = uid
                  }
 
-    handleUserDelete :: DynamicPath -> ServerPartE Response
-    handleUserDelete dpath = do
+    serveUserDelete :: DynamicPath -> ServerPartE Response
+    serveUserDelete dpath = do
       guardAuthorised_ [InGroup adminGroup]
       uid  <- lookupUserName =<< userNameInPath dpath
       merr <- updateState usersState $ DeleteUser uid
@@ -590,14 +590,14 @@ userFeature  usersState adminsState
         let groupr = GroupResource {
                 groupResource = (extendResourcePath "/.:format" mainr) {
                     resourceDesc = [ (GET, "Description of the group and a list of its members (defined in 'users' feature)") ]
-                  , resourceGet  = [ ("json", handleUserGroupGet groupr) ]
+                  , resourceGet  = [ ("json", serveUserGroupGet groupr) ]
                   }
               , groupUserResource = (extendResourcePath "/user/:username.:format" mainr) {
                     resourceDesc   = [ (PUT, "Add a user to the group (defined in 'users' feature)")
                                      , (DELETE, "Remove a user from the group (defined in 'users' feature)")
                                      ]
-                  , resourcePut    = [ ("", handleUserGroupUserPut groupr) ]
-                  , resourceDelete = [ ("", handleUserGroupUserDelete groupr) ]
+                  , resourcePut    = [ ("", serveUserGroupUserPut groupr) ]
+                  , resourceDelete = [ ("", serveUserGroupUserDelete groupr) ]
                   }
               , getGroup = \_ -> return group'
               }
@@ -640,20 +640,20 @@ userFeature  usersState adminsState
             groupr = GroupResource {
                 groupResource = (extendResourcePath "/.:format" mainr) {
                     resourceDesc = [ (GET, "Description of the group and a list of the members (defined in 'users' feature)") ]
-                  , resourceGet  = [ ("json", handleUserGroupGet groupr) ]
+                  , resourceGet  = [ ("json", serveUserGroupGet groupr) ]
                   }
               , groupUserResource = (extendResourcePath "/user/:username.:format" mainr) {
                     resourceDesc   = [ (PUT,    "Add a user to the group (defined in 'users' feature)")
                                      , (DELETE, "Delete a user from the group (defined in 'users' feature)")
                                      ]
-                  , resourcePut    = [ ("", handleUserGroupUserPut groupr) ]
-                  , resourceDelete = [ ("", handleUserGroupUserDelete groupr) ]
+                  , resourcePut    = [ ("", serveUserGroupUserPut groupr) ]
+                  , resourceDelete = [ ("", serveUserGroupUserDelete groupr) ]
                   }
               , getGroup = \dpath -> mkGroup' <$> getGroupData dpath
               }
         return (mkGroup', groupr)
 
-    handleUserGroupGet groupr dpath = do
+    serveUserGroupGet groupr dpath = do
       group    <- getGroup groupr dpath
       userDb   <- queryGetUserDb
       userlist <- liftIO $ queryUserList group
@@ -666,16 +666,16 @@ userFeature  usersState adminsState
             ui_members     = unames
           }
 
-    --TODO: add handleUserGroupUserPost for the sake of the html frontend
+    --TODO: add serveUserGroupUserPost for the sake of the html frontend
     --      and then remove groupAddUser & groupDeleteUser
-    handleUserGroupUserPut groupr dpath = do
+    serveUserGroupUserPut groupr dpath = do
       group <- getGroup groupr dpath
       guardAuthorised_ (map InGroup (canAddGroup group))
       uid <- lookupUserName =<< userNameInPath dpath
       liftIO $ addUserList group uid
       goToList groupr dpath
 
-    handleUserGroupUserDelete groupr dpath = do
+    serveUserGroupUserDelete groupr dpath = do
       group <- getGroup groupr dpath
       guardAuthorised_ (map InGroup (canRemoveGroup group))
       uid <- lookupUserName =<< userNameInPath dpath
