@@ -109,10 +109,6 @@ data UserFeature = UserFeature {
     -- | Action for an admin to create a user with "username", "password", and
     -- "repeat-password" username fields.
     adminAddUser        :: ServerPartE Response,
-    -- | Action to enable the given user based on an "enabled" form field.
-    enabledAccount      :: UserName -> ServerPartE (),
-    -- | Action to delete the given user.
-    deleteAccount       :: UserName -> ServerPartE (),
 
     -- Create a group resource for the given resource path.
     groupResourceAt     :: String -> UserGroup -> IO (UserGroup, GroupResource),
@@ -307,8 +303,14 @@ userFeature  usersState adminsState
           }
       , passwordResource = resourceAt "/user/:username/password.:format"
                            --TODO: PUT
-      , enabledResource  = resourceAt "/user/:username/enabled.:format"
-                           --TODO: GET & PUT
+      , enabledResource  = (resourceAt "/user/:username/enabled.:format") {
+            resourceDesc = [ (GET, "return if the user is enabled")
+                           , (PUT, "set if the user is enabled")
+                           ]
+          , resourceGet  = [("json", serveUserEnabledGet)]
+          , resourcePut  = [("json", serveUserEnabledPut)]
+          }
+
       , adminResource = adminResource
 
       , userListUri = \format ->
@@ -382,24 +384,6 @@ userFeature  usersState adminsState
           throwError (fromMaybe defaultResponse overrideResponse)
 
 
-    --TODO: delete these two
-    -- result: either not-found, not-authenticated, or 204 (success)
-    deleteAccount :: UserName -> ServerPartE ()
-    deleteAccount uname = do
-      void $ guardAuthorised [InGroup adminGroup]
-      uid <- lookupUserName uname
-      void $ updateState usersState (DeleteUser uid)
-
-    -- result: not-found, not authenticated, or ok (success)
-    enabledAccount :: UserName -> ServerPartE ()
-    enabledAccount uname = do
-      _        <- guardAuthorised [InGroup adminGroup]
-      uid      <- lookupUserName uname
-      enabled  <- optional $ look "enabled"
-      -- for a checkbox, presence in data string means 'checked'
-      let isenabled = maybe False (const True) enabled
-      void $ updateState usersState (SetUserEnabledStatus uid isenabled)
-
     -- | Resources representing the collection of known users.
     --
     -- Features:
@@ -455,6 +439,29 @@ userFeature  usersState adminsState
         Nothing -> noContent $ toResponse ()
         --TODO: need to be able to delete user by name to fix this race condition
         Just Users.ErrNoSuchUserId -> errInternalError [MText "uid does not exist"]
+
+    serveUserEnabledGet :: DynamicPath -> ServerPartE Response
+    serveUserEnabledGet dpath = do
+      guardAuthorised_ [InGroup adminGroup]
+      (_uid, uinfo) <- lookupUserNameFull =<< userNameInPath dpath
+      let enabled = case userStatus uinfo of
+                      AccountEnabled _ -> True
+                      _                -> False
+      return . toResponse $ toJSON EnabledResource { ui_enabled = enabled }
+
+    serveUserEnabledPut :: DynamicPath -> ServerPartE Response
+    serveUserEnabledPut dpath = do
+      guardAuthorised_ [InGroup adminGroup]
+      uid  <- lookupUserName =<< userNameInPath dpath
+      EnabledResource enabled <- expectAesonContent
+      merr <- updateState usersState (SetUserEnabledStatus uid enabled)
+      case merr of
+        Nothing -> noContent $ toResponse ()
+        Just (Left Users.ErrNoSuchUserId) ->
+          errInternalError [MText "uid does not exist"]
+        Just (Right Users.ErrDeletedUser) ->
+          errBadRequest "User deleted"
+            [MText "Cannot disable account, it has already been deleted"]
 
     --
     --  Exported utils for looking up user names in URLs\/paths
@@ -753,6 +760,7 @@ data UserNameIdResource = UserNameIdResource { ui_username    :: UserName,
 data UserInfoResource   = UserInfoResource   { ui1_username    :: UserName,
                                                ui1_userid      :: UserId,
                                                ui1_groups      :: [T.Text] }
+data EnabledResource    = EnabledResource    { ui_enabled     :: Bool }
 data UserGroupResource  = UserGroupResource  { ui_title       :: T.Text,
                                                ui_description :: T.Text,
                                                ui_members     :: [UserNameIdResource] }
@@ -765,5 +773,6 @@ $(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''UserGroupResource)
 #else
 $(deriveJSON (drop 3) ''UserNameIdResource)
 $(deriveJSON (drop 4) ''UserInfoResource)
+$(deriveJSON (drop 3) ''EnabledResource)
 $(deriveJSON (drop 3) ''UserGroupResource)
 #endif

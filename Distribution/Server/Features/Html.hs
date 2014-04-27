@@ -559,11 +559,8 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
           }
         -- user page with link to password form and list of groups (how to do this?)
       , (extendResource $ userPage users) {
-            resourceDesc   = [ (GET,    "show user page")
-                             , (DELETE, "delete the user")
-                             ]
+            resourceDesc   = [ (GET,    "show user page") ]
           , resourceGet    = [ ("html", serveUserPage) ]
-          , resourceDelete = [ ("html", serveDeleteUser) ]
           }
         -- form to PUT password
       , (extendResource $ passwordResource users) {
@@ -572,14 +569,6 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
                            ]
           , resourceGet  = [ ("html", servePasswordForm) ]
           , resourcePut  = [ ("html", servePutPassword) ]
-          }
-        -- form to enable or disable users (admin only)
-      , (extendResource $ enabledResource users) {
-            resourceDesc = [ (GET, "return if the user is enabled")
-                           , (PUT, "set if the user is enabled")
-                           ]
-          , resourceGet  = [("html", serveEnabledForm)]
-          , resourcePut  = [("html", servePutEnabled)]
           }
       ]
 
@@ -644,41 +633,6 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
                                  , input ! [thetype "submit", value "Change password"] ]
                   ]
             ]
-
-    serveEnabledForm :: DynamicPath -> ServerPartE Response
-    serveEnabledForm dpath = do
-      usersdb <- queryGetUserDb
-      uname <- userNameInPath dpath
-      (_, userInfo) <- case Users.lookupUserName uname usersdb of
-          Just (uid, uinfo) -> return (uid, uinfo)
-          Nothing           -> errNotFound "No such user" [MText "No such user"]
-      return $ toResponse $ Resource.XHtml $ hackagePage "Change user status"
-      -- TODO: expose some of the functionality in changePassword function to determine if permissions are correct
-      -- before serving this form (either admin or user)
-        [ toHtml "Change the account status here."
-        , form ! [theclass "box", XHtml.method "post", action $ userEnabledUri users "" uname] <<
-              [ toHtml $ makeCheckbox (isEnabled userInfo) "enabled" "on" "Enable user account"
-              , hidden "_method" "PUT" --method override
-              , paragraph << input ! [thetype "submit", value "Change status"]
-              ]
-        ]
-      where isEnabled userInfo = case userStatus userInfo of
-                AccountEnabled _ -> True
-                _                -> False
-
-    servePutEnabled :: DynamicPath -> ServerPartE Response
-    servePutEnabled dpath = do
-      uname <- userNameInPath dpath
-      enabledAccount uname
-      return $ toResponse $ Resource.XHtml $ hackagePage "Account status set"
-          [toHtml "Account status set for ", anchor ! [href $ userPageUri users "" uname] << display uname]
-
-    serveDeleteUser :: DynamicPath -> ServerPartE Response
-    serveDeleteUser dpath = do
-      uname <- userNameInPath dpath
-      deleteAccount uname
-      let ntitle = "Deleted user"
-      return $ toResponse $ Resource.XHtml $ hackagePage ntitle [toHtml ntitle]
 
     servePutPassword :: DynamicPath -> ServerPartE Response
     servePutPassword dpath = do

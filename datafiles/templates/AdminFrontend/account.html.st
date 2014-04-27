@@ -30,8 +30,9 @@ $if(account.enabled)$
 <p>The account is enabled for login.</p>
 
 <form class="box" action="/user/$account.name$/enabled" method="post" enctype="multipart/form-data">
-  <input type="hidden" name="_method" value="wrap-PUT-form"/>
+  <input type="hidden" name="_method" value="wrap-PUT-form2json"/>
   <input type="hidden" name="_return" value="/admin/account/$account.id$"/>
+  <input type="hidden" name="enabled" value="false"/>
 
   <button type="submit">Disable account</button>
 </form>
@@ -50,10 +51,10 @@ The username is still reserved.
 </p>
 
 <form class="box" action="/user/$account.name$/enabled" method="post" enctype="multipart/form-data">
-  <input type="hidden" name="_method" value="wrap-PUT-form"/>
+  <input type="hidden" name="_method" value="wrap-PUT-form2json"/>
   <input type="hidden" name="_return" value="/admin/account/$account.id$"/>
+  <input type="hidden" name="enabled" value="true"/>
 
-  <input type="hidden" name="enabled"/>
   <button type="submit">Enable account</button>
 </form>
 <form class="box" action="/user/$account.name$" method="post" enctype="multipart/form-data">
