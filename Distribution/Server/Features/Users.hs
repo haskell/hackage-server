@@ -387,24 +387,28 @@ userFeature  usersState adminsState
 
     handleUserPut :: DynamicPath -> ServerPartE Response
     handleUserPut dpath = do
-      _        <- guardAuthorised [InGroup adminGroup]
+      guardAuthorised_ [InGroup adminGroup]
       username <- userNameInPath dpath
       muid     <- updateState usersState $ AddUserDisabled username
       case muid of
-        -- the only possible error is that the user exists already
-        -- but that's ok too
-        Left  _ -> noContent $ toResponse ()
-        Right _ -> noContent $ toResponse ()
+        Left  Users.ErrUserNameClash ->
+          errBadRequest "Username already exists"
+            [MText "Cannot create a new user account with that username because already exists"]
+        Right uid -> return . toResponse $
+          toJSON UserNameIdResource {
+                   ui_username = username,
+                   ui_userid   = uid
+                 }
 
     handleUserDelete :: DynamicPath -> ServerPartE Response
     handleUserDelete dpath = do
-      _    <- guardAuthorised [InGroup adminGroup]
+      guardAuthorised_ [InGroup adminGroup]
       uid  <- lookupUserName =<< userNameInPath dpath
       merr <- updateState usersState $ DeleteUser uid
       case merr of
-        Nothing   -> noContent $ toResponse ()
+        Nothing -> noContent $ toResponse ()
         --TODO: need to be able to delete user by name to fix this race condition
-        Just _err -> errInternalError [MText "uid does not exist (but lookup was sucessful)"]
+        Just Users.ErrNoSuchUserId -> errInternalError [MText "uid does not exist"]
 
 
     -- | Resources representing the collection of known users.
@@ -710,12 +714,16 @@ userFeature  usersState adminsState
   Some types for JSON resources
 ------------------------------------------------------------------------------}
 
+data UserNameIdResource = UserNameIdResource { ui_username    :: UserName,
+                                               ui_userid      :: UserId }
 data UserGroupResource  = UserGroupResource  { ui_title       :: T.Text,
                                                ui_description :: T.Text,
                                                ui_members     :: [UserName] }
 
 #if MIN_VERSION_aeson(0,6,2)
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''UserNameIdResource)
 $(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''UserGroupResource)
 #else
+$(deriveJSON (drop 3) ''UserNameIdResource)
 $(deriveJSON (drop 3) ''UserGroupResource)
 #endif
