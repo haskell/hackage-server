@@ -44,10 +44,8 @@ packagePage render headLinks top sections bottom docURL isCandidate =
                  short -> ": " ++ short
     docSubtitle = toHtml docTitle
 
-    docBody =
-        h1 <<
-           bodyTitle :
-            concat [
+    docBody = h1 << bodyTitle
+          : concat [
              renderHeads,
              top,
              pkgBody render sections,
@@ -181,7 +179,12 @@ moduleSection render docURL = maybeToList $ fmap msect (rendModules render)
   where msect lib = toHtml
             [ h2 << "Modules"
             , renderModuleForest docURL lib
+            , renderDocIndexLink docURL
             ]
+        renderDocIndexLink = maybe mempty $ \docURL' ->
+            let docIndexURL = docURL' </> "doc-index.html"
+            in  paragraph ! [thestyle "font-size: small"]
+                  << ("[" +++ anchor ! [href docIndexURL] << "Index" +++ "]")
 
 propertySection :: [(String, Html)] -> [Html]
 propertySection sections =
