@@ -9,6 +9,34 @@ $hackageCssTheme()$
 $hackagePageHeader()$
 
 <div id="content">
+<h1>Welcome to Hackage!</h1>
+<p><b>Hackage</b> is the Haskell community's package hosting service. It lets you:</p>
+<ul>
+<li><a href="/packages/packages">Browse</a> the uploaded packages (sorted by category)</li>
+<li><a href="/packages/packages/search">Search</a> for a specific uploaded package, or a term (it searches the description too!)</li>
+<li>See what packages have been <a href="/packages/recent">added recently</a></li>
+<li><a href="/packages/packages/upload">Upload</a> your own packages to the Haskell community (note that you'll need an <a href="/accounts">account</a>!)</li>
+</ul>
+<p>Each package includes:
+<ul>
+<li>A description of what it does</li>
+<li>Licence information</li>
+<li>Author information</li>
+<li>A downloadable gzipped tarball</li>
+<li>A list of modules in the package</li>
+<li>Haddock documentation (if available)</li>
+<li>Source code (if Haddock documentation is available)</li>
+</ul>
+<p>In addition to the main package list page, there are a few other package indices:</p>
+<ul>
+<li><a href="/packages/tags">All tags</a></li>
+<li><a href="/packages/names">All packages by name</a>, with tags</li>
+<!-- <li><a href="/packages/reverse">All packages with reverse dependencies</a></li> -->
+<li><a href="/packages/top">All packages by download</a></li>
+<li><a href="/packages/preferred">All packages with preferred versions</a></li>
+<li><a href="/packages/deprecated">All deprecated packages</a></li>
+<li><a href="/packages/candidates">All candidate packages</a></li>
+</ul>
 
 <h1>Hackage 2</h1>
 
@@ -50,28 +78,6 @@ at <a href="mailto:admin@hackage.haskell.org">admin@hackage.haskell.org</a>
 <p>There is some developer and user documentation on the <a href="https://github.com/haskell/hackage-server/wiki">github wiki</a>, including a quick guide to getting your own server instance up and running.</p>
   
 <p>You can ask questions on the <a href="http://www.haskell.org/pipermail/cabal-devel/">cabal-devel</a> mailing list or on IRC in the <code>#hackage</code> channel on freenode.</p>
-
-
-<h2>Exploring the site</h2>
-
-<p>The header bar on each page has the most important links:</p>
-<ul>
-<li>The <a href="/packages/search">Search</a> box lets you search for packages by keywords that appear in the package name or description.</li>
-<li>The <a href="/packages/">Browse</a> page lists all the available packages.</li>
-<li>The <a href="/recent">What's new</a> page lists recent additions (also available <a href="/recent.rss">as an RSS feed</a>).</li>
-<li>The <a href="/upload">Upload</a> page lets you upload packages or package "candidates".</li>
-</ul>
-
-<p>In addition to the main package list page, there are a few other package indices:</p>
-<ul>
-<li><a href="/packages/tags">All tags</a></li>
-<li><a href="/packages/names">All packages by name</a>, with tags</li>
-<!-- <li><a href="/packages/reverse">All packages with reverse dependencies</a></li> -->
-<li><a href="/packages/top">All packages by download</a></li>
-<li><a href="/packages/preferred">All packages with preferred versions</a></li>
-<li><a href="/packages/deprecated">All deprecated packages</a></li>
-<li><a href="/packages/candidates">All candidate packages</a></li>
-</ul>
 
 <p>The new server has an automatically-generated <a href="/api">site api</a>. This is mainly intended as documentation for people working with the server, rather than as a user-oriented site map, but it can be interesting to see exactly what is available. This includes important resources like the machine-readable <a href="/packages/index.tar.gz">index of packages</a>, used by clients like <code>cabal-install</code>.</p>
 
