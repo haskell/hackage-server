@@ -62,9 +62,10 @@ instance Text UserId where
 
 instance Text UserName where
     disp (UserName name) = Disp.text name
-    parse = UserName <$> Parse.munch1 isAsciiChar
-      where
-        isAsciiChar c = (c < '\127' && Char.isAlphaNum c) || (c == '_')
+    parse = UserName <$> Parse.munch1 isValidUserNameChar
+
+isValidUserNameChar :: Char -> Bool
+isValidUserNameChar c = (c < '\127' && Char.isAlphaNum c) || (c == '_')
 
 $(deriveSafeCopy 0 'base ''UserId)
 $(deriveSafeCopy 0 'base ''UserName)
