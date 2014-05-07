@@ -71,7 +71,7 @@ table {
 	font:100%;
 }
 
-pre, code, kbd, samp, tt, .src {
+pre, code, kbd, samp, .src {
 	font-family:monospace;
 	*font-size:108%;
 	line-height: 124%;
