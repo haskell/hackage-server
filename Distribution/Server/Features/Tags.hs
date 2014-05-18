@@ -244,10 +244,15 @@ constructImmutableTags genDesc =
     licenseToTag :: License -> [Tag]
     licenseToTag l = case l of
         GPL  _ -> [Tag "gpl"]
+        AGPL _ -> [Tag "agpl"]
         LGPL _ -> [Tag "lgpl"]
+        UnknownLicense "BSD2" -> [Tag "bsd2"]
+        -- BSD2 -> [Tag "bsd2"]  -- Requires Cabal >= 1.20
         BSD3 -> [Tag "bsd3"]
         BSD4 -> [Tag "bsd4"]
         MIT  -> [Tag "mit"]
+        -- MPL _ -> [Tag "mpl"]  -- Requires Cabal >= 1.20
+        Apache _ -> [Tag "apache"]
         PublicDomain -> [Tag "public-domain"]
         AllRightsReserved -> [Tag "all-rights-reserved"]
         _ -> []
