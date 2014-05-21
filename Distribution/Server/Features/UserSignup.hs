@@ -606,7 +606,7 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
                , errBadRequest "Missing form fields" [] ]
 
         guardEmailMatches (Just AccountDetails {accountContactEmail}) useremail
-          | T.toLower accountContactEmail == T.toLower useremail = return ()
+          | T.toCaseFold accountContactEmail == T.toCaseFold useremail = return ()
         guardEmailMatches _ _ =
           errForbidden "Wrong account details"
             [MText "Sorry, that does not match any account details we have on file."]
