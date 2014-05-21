@@ -15,13 +15,14 @@ hackagePage = hackagePageWithHead []
 
 hackagePageWithHead :: [Html] -> String -> [Html] -> Html
 hackagePageWithHead headExtra docTitle docContent =
-    hackagePageWith headExtra docTitle docSubtitle docContent bodyExtra
+    hackagePageWith headExtra [] docTitle docSubtitle docContent bodyExtra
   where
     docSubtitle = anchor ! [href introductionURL] << "Hackage :: [Package]"
     bodyExtra   = []
 
-hackagePageWith :: [Html] -> String -> Html -> [Html] -> [Html] -> Html
-hackagePageWith headExtra docTitle docSubtitle docContent bodyExtra =
+hackagePageWith :: [Html] -> [Html] -> String
+                -> Html -> [Html] -> [Html] -> Html
+hackagePageWith headExtra navExtra docTitle docSubtitle docContent bodyExtra =
     toHtml [ header << (docHead ++ headExtra)
            , body   << (docBody ++ bodyExtra) ]
   where
@@ -36,22 +37,21 @@ hackagePageWith headExtra docTitle docSubtitle docContent bodyExtra =
                 ]
     docBody   = [ thediv ! [identifier "page-header"] << docHeader
                 , thediv ! [identifier "content"] << docContent ]
-    docHeader = [ navigationBar
+    docHeader = [ navigationBar navExtra
                 , paragraph ! [theclass "caption"] << docSubtitle ]
 
-navigationBar :: Html
-navigationBar =
-    ulist ! [theclass "links", identifier "page-menu"]
-      <<  map (li <<)
-          [ anchor ! [href introductionURL] << "Home"
-          , form   ! [action "/packages/search", theclass "search", method "get"]
-                  << [ button ! [thetype "submit"] << "Search", spaceHtml
-                     , input  ! [thetype "text", name "terms" ] ]
-          , anchor ! [href pkgListURL] << "Browse"
-          , anchor ! [href recentAdditionsURL] << "What's new"
-          , anchor ! [href uploadURL]   << "Upload"
-          , anchor ! [href accountsURL] << "User accounts"
-          ]
+navigationBar :: [Html] -> Html
+navigationBar extra =
+  let links = [ anchor ! [href introductionURL] << "Home"
+              , form   ! [action "/packages/search", theclass "search", method "get"]
+                << [ button ! [thetype "submit"] << "Search", spaceHtml
+                   , input  ! [thetype "text", name "terms" ] ]
+              , anchor ! [href pkgListURL] << "Browse"
+              , anchor ! [href recentAdditionsURL] << "What's new"
+              , anchor ! [href uploadURL]   << "Upload"
+              , anchor ! [href accountsURL] << "User accounts"
+              ] ++ extra
+  in ulist ! [theclass "links", identifier "page-menu"] << map (li <<) links
 
 stylesheetURL :: URL
 stylesheetURL = "/static/hackage.css"

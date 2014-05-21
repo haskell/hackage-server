@@ -34,7 +34,7 @@ import Data.Time.Format         (formatTime)
 
 packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)] -> [(String, Html)] -> Maybe URL -> Bool -> Html
 packagePage render headLinks top sections bottom docURL isCandidate =
-    hackagePageWith [] docTitle docSubtitle docBody [docFooter]
+    hackagePageWith [] docIndexLink docTitle docSubtitle docBody [docFooter]
   where
     pkgid = rendPkgId render
 
@@ -72,6 +72,10 @@ packagePage render headLinks top sections bottom docURL isCandidate =
 
     pair (title, content) =
         toHtml [ h2 << title, content ]
+
+    docIndexLink = case docURL of
+      Nothing -> []
+      _ -> [anchor ! [href $ docIndexURL pkgid] << "Package index"]
 
 -- | Body of the package page
 pkgBody :: PackageRender -> [(String, Html)] -> [Html]
@@ -396,6 +400,10 @@ renderModuleForest mb_url forest =
 -- | URL describing a package.
 packageURL :: PackageIdentifier -> URL
 packageURL pkgId = "/package" </> display pkgId
+
+-- | URL describing a package.
+docIndexURL :: PackageIdentifier -> URL
+docIndexURL pkgId = "/package" </> display pkgId </> "docs/doc-index.html"
 
 --cabalLogoURL :: URL
 --cabalLogoURL = "/built-with-cabal.png"
