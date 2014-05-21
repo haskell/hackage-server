@@ -12,7 +12,7 @@ $hackagePageHeader()$
 <h1>Published new revision for <a href="/package/$pkgid$">$pkgid$</a></h1>
 
 <p>The new revision has been published. It will be available to users as soon
-as they update their package index (e.g. <tt>cabal update</tt>).
+as they update their package index (e.g. <code>cabal update</code>).
 
 <pre rows="20" cols="80">$cabalfile$</pre>
 

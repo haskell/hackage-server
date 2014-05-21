@@ -26,6 +26,7 @@ import System.IO
 import Package
 import Util
 import HttpUtils ( isOk
+                 , isNoContent
                  , isForbidden
                  , Authorization(..)
                  )
@@ -87,24 +88,24 @@ doit root
 runUserTests :: IO ()
 runUserTests = do
     do info "Getting user list"
-       xs <- getUsers
+       xs <- fmap (map userName) getUsers
        unless (xs == ["admin"]) $
            die ("Bad user list: " ++ show xs)
     do info "Getting admin user list"
        xs <- getAdmins
-       unless (groupMembers xs == ["admin"]) $
+       unless (map userName (groupMembers xs) == ["admin"]) $
            die ("Bad admin user list: " ++ show xs)
     do -- For this test we just create the users directly using the admin
        -- interface, there's a separate test that tests the self-signup.
        createUserDirect (Auth "admin" "admin") "HackageTestUser1" "testpass1"
        createUserDirect (Auth "admin" "admin") "HackageTestUser2" "testpass2"
     do info "Checking new users are now in user list"
-       xs <- getUsers
+       xs <- fmap (map userName) getUsers
        unless (xs == ["admin","HackageTestUser1","HackageTestUser2"]) $
            die ("Bad user list: " ++ show xs)
     do info "Checking new users are not in admin list"
        xs <- getAdmins
-       unless (groupMembers xs == ["admin"]) $
+       unless (map userName (groupMembers xs) == ["admin"]) $
            die ("Bad admin user list: " ++ show xs)
     do info "Getting password change page for HackageTestUser1"
        void $ validate (Auth "HackageTestUser1" "testpass1") "/user/HackageTestUser1/password"
@@ -127,12 +128,12 @@ runUserTests = do
        checkIsUnauthorized (Auth "HackageTestUser2" "testpass2") "/user/HackageTestUser2/password"
     do info "Trying to delete HackageTestUser2 as HackageTestUser2"
        delete isForbidden (Auth "HackageTestUser2" "newtestpass2") "/user/HackageTestUser2"
-       xs <- getUsers
+       xs <- fmap (map userName) getUsers
        unless (xs == ["admin","HackageTestUser1","HackageTestUser2"]) $
            die ("Bad user list: " ++ show xs)
     do info "Deleting HackageTestUser2 as admin"
-       delete isOk (Auth "admin" "admin") "/user/HackageTestUser2"
-       xs <- getUsers
+       delete isNoContent (Auth "admin" "admin") "/user/HackageTestUser2"
+       xs <- fmap (map userName) getUsers
        unless (xs == ["admin","HackageTestUser1"]) $
            die ("Bad user list: " ++ show xs)
     do info "Getting user info for HackageTestUser1"
@@ -207,7 +208,7 @@ runPackageTests = do
            die "Bad Haskell file"
     do info "Getting testpackage maintainer info"
        xs <- getGroup "/package/testpackage/maintainers/.json"
-       unless (groupMembers xs == ["HackageTestUser1"]) $
+       unless (map userName (groupMembers xs) == ["HackageTestUser1"]) $
            die "Bad maintainers list"
   where
     (_,                             testpackageTarFileContent,
