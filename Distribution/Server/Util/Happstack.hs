@@ -13,7 +13,8 @@ module Distribution.Server.Util.Happstack (
     mime,
     consumeRequestBody,
 
-    uriEscape
+    uriEscape,
+    showContentType
   ) where
 
 import Happstack.Server
@@ -60,3 +61,21 @@ consumeRequestBody = do
       Nothing -> escape $ internalServerError $ toResponse
                    "consumeRequestBody cannot be called more than once."
       Just (Body b) -> return b
+
+
+-- The following functions are in happstack-server, but not exported. So we
+-- copy them here.
+
+-- | Produce the standard string representation of a content-type,
+--   e.g. \"text\/html; charset=ISO-8859-1\".
+showContentType :: ContentType -> String
+showContentType (ContentType x y ps) = x ++ "/" ++ y ++ showParameters ps
+
+-- | Helper for 'showContentType'.
+showParameters :: [(String,String)] -> String
+showParameters = concatMap f
+    where f (n,v) = "; " ++ n ++ "=\"" ++ concatMap esc v ++ "\""
+          esc '\\' = "\\\\"
+          esc '"'  = "\\\""
+          esc c | c `elem` ['\\','"'] = '\\':[c]
+                | otherwise = [c]
