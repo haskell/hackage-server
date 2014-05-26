@@ -193,8 +193,8 @@ propertySection sections =
     ]
 
 tabulate :: [(String, Html)] -> Html
-tabulate items = table <<
-        [tr << [th ! [align "left", valign "top"] << t, td << d] | (t, d) <- items]
+tabulate items = table ! [theclass "properties"] <<
+        [tr << [th << t, td << d] | (t, d) <- items]
 
 
 renderDependencies :: PackageRender -> (String, Html)
