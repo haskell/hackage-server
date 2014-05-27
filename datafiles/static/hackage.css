@@ -603,3 +603,8 @@ form.box {
 table.simpletable th, table.simpletable td {
   padding: 0.2em 1em;
 }
+
+table.properties th {
+  vertical-align: top;
+  text-align: left;
+}
