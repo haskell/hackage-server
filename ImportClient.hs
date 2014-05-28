@@ -54,7 +54,7 @@ import Control.Monad
 import Control.Monad.Trans
 import Control.Applicative ((<$>))
 import Data.ByteString.Lazy (ByteString)
-import Data.Aeson (Value(..), toJSON, encode)
+import Data.Aeson (Value(..), toJSON, encode, object, (.=))
 import Data.Text (Text)
 import qualified Data.HashMap.Strict  as HashMap
 import qualified Data.Text            as Text
@@ -245,7 +245,7 @@ importAccounts jobs htpasswdFile makeUploader baseURI = do
             =<< readFile htpasswdFile
 
   concForM_ jobs htpasswdDb $ \tasks ->
-    httpSession "hackage-import" version $ do
+    httpSession $ do
       setAuthorityFromURI baseURI
       tasks $ \(username, mPasswdhash) ->
         putUserAccount baseURI username mPasswdhash makeUploader
@@ -318,15 +318,10 @@ putUserDetails baseURI username realname email timestamp adminname = do
     userAdminInfoURI   = userURI <//> "admin-info.json"
 
     nameAddressInfo =
-      object
-          [ ("name",                String realname)
-          , ("contactEmailAddress", String email)
-          ]
+      object [ "name" .= realname, "contactEmailAddress" .= email ]
     adminInfo now =
-      object
-          [ ("accountKind", object [("AccountKindRealUser", array [])])
-          , ("notes",       toJSON (notes now))
-          ]
+      object [ "accountKind" .= String "AccountKindRealUser"
+             , "notes" .= notes now ]
     notes now = "Original hackage account created by "
              ++ display adminname ++ " on " ++ showUTCTime timestamp ++ "\n"
              ++ "Account created on this server by the hackage-import client on "
@@ -625,9 +620,9 @@ putDeprecatedInfo baseURI pkgname replacement = do
 
     deprecatedInfo =
       object
-          [ ("is-deprecated", Bool True)
-          , ("in-favour-of", array [ string $ display pkg
-                                   | pkg <- maybeToList replacement ])
+          [ "is-deprecated" .= True
+          , "in-favour-of" .= array [ string $ display pkg
+                                    | pkg <- maybeToList replacement ]
           ]
 
 
@@ -1015,9 +1010,6 @@ concMapM_ n action xs = do
 
 array :: [Value] -> Value
 array = Array . Vector.fromList
-
-object :: [(Text.Text, Value)] -> Value
-object = Object . HashMap.fromList
 
 string :: String -> Value
 string = String . Text.pack
