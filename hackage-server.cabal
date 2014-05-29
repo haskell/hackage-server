@@ -266,7 +266,7 @@ executable hackage-server
     -- client). 
     aeson      == 0.6.1.*,
     unordered-containers >= 0.2.3.0,
-    rss        == 3000.2.*,
+    rss        >= 3000.2.0.3,
     HaXml      >= 1.24,
     Cabal      == 1.20.*,
     csv        == 0.1.*,
