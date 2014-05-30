@@ -20,6 +20,9 @@ package after its been released.
       each other.
   </dd>
 
+<dt>Manage documentation <span style="font-weight: normal">for $versions:{pkgid|<a href="/package/$pkgid$/maintain/docs">$pkgid$</a>}; separator=", "$</span></dt>
+  <dd>Upload or delete Haddock documentation for this package.</dd>
+
 <dt><a href="preferred/edit">Preferred versions</a></dt>
   <dd>If you want users to keep using an older version when you release a newer
       version then you can set a preferred version range and tools like cabal
