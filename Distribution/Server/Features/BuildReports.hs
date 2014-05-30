@@ -68,7 +68,7 @@ reportsStateComponent name stateDir = do
     , stateHandle  = st
     , getState     = query st GetBuildReports
     , putState     = update st . ReplaceBuildReports
-    , backupState  = dumpBackup
+    , backupState  = \_ -> dumpBackup
     , restoreState = restoreBackup
     , resetState   = reportsStateComponent name
     }

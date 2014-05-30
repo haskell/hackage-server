@@ -154,7 +154,8 @@ userDetailsStateComponent stateDir = do
     , stateHandle  = st
     , getState     = query st GetUserDetailsTable
     , putState     = update st . ReplaceUserDetailsTable
-    , backupState  = \users -> [csvToBackup ["users.csv"] (userDetailsToCSV users)]
+    , backupState  = \backuptype users ->
+        [csvToBackup ["users.csv"] (userDetailsToCSV backuptype users)]
     , restoreState = userDetailsBackup
     , resetState   = userDetailsStateComponent
     }
@@ -201,15 +202,17 @@ importUserDetails = concatM . map fromRecord . drop 2
     parseKind "special" = return (Just AccountKindSpecial)
     parseKind sts       = fail $ "unable to parse account kind: " ++ sts
 
-userDetailsToCSV :: UserDetailsTable -> CSV
-userDetailsToCSV (UserDetailsTable tbl)
+userDetailsToCSV :: BackupType -> UserDetailsTable -> CSV
+userDetailsToCSV backuptype (UserDetailsTable tbl)
     = ([showVersion userCSVVer]:) $
       (userdetailsCSVKey:) $
 
       flip map (IntMap.toList tbl) $ \(uid, udetails) ->
       [ display (UserId uid)
       , T.unpack (accountName udetails)  --FIXME: apparently the csv lib doesn't do unicode properly
-      , T.unpack (accountContactEmail udetails)
+      , if backuptype == FullBackup
+        then T.unpack (accountContactEmail udetails)
+        else "hidden-email@nowhere.org"
       , infoToAccountKind udetails
       , T.unpack (accountAdminNotes udetails)
       ]

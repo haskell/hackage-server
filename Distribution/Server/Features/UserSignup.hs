@@ -180,8 +180,9 @@ signupResetStateComponent stateDir = do
     , stateHandle  = st
     , getState     = query st GetSignupResetTable
     , putState     = update st . ReplaceSignupResetTable
-    , backupState  = \tbl -> [csvToBackup ["signups.csv"] (signupInfoToCSV tbl)
-                             ,csvToBackup ["resets.csv"]  (resetInfoToCSV  tbl)]
+    , backupState  = \backuptype tbl ->
+        [csvToBackup ["signups.csv"] (signupInfoToCSV backuptype tbl)
+        ,csvToBackup ["resets.csv"]  (resetInfoToCSV backuptype tbl)]
     , restoreState = signupResetBackup
     , resetState   = signupResetStateComponent
     }
@@ -229,14 +230,18 @@ importSignupInfo = sequence . map fromRecord . drop 2
         return (nonce, signupinfo)
     fromRecord x = fail $ "Error processing signup info record: " ++ show x
 
-signupInfoToCSV :: SignupResetTable -> CSV
-signupInfoToCSV (SignupResetTable tbl)
+signupInfoToCSV :: BackupType -> SignupResetTable -> CSV
+signupInfoToCSV backuptype (SignupResetTable tbl)
     = ["0.1"]
     : [ "token", "username", "realname", "email", "timestamp" ]
-    : [ [ renderNonce nonce
+    : [ [ if backuptype == FullBackup
+          then renderNonce nonce
+          else ""
         , T.unpack signupUserName
         , T.unpack signupRealName
-        , T.unpack signupContactEmail
+        , if backuptype == FullBackup
+          then T.unpack signupContactEmail
+          else "hidden-email@nowhere.org"
         , formatUTCTime nonceTimestamp
         ]
       | (nonce, SignupInfo{..}) <- Map.toList tbl ]
@@ -256,11 +261,13 @@ importResetInfo = sequence . map fromRecord . drop 2
         return (nonce, signupinfo)
     fromRecord x = fail $ "Error processing signup info record: " ++ show x
 
-resetInfoToCSV :: SignupResetTable -> CSV
-resetInfoToCSV (SignupResetTable tbl)
+resetInfoToCSV :: BackupType -> SignupResetTable -> CSV
+resetInfoToCSV backuptype (SignupResetTable tbl)
     = ["0.1"]
     : [ "token", "userid", "timestamp" ]
-    : [ [ renderNonce nonce
+    : [ [ if backuptype == FullBackup
+          then renderNonce nonce
+          else ""
         , display resetUserId
         , formatUTCTime nonceTimestamp
         ]

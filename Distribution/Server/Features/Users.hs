@@ -231,7 +231,8 @@ usersStateComponent stateDir = do
     , stateHandle  = st
     , getState     = query st GetUserDb
     , putState     = update st . ReplaceUserDb
-    , backupState  = \users -> [csvToBackup ["users.csv"] (usersToCSV users)]
+    , backupState  = \backuptype users ->
+        [csvToBackup ["users.csv"] (usersToCSV backuptype users)]
     , restoreState = userBackup
     , resetState   = usersStateComponent
     }
@@ -244,7 +245,7 @@ adminsStateComponent stateDir = do
     , stateHandle  = st
     , getState     = query st GetHackageAdmins
     , putState     = update st . ReplaceHackageAdmins . adminList
-    , backupState  = \(HackageAdmins admins) -> [csvToBackup ["admins.csv"] (groupToCSV admins)]
+    , backupState  = \_ (HackageAdmins admins) -> [csvToBackup ["admins.csv"] (groupToCSV admins)]
     , restoreState = HackageAdmins <$> groupBackup ["admins.csv"]
     , resetState   = adminsStateComponent
     }

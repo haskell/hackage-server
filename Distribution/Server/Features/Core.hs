@@ -276,7 +276,7 @@ packagesStateComponent verbosity stateDir = do
      , stateHandle  = st
      , getState     = query st GetPackagesState
      , putState     = update st . ReplacePackagesState
-     , backupState  = indexToAllVersions
+     , backupState  = \_ -> indexToAllVersions
      , restoreState = packagesBackup
      , resetState   = packagesStateComponent verbosity
      }

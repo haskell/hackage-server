@@ -97,7 +97,7 @@ documentationStateComponent name stateDir = do
     , stateHandle  = st
     , getState     = query st GetDocumentation
     , putState     = update st . ReplaceDocumentation
-    , backupState  = dumpBackup
+    , backupState  = \_ -> dumpBackup
     , restoreState = updateDocumentation (Documentation Map.empty)
     , resetState   = documentationStateComponent name
     }

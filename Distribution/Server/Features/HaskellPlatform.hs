@@ -65,7 +65,7 @@ platformStateComponent stateDir = do
     -- TODO: backup
     -- For now backup is just empty, as this package is basically featureless
     -- It defines state, but there is no way at all to modify this state
-    , backupState  = \_ -> []
+    , backupState  = \_ _ -> []
     , restoreState = RestoreBackup {
                          restoreEntry    = error "Unexpected backup entry for platform"
                        , restoreFinalize = return initialPlatformPackages
