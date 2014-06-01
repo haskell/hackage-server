@@ -20,6 +20,7 @@ module HttpUtils (
   , validate
 ) where
 
+import Control.Exception
 import Control.Monad
 import Data.Maybe
 import Network.HTTP hiding (user)
@@ -100,7 +101,9 @@ execRequest auth req = execRequest' auth req isOk
 
 execRequest' :: Authorization -> Request_String -> ExpectedCode -> IO String
 execRequest' auth req' expectedCode = withAuth auth req' $ \req -> do
+    putStrLn "BEFORE"
     res <- simpleHTTP req
+    putStrLn "AFTER"
     case res of
       Left e -> die ("Request failed: " ++ show e)
       Right rsp | expectedCode (rspCode rsp) -> return $ rspBody rsp
@@ -178,14 +181,22 @@ instance FromJSON ValidateMessage where
       _       -> fail $ "Unknown message type " ++ msgType
   parseJSON _ = fail "Expected object"
 
-getValidateResult :: Authorization -> String -> IO (String, ValidateResult)
+getValidateResult :: Authorization -> String
+                  -> IO (String, Maybe ValidateResult)
 getValidateResult auth url = do
-    body   <- execRequest auth (getRequest url)
-    json   <- execRequest NoAuth (postRequestWithBody validatorURL "text/html" body)
-    result <- decodeJSON json
-    return (body, result)
-  where
-    validatorURL = "http://html5.validator.nu?out=json&charset=UTF-8"
+          body <- execRequest auth (getRequest url)
+          result <-
+            catch
+            (do
+                json <- execRequest NoAuth
+                        (postRequestWithBody validatorURL "text/html" body)
+                result <- decodeJSON json
+                return $ Just result)
+            handler
+          return (body, result)
+  where handler :: IOException -> IO (Maybe ValidateResult)
+        handler _ = return Nothing
+        validatorURL = "http://html5.validator.nu?out=json&charset=UTF-8"
 
 validationErrors :: ValidateResult -> [String]
 validationErrors = aux [] . validateMessages
@@ -198,5 +209,7 @@ validationErrors = aux [] . validateMessages
 -- Validate and return the list of errors
 validate :: Authorization -> String -> IO (String, [String])
 validate auth url = do
-  (body, result) <- getValidateResult auth url
-  return (body, validationErrors result)
+  (body, mres) <- getValidateResult auth url
+  case mres of
+    Just result -> return (body, validationErrors result)
+    Nothing -> return (body, ["Couldn't connect to validation service"])
