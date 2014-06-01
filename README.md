@@ -13,7 +13,7 @@ You'll need to do the following to get hackage-server to build:
 
 ## Running
 
-    cabal install --allow-newer=HaXml -j
+    cabal install -j --enable-tests
 
     hackage-server init
     hackage-server run
