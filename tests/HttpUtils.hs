@@ -101,9 +101,7 @@ execRequest auth req = execRequest' auth req isOk
 
 execRequest' :: Authorization -> Request_String -> ExpectedCode -> IO String
 execRequest' auth req' expectedCode = withAuth auth req' $ \req -> do
-    putStrLn "BEFORE"
     res <- simpleHTTP req
-    putStrLn "AFTER"
     case res of
       Left e -> die ("Request failed: " ++ show e)
       Right rsp | expectedCode (rspCode rsp) -> return $ rspBody rsp
