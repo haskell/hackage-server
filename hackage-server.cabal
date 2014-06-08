@@ -228,60 +228,53 @@ executable hackage-server
       Distribution.Server.Features.Crash
 
   build-depends:
-    base       == 4.*,
-    filepath   >= 1.1,
-    directory  >= 1.0 && < 1.3,
-    random     >= 1.0,
-    array      >= 0.1,
-    vector     >= 0.10,
-    containers >= 0.4,
-    pretty     >= 1.0,
-    base64-bytestring ==0.1.* || == 1.0.*,
-    base16-bytestring ==0.1.*,
-    bytestring >= 0.9,
-    --TODO: drop blaze builder in favour of bytestring-0.10 builder
-    blaze-builder,
-    text       >= 0.11,
-    split      >= 0.2,
-    time       >= 1.1 && < 1.5,
-    old-locale >= 1.0,
-    deepseq    == 1.1.* || == 1.3.*,
-    transformers >= 0.3,
-    mtl        >= 2.0,
-    parsec     == 3.1.*,
-    network    >= 2.1,
-    unix       < 2.7,
-    zlib       >= 0.5.3 && < 0.6,
-    tar        == 0.4.* && >= 0.4.0.1,
-    async      == 2.0.*,
-    cereal     == 0.3.*,
-    safecopy   >= 0.6 && < 0.9,
-    crypto-api >= 0.12 && < 0.13, 
-    pureMD5    >= 0.2,
-    xhtml      >= 3000.1,
-    -- The instances created by deriveJSON in later versions of Aeson are 
-    -- different from the instances created by this version; this would be ok
-    -- if we only used the Aeson-created instance, but we also hand-create
-    -- JSON in various places (for instance, in 'putUserDetails' in the import
-    -- client). 
-    aeson      == 0.6.1.*,
-    unordered-containers >= 0.2.3.0,
-    rss        == 3000.2.*,
-    Cabal      == 1.20.*,
-    csv        == 0.1.*,
-    stm        >= 2.2 && < 2.5,
-    acid-state == 0.8.*,
-    happstack-server == 7.0.* || ==7.1.* && >= 7.0.6,
-    hslogger,
-    mime-mail  ==0.4.*,
-    HStringTemplate ==0.7.*,
-    lifted-base >= 0.2.1 && < 0.3,
-    QuickCheck >= 2.5
+    base                 == 4.*,
+    filepath             == 1.3.0.1,
+    directory            == 1.2.0.1,
+    random               == 1.0.1.1,
+    array                == 0.4.0.1,
+    vector               == 0.10.9.2,
+    containers           == 0.5.0.0,
+    pretty               == 1.1.1.0,
+    base64-bytestring    == 1.0.0.1,
+    base16-bytestring    == 0.1.1.6,
+    bytestring           == 0.10.0.2,
+    text                 == 1.1.1.2,
+    split                == 0.2.2,
+    time                 == 1.4.0.1,
+    old-locale           == 1.0.0.5,
+    deepseq              == 1.3.0.1,
+    transformers         == 0.4.1.0,
+    mtl                  == 2.2.0.1,
+    parsec               == 3.1.5,
+    network              == 2.4.2.3,
+    unix                 == 2.6.0.1,
+    zlib                 == 0.5.4.1,
+    tar                  == 0.4.0.1,
+    async                == 2.0.1.5,
+    cereal               == 0.4.0.1,
+    safecopy             == 0.8.3,
+    crypto-api           == 0.13,
+    pureMD5              == 2.1.2.1,
+    xhtml                == 3000.2.1,
+    aeson                == 0.7.0.6,
+    unordered-containers == 0.2.4.0,
+    rss                  == 3000.2.0.2,
+    Cabal                == 1.20.*,
+    csv                  == 0.1.2,
+    stm                  == 2.4.3,
+    acid-state           == 0.12.2,
+    happstack-server     == 7.3.6,
+    hslogger             == 1.2.4,
+    mime-mail            == 0.4.5.2,
+    HStringTemplate      == 0.7.3,
+    lifted-base          == 0.2.2.2,
+    QuickCheck           == 2.7.3
 
   if ! flag(minimal)
     build-depends:
-      snowball == 1.0.*,
-      tokenize >= 0.1.3 && < 0.2
+      snowball == 1.0.0.1,
+      tokenize == 0.2.2
 
   build-tools:
     alex       >= 2.2  && < 3.2,
@@ -314,9 +307,9 @@ executable hackage-mirror
     filepath, directory,
     time,     old-locale, random,
     tar,      zlib,
-    network,  HTTP >= 4000.2.11,
+    network,  HTTP == 4000.2.17,
     Cabal,
-    safecopy, cereal, binary, mtl,
+    safecopy, cereal, binary == 0.5.1.1, mtl,
     unix, aeson
   default-language: Haskell2010
   ghc-options: -Wall -fwarn-tabs
@@ -333,14 +326,13 @@ executable hackage-build
   build-depends:
     base,
     containers, array, vector, bytestring, text, pretty,
-    filepath, directory, process >= 1.0,
+    filepath, directory, process == 1.1.0.2,
     time,     old-locale,
     tar,      zlib,
     network,  HTTP,
     Cabal,
     safecopy, cereal, binary, mtl,
-    -- See comment above why we insist on this version of Aeson
-    aeson == 0.6.1.*, 
+    aeson,
     random,
     unix,
     -- Runtime dependency only:
@@ -367,12 +359,11 @@ executable hackage-import
     filepath, directory,
     time,     old-locale, random,
     tar,      zlib,
-    network,  HTTP >= 4000.2.11,
+    network,  HTTP,
     Cabal,
     safecopy, cereal, binary, mtl,
-    csv, async, attoparsec,
-    -- See comment above why we insist on this version of Aeson
-    aeson == 0.6.1.*,
+    csv, async, attoparsec == 0.11.3.4,
+    aeson,
     unordered-containers
   default-language: Haskell2010
   ghc-options: -Wall -fwarn-tabs
@@ -399,7 +390,7 @@ Test-Suite HighLevelTest
                     aeson,
                     text,
                     vector,
-                    xml,
+                    xml == 1.3.13,
                     random
 
 Test-Suite CreateUserTest
@@ -428,4 +419,3 @@ Test-Suite CreateUserTest
                     vector,
                     xml,
                     random
-

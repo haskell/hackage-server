@@ -99,6 +99,7 @@ instance SafeCopy OS where
     putCopy IRIX        = contain $ putWord8 10
     putCopy HaLVM       = contain $ putWord8 11
     putCopy IOS         = contain $ putWord8 12
+    putCopy DragonFly   = contain $ putWord8 13
 
     getCopy = contain $ do
       tag <- getWord8
@@ -116,6 +117,7 @@ instance SafeCopy OS where
         10 -> return IRIX
         11 -> return HaLVM
         12 -> return IOS
+        13 -> return DragonFly
         _  -> fail "SafeCopy OS getCopy: unexpected tag"
 
 instance SafeCopy  Arch where

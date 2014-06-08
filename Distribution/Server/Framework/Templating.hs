@@ -34,12 +34,8 @@ import Happstack.Server (ToMessage(..), toResponseBS)
 import qualified Data.ByteString.Char8      as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS
 
---TODO: switch to bytestring builder, once we can depend on bytestring-0.10
---import qualified Data.ByteString.Lazy.Builder as Builder
---import Data.ByteString.Lazy.Builder (Builder)
-import Blaze.ByteString.Builder (Builder)
-import qualified Blaze.ByteString.Builder as Builder
-import qualified Blaze.ByteString.Builder.Html.Utf8 as Builder
+import qualified Data.ByteString.Lazy.Builder as Builder
+import Data.ByteString.Lazy.Builder (Builder)
 import qualified Text.XHtml.Strict as XHtml
 import Network.URI (URI)
 import qualified Data.Aeson as JSON
@@ -55,7 +51,6 @@ import Data.Maybe (isJust)
 import Data.IORef
 import System.FilePath ((<.>), takeExtension)
 import qualified Data.Map as Map
-
 
 type RawTemplate = StringTemplate Builder
 type RawTemplateGroup = STGroup Builder
@@ -75,6 +70,11 @@ newtype TemplateAttr = TemplateAttr (RawTemplate -> RawTemplate)
 infix 0 $=
 ($=) :: ToSElem a => String -> a -> TemplateAttr
 ($=) k v = TemplateAttr (setAttribute k v)
+
+instance Stringable Builder where
+    stFromString = Builder.lazyByteString . LBS.pack
+    stFromByteString = Builder.lazyByteString
+    stToString = LBS.unpack . Builder.toLazyByteString
 
 newtype TemplateVal = TemplateVal (forall b. Stringable b => SElem b)
 
@@ -182,7 +182,8 @@ applyEscaping XmlTemplate   = setEncoder escapeHtml -- ok to reuse
 applyEscaping OtherTemplate = id
 
 escapeHtml :: Builder -> Builder
-escapeHtml = Builder.fromHtmlEscapedString
+escapeHtml = Builder.lazyByteString . LBS.pack
+           . XHtml.showHtmlFragment . XHtml.stringToHtml
            . LBS.unpack
            . Builder.toLazyByteString
 
