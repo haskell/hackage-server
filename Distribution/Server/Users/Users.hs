@@ -50,7 +50,7 @@ import Data.Typeable (Typeable)
 import Control.Exception (assert)
 
 
--- | The entrie collection of users. Manages the mapping between 'UserName'
+-- | The entire collection of users. Manages the mapping between 'UserName'
 -- and 'UserId'.
 --
 data Users = Users {

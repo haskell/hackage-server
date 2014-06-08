@@ -6,6 +6,7 @@ module HttpUtils (
     ExpectedCode
   , isOk
   , isAccepted
+  , isNoContent
   , isSeeOther
   , isUnauthorized
   , isForbidden
@@ -36,9 +37,11 @@ import Util
 
 type ExpectedCode = (Int, Int, Int) -> Bool
 
-isOk, isAccepted, isSeeOther, isUnauthorized, isForbidden :: ExpectedCode
+isOk, isAccepted, isNoContent, isSeeOther :: ExpectedCode
+isUnauthorized, isForbidden :: ExpectedCode
 isOk           = (== (2, 0, 0))
 isAccepted     = (== (2, 0, 2))
+isNoContent    = (== (2, 0, 4))
 isSeeOther     = (== (3, 0, 3))
 isUnauthorized = (== (4, 0, 1))
 isForbidden    = (== (4, 0, 3))

@@ -95,7 +95,22 @@ runServer root args = run server args'
 ------------------------------------------------------------------------------}
 
 type User  = String
-data Group = Group { groupMembers     :: [User]
+
+data UserInfo = UserInfo { userName :: User
+                         , userId :: Int
+                         }
+              deriving Show
+
+instance FromJSON UserInfo where
+  parseJSON (Object obj) = do
+    name <- obj .: "username"
+    uid  <- obj .: "userid"
+    return UserInfo { userName = name
+                    , userId   = uid
+                    }
+  parseJSON _ = fail "Expected object"
+
+data Group = Group { groupMembers     :: [UserInfo]
                    , groupTitle       :: String
                    , groupDescription :: String
                    }
@@ -112,8 +127,8 @@ instance FromJSON Group where
                  }
   parseJSON _ = fail "Expected object"
 
-getUsers :: IO [User]
-getUsers = getJSONStrings "/users/.json"
+getUsers :: IO [UserInfo]
+getUsers = getUrl NoAuth "/users/.json" >>= decodeJSON
 
 getAdmins :: IO Group
 getAdmins = getGroup "/users/admins/.json"

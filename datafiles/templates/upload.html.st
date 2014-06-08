@@ -39,15 +39,15 @@ exists for a package, only its members can upload new versions of that package.
 
 <p>If there is no maintainer, the uploader can remove themselves from the group,
 and a <a href="/packages/trustees">package trustee</a> can add anyone who wishes
-to assume the responsibility. The <tt>Maintainer</tt> field of the Cabal file should be
-<tt>None</tt> in this case. If a package is being maintained, any release not approved
+to assume the responsibility. The <code>Maintainer</code> field of the Cabal file should be
+<code>None</code> in this case. If a package is being maintained, any release not approved
 and supported by the maintainer should use a different package name. Then use
-the <tt>Maintainer</tt> field as above either to commit to supporting the fork
+the <code>Maintainer</code> field as above either to commit to supporting the fork
 yourself or to mark it as unsupported.
 </p>
 
 <p>Note that all of the above is a makeshift upload policy based on the features
-available in the newer hackage-server. The <tt>Maintainer</tt> field has its uses,
+available in the newer hackage-server. The <code>Maintainer</code> field has its uses,
 as does maintainer user groups. The libraries mailing list should probably
 determine the best approach for this.
 </p>
@@ -73,7 +73,7 @@ href="https://github.com/haskell/hackage-server/issues/41#issuecomment-25005344"
 <ul>
 <li>You should check that your source bundle builds,
 including the haddock documentation if it's a library.</li>
-<li>Categories are determined by whatever you put in the <tt>Category</tt> field
+<li>Categories are determined by whatever you put in the <code>Category</code> field
 (there's no agreed list of category names yet).
 You can have more than one category, separated by commas. If no other versions of
 the package exist, the categories automatically become the package's tags.</li>
@@ -82,7 +82,7 @@ The means of doing this is still up in the air.</li>
 <li>We have moved to Haddock 2, and expect some glitches.
 If you notice anything broken, please report it on the
 <a href="http://trac.haskell.org/haddock">Haddock bug tracker</a>.</li>
-<li>In GHC 6.8, several modules were split from the <tt>base</tt> package
+<li>In GHC 6.8, several modules were split from the <code>base</code> package
 into other packages.
 See <a href="http://www.haskell.org/haskellwiki/Upgrading_packages">these notes</a> on making packages work with a range of versions of GHC.</li>
 <li>While <a href="http://www.haskell.org/haddock/">Haddock 2</a>

@@ -473,9 +473,7 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
 
         guardValidLookingUserName str = either errBadRealName return $ do
           guard (T.length str <= 50)    ?! "Sorry, we didn't expect login names to be longer than 50 characters."
-          guard (T.all isAsciiChar str) ?! "Sorry, login names have to be ASCII characters only, no spaces or symbols."
-          where
-            isAsciiChar c = (c < '\127' && isAlphaNum c) || (c == '_')
+          guard (T.all isValidUserNameChar str) ?! "Sorry, login names have to be ASCII characters only or _, no spaces or other symbols."
 
         guardValidLookingEmail str = either errBadEmail return $ do
           guard (T.length str <= 100)     ?! "Sorry, we didn't expect email addresses to be longer than 100 characters."
@@ -606,7 +604,7 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
                , errBadRequest "Missing form fields" [] ]
 
         guardEmailMatches (Just AccountDetails {accountContactEmail}) useremail
-          | accountContactEmail == useremail = return ()
+          | T.toCaseFold accountContactEmail == T.toCaseFold useremail = return ()
         guardEmailMatches _ _ =
           errForbidden "Wrong account details"
             [MText "Sorry, that does not match any account details we have on file."]

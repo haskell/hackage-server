@@ -1500,7 +1500,7 @@ htmlGroupResource :: UserFeature -> GroupResource -> [Resource]
 htmlGroupResource UserFeature{..} r@(GroupResource groupR userR getGroup) =
   [ (extendResource groupR) {
         resourceDesc = [ (GET, "Show list of users")
-                       , (POST, "Udd a user to the group")
+                       , (POST, "Add a user to the group")
                        ]
       , resourceGet  = [ ("html", getList) ]
       , resourcePost = [ ("html", postUser) ]
