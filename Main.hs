@@ -7,7 +7,7 @@ import Distribution.Server (ListenOn(..), ServerConfig(..), Server)
 import Distribution.Server.Framework.Feature
 import Distribution.Server.Framework.Logging
 import Distribution.Server.Framework.BackupRestore (equalTarBall, restoreServerBackup)
-import Distribution.Server.Framework.BackupDump (dumpServerBackup)
+import Distribution.Server.Framework.BackupDump (dumpServerBackup, BackupType(..))
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Util.SigTerm
 
@@ -187,7 +187,8 @@ data RunFlags = RunFlags {
     flagRunCacheDelay      :: Flag String,
     -- Online backup flags
     flagRunBackupOutputDir :: Flag FilePath,
-    flagRunBackupLinkBlobs :: Flag Bool
+    flagRunBackupLinkBlobs :: Flag Bool,
+    flagRunBackupScrubbed  :: Flag Bool
   }
 
 defaultRunFlags :: RunFlags
@@ -202,7 +203,8 @@ defaultRunFlags = RunFlags {
     flagRunTemp            = Flag False,
     flagRunCacheDelay      = NoFlag,
     flagRunBackupOutputDir = Flag "backups",
-    flagRunBackupLinkBlobs = Flag False
+    flagRunBackupLinkBlobs = Flag False,
+    flagRunBackupScrubbed  = Flag False
   }
 
 runCommand :: CommandUI RunFlags
@@ -260,6 +262,11 @@ runCommand = makeCommand name shortDesc longDesc defaultRunFlags options
            ++ " (reduces disk space and I/O but is less robust to errors).")
           flagRunBackupLinkBlobs (\v flags -> flags { flagRunBackupLinkBlobs = v })
           (noArg (Flag True))
+      , option [] ["scrubbed-backup"]
+          ("Generate a scrubbed backup containing no user " ++
+           "identifying information (for development use)")
+          flagRunBackupScrubbed (\v flags -> flags { flagRunBackupScrubbed = v })
+          (noArg (Flag True))
       ]
 
 runAction :: RunFlags -> IO ()
@@ -288,6 +295,7 @@ runAction opts = do
                     }
         outputDir = fromFlag (flagRunBackupOutputDir opts)
         linkBlobs = fromFlag (flagRunBackupLinkBlobs opts)
+        scrubbed = fromFlag (flagRunBackupScrubbed opts)
 
     checkBlankServerState =<< Server.hasSavedState config
     checkStaticDir staticDir (flagRunStaticDir opts)
@@ -302,7 +310,7 @@ runAction opts = do
 
     let backupHandler server = do
           lognotice verbosity "Starting backup..."
-          startBackup verbosity outputDir linkBlobs server
+          startBackup verbosity scrubbed outputDir linkBlobs server
           lognotice verbosity "Done"
 
     let reloadHandler server = do
@@ -509,7 +517,8 @@ data BackupFlags = BackupFlags {
     flagBackupOutputDir   :: Flag FilePath,
     flagBackupStateDir    :: Flag FilePath,
     flagBackupStaticDir   :: Flag FilePath,
-    flagBackupLinkBlobs   :: Flag Bool
+    flagBackupLinkBlobs   :: Flag Bool,
+    flagBackupScrubbed    :: Flag Bool
   }
 
 defaultBackupFlags :: BackupFlags
@@ -518,7 +527,8 @@ defaultBackupFlags = BackupFlags {
     flagBackupOutputDir   = Flag "backups",
     flagBackupStateDir    = NoFlag,
     flagBackupStaticDir   = NoFlag,
-    flagBackupLinkBlobs   = Flag False
+    flagBackupLinkBlobs   = Flag False,
+    flagBackupScrubbed    = Flag False
   }
 
 backupCommand :: CommandUI BackupFlags
@@ -549,6 +559,11 @@ backupCommand = makeCommand name shortDesc longDesc defaultBackupFlags options
            ++ " (reduces disk space and I/O but is less robust to errors).")
           flagBackupLinkBlobs (\v flags -> flags { flagBackupLinkBlobs = v })
           (noArg (Flag True))
+      , option [] ["scrubbed-backup"]
+          ("Generate a scrubbed backup containing no user " ++
+           "identifying information (for development use)")
+          flagBackupScrubbed (\v flags -> flags { flagBackupScrubbed = v })
+          (noArg (Flag True))
       ]
 
 backupAction :: BackupFlags -> IO ()
@@ -559,6 +574,7 @@ backupAction opts = do
         staticDir = fromFlagOrDefault (confStaticDir defaults) (flagBackupStaticDir opts)
         outputDir = fromFlag (flagBackupOutputDir opts)
         linkBlobs = fromFlag (flagBackupLinkBlobs opts)
+        scrubbed = fromFlag (flagBackupScrubbed opts)
         verbosity = fromFlag (flagBackupVerbosity opts)
         config    = defaults {
                       confVerbosity = verbosity,
@@ -566,14 +582,15 @@ backupAction opts = do
                       confStaticDir = staticDir
                      }
 
-    withServer config False $ startBackup verbosity outputDir linkBlobs
+    withServer config False $ startBackup verbosity scrubbed outputDir linkBlobs
 
-startBackup :: Verbosity -> FilePath -> Bool -> Server -> IO ()
-startBackup verbosity outputDir linkBlobs server = do
+startBackup :: Verbosity -> Bool -> FilePath -> Bool -> Server -> IO ()
+startBackup verbosity scrubbed outputDir linkBlobs server = do
   let store = Server.serverBlobStore (Server.serverEnv server)
       state = Server.serverState server
-  dumpServerBackup verbosity outputDir Nothing store linkBlobs
-                   (map (second abstractStateBackup) state)
+      backupType = if scrubbed then ScrubbedBackup else FullBackup
+  dumpServerBackup verbosity backupType outputDir Nothing store linkBlobs
+                   (map (second (\s -> abstractStateBackup s backupType)) state)
 
 -------------------------------------------------------------------------------
 -- Test backup command
@@ -585,6 +602,7 @@ data TestBackupFlags = TestBackupFlags {
     flagTestBackupStaticDir :: Flag FilePath,
     flagTestBackupTestDir   :: Flag FilePath,
     flagTestBackupLinkBlobs :: Flag Bool,
+    flagTestBackupScrubbed  :: Flag Bool,
     flagTestBackupFeatures  :: Flag String
   }
 
@@ -595,6 +613,7 @@ defaultTestBackupFlags = TestBackupFlags {
     flagTestBackupStaticDir = NoFlag,
     flagTestBackupTestDir   = Flag "test-backup",
     flagTestBackupLinkBlobs = Flag False,
+    flagTestBackupScrubbed  = Flag False,
     flagTestBackupFeatures  = NoFlag
   }
 
@@ -623,6 +642,11 @@ testBackupCommand = makeCommand name shortDesc longDesc defaultTestBackupFlags o
            ++ "blob files (saves on disk I/O, but less test coverage).")
           flagTestBackupLinkBlobs (\v flags -> flags { flagTestBackupLinkBlobs = v })
           (noArg (Flag True))
+      , option [] ["scrubbed-backup"]
+          ("Generate a scrubbed backup containing no user " ++
+           "identifying information (for development use)")
+          flagTestBackupScrubbed (\v flags -> flags { flagTestBackupScrubbed = v })
+          (noArg (Flag True))
       , option [] ["features"]
           ("Only test the specified features")
           flagTestBackupFeatures (\v flags -> flags { flagTestBackupFeatures = v })
@@ -648,6 +672,8 @@ testBackupAction opts = do
         staticDir   = fromFlagOrDefault (confStaticDir defaults) (flagTestBackupStaticDir opts)
         testDir     = fromFlag (flagTestBackupTestDir  opts)
         linkBlobs   = fromFlag (flagTestBackupLinkBlobs opts)
+        scrubbed    = fromFlag (flagTestBackupScrubbed opts)
+        backuptype  = if scrubbed then ScrubbedBackup else FullBackup
         verbosity   = fromFlag (flagTestBackupVerbosity opts)
         config      = defaults {
                         confStateDir  = stateDir,
@@ -691,8 +717,9 @@ testBackupAction opts = do
       -- representation. We start by writing it all out in the external
       -- representation.
       --
-      dumpServerBackup verbosity dump1Dir (Just tarDumpName) store linkBlobs
-                       (map (second abstractStateBackup) state)
+      dumpServerBackup verbosity FullBackup dump1Dir (Just tarDumpName)
+                       store linkBlobs
+                       (map (second (\s -> abstractStateBackup s backuptype)) state)
 
       -- Now what we need to do is to keep hold of our current internal state
       -- and construct an extra internal state by restoring from the external
@@ -732,8 +759,9 @@ testBackupAction opts = do
       -- we can look at the second backup tarball and manually do some
       -- comparisons
       lognotice verbosity "Preparing second export tarball"
-      dumpServerBackup verbosity dump2Dir (Just tarDumpName) store' linkBlobs
-                       (map (second abstractStateBackup) state')
+      dumpServerBackup verbosity FullBackup dump2Dir (Just tarDumpName)
+                       store' linkBlobs
+                       (map (second (\s -> abstractStateBackup s backuptype)) state')
 
       -- Now we are in a position to check that the original internal state and
       -- the new internal state we get from a dump/restore do actually match up.

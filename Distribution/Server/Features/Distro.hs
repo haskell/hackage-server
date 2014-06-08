@@ -60,7 +60,7 @@ distrosStateComponent stateDir = do
     , stateHandle  = st
     , getState     = query st GetDistributions
     , putState     = \(Distros dists versions) -> update st (ReplaceDistributions dists versions)
-    , backupState  = dumpBackup
+    , backupState  = \_ -> dumpBackup
     , restoreState = restoreBackup
     , resetState   = distrosStateComponent
     }

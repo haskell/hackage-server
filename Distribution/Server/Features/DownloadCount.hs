@@ -80,7 +80,7 @@ inMemStateComponent stateDir = do
     , stateHandle  = st
     , getState     = query st GetInMemStats
     , putState     = update st . ReplaceInMemStats
-    , backupState  = inMemBackup
+    , backupState  = \_ -> inMemBackup
     , restoreState = inMemRestore
     , resetState   = inMemStateComponent
     }
@@ -91,7 +91,7 @@ onDiskStateComponent stateDir = StateComponent {
     , stateHandle  = OnDiskState
     , getState     = readOnDiskStats (dcPath stateDir </> "ondisk")
     , putState     = writeOnDisk stateDir Nothing Nothing ReconstructLog
-    , backupState  = onDiskBackup
+    , backupState  = \_ -> onDiskBackup
     , restoreState = onDiskRestore
     , resetState   = return . onDiskStateComponent
     }

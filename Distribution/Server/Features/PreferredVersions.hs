@@ -109,7 +109,7 @@ preferredStateComponent stateDir = do
     , getState     = query st GetPreferredVersions
     , putState     = update st . ReplacePreferredVersions
     , resetState   = preferredStateComponent
-    , backupState  = backupPreferredVersions
+    , backupState  = \_ -> backupPreferredVersions
     , restoreState = restorePreferredVersions
     }
 

@@ -22,6 +22,7 @@ module Distribution.Server.Framework.Feature
   , BlobStorage
   ) where
 
+import Distribution.Server.Framework.BackupDump (BackupType (..))
 import Distribution.Server.Framework.BackupRestore (RestoreBackup(..), AbstractRestoreBackup(..), BackupEntry, abstractRestoreBackup)
 import Distribution.Server.Framework.Resource      (Resource, ServerErrorResponse)
 import Distribution.Server.Framework.BlobStorage   (BlobStorage)
@@ -93,7 +94,7 @@ data StateComponent f st = StateComponent {
     -- | Overwrite the state
   , putState     :: st -> IO ()
     -- | (Pure) backup function
-  , backupState  :: st -> [BackupEntry]
+  , backupState  :: BackupType -> st -> [BackupEntry]
     -- | (Pure) backup restore
   , restoreState :: RestoreBackup st
     -- | Clone the state component in the given state directory
@@ -108,7 +109,7 @@ data AbstractStateComponent = AbstractStateComponent {
     abstractStateDesc       :: String
   , abstractStateCheckpoint :: IO ()
   , abstractStateClose      :: IO ()
-  , abstractStateBackup     :: IO [BackupEntry]
+  , abstractStateBackup     :: BackupType -> IO [BackupEntry]
   , abstractStateRestore    :: AbstractRestoreBackup
   , abstractStateNewEmpty   :: FilePath -> IO (AbstractStateComponent, IO [String])
   , abstractStateSize       :: IO Int
@@ -152,7 +153,7 @@ abstractAcidStateComponent' cmp st = AbstractStateComponent {
     abstractStateDesc       = stateDesc st
   , abstractStateCheckpoint = createCheckpoint (stateHandle st)
   , abstractStateClose      = closeAcidState (stateHandle st)
-  , abstractStateBackup     = liftM (backupState st) (getState st)
+  , abstractStateBackup     = \t -> liftM (backupState st t) (getState st)
   , abstractStateRestore    = abstractRestoreBackup (putState st) (restoreState st)
   , abstractStateNewEmpty   = \stateDir -> do
                                 st' <- resetState st stateDir
@@ -166,7 +167,7 @@ abstractOnDiskStateComponent st = AbstractStateComponent {
     abstractStateDesc       = stateDesc st
   , abstractStateCheckpoint = return ()
   , abstractStateClose      = return ()
-  , abstractStateBackup     = liftM (backupState st) (getState st)
+  , abstractStateBackup     = \t -> liftM (backupState st t) (getState st)
   , abstractStateRestore    = abstractRestoreBackup (putState st) (restoreState st)
   , abstractStateNewEmpty   = \stateDir -> do
                                 st' <- resetState st stateDir
@@ -180,7 +181,7 @@ instance Monoid AbstractStateComponent where
       abstractStateDesc       = ""
     , abstractStateCheckpoint = return ()
     , abstractStateClose      = return ()
-    , abstractStateBackup     = return []
+    , abstractStateBackup     = \_ -> return []
     , abstractStateRestore    = mempty
     , abstractStateNewEmpty   = \_stateDir -> return (mempty, return [])
     , abstractStateSize       = return 0
@@ -189,7 +190,7 @@ instance Monoid AbstractStateComponent where
       abstractStateDesc       = abstractStateDesc a ++ "\n" ++ abstractStateDesc b
     , abstractStateCheckpoint = abstractStateCheckpoint a >> abstractStateCheckpoint b
     , abstractStateClose      = abstractStateClose a >> abstractStateClose b
-    , abstractStateBackup     = liftM2 (++) (abstractStateBackup a) (abstractStateBackup b)
+    , abstractStateBackup     = \t -> liftM2 (++) (abstractStateBackup a t) (abstractStateBackup b t)
     , abstractStateRestore    = abstractStateRestore a `mappend` abstractStateRestore b
     , abstractStateNewEmpty   = \stateDir -> do
                                  (a', cmpA) <- abstractStateNewEmpty a stateDir

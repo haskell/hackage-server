@@ -14,7 +14,9 @@ import Distribution.Server.Users.Users (Users)
 import Distribution.Server.Users.Group (UserList(..))
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Types
+import qualified Distribution.Server.Framework.Auth as Auth
 
+import Distribution.Server.Framework.BackupDump (BackupType(..))
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Text (display)
 import Data.Version
@@ -108,8 +110,8 @@ groupToCSV (UserList list) = [map show (IntSet.toList list)]
    User Id,User name,(enabled|disabled|deleted),pwd-hash
  -}
 -- have a "safe" argument to this function that doesn't export password hashes?
-usersToCSV :: Users -> CSV
-usersToCSV users
+usersToCSV :: BackupType -> Users -> CSV
+usersToCSV backuptype users
     = ([showVersion userCSVVer]:) $
       (usersCSVKey:) $
 
@@ -117,7 +119,9 @@ usersToCSV users
       [ display uid
       , display (userName uinfo)
       , infoToStatus uinfo
-      , infoToAuth uinfo
+      , if backuptype == FullBackup
+        then infoToAuth uinfo
+        else scrubbedAuth uinfo
       ]
 
  where
@@ -128,6 +132,17 @@ usersToCSV users
        , "auth-info"
        ]
     userCSVVer = Version [0,2] []
+
+    scrubbedAuth :: UserInfo -> String
+    scrubbedAuth userInfo = case userStatus userInfo of
+      AccountEnabled        (UserAuth (PasswdHash _))  -> testHash userInfo
+      AccountDisabled (Just (UserAuth (PasswdHash _))) -> testHash userInfo
+      _                                                -> ""
+
+    testHash :: UserInfo -> String
+    testHash userInfo = case Auth.newPasswdHash Auth.hackageRealm
+                             (userName userInfo) (PasswdPlain "test") of
+                          PasswdHash pwd -> pwd
 
     -- one of "enabled" "disabled" or "deleted"
     infoToStatus :: UserInfo -> String
