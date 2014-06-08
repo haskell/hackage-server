@@ -21,7 +21,7 @@ of package metadata after a release, without uploading a new tarball.
 <form action="edit" method="post" enctype="multipart/form-data">
   <textarea autofocus style="font-family: monospace" name="cabalfile" rows="20" cols="80">$cabalfile$</textarea>
   <p><input type="submit" name="review" value="Review changes"/>
-     <input type="submit" name="publish" value="Publish new revision" disabled="disabled"/>
+     <input type="submit" name="publish" value="Publish new revision"/>
      <a href="edit">Reset</a>
 
 $if(publish)$

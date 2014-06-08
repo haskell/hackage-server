@@ -78,7 +78,7 @@ addPackageRevision pkgid cabalfile uploadinfo = do
               pkgDataOld    = (pkgData pkginfo, pkgUploadData pkginfo)
                             : pkgDataOld pkginfo
             }
-            pkgindex' = PackageIndex.insert pkginfo pkgindex
+            pkgindex' = PackageIndex.insert pkginfo' pkgindex
         State.put $! PackagesState pkgindex'
         return (Just pkginfo, pkginfo')
       Nothing -> do
