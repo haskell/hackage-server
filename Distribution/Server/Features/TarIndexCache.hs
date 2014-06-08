@@ -46,7 +46,7 @@ tarIndexCacheStateComponent stateDir = do
     , putState     = update st . ReplaceTarIndexCache
     , resetState   = tarIndexCacheStateComponent
     -- We don't backup the tar indices, but reconstruct them on demand
-    , backupState  = \_ -> []
+    , backupState  = \_ _ -> []
     , restoreState = RestoreBackup {
                          restoreEntry    = error "The impossible happened"
                        , restoreFinalize = return initialTarIndexCache

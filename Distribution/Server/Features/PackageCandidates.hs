@@ -134,7 +134,7 @@ candidatesStateComponent stateDir = do
     , getState     = query st GetCandidatePackages
     , putState     = update st . ReplaceCandidatePackages
     , resetState   = candidatesStateComponent
-    , backupState  = backupCandidates
+    , backupState  = \_ -> backupCandidates
     , restoreState = restoreCandidates
   }
 

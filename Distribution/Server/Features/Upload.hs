@@ -147,7 +147,7 @@ trusteesStateComponent stateDir = do
     , stateHandle  = st
     , getState     = query st GetHackageTrustees
     , putState     = update st . ReplaceHackageTrustees . trusteeList
-    , backupState  = \(HackageTrustees trustees) -> [csvToBackup ["trustees.csv"] $ groupToCSV trustees]
+    , backupState  = \_ (HackageTrustees trustees) -> [csvToBackup ["trustees.csv"] $ groupToCSV trustees]
     , restoreState = HackageTrustees <$> groupBackup ["trustees.csv"]
     , resetState   = trusteesStateComponent
     }
@@ -160,7 +160,7 @@ uploadersStateComponent stateDir = do
     , stateHandle  = st
     , getState     = query st GetHackageUploaders
     , putState     = update st . ReplaceHackageUploaders . uploaderList
-    , backupState  = \(HackageUploaders uploaders) -> [csvToBackup ["uploaders.csv"] $ groupToCSV uploaders]
+    , backupState  = \_ (HackageUploaders uploaders) -> [csvToBackup ["uploaders.csv"] $ groupToCSV uploaders]
     , restoreState = HackageUploaders <$> groupBackup ["uploaders.csv"]
     , resetState   = uploadersStateComponent
     }
@@ -173,7 +173,7 @@ maintainersStateComponent stateDir = do
     , stateHandle  = st
     , getState     = query st AllPackageMaintainers
     , putState     = update st . ReplacePackageMaintainers
-    , backupState  = \(PackageMaintainers mains) -> [maintToExport mains]
+    , backupState  = \_ (PackageMaintainers mains) -> [maintToExport mains]
     , restoreState = maintainerBackup
     , resetState   = maintainersStateComponent
     }

@@ -120,7 +120,8 @@ legacyPasswdsStateComponent stateDir = do
     , stateHandle  = st
     , getState     = query st GetLegacyPasswdsTable
     , putState     = update st . ReplaceLegacyPasswdsTable
-    , backupState  = \users -> [csvToBackup ["htpasswd.csv"] (legacyPasswdsToCSV users)]
+    , backupState  = \backuptype users ->
+        [csvToBackup ["htpasswd.csv"] (legacyPasswdsToCSV backuptype users)]
     , restoreState = legacyPasswdsBackup
     , resetState   = legacyPasswdsStateComponent
     }
@@ -158,14 +159,16 @@ importHtPasswds = sequence . map fromRecord . drop 2
 
     fromRecord x = fail $ "Error processing user details record: " ++ show x
 
-legacyPasswdsToCSV :: LegacyPasswdsTable -> CSV
-legacyPasswdsToCSV (LegacyPasswdsTable tbl)
+legacyPasswdsToCSV :: BackupType -> LegacyPasswdsTable -> CSV
+legacyPasswdsToCSV backuptype (LegacyPasswdsTable tbl)
     = ([display version]:) $
       (headers:) $
 
       flip map (IntMap.toList tbl) $ \(uid, LegacyAuth.HtPasswdHash passwdhash) ->
       [ display (UserId uid)
-      , passwdhash
+      , if backuptype == FullBackup
+        then passwdhash
+        else ""
       ]
  where
     headers = ["uid", "htpasswd"]

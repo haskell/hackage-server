@@ -5,6 +5,7 @@ Create a tarball with the structured defined by each individual feature.
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Distribution.Server.Framework.BackupDump (
+    BackupType (..),
     dumpServerBackup,
     csvToBackup,
     blobToBackup,
@@ -38,6 +39,9 @@ import System.IO.Unsafe (unsafeInterleaveIO)
 import Data.Maybe (catMaybes, fromMaybe)
 import Data.Time
 
+data BackupType = FullBackup | ScrubbedBackup
+                               deriving (Eq, Show)
+
 -- Making backups is rather expensive in terms of disk I/O because we have
 -- a lot of large static files (like package tarballs and docs).
 --
@@ -63,9 +67,11 @@ import Data.Time
 -- > backups/blobs/ecfdf802c16bab706b6985de57c73663
 --
 
-dumpServerBackup :: Verbosity -> FilePath -> Maybe String -> BlobStorage -> Bool
+dumpServerBackup :: Verbosity -> BackupType -> FilePath -> Maybe String
+                 -> BlobStorage -> Bool
                  -> [(String, IO [BackupEntry])] -> IO ()
-dumpServerBackup verbosity backupDir tarfileTemplate store linkBlobs backupActions = do
+dumpServerBackup verbosity backupType backupDir tarfileTemplate
+                 store linkBlobs backupActions = do
 
     now <- getCurrentTime
     let template    = fromMaybe defaultTarfileTemplate tarfileTemplate
@@ -97,7 +103,8 @@ dumpServerBackup verbosity backupDir tarfileTemplate store linkBlobs backupActio
     lognotice verbosity "Backup complete"
 
   where
-    defaultTarfileTemplate = "backup-" ++ iso8601DateFormat Nothing
+    leadin = if backupType == ScrubbedBackup then "scrubbed-" else ""
+    defaultTarfileTemplate = leadin ++ "backup-" ++ iso8601DateFormat Nothing
     substTemplate = formatTime defaultTimeLocale
 
     -- MVar as 1-place chan

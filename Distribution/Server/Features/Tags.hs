@@ -107,7 +107,7 @@ tagsStateComponent stateDir = do
     , stateHandle  = st
     , getState     = query st GetPackageTags
     , putState     = update st . ReplacePackageTags
-    , backupState  = \pkgTags -> [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]
+    , backupState  = \_ pkgTags -> [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]
     , restoreState = tagsBackup
     , resetState   = tagsStateComponent
     }
