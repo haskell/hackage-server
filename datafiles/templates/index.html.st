@@ -10,12 +10,16 @@ $hackagePageHeader()$
 
 <div id="content">
 <h1>Welcome to Hackage!</h1>
-<p><b>Hackage</b> is the Haskell community's package hosting service. It lets you:</p>
+<p><b>Hackage</b> is the Haskell community's central package archive.
+   Package authors use it to publish their libraries and programs while other
+   Haskell programmers use tools like <a href="/package/cabal-install">cabal-install</a>
+   to download and install packages (or people get the packages via their distro).</p>
+<p>This web interface to Hackage lets you:</p>
 <ul>
-<li><a href="/packages/packages">Browse</a> the uploaded packages (sorted by category)</li>
-<li><a href="/packages/packages/search">Search</a> for a specific uploaded package, or a term (it searches the description too!)</li>
-<li>See what packages have been <a href="/packages/recent">added recently</a></li>
-<li><a href="/packages/packages/upload">Upload</a> your own packages to the Haskell community (note that you'll need an <a href="/accounts">account</a>!)</li>
+<li><a href="/packages">Browse</a> the packages (sorted by category)</li>
+<li><a href="/packages/search">Search</a> for packages by keyword (in the name or description)</li>
+<li>See what packages have been <a href="/packages/recent">uploaded recently</a></li>
+<li><a href="/upload">Upload</a> your own packages to Hackage (note that you'll need an <a href="/accounts">account</a>)</li>
 </ul>
 <p>Each package includes:
 <ul>
@@ -24,8 +28,7 @@ $hackagePageHeader()$
 <li>Author information</li>
 <li>A downloadable gzipped tarball</li>
 <li>A list of modules in the package</li>
-<li>Haddock documentation (if available)</li>
-<li>Source code (if Haddock documentation is available)</li>
+<li>Haddock documentation (if available) with source links</li>
 </ul>
 <p>In addition to the main package list page, there are a few other package indices:</p>
 <ul>
