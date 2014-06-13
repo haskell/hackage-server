@@ -24,7 +24,7 @@ module Distribution.Server.Features.BuildReports.BuildReport (
     parseList,
     show,
     showList,
-    
+
     BuildReport_v0,
   ) where
 
@@ -71,6 +71,7 @@ import qualified Data.ByteString.Char8 as BS
 import Data.Typeable
          ( Typeable )
 import Control.Applicative
+import Control.Monad
 
 import Prelude hiding (show, read)
 
@@ -148,6 +149,10 @@ initialBuildReport = BuildReport {
   where
     requiredField fname = error ("required field: " ++ fname)
 
+requiredFields :: [String]
+requiredFields
+    = ["package", "os", "arch", "compiler", "client", "install-outcome"]
+
 -- -----------------------------------------------------------------------------
 -- Parsing
 
@@ -161,14 +166,13 @@ parse s = case parseFields s of
   ParseFailed perror -> Left msg where (_, msg) = locatedErrorMsg perror
   ParseOk   _ report -> Right report
 
---FIXME: this does not allow for optional or repeated fields
 parseFields :: String -> ParseResult BuildReport
 parseFields input = do
   fields <- mapM extractField =<< readFields input
   let merged = mergeBy (\desc (_,name,_) -> compare (fieldName desc) name)
                        sortedFieldDescrs
                        (sortBy (comparing (\(_,name,_) -> name)) fields)
-  checkMerged initialBuildReport merged
+  foldM checkMerged initialBuildReport merged
 
   where
     extractField :: Field -> ParseResult (Int, String, String)
@@ -176,15 +180,15 @@ parseFields input = do
     extractField (Section line _ _ _) = syntaxError line "Unrecognized stanza"
     extractField (IfBlock line _ _ _) = syntaxError line "Unrecognized stanza"
 
-    checkMerged report [] = return report
-    checkMerged report (merged:remaining) = case merged of
-      InBoth fieldDescr (line, _name, value) -> do
-        report' <- fieldSet fieldDescr line value report
-        checkMerged report' remaining
+    checkMerged report merged = case merged of
+      InBoth fieldDescr (line, _name, value) ->
+        fieldSet fieldDescr line value report
       OnlyInRight (line, name, _) ->
         syntaxError line ("Unrecognized field " ++ name)
-      OnlyInLeft  fieldDescr ->
-        fail ("Missing field " ++ fieldName fieldDescr)
+      OnlyInLeft  fieldDescr
+        | fieldName fieldDescr `elem` requiredFields ->
+            fail ("Missing field " ++ fieldName fieldDescr)
+        | otherwise -> return report
 
 parseList :: String -> [BuildReport]
 parseList str =
@@ -323,8 +327,8 @@ instance Arbitrary Outcome where
 deriveSafeCopy 0 'base      ''Outcome
 deriveSafeCopy 0 'base      ''InstallOutcome
 deriveSafeCopy 2 'extension ''BuildReport
-    
-    
+
+
 -------------------
 -- Old SafeCopy versions
 --
