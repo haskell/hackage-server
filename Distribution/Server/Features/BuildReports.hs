@@ -26,6 +26,7 @@ import Distribution.Text
 import Distribution.Package
 import Distribution.Version (Version(..))
 
+import Control.Arrow (second)
 import Data.ByteString.Lazy.Char8 (unpack) -- Build reports are ASCII
 
 
@@ -34,6 +35,10 @@ import Data.ByteString.Lazy.Char8 (unpack) -- Build reports are ASCII
 -- 2. Decide build report upload policy (anonymous and authenticated)
 data ReportsFeature = ReportsFeature {
     reportsFeatureInterface :: HackageFeature,
+
+    packageReports :: DynamicPath -> ([(BuildReportId, BuildReport)] -> ServerPartE Response) -> ServerPartE Response,
+    packageReport :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog),
+
     reportsResource :: ReportsResource
 }
 
@@ -131,31 +136,45 @@ buildReportsFeature name
           , reportsLogUri  = \pkgid repid -> renderResource (reportsLog reportsResource) [display pkgid, display repid]
           }
 
-    textPackageReports dpath = do
+    ---------------------------------------------------------------------------
+
+    packageReports :: DynamicPath -> ([(BuildReportId, BuildReport)] -> ServerPartE Response) -> ServerPartE Response
+    packageReports dpath continue = do
       pkgid <- packageInPath dpath
       case pkgVersion pkgid of
         Version [] [] -> do
+          -- Redirect to the latest version
           pkginfo <- lookupPackageId pkgid
           seeOther (reportsListUri reportsResource "" (pkgInfoId pkginfo)) $
             toResponse ()
         _ -> do
           guardValidPackageId pkgid
           reportList <- queryState reportsState $ LookupPackageReports pkgid
-          return . toResponse $ show reportList
+          continue $ map (second fst) reportList
 
-    textPackageReport dpath = do
+    packageReport :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog)
+    packageReport dpath = do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
-      (reportId, report, mlog) <- packageReport dpath pkgid
+      reportId <- reportIdInPath dpath
+      mreport  <- queryState reportsState $ LookupReport pkgid reportId
+      case mreport of
+        Nothing -> errNotFound "Report not found" [MText "Build report does not exist"]
+        Just (report, mlog) -> return (reportId, report, mlog)
+
+    ---------------------------------------------------------------------------
+
+    textPackageReports dpath = packageReports dpath $ return . toResponse . show
+
+    textPackageReport dpath = do
+      (reportId, report, mlog) <- packageReport dpath
       return . toResponse $ unlines [ "Report #" ++ display reportId, show report
                                     , maybe "No build log" (const "Build log exists") mlog]
 
     -- result: not-found error or text file
     serveBuildLog :: DynamicPath -> ServerPartE Response
     serveBuildLog dpath = do
-      pkgid <- packageInPath dpath
-      guardValidPackageId pkgid
-      (repid, _, mlog) <- packageReport dpath pkgid
+      (repid, _, mlog) <- packageReport dpath
       case mlog of
         Nothing -> errNotFound "Log not found" [MText $ "Build log for report " ++ display repid ++ " not found"]
         Just (BuildLog blobId) -> do
@@ -233,12 +252,3 @@ buildReportsFeature name
 
     reportIdInPath :: MonadPlus m => DynamicPath -> m BuildReportId
     reportIdInPath dpath = maybe mzero return (simpleParse =<< lookup "id" dpath)
-
-    packageReport :: DynamicPath -> PackageId -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog)
-    packageReport dpath pkgid = do
-      reportId <- reportIdInPath dpath
-      mreport  <- queryState reportsState $ LookupReport pkgid reportId
-      case mreport of
-        Nothing -> errNotFound "Report not found" [MText "Build report does not exist"]
-        Just (report, mlog) -> return (reportId, report, mlog)
-
