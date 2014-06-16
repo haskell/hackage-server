@@ -38,6 +38,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
+import qualified Data.ByteString.Char8 as BS8
 
 import Distribution.Text (display)
 import Distribution.Package
@@ -479,7 +480,19 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     ------------------------------------------------------------------------
 
     servePackagesIndex :: DynamicPath -> ServerPartE Response
-    servePackagesIndex _ = toResponse <$> readAsyncCache cacheIndexTarball
+    servePackagesIndex _ = do
+      rq <- askRq
+      tarball <- readAsyncCache cacheIndexTarball
+      return $ etagCheck rq tarball
+        where etagCheck rq tarball =
+                case getHeader "if-none-match" rq of
+                  Just etag -> withETag (BS8.unpack etag) tarball
+                  _ -> toResponse tarball
+              withETag etag tarball =
+                if etagMatches etag tarball then noContentLength . result 304 $ ""
+                                            else toResponse tarball
+              etagMatches etag (IndexTarball _ _ md5 _) =
+                    etag == formatETag (ETag (show md5))
 
     -- TODO: should we include more information here? description and
     -- category for instance (but they are not readily available as long
