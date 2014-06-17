@@ -24,6 +24,7 @@ import HttpUtils ( ExpectedCode
                  , isOk
                  , isAccepted
                  , isSeeOther
+                 , isNotModified
                  , isUnauthorized
                  , isForbidden
                  , Authorization(..)
@@ -240,6 +241,15 @@ mkPostReq url vals =
 
 getUrl :: Authorization -> RelativeURL -> IO String
 getUrl auth url = Http.execRequest auth (mkGetReq url)
+
+getEtag :: RelativeURL -> IO String
+getEtag url = Http.responseHeader HdrETag (mkGetReq url)
+
+checkEtag :: String -> RelativeURL -> IO ()
+checkEtag etag url = void $
+  Http.execRequest' NoAuth rq isNotModified
+  where rq = Request (fromJust $ parseURI $ mkUrl url) GET hdrs ""
+        hdrs = [mkHeader HdrIfNoneMatch etag]
 
 getJSONStrings :: RelativeURL -> IO [String]
 getJSONStrings url = getUrl NoAuth url >>= decodeJSON

@@ -186,6 +186,10 @@ runPackageTests = do
                return ()
            _ ->
                die "Bad index contents"
+    do info "Getting package index with etag"
+       etag <- getEtag "/packages/index.tar.gz"
+       info $ "Got etag: " ++ etag
+       checkEtag etag "/packages/index.tar.gz"
     do info "Getting testpackage info"
        xs <- validate NoAuth "/package/testpackage"
        unless ("The testpackage package" `isInfixOf` xs) $
