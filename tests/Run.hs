@@ -26,7 +26,7 @@ run cmd args = do
                            killProcessGroup pid
                            return Nothing
                      Just (Exited ec)    -> return (Just ec)
-                     Just (Terminated _) -> return Nothing
+                     Just (Terminated _ _) -> return Nothing
                      Just _              -> return Nothing
                 `Exception.catch` \e ->
                     do putStrLn ("Got " ++ show (e :: SomeException) ++ ", so killing")
