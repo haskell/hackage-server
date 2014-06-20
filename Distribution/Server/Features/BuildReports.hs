@@ -39,6 +39,8 @@ data ReportsFeature = ReportsFeature {
     packageReports :: DynamicPath -> ([(BuildReportId, BuildReport)] -> ServerPartE Response) -> ServerPartE Response,
     packageReport :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog),
 
+    queryBuildLog :: MonadIO m => BuildLog -> m Resource.BuildLog,
+
     reportsResource :: ReportsResource
 }
 
@@ -162,6 +164,11 @@ buildReportsFeature name
         Nothing -> errNotFound "Report not found" [MText "Build report does not exist"]
         Just (report, mlog) -> return (reportId, report, mlog)
 
+    queryBuildLog :: MonadIO m => BuildLog -> m Resource.BuildLog
+    queryBuildLog (BuildLog blobId) = do
+        file <- liftIO $ BlobStorage.fetch store blobId
+        return $ Resource.BuildLog file
+
     ---------------------------------------------------------------------------
 
     textPackageReports dpath = packageReports dpath $ return . toResponse . show
@@ -177,9 +184,7 @@ buildReportsFeature name
       (repid, _, mlog) <- packageReport dpath
       case mlog of
         Nothing -> errNotFound "Log not found" [MText $ "Build log for report " ++ display repid ++ " not found"]
-        Just (BuildLog blobId) -> do
-            file <- liftIO $ BlobStorage.fetch store blobId
-            return . toResponse $ Resource.BuildLog file
+        Just logId -> toResponse <$> queryBuildLog logId
 
     -- result: auth error, not-found error, parse error, or redirect
     submitBuildReport :: DynamicPath -> ServerPartE Response
