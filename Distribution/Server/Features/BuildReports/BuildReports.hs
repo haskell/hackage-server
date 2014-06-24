@@ -19,18 +19,16 @@ module Distribution.Server.Features.BuildReports.BuildReports (
 
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Features.BuildReports.BuildReport
-         (BuildReport(..), BuildReport_v0)
+         (BuildReport(..), BuildReport_v1)
 
 import Distribution.Package (PackageId)
 import Distribution.Text (Text(..), display)
 
 import Distribution.Server.Framework.MemSize
-import Distribution.Server.Framework.Instances
+import Distribution.Server.Framework.Instances ()
 
 import Data.Map (Map)
 import qualified Data.Map as Map
-import qualified Data.Serialize as Serialize
-import Data.Serialize (Serialize)
 import Data.SafeCopy
 import Data.Typeable (Typeable)
 import Control.Applicative ((<$>))
@@ -130,9 +128,9 @@ instance ToSElem BuildReportId where
 -- SafeCopy instances
 --
 
-deriveSafeCopy 2 'extension ''BuildReportId
-deriveSafeCopy 2 'extension ''BuildLog
-deriveSafeCopy 2 'extension ''BuildReports
+deriveSafeCopy 2 'base      ''BuildReportId
+deriveSafeCopy 2 'base      ''BuildLog
+deriveSafeCopy 3 'extension ''BuildReports
 
 -- note: if the set of report ids is [1, 2, 3], then nextReportId = 4
 -- after calling deleteReport for 3, the set is [1, 2] and nextReportId is still 4.
@@ -160,57 +158,28 @@ instance MemSize PkgBuildReports where
 -- Old SafeCopy versions
 --
 
-newtype BuildReportId_v0 = BuildReportId_v0 Int deriving (Serialize, Enum, Eq, Ord)
-instance SafeCopy BuildReportId_v0
-
-instance Migrate BuildReportId where
-    type MigrateFrom BuildReportId = BuildReportId_v0
-    migrate (BuildReportId_v0 bid) = BuildReportId bid
-
----
-
-newtype BuildLog_v0 = BuildLog_v0 BlobStorage.BlobId_v0 deriving Serialize
-instance SafeCopy BuildLog_v0
-
-instance Migrate BuildLog where
-    type MigrateFrom BuildLog = BuildLog_v0
-    migrate (BuildLog_v0 bl) = BuildLog (migrate bl)
-
----
-
-data BuildReports_v0 = BuildReports_v0
-                         !(Map.Map PackageIdentifier_v0 PkgBuildReports_v0)
-
-instance SafeCopy  BuildReports_v0
-instance Serialize BuildReports_v0 where
-    put (BuildReports_v0 index) = Serialize.put index
-    get = BuildReports_v0 <$> Serialize.get
+data BuildReports_v1 = BuildReports_v1
+                         !(Map.Map PackageId PkgBuildReports_v1)
 
 instance Migrate BuildReports where
-     type MigrateFrom BuildReports = BuildReports_v0
-     migrate (BuildReports_v0 m) =
-       BuildReports (Map.mapKeys migrate $ Map.map migrate m)
+     type MigrateFrom BuildReports = BuildReports_v1
+     migrate (BuildReports_v1 m) =
+       BuildReports (Map.map migrate m)
 
 ---
 
-data PkgBuildReports_v0 = PkgBuildReports_v0
-                           !(Map BuildReportId_v0 (BuildReport_v0, Maybe BuildLog_v0))
-                           !BuildReportId_v0
-
-instance SafeCopy  PkgBuildReports_v0
-instance Serialize PkgBuildReports_v0 where
-    put (PkgBuildReports_v0 listing _) = Serialize.put listing
-    get = mkReports <$> Serialize.get
-      where
-        mkReports rs = PkgBuildReports_v0 rs
-                         (if Map.null rs
-                            then BuildReportId_v0 1
-                            else succ (fst $ Map.findMax rs))
+data PkgBuildReports_v1 = PkgBuildReports_v1
+                           !(Map BuildReportId (BuildReport_v1, Maybe BuildLog))
+                           !BuildReportId
 
 instance Migrate PkgBuildReports where
-     type MigrateFrom PkgBuildReports = PkgBuildReports_v0
-     migrate (PkgBuildReports_v0 m n) =
-         PkgBuildReports (migrateMap m) (migrate n)
+     type MigrateFrom PkgBuildReports = PkgBuildReports_v1
+     migrate (PkgBuildReports_v1 m n) =
+         PkgBuildReports (migrateMap m) n
        where
-         migrateMap = Map.mapKeys migrate
-                    . Map.map (\(br, l) -> (migrate br, fmap migrate  l))
+         migrateMap = Map.map (\(br, l) -> (migrate br, l))
+
+---
+
+deriveSafeCopy 2 'base ''PkgBuildReports_v1
+deriveSafeCopy 2 'base ''BuildReports_v1

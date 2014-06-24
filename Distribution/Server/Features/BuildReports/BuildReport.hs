@@ -25,7 +25,7 @@ module Distribution.Server.Features.BuildReports.BuildReport (
     show,
     showList,
 
-    BuildReport_v0,
+    BuildReport_v1
   ) where
 
 import Distribution.Package
@@ -42,7 +42,7 @@ import qualified Distribution.Text as Text
          ( Text(disp, parse), display )
 import Distribution.ParseUtils
          ( FieldDescr(..), ParseResult(..), Field(..)
-         , simpleField, listField, readFields
+         , simpleField, boolField, listField, readFields
          , syntaxError, locatedErrorMsg, showFields )
 import Distribution.Simple.Utils
          ( comparing )
@@ -51,27 +51,27 @@ import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.MemSize
 
 import qualified Distribution.Compat.ReadP as Parse
-         ( ReadP, pfail, munch1, skipSpaces )
 import qualified Text.PrettyPrint.HughesPJ as Disp
          ( Doc, char, text )
 import Text.PrettyPrint.HughesPJ
          ( (<+>), (<>), render )
-import Data.Serialize as Serialize
-         ( Serialize(..) )
 import Data.SafeCopy
-         ( SafeCopy(..), deriveSafeCopy, extension, base, Migrate(..) )
+         ( deriveSafeCopy, extension, base, Migrate(..) )
 import Test.QuickCheck
          ( Arbitrary(..), elements, oneof )
 import Text.StringTemplate ()
 import Text.StringTemplate.Classes
          ( SElem(..), ToSElem(..) )
 
+import Data.Foldable
+         ( foldMap )
 import Data.List
          ( unfoldr, sortBy )
 import Data.Char as Char
          ( isAlpha, isAlphaNum )
-import qualified Data.ByteString.Char8 as BS
 import qualified Data.Map as Map
+import Data.Time
+         ( UTCTime )
 import Data.Typeable
          ( Typeable )
 import Control.Applicative
@@ -84,6 +84,12 @@ data BuildReport
    = BuildReport {
     -- | The package this build report is about
     package         :: PackageIdentifier,
+
+    -- | The time at which the report was uploaded
+    time            :: Maybe UTCTime,
+
+    -- | Whether the client was generating documentation for upload
+    docBuilder      :: Bool,
 
     -- | The OS and Arch the package was built on
     os              :: OS,
@@ -119,7 +125,8 @@ data BuildReport
   deriving (Eq, Typeable, Show)
 
 data InstallOutcome
-   = DependencyFailed PackageIdentifier
+   = PlanningFailed
+   | DependencyFailed PackageIdentifier
    | DownloadFailed
    | UnpackFailed
    | SetupFailed
@@ -138,6 +145,8 @@ data Outcome = NotTried | Failed | Ok deriving (Eq, Show)
 initialBuildReport :: BuildReport
 initialBuildReport = BuildReport {
     package         = requiredField "package",
+    time            = Nothing,
+    docBuilder      = False,
     os              = requiredField "os",
     arch            = requiredField "arch",
     compiler        = requiredField "compiler",
@@ -218,6 +227,9 @@ fieldDescrs :: [FieldDescr BuildReport]
 fieldDescrs =
  [ simpleField "package"         Text.disp      Text.parse
                                  package        (\v r -> r { package = v })
+ , simpleField "time"            dispTime       parseTime
+                                 time           (\v r -> r { time = v })
+ , boolField   "doc-builder"     docBuilder     (\v r -> r { docBuilder = v })
  , simpleField "os"              Text.disp      Text.parse
                                  os             (\v r -> r { os = v })
  , simpleField "arch"            Text.disp      Text.parse
@@ -237,6 +249,9 @@ fieldDescrs =
  , simpleField "tests-outcome"   Text.disp      Text.parse
                                  testsOutcome   (\v r -> r { testsOutcome = v })
  ]
+  where
+    dispTime = foldMap Text.disp
+    parseTime = (Just <$> Text.parse) Parse.<++ pure Nothing
 
 sortedFieldDescrs :: [FieldDescr BuildReport]
 sortedFieldDescrs = sortBy (comparing fieldName) fieldDescrs
@@ -253,6 +268,7 @@ parseFlag = do
     flag       -> return (FlagName flag, True)
 
 instance Text.Text InstallOutcome where
+  disp PlanningFailed  = Disp.text "PlanningFailed"
   disp (DependencyFailed pkgid) = Disp.text "DependencyFailed" <+> Text.disp pkgid
   disp DownloadFailed  = Disp.text "DownloadFailed"
   disp UnpackFailed    = Disp.text "UnpackFailed"
@@ -265,6 +281,7 @@ instance Text.Text InstallOutcome where
   parse = do
     name <- Parse.munch1 Char.isAlphaNum
     case name of
+      "PlanningFailed"   -> return PlanningFailed
       "DependencyFailed" -> do Parse.skipSpaces
                                pkgid <- Text.parse
                                return (DependencyFailed pkgid)
@@ -290,7 +307,7 @@ instance Text.Text Outcome where
       _          -> Parse.pfail
 
 instance MemSize BuildReport where
-    memSize (BuildReport a b c d e f g h i j) = memSize10 a b c d e f g h i j
+    memSize (BuildReport a b c d e f g h i j k l) = memSize10 a b c d e f g h i j + 2 + memSize k + memSize l
 
 instance MemSize InstallOutcome where
     memSize (DependencyFailed a) = memSize1 a
@@ -306,6 +323,8 @@ instance MemSize Outcome where
 instance ToSElem BuildReport where
     toSElem BuildReport{..} = SM . Map.fromList $
         [ ("package", display package)
+        , ("time", toSElem time)
+        , ("docBuilder", toSElem docBuilder)
         , ("os", display os)
         , ("arch", display arch)
         , ("compiler", display compiler)
@@ -327,10 +346,11 @@ instance Arbitrary BuildReport where
   arbitrary = BuildReport <$> arbitrary <*> arbitrary <*> arbitrary
                           <*> arbitrary <*> arbitrary <*> arbitrary
                           <*> arbitrary <*> arbitrary <*> arbitrary
-                          <*> arbitrary
+                          <*> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary InstallOutcome where
-  arbitrary = oneof [ pure DependencyFailed <*> arbitrary
+  arbitrary = oneof [ pure PlanningFailed
+                    , pure DependencyFailed <*> arbitrary
                     , pure DownloadFailed
                     , pure UnpackFailed
                     , pure SetupFailed
@@ -349,21 +369,65 @@ instance Arbitrary Outcome where
 --
 
 deriveSafeCopy 0 'base      ''Outcome
-deriveSafeCopy 0 'base      ''InstallOutcome
-deriveSafeCopy 2 'extension ''BuildReport
+deriveSafeCopy 1 'extension ''InstallOutcome
+deriveSafeCopy 3 'extension ''BuildReport
 
 
 -------------------
 -- Old SafeCopy versions
 --
 
-newtype BuildReport_v0 = BuildReport_v0 BuildReport
+data BuildReport_v1 = BuildReport_v1 {
+    v1_package         :: PackageIdentifier,
+    v1_os              :: OS,
+    v1_arch            :: Arch,
+    v1_compiler        :: CompilerId,
+    v1_client          :: PackageIdentifier,
+    v1_flagAssignment  :: FlagAssignment,
+    v1_dependencies    :: [PackageIdentifier],
+    v1_installOutcome  :: InstallOutcome_v1,
+    v1_docsOutcome     :: Outcome,
+    v1_testsOutcome    :: Outcome
+  }
 
-instance SafeCopy  BuildReport_v0
-instance Serialize BuildReport_v0 where
-    put (BuildReport_v0 br) = Serialize.put . BS.pack . show $ br
-    get = (BuildReport_v0 . read . BS.unpack) `fmap` Serialize.get
+data InstallOutcome_v1
+    = V1_DependencyFailed PackageIdentifier
+    | V1_DownloadFailed
+    | V1_UnpackFailed
+    | V1_SetupFailed
+    | V1_ConfigureFailed
+    | V1_BuildFailed
+    | V1_InstallFailed
+    | V1_InstallOk
+
+deriveSafeCopy 0 'base ''InstallOutcome_v1
+deriveSafeCopy 2 'base ''BuildReport_v1
 
 instance Migrate BuildReport where
-     type MigrateFrom BuildReport = BuildReport_v0
-     migrate (BuildReport_v0 br) = br
+    type MigrateFrom BuildReport = BuildReport_v1
+    migrate BuildReport_v1{..} = BuildReport {
+        package = v1_package
+      , time = Nothing
+      , docBuilder = True  -- Most reports come from the doc builder anyway
+      , os = v1_os
+      , arch = v1_arch
+      , compiler = v1_compiler
+      , client = v1_client
+      , flagAssignment = v1_flagAssignment
+      , dependencies = v1_dependencies
+      , installOutcome = migrate v1_installOutcome
+      , docsOutcome = v1_docsOutcome
+      , testsOutcome = v1_testsOutcome
+      }
+
+instance Migrate InstallOutcome where
+    type MigrateFrom InstallOutcome = InstallOutcome_v1
+    migrate outcome = case outcome of
+        V1_DependencyFailed pkgid -> DependencyFailed pkgid
+        V1_DownloadFailed -> DownloadFailed
+        V1_UnpackFailed -> UnpackFailed
+        V1_SetupFailed -> SetupFailed
+        V1_ConfigureFailed -> ConfigureFailed
+        V1_BuildFailed -> BuildFailed
+        V1_InstallFailed -> InstallFailed
+        V1_InstallOk -> InstallOk
