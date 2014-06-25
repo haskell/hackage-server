@@ -37,6 +37,16 @@ $hackagePageHeader()$
 
 <table class="properties">
   <tr>
+    <th>Time submitted</th>
+    <td>
+      $if(report.1.time)$
+        $report.1.time$
+      $else$
+        <i>unknown</i>
+      $endif$
+    </td>
+  </tr>
+  <tr>
     <th>Compiler</th>
     <td>$report.1.compiler$</td>
   </tr>
