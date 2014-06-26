@@ -196,7 +196,8 @@ buildReportsFeature name
       case BuildReport.parse $ unpack reportbody of
           Left err -> errBadRequest "Error submitting report" [MText err]
           Right report -> do
-              reportId <- updateState reportsState $ AddReport pkgid (report, Nothing)
+              report' <- liftIO $ BuildReport.affixTimestamp report
+              reportId <- updateState reportsState $ AddReport pkgid (report', Nothing)
               -- redirect to new reports page
               seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 

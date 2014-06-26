@@ -25,6 +25,8 @@ module Distribution.Server.Features.BuildReports.BuildReport (
     show,
     showList,
 
+    affixTimestamp,
+
     BuildReport_v1
   ) where
 
@@ -71,7 +73,7 @@ import Data.Char as Char
          ( isAlpha, isAlphaNum )
 import qualified Data.Map as Map
 import Data.Time
-         ( UTCTime )
+         ( UTCTime, getCurrentTime )
 import Data.Typeable
          ( Typeable )
 import Control.Applicative
@@ -165,6 +167,15 @@ initialBuildReport = BuildReport {
 requiredFields :: [String]
 requiredFields
     = ["package", "os", "arch", "compiler", "client", "install-outcome"]
+
+-- -----------------------------------------------------------------------------
+-- Timestamps
+
+-- | If the 'time' field is empty, fill it in with the current time.
+affixTimestamp :: BuildReport -> IO BuildReport
+affixTimestamp report = case time report of
+    Nothing -> (\v -> report { time = Just v }) <$> getCurrentTime
+    Just _ -> return report
 
 -- -----------------------------------------------------------------------------
 -- Parsing
