@@ -12,6 +12,7 @@ import Distribution.Server.Features.Core
 import Distribution.Server.Features.RecentPackages
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.BuildReports
+import Distribution.Server.Features.BuildReports.Render
 import Distribution.Server.Features.PackageCandidates
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.DownloadCount
@@ -223,6 +224,7 @@ htmlFeature user
                                       upload
                                       tags
                                       docsCore
+                                      reportsCore
                                       download
                                       distros
                                       recent
@@ -406,6 +408,7 @@ mkHtmlCore :: HtmlUtilities
            -> UploadFeature
            -> TagsFeature
            -> DocumentationFeature
+           -> ReportsFeature
            -> DownloadFeature
            -> DistroFeature
            -> RecentPackagesFeature
@@ -424,7 +427,8 @@ mkHtmlCore HtmlUtilities{..}
                           }
            UploadFeature{guardAuthorisedAsMaintainerOrTrustee}
            TagsFeature{queryTagsForPackage}
-           DocumentationFeature{documentationResource, queryHasDocumentation}
+           documentationFeature@DocumentationFeature{documentationResource, queryHasDocumentation}
+           reportsFeature
            DownloadFeature{recentPackageDownloads,totalPackageDownloads}
            DistroFeature{queryPackageStatus}
            RecentPackagesFeature{packageRender}
@@ -479,6 +483,9 @@ mkHtmlCore HtmlUtilities{..}
         let realpkg = rendPkgId render
             pkgname = packageName realpkg
             middleHtml = Pages.renderFields render
+        -- render the build status line
+        buildStatus <- renderBuildStatus documentationFeature reportsFeature pkgid
+        let buildStatusHtml = [("Status", buildStatus)]
         -- get additional information from other features
         prefInfo <- queryGetPreferredInfo pkgname
         let infoUrl = fmap (\_ -> preferredPackageUri versions "" pkgname) $ sumRange prefInfo
@@ -515,7 +522,7 @@ mkHtmlCore HtmlUtilities{..}
               Nothing -> noHtml
         -- and put it all together
         return $ toResponse $ Resource.XHtml $
-            Pages.packagePage render [tagLinks] [deprHtml] (beforeHtml ++ middleHtml ++ afterHtml) [] docURL False
+            Pages.packagePage render [tagLinks] [deprHtml] (beforeHtml ++ buildStatusHtml ++ middleHtml ++ afterHtml) [] docURL False
       where
         showDist (dname, info) = toHtml (display dname ++ ":") +++
             anchor ! [href $ distroUrl info] << toHtml (display $ distroVersion info)

@@ -136,9 +136,9 @@ data InstallOutcome
    | BuildFailed
    | InstallFailed
    | InstallOk
-   deriving (Eq, Show)
+   deriving (Eq, Ord, Show)
 
-data Outcome = NotTried | Failed | Ok deriving (Eq, Show)
+data Outcome = NotTried | Failed | Ok deriving (Eq, Ord, Show)
 
 -- ------------------------------------------------------------
 -- * External format
