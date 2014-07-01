@@ -39,6 +39,7 @@ data ReportsFeature = ReportsFeature {
     packageReports :: DynamicPath -> ([(BuildReportId, BuildReport)] -> ServerPartE Response) -> ServerPartE Response,
     packageReport :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog),
 
+    queryPackageReports :: MonadIO m => PackageId -> m [(BuildReportId, BuildReport)],
     queryBuildLog :: MonadIO m => BuildLog -> m Resource.BuildLog,
 
     reportsResource :: ReportsResource
@@ -151,8 +152,7 @@ buildReportsFeature name
             toResponse ()
         _ -> do
           guardValidPackageId pkgid
-          reportList <- queryState reportsState $ LookupPackageReports pkgid
-          continue $ map (second fst) reportList
+          queryPackageReports pkgid >>= continue
 
     packageReport :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog)
     packageReport dpath = do
@@ -163,6 +163,11 @@ buildReportsFeature name
       case mreport of
         Nothing -> errNotFound "Report not found" [MText "Build report does not exist"]
         Just (report, mlog) -> return (reportId, report, mlog)
+
+    queryPackageReports :: MonadIO m => PackageId -> m [(BuildReportId, BuildReport)]
+    queryPackageReports pkgid = do
+        reports <- queryState reportsState $ LookupPackageReports pkgid
+        return $ map (second fst) reports
 
     queryBuildLog :: MonadIO m => BuildLog -> m Resource.BuildLog
     queryBuildLog (BuildLog blobId) = do
