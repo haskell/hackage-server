@@ -12,6 +12,7 @@ module Distribution.Server.Util.Happstack (
     remainingPathString,
     mime,
     consumeRequestBody,
+    checkCachingETag,
 
     uriEscape
   ) where
@@ -21,8 +22,11 @@ import qualified Data.Map as Map
 import System.FilePath.Posix (takeExtension, (</>))
 import Control.Monad
 import qualified Data.ByteString.Lazy as BS
+import qualified Data.ByteString.Char8 as BS8
 import qualified Network.URI as URI
 
+import Distribution.Server.Framework.ResponseContentTypes (ETag, formatETag)  -- TODO: move to this module
+import Distribution.Server.Framework.Error (ServerPartE)
 
 -- |Passes a list of remaining path segments in the URL. Does not
 -- include the query string. This call only fails if the passed in
@@ -60,3 +64,16 @@ consumeRequestBody = do
       Nothing -> escape $ internalServerError $ toResponse
                    "consumeRequestBody cannot be called more than once."
       Just (Body b) -> return b
+
+
+-- | Check the request for an ETag and return 304 if it matches.
+checkCachingETag :: ETag -> ServerPartE ()
+checkCachingETag expectedtag = do
+    rq <- askRq
+    case getHeader "if-none-match" rq of
+      Just etag -> checkEtag (BS8.unpack etag)
+      _ -> return ()
+    --return $ composeFilter (\r -> setHeader "ETag" (formatETag expectedtag))
+    where checkEtag actualtag =
+            when ((formatETag expectedtag) == actualtag) $
+                finishWith (noContentLength . result 304 $ "")
