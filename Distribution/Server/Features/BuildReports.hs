@@ -90,7 +90,7 @@ buildReportsFeature :: String
                     -> ReportsFeature
 buildReportsFeature name
                     ServerEnv{serverBlobStore = store}
-                    UserFeature{..} UploadFeature{trusteesGroup}
+                    UserFeature{..} UploadFeature{..}
                     CoreResource{ packageInPath
                                 , guardValidPackageId
                                 , lookupPackageId
@@ -201,6 +201,9 @@ buildReportsFeature name
       case BuildReport.parse $ unpack reportbody of
           Left err -> errBadRequest "Error submitting report" [MText err]
           Right report -> do
+              when (BuildReport.docBuilder report) $
+                  -- Check that the submitter can actually upload docs
+                  guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
               report' <- liftIO $ BuildReport.affixTimestamp report
               reportId <- updateState reportsState $ AddReport pkgid (report', Nothing)
               -- redirect to new reports page
