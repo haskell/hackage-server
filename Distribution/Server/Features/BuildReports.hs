@@ -179,9 +179,8 @@ buildReportsFeature name
     textPackageReports dpath = packageReports dpath $ return . toResponse . show
 
     textPackageReport dpath = do
-      (reportId, report, mlog) <- packageReport dpath
-      return . toResponse $ unlines [ "Report #" ++ display reportId, show report
-                                    , maybe "No build log" (const "Build log exists") mlog]
+      (_, report, _) <- packageReport dpath
+      return . toResponse $ BuildReport.show report
 
     -- result: not-found error or text file
     serveBuildLog :: DynamicPath -> ServerPartE Response
