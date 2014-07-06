@@ -22,8 +22,8 @@ lognotice verbosity msg =
     hFlush stdout
 
 loginfo :: Verbosity -> String -> IO ()
-loginfo verboisty msg =
-  when (verboisty >= verbose) $ do
+loginfo verbosity msg =
+  when (verbosity >= verbose) $ do
     BS.hPutStrLn stderr (BS.pack msg)
     hFlush stderr
 
