@@ -71,7 +71,6 @@ instance ToMessage PackageTarball where
   toResponse (PackageTarball bs blobid time) = mkResponse bs
     [ ("Content-Type",  "application/x-gzip")
     , ("Content-MD5",   md5sum)
-    , ("ETag",          formatETag (ETag md5sum))
     , ("Last-modified", formatTime time)
     ]
     where md5sum = blobMd5 blobid

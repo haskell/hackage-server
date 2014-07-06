@@ -17,6 +17,7 @@ module Distribution.Server.Features.Core (
   ) where
 
 import Distribution.Server.Framework
+import Distribution.Server.Framework.BlobStorage (blobMd5)
 
 import Distribution.Server.Features.Core.State
 import Distribution.Server.Features.Core.Backup
@@ -511,6 +512,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           [] -> errNotFound "Tarball not found" [MText "No tarball exists for this package version."]
           ((tb, _):_) -> do
               let blobId = pkgTarballGz tb
+              checkCachingETag (ETag (blobMd5 blobId))
               file <- liftIO $ BlobStorage.fetch store blobId
               runHook_ packageDownloadHook pkgid
               return $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)
