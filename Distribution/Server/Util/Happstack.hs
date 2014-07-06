@@ -68,11 +68,13 @@ consumeRequestBody = do
 -- | Check the request for an ETag and return 304 if it matches.
 checkCachingETag :: Monad m => ETag -> ServerPartT m ()
 checkCachingETag expectedtag = do
+    -- Set the ETag field on the response.
+    composeFilter $ setHeader "ETag" (formatETag expectedtag)
+    -- Check the request for a matching ETag, return 304 if found.
     rq <- askRq
     case getHeader "if-none-match" rq of
       Just etag -> checkEtag (BS8.unpack etag)
       _ -> return ()
-    --return $ composeFilter (\r -> setHeader "ETag" (formatETag expectedtag))
     where checkEtag actualtag =
             when ((formatETag expectedtag) == actualtag) $
                 finishWith (noContentLength . result 304 $ "")

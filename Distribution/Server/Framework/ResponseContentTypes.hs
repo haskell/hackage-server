@@ -54,7 +54,6 @@ instance ToMessage IndexTarball where
   toResponse (IndexTarball bs len md5 time) = mkResponseLen bs len
     [ ("Content-Type", "application/x-gzip")
     , ("Content-MD5",   md5str)
-    , ("ETag",          formatETag (ETag md5str))  -- TODO: set in checkCachingEtag
     , ("Last-modified", formatTime time)
     ]
     where md5str = show md5
