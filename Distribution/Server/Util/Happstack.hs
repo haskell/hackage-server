@@ -81,8 +81,8 @@ useETag expectedtag = do
     -- Check the request for a matching ETag, return 304 if found.
     rq <- askRq
     case getHeader "if-none-match" rq of
-      Just etag -> checkEtag (BS8.unpack etag)
+      Just etag -> checkETag (BS8.unpack etag)
       _ -> return ()
-    where checkEtag actualtag =
+    where checkETag actualtag =
             when ((formatETag expectedtag) == actualtag) $
                 finishWith (noContentLength . result 304 $ "")
