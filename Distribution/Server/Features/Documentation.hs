@@ -204,7 +204,7 @@ documentationFeature name
     serveDocumentationTar dpath =
       withDocumentation (packageDocsWhole documentationResource)
                         dpath $ \_ blobid _ -> do
-        checkCachingETag (Resource.blobETag blobid)
+        checkCachingETag (BlobStorage.blobETag blobid)
         file <- liftIO $ BlobStorage.fetch store blobid
         return $ toResponse $ Resource.DocTarball file blobid
 
@@ -215,7 +215,7 @@ documentationFeature name
       withDocumentation (packageDocsContent documentationResource)
                         dpath $ \pkgid blob index -> do
         let tarball = BlobStorage.filepath store blob
-            etag    = blobETag blob
+            etag    = BlobStorage.blobETag blob
         -- if given a directory, the default page is index.html
         -- the root directory within the tarball is e.g. foo-1.0-docs/
         ServerTarball.serveTarball ["index.html"] (display pkgid ++ "-docs")

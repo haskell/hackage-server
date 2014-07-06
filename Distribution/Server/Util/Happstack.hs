@@ -12,6 +12,9 @@ module Distribution.Server.Util.Happstack (
     remainingPathString,
     mime,
     consumeRequestBody,
+
+    ETag(..),
+    formatETag,
     checkCachingETag,
 
     uriEscape
@@ -24,8 +27,6 @@ import Control.Monad
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Char8 as BS8
 import qualified Network.URI as URI
-
-import Distribution.Server.Framework.ResponseContentTypes (ETag, formatETag)  -- TODO: move to this module
 
 -- |Passes a list of remaining path segments in the URL. Does not
 -- include the query string. This call only fails if the passed in
@@ -63,6 +64,13 @@ consumeRequestBody = do
       Nothing -> escape $ internalServerError $ toResponse
                    "consumeRequestBody cannot be called more than once."
       Just (Body b) -> return b
+
+
+newtype ETag = ETag String
+  deriving (Eq, Ord, Show)
+
+formatETag :: ETag -> String
+formatETag (ETag etag) = '"' : etag ++ ['"']
 
 
 -- | Check the request for an ETag and return 304 if it matches.

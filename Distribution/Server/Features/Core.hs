@@ -511,7 +511,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           [] -> errNotFound "Tarball not found" [MText "No tarball exists for this package version."]
           ((tb, _):_) -> do
               let blobId = pkgTarballGz tb
-              checkCachingETag (blobETag blobId)
+              checkCachingETag (BlobStorage.blobETag blobId)
               file <- liftIO $ BlobStorage.fetch store blobId
               runHook_ packageDownloadHook pkgid
               return $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)

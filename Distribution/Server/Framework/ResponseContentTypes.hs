@@ -38,16 +38,6 @@ import Text.CSV (printCSV, CSV)
 import Control.DeepSeq
 
 
-newtype ETag = ETag String
-  deriving (Eq, Ord, Show)
-
-blobETag :: BlobId -> ETag
-blobETag = ETag . blobMd5
-
-formatETag :: ETag -> String
-formatETag (ETag etag) = '"' : etag ++ ['"']
-
-
 data IndexTarball = IndexTarball !BS.Lazy.ByteString !Int !MD5Digest !UTCTime
 
 instance ToMessage IndexTarball where
