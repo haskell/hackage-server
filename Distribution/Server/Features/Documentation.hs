@@ -14,7 +14,7 @@ import Distribution.Server.Features.TarIndexCache
 
 import Distribution.Server.Framework.BackupRestore
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
-import Distribution.Server.Framework.BlobStorage (BlobId)
+import Distribution.Server.Framework.BlobStorage (BlobId, blobMd5)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Util.ServeTarball as ServerTarball
 import Data.TarIndex (TarIndex)
@@ -203,9 +203,10 @@ documentationFeature name
     serveDocumentationTar :: DynamicPath -> ServerPartE Response
     serveDocumentationTar dpath =
       withDocumentation (packageDocsWhole documentationResource)
-                        dpath $ \_ blob _ -> do
-        file <- liftIO $ BlobStorage.fetch store blob
-        return $ toResponse $ Resource.DocTarball file blob
+                        dpath $ \_ blobid _ -> do
+        checkCachingETag (ETag (blobMd5 blobid))
+        file <- liftIO $ BlobStorage.fetch store blobid
+        return $ toResponse $ Resource.DocTarball file blobid
 
 
     -- return: not-found error or tarball

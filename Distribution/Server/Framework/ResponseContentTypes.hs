@@ -81,7 +81,6 @@ instance ToMessage DocTarball where
   toResponse (DocTarball bs blobid) = mkResponse bs
     [ ("Content-Type",  "application/x-tar")
     , ("Content-MD5",   md5sum)
-    , ("ETag",          formatETag (ETag md5sum))
     ]
     where md5sum = blobMd5 blobid
 
