@@ -190,6 +190,7 @@ runPackageTests = do
        etag <- getETag "/packages/index.tar.gz"
        info $ "Got etag: " ++ etag
        checkETag etag "/packages/index.tar.gz"
+       checkETagMismatch (etag ++ "garbled123") "/packages/index.tar.gz"
     do info "Getting testpackage info"
        xs <- validate NoAuth "/package/testpackage"
        unless ("The testpackage package" `isInfixOf` xs) $

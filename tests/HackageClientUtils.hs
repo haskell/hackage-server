@@ -247,9 +247,17 @@ getETag url = Http.responseHeader HdrETag (mkGetReq url)
 
 checkETag :: String -> RelativeURL -> IO ()
 checkETag etag url = void $
-  Http.execRequest' NoAuth rq isNotModified
-  where rq = Request (fromJust $ parseURI $ mkUrl url) GET hdrs ""
-        hdrs = [mkHeader HdrIfNoneMatch etag]
+  Http.execRequest' NoAuth (mkGetReqWithETag url etag) isNotModified
+
+checkETagMismatch :: String -> RelativeURL -> IO ()
+checkETagMismatch etag url = void $
+  Http.execRequest NoAuth (mkGetReqWithETag url etag)
+
+mkGetReqWithETag :: String -> RelativeURL -> Request_String
+mkGetReqWithETag url etag =
+    Request (fromJust $ parseURI $ mkUrl url) GET hdrs ""
+  where
+    hdrs = [mkHeader HdrIfNoneMatch etag]
 
 getJSONStrings :: RelativeURL -> IO [String]
 getJSONStrings url = getUrl NoAuth url >>= decodeJSON
