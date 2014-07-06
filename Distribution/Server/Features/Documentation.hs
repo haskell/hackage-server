@@ -14,7 +14,7 @@ import Distribution.Server.Features.TarIndexCache
 
 import Distribution.Server.Framework.BackupRestore
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
-import Distribution.Server.Framework.BlobStorage (BlobId, blobMd5)
+import Distribution.Server.Framework.BlobStorage (BlobId)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Util.ServeTarball as ServerTarball
 import Data.TarIndex (TarIndex)
@@ -204,7 +204,7 @@ documentationFeature name
     serveDocumentationTar dpath =
       withDocumentation (packageDocsWhole documentationResource)
                         dpath $ \_ blobid _ -> do
-        checkCachingETag (ETag (blobMd5 blobid))
+        checkCachingETag (Resource.blobETag blobid)
         file <- liftIO $ BlobStorage.fetch store blobid
         return $ toResponse $ Resource.DocTarball file blobid
 
