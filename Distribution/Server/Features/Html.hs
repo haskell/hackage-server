@@ -11,6 +11,7 @@ import Distribution.Server.Framework.Templating
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.RecentPackages
 import Distribution.Server.Features.Upload
+import Distribution.Server.Features.BuildReports
 import Distribution.Server.Features.PackageCandidates
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.DownloadCount
@@ -55,6 +56,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Maybe (fromMaybe, isJust)
 import qualified Data.Text as T
+import Data.Traversable (traverse)
 import Control.Applicative (optional)
 import Data.Array (Array, listArray)
 import qualified Data.Array as Array
@@ -92,6 +94,7 @@ initHtmlFeature :: ServerEnv -> UserFeature -> CoreFeature -> RecentPackagesFeat
                 -> MirrorFeature -> DistroFeature
                 -> DocumentationFeature
                 -> DocumentationFeature
+                -> ReportsFeature
                 -> UserDetailsFeature
                 -> IO HtmlFeature
 
@@ -106,7 +109,9 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
                 list@ListFeature{itemUpdate}
                 names mirror
                 distros
-                docsCore docsCandidates usersdetails = do
+                docsCore docsCandidates
+                reportsCore
+                usersdetails = do
 
     loginfo verbosity "Initialising html feature, start"
 
@@ -114,6 +119,7 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
     templates <- loadTemplates serverTemplatesMode
                    [serverTemplatesDir, serverTemplatesDir </> "Html"]
                    [ "maintain.html", "maintain-candidate.html"
+                   , "reports.html", "report.html"
                    , "distro-monitor.html" ]
 
     -- do rec, tie the knot
@@ -125,6 +131,7 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
                           list names
                           mirror distros
                           docsCore docsCandidates
+                          reportsCore
                           usersdetails
                           (htmlUtilities core tags)
                           mainCache namesCache
@@ -168,6 +175,7 @@ htmlFeature :: UserFeature
             -> DistroFeature
             -> DocumentationFeature
             -> DocumentationFeature
+            -> ReportsFeature
             -> UserDetailsFeature
             -> HtmlUtilities
             -> AsyncCache Response
@@ -184,7 +192,9 @@ htmlFeature user
             list@ListFeature{getAllLists}
             names
             mirror distros
-            docsCore docsCandidates usersdetails
+            docsCore docsCandidates
+            reportsCore
+            usersdetails
             utilities@HtmlUtilities{..}
             cachePackagesPage cacheNamesPage
             templates
@@ -224,6 +234,7 @@ htmlFeature user
     htmlUsers      = mkHtmlUsers      user usersdetails
     htmlUploads    = mkHtmlUploads    utilities upload
     htmlDownloads  = mkHtmlDownloads  utilities download
+    htmlReports    = mkHtmlReports    utilities core reportsCore templates
     htmlCandidates = mkHtmlCandidates utilities core versions upload docsCandidates candidates templates
     htmlPreferred  = mkHtmlPreferred  utilities core versions
     htmlTags       = mkHtmlTags       utilities core list tags
@@ -233,6 +244,7 @@ htmlFeature user
         htmlCoreResources       htmlCore
       , htmlUsersResources      htmlUsers
       , htmlUploadsResources    htmlUploads
+      , htmlReportsResources    htmlReports
       , htmlCandidatesResources htmlCandidates
       , htmlPreferredResources  htmlPreferred
       , htmlDownloadsResources  htmlDownloads
@@ -688,6 +700,50 @@ mkHtmlUploads HtmlUtilities{..} UploadFeature{..} = HtmlUploads{..}
           ] ++ case warns of
             [] -> []
             _  -> [paragraph << "There were some warnings:", unordList warns]
+
+{-------------------------------------------------------------------------------
+  Build reports
+-------------------------------------------------------------------------------}
+
+data HtmlReports = HtmlReports {
+    htmlReportsResources :: [Resource]
+  }
+
+mkHtmlReports :: HtmlUtilities -> CoreFeature -> ReportsFeature -> Templates -> HtmlReports
+mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = HtmlReports{..}
+  where
+    CoreResource{packageInPath} = coreResource
+    ReportsResource{..} = reportsResource
+
+    htmlReportsResources = [
+        (extendResource reportsList) {
+            resourceGet = [ ("html", servePackageReports) ]
+          }
+      , (extendResource reportsPage) {
+            resourceGet = [ ("html", servePackageReport) ]
+          }
+      ]
+
+    servePackageReports :: DynamicPath -> ServerPartE Response
+    servePackageReports dpath = packageReports dpath $ \reports -> do
+        pkgid <- packageInPath dpath
+        template <- getTemplate templates "reports.html"
+        return $ toResponse $ template
+          [ "pkgid" $= (pkgid :: PackageIdentifier)
+          , "reports" $= reports
+          ]
+
+    servePackageReport :: DynamicPath -> ServerPartE Response
+    servePackageReport dpath = do
+        (repid, report, mlog) <- packageReport dpath
+        mlog' <- traverse queryBuildLog mlog
+        pkgid <- packageInPath dpath
+        template <- getTemplate templates "report.html"
+        return $ toResponse $ template
+          [ "pkgid" $= (pkgid :: PackageIdentifier)
+          , "report" $= (repid, report)
+          , "log" $= toMessage <$> mlog'
+          ]
 
 {-------------------------------------------------------------------------------
   Candidates

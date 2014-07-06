@@ -1,5 +1,5 @@
-{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, TemplateHaskell,
-             TypeFamilies #-}
+{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, RecordWildCards,
+             TemplateHaskell, TypeFamilies #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Client.Reporting
@@ -29,7 +29,7 @@ module Distribution.Server.Features.BuildReports.BuildReport (
   ) where
 
 import Distribution.Package
-         ( PackageIdentifier )
+         ( PackageIdentifier(..) )
 import Distribution.PackageDescription
          ( FlagName(..), FlagAssignment )
 --import Distribution.Version
@@ -39,7 +39,7 @@ import Distribution.System
 import Distribution.Compiler
          ( CompilerId )
 import qualified Distribution.Text as Text
-         ( Text(disp, parse) )
+         ( Text(disp, parse), display )
 import Distribution.ParseUtils
          ( FieldDescr(..), ParseResult(..), Field(..)
          , simpleField, listField, readFields
@@ -55,19 +55,23 @@ import qualified Distribution.Compat.ReadP as Parse
 import qualified Text.PrettyPrint.HughesPJ as Disp
          ( Doc, char, text )
 import Text.PrettyPrint.HughesPJ
-         ( (<+>), (<>) )
+         ( (<+>), (<>), render )
 import Data.Serialize as Serialize
          ( Serialize(..) )
 import Data.SafeCopy
          ( SafeCopy(..), deriveSafeCopy, extension, base, Migrate(..) )
 import Test.QuickCheck
          ( Arbitrary(..), elements, oneof )
+import Text.StringTemplate ()
+import Text.StringTemplate.Classes
+         ( SElem(..), ToSElem(..) )
 
 import Data.List
          ( unfoldr, sortBy )
 import Data.Char as Char
          ( isAlpha, isAlphaNum )
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.Map as Map
 import Data.Typeable
          ( Typeable )
 import Control.Applicative
@@ -294,6 +298,26 @@ instance MemSize InstallOutcome where
 
 instance MemSize Outcome where
     memSize _ = memSize0
+
+-------------------
+-- HStringTemplate instances
+--
+
+instance ToSElem BuildReport where
+    toSElem BuildReport{..} = SM . Map.fromList $
+        [ ("package", display package)
+        , ("os", display os)
+        , ("arch", display arch)
+        , ("compiler", display compiler)
+        , ("client", display client)
+        , ("flagAssignment", toSElem $ map (render . dispFlag) flagAssignment)
+        , ("dependencies", toSElem $ map Text.display dependencies)
+        , ("installOutcome", display installOutcome)
+        , ("docsOutcome", display docsOutcome)
+        , ("testsOutcome", display testsOutcome)
+        ]
+      where
+        display value = toSElem (Text.display value)
 
 -------------------
 -- Arbitrary instances
