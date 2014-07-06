@@ -15,7 +15,7 @@ module Distribution.Server.Util.Happstack (
 
     ETag(..),
     formatETag,
-    checkCachingETag,
+    useETag,
 
     uriEscape
   ) where
@@ -73,9 +73,9 @@ formatETag :: ETag -> String
 formatETag (ETag etag) = '"' : etag ++ ['"']
 
 
--- | Check the request for an ETag and return 304 if it matches.
-checkCachingETag :: Monad m => ETag -> ServerPartT m ()
-checkCachingETag expectedtag = do
+-- | Adds an ETag to the response, returns 304 if the request ETag matches.
+useETag :: Monad m => ETag -> ServerPartT m ()
+useETag expectedtag = do
     -- Set the ETag field on the response.
     composeFilter $ setHeader "ETag" (formatETag expectedtag)
     -- Check the request for a matching ETag, return 304 if found.

@@ -204,7 +204,7 @@ documentationFeature name
     serveDocumentationTar dpath =
       withDocumentation (packageDocsWhole documentationResource)
                         dpath $ \_ blobid _ -> do
-        checkCachingETag (BlobStorage.blobETag blobid)
+        useETag (BlobStorage.blobETag blobid)
         file <- liftIO $ BlobStorage.fetch store blobid
         return $ toResponse $ Resource.DocTarball file blobid
 
