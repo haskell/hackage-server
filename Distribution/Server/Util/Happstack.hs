@@ -26,7 +26,6 @@ import qualified Data.ByteString.Char8 as BS8
 import qualified Network.URI as URI
 
 import Distribution.Server.Framework.ResponseContentTypes (ETag, formatETag)  -- TODO: move to this module
-import Distribution.Server.Framework.Error (ServerPartE)
 
 -- |Passes a list of remaining path segments in the URL. Does not
 -- include the query string. This call only fails if the passed in
@@ -67,7 +66,7 @@ consumeRequestBody = do
 
 
 -- | Check the request for an ETag and return 304 if it matches.
-checkCachingETag :: ETag -> ServerPartE ()
+checkCachingETag :: Monad m => ETag -> ServerPartT m ()
 checkCachingETag expectedtag = do
     rq <- askRq
     case getHeader "if-none-match" rq of
