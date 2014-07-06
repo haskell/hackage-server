@@ -8,6 +8,7 @@ module HttpUtils (
   , isAccepted
   , isNoContent
   , isSeeOther
+  , isNotModified
   , isUnauthorized
   , isForbidden
   , parseQuery
@@ -15,6 +16,7 @@ module HttpUtils (
   , Authorization(..)
   , execRequest
   , execRequest'
+  , responseHeader
   , execPostFile
   -- * Interface to html5.validator.nu
   , validate
@@ -39,11 +41,12 @@ import Util
 type ExpectedCode = (Int, Int, Int) -> Bool
 
 isOk, isAccepted, isNoContent, isSeeOther :: ExpectedCode
-isUnauthorized, isForbidden :: ExpectedCode
+isNotModified, isUnauthorized, isForbidden :: ExpectedCode
 isOk           = (== (2, 0, 0))
 isAccepted     = (== (2, 0, 2))
 isNoContent    = (== (2, 0, 4))
 isSeeOther     = (== (3, 0, 3))
+isNotModified  = (== (3, 0, 4))
 isUnauthorized = (== (4, 0, 1))
 isForbidden    = (== (4, 0, 3))
 
@@ -106,6 +109,15 @@ execRequest' auth req' expectedCode = withAuth auth req' $ \req -> do
       Left e -> die ("Request failed: " ++ show e)
       Right rsp | expectedCode (rspCode rsp) -> return $ rspBody rsp
                 | otherwise                  -> badResponse rsp
+
+responseHeader :: HeaderName -> Request_String -> IO String
+responseHeader h req = do
+    res <- simpleHTTP req
+    case res of
+      Left e -> die ("Request failed: " ++ show e)
+      Right rsp -> case lookupHeader h $ getHeaders rsp of
+                     Just v -> return v
+                     _ -> die ("Header missing: " ++ show h)
 
 execPostFile :: ExpectedCode
              -> Authorization -> Request_String -> String
