@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: browse reset requests</title>
+<title>Browse reset requests | Hackage</title>
 </head>
 
 <body>

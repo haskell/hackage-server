@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: user account $account.name$</title>
+<title>User account $account.name$ | Hackage</title>
 </head>
 
 <body>

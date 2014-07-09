@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: Account recovery</title>
+<title>Account recovery | Hackage</title>
 </head>
 
 <body>

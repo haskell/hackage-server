@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: admin front-end</title>
+<title>Admin front-end | Hackage</title>
 </head>
 
 <body>

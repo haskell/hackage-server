@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: Uploading packages and package candidates</title>
+<title>Uploading packages and package candidates | Hackage</title>
 </head>
 
 <body>

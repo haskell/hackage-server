@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: introduction</title>
+<title>Introduction | Hackage</title>
 </head>
 
 <body>
