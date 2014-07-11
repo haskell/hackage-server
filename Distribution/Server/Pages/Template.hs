@@ -25,7 +25,7 @@ hackagePageWith headExtra docTitle docSubtitle docContent bodyExtra =
     toHtml [ header << (docHead ++ headExtra)
            , body   << (docBody ++ bodyExtra) ]
   where
-    docHead   = [ thetitle << ("Hackage: " ++ docTitle)
+    docHead   = [ thetitle << (docTitle ++ " | Hackage")
                 , thelink ! [ rel "stylesheet"
                             , href stylesheetURL
                             , thetype "text/css"] << noHtml

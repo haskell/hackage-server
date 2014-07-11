@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: Published new revision for $pkgid$</title>
+<title>Published new revision for $pkgid$ | Hackage</title>
 </head>
 
 <body>
