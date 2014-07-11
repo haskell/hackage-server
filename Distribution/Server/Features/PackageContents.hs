@@ -118,7 +118,7 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
     packageTarball PkgInfo{pkgTarball = (pkgTarball, _) : _} = do
       let blobid = pkgTarballNoGz pkgTarball
           fp     = BlobStorage.filepath store blobid
-          etag   = blobETag blobid
+          etag   = BlobStorage.blobETag blobid
       index <- cachedPackageTarIndex pkgTarball
       return $ Right (fp, etag, index)
     packageTarball _ =
