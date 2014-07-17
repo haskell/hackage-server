@@ -23,7 +23,7 @@ import Happstack.Server.Monads
 import Happstack.Server.Routing (method)
 import Happstack.Server.Response
 import Happstack.Server.FileServe as Happstack (mimeTypes)
-import Distribution.Server.Util.Happstack (remainingPath, ETag(..), formatETag)
+import Distribution.Server.Util.Happstack (remainingPath)
 import Distribution.Server.Pages.Template (hackagePage)
 import Distribution.Server.Framework.ResponseContentTypes as Resource
 
@@ -48,9 +48,8 @@ serveTarball :: MonadIO m
              -> FilePath   -- root dir in tar to serve
              -> FilePath   -- the tarball
              -> TarIndex   -- index for tarball
-             -> ETag       -- the etag
              -> ServerPartT m Response
-serveTarball indices tarRoot tarball tarIndex etag = do
+serveTarball indices tarRoot tarball tarIndex = do
     rq <- askRq
     action GET $ remainingPath $ \paths -> do
 
@@ -70,7 +69,7 @@ serveTarball indices tarRoot tarball tarIndex etag = do
              case TarIndex.lookup tarIndex path of
                Just (TarIndex.TarFileEntry off)
                    -> do
-                 tfe <- liftIO $ serveTarEntry tarball off path etag
+                 tfe <- liftIO $ serveTarEntry tarball off path
                  ok (toResponse tfe)
                _ -> mzero
 
@@ -84,8 +83,8 @@ serveTarball indices tarRoot tarball tarIndex etag = do
                  -> seeOther (addTrailingPathSeparator fullPath) (toResponse ())
 
                  | otherwise
-                 -> ok $ setHeader "ETag" (formatETag etag) $
-                         toResponse $ Resource.XHtml $ renderDirIndex fs
+                 -> do
+                      ok $ toResponse $ Resource.XHtml $ renderDirIndex fs
                _ -> mzero
 
 renderDirIndex :: [FilePath] -> XHtml.Html
@@ -94,8 +93,8 @@ renderDirIndex entries = hackagePage "Directory Listing"
       XHtml.+++ XHtml.br
     | e <- entries ]
 
-serveTarEntry :: FilePath -> Int -> FilePath -> ETag -> IO Response
-serveTarEntry tarfile off fname etag = do
+serveTarEntry :: FilePath -> Int -> FilePath -> IO Response
+serveTarEntry tarfile off fname = do
   htar <- openFile tarfile ReadMode
   hSeek htar AbsoluteSeek (fromIntegral (off * 512))
   header <- BS.hGet htar 512
@@ -107,8 +106,7 @@ serveTarEntry tarfile off fname etag = do
                            ext       -> ext
              mimeType = Map.findWithDefault "text/plain" extension mimeTypes'
              response = ((setHeader "Content-Length" (show size)) .
-                         (setHeader "Content-Type" mimeType) .
-                         (setHeader "ETag" (formatETag etag))) $
+                         (setHeader "Content-Type" mimeType)) $
                          resultBS 200 body
          return response
     _ -> fail "oh noes!!"
