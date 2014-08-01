@@ -118,7 +118,6 @@ executable hackage-server
     Distribution.Server.Packages.Render
     Distribution.Server.Packages.ChangeLog
 
-    Distribution.Server.Pages.BuildReports
     Distribution.Server.Pages.Distributions
     Distribution.Server.Pages.Group
     Distribution.Server.Pages.Index
@@ -176,6 +175,7 @@ executable hackage-server
       Distribution.Server.Features.BuildReports.BuildReport
       Distribution.Server.Features.BuildReports.BuildReports
       Distribution.Server.Features.BuildReports.Backup
+      Distribution.Server.Features.BuildReports.Render
       Distribution.Server.Features.BuildReports.State
       Distribution.Server.Features.PackageCandidates
       Distribution.Server.Features.PackageCandidates.Types

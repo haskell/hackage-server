@@ -1,5 +1,5 @@
-{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, TemplateHaskell,
-             TypeFamilies #-}
+{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, RecordWildCards,
+             TemplateHaskell, TypeFamilies #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Client.Reporting
@@ -24,12 +24,14 @@ module Distribution.Server.Features.BuildReports.BuildReport (
     parseList,
     show,
     showList,
-    
-    BuildReport_v0,
+
+    affixTimestamp,
+
+    BuildReport_v1
   ) where
 
 import Distribution.Package
-         ( PackageIdentifier )
+         ( PackageIdentifier(..) )
 import Distribution.PackageDescription
          ( FlagName(..), FlagAssignment )
 --import Distribution.Version
@@ -39,10 +41,10 @@ import Distribution.System
 import Distribution.Compiler
          ( CompilerId )
 import qualified Distribution.Text as Text
-         ( Text(disp, parse) )
+         ( Text(disp, parse), display )
 import Distribution.ParseUtils
          ( FieldDescr(..), ParseResult(..), Field(..)
-         , simpleField, listField, readFields
+         , simpleField, boolField, listField, readFields
          , syntaxError, locatedErrorMsg, showFields )
 import Distribution.Simple.Utils
          ( comparing )
@@ -51,26 +53,31 @@ import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.MemSize
 
 import qualified Distribution.Compat.ReadP as Parse
-         ( ReadP, pfail, munch1, skipSpaces )
 import qualified Text.PrettyPrint.HughesPJ as Disp
          ( Doc, char, text )
 import Text.PrettyPrint.HughesPJ
-         ( (<+>), (<>) )
-import Data.Serialize as Serialize
-         ( Serialize(..) )
+         ( (<+>), (<>), render )
 import Data.SafeCopy
-         ( SafeCopy(..), deriveSafeCopy, extension, base, Migrate(..) )
+         ( deriveSafeCopy, extension, base, Migrate(..) )
 import Test.QuickCheck
          ( Arbitrary(..), elements, oneof )
+import Text.StringTemplate ()
+import Text.StringTemplate.Classes
+         ( SElem(..), ToSElem(..) )
 
+import Data.Foldable
+         ( foldMap )
 import Data.List
          ( unfoldr, sortBy )
 import Data.Char as Char
          ( isAlpha, isAlphaNum )
-import qualified Data.ByteString.Char8 as BS
+import qualified Data.Map as Map
+import Data.Time
+         ( UTCTime, getCurrentTime )
 import Data.Typeable
          ( Typeable )
 import Control.Applicative
+import Control.Monad
 
 import Prelude hiding (show, read)
 
@@ -79,6 +86,12 @@ data BuildReport
    = BuildReport {
     -- | The package this build report is about
     package         :: PackageIdentifier,
+
+    -- | The time at which the report was uploaded
+    time            :: Maybe UTCTime,
+
+    -- | Whether the client was generating documentation for upload
+    docBuilder      :: Bool,
 
     -- | The OS and Arch the package was built on
     os              :: OS,
@@ -114,7 +127,8 @@ data BuildReport
   deriving (Eq, Typeable, Show)
 
 data InstallOutcome
-   = DependencyFailed PackageIdentifier
+   = PlanningFailed
+   | DependencyFailed PackageIdentifier
    | DownloadFailed
    | UnpackFailed
    | SetupFailed
@@ -122,9 +136,9 @@ data InstallOutcome
    | BuildFailed
    | InstallFailed
    | InstallOk
-   deriving (Eq, Show)
+   deriving (Eq, Ord, Show)
 
-data Outcome = NotTried | Failed | Ok deriving (Eq, Show)
+data Outcome = NotTried | Failed | Ok deriving (Eq, Ord, Show)
 
 -- ------------------------------------------------------------
 -- * External format
@@ -133,6 +147,8 @@ data Outcome = NotTried | Failed | Ok deriving (Eq, Show)
 initialBuildReport :: BuildReport
 initialBuildReport = BuildReport {
     package         = requiredField "package",
+    time            = Nothing,
+    docBuilder      = False,
     os              = requiredField "os",
     arch            = requiredField "arch",
     compiler        = requiredField "compiler",
@@ -148,6 +164,19 @@ initialBuildReport = BuildReport {
   where
     requiredField fname = error ("required field: " ++ fname)
 
+requiredFields :: [String]
+requiredFields
+    = ["package", "os", "arch", "compiler", "client", "install-outcome"]
+
+-- -----------------------------------------------------------------------------
+-- Timestamps
+
+-- | If the 'time' field is empty, fill it in with the current time.
+affixTimestamp :: BuildReport -> IO BuildReport
+affixTimestamp report = case time report of
+    Nothing -> (\v -> report { time = Just v }) <$> getCurrentTime
+    Just _ -> return report
+
 -- -----------------------------------------------------------------------------
 -- Parsing
 
@@ -161,14 +190,13 @@ parse s = case parseFields s of
   ParseFailed perror -> Left msg where (_, msg) = locatedErrorMsg perror
   ParseOk   _ report -> Right report
 
---FIXME: this does not allow for optional or repeated fields
 parseFields :: String -> ParseResult BuildReport
 parseFields input = do
   fields <- mapM extractField =<< readFields input
   let merged = mergeBy (\desc (_,name,_) -> compare (fieldName desc) name)
                        sortedFieldDescrs
                        (sortBy (comparing (\(_,name,_) -> name)) fields)
-  checkMerged initialBuildReport merged
+  foldM checkMerged initialBuildReport merged
 
   where
     extractField :: Field -> ParseResult (Int, String, String)
@@ -176,15 +204,15 @@ parseFields input = do
     extractField (Section line _ _ _) = syntaxError line "Unrecognized stanza"
     extractField (IfBlock line _ _ _) = syntaxError line "Unrecognized stanza"
 
-    checkMerged report [] = return report
-    checkMerged report (merged:remaining) = case merged of
-      InBoth fieldDescr (line, _name, value) -> do
-        report' <- fieldSet fieldDescr line value report
-        checkMerged report' remaining
+    checkMerged report merged = case merged of
+      InBoth fieldDescr (line, _name, value) ->
+        fieldSet fieldDescr line value report
       OnlyInRight (line, name, _) ->
         syntaxError line ("Unrecognized field " ++ name)
-      OnlyInLeft  fieldDescr ->
-        fail ("Missing field " ++ fieldName fieldDescr)
+      OnlyInLeft  fieldDescr
+        | fieldName fieldDescr `elem` requiredFields ->
+            fail ("Missing field " ++ fieldName fieldDescr)
+        | otherwise -> return report
 
 parseList :: String -> [BuildReport]
 parseList str =
@@ -210,6 +238,9 @@ fieldDescrs :: [FieldDescr BuildReport]
 fieldDescrs =
  [ simpleField "package"         Text.disp      Text.parse
                                  package        (\v r -> r { package = v })
+ , simpleField "time"            dispTime       parseTime
+                                 time           (\v r -> r { time = v })
+ , boolField   "doc-builder"     docBuilder     (\v r -> r { docBuilder = v })
  , simpleField "os"              Text.disp      Text.parse
                                  os             (\v r -> r { os = v })
  , simpleField "arch"            Text.disp      Text.parse
@@ -229,6 +260,9 @@ fieldDescrs =
  , simpleField "tests-outcome"   Text.disp      Text.parse
                                  testsOutcome   (\v r -> r { testsOutcome = v })
  ]
+  where
+    dispTime = foldMap Text.disp
+    parseTime = (Just <$> Text.parse) Parse.<++ pure Nothing
 
 sortedFieldDescrs :: [FieldDescr BuildReport]
 sortedFieldDescrs = sortBy (comparing fieldName) fieldDescrs
@@ -245,6 +279,7 @@ parseFlag = do
     flag       -> return (FlagName flag, True)
 
 instance Text.Text InstallOutcome where
+  disp PlanningFailed  = Disp.text "PlanningFailed"
   disp (DependencyFailed pkgid) = Disp.text "DependencyFailed" <+> Text.disp pkgid
   disp DownloadFailed  = Disp.text "DownloadFailed"
   disp UnpackFailed    = Disp.text "UnpackFailed"
@@ -257,6 +292,7 @@ instance Text.Text InstallOutcome where
   parse = do
     name <- Parse.munch1 Char.isAlphaNum
     case name of
+      "PlanningFailed"   -> return PlanningFailed
       "DependencyFailed" -> do Parse.skipSpaces
                                pkgid <- Text.parse
                                return (DependencyFailed pkgid)
@@ -282,7 +318,7 @@ instance Text.Text Outcome where
       _          -> Parse.pfail
 
 instance MemSize BuildReport where
-    memSize (BuildReport a b c d e f g h i j) = memSize10 a b c d e f g h i j
+    memSize (BuildReport a b c d e f g h i j k l) = memSize10 a b c d e f g h i j + 2 + memSize k + memSize l
 
 instance MemSize InstallOutcome where
     memSize (DependencyFailed a) = memSize1 a
@@ -292,6 +328,28 @@ instance MemSize Outcome where
     memSize _ = memSize0
 
 -------------------
+-- HStringTemplate instances
+--
+
+instance ToSElem BuildReport where
+    toSElem BuildReport{..} = SM . Map.fromList $
+        [ ("package", display package)
+        , ("time", toSElem time)
+        , ("docBuilder", toSElem docBuilder)
+        , ("os", display os)
+        , ("arch", display arch)
+        , ("compiler", display compiler)
+        , ("client", display client)
+        , ("flagAssignment", toSElem $ map (render . dispFlag) flagAssignment)
+        , ("dependencies", toSElem $ map Text.display dependencies)
+        , ("installOutcome", display installOutcome)
+        , ("docsOutcome", display docsOutcome)
+        , ("testsOutcome", display testsOutcome)
+        ]
+      where
+        display value = toSElem (Text.display value)
+
+-------------------
 -- Arbitrary instances
 --
 
@@ -299,10 +357,11 @@ instance Arbitrary BuildReport where
   arbitrary = BuildReport <$> arbitrary <*> arbitrary <*> arbitrary
                           <*> arbitrary <*> arbitrary <*> arbitrary
                           <*> arbitrary <*> arbitrary <*> arbitrary
-                          <*> arbitrary
+                          <*> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary InstallOutcome where
-  arbitrary = oneof [ pure DependencyFailed <*> arbitrary
+  arbitrary = oneof [ pure PlanningFailed
+                    , pure DependencyFailed <*> arbitrary
                     , pure DownloadFailed
                     , pure UnpackFailed
                     , pure SetupFailed
@@ -321,21 +380,65 @@ instance Arbitrary Outcome where
 --
 
 deriveSafeCopy 0 'base      ''Outcome
-deriveSafeCopy 0 'base      ''InstallOutcome
-deriveSafeCopy 2 'extension ''BuildReport
-    
-    
+deriveSafeCopy 1 'extension ''InstallOutcome
+deriveSafeCopy 3 'extension ''BuildReport
+
+
 -------------------
 -- Old SafeCopy versions
 --
 
-newtype BuildReport_v0 = BuildReport_v0 BuildReport
+data BuildReport_v1 = BuildReport_v1 {
+    v1_package         :: PackageIdentifier,
+    v1_os              :: OS,
+    v1_arch            :: Arch,
+    v1_compiler        :: CompilerId,
+    v1_client          :: PackageIdentifier,
+    v1_flagAssignment  :: FlagAssignment,
+    v1_dependencies    :: [PackageIdentifier],
+    v1_installOutcome  :: InstallOutcome_v1,
+    v1_docsOutcome     :: Outcome,
+    v1_testsOutcome    :: Outcome
+  }
 
-instance SafeCopy  BuildReport_v0
-instance Serialize BuildReport_v0 where
-    put (BuildReport_v0 br) = Serialize.put . BS.pack . show $ br
-    get = (BuildReport_v0 . read . BS.unpack) `fmap` Serialize.get
+data InstallOutcome_v1
+    = V1_DependencyFailed PackageIdentifier
+    | V1_DownloadFailed
+    | V1_UnpackFailed
+    | V1_SetupFailed
+    | V1_ConfigureFailed
+    | V1_BuildFailed
+    | V1_InstallFailed
+    | V1_InstallOk
+
+deriveSafeCopy 0 'base ''InstallOutcome_v1
+deriveSafeCopy 2 'base ''BuildReport_v1
 
 instance Migrate BuildReport where
-     type MigrateFrom BuildReport = BuildReport_v0
-     migrate (BuildReport_v0 br) = br
+    type MigrateFrom BuildReport = BuildReport_v1
+    migrate BuildReport_v1{..} = BuildReport {
+        package = v1_package
+      , time = Nothing
+      , docBuilder = True  -- Most reports come from the doc builder anyway
+      , os = v1_os
+      , arch = v1_arch
+      , compiler = v1_compiler
+      , client = v1_client
+      , flagAssignment = v1_flagAssignment
+      , dependencies = v1_dependencies
+      , installOutcome = migrate v1_installOutcome
+      , docsOutcome = v1_docsOutcome
+      , testsOutcome = v1_testsOutcome
+      }
+
+instance Migrate InstallOutcome where
+    type MigrateFrom InstallOutcome = InstallOutcome_v1
+    migrate outcome = case outcome of
+        V1_DependencyFailed pkgid -> DependencyFailed pkgid
+        V1_DownloadFailed -> DownloadFailed
+        V1_UnpackFailed -> UnpackFailed
+        V1_SetupFailed -> SetupFailed
+        V1_ConfigureFailed -> ConfigureFailed
+        V1_BuildFailed -> BuildFailed
+        V1_InstallFailed -> InstallFailed
+        V1_InstallOk -> InstallOk
