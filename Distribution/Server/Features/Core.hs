@@ -479,7 +479,10 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     ------------------------------------------------------------------------
 
     servePackagesIndex :: DynamicPath -> ServerPartE Response
-    servePackagesIndex _ = toResponse <$> readAsyncCache cacheIndexTarball
+    servePackagesIndex _ = do
+      tarball@(IndexTarball _ _ tarballmd5 _) <- readAsyncCache cacheIndexTarball
+      useETag (ETag (show tarballmd5))
+      return (toResponse tarball)
 
     -- TODO: should we include more information here? description and
     -- category for instance (but they are not readily available as long
@@ -508,6 +511,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           [] -> errNotFound "Tarball not found" [MText "No tarball exists for this package version."]
           ((tb, _):_) -> do
               let blobId = pkgTarballGz tb
+              useETag (BlobStorage.blobETag blobId)
               file <- liftIO $ BlobStorage.fetch store blobId
               runHook_ packageDownloadHook pkgid
               return $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)

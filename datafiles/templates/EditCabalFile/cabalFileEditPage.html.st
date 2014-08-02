@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: Edit package metadata for $pkgid$</title>
+<title>Edit package metadata for $pkgid$ | Hackage</title>
 </head>
 
 <body>

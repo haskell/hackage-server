@@ -67,8 +67,21 @@ select, input, button, textarea {
 }
 
 table {
+	margin: 0.8em 0;
 	font-size:inherit;
 	font:100%;
+}
+
+td, th {
+  padding: 1px 0.25em;
+}
+
+td:first-child, th:first-child {
+  padding-left: 0;
+}
+
+td:last-child, th:last-child {
+  padding-right: 0;
 }
 
 pre, code, kbd, samp, .src {

@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: Tarballs for $pkgname$</title>
+<title>Tarballs for $pkgname$ | Hackage</title>
 </head>
 
 <body>

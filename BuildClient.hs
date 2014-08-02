@@ -611,6 +611,7 @@ buildPackage verbosity opts config docInfo = do
                 renameFile (installDirectory opts </> "reports"
                                 </> display pkgid <.> "report")
                            resultReportFile
+                appendFile resultReportFile "\ndoc-builder: True"
                 return (Just resultReportFile)
 
     docs_generated <- fmap and $ sequence [

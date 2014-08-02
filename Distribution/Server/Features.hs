@@ -193,6 +193,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          distroFeature
                          documentationCoreFeature
                          documentationCandidatesFeature
+                         reportsCoreFeature
                          userDetailsFeature
 
     editCabalFeature <- initEditCabalFilesFeature env

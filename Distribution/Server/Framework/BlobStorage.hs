@@ -15,6 +15,7 @@ module Distribution.Server.Framework.BlobStorage (
     BlobStorage,
     BlobId,
     blobMd5,
+    blobETag,
     open,
     add,
     addWith,
@@ -27,6 +28,7 @@ module Distribution.Server.Framework.BlobStorage (
 
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Framework.Instances ()
+import Distribution.Server.Util.Happstack (ETag(..))
 
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Digest.Pure.MD5 as MD5
@@ -72,6 +74,9 @@ instance ToJSON BlobId where
 
 blobMd5 :: BlobId -> String
 blobMd5 (BlobId digest) = show digest
+
+blobETag :: BlobId -> ETag
+blobETag = ETag . blobMd5
 
 instance SafeCopy BlobId where
   version = 2

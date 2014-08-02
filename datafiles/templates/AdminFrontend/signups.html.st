@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: browse signup requests</title>
+<title>Browse signup requests | Hackage</title>
 </head>
 
 <body>

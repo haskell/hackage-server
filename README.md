@@ -4,9 +4,16 @@
 
 This is the `hackage-server` code. This is what powers <http://hackage.haskell.org>, and many other private hackage instances.
 
+## Mac OS X users note
+
+You'll need to do the following to get hackage-server to build:
+
+    brew install icu4c
+    brew link icu4c --force
+
 ## Running
 
-    cabal install
+    cabal install -j --enable-tests
 
     hackage-server init
     hackage-server run
