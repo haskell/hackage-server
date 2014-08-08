@@ -69,17 +69,17 @@ other groups. In particular there are groups:
 
 ### Mirroring
 
-There is a program included in the hackage-server package called
-hackage-mirror. It's intended to enable syncing all the packages from
-one server to another, e.g. getting all the packages from the old
+There is a client program included in the hackage-server package called
+hackage-mirror. It's intended to run against two servers, syncing all the
+packages from one to the other, e.g. getting all the packages from the old
 hackage and uploading them to a local instance of a hackage-server.
 
 To try it out:
 
-1. Add a user to the mirrorers group via
+1. On the target server, add a user to the mirrorers group via
    http://localhost:8080/packages/mirrorers/
-1. Create a config file that contains the local and remote
-   server. Assuming you are cloning the packages on
+1. Create a config file that contains the source and target
+   servers. Assuming you are cloning the packages on
    <http://hackage.haskell.org> locally, you could create a config
    file as follows:
 
