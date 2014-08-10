@@ -245,19 +245,20 @@ getUrl auth url = Http.execRequest auth (mkGetReq url)
 getETag :: RelativeURL -> IO String
 getETag url = Http.responseHeader HdrETag (mkGetReq url)
 
-checkETag :: String -> RelativeURL -> IO ()
-checkETag etag url = void $
-  Http.execRequest' NoAuth (mkGetReqWithETag url etag) isNotModified
-
-checkETagMismatch :: String -> RelativeURL -> IO ()
-checkETagMismatch etag url = void $
-  Http.execRequest NoAuth (mkGetReqWithETag url etag)
-
 mkGetReqWithETag :: String -> RelativeURL -> Request_String
 mkGetReqWithETag url etag =
     Request (fromJust $ parseURI $ mkUrl url) GET hdrs ""
   where
     hdrs = [mkHeader HdrIfNoneMatch etag]
+
+validateETagHandling :: RelativeURL -> IO ()
+validateETagHandling url = void $ do
+    etag <- getETag url
+    checkETag etag
+    checkETagMismatch (etag ++ "garbled123")
+  where
+    checkETag etag = void $ Http.execRequest' NoAuth (mkGetReqWithETag url etag) isNotModified
+    checkETagMismatch etag = void $ Http.execRequest NoAuth (mkGetReqWithETag url etag)
 
 getJSONStrings :: RelativeURL -> IO [String]
 getJSONStrings url = getUrl NoAuth url >>= decodeJSON

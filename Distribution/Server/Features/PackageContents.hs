@@ -100,8 +100,9 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
       case mChangeLog of
         Left err ->
           errNotFound "Changelog not found" [MText err]
-        Right (fp, etag, offset, name) ->
-          liftIO $ serveTarEntry fp offset name etag
+        Right (fp, etag, offset, name) -> do
+          useETag etag
+          liftIO $ serveTarEntry fp offset name
 
     -- return: not-found error or tarball
     serveContents :: DynamicPath -> ServerPartE Response
