@@ -17,7 +17,8 @@ module Distribution.Server.Util.Happstack (
     formatETag,
     useETag,
 
-    uriEscape
+    uriEscape,
+    showContentType
   ) where
 
 import Happstack.Server
@@ -27,6 +28,7 @@ import Control.Monad
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Char8 as BS8
 import qualified Network.URI as URI
+
 
 -- |Passes a list of remaining path segments in the URL. Does not
 -- include the query string. This call only fails if the passed in
@@ -86,3 +88,21 @@ useETag expectedtag = do
     where checkETag actualtag =
             when ((formatETag expectedtag) == actualtag) $
                 finishWith (noContentLength . result 304 $ "")
+
+
+-- The following functions are in happstack-server, but not exported. So we
+-- copy them here.
+
+-- | Produce the standard string representation of a content-type,
+--   e.g. \"text\/html; charset=ISO-8859-1\".
+showContentType :: ContentType -> String
+showContentType (ContentType x y ps) = x ++ "/" ++ y ++ showParameters ps
+
+-- | Helper for 'showContentType'.
+showParameters :: [(String,String)] -> String
+showParameters = concatMap f
+    where f (n,v) = "; " ++ n ++ "=\"" ++ concatMap esc v ++ "\""
+          esc '\\' = "\\\\"
+          esc '"'  = "\\\""
+          esc c | c `elem` ['\\','"'] = '\\':[c]
+                | otherwise = [c]

@@ -41,6 +41,9 @@ data DocumentationFeature = DocumentationFeature {
     queryDocumentation      :: MonadIO m => PackageIdentifier -> m (Maybe BlobId),
     queryDocumentationIndex :: MonadIO m => m (Map.Map PackageId BlobId),
 
+    uploadDocumentation :: DynamicPath -> ServerPartE Response,
+    deleteDocumentation :: DynamicPath -> ServerPartE Response,
+
     documentationResource :: DocumentationResource,
 
     -- | Notification of documentation changes
@@ -221,7 +224,6 @@ documentationFeature name
         ServerTarball.serveTarball ["index.html"] (display pkgid ++ "-docs")
                                    tarball index etag
 
-    -- return: not-found error (parsing) or see other uri
     uploadDocumentation :: DynamicPath -> ServerPartE Response
     uploadDocumentation dpath = do
       pkgid <- packageInPath dpath

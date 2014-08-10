@@ -121,6 +121,7 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    [serverTemplatesDir, serverTemplatesDir </> "Html"]
                    [ "maintain.html", "maintain-candidate.html"
                    , "reports.html", "report.html"
+                   , "maintain-docs.html"
                    , "distro-monitor.html" ]
 
     -- do rec, tie the knot
@@ -235,6 +236,7 @@ htmlFeature user
                                       templates
     htmlUsers      = mkHtmlUsers      user usersdetails
     htmlUploads    = mkHtmlUploads    utilities upload
+    htmlDocUploads = mkHtmlDocUploads utilities core docsCore templates
     htmlDownloads  = mkHtmlDownloads  utilities download
     htmlReports    = mkHtmlReports    utilities core reportsCore templates
     htmlCandidates = mkHtmlCandidates utilities core versions upload docsCandidates candidates templates
@@ -246,6 +248,7 @@ htmlFeature user
         htmlCoreResources       htmlCore
       , htmlUsersResources      htmlUsers
       , htmlUploadsResources    htmlUploads
+      , htmlDocUploadsResources htmlDocUploads
       , htmlReportsResources    htmlReports
       , htmlCandidatesResources htmlCandidates
       , htmlPreferredResources  htmlPreferred
@@ -707,6 +710,53 @@ mkHtmlUploads HtmlUtilities{..} UploadFeature{..} = HtmlUploads{..}
           ] ++ case warns of
             [] -> []
             _  -> [paragraph << "There were some warnings:", unordList warns]
+
+{-------------------------------------------------------------------------------
+  Documentation uploads
+-------------------------------------------------------------------------------}
+
+data HtmlDocUploads = HtmlDocUploads {
+    htmlDocUploadsResources :: [Resource]
+  }
+
+mkHtmlDocUploads :: HtmlUtilities -> CoreFeature -> DocumentationFeature -> Templates -> HtmlDocUploads
+mkHtmlDocUploads HtmlUtilities{..} CoreFeature{coreResource} DocumentationFeature{..} templates = HtmlDocUploads{..}
+  where
+    CoreResource{packageInPath} = coreResource
+
+    htmlDocUploadsResources = [
+        (extendResource $ packageDocsWhole documentationResource) {
+            resourcePut    = [ ("html", serveUploadDocumentation) ]
+          , resourceDelete = [ ("html", serveDeleteDocumentation) ]
+          }
+      , (resourceAt "/package/:package/maintain/docs") {
+            resourceGet = [("html", serveDocUploadForm)]
+          }
+      ]
+
+    serveUploadDocumentation :: DynamicPath -> ServerPartE Response
+    serveUploadDocumentation dpath = do
+        pkgid <- packageInPath dpath
+        uploadDocumentation dpath >> ignoreFilters  -- Override 204 No Content
+        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation uploaded" $
+          [ paragraph << [toHtml "Successfully uploaded documentation for ", packageLink pkgid, toHtml "!"]
+          ]
+
+    serveDeleteDocumentation :: DynamicPath -> ServerPartE Response
+    serveDeleteDocumentation dpath = do
+        pkgid <- packageInPath dpath
+        deleteDocumentation dpath >> ignoreFilters  -- Override 204 No Content
+        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation deleted" $
+          [ paragraph << [toHtml "Successfully deleted documentation for ", packageLink pkgid, toHtml "!"]
+          ]
+
+    serveDocUploadForm :: DynamicPath -> ServerPartE Response
+    serveDocUploadForm dpath = do
+        pkgid <- packageInPath dpath
+        template <- getTemplate templates "maintain-docs.html"
+        return $ toResponse $ template
+          [ "pkgid" $= (pkgid :: PackageIdentifier)
+          ]
 
 {-------------------------------------------------------------------------------
   Build reports
