@@ -487,7 +487,7 @@ mkHtmlCore HtmlUtilities{..}
             pkgname = packageName realpkg
             middleHtml = Pages.renderFields render
         -- render the build status line
-        buildStatus <- renderBuildStatus documentationFeature reportsFeature pkgid
+        buildStatus <- renderBuildStatus documentationFeature reportsFeature realpkg
         let buildStatusHtml = [("Status", buildStatus)]
         -- get additional information from other features
         prefInfo <- queryGetPreferredInfo pkgname
