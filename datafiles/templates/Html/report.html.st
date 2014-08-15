@@ -13,14 +13,14 @@ $hackagePageHeader()$
 
 <p style="font-size: small">[<a href="/package/$pkgid$/reports">all reports</a>]</p>
 
-<table class="properties">
+<table class="fancy">
   <tr>
     <th>Package</th>
     <td>$report.1.package$</td>
   </tr>
 </table>
 
-<table class="properties">
+<table class="fancy">
   <tr>
     <th>Install</th>
     <td>$report.1.installOutcome$</td>
@@ -35,7 +35,7 @@ $hackagePageHeader()$
   </tr>
 </table>
 
-<table class="properties">
+<table class="fancy">
   <tr>
     <th>Time submitted</th>
     <td>
