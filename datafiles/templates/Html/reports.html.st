@@ -12,7 +12,7 @@ $hackagePageHeader()$
 <h2>Build reports for <a href="/package/$pkgid$">$pkgid$</a></h2>
 
 $if(first(reports))$
-<table style="width: 100%">
+<table class="fancy" style="width: 100%">
   <tr>
     <th rowspan="2">No.</th>
     <th colspan="3" style="text-align: center">Outcome</th>
@@ -29,7 +29,7 @@ $if(first(reports))$
   </tr>
   $reports:{report|
     <tr>
-      <th><a href="/package/$pkgid$/reports/$report.0$">#$report.0$</a></th>
+      <td><a href="/package/$pkgid$/reports/$report.0$">#$report.0$</a></td>
       <td>$report.1.installOutcome$</td>
       <td>$report.1.docsOutcome$</td>
       <td>$report.1.testsOutcome$</td>
