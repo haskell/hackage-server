@@ -79,7 +79,7 @@ formatETag (ETag etag) = '"' : etag ++ ['"']
 useETag :: Monad m => ETag -> ServerPartT m ()
 useETag expectedtag = do
     -- Set the ETag field on the response.
-    composeFilter $ setHeader "ETag" (formatETag expectedtag)
+    setHeaderM "ETag" (formatETag expectedtag)
     -- Check the request for a matching ETag, return 304 if found.
     rq <- askRq
     case getHeader "if-none-match" rq of
