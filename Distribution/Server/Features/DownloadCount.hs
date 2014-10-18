@@ -177,10 +177,13 @@ downloadFeature CoreFeature{}
         today  <- getToday
         today' <- query (stateHandle inMemState) RecordedToday
 
+        --TODO: do this asyncronously rather than blocking this request
         when (today /= today') $ do
           -- For the first download each day we reset the in-memory stats and..
           inMemStats <- getState inMemState
           putState inMemState $ initInMemStats today
+          -- we can discard the large eventlog by writing a small checkpoint
+          createCheckpoint (stateHandle inMemState)
 
           -- Write yesterday's downloads to the log
           appendToLog (dcPath serverStateDir) inMemStats
