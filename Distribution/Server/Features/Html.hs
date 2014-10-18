@@ -525,7 +525,10 @@ mkHtmlCore HtmlUtilities{..}
               Nothing -> noHtml
         -- and put it all together
         return $ toResponse $ Resource.XHtml $
-            Pages.packagePage render [tagLinks] [deprHtml] (beforeHtml ++ buildStatusHtml ++ middleHtml ++ afterHtml) [] docURL False
+            Pages.packagePage render [tagLinks] [deprHtml]
+                              (beforeHtml ++ middleHtml ++ afterHtml
+                                ++ buildStatusHtml)
+                              [] docURL False
       where
         showDist (dname, info) = toHtml (display dname ++ ":") +++
             anchor ! [href $ distroUrl info] << toHtml (display $ distroVersion info)
