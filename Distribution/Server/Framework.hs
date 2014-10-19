@@ -2,7 +2,13 @@
 --
 module Distribution.Server.Framework (
 
-    module Happstack.Server,
+    module Happstack.Server.Routing,
+    module Happstack.Server.Response,
+    module Happstack.Server.RqData,
+    module Happstack.Server.FileServe,
+    module Happstack.Server.Error,
+    module Happstack.Server.Monads,
+    module Happstack.Server.Types,
     module Data.Acid,
     module Distribution.Server.Framework.MemState,
     module Distribution.Server.Framework.Cache,
@@ -27,7 +33,13 @@ module Distribution.Server.Framework (
 
   ) where
 
-import Happstack.Server
+import Happstack.Server.Routing
+import Happstack.Server.Response
+import Happstack.Server.RqData
+import Happstack.Server.FileServe
+import Happstack.Server.Error
+import Happstack.Server.Monads
+import Happstack.Server.Types
 
 import Data.Acid
 import Distribution.Server.Framework.MemState

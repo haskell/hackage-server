@@ -24,6 +24,7 @@ module Distribution.Server (
     tearDownTemp
  ) where
 
+import Happstack.Server.SimpleHTTP
 import Distribution.Server.Framework
 import qualified Distribution.Server.Framework.BackupRestore as Import
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
