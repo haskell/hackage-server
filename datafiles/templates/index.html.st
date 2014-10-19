@@ -71,14 +71,14 @@ though you'll need a Hackage <a href="accounts.html">username</a> and password.
 
 <h3>Development</h3>
 <p>See the
-<a href="http://hackage.haskell.org/trac/hackage/wiki/HackageDB">Hackage wiki page</a>.
-There is also a <a href="http://hackage.haskell.org/trac/hackage/wiki/HackageDB/2.0/Architecture">document in progress</a> summarizing the architecture of the new hackage-server. Check out the code yourself:
+<a href="https://github.com/haskell/hackage-server/wiki">Hackage wiki</a>.
+Check out the code:
 </p>
 
-<pre>darcs get http://code.haskell.org/hackage-server</pre>
+<pre>git clone https://github.com/haskell/hackage-server.git</pre>
 
 <p>
-We'd like to make it as simple as possible for anyone to <a href="http://hackage.haskell.org/trac/hackage/wiki/HackageDB/2.0/CommandLine">set up a Hackage server</a>.
+We'd like to make it as simple as possible for anyone to <a href="https://github.com/haskell/hackage-server/wiki/Command-Line">set up a Hackage server</a>.
 </p>
 </div>
 </body>
