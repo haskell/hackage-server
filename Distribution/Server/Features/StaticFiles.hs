@@ -37,7 +37,8 @@ find p dirPath = do
   return (filter p contents)
 
 staticFilesFeature :: ServerEnv -> Templates -> [FilePath] -> HackageFeature
-staticFilesFeature ServerEnv{serverStaticDir} templates staticFiles =
+staticFilesFeature ServerEnv{serverStaticDir, serverTemplatesMode}
+                   templates staticFiles =
   (emptyHackageFeature "static-files") {
     featureResources =
       [ (resourceAt "/") {
@@ -68,12 +69,19 @@ staticFilesFeature ServerEnv{serverStaticDir} templates staticFiles =
   }
 
   where
+    staticResourceCacheControls =
+      case serverTemplatesMode of
+        DesignMode -> [Public, maxAgeSeconds 0, NoCache]
+        NormalMode -> [Public, maxAgeDays 1]
+
     serveStaticDirFiles :: ServerPartE Response
-    serveStaticDirFiles =
+    serveStaticDirFiles = do
+      cacheControlWithoutETag staticResourceCacheControls
       serveDirectory DisableBrowsing [] serverStaticDir
 
     serveStaticToplevelFile :: String -> FilePath -> ServerPartE Response
-    serveStaticToplevelFile mimetype filename =
+    serveStaticToplevelFile mimetype filename = do
+      cacheControlWithoutETag staticResourceCacheControls
       serveFile (asContentType mimetype) (serverStaticDir </> filename)
 
     serveStaticTemplate :: String -> ServerPartE Response
@@ -95,7 +103,9 @@ staticFilesFeature ServerEnv{serverStaticDir} templates staticFiles =
       mtemplate <- tryGetTemplate templates name
       case mtemplate of
         Nothing       -> mzero
-        Just template -> ok $ toResponse $ template []
+        Just template -> do
+          cacheControlWithoutETag staticResourceCacheControls
+          ok $ toResponse $ template []
 
     textErrorPage (ErrorResponse errCode hdrs errTitle message) = do
         template <- getTemplate templates "hackageErrorPage.txt"
