@@ -517,7 +517,8 @@ serveErrorResponse errRes mformat err = do
 negotiateContent :: (FilterMonad Response m, ServerMonad m)
                  => (Content, a) -> [(Content, a)] -> m (Content, a)
 negotiateContent def available = do
-    setHeaderM "Vary" "Accept"
+    when (length available > 1) $
+      setHeaderM "Vary" "Accept"
     maccept <- getHeaderM "Accept"
     case maccept of
       Nothing -> return def
