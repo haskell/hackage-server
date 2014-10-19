@@ -578,6 +578,7 @@ buildPackage verbosity opts config docInfo = do
              "--haddock-hyperlink-source",
              "--prefix=" ++ installDirectory opts,
              "--build-summary=" ++ installDirectory opts </> "reports" </> "$pkgid.report",
+             "--report-planning-failure",
              -- We want both html documentation and hoogle database generated
              "--haddock-html",
              "--haddock-hoogle",
