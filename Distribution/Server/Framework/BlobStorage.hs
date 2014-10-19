@@ -28,7 +28,7 @@ module Distribution.Server.Framework.BlobStorage (
 
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Framework.Instances ()
-import Distribution.Server.Util.Happstack (ETag(..))
+import Distribution.Server.Framework.CacheControl (ETag(..))
 
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Digest.Pure.MD5 as MD5

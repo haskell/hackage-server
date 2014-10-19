@@ -20,10 +20,11 @@ module Distribution.Server.Framework (
     module Distribution.Server.Framework.Resource,
     module Distribution.Server.Framework.RequestContentTypes,
     module Distribution.Server.Framework.ResponseContentTypes,
+    module Distribution.Server.Framework.CacheControl,
     module Distribution.Server.Framework.Hook,
     module Distribution.Server.Framework.Error,
     module Distribution.Server.Framework.Logging,
-    module Distribution.Server.Util.Happstack,
+    module Distribution.Server.Framework.HappstackUtils,
 
     module Data.Monoid,
     module Control.Applicative,
@@ -52,12 +53,11 @@ import Distribution.Server.Framework.ServerEnv
 import Distribution.Server.Framework.Resource
 import Distribution.Server.Framework.RequestContentTypes
 import Distribution.Server.Framework.ResponseContentTypes
+import Distribution.Server.Framework.CacheControl
 import Distribution.Server.Framework.Hook
 import Distribution.Server.Framework.Error
 import Distribution.Server.Framework.Logging
-
-import Distribution.Server.Util.Happstack
-
+import Distribution.Server.Framework.HappstackUtils
 
 import Data.Monoid (Monoid(..))
 import Control.Applicative (Applicative(..), (<$>))

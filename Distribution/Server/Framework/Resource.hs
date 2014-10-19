@@ -38,7 +38,7 @@ module Distribution.Server.Framework.Resource (
   ) where
 
 import Happstack.Server
-import Distribution.Server.Util.Happstack (remainingPathString, uriEscape)
+import Distribution.Server.Framework.HappstackUtils (remainingPathString, uriEscape)
 import Distribution.Server.Util.ContentType (parseContentAccept)
 import Distribution.Server.Framework.Error
 

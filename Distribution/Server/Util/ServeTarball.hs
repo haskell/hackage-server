@@ -23,7 +23,8 @@ import Happstack.Server.Monads
 import Happstack.Server.Routing (method)
 import Happstack.Server.Response
 import Happstack.Server.FileServe as Happstack (mimeTypes)
-import Distribution.Server.Util.Happstack (remainingPath, ETag, useETag)
+import Distribution.Server.Framework.HappstackUtils (remainingPath)
+import Distribution.Server.Framework.CacheControl (ETag, useETag)
 import Distribution.Server.Pages.Template (hackagePage)
 import Distribution.Server.Framework.ResponseContentTypes as Resource
 

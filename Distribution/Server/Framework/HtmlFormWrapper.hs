@@ -15,7 +15,7 @@ import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HMap
 import Control.Concurrent.MVar
 
-import Distribution.Server.Util.Happstack (showContentType)
+import Distribution.Server.Framework.HappstackUtils (showContentType)
 
 
 -- | There is a bit of a conflict in the design of a REST api due to the need

@@ -105,11 +105,13 @@ executable hackage-server
     Distribution.Server.Framework.Resource
     Distribution.Server.Framework.RequestContentTypes
     Distribution.Server.Framework.ResponseContentTypes
+    Distribution.Server.Framework.CacheControl
     Distribution.Server.Framework.BackupDump
     Distribution.Server.Framework.BackupRestore
     Distribution.Server.Framework.ServerEnv
     Distribution.Server.Framework.Templating
-    
+    Distribution.Server.Framework.HappstackUtils
+
     Distribution.Server.Packages.Index
     Distribution.Server.Packages.ModuleForest
     Distribution.Server.Packages.PackageIndex
@@ -137,7 +139,6 @@ executable hackage-server
     Distribution.Server.Users.Backup
     Distribution.Server.Users.Users
 
-    Distribution.Server.Util.Happstack
     Distribution.Server.Util.Histogram
     Distribution.Server.Util.CountingMap
     Distribution.Server.Util.Index

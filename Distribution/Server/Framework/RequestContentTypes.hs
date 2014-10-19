@@ -29,7 +29,7 @@ module Distribution.Server.Framework.RequestContentTypes (
   ) where
 
 import Happstack.Server
-import Distribution.Server.Util.Happstack
+import Distribution.Server.Framework.HappstackUtils
 import Distribution.Server.Framework.Error
 import qualified Data.ByteString.Char8 as BS (ByteString, unpack) -- Used for content-type headers only
 import qualified Data.ByteString.Lazy as LBS (ByteString)
