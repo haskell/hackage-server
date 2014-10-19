@@ -481,7 +481,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     servePackagesIndex :: DynamicPath -> ServerPartE Response
     servePackagesIndex _ = do
       tarball@(IndexTarball _ _ tarballmd5 _) <- readAsyncCache cacheIndexTarball
-      useETag (ETag (show tarballmd5))
+      cacheControl [Public, NoTransform, maxAgeMinutes 5]
+                   (ETag (show tarballmd5))
       return (toResponse tarball)
 
     -- TODO: should we include more information here? description and
@@ -511,7 +512,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           [] -> errNotFound "Tarball not found" [MText "No tarball exists for this package version."]
           ((tb, _):_) -> do
               let blobId = pkgTarballGz tb
-              useETag (BlobStorage.blobETag blobId)
+              cacheControl [Public, NoTransform, maxAgeDays 30]
+                           (BlobStorage.blobETag blobId)
               file <- liftIO $ BlobStorage.fetch store blobId
               runHook_ packageDownloadHook pkgid
               return $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)

@@ -24,7 +24,7 @@ import Happstack.Server.Routing (method)
 import Happstack.Server.Response
 import Happstack.Server.FileServe as Happstack (mimeTypes)
 import Distribution.Server.Framework.HappstackUtils (remainingPath)
-import Distribution.Server.Framework.CacheControl (ETag, useETag)
+import Distribution.Server.Framework.CacheControl
 import Distribution.Server.Pages.Template (hackagePage)
 import Distribution.Server.Framework.ResponseContentTypes as Resource
 
@@ -49,9 +49,10 @@ serveTarball :: MonadIO m
              -> FilePath   -- root dir in tar to serve
              -> FilePath   -- the tarball
              -> TarIndex   -- index for tarball
+             -> [CacheControl]
              -> ETag       -- the etag
              -> ServerPartT m Response
-serveTarball indices tarRoot tarball tarIndex etag = do
+serveTarball indices tarRoot tarball tarIndex cacheCtls etag = do
     rq <- askRq
     action GET $ remainingPath $ \paths -> do
 
@@ -71,7 +72,7 @@ serveTarball indices tarRoot tarball tarIndex etag = do
              case TarIndex.lookup tarIndex path of
                Just (TarIndex.TarFileEntry off)
                    -> do
-                 useETag etag
+                 cacheControl cacheCtls etag
                  tfe <- liftIO $ serveTarEntry tarball off path
                  ok (toResponse tfe)
                _ -> mzero
@@ -87,7 +88,7 @@ serveTarball indices tarRoot tarball tarIndex etag = do
 
                  | otherwise
                  -> do
-                      useETag etag
+                      cacheControl cacheCtls etag
                       ok $ toResponse $ Resource.XHtml $ renderDirIndex fs
                _ -> mzero
 

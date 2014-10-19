@@ -101,7 +101,7 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
         Left err ->
           errNotFound "Changelog not found" [MText err]
         Right (fp, etag, offset, name) -> do
-          useETag etag
+          cacheControl [Public, maxAgeDays 30] etag
           liftIO $ serveTarEntry fp offset name
 
     -- return: not-found error or tarball
@@ -113,7 +113,8 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
         Left err ->
           errNotFound "Could not serve package contents" [MText err]
         Right (fp, etag, index) ->
-          serveTarball ["index.html"] (display (packageId pkg)) fp index etag
+          serveTarball ["index.html"] (display (packageId pkg)) fp index
+                       [Public, maxAgeDays 30] etag
 
     packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarIndex))
     packageTarball PkgInfo{pkgTarball = (pkgTarball, _) : _} = do

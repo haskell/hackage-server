@@ -392,7 +392,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 {-------------------------------------------------------------------------------
   TODO: everything below is an (almost) direct duplicate of corresponding
   functionality in PackageContents. We could factor this out, although there
-  isn't any "interesting" code here.
+  isn't any "interesting" code here, except differences in http cache control.
 -------------------------------------------------------------------------------}
 
     -- result: changelog or not-found error
@@ -404,7 +404,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         Left err ->
           errNotFound "Changelog not found" [MText err]
         Right (fp, etag, offset, name) -> do
-          useETag etag
+          cacheControl [Public, maxAgeMinutes 5] etag
           liftIO $ serveTarEntry fp offset name
 
     -- return: not-found error or tarball
@@ -416,7 +416,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         Left err ->
           errNotFound "Could not serve package contents" [MText err]
         Right (fp, etag, index) ->
-          serveTarball ["index.html"] (display (packageId pkg)) fp index etag
+          serveTarball ["index.html"] (display (packageId pkg)) fp index
+                       [Public, maxAgeMinutes 5] etag
 
     packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarIndex))
     packageTarball PkgInfo{pkgTarball = (pkgTarball, _) : _} = do
