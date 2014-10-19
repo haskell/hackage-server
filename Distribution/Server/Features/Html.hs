@@ -1478,7 +1478,7 @@ mkHtmlSearch HtmlUtilities{..}
 
         searchForm termsStr explain =
           [ h2 << "Package search"
-          , form ! [theclass "box", XHtml.method "GET", action "/packages/search"] <<
+          , form ! [XHtml.method "GET", action "/packages/search"] <<
               [ input ! [value termsStr, name "terms", identifier "terms"]
               , toHtml " "
               , input ! [thetype "submit", value "Search"]
@@ -1555,7 +1555,7 @@ mkHtmlSearch HtmlUtilities{..}
 
         paramsForm SearchRankParameters{..} termsStr =
           [ h2 << "Package search (tuning & explanation)"
-          , form ! [theclass "box", XHtml.method "GET", action "/packages/search"] <<
+          , form ! [XHtml.method "GET", action "/packages/search"] <<
               [ input ! [value termsStr, name "terms", identifier "terms"]
               , toHtml " "
               , input ! [thetype "submit", value "Search"]
@@ -1580,7 +1580,7 @@ mkHtmlSearch HtmlUtilities{..}
           ]
         resetParamsForm termsStr =
           let SearchRankParameters{..} = defaultSearchRankParameters in
-          form ! [theclass "box", XHtml.method "GET", action "/packages/search"] <<
+          form ! [XHtml.method "GET", action "/packages/search"] <<
             (concat $
               [ input ! [ thetype "submit", value "Reset parameters" ]
               , input ! [ thetype "hidden", name "terms", value termsStr ]
