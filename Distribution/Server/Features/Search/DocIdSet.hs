@@ -1,6 +1,7 @@
-{-# LANGUAGE BangPatterns, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE BangPatterns, GeneralizedNewtypeDeriving, TypeFamilies, MultiParamTypeClasses #-}
+
 module Distribution.Server.Features.Search.DocIdSet (
-    DocId,  
+    DocId,
     DocIdSet,
     null,
     size,
@@ -18,11 +19,12 @@ module Distribution.Server.Features.Search.DocIdSet (
 import Distribution.Server.Framework.MemSize
 
 import Data.Word
-import qualified Data.Vector.Unboxed         as Vec
-import qualified Data.Vector.Unboxed.Mutable as MVec
-import qualified Data.Vector.Generic.Base    as VecGen
-import qualified Data.Vector.Unboxed.Base    as VecBase
-import qualified Data.Vector.Generic.Mutable as VecMut
+import qualified Data.Vector.Unboxed         as VU
+import qualified Data.Vector.Unboxed.Mutable as MVU
+import qualified Data.Vector.Generic.Base    as VG
+-- import qualified Data.Vector.Unboxed.Base    as VUB
+import qualified Data.Vector.Generic.Mutable as MVG
+import Control.Monad (liftM)
 import Control.Monad.ST
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -33,65 +35,85 @@ import Prelude hiding (null)
 --import qualified Data.List as List
 
 newtype DocId = DocId Word32
-  deriving (Eq, Ord, Show, Enum, Bounded, MemSize, Vec.Unbox,
-            VecGen.Vector VecBase.Vector,
-            VecMut.MVector VecBase.MVector)
+  deriving (Eq, Ord, Show, Enum, Bounded, MemSize, VU.Unbox)
 
-newtype DocIdSet = DocIdSet (Vec.Vector DocId)
+newtype DocIdSet = DocIdSet (VU.Vector DocId)
   deriving (Eq, Show)
+
+
+newtype instance MVU.MVector s DocId = MVU_DocId (MVU.MVector s Word32)
+newtype instance VU.Vector DocId = VU_DocId (VU.Vector Word32)
+
+instance VG.Vector VU.Vector DocId where
+-- fixme, can i do a noop/coerce/unsafecoerce instead of these fmaps on newtypes?
+-- or does it even matter?
+  basicUnsafeFreeze (MVU_DocId mvw)= VU_DocId `liftM` VG.basicUnsafeFreeze mvw
+  basicUnsafeThaw (VU_DocId vw) = MVU_DocId `liftM` VG.basicUnsafeThaw vw
+  basicLength (VU_DocId vw) = VG.basicLength vw
+  basicUnsafeSlice start end (VU_DocId vw) = VU_DocId $ VG.basicUnsafeSlice start end vw
+  basicUnsafeIndexM (VU_DocId vw) ix = DocId `liftM` VG.basicUnsafeIndexM vw ix
+
+ -- basicLength, basicUnsafeSlice, basicOverlaps, basicUnsafeNew, basicUnsafeRead, basicUnsafeWrite
+instance MVG.MVector MVU.MVector DocId where
+  basicLength (MVU_DocId vw) = MVG.basicLength vw
+  basicUnsafeSlice start end (MVU_DocId vw) = MVU_DocId $ MVG.basicUnsafeSlice start end vw
+  basicOverlaps (MVU_DocId vw1) (MVU_DocId vw2) = MVG.basicOverlaps vw1 vw2
+  basicUnsafeNew size  = MVU_DocId `liftM` MVG.basicUnsafeNew size
+  basicUnsafeRead (MVU_DocId vw) ix   = DocId `liftM` MVG.basicUnsafeRead vw ix
+  basicUnsafeWrite (MVU_DocId vw) ix (DocId word) = MVG.basicUnsafeWrite vw ix word
 
 -- represented as a sorted sequence of ids
 invariant :: DocIdSet -> Bool
 invariant (DocIdSet vec) =
-    strictlyAscending (Vec.toList vec)
+    strictlyAscending (VU.toList vec)
   where
     strictlyAscending (a:xs@(b:_)) = a < b && strictlyAscending xs
     strictlyAscending _  = True
 
 
 size :: DocIdSet -> Int
-size (DocIdSet vec) = Vec.length vec
+size (DocIdSet vec) = VU.length vec
 
 null :: DocIdSet -> Bool
-null (DocIdSet vec) = Vec.null vec
+null (DocIdSet vec) = VU.null vec
 
 empty :: DocIdSet
-empty = DocIdSet Vec.empty
+empty = DocIdSet VU.empty
 
 singleton :: DocId -> DocIdSet
-singleton = DocIdSet . Vec.singleton
+singleton = DocIdSet . VU.singleton
 
 fromList :: [DocId] -> DocIdSet
-fromList = DocIdSet . Vec.fromList . Set.toAscList . Set.fromList
+fromList = DocIdSet . VU.fromList . Set.toAscList . Set.fromList
 
 toList ::  DocIdSet -> [DocId]
-toList (DocIdSet vec) = Vec.toList vec
+toList (DocIdSet vec) = VU.toList vec
 
 toSet ::  DocIdSet -> Set DocId
-toSet (DocIdSet vec) = Set.fromDistinctAscList (Vec.toList vec)
+toSet (DocIdSet vec) = Set.fromDistinctAscList (VU.toList vec)
 
 insert :: DocId -> DocIdSet -> DocIdSet
 insert x (DocIdSet vec) =
-    case binarySearch vec 0 (Vec.length vec - 1) x of
+    case binarySearch vec 0 (VU.length vec - 1) x of
       (_, True)  -> DocIdSet vec
-      (i, False) -> case Vec.splitAt i vec of
+      (i, False) -> case VU.splitAt i vec of
                       (before, after) ->
-                        DocIdSet (Vec.concat [before, Vec.singleton x, after])
+                        DocIdSet (VU.concat [before, VU.singleton x, after])
 
 delete :: DocId -> DocIdSet -> DocIdSet
 delete x (DocIdSet vec) =
-    case binarySearch vec 0 (Vec.length vec - 1) x of
+    case binarySearch vec 0 (VU.length vec - 1) x of
       (_, False) -> DocIdSet vec
-      (i, True)  -> case Vec.splitAt i vec of
+      (i, True)  -> case VU.splitAt i vec of
                       (before, after) ->
-                        DocIdSet (before Vec.++ Vec.tail after)
+                        DocIdSet (before VU.++ VU.tail after)
 
-binarySearch :: Vec.Vector DocId -> Int -> Int -> DocId -> (Int, Bool)
+binarySearch :: VU.Vector DocId -> Int -> Int -> DocId -> (Int, Bool)
 binarySearch vec !a !b !key
   | a > b     = (a, False)
   | otherwise =
     let mid = (a + b) `div` 2
-     in case compare key (vec Vec.! mid) of
+     in case compare key (vec VU.! mid) of
           LT -> binarySearch vec a (mid-1) key
           EQ -> (mid, True)
           GT -> binarySearch vec (mid+1) b key
@@ -100,29 +122,29 @@ union :: DocIdSet -> DocIdSet -> DocIdSet
 union x y | null x = y
           | null y = x
 union (DocIdSet xs) (DocIdSet ys) =
-    DocIdSet (Vec.create (MVec.new sizeBound >>= writeMerged xs ys))
+    DocIdSet (VU.create (MVU.new sizeBound >>= writeMerged xs ys))
   where
-    sizeBound = Vec.length xs + Vec.length ys
+    sizeBound = VU.length xs + VU.length ys
 
-writeMerged :: Vec.Vector DocId -> Vec.Vector DocId ->
-              MVec.MVector s DocId -> ST s (MVec.MVector s DocId)
+writeMerged :: VU.Vector DocId -> VU.Vector DocId ->
+              MVU.MVector s DocId -> ST s (MVU.MVector s DocId)
 writeMerged xs0 ys0 out = do
     i <- go xs0 ys0 0
-    return $! MVec.take i out
+    return $! MVU.take i out
   where
     go !xs !ys !i
-      | Vec.null xs = do Vec.copy (MVec.slice i (Vec.length ys) out) ys
-                         return (i + Vec.length ys)
-      | Vec.null ys = do Vec.copy (MVec.slice i (Vec.length xs) out) xs
-                         return (i + Vec.length xs)
-      | otherwise   = let x = Vec.head xs; y = Vec.head ys
+      | VU.null xs = do VU.copy (MVU.slice i (VU.length ys) out) ys;
+                         return (i + VU.length ys)
+      | VU.null ys = do VU.copy (MVU.slice i (VU.length xs) out) xs;
+                         return (i + VU.length xs)
+      | otherwise   = let x = VU.head xs; y = VU.head ys
                       in case compare x y of
-                GT -> do MVec.write out i y
-                         go           xs  (Vec.tail ys) (i+1) 
-                EQ -> do MVec.write out i x
-                         go (Vec.tail xs) (Vec.tail ys) (i+1)
-                LT -> do MVec.write out i x   
-                         go (Vec.tail xs)           ys  (i+1)
+                GT -> do MVU.write out i y
+                         go           xs  (VU.tail ys) (i+1)
+                EQ -> do MVU.write out i x
+                         go (VU.tail xs) (VU.tail ys) (i+1)
+                LT -> do MVU.write out i x
+                         go (VU.tail xs)           ys  (i+1)
 
 instance MemSize DocIdSet where
   memSize (DocIdSet vec) = memSizeUVector 2 vec
@@ -175,5 +197,5 @@ prop_union' dset1 dset2 =
 
 member :: DocId -> DocIdSet -> Bool
 member x (DocIdSet vec) =
-   x `List.elem` Vec.toList vec
+   x `List.elem` VU.toList vec
 -}

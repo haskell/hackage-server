@@ -1,10 +1,13 @@
-{-# LANGUAGE TemplateHaskell, StandaloneDeriving, GeneralizedNewtypeDeriving, DeriveDataTypeable, TypeFamilies #-}
+{-# LANGUAGE TemplateHaskell, StandaloneDeriving, GeneralizedNewtypeDeriving,
+             DeriveDataTypeable, TypeFamilies, FlexibleInstances, MultiParamTypeClasses #-}
 module Distribution.Server.Features.DownloadCount.State where
 
 import Data.Time.Calendar (Day(..))
 import Data.Version (Version)
 import Data.Typeable (Typeable)
 import Data.Foldable (forM_)
+import Control.Arrow (first)
+import Control.Monad (liftM)
 import Control.Monad.Reader (ask, asks)
 import Control.Monad.State (get, put, liftIO, execStateT, modify)
 -- import Control.Monad.IO.Class (liftIO)
@@ -51,22 +54,58 @@ data InMemStats = InMemStats {
 newtype OnDiskStats = OnDiskStats {
     onDiskStats :: NestedCountingMap PackageName OnDiskPerPkg
   }
-  deriving (CountingMap (PackageName, (Day, Version)), Show, Eq, MemSize)
+  deriving (Show, Eq, MemSize)
+
+instance CountingMap (PackageName, (Day, Version)) OnDiskStats where
+  cmEmpty                            = OnDiskStats $ cmEmpty
+  cmTotal  (OnDiskStats ncm)         = cmTotal ncm
+  cmInsert kl n (OnDiskStats ncm)    = OnDiskStats $ cmInsert kl n ncm
+  cmFind   k (OnDiskStats ncm)       = cmFind k ncm
+  cmToList   (OnDiskStats ncm)       = cmToList ncm
+  cmToCSV    (OnDiskStats ncm)       = cmToCSV ncm
+  cmInsertRecord r (OnDiskStats ncm) = first OnDiskStats `liftM` cmInsertRecord r ncm
 
 newtype OnDiskPerPkg = OnDiskPerPkg {
     onDiskPerPkgCounts :: NestedCountingMap Day (SimpleCountingMap Version)
   }
-  deriving (CountingMap (Day, Version), Show, Eq, MemSize)
+  deriving (Show, Eq, MemSize)
+
+instance CountingMap (Day, Version) OnDiskPerPkg where
+  cmEmpty  = OnDiskPerPkg $ cmEmpty
+  cmTotal  (OnDiskPerPkg ncm) = cmTotal ncm
+  cmInsert kl n (OnDiskPerPkg ncm) = OnDiskPerPkg $ cmInsert kl n ncm
+  cmFind   k (OnDiskPerPkg ncm) = cmFind k ncm
+  cmToList (OnDiskPerPkg ncm) = cmToList ncm
+  cmToCSV  (OnDiskPerPkg ncm) = cmToCSV ncm
+  cmInsertRecord r (OnDiskPerPkg ncm) = first OnDiskPerPkg `liftM` cmInsertRecord r ncm
 
 newtype RecentDownloads = RecentDownloads {
     recentDownloads :: SimpleCountingMap PackageName
   }
-  deriving (CountingMap PackageName, Show, Eq, MemSize)
+  deriving (Show, Eq, MemSize)
+
+instance CountingMap PackageName RecentDownloads where
+  cmEmpty  = RecentDownloads $ cmEmpty
+  cmTotal  (RecentDownloads ncm) = cmTotal ncm
+  cmInsert kl n (RecentDownloads ncm) = RecentDownloads $ cmInsert kl n ncm
+  cmFind   k (RecentDownloads ncm) = cmFind k ncm
+  cmToList (RecentDownloads ncm) = cmToList ncm
+  cmToCSV  (RecentDownloads ncm) = cmToCSV ncm
+  cmInsertRecord r (RecentDownloads ncm) = first RecentDownloads `liftM` cmInsertRecord r ncm
 
 newtype TotalDownloads = TotalDownloads {
     totalDownloads :: SimpleCountingMap PackageName
   }
-  deriving (CountingMap PackageName, Show, Eq, MemSize)
+  deriving (Show, Eq, MemSize)
+
+instance CountingMap PackageName TotalDownloads where
+  cmEmpty  = TotalDownloads $ cmEmpty
+  cmTotal  (TotalDownloads ncm) = cmTotal ncm
+  cmInsert kl n (TotalDownloads ncm) = TotalDownloads $ cmInsert kl n ncm
+  cmFind   k (TotalDownloads ncm) = cmFind k ncm
+  cmToList (TotalDownloads ncm) = cmToList ncm
+  cmToCSV  (TotalDownloads ncm) = cmToCSV ncm
+  cmInsertRecord r (TotalDownloads ncm) = first TotalDownloads `liftM` cmInsertRecord r ncm
 
 {------------------------------------------------------------------------------
   Initial instances

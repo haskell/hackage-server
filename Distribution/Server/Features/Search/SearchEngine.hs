@@ -89,6 +89,7 @@ initSearchEngine config params =
         searchConfig     = config,
         searchRankParams = params,
         sumFieldLengths  = listArray (minBound, maxBound) (repeat 0),
+        -- FIXME WAT
         bm25Context      = undefined
       }
 
