@@ -4,8 +4,7 @@ category:     Distribution
 synopsis:     The Hackage web server
 description:  The new implementation of the Hackage web server, based on the
               Happstack architecture. This is the implementation used to power
-              <http://hackage.haskell.org/>
-              .
+              <http://hackage.haskell.org/>.
               It is designed to be easy to run your own instance.
               It also includes a doc builder client and a mirroring client.
 author:       Duncan Coutts <duncan@community.haskell.org>,
