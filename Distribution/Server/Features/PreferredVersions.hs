@@ -1,4 +1,5 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, PatternGuards, OverloadedStrings #-}
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, 
+             PatternGuards, OverloadedStrings #-}
 module Distribution.Server.Features.PreferredVersions (
     VersionsFeature(..),
     VersionsResource(..),
@@ -120,7 +121,8 @@ versionsFeature :: CoreFeature
                 -> Hook (PackageName, PreferredInfo) ()
                 -> Hook (PackageName, Maybe [PackageName]) ()
                 -> VersionsFeature
-
+-- FIXME this packageInPath punning and shadowing makes
+-- things harder to understand and modify later
 versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
                                                       , guardValidPackageName
                                                       , lookupPackageName
@@ -190,6 +192,7 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
 
     textPreferred = fmap toResponse makePreferredVersions
 
+    handlePackagesDeprecatedGet :: DynamicPath -> ServerPartE Response
     handlePackagesDeprecatedGet _ = do
       deprPkgs <- deprecatedMap <$> queryState preferredState GetPreferredVersions
       return $ toResponse $ array
@@ -200,6 +203,7 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
               ]
           | (deprPkg, replacementPkgs) <- Map.toList deprPkgs ]
 
+    handlePackageDeprecatedGet :: DynamicPath -> ServerPartE Response
     handlePackageDeprecatedGet dpath = do
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
@@ -211,6 +215,7 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
                                      | pkg <- fromMaybe [] mdep ])
             ]
 
+    handlePackageDeprecatedPut :: DynamicPath -> ServerPartE Response
     handlePackageDeprecatedPut dpath = do
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
@@ -218,11 +223,16 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
       jv <- expectAesonContent
       case jv of
         Object o
+          -- FIXME should just be a nested case
+          -- or something more human friendly
           | fields <- HashMap.toList o
           , Just (Bool deprecated) <- lookup "is-deprecated" fields
           , Just (Array strs)      <- lookup "in-favour-of"  fields
+          -- FIXME Audit this parsing -> PackageName code, suspiciously
+          -- reliant on MonomorphismRestriction to resolve ambiguity
           , let asPackage (String s) = simpleParse (Text.unpack s)
                 asPackage _          = Nothing
+                mpkgs :: [Maybe PackageName]
                 mpkgs = map asPackage (Vector.toList strs)
           , all isJust mpkgs
           -> do let deprecatedInfo | deprecated = Just (catMaybes mpkgs)
