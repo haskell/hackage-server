@@ -89,7 +89,7 @@ initSearchEngine config params =
         searchConfig     = config,
         searchRankParams = params,
         sumFieldLengths  = listArray (minBound, maxBound) (repeat 0),
-        -- FIXME WAT
+        -- FIXME this use of undefined bears explaining
         bm25Context      = undefined
       }
 

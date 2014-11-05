@@ -22,7 +22,6 @@ import Data.Word
 import qualified Data.Vector.Unboxed         as VU
 import qualified Data.Vector.Unboxed.Mutable as MVU
 import qualified Data.Vector.Generic.Base    as VG
--- import qualified Data.Vector.Unboxed.Base    as VUB
 import qualified Data.Vector.Generic.Mutable as MVG
 import Control.Monad (liftM)
 import Control.Monad.ST
