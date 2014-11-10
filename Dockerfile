@@ -4,7 +4,6 @@ env HOME /home/haskell
 
 # dependencies
 run sudo apt-get update && sudo apt-get install -yy unzip libicu48 libicu-dev postfix
-
 run cabal update
 run curl -LO https://github.com/haskell/hackage-server/archive/master.zip
 
