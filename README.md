@@ -4,12 +4,19 @@
 
 This is the `hackage-server` code. This is what powers <http://hackage.haskell.org>, and many other private hackage instances.
 
-## Mac OS X users note
+## Installing ICU
 
-You'll need to do the following to get hackage-server to build:
+You'll need to do the following to get hackage-server's dependency `text-icu` to build:
+
+### Mac OS X
 
     brew install icu4c
     brew link icu4c --force
+
+### Ubuntu/Debian
+
+    sudo apt-get update
+    sudo apt-get install libghc-text-icu-dev
 
 ## Running
 
