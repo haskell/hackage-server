@@ -80,7 +80,7 @@ platformFeature platformState
     platformFeatureInterface = (emptyHackageFeature "platform") {
         featureDesc = "List packages which are part of the Haskell platform (this is work in progress)"
       , featureResources =
-          map ($platformResource) [
+          map ($ platformResource) [
               platformPackage
             , platformPackages
             ]

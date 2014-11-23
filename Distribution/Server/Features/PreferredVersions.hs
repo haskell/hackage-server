@@ -139,7 +139,7 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
   where
     versionsFeatureInterface = (emptyHackageFeature "versions") {
         featureResources =
-          map ($versionsResource) [
+          map ($ versionsResource) [
               preferredResource
             , preferredPackageResource
             , deprecatedResource
