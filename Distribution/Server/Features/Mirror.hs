@@ -109,7 +109,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
     mirrorFeatureInterface = (emptyHackageFeature "mirror") {
         featureDesc = "Support direct (PUT) tarball uploads and overrides"
       , featureResources =
-          map ($mirrorResource) [
+          map ($ mirrorResource) [
               mirrorPackageTarball
             , mirrorPackageUploadTime
             , mirrorPackageUploader

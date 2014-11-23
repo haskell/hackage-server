@@ -159,13 +159,13 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     candidatesFeatureInterface = (emptyHackageFeature "candidates") {
         featureDesc = "Support for package candidates"
       , featureResources =
-          map ($candidatesCoreResource) [
+          map ($ candidatesCoreResource) [
               corePackagesPage
             , corePackagePage
             , coreCabalFile
             , corePackageTarball
             ] ++
-          map ($candidatesResource) [
+          map ($ candidatesResource) [
               publishPage
             , candidateContents
             , candidateChangeLog

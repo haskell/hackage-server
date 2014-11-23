@@ -145,7 +145,7 @@ tagsFeature CoreFeature{ queryGetPackageIndex
 
     tagsFeatureInterface = (emptyHackageFeature "tags") {
         featureResources =
-          map ($tagsResource) [
+          map ($ tagsResource) [
               tagsListing
             , tagListing
             , packageTagsListing

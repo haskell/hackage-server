@@ -76,7 +76,7 @@ distroFeature UserFeature{..}
   where
     distroFeatureInterface = (emptyHackageFeature "distro") {
         featureResources =
-          map ($distroResource) [
+          map ($ distroResource) [
               distroIndexPage
             , distroAllPage
             , distroPackages

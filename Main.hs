@@ -273,9 +273,9 @@ runAction :: RunFlags -> IO ()
 runAction opts = do
     defaults <- Server.defaultServerConfig
 
-    port       <- checkPortOpt defaults (flagToMaybe (flagRunPort opts))
-    ip         <- checkIPOpt   defaults (flagToMaybe (flagRunIP   opts))
-    hosturi    <- checkHostURI defaults (flagToMaybe (flagRunHostURI opts)) port
+    port       <- checkPortOpt    defaults (flagToMaybe (flagRunPort       opts))
+    ip         <- checkIPOpt      defaults (flagToMaybe (flagRunIP         opts))
+    hosturi    <- checkHostURI    defaults (flagToMaybe (flagRunHostURI    opts)) port
     cacheDelay <- checkCacheDelay defaults (flagToMaybe (flagRunCacheDelay opts))
     let stateDir  = fromFlagOrDefault (confStateDir  defaults) (flagRunStateDir  opts)
         staticDir = fromFlagOrDefault (confStaticDir defaults) (flagRunStaticDir opts)
@@ -819,7 +819,7 @@ restoreCommand = makeCommand name shortDesc longDesc defaultRestoreFlags options
       [ optionVerbosity
           flagRestoreVerbosity (\v flags -> flags { flagRestoreVerbosity = v })
       , optionStateDir
-          flagRestoreStateDir (\v flags -> flags { flagRestoreStateDir = v })
+          flagRestoreStateDir  (\v flags -> flags { flagRestoreStateDir  = v })
       , optionStaticDir
           flagRestoreStaticDir (\v flags -> flags { flagRestoreStaticDir = v })
       ]

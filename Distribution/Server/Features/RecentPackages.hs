@@ -89,7 +89,7 @@ recentPackagesFeature env
   = (RecentPackagesFeature{..}, updateRecentCache)
   where
     recentPackagesFeatureInterface = (emptyHackageFeature "recentPackages") {
-        featureResources = map ($recentPackagesResource) [recentPackages]
+        featureResources = map ($ recentPackagesResource) [recentPackages]
       , featureState     = []
       , featureCaches    = [
             CacheComponent {
