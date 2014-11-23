@@ -819,7 +819,7 @@ restoreCommand = makeCommand name shortDesc longDesc defaultRestoreFlags options
       [ optionVerbosity
           flagRestoreVerbosity (\v flags -> flags { flagRestoreVerbosity = v })
       , optionStateDir
-          flagRestoreStateDir (\v flags -> flags { flagRestoreStateDir = v })
+          flagRestoreStateDir  (\v flags -> flags { flagRestoreStateDir  = v })
       , optionStaticDir
           flagRestoreStaticDir (\v flags -> flags { flagRestoreStaticDir = v })
       ]
