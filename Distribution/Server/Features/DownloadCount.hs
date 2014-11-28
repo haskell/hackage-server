@@ -54,9 +54,11 @@ data DownloadResource = DownloadResource {
     topDownloads :: Resource
   }
 
-initDownloadFeature :: ServerEnv -> CoreFeature -> UserFeature -> IO DownloadFeature
-initDownloadFeature serverEnv@ServerEnv{serverStateDir, serverVerbosity = verbosity} core users = do
-    loginfo verbosity "Initialising download feature, start"
+initDownloadFeature :: ServerEnv
+                    -> IO (CoreFeature -> UserFeature -> IO DownloadFeature)
+initDownloadFeature serverEnv@ServerEnv{ serverStateDir, 
+                                         serverVerbosity = verbosity } = do
+    loginfo verbosity "Initialising download feature"
 
     inMemState     <- inMemStateComponent  serverStateDir
     let onDiskState = onDiskStateComponent serverStateDir
@@ -64,12 +66,12 @@ initDownloadFeature serverEnv@ServerEnv{serverStateDir, serverVerbosity = verbos
     totalsCache    <- newMemStateWHNF =<< computeTotalDownloads =<< getState onDiskState
     downChan       <- newChan
 
-    let feature   = downloadFeature core users serverEnv inMemState
-                    onDiskState totalsCache recentCache downChan
+    return $ \core users -> do
+      let feature = downloadFeature core users serverEnv inMemState
+                      onDiskState totalsCache recentCache downChan
 
-    registerHook (packageDownloadHook core) (writeChan downChan)
-    loginfo verbosity "Initialising download feature, end"
-    return feature
+      registerHook (packageDownloadHook core) (writeChan downChan)
+      return feature
 
 inMemStateComponent :: FilePath -> IO (StateComponent AcidState InMemStats)
 inMemStateComponent stateDir = do

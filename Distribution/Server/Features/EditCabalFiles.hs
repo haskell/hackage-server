@@ -41,18 +41,23 @@ import qualified Data.ByteString.Lazy.Char8 as BS -- TODO: Verify that we don't 
 -- | A feature to allow editing cabal files without uploading new tarballs.
 --
 initEditCabalFilesFeature :: ServerEnv
-                          -> UserFeature -> CoreFeature -> UploadFeature
-                          -> IO HackageFeature
-initEditCabalFilesFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode} user core upload = do
+                          -> IO (UserFeature
+                              -> CoreFeature
+                              -> UploadFeature
+                              -> IO HackageFeature)
+initEditCabalFilesFeature env@ServerEnv{ serverTemplatesDir, serverTemplatesMode, 
+                                         serverVerbosity = verbosity } = do
+    loginfo verbosity "Initialising edit cabal files feature"
 
-  -- Page templates
-  templates <- loadTemplates serverTemplatesMode
-                 [serverTemplatesDir, serverTemplatesDir </> "EditCabalFile"]
-                 ["cabalFileEditPage.html", "cabalFilePublished.html"]
+    -- Page templates
+    templates <- loadTemplates serverTemplatesMode
+                   [serverTemplatesDir, serverTemplatesDir </> "EditCabalFile"]
+                   ["cabalFileEditPage.html", "cabalFilePublished.html"]
 
-  let feature = editCabalFilesFeature env templates user core upload
+    return $ \user core upload -> do
+      let feature = editCabalFilesFeature env templates user core upload
 
-  return feature
+      return feature
 
 
 editCabalFilesFeature :: ServerEnv -> Templates

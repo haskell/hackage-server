@@ -116,14 +116,22 @@ data CandidateRender = CandidateRender {
 
 -- URI generation (string-based), using maps; user groups
 initPackageCandidatesFeature :: ServerEnv
-                             -> UserFeature
-                             -> CoreFeature
-                             -> UploadFeature
-                             -> TarIndexCacheFeature
-                             -> IO PackageCandidatesFeature
-initPackageCandidatesFeature env@ServerEnv{serverStateDir} user core upload tarIndexCache = do
+                             -> IO (UserFeature
+                                 -> CoreFeature
+                                 -> UploadFeature
+                                 -> TarIndexCacheFeature
+                                 -> IO PackageCandidatesFeature)
+initPackageCandidatesFeature env@ServerEnv{ serverStateDir,
+                                            serverVerbosity = verbosity } = do
+    loginfo verbosity "Initialising package candidates feature"
+
     candidatesState <- candidatesStateComponent serverStateDir
-    return $ candidatesFeature env user core upload tarIndexCache candidatesState
+
+    return $ \user core upload tarIndexCache -> do
+      let feature = candidatesFeature env
+                                      user core upload tarIndexCache
+                                      candidatesState
+      return feature
 
 candidatesStateComponent :: FilePath -> IO (StateComponent AcidState CandidatePackages)
 candidatesStateComponent stateDir = do

@@ -40,18 +40,16 @@ data PackageContentsResource = PackageContentsResource {
 }
 
 initPackageContentsFeature :: ServerEnv
-                           -> CoreFeature
-                           -> TarIndexCacheFeature
-                           -> IO PackageContentsFeature
-initPackageContentsFeature env@ServerEnv{serverVerbosity = verbosity}
-                           core
-                           tarIndexCache = do
-    loginfo verbosity "Initialising package-contents feature, start"
+                           -> IO (CoreFeature
+                               -> TarIndexCacheFeature
+                               -> IO PackageContentsFeature)
+initPackageContentsFeature env@ServerEnv{serverVerbosity = verbosity} = do
+    loginfo verbosity "Initialising package-contents feature"
 
-    let feature = packageContentsFeature env core tarIndexCache
+    return $ \core tarIndexCache -> do
+      let feature = packageContentsFeature env core tarIndexCache
 
-    loginfo verbosity "Initialising package-contents feature, end"
-    return feature
+      return feature
 
 packageContentsFeature :: ServerEnv
                        -> CoreFeature

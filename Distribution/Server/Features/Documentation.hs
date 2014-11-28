@@ -65,18 +65,15 @@ data DocumentationResource = DocumentationResource {
 
 initDocumentationFeature :: String
                          -> ServerEnv
-                         -> CoreResource
-                         -> IO [PackageIdentifier]
-                         -> UploadFeature
-                         -> TarIndexCacheFeature
-                         -> IO DocumentationFeature
+                         -> IO (CoreResource
+                             -> IO [PackageIdentifier]
+                             -> UploadFeature
+                             -> TarIndexCacheFeature
+                             -> IO DocumentationFeature)
 initDocumentationFeature name
-                         env@ServerEnv{serverStateDir, serverVerbosity = verbosity}
-                         core
-                         getPackages
-                         upload
-                         tarIndexCache = do
-    loginfo verbosity "Initialising documentation feature, start"
+                         env@ServerEnv{ serverStateDir,
+                                        serverVerbosity = verbosity } = do
+    loginfo verbosity "Initialising documentation feature"
 
     -- Canonical state
     documentationState <- documentationStateComponent name serverStateDir
@@ -84,13 +81,12 @@ initDocumentationFeature name
     -- Hooks
     documentationChangeHook <- newHook
 
-    let feature = documentationFeature name env
-                                       core getPackages upload tarIndexCache
-                                       documentationState
-                                       documentationChangeHook
-
-    loginfo verbosity "Initialising documentation feature, end"
-    return feature
+    return $ \core getPackages upload tarIndexCache -> do
+      let feature = documentationFeature name env
+                                         core getPackages upload tarIndexCache
+                                         documentationState
+                                         documentationChangeHook
+      return feature
 
 documentationStateComponent :: String -> FilePath -> IO (StateComponent AcidState Documentation)
 documentationStateComponent name stateDir = do

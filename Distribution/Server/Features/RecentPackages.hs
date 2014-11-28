@@ -43,35 +43,33 @@ data RecentPackagesResource = RecentPackagesResource {
 }
 
 initRecentPackagesFeature :: ServerEnv
-                          -> UserFeature
-                          -> CoreFeature
-                          -> PackageContentsFeature
-                          -> IO RecentPackagesFeature
-initRecentPackagesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
-                          user
-                          core@CoreFeature{packageChangeHook}
-                          packageContents = do
-    loginfo verbosity "Initialising recentPackages feature, start"
+                          -> IO (UserFeature
+                              -> CoreFeature
+                              -> PackageContentsFeature
+                              -> IO RecentPackagesFeature)
+initRecentPackagesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verbosity} = do
+    loginfo verbosity "Initialising recentPackages feature"
 
-    -- recent caches. in lieu of an ActionLog
-    -- TODO: perhaps a hook, recentUpdated :: HookList ([PkgInfo] -> IO ())
-    rec let (feature, updateRecentCache) =
-              recentPackagesFeature env user core packageContents
-                                    cacheRecent
+    return $ \user core@CoreFeature{packageChangeHook} packageContents -> do
 
-        cacheRecent <- newAsyncCacheNF updateRecentCache
-                         defaultAsyncCachePolicy {
-                           asyncCacheName = "recent uploads (html,rss)",
-                           asyncCacheUpdateDelay  = serverCacheDelay,
-                           asyncCacheSyncInit     = False,
-                           asyncCacheLogVerbosity = verbosity
-                         }
+      -- recent caches. in lieu of an ActionLog
+      -- TODO: perhaps a hook, recentUpdated :: HookList ([PkgInfo] -> IO ())
+      rec let (feature, updateRecentCache) =
+                recentPackagesFeature env user core packageContents
+                                      cacheRecent
 
-    registerHookJust packageChangeHook isPackageChangeAny $ \_ ->
-      prodAsyncCache cacheRecent
+          cacheRecent <- newAsyncCacheNF updateRecentCache
+                           defaultAsyncCachePolicy {
+                             asyncCacheName = "recent uploads (html,rss)",
+                             asyncCacheUpdateDelay  = serverCacheDelay,
+                             asyncCacheSyncInit     = False,
+                             asyncCacheLogVerbosity = verbosity
+                           }
 
-    loginfo verbosity "Initialising recentPackages feature, end"
-    return feature
+      registerHookJust packageChangeHook isPackageChangeAny $ \_ ->
+        prodAsyncCache cacheRecent
+
+      return feature
 
 
 recentPackagesFeature :: ServerEnv

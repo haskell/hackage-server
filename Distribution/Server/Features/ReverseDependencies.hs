@@ -75,9 +75,11 @@ data ReverseResource = ReverseResource {
 }
 
 
-initReverseFeature :: ServerEnv -> CoreFeature -> VersionsFeature -> IO ReverseFeature
-initReverseFeature ServerEnv{serverVerbosity = verbosity} core _ = do
-    loginfo verbosity "Initialising reverse feature, start"
+initReverseFeature :: ServerEnv
+                   -> IO (CoreFeature
+                       -> IO ReverseFeature)
+initReverseFeature ServerEnv{serverVerbosity = verbosity} = do
+    loginfo verbosity "Initialising reverse feature"
 
     revChan <- newChan
     registerHook (packageAddHook core) $ \pkg -> writeChan revChan $
@@ -94,11 +96,11 @@ initReverseFeature ServerEnv{serverVerbosity = verbosity} core _ = do
     revTopCache <- Cache.newCacheable =<< sortedRevs
     registerHook revHook $ \_ -> Cache.putCache revTopCache =<< sortedRevs
 
-    let feature = reverseFeature core
-                     revChan revHook revTopCache
+    return $ \core -> do
+      let feature = reverseFeature core
+                       revChan revHook revTopCache
 
-    loginfo verbosity "Initialising reverse feature, end"
-    return feature
+      return feature
 
 reverseFeature :: CoreFeature
                -> Chan (IO (Map PackageName [Version]))

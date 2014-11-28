@@ -27,24 +27,28 @@ import Data.Maybe (isJust)
 -- | An HTML UI for various server admin tasks, mostly user accounts
 --
 initAdminFrontendFeature :: ServerEnv
-                         -> UserFeature -> UserDetailsFeature
-                         -> UserSignupFeature
-                         -> LegacyPasswdsFeature
-                         -> IO HackageFeature
-initAdminFrontendFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode}
-                         user userdetails usersignup legacypasswds = do
+                         -> IO (UserFeature
+                             -> UserDetailsFeature
+                             -> UserSignupFeature
+                             -> LegacyPasswdsFeature
+                             -> IO HackageFeature)
+initAdminFrontendFeature env@ServerEnv{ serverTemplatesDir,
+                                        serverTemplatesMode,
+                                        serverVerbosity = verbosity } = do
+    loginfo verbosity "Initialising admin frontend feature"
 
-  -- Page templates
-  templates <- loadTemplates serverTemplatesMode
-                 [serverTemplatesDir, serverTemplatesDir </> "AdminFrontend"]
-                 [ "admin.html", "accounts.html", "account.html"
-                 , "signups.html", "resets.html", "legacy.html" ]
+    -- Page templates
+    templates <- loadTemplates serverTemplatesMode
+                   [serverTemplatesDir, serverTemplatesDir </> "AdminFrontend"]
+                   [ "admin.html", "accounts.html", "account.html"
+                   , "signups.html", "resets.html", "legacy.html" ]
 
-  let feature = adminFrontendFeature env templates
-                                     user userdetails
-                                     usersignup legacypasswds
+    return $ \user userdetails usersignup legacypasswds -> do
+      let feature = adminFrontendFeature env templates
+                                         user userdetails
+                                         usersignup legacypasswds
 
-  return feature
+      return feature
 
 
 adminFrontendFeature :: ServerEnv -> Templates

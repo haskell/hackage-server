@@ -44,13 +44,15 @@ data DistroResource = DistroResource {
     distroPackage   :: Resource
 }
 
-initDistroFeature :: ServerEnv -> UserFeature -> CoreFeature -> IO DistroFeature
-initDistroFeature ServerEnv{serverStateDir, serverVerbosity = verbosity} user core = do
-    loginfo verbosity "Initialising distro feature, start"
+initDistroFeature :: ServerEnv
+                  -> IO (UserFeature -> CoreFeature -> IO DistroFeature)
+initDistroFeature ServerEnv{serverStateDir, serverVerbosity = verbosity} = do
+    loginfo verbosity "Initialising distro feature"
     distrosState <- distrosStateComponent serverStateDir
-    let feature = distroFeature user core distrosState
-    loginfo verbosity "Initialising distro feature, end"
-    return feature
+
+    return $ \user core -> do
+      let feature = distroFeature user core distrosState
+      return feature
 
 distrosStateComponent :: FilePath -> IO (StateComponent AcidState Distros)
 distrosStateComponent stateDir = do

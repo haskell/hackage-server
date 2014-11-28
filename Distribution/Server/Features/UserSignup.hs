@@ -279,28 +279,31 @@ resetInfoToCSV backuptype (SignupResetTable tbl)
 --
 
 initUserSignupFeature :: ServerEnv
-                      -> UserFeature
-                      -> UserDetailsFeature
-                      -> UploadFeature
-                      -> IO UserSignupFeature
-initUserSignupFeature env@ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode}
-                      users userdetails upload = do
+                      -> IO (UserFeature
+                          -> UserDetailsFeature
+                          -> UploadFeature
+                          -> IO UserSignupFeature)
+initUserSignupFeature env@ServerEnv{ serverStateDir, serverTemplatesDir, 
+                                     serverTemplatesMode, 
+                                     serverVerbosity = verbosity } = do
+    loginfo verbosity "Initialising user signup feature"
 
-  -- Canonical state
-  signupResetState <- signupResetStateComponent serverStateDir
+    -- Canonical state
+    signupResetState <- signupResetStateComponent serverStateDir
 
-  -- Page templates
-  templates <- loadTemplates serverTemplatesMode
-                 [serverTemplatesDir, serverTemplatesDir </> "UserSignupReset"]
-                 [ "SignupRequest.html", "SignupConfirmation.email"
-                 , "SignupEmailSent.html", "SignupConfirm.html"
-                 , "ResetRequest.html", "ResetConfirmation.email"
-                 , "ResetEmailSent.html", "ResetConfirm.html" ]
+    -- Page templates
+    templates <- loadTemplates serverTemplatesMode
+                   [serverTemplatesDir, serverTemplatesDir </> "UserSignupReset"]
+                   [ "SignupRequest.html", "SignupConfirmation.email"
+                   , "SignupEmailSent.html", "SignupConfirm.html"
+                   , "ResetRequest.html", "ResetConfirmation.email"
+                   , "ResetEmailSent.html", "ResetConfirm.html" ]
 
-  let feature = userSignupFeature env users userdetails
-                                  upload signupResetState templates
-
-  return feature
+    return $ \users userdetails upload -> do
+      let feature = userSignupFeature env
+                      users userdetails upload
+                      signupResetState templates
+      return feature
 
 
 userSignupFeature :: ServerEnv

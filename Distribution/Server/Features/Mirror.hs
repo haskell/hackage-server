@@ -52,23 +52,25 @@ data MirrorResource = MirrorResource {
 }
 
 -------------------------------------------------------------------------
-initMirrorFeature :: ServerEnv -> CoreFeature -> UserFeature -> IO MirrorFeature
-initMirrorFeature env@ServerEnv{serverStateDir, serverVerbosity = verbosity}
-                  core user@UserFeature{..} = do
-    loginfo verbosity "Initialising mirror feature, start"
+initMirrorFeature :: ServerEnv
+                  -> IO (CoreFeature
+                      -> UserFeature
+                      -> IO MirrorFeature)
+initMirrorFeature env@ServerEnv{serverStateDir, serverVerbosity = verbosity} = do
+    loginfo verbosity "Initialising mirror feature"
 
     -- Canonical state
     mirrorersState <- mirrorersStateComponent serverStateDir
 
-    -- Tie the knot with a do-rec
-    rec let (feature, mirrorersGroupDesc)
-              = mirrorFeature env core user
-                              mirrorersState mirrorersG mirrorR
+    return $ \core user@UserFeature{..} -> do
+      -- Tie the knot with a do-rec
+      rec let (feature, mirrorersGroupDesc)
+                = mirrorFeature env core user
+                                mirrorersState mirrorersG mirrorR
 
-        (mirrorersG, mirrorR) <- groupResourceAt "/packages/mirrorers" mirrorersGroupDesc
+          (mirrorersG, mirrorR) <- groupResourceAt "/packages/mirrorers" mirrorersGroupDesc
 
-    loginfo verbosity "Initialising mirror feature, end"
-    return feature
+      return feature
 
 mirrorersStateComponent :: FilePath -> IO (StateComponent AcidState MirrorClients)
 mirrorersStateComponent stateDir = do

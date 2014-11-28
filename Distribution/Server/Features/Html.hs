@@ -87,32 +87,25 @@ instance IsHackageFeature HtmlFeature where
 --
 -- This means of generating HTML is somewhat temporary, in that a more advanced
 -- (and better-looking) HTML ajaxy scheme should come about later on.
-initHtmlFeature :: ServerEnv -> UserFeature -> CoreFeature -> RecentPackagesFeature
-                -> UploadFeature -> PackageCandidatesFeature -> VersionsFeature
-                -- [reverse index disabled] -> ReverseFeature
-                -> TagsFeature -> DownloadFeature
-                -> ListFeature -> SearchFeature
-                -> MirrorFeature -> DistroFeature
-                -> DocumentationFeature
-                -> DocumentationFeature
-                -> ReportsFeature
-                -> UserDetailsFeature
-                -> IO HtmlFeature
+initHtmlFeature :: ServerEnv
+                -> IO (UserFeature
+                    -> CoreFeature
+                    -> RecentPackagesFeature
+                    -> UploadFeature -> PackageCandidatesFeature
+                    -> VersionsFeature
+                    -- [reverse index disabled] -> ReverseFeature
+                    -> TagsFeature -> DownloadFeature
+                    -> ListFeature -> SearchFeature
+                    -> MirrorFeature -> DistroFeature
+                    -> DocumentationFeature
+                    -> DocumentationFeature
+                    -> ReportsFeature
+                    -> UserDetailsFeature
+                    -> IO HtmlFeature)
 
 initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
                           serverCacheDelay,
-                          serverVerbosity = verbosity}
-                user core@CoreFeature{packageChangeHook}
-                packages upload
-                candidates versions
-                -- [reverse index disabled] reverse
-                tags download
-                list@ListFeature{itemUpdate}
-                names mirror
-                distros
-                docsCore docsCandidates
-                reportsCore
-                usersdetails = do
+                          serverVerbosity = verbosity} = do
 
     loginfo verbosity "Initialising html feature, start"
 
@@ -124,44 +117,54 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    , "maintain-docs.html"
                    , "distro-monitor.html" ]
 
-    -- do rec, tie the knot
-    rec let (feature, packageIndex, packagesPage) =
-              htmlFeature user core
-                          packages upload
-                          candidates versions
-                          tags download
-                          list names
-                          mirror distros
-                          docsCore docsCandidates
-                          reportsCore
-                          usersdetails
-                          (htmlUtilities core tags)
-                          mainCache namesCache
-                          templates
+    return $ \user core@CoreFeature{packageChangeHook}
+              packages upload
+              candidates versions
+              -- [reverse index disabled] reverse
+              tags download
+              list@ListFeature{itemUpdate}
+              names mirror
+              distros
+              docsCore docsCandidates
+              reportsCore
+              usersdetails -> do
+      -- do rec, tie the knot
+      rec let (feature, packageIndex, packagesPage) =
+                htmlFeature user core
+                            packages upload
+                            candidates versions
+                            tags download
+                            list names
+                            mirror distros
+                            docsCore docsCandidates
+                            reportsCore
+                            usersdetails
+                            (htmlUtilities core tags)
+                            mainCache namesCache
+                            templates
 
-        -- Index page caches
-        mainCache  <- newAsyncCacheNF packageIndex
-                        defaultAsyncCachePolicy {
-                          asyncCacheName = "packages index page (by category)",
-                          asyncCacheUpdateDelay  = serverCacheDelay,
-                          asyncCacheSyncInit     = False,
-                          asyncCacheLogVerbosity = verbosity
-                        }
+          -- Index page caches
+          mainCache  <- newAsyncCacheNF packageIndex
+                          defaultAsyncCachePolicy {
+                            asyncCacheName = "packages index page (by category)",
+                            asyncCacheUpdateDelay  = serverCacheDelay,
+                            asyncCacheSyncInit     = False,
+                            asyncCacheLogVerbosity = verbosity
+                          }
 
-        namesCache <- newAsyncCacheNF packagesPage
-                        defaultAsyncCachePolicy {
-                          asyncCacheName = "packages index page (by name)",
-                          asyncCacheUpdateDelay  = serverCacheDelay,
-                          asyncCacheLogVerbosity = verbosity
-                        }
+          namesCache <- newAsyncCacheNF packagesPage
+                          defaultAsyncCachePolicy {
+                            asyncCacheName = "packages index page (by name)",
+                            asyncCacheUpdateDelay  = serverCacheDelay,
+                            asyncCacheLogVerbosity = verbosity
+                          }
 
-    registerHook itemUpdate         $ \_ -> prodAsyncCache mainCache
-                                         >> prodAsyncCache namesCache
-    registerHook packageChangeHook  $ \_ -> prodAsyncCache mainCache
-                                         >> prodAsyncCache namesCache
+      registerHook itemUpdate         $ \_ -> prodAsyncCache mainCache
+                                           >> prodAsyncCache namesCache
+      registerHook packageChangeHook  $ \_ -> prodAsyncCache mainCache
+                                           >> prodAsyncCache namesCache
 
-    loginfo verbosity "Initialising html feature, end"
-    return feature
+      return feature
 
 htmlFeature :: UserFeature
             -> CoreFeature

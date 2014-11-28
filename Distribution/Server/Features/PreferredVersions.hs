@@ -89,17 +89,22 @@ data PreferredRender = PreferredRender {
 } deriving (Show, Eq)
 
 
-initVersionsFeature :: ServerEnv -> CoreFeature -> UploadFeature -> TagsFeature -> IO VersionsFeature
-initVersionsFeature ServerEnv{serverStateDir, serverVerbosity = verbosity}
-                    core upload tags = do
-    loginfo verbosity "Initialising versions feature, start"
+initVersionsFeature :: ServerEnv
+                    -> IO (CoreFeature
+                        -> UploadFeature
+                        -> TagsFeature
+                        -> IO VersionsFeature)
+initVersionsFeature ServerEnv{serverStateDir, serverVerbosity = verbosity} = do
+    loginfo verbosity "Initialising versions feature"
+
     preferredState <- preferredStateComponent serverStateDir
     preferredHook  <- newHook
     deprecatedHook <- newHook
-    let feature = versionsFeature core upload tags
-                             preferredState preferredHook deprecatedHook
-    loginfo verbosity "Initialising versions feature, end"
-    return feature
+
+    return $ \core upload tags -> do
+      let feature = versionsFeature core upload tags
+                                    preferredState preferredHook deprecatedHook
+      return feature
 
 preferredStateComponent :: FilePath -> IO (StateComponent AcidState PreferredVersions)
 preferredStateComponent stateDir = do

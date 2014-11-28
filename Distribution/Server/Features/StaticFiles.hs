@@ -16,7 +16,7 @@ import System.Directory (getDirectoryContents)
 -- and also serve the genuinely static files.
 --
 initStaticFilesFeature :: ServerEnv
-                       -> IO HackageFeature
+                       -> IO (IO HackageFeature)
 initStaticFilesFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode} = do
 
   -- Page templates
@@ -26,9 +26,10 @@ initStaticFilesFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode} = 
 
   staticFiles <- find (isSuffixOf ".html.st") serverTemplatesDir
 
-  let feature = staticFilesFeature env templates staticFiles
+  return $ do
+    let feature = staticFilesFeature env templates staticFiles
 
-  return feature
+    return feature
 
 -- Simpler version of Syhstem.FilePath.Find (which requires unix-compat)
 find :: (FilePath -> Bool) -> FilePath -> IO [FilePath]

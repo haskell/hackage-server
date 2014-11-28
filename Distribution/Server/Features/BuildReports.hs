@@ -61,12 +61,21 @@ data ReportsResource = ReportsResource {
 
 initBuildReportsFeature :: String
                         -> ServerEnv
-                        -> UserFeature -> UploadFeature
-                        -> CoreResource
-                        -> IO ReportsFeature
-initBuildReportsFeature name env@ServerEnv{serverStateDir} user upload core = do
+                        -> IO (UserFeature
+                            -> UploadFeature
+                            -> CoreResource
+                            -> IO ReportsFeature)
+initBuildReportsFeature name env@ServerEnv{ serverStateDir,
+                                            serverVerbosity = verbosity } = do
+    loginfo verbosity "Initialising build reports feature"
+
     reportsState <- reportsStateComponent name serverStateDir
-    return $ buildReportsFeature name env user upload core reportsState
+
+    return $ \user upload core -> do
+      let feature = buildReportsFeature name env
+                                        user upload core
+                                        reportsState
+      return feature
 
 reportsStateComponent :: String -> FilePath -> IO (StateComponent AcidState BuildReports)
 reportsStateComponent name stateDir = do

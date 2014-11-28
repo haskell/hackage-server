@@ -228,10 +228,10 @@ data CoreResource = CoreResource {
     lookupPackageId   :: PackageId   -> ServerPartE PkgInfo
 }
 
-initCoreFeature :: ServerEnv -> UserFeature -> IO CoreFeature
+initCoreFeature :: ServerEnv -> IO (UserFeature -> IO CoreFeature)
 initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
-                              serverVerbosity = verbosity} users = do
-    loginfo verbosity "Initialising core feature, start"
+                              serverVerbosity = verbosity} = do
+    loginfo verbosity "Initialising core feature"
 
     -- Canonical state
     packagesState <- packagesStateComponent verbosity serverStateDir
@@ -244,26 +244,26 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
     packageChangeHook   <- newHook
     packageDownloadHook <- newHook
 
-    rec let (feature, getIndexTarball)
-              = coreFeature env users
-                            packagesState extraMap indexTar
-                            packageChangeHook packageDownloadHook
+    return $ \users -> do
+      rec let (feature, getIndexTarball)
+                = coreFeature env users
+                              packagesState extraMap indexTar
+                              packageChangeHook packageDownloadHook
 
-        -- Caches
-        -- The index.tar.gz file
-        indexTar <- newAsyncCacheNF getIndexTarball
-                      defaultAsyncCachePolicy {
-                        asyncCacheName = "index tarball",
-                        asyncCacheUpdateDelay  = serverCacheDelay,
-                        asyncCacheSyncInit     = False,
-                        asyncCacheLogVerbosity = verbosity
-                      }
+          -- Caches
+          -- The index.tar.gz file
+          indexTar <- newAsyncCacheNF getIndexTarball
+                        defaultAsyncCachePolicy {
+                          asyncCacheName = "index tarball",
+                          asyncCacheUpdateDelay  = serverCacheDelay,
+                          asyncCacheSyncInit     = False,
+                          asyncCacheLogVerbosity = verbosity
+                        }
 
-    registerHookJust packageChangeHook isPackageIndexChange $ \_ ->
-      prodAsyncCache indexTar
+      registerHookJust packageChangeHook isPackageIndexChange $ \_ ->
+        prodAsyncCache indexTar
 
-    loginfo verbosity "Initialising core feature, end"
-    return feature
+      return feature
 
 
 packagesStateComponent :: Verbosity -> FilePath -> IO (StateComponent AcidState PackagesState)
