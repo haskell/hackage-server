@@ -146,7 +146,6 @@ executable hackage-server
     Distribution.Server.Util.Parse
     Distribution.Server.Util.ServeTarball
     Distribution.Server.Util.TarIndex
-    Distribution.Server.Util.TextSearch
     Distribution.Server.Util.GZip
     Distribution.Server.Util.ContentType
     Distribution.Server.Util.SigTerm
