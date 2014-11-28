@@ -238,7 +238,7 @@ executable hackage-server
     pretty     >= 1.0,
     base64-bytestring ==0.1.* || == 1.0.*,
     base16-bytestring ==0.1.*,
-    bytestring >= 0.9,
+    bytestring >= 0.10.4.1,
     --TODO: drop blaze builder in favour of bytestring-0.10 builder
     blaze-builder,
     text       >= 0.11,
