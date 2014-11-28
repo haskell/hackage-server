@@ -115,17 +115,8 @@ data Server = Server {
 hasSavedState :: ServerConfig -> IO Bool
 hasSavedState = doesDirectoryExist . confDbStateDir
 
--- | Make a server instance from the server configuration.
---
--- This does not yet run the server (see 'run') but it does setup the server
--- state system, making it possible to import data, and initializes the
--- features.
---
--- Note: the server instance must eventually be 'shutdown' or you'll end up
--- with stale lock files.
---
-initialise :: ServerConfig -> IO Server
-initialise config@(ServerConfig verbosity hostURI listenOn
+mkServerEnv :: ServerConfig -> IO ServerEnv
+mkServerEnv config@(ServerConfig verbosity hostURI _
                                     stateDir _ tmpDir
                                     cacheDelay) = do
     createDirectoryIfMissing False stateDir
@@ -146,13 +137,28 @@ initialise config@(ServerConfig verbosity hostURI listenOn
             serverBaseURI       = hostURI,
             serverVerbosity     = verbosity
          }
+    return env
+
+-- | Make a server instance from the server configuration.
+--
+-- This does not yet run the server (see 'run') but it does setup the server
+-- state system, making it possible to import data, and initializes the
+-- features.
+--
+-- Note: the server instance must eventually be 'shutdown' or you'll end up
+-- with stale lock files.
+--
+initialise :: ServerConfig -> IO Server
+initialise config = do
+    env <- mkServerEnv config
+
     -- do feature initialization
     (features, userFeature) <- Features.initHackageFeatures env
 
     return Server {
         serverFeatures    = features,
         serverUserFeature = userFeature,
-        serverListenOn    = listenOn,
+        serverListenOn    = confListenOn config,
         serverEnv         = env
     }
 
