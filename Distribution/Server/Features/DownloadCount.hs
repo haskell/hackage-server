@@ -43,7 +43,7 @@ import Control.Concurrent (forkIO)
 data DownloadFeature = DownloadFeature {
     downloadFeatureInterface :: HackageFeature
   , downloadResource         :: DownloadResource
-  , totalPackageDownloads   :: MonadIO m => m TotalDownloads
+  , totalPackageDownloads    :: MonadIO m => m TotalDownloads
   , recentPackageDownloads   :: MonadIO m => m RecentDownloads
   }
 
@@ -62,8 +62,10 @@ initDownloadFeature serverEnv@ServerEnv{ serverStateDir,
 
     inMemState     <- inMemStateComponent  serverStateDir
     let onDiskState = onDiskStateComponent serverStateDir
-    recentCache    <- newMemStateWHNF =<< computeRecentDownloads =<< getState onDiskState
-    totalsCache    <- newMemStateWHNF =<< computeTotalDownloads =<< getState onDiskState
+    (recentDownloads,
+     totalDownloads) <- computeRecentAndTotalDownloads =<< getState onDiskState
+    recentCache    <- newMemStateWHNF recentDownloads
+    totalsCache    <- newMemStateWHNF totalDownloads
     downChan       <- newChan
 
     return $ \core users -> do
@@ -92,41 +94,15 @@ onDiskStateComponent stateDir = StateComponent {
       stateDesc    = "All time download counts"
     , stateHandle  = OnDiskState
     , getState     = readOnDiskStats (dcPath stateDir </> "ondisk")
-    , putState     = writeOnDisk stateDir Nothing Nothing ReconstructLog
+    , putState     = \onDiskStats -> do
+                       --TODO: we should extend the backup system so we can
+                       -- write these files out incrementally
+                       writeOnDiskStats (dcPath stateDir </> "ondisk") onDiskStats
+                       reconstructLog (dcPath stateDir) onDiskStats
     , backupState  = \_ -> onDiskBackup
     , restoreState = onDiskRestore
     , resetState   = return . onDiskStateComponent
     }
-
-data ReconstructLog = ReconstructLog | DontReconstructLog
-
-writeOnDisk :: FilePath
-            -> Maybe (MemState TotalDownloads)
-            -> Maybe (MemState RecentDownloads)
-            -> ReconstructLog
-            -> OnDiskStats
-            -> IO ()
-writeOnDisk stateDir mTotalDownloads mRecentDownloads
-  shouldReconstructLog onDiskStats = do
-  writeOnDiskStats (dcPath stateDir </> "ondisk") onDiskStats
-
-  case mTotalDownloads of
-    Just totalDownloads ->
-      writeMemState totalDownloads =<< computeTotalDownloads onDiskStats
-    Nothing ->
-      return ()
-
-  case mRecentDownloads of
-    Just recentDownloads ->
-      writeMemState recentDownloads =<< computeRecentDownloads onDiskStats
-    Nothing ->
-      return ()
-
-  case shouldReconstructLog of
-    ReconstructLog ->
-      reconstructLog (dcPath stateDir) onDiskStats
-    DontReconstructLog ->
-      return ()
 
 downloadFeature :: CoreFeature
                 -> UserFeature
@@ -192,8 +168,14 @@ downloadFeature CoreFeature{}
 
           -- Update the on-disk statistics and recompute recent downloads
           onDiskStats' <- updateHistory inMemStats <$> getState onDiskState
-          writeOnDisk serverStateDir (Just totalDownloadsCache)
-            (Just recentDownloadsCache) DontReconstructLog onDiskStats'
+          writeOnDiskStats (dcPath serverStateDir </> "ondisk") onDiskStats'
+          --TODO: this is still stupid, writing it out only to read it back
+          -- we should be able to update the in memory ones incrementally
+          (recentDownloads,
+           totalDownloads) <- computeRecentAndTotalDownloads =<< getState onDiskState
+          writeMemState recentDownloadsCache recentDownloads
+          writeMemState totalDownloadsCache totalDownloads
+
 
         updateState inMemState $ RegisterDownload pkg
 
@@ -211,6 +193,7 @@ downloadFeature CoreFeature{}
 
     getDownloadCounts :: DynamicPath -> ServerPartE Response
     getDownloadCounts _path = do
+      guardAuthorised_ [InGroup adminGroup]
       onDiskStats <- liftIO $ getState onDiskState
       let [BackupByteString _ bs] = onDiskBackup onDiskStats
       return $ toResponse bs
@@ -221,8 +204,15 @@ downloadFeature CoreFeature{}
       fileContents <- expectCSV
       csv          <- importCSV "PUT input" fileContents
       onDiskStats  <- cmFromCSV csv
-      liftIO $ writeOnDisk serverStateDir (Just totalDownloadsCache)
-        (Just recentDownloadsCache) ReconstructLog onDiskStats
+      liftIO $ do
+        --TODO: if the onDiskStats are large, can we stream it?
+        writeOnDiskStats (dcPath serverStateDir </> "ondisk") onDiskStats
+        (recentDownloads,
+         totalDownloads) <- computeRecentAndTotalDownloads onDiskStats
+        writeMemState recentDownloadsCache recentDownloads
+        writeMemState totalDownloadsCache totalDownloads
+        reconstructLog (dcPath serverStateDir) onDiskStats
+
       ok $ toResponse $ "Imported " ++ show (length csv) ++ " records\n"
 
 {------------------------------------------------------------------------------
@@ -232,20 +222,16 @@ downloadFeature CoreFeature{}
 getToday :: IO Day
 getToday = utctDay <$> getCurrentTime
 
-getRecentDayRange :: Integer -> IO DayRange
+getRecentDayRange :: Integer -> IO (Day, Day)
 getRecentDayRange numDays = do
   lastDay <- getToday
-  let firstDay  = addDays (negate numDays) lastDay
-      secondDay = addDays 1 firstDay
-  return [firstDay, secondDay .. lastDay]
+  let firstDay = addDays (negate numDays) lastDay
+  return (firstDay, lastDay)
 
-computeRecentDownloads :: OnDiskStats -> IO RecentDownloads
-computeRecentDownloads onDiskStats = do
+computeRecentAndTotalDownloads :: OnDiskStats -> IO (RecentDownloads, TotalDownloads)
+computeRecentAndTotalDownloads onDiskStats = do
   recentRange <- getRecentDayRange 30
-  return $ initRecentDownloads recentRange onDiskStats
-
-computeTotalDownloads :: OnDiskStats -> IO TotalDownloads
-computeTotalDownloads onDiskStats = return $ initTotalDownloads onDiskStats
+  return $ initRecentAndTotalDownloads recentRange onDiskStats
 
 dcPath :: FilePath -> FilePath
 dcPath stateDir = stateDir </> "db" </> "DownloadCount"

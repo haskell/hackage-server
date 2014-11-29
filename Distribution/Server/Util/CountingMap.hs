@@ -8,8 +8,8 @@ module Distribution.Server.Util.CountingMap (
 
 import Prelude hiding (rem)
 
-import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Typeable (Typeable)
 import Text.CSV (CSV, Record)
@@ -33,21 +33,22 @@ import Distribution.Server.Framework.BackupRestore (parseRead, parseText)
 ------------------------------------------------------------------------------}
 
 data NestedCountingMap a b = NCM {
-    nestedTotalCount  :: Int
-  , nestedCountingMap :: Map a b
+    nestedTotalCount  :: !Int
+  , nestedCountingMap :: !(Map a b)
   }
-  deriving (Show, Eq, Typeable)
+  deriving (Show, Eq, Ord, Typeable)
 
 newtype SimpleCountingMap a = SCM {
     simpleCountingMap :: NestedCountingMap a Int
   }
-  deriving (Show, Eq, Typeable)
+  deriving (Show, Eq, Ord, Typeable)
 
 class CountingMap k a | a -> k where
   cmEmpty  :: a
   cmTotal  :: a -> Int
   cmInsert :: k -> Int -> a -> a
   cmFind   :: k -> a -> Int
+  cmUnion  :: a -> a -> a
   cmToList :: a -> [(k, Int)]
 
   cmToCSV        :: a -> CSV
@@ -60,6 +61,9 @@ instance (Ord k, Text k) => CountingMap k (SimpleCountingMap k) where
 
   cmInsert k n (SCM (NCM total m)) =
     SCM (NCM (total + n) (adjustFrom (+ n) k 0 m))
+
+  cmUnion (SCM (NCM total1 m1)) (SCM (NCM total2 m2)) =
+    SCM (NCM (total1 + total2) (Map.unionWith (+) m1 m2))
 
   cmFind k (SCM (NCM _ m)) = Map.findWithDefault 0 k m
 
@@ -86,6 +90,9 @@ instance (Text k, Ord k, Eq l, CountingMap l a) => CountingMap (k, l) (NestedCou
     NCM (total + n) (adjustFrom (cmInsert l n) k cmEmpty m)
 
   cmFind (k, l) (NCM _ m) = cmFind l (Map.findWithDefault cmEmpty k m)
+
+  cmUnion (NCM total1 m1) (NCM total2 m2) =
+    NCM (total1 + total2) (Map.unionWith cmUnion m1 m2)
 
   cmToList (NCM _ m) = concatMap aux (Map.toList m)
     where
