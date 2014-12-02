@@ -27,7 +27,7 @@ module Distribution.Server.Features.BuildReports.BuildReport (
 
     affixTimestamp,
 
-    BuildReport_v1
+    BuildReport_v0,
   ) where
 
 import Distribution.Package
@@ -57,8 +57,10 @@ import qualified Text.PrettyPrint.HughesPJ as Disp
          ( Doc, char, text )
 import Text.PrettyPrint.HughesPJ
          ( (<+>), (<>), render )
+import Data.Serialize as Serialize
+         ( Serialize(..) )
 import Data.SafeCopy
-         ( deriveSafeCopy, extension, base, Migrate(..) )
+         ( SafeCopy(..), deriveSafeCopy, extension, base, Migrate(..) )
 import Test.QuickCheck
          ( Arbitrary(..), elements, oneof )
 import Text.StringTemplate ()
@@ -71,6 +73,7 @@ import Data.List
          ( unfoldr, sortBy )
 import Data.Char as Char
          ( isAlpha, isAlphaNum )
+import qualified Data.ByteString.Char8 as BS
 import qualified Data.Map as Map
 import Data.Time
          ( UTCTime, getCurrentTime )
@@ -318,7 +321,7 @@ instance Text.Text Outcome where
       _          -> Parse.pfail
 
 instance MemSize BuildReport where
-    memSize (BuildReport a b c d e f g h i j k l) = memSize10 a b c d e f g h i j + 2 + memSize k + memSize l
+    memSize (BuildReport a b c d e f g h i j k l) = memSize10 a b c d e f g h i j + memSize k + memSize l
 
 instance MemSize InstallOutcome where
     memSize (DependencyFailed a) = memSize1 a
@@ -388,6 +391,41 @@ deriveSafeCopy 3 'extension ''BuildReport
 -- Old SafeCopy versions
 --
 
+-- Note this is kind of backwards from a migration pov, but this is because
+-- the oldest one used a textual external rep with a parser, and the only
+-- version we have with a parser is the latest, but they're sufficiently
+-- compatible that we can get away with it for now.
+newtype BuildReport_v0 = BuildReport_v0 BuildReport
+
+instance SafeCopy  BuildReport_v0
+instance Serialize BuildReport_v0 where
+    put (BuildReport_v0 br) = Serialize.put . BS.pack . show $ br
+    get = (BuildReport_v0 . read . BS.unpack) `fmap` Serialize.get
+
+instance Migrate BuildReport_v1 where
+    type MigrateFrom BuildReport_v1 = BuildReport_v0
+    migrate (BuildReport_v0 BuildReport{..}) = BuildReport_v1 {
+        v1_package = package
+      , v1_os = os
+      , v1_arch = arch
+      , v1_compiler = compiler
+      , v1_client = client
+      , v1_flagAssignment = flagAssignment
+      , v1_dependencies = dependencies
+      , v1_installOutcome = case installOutcome of
+          PlanningFailed         -> error "impossible rev migration"
+          DependencyFailed pkgid -> V0_DependencyFailed pkgid
+          DownloadFailed         -> V0_DownloadFailed
+          UnpackFailed           -> V0_UnpackFailed
+          SetupFailed            -> V0_SetupFailed
+          ConfigureFailed        -> V0_ConfigureFailed
+          BuildFailed            -> V0_BuildFailed
+          InstallFailed          -> V0_InstallFailed
+          InstallOk              -> V0_InstallOk
+      , v1_docsOutcome = docsOutcome
+      , v1_testsOutcome = testsOutcome
+      }
+
 data BuildReport_v1 = BuildReport_v1 {
     v1_package         :: PackageIdentifier,
     v1_os              :: OS,
@@ -396,30 +434,30 @@ data BuildReport_v1 = BuildReport_v1 {
     v1_client          :: PackageIdentifier,
     v1_flagAssignment  :: FlagAssignment,
     v1_dependencies    :: [PackageIdentifier],
-    v1_installOutcome  :: InstallOutcome_v1,
+    v1_installOutcome  :: InstallOutcome_v0,
     v1_docsOutcome     :: Outcome,
     v1_testsOutcome    :: Outcome
   }
 
-data InstallOutcome_v1
-    = V1_DependencyFailed PackageIdentifier
-    | V1_DownloadFailed
-    | V1_UnpackFailed
-    | V1_SetupFailed
-    | V1_ConfigureFailed
-    | V1_BuildFailed
-    | V1_InstallFailed
-    | V1_InstallOk
+data InstallOutcome_v0
+   = V0_DependencyFailed PackageIdentifier
+   | V0_DownloadFailed
+   | V0_UnpackFailed
+   | V0_SetupFailed
+   | V0_ConfigureFailed
+   | V0_BuildFailed
+   | V0_InstallFailed
+   | V0_InstallOk
 
-deriveSafeCopy 0 'base ''InstallOutcome_v1
-deriveSafeCopy 2 'base ''BuildReport_v1
+deriveSafeCopy 0 'base      ''InstallOutcome_v0
+deriveSafeCopy 2 'extension ''BuildReport_v1
 
 instance Migrate BuildReport where
     type MigrateFrom BuildReport = BuildReport_v1
     migrate BuildReport_v1{..} = BuildReport {
         package = v1_package
       , time = Nothing
-      , docBuilder = True  -- Most reports come from the doc builder anyway
+      , docBuilder = True  -- Most old reports come from the doc builder anyway
       , os = v1_os
       , arch = v1_arch
       , compiler = v1_compiler
@@ -432,13 +470,13 @@ instance Migrate BuildReport where
       }
 
 instance Migrate InstallOutcome where
-    type MigrateFrom InstallOutcome = InstallOutcome_v1
+    type MigrateFrom InstallOutcome = InstallOutcome_v0
     migrate outcome = case outcome of
-        V1_DependencyFailed pkgid -> DependencyFailed pkgid
-        V1_DownloadFailed -> DownloadFailed
-        V1_UnpackFailed -> UnpackFailed
-        V1_SetupFailed -> SetupFailed
-        V1_ConfigureFailed -> ConfigureFailed
-        V1_BuildFailed -> BuildFailed
-        V1_InstallFailed -> InstallFailed
-        V1_InstallOk -> InstallOk
+        V0_DependencyFailed pkgid -> DependencyFailed pkgid
+        V0_DownloadFailed -> DownloadFailed
+        V0_UnpackFailed -> UnpackFailed
+        V0_SetupFailed -> SetupFailed
+        V0_ConfigureFailed -> ConfigureFailed
+        V0_BuildFailed -> BuildFailed
+        V0_InstallFailed -> InstallFailed
+        V0_InstallOk -> InstallOk
