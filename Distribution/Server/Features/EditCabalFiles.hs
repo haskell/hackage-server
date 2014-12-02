@@ -45,10 +45,8 @@ initEditCabalFilesFeature :: ServerEnv
                               -> CoreFeature
                               -> UploadFeature
                               -> IO HackageFeature)
-initEditCabalFilesFeature env@ServerEnv{ serverTemplatesDir, serverTemplatesMode, 
-                                         serverVerbosity = verbosity } = do
-    loginfo verbosity "Initialising edit cabal files feature"
-
+initEditCabalFilesFeature env@ServerEnv{ serverTemplatesDir,
+                                         serverTemplatesMode } = do
     -- Page templates
     templates <- loadTemplates serverTemplatesMode
                    [serverTemplatesDir, serverTemplatesDir </> "EditCabalFile"]

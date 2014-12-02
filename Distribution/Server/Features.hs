@@ -80,35 +80,63 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
     loginfo verbosity "Initialising features, part 1"
 
-    mkStaticFilesFeature <- initStaticFilesFeature env
-    mkUserFeature        <- initUserFeature env
-    mkCoreFeature        <- initCoreFeature env
-    mkMirrorFeature      <- initMirrorFeature env
-    mkUploadFeature      <- initUploadFeature env
+    mkStaticFilesFeature <- logStartup "static files" $
+                            initStaticFilesFeature env
+    mkUserFeature        <- logStartup "user" $
+                            initUserFeature env
+    mkCoreFeature        <- logStartup "core" $
+                            initCoreFeature env
+    mkMirrorFeature      <- logStartup "mirror" $
+                            initMirrorFeature env
+    mkUploadFeature      <- logStartup "upload" $
+                            initUploadFeature env
 #ifndef MINIMAL
-    mkTarIndexCacheFeature   <- initTarIndexCacheFeature env
-    mkPackageContentsFeature <- initPackageContentsFeature env
-    mkRecentPackagesFeature  <- initRecentPackagesFeature env
-    mkUserDetailsFeature   <- initUserDetailsFeature env
-    mkUserSignupFeature    <- initUserSignupFeature env
-    mkLegacyPasswdsFeature <- initLegacyPasswdsFeature env
-    mkDistroFeature        <- initDistroFeature env
-    mkPackageCandidatesFeature       <- initPackageCandidatesFeature env
-    mkBuildReportsCoreFeature        <- initBuildReportsFeature "reports-core" env
-    mkBuildReportsCandidatesFeature  <- initBuildReportsFeature "reports-candidates" env
-    mkDocumentationCoreFeature       <- initDocumentationFeature "documentation-core" env
-    mkDocumentationCandidatesFeature <- initDocumentationFeature "documentation-candidates" env
-    mkDownloadFeature       <- initDownloadFeature env
-    mkTagsFeature           <- initTagsFeature env
-    mkVersionsFeature       <- initVersionsFeature env
-    -- mkReverseFeature     <- initReverseFeature env
-    mkListFeature           <- initListFeature env
-    mkSearchFeature         <- initSearchFeature env
-    mkPlatformFeature       <- initPlatformFeature env
-    mkHtmlFeature           <- initHtmlFeature env
-    mkEditCabalFilesFeature <- initEditCabalFilesFeature env
-    mkAdminFrontendFeature  <- initAdminFrontendFeature env
-    mkHoogleDataFeature     <- initHoogleDataFeature env
+    mkTarIndexCacheFeature   <- logStartup "tar index" $
+                                initTarIndexCacheFeature env
+    mkPackageContentsFeature <- logStartup "package contents" $
+                                initPackageContentsFeature env
+    mkRecentPackagesFeature  <- logStartup "recent packages" $
+                                initRecentPackagesFeature env
+    mkUserDetailsFeature   <- logStartup "user details" $
+                              initUserDetailsFeature env
+    mkUserSignupFeature    <- logStartup "user signup" $
+                              initUserSignupFeature env
+    mkLegacyPasswdsFeature <- logStartup "legacy passwords" $
+                              initLegacyPasswdsFeature env
+    mkDistroFeature        <- logStartup "distro" $
+                              initDistroFeature env
+    mkPackageCandidatesFeature       <- logStartup "package candidates" $
+                                        initPackageCandidatesFeature env
+    mkBuildReportsCoreFeature        <- logStartup "reports (core)" $
+                                        initBuildReportsFeature "reports-core" env
+    mkBuildReportsCandidatesFeature  <- logStartup "reports (candidates)" $
+                                        initBuildReportsFeature "reports-candidates" env
+    mkDocumentationCoreFeature       <- logStartup "documentation (core)" $
+                                        initDocumentationFeature "documentation-core" env
+    mkDocumentationCandidatesFeature <- logStartup "documentation (candidates)" $
+                                        initDocumentationFeature "documentation-candidates" env
+    mkDownloadFeature       <- logStartup "download counts" $
+                               initDownloadFeature env
+    mkTagsFeature           <- logStartup "tags" $
+                               initTagsFeature env
+    mkVersionsFeature       <- logStartup "versions" $
+                               initVersionsFeature env
+    -- mkReverseFeature     <- logStartup "reverse deps" $
+    --                         initReverseFeature env
+    mkListFeature           <- logStartup "list" $
+                               initListFeature env
+    mkSearchFeature         <- logStartup "search" $
+                               initSearchFeature env
+    mkPlatformFeature       <- logStartup "platform" $
+                               initPlatformFeature env
+    mkHtmlFeature           <- logStartup "html" $
+                               initHtmlFeature env
+    mkEditCabalFilesFeature <- logStartup "edit cabal files" $
+                               initEditCabalFilesFeature env
+    mkAdminFrontendFeature  <- logStartup "admn frontend" $
+                               initAdminFrontendFeature env
+    mkHoogleDataFeature     <- logStartup "hoogle" $
+                               initHoogleDataFeature env
 #endif
 
     loginfo verbosity "Initialising features, part 2"
@@ -300,12 +328,17 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     -- for them. This solution is iffy for initial feature hooks that rely on
     -- other features It also happens even in the backup/restore modes.
     sequence_
-      [ do loginfo verbosity ("Running feature post-init hook for " ++ name)
-           featurePostInit feature
+      [ logStartup ("post-init for " ++ name ++ "feature") $
+        featurePostInit feature
       | feature@HackageFeature { featureName = name } <- allFeatures ]
     loginfo verbosity "Initialising features done"
 
     return (allFeatures, usersFeature)
+
+  where
+    logStartup feature action = do
+      loginfo verbosity ("Initialising " ++ feature ++ " feature")
+      logTiming verbosity ("Initialising " ++ feature ++ " feature done") action
 
 -- | Checkpoint a feature's persistent state to disk.
 featureCheckpoint :: HackageFeature -> IO ()

@@ -121,10 +121,7 @@ initPackageCandidatesFeature :: ServerEnv
                                  -> UploadFeature
                                  -> TarIndexCacheFeature
                                  -> IO PackageCandidatesFeature)
-initPackageCandidatesFeature env@ServerEnv{ serverStateDir,
-                                            serverVerbosity = verbosity } = do
-    loginfo verbosity "Initialising package candidates feature"
-
+initPackageCandidatesFeature env@ServerEnv{serverStateDir} = do
     candidatesState <- candidatesStateComponent serverStateDir
 
     return $ \user core upload tarIndexCache -> do

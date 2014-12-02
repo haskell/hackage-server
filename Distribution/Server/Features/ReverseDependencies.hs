@@ -79,8 +79,6 @@ initReverseFeature :: ServerEnv
                    -> IO (CoreFeature
                        -> IO ReverseFeature)
 initReverseFeature ServerEnv{serverVerbosity = verbosity} = do
-    loginfo verbosity "Initialising reverse feature"
-
     revChan <- newChan
     registerHook (packageAddHook core) $ \pkg -> writeChan revChan $
         update $ AddReversePackage (packageId pkg) (getAllDependencies pkg)

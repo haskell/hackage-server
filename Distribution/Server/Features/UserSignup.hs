@@ -29,7 +29,7 @@ import qualified Data.Text as T
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS -- Only used for ASCII data
 import qualified Data.ByteString.Base16 as Base16
-import Data.Char (isSpace, isPrint, isAlphaNum)
+import Data.Char (isSpace, isPrint)
 
 import Data.Typeable (Typeable)
 import Control.Monad.Reader (ask)
@@ -284,10 +284,7 @@ initUserSignupFeature :: ServerEnv
                           -> UploadFeature
                           -> IO UserSignupFeature)
 initUserSignupFeature env@ServerEnv{ serverStateDir, serverTemplatesDir, 
-                                     serverTemplatesMode, 
-                                     serverVerbosity = verbosity } = do
-    loginfo verbosity "Initialising user signup feature"
-
+                                     serverTemplatesMode } = do
     -- Canonical state
     signupResetState <- signupResetStateComponent serverStateDir
 

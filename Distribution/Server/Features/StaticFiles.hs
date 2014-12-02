@@ -18,7 +18,6 @@ import System.Directory (getDirectoryContents)
 initStaticFilesFeature :: ServerEnv
                        -> IO (IO HackageFeature)
 initStaticFilesFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode} = do
-
   -- Page templates
   templates <- loadTemplates serverTemplatesMode
                  [serverTemplatesDir]

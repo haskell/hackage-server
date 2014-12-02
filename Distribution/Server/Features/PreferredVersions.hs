@@ -94,9 +94,7 @@ initVersionsFeature :: ServerEnv
                         -> UploadFeature
                         -> TagsFeature
                         -> IO VersionsFeature)
-initVersionsFeature ServerEnv{serverStateDir, serverVerbosity = verbosity} = do
-    loginfo verbosity "Initialising versions feature"
-
+initVersionsFeature ServerEnv{serverStateDir} = do
     preferredState <- preferredStateComponent serverStateDir
     preferredHook  <- newHook
     deprecatedHook <- newHook

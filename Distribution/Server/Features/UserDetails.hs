@@ -242,10 +242,7 @@ initUserDetailsFeature :: ServerEnv
                        -> IO (UserFeature
                            -> CoreFeature
                            -> IO UserDetailsFeature)
-initUserDetailsFeature ServerEnv{ serverStateDir, 
-                                  serverVerbosity = verbosity } = do
-    loginfo verbosity "Initialising user details feature"
-
+initUserDetailsFeature ServerEnv{serverStateDir} = do
     -- Canonical state
     usersDetailsState <- userDetailsStateComponent serverStateDir
 

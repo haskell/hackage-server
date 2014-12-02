@@ -193,9 +193,7 @@ instance MemSize GroupIndex where
 
 -- TODO: add renaming
 initUserFeature :: ServerEnv -> IO (IO UserFeature)
-initUserFeature ServerEnv{serverStateDir, serverVerbosity = verbosity} = do
-  loginfo verbosity "Initialising user feature"
-
+initUserFeature ServerEnv{serverStateDir} = do
   -- Canonical state
   usersState  <- usersStateComponent  serverStateDir
   adminsState <- adminsStateComponent serverStateDir

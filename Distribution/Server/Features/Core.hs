@@ -231,8 +231,6 @@ data CoreResource = CoreResource {
 initCoreFeature :: ServerEnv -> IO (UserFeature -> IO CoreFeature)
 initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
                               serverVerbosity = verbosity} = do
-    loginfo verbosity "Initialising core feature"
-
     -- Canonical state
     packagesState <- packagesStateComponent verbosity serverStateDir
 

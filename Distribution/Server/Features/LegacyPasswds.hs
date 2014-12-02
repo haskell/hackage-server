@@ -181,8 +181,8 @@ legacyPasswdsToCSV backuptype (LegacyPasswdsTable tbl)
 initLegacyPasswdsFeature :: ServerEnv
                          -> IO (UserFeature
                              -> IO LegacyPasswdsFeature)
-initLegacyPasswdsFeature env@ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode} = do
-
+initLegacyPasswdsFeature env@ServerEnv{serverStateDir, serverTemplatesDir,
+                                       serverTemplatesMode} = do
   -- Canonical state
   legacyPasswdsState <- legacyPasswdsStateComponent serverStateDir
 

@@ -43,9 +43,7 @@ initPackageContentsFeature :: ServerEnv
                            -> IO (CoreFeature
                                -> TarIndexCacheFeature
                                -> IO PackageContentsFeature)
-initPackageContentsFeature env@ServerEnv{serverVerbosity = verbosity} = do
-    loginfo verbosity "Initialising package-contents feature"
-
+initPackageContentsFeature env@ServerEnv{} = do
     return $ \core tarIndexCache -> do
       let feature = packageContentsFeature env core tarIndexCache
 

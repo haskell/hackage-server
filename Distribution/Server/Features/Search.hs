@@ -52,9 +52,7 @@ initSearchFeature :: ServerEnv
                   -> IO (CoreFeature
                       -> ListFeature
                       -> IO SearchFeature)
-initSearchFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode, serverVerbosity = verbosity} = do
-    loginfo verbosity "Initialising search feature"
-
+initSearchFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode} = do
     templates <- loadTemplates serverTemplatesMode
                    [serverTemplatesDir, serverTemplatesDir </> "Search"]
                    [ "opensearch.xml"]

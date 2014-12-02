@@ -48,8 +48,6 @@ initRecentPackagesFeature :: ServerEnv
                               -> PackageContentsFeature
                               -> IO RecentPackagesFeature)
 initRecentPackagesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verbosity} = do
-    loginfo verbosity "Initialising recentPackages feature"
-
     return $ \user core@CoreFeature{packageChangeHook} packageContents -> do
 
       -- recent caches. in lieu of an ActionLog

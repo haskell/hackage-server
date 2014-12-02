@@ -85,10 +85,7 @@ initTagsFeature :: ServerEnv
                 -> IO (CoreFeature
                     -> UploadFeature
                     -> IO TagsFeature)
-initTagsFeature ServerEnv{ serverStateDir,
-                           serverVerbosity = verbosity } = do
-    loginfo verbosity "Initialising tags feature"
-
+initTagsFeature ServerEnv{serverStateDir} = do
     tagsState <- tagsStateComponent serverStateDir
     specials  <- newMemStateWHNF emptyPackageTags
     updateTag <- newHook

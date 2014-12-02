@@ -46,8 +46,7 @@ data DistroResource = DistroResource {
 
 initDistroFeature :: ServerEnv
                   -> IO (UserFeature -> CoreFeature -> IO DistroFeature)
-initDistroFeature ServerEnv{serverStateDir, serverVerbosity = verbosity} = do
-    loginfo verbosity "Initialising distro feature"
+initDistroFeature ServerEnv{serverStateDir} = do
     distrosState <- distrosStateComponent serverStateDir
 
     return $ \user core -> do

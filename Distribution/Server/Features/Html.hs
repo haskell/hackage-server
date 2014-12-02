@@ -106,9 +106,6 @@ initHtmlFeature :: ServerEnv
 initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
                           serverCacheDelay,
                           serverVerbosity = verbosity} = do
-
-    loginfo verbosity "Initialising html feature, start"
-
     -- Page templates
     templates <- loadTemplates serverTemplatesMode
                    [serverTemplatesDir, serverTemplatesDir </> "Html"]

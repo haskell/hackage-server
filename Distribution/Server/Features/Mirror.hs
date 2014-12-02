@@ -56,9 +56,7 @@ initMirrorFeature :: ServerEnv
                   -> IO (CoreFeature
                       -> UserFeature
                       -> IO MirrorFeature)
-initMirrorFeature env@ServerEnv{serverStateDir, serverVerbosity = verbosity} = do
-    loginfo verbosity "Initialising mirror feature"
-
+initMirrorFeature env@ServerEnv{serverStateDir} = do
     -- Canonical state
     mirrorersState <- mirrorersStateComponent serverStateDir
 

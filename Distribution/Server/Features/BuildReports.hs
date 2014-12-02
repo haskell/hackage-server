@@ -65,10 +65,7 @@ initBuildReportsFeature :: String
                             -> UploadFeature
                             -> CoreResource
                             -> IO ReportsFeature)
-initBuildReportsFeature name env@ServerEnv{ serverStateDir,
-                                            serverVerbosity = verbosity } = do
-    loginfo verbosity "Initialising build reports feature"
-
+initBuildReportsFeature name env@ServerEnv{serverStateDir} = do
     reportsState <- reportsStateComponent name serverStateDir
 
     return $ \user upload core -> do

@@ -89,8 +89,6 @@ initListFeature :: ServerEnv
                     -> VersionsFeature
                     -> IO ListFeature)
 initListFeature ServerEnv{ serverVerbosity = verbosity } = do
-    loginfo verbosity "Initialising package list feature, start"
-
     itemCache  <- newMemStateWHNF Map.empty
     itemUpdate <- newHook
 

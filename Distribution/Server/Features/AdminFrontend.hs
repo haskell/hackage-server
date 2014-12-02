@@ -33,10 +33,7 @@ initAdminFrontendFeature :: ServerEnv
                              -> LegacyPasswdsFeature
                              -> IO HackageFeature)
 initAdminFrontendFeature env@ServerEnv{ serverTemplatesDir,
-                                        serverTemplatesMode,
-                                        serverVerbosity = verbosity } = do
-    loginfo verbosity "Initialising admin frontend feature"
-
+                                        serverTemplatesMode } = do
     -- Page templates
     templates <- loadTemplates serverTemplatesMode
                    [serverTemplatesDir, serverTemplatesDir </> "AdminFrontend"]

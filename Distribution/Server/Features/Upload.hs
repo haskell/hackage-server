@@ -106,10 +106,7 @@ data UploadResult = UploadResult {
 
 initUploadFeature :: ServerEnv
                   -> IO (UserFeature -> CoreFeature -> IO UploadFeature)
-initUploadFeature env@ServerEnv{ serverStateDir,
-                                 serverVerbosity = verbosity } = do
-    loginfo verbosity "Initialising upload feature"
-
+initUploadFeature env@ServerEnv{serverStateDir} = do
     -- Canonical state
     trusteesState    <- trusteesStateComponent    serverStateDir
     uploadersState   <- uploadersStateComponent   serverStateDir

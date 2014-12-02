@@ -34,9 +34,7 @@ instance IsHackageFeature TarIndexCacheFeature where
 initTarIndexCacheFeature :: ServerEnv
                          -> IO (UserFeature
                              -> IO TarIndexCacheFeature)
-initTarIndexCacheFeature env@ServerEnv{ serverStateDir,
-                                        serverVerbosity = verbosity} = do
-    loginfo verbosity "Initialising tar index cache feature"
+initTarIndexCacheFeature env@ServerEnv{serverStateDir} = do
     tarIndexCache <- tarIndexCacheStateComponent serverStateDir
 
     return $ \users -> do

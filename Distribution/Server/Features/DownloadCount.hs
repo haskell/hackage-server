@@ -56,10 +56,7 @@ data DownloadResource = DownloadResource {
 
 initDownloadFeature :: ServerEnv
                     -> IO (CoreFeature -> UserFeature -> IO DownloadFeature)
-initDownloadFeature serverEnv@ServerEnv{ serverStateDir, 
-                                         serverVerbosity = verbosity } = do
-    loginfo verbosity "Initialising download feature"
-
+initDownloadFeature serverEnv@ServerEnv{serverStateDir} = do
     inMemState     <- inMemStateComponent  serverStateDir
     let onDiskState = onDiskStateComponent serverStateDir
     (recentDownloads,

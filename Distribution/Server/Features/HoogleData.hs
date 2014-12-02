@@ -65,8 +65,6 @@ initHoogleDataFeature :: ServerEnv
                           -> IO HoogleDataFeature)
 initHoogleDataFeature env@ServerEnv{ serverCacheDelay,
                                      serverVerbosity = verbosity } = do
-    loginfo verbosity "Initialising hoogle data feature"
-
     -- Ephemeral state
     docsUpdatedState <- newMemStateWHNF Set.empty
 

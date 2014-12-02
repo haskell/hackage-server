@@ -71,10 +71,7 @@ initDocumentationFeature :: String
                              -> TarIndexCacheFeature
                              -> IO DocumentationFeature)
 initDocumentationFeature name
-                         env@ServerEnv{ serverStateDir,
-                                        serverVerbosity = verbosity } = do
-    loginfo verbosity "Initialising documentation feature"
-
+                         env@ServerEnv{serverStateDir} = do
     -- Canonical state
     documentationState <- documentationStateComponent name serverStateDir
 
