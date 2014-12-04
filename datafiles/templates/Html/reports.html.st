@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: Build reports for $pkgid$</title>
+<title>Build reports for $pkgid$ | Hackage</title>
 </head>
 
 <body>
