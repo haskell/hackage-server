@@ -49,7 +49,7 @@ $hackagePageHeader()$
 
 <h2 id="support-from-the-industrial-haskell-group">Support from the Industrial Haskell Group</h2>
 
-<a href="http://industry.haskell.org/"><img style="float: left; margin-right: 1em" src="http://industry.haskell.org/ihg-logo.png" height="90" alt="The IHG logo" /></a>
+<a href="http://industry.haskell.org/"><img style="float: left; margin-right: 1em" src="/static/ihg-logo.png" height="90" alt="The IHG logo" /></a>
 
 <p>The IHG is a consortium of companies that rely on Haskell. The IHG members have funded the effort to get Hackage 2 up to feature parity and get it ready for the switchover. The IHG funded this effort because while the volunteer effort got us the “first 90%” of the way there (including adding a number of new features) there was still the “last 90%” to do to get it production ready.</p>
 
