@@ -63,7 +63,7 @@ $hackagePageHeader()$
 
 <a href="https://www.fastly.com/"><img style="float: left; margin-right: 1em" src="/static/fastly-logo.png" height="90" alt="Fastly's logo" /></a>
 
-<p>As the needs of the Haskell.org community increase, Hackage and other parts of our infrastructure demand increasing amounts of bandwidth, lower latency, and more storage and compute resources. Hackage contains code written from people all over the world, and uputime as well as speed are paramount to a clean user experience when developing.</p>
+<p>As the needs of the Haskell.org community increase, Hackage and other parts of our infrastructure demand increasing amounts of bandwidth, lower latency, and more storage and compute resources. Hackage contains code written from people all over the world, and uptime as well as speed are paramount to a clean user experience when developing.</p>
 
 <p><a href="https://www.fastly.com/">Fastly.com</a> has offered the Haskell.org community unlimited access to their CDN, allowing us to push TBs of data through their edge systems, provide resource shielding for servers, and get real-time analytics for all our users and data.</p>
 
