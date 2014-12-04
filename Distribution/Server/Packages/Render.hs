@@ -76,7 +76,7 @@ doPackageRender users info hasChangeLog = return $ PackageRender
     , rendModules      = fmap (moduleForest . exposedModules) (library flatDesc)
     , rendHasTarball   = not . null $ pkgTarball info
     , rendHasChangeLog = hasChangeLog
-    , rendUploadInfo   = let (utime, uid) = pkgUploadData info
+    , rendUploadInfo   = let (utime, uid) = pkgOriginalUploadData info
                          in (utime, Users.lookupUserId uid users)
     , rendPkgUri       = pkgUri
     , rendFlags        = genPackageFlags genDesc

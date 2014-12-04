@@ -91,11 +91,17 @@ data PkgTarball = PkgTarball {
 
 type UploadInfo = (UTCTime, UserId)
 
+-- The structure above should really be rearranged to make this less confusing.
+-- The original upload info is the one at the end of the pkgDataOld.
+pkgOriginalUploadData :: PkgInfo -> UploadInfo
+pkgOriginalUploadData PkgInfo { pkgDataOld = [], pkgUploadData = uinfo } = uinfo
+pkgOriginalUploadData PkgInfo { pkgDataOld = old@(_:_) } = snd (last old)
+
 pkgUploadTime :: PkgInfo -> UTCTime
-pkgUploadTime = fst . pkgUploadData
+pkgUploadTime = fst . pkgOriginalUploadData
 
 pkgUploadUser :: PkgInfo -> UserId
-pkgUploadUser = snd . pkgUploadData
+pkgUploadUser = snd . pkgOriginalUploadData
 
 -- a small utility
 descendUploadTimes :: [(a, UploadInfo)] -> [(a, UploadInfo)]

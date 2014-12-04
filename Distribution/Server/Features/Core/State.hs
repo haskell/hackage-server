@@ -106,7 +106,7 @@ setPackageUploader :: PackageId -> UserId
 setPackageUploader pkgid uid =
     alterPackage pkgid $ \pkginfo ->
       pkginfo {
-        pkgUploadData = (pkgUploadTime pkginfo, uid)
+        pkgUploadData = (fst (pkgUploadData pkginfo), uid)
       }
 
 setPackageUploadTime :: PackageId -> UTCTime
@@ -114,7 +114,7 @@ setPackageUploadTime :: PackageId -> UTCTime
 setPackageUploadTime pkgid time =
     alterPackage pkgid $ \pkginfo ->
       pkginfo {
-        pkgUploadData = (time, pkgUploadUser pkginfo)
+        pkgUploadData = (time, snd (pkgUploadData pkginfo))
       }
 
 alterPackage :: PackageId -> (PkgInfo -> PkgInfo)
@@ -166,10 +166,10 @@ deletePackageVersion pkg = State.modify $ \pkgsState -> pkgsState { packageList 
     where deleteVersion = PackageIndex.deletePackageId pkg
 
 replacePackageUploader :: PackageId -> UserId -> Update PackagesState (Either String (PkgInfo, PkgInfo))
-replacePackageUploader pkg uid = modifyPkgInfo pkg $ \pkgInfo -> pkgInfo { pkgUploadData = (pkgUploadTime pkgInfo, uid) }
+replacePackageUploader pkg uid = modifyPkgInfo pkg $ \pkgInfo -> pkgInfo { pkgUploadData = (fst (pkgUploadData pkgInfo), uid) }
 
 replacePackageUploadTime :: PackageId -> UTCTime -> Update PackagesState (Either String (PkgInfo, PkgInfo))
-replacePackageUploadTime pkg time = modifyPkgInfo pkg $ \pkgInfo -> pkgInfo { pkgUploadData = (time, pkgUploadUser pkgInfo) }
+replacePackageUploadTime pkg time = modifyPkgInfo pkg $ \pkgInfo -> pkgInfo { pkgUploadData = (time, snd (pkgUploadData pkgInfo)) }
 
 addTarball :: PackageId -> PkgTarball -> UploadInfo -> Update PackagesState (Either String (PkgInfo, PkgInfo))
 addTarball pkg tarball uploadInfo = modifyPkgInfo pkg $ \pkgInfo -> pkgInfo { pkgTarball = (tarball, uploadInfo) : pkgTarball pkgInfo }
