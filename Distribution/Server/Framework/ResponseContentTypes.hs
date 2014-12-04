@@ -44,7 +44,7 @@ instance ToMessage IndexTarball where
   toResponse (IndexTarball bs len md5 time) = mkResponseLen bs len
     [ ("Content-Type", "application/x-gzip")
     , ("Content-MD5",   md5str)
-    , ("Last-modified", formatTime time)
+    , ("Last-modified", formatLastModifiedTime time)
     ]
     where md5str = show md5
 
@@ -61,7 +61,7 @@ instance ToMessage PackageTarball where
   toResponse (PackageTarball bs blobid time) = mkResponse bs
     [ ("Content-Type",  "application/x-gzip")
     , ("Content-MD5",   md5sum)
-    , ("Last-modified", formatTime time)
+    , ("Last-modified", formatLastModifiedTime time)
     ]
     where md5sum = blobMd5 blobid
 
@@ -74,8 +74,8 @@ instance ToMessage DocTarball where
     ]
     where md5sum = blobMd5 blobid
 
-formatTime :: UTCTime -> String
-formatTime = Time.formatTime defaultTimeLocale rfc822DateFormat
+formatLastModifiedTime :: UTCTime -> String
+formatLastModifiedTime = Time.formatTime defaultTimeLocale rfc822DateFormat
   where
     -- HACK! we're using UTC but http requires GMT
     -- hopefully it's ok to just say it's GMT

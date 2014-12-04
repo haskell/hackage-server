@@ -6,7 +6,7 @@ module Distribution.Server.Features.Mirror (
     initMirrorFeature
   ) where
 
-import Distribution.Server.Framework hiding (formatTime)
+import Distribution.Server.Framework
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
