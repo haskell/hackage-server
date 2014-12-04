@@ -26,6 +26,7 @@ import Distribution.Server.Features.Mirror
 import Distribution.Server.Features.Distro
 import Distribution.Server.Features.Documentation
 import Distribution.Server.Features.UserDetails
+import Distribution.Server.Features.EditCabalFiles
 
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Group as Group
@@ -62,6 +63,8 @@ import Control.Applicative (optional)
 import Data.Array (Array, listArray)
 import qualified Data.Array as Array
 import qualified Data.Ix    as Ix
+import Data.Time.Format (formatTime)
+import System.Locale (defaultTimeLocale)
 
 import Text.XHtml.Strict
 import qualified Text.XHtml.Strict as XHtml
@@ -112,7 +115,8 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    [ "maintain.html", "maintain-candidate.html"
                    , "reports.html", "report.html"
                    , "maintain-docs.html"
-                   , "distro-monitor.html" ]
+                   , "distro-monitor.html"
+                   , "revisions.html" ]
 
     return $ \user core@CoreFeature{packageChangeHook}
               packages upload
@@ -220,6 +224,7 @@ htmlFeature user
       }
 
     htmlCore       = mkHtmlCore       utilities
+                                      user
                                       core
                                       versions
                                       upload
@@ -406,6 +411,7 @@ data HtmlCore = HtmlCore {
   }
 
 mkHtmlCore :: HtmlUtilities
+           -> UserFeature
            -> CoreFeature
            -> VersionsFeature
            -> UploadFeature
@@ -422,6 +428,7 @@ mkHtmlCore :: HtmlUtilities
            -> Templates
            -> HtmlCore
 mkHtmlCore HtmlUtilities{..}
+           UserFeature{queryGetUserDb}
            CoreFeature{coreResource}
            VersionsFeature{ versionsResource
                           , queryGetDeprecatedFor
@@ -442,7 +449,7 @@ mkHtmlCore HtmlUtilities{..}
            templates
   = HtmlCore{..}
   where
-    cores@CoreResource{packageInPath, lookupPackageName} = coreResource
+    cores@CoreResource{packageInPath, lookupPackageName, lookupPackageId} = coreResource
     versions = versionsResource
     docs     = documentationResource
 
@@ -469,7 +476,11 @@ mkHtmlCore HtmlUtilities{..}
           }
       , maintainPackage
       , (resourceAt "/package/:package/distro-monitor") {
-            resourceGet = [("html", serveDistroMonitorPage)]
+            resourceDesc = [(GET, "A handy page for distro package change monitor tools")]
+          , resourceGet  = [("html", serveDistroMonitorPage)]
+          }
+      , (resourceAt "/package/:package/revisions/") {
+            resourceGet  = [("html", serveCabalRevisionsPage)]
           }
       ]
 
@@ -553,6 +564,43 @@ mkHtmlCore HtmlUtilities{..}
         [ "pkgname"  $= pkgname
         , "versions" $= map packageId pkgs
         ]
+
+    serveCabalRevisionsPage :: DynamicPath -> ServerPartE Response
+    serveCabalRevisionsPage dpath = do
+      pkginfo  <- packageInPath dpath >>= lookupPackageId
+      users    <- queryGetUserDb
+      template <- getTemplate templates "revisions.html"
+      let pkgid        = packageId pkginfo
+          pkgname      = packageName pkginfo
+          revisions    = (pkgData pkginfo, pkgUploadData pkginfo)
+                       : pkgDataOld pkginfo
+          numRevisions = length revisions
+          revchanges   = [ case diffCabalRevisions pkgid
+                                  (cabalFileByteString old)
+                                  (cabalFileByteString new)
+                           of Left _err     -> []
+                              Right changes -> changes
+                         | ((new, _), (old, _)) <- zip revisions (tail revisions) ]
+
+      return $ toResponse $ template
+        [ "pkgname"   $= pkgname
+        , "pkgid"     $= pkgid
+        , "revisions" $= zipWith3 (revisionToTemplate users)
+                                  (map snd revisions)
+                                  [numRevisions-1, numRevisions-2..]
+                                  (revchanges ++ [[]])
+        ]
+      where
+        revisionToTemplate :: Users.Users -> UploadInfo -> Int -> [Change]
+                           -> TemplateVal
+        revisionToTemplate users (utime, uid) revision changes =
+          let uname = Users.userIdToName users uid
+           in templateDict
+                [ templateVal "number" revision
+                , templateVal "user" (display uname)
+                , templateVal "time" (formatTime defaultTimeLocale "%c" utime)
+                , templateVal "changes" changes
+                ]
 
 
 {-------------------------------------------------------------------------------

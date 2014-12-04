@@ -277,11 +277,9 @@ renderFields render = [
 
     renderUpdateInfo revisionNo utime uinfo =
         renderUploadInfo utime uinfo +++ " to " +++
-        "revision " +++ show revisionNo
--- TODO: add a revisions page:
---        anchor ! [href revisionsURL] << ("revision " +++ show revisionNo)
---      where
---        revisionsURL = display (packageName (rendPkgId render)) </> "revisions/"
+        anchor ! [href revisionsURL] << ("revision " +++ show revisionNo)
+      where
+        revisionsURL = display (packageName (rendPkgId render)) </> "revisions/"
 
     linkField url = case url of
         [] -> noHtml

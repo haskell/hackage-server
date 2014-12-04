@@ -3,6 +3,9 @@
              StandaloneDeriving, GeneralizedNewtypeDeriving #-}
 module Distribution.Server.Features.EditCabalFiles (
     initEditCabalFilesFeature
+
+  , diffCabalRevisions
+  , Change(..)
   ) where
 
 import Distribution.Server.Framework
@@ -110,7 +113,7 @@ editCabalFilesFeature _env templates
         let oldVersion = cabalFileByteString (pkgData pkg)
         newRevision <- getCabalFile
         shouldPublish <- getPublish
-        case runCheck $ checkCabalFileRevision pkgid oldVersion newRevision of
+        case diffCabalRevisions pkgid oldVersion newRevision of
           Left errs ->
             responseTemplate template pkgid newRevision
                              shouldPublish [errs] []
@@ -172,6 +175,11 @@ logChange :: Change -> CheckM ()
 logChange change = CheckM (tell [change])
 
 type Check a = a -> a -> CheckM ()
+
+diffCabalRevisions :: PackageId -> ByteString -> ByteString
+                   -> Either String [Change]
+diffCabalRevisions pkgid oldVersion newRevision =
+    runCheck $ checkCabalFileRevision pkgid oldVersion newRevision
 
 checkCabalFileRevision :: PackageId -> Check ByteString
 checkCabalFileRevision pkgid old new = do
