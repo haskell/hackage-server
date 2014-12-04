@@ -123,15 +123,17 @@ distroFeature UserFeature{..}
     textDistroPkg dpath = withDistroPackagePath dpath $ \_ _ info -> return . toResponse $ show info
 
     -- result: see-other uri, or an error: not authenticated or not found (todo)
-    distroDelete dpath = withDistroNamePath dpath $ \distro -> do
-        -- authenticate Hackage admins
+    distroDelete dpath =
+      withDistroNamePath dpath $ \distro -> do
+        guardAuthorised_ [InGroup adminGroup] --TODO: use the per-distro maintainer groups
         -- should also check for existence here of distro here
         void $ updateState distrosState $ RemoveDistro distro
         seeOther ("/distros/") (toResponse ())
 
     -- result: ok response or not-found error
-    distroPackageDelete dpath = withDistroPackagePath dpath $ \dname pkgname info -> do
-        -- authenticate distro maintainer
+    distroPackageDelete dpath =
+      withDistroPackagePath dpath $ \dname pkgname info -> do
+        guardAuthorised_ [AnyKnownUser] --TODO: use the per-distro maintainer groups
         case info of
             Nothing -> notFound . toResponse $ "Package not found for " ++ display pkgname
             Just {} -> do
@@ -139,13 +141,16 @@ distroFeature UserFeature{..}
                 ok $ toResponse "Ok!"
 
     -- result: see-other response, or an error: not authenticated or not found (todo)
-    distroPackagePut dpath = withDistroPackagePath dpath $ \dname pkgname _ -> lookPackageInfo $ \newPkgInfo -> do
-        -- authenticate distro maintainer
+    distroPackagePut dpath =
+      withDistroPackagePath dpath $ \dname pkgname _ -> lookPackageInfo $ \newPkgInfo -> do
+        guardAuthorised_ [AnyKnownUser] --TODO: use the per-distro maintainer groups
         void $ updateState distrosState $ AddPackage dname pkgname newPkgInfo
         seeOther ("/distro/" ++ display dname ++ "/" ++ display pkgname) $ toResponse "Ok!"
 
     -- result: see-other response, or an error: not authentcated or bad request
-    distroPostNew _ = lookDistroName $ \dname -> do
+    distroPostNew _ =
+      lookDistroName $ \dname -> do
+        guardAuthorised_ [AnyKnownUser] --TODO: use the per-distro maintainer groups
         success <- updateState distrosState $ AddDistro dname
         if success
             then seeOther ("/distro/" ++ display dname) $ toResponse "Ok!"
@@ -153,6 +158,7 @@ distroFeature UserFeature{..}
 
     distroPutNew dpath =
       withDistroNamePath dpath $ \dname -> do
+        guardAuthorised_ [AnyKnownUser] --TODO: use the per-distro maintainer groups
         _success <- updateState distrosState $ AddDistro dname
         -- it doesn't matter if it exists already or not
         ok $ toResponse "Ok!"
@@ -160,7 +166,7 @@ distroFeature UserFeature{..}
     -- result: ok repsonse or not-found error
     distroPackageListPut dpath =
       withDistroPath dpath $ \dname _pkgs -> do
-        -- FIXME: authenticate distro maintainer
+        guardAuthorised_ [AnyKnownUser] --TODO: use the per-distro maintainer groups
         lookCSVFile $ \csv ->
             case csvToPackageList csv of
                 Nothing -> fail $ "Could not parse CSV File to a distro package list"
