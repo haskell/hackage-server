@@ -45,7 +45,7 @@ $hackagePageHeader()$
 
 <p>Well-Typed and the <a href="http://industry.haskell.org/">Industrial Haskell Group</a> (IHG) are very pleased to announce that Hackage 2 is now powering the official Hackage server.</p>
 
-<p>Read on for an overview of the new features and what the IHG has been doing to help, and for details of how you can help to make Hackage 2 even better.</p>
+<p>Read on for an overview of the new features, system improvements, and for details of how you can help to make Hackage 2 even better.</p>
 
 <h2 id="support-from-the-industrial-haskell-group">Support from the Industrial Haskell Group</h2>
 
@@ -58,6 +58,14 @@ $hackagePageHeader()$
 <p>The IHG is keen to increase its membership so that more resources can be dedicated to improving the Haskell development platform. If your organisation relies on Haskell in some way then you may want to consider joining. See the <a href="http://industry.haskell.org/">IHG website</a> for more details or contact <a href="mailto:info@industry.haskell.org">info@industry.haskell.org</a>.</p>
 
 <p>Despite the help of the IHG in getting to this point, Hackage is a community project, and its success depends on the community maintaining and further improving the new server. The code is <a href="http://github.com/haskell/hackage-server">now on github</a> so it is easier to contribute, and now that the server is live there is more immediate gratification for volunteers contributing fixes and new features.</p>
+
+<h2 id="support-from-the-smartest-cdn">The fastest Content Distribution Network</h2>
+
+<a href="https://www.fastly.com/"><img style="float: left; margin-right: 1em" src="/static/fastly-logo.png" height="90" alt="Fastly's logo" /></a>
+
+<p>As the needs of the Haskell.org community increase, Hackage and other parts of our infrastructure demand increasing amounts of bandwidth, lower latency, and more storage and compute resources. Hackage contains code written from people all over the world, and uputime as well as speed are paramount to a clean user experience when developing.</p>
+
+<p><a href="https://www.fastly.com/">Fastly.com</a> has offered the Haskell.org community unlimited access to their CDN, allowing us to push TBs of data through their edge systems, provide resource shielding for servers, and get real-time analytics for all our users and data.</p>
 
 <h2 id="new-features">New features</h2>
 <p>Though our main priority has been feature parity so that we can switch over, volunteers have contributed several new features, including better package search, a new site theme, improved security, the ability to fix package dependencies after a release, changelogs, and a REST-style interface.</p>
