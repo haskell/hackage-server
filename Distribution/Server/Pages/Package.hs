@@ -279,7 +279,7 @@ renderFields render = [
         renderUploadInfo utime uinfo +++ " to " +++
         anchor ! [href revisionsURL] << ("revision " +++ show revisionNo)
       where
-        revisionsURL = display (packageName (rendPkgId render)) </> "revisions/"
+        revisionsURL = display (rendPkgId render) </> "revisions/"
 
     linkField url = case url of
         [] -> noHtml
