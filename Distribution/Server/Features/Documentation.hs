@@ -41,6 +41,9 @@ data DocumentationFeature = DocumentationFeature {
     queryDocumentation      :: MonadIO m => PackageIdentifier -> m (Maybe BlobId),
     queryDocumentationIndex :: MonadIO m => m (Map.Map PackageId BlobId),
 
+    uploadDocumentation :: DynamicPath -> ServerPartE Response,
+    deleteDocumentation :: DynamicPath -> ServerPartE Response,
+
     documentationResource :: DocumentationResource,
 
     -- | Notification of documentation changes
@@ -62,32 +65,25 @@ data DocumentationResource = DocumentationResource {
 
 initDocumentationFeature :: String
                          -> ServerEnv
-                         -> CoreResource
-                         -> IO [PackageIdentifier]
-                         -> UploadFeature
-                         -> TarIndexCacheFeature
-                         -> IO DocumentationFeature
+                         -> IO (CoreResource
+                             -> IO [PackageIdentifier]
+                             -> UploadFeature
+                             -> TarIndexCacheFeature
+                             -> IO DocumentationFeature)
 initDocumentationFeature name
-                         env@ServerEnv{serverStateDir, serverVerbosity = verbosity}
-                         core
-                         getPackages
-                         upload
-                         tarIndexCache = do
-    loginfo verbosity "Initialising documentation feature, start"
-
+                         env@ServerEnv{serverStateDir} = do
     -- Canonical state
     documentationState <- documentationStateComponent name serverStateDir
 
     -- Hooks
     documentationChangeHook <- newHook
 
-    let feature = documentationFeature name env
-                                       core getPackages upload tarIndexCache
-                                       documentationState
-                                       documentationChangeHook
-
-    loginfo verbosity "Initialising documentation feature, end"
-    return feature
+    return $ \core getPackages upload tarIndexCache -> do
+      let feature = documentationFeature name env
+                                         core getPackages upload tarIndexCache
+                                         documentationState
+                                         documentationChangeHook
+      return feature
 
 documentationStateComponent :: String -> FilePath -> IO (StateComponent AcidState Documentation)
 documentationStateComponent name stateDir = do
@@ -203,9 +199,11 @@ documentationFeature name
     serveDocumentationTar :: DynamicPath -> ServerPartE Response
     serveDocumentationTar dpath =
       withDocumentation (packageDocsWhole documentationResource)
-                        dpath $ \_ blob _ -> do
-        file <- liftIO $ BlobStorage.fetch store blob
-        return $ toResponse $ Resource.DocTarball file blob
+                        dpath $ \_ blobid _ -> do
+        cacheControl [Public, maxAgeDays 1]
+                     (BlobStorage.blobETag blobid)
+        file <- liftIO $ BlobStorage.fetch store blobid
+        return $ toResponse $ Resource.DocTarball file blobid
 
 
     -- return: not-found error or tarball
@@ -214,13 +212,12 @@ documentationFeature name
       withDocumentation (packageDocsContent documentationResource)
                         dpath $ \pkgid blob index -> do
         let tarball = BlobStorage.filepath store blob
-            etag    = blobETag blob
+            etag    = BlobStorage.blobETag blob
         -- if given a directory, the default page is index.html
         -- the root directory within the tarball is e.g. foo-1.0-docs/
         ServerTarball.serveTarball ["index.html"] (display pkgid ++ "-docs")
-                                   tarball index etag
+                                   tarball index [Public, maxAgeDays 1] etag
 
-    -- return: not-found error (parsing) or see other uri
     uploadDocumentation :: DynamicPath -> ServerPartE Response
     uploadDocumentation dpath = do
       pkgid <- packageInPath dpath

@@ -261,24 +261,35 @@ renderFields render = [
         ("Bug tracker", linkField $ bugReports desc),
         ("Source repository", vList $ map sourceRepositoryField $ sourceRepos desc),
         ("Executables", commaList . map toHtml $ rendExecNames render),
-        ("Upload date", toHtml $ showTime utime),
-        ("Uploaded by", userField)
+        ("Uploaded", uncurry renderUploadInfo (rendUploadInfo render))
       ]
-  where desc = rendOther render
-        (utime, uinfo) = rendUploadInfo render
-        uname = maybe "Unknown" (display . userName) uinfo
+   ++ [ ("Updated", renderUpdateInfo revisionNo utime uinfo)
+      | (revisionNo, utime, uinfo) <- maybeToList (rendUpdateInfo render) ]
+  where
+    desc = rendOther render
+    renderUploadInfo utime uinfo =
+        formatTime defaultTimeLocale "%c" utime +++ " by " +++ user
+      where
+        uname   = maybe "Unknown" (display . userName) uinfo
         uactive = maybe False (isActiveAccount . userStatus) uinfo
-        userField | uactive   = anchor ! [href $ "/user/" ++ uname] << uname
-                  | otherwise = toHtml uname
-        linkField url = case url of
-            [] -> noHtml
-            _  -> anchor ! [href url] << url
-        categoryField cat = anchor ! [href $ "/packages/#cat:" ++ cat] << cat
-        maintainField mnt = case mnt of
-            Nothing -> strong ! [theclass "warning"] << toHtml "none"
-            Just n  -> toHtml n
-        showTime = formatTime defaultTimeLocale "%c"
-        sourceRepositoryField sr = sourceRepositoryToHtml sr
+        user | uactive   = anchor ! [href $ "/user/" ++ uname] << uname
+             | otherwise = toHtml uname
+
+    renderUpdateInfo revisionNo utime uinfo =
+        renderUploadInfo utime uinfo +++ " to " +++
+        anchor ! [href revisionsURL] << ("revision " +++ show revisionNo)
+      where
+        revisionsURL = display (packageName (rendPkgId render)) </> "revisions/"
+
+    linkField url = case url of
+        [] -> noHtml
+        _  -> anchor ! [href url] << url
+    categoryField cat = anchor ! [href $ "/packages/#cat:" ++ cat] << cat
+    maintainField mnt = case mnt of
+        Nothing -> strong ! [theclass "warning"] << toHtml "none"
+        Just n  -> toHtml n
+    sourceRepositoryField sr = sourceRepositoryToHtml sr
+
 
 sourceRepositoryToHtml :: SourceRepo -> Html
 sourceRepositoryToHtml sr

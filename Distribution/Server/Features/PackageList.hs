@@ -81,46 +81,48 @@ emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" 0
                                    False 0
 
 
-initListFeature :: ServerEnv -> CoreFeature
-                -- [reverse index disabled] -> ReverseFeature
-                -> DownloadFeature
-                -> TagsFeature -> VersionsFeature -> IO ListFeature
-initListFeature ServerEnv{serverVerbosity = verbosity} core@CoreFeature{..}
-                -- [reverse index disabled] revs
-                download
-                tagsf@TagsFeature{..}
-                versions@VersionsFeature{..} = do
-    loginfo verbosity "Initialising package list feature, start"
-
+initListFeature :: ServerEnv
+                -> IO (CoreFeature
+                    -- [reverse index disabled] -> ReverseFeature
+                    -> DownloadFeature
+                    -> TagsFeature
+                    -> VersionsFeature
+                    -> IO ListFeature)
+initListFeature ServerEnv{ serverVerbosity = verbosity } = do
     itemCache  <- newMemStateWHNF Map.empty
     itemUpdate <- newHook
 
-    let (feature, modifyItem, updateDesc) =
-          listFeature core download tagsf versions
-                      itemCache itemUpdate
+    return $ \core@CoreFeature{..}
+              -- [reverse index disabled] revs
+              download
+              tagsf@TagsFeature{..}
+              versions@VersionsFeature{..} -> do
 
-    registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, _) ->
-      updateDesc (packageName pkgid)
+      let (feature, modifyItem, updateDesc) =
+            listFeature core download tagsf versions
+                        itemCache itemUpdate
 
-    {- [reverse index disabled]
-    registerHook (reverseUpdateHook revs) $ \mrev -> do
-        let pkgs = Map.keys mrev
-        forM_ pkgs $ \pkgname -> do
-            revCount <- query . GetReverseCount $ pkgname
-            modifyItem pkgname (updateReverseItem revCount)
-        runHook' itemUpdate $ Set.fromDistinctAscList pkgs
-    -}
-    registerHook tagsUpdated $ \(pkgs, _) -> do
-        forM_ (Set.toList pkgs) $ \pkgname -> do
-            tags <- queryTagsForPackage pkgname
-            modifyItem pkgname (updateTagItem tags)
-        runHook_ itemUpdate pkgs
-    registerHook deprecatedHook $ \(pkgname, mpkgs) -> do
-        modifyItem pkgname (updateDeprecation mpkgs)
-        runHook_ itemUpdate (Set.singleton pkgname)
+      registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, _) ->
+        updateDesc (packageName pkgid)
 
-    loginfo verbosity "Initialising package list feature, end"
-    return feature
+      {- [reverse index disabled]
+      registerHook (reverseUpdateHook revs) $ \mrev -> do
+          let pkgs = Map.keys mrev
+          forM_ pkgs $ \pkgname -> do
+              revCount <- query . GetReverseCount $ pkgname
+              modifyItem pkgname (updateReverseItem revCount)
+          runHook' itemUpdate $ Set.fromDistinctAscList pkgs
+      -}
+      registerHook tagsUpdated $ \(pkgs, _) -> do
+          forM_ (Set.toList pkgs) $ \pkgname -> do
+              tags <- queryTagsForPackage pkgname
+              modifyItem pkgname (updateTagItem tags)
+          runHook_ itemUpdate pkgs
+      registerHook deprecatedHook $ \(pkgname, mpkgs) -> do
+          modifyItem pkgname (updateDeprecation mpkgs)
+          runHook_ itemUpdate (Set.singleton pkgname)
+
+      return feature
 
 
 listFeature :: CoreFeature

@@ -49,10 +49,7 @@ recentPage users pkgs =
    in hackagePageWithHead [rss_link] "recent additions" docBody
 
 makeRow :: Users -> PkgInfo -> Html
-makeRow users PkgInfo {
-      pkgInfoId = pkgid
-    , pkgUploadData = (time, userId)
-  } =
+makeRow users pkginfo =
   XHtml.tr <<
     [XHtml.td ! [XHtml.align "right"] <<
             [XHtml.toHtml (showTime time), nbsp, nbsp],
@@ -60,8 +57,12 @@ makeRow users PkgInfo {
      XHtml.td ! [XHtml.align "left"] <<
             [nbsp, nbsp, XHtml.anchor !
                            [XHtml.href (packageURL pkgid)] << display pkgid]]
-  where nbsp = XHtml.primHtmlChar "nbsp"
-        user = Users.userIdToName users userId
+  where
+    nbsp = XHtml.primHtmlChar "nbsp"
+    user = Users.userIdToName users userId
+
+    (time, userId) = pkgOriginalUploadData pkginfo
+    pkgid = pkgInfoId pkginfo
 
 showTime :: UTCTime -> String
 showTime = formatTime defaultTimeLocale "%c"
@@ -96,13 +97,10 @@ channel now =
   , RSS.Generator "rss-feed"
   ]
   where
-    email = "duncan@haskell.org (Duncan Coutts)"
+    email = "admin@hackage.haskell.org" --TODO: make this configurable
 
 releaseItem :: Users -> URI -> PkgInfo -> [RSS.ItemElem]
-releaseItem users hostURI pkgInfo@(PkgInfo {
-      pkgInfoId = pkgId
-    , pkgUploadData = (time, userId)
-  }) =
+releaseItem users hostURI pkgInfo =
   [ RSS.Title title
   , RSS.Link uri
   , RSS.Guid True (uriToString id uri "")
@@ -116,6 +114,9 @@ releaseItem users hostURI pkgInfo@(PkgInfo {
     desc  = "<i>Added by " ++ display user ++ ", " ++ showTime time ++ ".</i>"
          ++ if null body then "" else "<p>" ++ body
     user = Users.userIdToName users userId
+
+    (time, userId) = pkgOriginalUploadData pkgInfo
+    pkgId = pkgInfoId pkgInfo
 
 unPackageName :: PackageName -> String
 unPackageName (PackageName name) = name

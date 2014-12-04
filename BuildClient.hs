@@ -560,6 +560,10 @@ buildPackage verbosity opts config docInfo = do
              -- "packages are likely to be broken by the reinstalls"
              "--package-db=clear", "--package-db=global",
              "--package-db=" ++ packageDb,
+             -- Always build the package, even when it's been built
+             -- before. This lets us regenerate documentation when
+             -- dependencies are updated.
+             "--reinstall",
              -- We know where this documentation will
              -- eventually be hosted, bake that in.
              -- The wiki claims we shouldn't include the
@@ -574,6 +578,7 @@ buildPackage verbosity opts config docInfo = do
              "--haddock-hyperlink-source",
              "--prefix=" ++ installDirectory opts,
              "--build-summary=" ++ installDirectory opts </> "reports" </> "$pkgid.report",
+             "--report-planning-failure",
              -- We want both html documentation and hoogle database generated
              "--haddock-html",
              "--haddock-hoogle",
@@ -607,6 +612,7 @@ buildPackage verbosity opts config docInfo = do
                 renameFile (installDirectory opts </> "reports"
                                 </> display pkgid <.> "report")
                            resultReportFile
+                appendFile resultReportFile "\ndoc-builder: True"
                 return (Just resultReportFile)
 
     docs_generated <- fmap and $ sequence [

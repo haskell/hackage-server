@@ -45,13 +45,13 @@ data PlatformResource = PlatformResource {
     platformPackagesUri :: String -> String
 }
 
-initPlatformFeature :: ServerEnv -> IO PlatformFeature
-initPlatformFeature ServerEnv{serverStateDir, serverVerbosity = verbosity} = do
-    loginfo verbosity "Initialising platform feature, start"
+initPlatformFeature :: ServerEnv -> IO (IO PlatformFeature)
+initPlatformFeature ServerEnv{serverStateDir} = do
     platformState <- platformStateComponent serverStateDir
-    let feature    = platformFeature platformState
-    loginfo verbosity "Initialising platform feature, end"
-    return feature
+
+    return $ do
+      let feature = platformFeature platformState
+      return feature
 
 platformStateComponent :: FilePath -> IO (StateComponent AcidState PlatformPackages)
 platformStateComponent stateDir = do
@@ -80,7 +80,7 @@ platformFeature platformState
     platformFeatureInterface = (emptyHackageFeature "platform") {
         featureDesc = "List packages which are part of the Haskell platform (this is work in progress)"
       , featureResources =
-          map ($platformResource) [
+          map ($ platformResource) [
               platformPackage
             , platformPackages
             ]

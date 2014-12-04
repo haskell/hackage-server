@@ -11,6 +11,8 @@ import Distribution.Server.Framework.Templating
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.RecentPackages
 import Distribution.Server.Features.Upload
+import Distribution.Server.Features.BuildReports
+import Distribution.Server.Features.BuildReports.Render
 import Distribution.Server.Features.PackageCandidates
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.DownloadCount
@@ -24,6 +26,7 @@ import Distribution.Server.Features.Mirror
 import Distribution.Server.Features.Distro
 import Distribution.Server.Features.Documentation
 import Distribution.Server.Features.UserDetails
+import Distribution.Server.Features.EditCabalFiles
 
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Group as Group
@@ -55,10 +58,13 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Maybe (fromMaybe, isJust)
 import qualified Data.Text as T
+import Data.Traversable (traverse)
 import Control.Applicative (optional)
 import Data.Array (Array, listArray)
 import qualified Data.Array as Array
 import qualified Data.Ix    as Ix
+import Data.Time.Format (formatTime)
+import System.Locale (defaultTimeLocale)
 
 import Text.XHtml.Strict
 import qualified Text.XHtml.Strict as XHtml
@@ -84,75 +90,82 @@ instance IsHackageFeature HtmlFeature where
 --
 -- This means of generating HTML is somewhat temporary, in that a more advanced
 -- (and better-looking) HTML ajaxy scheme should come about later on.
-initHtmlFeature :: ServerEnv -> UserFeature -> CoreFeature -> RecentPackagesFeature
-                -> UploadFeature -> PackageCandidatesFeature -> VersionsFeature
-                -- [reverse index disabled] -> ReverseFeature
-                -> TagsFeature -> DownloadFeature
-                -> ListFeature -> SearchFeature
-                -> MirrorFeature -> DistroFeature
-                -> DocumentationFeature
-                -> DocumentationFeature
-                -> UserDetailsFeature
-                -> IO HtmlFeature
+initHtmlFeature :: ServerEnv
+                -> IO (UserFeature
+                    -> CoreFeature
+                    -> RecentPackagesFeature
+                    -> UploadFeature -> PackageCandidatesFeature
+                    -> VersionsFeature
+                    -- [reverse index disabled] -> ReverseFeature
+                    -> TagsFeature -> DownloadFeature
+                    -> ListFeature -> SearchFeature
+                    -> MirrorFeature -> DistroFeature
+                    -> DocumentationFeature
+                    -> DocumentationFeature
+                    -> ReportsFeature
+                    -> UserDetailsFeature
+                    -> IO HtmlFeature)
 
 initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
                           serverCacheDelay,
-                          serverVerbosity = verbosity}
-                user core@CoreFeature{packageChangeHook}
-                packages upload
-                candidates versions
-                -- [reverse index disabled] reverse
-                tags download
-                list@ListFeature{itemUpdate}
-                names mirror
-                distros
-                docsCore docsCandidates usersdetails = do
-
-    loginfo verbosity "Initialising html feature, start"
-
+                          serverVerbosity = verbosity} = do
     -- Page templates
     templates <- loadTemplates serverTemplatesMode
                    [serverTemplatesDir, serverTemplatesDir </> "Html"]
                    [ "maintain.html", "maintain-candidate.html"
-                   , "distro-monitor.html" ]
+                   , "reports.html", "report.html"
+                   , "maintain-docs.html"
+                   , "distro-monitor.html"
+                   , "revisions.html" ]
 
-    -- do rec, tie the knot
-    rec let (feature, packageIndex, packagesPage) =
-              htmlFeature user core
-                          packages upload
-                          candidates versions
-                          tags download
-                          list names
-                          mirror distros
-                          docsCore docsCandidates
-                          usersdetails
-                          (htmlUtilities core tags)
-                          mainCache namesCache
-                          templates
+    return $ \user core@CoreFeature{packageChangeHook}
+              packages upload
+              candidates versions
+              -- [reverse index disabled] reverse
+              tags download
+              list@ListFeature{itemUpdate}
+              names mirror
+              distros
+              docsCore docsCandidates
+              reportsCore
+              usersdetails -> do
+      -- do rec, tie the knot
+      rec let (feature, packageIndex, packagesPage) =
+                htmlFeature user core
+                            packages upload
+                            candidates versions
+                            tags download
+                            list names
+                            mirror distros
+                            docsCore docsCandidates
+                            reportsCore
+                            usersdetails
+                            (htmlUtilities core tags)
+                            mainCache namesCache
+                            templates
 
-        -- Index page caches
-        mainCache  <- newAsyncCacheNF packageIndex
-                        defaultAsyncCachePolicy {
-                          asyncCacheName = "packages index page (by category)",
-                          asyncCacheUpdateDelay  = serverCacheDelay,
-                          asyncCacheSyncInit     = False,
-                          asyncCacheLogVerbosity = verbosity
-                        }
+          -- Index page caches
+          mainCache  <- newAsyncCacheNF packageIndex
+                          defaultAsyncCachePolicy {
+                            asyncCacheName = "packages index page (by category)",
+                            asyncCacheUpdateDelay  = serverCacheDelay,
+                            asyncCacheSyncInit     = False,
+                            asyncCacheLogVerbosity = verbosity
+                          }
 
-        namesCache <- newAsyncCacheNF packagesPage
-                        defaultAsyncCachePolicy {
-                          asyncCacheName = "packages index page (by name)",
-                          asyncCacheUpdateDelay  = serverCacheDelay,
-                          asyncCacheLogVerbosity = verbosity
-                        }
+          namesCache <- newAsyncCacheNF packagesPage
+                          defaultAsyncCachePolicy {
+                            asyncCacheName = "packages index page (by name)",
+                            asyncCacheUpdateDelay  = serverCacheDelay,
+                            asyncCacheLogVerbosity = verbosity
+                          }
 
-    registerHook itemUpdate         $ \_ -> prodAsyncCache mainCache
-                                         >> prodAsyncCache namesCache
-    registerHook packageChangeHook  $ \_ -> prodAsyncCache mainCache
-                                         >> prodAsyncCache namesCache
+      registerHook itemUpdate         $ \_ -> prodAsyncCache mainCache
+                                           >> prodAsyncCache namesCache
+      registerHook packageChangeHook  $ \_ -> prodAsyncCache mainCache
+                                           >> prodAsyncCache namesCache
 
-    loginfo verbosity "Initialising html feature, end"
-    return feature
+      return feature
 
 htmlFeature :: UserFeature
             -> CoreFeature
@@ -168,6 +181,7 @@ htmlFeature :: UserFeature
             -> DistroFeature
             -> DocumentationFeature
             -> DocumentationFeature
+            -> ReportsFeature
             -> UserDetailsFeature
             -> HtmlUtilities
             -> AsyncCache Response
@@ -184,7 +198,9 @@ htmlFeature user
             list@ListFeature{getAllLists}
             names
             mirror distros
-            docsCore docsCandidates usersdetails
+            docsCore docsCandidates
+            reportsCore
+            usersdetails
             utilities@HtmlUtilities{..}
             cachePackagesPage cacheNamesPage
             templates
@@ -208,11 +224,13 @@ htmlFeature user
       }
 
     htmlCore       = mkHtmlCore       utilities
+                                      user
                                       core
                                       versions
                                       upload
                                       tags
                                       docsCore
+                                      reportsCore
                                       download
                                       distros
                                       recent
@@ -223,7 +241,9 @@ htmlFeature user
                                       templates
     htmlUsers      = mkHtmlUsers      user usersdetails
     htmlUploads    = mkHtmlUploads    utilities upload
+    htmlDocUploads = mkHtmlDocUploads utilities core docsCore templates
     htmlDownloads  = mkHtmlDownloads  utilities download
+    htmlReports    = mkHtmlReports    utilities core reportsCore templates
     htmlCandidates = mkHtmlCandidates utilities core versions upload docsCandidates candidates templates
     htmlPreferred  = mkHtmlPreferred  utilities core versions
     htmlTags       = mkHtmlTags       utilities core list tags
@@ -233,6 +253,8 @@ htmlFeature user
         htmlCoreResources       htmlCore
       , htmlUsersResources      htmlUsers
       , htmlUploadsResources    htmlUploads
+      , htmlDocUploadsResources htmlDocUploads
+      , htmlReportsResources    htmlReports
       , htmlCandidatesResources htmlCandidates
       , htmlPreferredResources  htmlPreferred
       , htmlDownloadsResources  htmlDownloads
@@ -389,11 +411,13 @@ data HtmlCore = HtmlCore {
   }
 
 mkHtmlCore :: HtmlUtilities
+           -> UserFeature
            -> CoreFeature
            -> VersionsFeature
            -> UploadFeature
            -> TagsFeature
            -> DocumentationFeature
+           -> ReportsFeature
            -> DownloadFeature
            -> DistroFeature
            -> RecentPackagesFeature
@@ -404,6 +428,7 @@ mkHtmlCore :: HtmlUtilities
            -> Templates
            -> HtmlCore
 mkHtmlCore HtmlUtilities{..}
+           UserFeature{queryGetUserDb}
            CoreFeature{coreResource}
            VersionsFeature{ versionsResource
                           , queryGetDeprecatedFor
@@ -412,7 +437,8 @@ mkHtmlCore HtmlUtilities{..}
                           }
            UploadFeature{guardAuthorisedAsMaintainerOrTrustee}
            TagsFeature{queryTagsForPackage}
-           DocumentationFeature{documentationResource, queryHasDocumentation}
+           documentationFeature@DocumentationFeature{documentationResource, queryHasDocumentation}
+           reportsFeature
            DownloadFeature{recentPackageDownloads,totalPackageDownloads}
            DistroFeature{queryPackageStatus}
            RecentPackagesFeature{packageRender}
@@ -423,7 +449,7 @@ mkHtmlCore HtmlUtilities{..}
            templates
   = HtmlCore{..}
   where
-    cores@CoreResource{packageInPath, lookupPackageName} = coreResource
+    cores@CoreResource{packageInPath, lookupPackageName, lookupPackageId} = coreResource
     versions = versionsResource
     docs     = documentationResource
 
@@ -450,7 +476,11 @@ mkHtmlCore HtmlUtilities{..}
           }
       , maintainPackage
       , (resourceAt "/package/:package/distro-monitor") {
-            resourceGet = [("html", serveDistroMonitorPage)]
+            resourceDesc = [(GET, "A handy page for distro package change monitor tools")]
+          , resourceGet  = [("html", serveDistroMonitorPage)]
+          }
+      , (resourceAt "/package/:package/revisions/") {
+            resourceGet  = [("html", serveCabalRevisionsPage)]
           }
       ]
 
@@ -467,6 +497,9 @@ mkHtmlCore HtmlUtilities{..}
         let realpkg = rendPkgId render
             pkgname = packageName realpkg
             middleHtml = Pages.renderFields render
+        -- render the build status line
+        buildStatus <- renderBuildStatus documentationFeature reportsFeature realpkg
+        let buildStatusHtml = [("Status", buildStatus)]
         -- get additional information from other features
         prefInfo <- queryGetPreferredInfo pkgname
         let infoUrl = fmap (\_ -> preferredPackageUri versions "" pkgname) $ sumRange prefInfo
@@ -503,7 +536,10 @@ mkHtmlCore HtmlUtilities{..}
               Nothing -> noHtml
         -- and put it all together
         return $ toResponse $ Resource.XHtml $
-            Pages.packagePage render [tagLinks] [deprHtml] (beforeHtml ++ middleHtml ++ afterHtml) [] docURL False
+            Pages.packagePage render [tagLinks] [deprHtml]
+                              (beforeHtml ++ middleHtml ++ afterHtml
+                                ++ buildStatusHtml)
+                              [] docURL False
       where
         showDist (dname, info) = toHtml (display dname ++ ":") +++
             anchor ! [href $ distroUrl info] << toHtml (display $ distroVersion info)
@@ -528,6 +564,43 @@ mkHtmlCore HtmlUtilities{..}
         [ "pkgname"  $= pkgname
         , "versions" $= map packageId pkgs
         ]
+
+    serveCabalRevisionsPage :: DynamicPath -> ServerPartE Response
+    serveCabalRevisionsPage dpath = do
+      pkginfo  <- packageInPath dpath >>= lookupPackageId
+      users    <- queryGetUserDb
+      template <- getTemplate templates "revisions.html"
+      let pkgid        = packageId pkginfo
+          pkgname      = packageName pkginfo
+          revisions    = (pkgData pkginfo, pkgUploadData pkginfo)
+                       : pkgDataOld pkginfo
+          numRevisions = length revisions
+          revchanges   = [ case diffCabalRevisions pkgid
+                                  (cabalFileByteString old)
+                                  (cabalFileByteString new)
+                           of Left _err     -> []
+                              Right changes -> changes
+                         | ((new, _), (old, _)) <- zip revisions (tail revisions) ]
+
+      return $ toResponse $ template
+        [ "pkgname"   $= pkgname
+        , "pkgid"     $= pkgid
+        , "revisions" $= zipWith3 (revisionToTemplate users)
+                                  (map snd revisions)
+                                  [numRevisions-1, numRevisions-2..]
+                                  (revchanges ++ [[]])
+        ]
+      where
+        revisionToTemplate :: Users.Users -> UploadInfo -> Int -> [Change]
+                           -> TemplateVal
+        revisionToTemplate users (utime, uid) revision changes =
+          let uname = Users.userIdToName users uid
+           in templateDict
+                [ templateVal "number" revision
+                , templateVal "user" (display uname)
+                , templateVal "time" (formatTime defaultTimeLocale "%c" utime)
+                , templateVal "changes" changes
+                ]
 
 
 {-------------------------------------------------------------------------------
@@ -688,6 +761,97 @@ mkHtmlUploads HtmlUtilities{..} UploadFeature{..} = HtmlUploads{..}
           ] ++ case warns of
             [] -> []
             _  -> [paragraph << "There were some warnings:", unordList warns]
+
+{-------------------------------------------------------------------------------
+  Documentation uploads
+-------------------------------------------------------------------------------}
+
+data HtmlDocUploads = HtmlDocUploads {
+    htmlDocUploadsResources :: [Resource]
+  }
+
+mkHtmlDocUploads :: HtmlUtilities -> CoreFeature -> DocumentationFeature -> Templates -> HtmlDocUploads
+mkHtmlDocUploads HtmlUtilities{..} CoreFeature{coreResource} DocumentationFeature{..} templates = HtmlDocUploads{..}
+  where
+    CoreResource{packageInPath} = coreResource
+
+    htmlDocUploadsResources = [
+        (extendResource $ packageDocsWhole documentationResource) {
+            resourcePut    = [ ("html", serveUploadDocumentation) ]
+          , resourceDelete = [ ("html", serveDeleteDocumentation) ]
+          }
+      , (resourceAt "/package/:package/maintain/docs") {
+            resourceGet = [("html", serveDocUploadForm)]
+          }
+      ]
+
+    serveUploadDocumentation :: DynamicPath -> ServerPartE Response
+    serveUploadDocumentation dpath = do
+        pkgid <- packageInPath dpath
+        uploadDocumentation dpath >> ignoreFilters  -- Override 204 No Content
+        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation uploaded" $
+          [ paragraph << [toHtml "Successfully uploaded documentation for ", packageLink pkgid, toHtml "!"]
+          ]
+
+    serveDeleteDocumentation :: DynamicPath -> ServerPartE Response
+    serveDeleteDocumentation dpath = do
+        pkgid <- packageInPath dpath
+        deleteDocumentation dpath >> ignoreFilters  -- Override 204 No Content
+        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation deleted" $
+          [ paragraph << [toHtml "Successfully deleted documentation for ", packageLink pkgid, toHtml "!"]
+          ]
+
+    serveDocUploadForm :: DynamicPath -> ServerPartE Response
+    serveDocUploadForm dpath = do
+        pkgid <- packageInPath dpath
+        template <- getTemplate templates "maintain-docs.html"
+        return $ toResponse $ template
+          [ "pkgid" $= (pkgid :: PackageIdentifier)
+          ]
+
+{-------------------------------------------------------------------------------
+  Build reports
+-------------------------------------------------------------------------------}
+
+data HtmlReports = HtmlReports {
+    htmlReportsResources :: [Resource]
+  }
+
+mkHtmlReports :: HtmlUtilities -> CoreFeature -> ReportsFeature -> Templates -> HtmlReports
+mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = HtmlReports{..}
+  where
+    CoreResource{packageInPath} = coreResource
+    ReportsResource{..} = reportsResource
+
+    htmlReportsResources = [
+        (extendResource reportsList) {
+            resourceGet = [ ("html", servePackageReports) ]
+          }
+      , (extendResource reportsPage) {
+            resourceGet = [ ("html", servePackageReport) ]
+          }
+      ]
+
+    servePackageReports :: DynamicPath -> ServerPartE Response
+    servePackageReports dpath = packageReports dpath $ \reports -> do
+        pkgid <- packageInPath dpath
+        template <- getTemplate templates "reports.html"
+        return $ toResponse $ template
+          [ "pkgid" $= (pkgid :: PackageIdentifier)
+          , "reports" $= reports
+          ]
+
+    servePackageReport :: DynamicPath -> ServerPartE Response
+    servePackageReport dpath = do
+        (repid, report, mlog) <- packageReport dpath
+        mlog' <- traverse queryBuildLog mlog
+        pkgid <- packageInPath dpath
+        template <- getTemplate templates "report.html"
+        return $ toResponse $ template
+          [ "pkgid" $= (pkgid :: PackageIdentifier)
+          , "report" $= (repid, report)
+          , "log" $= toMessage <$> mlog'
+          ]
 
 {-------------------------------------------------------------------------------
   Candidates
@@ -1362,7 +1526,7 @@ mkHtmlSearch HtmlUtilities{..}
 
         searchForm termsStr explain =
           [ h2 << "Package search"
-          , form ! [theclass "box", XHtml.method "GET", action "/packages/search"] <<
+          , form ! [XHtml.method "GET", action "/packages/search"] <<
               [ input ! [value termsStr, name "terms", identifier "terms"]
               , toHtml " "
               , input ! [thetype "submit", value "Search"]
@@ -1439,7 +1603,7 @@ mkHtmlSearch HtmlUtilities{..}
 
         paramsForm SearchRankParameters{..} termsStr =
           [ h2 << "Package search (tuning & explanation)"
-          , form ! [theclass "box", XHtml.method "GET", action "/packages/search"] <<
+          , form ! [XHtml.method "GET", action "/packages/search"] <<
               [ input ! [value termsStr, name "terms", identifier "terms"]
               , toHtml " "
               , input ! [thetype "submit", value "Search"]
@@ -1464,7 +1628,7 @@ mkHtmlSearch HtmlUtilities{..}
           ]
         resetParamsForm termsStr =
           let SearchRankParameters{..} = defaultSearchRankParameters in
-          form ! [theclass "box", XHtml.method "GET", action "/packages/search"] <<
+          form ! [XHtml.method "GET", action "/packages/search"] <<
             (concat $
               [ input ! [ thetype "submit", value "Reset parameters" ]
               , input ! [ thetype "hidden", name "terms", value termsStr ]

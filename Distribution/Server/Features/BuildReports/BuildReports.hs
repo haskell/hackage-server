@@ -22,7 +22,7 @@ import Distribution.Server.Features.BuildReports.BuildReport
          (BuildReport(..), BuildReport_v0)
 
 import Distribution.Package (PackageId)
-import Distribution.Text (Text(..))
+import Distribution.Text (Text(..), display)
 
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Framework.Instances
@@ -37,6 +37,7 @@ import Control.Applicative ((<$>))
 
 import qualified Distribution.Server.Util.Parse as Parse
 import qualified Text.PrettyPrint          as Disp
+import Text.StringTemplate (ToSElem(..))
 
 
 newtype BuildReportId = BuildReportId Int
@@ -119,6 +120,13 @@ setBuildLog pkgid reportId buildLog buildReports = case Map.lookup pkgid (report
                          in Just $ buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
 
 -------------------
+-- HStringTemplate instances
+--
+
+instance ToSElem BuildReportId where
+    toSElem = toSElem . display
+
+-------------------
 -- SafeCopy instances
 --
 
@@ -146,8 +154,8 @@ instance MemSize BuildReports where
 
 instance MemSize PkgBuildReports where
     memSize (PkgBuildReports a b) = memSize2 a b
-    
-    
+
+
 -------------------
 -- Old SafeCopy versions
 --
@@ -170,7 +178,7 @@ instance Migrate BuildLog where
 
 ---
 
-data BuildReports_v0 = BuildReports_v0 
+data BuildReports_v0 = BuildReports_v0
                          !(Map.Map PackageIdentifier_v0 PkgBuildReports_v0)
 
 instance SafeCopy  BuildReports_v0
@@ -204,5 +212,8 @@ instance Migrate PkgBuildReports where
      migrate (PkgBuildReports_v0 m n) =
          PkgBuildReports (migrateMap m) (migrate n)
        where
+         migrateMap :: Map BuildReportId_v0 (BuildReport_v0, Maybe BuildLog_v0)
+                    -> Map BuildReportId    (BuildReport,    Maybe BuildLog)
          migrateMap = Map.mapKeys migrate
-                    . Map.map (\(br, l) -> (migrate br, fmap migrate  l))
+                    . Map.map (\(br, l) -> (migrate (migrate br),
+                                            fmap migrate  l))

@@ -29,7 +29,7 @@ import qualified Data.Text as T
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS -- Only used for ASCII data
 import qualified Data.ByteString.Base16 as Base16
-import Data.Char (isSpace, isPrint, isAlphaNum)
+import Data.Char (isSpace, isPrint)
 
 import Data.Typeable (Typeable)
 import Control.Monad.Reader (ask)
@@ -279,28 +279,28 @@ resetInfoToCSV backuptype (SignupResetTable tbl)
 --
 
 initUserSignupFeature :: ServerEnv
-                      -> UserFeature
-                      -> UserDetailsFeature
-                      -> UploadFeature
-                      -> IO UserSignupFeature
-initUserSignupFeature env@ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode}
-                      users userdetails upload = do
+                      -> IO (UserFeature
+                          -> UserDetailsFeature
+                          -> UploadFeature
+                          -> IO UserSignupFeature)
+initUserSignupFeature env@ServerEnv{ serverStateDir, serverTemplatesDir, 
+                                     serverTemplatesMode } = do
+    -- Canonical state
+    signupResetState <- signupResetStateComponent serverStateDir
 
-  -- Canonical state
-  signupResetState <- signupResetStateComponent serverStateDir
+    -- Page templates
+    templates <- loadTemplates serverTemplatesMode
+                   [serverTemplatesDir, serverTemplatesDir </> "UserSignupReset"]
+                   [ "SignupRequest.html", "SignupConfirmation.email"
+                   , "SignupEmailSent.html", "SignupConfirm.html"
+                   , "ResetRequest.html", "ResetConfirmation.email"
+                   , "ResetEmailSent.html", "ResetConfirm.html" ]
 
-  -- Page templates
-  templates <- loadTemplates serverTemplatesMode
-                 [serverTemplatesDir, serverTemplatesDir </> "UserSignupReset"]
-                 [ "SignupRequest.html", "SignupConfirmation.email"
-                 , "SignupEmailSent.html", "SignupConfirm.html"
-                 , "ResetRequest.html", "ResetConfirmation.email"
-                 , "ResetEmailSent.html", "ResetConfirm.html" ]
-
-  let feature = userSignupFeature env users userdetails
-                                  upload signupResetState templates
-
-  return feature
+    return $ \users userdetails upload -> do
+      let feature = userSignupFeature env
+                      users userdetails upload
+                      signupResetState templates
+      return feature
 
 
 userSignupFeature :: ServerEnv

@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: Maintainers' page for $pkgname$</title>
+<title>Maintainers' page for $pkgname$ | Hackage</title>
 </head>
 
 <body>
@@ -19,6 +19,9 @@ package after its been released.
   <dd>Package tags are used to improve search results and related packages to
       each other.
   </dd>
+
+<dt>Manage documentation <span style="font-weight: normal">for $versions:{pkgid|<a href="/package/$pkgid$/maintain/docs">$pkgid$</a>}; separator=", "$</span></dt>
+  <dd>Upload or delete Haddock documentation for this package.</dd>
 
 <dt><a href="preferred/edit">Preferred versions</a></dt>
   <dd>If you want users to keep using an older version when you release a newer

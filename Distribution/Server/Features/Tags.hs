@@ -81,23 +81,28 @@ data TagsResource = TagsResource {
     packageTagsUri :: String -> PackageName -> String
 }
 
-initTagsFeature :: ServerEnv -> CoreFeature -> UploadFeature -> IO TagsFeature
-initTagsFeature ServerEnv{serverStateDir} core@CoreFeature{..} upload = do
+initTagsFeature :: ServerEnv
+                -> IO (CoreFeature
+                    -> UploadFeature
+                    -> IO TagsFeature)
+initTagsFeature ServerEnv{serverStateDir} = do
     tagsState <- tagsStateComponent serverStateDir
     specials  <- newMemStateWHNF emptyPackageTags
     updateTag <- newHook
 
-    let feature = tagsFeature core upload tagsState specials updateTag
-    registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, mpkginfo) ->
-      case mpkginfo of
-        Nothing      -> return ()
-        Just pkginfo -> do
-          let pkgname = packageName pkgid
-              tags = Set.fromList . constructImmutableTags . pkgDesc $ pkginfo
-          updateState tagsState . SetPackageTags pkgname $ tags
-          runHook_ updateTag (Set.singleton pkgname, tags)
+    return $ \core@CoreFeature{..} upload -> do
+      let feature = tagsFeature core upload tagsState specials updateTag
 
-    return feature
+      registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, mpkginfo) ->
+        case mpkginfo of
+          Nothing      -> return ()
+          Just pkginfo -> do
+            let pkgname = packageName pkgid
+                tags = Set.fromList . constructImmutableTags . pkgDesc $ pkginfo
+            updateState tagsState . SetPackageTags pkgname $ tags
+            runHook_ updateTag (Set.singleton pkgname, tags)
+
+      return feature
 
 tagsStateComponent :: FilePath -> IO (StateComponent AcidState PackageTags)
 tagsStateComponent stateDir = do
@@ -145,7 +150,7 @@ tagsFeature CoreFeature{ queryGetPackageIndex
 
     tagsFeatureInterface = (emptyHackageFeature "tags") {
         featureResources =
-          map ($tagsResource) [
+          map ($ tagsResource) [
               tagsListing
             , tagListing
             , packageTagsListing

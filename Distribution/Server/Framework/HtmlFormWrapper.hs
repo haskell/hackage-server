@@ -15,6 +15,8 @@ import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HMap
 import Control.Concurrent.MVar
 
+import Distribution.Server.Framework.HappstackUtils (showContentType)
+
 
 -- | There is a bit of a conflict in the design of a REST api due to the need
 -- to support both web browsers and machine clients using machine formats like
@@ -114,21 +116,26 @@ htmlFormWrapperHack rest = do
 
     doTransform Nothing            action = action
     doTransform (Just "form2json") action = formDataToJSON action
+    doTransform (Just "file2raw")  action = fileUploadToRaw action
     doTransform (Just other)      _action = escape $ badRequest $ toResponse $
                                             "Unknown _transform value " ++ other
 
     formDataToJSON action = do
-      req <- askRq
       mjsonval <- requestFormDataAsJSON
       case mjsonval of
         Right jsonval -> do
-          putRequestBody req (Body (JSON.encode jsonval))
+          putRequestBody (JSON.encode jsonval)
           localRq (setHeader "Content-Type" "application/json") action
         Left intermediate ->
           escape $ badRequest $
             toResponse $
               "The form-data is not in the expected syntax for the form2json transform:\n\n"
               ++ unlines (map show intermediate)
+
+    fileUploadToRaw action = do
+        (filePath, _name, contentType) <- body $ lookFile "_file"
+        putRequestBody =<< liftIO (BS.readFile filePath)
+        localRq (setHeader "Content-Type" (showContentType contentType)) action
 
 -- | Very simple translation from form-data key value pairs to a single JSON
 -- object with equivalent field names and string values.
@@ -194,8 +201,11 @@ insertJPath (JField f p) (JSON.Object obj) = do
 insertJPath (JVal v) JSON.Null = return v
 insertJPath _        _         = Nothing
 
-putRequestBody :: MonadIO m => Request -> RqBody -> m ()
-putRequestBody req = liftIO . putMVar (rqBody req)
+-- | Replace the request body with something else.
+putRequestBody :: (ServerMonad m, MonadIO m) => BS.ByteString -> m ()
+putRequestBody newBody = do
+    req <- askRq
+    liftIO $ putMVar (rqBody req) (Body newBody)
 
 -- | For use with 'htmlFormWrapperHack': tries to report the original method
 -- of a request before the hack was applied.

@@ -104,40 +104,41 @@ data UploadResult = UploadResult {
     uploadWarnings :: ![String]
 }
 
-initUploadFeature :: ServerEnv -> CoreFeature -> UserFeature -> IO UploadFeature
-initUploadFeature env@ServerEnv{serverStateDir}
-                  core@CoreFeature{..} user@UserFeature{..} = do
-
+initUploadFeature :: ServerEnv
+                  -> IO (UserFeature -> CoreFeature -> IO UploadFeature)
+initUploadFeature env@ServerEnv{serverStateDir} = do
     -- Canonical state
     trusteesState    <- trusteesStateComponent    serverStateDir
     uploadersState   <- uploadersStateComponent   serverStateDir
     maintainersState <- maintainersStateComponent serverStateDir
 
-    -- Recusively tie the knot: the feature contains new user group resources
-    -- but we make the functions needed to create those resources along with
-    -- the feature
-    rec let (feature,
-             getTrusteesGroup, getUploadersGroup, makeMaintainersGroup)
-              = uploadFeature env core user
-                              trusteesState    trusteesGroup    trusteesGroupResource
-                              uploadersState   uploadersGroup   uploadersGroupResource
-                              maintainersState maintainersGroup maintainersGroupResource
+    return $ \user@UserFeature{..} core@CoreFeature{..} -> do
 
-        (trusteesGroup,  trusteesGroupResource) <-
-          groupResourceAt "/packages/trustees"  (getTrusteesGroup  [adminGroup])
+      -- Recusively tie the knot: the feature contains new user group resources
+      -- but we make the functions needed to create those resources along with
+      -- the feature
+      rec let (feature,
+               getTrusteesGroup, getUploadersGroup, makeMaintainersGroup)
+                = uploadFeature env core user
+                                trusteesState    trusteesGroup    trusteesGroupResource
+                                uploadersState   uploadersGroup   uploadersGroupResource
+                                maintainersState maintainersGroup maintainersGroupResource
 
-        (uploadersGroup, uploadersGroupResource) <-
-          groupResourceAt "/packages/uploaders" (getUploadersGroup [adminGroup])
+          (trusteesGroup,  trusteesGroupResource) <-
+            groupResourceAt "/packages/trustees"  (getTrusteesGroup  [adminGroup])
 
-        pkgNames <- PackageIndex.packageNames <$> queryGetPackageIndex
-        (maintainersGroup, maintainersGroupResource) <-
-          groupResourcesAt "/package/:package/maintainers"
-                           (makeMaintainersGroup [adminGroup, trusteesGroup])
-                           (\pkgname -> [("package", display pkgname)])
-                           (packageInPath coreResource)
-                           pkgNames
+          (uploadersGroup, uploadersGroupResource) <-
+            groupResourceAt "/packages/uploaders" (getUploadersGroup [adminGroup])
 
-    return feature
+          pkgNames <- PackageIndex.packageNames <$> queryGetPackageIndex
+          (maintainersGroup, maintainersGroupResource) <-
+            groupResourcesAt "/package/:package/maintainers"
+                             (makeMaintainersGroup [adminGroup, trusteesGroup])
+                             (\pkgname -> [("package", display pkgname)])
+                             (packageInPath coreResource)
+                             pkgNames
+
+      return feature
 
 trusteesStateComponent :: FilePath -> IO (StateComponent AcidState HackageTrustees)
 trusteesStateComponent stateDir = do

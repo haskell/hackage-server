@@ -38,7 +38,7 @@ module Distribution.Server.Framework.Resource (
   ) where
 
 import Happstack.Server
-import Distribution.Server.Util.Happstack (remainingPathString, uriEscape)
+import Distribution.Server.Framework.HappstackUtils (remainingPathString, uriEscape)
 import Distribution.Server.Util.ContentType (parseContentAccept)
 import Distribution.Server.Framework.Error
 
@@ -514,8 +514,11 @@ serveErrorResponse errRes mformat err = do
       format <- mformat
       lookup format errRes
 
-negotiateContent :: ServerMonad m => (Content, a) -> [(Content, a)] -> m (Content, a)
+negotiateContent :: (FilterMonad Response m, ServerMonad m)
+                 => (Content, a) -> [(Content, a)] -> m (Content, a)
 negotiateContent def available = do
+    when (length available > 1) $
+      setHeaderM "Vary" "Accept"
     maccept <- getHeaderM "Accept"
     case maccept of
       Nothing -> return def

@@ -26,6 +26,7 @@ import Distribution.Text
 import Distribution.Package
 import Distribution.Version (Version(..))
 
+import Control.Arrow (second)
 import Data.ByteString.Lazy.Char8 (unpack) -- Build reports are ASCII
 
 
@@ -34,6 +35,13 @@ import Data.ByteString.Lazy.Char8 (unpack) -- Build reports are ASCII
 -- 2. Decide build report upload policy (anonymous and authenticated)
 data ReportsFeature = ReportsFeature {
     reportsFeatureInterface :: HackageFeature,
+
+    packageReports :: DynamicPath -> ([(BuildReportId, BuildReport)] -> ServerPartE Response) -> ServerPartE Response,
+    packageReport :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog),
+
+    queryPackageReports :: MonadIO m => PackageId -> m [(BuildReportId, BuildReport)],
+    queryBuildLog :: MonadIO m => BuildLog -> m Resource.BuildLog,
+
     reportsResource :: ReportsResource
 }
 
@@ -53,12 +61,18 @@ data ReportsResource = ReportsResource {
 
 initBuildReportsFeature :: String
                         -> ServerEnv
-                        -> UserFeature -> UploadFeature
-                        -> CoreResource
-                        -> IO ReportsFeature
-initBuildReportsFeature name env@ServerEnv{serverStateDir} user upload core = do
+                        -> IO (UserFeature
+                            -> UploadFeature
+                            -> CoreResource
+                            -> IO ReportsFeature)
+initBuildReportsFeature name env@ServerEnv{serverStateDir} = do
     reportsState <- reportsStateComponent name serverStateDir
-    return $ buildReportsFeature name env user upload core reportsState
+
+    return $ \user upload core -> do
+      let feature = buildReportsFeature name env
+                                        user upload core
+                                        reportsState
+      return feature
 
 reportsStateComponent :: String -> FilePath -> IO (StateComponent AcidState BuildReports)
 reportsStateComponent name stateDir = do
@@ -82,7 +96,7 @@ buildReportsFeature :: String
                     -> ReportsFeature
 buildReportsFeature name
                     ServerEnv{serverBlobStore = store}
-                    UserFeature{..} UploadFeature{trusteesGroup}
+                    UserFeature{..} UploadFeature{..}
                     CoreResource{ packageInPath
                                 , guardValidPackageId
                                 , lookupPackageId
@@ -131,36 +145,56 @@ buildReportsFeature name
           , reportsLogUri  = \pkgid repid -> renderResource (reportsLog reportsResource) [display pkgid, display repid]
           }
 
-    textPackageReports dpath = do
+    ---------------------------------------------------------------------------
+
+    packageReports :: DynamicPath -> ([(BuildReportId, BuildReport)] -> ServerPartE Response) -> ServerPartE Response
+    packageReports dpath continue = do
       pkgid <- packageInPath dpath
       case pkgVersion pkgid of
         Version [] [] -> do
+          -- Redirect to the latest version
           pkginfo <- lookupPackageId pkgid
           seeOther (reportsListUri reportsResource "" (pkgInfoId pkginfo)) $
             toResponse ()
         _ -> do
           guardValidPackageId pkgid
-          reportList <- queryState reportsState $ LookupPackageReports pkgid
-          return . toResponse $ show reportList
+          queryPackageReports pkgid >>= continue
 
-    textPackageReport dpath = do
+    packageReport :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog)
+    packageReport dpath = do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
-      (reportId, report, mlog) <- packageReport dpath pkgid
-      return . toResponse $ unlines [ "Report #" ++ display reportId, show report
-                                    , maybe "No build log" (const "Build log exists") mlog]
+      reportId <- reportIdInPath dpath
+      mreport  <- queryState reportsState $ LookupReport pkgid reportId
+      case mreport of
+        Nothing -> errNotFound "Report not found" [MText "Build report does not exist"]
+        Just (report, mlog) -> return (reportId, report, mlog)
+
+    queryPackageReports :: MonadIO m => PackageId -> m [(BuildReportId, BuildReport)]
+    queryPackageReports pkgid = do
+        reports <- queryState reportsState $ LookupPackageReports pkgid
+        return $ map (second fst) reports
+
+    queryBuildLog :: MonadIO m => BuildLog -> m Resource.BuildLog
+    queryBuildLog (BuildLog blobId) = do
+        file <- liftIO $ BlobStorage.fetch store blobId
+        return $ Resource.BuildLog file
+
+    ---------------------------------------------------------------------------
+
+    textPackageReports dpath = packageReports dpath $ return . toResponse . show
+
+    textPackageReport dpath = do
+      (_, report, _) <- packageReport dpath
+      return . toResponse $ BuildReport.show report
 
     -- result: not-found error or text file
     serveBuildLog :: DynamicPath -> ServerPartE Response
     serveBuildLog dpath = do
-      pkgid <- packageInPath dpath
-      guardValidPackageId pkgid
-      (repid, _, mlog) <- packageReport dpath pkgid
+      (repid, _, mlog) <- packageReport dpath
       case mlog of
         Nothing -> errNotFound "Log not found" [MText $ "Build log for report " ++ display repid ++ " not found"]
-        Just (BuildLog blobId) -> do
-            file <- liftIO $ BlobStorage.fetch store blobId
-            return . toResponse $ Resource.BuildLog file
+        Just logId -> toResponse <$> queryBuildLog logId
 
     -- result: auth error, not-found error, parse error, or redirect
     submitBuildReport :: DynamicPath -> ServerPartE Response
@@ -172,7 +206,11 @@ buildReportsFeature name
       case BuildReport.parse $ unpack reportbody of
           Left err -> errBadRequest "Error submitting report" [MText err]
           Right report -> do
-              reportId <- updateState reportsState $ AddReport pkgid (report, Nothing)
+              when (BuildReport.docBuilder report) $
+                  -- Check that the submitter can actually upload docs
+                  guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
+              report' <- liftIO $ BuildReport.affixTimestamp report
+              reportId <- updateState reportsState $ AddReport pkgid (report', Nothing)
               -- redirect to new reports page
               seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
@@ -233,12 +271,3 @@ buildReportsFeature name
 
     reportIdInPath :: MonadPlus m => DynamicPath -> m BuildReportId
     reportIdInPath dpath = maybe mzero return (simpleParse =<< lookup "id" dpath)
-
-    packageReport :: DynamicPath -> PackageId -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog)
-    packageReport dpath pkgid = do
-      reportId <- reportIdInPath dpath
-      mreport  <- queryState reportsState $ LookupReport pkgid reportId
-      case mreport of
-        Nothing -> errNotFound "Report not found" [MText "Build report does not exist"]
-        Just (report, mlog) -> return (reportId, report, mlog)
-

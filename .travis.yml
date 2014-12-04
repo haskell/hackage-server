@@ -1,13 +1,35 @@
-language: haskell
+# NB: don't set `language: haskell` here
+
+# See also https://github.com/hvr/multi-ghc-travis for more information
+
+# The following lines enable several GHC versions and/or HP versions
+# to be tested; often it's enough to test only against the last
+# release of a major GHC version. Setting HPVER implictly sets
+# GHCVER. Omit lines with versions you don't need/want testing for.
+env:
+ - GHCVER=7.6.3
+ - GHCVER=7.8.3
 
 notifications:
   email: false
   irc: "chat.freenode.net#hackage"
 
+before_install:
+ - sudo add-apt-repository -y ppa:hvr/ghc
+ - sudo apt-get update
+ - sudo apt-get install cabal-install-1.18 ghc-$GHCVER libicu-dev happy-1.19.3 alex-3.1.3
+ - sudo ln -sf /opt/alex/3.1.3/bin/alex-3.1.3 /usr/bin/alex
+ - export PATH=/opt/ghc/$GHCVER/bin:/opt/happy/1.19.3/bin:/opt/alex/3.1.3/bin:$PATH
+
 install:
-  - sudo apt-get install libicu-dev
-  - cabal install --only-dependencies --enable-tests --disable-optimization --ghc-options=-w
+  - cabal-1.18 update
+  - cabal-1.18 install cabal alex
+  - cabal-1.18 sandbox init
+  - cabal-1.18 install --only-dependencies --enable-tests --disable-optimization --force-reinstalls --ghc-options=-w
 
 script:
-  - cabal configure --enable-tests --disable-optimization && cabal build
-  - travis_retry cabal test
+ - cabal-1.18 configure --enable-tests --disable-optimization
+ - cabal-1.18 build
+ - cabal-1.18 test
+
+# EOF

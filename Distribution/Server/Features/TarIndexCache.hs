@@ -31,10 +31,15 @@ data TarIndexCacheFeature = TarIndexCacheFeature {
 instance IsHackageFeature TarIndexCacheFeature where
   getFeatureInterface = tarIndexCacheFeatureInterface
 
-initTarIndexCacheFeature :: ServerEnv -> UserFeature -> IO TarIndexCacheFeature
-initTarIndexCacheFeature env@ServerEnv{serverStateDir} users = do
-  tarIndexCache <- tarIndexCacheStateComponent serverStateDir
-  return $ tarIndexCacheFeature env users tarIndexCache
+initTarIndexCacheFeature :: ServerEnv
+                         -> IO (UserFeature
+                             -> IO TarIndexCacheFeature)
+initTarIndexCacheFeature env@ServerEnv{serverStateDir} = do
+    tarIndexCache <- tarIndexCacheStateComponent serverStateDir
+
+    return $ \users -> do
+      let feature = tarIndexCacheFeature env users tarIndexCache
+      return feature
 
 tarIndexCacheStateComponent :: FilePath -> IO (StateComponent AcidState TarIndexCache)
 tarIndexCacheStateComponent stateDir = do

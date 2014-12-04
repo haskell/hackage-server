@@ -238,17 +238,19 @@ userDetailsToCSV backuptype (UserDetailsTable tbl)
 -- Feature definition & initialisation
 --
 
-initUserDetailsFeature :: ServerEnv -> UserFeature -> CoreFeature -> IO UserDetailsFeature
-initUserDetailsFeature ServerEnv{serverStateDir} users core = do
+initUserDetailsFeature :: ServerEnv
+                       -> IO (UserFeature
+                           -> CoreFeature
+                           -> IO UserDetailsFeature)
+initUserDetailsFeature ServerEnv{serverStateDir} = do
+    -- Canonical state
+    usersDetailsState <- userDetailsStateComponent serverStateDir
 
-  -- Canonical state
-  usersDetailsState <- userDetailsStateComponent serverStateDir
+    --TODO: link up to user feature to delete
 
-  let feature = userDetailsFeature usersDetailsState users core
-
-  --TODO: link up to user feature to delete
-
-  return feature
+    return $ \users core -> do
+      let feature = userDetailsFeature usersDetailsState users core
+      return feature
 
 
 userDetailsFeature :: StateComponent AcidState UserDetailsTable

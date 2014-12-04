@@ -50,8 +50,8 @@ import Distribution.Server.Util.Merge
 
 import Prelude hiding (lookup)
 import Control.Exception (assert)
-import qualified Data.Map as Map
-import Data.Map (Map)
+import qualified Data.Map.Strict as Map
+import Data.Map.Strict (Map)
 import qualified Data.Foldable as Foldable
 import Data.List (groupBy, sortBy, find, isInfixOf)
 import Data.Monoid (Monoid(..))

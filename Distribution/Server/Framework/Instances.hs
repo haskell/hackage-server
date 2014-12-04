@@ -20,7 +20,7 @@ import Distribution.System   (OS(..), Arch(..))
 import Distribution.PackageDescription (FlagName(..))
 import Distribution.Version
 
-import Data.Time.Calendar (Day(..))
+import Data.Time (Day(..), DiffTime, UTCTime(..))
 import Control.Applicative
 import Control.DeepSeq
 
@@ -245,8 +245,12 @@ instance MemSize Length where
     memSize _ = memSize0
 
 instance Text Day where
-  disp  = PP.text . show 
+  disp  = PP.text . show
   parse = readS_to_P (reads :: ReadS Day)
+
+instance Text UTCTime where
+  disp  = PP.text . show
+  parse = readS_to_P (reads :: ReadS UTCTime)
 
 -------------------
 -- Arbitrary instances
@@ -283,6 +287,30 @@ instance Arbitrary OS where
 
 instance Arbitrary FlagName where
   arbitrary = FlagName <$> vectorOf 4 (choose ('a', 'z'))
+
+-- Below instances copied from
+-- <http://hackage.haskell.org/package/quickcheck-instances-0.2.0/docs/src/Test-QuickCheck-Instances.html>
+
+instance Arbitrary Day where
+    arbitrary = ModifiedJulianDay <$> (2000 +) <$> arbitrary
+    shrink    = (ModifiedJulianDay <$>) . shrink . toModifiedJulianDay
+
+instance Arbitrary DiffTime where
+    arbitrary = arbitrarySizedFractional
+#if MIN_VERSION_time(1,3,0)
+    shrink    = shrinkRealFrac
+#else
+    shrink    = (fromRational <$>) . shrink . toRational
+#endif
+
+instance Arbitrary UTCTime where
+    arbitrary =
+        UTCTime
+        <$> arbitrary
+        <*> (fromRational . toRational <$> choose (0::Double, 86400))
+    shrink ut@(UTCTime day dayTime) =
+        [ ut { utctDay     = d' } | d' <- shrink day     ] ++
+        [ ut { utctDayTime = t' } | t' <- shrink dayTime ]
 
 --------------------------
 -- Old SafeCopy versions

@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: User accounts</title>
+<title>User accounts | Hackage</title>
 </head>
 
 <body>

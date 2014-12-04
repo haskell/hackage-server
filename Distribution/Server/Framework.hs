@@ -2,7 +2,13 @@
 --
 module Distribution.Server.Framework (
 
-    module Happstack.Server,
+    module Happstack.Server.Routing,
+    module Happstack.Server.Response,
+    module Happstack.Server.RqData,
+    module Happstack.Server.FileServe,
+    module Happstack.Server.Error,
+    module Happstack.Server.Monads,
+    module Happstack.Server.Types,
     module Data.Acid,
     module Distribution.Server.Framework.MemState,
     module Distribution.Server.Framework.Cache,
@@ -14,10 +20,11 @@ module Distribution.Server.Framework (
     module Distribution.Server.Framework.Resource,
     module Distribution.Server.Framework.RequestContentTypes,
     module Distribution.Server.Framework.ResponseContentTypes,
+    module Distribution.Server.Framework.CacheControl,
     module Distribution.Server.Framework.Hook,
     module Distribution.Server.Framework.Error,
     module Distribution.Server.Framework.Logging,
-    module Distribution.Server.Util.Happstack,
+    module Distribution.Server.Framework.HappstackUtils,
 
     module Data.Monoid,
     module Control.Applicative,
@@ -27,7 +34,13 @@ module Distribution.Server.Framework (
 
   ) where
 
-import Happstack.Server
+import Happstack.Server.Routing
+import Happstack.Server.Response
+import Happstack.Server.RqData
+import Happstack.Server.FileServe
+import Happstack.Server.Error
+import Happstack.Server.Monads
+import Happstack.Server.Types
 
 import Data.Acid
 import Distribution.Server.Framework.MemState
@@ -40,12 +53,11 @@ import Distribution.Server.Framework.ServerEnv
 import Distribution.Server.Framework.Resource
 import Distribution.Server.Framework.RequestContentTypes
 import Distribution.Server.Framework.ResponseContentTypes
+import Distribution.Server.Framework.CacheControl
 import Distribution.Server.Framework.Hook
 import Distribution.Server.Framework.Error
 import Distribution.Server.Framework.Logging
-
-import Distribution.Server.Util.Happstack
-
+import Distribution.Server.Framework.HappstackUtils
 
 import Data.Monoid (Monoid(..))
 import Control.Applicative (Applicative(..), (<$>))

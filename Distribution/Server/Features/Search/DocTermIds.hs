@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE BangPatterns, GeneralizedNewtypeDeriving, ScopedTypeVariables #-}
 module Distribution.Server.Features.Search.DocTermIds (
     DocTermIds,
     TermId,
@@ -53,12 +53,12 @@ fieldElems docterms field =
 -- Vector indexed by Ix Bounded
 --
 
-vecIndexIx  :: (Ix ix, Bounded ix) => Vector a -> ix -> a
-vecIndexIx vec ix = vec ! Ix.index (minBound, maxBound) ix
+vecIndexIx  :: forall ix a . (Ix ix, Bounded ix) => Vector a -> ix -> a
+vecIndexIx vec ix = vec ! Ix.index (minBound :: ix, maxBound :: ix) ix
 
-vecCreateIx :: (Ix ix, Bounded ix) => (ix -> a) -> Vector a
+vecCreateIx :: forall ix a . (Ix ix, Bounded ix) => (ix -> a) -> Vector a
 vecCreateIx f = Vec.fromListN (Ix.rangeSize bounds)
                   [ y | ix <- Ix.range bounds, let !y = f ix ]
   where
+    bounds :: (ix, ix)
     bounds = (minBound, maxBound)
-

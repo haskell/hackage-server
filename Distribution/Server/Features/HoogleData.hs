@@ -58,22 +58,25 @@ instance IsHackageFeature HoogleDataFeature where
 -- Feature definition & initialisation
 --
 
-initHoogleDataFeature :: ServerEnv -> CoreFeature
-                      -> DocumentationFeature -> TarIndexCacheFeature
-                      -> IO HoogleDataFeature
-initHoogleDataFeature env@ServerEnv{..} core docs tarIndexCache = do
+initHoogleDataFeature :: ServerEnv
+                      -> IO (CoreFeature
+                          -> DocumentationFeature
+                          -> TarIndexCacheFeature
+                          -> IO HoogleDataFeature)
+initHoogleDataFeature env@ServerEnv{ serverCacheDelay,
+                                     serverVerbosity = verbosity } = do
+    -- Ephemeral state
+    docsUpdatedState <- newMemStateWHNF Set.empty
 
-  -- Ephemeral state
-  docsUpdatedState <- newMemStateWHNF Set.empty
+    hoogleBundleUpdateJob <- newAsyncUpdate serverCacheDelay verbosity
+                                            "hoogle.tar.gz"
 
-  hoogleBundleUpdateJob <- newAsyncUpdate serverCacheDelay serverVerbosity
-                                          "hoogle.tar.gz"
+    return $ \core docs tarIndexCache -> do
+      let feature = hoogleDataFeature docsUpdatedState
+                                      hoogleBundleUpdateJob
+                                      env core docs tarIndexCache
 
-  let feature = hoogleDataFeature docsUpdatedState
-                                  hoogleBundleUpdateJob
-                                  env core docs tarIndexCache
-
-  return feature
+      return feature
 
 
 hoogleDataFeature :: MemState (Set PackageId)

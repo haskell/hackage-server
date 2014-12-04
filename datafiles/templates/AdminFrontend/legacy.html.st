@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: User accounts with legacy passwords</title>
+<title>User accounts with legacy passwords | Hackage</title>
 </head>
 
 <body>

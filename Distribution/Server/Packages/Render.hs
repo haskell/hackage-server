@@ -49,6 +49,7 @@ data PackageRender = PackageRender {
     rendHasTarball   :: Bool,
     rendHasChangeLog :: Bool,
     rendUploadInfo   :: (UTCTime, Maybe UserInfo),
+    rendUpdateInfo   :: Maybe (Int, UTCTime, Maybe UserInfo),
     rendPkgUri       :: String,
     rendFlags        :: [Flag],
     -- rendOther contains other useful fields which are merely strings, possibly empty
@@ -76,8 +77,14 @@ doPackageRender users info hasChangeLog = return $ PackageRender
     , rendModules      = fmap (moduleForest . exposedModules) (library flatDesc)
     , rendHasTarball   = not . null $ pkgTarball info
     , rendHasChangeLog = hasChangeLog
-    , rendUploadInfo   = let (utime, uid) = pkgUploadData info
+    , rendUploadInfo   = let (utime, uid) = pkgOriginalUploadData info
                          in (utime, Users.lookupUserId uid users)
+    , rendUpdateInfo   = let revision     = length (pkgDataOld info)
+                             (utime, uid) = pkgUploadData info
+                             uinfo        = Users.lookupUserId uid users
+                         in if revision > 0
+                              then Just (revision, utime, uinfo)
+                              else Nothing
     , rendPkgUri       = pkgUri
     , rendFlags        = genPackageFlags genDesc
     , rendOther        = desc

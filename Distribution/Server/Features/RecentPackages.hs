@@ -43,35 +43,31 @@ data RecentPackagesResource = RecentPackagesResource {
 }
 
 initRecentPackagesFeature :: ServerEnv
-                          -> UserFeature
-                          -> CoreFeature
-                          -> PackageContentsFeature
-                          -> IO RecentPackagesFeature
-initRecentPackagesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verbosity}
-                          user
-                          core@CoreFeature{packageChangeHook}
-                          packageContents = do
-    loginfo verbosity "Initialising recentPackages feature, start"
+                          -> IO (UserFeature
+                              -> CoreFeature
+                              -> PackageContentsFeature
+                              -> IO RecentPackagesFeature)
+initRecentPackagesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verbosity} = do
+    return $ \user core@CoreFeature{packageChangeHook} packageContents -> do
 
-    -- recent caches. in lieu of an ActionLog
-    -- TODO: perhaps a hook, recentUpdated :: HookList ([PkgInfo] -> IO ())
-    rec let (feature, updateRecentCache) =
-              recentPackagesFeature env user core packageContents
-                                    cacheRecent
+      -- recent caches. in lieu of an ActionLog
+      -- TODO: perhaps a hook, recentUpdated :: HookList ([PkgInfo] -> IO ())
+      rec let (feature, updateRecentCache) =
+                recentPackagesFeature env user core packageContents
+                                      cacheRecent
 
-        cacheRecent <- newAsyncCacheNF updateRecentCache
-                         defaultAsyncCachePolicy {
-                           asyncCacheName = "recent uploads (html,rss)",
-                           asyncCacheUpdateDelay  = serverCacheDelay,
-                           asyncCacheSyncInit     = False,
-                           asyncCacheLogVerbosity = verbosity
-                         }
+          cacheRecent <- newAsyncCacheNF updateRecentCache
+                           defaultAsyncCachePolicy {
+                             asyncCacheName = "recent uploads (html,rss)",
+                             asyncCacheUpdateDelay  = serverCacheDelay,
+                             asyncCacheSyncInit     = False,
+                             asyncCacheLogVerbosity = verbosity
+                           }
 
-    registerHookJust packageChangeHook isPackageChangeAny $ \_ ->
-      prodAsyncCache cacheRecent
+      registerHookJust packageChangeHook isPackageChangeAny $ \_ ->
+        prodAsyncCache cacheRecent
 
-    loginfo verbosity "Initialising recentPackages feature, end"
-    return feature
+      return feature
 
 
 recentPackagesFeature :: ServerEnv
@@ -89,7 +85,7 @@ recentPackagesFeature env
   = (RecentPackagesFeature{..}, updateRecentCache)
   where
     recentPackagesFeatureInterface = (emptyHackageFeature "recentPackages") {
-        featureResources = map ($recentPackagesResource) [recentPackages]
+        featureResources = map ($ recentPackagesResource) [recentPackages]
       , featureState     = []
       , featureCaches    = [
             CacheComponent {

@@ -67,6 +67,7 @@ select, input, button, textarea {
 }
 
 table {
+	margin: 0.8em 0;
 	font-size:inherit;
 	font:100%;
 }
@@ -604,7 +605,37 @@ table.simpletable th, table.simpletable td {
   padding: 0.2em 1em;
 }
 
-table.properties th {
+table.properties td, table.properties th {
+  padding: 1px 0.25em;
+}
+
+table.properties td:first-child, table.properties th:first-child {
+  padding-left: 0;
+}
+
+table.properties td:last-child, table.properties th:last-child {
+  padding-right: 0;
+}
+
+table.properties td, table.properties th {
   vertical-align: top;
   text-align: left;
+}
+
+table.fancy {
+  border: 1px solid #ddd;
+  border-collapse: collapse;
+}
+
+table.fancy tr {
+  border: 1px solid #ddd;
+  border-width: 1px 0;
+}
+
+table.fancy th {
+  background: #f0f0f0;
+}
+
+table.fancy td, table.fancy th {
+  padding: 0.25em 0.5em;
 }

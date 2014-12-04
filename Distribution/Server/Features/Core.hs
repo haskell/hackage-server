@@ -25,6 +25,7 @@ import Distribution.Server.Features.Users
 
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Types (UserId)
+import Distribution.Server.Users.Users (userIdToName)
 import qualified Distribution.Server.Packages.Index as Packages.Index
 import qualified Codec.Compression.GZip as GZip
 import Data.Digest.Pure.MD5 (md5)
@@ -34,6 +35,8 @@ import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
 import Data.Time.Clock (UTCTime, getCurrentTime)
+import Data.Time.Format (formatTime)
+import System.Locale (defaultTimeLocale)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.ByteString.Lazy (ByteString)
@@ -228,11 +231,9 @@ data CoreResource = CoreResource {
     lookupPackageId   :: PackageId   -> ServerPartE PkgInfo
 }
 
-initCoreFeature :: ServerEnv -> UserFeature -> IO CoreFeature
+initCoreFeature :: ServerEnv -> IO (UserFeature -> IO CoreFeature)
 initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
-                              serverVerbosity = verbosity} users = do
-    loginfo verbosity "Initialising core feature, start"
-
+                              serverVerbosity = verbosity} = do
     -- Canonical state
     packagesState <- packagesStateComponent verbosity serverStateDir
 
@@ -244,26 +245,26 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
     packageChangeHook   <- newHook
     packageDownloadHook <- newHook
 
-    rec let (feature, getIndexTarball)
-              = coreFeature env users
-                            packagesState extraMap indexTar
-                            packageChangeHook packageDownloadHook
+    return $ \users -> do
+      rec let (feature, getIndexTarball)
+                = coreFeature env users
+                              packagesState extraMap indexTar
+                              packageChangeHook packageDownloadHook
 
-        -- Caches
-        -- The index.tar.gz file
-        indexTar <- newAsyncCacheNF getIndexTarball
-                      defaultAsyncCachePolicy {
-                        asyncCacheName = "index tarball",
-                        asyncCacheUpdateDelay  = serverCacheDelay,
-                        asyncCacheSyncInit     = False,
-                        asyncCacheLogVerbosity = verbosity
-                      }
+          -- Caches
+          -- The index.tar.gz file
+          indexTar <- newAsyncCacheNF getIndexTarball
+                        defaultAsyncCachePolicy {
+                          asyncCacheName = "index tarball",
+                          asyncCacheUpdateDelay  = serverCacheDelay,
+                          asyncCacheSyncInit     = False,
+                          asyncCacheLogVerbosity = verbosity
+                        }
 
-    registerHookJust packageChangeHook isPackageIndexChange $ \_ ->
-      prodAsyncCache indexTar
+      registerHookJust packageChangeHook isPackageIndexChange $ \_ ->
+        prodAsyncCache indexTar
 
-    loginfo verbosity "Initialising core feature, end"
-    return feature
+      return feature
 
 
 packagesStateComponent :: Verbosity -> FilePath -> IO (StateComponent AcidState PackagesState)
@@ -305,6 +306,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           , corePackageRedirect
           , corePackageTarball
           , coreCabalFile
+          , coreCabalFileRevs
+          , coreCabalFileRev
           ]
       , featureState    = [abstractAcidStateComponent packagesState]
       , featureCaches   = [
@@ -342,6 +345,14 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     coreCabalFile = (resourceAt "/package/:package/:cabal.cabal") {
         resourceDesc = [(GET, "Get package .cabal file")]
       , resourceGet  = [("cabal", serveCabalFile)]
+      }
+    coreCabalFileRevs = (resourceAt "/package/:package/revisions/") {
+        resourceDesc = [(GET, "List all package .cabal file revisions")]
+      , resourceGet  = [("json", serveCabalFileRevisionsList)]
+      }
+    coreCabalFileRev = (resourceAt "/package/:package/revision/:revision.:format") {
+        resourceDesc = [(GET, "Get package .cabal file revision")]
+      , resourceGet  = [("cabal", serveCabalFileRevision)]
       }
     indexPackageUri = \format ->
       renderResource corePackagesPage [format]
@@ -479,7 +490,11 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     ------------------------------------------------------------------------
 
     servePackagesIndex :: DynamicPath -> ServerPartE Response
-    servePackagesIndex _ = toResponse <$> readAsyncCache cacheIndexTarball
+    servePackagesIndex _ = do
+      tarball@(IndexTarball _ _ tarballmd5 _) <- readAsyncCache cacheIndexTarball
+      cacheControl [Public, NoTransform, maxAgeMinutes 5]
+                   (ETag (show tarballmd5))
+      return (toResponse tarball)
 
     -- TODO: should we include more information here? description and
     -- category for instance (but they are not readily available as long
@@ -508,6 +523,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           [] -> errNotFound "Tarball not found" [MText "No tarball exists for this package version."]
           ((tb, _):_) -> do
               let blobId = pkgTarballGz tb
+              cacheControl [Public, NoTransform, maxAgeDays 30]
+                           (BlobStorage.blobETag blobId)
               file <- liftIO $ BlobStorage.fetch store blobId
               runHook_ packageDownloadHook pkgid
               return $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)
@@ -520,6 +537,34 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       case lookup "cabal" dpath == Just (display $ packageName pkg) of
           True  -> return $ toResponse (Resource.CabalFile (cabalFileByteString (pkgData pkg)))
           False -> mzero
+
+    serveCabalFileRevisionsList :: DynamicPath -> ServerPartE Response
+    serveCabalFileRevisionsList dpath = do
+      pkginfo <- packageInPath dpath >>= lookupPackageId
+      users   <- queryGetUserDb
+      let revisions    = pkgUploadData pkginfo : map snd (pkgDataOld pkginfo)
+          revisionToObj (utime, uid) rev =
+            let uname = userIdToName users uid in
+            Object $ HashMap.fromList
+              [ (Text.pack "number", Number (fromIntegral rev))
+              , (Text.pack "user", String (Text.pack (display uname)))
+              , (Text.pack "time", String (Text.pack (formatTime defaultTimeLocale "%c" utime)))
+              ]
+          revisionsJson = Array $ Vector.fromList $
+                            zipWith revisionToObj revisions [0 :: Int ..]
+      return (toResponse revisionsJson)
+
+    serveCabalFileRevision :: DynamicPath -> ServerPartE Response
+    serveCabalFileRevision dpath = do
+      pkginfo <- packageInPath dpath >>= lookupPackageId
+      let mrev = lookup "revision" dpath >>= fromReqURI
+          revisions = reverse (pkgData pkginfo : map fst (pkgDataOld pkginfo))
+      case mrev of
+        Just rev
+          | rev >= 0
+          , (fileRev:_) <- drop rev revisions
+          -> return $ toResponse (Resource.CabalFile (cabalFileByteString fileRev))
+        _ -> mzero
 
 packageExists, packageIdExists :: (Package pkg, Package pkg') => PackageIndex pkg -> pkg' -> Bool
 -- | Whether a package exists in the given package index.

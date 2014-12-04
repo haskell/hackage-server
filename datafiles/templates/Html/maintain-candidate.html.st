@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: Maintainers' page for $pkgname$-$pkgversion$ candidate</title>
+<title>Maintainers' page for $pkgname$-$pkgversion$ candidate | Hackage</title>
 </head>
 
 <body>

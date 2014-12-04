@@ -192,9 +192,8 @@ instance MemSize GroupIndex where
     memSize (GroupIndex a b) = memSize2 a b
 
 -- TODO: add renaming
-initUserFeature :: ServerEnv -> IO UserFeature
+initUserFeature :: ServerEnv -> IO (IO UserFeature)
 initUserFeature ServerEnv{serverStateDir} = do
-
   -- Canonical state
   usersState  <- usersStateComponent  serverStateDir
   adminsState <- adminsStateComponent serverStateDir
@@ -206,22 +205,23 @@ initUserFeature ServerEnv{serverStateDir} = do
   userAdded     <- newHook
   authFailHook  <- newHook
 
-  -- Slightly tricky: we have an almost recursive knot between the group
-  -- resource management functions, and creating the admin group
-  -- resource that is part of the user feature.
-  --
-  -- Instead of trying to pull it apart, we just use a 'do rec'
-  --
-  rec let (feature@UserFeature{groupResourceAt}, adminGroupDesc)
-            = userFeature usersState
-                          adminsState
-                          groupIndex
-                          userAdded authFailHook
-                          adminG adminR
+  return $ do
+    -- Slightly tricky: we have an almost recursive knot between the group
+    -- resource management functions, and creating the admin group
+    -- resource that is part of the user feature.
+    --
+    -- Instead of trying to pull it apart, we just use a 'do rec'
+    --
+    rec let (feature@UserFeature{groupResourceAt}, adminGroupDesc)
+              = userFeature usersState
+                            adminsState
+                            groupIndex
+                            userAdded authFailHook
+                            adminG adminR
 
-      (adminG, adminR) <- groupResourceAt "/users/admins/" adminGroupDesc
+        (adminG, adminR) <- groupResourceAt "/users/admins/" adminGroupDesc
 
-  return feature
+    return feature
 
 usersStateComponent :: FilePath -> IO (StateComponent AcidState Users.Users)
 usersStateComponent stateDir = do

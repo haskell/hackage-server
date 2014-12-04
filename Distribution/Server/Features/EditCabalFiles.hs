@@ -3,6 +3,9 @@
              StandaloneDeriving, GeneralizedNewtypeDeriving #-}
 module Distribution.Server.Features.EditCabalFiles (
     initEditCabalFilesFeature
+
+  , diffCabalRevisions
+  , Change(..)
   ) where
 
 import Distribution.Server.Framework
@@ -41,18 +44,21 @@ import qualified Data.ByteString.Lazy.Char8 as BS -- TODO: Verify that we don't 
 -- | A feature to allow editing cabal files without uploading new tarballs.
 --
 initEditCabalFilesFeature :: ServerEnv
-                          -> UserFeature -> CoreFeature -> UploadFeature
-                          -> IO HackageFeature
-initEditCabalFilesFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode} user core upload = do
+                          -> IO (UserFeature
+                              -> CoreFeature
+                              -> UploadFeature
+                              -> IO HackageFeature)
+initEditCabalFilesFeature env@ServerEnv{ serverTemplatesDir,
+                                         serverTemplatesMode } = do
+    -- Page templates
+    templates <- loadTemplates serverTemplatesMode
+                   [serverTemplatesDir, serverTemplatesDir </> "EditCabalFile"]
+                   ["cabalFileEditPage.html", "cabalFilePublished.html"]
 
-  -- Page templates
-  templates <- loadTemplates serverTemplatesMode
-                 [serverTemplatesDir, serverTemplatesDir </> "EditCabalFile"]
-                 ["cabalFileEditPage.html", "cabalFilePublished.html"]
+    return $ \user core upload -> do
+      let feature = editCabalFilesFeature env templates user core upload
 
-  let feature = editCabalFilesFeature env templates user core upload
-
-  return feature
+      return feature
 
 
 editCabalFilesFeature :: ServerEnv -> Templates
@@ -107,7 +113,7 @@ editCabalFilesFeature _env templates
         let oldVersion = cabalFileByteString (pkgData pkg)
         newRevision <- getCabalFile
         shouldPublish <- getPublish
-        case runCheck $ checkCabalFileRevision pkgid oldVersion newRevision of
+        case diffCabalRevisions pkgid oldVersion newRevision of
           Left errs ->
             responseTemplate template pkgid newRevision
                              shouldPublish [errs] []
@@ -169,6 +175,11 @@ logChange :: Change -> CheckM ()
 logChange change = CheckM (tell [change])
 
 type Check a = a -> a -> CheckM ()
+
+diffCabalRevisions :: PackageId -> ByteString -> ByteString
+                   -> Either String [Change]
+diffCabalRevisions pkgid oldVersion newRevision =
+    runCheck $ checkCabalFileRevision pkgid oldVersion newRevision
 
 checkCabalFileRevision :: PackageId -> Check ByteString
 checkCabalFileRevision pkgid old new = do

@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: $errorTitle$</title>
+<title>$errorTitle$ | Hackage</title>
 </head>
 
 <body>

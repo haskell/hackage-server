@@ -40,18 +40,14 @@ data PackageContentsResource = PackageContentsResource {
 }
 
 initPackageContentsFeature :: ServerEnv
-                           -> CoreFeature
-                           -> TarIndexCacheFeature
-                           -> IO PackageContentsFeature
-initPackageContentsFeature env@ServerEnv{serverVerbosity = verbosity}
-                           core
-                           tarIndexCache = do
-    loginfo verbosity "Initialising package-contents feature, start"
+                           -> IO (CoreFeature
+                               -> TarIndexCacheFeature
+                               -> IO PackageContentsFeature)
+initPackageContentsFeature env@ServerEnv{} = do
+    return $ \core tarIndexCache -> do
+      let feature = packageContentsFeature env core tarIndexCache
 
-    let feature = packageContentsFeature env core tarIndexCache
-
-    loginfo verbosity "Initialising package-contents feature, end"
-    return feature
+      return feature
 
 packageContentsFeature :: ServerEnv
                        -> CoreFeature
@@ -100,8 +96,9 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
       case mChangeLog of
         Left err ->
           errNotFound "Changelog not found" [MText err]
-        Right (fp, etag, offset, name) ->
-          liftIO $ serveTarEntry fp offset name etag
+        Right (fp, etag, offset, name) -> do
+          cacheControl [Public, maxAgeDays 30] etag
+          liftIO $ serveTarEntry fp offset name
 
     -- return: not-found error or tarball
     serveContents :: DynamicPath -> ServerPartE Response
@@ -112,13 +109,14 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
         Left err ->
           errNotFound "Could not serve package contents" [MText err]
         Right (fp, etag, index) ->
-          serveTarball ["index.html"] (display (packageId pkg)) fp index etag
+          serveTarball ["index.html"] (display (packageId pkg)) fp index
+                       [Public, maxAgeDays 30] etag
 
     packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarIndex))
     packageTarball PkgInfo{pkgTarball = (pkgTarball, _) : _} = do
       let blobid = pkgTarballNoGz pkgTarball
           fp     = BlobStorage.filepath store blobid
-          etag   = blobETag blobid
+          etag   = BlobStorage.blobETag blobid
       index <- cachedPackageTarIndex pkgTarball
       return $ Right (fp, etag, index)
     packageTarball _ =

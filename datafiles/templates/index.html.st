@@ -2,7 +2,7 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Hackage: Introduction</title>
+<title>Introduction | Hackage</title>
 </head>
 
 <body>
@@ -83,15 +83,6 @@ at <a href="mailto:admin@hackage.haskell.org">admin@hackage.haskell.org</a>
 <p>You can ask questions on the <a href="http://www.haskell.org/pipermail/cabal-devel/">cabal-devel</a> mailing list or on IRC in the <code>#hackage</code> channel on freenode.</p>
 
 <p>The new server has an automatically-generated <a href="/api">site api</a>. This is mainly intended as documentation for people working with the server, rather than as a user-oriented site map, but it can be interesting to see exactly what is available. This includes important resources like the machine-readable <a href="/packages/index.tar.gz">index of packages</a>, used by clients like <code>cabal-install</code>.</p>
-
-<h2>Old Hackage</h2>
-
-<p>The old Hackage server is still available for a while in case anyone needs it. To use
-it with cabal-install, change your <code>~/.cabal/config</code> file, comment-out the existing
-<code>remote-repo</code> line near the top of the file and add in a new one
-like this:</p>
-
-<pre><code>remote-repo: old.hackage.haskell.org:http://old.hackage.haskell.org/</code></pre>
 
 </div>
 </body>

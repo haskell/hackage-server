@@ -116,14 +116,19 @@ data CandidateRender = CandidateRender {
 
 -- URI generation (string-based), using maps; user groups
 initPackageCandidatesFeature :: ServerEnv
-                             -> UserFeature
-                             -> CoreFeature
-                             -> UploadFeature
-                             -> TarIndexCacheFeature
-                             -> IO PackageCandidatesFeature
-initPackageCandidatesFeature env@ServerEnv{serverStateDir} user core upload tarIndexCache = do
+                             -> IO (UserFeature
+                                 -> CoreFeature
+                                 -> UploadFeature
+                                 -> TarIndexCacheFeature
+                                 -> IO PackageCandidatesFeature)
+initPackageCandidatesFeature env@ServerEnv{serverStateDir} = do
     candidatesState <- candidatesStateComponent serverStateDir
-    return $ candidatesFeature env user core upload tarIndexCache candidatesState
+
+    return $ \user core upload tarIndexCache -> do
+      let feature = candidatesFeature env
+                                      user core upload tarIndexCache
+                                      candidatesState
+      return feature
 
 candidatesStateComponent :: FilePath -> IO (StateComponent AcidState CandidatePackages)
 candidatesStateComponent stateDir = do
@@ -159,13 +164,13 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     candidatesFeatureInterface = (emptyHackageFeature "candidates") {
         featureDesc = "Support for package candidates"
       , featureResources =
-          map ($candidatesCoreResource) [
+          map ($ candidatesCoreResource) [
               corePackagesPage
             , corePackagePage
             , coreCabalFile
             , corePackageTarball
             ] ++
-          map ($candidatesResource) [
+          map ($ candidatesResource) [
               publishPage
             , candidateContents
             , candidateChangeLog
@@ -392,7 +397,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 {-------------------------------------------------------------------------------
   TODO: everything below is an (almost) direct duplicate of corresponding
   functionality in PackageContents. We could factor this out, although there
-  isn't any "interesting" code here.
+  isn't any "interesting" code here, except differences in http cache control.
 -------------------------------------------------------------------------------}
 
     -- result: changelog or not-found error
@@ -403,8 +408,9 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       case mChangeLog of
         Left err ->
           errNotFound "Changelog not found" [MText err]
-        Right (fp, etag, offset, name) ->
-          liftIO $ serveTarEntry fp offset name etag
+        Right (fp, etag, offset, name) -> do
+          cacheControl [Public, maxAgeMinutes 5] etag
+          liftIO $ serveTarEntry fp offset name
 
     -- return: not-found error or tarball
     serveContents :: DynamicPath -> ServerPartE Response
@@ -415,13 +421,14 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         Left err ->
           errNotFound "Could not serve package contents" [MText err]
         Right (fp, etag, index) ->
-          serveTarball ["index.html"] (display (packageId pkg)) fp index etag
+          serveTarball ["index.html"] (display (packageId pkg)) fp index
+                       [Public, maxAgeMinutes 5] etag
 
     packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarIndex))
     packageTarball PkgInfo{pkgTarball = (pkgTarball, _) : _} = do
       let blobid = pkgTarballNoGz pkgTarball
           fp     = BlobStorage.filepath store blobid
-          etag   = blobETag blobid
+          etag   = BlobStorage.blobETag blobid
       index <- cachedPackageTarIndex pkgTarball
       return $ Right (fp, etag, index)
     packageTarball _ =

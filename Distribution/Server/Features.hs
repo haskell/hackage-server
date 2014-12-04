@@ -70,114 +70,184 @@ import Distribution.Package (packageId)
 initHackageFeatures :: ServerEnv -> IO ([HackageFeature], UserFeature)
 initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
-    loginfo verbosity "Initialising features"
+    -- We have a three phase initialisation procedure...
+    -- 1. in phase 1 all features can start independently (could be parallel)
+    --    they load the data they need, but before having access to the other
+    --    features they depend on
+    -- 2. in phase 2 they have access to the other features they depend on
+    --    this is serialised according to the dependencies of the features
+    -- 3. in phase 3 we run all post-init actions. This could also be parallel.
+
+    loginfo verbosity "Initialising features, part 1"
+
+    mkStaticFilesFeature <- logStartup "static files" $
+                            initStaticFilesFeature env
+    mkUserFeature        <- logStartup "user" $
+                            initUserFeature env
+    mkCoreFeature        <- logStartup "core" $
+                            initCoreFeature env
+    mkMirrorFeature      <- logStartup "mirror" $
+                            initMirrorFeature env
+    mkUploadFeature      <- logStartup "upload" $
+                            initUploadFeature env
+#ifndef MINIMAL
+    mkTarIndexCacheFeature   <- logStartup "tar index" $
+                                initTarIndexCacheFeature env
+    mkPackageContentsFeature <- logStartup "package contents" $
+                                initPackageContentsFeature env
+    mkRecentPackagesFeature  <- logStartup "recent packages" $
+                                initRecentPackagesFeature env
+    mkUserDetailsFeature   <- logStartup "user details" $
+                              initUserDetailsFeature env
+    mkUserSignupFeature    <- logStartup "user signup" $
+                              initUserSignupFeature env
+    mkLegacyPasswdsFeature <- logStartup "legacy passwords" $
+                              initLegacyPasswdsFeature env
+    mkDistroFeature        <- logStartup "distro" $
+                              initDistroFeature env
+    mkPackageCandidatesFeature       <- logStartup "package candidates" $
+                                        initPackageCandidatesFeature env
+    mkBuildReportsCoreFeature        <- logStartup "reports (core)" $
+                                        initBuildReportsFeature "reports-core" env
+    mkBuildReportsCandidatesFeature  <- logStartup "reports (candidates)" $
+                                        initBuildReportsFeature "reports-candidates" env
+    mkDocumentationCoreFeature       <- logStartup "documentation (core)" $
+                                        initDocumentationFeature "documentation-core" env
+    mkDocumentationCandidatesFeature <- logStartup "documentation (candidates)" $
+                                        initDocumentationFeature "documentation-candidates" env
+    mkDownloadFeature       <- logStartup "download counts" $
+                               initDownloadFeature env
+    mkTagsFeature           <- logStartup "tags" $
+                               initTagsFeature env
+    mkVersionsFeature       <- logStartup "versions" $
+                               initVersionsFeature env
+    -- mkReverseFeature     <- logStartup "reverse deps" $
+    --                         initReverseFeature env
+    mkListFeature           <- logStartup "list" $
+                               initListFeature env
+    mkSearchFeature         <- logStartup "search" $
+                               initSearchFeature env
+    mkPlatformFeature       <- logStartup "platform" $
+                               initPlatformFeature env
+    mkHtmlFeature           <- logStartup "html" $
+                               initHtmlFeature env
+    mkEditCabalFilesFeature <- logStartup "edit cabal files" $
+                               initEditCabalFilesFeature env
+    mkAdminFrontendFeature  <- logStartup "admn frontend" $
+                               initAdminFrontendFeature env
+    mkHoogleDataFeature     <- logStartup "hoogle" $
+                               initHoogleDataFeature env
+#endif
+
+    loginfo verbosity "Initialising features, part 2"
 
     -- Arguments denote feature dependencies.
     -- What follows is a topological sort along those lines
-    staticFilesFeature <- initStaticFilesFeature env
+    staticFilesFeature <- mkStaticFilesFeature
 
-    usersFeature    <- initUserFeature env
+    usersFeature    <- mkUserFeature
 
-    coreFeature     <- initCoreFeature env
+    coreFeature     <- mkCoreFeature
                          usersFeature
 
-    mirrorFeature   <- initMirrorFeature env
+    mirrorFeature   <- mkMirrorFeature
                          coreFeature
                          usersFeature
 
-    uploadFeature   <- initUploadFeature env
-                         coreFeature
+    uploadFeature   <- mkUploadFeature
                          usersFeature
+                         coreFeature
 
 #ifndef MINIMAL
-    tarIndexCacheFeature <- initTarIndexCacheFeature env usersFeature
+    tarIndexCacheFeature <- mkTarIndexCacheFeature 
+                              usersFeature
 
-    packageContentsFeature <- initPackageContentsFeature env
+    packageContentsFeature <- mkPackageContentsFeature
                                 coreFeature
                                 tarIndexCacheFeature
 
-    packagesFeature <- initRecentPackagesFeature env
+    packagesFeature <- mkRecentPackagesFeature
                          usersFeature
                          coreFeature
                          packageContentsFeature
 
-    userDetailsFeature <- initUserDetailsFeature env
+    userDetailsFeature <- mkUserDetailsFeature
                             usersFeature
                             coreFeature
 
-    userSignupFeature <- initUserSignupFeature env
+    userSignupFeature <- mkUserSignupFeature
                            usersFeature
                            userDetailsFeature
                            uploadFeature
 
-    legacyPasswdsFeature <- initLegacyPasswdsFeature env
+    legacyPasswdsFeature <- mkLegacyPasswdsFeature
                               usersFeature
 
-    distroFeature   <- initDistroFeature env
+    distroFeature   <- mkDistroFeature
                          usersFeature
                          coreFeature
 
-    candidatesFeature <- initPackageCandidatesFeature env
+    candidatesFeature <- mkPackageCandidatesFeature
                            usersFeature
                            coreFeature
                            uploadFeature
                            tarIndexCacheFeature
 
-    reportsCoreFeature <- initBuildReportsFeature "reports-core" env
+    reportsCoreFeature <- mkBuildReportsCoreFeature
                          usersFeature
                          uploadFeature
                          (coreResource coreFeature)
 
-    reportsCandidatesFeature <- initBuildReportsFeature "reports-candidates" env
+    reportsCandidatesFeature <- mkBuildReportsCandidatesFeature
                          usersFeature
                          uploadFeature
                          (candidatesCoreResource candidatesFeature)
 
-    documentationCoreFeature <- initDocumentationFeature "documentation-core" env
+    documentationCoreFeature <- mkDocumentationCoreFeature
                          (coreResource coreFeature)
                          (map packageId . allPackages <$> queryGetPackageIndex coreFeature)
                          uploadFeature
                          tarIndexCacheFeature
 
-    documentationCandidatesFeature <- initDocumentationFeature "documentation-candidates" env
+    documentationCandidatesFeature <- mkDocumentationCandidatesFeature
                          (candidatesCoreResource candidatesFeature)
                          (map packageId . allPackages <$> queryGetCandidateIndex candidatesFeature)
                          uploadFeature
                          tarIndexCacheFeature
 
-    downloadFeature <- initDownloadFeature env
+    downloadFeature <- mkDownloadFeature
                          coreFeature
                          usersFeature
 
-    tagsFeature     <- initTagsFeature env
+    tagsFeature     <- mkTagsFeature
                          coreFeature
                          uploadFeature
 
-    versionsFeature <- initVersionsFeature env
+    versionsFeature <- mkVersionsFeature
                          coreFeature
                          uploadFeature
                          tagsFeature
 
     {- [reverse index disabled]
-    reverseFeature  <- initReverseFeature env
+    reverseFeature  <- mkReverseFeature
                          coreFeature
                          versionsFeature
                          -}
 
-    listFeature     <- initListFeature env
+    listFeature     <- mkListFeature
                          coreFeature
                          -- [reverse index disabled] reverseFeature
                          downloadFeature
                          tagsFeature
                          versionsFeature
 
-    searchFeature   <- initSearchFeature env
+    searchFeature   <- mkSearchFeature
                          coreFeature
                          listFeature
 
-    platformFeature <- initPlatformFeature env
+    platformFeature <- mkPlatformFeature
 
-    htmlFeature     <- initHtmlFeature env
+    htmlFeature     <- mkHtmlFeature
                          usersFeature
                          coreFeature
                          packagesFeature
@@ -193,20 +263,21 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          distroFeature
                          documentationCoreFeature
                          documentationCandidatesFeature
+                         reportsCoreFeature
                          userDetailsFeature
 
-    editCabalFeature <- initEditCabalFilesFeature env
+    editCabalFeature <- mkEditCabalFilesFeature
                           usersFeature
                           coreFeature
                           uploadFeature
 
-    adminFrontendFeature <- initAdminFrontendFeature env
+    adminFrontendFeature <- mkAdminFrontendFeature
                               usersFeature
                               userDetailsFeature
                               userSignupFeature
                               legacyPasswdsFeature
 
-    hoogleDataFeature <- initHoogleDataFeature env
+    hoogleDataFeature <- mkHoogleDataFeature
                            coreFeature
                            documentationCoreFeature
                            tarIndexCacheFeature
@@ -256,11 +327,18 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     -- Run all post init hooks, now that everyone's gotten a chance to register
     -- for them. This solution is iffy for initial feature hooks that rely on
     -- other features It also happens even in the backup/restore modes.
-    loginfo verbosity "Running feature post-init hooks"
-    mapM_ featurePostInit allFeatures
+    sequence_
+      [ logStartup ("post-init for " ++ name ++ "feature") $
+        featurePostInit feature
+      | feature@HackageFeature { featureName = name } <- allFeatures ]
     loginfo verbosity "Initialising features done"
 
     return (allFeatures, usersFeature)
+
+  where
+    logStartup feature action = do
+      loginfo verbosity ("Initialising " ++ feature ++ " feature")
+      logTiming verbosity ("Initialising " ++ feature ++ " feature done") action
 
 -- | Checkpoint a feature's persistent state to disk.
 featureCheckpoint :: HackageFeature -> IO ()

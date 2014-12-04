@@ -48,22 +48,22 @@ instance IsHackageFeature SearchFeature where
     getFeatureInterface = searchFeatureInterface
 
 
-initSearchFeature :: ServerEnv -> CoreFeature -> ListFeature -> IO SearchFeature
-initSearchFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode, serverVerbosity = verbosity}
-                 core@CoreFeature{..} list = do
-    loginfo verbosity "Initialising search feature, start"
-
+initSearchFeature :: ServerEnv
+                  -> IO (CoreFeature
+                      -> ListFeature
+                      -> IO SearchFeature)
+initSearchFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode} = do
     templates <- loadTemplates serverTemplatesMode
                    [serverTemplatesDir, serverTemplatesDir </> "Search"]
                    [ "opensearch.xml"]
 
     searchEngineState <- newMemStateWHNF initialPkgSearchEngine
 
-    let feature = searchFeature env core list
-                                searchEngineState templates
+    return $ \core@CoreFeature{..} list -> do
+      let feature = searchFeature env core list
+                                  searchEngineState templates
 
-    loginfo verbosity "Initialising search feature, end"
-    return feature
+      return feature
 
 
 searchFeature :: ServerEnv

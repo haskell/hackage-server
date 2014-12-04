@@ -186,6 +186,8 @@ runPackageTests = do
                return ()
            _ ->
                die "Bad index contents"
+    do info "Getting package index with etag"
+       validateETagHandling "/packages/index.tar.gz"
     do info "Getting testpackage info"
        xs <- validate NoAuth "/package/testpackage"
        unless ("The testpackage package" `isInfixOf` xs) $
@@ -206,6 +208,8 @@ runPackageTests = do
        hsFile <- getUrl NoAuth ("/package/testpackage/src" </> testpackageHaskellFilename)
        unless (hsFile == testpackageHaskellFileContent) $
            die "Bad Haskell file"
+    do info "Getting testpackage source with etag"
+       validateETagHandling ("/package/testpackage/src" </> testpackageHaskellFilename)
     do info "Getting testpackage maintainer info"
        xs <- getGroup "/package/testpackage/maintainers/.json"
        unless (map userName (groupMembers xs) == ["HackageTestUser1"]) $

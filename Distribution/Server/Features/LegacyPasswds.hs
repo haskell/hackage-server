@@ -178,9 +178,11 @@ legacyPasswdsToCSV backuptype (LegacyPasswdsTable tbl)
 -- Feature definition & initialisation
 --
 
-initLegacyPasswdsFeature :: ServerEnv -> UserFeature -> IO LegacyPasswdsFeature
-initLegacyPasswdsFeature env@ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode} users = do
-
+initLegacyPasswdsFeature :: ServerEnv
+                         -> IO (UserFeature
+                             -> IO LegacyPasswdsFeature)
+initLegacyPasswdsFeature env@ServerEnv{serverStateDir, serverTemplatesDir,
+                                       serverTemplatesMode} = do
   -- Canonical state
   legacyPasswdsState <- legacyPasswdsStateComponent serverStateDir
 
@@ -189,9 +191,10 @@ initLegacyPasswdsFeature env@ServerEnv{serverStateDir, serverTemplatesDir, serve
                  [serverTemplatesDir, serverTemplatesDir </> "LegacyPasswds"]
                  ["htpasswd-upgrade.html", "htpasswd-upgrade-success.html"]
 
-  let feature = legacyPasswdsFeature env legacyPasswdsState templates users
+  return $ \users -> do
+    let feature = legacyPasswdsFeature env legacyPasswdsState templates users
 
-  return feature
+    return feature
 
 legacyPasswdsFeature :: ServerEnv
                      -> StateComponent AcidState LegacyPasswdsTable
