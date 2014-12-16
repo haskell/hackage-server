@@ -123,8 +123,7 @@ categories pkg
 
 -- categories we ignore
 blacklist :: [String]
-blacklist = ["Application", "Foreign binding", "Tool", "Type", "Various",
-        "Unclassified"]
+blacklist = ["Application", "Foreign binding", "Tool", "Type", "Various", "Unclassified"]
 
 groupOnFstBy :: (Ord a, Ord c) => (a -> c) -> [(a, b)] -> [(a, [b])]
 groupOnFstBy f xys = [(x, y : map snd xys') |

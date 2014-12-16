@@ -6,3 +6,4 @@ tags
 *.swp
 .cabal-sandbox
 cabal.sandbox.config
+TAGS

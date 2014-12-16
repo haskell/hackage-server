@@ -1509,7 +1509,7 @@ mkHtmlSearch HtmlUtilities{..}
                    | otherwise   -> toHtml "No more results"
                 _ -> toHtml
                       [ ulist ! [theclass "packages"]
-                             << map renderItem pkgDetails
+                             << map renderItemWithDownloads pkgDetails
                       , if null moreResults
                           then noHtml
                           else anchor ! [href moreResultsLink]
@@ -1517,6 +1517,22 @@ mkHtmlSearch HtmlUtilities{..}
                       ]
             ]
           where
+            renderItemWithDownloads :: PackageItem -> Html
+            renderItemWithDownloads item = li ! classes <<
+              [ packageNameLink pkgname
+              , toHtml $ " " ++ ptype (itemHasLibrary item) (itemNumExecutables item)
+                ++ ": " ++ itemDesc item
+              , " (" +++ renderTags (itemTags item) +++ ") "
+              , "Downloads: " +++ (show $ itemDownloads item)
+              ]
+              where
+                pkgname = itemName item
+                ptype _ 0 = "library"
+                ptype lib num = (if lib then "library and " else "")
+                                ++ (case num of 1 -> "program"; _ -> "programs")
+                classes = case classList of [] -> []; _ -> [theclass $ unwords classList]
+                classList = (case itemDeprecated item of Nothing -> []; _ -> ["deprecated"])
+
             range = (offset, offset + length pkgDetails)
             moreResultsLink =
                 "/packages/search?"
