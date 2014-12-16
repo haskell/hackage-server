@@ -571,4 +571,3 @@ packageExists, packageIdExists :: (Package pkg, Package pkg') => PackageIndex pk
 packageExists   pkgs pkg = not . null $ PackageIndex.lookupPackageName pkgs (packageName pkg)
 -- | Whether a particular package version exists in the given package index.
 packageIdExists pkgs pkg = maybe False (const True) $ PackageIndex.lookupPackageId pkgs (packageId pkg)
-
