@@ -64,6 +64,8 @@ import Data.Array (Array, listArray)
 import qualified Data.Array as Array
 import qualified Data.Ix    as Ix
 import Data.Time.Format (formatTime)
+import Data.Time.Clock (getCurrentTime)
+import qualified Data.Time.Format.Human as HumanTime
 import System.Locale (defaultTimeLocale)
 
 import Text.XHtml.Strict
@@ -247,7 +249,7 @@ htmlFeature user
     htmlCandidates = mkHtmlCandidates utilities core versions upload docsCandidates candidates templates
     htmlPreferred  = mkHtmlPreferred  utilities core versions
     htmlTags       = mkHtmlTags       utilities core list tags
-    htmlSearch     = mkHtmlSearch     utilities      list names
+    htmlSearch     = mkHtmlSearch     utilities core list names
 
     htmlResources = concat [
         htmlCoreResources       htmlCore
@@ -1447,12 +1449,15 @@ data HtmlSearch = HtmlSearch {
   }
 
 mkHtmlSearch :: HtmlUtilities
+             -> CoreFeature
              -> ListFeature
              -> SearchFeature
              -> HtmlSearch
 mkHtmlSearch HtmlUtilities{..}
+             CoreFeature{..}
              ListFeature{makeItemList}
-             SearchFeature{..} = HtmlSearch{..}
+             SearchFeature{..} =
+    HtmlSearch{..}
   where
     htmlSearchResources = [
         (extendResource searchPackagesResource) {
@@ -1481,13 +1486,15 @@ mkHtmlSearch HtmlUtilities{..}
                 ]
 
           Just termsStr | terms <- words termsStr, not (null terms) -> do
+            pkgIndex <- liftIO $ queryGetPackageIndex
+            currentTime <- liftIO $ getCurrentTime
             pkgnames <- searchPackages terms
             let (pageResults, moreResults) = splitAt limit (drop offset pkgnames)
             pkgDetails <- liftIO $ makeItemList pageResults
             return $ toResponse $ Resource.XHtml $
               hackagePage "Package search" $
                 [ toHtml $ searchForm termsStr False
-                , toHtml $ resultsArea pkgDetails offset limit moreResults termsStr
+                , toHtml $ resultsArea pkgIndex currentTime pkgDetails offset limit moreResults termsStr
                 , alternativeSearch
                 ]
 
@@ -1498,7 +1505,7 @@ mkHtmlSearch HtmlUtilities{..}
                 , alternativeSearch
                 ]
       where
-        resultsArea pkgDetails offset limit moreResults termsStr =
+        resultsArea pkgIndex currentTime pkgDetails offset limit moreResults termsStr =
             [ h2 << "Results"
             , if offset == 0
                 then noHtml
@@ -1523,10 +1530,18 @@ mkHtmlSearch HtmlUtilities{..}
               , toHtml $ " " ++ ptype (itemHasLibrary item) (itemNumExecutables item)
                 ++ ": " ++ itemDesc item
               , " (" +++ renderTags (itemTags item) +++ ") "
-              , "Downloads: " +++ (show $ itemDownloads item)
+              , small $ "Last upload: " +++ humanTime
               ]
               where
                 pkgname = itemName item
+                --    [PkgInfo] -> [[(PkgTarball, UploadInfo)]] -> [(PkgTarball, UploadInfo)]
+                -- -> [(UTCTime, UserId)] -> [UTCTime] -> sorted [UTCTime] -> most recent UTCTime
+                timestamp = head
+                            $ sortBy (flip compare)
+                            $ map (fst . snd)
+                            $ concatMap pkgTarball (PackageIndex.lookupPackageName pkgIndex pkgname)
+                -- takes current time as argument so it can say how many $X ago something was
+                humanTime = HumanTime.humanReadableTime' currentTime timestamp
                 ptype _ 0 = "library"
                 ptype lib num = (if lib then "library and " else "")
                                 ++ (case num of 1 -> "program"; _ -> "programs")
