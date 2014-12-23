@@ -7,15 +7,24 @@ module Distribution.Server.Features.TarIndexCache (
   ) where
 
 import Control.Exception (throwIO)
+import Control.Monad.Error (ErrorT(..))
+import qualified Codec.Archive.Tar as Tar
+import qualified Codec.Archive.Tar.Entry as Tar
+
+import qualified Data.ByteString.Lazy as BS
 import Data.Serialize (runGetLazy, runPutLazy)
 import Data.SafeCopy (safeGet, safePut)
 
+import System.IO
+
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BlobStorage
+import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Features.TarIndexCache.State
 import Distribution.Server.Features.Users
-import Distribution.Server.Packages.Types (PkgTarball(..))
+import Distribution.Server.Packages.ChangeLog
+import Distribution.Server.Packages.Types (PkgTarball(..), PkgInfo(..))
 import Data.TarIndex
 import Distribution.Server.Util.ServeTarball (constructTarIndex)
 
@@ -26,6 +35,8 @@ data TarIndexCacheFeature = TarIndexCacheFeature {
     tarIndexCacheFeatureInterface :: HackageFeature
   , cachedTarIndex        :: BlobId -> IO TarIndex
   , cachedPackageTarIndex :: PkgTarball -> IO TarIndex
+  , packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex))
+  , packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarEntryOffset, FilePath))
   }
 
 instance IsHackageFeature TarIndexCacheFeature where
@@ -123,3 +134,22 @@ tarIndexCacheFeature ServerEnv{serverBlobStore = store}
       -- remove any blobs
       liftIO $ putState tarIndexCache initialTarIndexCache
       ok $ toResponse "Ok!"
+    
+    -- Functions to access specific files in a tarball
+    
+    packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex))
+    packageTarball PkgInfo{pkgTarball = (pkgTarball, _) : _} = do
+      let blobid = pkgTarballNoGz pkgTarball
+          fp     = BlobStorage.filepath store blobid
+          etag   = BlobStorage.blobETag blobid
+      index <- cachedPackageTarIndex pkgTarball
+      return $ Right (fp, etag, index)
+    packageTarball _ =
+      return $ Left "No tarball found"
+
+    packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarEntryOffset, FilePath))
+    packageChangeLog pkgInfo = runErrorT $ do
+      (fp, etag, index) <- ErrorT $ packageTarball pkgInfo
+      (offset, fname)   <- ErrorT $ return . maybe (Left "No changelog found") Right
+                                  $ findChangeLog pkgInfo index
+      return (fp, etag, offset, fname)

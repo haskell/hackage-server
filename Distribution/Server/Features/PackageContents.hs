@@ -6,20 +6,18 @@ module Distribution.Server.Features.PackageContents (
   ) where
 
 import Distribution.Server.Framework
-import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.TarIndexCache
 
-import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.ChangeLog
+import Distribution.Server.Packages.Types
 import Distribution.Server.Util.ServeTarball (serveTarEntry, serveTarball)
 import qualified Data.TarIndex as TarIndex
 
 import Distribution.Text
 import Distribution.Package
 
-import Control.Monad.Error (ErrorT(..))
 
 data PackageContentsFeature = PackageContentsFeature {
     packageFeatureInterface :: HackageFeature,
@@ -60,7 +58,7 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
                                     , lookupPackageId
                                     }
                                   }
-                       TarIndexCacheFeature{cachedPackageTarIndex}
+                       TarIndexCacheFeature{packageTarball, packageChangeLog}
   = PackageContentsFeature{..}
   where
     packageFeatureInterface = (emptyHackageFeature "package-contents") {
@@ -111,20 +109,3 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
         Right (fp, etag, index) ->
           serveTarball ["index.html"] (display (packageId pkg)) fp index
                        [Public, maxAgeDays 30] etag
-
-    packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarIndex))
-    packageTarball PkgInfo{pkgTarball = (pkgTarball, _) : _} = do
-      let blobid = pkgTarballNoGz pkgTarball
-          fp     = BlobStorage.filepath store blobid
-          etag   = BlobStorage.blobETag blobid
-      index <- cachedPackageTarIndex pkgTarball
-      return $ Right (fp, etag, index)
-    packageTarball _ =
-      return $ Left "No tarball found"
-
-    packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarEntryOffset, FilePath))
-    packageChangeLog pkgInfo = runErrorT $ do
-      (fp, etag, index) <- ErrorT $ packageTarball pkgInfo
-      (offset, fname)   <- ErrorT $ return . maybe (Left "No changelog found") Right
-                                  $ findChangeLog pkgInfo index
-      return (fp, etag, offset, fname)

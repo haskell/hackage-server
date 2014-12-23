@@ -30,7 +30,6 @@ import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
 import Distribution.Server.Util.ServeTarball (serveTarEntry, serveTarball)
-import qualified Data.TarIndex as TarIndex
 
 import Distribution.Text
 import Distribution.Package
@@ -39,7 +38,6 @@ import Data.Version
 import Data.Function (fix)
 import Data.List (find)
 import Data.Time.Clock (getCurrentTime)
-import Control.Monad.Error (ErrorT(..))
 
 data PackageCandidatesFeature = PackageCandidatesFeature {
     candidatesFeatureInterface :: HackageFeature,
@@ -157,7 +155,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                              , updateAddPackage
                              }
                   UploadFeature{..}
-                  TarIndexCacheFeature{cachedPackageTarIndex}
+                  TarIndexCacheFeature{packageTarball, packageChangeLog}
                   candidatesState
   = PackageCandidatesFeature{..}
   where
@@ -423,20 +421,3 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         Right (fp, etag, index) ->
           serveTarball ["index.html"] (display (packageId pkg)) fp index
                        [Public, maxAgeMinutes 5] etag
-
-    packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarIndex))
-    packageTarball PkgInfo{pkgTarball = (pkgTarball, _) : _} = do
-      let blobid = pkgTarballNoGz pkgTarball
-          fp     = BlobStorage.filepath store blobid
-          etag   = BlobStorage.blobETag blobid
-      index <- cachedPackageTarIndex pkgTarball
-      return $ Right (fp, etag, index)
-    packageTarball _ =
-      return $ Left "No tarball found"
-
-    packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarEntryOffset, FilePath))
-    packageChangeLog pkgInfo = runErrorT $ do
-      (fp, etag, index) <- ErrorT $ packageTarball pkgInfo
-      (offset, fname)   <- ErrorT $ return . maybe (Left "No changelog found") Right
-                                  $ findChangeLog pkgInfo index
-      return (fp, etag, offset, fname)
