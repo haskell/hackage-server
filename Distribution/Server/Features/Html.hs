@@ -9,7 +9,6 @@ import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Framework.Templating
 
 import Distribution.Server.Features.Core
-import Distribution.Server.Features.RecentPackages
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.BuildReports
 import Distribution.Server.Features.BuildReports.Render
@@ -20,6 +19,7 @@ import Distribution.Server.Features.Search
 import Distribution.Server.Features.Search as Search
 import Distribution.Server.Features.PreferredVersions
 -- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies
+import Distribution.Server.Features.PackageContents (PackageContentsFeature(..))
 import Distribution.Server.Features.PackageList
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Mirror
@@ -96,7 +96,7 @@ instance IsHackageFeature HtmlFeature where
 initHtmlFeature :: ServerEnv
                 -> IO (UserFeature
                     -> CoreFeature
-                    -> RecentPackagesFeature
+                    -> PackageContentsFeature
                     -> UploadFeature -> PackageCandidatesFeature
                     -> VersionsFeature
                     -- [reverse index disabled] -> ReverseFeature
@@ -172,7 +172,7 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
 
 htmlFeature :: UserFeature
             -> CoreFeature
-            -> RecentPackagesFeature
+            -> PackageContentsFeature
             -> UploadFeature
             -> PackageCandidatesFeature
             -> VersionsFeature
@@ -194,7 +194,7 @@ htmlFeature :: UserFeature
 
 htmlFeature user
             core@CoreFeature{queryGetPackageIndex}
-            recent upload
+            packages upload
             candidates versions
             -- [reverse index disabled] ReverseFeature{..}
             tags download
@@ -236,7 +236,7 @@ htmlFeature user
                                       reportsCore
                                       download
                                       distros
-                                      recent
+                                      packages
                                       htmlTags
                                       htmlPreferred
                                       cachePackagesPage
@@ -423,7 +423,7 @@ mkHtmlCore :: HtmlUtilities
            -> ReportsFeature
            -> DownloadFeature
            -> DistroFeature
-           -> RecentPackagesFeature
+           -> PackageContentsFeature
            -> HtmlTags
            -> HtmlPreferred
            -> AsyncCache Response
@@ -444,7 +444,7 @@ mkHtmlCore HtmlUtilities{..}
            reportsFeature
            DownloadFeature{recentPackageDownloads,totalPackageDownloads}
            DistroFeature{queryPackageStatus}
-           RecentPackagesFeature{packageRender}
+           PackageContentsFeature{packageRender}
            HtmlTags{..}
            HtmlPreferred{..}
            cachePackagesPage
