@@ -99,7 +99,7 @@ renderDirIndex entries = hackagePage "Directory Listing"
       XHtml.+++ XHtml.br
     | e <- entries ]
 
-loadTarEntry :: FilePath -> Int -> IO (Either String (Tar.FileSize, BS.ByteString))
+loadTarEntry :: FilePath -> TarIndex.TarEntryOffset -> IO (Either String (Tar.FileSize, BS.ByteString))
 loadTarEntry tarfile off = do
   htar <- openFile tarfile ReadMode
   hSeek htar AbsoluteSeek (fromIntegral $ off * 512)
@@ -110,7 +110,7 @@ loadTarEntry tarfile off = do
          return $ Right (size, body)
     _ -> fail "oops"
 
-serveTarEntry :: FilePath -> Int -> FilePath -> IO Response
+serveTarEntry :: FilePath -> TarIndex.TarEntryOffset -> FilePath -> IO Response
 serveTarEntry tarfile off fname = do
     Right (size, body) <- loadTarEntry tarfile off
     return . ((setHeader "Content-Length" (show size)) .

@@ -11,6 +11,7 @@ import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.PackageContents (PackageContentsFeature(..))
 
+import Distribution.Server.Packages.ChangeLog
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.Render
 
@@ -80,7 +81,7 @@ recentPackagesFeature :: ServerEnv
 recentPackagesFeature env
                       UserFeature{..}
                       CoreFeature{..}
-                      PackageContentsFeature{packageChangeLog}
+                      PackageContentsFeature{findToplevelFile}
                       cacheRecent
   = (RecentPackagesFeature{..}, updateRecentCache)
   where
@@ -107,7 +108,7 @@ recentPackagesFeature env
 
     packageRender pkg = do
       users <- queryGetUserDb
-      mChangeLog <- packageChangeLog pkg
+      mChangeLog <- findToplevelFile pkg isChangeLogFile
       let changeLog = case mChangeLog of Right (_,_,_,fname,contents) -> Just (fname, contents) 
                                          _                            -> Nothing
           render = doPackageRender users pkg

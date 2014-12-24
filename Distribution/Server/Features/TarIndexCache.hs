@@ -8,14 +8,12 @@ module Distribution.Server.Features.TarIndexCache (
 
 import Control.Exception (throwIO)
 import Control.Monad.Error (ErrorT(..))
-import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
 
 import qualified Data.ByteString.Lazy as BS
 import Data.Serialize (runGetLazy, runPutLazy)
 import Data.SafeCopy (safeGet, safePut)
-
-import System.IO
+import Data.Maybe (listToMaybe)
 
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BlobStorage
@@ -39,7 +37,8 @@ data TarIndexCacheFeature = TarIndexCacheFeature {
   , cachedTarIndex        :: BlobId -> IO TarIndex
   , cachedPackageTarIndex :: PkgTarball -> IO TarIndex
   , packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex))
-  , packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarEntryOffset, FilePath, BS.ByteString))
+  , findToplevelFile :: PkgInfo -> (FilePath -> Bool)
+                     -> IO (Either String (FilePath, ETag, TarEntryOffset, FilePath, BS.ByteString))
   }
 
 instance IsHackageFeature TarIndexCacheFeature where
@@ -151,10 +150,26 @@ tarIndexCacheFeature ServerEnv{serverBlobStore = store}
       | otherwise =
         return $ Left "No tarball found"
 
-    packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarEntryOffset, FilePath, BS.ByteString))
-    packageChangeLog pkgInfo = runErrorT $ do
-      (fp, etag, index) <- ErrorT $ packageTarball pkgInfo
-      (offset, fname)   <- ErrorT $ return . maybe (Left "No changelog found") Right
-                                  $ findChangeLog pkgInfo index
-      (_size, contents) <- ErrorT $ loadTarEntry fp offset                     
-      return (fp, etag, offset, fname, contents)
+    -- TODO: Specify *what* file wasn't found in the error. This will require another parameter.
+    findToplevelFile :: PkgInfo -> (FilePath -> Bool)
+                     -> IO (Either String (FilePath, ETag, TarEntryOffset, FilePath, BS.ByteString))
+    findToplevelFile pkg test = runErrorT $ do
+        (fp, etag, index) <- ErrorT $ packageTarball pkg
+        (offset, fname)   <- ErrorT $ return . maybe (Left "File not found") Right
+                                    $ findFile index
+        (_size, contents) <- ErrorT $ loadTarEntry fp offset
+        return (fp, etag, offset, fname, contents)
+      where
+        topdir :: FilePath
+        topdir = display (packageId pkg)
+
+        findFile :: TarIndex -> Maybe (TarEntryOffset, String)
+        findFile index = do
+          TarDir fnames <- TarIndex.lookup index topdir
+          listToMaybe $
+            [ (offset, fname')
+            | fname <- fnames
+            , test fname
+            , let fname' = topdir </> fname
+            , Just (TarIndex.TarFileEntry offset) <- [TarIndex.lookup index fname']
+            ]
