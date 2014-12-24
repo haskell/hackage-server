@@ -45,7 +45,7 @@ initPackageContentsFeature :: ServerEnv
                                -> TarIndexCacheFeature
                                -> UserFeature
                                -> IO PackageContentsFeature)
-initPackageContentsFeature = do
+initPackageContentsFeature _ = do
     return $ \core tarIndexCache user -> do
       let feature = packageContentsFeature core tarIndexCache user
 
