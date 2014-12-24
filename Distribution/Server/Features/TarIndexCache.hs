@@ -26,7 +26,10 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Packages.ChangeLog
 import Distribution.Server.Packages.Types (PkgTarball(..), PkgInfo(..), pkgLatestTarball)
 import Data.TarIndex
-import Distribution.Server.Util.ServeTarball (constructTarIndex)
+import qualified Data.TarIndex as TarIndex
+import Distribution.Server.Util.ServeTarball (constructTarIndex, loadTarEntry)
+import Distribution.Package (packageId)
+import Distribution.Text (display)
 
 import qualified Data.Map as Map
 import Data.Aeson (toJSON)
@@ -36,7 +39,7 @@ data TarIndexCacheFeature = TarIndexCacheFeature {
   , cachedTarIndex        :: BlobId -> IO TarIndex
   , cachedPackageTarIndex :: PkgTarball -> IO TarIndex
   , packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex))
-  , packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarEntryOffset, FilePath))
+  , packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarEntryOffset, FilePath, BS.ByteString))
   }
 
 instance IsHackageFeature TarIndexCacheFeature where
@@ -148,9 +151,10 @@ tarIndexCacheFeature ServerEnv{serverBlobStore = store}
       | otherwise =
         return $ Left "No tarball found"
 
-    packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarEntryOffset, FilePath))
+    packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarEntryOffset, FilePath, BS.ByteString))
     packageChangeLog pkgInfo = runErrorT $ do
       (fp, etag, index) <- ErrorT $ packageTarball pkgInfo
       (offset, fname)   <- ErrorT $ return . maybe (Left "No changelog found") Right
                                   $ findChangeLog pkgInfo index
-      return (fp, etag, offset, fname)
+      (_size, contents) <- ErrorT $ loadTarEntry fp offset                     
+      return (fp, etag, offset, fname, contents)

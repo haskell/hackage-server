@@ -369,10 +369,12 @@ candidatesFeature ServerEnv{serverBlobStore = store}
            users  <- queryGetUserDb
            index  <- queryGetPackageIndex
            mChangeLog <- packageChangeLog (candPkgInfo cand)
-           let showChangeLogLink = case mChangeLog of Right _ -> True ; _ -> False
-           render <- doPackageRender users (candPkgInfo cand) showChangeLogLink
+           let changeLog = case mChangeLog of Right (_,_,_,fname,contents) -> Just (fname, contents) 
+                                              _                    -> Nothing
+               render = doPackageRender users (candPkgInfo cand)
            return $ CandidateRender {
-             candPackageRender = render { rendPkgUri = rendPkgUri render ++ "/candidate" },
+             candPackageRender = render { rendPkgUri = rendPkgUri render ++ "/candidate"
+                                        , rendChangeLog = changeLog },
              renderWarnings = candWarnings cand,
              hasIndexedPackage = not . null $ PackageIndex.lookupPackageName index (packageName cand)
            }
@@ -414,9 +416,9 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       case mChangeLog of
         Left err ->
           errNotFound "Changelog not found" [MText err]
-        Right (fp, etag, offset, name) -> do
+        Right (fp, etag, offset, name, _contents) -> do
           cacheControl [Public, maxAgeMinutes 5] etag
-          liftIO $ serveTarEntry fp offset name
+          liftIO $ serveTarEntry fp offset name -- TODO: We've already loaded the contents; refactor
 
     -- return: not-found error or tarball
     serveContents :: DynamicPath -> ServerPartE Response

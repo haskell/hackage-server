@@ -107,9 +107,11 @@ recentPackagesFeature env
 
     packageRender pkg = do
       users <- queryGetUserDb
-      changeLog <- packageChangeLog pkg
-      let showChangeLogLink = case changeLog of Right _ -> True ; _ -> False
-      doPackageRender users pkg showChangeLogLink
+      mChangeLog <- packageChangeLog pkg
+      let changeLog = case mChangeLog of Right (_,_,_,fname,contents) -> Just (fname, contents) 
+                                         _                            -> Nothing
+          render = doPackageRender users pkg
+      return $ render { rendChangeLog = changeLog }
 
     updateRecentCache = do
         -- TODO: move the html version to the HTML feature

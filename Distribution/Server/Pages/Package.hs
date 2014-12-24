@@ -85,9 +85,9 @@ descriptionSection PackageRender{..} =
  ++ [ hr
     , ulist << li << changelogLink]
   where
-    changelogLink
-      | rendHasChangeLog = anchor ! [href changeLogURL] << "Changelog"
-      | otherwise        = toHtml << "No changelog available"
+    changelogLink = case rendChangeLog of
+      Just _ -> anchor ! [href changeLogURL] << "Changelog"
+      _      -> toHtml << "No changelog available"
     changeLogURL  = rendPkgUri </> "changelog"
 
 prologue :: String -> [Html]

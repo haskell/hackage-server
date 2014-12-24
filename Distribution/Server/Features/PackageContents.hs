@@ -14,6 +14,7 @@ import Distribution.Server.Packages.ChangeLog
 import Distribution.Server.Packages.Types
 import Distribution.Server.Util.ServeTarball (serveTarEntry, serveTarball)
 import qualified Data.TarIndex as TarIndex
+import qualified Data.ByteString.Lazy as BS
 
 import Distribution.Text
 import Distribution.Package
@@ -22,10 +23,12 @@ import Distribution.Package
 data PackageContentsFeature = PackageContentsFeature {
     packageFeatureInterface :: HackageFeature,
     packageContentsResource :: PackageContentsResource,
-
-    -- Functionality exported to other features
-    packageTarball   :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarIndex)),
-    packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarEntryOffset, FilePath))
+    -- TODO: Exported temporarily from TarIndexCache for RecentPackages's `render`
+    --       which in turn is only in RecentPackages because PackageContents doesn't
+    --       have access to the Users feature. Refactor.
+    packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarEntryOffset, FilePath, BS.ByteString))
+    
+  
 }
 
 instance IsHackageFeature PackageContentsFeature where
@@ -94,9 +97,9 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
       case mChangeLog of
         Left err ->
           errNotFound "Changelog not found" [MText err]
-        Right (fp, etag, offset, name) -> do
+        Right (fp, etag, offset, name, _contents) -> do
           cacheControl [Public, maxAgeDays 30] etag
-          liftIO $ serveTarEntry fp offset name
+          liftIO $ serveTarEntry fp offset name  -- TODO: We've already loaded the contents; refactor (also in Candidates)
 
     -- return: not-found error or tarball
     serveContents :: DynamicPath -> ServerPartE Response
