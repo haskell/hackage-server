@@ -26,8 +26,8 @@ data PackageContentsFeature = PackageContentsFeature {
     -- TODO: Exported temporarily from TarIndexCache for RecentPackages's `render`
     --       which in turn is only in RecentPackages because PackageContents doesn't
     --       have access to the Users feature. Refactor.
-    packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarEntryOffset, FilePath, BS.ByteString))
-    
+    findToplevelFile :: PkgInfo -> (FilePath -> Bool)
+                     -> IO (Either String (FilePath, ETag, TarIndex.TarEntryOffset, FilePath, BS.ByteString))
   
 }
 
@@ -61,7 +61,7 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
                                     , lookupPackageId
                                     }
                                   }
-                       TarIndexCacheFeature{packageTarball, packageChangeLog}
+                       TarIndexCacheFeature{packageTarball, findToplevelFile}
   = PackageContentsFeature{..}
   where
     packageFeatureInterface = (emptyHackageFeature "package-contents") {
@@ -93,7 +93,7 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
     serveChangeLog :: DynamicPath -> ServerPartE Response
     serveChangeLog dpath = do
       pkg        <- packageInPath dpath >>= lookupPackageId
-      mChangeLog <- liftIO $ packageChangeLog pkg
+      mChangeLog <- liftIO $ findToplevelFile pkg isChangeLogFile
       case mChangeLog of
         Left err ->
           errNotFound "Changelog not found" [MText err]

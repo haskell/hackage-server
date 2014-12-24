@@ -155,7 +155,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                              , updateAddPackage
                              }
                   UploadFeature{..}
-                  TarIndexCacheFeature{packageTarball, packageChangeLog}
+                  TarIndexCacheFeature{packageTarball, findToplevelFile}
                   candidatesState
   = PackageCandidatesFeature{..}
   where
@@ -360,9 +360,9 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     candidateRender cand = do
            users  <- queryGetUserDb
            index  <- queryGetPackageIndex
-           mChangeLog <- packageChangeLog (candPkgInfo cand)
+           mChangeLog <- findToplevelFile (candPkgInfo cand) isChangeLogFile
            let changeLog = case mChangeLog of Right (_,_,_,fname,contents) -> Just (fname, contents) 
-                                              _                    -> Nothing
+                                              _                           -> Nothing
                render = doPackageRender users (candPkgInfo cand)
            return $ CandidateRender {
              candPackageRender = render { rendPkgUri = rendPkgUri render ++ "/candidate"
@@ -404,7 +404,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     serveChangeLog :: DynamicPath -> ServerPartE Response
     serveChangeLog dpath = do
       pkg        <- packageInPath dpath >>= lookupCandidateId
-      mChangeLog <- liftIO $ packageChangeLog (candPkgInfo pkg)
+      mChangeLog <- liftIO $ findToplevelFile (candPkgInfo pkg) isChangeLogFile
       case mChangeLog of
         Left err ->
           errNotFound "Changelog not found" [MText err]
