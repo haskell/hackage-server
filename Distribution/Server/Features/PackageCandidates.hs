@@ -22,6 +22,7 @@ import Distribution.Server.Features.TarIndexCache
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.Render
 import Distribution.Server.Packages.ChangeLog
+import Distribution.Server.Packages.Readme
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Group as Group
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
@@ -30,7 +31,6 @@ import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
 import Distribution.Server.Util.ServeTarball (serveTarEntry, serveTarball)
-import qualified Data.TarIndex as TarIndex
 
 import Distribution.Text
 import Distribution.Package
@@ -39,7 +39,6 @@ import Data.Version
 import Data.Function (fix)
 import Data.List (find)
 import Data.Time.Clock (getCurrentTime)
-import Control.Monad.Error (ErrorT(..))
 
 data PackageCandidatesFeature = PackageCandidatesFeature {
     candidatesFeatureInterface :: HackageFeature,
@@ -157,7 +156,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                              , updateAddPackage
                              }
                   UploadFeature{..}
-                  TarIndexCacheFeature{cachedPackageTarIndex}
+                  TarIndexCacheFeature{packageTarball, findToplevelFile}
                   candidatesState
   = PackageCandidatesFeature{..}
   where
@@ -362,11 +361,18 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     candidateRender cand = do
            users  <- queryGetUserDb
            index  <- queryGetPackageIndex
-           mChangeLog <- packageChangeLog (candPkgInfo cand)
-           let showChangeLogLink = case mChangeLog of Right _ -> True ; _ -> False
-           render <- doPackageRender users (candPkgInfo cand) showChangeLogLink
+           let pkg = candPkgInfo cand
+           mChangeLog <- findToplevelFile pkg isChangeLogFile
+           mReadme    <- findToplevelFile pkg isReadmeFile
+           let changeLog = case mChangeLog of Right (_,_,_,fname,contents) -> Just (fname, contents) 
+                                              _                            -> Nothing
+               readme    = case mReadme    of Right (_,_,_,fname,contents) -> Just (fname, contents) 
+                                              _                            -> Nothing
+               render = doPackageRender users pkg
            return $ CandidateRender {
-             candPackageRender = render { rendPkgUri = rendPkgUri render ++ "/candidate" },
+             candPackageRender = render { rendPkgUri = rendPkgUri render ++ "/candidate"
+                                        , rendChangeLog = changeLog
+                                        , rendReadme = readme},
              renderWarnings = candWarnings cand,
              hasIndexedPackage = not . null $ PackageIndex.lookupPackageName index (packageName cand)
            }
@@ -404,13 +410,13 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     serveChangeLog :: DynamicPath -> ServerPartE Response
     serveChangeLog dpath = do
       pkg        <- packageInPath dpath >>= lookupCandidateId
-      mChangeLog <- liftIO $ packageChangeLog (candPkgInfo pkg)
+      mChangeLog <- liftIO $ findToplevelFile (candPkgInfo pkg) isChangeLogFile
       case mChangeLog of
         Left err ->
           errNotFound "Changelog not found" [MText err]
-        Right (fp, etag, offset, name) -> do
+        Right (fp, etag, offset, name, _contents) -> do
           cacheControl [Public, maxAgeMinutes 5] etag
-          liftIO $ serveTarEntry fp offset name
+          liftIO $ serveTarEntry fp offset name -- TODO: We've already loaded the contents; refactor
 
     -- return: not-found error or tarball
     serveContents :: DynamicPath -> ServerPartE Response
@@ -423,20 +429,3 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         Right (fp, etag, index) ->
           serveTarball ["index.html"] (display (packageId pkg)) fp index
                        [Public, maxAgeMinutes 5] etag
-
-    packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarIndex))
-    packageTarball PkgInfo{pkgTarball = (pkgTarball, _) : _} = do
-      let blobid = pkgTarballNoGz pkgTarball
-          fp     = BlobStorage.filepath store blobid
-          etag   = BlobStorage.blobETag blobid
-      index <- cachedPackageTarIndex pkgTarball
-      return $ Right (fp, etag, index)
-    packageTarball _ =
-      return $ Left "No tarball found"
-
-    packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarEntryOffset, FilePath))
-    packageChangeLog pkgInfo = runErrorT $ do
-      (fp, etag, index) <- ErrorT $ packageTarball pkgInfo
-      (offset, fname)   <- ErrorT $ return . maybe (Left "No changelog found") Right
-                                  $ findChangeLog pkgInfo index
-      return (fp, etag, offset, fname)

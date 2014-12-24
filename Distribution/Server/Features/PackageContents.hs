@@ -6,28 +6,29 @@ module Distribution.Server.Features.PackageContents (
   ) where
 
 import Distribution.Server.Framework
-import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.TarIndexCache
 
-import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.ChangeLog
+import Distribution.Server.Packages.Readme
+import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Render
+import Distribution.Server.Features.Users
 import Distribution.Server.Util.ServeTarball (serveTarEntry, serveTarball)
-import qualified Data.TarIndex as TarIndex
+
 
 import Distribution.Text
 import Distribution.Package
 
-import Control.Monad.Error (ErrorT(..))
 
 data PackageContentsFeature = PackageContentsFeature {
     packageFeatureInterface :: HackageFeature,
     packageContentsResource :: PackageContentsResource,
 
-    -- Functionality exported to other features
-    packageTarball   :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarIndex)),
-    packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarEntryOffset, FilePath))
+    -- necessary information for the representation of a package resource
+    -- This needs to be here in order to extract from the tar file
+    packageRender :: PkgInfo -> IO PackageRender
 }
 
 instance IsHackageFeature PackageContentsFeature where
@@ -42,25 +43,26 @@ data PackageContentsResource = PackageContentsResource {
 initPackageContentsFeature :: ServerEnv
                            -> IO (CoreFeature
                                -> TarIndexCacheFeature
+                               -> UserFeature
                                -> IO PackageContentsFeature)
-initPackageContentsFeature env@ServerEnv{} = do
-    return $ \core tarIndexCache -> do
-      let feature = packageContentsFeature env core tarIndexCache
+initPackageContentsFeature _ = do
+    return $ \core tarIndexCache user -> do
+      let feature = packageContentsFeature core tarIndexCache user
 
       return feature
 
-packageContentsFeature :: ServerEnv
-                       -> CoreFeature
+packageContentsFeature :: CoreFeature
                        -> TarIndexCacheFeature
+                       -> UserFeature
                        -> PackageContentsFeature
 
-packageContentsFeature ServerEnv{serverBlobStore = store}
-                       CoreFeature{ coreResource = CoreResource{
+packageContentsFeature CoreFeature{ coreResource = CoreResource{
                                       packageInPath
                                     , lookupPackageId
                                     }
                                   }
-                       TarIndexCacheFeature{cachedPackageTarIndex}
+                       TarIndexCacheFeature{packageTarball, findToplevelFile}
+                       UserFeature{queryGetUserDb}
   = PackageContentsFeature{..}
   where
     packageFeatureInterface = (emptyHackageFeature "package-contents") {
@@ -83,6 +85,18 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
         , packageContentsChangeLogUri = \pkgid ->
             renderResource (packageContentsChangeLog packageContentsResource) [display pkgid, display (packageName pkgid)]
         }
+        
+    packageRender :: PkgInfo -> IO PackageRender
+    packageRender pkg = do
+      users <- queryGetUserDb
+      mChangeLog <- findToplevelFile pkg isChangeLogFile
+      mReadme <- findToplevelFile pkg isReadmeFile
+      let changeLog = case mChangeLog of Right (_,_,_,fname,contents) -> Just (fname, contents) 
+                                         _                            -> Nothing
+          readme    = case mReadme    of Right (_,_,_,fname,contents) -> Just (fname, contents) 
+                                         _                            -> Nothing
+          render = doPackageRender users pkg
+      return $ render { rendChangeLog = changeLog, rendReadme = readme }
 
 {-------------------------------------------------------------------------------
   TODO: everything below is duplicated in PackageCandidates.
@@ -92,13 +106,15 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
     serveChangeLog :: DynamicPath -> ServerPartE Response
     serveChangeLog dpath = do
       pkg        <- packageInPath dpath >>= lookupPackageId
-      mChangeLog <- liftIO $ packageChangeLog pkg
+      mChangeLog <- liftIO $ findToplevelFile pkg isChangeLogFile
       case mChangeLog of
         Left err ->
           errNotFound "Changelog not found" [MText err]
-        Right (fp, etag, offset, name) -> do
+        Right (fp, etag, offset, name, _contents) -> do
           cacheControl [Public, maxAgeDays 30] etag
-          liftIO $ serveTarEntry fp offset name
+          liftIO $ serveTarEntry fp offset name  -- TODO: We've already loaded the contents
+                                                 -- we do repeated work here by re-seeking in the tar.
+                                                 -- This should be refactored; same thing in PackageCandidates
 
     -- return: not-found error or tarball
     serveContents :: DynamicPath -> ServerPartE Response
@@ -111,20 +127,3 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
         Right (fp, etag, index) ->
           serveTarball ["index.html"] (display (packageId pkg)) fp index
                        [Public, maxAgeDays 30] etag
-
-    packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarIndex))
-    packageTarball PkgInfo{pkgTarball = (pkgTarball, _) : _} = do
-      let blobid = pkgTarballNoGz pkgTarball
-          fp     = BlobStorage.filepath store blobid
-          etag   = BlobStorage.blobETag blobid
-      index <- cachedPackageTarIndex pkgTarball
-      return $ Right (fp, etag, index)
-    packageTarball _ =
-      return $ Left "No tarball found"
-
-    packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarEntryOffset, FilePath))
-    packageChangeLog pkgInfo = runErrorT $ do
-      (fp, etag, index) <- ErrorT $ packageTarball pkgInfo
-      (offset, fname)   <- ErrorT $ return . maybe (Left "No changelog found") Right
-                                  $ findChangeLog pkgInfo index
-      return (fp, etag, offset, fname)

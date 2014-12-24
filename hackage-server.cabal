@@ -119,6 +119,7 @@ executable hackage-server
     Distribution.Server.Packages.Unpack
     Distribution.Server.Packages.Render
     Distribution.Server.Packages.ChangeLog
+    Distribution.Server.Packages.Readme
 
     Distribution.Server.Pages.Distributions
     Distribution.Server.Pages.Group

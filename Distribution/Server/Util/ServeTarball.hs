@@ -14,6 +14,7 @@
 module Distribution.Server.Util.ServeTarball
     ( serveTarball
     , serveTarEntry
+    , loadTarEntry
     , constructTarIndexFromFile
     , constructTarIndex
     ) where
@@ -98,24 +99,28 @@ renderDirIndex entries = hackagePage "Directory Listing"
       XHtml.+++ XHtml.br
     | e <- entries ]
 
-serveTarEntry :: FilePath -> Int -> FilePath -> IO Response
-serveTarEntry tarfile off fname = do
+loadTarEntry :: FilePath -> TarIndex.TarEntryOffset -> IO (Either String (Tar.FileSize, BS.ByteString))
+loadTarEntry tarfile off = do
   htar <- openFile tarfile ReadMode
-  hSeek htar AbsoluteSeek (fromIntegral (off * 512))
+  hSeek htar AbsoluteSeek (fromIntegral $ off * 512)
   header <- BS.hGet htar 512
   case Tar.read header of
     (Tar.Next Tar.Entry{Tar.entryContent = Tar.NormalFile _ size} _) -> do
          body <- BS.hGet htar (fromIntegral size)
-         let extension = case takeExtension fname of
+         return $ Right (size, body)
+    _ -> fail "oops"
+
+serveTarEntry :: FilePath -> TarIndex.TarEntryOffset -> FilePath -> IO Response
+serveTarEntry tarfile off fname = do
+    Right (size, body) <- loadTarEntry tarfile off
+    return . ((setHeader "Content-Length" (show size)) .
+              (setHeader "Content-Type" mimeType)) $
+              resultBS 200 body
+  where extension = case takeExtension fname of
                            ('.':ext) -> ext
                            ext       -> ext
-             mimeType = Map.findWithDefault "text/plain" extension mimeTypes'
-             response = ((setHeader "Content-Length" (show size)) .
-                         (setHeader "Content-Type" mimeType)) $
-                         resultBS 200 body
-         return response
-    _ -> fail "oh noes!!"
-
+        mimeType = Map.findWithDefault "text/plain" extension mimeTypes'
+        
 -- | Extended mapping from file extension to mime type
 mimeTypes' :: Map.Map String String
 mimeTypes' = Happstack.mimeTypes `Map.union` Map.fromList
