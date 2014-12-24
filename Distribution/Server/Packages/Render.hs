@@ -19,7 +19,6 @@ import qualified Data.Vector as Vec
 import Data.Ord (comparing)
 import Data.List (sortBy)
 import Data.Time.Clock (UTCTime)
-import System.IO (FilePath)
 
 -- Cabal
 import Distribution.PackageDescription
@@ -48,6 +47,7 @@ data PackageRender = PackageRender {
     rendModules      :: Maybe ModuleForest,
     rendHasTarball   :: Bool,
     rendChangeLog    :: Maybe (FilePath, BS.ByteString),
+    rendReadme       :: Maybe (FilePath, BS.ByteString),
     rendUploadInfo   :: (UTCTime, Maybe UserInfo),
     rendUpdateInfo   :: Maybe (Int, UTCTime, Maybe UserInfo),
     rendPkgUri       :: String,
@@ -76,7 +76,8 @@ doPackageRender users info = PackageRender
     , rendRepoHeads    = catMaybes (map rendRepo $ sourceRepos desc)
     , rendModules      = fmap (moduleForest . exposedModules) (library flatDesc)
     , rendHasTarball   = not . Vec.null $ pkgTarballRevisions info
-    , rendHasChangeLog = hasChangeLog
+    , rendChangeLog    = Nothing -- populated later
+    , rendReadme       = Nothing -- populated later
     , rendUploadInfo   = let (utime, uid) = pkgOriginalUploadInfo info
                          in (utime, Users.lookupUserId uid users)
     , rendUpdateInfo   = let maxrevision  = Vec.length (pkgMetadataRevisions info) - 1

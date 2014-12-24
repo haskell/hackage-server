@@ -22,6 +22,7 @@ import Distribution.Server.Features.TarIndexCache
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.Render
 import Distribution.Server.Packages.ChangeLog
+import Distribution.Server.Packages.Readme
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Group as Group
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
@@ -38,6 +39,7 @@ import Data.Version
 import Data.Function (fix)
 import Data.List (find)
 import Data.Time.Clock (getCurrentTime)
+import qualified Data.Vector as Vec
 
 data PackageCandidatesFeature = PackageCandidatesFeature {
     candidatesFeatureInterface :: HackageFeature,
@@ -368,13 +370,18 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     candidateRender cand = do
            users  <- queryGetUserDb
            index  <- queryGetPackageIndex
-           mChangeLog <- findToplevelFile (candPkgInfo cand) isChangeLogFile
-           let changeLog = case mChangeLog of Right (_,_,_,fname,contents) -> Just (fname, contents) 
-                                              _                           -> Nothing
-               render = doPackageRender users (candPkgInfo cand)
+           let pkg = candPkgInfo cand
+           mChangeLog <- findToplevelFile pkg isChangeLogFile
+           mReadme    <- findToplevelFile pkg isReadmeFile
+           let changeLog = case mChangeLog of Right (_,_,_,fname,contents) -> Just (fname, contents)
+                                              _                            -> Nothing
+               readme    = case mReadme    of Right (_,_,_,fname,contents) -> Just (fname, contents)
+                                              _                            -> Nothing
+               render = doPackageRender users pkg
            return $ CandidateRender {
              candPackageRender = render { rendPkgUri = rendPkgUri render ++ "/candidate"
-                                        , rendChangeLog = changeLog },
+                                        , rendChangeLog = changeLog
+                                        , rendReadme = readme},
              renderWarnings = candWarnings cand,
              hasIndexedPackage = not . null $ PackageIndex.lookupPackageName index (packageName cand)
            }
