@@ -12,6 +12,7 @@ module Distribution.Server.Packages.Render (
 
 import Data.Maybe (catMaybes)
 import Control.Monad (guard, liftM2)
+import qualified Data.ByteString.Lazy as BS
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
 import Data.Map (Map)
@@ -20,6 +21,7 @@ import qualified Data.Traversable as Traversable
 import Data.Ord (comparing)
 import Data.List (sort, sortBy, partition)
 import Data.Time.Clock (UTCTime)
+import System.IO (FilePath)
 
 -- Cabal
 import Distribution.PackageDescription
@@ -47,7 +49,7 @@ data PackageRender = PackageRender {
     rendRepoHeads    :: [(RepoType, String, SourceRepo)],
     rendModules      :: Maybe ModuleForest,
     rendHasTarball   :: Bool,
-    rendHasChangeLog :: Bool,
+    rendChangeLog    :: Maybe (FilePath, BS.ByteString),
     rendUploadInfo   :: (UTCTime, Maybe UserInfo),
     rendUpdateInfo   :: Maybe (Int, UTCTime, Maybe UserInfo),
     rendPkgUri       :: String,
@@ -59,8 +61,8 @@ data PackageRender = PackageRender {
     rendOther        :: PackageDescription
 } deriving (Show)
 
-doPackageRender :: Users.Users -> PkgInfo -> Bool -> IO PackageRender
-doPackageRender users info hasChangeLog = return $ PackageRender
+doPackageRender :: Users.Users -> PkgInfo -> PackageRender
+doPackageRender users info = PackageRender
     { rendPkgId        = pkgInfoId info
     , rendDepends      = flatDependencies genDesc
     , rendExecNames    = map exeName (executables flatDesc)
@@ -76,7 +78,7 @@ doPackageRender users info hasChangeLog = return $ PackageRender
     , rendRepoHeads    = catMaybes (map rendRepo $ sourceRepos desc)
     , rendModules      = fmap (moduleForest . exposedModules) (library flatDesc)
     , rendHasTarball   = not . null $ pkgTarball info
-    , rendHasChangeLog = hasChangeLog
+    , rendChangeLog    = Nothing -- populated later
     , rendUploadInfo   = let (utime, uid) = pkgOriginalUploadData info
                          in (utime, Users.lookupUserId uid users)
     , rendUpdateInfo   = let revision     = length (pkgDataOld info)
