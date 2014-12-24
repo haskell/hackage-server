@@ -11,10 +11,12 @@ import Distribution.Server.Features.Core
 import Distribution.Server.Features.TarIndexCache
 
 import Distribution.Server.Packages.ChangeLog
+import Distribution.Server.Packages.Readme
 import Distribution.Server.Packages.Types
+import Distribution.Server.Packages.Render
+import Distribution.Server.Features.Users
 import Distribution.Server.Util.ServeTarball (serveTarEntry, serveTarball)
-import qualified Data.TarIndex as TarIndex
-import qualified Data.ByteString.Lazy as BS
+
 
 import Distribution.Text
 import Distribution.Package
@@ -23,12 +25,10 @@ import Distribution.Package
 data PackageContentsFeature = PackageContentsFeature {
     packageFeatureInterface :: HackageFeature,
     packageContentsResource :: PackageContentsResource,
-    -- TODO: Exported temporarily from TarIndexCache for RecentPackages's `render`
-    --       which in turn is only in RecentPackages because PackageContents doesn't
-    --       have access to the Users feature. Refactor.
-    findToplevelFile :: PkgInfo -> (FilePath -> Bool)
-                     -> IO (Either String (FilePath, ETag, TarIndex.TarEntryOffset, FilePath, BS.ByteString))
-  
+
+    -- necessary information for the representation of a package resource
+    -- This needs to be here in order to extract from the tar file
+    packageRender :: PkgInfo -> IO PackageRender
 }
 
 instance IsHackageFeature PackageContentsFeature where
@@ -43,25 +43,26 @@ data PackageContentsResource = PackageContentsResource {
 initPackageContentsFeature :: ServerEnv
                            -> IO (CoreFeature
                                -> TarIndexCacheFeature
+                               -> UserFeature
                                -> IO PackageContentsFeature)
-initPackageContentsFeature env@ServerEnv{} = do
-    return $ \core tarIndexCache -> do
-      let feature = packageContentsFeature env core tarIndexCache
+initPackageContentsFeature = do
+    return $ \core tarIndexCache user -> do
+      let feature = packageContentsFeature core tarIndexCache user
 
       return feature
 
-packageContentsFeature :: ServerEnv
-                       -> CoreFeature
+packageContentsFeature :: CoreFeature
                        -> TarIndexCacheFeature
+                       -> UserFeature
                        -> PackageContentsFeature
 
-packageContentsFeature ServerEnv{serverBlobStore = store}
-                       CoreFeature{ coreResource = CoreResource{
+packageContentsFeature CoreFeature{ coreResource = CoreResource{
                                       packageInPath
                                     , lookupPackageId
                                     }
                                   }
                        TarIndexCacheFeature{packageTarball, findToplevelFile}
+                       UserFeature{queryGetUserDb}
   = PackageContentsFeature{..}
   where
     packageFeatureInterface = (emptyHackageFeature "package-contents") {
@@ -84,6 +85,18 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
         , packageContentsChangeLogUri = \pkgid ->
             renderResource (packageContentsChangeLog packageContentsResource) [display pkgid, display (packageName pkgid)]
         }
+        
+    packageRender :: PkgInfo -> IO PackageRender
+    packageRender pkg = do
+      users <- queryGetUserDb
+      mChangeLog <- findToplevelFile pkg isChangeLogFile
+      mReadme <- findToplevelFile pkg isReadmeFile
+      let changeLog = case mChangeLog of Right (_,_,_,fname,contents) -> Just (fname, contents) 
+                                         _                            -> Nothing
+          readme    = case mReadme    of Right (_,_,_,fname,contents) -> Just (fname, contents) 
+                                         _                            -> Nothing
+          render = doPackageRender users pkg
+      return $ render { rendChangeLog = changeLog, rendReadme = readme }
 
 {-------------------------------------------------------------------------------
   TODO: everything below is duplicated in PackageCandidates.
@@ -99,7 +112,9 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
           errNotFound "Changelog not found" [MText err]
         Right (fp, etag, offset, name, _contents) -> do
           cacheControl [Public, maxAgeDays 30] etag
-          liftIO $ serveTarEntry fp offset name  -- TODO: We've already loaded the contents; refactor (also in Candidates)
+          liftIO $ serveTarEntry fp offset name  -- TODO: We've already loaded the contents
+                                                 -- we do repeated work here by re-seeking in the tar.
+                                                 -- This should be refactored; same thing in PackageCandidates
 
     -- return: not-found error or tarball
     serveContents :: DynamicPath -> ServerPartE Response

@@ -165,11 +165,11 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     packageContentsFeature <- mkPackageContentsFeature
                                 coreFeature
                                 tarIndexCacheFeature
+                                usersFeature
 
     packagesFeature <- mkRecentPackagesFeature
                          usersFeature
                          coreFeature
-                         packageContentsFeature
 
     userDetailsFeature <- mkUserDetailsFeature
                             usersFeature
@@ -250,7 +250,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     htmlFeature     <- mkHtmlFeature
                          usersFeature
                          coreFeature
-                         packagesFeature
+                         packageContentsFeature
                          uploadFeature
                          candidatesFeature
                          versionsFeature
