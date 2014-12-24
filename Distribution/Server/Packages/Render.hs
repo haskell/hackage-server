@@ -21,7 +21,6 @@ import qualified Data.Traversable as Traversable
 import Data.Ord (comparing)
 import Data.List (sort, sortBy, partition)
 import Data.Time.Clock (UTCTime)
-import System.IO (FilePath)
 
 -- Cabal
 import Distribution.PackageDescription
@@ -50,6 +49,7 @@ data PackageRender = PackageRender {
     rendModules      :: Maybe ModuleForest,
     rendHasTarball   :: Bool,
     rendChangeLog    :: Maybe (FilePath, BS.ByteString),
+    rendReadme       :: Maybe (FilePath, BS.ByteString),
     rendUploadInfo   :: (UTCTime, Maybe UserInfo),
     rendUpdateInfo   :: Maybe (Int, UTCTime, Maybe UserInfo),
     rendPkgUri       :: String,
@@ -79,6 +79,7 @@ doPackageRender users info = PackageRender
     , rendModules      = fmap (moduleForest . exposedModules) (library flatDesc)
     , rendHasTarball   = not . null $ pkgTarball info
     , rendChangeLog    = Nothing -- populated later
+    , rendReadme       = Nothing -- populated later
     , rendUploadInfo   = let (utime, uid) = pkgOriginalUploadData info
                          in (utime, Users.lookupUserId uid users)
     , rendUpdateInfo   = let revision     = length (pkgDataOld info)

@@ -8,7 +8,6 @@ module Distribution.Server.Features.TarIndexCache (
 
 import Control.Exception (throwIO)
 import Control.Monad.Error (ErrorT(..))
-import qualified Codec.Archive.Tar.Entry as Tar
 
 import qualified Data.ByteString.Lazy as BS
 import Data.Serialize (runGetLazy, runPutLazy)
