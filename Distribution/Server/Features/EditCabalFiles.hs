@@ -18,6 +18,7 @@ import Distribution.Server.Features.Upload
 
 import Distribution.Package
 import Distribution.Text (display)
+import Distribution.Version (intersectVersionRanges)
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Parse
          (parsePackageDescription, sourceRepoFieldDescrs)
@@ -329,9 +330,19 @@ checkCondTree checkElem
 
 checkDependencies :: Check [Dependency]
 checkDependencies =
-  checkList "Cannot don't add or remove dependencies, \
-            \just change the version constraints"
-            checkDependency
+    fmapCheck canonicaliseDeps $
+    checkList "Cannot add or remove dependencies, \
+              \just change the version constraints"
+              checkDependency
+  where
+    -- Allow a limited degree of adding and removing deps: only when they
+    -- are additional constraints on an existing package.
+    canonicaliseDeps :: [Dependency] -> [Dependency]
+    canonicaliseDeps =
+        map (\(pkgname, verrange) -> Dependency pkgname verrange)
+      . Map.toList
+      . Map.fromListWith (flip intersectVersionRanges)
+      . map (\(Dependency pkgname verrange) -> (pkgname, verrange))
 
 checkDependency :: Check Dependency
 checkDependency (Dependency pkgA verA) (Dependency pkgB verB)
@@ -406,6 +417,10 @@ checkMaybe :: String -> Check a -> Check (Maybe a)
 checkMaybe _   _     Nothing  Nothing  = return ()
 checkMaybe _   check (Just x) (Just y) = check x y
 checkMaybe msg _     _        _        = fail msg
+
+fmapCheck :: (b -> a) -> Check a -> Check b
+fmapCheck f check a b =
+  check (f a) (f b)
 
 --TODO: export from Cabal
 ppSourceRepo :: SourceRepo -> Doc
