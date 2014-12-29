@@ -198,12 +198,10 @@ tabulate items = table ! [theclass "properties"] <<
 
 
 renderDependencies :: PackageRender -> (String, Html)
-renderDependencies render = ("Dependencies", case htmlDepsList of
-    [] -> toHtml "None"
-    _  -> foldr (+++) noHtml htmlDepsList)
-  where htmlDepsList =
-            intersperse (toHtml " " +++ bold (toHtml "or") +++ br) $
-            map showDependencies (rendDepends render)
+renderDependencies render =
+    ("Dependencies", case rendDepends render of
+                       []   -> toHtml "None"
+                       deps -> showDependencies deps)
 
 showDependencies :: [Dependency] -> Html
 showDependencies deps = commaList (map showDependency deps)
