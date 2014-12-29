@@ -96,8 +96,8 @@ editCabalFilesFeature _env templates
         guard (lookup "cabal" dpath == Just (display pkgname))
         ok $ toResponse $ template
           [ "pkgid"     $= pkgid
-          , "cabalfile" $= insertRevisionField (1 + length (pkgDataOld pkg))
-                             (cabalFileByteString (pkgData pkg))
+          , "cabalfile" $= insertRevisionField (pkgNumRevisions pkg)
+                             (cabalFileByteString (pkgLatestCabalFileText pkg))
           ]
 
     serveEditCabalFilePost :: DynamicPath -> ServerPartE Response
@@ -110,7 +110,7 @@ editCabalFilesFeature _env templates
         guard (lookup "cabal" dpath == Just (display pkgname))
         uid <- guardAuthorised [ InGroup (maintainersGroup pkgname)
                                , InGroup trusteesGroup ]
-        let oldVersion = cabalFileByteString (pkgData pkg)
+        let oldVersion = cabalFileByteString (pkgLatestCabalFileText pkg)
         newRevision <- getCabalFile
         shouldPublish <- getPublish
         case diffCabalRevisions pkgid oldVersion newRevision of

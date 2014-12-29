@@ -56,6 +56,7 @@ import Data.Function (on)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
+import qualified Data.Vector as Vec
 import Data.Maybe (fromMaybe, isJust)
 import qualified Data.Text as T
 import Data.Traversable (traverse)
@@ -572,9 +573,8 @@ mkHtmlCore HtmlUtilities{..}
       template <- getTemplate templates "revisions.html"
       let pkgid        = packageId pkginfo
           pkgname      = packageName pkginfo
-          revisions    = (pkgData pkginfo, pkgUploadData pkginfo)
-                       : pkgDataOld pkginfo
-          numRevisions = length revisions
+          revisions    = reverse $ Vec.toList (pkgMetadataRevisions pkginfo)
+          numRevisions = pkgNumRevisions pkginfo
           revchanges   = [ case diffCabalRevisions pkgid
                                   (cabalFileByteString old)
                                   (cabalFileByteString new)

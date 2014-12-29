@@ -1,5 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, DeriveDataTypeable,
-             StandaloneDeriving, TemplateHaskell, TypeFamilies #-}
+             StandaloneDeriving, TemplateHaskell, TypeFamilies,
+             RecordWildCards #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Server.Packages.Types
@@ -27,6 +28,7 @@ import Distribution.PackageDescription
 import Distribution.PackageDescription.Parse
          ( parsePackageDescription, ParseResult(..) )
 
+import qualified Data.Vector as Vec
 import Control.Applicative
 import qualified Data.Serialize as Serialize
 import Data.Serialize (Serialize)
@@ -58,31 +60,23 @@ instance Show CabalFileText where
 -- We normally disallow re-uploading but may make occasional exceptions.
 data PkgInfo = PkgInfo {
     pkgInfoId :: !PackageIdentifier,
-    -- | The .cabal file text.
-    pkgData   :: !CabalFileText,
-    -- | The actual package .tar.gz file. It is optional for making an incomplete
-    -- mirror, e.g. using archives of just the latest packages, or perhaps for a
-    -- multipart upload process.
+
+    -- | The .cabal file text. This includes all revisions, indexed from the
+    -- original vision (revision 0). This is always non-empty.
     --
-    -- The canonical tarball URL points to the most recently uploaded package.
-    pkgTarball :: ![(PkgTarball, UploadInfo)],
-    -- | Previous data. The UploadInfo does *not* indicate when the ByteString was
-    -- uploaded, but rather when it was replaced. This way, pkgUploadData won't change
-    -- even if a cabal file is changed.
-    -- Should be updated whenever a tarball is uploaded (see mergePkg state function)
-    pkgDataOld :: ![(CabalFileText, UploadInfo)],
-    -- | When the package was created. Imports will override this with time in their logs.
-    pkgUploadData :: !UploadInfo
+    pkgMetadataRevisions :: !(Vec.Vector (CabalFileText, UploadInfo)),
+
+    -- | The package .tar.gz file. This includes all revisions but is typically
+    -- of length 1. It can be empty (to allow a multi-stage upload process, or
+    -- perhaps in future for making an incomplete mirror, e.g. using archives
+    -- of just the latest packages). The representation allows multiple versions
+    -- but the normal policy is not to allow replacing the tarball.
+    --
+    pkgTarballRevisions :: !(Vec.Vector (PkgTarball, UploadInfo))
+
 } deriving (Eq, Typeable, Show)
 
--- | The information held in a parsed .cabal file (used by cabal-install)
-pkgDesc :: PkgInfo -> GenericPackageDescription
-pkgDesc pkgInfo
-     = case parsePackageDescription $ cabalFileString $ pkgData pkgInfo of
-       -- We only make PkgInfos with parsable pkgDatas, so if it
-       -- doesn't parse then something has gone wrong.
-       ParseFailed e -> error ("Internal error: " ++ show e)
-       ParseOk _ x   -> x
+instance Package PkgInfo where packageId = pkgInfoId
 
 data PkgTarball = PkgTarball {
    pkgTarballGz   :: !BlobId,
@@ -91,29 +85,53 @@ data PkgTarball = PkgTarball {
 
 type UploadInfo = (UTCTime, UserId)
 
--- The structure above should really be rearranged to make this less confusing.
--- The original upload info is the one at the end of the pkgDataOld.
-pkgOriginalUploadData :: PkgInfo -> UploadInfo
-pkgOriginalUploadData PkgInfo { pkgDataOld = [], pkgUploadData = uinfo } = uinfo
-pkgOriginalUploadData PkgInfo { pkgDataOld = old@(_:_) } = snd (last old)
+pkgOriginalRevision :: PkgInfo -> (CabalFileText, UploadInfo)
+pkgOriginalRevision = Vec.head . pkgMetadataRevisions
 
-pkgUploadTime :: PkgInfo -> UTCTime
-pkgUploadTime = fst . pkgOriginalUploadData
+pkgOriginalUploadInfo :: PkgInfo -> UploadInfo
+pkgOriginalUploadInfo = snd . pkgOriginalRevision
 
-pkgUploadUser :: PkgInfo -> UserId
-pkgUploadUser = snd . pkgOriginalUploadData
+pkgOriginalUploadTime :: PkgInfo -> UTCTime
+pkgOriginalUploadTime = fst . pkgOriginalUploadInfo
 
--- a small utility
-descendUploadTimes :: [(a, UploadInfo)] -> [(a, UploadInfo)]
-descendUploadTimes = sortBy (flip $ comparing (fst . snd))
+pkgOriginalUploadUser :: PkgInfo -> UserId
+pkgOriginalUploadUser = snd . pkgOriginalUploadInfo
 
-instance Package PkgInfo where packageId = pkgInfoId
+pkgLatestRevision :: PkgInfo -> (CabalFileText, UploadInfo)
+pkgLatestRevision = Vec.last . pkgMetadataRevisions
 
-deriveSafeCopy 2 'extension ''PkgInfo
+pkgLatestCabalFileText :: PkgInfo -> CabalFileText
+pkgLatestCabalFileText = fst . pkgLatestRevision
+
+pkgLatestUploadInfo :: PkgInfo -> UploadInfo
+pkgLatestUploadInfo = snd . pkgLatestRevision
+
+pkgLatestUploadTime :: PkgInfo -> UTCTime
+pkgLatestUploadTime = fst . pkgLatestUploadInfo
+
+pkgLatestUploadUser :: PkgInfo -> UserId
+pkgLatestUploadUser = snd . pkgLatestUploadInfo
+
+pkgNumRevisions :: PkgInfo -> Int
+pkgNumRevisions = Vec.length . pkgMetadataRevisions
+
+pkgLatestTarball :: PkgInfo -> Maybe (PkgTarball, UploadInfo)
+pkgLatestTarball = (Vec.!? 0) . pkgTarballRevisions
+
+-- | The information held in a parsed .cabal file (used by cabal-install)
+pkgDesc :: PkgInfo -> GenericPackageDescription
+pkgDesc pkgInfo =
+    case parsePackageDescription $ cabalFileString $ fst $ pkgLatestRevision pkgInfo of
+      -- We only make PkgInfos with parsable pkgDatas, so if it
+      -- doesn't parse then something has gone wrong.
+      ParseFailed e -> error ("Internal error: " ++ show e)
+      ParseOk _ x   -> x
+
+deriveSafeCopy 3 'extension ''PkgInfo
 deriveSafeCopy 2 'extension ''PkgTarball
 
 instance MemSize PkgInfo where
-    memSize (PkgInfo a b c d e) = memSize5 a b c d e
+    memSize (PkgInfo a b c) = memSize3 a b c
 
 instance MemSize PkgTarball where
     memSize (PkgTarball a b) = memSize2 a b
@@ -121,6 +139,26 @@ instance MemSize PkgTarball where
 --------------------------
 -- Old SafeCopy versions
 --
+
+data PkgInfo_v1 = PkgInfo_v1 {
+    v1_pkgInfoId     :: !PackageIdentifier,
+    v1_pkgData       :: !CabalFileText,
+    v1_pkgTarball    :: ![(PkgTarball, UploadInfo)],
+    v1_pkgDataOld    :: ![(CabalFileText, UploadInfo)],
+    v1_pkgUploadData :: !UploadInfo
+}
+
+deriveSafeCopy 2 'extension ''PkgInfo_v1
+
+instance Migrate PkgInfo where
+    type MigrateFrom PkgInfo = PkgInfo_v1
+    migrate (PkgInfo_v1 {..}) =
+      PkgInfo {
+        pkgInfoId            = v1_pkgInfoId,
+        pkgMetadataRevisions = Vec.fromList ((v1_pkgData, v1_pkgUploadData)
+                                             :v1_pkgDataOld),
+        pkgTarballRevisions  = Vec.fromList v1_pkgTarball
+      }
 
 data PkgInfo_v0 = PkgInfo_v0  !PackageIdentifier_v0 !CabalFileText
                               ![(PkgTarball_v0, UploadInfo_v0)]
@@ -142,13 +180,13 @@ instance Serialize PkgInfo_v0 where
      <*> (map (\(bs,uinf) -> (CabalFileText bs, uinf)) <$> Serialize.get)
      <*> Serialize.get
 
-instance Migrate PkgInfo where
-    type MigrateFrom PkgInfo = PkgInfo_v0
+instance Migrate PkgInfo_v1 where
+    type MigrateFrom PkgInfo_v1 = PkgInfo_v0
     migrate (PkgInfo_v0 a b c d e) =
-      PkgInfo (migrate a) b
-              [ (migrate pt, migrateUploadInfo ui) | (pt, ui) <- c ]
-              [ (cf, (migrateUploadInfo ui)) | (cf, ui) <- d ]
-              (migrateUploadInfo e)
+      PkgInfo_v1 (migrate a) b
+                 [ (migrate pt, migrateUploadInfo ui) | (pt, ui) <- c ]
+                 [ (cf, (migrateUploadInfo ui)) | (cf, ui) <- d ]
+                 (migrateUploadInfo e)
       where
         migrateUploadInfo (UTCTime_v0 ts, UserId_v0 uid) = (ts, UserId uid)
 

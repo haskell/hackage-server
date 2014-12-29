@@ -48,7 +48,7 @@ import Distribution.Version (Version(..))
 
 import Data.Aeson (Value(..))
 import qualified Data.HashMap.Strict as HashMap
-import qualified Data.Vector         as Vector
+import qualified Data.Vector         as Vec
 import qualified Data.Text           as Text
 
 -- | The core feature, responsible for the main package index and all access
@@ -511,7 +511,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
             Object . HashMap.fromList $ [
                 (Text.pack "packageName", String (Text.pack str))
               ]
-      return . toResponse $ Array (Vector.fromList json)
+      return . toResponse $ Array (Vec.fromList json)
 
     -- result: tarball or not-found error
     servePackageTarball :: DynamicPath -> ServerPartE Response
@@ -519,52 +519,53 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       pkgid <- packageTarballInPath dpath
       guard (pkgVersion pkgid /= Version [] [])
       pkg <- lookupPackageId pkgid
-      case pkgTarball pkg of
-          [] -> errNotFound "Tarball not found" [MText "No tarball exists for this package version."]
-          ((tb, _):_) -> do
-              let blobId = pkgTarballGz tb
-              cacheControl [Public, NoTransform, maxAgeDays 30]
-                           (BlobStorage.blobETag blobId)
-              file <- liftIO $ BlobStorage.fetch store blobId
-              runHook_ packageDownloadHook pkgid
-              return $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime pkg)
+      case pkgLatestTarball pkg of
+        Nothing -> errNotFound "Tarball not found"
+                     [MText "No tarball exists for this package version."]
+        Just (tarball, (uploadtime,_uid)) -> do
+          let blobId = pkgTarballGz tarball
+          cacheControl [Public, NoTransform, maxAgeDays 30]
+                       (BlobStorage.blobETag blobId)
+          file <- liftIO $ BlobStorage.fetch store blobId
+          runHook_ packageDownloadHook pkgid
+          return $ toResponse $ Resource.PackageTarball file blobId uploadtime
 
     -- result: cabal file or not-found error
     serveCabalFile :: DynamicPath -> ServerPartE Response
     serveCabalFile dpath = do
-      pkg <- packageInPath dpath >>= lookupPackageId
+      pkginfo <- packageInPath dpath >>= lookupPackageId
       -- check that the cabal name matches the package
-      case lookup "cabal" dpath == Just (display $ packageName pkg) of
-          True  -> return $ toResponse (Resource.CabalFile (cabalFileByteString (pkgData pkg)))
-          False -> mzero
+      guard (lookup "cabal" dpath == Just (display $ packageName pkginfo))
+      let (fileRev, (utime, _uid)) = pkgLatestRevision pkginfo
+          cabalfile = Resource.CabalFile (cabalFileByteString fileRev) utime
+      return $ toResponse cabalfile
 
     serveCabalFileRevisionsList :: DynamicPath -> ServerPartE Response
     serveCabalFileRevisionsList dpath = do
       pkginfo <- packageInPath dpath >>= lookupPackageId
       users   <- queryGetUserDb
-      let revisions    = pkgUploadData pkginfo : map snd (pkgDataOld pkginfo)
-          revisionToObj (utime, uid) rev =
+      let revisions = pkgMetadataRevisions pkginfo
+          revisionToObj rev (_, (utime, uid)) =
             let uname = userIdToName users uid in
             Object $ HashMap.fromList
               [ (Text.pack "number", Number (fromIntegral rev))
               , (Text.pack "user", String (Text.pack (display uname)))
               , (Text.pack "time", String (Text.pack (formatTime defaultTimeLocale "%c" utime)))
               ]
-          revisionsJson = Array $ Vector.fromList $
-                            zipWith revisionToObj revisions [0 :: Int ..]
+          revisionsJson = Array $ Vec.imap revisionToObj revisions
       return (toResponse revisionsJson)
 
     serveCabalFileRevision :: DynamicPath -> ServerPartE Response
     serveCabalFileRevision dpath = do
       pkginfo <- packageInPath dpath >>= lookupPackageId
-      let mrev = lookup "revision" dpath >>= fromReqURI
-          revisions = reverse (pkgData pkginfo : map fst (pkgDataOld pkginfo))
-      case mrev of
-        Just rev
-          | rev >= 0
-          , (fileRev:_) <- drop rev revisions
-          -> return $ toResponse (Resource.CabalFile (cabalFileByteString fileRev))
-        _ -> mzero
+      let mrev      = lookup "revision" dpath >>= fromReqURI
+          revisions = pkgMetadataRevisions pkginfo
+      case mrev >>= \rev -> revisions Vec.!? rev of
+        Just (fileRev, (utime, _uid)) -> return $ toResponse cabalfile
+          where
+            cabalfile = Resource.CabalFile (cabalFileByteString fileRev) utime
+        Nothing -> errNotFound "Package revision not found"
+                     [MText "Cannot parse revision, or revision out of range."]
 
 packageExists, packageIdExists :: (Package pkg, Package pkg') => PackageIndex pkg -> pkg' -> Bool
 -- | Whether a package exists in the given package index.

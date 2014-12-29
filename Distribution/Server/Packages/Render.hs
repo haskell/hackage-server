@@ -15,6 +15,7 @@ import Control.Monad (guard, liftM2)
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
 import Data.Map (Map)
+import qualified Data.Vector as Vec
 import qualified Data.Foldable as Foldable
 import qualified Data.Traversable as Traversable
 import Data.Ord (comparing)
@@ -75,15 +76,15 @@ doPackageRender users info hasChangeLog = return $ PackageRender
                            str -> categorySplit str
     , rendRepoHeads    = catMaybes (map rendRepo $ sourceRepos desc)
     , rendModules      = fmap (moduleForest . exposedModules) (library flatDesc)
-    , rendHasTarball   = not . null $ pkgTarball info
+    , rendHasTarball   = not . Vec.null $ pkgTarballRevisions info
     , rendHasChangeLog = hasChangeLog
-    , rendUploadInfo   = let (utime, uid) = pkgOriginalUploadData info
+    , rendUploadInfo   = let (utime, uid) = pkgOriginalUploadInfo info
                          in (utime, Users.lookupUserId uid users)
-    , rendUpdateInfo   = let revision     = length (pkgDataOld info)
-                             (utime, uid) = pkgUploadData info
+    , rendUpdateInfo   = let maxrevision  = Vec.length (pkgMetadataRevisions info) - 1
+                             (utime, uid) = pkgLatestUploadInfo info
                              uinfo        = Users.lookupUserId uid users
-                         in if revision > 0
-                              then Just (revision, utime, uinfo)
+                         in if maxrevision > 0
+                              then Just (maxrevision, utime, uinfo)
                               else Nothing
     , rendPkgUri       = pkgUri
     , rendFlags        = genPackageFlags genDesc

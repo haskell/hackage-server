@@ -40,6 +40,8 @@ import Data.Function (fix)
 import Data.List (find)
 import Data.Time.Clock (getCurrentTime)
 import Control.Monad.Error (ErrorT(..))
+import qualified Data.Vector as Vec
+
 
 data PackageCandidatesFeature = PackageCandidatesFeature {
     candidatesFeatureInterface :: HackageFeature,
@@ -262,13 +264,18 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
     serveCandidateTarball :: DynamicPath -> ServerPartE Response
     serveCandidateTarball dpath = do
-      pkg <- packageTarballInPath dpath >>= lookupCandidateId
-      case pkgTarball (candPkgInfo pkg) of
-        [] -> mzero --candidate's tarball does not exist
-        ((tb, _):_) -> do
-            let blobId = pkgTarballGz tb
-            file <- liftIO $ BlobStorage.fetch store blobId
-            ok $ toResponse $ Resource.PackageTarball file blobId (pkgUploadTime $ candPkgInfo pkg)
+      pkgid <- packageTarballInPath dpath
+      guard (pkgVersion pkgid /= Version [] [])
+      pkg   <- lookupCandidateId pkgid
+      case pkgLatestTarball (candPkgInfo pkg) of
+        Nothing -> errNotFound "Tarball not found"
+                     [MText "No tarball exists for this package version."]
+        Just (tarball, (uploadtime,_uid)) -> do
+          let blobId = pkgTarballGz tarball
+          cacheControl [Public, NoTransform, maxAgeMinutes 10]
+                       (BlobStorage.blobETag blobId)
+          file <- liftIO $ BlobStorage.fetch store blobId
+          return $ toResponse $ Resource.PackageTarball file blobId uploadtime
 
     --withFormat :: DynamicPath -> (String -> a) -> a
     --TODO: use something else for nice html error pages
@@ -276,7 +283,9 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     serveCandidateCabal dpath = do
       pkg <- packageInPath dpath >>= lookupCandidateId
       guard (lookup "cabal" dpath == Just (display $ packageName pkg))
-      return $ toResponse (Resource.CabalFile (cabalFileByteString $ pkgData $ candPkgInfo pkg))
+      let (fileRev, (utime, _uid)) = pkgLatestRevision (candPkgInfo pkg)
+          cabalfile = Resource.CabalFile (cabalFileByteString fileRev) utime
+      return $ toResponse cabalfile
 
     uploadCandidate :: (PackageId -> Bool) -> ServerPartE CandPkgInfo
     uploadCandidate isRight = do
@@ -291,12 +300,10 @@ candidatesFeature ServerEnv{serverBlobStore = store}
             uploadinfo = (now, uid)
             candidate = CandPkgInfo {
                 candPkgInfo = PkgInfo {
-                                pkgInfoId     = pkgid,
-                                pkgData       = cabalfile,
-                                pkgTarball    = [(tarball, uploadinfo)],
-                                pkgUploadData = uploadinfo,
-                                pkgDataOld    = []
-                              },
+                    pkgInfoId     = pkgid,
+                    pkgMetadataRevisions = Vec.singleton (cabalfile, uploadinfo),
+                    pkgTarballRevisions  = Vec.singleton (tarball, uploadinfo)
+                  },
                 candWarnings = uploadWarnings uresult,
                 candPublic = True -- do withDataFn
             }
@@ -330,12 +337,15 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         Nothing -> do
           -- run filters
           let pkgInfo = candPkgInfo candidate
-              uresult = UploadResult (pkgDesc pkgInfo) (cabalFileByteString $ pkgData pkgInfo) (candWarnings candidate)
+              uresult = UploadResult (pkgDesc pkgInfo)
+                                     (cabalFileByteString (pkgLatestCabalFileText pkgInfo))
+                                     (candWarnings candidate)
           time <- liftIO getCurrentTime
           let uploadInfo = (time, uid)
-              ((tarball,_):_) = pkgTarball pkgInfo 
-          success <- updateAddPackage (packageId candidate) (pkgData pkgInfo)
-                                      uploadInfo (Just tarball)
+          success <- updateAddPackage (packageId candidate)
+                                      (pkgLatestCabalFileText pkgInfo)
+                                      uploadInfo
+                                      (fmap fst $ pkgLatestTarball pkgInfo)
           --FIXME: share code here with upload
           -- currently we do not create the initial maintainer group etc.
           if success
@@ -425,14 +435,14 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                        [Public, maxAgeMinutes 5] etag
 
     packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarIndex))
-    packageTarball PkgInfo{pkgTarball = (pkgTarball, _) : _} = do
-      let blobid = pkgTarballNoGz pkgTarball
-          fp     = BlobStorage.filepath store blobid
-          etag   = BlobStorage.blobETag blobid
-      index <- cachedPackageTarIndex pkgTarball
-      return $ Right (fp, etag, index)
-    packageTarball _ =
-      return $ Left "No tarball found"
+    packageTarball pkginfo
+      | Just (pkgTarball, _uploadinfo) <- pkgLatestTarball pkginfo = do
+          let blobid = pkgTarballNoGz pkgTarball
+              fp     = BlobStorage.filepath store blobid
+              etag   = BlobStorage.blobETag blobid
+          index <- cachedPackageTarIndex pkgTarball
+          return $ Right (fp, etag, index)
+      | otherwise = return $ Left "No tarball found"
 
     packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarEntryOffset, FilePath))
     packageChangeLog pkgInfo = runErrorT $ do

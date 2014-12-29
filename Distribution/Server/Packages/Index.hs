@@ -19,7 +19,8 @@ import qualified Codec.Archive.Tar.Entry as Tar
 import qualified Distribution.Server.Util.Index as PackageIndex
 
 import Distribution.Server.Packages.Types
-         ( CabalFileText(..), PkgInfo(..) )
+         ( CabalFileText(..), PkgInfo(..)
+         , pkgLatestCabalFileText, pkgLatestUploadInfo )
 import Distribution.Server.Users.Users
          ( Users, userIdToName )
 
@@ -41,17 +42,21 @@ import Prelude hiding (read)
 -- a package index, an index tarball. This tarball has the modification times
 -- and uploading users built-in.
 write :: Users -> Map String (ByteString, UTCTime) -> PackageIndex PkgInfo -> ByteString
-write users = PackageIndex.write (cabalFileByteString . pkgData) setModTime . extraEntries
+write users =
+    PackageIndex.write (cabalFileByteString . pkgLatestCabalFileText) setModTime
+  . extraEntries
   where
-    setModTime pkgInfo entry = let (utime, uuser) = pkgUploadData pkgInfo in entry {
-      Tar.entryTime      = utcToUnixTime utime,
-      Tar.entryOwnership = Tar.Ownership {
-        Tar.ownerName = userName uuser,
-        Tar.groupName = "Hackage",
-        Tar.ownerId = 0,
-        Tar.groupId = 0
+    setModTime pkgInfo entry =
+      let (utime, uuser) = pkgLatestUploadInfo pkgInfo in 
+      entry {
+        Tar.entryTime      = utcToUnixTime utime,
+        Tar.entryOwnership = Tar.Ownership {
+          Tar.ownerName = userName uuser,
+          Tar.groupName = "Hackage",
+          Tar.ownerId = 0,
+          Tar.groupId = 0
+        }
       }
-    }
     utcToUnixTime :: UTCTime -> Int64
     utcToUnixTime = truncate . utcTimeToPOSIXSeconds
     userName = display . userIdToName users

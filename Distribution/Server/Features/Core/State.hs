@@ -16,6 +16,7 @@ import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import Data.Monoid
 import Data.Time (UTCTime)
+import qualified Data.Vector as Vec
 import Data.List (sortBy)
 import Data.Ord (comparing)
 import Data.Maybe (maybeToList)
@@ -45,12 +46,12 @@ addPackage pkgid cabalfile uploadinfo mtarball = do
       Just _  -> return Nothing
       Nothing -> do
         let !pkginfo = PkgInfo {
-              pkgInfoId     = pkgid,
-              pkgData       = cabalfile,
-              pkgTarball    = [ (tarball, uploadinfo)
-                              | tarball <- maybeToList mtarball ],
-              pkgDataOld    = [],
-              pkgUploadData = uploadinfo
+              pkgInfoId            = pkgid,
+              pkgMetadataRevisions = Vec.singleton (cabalfile, uploadinfo),
+              pkgTarballRevisions  = case mtarball of
+                                       Nothing      -> Vec.empty
+                                       Just tarball -> Vec.singleton
+                                                         (tarball, uploadinfo)
             }
             pkgindex' = PackageIndex.insert pkginfo pkgindex
         State.put $! PackagesState pkgindex'
@@ -73,21 +74,17 @@ addPackageRevision pkgid cabalfile uploadinfo = do
     case PackageIndex.lookupPackageId pkgindex pkgid of
       Just pkginfo -> do
         let !pkginfo' = pkginfo {
-              pkgData       = cabalfile,
-              pkgUploadData = uploadinfo,
-              pkgDataOld    = (pkgData pkginfo, pkgUploadData pkginfo)
-                            : pkgDataOld pkginfo
+              pkgMetadataRevisions = pkgMetadataRevisions pkginfo
+                                     `Vec.snoc` (cabalfile, uploadinfo)
             }
             pkgindex' = PackageIndex.insert pkginfo' pkgindex
         State.put $! PackagesState pkgindex'
         return (Just pkginfo, pkginfo')
       Nothing -> do
         let !pkginfo = PkgInfo {
-              pkgInfoId     = pkgid,
-              pkgData       = cabalfile,
-              pkgTarball    = [],
-              pkgDataOld    = [],
-              pkgUploadData = uploadinfo
+              pkgInfoId            = pkgid,
+              pkgMetadataRevisions = Vec.singleton (cabalfile, uploadinfo),
+              pkgTarballRevisions  = Vec.empty
             }
             pkgindex' = PackageIndex.insert pkginfo pkgindex
         State.put $! PackagesState pkgindex'
@@ -98,23 +95,28 @@ addPackageTarball :: PackageId -> PkgTarball -> UploadInfo
 addPackageTarball pkgid tarball uploadinfo =
     alterPackage pkgid $ \pkginfo ->
       pkginfo {
-        pkgTarball = (tarball, uploadinfo) : pkgTarball pkginfo
+        pkgTarballRevisions = pkgTarballRevisions pkginfo
+                              `Vec.snoc` (tarball, uploadinfo)
       }
 
 setPackageUploader :: PackageId -> UserId
                    -> Update PackagesState (Maybe (PkgInfo, PkgInfo))
 setPackageUploader pkgid uid =
     alterPackage pkgid $ \pkginfo ->
+      let (cabalfile, (time, _uid)) = pkgLatestRevision pkginfo in
       pkginfo {
-        pkgUploadData = (fst (pkgUploadData pkginfo), uid)
+        pkgMetadataRevisions = Vec.init (pkgMetadataRevisions pkginfo)
+                               `Vec.snoc` (cabalfile, (time, uid))
       }
 
 setPackageUploadTime :: PackageId -> UTCTime
                      -> Update PackagesState (Maybe (PkgInfo, PkgInfo))
 setPackageUploadTime pkgid time =
     alterPackage pkgid $ \pkginfo ->
+      let (cabalfile, (_time, uid)) = pkgLatestRevision pkginfo in
       pkginfo {
-        pkgUploadData = (time, snd (pkgUploadData pkginfo))
+        pkgMetadataRevisions = Vec.init (pkgMetadataRevisions pkginfo)
+                               `Vec.snoc` (cabalfile, (time, uid))
       }
 
 alterPackage :: PackageId -> (PkgInfo -> PkgInfo)
@@ -128,61 +130,6 @@ alterPackage pkgid alter = do
             pkgindex' = PackageIndex.insert pkginfo' pkgindex
         State.put $! PackagesState pkgindex'
         return (Just (pkginfo, pkginfo'))
-
--- Keep old versions for a bit, for acid-state log compatability
-
-insertPkgIfAbsent :: PkgInfo -> Update PackagesState Bool
-insertPkgIfAbsent pkg = do
-    pkgsState <- State.get
-    case PackageIndex.lookupPackageId (packageList pkgsState) (packageId pkg) of
-        Nothing -> do State.put $ pkgsState { packageList = PackageIndex.insert pkg (packageList pkgsState) }
-                      return True
-        Just{}  -> do return False
-
--- could also return something to indicate existence
-mergePkg :: PkgInfo -> Update PackagesState ()
-mergePkg pkg = State.modify $ \pkgsState -> pkgsState { packageList = PackageIndex.insertWith mergeFunc pkg (packageList pkgsState) }
-  where
-    mergeFunc newPkg oldPkg =
-      let cabalH : cabalT = sortDesc $ (pkgData newPkg, pkgUploadData newPkg)
-                                     : (pkgData oldPkg, pkgUploadData oldPkg)
-                                     : pkgDataOld newPkg
-                                    ++ pkgDataOld oldPkg
-          tarballs        = sortDesc $ pkgTarball newPkg
-                                    ++ pkgTarball oldPkg
-      in PkgInfo {
-             pkgInfoId     = pkgInfoId oldPkg -- should equal pkgInfoId newPkg
-           , pkgData       = fst cabalH
-           , pkgTarball    = tarballs
-           , pkgDataOld    = cabalT
-           , pkgUploadData = snd cabalH
-           }
-
-    sortDesc :: Ord a => [(a1, (a, b))] -> [(a1, (a, b))]
-    sortDesc = sortBy $ flip (comparing (fst . snd))
-
-deletePackageVersion :: PackageId -> Update PackagesState ()
-deletePackageVersion pkg = State.modify $ \pkgsState -> pkgsState { packageList = deleteVersion (packageList pkgsState) }
-    where deleteVersion = PackageIndex.deletePackageId pkg
-
-replacePackageUploader :: PackageId -> UserId -> Update PackagesState (Either String (PkgInfo, PkgInfo))
-replacePackageUploader pkg uid = modifyPkgInfo pkg $ \pkgInfo -> pkgInfo { pkgUploadData = (fst (pkgUploadData pkgInfo), uid) }
-
-replacePackageUploadTime :: PackageId -> UTCTime -> Update PackagesState (Either String (PkgInfo, PkgInfo))
-replacePackageUploadTime pkg time = modifyPkgInfo pkg $ \pkgInfo -> pkgInfo { pkgUploadData = (time, snd (pkgUploadData pkgInfo)) }
-
-addTarball :: PackageId -> PkgTarball -> UploadInfo -> Update PackagesState (Either String (PkgInfo, PkgInfo))
-addTarball pkg tarball uploadInfo = modifyPkgInfo pkg $ \pkgInfo -> pkgInfo { pkgTarball = (tarball, uploadInfo) : pkgTarball pkgInfo }
-
-modifyPkgInfo :: PackageId -> (PkgInfo -> PkgInfo) -> Update PackagesState (Either String (PkgInfo, PkgInfo))
-modifyPkgInfo pkg f = do
-  pkgsState <- State.get
-  case PackageIndex.lookupPackageId (packageList pkgsState) pkg of
-    Nothing -> return (Left "No such package")
-    Just pkgInfo -> do
-      let pkgInfo' = f pkgInfo
-      State.put $ pkgsState { packageList = PackageIndex.insert pkgInfo' (packageList pkgsState) }
-      return $ Right (pkgInfo, pkgInfo')
 
 -- |Replace all existing packages and reports
 replacePackagesState :: PackagesState -> Update PackagesState ()
@@ -199,14 +146,5 @@ makeAcidic ''PackagesState ['getPackagesState
                            ,'addPackageTarball
                            ,'setPackageUploader
                            ,'setPackageUploadTime
-
-                             -- Keep old versions for a bit,
-                             -- for acid-state log compatability
-                           ,'replacePackageUploadTime
-                           ,'replacePackageUploader
-                           ,'addTarball
-                           ,'insertPkgIfAbsent
-                           ,'mergePkg
-                           ,'deletePackageVersion
                            ]
 
