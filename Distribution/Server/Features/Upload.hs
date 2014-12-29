@@ -274,10 +274,10 @@ uploadFeature ServerEnv{serverBlobStore = store}
       where pname = display pkgname
 
     trusteeDescription :: GroupDescription
-    trusteeDescription = nullDescription { groupTitle = "Package trustees", groupPrologue = "Package trustees are essentially maintainers for the entire package database. They can edit package maintainer groups and upload any package." }
+    trusteeDescription = nullDescription { groupTitle = "Package trustees", groupPrologue = "The role of trustees is to help to curate the whole package collection. Trustees have a limited ability to edit package information, for the entire package database (as opposed to package maintainers who have full control over individual packages). Trustees can edit .cabal files, edit other package metadata and upload documentation but they cannot upload new package versions." }
 
     uploaderDescription :: GroupDescription
-    uploaderDescription = nullDescription { groupTitle = "Package uploaders", groupPrologue = "Package uploaders allowed to upload packages. If a package already exists then you also need to be in the maintainer group for that package." }
+    uploaderDescription = nullDescription { groupTitle = "Package uploaders", groupPrologue = "Package uploaders are allowed to upload packages. Note that if a package already exists then you also need to be in the maintainer group for that package." }
 
     guardAuthorisedAsMaintainer :: PackageName -> ServerPartE ()
     guardAuthorisedAsMaintainer pkgname =
