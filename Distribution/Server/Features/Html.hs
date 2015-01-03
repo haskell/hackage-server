@@ -1529,17 +1529,16 @@ mkHtmlSearch HtmlUtilities{..}
               [ packageNameLink pkgname
               , toHtml $ " " ++ ptype (itemHasLibrary item) (itemNumExecutables item)
                 ++ ": " ++ itemDesc item
-              , " (" +++ renderTags (itemTags item) +++ ") "
-              , small $ "Last upload: " +++ humanTime
+              , br
+              , small ! [ theclass "info" ] <<
+                [ "(" +++ renderTags (itemTags item) +++ ")"
+                , " Last uploaded " +++ humanTime ]
               ]
               where
-                pkgname = itemName item
-                --    [PkgInfo] -> [[(PkgTarball, UploadInfo)]] -> [(PkgTarball, UploadInfo)]
-                -- -> [(UTCTime, UserId)] -> [UTCTime] -> sorted [UTCTime] -> most recent UTCTime
-                timestamp = head
-                            $ sortBy (flip compare)
-                            $ map (fst . snd)
-                            $ concatMap pkgTarball (PackageIndex.lookupPackageName pkgIndex pkgname)
+                pkgname   = itemName item
+                timestamp = maximum
+                          $ map pkgOriginalUploadTime
+                          $ PackageIndex.lookupPackageName pkgIndex pkgname
                 -- takes current time as argument so it can say how many $X ago something was
                 humanTime = HumanTime.humanReadableTime' currentTime timestamp
                 ptype _ 0 = "library"
