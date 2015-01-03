@@ -175,3 +175,4 @@ searchFeature ServerEnv{serverBaseURI} CoreFeature{..} ListFeature{getAllLists}
     suggestJson =
     --TODO: open search supports a suggest / autocomplete system
 -}
+
