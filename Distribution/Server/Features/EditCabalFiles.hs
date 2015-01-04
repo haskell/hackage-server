@@ -329,11 +329,16 @@ checkCondTree checkElem
                  (checkCondTree checkElem) thenPartA thenPartB
 
 checkDependencies :: Check [Dependency]
-checkDependencies =
-    fmapCheck canonicaliseDeps $
-    checkList "Cannot add or remove dependencies, \
-              \just change the version constraints"
-              checkDependency
+-- Special case: there are some pretty weird broken packages out there, see
+--   https://github.com/haskell/hackage-server/issues/303
+checkDependencies [] [Dependency (PackageName "base") _] = return ()
+
+checkDependencies ds1 ds2 =
+    fmapCheck canonicaliseDeps
+      (checkList "Cannot add or remove dependencies, \
+                \just change the version constraints"
+                checkDependency)
+      ds1 ds2
   where
     -- Allow a limited degree of adding and removing deps: only when they
     -- are additional constraints on an existing package.
