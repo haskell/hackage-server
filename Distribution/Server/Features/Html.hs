@@ -56,6 +56,7 @@ import Data.Function (on)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
+import qualified Data.Vector as Vec
 import Data.Maybe (fromMaybe, isJust)
 import qualified Data.Text as T
 import Data.Traversable (traverse)
@@ -64,6 +65,8 @@ import Data.Array (Array, listArray)
 import qualified Data.Array as Array
 import qualified Data.Ix    as Ix
 import Data.Time.Format (formatTime)
+import Data.Time.Clock (getCurrentTime)
+import qualified Data.Time.Format.Human as HumanTime
 import System.Locale (defaultTimeLocale)
 
 import Text.XHtml.Strict
@@ -247,7 +250,7 @@ htmlFeature user
     htmlCandidates = mkHtmlCandidates utilities core versions upload docsCandidates candidates templates
     htmlPreferred  = mkHtmlPreferred  utilities core versions
     htmlTags       = mkHtmlTags       utilities core list tags
-    htmlSearch     = mkHtmlSearch     utilities      list names
+    htmlSearch     = mkHtmlSearch     utilities core list names
 
     htmlResources = concat [
         htmlCoreResources       htmlCore
@@ -572,9 +575,8 @@ mkHtmlCore HtmlUtilities{..}
       template <- getTemplate templates "revisions.html"
       let pkgid        = packageId pkginfo
           pkgname      = packageName pkginfo
-          revisions    = (pkgData pkginfo, pkgUploadData pkginfo)
-                       : pkgDataOld pkginfo
-          numRevisions = length revisions
+          revisions    = reverse $ Vec.toList (pkgMetadataRevisions pkginfo)
+          numRevisions = pkgNumRevisions pkginfo
           revchanges   = [ case diffCabalRevisions pkgid
                                   (cabalFileByteString old)
                                   (cabalFileByteString new)
@@ -1447,12 +1449,15 @@ data HtmlSearch = HtmlSearch {
   }
 
 mkHtmlSearch :: HtmlUtilities
+             -> CoreFeature
              -> ListFeature
              -> SearchFeature
              -> HtmlSearch
 mkHtmlSearch HtmlUtilities{..}
+             CoreFeature{..}
              ListFeature{makeItemList}
-             SearchFeature{..} = HtmlSearch{..}
+             SearchFeature{..} =
+    HtmlSearch{..}
   where
     htmlSearchResources = [
         (extendResource searchPackagesResource) {
@@ -1481,13 +1486,15 @@ mkHtmlSearch HtmlUtilities{..}
                 ]
 
           Just termsStr | terms <- words termsStr, not (null terms) -> do
+            pkgIndex <- liftIO $ queryGetPackageIndex
+            currentTime <- liftIO $ getCurrentTime
             pkgnames <- searchPackages terms
             let (pageResults, moreResults) = splitAt limit (drop offset pkgnames)
             pkgDetails <- liftIO $ makeItemList pageResults
             return $ toResponse $ Resource.XHtml $
               hackagePage "Package search" $
                 [ toHtml $ searchForm termsStr False
-                , toHtml $ resultsArea pkgDetails offset limit moreResults termsStr
+                , toHtml $ resultsArea pkgIndex currentTime pkgDetails offset limit moreResults termsStr
                 , alternativeSearch
                 ]
 
@@ -1498,7 +1505,7 @@ mkHtmlSearch HtmlUtilities{..}
                 , alternativeSearch
                 ]
       where
-        resultsArea pkgDetails offset limit moreResults termsStr =
+        resultsArea pkgIndex currentTime pkgDetails offset limit moreResults termsStr =
             [ h2 << "Results"
             , if offset == 0
                 then noHtml
@@ -1508,8 +1515,8 @@ mkHtmlSearch HtmlUtilities{..}
                 [] | offset == 0 -> toHtml "None"
                    | otherwise   -> toHtml "No more results"
                 _ -> toHtml
-                      [ ulist ! [theclass "packages"]
-                             << map renderItem pkgDetails
+                      [ ulist ! [theclass "searchresults"]
+                             << map renderSearchResult pkgDetails
                       , if null moreResults
                           then noHtml
                           else anchor ! [href moreResultsLink]
@@ -1517,6 +1524,30 @@ mkHtmlSearch HtmlUtilities{..}
                       ]
             ]
           where
+            renderSearchResult :: PackageItem -> Html
+            renderSearchResult item = li ! classes <<
+              [ packageNameLink pkgname
+              , toHtml $ " " ++ ptype (itemHasLibrary item) (itemNumExecutables item)
+              , br
+              , toHtml (itemDesc item)
+              , br
+              , small ! [ theclass "info" ] <<
+                [ toHtml (renderTags (itemTags item))
+                , " Last uploaded " +++ humanTime ]
+              ]
+              where
+                pkgname   = itemName item
+                timestamp = maximum
+                          $ map pkgOriginalUploadTime
+                          $ PackageIndex.lookupPackageName pkgIndex pkgname
+                -- takes current time as argument so it can say how many $X ago something was
+                humanTime = HumanTime.humanReadableTime' currentTime timestamp
+                ptype _ 0 = "library"
+                ptype lib num = (if lib then "library and " else "")
+                                ++ (case num of 1 -> "program"; _ -> "programs")
+                classes = case classList of [] -> []; _ -> [theclass $ unwords classList]
+                classList = (case itemDeprecated item of Nothing -> []; _ -> ["deprecated"])
+
             range = (offset, offset + length pkgDetails)
             moreResultsLink =
                 "/packages/search?"

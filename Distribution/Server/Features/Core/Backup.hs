@@ -31,6 +31,7 @@ import Text.CSV
 
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Vector as Vec
 import Data.List
 import Data.Ord (comparing)
 import Control.Monad.State
@@ -132,18 +133,22 @@ partialToFullPkg (pkgId, partial) = do
                          partialCabal partialCabalUpload partial
     tarballDex <- liftM2 (makeRecord $ "tarball for " ++ display pkgId)
                          partialTarball partialTarballUpload partial
-    case descendUploadTimes cabalDex of
-      [] -> fail $ "No cabal files found for " ++ display pkgId
-      ((cabal, info):cabalOld) -> case parsePackageDescription (cabalFileString cabal) of
-        ParseFailed err -> fail $ show (locatedErrorMsg err)
-        ParseOk _ _ -> do
-            return $ PkgInfo {
-                pkgInfoId = pkgId,
-                pkgData = cabal,
-                pkgTarball = descendUploadTimes tarballDex,
-                pkgDataOld = cabalOld,
-                pkgUploadData = info
-            }
+    let cabalRevisions   = sortByUploadTimes cabalDex
+        tarballRevisions = sortByUploadTimes tarballDex
+
+    when (null cabalRevisions) $
+      fail $ "No cabal files found for " ++ display pkgId
+
+    let (latestCabalFile, _) = last cabalRevisions
+    case parsePackageDescription (cabalFileString latestCabalFile) of
+      ParseFailed err -> fail $ show (locatedErrorMsg err)
+      ParseOk _ _     -> return ()
+
+    return PkgInfo {
+      pkgInfoId            = pkgId,
+      pkgMetadataRevisions = Vec.fromList cabalRevisions,
+      pkgTarballRevisions  = Vec.fromList tarballRevisions
+    }
   where
     makeRecord :: String -> [(Int, a)] -> [(Int, UploadInfo)] -> Restore [(a, UploadInfo)]
     makeRecord item list list' = makeRecord' item 0 (mergeBy (\(i, _) (i', _) -> compare i i')
@@ -158,6 +163,10 @@ partialToFullPkg (pkgId, partial) = do
                                                ++ ") found without matching upload log entry"
     makeRecord' item _ (OnlyInRight y:_) = fail $ "Upload log entry for " ++ item ++ " (index "
                                                ++ show (fst y) ++") found, but file itself missing"
+
+    sortByUploadTimes :: [(a, UploadInfo)] -> [(a, UploadInfo)]
+    sortByUploadTimes = sortBy (comparing (fst . snd))
+
 
 --------------------------------------------------------------------------------
 -- Every tarball and cabal file ever uploaded for every single package name and version
@@ -175,8 +184,8 @@ indexToAllVersions' st =
 -- The most recent tarball and cabal file for the most recent version of every package
 indexToCurrentVersions :: PackagesState -> [BackupEntry]
 indexToCurrentVersions st =
-    let pkgList = PackageIndex.allPackagesByName . packageList $ st
-        pkgList' = map (maximumBy (comparing pkgUploadTime)) pkgList
+    let pkgList  = PackageIndex.allPackagesByName . packageList $ st
+        pkgList' = map (maximumBy (comparing pkgOriginalUploadTime)) pkgList
     in concatMap infoToCurrentEntries pkgList'
 
 -- it's also possible to make a cabal-only export
@@ -185,15 +194,15 @@ indexToCurrentVersions st =
 infoToAllEntries :: PkgInfo -> [BackupEntry]
 infoToAllEntries pkg =
     let pkgId = pkgInfoId pkg
-        cabals   = cabalListToExport pkgId $ ((pkgData pkg, pkgUploadData pkg):pkgDataOld pkg)
-        tarballs = tarballListToExport pkgId (pkgTarball pkg)
+        cabals   = cabalListToExport   pkgId (Vec.toList (pkgMetadataRevisions pkg))
+        tarballs = tarballListToExport pkgId (Vec.toList (pkgTarballRevisions pkg))
     in cabals ++ tarballs
 
 infoToCurrentEntries :: PkgInfo -> [BackupEntry]
 infoToCurrentEntries pkg =
     let pkgId = pkgInfoId pkg
-        cabals   = cabalListToExport pkgId [(pkgData pkg, pkgUploadData pkg)]
-        tarballs = tarballListToExport pkgId (take 1 $ pkgTarball pkg)
+        cabals   = cabalListToExport   pkgId (Vec.toList (Vec.take 1 (pkgMetadataRevisions pkg)))
+        tarballs = tarballListToExport pkgId (Vec.toList (Vec.take 1 (pkgTarballRevisions pkg)))
     in cabals ++ tarballs
 
 ----------- Converting pieces of PkgInfo to entries

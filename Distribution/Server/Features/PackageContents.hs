@@ -113,14 +113,14 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
                        [Public, maxAgeDays 30] etag
 
     packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarIndex))
-    packageTarball PkgInfo{pkgTarball = (pkgTarball, _) : _} = do
-      let blobid = pkgTarballNoGz pkgTarball
-          fp     = BlobStorage.filepath store blobid
-          etag   = BlobStorage.blobETag blobid
-      index <- cachedPackageTarIndex pkgTarball
-      return $ Right (fp, etag, index)
-    packageTarball _ =
-      return $ Left "No tarball found"
+    packageTarball pkginfo
+      | Just (pkgTarball, _uploadinfo) <- pkgLatestTarball pkginfo = do
+          let blobid = pkgTarballNoGz pkgTarball
+              fp     = BlobStorage.filepath store blobid
+              etag   = BlobStorage.blobETag blobid
+          index <- cachedPackageTarIndex pkgTarball
+          return $ Right (fp, etag, index)
+      | otherwise = return $ Left "No tarball found"
 
     packageChangeLog :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarEntryOffset, FilePath))
     packageChangeLog pkgInfo = runErrorT $ do

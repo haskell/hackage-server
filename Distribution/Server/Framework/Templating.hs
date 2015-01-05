@@ -33,6 +33,8 @@ import Happstack.Server (ToMessage(..), toResponseBS)
 
 import qualified Data.ByteString.Char8      as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS
+import qualified Data.Text.Lazy.Encoding as T
+import qualified Data.Text.Encoding.Error as T
 
 --TODO: switch to bytestring builder, once we can depend on bytestring-0.10
 --import qualified Data.ByteString.Lazy.Builder as Builder
@@ -182,8 +184,8 @@ applyEscaping XmlTemplate   = setEncoder escapeHtml -- ok to reuse
 applyEscaping OtherTemplate = id
 
 escapeHtml :: Builder -> Builder
-escapeHtml = Builder.fromHtmlEscapedString
-           . LBS.unpack
+escapeHtml = Builder.fromHtmlEscapedLazyText
+           . T.decodeUtf8With T.lenientDecode
            . Builder.toLazyByteString
 
 templateContentType :: TemplateKind -> BS.ByteString

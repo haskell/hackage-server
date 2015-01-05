@@ -1,5 +1,5 @@
 name:         hackage-server
-version:      0.4.3
+version:      0.5.0
 category:     Distribution
 synopsis:     The Hackage web server
 description:  The new implementation of the Hackage web server, based on the
@@ -250,7 +250,7 @@ executable hackage-server
     mtl        >= 2.0,
     parsec     == 3.1.*,
     network    >= 2.1,
-    unix       >= 2.7,
+    unix       >= 2.6,
     zlib       >= 0.5.3 && < 0.6,
     tar        == 0.4.* && >= 0.4.0.1,
     async      == 2.0.*,
@@ -277,7 +277,8 @@ executable hackage-server
     mime-mail  ==0.4.*,
     HStringTemplate ==0.7.*,
     lifted-base >= 0.2.1 && < 0.3,
-    QuickCheck >= 2.5
+    QuickCheck >= 2.5,
+    friendly-time >= 0.3 && < 0.4
 
   if ! flag(minimal)
     build-depends:

@@ -116,7 +116,8 @@ recentPackagesFeature env
         pkgIndex <- queryGetPackageIndex
         users <- queryGetUserDb
         now   <- getCurrentTime
-        let recentChanges = reverse $ sortBy (comparing pkgUploadTime) (PackageIndex.allPackages pkgIndex)
+        let recentChanges = reverse $ sortBy (comparing pkgOriginalUploadTime)
+                                             (PackageIndex.allPackages pkgIndex)
             xmlRepresentation = toResponse $ Resource.XHtml $ Pages.recentPage users recentChanges
             rssRepresentation = toResponse $ Pages.recentFeed users (serverBaseURI env) now recentChanges
         return (xmlRepresentation, rssRepresentation)

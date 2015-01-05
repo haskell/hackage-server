@@ -192,7 +192,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
     uploaderGet dpath = do
       pkg    <- packageInPath dpath >>= lookupPackageId
       userdb <- queryGetUserDb
-      return $ toResponse $ display (userIdToName userdb (pkgUploadUser pkg))
+      return $ toResponse $ display (userIdToName userdb (pkgLatestUploadUser pkg))
 
     uploaderPut :: DynamicPath -> ServerPartE Response
     uploaderPut dpath = do
@@ -209,7 +209,8 @@ mirrorFeature ServerEnv{serverBlobStore = store}
     uploadTimeGet :: DynamicPath -> ServerPartE Response
     uploadTimeGet dpath = do
       pkg <- packageInPath dpath >>= lookupPackageId
-      return $ toResponse $ formatTime defaultTimeLocale "%c" (pkgUploadTime pkg)
+      return $ toResponse $ formatTime defaultTimeLocale "%c"
+                                       (pkgLatestUploadTime pkg)
 
     -- curl -H 'Content-Type: text/plain' -u admin:admin -X PUT -d "Tue Oct 18 20:54:28 UTC 2010" http://localhost:8080/package/edit-distance-0.2.1/upload-time
     uploadTimePut :: DynamicPath -> ServerPartE Response

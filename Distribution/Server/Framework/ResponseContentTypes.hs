@@ -91,11 +91,13 @@ instance ToMessage Aeson.Value where
     toContentType _ = "application/json; charset=utf-8"
     toMessage val = Aeson.encode val
 
-newtype CabalFile = CabalFile BS.Lazy.ByteString
+data CabalFile = CabalFile !BS.Lazy.ByteString !UTCTime
 
 instance ToMessage CabalFile where
-    toContentType _ = "text/plain; charset=utf-8"
-    toMessage (CabalFile bs) = bs
+    toResponse (CabalFile bs time) = mkResponse bs
+      [ ("Content-Type",  "text/plain; charset=utf-8")
+      , ("Last-modified", formatLastModifiedTime time)
+      ]
 
 newtype BuildLog = BuildLog BS.Lazy.ByteString
 

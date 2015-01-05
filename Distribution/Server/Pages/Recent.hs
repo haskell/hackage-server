@@ -61,7 +61,7 @@ makeRow users pkginfo =
     nbsp = XHtml.primHtmlChar "nbsp"
     user = Users.userIdToName users userId
 
-    (time, userId) = pkgOriginalUploadData pkginfo
+    (time, userId) = pkgOriginalUploadInfo pkginfo
     pkgid = pkgInfoId pkginfo
 
 showTime :: UTCTime -> String
@@ -115,7 +115,7 @@ releaseItem users hostURI pkgInfo =
          ++ if null body then "" else "<p>" ++ body
     user = Users.userIdToName users userId
 
-    (time, userId) = pkgOriginalUploadData pkgInfo
+    (time, userId) = pkgOriginalUploadInfo pkgInfo
     pkgId = pkgInfoId pkgInfo
 
 unPackageName :: PackageName -> String

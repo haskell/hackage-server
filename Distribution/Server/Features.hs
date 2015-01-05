@@ -328,7 +328,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     -- for them. This solution is iffy for initial feature hooks that rely on
     -- other features It also happens even in the backup/restore modes.
     sequence_
-      [ logStartup ("post-init for " ++ name ++ "feature") $
+      [ logStartup ("post-init for " ++ name) $
         featurePostInit feature
       | feature@HackageFeature { featureName = name } <- allFeatures ]
     loginfo verbosity "Initialising features done"

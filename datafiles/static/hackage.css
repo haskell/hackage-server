@@ -568,6 +568,8 @@ ul.links li form button:hover {
 
 strong.warning { color: red; }
 
+small.info { color: grey; }
+
 /* @end */
 
 
@@ -639,3 +641,8 @@ table.fancy th {
 table.fancy td, table.fancy th {
   padding: 0.25em 0.5em;
 }
+
+ul.searchresults li {
+  margin-bottom: 1em;
+}
+
