@@ -1515,8 +1515,8 @@ mkHtmlSearch HtmlUtilities{..}
                 [] | offset == 0 -> toHtml "None"
                    | otherwise   -> toHtml "No more results"
                 _ -> toHtml
-                      [ ulist ! [theclass "packages"]
-                             << map renderItemWithDownloads pkgDetails
+                      [ ulist ! [theclass "searchresults"]
+                             << map renderSearchResult pkgDetails
                       , if null moreResults
                           then noHtml
                           else anchor ! [href moreResultsLink]
@@ -1524,14 +1524,15 @@ mkHtmlSearch HtmlUtilities{..}
                       ]
             ]
           where
-            renderItemWithDownloads :: PackageItem -> Html
-            renderItemWithDownloads item = li ! classes <<
+            renderSearchResult :: PackageItem -> Html
+            renderSearchResult item = li ! classes <<
               [ packageNameLink pkgname
               , toHtml $ " " ++ ptype (itemHasLibrary item) (itemNumExecutables item)
-                ++ ": " ++ itemDesc item
+              , br
+              , toHtml (itemDesc item)
               , br
               , small ! [ theclass "info" ] <<
-                [ "(" +++ renderTags (itemTags item) +++ ")"
+                [ toHtml (renderTags (itemTags item))
                 , " Last uploaded " +++ humanTime ]
               ]
               where
