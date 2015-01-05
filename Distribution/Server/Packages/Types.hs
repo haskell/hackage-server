@@ -127,7 +127,7 @@ pkgDesc pkgInfo =
       ParseFailed e -> error ("Internal error: " ++ show e)
       ParseOk _ x   -> x
 
-deriveSafeCopy 3 'extension ''PkgInfo
+deriveSafeCopy 4 'extension ''PkgInfo
 deriveSafeCopy 2 'extension ''PkgTarball
 
 instance MemSize PkgInfo where
@@ -140,6 +140,28 @@ instance MemSize PkgTarball where
 -- Old SafeCopy versions
 --
 
+data PkgInfo_v2 = PkgInfo_v2 {
+    v2_pkgInfoId            :: !PackageIdentifier,
+    v2_pkgMetadataRevisions :: !(Vec.Vector (CabalFileText, UploadInfo)),
+    v2_pkgTarballRevisions  :: !(Vec.Vector (PkgTarball, UploadInfo))
+}
+
+deriveSafeCopy 3 'extension ''PkgInfo_v2
+
+instance Migrate PkgInfo where
+    type MigrateFrom PkgInfo = PkgInfo_v2
+    migrate (PkgInfo_v2 {..}) =
+      PkgInfo {
+        pkgInfoId            = v2_pkgInfoId,
+        -- Fix the previous migration that put all the revisions in reverse.
+        -- We'll sort by upload time, in case there have been any new
+        -- revisions added in the meantime.
+        pkgMetadataRevisions = Vec.fromList
+                             $ sortBy (comparing (fst.snd))
+                             $ Vec.toList v2_pkgMetadataRevisions,
+        pkgTarballRevisions  = v2_pkgTarballRevisions
+      }
+
 data PkgInfo_v1 = PkgInfo_v1 {
     v1_pkgInfoId     :: !PackageIdentifier,
     v1_pkgData       :: !CabalFileText,
@@ -150,14 +172,16 @@ data PkgInfo_v1 = PkgInfo_v1 {
 
 deriveSafeCopy 2 'extension ''PkgInfo_v1
 
-instance Migrate PkgInfo where
-    type MigrateFrom PkgInfo = PkgInfo_v1
+instance Migrate PkgInfo_v2 where
+    type MigrateFrom PkgInfo_v2 = PkgInfo_v1
     migrate (PkgInfo_v1 {..}) =
-      PkgInfo {
-        pkgInfoId            = v1_pkgInfoId,
-        pkgMetadataRevisions = Vec.fromList ((v1_pkgData, v1_pkgUploadData)
-                                             :v1_pkgDataOld),
-        pkgTarballRevisions  = Vec.fromList v1_pkgTarball
+      PkgInfo_v2 {
+        v2_pkgInfoId            = v1_pkgInfoId,
+        -- This migration was wrong. It put the revisions in the wrong order.
+        -- This mistake is corrected in the subsequent migration.
+        v2_pkgMetadataRevisions = Vec.fromList ((v1_pkgData, v1_pkgUploadData)
+                                                :v1_pkgDataOld),
+        v2_pkgTarballRevisions  = Vec.fromList v1_pkgTarball
       }
 
 data PkgInfo_v0 = PkgInfo_v0  !PackageIdentifier_v0 !CabalFileText
