@@ -250,6 +250,7 @@ executable hackage-server
     mtl        >= 2.0,
     parsec     == 3.1.*,
     network    >= 2.1,
+    network-uri >= 2.6,
     unix       >= 2.6,
     zlib       >= 0.5.3 && < 0.6,
     tar        == 0.4.* && >= 0.4.0.1,
@@ -317,6 +318,7 @@ executable hackage-mirror
     time,     old-locale, random,
     tar,      zlib,
     network,  HTTP >= 4000.2.11,
+    network-uri,
     Cabal,
     safecopy, cereal, binary, mtl,
     unix, aeson
@@ -339,6 +341,7 @@ executable hackage-build
     time,     old-locale,
     tar,      zlib,
     network,  HTTP,
+    network-uri,
     Cabal,
     safecopy, cereal, binary, mtl,
     -- See comment above why we insist on this version of Aeson
