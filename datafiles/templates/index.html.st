@@ -41,6 +41,35 @@ $hackagePageHeader()$
 <li><a href="/packages/candidates">All candidate packages</a></li>
 </ul>
 
+<h1>Administrative issues</h1>
+
+<ul>
+<li><a href="https://wiki.haskell.org/Taking_over_a_package">Taking over a package</a> on Hackage</li>
+<li><a href="https://wiki.haskell.org/Hackage_trustees">Hackage trustees</a> and what they do</li>
+<li>Submitting <a href="https://wiki.haskell.org/Library_submissions">changes for the core libraries</a></li>
+</ul>
+
+<h2 id="reporting-problems">Reporting problems</h2>
+
+<p>For issues with accounts or permissions please contact the administrators by email
+at <a href="mailto:admin@hackage.haskell.org">admin@hackage.haskell.org</a></p>
+
+<p>For bugs with the site code or server/hosting issues, please report them in our <a
+href="https://github.com/haskell/hackage-server/issues">issue tracker</a>.
+
+<h2 id="contributing-to-the-development">Contributing to the development</h2>
+
+<p>The <a href="https://github.com/haskell/hackage-server">code</a> is on github and we welcome pull requests.</p>
+
+<p>There are open tickets describing existing bugs and features that we want or that are in need of improvement. Help on any of these would be greatly appreciated.</p>
+
+<p>There is some developer and user documentation on the <a href="https://github.com/haskell/hackage-server/wiki">github wiki</a>, including a quick guide to getting your own server instance up and running.</p>
+  
+<p>You can ask questions on the <a href="http://www.haskell.org/pipermail/cabal-devel/">cabal-devel</a> mailing list or on IRC in the <code>#hackage</code> channel on freenode.</p>
+
+<p>The new server has an automatically-generated <a href="/api">site api</a>. This is mainly intended as documentation for people working with the server, rather than as a user-oriented site map, but it can be interesting to see exactly what is available. This includes important resources like the machine-readable <a href="/packages/index.tar.gz">index of packages</a>, used by clients like <code>cabal-install</code>.</p>
+
+
 <h1>Hackage 2</h1>
 
 <p>Well-Typed and the <a href="http://industry.haskell.org/">Industrial Haskell Group</a> (IHG) are very pleased to announce that Hackage 2 is now powering the official Hackage server.</p>
@@ -71,26 +100,6 @@ $hackagePageHeader()$
 <p>Though our main priority has been feature parity so that we can switch over, volunteers have contributed several new features, including better package search, a new site theme, improved security, the ability to fix package dependencies after a release, changelogs, and a REST-style interface.</p>
 
 <p>See the <a href="/new-features">new features</a> page for more details on these, plus details of other features that are partially implemented or are in need of improvement.</p>
-
-<h2 id="reporting-problems">Reporting problems</h2>
-
-There are site administrators you can contact and there is an issue tracker.
-Please report bugs in the site <a
-href="https://github.com/haskell/hackage-server/issues">issue tracker</a>.  For
-issues with accounts or permissions please contact the administrators by email
-at <a href="mailto:admin@hackage.haskell.org">admin@hackage.haskell.org</a>
-
-<h2 id="contributing-to-the-development">Contributing to the development</h2>
-
-<p>The <a href="https://github.com/haskell/hackage-server">code</a> is on github and we welcome pull requests.</p>
-
-<p>There are open tickets describing existing bugs and features that we want or that are in need of improvement. Help on any of these would be greatly appreciated.</p>
-
-<p>There is some developer and user documentation on the <a href="https://github.com/haskell/hackage-server/wiki">github wiki</a>, including a quick guide to getting your own server instance up and running.</p>
-  
-<p>You can ask questions on the <a href="http://www.haskell.org/pipermail/cabal-devel/">cabal-devel</a> mailing list or on IRC in the <code>#hackage</code> channel on freenode.</p>
-
-<p>The new server has an automatically-generated <a href="/api">site api</a>. This is mainly intended as documentation for people working with the server, rather than as a user-oriented site map, but it can be interesting to see exactly what is available. This includes important resources like the machine-readable <a href="/packages/index.tar.gz">index of packages</a>, used by clients like <code>cabal-install</code>.</p>
 
 </div>
 </body>
