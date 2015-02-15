@@ -278,7 +278,8 @@ executable hackage-server
     HStringTemplate ==0.7.*,
     lifted-base >= 0.2.1 && < 0.3,
     QuickCheck >= 2.5,
-    friendly-time >= 0.3 && < 0.4
+    friendly-time >= 0.3 && < 0.4,
+    network-uri >= 2.6.0.1
 
   if ! flag(minimal)
     build-depends:
@@ -319,7 +320,8 @@ executable hackage-mirror
     network,  HTTP >= 4000.2.11,
     Cabal,
     safecopy, cereal, binary, mtl,
-    unix, aeson
+    unix, aeson,
+    network-uri >= 2.6.0.1
   default-language: Haskell2010
   ghc-options: -Wall -fwarn-tabs
 
@@ -345,6 +347,7 @@ executable hackage-build
     aeson == 0.6.1.*, 
     random,
     unix,
+    network-uri >= 2.6.0.1,
     -- Runtime dependency only:
     hscolour >= 1.8
   default-language: Haskell2010
@@ -375,7 +378,8 @@ executable hackage-import
     csv, async, attoparsec,
     -- See comment above why we insist on this version of Aeson
     aeson == 0.6.1.*,
-    unordered-containers
+    unordered-containers,
+    network-uri >= 2.6.0.1
   default-language: Haskell2010
   ghc-options: -Wall -fwarn-tabs
 
@@ -402,7 +406,8 @@ Test-Suite HighLevelTest
                     text,
                     vector,
                     xml,
-                    random
+                    random,
+                    network-uri
 
 Test-Suite CreateUserTest
     if ! flag(test-create-user)
@@ -429,5 +434,5 @@ Test-Suite CreateUserTest
                     text,
                     vector,
                     xml,
-                    random
-
+                    random,
+                    network-uri
