@@ -279,7 +279,9 @@ executable hackage-server
     HStringTemplate ==0.7.*,
     lifted-base >= 0.2.1 && < 0.3,
     QuickCheck >= 2.5,
-    friendly-time >= 0.3 && < 0.4
+    friendly-time >= 0.3 && < 0.4,
+    cheapskate >= 0.1,
+    blaze-html >= 0.7
 
   if ! flag(minimal)
     build-depends:

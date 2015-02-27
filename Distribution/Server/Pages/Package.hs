@@ -32,6 +32,13 @@ import System.FilePath.Posix    ((</>), (<.>))
 import System.Locale            (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
 
+import Cheapskate (markdown, Options(..))
+import Cheapskate.Html (renderDoc)
+
+import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
+import qualified Data.Text.Encoding as T (decodeUtf8)
+import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
+
 packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)] -> [(String, Html)] -> Maybe URL -> Bool -> Html
 packagePage render headLinks top sections bottom docURL isCandidate =
     hackagePageWith [] docTitle docSubtitle docBody [docFooter]
@@ -80,8 +87,8 @@ pkgBody render sections =
  ++ propertySection sections
 
 descriptionSection :: PackageRender -> [Html]
-descriptionSection PackageRender{..} =
-    prologue (description rendOther)
+descriptionSection p@PackageRender{..} =
+    prologue p
  ++ [ hr
     , ulist << li << changelogLink]
   where
@@ -90,11 +97,31 @@ descriptionSection PackageRender{..} =
       _      -> toHtml << "No changelog available"
     changeLogURL  = rendPkgUri </> "changelog"
 
-prologue :: String -> [Html]
-prologue [] = []
-prologue desc = case tokenise desc >>= parseHaddockParagraphs of
-    Nothing  -> [paragraph << p | p <- paragraphs desc]
-    Just doc -> [markup htmlMarkup doc]
+prologue :: PackageRender -> [Html]
+prologue PackageRender{..} =
+  case rendReadme of
+    Nothing -> renderHaddock (description rendOther)
+    Just (_, readme) -> [renderMarkdown readme]
+
+renderHaddock :: String -> [Html]
+renderHaddock []   = []
+renderHaddock desc =
+  case tokenise desc >>= parseHaddockParagraphs of
+      Nothing  -> [paragraph << p | p <- paragraphs desc]
+      Just doc -> [markup htmlMarkup doc]
+
+renderMarkdown :: BS.ByteString -> Html
+renderMarkdown = primHtml . Blaze.renderHtml . renderDoc . markdown opts
+               . T.decodeUtf8 . BS.toStrict
+  where
+    opts =
+      Options
+        { sanitize = True
+        , allowRawHtml = False
+        , preserveHardBreaks = False
+        , debug = False
+        }
+
 
 -- Break text into paragraphs (separated by blank lines)
 paragraphs :: String -> [String]
