@@ -44,8 +44,8 @@ data-files:
   static/*.png
 
 source-repository head
-  type: git 
-  location: https://github.com/haskell/hackage-server 
+  type: git
+  location: https://github.com/haskell/hackage-server
 
 flag minimal
   default: False
@@ -257,14 +257,14 @@ executable hackage-server
     async      == 2.0.*,
     cereal     >= 0.4,
     safecopy   >= 0.6 && < 0.9,
-    crypto-api >= 0.12 && < 0.13, 
+    crypto-api >= 0.12 && < 0.13,
     pureMD5    >= 0.2,
     xhtml      >= 3000.1,
-    -- The instances created by deriveJSON in later versions of Aeson are 
+    -- The instances created by deriveJSON in later versions of Aeson are
     -- different from the instances created by this version; this would be ok
     -- if we only used the Aeson-created instance, but we also hand-create
     -- JSON in various places (for instance, in 'putUserDetails' in the import
-    -- client). 
+    -- client).
     aeson      == 0.6.1.*,
     unordered-containers >= 0.2.3.0,
     rss        >= 3000.2.0.3,
@@ -343,7 +343,7 @@ executable hackage-build
     Cabal,
     safecopy, cereal, binary, mtl,
     -- See comment above why we insist on this version of Aeson
-    aeson == 0.6.1.*, 
+    aeson == 0.6.1.*,
     random,
     unix,
     -- Runtime dependency only:
