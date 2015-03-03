@@ -34,11 +34,14 @@ import Data.Time.Format         (formatTime)
 
 packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)] -> [(String, Html)] -> Maybe URL -> Bool -> Html
 packagePage render headLinks top sections bottom docURL isCandidate =
-    hackagePageWith [] docTitle docSubtitle docBody [docFooter]
+    hackagePageWith [canonical] docTitle docSubtitle docBody [docFooter]
   where
-    pkgid = rendPkgId render
+    pkgid   = rendPkgId render
+    pkgName = display $ packageName pkgid
 
-    docTitle = display (packageName pkgid)
+    canonical = thelink ! [ rel "canonical"
+                          , href ("/package/" ++ pkgName) ] << noHtml
+    docTitle = pkgName
             ++ case synopsis (rendOther render) of
                  ""    -> ""
                  short -> ": " ++ short
@@ -55,7 +58,7 @@ packagePage render headLinks top sections bottom docURL isCandidate =
              maintainerSection pkgid isCandidate,
              map pair bottom
            ]
-    bodyTitle = "The " ++ display (pkgName pkgid) ++ " package"
+    bodyTitle = "The " ++ pkgName ++ " package"
 
     renderHeads = case headLinks of
         [] -> []
