@@ -78,6 +78,10 @@ flag test-create-user
   default: False
   manual: True
 
+flag network-uri
+  description: Get Network.URI from the network-uri package
+  default: True
+
 executable hackage-server
   if ! flag(build-hackage-server)
     buildable: False
@@ -285,6 +289,11 @@ executable hackage-server
       snowball == 1.0.*,
       tokenize >= 0.1.3 && < 0.2
 
+  if flag(network-uri)
+    build-depends: network-uri >= 2.6, network >= 2.6
+  else
+    build-depends: network-uri < 2.6, network < 2.6
+
   build-tools:
     alex       >= 2.2  && < 3.2,
     happy      >= 1.17 && < 1.20
@@ -323,6 +332,11 @@ executable hackage-mirror
   default-language: Haskell2010
   ghc-options: -Wall -fwarn-tabs
 
+  if flag(network-uri)
+    build-depends: network-uri >= 2.6, network >= 2.6
+  else
+    build-depends: network-uri < 2.6, network < 2.6
+
 executable hackage-build
   if ! flag(build-hackage-build)
     buildable: False
@@ -352,6 +366,11 @@ executable hackage-build
   -- of CTRL-C (not sure why :( )
   ghc-options: -Wall -fwarn-tabs -threaded
 
+  if flag(network-uri)
+    build-depends: network-uri >= 2.6, network >= 2.6
+  else
+    build-depends: network-uri < 2.6, network < 2.6
+
 executable hackage-import
   if ! flag(build-hackage-import)
     buildable: False
@@ -379,6 +398,11 @@ executable hackage-import
   default-language: Haskell2010
   ghc-options: -Wall -fwarn-tabs
 
+  if flag(network-uri)
+    build-depends: network-uri >= 2.6, network >= 2.6
+  else
+    build-depends: network-uri < 2.6, network < 2.6
+
 Test-Suite HighLevelTest
     type:           exitcode-stdio-1.0
     main-is:        HighLevelTest.hs
@@ -403,6 +427,11 @@ Test-Suite HighLevelTest
                     vector,
                     xml,
                     random
+
+  if flag(network-uri)
+    build-depends: network-uri >= 2.6, network >= 2.6
+  else
+    build-depends: network-uri < 2.6, network < 2.6
 
 Test-Suite CreateUserTest
     if ! flag(test-create-user)
@@ -430,4 +459,9 @@ Test-Suite CreateUserTest
                     vector,
                     xml,
                     random
+
+  if flag(network-uri)
+    build-depends: network-uri >= 2.6, network >= 2.6
+  else
+    build-depends: network-uri < 2.6, network < 2.6
 
