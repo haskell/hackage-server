@@ -16,6 +16,8 @@ import Distribution.Server.Features.Core
 
 import Distribution.Server.Users.Types
 
+import Distribution.Server.Util.JSON
+
 import Data.SafeCopy (base, deriveSafeCopy)
 
 import Data.IntMap (IntMap)
@@ -370,9 +372,9 @@ data AdminInfo      = AdminInfo      { ui_accountKind :: Maybe AccountKind, ui_n
 
 
 #if MIN_VERSION_aeson(0,6,2)
-$(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''NameAndContact)
-$(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''AdminInfo)
-$(deriveJSON defaultOptions                              ''AccountKind)
+$(deriveJSON compatibilityOptions{fieldLabelModifier = drop 3} ''NameAndContact)
+$(deriveJSON compatibilityOptions{fieldLabelModifier = drop 3} ''AdminInfo)
+$(deriveJSON compatibilityOptions                              ''AccountKind)
 #else
 $(deriveJSON (drop 3) ''NameAndContact)
 $(deriveJSON (drop 3) ''AdminInfo)

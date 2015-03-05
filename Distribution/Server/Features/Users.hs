@@ -19,6 +19,7 @@ import Distribution.Server.Users.Backup
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), UserList, nullDescription)
+import Distribution.Server.Util.JSON
 
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
@@ -767,10 +768,10 @@ data UserGroupResource  = UserGroupResource  { ui_title       :: T.Text,
                                                ui_members     :: [UserNameIdResource] }
 
 #if MIN_VERSION_aeson(0,6,2)
-$(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''UserNameIdResource)
-$(deriveJSON defaultOptions{fieldLabelModifier = drop 4} ''UserInfoResource)
-$(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''EnabledResource)
-$(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''UserGroupResource)
+$(deriveJSON compatibilityOptions{fieldLabelModifier = drop 3} ''UserNameIdResource)
+$(deriveJSON compatibilityOptions{fieldLabelModifier = drop 4} ''UserInfoResource)
+$(deriveJSON compatibilityOptions{fieldLabelModifier = drop 3} ''EnabledResource)
+$(deriveJSON compatibilityOptions{fieldLabelModifier = drop 3} ''UserGroupResource)
 #else
 $(deriveJSON (drop 3) ''UserNameIdResource)
 $(deriveJSON (drop 4) ''UserInfoResource)
