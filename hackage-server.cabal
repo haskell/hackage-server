@@ -78,6 +78,10 @@ flag test-create-user
   default: False
   manual: True
 
+flag network-uri
+  description: Get Network.URI from the network-uri package
+  default: True
+
 executable hackage-server
   if ! flag(build-hackage-server)
     buildable: False
@@ -142,6 +146,7 @@ executable hackage-server
     Distribution.Server.Util.Histogram
     Distribution.Server.Util.CountingMap
     Distribution.Server.Util.Index
+    Distribution.Server.Util.JSON
     Distribution.Server.Util.NameIndex
     Distribution.Server.Util.Parse
     Distribution.Server.Util.ServeTarball
@@ -259,12 +264,7 @@ executable hackage-server
     crypto-api >= 0.12 && < 0.13, 
     pureMD5    >= 0.2,
     xhtml      >= 3000.1,
-    -- The instances created by deriveJSON in later versions of Aeson are 
-    -- different from the instances created by this version; this would be ok
-    -- if we only used the Aeson-created instance, but we also hand-create
-    -- JSON in various places (for instance, in 'putUserDetails' in the import
-    -- client). 
-    aeson      == 0.6.1.*,
+    aeson      >= 0.6.1.0,
     unordered-containers >= 0.2.3.0,
     rss        >= 3000.2.0.3,
     HaXml      >= 1.24,
@@ -284,6 +284,11 @@ executable hackage-server
     build-depends:
       snowball == 1.0.*,
       tokenize >= 0.1.3 && < 0.2
+
+  if flag(network-uri)
+    build-depends: network-uri >= 2.6, network >= 2.6
+  else
+    build-depends: network-uri < 2.6, network < 2.6
 
   build-tools:
     alex       >= 2.2  && < 3.2,
@@ -323,6 +328,11 @@ executable hackage-mirror
   default-language: Haskell2010
   ghc-options: -Wall -fwarn-tabs
 
+  if flag(network-uri)
+    build-depends: network-uri >= 2.6, network >= 2.6
+  else
+    build-depends: network-uri < 2.6, network < 2.6
+
 executable hackage-build
   if ! flag(build-hackage-build)
     buildable: False
@@ -341,8 +351,7 @@ executable hackage-build
     network,  HTTP,
     Cabal,
     safecopy, cereal, binary, mtl,
-    -- See comment above why we insist on this version of Aeson
-    aeson == 0.6.1.*, 
+    aeson >= 0.6.1.0,
     random,
     unix,
     -- Runtime dependency only:
@@ -351,6 +360,11 @@ executable hackage-build
   -- the -threaded option is necessary for correct handling
   -- of CTRL-C (not sure why :( )
   ghc-options: -Wall -fwarn-tabs -threaded
+
+  if flag(network-uri)
+    build-depends: network-uri >= 2.6, network >= 2.6
+  else
+    build-depends: network-uri < 2.6, network < 2.6
 
 executable hackage-import
   if ! flag(build-hackage-import)
@@ -373,11 +387,15 @@ executable hackage-import
     Cabal,
     safecopy, cereal, binary, mtl,
     csv, async, attoparsec,
-    -- See comment above why we insist on this version of Aeson
-    aeson == 0.6.1.*,
+    aeson >= 0.6.1.0,
     unordered-containers
   default-language: Haskell2010
   ghc-options: -Wall -fwarn-tabs
+
+  if flag(network-uri)
+    build-depends: network-uri >= 2.6, network >= 2.6
+  else
+    build-depends: network-uri < 2.6, network < 2.6
 
 Test-Suite HighLevelTest
     type:           exitcode-stdio-1.0
@@ -403,6 +421,11 @@ Test-Suite HighLevelTest
                     vector,
                     xml,
                     random
+
+  if flag(network-uri)
+    build-depends: network-uri >= 2.6, network >= 2.6
+  else
+    build-depends: network-uri < 2.6, network < 2.6
 
 Test-Suite CreateUserTest
     if ! flag(test-create-user)
@@ -430,4 +453,9 @@ Test-Suite CreateUserTest
                     vector,
                     xml,
                     random
+
+  if flag(network-uri)
+    build-depends: network-uri >= 2.6, network >= 2.6
+  else
+    build-depends: network-uri < 2.6, network < 2.6
 

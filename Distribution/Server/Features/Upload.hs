@@ -118,22 +118,23 @@ initUploadFeature env@ServerEnv{serverStateDir} = do
       -- but we make the functions needed to create those resources along with
       -- the feature
       rec let (feature,
-               getTrusteesGroup, getUploadersGroup, makeMaintainersGroup)
+               trusteesGroupDescription, uploadersGroupDescription,
+               maintainersGroupDescription)
                 = uploadFeature env core user
                                 trusteesState    trusteesGroup    trusteesGroupResource
                                 uploadersState   uploadersGroup   uploadersGroupResource
                                 maintainersState maintainersGroup maintainersGroupResource
 
           (trusteesGroup,  trusteesGroupResource) <-
-            groupResourceAt "/packages/trustees"  (getTrusteesGroup  [adminGroup])
+            groupResourceAt "/packages/trustees"  trusteesGroupDescription
 
           (uploadersGroup, uploadersGroupResource) <-
-            groupResourceAt "/packages/uploaders" (getUploadersGroup [adminGroup])
+            groupResourceAt "/packages/uploaders" uploadersGroupDescription
 
           pkgNames <- PackageIndex.packageNames <$> queryGetPackageIndex
           (maintainersGroup, maintainersGroupResource) <-
             groupResourcesAt "/package/:package/maintainers"
-                             (makeMaintainersGroup [adminGroup, trusteesGroup])
+                             maintainersGroupDescription
                              (\pkgname -> [("package", display pkgname)])
                              (packageInPath coreResource)
                              pkgNames
@@ -186,9 +187,9 @@ uploadFeature :: ServerEnv
               -> StateComponent AcidState HackageUploaders   -> UserGroup -> GroupResource
               -> StateComponent AcidState PackageMaintainers -> (PackageName -> UserGroup) -> GroupResource
               -> (UploadFeature,
-                  [UserGroup] -> UserGroup,
-                  [UserGroup] -> UserGroup,
-                  [UserGroup] -> PackageName -> UserGroup)
+                  UserGroup,
+                  UserGroup,
+                  PackageName -> UserGroup)
 
 uploadFeature ServerEnv{serverBlobStore = store}
               CoreFeature{ coreResource
@@ -200,7 +201,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
               uploadersState   uploadersGroup   uploadersGroupResource
               maintainersState maintainersGroup maintainersGroupResource
    = ( UploadFeature {..}
-     , getTrusteesGroup, getUploadersGroup, makeMaintainersGroup)
+     , trusteesGroupDescription, uploadersGroupDescription, maintainersGroupDescription)
    where
     uploadFeatureInterface = (emptyHackageFeature "upload") {
         featureDesc = "Support for package uploads, and define groups for trustees, uploaders, and package maintainers"
@@ -235,34 +236,34 @@ uploadFeature ServerEnv{serverBlobStore = store}
 
     --------------------------------------------------------------------------------
     -- User groups and authentication
-    getTrusteesGroup :: [UserGroup] -> UserGroup
-    getTrusteesGroup canModify = fix $ \u -> UserGroup {
+    trusteesGroupDescription :: UserGroup
+    trusteesGroupDescription = UserGroup {
         groupDesc = trusteeDescription,
         queryUserList  = queryState  trusteesState   GetTrusteesList,
         addUserList    = updateState trusteesState . AddHackageTrustee,
         removeUserList = updateState trusteesState . RemoveHackageTrustee,
-        canAddGroup    = [u] ++ canModify,
-        canRemoveGroup = canModify
+        canAddGroup    = [adminGroup],
+        canRemoveGroup = [adminGroup]
     }
 
-    getUploadersGroup :: [UserGroup] -> UserGroup
-    getUploadersGroup canModify = UserGroup {
+    uploadersGroupDescription :: UserGroup
+    uploadersGroupDescription = UserGroup {
         groupDesc      = uploaderDescription,
         queryUserList  = queryState  uploadersState   GetUploadersList,
         addUserList    = updateState uploadersState . AddHackageUploader,
         removeUserList = updateState uploadersState . RemoveHackageUploader,
-        canAddGroup    = canModify,
-        canRemoveGroup = canModify
+        canAddGroup    = [adminGroup],
+        canRemoveGroup = [adminGroup]
     }
 
-    makeMaintainersGroup :: [UserGroup] -> PackageName -> UserGroup
-    makeMaintainersGroup canModify name = fix $ \u -> UserGroup {
+    maintainersGroupDescription :: PackageName -> UserGroup
+    maintainersGroupDescription name = fix $ \u -> UserGroup {
         groupDesc      = maintainerDescription name,
         queryUserList  = queryState  maintainersState $ GetPackageMaintainers name,
         addUserList    = updateState maintainersState . AddPackageMaintainer name,
         removeUserList = updateState maintainersState . RemovePackageMaintainer name,
-        canAddGroup    = [u] ++ canModify,
-        canRemoveGroup = [u] ++ canModify
+        canAddGroup    = [u, adminGroup],
+        canRemoveGroup = [u, adminGroup]
       }
 
     maintainerDescription :: PackageName -> GroupDescription
