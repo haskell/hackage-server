@@ -10,7 +10,7 @@ $hackagePageHeader()$
 
 <div id="content">
 <h1>Welcome to Hackage!</h1>
-<p><b>Hackage</b> is the Haskell community's central package archive.
+<p><b>Hackage</b> is the Haskell community's central package archive of open source software.
    Package authors use it to publish their libraries and programs while other
    Haskell programmers use tools like <a href="/package/cabal-install">cabal-install</a>
    to download and install packages (or people get the packages via their distro).</p>

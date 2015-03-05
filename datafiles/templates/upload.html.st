@@ -16,6 +16,7 @@ $hackagePageHeader()$
 <p>Uploading a package puts it in the <a href="/packages/">main package index</a>
 so that anyone can download it and view information about it. You can only
 upload a package version once, so try to get it right the first time!
+Though you can try the package candidates feature below.
 </p>
 
 <p>Packages must be in the form produced by Cabal's
@@ -25,6 +26,41 @@ comprising a directory <em>package</em>-<em>version</em> containing a package
 of that name and version, including <em>package</em><tt>.cabal</tt>.
 See the notes at the bottom of the page.
 </p>
+
+<h3>Open source licenses</h3>
+
+<p>The code and other material you upload and distribute via this site must be
+under an <em>open source license</em>. This is a service operated for the
+benefit of the community and that is our policy. It is also so that we can
+operate the service in compliance with copyright laws.</p>
+
+<p>The Hackage operators do not want to be in the business of making judgements
+on what is and is not a valid open source license, but we retain the right to
+remove packages that are not under licenses that are open source in spirit, or
+that conflict with our ability to operate this service. (If you want advice,
+see the ones <a href="/package/Cabal/docs/Distribution-License.html">Cabal
+recommends</a>.)</p>
+
+<p>The Hackage operators do <em>not</em> need and are <em>not</em> asking for
+any rights beyond those granted by the open source license you choose to use.
+All normal open source licenses grant enough rights to be able to operate this
+service.</p>
+
+<p>In particular, we expect as a consequence of the license that:</p>
+<ol>
+<li>we have the right to distribute what you have uploaded to other people</li>
+<li>we have the right to distribute certain derivatives and format conversions,
+    including but not limited to:
+    <ul>
+      <li>documentation derived from the package</li>
+      <li>alternative presentations and formats of code (e.g. html markup)</li>
+      <li>excerpts and presentation of package metadata</li>
+      <li>modified versions of package metadata</li>
+    </ul>
+</ol>
+<p>Please make sure that you comply with the license of all code and other
+material that you upload. For example, check that your tarball includes the
+license files of any 3rd party code that you include.</p>
 
 <h3>Privileges</h3>
 
