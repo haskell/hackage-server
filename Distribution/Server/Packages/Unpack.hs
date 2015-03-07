@@ -58,7 +58,7 @@ import qualified System.FilePath.Windows
 
 -- Whether to allow upload of "all rights reserved" packages
 allowAllRightsReserved :: Bool
-allowAllRightsReserved = True
+allowAllRightsReserved = False
 
 -- | Upload or check a tarball containing a Cabal package.
 -- Returns either an fatal error or a package description and a list
