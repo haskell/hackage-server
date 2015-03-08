@@ -357,9 +357,14 @@ checkDependency (Dependency pkgA verA) (Dependency pkgB verB)
                         \just their version constraints."
 
 checkLibrary :: Check Library
-checkLibrary (Library modulesA exposedA buildInfoA)
-             (Library modulesB exposedB buildInfoB) = do
+checkLibrary (Library modulesA reexportedA requiredSigsA exposedSigsA
+                      exposedA buildInfoA)
+             (Library modulesB reexportedB requiredSigsB exposedSigsB
+                      exposedB buildInfoB) = do
   checkSame "Cannot change the exposed modules" modulesA modulesB
+  checkSame "Cannot change the re-exported modules" reexportedA reexportedB
+  checkSame "Cannot change the required signatures" requiredSigsA requiredSigsB
+  checkSame "Cannot change the exposed signatures"  exposedSigsA  exposedSigsB
   checkSame "Cannot change the package exposed status" exposedA exposedB
   checkBuildInfo buildInfoA buildInfoB
 

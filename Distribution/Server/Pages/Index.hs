@@ -12,6 +12,7 @@ import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.Types
 import Distribution.Simple.Utils (comparing, equating)
 import Distribution.ModuleName (toFilePath)
+import Distribution.Text (display)
 
 import Text.XHtml.Strict hiding ( p, name )
 import qualified Text.XHtml.Strict as XHtml ( name )
@@ -69,7 +70,7 @@ formatPkgGroups pkgs = hackagePage "packages by category" docBody
           where catName = categoryName cat
         cat_pkgs = groupOnFstBy normalizeCategory $ [(capitalize cat, pkg) |
                         pkg <- pkgs, cat <- pii_categories pkg]
-        sortKey pkg = map toLower $ unPackageName $ pii_pkgName pkg
+        sortKey pkg = map toLower $ display $ pii_pkgName pkg
         formatCategory cat =
                 h3 ! [theclass "category"] <<
                         anchor ! [XHtml.name (catLabel catName)] << catName
@@ -87,7 +88,7 @@ formatPkgList pkgs = ulist ! [theclass "packages"] << map formatPkg pkgs
 formatPkg :: PackageIndexInfo -> Html
 formatPkg pkg = li << (pkgLink : toHtml (" " ++ ptype) : defn)
   where pname = pii_pkgName pkg
-        pkgLink = anchor ! [href (packageNameURL pname)] << unPackageName pname
+        pkgLink = anchor ! [href (packageNameURL pname)] << display pname
         defn
           | null (pii_synopsis pkg) = []
           | otherwise = [toHtml (": " ++ trim (pii_synopsis pkg))]
@@ -141,7 +142,4 @@ allocatedTopLevelNodes = [
         "Network", "Numeric", "Prelude", "Sound", "System", "Test", "Text"]
 
 packageNameURL :: PackageName -> URL
-packageNameURL pkg = "/package/" ++ unPackageName pkg
-
-unPackageName :: PackageName -> String
-unPackageName (PackageName name) = name
+packageNameURL pkg = "/package/" ++ display pkg
