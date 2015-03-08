@@ -13,7 +13,7 @@ module Distribution.Server.Framework (
     module Distribution.Server.Framework.MemState,
     module Distribution.Server.Framework.Cache,
     module Distribution.Server.Framework.MemSize,
-
+    module Distribution.Server.Framework.Instances,
     module Distribution.Server.Framework.Auth,
     module Distribution.Server.Framework.Feature,
     module Distribution.Server.Framework.ServerEnv,
@@ -46,7 +46,7 @@ import Data.Acid
 import Distribution.Server.Framework.MemState
 import Distribution.Server.Framework.Cache
 import Distribution.Server.Framework.MemSize
-
+import Distribution.Server.Framework.Instances hiding (PackageIdentifier_v0)
 import Distribution.Server.Framework.Auth (PrivilegeCondition(..))
 import Distribution.Server.Framework.Feature
 import Distribution.Server.Framework.ServerEnv

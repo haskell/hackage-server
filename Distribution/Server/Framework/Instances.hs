@@ -9,7 +9,11 @@
 -- Major version changes may break this module.
 --
 
-module Distribution.Server.Framework.Instances (PackageIdentifier_v0) where
+module Distribution.Server.Framework.Instances (
+    PackageIdentifier_v0,
+    compatAesonOptions,
+    compatAesonOptionsDropPrefix,
+  ) where
 
 import Distribution.Text
 import Distribution.Server.Framework.MemSize
@@ -28,9 +32,12 @@ import Data.Serialize as Serialize
 import Data.SafeCopy hiding (Version)
 import Test.QuickCheck
 
+import Data.Aeson.Types as Aeson
+
 import Happstack.Server
 
 import Data.Maybe (fromJust)
+import Data.List (stripPrefix)
 
 import qualified Text.PrettyPrint as PP (text)
 import Distribution.Compat.ReadP (readS_to_P)
@@ -367,3 +374,32 @@ textGet_v0 = (fromJust . simpleParse) <$> Serialize.get
 
 textPut_v0 :: Text a => a -> Serialize.Put
 textPut_v0 = Serialize.put . display
+
+---------------------------------------------------------------------
+
+--------------------------
+-- Aeson instance helper
+--
+
+-- | Using these aeson 'Options' ensures that dervived instances are compatible
+-- with the way these instances were generated before aeson-0.6.2. See
+-- haskell/hackage-server#73 and bos/aeson#141
+compatAesonOptions :: Aeson.Options
+compatAesonOptions =
+    Aeson.defaultOptions {
+      sumEncoding           = ObjectWithSingleField,
+      allNullaryToStringTag = False
+    }
+
+compatAesonOptionsDropPrefix :: String -> Aeson.Options
+compatAesonOptionsDropPrefix prefix =
+    compatAesonOptions {
+      fieldLabelModifier = dropPrefix
+    }
+  where
+    dropPrefix str = case stripPrefix prefix str of
+                       Nothing   -> error err
+                       Just str' -> str'
+      where
+        err = "compatAesonOptionsDropPrefix: expected field prefix of "
+           ++ show prefix ++ ", but got " ++ show str
