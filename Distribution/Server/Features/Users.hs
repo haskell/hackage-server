@@ -1,5 +1,5 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, DoRec,
-             BangPatterns, OverloadedStrings, CPP, TemplateHaskell #-}
+             BangPatterns, OverloadedStrings, TemplateHaskell #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Features.Users (
     initUserFeature,
@@ -19,7 +19,6 @@ import Distribution.Server.Users.Backup
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), UserList, nullDescription)
-import Distribution.Server.Util.JSON
 
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
@@ -767,14 +766,7 @@ data UserGroupResource  = UserGroupResource  { ui_title       :: T.Text,
                                                ui_description :: T.Text,
                                                ui_members     :: [UserNameIdResource] }
 
-#if MIN_VERSION_aeson(0,6,2)
-$(deriveJSON compatibilityOptions{fieldLabelModifier = drop 3} ''UserNameIdResource)
-$(deriveJSON compatibilityOptions{fieldLabelModifier = drop 4} ''UserInfoResource)
-$(deriveJSON compatibilityOptions{fieldLabelModifier = drop 3} ''EnabledResource)
-$(deriveJSON compatibilityOptions{fieldLabelModifier = drop 3} ''UserGroupResource)
-#else
-$(deriveJSON (drop 3) ''UserNameIdResource)
-$(deriveJSON (drop 4) ''UserInfoResource)
-$(deriveJSON (drop 3) ''EnabledResource)
-$(deriveJSON (drop 3) ''UserGroupResource)
-#endif
+deriveJSON (compatAesonOptionsDropPrefix "ui_")  ''UserNameIdResource
+deriveJSON (compatAesonOptionsDropPrefix "ui1_") ''UserInfoResource
+deriveJSON (compatAesonOptionsDropPrefix "ui_")  ''EnabledResource
+deriveJSON (compatAesonOptionsDropPrefix "ui_")  ''UserGroupResource

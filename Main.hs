@@ -68,7 +68,7 @@ main :: IO ()
 main = topHandler $ do
     hSetBuffering stdout LineBuffering
     args <- getArgs
-    case commandsRun globalCommand commands args of
+    case commandsRun (globalCommand commands) commands args of
       CommandHelp   help  -> printHelp help
       CommandList   opts  -> printOptionsList opts
       CommandErrors errs  -> printErrors errs
@@ -117,16 +117,24 @@ defaultGlobalFlags = GlobalFlags {
     flagGlobalVersion = Flag False
   }
 
-globalCommand :: CommandUI GlobalFlags
-globalCommand = CommandUI {
+globalCommand :: [Command a] -> CommandUI GlobalFlags
+globalCommand commands = CommandUI {
     commandName         = "",
-    commandSynopsis     = "",
-    commandUsage        = \_ ->
-         "Hackage server: serves a collection of Haskell Cabal packages\n",
+    commandSynopsis     = "Hackage server: serves a collection of Haskell Cabal packages",
+    commandUsage        = usageAlternatives "" ["COMMAND [FLAGS]", "[GLOBAL FLAGS]"],
     commandDescription  = Just $ \pname ->
-         "For more information about a command use\n"
-      ++ "  " ++ pname ++ " COMMAND --help\n\n"
-      ++ "Steps to create a new empty server instance:\n"
+     let  commands' = commands ++ [commandAddAction helpCommandUI undefined]
+          cmdDescs = getNormalCommandDescriptions commands'
+          maxlen    = maximum $ [length name | (name, _) <- cmdDescs]
+          align str = str ++ replicate (maxlen - length str) ' '
+      in "Commands:\n"
+      ++ unlines [ "  " ++ align name ++ "    " ++ description
+                 | (name, description) <- cmdDescs ]
+      ++ "\n"
+      ++ "For more information about a command use\n"
+      ++ "  " ++ pname ++ " COMMAND --help\n",
+    commandNotes        = Just $ \pname ->
+         "Steps to create a new empty server instance:\n"
       ++ concat [ "  " ++ pname ++ " " ++ x ++ "\n"
                 | x <- ["init", "run"]],
     commandDefaultFlags = defaultGlobalFlags,
@@ -208,12 +216,18 @@ defaultRunFlags = RunFlags {
   }
 
 runCommand :: CommandUI RunFlags
-runCommand = makeCommand name shortDesc longDesc defaultRunFlags options
+runCommand =
+    CommandUI {
+      commandName         = "run",
+      commandSynopsis     = "Run an already-initialized Hackage server.",
+      commandUsage        = usageAlternatives "run" ["[FLAGS]"],
+      commandDescription  = Nothing,
+      commandNotes        = Just notes,
+      commandDefaultFlags = defaultRunFlags,
+      commandOptions      = options
+    }
   where
-    name       = "run"
-    shortDesc  = "Run an already-initialized Hackage server."
-    longDesc   = Just $ \progname ->
-                  "Note: the " ++ progname ++ " data lock prevents two "
+    notes pname = "Note: the " ++ pname ++ " data lock prevents two "
                ++ "state-accessing modes from\nbeing run simultaneously.\n\n"
                ++ "On unix systems you can tell the server to checkpoint its "
                ++ "database state using:\n"
@@ -452,12 +466,18 @@ defaultInitFlags = InitFlags {
   }
 
 initCommand :: CommandUI InitFlags
-initCommand = makeCommand name shortDesc longDesc defaultInitFlags options
+initCommand =
+    CommandUI {
+      commandName         = "init",
+      commandSynopsis     = "Initialize the server state to a useful default.",
+      commandUsage        = usageAlternatives "init" ["[FLAGS]"],
+      commandDescription  = Just longDesc,
+      commandNotes        = Nothing,
+      commandDefaultFlags = defaultInitFlags,
+      commandOptions      = options
+    }
   where
-    name       = "init"
-    shortDesc  = "Initialize the server state to a useful default."
-    longDesc   = Just $ \_ ->
-                 "Creates an empty package collection and one admininstrator "
+    longDesc _ = "Creates an empty package collection and one admininstrator "
               ++ "account so that you\ncan log in via the web interface and "
               ++ "bootstrap from there.\n"
     options _  =
@@ -532,15 +552,21 @@ defaultBackupFlags = BackupFlags {
   }
 
 backupCommand :: CommandUI BackupFlags
-backupCommand = makeCommand name shortDesc longDesc defaultBackupFlags options
+backupCommand =
+    CommandUI {
+      commandName         = "backup",
+      commandSynopsis     = "Create a backup of the server's database.",
+      commandUsage        = usageAlternatives "backup" ["[FLAGS]"],
+      commandDescription  = Just longDesc,
+      commandNotes        = Nothing,
+      commandDefaultFlags = defaultBackupFlags,
+      commandOptions      = options
+    }
   where
-    name       = "backup"
-    shortDesc  = "Create a backup of the server's database."
-    longDesc   = Just $ \_ ->
-                 "Creates a backup containing all of the data that the server "
+    longDesc _ = "Creates a backup containing all of the data that the server "
               ++ "manages.\nThe purpose is for backup and for data integrity "
               ++ "across server upgrades.\nThe backup consists of a per-backup "
-              ++ "tarball plus a shared directory of static files. The tarball "
+              ++ "tarball plus a shared directory of static\nfiles. The tarball "
               ++ "contains files in standard formats or simple text formats.\n"
               ++ "The backup can be restored using the 'restore' command.\n"
     options _  =
@@ -618,14 +644,21 @@ defaultTestBackupFlags = TestBackupFlags {
   }
 
 testBackupCommand :: CommandUI TestBackupFlags
-testBackupCommand = makeCommand name shortDesc longDesc defaultTestBackupFlags options
+testBackupCommand =
+    CommandUI {
+      commandName         = "test-backup",
+      commandSynopsis     = "A self-test of the server's database backup/restore system.",
+      commandUsage        = usageAlternatives "test-backup" ["[FLAGS]"],
+      commandDescription  = Just longDesc,
+      commandNotes        = Nothing,
+      commandDefaultFlags = defaultTestBackupFlags,
+      commandOptions      = options
+
+    }
   where
-    name       = "test-backup"
-    shortDesc  = "A self-test of the server's database backup/restore system."
-    longDesc   = Just $ \_ ->
-                 "Checks that backing up and then restoring is the identity function on the"
-              ++ "server state,\n and that restoring and then backing up is the identity function"
-              ++ "on the backup tarball.\n"
+    longDesc _ = "Checks that backing up and then restoring is the identity function on the "
+              ++ "server\nstate, and that restoring and then backing up is the identity function"
+              ++ "on the\nbackup tarball.\n"
     options _  =
       [ optionVerbosity
           flagTestBackupVerbosity (\v flags -> flags { flagTestBackupVerbosity = v })
@@ -808,12 +841,18 @@ defaultRestoreFlags = RestoreFlags {
   }
 
 restoreCommand :: CommandUI RestoreFlags
-restoreCommand = makeCommand name shortDesc longDesc defaultRestoreFlags options
+restoreCommand =
+    CommandUI {
+      commandName         = "restore",
+      commandSynopsis     = "Restore server state from a backup tarball.",
+      commandUsage        = usageAlternatives "restore" ["[FLAGS]"],
+      commandDescription  = Nothing,
+      commandNotes        = Just notes,
+      commandDefaultFlags = defaultRestoreFlags,
+      commandOptions      = options
+    }
   where
-    name       = "restore"
-    shortDesc  = "Restore server state from a backup tarball."
-    longDesc   = Just $ \_ ->
-                 "Note that this creates a new server state, so for safety "
+    notes _    = "Note that this creates a new server state, so for safety "
               ++ "it requires that the\nserver not be initialised already.\n"
     options _  =
       [ optionVerbosity

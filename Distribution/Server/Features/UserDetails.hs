@@ -1,4 +1,5 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, RankNTypes, NamedFieldPuns, RecordWildCards, DoRec, BangPatterns, CPP #-}
+{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, RankNTypes,
+    NamedFieldPuns, RecordWildCards, DoRec, BangPatterns #-}
 module Distribution.Server.Features.UserDetails (
     initUserDetailsFeature,
     UserDetailsFeature(..),
@@ -15,8 +16,6 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Features.Core
 
 import Distribution.Server.Users.Types
-
-import Distribution.Server.Util.JSON
 
 import Data.SafeCopy (base, deriveSafeCopy)
 
@@ -371,12 +370,6 @@ data NameAndContact = NameAndContact { ui_name  :: Text, ui_contactEmailAddress 
 data AdminInfo      = AdminInfo      { ui_accountKind :: Maybe AccountKind, ui_notes :: Text }
 
 
-#if MIN_VERSION_aeson(0,6,2)
-$(deriveJSON compatibilityOptions{fieldLabelModifier = drop 3} ''NameAndContact)
-$(deriveJSON compatibilityOptions{fieldLabelModifier = drop 3} ''AdminInfo)
-$(deriveJSON compatibilityOptions                              ''AccountKind)
-#else
-$(deriveJSON (drop 3) ''NameAndContact)
-$(deriveJSON (drop 3) ''AdminInfo)
-$(deriveJSON id       ''AccountKind)
-#endif
+deriveJSON (compatAesonOptionsDropPrefix "ui_") ''NameAndContact
+deriveJSON (compatAesonOptionsDropPrefix "ui_") ''AdminInfo
+deriveJSON  compatAesonOptions                  ''AccountKind
