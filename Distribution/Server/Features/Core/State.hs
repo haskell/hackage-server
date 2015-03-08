@@ -17,9 +17,6 @@ import qualified Control.Monad.State as State
 import Data.Monoid
 import Data.Time (UTCTime)
 import qualified Data.Vector as Vec
-import Data.List (sortBy)
-import Data.Ord (comparing)
-import Data.Maybe (maybeToList)
 
 
 ---------------------------------- Index of metadata and tarballs
