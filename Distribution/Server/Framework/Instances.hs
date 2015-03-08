@@ -106,6 +106,7 @@ instance SafeCopy OS where
     putCopy IRIX        = contain $ putWord8 10
     putCopy HaLVM       = contain $ putWord8 11
     putCopy IOS         = contain $ putWord8 12
+    putCopy DragonFly   = contain $ putWord8 13
 
     getCopy = contain $ do
       tag <- getWord8
@@ -123,6 +124,7 @@ instance SafeCopy OS where
         10 -> return IRIX
         11 -> return HaLVM
         12 -> return IOS
+        13 -> return DragonFly
         _  -> fail "SafeCopy OS getCopy: unexpected tag"
 
 instance SafeCopy  Arch where
@@ -175,6 +177,7 @@ instance SafeCopy CompilerFlavor where
     putCopy JHC               = contain $ putWord8 7
     putCopy LHC               = contain $ putWord8 8
     putCopy UHC               = contain $ putWord8 9
+    putCopy (HaskellSuite s)  = contain $ putWord8 10 >> safePut s
 
     getCopy = contain $ do
       tag <- getWord8
@@ -189,6 +192,7 @@ instance SafeCopy CompilerFlavor where
         7  -> return JHC
         8  -> return LHC
         9  -> return UHC
+        10 -> return HaskellSuite <*> safeGet
         _  -> fail "SafeCopy CompilerFlavor getCopy: unexpected tag"
 
 
