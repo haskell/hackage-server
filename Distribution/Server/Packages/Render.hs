@@ -10,7 +10,7 @@ module Distribution.Server.Packages.Render (
   , categorySplit,
   ) where
 
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, maybeToList)
 import Control.Monad (guard)
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
@@ -114,24 +114,29 @@ categorySplit xs = map (dropWhile isSpace) $ splitOn ',' xs
 
 -----------------------------------------------------------------------
 --
--- Flatten the dependencies of a GenericPackageDescription into
--- a simple summary form.
+-- Flatten the dependencies of a GenericPackageDescription into a
+-- simple summary form. Dependency version ranges within each executable
+-- or library are unioned, and the resulting sets are intersected.
 --
 flatDependencies :: GenericPackageDescription -> [Dependency]
 flatDependencies =
       sortOn (\(Dependency pkgname _) -> map toLower (display pkgname))
-    . unionAllDeps . allPkgDeps
+    . combineDepsBy intersectVersionIntervals
+    . concat
+    . map (combineDepsBy unionVersionIntervals)
+    . targetDeps
   where
-    unionAllDeps :: [Dependency] -> [Dependency]
-    unionAllDeps =
+    combineDepsBy :: (VersionIntervals -> VersionIntervals -> VersionIntervals)
+                  -> [Dependency] -> [Dependency]
+    combineDepsBy f =
         map (\(pkgname, ver) -> Dependency pkgname (fromVersionIntervals ver))
       . Map.toList
-      . Map.fromListWith unionVersionIntervals
+      . Map.fromListWith f
       . map (\(Dependency pkgname ver) -> (pkgname, toVersionIntervals ver))
 
-    allPkgDeps :: GenericPackageDescription -> [Dependency]
-    allPkgDeps pkg = maybe [] condTreeDeps (condLibrary pkg)
-                  ++ concatMap (condTreeDeps . snd) (condExecutables pkg)
+    targetDeps :: GenericPackageDescription -> [[Dependency]]
+    targetDeps pkg = map condTreeDeps (maybeToList $ condLibrary pkg)
+                  ++ map (condTreeDeps . snd) (condExecutables pkg)
  
     condTreeDeps :: CondTree v [Dependency] a -> [Dependency]
     condTreeDeps (CondNode _ ds comps) =
