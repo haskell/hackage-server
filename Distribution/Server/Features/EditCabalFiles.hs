@@ -178,6 +178,8 @@ logChange change = CheckM (tell [change])
 
 type Check a = a -> a -> CheckM ()
 
+type BuildTarget = String
+
 diffCabalRevisions :: PackageId -> ByteString -> ByteString
                    -> Either String [Change]
 diffCabalRevisions pkgid oldVersion newRevision =
@@ -227,16 +229,16 @@ checkGenericPackageDescription
       flagsA flagsB
 
     checkMaybe "Cannot add or remove library sections"
-      (checkCondTree checkLibrary) libsA libsB
+      (checkCondTree "library" checkLibrary) libsA libsB
 
     checkListAssoc "Cannot add or remove executable sections"
-      (checkCondTree checkExecutable) exesA exesB
+      (checkCondTree "executable" checkExecutable) exesA exesB
 
     checkListAssoc "Cannot add or remove test-suite sections"
-      (checkCondTree checkTestSuite) testsA testsB
+      (checkCondTree "test" checkTestSuite) testsA testsB
 
     checkListAssoc "Cannot add or remove benchmark sections"
-      (checkCondTree checkBenchmark) benchsA benchsB
+      (checkCondTree "benchmark" checkBenchmark) benchsA benchsB
 
 
 checkPackageDescriptions :: Check PackageDescription
@@ -312,11 +314,11 @@ checkRevision customFieldsA customFieldsB =
         _                             -> 0
 
 
-checkCondTree :: Check a -> Check (CondTree ConfVar [Dependency] a)
-checkCondTree checkElem
+checkCondTree :: BuildTarget -> Check a -> Check (CondTree ConfVar [Dependency] a)
+checkCondTree target checkElem
   (CondNode dataA constraintsA componentsA)
   (CondNode dataB constraintsB componentsB) = do
-    checkDependencies constraintsA constraintsB
+    checkDependencies target constraintsA constraintsB
     checkList "Cannot add or remove 'if' conditionals"
               checkComponent componentsA componentsB
     checkElem dataA dataB
@@ -325,21 +327,21 @@ checkCondTree checkElem
                    (condB, ifPartB, thenPartB) = do
       checkSame "Cannot change the 'if' condition expressions"
                 condA condB
-      checkCondTree checkElem ifPartA ifPartB
+      checkCondTree target checkElem ifPartA ifPartB
       checkMaybe "Cannot add or remove the 'else' part in conditionals"
-                 (checkCondTree checkElem) thenPartA thenPartB
+                 (checkCondTree target checkElem) thenPartA thenPartB
 
-checkDependencies :: Check [Dependency]
+checkDependencies :: BuildTarget -> Check [Dependency]
 -- Special case: there are some pretty weird broken packages out there, see
 --   https://github.com/haskell/hackage-server/issues/303
-checkDependencies [] [dep@(Dependency (PackageName "base") _)] =
+checkDependencies _ [] [dep@(Dependency (PackageName "base") _)] =
     logChange (Change ("added dependency on") (display dep) "")
 
-checkDependencies ds1 ds2 =
+checkDependencies target ds1 ds2 =
     fmapCheck canonicaliseDeps
       (checkList "Cannot add or remove dependencies, \
                 \just change the version constraints"
-                checkDependency)
+                (checkDependency target))
       ds1 ds2
   where
     -- Allow a limited degree of adding and removing deps: only when they
@@ -351,9 +353,9 @@ checkDependencies ds1 ds2 =
       . Map.fromListWith (flip intersectVersionRanges)
       . map (\(Dependency pkgname verrange) -> (pkgname, verrange))
 
-checkDependency :: Check Dependency
-checkDependency (Dependency pkgA verA) (Dependency pkgB verB)
-  | pkgA == pkgB = changesOk ("dependency on " ++ display pkgA) display
+checkDependency :: BuildTarget -> Check Dependency
+checkDependency target (Dependency pkgA verA) (Dependency pkgB verB)
+  | pkgA == pkgB = changesOk ("dependency on " ++ display pkgA ++ " for target " ++ target) display
                              verA verB
   | otherwise    = fail "Cannot change which packages are dependencies, \
                         \just their version constraints."
@@ -486,4 +488,3 @@ insertRevisionField rev
       , Just (':',_) <- BS.uncons t
                   = True
       | otherwise = False
-
