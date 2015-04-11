@@ -46,14 +46,15 @@ import System.IO
 -- file. TODO: This is not a sustainable implementation,
 -- but it gives us something to test with.
 serveTarball :: MonadIO m
-             => [FilePath] -- dir index file names (e.g. ["index.html"])
+             => String     -- description for directory listings
+             -> [FilePath] -- dir index file names (e.g. ["index.html"])
              -> FilePath   -- root dir in tar to serve
              -> FilePath   -- the tarball
              -> TarIndex   -- index for tarball
              -> [CacheControl]
              -> ETag       -- the etag
              -> ServerPartT m Response
-serveTarball indices tarRoot tarball tarIndex cacheCtls etag = do
+serveTarball descr indices tarRoot tarball tarIndex cacheCtls etag = do
     rq <- askRq
     action GET $ remainingPath $ \paths -> do
 
@@ -90,14 +91,18 @@ serveTarball indices tarRoot tarball tarIndex cacheCtls etag = do
                  | otherwise
                  -> do
                       cacheControl cacheCtls etag
-                      ok $ toResponse $ Resource.XHtml $ renderDirIndex fs
+                      ok $ toResponse $ Resource.XHtml $
+                        renderDirIndex descr path fs
                _ -> mzero
 
-renderDirIndex :: [(FilePath, TarIndex.TarIndexEntry)] -> XHtml.Html
-renderDirIndex topentries =
-    hackagePage "Directory Listing"
-      [ renderForest "" topentries]
+renderDirIndex :: String -> FilePath -> [(FilePath, TarIndex.TarIndexEntry)] -> XHtml.Html
+renderDirIndex descr topdir topentries =
+    hackagePage title
+      [ XHtml.h2 << title
+      , XHtml.h3 << addTrailingPathSeparator topdir
+      , renderForest "" topentries]
   where
+    title = "Directory listing for " ++ descr
     renderForest _   [] = XHtml.noHtml
     renderForest dir ts = XHtml.ulist ! [ XHtml.theclass "directory-list" ]
                            << map (uncurry (renderTree dir)) ts
