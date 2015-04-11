@@ -10,14 +10,15 @@ module Distribution.Server.Packages.Render (
   , categorySplit,
   ) where
 
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, isJust)
 import Control.Monad (guard)
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
 import qualified Data.Vector as Vec
 import Data.Ord (comparing)
-import Data.List (sortBy)
+import Data.List (sortBy, intercalate)
 import Data.Time.Clock (UTCTime)
+import System.FilePath.Posix ((</>), (<.>))
 
 -- Cabal
 import Distribution.PackageDescription
@@ -25,12 +26,15 @@ import Distribution.PackageDescription.Configuration
 import Distribution.Package
 import Distribution.Text
 import Distribution.Version
+import Distribution.ModuleName as ModuleName
 
 -- hackage-server
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.ModuleForest
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Types
+import qualified Data.TarIndex as TarIndex
+import Data.TarIndex (TarIndex)
 
 -- This should provide the caller enough information to encode the package information
 -- in its particular format (text, html, json) with minimal effort on its part.
@@ -43,7 +47,7 @@ data PackageRender = PackageRender {
     rendMaintainer   :: Maybe String,
     rendCategory     :: [String],
     rendRepoHeads    :: [(RepoType, String, SourceRepo)],
-    rendModules      :: Maybe ModuleForest,
+    rendModules      :: Maybe TarIndex -> Maybe ModuleForest,
     rendHasTarball   :: Bool,
     rendHasChangeLog :: Bool,
     rendUploadInfo   :: (UTCTime, Maybe UserInfo),
@@ -72,7 +76,11 @@ doPackageRender users info hasChangeLog = return $ PackageRender
                            []  -> []
                            str -> categorySplit str
     , rendRepoHeads    = catMaybes (map rendRepo $ sourceRepos desc)
-    , rendModules      = fmap (moduleForest . exposedModules) (library flatDesc)
+    , rendModules      = \docindex ->
+                             fmap (moduleForest
+                           . map (\m -> (m, moduleHasDocs docindex m))
+                           . exposedModules)
+                          (library flatDesc)
     , rendHasTarball   = not . Vec.null $ pkgTarballRevisions info
     , rendHasChangeLog = hasChangeLog
     , rendUploadInfo   = let (utime, uid) = pkgOriginalUploadInfo info
@@ -92,6 +100,16 @@ doPackageRender users info hasChangeLog = return $ PackageRender
     flatDesc = flattenPackageDescription genDesc
     desc     = packageDescription genDesc
     pkgUri   = "/package/" ++ display (pkgInfoId info)
+    
+    moduleHasDocs :: Maybe TarIndex -> ModuleName -> Bool
+    moduleHasDocs Nothing       = const False
+    moduleHasDocs (Just doctar) = isJust . TarIndex.lookup doctar
+                                         . moduleDocTarPath (packageId genDesc)
+
+    moduleDocTarPath :: PackageId -> ModuleName -> FilePath
+    moduleDocTarPath pkgid modname =
+      display pkgid ++ "-docs" </>
+      intercalate "-" (ModuleName.components modname) <.> "html"
 
     rendRepo r = do
         guard $ repoKind r == RepoHead

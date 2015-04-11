@@ -17,6 +17,7 @@ import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Packages.ModuleForest
 import Distribution.Server.Packages.Render
 import Distribution.Server.Users.Types (userStatus, userName, isActiveAccount)
+import Data.TarIndex (TarIndex)
 
 import Distribution.Package
 import Distribution.PackageDescription as P
@@ -26,14 +27,16 @@ import Distribution.Text        (display)
 import Text.XHtml.Strict hiding (p, name, title, content)
 
 import Data.Monoid              (Monoid(..))
-import Data.Maybe               (maybeToList)
+import Data.Maybe               (maybeToList, isJust)
 import Data.List                (intersperse, intercalate)
 import System.FilePath.Posix    ((</>), (<.>))
 import System.Locale            (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
 
-packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)] -> [(String, Html)] -> Maybe URL -> Bool -> Html
-packagePage render headLinks top sections bottom docURL isCandidate =
+packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)]
+            -> [(String, Html)] -> Maybe TarIndex -> URL -> Bool
+            -> Html
+packagePage render headLinks top sections bottom mdocIndex docURL isCandidate =
     hackagePageWith [canonical] docTitle docSubtitle docBody [docFooter]
   where
     pkgid   = rendPkgId render
@@ -52,7 +55,7 @@ packagePage render headLinks top sections bottom docURL isCandidate =
              renderHeads,
              top,
              pkgBody render sections,
-             moduleSection render docURL,
+             moduleSection render mdocIndex docURL,
              packageFlags render,
              downloadSection render,
              maintainerSection pkgid isCandidate,
@@ -177,17 +180,20 @@ packageFlags render =
                  if flagDefault flag then "Enabled" else "Disabled"]
         code = (thespan ! [theclass "code"] <<)
 
-moduleSection :: PackageRender -> Maybe URL -> [Html]
-moduleSection render docURL = maybeToList $ fmap msect (rendModules render)
-  where msect lib = toHtml
+moduleSection :: PackageRender -> Maybe TarIndex -> URL -> [Html]
+moduleSection render mdocIndex docURL =
+    maybeToList $ fmap msect (rendModules render mdocIndex)
+  where msect libModuleForrest = toHtml
             [ h2 << "Modules"
-            , renderModuleForest docURL lib
-            , renderDocIndexLink docURL
+            , renderModuleForest docURL libModuleForrest
+            , renderDocIndexLink
             ]
-        renderDocIndexLink = maybe mempty $ \docURL' ->
-            let docIndexURL = docURL' </> "doc-index.html"
+        renderDocIndexLink
+          | isJust mdocIndex =
+            let docIndexURL = docURL </> "doc-index.html"
             in  paragraph ! [thestyle "font-size: small"]
                   << ("[" +++ anchor ! [href docIndexURL] << "Index" +++ "]")
+          | otherwise = mempty
 
 propertySection :: [(String, Html)] -> [Html]
 propertySection sections =
@@ -378,26 +384,29 @@ vList :: [Html] -> Html
 vList = concatHtml . intersperse br
 -----------------------------------------------------------------------------
 
-renderModuleForest :: Maybe URL -> ModuleForest -> Html
-renderModuleForest mb_url forest =
+renderModuleForest :: URL -> ModuleForest -> Html
+renderModuleForest docUrl forest =
     thediv ! [identifier "module-list"] << renderForest [] forest
     where
       renderForest _       [] = noHtml
       renderForest pathRev ts = myUnordList $ map renderTree ts
           where
-            renderTree (Node s isModule subs) =
-                    ( if isModule then moduleEntry newPath else italics << s )
+            renderTree (Node s isModule hasDocs subs) =
+                    ( if isModule then moduleEntry hasDocs newPath
+                                  else italics << s )
                 +++ renderForest newPathRev subs
                 where
                   newPathRev = s:pathRev
                   newPath = reverse newPathRev
 
-      moduleEntry path =
-          thespan ! [theclass "module"] << maybe modName linkedName mb_url path
+      moduleEntry False path =
+          thespan ! [theclass "module"] << modName path
+      moduleEntry True path =
+          thespan ! [theclass "module"] << linkedName path
       modName path = toHtml (intercalate "." path)
-      linkedName url path = anchor ! [href modUrl] << modName path
+      linkedName path = anchor ! [href modUrl] << modName path
           where
-            modUrl = url ++ "/" ++ intercalate "-" path ++ ".html"
+            modUrl = docUrl ++ "/" ++ intercalate "-" path ++ ".html"
       myUnordList :: HTML a => [a] -> Html
       myUnordList = unordList ! [theclass "modules"]
 
