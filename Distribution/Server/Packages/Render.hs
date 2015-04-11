@@ -44,6 +44,7 @@ data PackageRender = PackageRender {
     rendDepends      :: [Dependency],
     rendExecNames    :: [String],
     rendLicenseName  :: String,
+    rendLicenseFiles :: [FilePath],
     rendMaintainer   :: Maybe String,
     rendCategory     :: [String],
     rendRepoHeads    :: [(RepoType, String, SourceRepo)],
@@ -67,6 +68,7 @@ doPackageRender users info hasChangeLog = return $ PackageRender
     , rendDepends      = flatDependencies genDesc
     , rendExecNames    = map exeName (executables flatDesc)
     , rendLicenseName  = display (license desc) -- maybe make this a bit more human-readable
+    , rendLicenseFiles = licenseFiles desc
     , rendMaintainer   = case maintainer desc of
                            "None" -> Nothing
                            "none" -> Nothing

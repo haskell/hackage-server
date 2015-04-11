@@ -258,7 +258,7 @@ renderDownloads totalDown recentDown {- versionDown version -} =
 renderFields :: PackageRender -> [(String, Html)]
 renderFields render = [
         -- Cabal-Version
-        ("License",     toHtml $ rendLicenseName render),
+        ("License",     rendLicense),
         ("Copyright",   toHtml $ P.copyright desc),
         ("Author",      toHtml $ author desc),
         ("Maintainer",  maintainField $ rendMaintainer render),
@@ -296,6 +296,16 @@ renderFields render = [
         Nothing -> strong ! [theclass "warning"] << toHtml "none"
         Just n  -> toHtml n
     sourceRepositoryField sr = sourceRepositoryToHtml sr
+    
+    rendLicense = case rendLicenseFiles render of
+      []            -> toHtml (rendLicenseName render)
+      [licenseFile] -> anchor ! [ href (rendPkgUri render </> "src" </> licenseFile) ]
+                             << rendLicenseName render
+      _licenseFiles -> toHtml (rendLicenseName render)
+                       +++ "["
+                       +++ anchor ! [ href (rendPkgUri render </> "src") ]
+                                 << "multiple licese files"
+                       +++ "]"
 
 
 sourceRepositoryToHtml :: SourceRepo -> Html
