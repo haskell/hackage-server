@@ -18,12 +18,13 @@ module Data.TarIndex (
 import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable (Typeable)
 
+import Codec.Archive.Tar (Entry(..), EntryContent(..), Entries(..), entryPath)
 import qualified Data.StringTable as StringTable
 import Data.StringTable (StringTable)
 import qualified Data.IntTrie as IntTrie
 
 import Data.IntTrie (IntTrie)
-import qualified System.FilePath as FilePath
+import qualified System.FilePath.Posix as FilePath
 import Prelude hiding (lookup)
 #ifdef TESTS
 import qualified Prelude
@@ -62,7 +63,7 @@ data TarIndex = TarIndex
 
 
 data TarIndexEntry = TarFileEntry !TarEntryOffset
-                   | TarDir [FilePath]
+                   | TarDir [(FilePath, TarIndexEntry)]
   deriving (Show, Typeable)
 
 
@@ -85,20 +86,36 @@ instance MemSize TarIndex where
 -- the list of files within that directory.
 --
 lookup :: TarIndex -> FilePath -> Maybe TarIndexEntry
-lookup (TarIndex pathTable pathTrie) path =
-    case toComponentIds pathTable path of
-      Nothing    -> Nothing
-      Just fpath -> fmap (mkIndexEntry fpath) (IntTrie.lookup pathTrie fpath)
+lookup (TarIndex pathTable pathTrie) path = do
+    fpath  <- toComponentIds pathTable path
+    tentry <- IntTrie.lookup pathTrie fpath
+    return (mkIndexEntry tentry)
   where
-    mkIndexEntry _ (IntTrie.Entry offset)        = TarFileEntry offset
-    mkIndexEntry _ (IntTrie.Completions entries) =
-      TarDir [ fromComponentIds pathTable [entry]
-             | entry <- entries ]
+    mkIndexEntry (IntTrie.Entry offset)        = TarFileEntry offset
+    mkIndexEntry (IntTrie.Completions entries) =
+      TarDir [ (fromComponentId pathTable key, mkIndexEntry entry)
+             | (key, entry) <- entries ]
 
--- | Construct a 'TarIndex' from a list of filepaths and their corresponding
---
-construct :: [(FilePath, TarEntryOffset)] -> TarIndex
-construct pathsOffsets = TarIndex pathTable pathTrie
+data IndexBuilder = IndexBuilder [(FilePath, TarEntryOffset)]
+                                 {-# UNPACK #-} !TarEntryOffset
+
+initialIndexBuilder :: IndexBuilder
+initialIndexBuilder = IndexBuilder [] 0
+
+accumIndexBuilder :: Entry -> IndexBuilder -> IndexBuilder
+accumIndexBuilder entry (IndexBuilder acc nextOffset) =
+    IndexBuilder ((entryPath entry, nextOffset):acc) nextOffset'
+  where
+    nextOffset' = nextOffset + 1
+                + case entryContent entry of
+                   NormalFile     _   size -> blocks size
+                   OtherEntryType _ _ size -> blocks size
+                   _                           -> 0
+    blocks size = 1 + ((fromIntegral size - 1) `div` 512)
+
+finaliseIndexBuilder :: IndexBuilder -> TarIndex
+finaliseIndexBuilder (IndexBuilder pathsOffsets _) =
+    TarIndex pathTable pathTrie
   where
     pathComponents = concatMap (FilePath.splitDirectories . fst) pathsOffsets
     pathTable = StringTable.construct pathComponents
@@ -106,6 +123,16 @@ construct pathsOffsets = TarIndex pathTable pathTrie
                   [ (cids, offset)
                   | (path, offset) <- pathsOffsets
                   , let Just cids = toComponentIds pathTable path ]
+
+-- | Construct a 'TarIndex' from a sequence of tar 'Entries'. The 'Entries' are
+-- assumed to start at offset @0@ within a file.
+--
+construct :: Entries e -> Either e TarIndex
+construct = go initialIndexBuilder
+  where
+    go builder (Next e es) = go (accumIndexBuilder e builder) es
+    go builder  Done       = Right $! finaliseIndexBuilder builder
+    go _       (Fail err)  = Left err
 
 toComponentIds :: StringTable PathComponentId -> FilePath -> Maybe [PathComponentId]
 toComponentIds table = lookupComponents [] . FilePath.splitDirectories
@@ -115,8 +142,8 @@ toComponentIds table = lookupComponents [] . FilePath.splitDirectories
       Nothing  -> Nothing
       Just cid -> lookupComponents (cid:cs') cs
 
-fromComponentIds :: StringTable PathComponentId -> [PathComponentId] -> FilePath
-fromComponentIds table = FilePath.joinPath . map (StringTable.index table)
+fromComponentId :: StringTable PathComponentId -> PathComponentId -> FilePath
+fromComponentId table = StringTable.index table
 
 #ifdef TESTS
 

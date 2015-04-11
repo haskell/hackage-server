@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE DeriveDataTypeable, TemplateHaskell #-}
+{-# LANGUAGE DeriveDataTypeable, TemplateHaskell, ScopedTypeVariables #-}
 
 module Data.IntTrie (
 
@@ -11,7 +11,8 @@ module Data.IntTrie (
 
 #ifdef TESTS
   tests,
-  prop,
+  prop_construct1,
+  prop_construct2,
 #endif
 
  ) where
@@ -31,6 +32,12 @@ import Data.SafeCopy (base, deriveSafeCopy)
 
 import Distribution.Server.Framework.Instances()
 import Distribution.Server.Framework.MemSize
+
+#ifdef TESTS
+import Test.QuickCheck
+import Control.Applicative ((<$>), (<*>))
+#endif
+
 
 -- | A compact mapping from sequences of small ints to small ints.
 --
@@ -142,6 +149,9 @@ tagLeaf = id
 tagNode = flip Bits.setBit   31
 untag   = flip Bits.clearBit 31
 
+isNode :: Word32 -> Bool
+isNode = flip Bits.testBit 31
+
 -- So the overall array form of the above trie is:
 --
 -- offset:   0   1    2    3   4  5  6    7    8     9     10  11  12
@@ -167,12 +177,30 @@ example4 :: IntTrie Int Int
 example4 = IntTrie (mkArray example3)
 
 test3 = case lookup example4 [1] of
-          Just (Completions [2,3,4]) -> True
+          Just (Completions [(2,_),(3,_),(4,_)]) -> True
           _                          -> False
 
 test1, test2, test3, tests :: Bool
 tests = test1 && test2 && test3
 #endif
+
+-------------------------------------
+-- Decoding the trie array form
+--
+
+completionsFrom :: (Enum k, Enum v) => IntTrie k v -> Word32 -> Completions k v
+completionsFrom trie@(IntTrie arr) nodeOff =
+    [ (word32ToEnum (untag key), next)
+    | keyOff <- [keysStart..keysEnd]
+    , let key   = arr ! keyOff
+          entry = arr ! (keyOff + nodeSize)
+          next | isNode key = Completions (completionsFrom trie entry)
+               | otherwise  = Entry (word32ToEnum entry)
+    ]
+  where
+    nodeSize  = arr ! nodeOff
+    keysStart = nodeOff + 1
+    keysEnd   = nodeOff + nodeSize
 
 -------------------------------------
 -- Toplevel trie array construction
@@ -195,28 +223,26 @@ mkArray xs = A.listArray (0, fromIntegral (length xs) - 1) xs
 -- Looking up in the trie array
 --
 
-data TrieLookup k v = Entry !v | Completions [k] deriving Show
+data TrieLookup  k v = Entry !v | Completions (Completions k v) deriving Show
+type Completions k v = [(k, TrieLookup k v)]
 
-lookup :: (Enum k, Enum v) => IntTrie k v -> [k] -> Maybe (TrieLookup k v)
-lookup (IntTrie arr) = fmap convertLookup . go 0 . convertKey
+lookup :: forall k v. (Enum k, Enum v) => IntTrie k v -> [k] -> Maybe (TrieLookup k v)
+lookup trie@(IntTrie arr) = go 0
   where
-    go :: Word32 -> [Word32] -> Maybe (TrieLookup Word32 Word32)
+    go :: Word32 -> [k] -> Maybe (TrieLookup k v)
     go nodeOff []     = Just (completions nodeOff)
-    go nodeOff (k:ks) = case search nodeOff (tagLeaf k) of
+    go nodeOff (k:ks) = case search nodeOff (tagLeaf k') of
       Just entryOff
         | null ks   -> Just (entry entryOff)
         | otherwise -> Nothing
-      Nothing     -> case search nodeOff (tagNode k) of
+      Nothing       -> case search nodeOff (tagNode k') of
         Nothing       -> Nothing
         Just entryOff -> go (arr ! entryOff) ks
-
-    entry       entryOff = Entry (arr ! entryOff)
-    completions nodeOff  = Completions [ untag (arr ! keyOff)
-                                       | keyOff <- [keysStart..keysEnd] ]
       where
-        nodeSize  = arr ! nodeOff
-        keysStart = nodeOff + 1
-        keysEnd   = nodeOff + nodeSize
+        k' = enumToWord32 k
+
+    entry       entryOff = Entry (word32ToEnum (arr ! entryOff))
+    completions nodeOff  = Completions (completionsFrom trie nodeOff)
 
     search :: Word32 -> Word32 -> Maybe Word32
     search nodeOff key = fmap (+nodeSize) (bsearch keysStart keysEnd key)
@@ -235,16 +261,11 @@ lookup (IntTrie arr) = fmap convertLookup . go 0 . convertKey
       where mid = (a + b) `div` 2
 
 
-convertKey :: Enum k => [k] -> [Word32]
-convertKey = map (fromIntegral . fromEnum)
+enumToWord32 :: Enum n => n -> Word32
+enumToWord32 = fromIntegral . fromEnum
 
-convertLookup :: (Enum k, Enum v) => TrieLookup Word32 Word32
-                                  -> TrieLookup k v
-convertLookup (Entry v)        = Entry       (word16ToEnum v)
-convertLookup (Completions ks) = Completions (map word16ToEnum ks)
-
-word16ToEnum :: Enum n => Word32 -> n
-word16ToEnum = toEnum . fromIntegral
+word32ToEnum :: Enum n => Word32 -> n
+word32ToEnum = toEnum . fromIntegral
 
 
 -------------------------
@@ -259,7 +280,7 @@ instance Functor (TrieNodeF k v) where
   fmap f (Node k x) = Node k (f x)
 
 -- The trie functor
-type    TrieF k v x = [TrieNodeF k v x]
+type TrieF k v x = [TrieNodeF k v x]
 
 -- Trie is the fixpoint of the 'TrieF' functor
 newtype Trie  k v   = Trie (TrieF k v (Trie k v)) deriving (Eq, Show)
@@ -284,8 +305,8 @@ trieNodeSize (Node _ t) = 2 + trieSize t
 -- Building and flattening Tries
 --
 
--- A list of non-empty key-lists paired
-type Paths  k v = [([k], v)]
+-- | A list of key value pairs. The keys must be distinct and non-empty.
+type Paths k v = [([k], v)]
 
 
 mkTrie :: Ord k => Paths k v -> Trie k v
@@ -342,8 +363,8 @@ enum2Word32 = int2Word32 . fromEnum
 
 #ifdef TESTS
 
-prop :: (Show from, Show to, Enum from, Enum to, Ord from, Eq to) => Paths from to -> Bool
-prop paths =
+prop_construct1 :: ValidPaths -> Bool
+prop_construct1 (ValidPaths paths) =
   flip all paths $ \(key, value) ->
     case lookup trie key of
       Just (Entry value') | value' == value -> True
@@ -354,6 +375,37 @@ prop paths =
   where
     trie = construct paths
 
---TODO: missing data abstraction property
+prop_construct2 :: ValidPaths -> Bool
+prop_construct2 (ValidPaths paths) =
+    mkTrie paths == convertCompletions (completionsFrom (construct paths) 0)
+  where
+    convertCompletions :: Ord k => Completions k v -> Trie k v
+    convertCompletions kls =
+      Trie [ case l of
+               Entry v          -> Leaf k v
+               Completions kls' -> Node k (convertCompletions kls')
+           | (k, l) <- sortBy (compare `on` fst) kls ]
+
+newtype ValidPaths = ValidPaths (Paths Char Char) deriving Show
+
+instance Arbitrary ValidPaths where
+  arbitrary =
+      ValidPaths . makeNoPrefix <$> listOf ((,) <$> listOf1 arbitrary <*> arbitrary)
+    where
+      makeNoPrefix [] = []
+      makeNoPrefix ((k,v):kvs)
+        | all (\(k', _) -> not (isPrefixOfOther k k')) kvs
+                     = (k,v) : makeNoPrefix kvs
+        | otherwise  =         makeNoPrefix kvs
+
+  shrink (ValidPaths kvs) =
+      map ValidPaths . filter noPrefix . filter nonEmpty . shrink $ kvs
+    where
+      noPrefix []          = True
+      noPrefix ((k,_):kvs) = all (\(k', _) -> not (isPrefixOfOther k k')) kvs
+                          && noPrefix kvs
+      nonEmpty = all (not . null . fst)
+
+isPrefixOfOther a b = a `isPrefixOf` b || b `isPrefixOf` a
 
 #endif

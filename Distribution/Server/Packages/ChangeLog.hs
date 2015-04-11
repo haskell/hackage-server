@@ -20,7 +20,7 @@ findChangeLog pkg index = do
     TarIndex.TarDir fnames <- TarIndex.lookup index topdir
     listToMaybe
       [ (offset, fname')
-      | fname <- fnames
+      | (fname, _) <- fnames
       , isChangelogFile fname
       , let fname' = topdir </> fname
       , Just (TarIndex.TarFileEntry offset) <- [TarIndex.lookup index fname'] ]

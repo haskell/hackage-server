@@ -92,11 +92,11 @@ serveTarball indices tarRoot tarball tarIndex cacheCtls etag = do
                       ok $ toResponse $ Resource.XHtml $ renderDirIndex fs
                _ -> mzero
 
-renderDirIndex :: [FilePath] -> XHtml.Html
+renderDirIndex :: [(FilePath, TarIndex.TarIndexEntry)] -> XHtml.Html
 renderDirIndex entries = hackagePage "Directory Listing"
     [ (XHtml.anchor XHtml.! [XHtml.href e] XHtml.<< e)
       XHtml.+++ XHtml.br
-    | e <- entries ]
+    | (e,_) <- entries ]
 
 serveTarEntry :: FilePath -> Int -> FilePath -> IO Response
 serveTarEntry tarfile off fname = do
@@ -130,25 +130,6 @@ constructTarIndexFromFile file = do
 
 -- | Forcing the Either will force the tar index
 constructTarIndex :: BS.ByteString -> Either String TarIndex
-constructTarIndex tar =
-  case extractInfo (Tar.read tar) of
-    Just info -> let tarIndex = TarIndex.construct info
-                 in tarIndex `seq` Right tarIndex
-    Nothing   -> Left "bad tar file"
-
-type Block = Int
-
-extractInfo :: Tar.Entries e -> Maybe [(FilePath, Block)]
-extractInfo = go 0 []
-  where
-    go _ es' (Tar.Done)      = Just es'
-    go _ _   (Tar.Fail _)    = Nothing
-    go n es' (Tar.Next e es) = go n' ((Tar.entryPath e, n) : es') es
-      where
-        n' = n + 1
-               + case Tar.entryContent e of
-                   Tar.NormalFile     _   size -> blocks size
-                   Tar.OtherEntryType _ _ size -> blocks size
-                   _                           -> 0
-        blocks s = 1 + ((fromIntegral s - 1) `div` 512)
+constructTarIndex = either (\e -> Left ("bad tar file: " ++ show e)) Right
+                  . TarIndex.construct . Tar.read
 
