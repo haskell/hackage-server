@@ -34,6 +34,7 @@ import qualified Data.TarIndex as TarIndex
 import Data.TarIndex (TarIndex)
 
 import qualified Text.XHtml.Strict as XHtml
+import Text.XHtml.Strict ((<<), (!))
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.Map as Map
 import System.FilePath
@@ -93,10 +94,22 @@ serveTarball indices tarRoot tarball tarIndex cacheCtls etag = do
                _ -> mzero
 
 renderDirIndex :: [(FilePath, TarIndex.TarIndexEntry)] -> XHtml.Html
-renderDirIndex entries = hackagePage "Directory Listing"
-    [ (XHtml.anchor XHtml.! [XHtml.href e] XHtml.<< e)
-      XHtml.+++ XHtml.br
-    | (e,_) <- entries ]
+renderDirIndex topentries =
+    hackagePage "Directory Listing"
+      [ renderForest "" topentries]
+  where
+    renderForest _   [] = XHtml.noHtml
+    renderForest dir ts = XHtml.ulist ! [ XHtml.theclass "directory-list" ]
+                           << map (uncurry (renderTree dir)) ts
+
+    renderTree dir entryname (TarIndex.TarFileEntry _) =
+      XHtml.li << XHtml.anchor ! [XHtml.href (dir </> entryname)]
+                              << entryname
+    renderTree dir entryname (TarIndex.TarDir entries) =
+      XHtml.li << [ XHtml.anchor ! [XHtml.href (dir </> entryname)]
+                              << addTrailingPathSeparator entryname
+                  , renderForest (dir </> entryname) entries ]
+
 
 serveTarEntry :: FilePath -> Int -> FilePath -> IO Response
 serveTarEntry tarfile off fname = do
