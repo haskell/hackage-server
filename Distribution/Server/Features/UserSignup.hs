@@ -33,11 +33,11 @@ import Data.Char (isSpace, isPrint)
 
 import Data.Typeable (Typeable)
 import Control.Monad.Reader (ask)
-import Control.Monad.State (get, put)
+import Control.Monad.State (get, put, modify)
 import Data.SafeCopy (base, deriveSafeCopy)
 
 import Distribution.Text (display)
-import Data.Time (UTCTime, getCurrentTime)
+import Data.Time (UTCTime(..), getCurrentTime, addDays)
 import Text.CSV (CSV, Record)
 import System.IO
 import Network.Mail.Mime
@@ -151,11 +151,16 @@ addSignupResetInfo nonce info = do
               return True
       else return False
 
-
 deleteSignupResetInfo :: Nonce -> Update SignupResetTable ()
 deleteSignupResetInfo nonce = do
     SignupResetTable tbl <- get
     put $! SignupResetTable (Map.delete nonce tbl)
+
+deleteAllExpired :: UTCTime -> Update SignupResetTable ()
+deleteAllExpired expireTime =
+    modify $ \(SignupResetTable tbl) ->
+      SignupResetTable $
+        Map.filter (\entry -> nonceTimestamp entry > expireTime) tbl
 
 makeAcidic ''SignupResetTable [
     --queries
@@ -164,7 +169,8 @@ makeAcidic ''SignupResetTable [
     --updates
     'replaceSignupResetTable,
     'addSignupResetInfo,
-    'deleteSignupResetInfo
+    'deleteSignupResetInfo,
+    'deleteAllExpired
   ]
 
 
@@ -310,7 +316,8 @@ userSignupFeature :: ServerEnv
                   -> StateComponent AcidState SignupResetTable
                   -> Templates
                   -> UserSignupFeature
-userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..}
+userSignupFeature ServerEnv{serverBaseURI, serverCron}
+                  UserFeature{..} UserDetailsFeature{..}
                   UploadFeature{uploadersGroup} signupResetState templates
   = UserSignupFeature {..}
 
@@ -324,6 +331,7 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
       , featureState     = [abstractAcidStateComponent signupResetState]
       , featureCaches    = []
       , featureReloadFiles = reloadTemplates templates
+      , featurePostInit  = setupExpireCronJob
       }
 
     -- Resources
@@ -393,6 +401,19 @@ userSignupFeature ServerEnv{serverBaseURI} UserFeature{..} UserDetailsFeature{..
     updateDeleteSignupResetInfo :: Nonce -> MonadIO m => m ()
     updateDeleteSignupResetInfo nonce =
         updateState signupResetState (DeleteSignupResetInfo nonce)
+
+    -- Expiry
+    --
+    setupExpireCronJob =
+      addCronJob serverCron CronJob {
+        cronJobName      = "delete expired signup/reset requests",
+        cronJobFrequency = DailyJobFrequency,
+        cronJobOneShot   = False,
+        cronJobAction    = do
+          now <- getCurrentTime
+          let expire = now { utctDay = addDays (-7) (utctDay now) }
+          updateState signupResetState (DeleteAllExpired expire)
+      }
 
     -- Request handlers
     --
