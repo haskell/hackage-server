@@ -125,6 +125,7 @@ mkServerEnv config@(ServerConfig verbosity hostURI _
         templatesDir  = confTemplatesDir   config
 
     store   <- BlobStorage.open blobStoreDir
+    cron    <- newCron verbosity
 
     let env = ServerEnv {
             serverStaticDir     = staticDir,
@@ -132,6 +133,7 @@ mkServerEnv config@(ServerConfig verbosity hostURI _
             serverTemplatesMode = NormalMode,
             serverStateDir      = stateDir,
             serverBlobStore     = store,
+            serverCron          = cron,
             serverTmpDir        = tmpDir,
             serverCacheDelay    = cacheDelay * 1000000, --microseconds
             serverBaseURI       = hostURI,
