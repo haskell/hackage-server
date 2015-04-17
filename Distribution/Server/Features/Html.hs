@@ -493,7 +493,7 @@ mkHtmlCore HtmlUtilities{..}
             resourceDesc = [(GET, "A handy page for distro package change monitor tools")]
           , resourceGet  = [("html", serveDistroMonitorPage)]
           }
-      , (resourceAt "/package/:package/revisions/") {
+      , (resourceAt "/package/:package/revisions/.:format") {
             resourceGet  = [("html", serveCabalRevisionsPage)]
           }
       ]
