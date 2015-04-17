@@ -388,9 +388,11 @@ checkBenchmark (Benchmark _nameA interfaceA buildInfoA _enabledA)
   checkBuildInfo buildInfoA buildInfoB
 
 checkBuildInfo :: Check BuildInfo
-checkBuildInfo =
+checkBuildInfo biA biB =
   checkSame "Cannot change build information \
             \(just the dependency version constraints)"
+            (biA { targetBuildDepends = [] })
+            (biB { targetBuildDepends = [] })
 
 changesOk :: Eq a => String -> (a -> String) -> Check a
 changesOk what render a b
