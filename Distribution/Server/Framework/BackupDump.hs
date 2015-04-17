@@ -33,8 +33,8 @@ import Control.Concurrent.Async as Async
 import Control.Monad (liftM, forM, unless)
 import System.FilePath
 import System.Directory
-import System.Posix.Files as Posix (createLink)
-import System.Locale
+-- import System.Posix.Files as Posix (createLink)
+-- import System.Locale
 import System.IO.Unsafe (unsafeInterleaveIO)
 import Data.Maybe (catMaybes, fromMaybe)
 import Data.Time

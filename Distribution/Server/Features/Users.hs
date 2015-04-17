@@ -1,5 +1,5 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, DoRec,
-             BangPatterns, OverloadedStrings, TemplateHaskell #-}
+             BangPatterns, OverloadedStrings, TemplateHaskell, FlexibleContexts #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Features.Users (
     initUserFeature,

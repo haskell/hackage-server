@@ -38,6 +38,7 @@ import Data.ByteString.Lazy (ByteString)
 import qualified Data.Map as Map
 import Control.Monad.Error  (ErrorT, runErrorT)
 import Control.Monad.Writer (MonadWriter(..), Writer, runWriter)
+import Control.Applicative
 import Data.Time (getCurrentTime)
 
 import qualified Data.ByteString.Lazy.Char8 as BS -- TODO: Verify that we don't need to worry about UTF8
@@ -157,7 +158,7 @@ instance ToSElem Change where
                           ,("from", from)
                           ,("to", to)])
 
-newtype CheckM a = CheckM { unCheckM :: ErrorT String (Writer [Change]) a }
+newtype CheckM a = CheckM { unCheckM :: ErrorT String (Writer [Change]) a } deriving (Functor, Applicative)
 
 runCheck :: CheckM () -> Either String [Change]
 runCheck c = case runWriter . runErrorT . unCheckM $ c of

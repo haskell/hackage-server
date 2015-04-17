@@ -39,13 +39,13 @@ import qualified Data.ByteString.Lazy as BS
 import qualified Data.Map as Map
 import System.FilePath
 import Control.Monad.Trans (MonadIO, liftIO)
-import Control.Monad (msum, mzero)
+import Control.Monad (msum, mzero, MonadPlus(..))
 import System.IO
 
 -- | Serve the contents of a tar file
 -- file. TODO: This is not a sustainable implementation,
 -- but it gives us something to test with.
-serveTarball :: MonadIO m
+serveTarball :: (MonadIO m, MonadPlus m)
              => String     -- description for directory listings
              -> [FilePath] -- dir index file names (e.g. ["index.html"])
              -> FilePath   -- root dir in tar to serve

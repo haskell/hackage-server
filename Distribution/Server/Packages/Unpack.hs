@@ -194,7 +194,7 @@ extraChecks genPkgDesc = do
 --      WriterT for warning messages
 --      Either for fatal errors
 newtype UploadMonad a = UploadMonad (WriterT [String] (ErrorT String Identity) a)
-  deriving (Monad, MonadWriter [String])
+  deriving (Functor, Applicative, Monad, MonadWriter [String])
 
 warn :: String -> UploadMonad ()
 warn msg = tell [msg]

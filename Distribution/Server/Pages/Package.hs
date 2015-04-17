@@ -30,7 +30,7 @@ import Data.Monoid              (Monoid(..))
 import Data.Maybe               (maybeToList, isJust)
 import Data.List                (intersperse, intercalate)
 import System.FilePath.Posix    ((</>), (<.>))
-import System.Locale            (defaultTimeLocale)
+import Data.Time.Locale.Compat  (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
 
 packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)]

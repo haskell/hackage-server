@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, RecordWildCards, GeneralizedNewtypeDeriving, BangPatterns #-}
+{-# LANGUAGE RankNTypes, RecordWildCards, GeneralizedNewtypeDeriving, BangPatterns, FlexibleContexts #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Distribution.Server.Framework.BackupRestore (
@@ -40,7 +40,7 @@ import Control.Monad.Error
 import Control.Monad.Writer
 import Data.Time (UTCTime)
 import qualified Data.Time as Time
-import System.Locale
+import Data.Time.Locale.Compat (defaultTimeLocale)
 
 import Distribution.Server.Util.Merge
 import Distribution.Server.Util.Parse (unpackUTF8)
@@ -280,7 +280,7 @@ completeBackups res = case res of
 -- internal import utils
 
 newtype Import a = Import { unImp :: StateT ImportState (ErrorT String IO) a }
-  deriving (Monad, MonadIO, MonadState ImportState)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadState ImportState)
 
 evalImport :: BlobStorage -> FilePath -> Bool
            -> [(String, AbstractRestoreBackup)]

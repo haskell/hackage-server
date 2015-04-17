@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Distribution.Server.Framework.HtmlFormWrapper (
     htmlFormWrapperHack,
     rqRealMethod,
@@ -139,8 +140,8 @@ htmlFormWrapperHack rest = do
 
 -- | Very simple translation from form-data key value pairs to a single JSON
 -- object with equivalent field names and string values.
---    
-requestFormDataAsJSON :: MonadIO m => ServerPartT m (Either [((String, BS.ByteString), JPath)]
+--
+requestFormDataAsJSON :: (MonadIO m, MonadPlus m) => ServerPartT m (Either [((String, BS.ByteString), JPath)]
                                                             JSON.Value)
 requestFormDataAsJSON = do
     (_, mbody, _) <- askRqEnv

@@ -1,4 +1,4 @@
-{-# LANGUAGE DoRec, RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE DoRec, FlexibleContexts, RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.Html (
     HtmlFeature(..),
     initHtmlFeature
@@ -68,7 +68,7 @@ import qualified Data.Ix    as Ix
 import Data.Time.Format (formatTime)
 import Data.Time.Clock (getCurrentTime)
 import qualified Data.Time.Format.Human as HumanTime
-import System.Locale (defaultTimeLocale)
+import Data.Time.Locale.Compat (defaultTimeLocale)
 
 import Text.XHtml.Strict
 import qualified Text.XHtml.Strict as XHtml

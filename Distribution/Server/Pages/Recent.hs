@@ -31,7 +31,7 @@ import Data.Time.Clock
          ( UTCTime )
 import Data.Time.Format
          ( formatTime )
-import System.Locale
+import Data.Time.Locale.Compat
          ( defaultTimeLocale )
 
 

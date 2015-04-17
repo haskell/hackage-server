@@ -4,7 +4,6 @@
                 -fno-warn-missing-signatures
                 -fno-warn-unused-binds
                 -fno-warn-unused-matches
-                -fno-warn-lazy-unlifted-bindings
                 -fno-warn-name-shadowing
                 -fno-warn-incomplete-patterns
                 -fno-warn-tabs #-}

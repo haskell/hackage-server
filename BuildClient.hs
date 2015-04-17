@@ -29,7 +29,7 @@ import qualified Codec.Compression.GZip  as GZip
 import qualified Codec.Archive.Tar       as Tar
 
 import System.Environment
-import System.Exit
+import System.Exit(exitFailure, ExitCode(..))
 import System.FilePath
 import System.Directory
 import System.Console.GetOpt
