@@ -289,6 +289,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
     uploadCandidate :: (PackageId -> Bool) -> ServerPartE CandPkgInfo
     uploadCandidate isRight = do
+        guardAuthorised_ [InGroup uploadersGroup]
         regularIndex <- queryGetPackageIndex
         -- ensure that the user has proper auth if the package exists
         (uid, uresult, tarball) <- extractPackage $ \uid info ->
