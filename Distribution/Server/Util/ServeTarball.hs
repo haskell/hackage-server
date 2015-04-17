@@ -22,8 +22,7 @@ import Happstack.Server.Types
 import Happstack.Server.Monads
 import Happstack.Server.Routing (method)
 import Happstack.Server.Response
-import Happstack.Server.FileServe as Happstack (mimeTypes)
-import Distribution.Server.Framework.HappstackUtils (remainingPath)
+import Distribution.Server.Framework.HappstackUtils (mime, remainingPath)
 import Distribution.Server.Framework.CacheControl
 import Distribution.Server.Pages.Template (hackagePage)
 import Distribution.Server.Framework.ResponseContentTypes as Resource
@@ -36,7 +35,6 @@ import Data.TarIndex (TarIndex)
 import qualified Text.XHtml.Strict as XHtml
 import Text.XHtml.Strict ((<<), (!))
 import qualified Data.ByteString.Lazy as BS
-import qualified Data.Map as Map
 import System.FilePath
 import Control.Monad.Trans (MonadIO, liftIO)
 import Control.Monad (msum, mzero)
@@ -124,20 +122,12 @@ serveTarEntry tarfile off fname = do
   case Tar.read header of
     (Tar.Next Tar.Entry{Tar.entryContent = Tar.NormalFile _ size} _) -> do
          body <- BS.hGet htar (fromIntegral size)
-         let extension = case takeExtension fname of
-                           ('.':ext) -> ext
-                           ext       -> ext
-             mimeType = Map.findWithDefault "text/plain" extension mimeTypes'
+         let mimeType = mime fname
              response = ((setHeader "Content-Length" (show size)) .
                          (setHeader "Content-Type" mimeType)) $
                          resultBS 200 body
          return response
     _ -> fail "oh noes!!"
-
--- | Extended mapping from file extension to mime type
-mimeTypes' :: Map.Map String String
-mimeTypes' = Happstack.mimeTypes `Map.union` Map.fromList
-  [("xhtml", "application/xhtml+xml")]
 
 constructTarIndexFromFile :: FilePath -> IO TarIndex
 constructTarIndexFromFile file = do
