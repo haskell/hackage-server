@@ -263,6 +263,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          distroFeature
                          documentationCoreFeature
                          documentationCandidatesFeature
+                         tarIndexCacheFeature
                          reportsCoreFeature
                          userDetailsFeature
 

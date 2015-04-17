@@ -2,6 +2,7 @@ module Distribution.Server.Framework.ServerEnv where
 
 import Distribution.Server.Framework.BlobStorage (BlobStorage)
 import Distribution.Server.Framework.Logging (Verbosity)
+import Distribution.Server.Framework.Cron (Cron)
 import Distribution.Server.Framework.Templating (TemplatesMode)
 
 import qualified Network.URI as URI
@@ -30,6 +31,9 @@ data ServerEnv = ServerEnv {
     -- | The blob store is a specialised provider of persistent state for
     -- larger relatively-static blobs of data (e.g. uploaded tarballs).
     serverBlobStore :: BlobStorage,
+
+    -- | A cron job service
+    serverCron :: Cron,
 
     -- | The temporary directory the server has been configured to use.
     -- Use it for temp files such as when validating uploads.

@@ -30,6 +30,8 @@ import Distribution.ModuleName
          ( components )
 import Distribution.Server.Util.Parse
          ( unpackUTF8 )
+import Distribution.License
+         ( License(..) )
 
 import Data.List
          ( nub, (\\), partition, intercalate )
@@ -53,6 +55,10 @@ import System.FilePath
          ( (</>), (<.>), splitDirectories, splitExtension, normalise )
 import qualified System.FilePath.Windows
          ( takeFileName )
+
+-- Whether to allow upload of "all rights reserved" packages
+allowAllRightsReserved :: Bool
+allowAllRightsReserved = True
 
 -- | Upload or check a tarball containing a Cabal package.
 -- Returns either an fatal error or a package description and a list
@@ -173,11 +179,17 @@ extraChecks genPkgDesc = do
 
   let pureChecks = checkPackage genPkgDesc (Just pkgDesc)
       checks = pureChecks -- ++ fileChecks
-      isDistError (PackageDistSuspicious {}) = False
+      isDistError (PackageDistSuspicious {}) = False -- warn without refusing
       isDistError _                          = True
       (errors, warnings) = partition isDistError checks
   mapM_ (fail . explanation) errors
   mapM_ (warn . explanation) warnings
+
+  -- Proprietary License check (only active in central-server branch)
+  when (not allowAllRightsReserved &&
+        license pkgDesc == AllRightsReserved)
+       (fail $ "This server does not accept packages with 'license' " ++
+               "field set to AllRightsReserved.")
 
   -- Check reasonableness of names of exposed modules
   let topLevel = case library pkgDesc of

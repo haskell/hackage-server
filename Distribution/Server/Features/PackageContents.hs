@@ -109,7 +109,8 @@ packageContentsFeature ServerEnv{serverBlobStore = store}
         Left err ->
           errNotFound "Could not serve package contents" [MText err]
         Right (fp, etag, index) ->
-          serveTarball ["index.html"] (display (packageId pkg)) fp index
+          serveTarball (display (packageId pkg) ++ " source tarball")
+                       ["index.html"] (display (packageId pkg)) fp index
                        [Public, maxAgeDays 30] etag
 
     packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex.TarIndex))

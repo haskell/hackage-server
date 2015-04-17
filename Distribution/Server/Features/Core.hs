@@ -346,7 +346,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
         resourceDesc = [(GET, "Get package .cabal file")]
       , resourceGet  = [("cabal", serveCabalFile)]
       }
-    coreCabalFileRevs = (resourceAt "/package/:package/revisions/") {
+    coreCabalFileRevs = (resourceAt "/package/:package/revisions/.:format") {
         resourceDesc = [(GET, "List all package .cabal file revisions")]
       , resourceGet  = [("json", serveCabalFileRevisionsList)]
       }

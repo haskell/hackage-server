@@ -331,7 +331,8 @@ checkCondTree checkElem
 checkDependencies :: Check [Dependency]
 -- Special case: there are some pretty weird broken packages out there, see
 --   https://github.com/haskell/hackage-server/issues/303
-checkDependencies [] [Dependency (PackageName "base") _] = return ()
+checkDependencies [] [dep@(Dependency (PackageName "base") _)] =
+    logChange (Change ("added dependency on") (display dep) "")
 
 checkDependencies ds1 ds2 =
     fmapCheck canonicaliseDeps
@@ -387,9 +388,11 @@ checkBenchmark (Benchmark _nameA interfaceA buildInfoA _enabledA)
   checkBuildInfo buildInfoA buildInfoB
 
 checkBuildInfo :: Check BuildInfo
-checkBuildInfo =
+checkBuildInfo biA biB =
   checkSame "Cannot change build information \
             \(just the dependency version constraints)"
+            (biA { targetBuildDepends = [] })
+            (biB { targetBuildDepends = [] })
 
 changesOk :: Eq a => String -> (a -> String) -> Check a
 changesOk what render a b

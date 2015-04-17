@@ -646,3 +646,7 @@ ul.searchresults li {
   margin-bottom: 1em;
 }
 
+ul.directory-list {
+  list-style: none;
+  margin: 0 0 0 2em;
+}

@@ -24,6 +24,7 @@ module Distribution.Server.Framework (
     module Distribution.Server.Framework.Hook,
     module Distribution.Server.Framework.Error,
     module Distribution.Server.Framework.Logging,
+    module Distribution.Server.Framework.Cron,
     module Distribution.Server.Framework.HappstackUtils,
 
     module Data.Monoid,
@@ -57,6 +58,7 @@ import Distribution.Server.Framework.CacheControl
 import Distribution.Server.Framework.Hook
 import Distribution.Server.Framework.Error
 import Distribution.Server.Framework.Logging
+import Distribution.Server.Framework.Cron
 import Distribution.Server.Framework.HappstackUtils
 
 import Data.Monoid (Monoid(..))
