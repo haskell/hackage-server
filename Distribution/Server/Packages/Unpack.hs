@@ -39,6 +39,7 @@ import Data.Time
          ( UTCTime(..), fromGregorian, addUTCTime )
 import Data.Time.Clock.POSIX
          ( posixSecondsToUTCTime )
+import Control.Applicative
 import Control.Monad
          ( unless, when )
 import Control.Monad.Error

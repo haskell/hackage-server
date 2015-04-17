@@ -275,7 +275,7 @@ executable hackage-server
     happstack-server == 7.3.*,
     hslogger,
     mime-mail  ==0.4.*,
-    HStringTemplate ==0.7.*,
+    HStringTemplate > 0.7 && < 0.9,
     lifted-base >= 0.2.1 && < 0.3,
     QuickCheck >= 2.5,
     friendly-time >= 0.3 && < 0.4
