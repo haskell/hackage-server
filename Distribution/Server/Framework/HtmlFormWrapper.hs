@@ -84,10 +84,10 @@ import Distribution.Server.Framework.HappstackUtils (showContentType)
 -- request should be translated. For the return location we use a @_return@
 -- field.
 --
-htmlFormWrapperHack :: (Functor m, MonadIO m) => ServerPartT m Response -> ServerPartT m Response
+htmlFormWrapperHack :: (Functor m, MonadIO m, MonadPlus m) => ServerPartT m Response -> ServerPartT m Response
 htmlFormWrapperHack rest = do
     res <- getDataFn $ body $
-      (,,) <$> optional (do m <- look "_method" 
+      (,,) <$> optional (do m <- look "_method"
                             case m of
                               "PUT"    -> return PUT
                               "POST"   -> return POST
@@ -213,4 +213,3 @@ putRequestBody newBody = do
 rqRealMethod :: Request -> Method
 rqRealMethod rq | Just _ <- getHeader "_method" rq = POST
                 | otherwise                        = rqMethod rq
-
