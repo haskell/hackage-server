@@ -116,7 +116,9 @@ pkgNumRevisions :: PkgInfo -> Int
 pkgNumRevisions = Vec.length . pkgMetadataRevisions
 
 pkgLatestTarball :: PkgInfo -> Maybe (PkgTarball, UploadInfo)
-pkgLatestTarball = (Vec.!? 0) . pkgTarballRevisions
+pkgLatestTarball pkginfo
+  | Vec.null (pkgTarballRevisions pkginfo) = Nothing
+  | otherwise = Just (Vec.last (pkgTarballRevisions pkginfo))
 
 -- | The information held in a parsed .cabal file (used by cabal-install)
 pkgDesc :: PkgInfo -> GenericPackageDescription

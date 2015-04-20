@@ -50,9 +50,11 @@ uriEscape = URI.escapeURIString URI.isAllowedInURI
 -- |Returns a mime-type string based on the extension of the passed in
 -- file.
 mime :: FilePath -> String
-mime x  = Map.findWithDefault "text/plain; charset=utf-8" (drop 1 (takeExtension x)) mimeTypes'
+mime x =
+    Map.findWithDefault thedefault (drop 1 (takeExtension x)) mimeTypes'
   where
-    mimeTypes' = customMimeTypes `Map.union` mimeTypes
+    thedefault      = "text/plain; charset=utf-8"
+    mimeTypes'      = mimeTypes `Map.union` customMimeTypes
     customMimeTypes = Map.fromList
       [ ("xhtml", "application/xhtml+xml; charset=utf-8")
       , ("html" , "text/html; charset=utf-8")
@@ -64,6 +66,7 @@ mime x  = Map.findWithDefault "text/plain; charset=utf-8" (drop 1 (takeExtension
       , ("c",  " text/plain; charset=utf-8")
       , ("h",  " text/plain; charset=utf-8")
       ]
+
 
 
 

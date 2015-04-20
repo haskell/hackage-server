@@ -49,7 +49,7 @@ updatePackages packageMap = RestoreBackup {
       return (updatePackages packageMap')
   , restoreFinalize = do
       results <- mapM partialToFullPkg (Map.toList packageMap)
-      return $ PackagesState (PackageIndex.fromList results)
+      return $ PackagesState (PackageIndex.fromList results) (error "TODO")
   }
 
 type PartialIndex = Map PackageId PartialPkg
@@ -172,19 +172,19 @@ partialToFullPkg (pkgId, partial) = do
 -- Every tarball and cabal file ever uploaded for every single package name and version
 indexToAllVersions :: PackagesState -> [BackupEntry]
 indexToAllVersions st =
-    let pkgList = PackageIndex.allPackages . packageList $ st
+    let pkgList = PackageIndex.allPackages . packageIndex $ st
     in concatMap infoToAllEntries pkgList
 
 -- The most recent tarball and cabal file for every single package name and version
 indexToAllVersions' :: PackagesState -> [BackupEntry]
 indexToAllVersions' st =
-    let pkgList = PackageIndex.allPackages . packageList $ st
+    let pkgList = PackageIndex.allPackages . packageIndex $ st
     in concatMap infoToCurrentEntries pkgList
 
 -- The most recent tarball and cabal file for the most recent version of every package
 indexToCurrentVersions :: PackagesState -> [BackupEntry]
 indexToCurrentVersions st =
-    let pkgList  = PackageIndex.allPackagesByName . packageList $ st
+    let pkgList  = PackageIndex.allPackagesByName . packageIndex $ st
         pkgList' = map (maximumBy (comparing pkgOriginalUploadTime)) pkgList
     in concatMap infoToCurrentEntries pkgList'
 

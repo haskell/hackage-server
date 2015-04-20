@@ -216,7 +216,7 @@ documentationFeature name
         -- if given a directory, the default page is index.html
         -- the root directory within the tarball is e.g. foo-1.0-docs/
         ServerTarball.serveTarball (display pkgid ++ " documentation")
-                                   ["index.html"] (display pkgid ++ "-docs")
+                                   [{-no index-}] (display pkgid ++ "-docs")
                                    tarball index [Public, maxAgeDays 1] etag
 
     uploadDocumentation :: DynamicPath -> ServerPartE Response

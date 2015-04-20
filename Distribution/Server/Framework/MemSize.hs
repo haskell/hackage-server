@@ -15,6 +15,8 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.IntSet as IntSet
 import Data.IntSet (IntSet)
+import Data.Sequence (Seq)
+import qualified Data.Foldable as Foldable
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
@@ -140,6 +142,9 @@ instance MemSize a => MemSize (Set a) where
 
 instance MemSize IntSet where
   memSize s = 4 * IntSet.size s --estimate
+
+instance MemSize a => MemSize (Seq a) where
+  memSize s = sum [ 5 + memSize v | v <- Foldable.toList s ] --estimate
 
 instance MemSize BS.ByteString where
   memSize s = let (w,t) = divMod (BS.length s) wordSize

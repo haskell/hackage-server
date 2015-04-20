@@ -41,6 +41,8 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
+import qualified Data.Foldable as Foldable
+import Data.Maybe (isNothing)
 
 import Distribution.Text (display)
 import Distribution.Package
@@ -264,6 +266,12 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
       registerHookJust packageChangeHook isPackageIndexChange $ \_ ->
         prodAsyncCache indexTar
 
+      -- One-off complex migration
+      PackagesState {packageUpdateLog} <- queryState packagesState GetPackagesState
+      when (isNothing packageUpdateLog) $ do
+        userdb <- queryGetUserDb users
+        updateState packagesState (MigrateAddUpdateLog userdb)
+
       return feature
 
 
@@ -389,7 +397,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     -- Queries
     --
     queryGetPackageIndex :: MonadIO m => m (PackageIndex PkgInfo)
-    queryGetPackageIndex = return . packageList =<< queryState packagesState GetPackagesState
+    queryGetPackageIndex = return . packageIndex =<< queryState packagesState GetPackagesState
 
     -- Update transactions
     --
@@ -457,11 +465,10 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     --
     getIndexTarball :: IO IndexTarball
     getIndexTarball = do
-      users  <- queryGetUserDb  -- note, changes here don't automatically propagate
-      index  <- queryGetPackageIndex
-      extras <- readMemState indexExtras
+      PackagesState index (Just updatelog) <- queryState packagesState GetPackagesState
+      extras <- readMemState indexExtras --FIXME: use this or change it
       time   <- getCurrentTime
-      let indexTarball = GZip.compress (Packages.Index.write users extras index)
+      let indexTarball = GZip.compress (Packages.Index.write index (Foldable.toList updatelog))
       return $! IndexTarball indexTarball (fromIntegral $ BS.length indexTarball)
                              (md5 indexTarball) time
 
