@@ -18,6 +18,7 @@ import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import Data.Monoid
 import Data.Time (UTCTime)
+import qualified Data.ByteString.Lazy as BS
 import qualified Data.Vector as Vec
 import qualified Data.Sequence as Seq
 import Data.Sequence (Seq)
@@ -162,6 +163,14 @@ alterPackage pkgid alter = do
         State.put $! PackagesState pkgindex' updatelog
         return (Just (pkginfo, pkginfo'))
 
+addIndexExtraEntry :: FilePath -> BS.ByteString -> UTCTime
+                   -> Update PackagesState ()
+addIndexExtraEntry entrypath content timestamp = do
+    PackagesState pkgindex updatelog <- State.get
+    let !extraentry = ExtraEntry entrypath content timestamp
+        updatelog'  = fmap (Seq.|> extraentry) updatelog
+    State.put $! PackagesState pkgindex updatelog'
+
 -- |Replace all existing packages and reports
 replacePackagesState :: PackagesState -> Update PackagesState ()
 replacePackagesState = State.put
@@ -196,6 +205,7 @@ makeAcidic ''PackagesState ['getPackagesState
                            ,'addPackageTarball
                            ,'setPackageUploader
                            ,'setPackageUploadTime
+                           ,'addIndexExtraEntry
                            ,'migrateAddUpdateLog
                            ]
 

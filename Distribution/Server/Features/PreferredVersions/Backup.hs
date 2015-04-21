@@ -86,7 +86,7 @@ parsePackageName str = fail $ "Could not parse package name '" ++ str ++ "'"
 -------------------------------------------------------------------------------}
 
 backupPreferredVersions :: PreferredVersions -> [BackupEntry]
-backupPreferredVersions (PreferredVersions preferredMap deprecatedMap) =
+backupPreferredVersions (PreferredVersions preferredMap deprecatedMap _) =
      map backupPreferredInfo (Map.toList preferredMap)
   ++ map backupDeprecated (Map.toList deprecatedMap)
 

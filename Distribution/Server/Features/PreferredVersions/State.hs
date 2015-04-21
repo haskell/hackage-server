@@ -15,24 +15,25 @@ import Control.Arrow (second)
 import Control.Monad (ap)
 import Control.Monad.State (put, modify)
 import Control.Monad.Reader (ask, asks)
-import Data.Map (Map)
-import qualified Data.Map as Map
-import Data.SafeCopy (base, deriveSafeCopy)
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
+import Data.SafeCopy (Migrate(..), base, extension, deriveSafeCopy)
 import Data.Set (Set)
 import qualified Data.Set as Set
 
 data PreferredVersions = PreferredVersions {
     preferredMap  :: Map PackageName PreferredInfo,
-    deprecatedMap :: Map PackageName [PackageName]
+    deprecatedMap :: Map PackageName [PackageName],
+    migratedEphemeralPrefs :: Bool
 } deriving (Typeable, Show, Eq)
 
 emptyPreferredVersions :: PreferredVersions
-emptyPreferredVersions = PreferredVersions Map.empty Map.empty
+emptyPreferredVersions = PreferredVersions Map.empty Map.empty True
 
 data PreferredInfo = PreferredInfo {
     preferredRanges :: [VersionRange],
     deprecatedVersions :: [Version],
-    sumRange :: Maybe VersionRange
+    sumRange :: Maybe VersionRange -- cached form of 'consolidateRanges' below
 } deriving (Typeable, Show, Eq)
 
 emptyPreferredInfo :: PreferredInfo
@@ -67,12 +68,12 @@ partitionVersions info versions = if (not . isJust $ sumRange info) then (versio
             UnpreferredVersion -> (norm, depr, v:unpref)
         go [] = ([], [], [])
 ------------------------------------------
-$(deriveSafeCopy 0 'base ''PreferredVersions)
+$(deriveSafeCopy 1 'extension ''PreferredVersions)
 $(deriveSafeCopy 0 'base ''PreferredInfo)
 $(deriveSafeCopy 0 'base ''VersionStatus)
 
 instance MemSize PreferredVersions where
-    memSize (PreferredVersions a b) = memSize2 a b
+    memSize (PreferredVersions a b c) = memSize3 a b c
 
 instance MemSize PreferredInfo where
     memSize (PreferredInfo a b c) = memSize3 a b c
@@ -80,18 +81,22 @@ instance MemSize PreferredInfo where
 initialPreferredVersions :: PreferredVersions
 initialPreferredVersions = emptyPreferredVersions
 
-setPreferredRanges :: PackageName -> [VersionRange] -> Update PreferredVersions ()
-setPreferredRanges name ranges = alterPreferredInfo name $ \p ->
-    p { preferredRanges = ranges }
-
-setDeprecatedVersions :: PackageName -> [Version] -> Update PreferredVersions ()
-setDeprecatedVersions name versions = alterPreferredInfo name $ \p ->
-    p { deprecatedVersions = versions }
-
-alterPreferredInfo :: PackageName -> (PreferredInfo -> PreferredInfo) -> Update PreferredVersions ()
-alterPreferredInfo name func = modify $ \p -> p { preferredMap = Map.alter (res . func . fromMaybe emptyPreferredInfo) name $ preferredMap p }
-  where res (PreferredInfo [] [] _) = Nothing
-        res (PreferredInfo ranges depr _) = Just (PreferredInfo ranges depr $ consolidateRanges ranges depr)
+setPreferredInfo :: PackageName -> [VersionRange] -> [Version]
+                                  -> Update PreferredVersions PreferredInfo
+setPreferredInfo name ranges versions = do
+    let prefinfo =  PreferredInfo {
+          preferredRanges    = ranges,
+          deprecatedVersions = versions,
+          sumRange           = consolidateRanges ranges versions
+        }
+    if null ranges && null versions
+      then modify $ \p -> p { 
+             preferredMap = Map.delete name (preferredMap p)
+           }
+      else modify $ \p -> p {
+             preferredMap = Map.insert name prefinfo (preferredMap p)
+           }
+    return prefinfo
 
 getPreferredInfo :: PackageName -> Query PreferredVersions PreferredInfo
 getPreferredInfo name = asks $ Map.findWithDefault emptyPreferredInfo name . preferredMap
@@ -111,7 +116,35 @@ getPreferredVersions = ask
 replacePreferredVersions :: PreferredVersions -> Update PreferredVersions ()
 replacePreferredVersions = put
 
-makeAcidic ''PreferredVersions ['setPreferredRanges
+setMigratedEphemeralPrefs :: Update PreferredVersions ()
+setMigratedEphemeralPrefs = modify $ \p -> p { migratedEphemeralPrefs = True }
+
+---------------
+-- old, for old acid-state logs only
+--
+
+setPreferredRanges :: PackageName -> [VersionRange] -> Update PreferredVersions ()
+setPreferredRanges name ranges =
+    alterPreferredInfo name $ \p -> p { preferredRanges = ranges }
+
+setDeprecatedVersions :: PackageName -> [Version] -> Update PreferredVersions ()
+setDeprecatedVersions name versions =
+    alterPreferredInfo name $ \p -> p { deprecatedVersions = versions }
+
+alterPreferredInfo :: PackageName -> (PreferredInfo -> PreferredInfo)
+                   -> Update PreferredVersions ()
+alterPreferredInfo name func =
+    modify $ \p -> p {
+      preferredMap = Map.alter (res . func . fromMaybe emptyPreferredInfo)
+                               name (preferredMap p)
+    }
+  where res (PreferredInfo [] [] _)       = Nothing -- ie delete
+        res (PreferredInfo ranges depr _) =
+          Just (PreferredInfo ranges depr (consolidateRanges ranges depr))
+
+
+makeAcidic ''PreferredVersions ['setPreferredInfo
+                               ,'setPreferredRanges
                                ,'setDeprecatedVersions
                                ,'getPreferredInfo
                                ,'setDeprecatedFor
@@ -119,7 +152,24 @@ makeAcidic ''PreferredVersions ['setPreferredRanges
                                ,'isDeprecated
                                ,'getPreferredVersions
                                ,'replacePreferredVersions
+                               ,'setMigratedEphemeralPrefs
                                ]
+
+
+data PreferredVersions_v0
+   = PreferredVersions_v0 (Map PackageName PreferredInfo)
+                          (Map PackageName [PackageName])
+
+deriveSafeCopy 0 'base ''PreferredVersions_v0
+
+instance Migrate PreferredVersions where
+    type MigrateFrom PreferredVersions = PreferredVersions_v0
+    migrate (PreferredVersions_v0 prefs deprs) =
+      PreferredVersions {
+        preferredMap  = prefs,
+        deprecatedMap = deprs,
+        migratedEphemeralPrefs = False
+      }
 
 ---------------
 maybeBestVersion :: PreferredInfo -> [Version] -> Set Version -> Maybe (Version, Maybe VersionStatus)

@@ -36,8 +36,8 @@ import Data.Maybe (catMaybes)
 
 -- | Entries used to construct the contents of the hackage index tarball
 --
-data TarIndexEntry = PackageEntry PackageId RevisionNo UTCTime UserName
-                   | ExtraEntry FilePath ByteString UTCTime
+data TarIndexEntry = PackageEntry !PackageId !RevisionNo !UTCTime !UserName
+                   | ExtraEntry !FilePath !ByteString !UTCTime
   deriving (Eq, Show)
 
 type RevisionNo = Int

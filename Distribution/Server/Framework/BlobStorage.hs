@@ -16,6 +16,7 @@ module Distribution.Server.Framework.BlobStorage (
     BlobId,
     blobMd5,
     blobETag,
+    blobMd5Digest,
     open,
     add,
     addWith,
@@ -70,7 +71,10 @@ newtype BlobId = BlobId MD5Digest
   deriving (Eq, Ord, Show, Typeable, MemSize)
 
 instance ToJSON BlobId where
-  toJSON (BlobId md5digest) = toJSON (show md5digest)
+  toJSON = toJSON . blobMd5
+
+blobMd5Digest :: BlobId -> MD5Digest
+blobMd5Digest (BlobId digest) = digest
 
 blobMd5 :: BlobId -> String
 blobMd5 (BlobId digest) = show digest

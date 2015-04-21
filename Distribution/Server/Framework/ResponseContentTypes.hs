@@ -38,22 +38,46 @@ import Text.CSV (printCSV, CSV)
 import Control.DeepSeq
 
 
-data IndexTarball = IndexTarball !BS.Lazy.ByteString !Int !MD5Digest !UTCTime
+data IndexTarballInfo = IndexTarballInfo
+                          !BS.Lazy.ByteString !Int !MD5Digest -- tar
+                          !BS.Lazy.ByteString !Int !MD5Digest -- tar.gz
+                          !UTCTime
 
-instance ToMessage IndexTarball where
-  toResponse (IndexTarball bs len md5 time) = mkResponseLen bs len
-    [ ("Content-Type", "application/x-gzip")
-    , ("Content-MD5",   md5str)
-    , ("Last-modified", formatLastModifiedTime time)
-    ]
-    where md5str = show md5
+instance NFData IndexTarballInfo where
+  rnf (IndexTarballInfo a b c d e f g) = rnf (a,b,c,d,e,f,g)
 
-instance NFData IndexTarball where
-  rnf (IndexTarball a b c d) = rnf (a,b,c,d)
+instance MemSize IndexTarballInfo where
+  memSize (IndexTarballInfo a b c d e f g) = memSize7 a b c d e f g
 
-instance MemSize IndexTarball where
-  memSize (IndexTarball a b c d) = memSize4 a b c d
+indexTarballCompressed :: IndexTarballInfo -> TarballCompressed
+indexTarballCompressed (IndexTarballInfo _ _ _ bs len md5 time) =
+  TarballCompressed bs len md5 time
 
+indexTarballUncompressed :: IndexTarballInfo -> TarballUncompressed
+indexTarballUncompressed (IndexTarballInfo bs len md5 _ _ _ time) =
+  TarballUncompressed bs len md5 time
+
+data TarballCompressed   = TarballCompressed   !BS.Lazy.ByteString !Int
+                                               !MD5Digest !UTCTime
+
+data TarballUncompressed = TarballUncompressed !BS.Lazy.ByteString !Int
+                                               !MD5Digest !UTCTime
+
+instance ToMessage TarballCompressed where
+  toResponse (TarballCompressed bs len md5 time) =
+    mkResponseLen bs len
+      [ ("Content-Type", "application/x-gzip")
+      , ("Content-MD5",   show md5)
+      , ("Last-modified", formatLastModifiedTime time)
+      ]
+
+instance ToMessage TarballUncompressed where
+  toResponse (TarballUncompressed bs len md5 time) =
+    mkResponseLen bs len
+      [ ("Content-Type", "application/x-tar")
+      , ("Content-MD5",   show md5)
+      , ("Last-modified", formatLastModifiedTime time)
+      ]
 
 data PackageTarball = PackageTarball BS.Lazy.ByteString BlobId UTCTime
 

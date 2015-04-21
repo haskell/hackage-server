@@ -1249,10 +1249,10 @@ mkHtmlPreferred HtmlUtilities{..}
     servePutPreferred dpath = do
       pkgname <- packageInPath dpath
       putPreferred pkgname
-      return $ toResponse $ Resource.XHtml $ hackagePage "Set preferred versions"
-        [ h2 << "Set preferred versions"
+      return $ toResponse $ Resource.XHtml $ hackagePage "Updated preferred versions"
+        [ h2 << "Updated the preferred versions"
         , paragraph <<
-            [ toHtml "Set the "
+            [ toHtml "Updated the "
             , anchor ! [href $ preferredPackageUri versionsResource "" pkgname] << "preferred versions"
             , toHtml " for "
             , packageNameLink pkgname
@@ -1267,7 +1267,7 @@ mkHtmlPreferred HtmlUtilities{..}
       return $ toResponse $ Resource.XHtml $ hackagePage dtitle
          [ h2 << dtitle
          , paragraph <<
-            [ toHtml "Set the "
+            [ toHtml "Updated the "
             , anchor ! [href $ deprecatedPackageUri versionsResource "" pkgname] << "deprecated status"
             , toHtml " for "
             , packageNameLink pkgname

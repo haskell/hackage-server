@@ -120,7 +120,7 @@ data CoreFeature = CoreFeature {
     -- modification time for the tar entry.
     --
     -- This runs a `PackageChangeIndexExtra` hook when done.
-    updateArchiveIndexEntry  :: MonadIO m => String -> (ByteString, UTCTime) -> m (),
+    updateArchiveIndexEntry :: MonadIO m => FilePath -> ByteString -> UTCTime -> m (),
 
     -- | Notification of package or index changes.
     packageChangeHook :: Hook PackageChange (),
@@ -239,18 +239,22 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
     -- Canonical state
     packagesState <- packagesStateComponent verbosity serverStateDir
 
-    -- Ephemeral state
-    -- Additional files to put in the index tarball like preferred-versions
-    extraMap <- newMemStateWHNF Map.empty
-
     -- Hooks
     packageChangeHook   <- newHook
     packageDownloadHook <- newHook
 
     return $ \users -> do
+
+      -- One-off complex migration
+      PackagesState {packageUpdateLog} <- queryState packagesState GetPackagesState
+      when (isNothing packageUpdateLog) $ do
+        userdb <- queryGetUserDb users
+        logTiming verbosity "migrating package update log" $
+          updateState packagesState (MigrateAddUpdateLog userdb)
+
       rec let (feature, getIndexTarball)
                 = coreFeature env users
-                              packagesState extraMap indexTar
+                              packagesState indexTar
                               packageChangeHook packageDownloadHook
 
           -- Caches
@@ -265,12 +269,6 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
 
       registerHookJust packageChangeHook isPackageIndexChange $ \_ ->
         prodAsyncCache indexTar
-
-      -- One-off complex migration
-      PackagesState {packageUpdateLog} <- queryState packagesState GetPackagesState
-      when (isNothing packageUpdateLog) $ do
-        userdb <- queryGetUserDb users
-        updateState packagesState (MigrateAddUpdateLog userdb)
 
       return feature
 
@@ -293,22 +291,24 @@ packagesStateComponent verbosity stateDir = do
 coreFeature :: ServerEnv
             -> UserFeature
             -> StateComponent AcidState PackagesState
-            -> MemState (Map String (ByteString, UTCTime))
-            -> AsyncCache IndexTarball
+            -> AsyncCache IndexTarballInfo
             -> Hook PackageChange ()
             -> Hook PackageId ()
             -> ( CoreFeature
-               , IO IndexTarball )
+               , IO IndexTarballInfo )
 
 coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
-            packagesState indexExtras cacheIndexTarball
+            packagesState cacheIndexTarball
             packageChangeHook packageDownloadHook
   = (CoreFeature{..}, getIndexTarball)
   where
     coreFeatureInterface = (emptyHackageFeature "core") {
         featureDesc = "Core functionality"
       , featureResources = [
-            coreIndexTarball
+            coreIndexTarballTarGz
+          , coreIndexTarballTarGzMd5
+          , coreIndexTarballTar
+          , coreIndexTarballTarMd5
           , corePackagesPage
           , corePackagePage
           , corePackageRedirect
@@ -323,19 +323,27 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
               cacheDesc       = "main package index tarball",
               getCacheMemSize = memSize <$> readAsyncCache cacheIndexTarball
             }
-          , CacheComponent {
-              cacheDesc       = "package index extra files",
-              getCacheMemSize = memSize <$> readMemState indexExtras
-            }
           ]
       , featurePostInit = syncAsyncCache cacheIndexTarball
       }
 
     -- the rudimentary HTML resources are for when we don't want an additional HTML feature
     coreResource = CoreResource {..}
-    coreIndexTarball = (resourceAt "/packages/index.tar.gz") {
-        resourceDesc = [(GET, "tarball of package descriptions")]
-      , resourceGet  = [("tarball", servePackagesIndex)]
+    coreIndexTarballTarGz = (resourceAt "/packages/index.tar.gz") {
+        resourceDesc = [(GET, "tarball of package descriptions (compressed)")]
+      , resourceGet  = [("tarball", servePackagesIndexTarGz)]
+      }
+    coreIndexTarballTarGzMd5 = (resourceAt "/packages/index.tar.gz.md5") {
+        resourceDesc = [(GET, "MD5 hash of index.tar.gz")]
+      , resourceGet  = [("tarball", servePackagesIndexTarGzMd5)]
+      }
+    coreIndexTarballTar = (resourceAt "/packages/index.tar") {
+        resourceDesc = [(GET, "tarball of package descriptions (not compressed)")]
+      , resourceGet  = [("tarball", servePackagesIndexTar)]
+      }
+    coreIndexTarballTarMd5 = (resourceAt "/packages/index.tar.md5") {
+        resourceDesc = [(GET, "MD5 hash of index.tar")]
+      , resourceGet  = [("tarball", servePackagesIndexTarMd5)]
       }
     corePackagesPage = (resourceAt "/packages/.:format") {
         resourceDesc = [(GET, "List of all packages")]
@@ -456,21 +464,29 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           runHook_ packageChangeHook  (PackageChangeInfo oldpkginfo newpkginfo)
           return True
 
-    updateArchiveIndexEntry :: MonadIO m => String -> (ByteString, UTCTime) -> m ()
-    updateArchiveIndexEntry entryName entryDetails@(entryData, entryTime) = do
-      modifyMemState indexExtras (Map.insert entryName entryDetails)
+    updateArchiveIndexEntry :: MonadIO m => FilePath -> ByteString -> UTCTime -> m ()
+    updateArchiveIndexEntry entryName entryData entryTime = do
+      updateState packagesState (AddIndexExtraEntry entryName entryData entryTime)
       runHook_ packageChangeHook (PackageChangeIndexExtra entryName entryData entryTime)
 
     -- Cache updates
     --
-    getIndexTarball :: IO IndexTarball
+    getIndexTarball :: IO IndexTarballInfo
     getIndexTarball = do
       PackagesState index (Just updatelog) <- queryState packagesState GetPackagesState
-      extras <- readMemState indexExtras --FIXME: use this or change it
       time   <- getCurrentTime
-      let indexTarball = GZip.compress (Packages.Index.write index (Foldable.toList updatelog))
-      return $! IndexTarball indexTarball (fromIntegral $ BS.length indexTarball)
-                             (md5 indexTarball) time
+      let indexTarball      = Packages.Index.write index (Foldable.toList updatelog)
+          indexTarballGz    = GZip.compress indexTarball
+          indexTarballLen   = fromIntegral $ BS.length indexTarball
+          indexTarballGzLen = fromIntegral $ BS.length indexTarballGz
+          indexTarballMD5   = md5 indexTarball
+          indexTarballGzMD5 = md5 indexTarballGz
+          -- lazy construction, since it's forced by the async cache
+          resourceInfo = IndexTarballInfo
+                           indexTarball   indexTarballLen   indexTarballMD5
+                           indexTarballGz indexTarballGzLen indexTarballGzMD5
+                           time
+      return resourceInfo
 
     ------------------------------------------------------------------------------
     packageError :: [MessageSpan] -> ServerPartE a
@@ -496,12 +512,37 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     ------------------------------------------------------------------------
 
-    servePackagesIndex :: DynamicPath -> ServerPartE Response
-    servePackagesIndex _ = do
-      tarball@(IndexTarball _ _ tarballmd5 _) <- readAsyncCache cacheIndexTarball
+    servePackagesIndexTarGz :: DynamicPath -> ServerPartE Response
+    servePackagesIndexTarGz _ = do
+      tarball@(Resource.TarballCompressed _ _ tarballmd5 _) <-
+        indexTarballCompressed <$> readAsyncCache cacheIndexTarball
       cacheControl [Public, NoTransform, maxAgeMinutes 5]
                    (ETag (show tarballmd5))
       return (toResponse tarball)
+
+    servePackagesIndexTarGzMd5 :: DynamicPath -> ServerPartE Response
+    servePackagesIndexTarGzMd5 _ = do
+      (Resource.TarballCompressed _ _ tarballmd5 _) <-
+        indexTarballCompressed <$> readAsyncCache cacheIndexTarball
+      cacheControl [Public, NoTransform, maxAgeMinutes 5]
+                   (ETag (show tarballmd5))
+      return (toResponse (show tarballmd5))
+
+    servePackagesIndexTar :: DynamicPath -> ServerPartE Response
+    servePackagesIndexTar _ = do
+      tarball@(Resource.TarballUncompressed _ _ tarballmd5 _) <-
+        indexTarballUncompressed <$> readAsyncCache cacheIndexTarball
+      cacheControl [Public, NoTransform, maxAgeMinutes 5]
+                   (ETag (show tarballmd5))
+      return (toResponse tarball)
+
+    servePackagesIndexTarMd5 :: DynamicPath -> ServerPartE Response
+    servePackagesIndexTarMd5 _ = do
+      (Resource.TarballUncompressed _ _ tarballmd5 _) <-
+        indexTarballUncompressed <$> readAsyncCache cacheIndexTarball
+      cacheControl [Public, NoTransform, maxAgeMinutes 5]
+                   (ETag (show tarballmd5))
+      return (toResponse (show tarballmd5))
 
     -- TODO: should we include more information here? description and
     -- category for instance (but they are not readily available as long
