@@ -30,13 +30,11 @@ import Text.RSS
 import Network.URI
          ( URI(..), uriToString )
 import Data.Time.Clock
-         ( UTCTime )
+         ( UTCTime, addUTCTime )
 import Data.Time.Format
          ( formatTime )
 import Data.Time.Locale.Compat
          ( defaultTimeLocale )
-import qualified Data.Vector as Vec
-
 
 -- | Takes a list of package info, in reverse order by timestamp.
 --
@@ -84,7 +82,7 @@ makeRevisionRow users pkginfo =
   XHtml.tr <<
     [XHtml.td ! [XHtml.align "right"] <<
             [XHtml.toHtml (showTime time), nbsp, nbsp],
-     XHtml.td ! [XHtml.align "left"] << [XHtml.toHtml ("#" ++ show (Vec.length (pkgMetadataRevisions pkginfo) - 1)), nbsp, nbsp],
+     XHtml.td ! [XHtml.align "left"] << [XHtml.toHtml ("#" ++ show (pkgNumRevisions pkginfo - 1)), nbsp, nbsp],
      XHtml.td ! [XHtml.align "left"] << display user,
      XHtml.td ! [XHtml.align "left"] <<
                   [nbsp, nbsp, XHtml.anchor !
@@ -93,7 +91,7 @@ makeRevisionRow users pkginfo =
     nbsp = XHtml.primHtmlChar "nbsp"
     user = Users.userIdToName users userId
 
-    (time, userId) = snd . Vec.last $ pkgMetadataRevisions pkginfo
+    (time, userId) = pkgLatestUploadInfo pkginfo
     pkgid = pkgInfoId pkginfo
 
 showTime :: UTCTime -> String
@@ -122,9 +120,13 @@ recentFeed users hostURI now pkgs = RSS
   (hostURI { uriPath = recentAdditionsURL})
   desc
   (channel now)
-  [ releaseItem users hostURI pkg | pkg <- take 20 pkgs ]
+  (map (releaseItem users hostURI) pkgList)
   where
-    desc = "The 20 most recent additions to Hackage, the Haskell package database."
+    desc = "The 20 most recent additions to Hackage (or last 48 hours worth, whichever is greater), the Haskell package database."
+    twoDaysAgo = addUTCTime (negate $ 60 * 60 * 48) now
+    pkgListTwoDays = takeWhile (\p -> pkgLatestUploadTime p > twoDaysAgo) pkgs
+    pkgList = if (length pkgListTwoDays > 20) then pkgListTwoDays else take 20 pkgList
+
 
 recentRevisionsFeed :: Users -> URI -> UTCTime -> [PkgInfo] -> RSS
 recentRevisionsFeed users hostURI now pkgs = RSS
@@ -132,9 +134,12 @@ recentRevisionsFeed users hostURI now pkgs = RSS
   (hostURI { uriPath = recentRevisionsURL})
   desc
   (channel now)
-  [ revisionItem users hostURI pkg | pkg <- take 40 pkgs ]
+  (map (revisionItem users hostURI) pkgList)
   where
-    desc = "The 40 most recent revisions to cabal metadata in Hackage, the Haskell package database."
+    desc = "The 40 most recent revisions to cabal metadata in Hackage (or last 48 hours worth, whichever is greater), the Haskell package database."
+    twoDaysAgo = addUTCTime (negate $ 60 * 60 * 48) now
+    pkgListTwoDays = takeWhile (\p -> pkgLatestUploadTime p > twoDaysAgo) pkgs
+    pkgList = if (length pkgListTwoDays > 40) then pkgListTwoDays else take 40 pkgList
 
 channel :: UTCTime -> [RSS.ChannelElem]
 channel now =
@@ -178,10 +183,10 @@ revisionItem users hostURI pkgInfo =
   where
     uri   = hostURI { uriPath = packageURL pkgId  ++ "/revisions"}
     title = display (packageName pkgId) ++ " " ++ display (packageVersion pkgId)
-    body  = "Revision #" ++ show (Vec.length (pkgMetadataRevisions pkgInfo) - 1)
+    body  = "Revision #" ++ show (pkgNumRevisions pkgInfo - 1)
     desc  = "<i>Revised by " ++ display user ++ ", " ++ showTime time ++ ".</i>"
          ++ if null body then "" else "<p>" ++ body
     user = Users.userIdToName users userId
 
-    (time, userId) = snd . Vec.last $ pkgMetadataRevisions pkgInfo
+    (time, userId) = pkgLatestUploadInfo pkgInfo
     pkgId = pkgInfoId pkgInfo

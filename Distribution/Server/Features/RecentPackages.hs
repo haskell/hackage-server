@@ -21,8 +21,6 @@ import Data.Time.Clock (getCurrentTime)
 import Data.List (sortBy)
 import Data.Ord (comparing)
 
-import qualified Data.Vector as Vec
-
 -- the goal is to have the HTML modules import /this/ one, not the other way around
 import qualified Distribution.Server.Pages.Recent as Pages
 
@@ -131,8 +129,8 @@ recentPackagesFeature env
 
             recentRevisions = sortBy (flip $ comparing revisionTime) .
                               filter isRevised $ (PackageIndex.allPackages pkgIndex)
-            revisionTime pkgInfo = fst . snd . Vec.last $ pkgMetadataRevisions pkgInfo
-            isRevised pkgInfo = Vec.length (pkgMetadataRevisions pkgInfo) > 1
+            revisionTime pkgInfo = pkgLatestUploadTime pkgInfo
+            isRevised pkgInfo = pkgNumRevisions pkgInfo > 1
             xmlRevisions = toResponse $ Resource.XHtml $ Pages.revisionsPage users recentRevisions
             rssRevisions = toResponse $ Pages.recentRevisionsFeed users (serverBaseURI env) now recentRevisions
 
