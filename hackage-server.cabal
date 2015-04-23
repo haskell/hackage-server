@@ -163,6 +163,7 @@ executable hackage-server
     Distribution.Server.Features.Upload.State
     Distribution.Server.Features.Upload.Backup
     Distribution.Server.Features.Users
+    Distribution.Server.Features.AdminLog
 
 
   if flag(minimal)
