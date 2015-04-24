@@ -288,7 +288,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
     adminLogFeature <- mkAdminLogFeature
                          usersFeature
-                         coreFeature
+
 #endif
 
     -- The order of initialization above should be the same as

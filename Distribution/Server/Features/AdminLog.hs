@@ -5,10 +5,11 @@ module Distribution.Server.Features.AdminLog where
 import Distribution.Package
 import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Users.Group
+import Distribution.Server.Users.Users (Users)
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupRestore
 
-import Distribution.Server.Features.Core
+import Distribution.Server.Pages.AdminLog
 import Distribution.Server.Features.Users
 
 import Data.SafeCopy (base, deriveSafeCopy)
@@ -79,10 +80,10 @@ data AdminLogFeature = AdminLogFeature {
 instance IsHackageFeature AdminLogFeature where
     getFeatureInterface = adminLogFeatureInterface
 
-initAdminLogFeature :: ServerEnv -> IO (UserFeature -> CoreFeature -> IO AdminLogFeature)
+initAdminLogFeature :: ServerEnv -> IO (UserFeature -> IO AdminLogFeature)
 initAdminLogFeature ServerEnv{serverStateDir} = do
   adminLogState <- adminLogStateComponent serverStateDir
-  return $ \UserFeature{groupChangedHook} CoreFeature{coreResource} -> do
+  return $ \UserFeature{groupChangedHook, queryGetUserDb} -> do
     registerHook groupChangedHook $ \(gd,addOrDel,actorUid,targetUid) -> do
         now <- getCurrentTime
         updateState adminLogState $ AddAdminLog
@@ -90,24 +91,30 @@ initAdminLogFeature ServerEnv{serverStateDir} = do
 
     return $ AdminLogFeature {
        adminLogFeatureInterface =
-           (emptyHackageFeature "Admin Actions Log") {
+           (emptyHackageFeature "admin-actions-log") {
                featureDesc = "Log of additions and removals of users from groups.",
-               featureResources = [adminLogResource coreResource adminLogState],
+               featureResources = [adminLogResource queryGetUserDb adminLogState],
                featureState = [abstractAcidStateComponent adminLogState]
        }
     }
 
-adminLogResource :: CoreResource -> StateComponent AcidState AdminLog -> Resource
-adminLogResource coreResource logState = (extendResourcePath "/admin-log.:format" (corePackagesPage coreResource)) {
+adminLogResource :: ServerPartE Users -> StateComponent AcidState AdminLog -> Resource
+adminLogResource getUserDb logState = (resourceAt "/admin-log.:format") {
+               resourceDesc = [(GET, "Full list of group additions and removals")],
                resourceGet = [
                   ("html", \ _ -> do
-                     adminLog <- queryState logState GetAdminLog
-                     return . toResponse $ show adminLog)
-                , ("rss", \ _ -> do
-                     adminLog <- queryState logState GetAdminLog
-                     return . toResponse $ show adminLog)
+                     aLog <- queryState logState GetAdminLog
+                     users <- getUserDb
+                     return . toResponse . adminLogPage users . map mkRow . adminLog $ aLog)
                ]
              }
+  where
+    mkRow (time, actorId, Admin_GroupDelUser targetId group) = (time, actorId, "Delete", targetId, nameIt group)
+    mkRow (time, actorId, Admin_GroupAddUser targetId group) = (time, actorId, "Add", targetId, nameIt group)
+    nameIt (MaintainerGroup pn) = "Maintainers for " ++ unPackageName pn
+    nameIt AdminGroup = "Administrators"
+    nameIt TrusteeGroup = "Trustees"
+    nameIt (OtherGroup s) = s
 
 adminLogStateComponent :: FilePath -> IO (StateComponent AcidState AdminLog)
 adminLogStateComponent stateDir = do
