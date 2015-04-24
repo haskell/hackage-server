@@ -125,7 +125,7 @@ recentFeed users hostURI now pkgs = RSS
     desc = "The 20 most recent additions to Hackage (or last 48 hours worth, whichever is greater), the Haskell package database."
     twoDaysAgo = addUTCTime (negate $ 60 * 60 * 48) now
     pkgListTwoDays = takeWhile (\p -> pkgLatestUploadTime p > twoDaysAgo) pkgs
-    pkgList = if (length pkgListTwoDays > 20) then pkgListTwoDays else take 20 pkgList
+    pkgList = if (length pkgListTwoDays > 20) then pkgListTwoDays else take 20 pkgs
 
 
 recentRevisionsFeed :: Users -> URI -> UTCTime -> [PkgInfo] -> RSS
@@ -139,7 +139,7 @@ recentRevisionsFeed users hostURI now pkgs = RSS
     desc = "The 40 most recent revisions to cabal metadata in Hackage (or last 48 hours worth, whichever is greater), the Haskell package database."
     twoDaysAgo = addUTCTime (negate $ 60 * 60 * 48) now
     pkgListTwoDays = takeWhile (\p -> pkgLatestUploadTime p > twoDaysAgo) pkgs
-    pkgList = if (length pkgListTwoDays > 40) then pkgListTwoDays else take 40 pkgList
+    pkgList = if (length pkgListTwoDays > 40) then pkgListTwoDays else take 40 pkgs
 
 channel :: UTCTime -> [RSS.ChannelElem]
 channel now =
