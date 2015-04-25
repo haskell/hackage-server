@@ -2,7 +2,6 @@
 
 module Distribution.Server.Features.AdminLog where
 
-import Distribution.Package
 import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Users.Group
 import Distribution.Server.Users.Users (Users)
@@ -23,7 +22,7 @@ import qualified Data.ByteString.Lazy.Char8 as BS
 import Text.Read (readMaybe)
 import Distribution.Server.Util.Parse
 
-data GroupDesc = MaintainerGroup PackageName | AdminGroup | TrusteeGroup | OtherGroup String deriving (Eq, Ord, Read, Show)
+data GroupDesc = MaintainerGroup BS.ByteString | AdminGroup | TrusteeGroup | OtherGroup BS.ByteString deriving (Eq, Ord, Read, Show)
 
 deriveSafeCopy 0 'base ''GroupDesc
 
@@ -39,15 +38,17 @@ instance MemSize AdminAction where
 
 deriveSafeCopy 0 'base ''AdminAction
 
+--TODO Maybe Reason
+
 mkAdminAction :: GroupDescription -> Bool -> UserId -> AdminAction
 mkAdminAction gd isAdd uid = (if isAdd then Admin_GroupAddUser else Admin_GroupDelUser) uid groupdesc
     where groupdesc | groupTitle gd == "Hackage admins" = AdminGroup
                     | groupTitle gd == "Package trustees" = TrusteeGroup
-                    | Just (pn,_) <- groupEntity gd, groupTitle gd == "Maintainers" = MaintainerGroup (PackageName pn)
-                    | otherwise = OtherGroup (groupTitle gd ++ maybe "" ((' ':) . fst) (groupEntity gd))
+                    | Just (pn,_) <- groupEntity gd, groupTitle gd == "Maintainers" = MaintainerGroup (packUTF8 pn)
+                    | otherwise = OtherGroup $ packUTF8 (groupTitle gd ++ maybe "" ((' ':) . fst) (groupEntity gd))
 
 newtype AdminLog = AdminLog {
-      adminLog :: [(UTCTime,UserId,AdminAction)]
+      adminLog :: [(UTCTime,UserId,AdminAction,BS.ByteString)]
 } deriving (Typeable, Show, MemSize)
 
 deriveSafeCopy 0 'base ''AdminLog
@@ -58,7 +59,7 @@ initialAdminLog = AdminLog []
 getAdminLog :: Query AdminLog AdminLog
 getAdminLog = ask
 
-addAdminLog :: (UTCTime, UserId, AdminAction) -> Update AdminLog ()
+addAdminLog :: (UTCTime, UserId, AdminAction, BS.ByteString) -> Update AdminLog ()
 addAdminLog x = State.modify (\(AdminLog xs) -> AdminLog (x : xs))
 
 instance Eq AdminLog where
@@ -84,10 +85,10 @@ initAdminLogFeature :: ServerEnv -> IO (UserFeature -> IO AdminLogFeature)
 initAdminLogFeature ServerEnv{serverStateDir} = do
   adminLogState <- adminLogStateComponent serverStateDir
   return $ \UserFeature{groupChangedHook, queryGetUserDb} -> do
-    registerHook groupChangedHook $ \(gd,addOrDel,actorUid,targetUid) -> do
+    registerHook groupChangedHook $ \(gd,addOrDel,actorUid,targetUid,reason) -> do
         now <- getCurrentTime
         updateState adminLogState $ AddAdminLog
-            (now, actorUid, mkAdminAction gd addOrDel targetUid)
+            (now, actorUid, mkAdminAction gd addOrDel targetUid, packUTF8 reason)
 
     return $ AdminLogFeature {
        adminLogFeatureInterface =
@@ -109,12 +110,14 @@ adminLogResource getUserDb logState = (resourceAt "/admin-log.:format") {
                ]
              }
   where
-    mkRow (time, actorId, Admin_GroupDelUser targetId group) = (time, actorId, "Delete", targetId, nameIt group)
-    mkRow (time, actorId, Admin_GroupAddUser targetId group) = (time, actorId, "Add", targetId, nameIt group)
-    nameIt (MaintainerGroup pn) = "Maintainers for " ++ unPackageName pn
+    mkRow (time, actorId, Admin_GroupDelUser targetId group, reason) =
+          (time, actorId, "Delete", targetId, nameIt group, unpackUTF8 reason)
+    mkRow (time, actorId, Admin_GroupAddUser targetId group, reason) =
+          (time, actorId, "Add", targetId, nameIt group, unpackUTF8 reason)
+    nameIt (MaintainerGroup pn) = "Maintainers for " ++ unpackUTF8 pn
     nameIt AdminGroup = "Administrators"
     nameIt TrusteeGroup = "Trustees"
-    nameIt (OtherGroup s) = s
+    nameIt (OtherGroup s) = unpackUTF8 s
 
 adminLogStateComponent :: FilePath -> IO (StateComponent AcidState AdminLog)
 adminLogStateComponent stateDir = do
@@ -144,8 +147,8 @@ restoreAdminLogBackup = go (AdminLog [])
 importLogs :: AdminLog -> BS.ByteString -> AdminLog
 importLogs (AdminLog ls) = AdminLog . (++ls) . catMaybes . map fromRecord . lines . unpackUTF8
     where
-      fromRecord :: String -> Maybe (UTCTime,UserId,AdminAction)
+      fromRecord :: String -> Maybe (UTCTime,UserId,AdminAction,BS.ByteString)
       fromRecord = readMaybe
 
-backupLogEntries :: [(UTCTime,UserId,AdminAction)] -> BS.ByteString
+backupLogEntries :: [(UTCTime,UserId,AdminAction,BS.ByteString)] -> BS.ByteString
 backupLogEntries = packUTF8 . unlines . map show

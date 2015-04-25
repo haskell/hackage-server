@@ -52,7 +52,7 @@ data UserFeature = UserFeature {
     -- modification thereof.
     adminGroup :: UserGroup,
 
-    groupChangedHook :: Hook (GroupDescription, Bool, UserId, UserId) (),
+    groupChangedHook :: Hook (GroupDescription, Bool, UserId, UserId, String) (),
 
     -- Authorisation
     -- | Require any of a set of privileges.
@@ -257,7 +257,7 @@ userFeature :: StateComponent AcidState Users.Users
             -> MemState GroupIndex
             -> Hook () ()
             -> Hook Auth.AuthError (Maybe ErrorResponse)
-            -> Hook (GroupDescription, Bool, UserId, UserId) ()
+            -> Hook (GroupDescription, Bool, UserId, UserId, String) ()
             -> UserGroup
             -> GroupResource
             -> (UserFeature, UserGroup)
@@ -568,21 +568,23 @@ userFeature  usersState adminsState
         actorUid <- guardAuthorised (map InGroup (canAddGroup group))
         users <- queryState usersState GetUserDb
         muser <- optional $ look "user"
+        reason <- optional $ look "reason"
         case muser of
             Nothing -> addError "Bad request (could not find 'user' argument)"
             Just ustr -> case simpleParse ustr >>= \uname -> Users.lookupUserName uname users of
                 Nothing      -> addError $ "No user with name " ++ show ustr ++ " found"
                 Just (uid,_) -> do
                              liftIO $ addUserList group uid
-                             runHook_ groupChangedHook (groupDesc group, True,actorUid,uid)
+                             runHook_ groupChangedHook (groupDesc group, True,actorUid,uid,fromMaybe "" reason)
        where addError = errBadRequest "Failed to add user" . return . MText
 
     groupDeleteUser :: UserGroup -> DynamicPath -> ServerPartE ()
     groupDeleteUser group dpath = do
       actorUid <- guardAuthorised (map InGroup (canRemoveGroup group))
       uid <- lookupUserName =<< userNameInPath dpath
+      reason <- localRq (\req -> req {rqMethod = POST}) . optional $ look "reason"
       liftIO $ removeUserList group uid
-      runHook_ groupChangedHook (groupDesc group, False,actorUid,uid)
+      runHook_ groupChangedHook (groupDesc group, False,actorUid,uid,fromMaybe "" reason)
 
     lookupGroupEditAuth :: UserGroup -> ServerPartE (Bool, Bool)
     lookupGroupEditAuth group = do
@@ -704,16 +706,18 @@ userFeature  usersState adminsState
       group <- getGroup groupr dpath
       actorUid <- guardAuthorised (map InGroup (canAddGroup group))
       uid <- lookupUserName =<< userNameInPath dpath
+      reason <- optional $ look "reason"
       liftIO $ addUserList group uid
-      runHook_ groupChangedHook (groupDesc group, True,actorUid,uid)
+      runHook_ groupChangedHook (groupDesc group, True,actorUid,uid,fromMaybe "" reason)
       goToList groupr dpath
 
     serveUserGroupUserDelete groupr dpath = do
       group <- getGroup groupr dpath
       actorUid <- guardAuthorised (map InGroup (canRemoveGroup group))
       uid <- lookupUserName =<< userNameInPath dpath
+      reason <- optional $ look "reason"
       liftIO $ removeUserList group uid
-      runHook_ groupChangedHook (groupDesc group, False,actorUid,uid)
+      runHook_ groupChangedHook (groupDesc group, False,actorUid,uid,fromMaybe "" reason)
       goToList groupr dpath
 
     goToList group dpath = seeOther (renderResource' (groupResource group) dpath)

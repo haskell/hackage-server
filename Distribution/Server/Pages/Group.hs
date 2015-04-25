@@ -48,17 +48,19 @@ addUser uri =
     [ h3 << "Add user"
     , gui uri ! [theclass "box"] <<
         [ p << [stringToHtml "User: ", textfield "user"]
+        , p << [stringToHtml "Reason: ", textfield "reason"]
         , submit "submit" "Add member"
         ]
     ]
 
 removeUser :: Users.UserName -> String -> [Html]
 removeUser uname uri =
-    [ toHtml " ",
-      gui (uri </> "user" </> display uname) <<
-       [ hidden "_method" "DELETE"
-       , submit "submit" "Remove"
-       ]
+    [ toHtml " "
+    , gui (uri </> "user" </> display uname) <<
+        [ p << [stringToHtml "Reason: ", textfield "reason"]
+        , hidden "_method" "DELETE"
+        , submit "submit" "Remove"
+        ]
     ]
 
 listGroup :: [Users.UserName] -> Maybe String -> Html
@@ -66,4 +68,3 @@ listGroup [] _ = p << "No member exist presently"
 listGroup users muri = unordList (map displayName users)
   where displayName uname = (anchor ! [href $ "/user/" ++ display uname] << display uname) +++
                             fromMaybe [] (fmap (removeUser uname) muri)
-

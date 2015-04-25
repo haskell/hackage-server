@@ -23,18 +23,19 @@ import Data.Time.Format
 import Data.Time.Locale.Compat
          ( defaultTimeLocale )
 
-adminLogPage :: Users -> [(UTCTime, UserId, String, UserId, String)] -> Html
+adminLogPage :: Users -> [(UTCTime, UserId, String, UserId, String, String)] -> Html
 adminLogPage users entries = hackagePage "adminstrator actions log" docBody
      where
         docBody = [XHtml.h2 << "Administrator actions",
                    XHtml.table ! [XHtml.align "center"] << (header : map makeRow entries)]
-        makeRow (time, actorId, action, targetId, group) = XHtml.tr << map fmtCell
+        makeRow (time, actorId, action, targetId, group, reason) = XHtml.tr << map fmtCell
              [showTime time,
               display $ Users.userIdToName users actorId,
               action,
               display $ Users.userIdToName users targetId,
-              group]
+              group,
+              reason]
         nbsp = XHtml.primHtmlChar "nbsp"
         showTime = formatTime defaultTimeLocale "%c"
-        header = XHtml.tr << map (XHtml.th <<) ["Time ","User ","Action ","Target ","Group "]
+        header = XHtml.tr << map (XHtml.th <<) ["Time ","User ","Action ","Target ","Group ","Reason "]
         fmtCell x = XHtml.td ! [XHtml.align "left"] << [XHtml.toHtml x, nbsp, nbsp]
