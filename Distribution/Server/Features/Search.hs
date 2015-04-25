@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, DoRec #-}
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, RecursiveDo #-}
 module Distribution.Server.Features.Search (
     SearchFeature(..),
     initSearchFeature,

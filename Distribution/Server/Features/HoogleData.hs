@@ -1,4 +1,6 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, RankNTypes, NamedFieldPuns, RecordWildCards, DoRec, BangPatterns, CPP #-}
+{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell,
+             RankNTypes, NamedFieldPuns, RecordWildCards,
+             RecursiveDo, BangPatterns, CPP #-}
 module Distribution.Server.Features.HoogleData (
     initHoogleDataFeature,
     HoogleDataFeature(..),
