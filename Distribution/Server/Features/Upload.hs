@@ -1,4 +1,4 @@
-{-# LANGUAGE DoRec, RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE RecursiveDo, RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.Upload (
     UploadFeature(..),
     UploadResource(..),

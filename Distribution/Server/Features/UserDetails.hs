@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, RankNTypes,
-    NamedFieldPuns, RecordWildCards, DoRec, BangPatterns #-}
+    NamedFieldPuns, RecordWildCards, RecursiveDo, BangPatterns #-}
 module Distribution.Server.Features.UserDetails (
     initUserDetailsFeature,
     UserDetailsFeature(..),

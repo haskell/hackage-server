@@ -1,4 +1,4 @@
-{-# LANGUAGE DoRec, RankNTypes, ScopedTypeVariables,
+{-# LANGUAGE RecursiveDo, RankNTypes, ScopedTypeVariables,
              NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.Mirror (
     MirrorFeature(..),

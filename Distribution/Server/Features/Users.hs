@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, DoRec,
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, RecursiveDo,
              BangPatterns, OverloadedStrings, TemplateHaskell, FlexibleContexts #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Features.Users (

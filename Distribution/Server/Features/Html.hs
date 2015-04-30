@@ -1,4 +1,4 @@
-{-# LANGUAGE DoRec, FlexibleContexts, RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE RecursiveDo, FlexibleContexts, RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.Html (
     HtmlFeature(..),
     initHtmlFeature
