@@ -54,8 +54,9 @@ mime x  = Map.findWithDefault "text/plain; charset=utf-8" (drop 1 (takeExtension
   where
     mimeTypes' = customMimeTypes `Map.union` mimeTypes
     customMimeTypes = Map.fromList
-      [ ("xhtml", "application/xhtml+xml")
-      , ("cabal", "text/plain")
+      [ ("xhtml", "application/xhtml+xml; charset=utf-8")
+      , ("html" , "text/html; charset=utf-8")
+      , ("cabal", "text/plain; charset=utf-8")
       ]
 
 
