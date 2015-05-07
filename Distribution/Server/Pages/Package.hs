@@ -105,9 +105,10 @@ descriptionSection p@PackageRender{..} =
 
 prologue :: PackageRender -> [Html]
 prologue PackageRender{..} =
-  case rendReadme of
-    Nothing -> renderHaddock (description rendOther)
-    Just (_, readme) -> [renderMarkdown readme]
+  renderHaddock (description rendOther) ++
+  (case rendReadme of
+    Nothing -> []
+    Just (_, readme) -> [renderMarkdown readme])
 
 renderHaddock :: String -> [Html]
 renderHaddock []   = []
