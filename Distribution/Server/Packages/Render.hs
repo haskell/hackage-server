@@ -11,7 +11,8 @@ module Distribution.Server.Packages.Render (
   ) where
 
 import Data.Maybe (catMaybes, isJust, maybeToList)
-import Control.Monad (guard)
+import Control.Monad (guard, liftM2)
+import qualified Data.ByteString.Lazy as BS
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
 import qualified Data.Vector as Vec
@@ -50,7 +51,8 @@ data PackageRender = PackageRender {
     rendRepoHeads    :: [(RepoType, String, SourceRepo)],
     rendModules      :: Maybe TarIndex -> Maybe ModuleForest,
     rendHasTarball   :: Bool,
-    rendHasChangeLog :: Bool,
+    rendChangeLog    :: Maybe (FilePath, BS.ByteString),
+    rendReadme       :: Maybe (FilePath, BS.ByteString),
     rendUploadInfo   :: (UTCTime, Maybe UserInfo),
     rendUpdateInfo   :: Maybe (Int, UTCTime, Maybe UserInfo),
     rendPkgUri       :: String,
@@ -62,8 +64,8 @@ data PackageRender = PackageRender {
     rendOther        :: PackageDescription
 } deriving (Show)
 
-doPackageRender :: Users.Users -> PkgInfo -> Bool -> IO PackageRender
-doPackageRender users info hasChangeLog = return $ PackageRender
+doPackageRender :: Users.Users -> PkgInfo -> PackageRender
+doPackageRender users info = PackageRender
     { rendPkgId        = pkgInfoId info
     , rendDepends      = flatDependencies genDesc
     , rendExecNames    = map exeName (executables flatDesc)
@@ -84,7 +86,8 @@ doPackageRender users info hasChangeLog = return $ PackageRender
                            . exposedModules)
                           (library flatDesc)
     , rendHasTarball   = not . Vec.null $ pkgTarballRevisions info
-    , rendHasChangeLog = hasChangeLog
+    , rendChangeLog    = Nothing -- populated later
+    , rendReadme       = Nothing -- populated later
     , rendUploadInfo   = let (utime, uid) = pkgOriginalUploadInfo info
                          in (utime, Users.lookupUserId uid users)
     , rendUpdateInfo   = let maxrevision  = Vec.length (pkgMetadataRevisions info) - 1
