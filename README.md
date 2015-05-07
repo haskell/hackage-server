@@ -16,7 +16,7 @@ You'll need to do the following to get hackage-server's dependency `text-icu` to
 ### Ubuntu/Debian
 
     sudo apt-get update
-    sudo apt-get install unzip libicu48 libicu-dev
+    sudo apt-get install unzip libicu-dev
 
 ## Running
 
