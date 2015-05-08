@@ -138,37 +138,74 @@ categorySplit xs = map (dropWhile isSpace) $ splitOn ',' xs
 -----------------------------------------------------------------------
 --
 -- Flatten the dependencies of a GenericPackageDescription into a
--- simple summary form. Dependency version ranges within each executable
--- or library are unioned, and the resulting sets are intersected.
+-- simple summary form. Library and executable dependency ranges
+-- are combined using intersection, except for dependencies within
+-- if and else branches, which are unioned together.
 --
 flatDependencies :: GenericPackageDescription -> [Dependency]
 flatDependencies =
       sortOn (\(Dependency pkgname _) -> map toLower (display pkgname))
-    . combineDepsBy intersectVersionIntervals
-    . concat
-    . map (combineDepsBy unionVersionIntervals)
-    . targetDeps
+    . pkgDeps
   where
-    combineDepsBy :: (VersionIntervals -> VersionIntervals -> VersionIntervals)
-                  -> [Dependency] -> [Dependency]
-    combineDepsBy f =
-        map (\(pkgname, ver) -> Dependency pkgname (fromVersionIntervals ver))
-      . Map.toList
-      . Map.fromListWith f
-      . map (\(Dependency pkgname ver) -> (pkgname, toVersionIntervals ver))
-
-    targetDeps :: GenericPackageDescription -> [[Dependency]]
-    targetDeps pkg = map condTreeDeps (maybeToList $ condLibrary pkg)
-                  ++ map (condTreeDeps . snd) (condExecutables pkg)
- 
-    condTreeDeps :: CondTree v [Dependency] a -> [Dependency]
-    condTreeDeps (CondNode _ ds comps) =
-        ds ++ concatMap fromComponent comps
+    pkgDeps :: GenericPackageDescription -> [Dependency]
+    pkgDeps pkg = fromMap $ Map.unionsWith intersectVersions $
+                      map condTreeDeps (maybeToList $ condLibrary pkg)
+                   ++ map (condTreeDeps . snd) (condExecutables pkg)
       where
-        fromComponent (_, then_part, Nothing) =
-          condTreeDeps then_part
-        fromComponent (_, then_part, Just else_part) =
-          condTreeDeps then_part ++ condTreeDeps else_part
+        fromMap = map fromPair . Map.toList
+        fromPair (pkgname, Versions _ ver) =
+            Dependency pkgname $ fromVersionIntervals ver
+
+    condTreeDeps :: CondTree v [Dependency] a -> PackageVersions
+    condTreeDeps (CondNode _ ds comps) =
+        Map.unionsWith intersectVersions $
+          toMap ds : map fromComponent comps
+      where
+        fromComponent (_, then_part, else_part) =
+            unionDeps (condTreeDeps then_part)
+                      (maybe Map.empty condTreeDeps else_part)
+        toMap = Map.fromListWith intersectVersions . map toPair
+        toPair (Dependency pkgname ver) =
+            (pkgname, Versions All $ toVersionIntervals ver)
+
+    unionDeps :: PackageVersions -> PackageVersions -> PackageVersions
+    unionDeps ds1 ds2 = Map.unionWith unionVersions
+                        (Map.union ds1 defaults) (Map.union ds2 defaults)
+      where
+        defaults = Map.map (const notSpecified) $ Map.union ds1 ds2
+        notSpecified = Versions Some $ toVersionIntervals noVersion
+
+-- | Version intervals for a dependency that also indicate whether the
+-- dependency has been specified on all branches. For example, package x's
+-- version intervals use 'All' while package y's version intervals use
+-- 'Some':
+--
+-- > if flag(f)
+-- >   build-depends: x < 1, y < 1
+-- > else
+-- >   build-depends: x >= 1
+--
+-- This distinction affects the intersection of intervals.
+data Versions = Versions Branches VersionIntervals
+
+data Branches = All | Some deriving Eq
+
+type PackageVersions = Map.Map PackageName Versions
+
+unionVersions :: Versions -> Versions -> Versions
+unionVersions (Versions b1 v1) (Versions b2 v2) =
+    let b3 = if b1 == Some || b2 == Some
+                then Some
+                else All
+    in Versions b3 $ unionVersionIntervals v1 v2
+
+intersectVersions :: Versions -> Versions -> Versions
+intersectVersions (Versions Some v1) (Versions Some v2) =
+    Versions Some $ unionVersionIntervals v1 v2
+intersectVersions (Versions Some _) v@(Versions All _) = v
+intersectVersions v@(Versions All _) (Versions Some _) = v
+intersectVersions (Versions All v1) (Versions All v2) =
+    Versions All $ intersectVersionIntervals v1 v2
 
 -- Same as @sortBy (comparing f)@, but without recomputing @f@.
 sortOn :: Ord b => (a -> b) -> [a] -> [a]
