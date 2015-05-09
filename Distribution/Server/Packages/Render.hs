@@ -13,7 +13,6 @@ module Distribution.Server.Packages.Render (
 import Data.Maybe (catMaybes, isJust, maybeToList)
 import Control.Monad (guard)
 import Data.Char (toLower, isSpace)
-import Data.Functor (($>))
 import qualified Data.Map as Map
 import qualified Data.Vector as Vec
 import Data.Ord (comparing)
@@ -170,7 +169,7 @@ flatDependencies =
     unionDeps ds1 ds2 = Map.unionWith unionVersions
                         (Map.union ds1 defaults) (Map.union ds2 defaults)
       where
-        defaults = Map.union ds1 ds2 $> notSpecified
+        defaults = Map.map (const notSpecified) $ Map.union ds1 ds2
         notSpecified = Versions Some $ toVersionIntervals noVersion
 
 -- | Version intervals for a dependency that also indicate whether the
