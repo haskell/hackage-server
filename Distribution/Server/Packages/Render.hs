@@ -190,11 +190,11 @@ data Branches = All | Some deriving Eq
 type PackageVersions = Map.Map PackageName Versions
 
 unionVersions :: Versions -> Versions -> Versions
-unionVersions (Versions ic1 v1) (Versions ic2 v2) =
-    let ic3 = if ic1 == Some || ic2 == Some
+unionVersions (Versions b1 v1) (Versions b2 v2) =
+    let b3 = if b1 == Some || b2 == Some
                 then Some
                 else All
-    in Versions ic3 $ unionVersionIntervals v1 v2
+    in Versions b3 $ unionVersionIntervals v1 v2
 
 intersectVersions :: Versions -> Versions -> Versions
 intersectVersions (Versions Some v1) (Versions Some v2) =
