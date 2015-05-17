@@ -100,10 +100,11 @@ initAdminLogFeature ServerEnv{serverStateDir} = do
     }
 
 adminLogResource :: ServerPartE Users -> StateComponent AcidState AdminLog -> Resource
-adminLogResource getUserDb logState = (resourceAt "/admin-log.:format") {
+adminLogResource getUserDb logState = (resourceAt "/admin/log.:format") {
                resourceDesc = [(GET, "Full list of group additions and removals")],
                resourceGet = [
                   ("html", \ _ -> do
+                     guardAuthorised_ [InGroup adminGroup]
                      aLog <- queryState logState GetAdminLog
                      users <- getUserDb
                      return . toResponse . adminLogPage users . map mkRow . adminLog $ aLog)

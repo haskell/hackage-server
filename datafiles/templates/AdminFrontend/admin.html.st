@@ -42,6 +42,7 @@ $hackagePageHeader()$
   <a href="/packages/mirrorers/edit">mirrorers</a>,
   <a href="/packages/trustees/edit">trustees</a>,
   <a href="/packages/uploaders/edit">uploaders</a></li>
+<li>Browse the <a href="/admin/log">admin audit log</a> of changes to group membership</a></li>
 </ul>
 
 <h2>Account signup and reset requests</h2>
