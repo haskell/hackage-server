@@ -28,6 +28,8 @@ import Distribution.ParseUtils
 import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.ParseUtils (FieldDescr(..))
 import Distribution.Text (Text(..))
+import Distribution.Simple.LocalBuildInfo (Component(..), ComponentName(..)
+                                          ,componentName, showComponentName )
 import Text.PrettyPrint as Doc
          (nest, empty, isEmpty, (<+>), colon, (<>), text, vcat, ($+$), Doc)
 import Text.StringTemplate (ToSElem(..))
@@ -39,6 +41,7 @@ import qualified Data.Map as Map
 import Control.Monad.Error  (ErrorT, runErrorT)
 import Control.Monad.Writer (MonadWriter(..), Writer, runWriter)
 import Control.Applicative
+import Control.Arrow (second)
 import Data.Time (getCurrentTime)
 
 import qualified Data.ByteString.Lazy.Char8 as BS -- TODO: Verify that we don't need to worry about UTF8
@@ -218,8 +221,8 @@ checkCabalFileRevision pkgid old new = do
 
 checkGenericPackageDescription :: Check GenericPackageDescription
 checkGenericPackageDescription
-    (GenericPackageDescription descrA flagsA libsA exesA testsA benchsA)
-    (GenericPackageDescription descrB flagsB libsB exesB testsB benchsB) = do
+    (GenericPackageDescription descrA flagsA maybeLibA exesA testsA benchsA)
+    (GenericPackageDescription descrB flagsB maybeLibB exesB testsB benchsB) = do
 
     checkPackageDescriptions descrA descrB
 
@@ -227,17 +230,35 @@ checkGenericPackageDescription
       flagsA flagsB
 
     checkMaybe "Cannot add or remove library sections"
-      (checkCondTree checkLibrary) libsA libsB
+      (checkCondTree checkComponent)
+      (fmap (toCompCondTree CLib) maybeLibA)
+      (fmap (toCompCondTree CLib) maybeLibB)
 
     checkListAssoc "Cannot add or remove executable sections"
-      (checkCondTree checkExecutable) exesA exesB
+      (checkCondTree checkComponent)
+      (fmap (toStringCompCondTree CExe) exesA)
+      (fmap (toStringCompCondTree CExe) exesB)
 
     checkListAssoc "Cannot add or remove test-suite sections"
-      (checkCondTree checkTestSuite) testsA testsB
+      (checkCondTree checkComponent)
+      (fmap (toStringCompCondTree CTest) testsA)
+      (fmap (toStringCompCondTree CTest) testsB)
 
     checkListAssoc "Cannot add or remove benchmark sections"
-      (checkCondTree checkBenchmark) benchsA benchsB
+      (checkCondTree checkComponent)
+      (fmap (toStringCompCondTree CBench) benchsA)
+      (fmap (toStringCompCondTree CBench) benchsB)
+    where
+      toCompCondTree :: (a -> Component)
+                        -> CondTree ConfVar [Dependency] a
+                        -> CondTree ConfVar [Dependency] Component
+      toCompCondTree f (CondNode d constraints components) =
+        CondNode (f d) constraints (fmap transformNode components)
+        where
+          transformNode (condition, condTree, maybeCondTree) =
+            (condition, toCompCondTree f condTree, fmap (toCompCondTree f) maybeCondTree)
 
+      toStringCompCondTree f (a, b) = (a, toCompCondTree f b)
 
 checkPackageDescriptions :: Check PackageDescription
 checkPackageDescriptions
@@ -311,12 +332,11 @@ checkRevision customFieldsA customFieldsB =
         Just s  | [(n,"")] <- reads s -> n :: Int
         _                             -> 0
 
-
-checkCondTree :: Check a -> Check (CondTree ConfVar [Dependency] a)
+checkCondTree :: Check Component -> Check (CondTree ConfVar [Dependency] Component)
 checkCondTree checkElem
   (CondNode dataA constraintsA componentsA)
   (CondNode dataB constraintsB componentsB) = do
-    checkDependencies constraintsA constraintsB
+    checkDependencies (componentName dataA) constraintsA constraintsB
     checkList "Cannot add or remove 'if' conditionals"
               checkComponent componentsA componentsB
     checkElem dataA dataB
@@ -329,17 +349,17 @@ checkCondTree checkElem
       checkMaybe "Cannot add or remove the 'else' part in conditionals"
                  (checkCondTree checkElem) thenPartA thenPartB
 
-checkDependencies :: Check [Dependency]
+checkDependencies :: ComponentName -> Check [Dependency]
 -- Special case: there are some pretty weird broken packages out there, see
 --   https://github.com/haskell/hackage-server/issues/303
-checkDependencies [] [dep@(Dependency (PackageName "base") _)] =
+checkDependencies _ [] [dep@(Dependency (PackageName "base") _)] =
     logChange (Change ("added dependency on") (display dep) "")
 
-checkDependencies ds1 ds2 =
+checkDependencies componentName ds1 ds2 =
     fmapCheck canonicaliseDeps
       (checkList "Cannot add or remove dependencies, \
                 \just change the version constraints"
-                checkDependency)
+                (checkDependency componentName))
       ds1 ds2
   where
     -- Allow a limited degree of adding and removing deps: only when they
@@ -351,12 +371,20 @@ checkDependencies ds1 ds2 =
       . Map.fromListWith (flip intersectVersionRanges)
       . map (\(Dependency pkgname verrange) -> (pkgname, verrange))
 
-checkDependency :: Check Dependency
-checkDependency (Dependency pkgA verA) (Dependency pkgB verB)
-  | pkgA == pkgB = changesOk ("dependency on " ++ display pkgA) display
+checkDependency :: ComponentName -> Check Dependency
+checkDependency componentName (Dependency pkgA verA) (Dependency pkgB verB)
+  | pkgA == pkgB = changesOk ("dependency on " ++ display pkgA ++ " for " ++
+                              showComponentName componentName) display
                              verA verB
   | otherwise    = fail "Cannot change which packages are dependencies, \
                         \just their version constraints."
+
+checkComponent :: Check Component
+checkComponent (CLib libA)     (CLib libB)     = checkLibrary libA libB
+checkComponent (CExe exeA)     (CExe exeB)     = checkExecutable exeA exeB
+checkComponent (CTest testA)   (CTest testB)   = checkTestSuite testA testB
+checkComponent (CBench benchA) (CBench benchB) = checkBenchmark benchA benchB
+checkComponent _ _ = error "Internal error: Comparing different components"
 
 checkLibrary :: Check Library
 checkLibrary (Library modulesA reexportedA requiredSigsA exposedSigsA
@@ -486,4 +514,3 @@ insertRevisionField rev
       , Just (':',_) <- BS.uncons t
                   = True
       | otherwise = False
-
