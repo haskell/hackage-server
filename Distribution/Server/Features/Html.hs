@@ -1048,6 +1048,8 @@ mkHtmlCandidates HtmlUtilities{..}
           ]
         -- note: each of the lists here should be non-empty, according to PackageIndex
       where showCands pkgs =
+                -- TODO: Duncan changed this to packageSynopsis but without an
+                -- accomponaying definition of packageSynposis. Changed back for now.
                 let desc = packageDescription . pkgDesc . candPkgInfo $ last pkgs
                     pkgname = packageName desc
                 in  [ anchor ! [href $ packageCandidatesUri candidates "" pkgname ] << display pkgname
@@ -1672,7 +1674,7 @@ mkHtmlSearch HtmlUtilities{..}
                                    ("w" ++ featurename)
                                    ("Weight for " ++ featurename)
                     | feature <- Ix.range (minBound, maxBound :: PkgDocFeatures)
-                    , let featurename = show feature ] 
+                    , let featurename = show feature ]
               ]
           ]
         resetParamsForm termsStr =
@@ -1798,4 +1800,3 @@ data HtmlUtilities = HtmlUtilities {
   , renderItem :: PackageItem -> Html
   , renderTags :: Set Tag -> [Html]
   }
-

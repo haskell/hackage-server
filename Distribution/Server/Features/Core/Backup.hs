@@ -3,12 +3,9 @@
 module Distribution.Server.Features.Core.Backup (
     packagesBackup,
     indexToAllVersions,
-    indexToAllVersions',
-    indexToCurrentVersions,
     infoToAllEntries,
-    infoToCurrentEntries,
     pkgPath,
-    PartialIndex,
+    PartialIndex(..),
     PartialPkg,
     partialToFullPkg,
     parsePackageId,
@@ -16,6 +13,7 @@ module Distribution.Server.Features.Core.Backup (
   ) where
 
 import Distribution.Server.Features.Core.State
+import Distribution.Server.Packages.Index
 
 import Distribution.Server.Packages.Types
 import Distribution.Server.Framework.BackupRestore
@@ -32,27 +30,32 @@ import Text.CSV
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as Vec
+import Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
+import qualified Data.Foldable as Foldable
 import Data.List
 import Data.Ord (comparing)
 import Control.Monad.State
 import qualified Distribution.Server.Util.GZip as GZip
 import qualified Data.ByteString.Lazy as BS
+import qualified Data.ByteString.Lazy.Char8 as BSC
 import System.FilePath ((</>))
 
 packagesBackup :: RestoreBackup PackagesState
-packagesBackup = updatePackages Map.empty
+packagesBackup = updatePackages (PartialIndex Map.empty Nothing)
 
 updatePackages :: PartialIndex -> RestoreBackup PackagesState
-updatePackages packageMap = RestoreBackup {
+updatePackages accum@(PartialIndex packageMap updatelog) = RestoreBackup {
     restoreEntry = \entry -> do
-      packageMap' <- doPackageImport packageMap entry
-      return (updatePackages packageMap')
+      accum' <- doPackageImport accum entry
+      return (updatePackages accum')
   , restoreFinalize = do
       results <- mapM partialToFullPkg (Map.toList packageMap)
-      return $ PackagesState (PackageIndex.fromList results) (error "TODO")
+      return $ PackagesState (PackageIndex.fromList results) updatelog
   }
 
-type PartialIndex = Map PackageId PartialPkg
+data PartialIndex = PartialIndex !(Map PackageId PartialPkg)
+                                 !(Maybe (Seq TarIndexEntry))
 
 data PartialPkg = PartialPkg {
     partialCabal :: [(Int, CabalFileText)],
@@ -62,7 +65,7 @@ data PartialPkg = PartialPkg {
 }
 
 doPackageImport :: PartialIndex -> BackupEntry -> Restore PartialIndex
-doPackageImport packages entry = case entry of
+doPackageImport (PartialIndex packages updatelog) entry = case entry of
   BackupByteString ("package":pkgStr:rest) bs -> do
     pkgId <- parsePackageId pkgStr
     let partial = Map.findWithDefault emptyPartialPkg pkgId packages
@@ -76,7 +79,7 @@ doPackageImport packages entry = case entry of
       [other] | Just version <- extractVersion other (packageName pkgId) ".cabal" ->
         return $ partial { partialCabal = (version, CabalFileText bs):partialCabal partial }
       _ -> return partial
-    return (Map.insert pkgId partial' packages)
+    return $! PartialIndex (Map.insert pkgId partial' packages) updatelog
   BackupBlob filename@["package",pkgStr,other] blobId -> do
     pkgId <- parsePackageId pkgStr
     let partial = Map.findWithDefault emptyPartialPkg pkgId packages
@@ -88,9 +91,12 @@ doPackageImport packages entry = case entry of
                               pkgTarballNoGz = blobIdUncompressed }
         return $ partial { partialTarball = (version, tb):partialTarball partial }
       _ -> return partial
-    return (Map.insert pkgId partial' packages)
+    return $! PartialIndex (Map.insert pkgId partial' packages) updatelog
+  BackupByteString ["updatelog.csv"] bs -> do
+    updatelog' <- importCSV "updatelog.csv" bs >>= importTarIndexEntries
+    return $! PartialIndex packages (Just updatelog')
   _ ->
-    return packages
+    return (PartialIndex packages updatelog)
   where
     extractVersion name text ext = case stripPrefix (display text ++ ext) name of
       Just "" -> Just 0
@@ -173,22 +179,8 @@ partialToFullPkg (pkgId, partial) = do
 indexToAllVersions :: PackagesState -> [BackupEntry]
 indexToAllVersions st =
     let pkgList = PackageIndex.allPackages . packageIndex $ st
-    in concatMap infoToAllEntries pkgList
-
--- The most recent tarball and cabal file for every single package name and version
-indexToAllVersions' :: PackagesState -> [BackupEntry]
-indexToAllVersions' st =
-    let pkgList = PackageIndex.allPackages . packageIndex $ st
-    in concatMap infoToCurrentEntries pkgList
-
--- The most recent tarball and cabal file for the most recent version of every package
-indexToCurrentVersions :: PackagesState -> [BackupEntry]
-indexToCurrentVersions st =
-    let pkgList  = PackageIndex.allPackagesByName . packageIndex $ st
-        pkgList' = map (maximumBy (comparing pkgOriginalUploadTime)) pkgList
-    in concatMap infoToCurrentEntries pkgList'
-
--- it's also possible to make a cabal-only export
+    in maybe id (\l x -> packageUpdateLogToExport l : x) (packageUpdateLog st) $
+       concatMap infoToAllEntries pkgList
 
 ---------- Converting PkgInfo to entries
 infoToAllEntries :: PkgInfo -> [BackupEntry]
@@ -196,13 +188,6 @@ infoToAllEntries pkg =
     let pkgId = pkgInfoId pkg
         cabals   = cabalListToExport   pkgId (Vec.toList (pkgMetadataRevisions pkg))
         tarballs = tarballListToExport pkgId (Vec.toList (pkgTarballRevisions pkg))
-    in cabals ++ tarballs
-
-infoToCurrentEntries :: PkgInfo -> [BackupEntry]
-infoToCurrentEntries pkg =
-    let pkgId = pkgInfoId pkg
-        cabals   = cabalListToExport   pkgId (Vec.toList (Vec.take 1 (pkgMetadataRevisions pkg)))
-        tarballs = tarballListToExport pkgId (Vec.toList (Vec.take 1 (pkgTarballRevisions pkg)))
     in cabals ++ tarballs
 
 ----------- Converting pieces of PkgInfo to entries
@@ -235,4 +220,50 @@ versionListToCSV infos = [showVersion versionCSVVer]:versionCSVKey:
   where
     versionCSVVer = Version [0,1] ["unstable"]
     versionCSVKey = ["index", "time", "user-id"]
+
+----------- Converting TarIndexEntry to and from entries
+
+packageUpdateLogToExport :: Seq TarIndexEntry -> BackupEntry
+packageUpdateLogToExport = csvToBackup ["updatelog.csv"]
+                         . packageUpdateLogToCSV
+
+packageUpdateLogToCSV :: Seq TarIndexEntry -> CSV
+packageUpdateLogToCSV updlog =
+    [showVersion versionCSVVer] : versionCSVKey : map entryToCSV (Foldable.toList updlog)
+  where
+    versionCSVVer = Version [0,1] []
+    versionCSVKey = ["time", "pkgid", "revno", "user-name", "extrapath", "extracontent"]
+    entryToCSV (PackageEntry pkgid revno time username) =
+      [ formatUTCTime time
+      , display pkgid
+      , show revno
+      , display username
+      , ""
+      , ""
+      ]
+    entryToCSV (ExtraEntry extrapath content time) =
+      [ formatUTCTime time
+      , ""
+      , ""
+      , ""
+      , extrapath
+      , BSC.unpack content
+      ]
+
+importTarIndexEntries :: CSV -> Restore (Seq TarIndexEntry)
+importTarIndexEntries = fmap Seq.fromList . mapM fromRecord . drop 2
+  where
+    fromRecord :: Record -> Restore TarIndexEntry
+    fromRecord [timeStr, pkgidStr, revnoStr, usernameStr, "", ""] = do
+       utcTime  <- parseUTCTime "time" timeStr
+       pkgid    <- parseText "pkgid" pkgidStr
+       revno    <- parseRead "revno" revnoStr
+       username <- parseText "user-name" usernameStr
+       return (PackageEntry pkgid revno utcTime username)
+
+    fromRecord [timeStr, "", "", "", extrapath, extracontent] = do
+       utcTime <- parseUTCTime "time" timeStr
+       return (ExtraEntry extrapath (BSC.pack extracontent) utcTime)
+
+    fromRecord x = fail $ "Error index entries list: " ++ show x
 
