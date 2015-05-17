@@ -44,8 +44,8 @@ data-files:
   static/*.png
 
 source-repository head
-  type: git 
-  location: https://github.com/haskell/hackage-server 
+  type: git
+  location: https://github.com/haskell/hackage-server
 
 flag minimal
   default: False
@@ -133,6 +133,7 @@ executable hackage-server
     Distribution.Server.Pages.Package.HaddockParse
     Distribution.Server.Pages.Package.HaddockTypes
     Distribution.Server.Pages.Recent
+    Distribution.Server.Pages.AdminLog
     -- [reverse index disabled] Distribution.Server.Pages.Reverse
     Distribution.Server.Pages.Template
     Distribution.Server.Pages.Util
@@ -164,7 +165,6 @@ executable hackage-server
     Distribution.Server.Features.Upload.Backup
     Distribution.Server.Features.Users
 
-
   if flag(minimal)
     cpp-options: -DMINIMAL
   else
@@ -175,6 +175,7 @@ executable hackage-server
       Distribution.Server.Features.LegacyPasswds
       Distribution.Server.Features.LegacyPasswds.Auth
       Distribution.Server.Features.PackageContents
+      Distribution.Server.Features.AdminLog
       Distribution.Server.Features.BuildReports
       Distribution.Server.Features.BuildReports.BuildReport
       Distribution.Server.Features.BuildReports.BuildReports
@@ -261,7 +262,7 @@ executable hackage-server
     async      == 2.0.*,
     cereal     >= 0.4,
     safecopy   >= 0.6 && < 0.9,
-    crypto-api >= 0.12 && < 0.13, 
+    crypto-api >= 0.12 && < 0.13,
     pureMD5    >= 0.2,
     xhtml      >= 3000.1,
     aeson      >= 0.6.2,
@@ -461,4 +462,3 @@ Test-Suite CreateUserTest
     build-depends: network-uri >= 2.6, network >= 2.6
   else
     build-depends: network-uri < 2.6, network < 2.6
-

@@ -21,10 +21,10 @@ import Data.Typeable (Typeable)
 
 
 newtype UserId = UserId Int
-  deriving (Eq, Ord, Show, Typeable, MemSize, ToJSON, FromJSON)
+  deriving (Eq, Ord, Read, Show, Typeable, MemSize, ToJSON, FromJSON)
 
 newtype UserName  = UserName String
-  deriving (Eq, Ord, Show, Typeable, MemSize, ToJSON, FromJSON)
+  deriving (Eq, Ord, Read, Show, Typeable, MemSize, ToJSON, FromJSON)
 
 data UserInfo = UserInfo {
                   userName   :: !UserName,
