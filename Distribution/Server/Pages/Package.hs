@@ -5,7 +5,8 @@ module Distribution.Server.Pages.Package (
     renderDependencies,
     renderVersion,
     renderFields,
-    renderDownloads
+    renderDownloads,
+    renderChangelog
   ) where
 
 import Distribution.Server.Features.PreferredVersions
@@ -29,7 +30,7 @@ import Text.XHtml.Strict hiding (p, name, title, content)
 import Data.Monoid              (Monoid(..))
 import Data.Maybe               (maybeToList, isJust)
 import Data.List                (intersperse, intercalate)
-import System.FilePath.Posix    ((</>), (<.>))
+import System.FilePath.Posix    ((</>), (<.>), takeFileName)
 import Data.Time.Locale.Compat  (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
 
@@ -94,21 +95,29 @@ pkgBody render sections =
 
 descriptionSection :: PackageRender -> [Html]
 descriptionSection p@PackageRender{..} =
-    prologue p
- ++ [ hr
-    , ulist << li << changelogLink]
+        prologue p
+     ++ readmeLink
   where
-    changelogLink = case rendChangeLog of
-      Just _ -> anchor ! [href changeLogURL] << "Changelog"
-      _      -> toHtml << "No changelog available"
-    changeLogURL  = rendPkgUri </> "changelog"
+    readmeLink = case rendReadme of
+      Just _ -> [ hr
+                , ulist << li << anchor ! [href readmeURL] << "ReadMe"
+                ]
+      _      -> []
+    readmeURL  = rendPkgUri </> "readme"
 
 prologue :: PackageRender -> [Html]
 prologue PackageRender{..} =
-  renderHaddock (description rendOther) ++
+  renderHaddock (description rendOther)
+{-
+  --TODO: need to improve the display of the description / readme
+  -- just having both is too much in many cases. Perhaps we should
+  -- use the readme only if the description is empty. And otherwise just link.
+  -- Also, we need to limit the length of both the description and readme
+  -- or it pushes everything else off the page
   (case rendReadme of
     Nothing -> []
     Just (_, readme) -> [renderMarkdown readme])
+-}
 
 renderHaddock :: String -> [Html]
 renderHaddock []   = []
@@ -274,6 +283,15 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
             DeprecatedVersion  -> [theclass "deprecated"]
             UnpreferredVersion -> [theclass "unpreferred"]
         infoHtml = case info of Nothing -> noHtml; Just str -> " (" +++ (anchor ! [href str] << "info") +++ ")"
+
+renderChangelog :: PackageRender -> (String, Html)
+renderChangelog render =
+    ("Change log", case rendChangeLog render of
+                     Nothing            -> toHtml "None available"
+                     Just (_,_,_,fname) -> anchor ! [href changeLogURL]
+                                                 << takeFileName fname)
+  where
+    changeLogURL  = rendPkgUri render </> "changelog"
 
 -- We don't keep currently per-version downloads in memory; if we decide that
 -- it is important to show this all the time, we can reenable

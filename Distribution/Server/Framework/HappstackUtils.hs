@@ -57,6 +57,12 @@ mime x  = Map.findWithDefault "text/plain; charset=utf-8" (drop 1 (takeExtension
       [ ("xhtml", "application/xhtml+xml; charset=utf-8")
       , ("html" , "text/html; charset=utf-8")
       , ("cabal", "text/plain; charset=utf-8")
+      , ("hs",  "text/plain; charset=utf-8")
+      , ("lhs", "text/plain; charset=utf-8")
+      , ("hsc", "text/plain; charset=utf-8")
+      , ("chs", "text/plain; charset=utf-8")
+      , ("c",  " text/plain; charset=utf-8")
+      , ("h",  " text/plain; charset=utf-8")
       ]
 
 

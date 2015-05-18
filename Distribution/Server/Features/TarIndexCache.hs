@@ -9,7 +9,6 @@ module Distribution.Server.Features.TarIndexCache (
 import Control.Exception (throwIO)
 import Control.Monad.Error (ErrorT(..))
 
-import qualified Data.ByteString.Lazy as BS
 import Data.Serialize (runGetLazy, runPutLazy)
 import Data.SafeCopy (safeGet, safePut)
 import Data.Maybe (listToMaybe)
@@ -24,7 +23,7 @@ import Distribution.Server.Packages.ChangeLog
 import Distribution.Server.Packages.Types (PkgTarball(..), PkgInfo(..), pkgLatestTarball)
 import Data.TarIndex
 import qualified Data.TarIndex as TarIndex
-import Distribution.Server.Util.ServeTarball (constructTarIndex, loadTarEntry)
+import Distribution.Server.Util.ServeTarball (constructTarIndex)
 import Distribution.Package (packageId)
 import Distribution.Text (display)
 
@@ -37,7 +36,7 @@ data TarIndexCacheFeature = TarIndexCacheFeature {
   , cachedPackageTarIndex :: PkgTarball -> IO TarIndex
   , packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex))
   , findToplevelFile :: PkgInfo -> (FilePath -> Bool)
-                     -> IO (Either String (FilePath, ETag, TarEntryOffset, FilePath, BS.ByteString))
+                     -> IO (Either String (FilePath, ETag, TarEntryOffset, FilePath))
   }
 
 instance IsHackageFeature TarIndexCacheFeature where
@@ -151,13 +150,12 @@ tarIndexCacheFeature ServerEnv{serverBlobStore = store}
 
     -- TODO: Specify *what* file wasn't found in the error. This will require another parameter.
     findToplevelFile :: PkgInfo -> (FilePath -> Bool)
-                     -> IO (Either String (FilePath, ETag, TarEntryOffset, FilePath, BS.ByteString))
+                     -> IO (Either String (FilePath, ETag, TarEntryOffset, FilePath))
     findToplevelFile pkg test = runErrorT $ do
         (fp, etag, index) <- ErrorT $ packageTarball pkg
         (offset, fname)   <- ErrorT $ return . maybe (Left "File not found") Right
                                     $ findFile index
-        (_size, contents) <- ErrorT $ loadTarEntry fp offset
-        return (fp, etag, offset, fname, contents)
+        return (fp, etag, offset, fname)
       where
         topdir :: FilePath
         topdir = display (packageId pkg)

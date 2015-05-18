@@ -124,7 +124,7 @@ loadTarEntry tarfile off = do
     (Tar.Next Tar.Entry{Tar.entryContent = Tar.NormalFile _ size} _) -> do
          body <- BS.hGet htar (fromIntegral size)
          return $ Right (size, body)
-    _ -> fail "oh noes!!"
+    _ -> fail "failed to read entry from tar file"
 
 serveTarEntry :: FilePath -> TarIndex.TarEntryOffset -> FilePath -> IO Response
 serveTarEntry tarfile off fname = do

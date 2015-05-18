@@ -30,7 +30,7 @@ import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
-import Distribution.Server.Util.ServeTarball (serveTarEntry, serveTarball)
+import Distribution.Server.Util.ServeTarball
 
 import Distribution.Text
 import Distribution.Package
@@ -369,23 +369,21 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
     candidateRender :: CandPkgInfo -> IO CandidateRender
     candidateRender cand = do
-           users  <- queryGetUserDb
-           index  <- queryGetPackageIndex
-           let pkg = candPkgInfo cand
-           mChangeLog <- findToplevelFile pkg isChangeLogFile
-           mReadme    <- findToplevelFile pkg isReadmeFile
-           let changeLog = case mChangeLog of Right (_,_,_,fname,contents) -> Just (fname, contents)
-                                              _                            -> Nothing
-               readme    = case mReadme    of Right (_,_,_,fname,contents) -> Just (fname, contents)
-                                              _                            -> Nothing
-               render = doPackageRender users pkg
-           return $ CandidateRender {
-             candPackageRender = render { rendPkgUri = rendPkgUri render ++ "/candidate"
-                                        , rendChangeLog = changeLog
-                                        , rendReadme = readme},
-             renderWarnings = candWarnings cand,
-             hasIndexedPackage = not . null $ PackageIndex.lookupPackageName index (packageName cand)
-           }
+        users  <- queryGetUserDb
+        index  <- queryGetPackageIndex
+        let pkg = candPkgInfo cand
+        changeLog <- findToplevelFile pkg isChangeLogFile 
+                 >>= either (\_ -> return Nothing) (return . Just)
+        readme    <- findToplevelFile pkg isReadmeFile
+                 >>= either (\_ -> return Nothing) (return . Just)
+        let render = doPackageRender users pkg
+        return $ CandidateRender {
+          candPackageRender = render { rendPkgUri    = rendPkgUri render ++ "/candidate"
+                                     , rendChangeLog = changeLog
+                                     , rendReadme    = readme},
+          renderWarnings    = candWarnings cand,
+          hasIndexedPackage = not . null $ PackageIndex.lookupPackageName index (packageName cand)
+        }
 
     ------------------------------------------------------------------------------
 
@@ -424,7 +422,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       case mChangeLog of
         Left err ->
           errNotFound "Changelog not found" [MText err]
-        Right (fp, etag, offset, name, _contents) -> do
+        Right (fp, etag, offset, name) -> do
           cacheControl [Public, maxAgeMinutes 5] etag
           liftIO $ serveTarEntry fp offset name -- TODO: We've already loaded the contents; refactor
 

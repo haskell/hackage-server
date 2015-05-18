@@ -11,8 +11,7 @@ module Distribution.Server.Packages.Render (
   ) where
 
 import Data.Maybe (catMaybes, isJust, maybeToList)
-import Control.Monad (guard, liftM2)
-import qualified Data.ByteString.Lazy as BS
+import Control.Monad (guard)
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
 import qualified Data.Vector as Vec
@@ -30,12 +29,13 @@ import Distribution.Version
 import Distribution.ModuleName as ModuleName
 
 -- hackage-server
+import Distribution.Server.Framework.CacheControl (ETag)
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.ModuleForest
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Types
 import qualified Data.TarIndex as TarIndex
-import Data.TarIndex (TarIndex)
+import Data.TarIndex (TarIndex, TarEntryOffset)
 
 -- This should provide the caller enough information to encode the package information
 -- in its particular format (text, html, json) with minimal effort on its part.
@@ -51,8 +51,8 @@ data PackageRender = PackageRender {
     rendRepoHeads    :: [(RepoType, String, SourceRepo)],
     rendModules      :: Maybe TarIndex -> Maybe ModuleForest,
     rendHasTarball   :: Bool,
-    rendChangeLog    :: Maybe (FilePath, BS.ByteString),
-    rendReadme       :: Maybe (FilePath, BS.ByteString),
+    rendChangeLog    :: Maybe (FilePath, ETag, TarEntryOffset, FilePath),
+    rendReadme       :: Maybe (FilePath, ETag, TarEntryOffset, FilePath),
     rendUploadInfo   :: (UTCTime, Maybe UserInfo),
     rendUpdateInfo   :: Maybe (Int, UTCTime, Maybe UserInfo),
     rendPkgUri       :: String,
