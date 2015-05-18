@@ -44,8 +44,8 @@ data-files:
   static/*.png
 
 source-repository head
-  type: git 
-  location: https://github.com/haskell/hackage-server 
+  type: git
+  location: https://github.com/haskell/hackage-server
 
 flag minimal
   default: False
@@ -123,6 +123,7 @@ executable hackage-server
     Distribution.Server.Packages.Unpack
     Distribution.Server.Packages.Render
     Distribution.Server.Packages.ChangeLog
+    Distribution.Server.Packages.Readme
 
     Distribution.Server.Pages.Distributions
     Distribution.Server.Pages.Group
@@ -133,6 +134,7 @@ executable hackage-server
     Distribution.Server.Pages.Package.HaddockParse
     Distribution.Server.Pages.Package.HaddockTypes
     Distribution.Server.Pages.Recent
+    Distribution.Server.Pages.AdminLog
     -- [reverse index disabled] Distribution.Server.Pages.Reverse
     Distribution.Server.Pages.Template
     Distribution.Server.Pages.Util
@@ -164,7 +166,6 @@ executable hackage-server
     Distribution.Server.Features.Upload.Backup
     Distribution.Server.Features.Users
 
-
   if flag(minimal)
     cpp-options: -DMINIMAL
   else
@@ -175,6 +176,7 @@ executable hackage-server
       Distribution.Server.Features.LegacyPasswds
       Distribution.Server.Features.LegacyPasswds.Auth
       Distribution.Server.Features.PackageContents
+      Distribution.Server.Features.AdminLog
       Distribution.Server.Features.BuildReports
       Distribution.Server.Features.BuildReports.BuildReport
       Distribution.Server.Features.BuildReports.BuildReports
@@ -247,9 +249,10 @@ executable hackage-server
     blaze-builder,
     text       >= 0.11,
     split      >= 0.2,
-    time       >= 1.1 && < 1.5,
-    old-locale >= 1.0,
-    deepseq    == 1.1.* || == 1.3.*,
+    time       >= 1.1 && < 1.6,
+    time-locale-compat >= 0.1.0.1,
+--    old-locale >= 1.0,
+    deepseq    == 1.1.* || > 1.3.0,
     transformers >= 0.3,
     mtl        >= 2.0,
     parsec     == 3.1.*,
@@ -260,7 +263,7 @@ executable hackage-server
     async      == 2.0.*,
     cereal     >= 0.4,
     safecopy   >= 0.6 && < 0.9,
-    crypto-api >= 0.12 && < 0.13, 
+    crypto-api >= 0.12 && < 0.13,
     pureMD5    >= 0.2,
     xhtml      >= 3000.1,
     aeson      >= 0.6.2,
@@ -274,10 +277,12 @@ executable hackage-server
     happstack-server == 7.3.*,
     hslogger,
     mime-mail  ==0.4.*,
-    HStringTemplate ==0.7.*,
+    HStringTemplate > 0.7 && < 0.9,
     lifted-base >= 0.2.1 && < 0.3,
     QuickCheck >= 2.5,
-    friendly-time >= 0.3 && < 0.4
+    friendly-time >= 0.3 && < 0.4,
+    cheapskate >= 0.1,
+    blaze-html >= 0.7
 
   if ! flag(minimal)
     build-depends:
@@ -318,7 +323,8 @@ executable hackage-mirror
     base,
     containers, array, vector, bytestring, text, pretty,
     filepath, directory,
-    time,     old-locale, random,
+    time,     random,
+    time-locale-compat >= 0.1.0.1,
     tar,      zlib,
     network,  HTTP >= 4000.2.11,
     Cabal,
@@ -345,7 +351,8 @@ executable hackage-build
     base,
     containers, array, vector, bytestring, text, pretty,
     filepath, directory, process >= 1.0,
-    time,     old-locale,
+    time,
+    time-locale-compat >= 0.1.0.1,
     tar,      zlib,
     network,  HTTP,
     Cabal,
@@ -380,7 +387,8 @@ executable hackage-import
     base,
     containers, array, vector, bytestring, text, pretty,
     filepath, directory,
-    time,     old-locale, random,
+    time,     random,
+    time-locale-compat >= 0.1.0.1,
     tar,      zlib,
     network,  HTTP >= 4000.2.11,
     Cabal,
@@ -457,4 +465,3 @@ Test-Suite CreateUserTest
     build-depends: network-uri >= 2.6, network >= 2.6
   else
     build-depends: network-uri < 2.6, network < 2.6
-

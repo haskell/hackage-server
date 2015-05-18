@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Distribution.Server.Framework.HtmlFormWrapper (
     htmlFormWrapperHack,
     rqRealMethod,
@@ -83,10 +84,10 @@ import Distribution.Server.Framework.HappstackUtils (showContentType)
 -- request should be translated. For the return location we use a @_return@
 -- field.
 --
-htmlFormWrapperHack :: (Functor m, MonadIO m) => ServerPartT m Response -> ServerPartT m Response
+htmlFormWrapperHack :: (Functor m, MonadIO m, MonadPlus m) => ServerPartT m Response -> ServerPartT m Response
 htmlFormWrapperHack rest = do
     res <- getDataFn $ body $
-      (,,) <$> optional (do m <- look "_method" 
+      (,,) <$> optional (do m <- look "_method"
                             case m of
                               "PUT"    -> return PUT
                               "POST"   -> return POST
@@ -139,8 +140,8 @@ htmlFormWrapperHack rest = do
 
 -- | Very simple translation from form-data key value pairs to a single JSON
 -- object with equivalent field names and string values.
---    
-requestFormDataAsJSON :: MonadIO m => ServerPartT m (Either [((String, BS.ByteString), JPath)]
+--
+requestFormDataAsJSON :: (MonadIO m, MonadPlus m) => ServerPartT m (Either [((String, BS.ByteString), JPath)]
                                                             JSON.Value)
 requestFormDataAsJSON = do
     (_, mbody, _) <- askRqEnv
@@ -212,4 +213,3 @@ putRequestBody newBody = do
 rqRealMethod :: Request -> Method
 rqRealMethod rq | Just _ <- getHeader "_method" rq = POST
                 | otherwise                        = rqMethod rq
-

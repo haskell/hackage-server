@@ -5,7 +5,8 @@ module Distribution.Server.Pages.Package (
     renderDependencies,
     renderVersion,
     renderFields,
-    renderDownloads
+    renderDownloads,
+    renderChangelog
   ) where
 
 import Distribution.Server.Features.PreferredVersions
@@ -29,9 +30,16 @@ import Text.XHtml.Strict hiding (p, name, title, content)
 import Data.Monoid              (Monoid(..))
 import Data.Maybe               (maybeToList, isJust)
 import Data.List                (intersperse, intercalate)
-import System.FilePath.Posix    ((</>), (<.>))
-import System.Locale            (defaultTimeLocale)
+import System.FilePath.Posix    ((</>), (<.>), takeFileName)
+import Data.Time.Locale.Compat  (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
+
+import Cheapskate (markdown, Options(..))
+import Cheapskate.Html (renderDoc)
+
+import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
+import qualified Data.Text.Encoding as T (decodeUtf8)
+import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
 
 packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)]
             -> [(String, Html)] -> Maybe TarIndex -> URL -> Bool
@@ -86,21 +94,50 @@ pkgBody render sections =
  ++ propertySection sections
 
 descriptionSection :: PackageRender -> [Html]
-descriptionSection PackageRender{..} =
-    prologue (description rendOther)
- ++ [ hr
-    , ulist << li << changelogLink]
+descriptionSection p@PackageRender{..} =
+        prologue p
+     ++ readmeLink
   where
-    changelogLink
-      | rendHasChangeLog = anchor ! [href changeLogURL] << "Changelog"
-      | otherwise        = toHtml << "No changelog available"
-    changeLogURL  = rendPkgUri </> "changelog"
+    readmeLink = case rendReadme of
+      Just _ -> [ hr
+                , ulist << li << anchor ! [href readmeURL] << "ReadMe"
+                ]
+      _      -> []
+    readmeURL  = rendPkgUri </> "readme"
 
-prologue :: String -> [Html]
-prologue [] = []
-prologue desc = case tokenise desc >>= parseHaddockParagraphs of
-    Nothing  -> [paragraph << p | p <- paragraphs desc]
-    Just doc -> [markup htmlMarkup doc]
+prologue :: PackageRender -> [Html]
+prologue PackageRender{..} =
+  renderHaddock (description rendOther)
+{-
+  --TODO: need to improve the display of the description / readme
+  -- just having both is too much in many cases. Perhaps we should
+  -- use the readme only if the description is empty. And otherwise just link.
+  -- Also, we need to limit the length of both the description and readme
+  -- or it pushes everything else off the page
+  (case rendReadme of
+    Nothing -> []
+    Just (_, readme) -> [renderMarkdown readme])
+-}
+
+renderHaddock :: String -> [Html]
+renderHaddock []   = []
+renderHaddock desc =
+  case tokenise desc >>= parseHaddockParagraphs of
+      Nothing  -> [paragraph << p | p <- paragraphs desc]
+      Just doc -> [markup htmlMarkup doc]
+
+renderMarkdown :: BS.ByteString -> Html
+renderMarkdown = primHtml . Blaze.renderHtml . renderDoc . markdown opts
+               . T.decodeUtf8 . BS.toStrict
+  where
+    opts =
+      Options
+        { sanitize = True
+        , allowRawHtml = False
+        , preserveHardBreaks = False
+        , debug = False
+        }
+
 
 -- Break text into paragraphs (separated by blank lines)
 paragraphs :: String -> [String]
@@ -246,6 +283,15 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
             DeprecatedVersion  -> [theclass "deprecated"]
             UnpreferredVersion -> [theclass "unpreferred"]
         infoHtml = case info of Nothing -> noHtml; Just str -> " (" +++ (anchor ! [href str] << "info") +++ ")"
+
+renderChangelog :: PackageRender -> (String, Html)
+renderChangelog render =
+    ("Change log", case rendChangeLog render of
+                     Nothing            -> toHtml "None available"
+                     Just (_,_,_,fname) -> anchor ! [href changeLogURL]
+                                                 << takeFileName fname)
+  where
+    changeLogURL  = rendPkgUri render </> "changelog"
 
 -- We don't keep currently per-version downloads in memory; if we decide that
 -- it is important to show this all the time, we can reenable

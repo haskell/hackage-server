@@ -1,4 +1,4 @@
-{-# LANGUAGE DoRec, RankNTypes, ScopedTypeVariables,
+{-# LANGUAGE RecursiveDo, RankNTypes, ScopedTypeVariables,
              NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.Mirror (
     MirrorFeature(..),
@@ -27,7 +27,7 @@ import Distribution.ParseUtils (ParseResult(..), locatedErrorMsg, showPWarning)
 
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (formatTime, parseTime)
-import System.Locale (defaultTimeLocale)
+import Data.Time.Locale.Compat (defaultTimeLocale)
 import qualified Distribution.Server.Util.GZip as GZip
 
 import Distribution.Package

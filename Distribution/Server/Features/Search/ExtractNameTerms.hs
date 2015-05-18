@@ -17,6 +17,7 @@ import Control.Monad
 import Control.Monad.List
 import Control.Monad.Writer
 import Control.Monad.State
+import Control.Applicative
 
 
 extractModuleNameTerms :: String -> [Text]
@@ -57,7 +58,7 @@ extractPackageNameTerms pkgname =
     get >>= emit
 
 newtype Split a = Split (StateT String (ListT (WriterT [String] Identity)) a)
-  deriving (Monad, MonadPlus, MonadState String)
+  deriving (Functor, Applicative, Alternative, Monad, MonadPlus, MonadState String)
 
 emit :: String -> Split ()
 emit x = Split (lift (lift (tell [x])))

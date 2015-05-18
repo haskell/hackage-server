@@ -1,5 +1,5 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, DoRec,
-             BangPatterns, OverloadedStrings, TemplateHaskell #-}
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, RecursiveDo,
+             BangPatterns, OverloadedStrings, TemplateHaskell, FlexibleContexts #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Features.Users (
     initUserFeature,
@@ -52,6 +52,8 @@ data UserFeature = UserFeature {
     -- modification thereof.
     adminGroup :: UserGroup,
 
+    groupChangedHook :: Hook (GroupDescription, Bool, UserId, UserId, String) (),
+
     -- Authorisation
     -- | Require any of a set of privileges.
     guardAuthorised_   :: [PrivilegeCondition] -> ServerPartE (),
@@ -62,7 +64,6 @@ data UserFeature = UserFeature {
     -- | A hook to override the default authentication error in particular
     -- circumstances.
     authFailHook       :: Hook Auth.AuthError (Maybe ErrorResponse),
-
     -- | Retrieves the entire user base.
     queryGetUserDb    :: forall m. MonadIO m => m Users.Users,
 
@@ -204,6 +205,7 @@ initUserFeature ServerEnv{serverStateDir} = do
   -- Extension hooks
   userAdded     <- newHook
   authFailHook  <- newHook
+  groupChangedHook <- newHook
 
   return $ do
     -- Slightly tricky: we have an almost recursive knot between the group
@@ -216,7 +218,7 @@ initUserFeature ServerEnv{serverStateDir} = do
               = userFeature usersState
                             adminsState
                             groupIndex
-                            userAdded authFailHook
+                            userAdded authFailHook groupChangedHook
                             adminG adminR
 
         (adminG, adminR) <- groupResourceAt "/users/admins/" adminGroupDesc
@@ -255,11 +257,12 @@ userFeature :: StateComponent AcidState Users.Users
             -> MemState GroupIndex
             -> Hook () ()
             -> Hook Auth.AuthError (Maybe ErrorResponse)
+            -> Hook (GroupDescription, Bool, UserId, UserId, String) ()
             -> UserGroup
             -> GroupResource
             -> (UserFeature, UserGroup)
 userFeature  usersState adminsState
-             groupIndex userAdded authFailHook
+             groupIndex userAdded authFailHook groupChangedHook
              adminGroup adminResource
   = (UserFeature {..}, adminGroupDesc)
   where
@@ -554,29 +557,34 @@ userFeature  usersState adminsState
     adminGroupDesc = UserGroup {
           groupDesc      = nullDescription { groupTitle = "Hackage admins" },
           queryUserList  = queryState adminsState GetAdminList,
-          addUserList    = updateState adminsState . AddHackageAdmin,
-          removeUserList = updateState adminsState . RemoveHackageAdmin,
+          addUserList    =  updateState adminsState . AddHackageAdmin,
+          removeUserList =  updateState adminsState . RemoveHackageAdmin,
           canAddGroup    = [adminGroupDesc],
           canRemoveGroup = [adminGroupDesc]
         }
 
     groupAddUser :: UserGroup -> DynamicPath -> ServerPartE ()
     groupAddUser group _ = do
-        guardAuthorised_ (map InGroup (canAddGroup group))
+        actorUid <- guardAuthorised (map InGroup (canAddGroup group))
         users <- queryState usersState GetUserDb
         muser <- optional $ look "user"
+        reason <- optional $ look "reason"
         case muser of
             Nothing -> addError "Bad request (could not find 'user' argument)"
             Just ustr -> case simpleParse ustr >>= \uname -> Users.lookupUserName uname users of
                 Nothing      -> addError $ "No user with name " ++ show ustr ++ " found"
-                Just (uid,_) -> liftIO $ addUserList group uid
+                Just (uid,_) -> do
+                             liftIO $ addUserList group uid
+                             runHook_ groupChangedHook (groupDesc group, True,actorUid,uid,fromMaybe "" reason)
        where addError = errBadRequest "Failed to add user" . return . MText
 
     groupDeleteUser :: UserGroup -> DynamicPath -> ServerPartE ()
     groupDeleteUser group dpath = do
-      guardAuthorised_ (map InGroup (canRemoveGroup group))
+      actorUid <- guardAuthorised (map InGroup (canRemoveGroup group))
       uid <- lookupUserName =<< userNameInPath dpath
+      reason <- localRq (\req -> req {rqMethod = POST}) . optional $ look "reason"
       liftIO $ removeUserList group uid
+      runHook_ groupChangedHook (groupDesc group, False,actorUid,uid,fromMaybe "" reason)
 
     lookupGroupEditAuth :: UserGroup -> ServerPartE (Bool, Bool)
     lookupGroupEditAuth group = do
@@ -696,16 +704,20 @@ userFeature  usersState adminsState
     --      and then remove groupAddUser & groupDeleteUser
     serveUserGroupUserPut groupr dpath = do
       group <- getGroup groupr dpath
-      guardAuthorised_ (map InGroup (canAddGroup group))
+      actorUid <- guardAuthorised (map InGroup (canAddGroup group))
       uid <- lookupUserName =<< userNameInPath dpath
+      reason <- optional $ look "reason"
       liftIO $ addUserList group uid
+      runHook_ groupChangedHook (groupDesc group, True,actorUid,uid,fromMaybe "" reason)
       goToList groupr dpath
 
     serveUserGroupUserDelete groupr dpath = do
       group <- getGroup groupr dpath
-      guardAuthorised_ (map InGroup (canRemoveGroup group))
+      actorUid <- guardAuthorised (map InGroup (canRemoveGroup group))
       uid <- lookupUserName =<< userNameInPath dpath
+      reason <- optional $ look "reason"
       liftIO $ removeUserList group uid
+      runHook_ groupChangedHook (groupDesc group, False,actorUid,uid,fromMaybe "" reason)
       goToList groupr dpath
 
     goToList group dpath = seeOther (renderResource' (groupResource group) dpath)

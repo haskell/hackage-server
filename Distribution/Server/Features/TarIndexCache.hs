@@ -7,17 +7,25 @@ module Distribution.Server.Features.TarIndexCache (
   ) where
 
 import Control.Exception (throwIO)
+import Control.Monad.Error (ErrorT(..))
+
 import Data.Serialize (runGetLazy, runPutLazy)
 import Data.SafeCopy (safeGet, safePut)
+import Data.Maybe (listToMaybe)
 
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BlobStorage
+import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Features.TarIndexCache.State
 import Distribution.Server.Features.Users
-import Distribution.Server.Packages.Types (PkgTarball(..))
+import Distribution.Server.Packages.ChangeLog
+import Distribution.Server.Packages.Types (PkgTarball(..), PkgInfo(..), pkgLatestTarball)
 import Data.TarIndex
+import qualified Data.TarIndex as TarIndex
 import Distribution.Server.Util.ServeTarball (constructTarIndex)
+import Distribution.Package (packageId)
+import Distribution.Text (display)
 
 import qualified Data.Map as Map
 import Data.Aeson (toJSON)
@@ -26,6 +34,9 @@ data TarIndexCacheFeature = TarIndexCacheFeature {
     tarIndexCacheFeatureInterface :: HackageFeature
   , cachedTarIndex        :: BlobId -> IO TarIndex
   , cachedPackageTarIndex :: PkgTarball -> IO TarIndex
+  , packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex))
+  , findToplevelFile :: PkgInfo -> (FilePath -> Bool)
+                     -> IO (Either String (FilePath, ETag, TarEntryOffset, FilePath))
   }
 
 instance IsHackageFeature TarIndexCacheFeature where
@@ -123,3 +134,39 @@ tarIndexCacheFeature ServerEnv{serverBlobStore = store}
       -- remove any blobs
       liftIO $ putState tarIndexCache initialTarIndexCache
       ok $ toResponse "Ok!"
+
+    -- Functions to access specific files in a tarball
+
+    packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex))
+    packageTarball pkginfo
+      | Just (pkgTarball, _uploadinfo) <- pkgLatestTarball pkginfo = do
+        let blobid = pkgTarballNoGz pkgTarball
+            fp     = BlobStorage.filepath store blobid
+            etag   = BlobStorage.blobETag blobid
+        index <- cachedPackageTarIndex pkgTarball
+        return $ Right (fp, etag, index)
+      | otherwise =
+        return $ Left "No tarball found"
+
+    -- TODO: Specify *what* file wasn't found in the error. This will require another parameter.
+    findToplevelFile :: PkgInfo -> (FilePath -> Bool)
+                     -> IO (Either String (FilePath, ETag, TarEntryOffset, FilePath))
+    findToplevelFile pkg test = runErrorT $ do
+        (fp, etag, index) <- ErrorT $ packageTarball pkg
+        (offset, fname)   <- ErrorT $ return . maybe (Left "File not found") Right
+                                    $ findFile index
+        return (fp, etag, offset, fname)
+      where
+        topdir :: FilePath
+        topdir = display (packageId pkg)
+
+        findFile :: TarIndex -> Maybe (TarEntryOffset, String)
+        findFile index = do
+          TarDir fnames <- TarIndex.lookup index topdir
+          listToMaybe $
+            [ (offset, fname')
+            | (fname, _) <- fnames
+            , test fname
+            , let fname' = topdir </> fname
+            , Just (TarIndex.TarFileEntry offset) <- [TarIndex.lookup index fname']
+            ]

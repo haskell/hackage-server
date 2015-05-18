@@ -1,5 +1,5 @@
 {-# LANGUAGE PatternGuards, GeneralizedNewtypeDeriving,
-             MultiParamTypeClasses, FlexibleInstances, CPP #-}
+             MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, CPP #-}
 module Main where
 
 import Network.HTTP
@@ -41,10 +41,10 @@ import Data.IORef
 import Control.Exception
 import Data.Time
 import Data.Time.Clock.POSIX
-import System.Locale
+import Data.Time.Locale.Compat (defaultTimeLocale)
 import System.Environment
 import System.IO
-import System.Exit
+import System.Exit(exitSuccess, exitWith, ExitCode(..))
 import System.FilePath
 import System.Directory
 import System.Console.GetOpt
@@ -430,7 +430,7 @@ newtype MirrorSession a
                           (BrowserAction (HandleStream ByteString)))
                         a
         }
-  deriving (Functor, Monad, MonadIO,
+  deriving (Functor, Applicative, Monad, MonadIO,
             MonadError MirrorError)
 
 instance MonadReader (Verbosity, Bool) MirrorSession where

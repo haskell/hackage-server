@@ -14,6 +14,7 @@
 module Distribution.Server.Util.ServeTarball
     ( serveTarball
     , serveTarEntry
+    , loadTarEntry
     , constructTarIndexFromFile
     , constructTarIndex
     ) where
@@ -37,13 +38,13 @@ import Text.XHtml.Strict ((<<), (!))
 import qualified Data.ByteString.Lazy as BS
 import System.FilePath
 import Control.Monad.Trans (MonadIO, liftIO)
-import Control.Monad (msum, mzero)
+import Control.Monad (msum, mzero, MonadPlus(..))
 import System.IO
 
 -- | Serve the contents of a tar file
 -- file. TODO: This is not a sustainable implementation,
 -- but it gives us something to test with.
-serveTarball :: MonadIO m
+serveTarball :: (MonadIO m, MonadPlus m)
              => String     -- description for directory listings
              -> [FilePath] -- dir index file names (e.g. ["index.html"])
              -> FilePath   -- root dir in tar to serve
@@ -114,20 +115,24 @@ renderDirIndex descr topdir topentries =
                   , renderForest (dir </> entryname) entries ]
 
 
-serveTarEntry :: FilePath -> Int -> FilePath -> IO Response
-serveTarEntry tarfile off fname = do
+loadTarEntry :: FilePath -> TarIndex.TarEntryOffset -> IO (Either String (Tar.FileSize, BS.ByteString))
+loadTarEntry tarfile off = do
   htar <- openFile tarfile ReadMode
-  hSeek htar AbsoluteSeek (fromIntegral (off * 512))
+  hSeek htar AbsoluteSeek (fromIntegral $ off * 512)
   header <- BS.hGet htar 512
   case Tar.read header of
     (Tar.Next Tar.Entry{Tar.entryContent = Tar.NormalFile _ size} _) -> do
          body <- BS.hGet htar (fromIntegral size)
-         let mimeType = mime fname
-             response = ((setHeader "Content-Length" (show size)) .
-                         (setHeader "Content-Type" mimeType)) $
-                         resultBS 200 body
-         return response
-    _ -> fail "oh noes!!"
+         return $ Right (size, body)
+    _ -> fail "failed to read entry from tar file"
+
+serveTarEntry :: FilePath -> TarIndex.TarEntryOffset -> FilePath -> IO Response
+serveTarEntry tarfile off fname = do
+    Right (size, body) <- loadTarEntry tarfile off
+    return . ((setHeader "Content-Length" (show size)) .
+              (setHeader "Content-Type" mimeType)) $
+              resultBS 200 body
+  where mimeType = mime fname
 
 constructTarIndexFromFile :: FilePath -> IO TarIndex
 constructTarIndexFromFile file = do

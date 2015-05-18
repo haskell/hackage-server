@@ -34,7 +34,7 @@ import Control.Monad (liftM, forM, unless)
 import System.FilePath
 import System.Directory
 import System.Posix.Files as Posix (createLink)
-import System.Locale
+import Data.Time.Locale.Compat
 import System.IO.Unsafe (unsafeInterleaveIO)
 import Data.Maybe (catMaybes, fromMaybe)
 import Data.Time
@@ -104,7 +104,7 @@ dumpServerBackup verbosity backupType backupDir tarfileTemplate
 
   where
     leadin = if backupType == ScrubbedBackup then "scrubbed-" else ""
-    defaultTarfileTemplate = leadin ++ "backup-" ++ iso8601DateFormat Nothing
+    defaultTarfileTemplate = leadin ++ "backup-" ++ "%Y-%m-%d"
     substTemplate = formatTime defaultTimeLocale
 
     -- MVar as 1-place chan

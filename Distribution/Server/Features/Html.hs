@@ -1,4 +1,4 @@
-{-# LANGUAGE DoRec, RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE RecursiveDo, FlexibleContexts, RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.Html (
     HtmlFeature(..),
     initHtmlFeature
@@ -9,7 +9,6 @@ import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Framework.Templating
 
 import Distribution.Server.Features.Core
-import Distribution.Server.Features.RecentPackages
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.BuildReports
 import Distribution.Server.Features.BuildReports.Render
@@ -20,6 +19,7 @@ import Distribution.Server.Features.Search
 import Distribution.Server.Features.Search as Search
 import Distribution.Server.Features.PreferredVersions
 -- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies
+import Distribution.Server.Features.PackageContents (PackageContentsFeature(..))
 import Distribution.Server.Features.PackageList
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Mirror
@@ -68,7 +68,7 @@ import qualified Data.Ix    as Ix
 import Data.Time.Format (formatTime)
 import Data.Time.Clock (getCurrentTime)
 import qualified Data.Time.Format.Human as HumanTime
-import System.Locale (defaultTimeLocale)
+import Data.Time.Locale.Compat (defaultTimeLocale)
 
 import Text.XHtml.Strict
 import qualified Text.XHtml.Strict as XHtml
@@ -97,7 +97,7 @@ instance IsHackageFeature HtmlFeature where
 initHtmlFeature :: ServerEnv
                 -> IO (UserFeature
                     -> CoreFeature
-                    -> RecentPackagesFeature
+                    -> PackageContentsFeature
                     -> UploadFeature -> PackageCandidatesFeature
                     -> VersionsFeature
                     -- [reverse index disabled] -> ReverseFeature
@@ -176,7 +176,7 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
 
 htmlFeature :: UserFeature
             -> CoreFeature
-            -> RecentPackagesFeature
+            -> PackageContentsFeature
             -> UploadFeature
             -> PackageCandidatesFeature
             -> VersionsFeature
@@ -199,7 +199,7 @@ htmlFeature :: UserFeature
 
 htmlFeature user
             core@CoreFeature{queryGetPackageIndex}
-            recent upload
+            packages upload
             candidates versions
             -- [reverse index disabled] ReverseFeature{..}
             tags download
@@ -243,7 +243,7 @@ htmlFeature user
                                       reportsCore
                                       download
                                       distros
-                                      recent
+                                      packages
                                       htmlTags
                                       htmlPreferred
                                       cachePackagesPage
@@ -433,7 +433,7 @@ mkHtmlCore :: HtmlUtilities
            -> ReportsFeature
            -> DownloadFeature
            -> DistroFeature
-           -> RecentPackagesFeature
+           -> PackageContentsFeature
            -> HtmlTags
            -> HtmlPreferred
            -> AsyncCache Response
@@ -455,7 +455,7 @@ mkHtmlCore HtmlUtilities{..}
            reportsFeature
            DownloadFeature{recentPackageDownloads,totalPackageDownloads}
            DistroFeature{queryPackageStatus}
-           RecentPackagesFeature{packageRender}
+           PackageContentsFeature{packageRender}
            HtmlTags{..}
            HtmlPreferred{..}
            cachePackagesPage
@@ -517,8 +517,9 @@ mkHtmlCore HtmlUtilities{..}
         -- get additional information from other features
         prefInfo <- queryGetPreferredInfo pkgname
         let infoUrl = fmap (\_ -> preferredPackageUri versions "" pkgname) $ sumRange prefInfo
-            beforeHtml = [Pages.renderVersion realpkg (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl,
-                          Pages.renderDependencies render]
+            beforeHtml = [ Pages.renderVersion realpkg (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl
+                         , Pages.renderChangelog render
+                         , Pages.renderDependencies render]
         -- and other package indices
         distributions <- queryPackageStatus pkgname
         -- [reverse index disabled] revCount <- revPackageSummary realpkg

@@ -41,6 +41,7 @@ import Distribution.Server.Features.UserSignup          (initUserSignupFeature)
 import Distribution.Server.Features.LegacyPasswds       (initLegacyPasswdsFeature)
 import Distribution.Server.Features.EditCabalFiles      (initEditCabalFilesFeature)
 import Distribution.Server.Features.AdminFrontend       (initAdminFrontendFeature)
+import Distribution.Server.Features.AdminLog            (initAdminLogFeature)
 import Distribution.Server.Features.HoogleData          (initHoogleDataFeature)
 #endif
 import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
@@ -137,6 +138,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                                initAdminFrontendFeature env
     mkHoogleDataFeature     <- logStartup "hoogle" $
                                initHoogleDataFeature env
+    mkAdminLogFeature       <- logStartup "admin log" $
+                               initAdminLogFeature env
 #endif
 
     loginfo verbosity "Initialising features, part 2"
@@ -165,11 +168,11 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     packageContentsFeature <- mkPackageContentsFeature
                                 coreFeature
                                 tarIndexCacheFeature
+                                usersFeature
 
     packagesFeature <- mkRecentPackagesFeature
                          usersFeature
                          coreFeature
-                         packageContentsFeature
 
     userDetailsFeature <- mkUserDetailsFeature
                             usersFeature
@@ -250,7 +253,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     htmlFeature     <- mkHtmlFeature
                          usersFeature
                          coreFeature
-                         packagesFeature
+                         packageContentsFeature
                          uploadFeature
                          candidatesFeature
                          versionsFeature
@@ -282,6 +285,10 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                            coreFeature
                            documentationCoreFeature
                            tarIndexCacheFeature
+
+    adminLogFeature <- mkAdminLogFeature
+                         usersFeature
+
 #endif
 
     -- The order of initialization above should be the same as
@@ -317,6 +324,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , editCabalFeature
          , adminFrontendFeature
          , getFeatureInterface hoogleDataFeature
+         , getFeatureInterface adminLogFeature
 #endif
          , staticFilesFeature
          , serverIntrospectFeature allFeatures

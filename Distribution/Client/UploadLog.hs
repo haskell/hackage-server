@@ -39,7 +39,7 @@ import Data.Time.LocalTime
          ( zonedTimeToUTC )
 import Data.Time.Format
          ( readsTime, formatTime )
-import System.Locale
+import Data.Time.Locale.Compat
          ( defaultTimeLocale )
 import Data.List
          ( sortBy, groupBy, nub )

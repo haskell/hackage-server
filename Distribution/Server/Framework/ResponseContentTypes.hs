@@ -33,7 +33,7 @@ import qualified Text.XHtml.Strict as XHtml (Html, showHtml)
 import qualified Data.Aeson as Aeson (Value, encode)
 import Data.Time.Clock (UTCTime)
 import qualified Data.Time.Format as Time (formatTime)
-import System.Locale (defaultTimeLocale)
+import Data.Time.Locale.Compat (defaultTimeLocale)
 import Text.CSV (printCSV, CSV)
 import Control.DeepSeq
 

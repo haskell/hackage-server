@@ -29,7 +29,7 @@ import qualified Codec.Compression.GZip  as GZip
 import qualified Codec.Archive.Tar       as Tar
 
 import System.Environment
-import System.Exit
+import System.Exit(exitFailure, ExitCode(..))
 import System.FilePath
 import System.Directory
 import System.Console.GetOpt
@@ -54,7 +54,9 @@ data BuildOpts = BuildOpts {
                      bo_continuous :: Maybe Int,
                      bo_keepGoing  :: Bool,
                      bo_dryRun     :: Bool,
-                     bo_prune      :: Bool
+                     bo_prune      :: Bool,
+                     bo_username   :: Maybe String,
+                     bo_password   :: Maybe String
                  }
 
 data BuildConfig = BuildConfig {
@@ -118,10 +120,8 @@ main = topHandler $ do
 
 initialise :: BuildOpts -> URI -> [URI] -> IO ()
 initialise opts uri auxUris
-    = do putStrLn "Enter hackage username"
-         username <- getLine
-         putStrLn "Enter hackage password"
-         password <- getLine
+    = do username <- readMissingOpt "Enter hackage username" (bo_username opts)
+         password <- readMissingOpt "Enter hackage password" (bo_password opts)
          let config = BuildConfig {
                         bc_srcURI   = uri,
                         bc_auxURIs  = auxUris,
@@ -132,6 +132,8 @@ initialise opts uri auxUris
          createDirectoryIfMissing False $ resultsDirectory opts
          writeConfig opts config
          writeCabalConfig opts config
+  where
+    readMissingOpt prompt = maybe (putStrLn prompt >> getLine) return
 
 writeConfig :: BuildOpts -> BuildConfig -> IO ()
 writeConfig opts BuildConfig {
@@ -775,7 +777,9 @@ data BuildFlags = BuildFlags {
     flagKeepGoing  :: Bool,
     flagDryRun     :: Bool,
     flagInterval   :: Maybe String,
-    flagPrune      :: Bool
+    flagPrune      :: Bool,
+    flagUsername   :: Maybe String,
+    flagPassword   :: Maybe String
 }
 
 emptyBuildFlags :: BuildFlags
@@ -790,6 +794,8 @@ emptyBuildFlags = BuildFlags {
   , flagDryRun     = False
   , flagInterval   = Nothing
   , flagPrune      = False
+  , flagUsername   = Nothing
+  , flagPassword   = Nothing
   }
 
 buildFlagDescrs :: [OptDescr (BuildFlags -> BuildFlags)]
@@ -835,6 +841,14 @@ buildFlagDescrs =
   , Option [] ["prune-haddock-files"]
       (NoArg (\opts -> opts { flagPrune = True }))
       "Remove unnecessary haddock files (frames, .haddock file)"
+
+  , Option [] ["init-username"]
+      (ReqArg (\uname opts -> opts { flagUsername = Just uname }) "USERNAME")
+      "The Hackage user to run the build as (used with init)"
+
+  , Option [] ["init-password"]
+      (ReqArg (\passwd opts -> opts { flagPassword = Just passwd }) "PASSWORD")
+      "The password of the Hackage user to run the build as (used with init)"
   ]
 
 validateOpts :: [String] -> IO (Mode, BuildOpts)
@@ -854,7 +868,9 @@ validateOpts args = do
                                      (False, _)      -> Nothing,
                    bo_keepGoing  = flagKeepGoing flags,
                    bo_dryRun     = flagDryRun flags,
-                   bo_prune      = flagPrune flags
+                   bo_prune      = flagPrune flags,
+                   bo_username   = flagUsername flags,
+                   bo_password   = flagPassword flags
                }
 
         mode = case args' of

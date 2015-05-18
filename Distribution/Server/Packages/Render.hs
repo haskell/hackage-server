@@ -29,12 +29,13 @@ import Distribution.Version
 import Distribution.ModuleName as ModuleName
 
 -- hackage-server
+import Distribution.Server.Framework.CacheControl (ETag)
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.ModuleForest
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Types
 import qualified Data.TarIndex as TarIndex
-import Data.TarIndex (TarIndex)
+import Data.TarIndex (TarIndex, TarEntryOffset)
 
 -- This should provide the caller enough information to encode the package information
 -- in its particular format (text, html, json) with minimal effort on its part.
@@ -50,7 +51,8 @@ data PackageRender = PackageRender {
     rendRepoHeads    :: [(RepoType, String, SourceRepo)],
     rendModules      :: Maybe TarIndex -> Maybe ModuleForest,
     rendHasTarball   :: Bool,
-    rendHasChangeLog :: Bool,
+    rendChangeLog    :: Maybe (FilePath, ETag, TarEntryOffset, FilePath),
+    rendReadme       :: Maybe (FilePath, ETag, TarEntryOffset, FilePath),
     rendUploadInfo   :: (UTCTime, Maybe UserInfo),
     rendUpdateInfo   :: Maybe (Int, UTCTime, Maybe UserInfo),
     rendPkgUri       :: String,
@@ -62,8 +64,8 @@ data PackageRender = PackageRender {
     rendOther        :: PackageDescription
 } deriving (Show)
 
-doPackageRender :: Users.Users -> PkgInfo -> Bool -> IO PackageRender
-doPackageRender users info hasChangeLog = return $ PackageRender
+doPackageRender :: Users.Users -> PkgInfo -> PackageRender
+doPackageRender users info = PackageRender
     { rendPkgId        = pkgInfoId info
     , rendDepends      = flatDependencies genDesc
     , rendExecNames    = map exeName (executables flatDesc)
@@ -84,7 +86,8 @@ doPackageRender users info hasChangeLog = return $ PackageRender
                            . exposedModules)
                           (library flatDesc)
     , rendHasTarball   = not . Vec.null $ pkgTarballRevisions info
-    , rendHasChangeLog = hasChangeLog
+    , rendChangeLog    = Nothing -- populated later
+    , rendReadme       = Nothing -- populated later
     , rendUploadInfo   = let (utime, uid) = pkgOriginalUploadInfo info
                          in (utime, Users.lookupUserId uid users)
     , rendUpdateInfo   = let maxrevision  = Vec.length (pkgMetadataRevisions info) - 1
