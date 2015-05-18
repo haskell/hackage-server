@@ -1,10 +1,11 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, BangPatterns, GeneralizedNewtypeDeriving, NamedFieldPuns, PatternGuards #-}
+{-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, BangPatterns,
+             GeneralizedNewtypeDeriving, NamedFieldPuns, RecordWildCards,
+             PatternGuards #-}
 
 module Distribution.Server.Features.AdminLog where
 
 import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Users.Group
-import Distribution.Server.Users.Users (Users)
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupRestore
 
@@ -84,41 +85,53 @@ instance IsHackageFeature AdminLogFeature where
 initAdminLogFeature :: ServerEnv -> IO (UserFeature -> IO AdminLogFeature)
 initAdminLogFeature ServerEnv{serverStateDir} = do
   adminLogState <- adminLogStateComponent serverStateDir
-  return $ \UserFeature{groupChangedHook, queryGetUserDb} -> do
+  return $ \users@UserFeature{groupChangedHook} -> do
+
+    let feature = adminLogFeature users adminLogState
+
     registerHook groupChangedHook $ \(gd,addOrDel,actorUid,targetUid,reason) -> do
         now <- getCurrentTime
         updateState adminLogState $ AddAdminLog
             (now, actorUid, mkAdminAction gd addOrDel targetUid, packUTF8 reason)
 
-    return $ AdminLogFeature {
-       adminLogFeatureInterface =
-           (emptyHackageFeature "admin-actions-log") {
-               featureDesc = "Log of additions and removals of users from groups.",
-               featureResources = [adminLogResource queryGetUserDb adminLogState],
-               featureState = [abstractAcidStateComponent adminLogState]
-       }
-    }
+    return feature
 
-adminLogResource :: ServerPartE Users -> StateComponent AcidState AdminLog -> Resource
-adminLogResource getUserDb logState = (resourceAt "/admin/log.:format") {
-               resourceDesc = [(GET, "Full list of group additions and removals")],
-               resourceGet = [
-                  ("html", \ _ -> do
-                     guardAuthorised_ [InGroup adminGroup]
-                     aLog <- queryState logState GetAdminLog
-                     users <- getUserDb
-                     return . toResponse . adminLogPage users . map mkRow . adminLog $ aLog)
-               ]
-             }
+adminLogFeature :: UserFeature
+                -> StateComponent AcidState AdminLog
+                -> AdminLogFeature
+adminLogFeature UserFeature{..} adminLogState
+  = AdminLogFeature {..}
+
   where
+    adminLogFeatureInterface =
+      (emptyHackageFeature "admin-actions-log") {
+        featureDesc      = "Log of additions and removals of users from groups.",
+        featureResources = [adminLogResource],
+        featureState     = [abstractAcidStateComponent adminLogState]
+      }
+
+    adminLogResource :: Resource
+    adminLogResource =
+      (resourceAt "/admin/log.:format") {
+        resourceDesc = [(GET, "Full list of group additions and removals")],
+        resourceGet  = [("html", serveAdminLogGet)]
+      }
+
+    serveAdminLogGet _ = do
+      guardAuthorised_ [InGroup adminGroup]
+      aLog  <- queryState adminLogState GetAdminLog
+      users <- queryGetUserDb
+      return . toResponse . adminLogPage users . map mkRow . adminLog $ aLog
+
     mkRow (time, actorId, Admin_GroupDelUser targetId group, reason) =
           (time, actorId, "Delete", targetId, nameIt group, unpackUTF8 reason)
     mkRow (time, actorId, Admin_GroupAddUser targetId group, reason) =
           (time, actorId, "Add", targetId, nameIt group, unpackUTF8 reason)
+
     nameIt (MaintainerGroup pn) = "Maintainers for " ++ unpackUTF8 pn
-    nameIt AdminGroup = "Administrators"
-    nameIt TrusteeGroup = "Trustees"
-    nameIt (OtherGroup s) = unpackUTF8 s
+    nameIt AdminGroup           = "Administrators"
+    nameIt TrusteeGroup         = "Trustees"
+    nameIt (OtherGroup s)       = unpackUTF8 s
 
 adminLogStateComponent :: FilePath -> IO (StateComponent AcidState AdminLog)
 adminLogStateComponent stateDir = do
@@ -128,28 +141,31 @@ adminLogStateComponent stateDir = do
     , stateHandle  = st
     , getState     = query st GetAdminLog
     , putState     = update st . ReplaceAdminLog
-    , backupState  = \_ (AdminLog xs) -> [BackupByteString ["adminLog.txt"] . backupLogEntries $ xs]
+    , backupState  = \_ (AdminLog xs) ->
+                      [BackupByteString ["adminLog.txt"] . backupLogEntries $ xs]
     , restoreState = restoreAdminLogBackup
     , resetState   = adminLogStateComponent
     }
 
 restoreAdminLogBackup :: RestoreBackup AdminLog
-restoreAdminLogBackup = go (AdminLog [])
-    where go logs =
-              RestoreBackup {
-                   restoreEntry = \entry ->
-                                  case entry of
-                                    BackupByteString ["adminLog.txt"] bs ->
-                                        return . go $ importLogs logs bs
-                                    _ -> return (go logs)
-                 , restoreFinalize = return logs
-                 }
+restoreAdminLogBackup =
+    go (AdminLog [])
+  where
+    go logs =
+      RestoreBackup {
+        restoreEntry = \entry -> case entry of
+                        BackupByteString ["adminLog.txt"] bs
+                          -> return . go $ importLogs logs bs
+                        _ -> return (go logs)
+      , restoreFinalize = return logs
+      }
 
 importLogs :: AdminLog -> BS.ByteString -> AdminLog
-importLogs (AdminLog ls) = AdminLog . (++ls) . catMaybes . map fromRecord . lines . unpackUTF8
-    where
-      fromRecord :: String -> Maybe (UTCTime,UserId,AdminAction,BS.ByteString)
-      fromRecord = readMaybe
+importLogs (AdminLog ls) =
+    AdminLog . (++ls) . catMaybes . map fromRecord . lines . unpackUTF8
+  where
+    fromRecord :: String -> Maybe (UTCTime,UserId,AdminAction,BS.ByteString)
+    fromRecord = readMaybe
 
 backupLogEntries :: [(UTCTime,UserId,AdminAction,BS.ByteString)] -> BS.ByteString
 backupLogEntries = packUTF8 . unlines . map show
