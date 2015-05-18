@@ -48,7 +48,8 @@ addUser uri =
     [ h3 << "Add user"
     , gui uri ! [theclass "box"] <<
         [ p << [stringToHtml "User: ", textfield "user"]
-        , p << [stringToHtml "Reason: ", textfield "reason"]
+        , p << [ stringToHtml "Reason: ", textfield "reason"
+               , toHtml " publicly visible in audit log"]
         , submit "submit" "Add member"
         ]
     ]
@@ -57,7 +58,8 @@ removeUser :: Users.UserName -> String -> [Html]
 removeUser uname uri =
     [ toHtml " "
     , gui (uri </> "user" </> display uname) <<
-        [ p << [stringToHtml "Reason: ", textfield "reason"]
+        [ p << [ stringToHtml "Reason: ", textfield "reason"
+               , toHtml " publicly visible in audit log"]
         , hidden "_method" "DELETE"
         , submit "submit" "Remove"
         ]

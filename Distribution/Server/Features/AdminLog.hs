@@ -118,7 +118,6 @@ adminLogFeature UserFeature{..} adminLogState
       }
 
     serveAdminLogGet _ = do
-      guardAuthorised_ [InGroup adminGroup]
       aLog  <- queryState adminLogState GetAdminLog
       users <- queryGetUserDb
       return . toResponse . adminLogPage users . map mkRow . adminLog $ aLog
