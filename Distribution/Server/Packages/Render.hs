@@ -4,6 +4,7 @@
 module Distribution.Server.Packages.Render (
     -- * Package render
     PackageRender(..)
+  , IsBuildable (..)
   , doPackageRender
 
     -- * Utils
@@ -12,6 +13,7 @@ module Distribution.Server.Packages.Render (
 
 import Data.Maybe (catMaybes, isJust, maybeToList)
 import Control.Monad (guard)
+import Control.Arrow (second)
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
 import qualified Data.Vector as Vec
@@ -43,7 +45,8 @@ import Data.TarIndex (TarIndex, TarEntryOffset)
 data PackageRender = PackageRender {
     rendPkgId        :: PackageIdentifier,
     rendDepends      :: [Dependency],
-    rendExecNames    :: [String],
+    rendLibraryDeps  :: Maybe (CondTree ConfVar [Dependency] IsBuildable),
+    rendExecutableDeps :: [(String, CondTree ConfVar [Dependency] IsBuildable)],
     rendLicenseName  :: String,
     rendLicenseFiles :: [FilePath],
     rendMaintainer   :: Maybe String,
@@ -68,7 +71,8 @@ doPackageRender :: Users.Users -> PkgInfo -> PackageRender
 doPackageRender users info = PackageRender
     { rendPkgId        = pkgInfoId info
     , rendDepends      = flatDependencies genDesc
-    , rendExecNames    = map exeName (executables flatDesc)
+    , rendLibraryDeps  = getDeps libBuildInfo `fmap` condLibrary genDesc
+    , rendExecutableDeps = second (getDeps buildInfo) `map` condExecutables genDesc
     , rendLicenseName  = display (license desc) -- maybe make this a bit more human-readable
     , rendLicenseFiles = licenseFiles desc
     , rendMaintainer   = case maintainer desc of
@@ -105,6 +109,16 @@ doPackageRender users info = PackageRender
     flatDesc = flattenPackageDescription genDesc
     desc     = packageDescription genDesc
     pkgUri   = "/package/" ++ display (pkgInfoId info)
+
+    getDeps getBuildInfo (CondNode ctData ds comps) =
+        CondNode isBuildable ds' $ map processComponent comps
+        where
+          ds' = sortDeps $ combineDepsBy intersectVersionIntervals ds
+          processComponent (cond, then', else') =
+              (cond, getDeps getBuildInfo then', getDeps getBuildInfo `fmap` else')
+          isBuildable = if buildable $ getBuildInfo ctData
+                          then Buildable
+                          else NotBuildable
     
     moduleHasDocs :: Maybe TarIndex -> ModuleName -> Bool
     moduleHasDocs Nothing       = const False
@@ -121,6 +135,10 @@ doPackageRender users info = PackageRender
         ty <- repoType r
         loc <- repoLocation r
         return (ty, loc, r)
+
+data IsBuildable = Buildable
+                 | NotBuildable
+                   deriving (Eq, Show)
 
 {-------------------------------------------------------------------------------
   Util
@@ -143,20 +161,12 @@ categorySplit xs = map (dropWhile isSpace) $ splitOn ',' xs
 --
 flatDependencies :: GenericPackageDescription -> [Dependency]
 flatDependencies =
-      sortOn (\(Dependency pkgname _) -> map toLower (display pkgname))
+      sortDeps
     . combineDepsBy intersectVersionIntervals
     . concat
     . map (combineDepsBy unionVersionIntervals)
     . targetDeps
   where
-    combineDepsBy :: (VersionIntervals -> VersionIntervals -> VersionIntervals)
-                  -> [Dependency] -> [Dependency]
-    combineDepsBy f =
-        map (\(pkgname, ver) -> Dependency pkgname (fromVersionIntervals ver))
-      . Map.toList
-      . Map.fromListWith f
-      . map (\(Dependency pkgname ver) -> (pkgname, toVersionIntervals ver))
-
     targetDeps :: GenericPackageDescription -> [[Dependency]]
     targetDeps pkg = map condTreeDeps (maybeToList $ condLibrary pkg)
                   ++ map (condTreeDeps . snd) (condExecutables pkg)
@@ -169,6 +179,17 @@ flatDependencies =
           condTreeDeps then_part
         fromComponent (_, then_part, Just else_part) =
           condTreeDeps then_part ++ condTreeDeps else_part
+
+sortDeps :: [Dependency] -> [Dependency]
+sortDeps = sortOn $ \(Dependency pkgname _) -> map toLower (display pkgname)
+
+combineDepsBy :: (VersionIntervals -> VersionIntervals -> VersionIntervals)
+              -> [Dependency] -> [Dependency]
+combineDepsBy f =
+    map (\(pkgname, ver) -> Dependency pkgname (fromVersionIntervals ver))
+  . Map.toList
+  . Map.fromListWith f
+  . map (\(Dependency pkgname ver) -> (pkgname, toVersionIntervals ver))
 
 -- Same as @sortBy (comparing f)@, but without recomputing @f@.
 sortOn :: Ord b => (a -> b) -> [a] -> [a]

@@ -519,7 +519,8 @@ mkHtmlCore HtmlUtilities{..}
         let infoUrl = fmap (\_ -> preferredPackageUri versions "" pkgname) $ sumRange prefInfo
             beforeHtml = [ Pages.renderVersion realpkg (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl
                          , Pages.renderChangelog render
-                         , Pages.renderDependencies render]
+                         , Pages.renderDependencies render
+                         , Pages.renderDetailedDependencies render]
         -- and other package indices
         distributions <- queryPackageStatus pkgname
         -- [reverse index disabled] revCount <- revPackageSummary realpkg
@@ -1004,7 +1005,8 @@ mkHtmlCandidates HtmlUtilities{..}
                    <$> queryGetPackageIndex
       prefInfo <- queryGetPreferredInfo pkgname
       let sectionHtml = [Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing,
-                         Pages.renderDependencies render] ++ Pages.renderFields render
+                         Pages.renderDependencies render,
+                         Pages.renderDetailedDependencies render] ++ Pages.renderFields render
           maintainHtml = anchor ! [href $ renderResource maintain [display $ packageId cand]] << "maintain"
       -- bottom sections, currently only documentation
       mdoctarblob <- queryDocumentation (packageId cand)

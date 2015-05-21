@@ -3,6 +3,7 @@
 module Distribution.Server.Pages.Package (
     packagePage,
     renderDependencies,
+    renderDetailedDependencies,
     renderVersion,
     renderFields,
     renderDownloads,
@@ -30,6 +31,7 @@ import Text.XHtml.Strict hiding (p, name, title, content)
 import Data.Monoid              (Monoid(..))
 import Data.Maybe               (maybeToList, isJust)
 import Data.List                (intersperse, intercalate)
+import Control.Arrow            (second)
 import System.FilePath.Posix    ((</>), (<.>), takeFileName)
 import Data.Time.Locale.Compat  (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
@@ -264,6 +266,71 @@ showDependency (Dependency (PackageName pname) vs) = showPkg +++ vsHtml
         -- passing along the PackageRender, which is not the case here
         showPkg = anchor ! [href . packageURL $ PackageIdentifier (PackageName pname) (Version [] [])] << pname
 
+renderDetailedDependencies :: PackageRender -> (String, Html)
+renderDetailedDependencies pkgRender = ("Dependency Details", details)
+  where
+    details = tabulate $ map (second render) targets
+
+    targets :: [(String, CondTree ConfVar [Dependency] IsBuildable)]
+    targets = maybeToList library ++ rendExecutableDeps pkgRender
+      where
+        library = (\lib -> ("library", lib)) `fmap` rendLibraryDeps pkgRender
+
+    render (P.CondNode isBuilable deps components) =
+        thediv ! [identifier "detailed-dependencies"] << unordList items
+      where
+        items = buildable ++ showDependencies deps : map renderComp components
+        buildable = case isBuilable of
+                      Buildable -> []
+                      NotBuildable -> [strong << "buildable:" +++ " False"]
+
+    renderComp (condition, then', maybeElse)
+        | hasDataCondNode then' =
+            (strong << "if ") +++ renderCond condition
+              +++ render then'
+              +++ maybe noHtml (((strong << "else") +++) . render) maybeElse
+        | Just else' <- maybeElse, hasDataCondNode else' =
+            (strong << "if ") +++ renderCond (notCond condition) +++ render else'
+        | otherwise = noHtml
+            where
+              hasDataCondNode (P.CondNode isBuilable deps components) =
+                  isBuilable == NotBuildable ||
+                  not (null deps) ||
+                  any hasDataComp components
+
+              hasDataComp (_, t, e) =
+                  hasDataCondNode t ||
+                  maybe False hasDataCondNode e
+
+              notCond (CNot c) = c
+              notCond c = CNot c
+
+              renderCond cond =
+                case cond of
+                  (Var v) -> toHtml $ displayConfVar v
+                  (Lit b) -> toHtml $ show b
+                  (CNot c) -> "!" +++ renderParens 3 c
+                  (COr c1 c2) -> renderParens 1 c1 +++ " || " +++ renderParens 1 c2
+                  (CAnd c1 c2) -> renderParens 2 c1 +++ " && " +++ renderParens 2 c2
+                where
+                  renderParens :: Int -> Condition ConfVar -> Html
+                  renderParens precedence c
+                      | COr _ _ <- c, precedence > 1 = parenthesized
+                      | CAnd _ _ <- c, precedence > 2 = parenthesized
+                      | otherwise = renderCond c
+                    where
+                      parenthesized = "(" +++ renderCond c +++ ")"
+
+              displayConfVar (OS os) = "os(" ++ display os ++ ")"
+              displayConfVar (Arch arch) = "arch(" ++ display arch ++ ")"
+              displayConfVar (Flag (FlagName f)) = "flag(" ++ f ++ ")"
+              displayConfVar (Impl compilerFlavor versionRange) =
+                  "impl(" ++ display compilerFlavor ++ ver ++ ")"
+                 where
+                   ver = if isAnyVersion versionRange
+                           then ""
+                           else display versionRange
+
 renderVersion :: PackageId -> [(Version, VersionStatus)] -> Maybe String -> (String, Html)
 renderVersion (PackageIdentifier pname pversion) allVersions info =
     (if null earlierVersions && null laterVersions then "Version" else "Versions", versionList +++ infoHtml)
@@ -313,7 +380,7 @@ renderFields render = [
         ("Home page",   linkField $ homepage desc),
         ("Bug tracker", linkField $ bugReports desc),
         ("Source repository", vList $ map sourceRepositoryField $ sourceRepos desc),
-        ("Executables", commaList . map toHtml $ rendExecNames render),
+        ("Executables", commaList . map toHtml $ map fst $ rendExecutableDeps render),
         ("Uploaded", uncurry renderUploadInfo (rendUploadInfo render))
       ]
    ++ [ ("Updated", renderUpdateInfo revisionNo utime uinfo)
