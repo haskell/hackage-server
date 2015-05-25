@@ -29,7 +29,7 @@ import Distribution.Text        (display)
 import Text.XHtml.Strict hiding (p, name, title, content)
 
 import Data.Monoid              (Monoid(..))
-import Data.Maybe               (maybeToList, isJust)
+import Data.Maybe               (fromMaybe, maybeToList, isJust, mapMaybe)
 import Data.List                (intersperse, intercalate)
 import Control.Arrow            (second)
 import System.FilePath.Posix    ((</>), (<.>), takeFileName)
@@ -269,67 +269,72 @@ showDependency (Dependency (PackageName pname) vs) = showPkg +++ vsHtml
 renderDetailedDependencies :: PackageRender -> (String, Html)
 renderDetailedDependencies pkgRender = ("Dependency Details", details)
   where
-    details = tabulate $ map (second render) targets
+    details = tabulate $
+              map (second (fromMaybe noHtml . render)) targets
 
-    targets :: [(String, CondTree ConfVar [Dependency] IsBuildable)]
+    targets :: [(String, CondTreeDeps)]
     targets = maybeToList library ++ rendExecutableDeps pkgRender
       where
         library = (\lib -> ("library", lib)) `fmap` rendLibraryDeps pkgRender
 
-    render (P.CondNode isBuilable deps components) =
-        thediv ! [identifier "detailed-dependencies"] << unordList items
+    render :: CondTreeDeps -> Maybe Html
+    render (P.CondNode isBuildable deps components)
+        | null deps && null comps && isBuildable == Buildable = Nothing
+        | otherwise =
+            Just $ thediv ! [identifier "detailed-dependencies"] << unordList items
       where
-        items = buildable ++ showDependencies deps : map renderComp components
-        buildable = case isBuilable of
+        items = buildable ++ showDependencies deps : comps
+        comps = mapMaybe renderComponent components
+        buildable = case isBuildable of
                       Buildable -> []
                       NotBuildable -> [strong << "buildable:" +++ " False"]
 
-    renderComp (condition, then', maybeElse)
-        | hasDataCondNode then' =
-            (strong << "if ") +++ renderCond condition
-              +++ render then'
-              +++ maybe noHtml (((strong << "else") +++) . render) maybeElse
-        | Just else' <- maybeElse, hasDataCondNode else' =
-            (strong << "if ") +++ renderCond (notCond condition) +++ render else'
-        | otherwise = noHtml
-            where
-              hasDataCondNode (P.CondNode isBuilable deps components) =
-                  isBuilable == NotBuildable ||
-                  not (null deps) ||
-                  any hasDataComp components
+    renderComponent :: (Condition ConfVar, CondTreeDeps, Maybe CondTreeDeps)
+                    -> Maybe Html
+    renderComponent (condition, then', else')
+        | Just thenHtml <- render then' =
+                           Just $ strong << "if "
+                             +++ renderCond condition
+                             +++ thenHtml
+                             +++ maybe noHtml ((strong << "else") +++)
+                                 (render =<< else')
+        | Just elseHtml <- render =<< else' =
+                           Just $ strong << "if "
+                             +++ renderCond (notCond condition)
+                             +++ elseHtml
+        | otherwise = Nothing
+      where
+        notCond (CNot c) = c
+        notCond c = CNot c
 
-              hasDataComp (_, t, e) =
-                  hasDataCondNode t ||
-                  maybe False hasDataCondNode e
+        renderCond :: Condition ConfVar -> Html
+        renderCond cond =
+            case cond of
+              (Var v) -> toHtml $ displayConfVar v
+              (Lit b) -> toHtml $ show b
+              (CNot c) -> "!" +++ renderParens 3 c
+              (COr c1 c2) -> renderParens 1 c1 +++ " || " +++ renderParens 1 c2
+              (CAnd c1 c2) -> renderParens 2 c1 +++ " && " +++ renderParens 2 c2
+          where
+            renderParens :: Int -> Condition ConfVar -> Html
+            renderParens precedence c
+                | COr _ _ <- c, precedence > 1 = parenthesized
+                | CAnd _ _ <- c, precedence > 2 = parenthesized
+                | otherwise = renderCond c
+              where
+                parenthesized = "(" +++ renderCond c +++ ")"
 
-              notCond (CNot c) = c
-              notCond c = CNot c
+            displayConfVar (OS os) = "os(" ++ display os ++ ")"
+            displayConfVar (Arch arch) = "arch(" ++ display arch ++ ")"
+            displayConfVar (Flag (FlagName f)) = "flag(" ++ f ++ ")"
+            displayConfVar (Impl compilerFlavor versionRange) =
+                "impl(" ++ display compilerFlavor ++ ver ++ ")"
+              where
+                ver = if isAnyVersion versionRange
+                        then ""
+                        else display versionRange
 
-              renderCond cond =
-                case cond of
-                  (Var v) -> toHtml $ displayConfVar v
-                  (Lit b) -> toHtml $ show b
-                  (CNot c) -> "!" +++ renderParens 3 c
-                  (COr c1 c2) -> renderParens 1 c1 +++ " || " +++ renderParens 1 c2
-                  (CAnd c1 c2) -> renderParens 2 c1 +++ " && " +++ renderParens 2 c2
-                where
-                  renderParens :: Int -> Condition ConfVar -> Html
-                  renderParens precedence c
-                      | COr _ _ <- c, precedence > 1 = parenthesized
-                      | CAnd _ _ <- c, precedence > 2 = parenthesized
-                      | otherwise = renderCond c
-                    where
-                      parenthesized = "(" +++ renderCond c +++ ")"
-
-              displayConfVar (OS os) = "os(" ++ display os ++ ")"
-              displayConfVar (Arch arch) = "arch(" ++ display arch ++ ")"
-              displayConfVar (Flag (FlagName f)) = "flag(" ++ f ++ ")"
-              displayConfVar (Impl compilerFlavor versionRange) =
-                  "impl(" ++ display compilerFlavor ++ ver ++ ")"
-                 where
-                   ver = if isAnyVersion versionRange
-                           then ""
-                           else display versionRange
+type CondTreeDeps = P.CondTree ConfVar [Dependency] IsBuildable
 
 renderVersion :: PackageId -> [(Version, VersionStatus)] -> Maybe String -> (String, Html)
 renderVersion (PackageIdentifier pname pversion) allVersions info =
