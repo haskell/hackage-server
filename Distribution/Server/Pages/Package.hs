@@ -342,7 +342,7 @@ renderFields render = [
         Nothing -> strong ! [theclass "warning"] << toHtml "none"
         Just n  -> toHtml n
     sourceRepositoryField sr = sourceRepositoryToHtml sr
-    
+
     rendLicense = case rendLicenseFiles render of
       []            -> toHtml (rendLicenseName render)
       [licenseFile] -> anchor ! [ href (rendPkgUri render </> "src" </> licenseFile) ]

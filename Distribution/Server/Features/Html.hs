@@ -15,6 +15,7 @@ import Distribution.Server.Features.BuildReports.Render
 import Distribution.Server.Features.PackageCandidates
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.DownloadCount
+import Distribution.Server.Features.Ranking
 import Distribution.Server.Features.Search
 import Distribution.Server.Features.Search as Search
 import Distribution.Server.Features.PreferredVersions
@@ -102,6 +103,7 @@ initHtmlFeature :: ServerEnv
                     -> VersionsFeature
                     -- [reverse index disabled] -> ReverseFeature
                     -> TagsFeature -> DownloadFeature
+                    -> RankingFeature
                     -> ListFeature -> SearchFeature
                     -> MirrorFeature -> DistroFeature
                     -> DocumentationFeature
@@ -128,6 +130,7 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
               candidates versions
               -- [reverse index disabled] reverse
               tags download
+              rank
               list@ListFeature{itemUpdate}
               names mirror
               distros
@@ -141,6 +144,7 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
                             packages upload
                             candidates versions
                             tags download
+                            rank
                             list names
                             mirror distros
                             docsCore docsCandidates
@@ -182,6 +186,7 @@ htmlFeature :: UserFeature
             -> VersionsFeature
             -> TagsFeature
             -> DownloadFeature
+            -> RankingFeature
             -> ListFeature
             -> SearchFeature
             -> MirrorFeature
@@ -203,6 +208,7 @@ htmlFeature user
             candidates versions
             -- [reverse index disabled] ReverseFeature{..}
             tags download
+            rank
             list@ListFeature{getAllLists}
             names
             mirror distros
@@ -242,6 +248,7 @@ htmlFeature user
                                       tarIndexCache
                                       reportsCore
                                       download
+                                      rank
                                       distros
                                       packages
                                       htmlTags
@@ -432,6 +439,7 @@ mkHtmlCore :: HtmlUtilities
            -> TarIndexCacheFeature
            -> ReportsFeature
            -> DownloadFeature
+           -> RankingFeature
            -> DistroFeature
            -> PackageContentsFeature
            -> HtmlTags
@@ -454,6 +462,7 @@ mkHtmlCore HtmlUtilities{..}
            TarIndexCacheFeature{cachedTarIndex}
            reportsFeature
            DownloadFeature{recentPackageDownloads,totalPackageDownloads}
+           RankingFeature{..}
            DistroFeature{queryPackageStatus}
            PackageContentsFeature{packageRender}
            HtmlTags{..}
@@ -527,10 +536,12 @@ mkHtmlCore HtmlUtilities{..}
         -- (totalDown, versionDown) <- perVersionDownloads pkg
         totalDown <- cmFind pkgname `liftM` totalPackageDownloads
         recentDown <- cmFind pkgname `liftM` recentPackageDownloads
+        pkgStarsHtml <- renderStarsHtml pkgname
         let distHtml = case distributions of
                 [] -> []
                 _  -> [("Distributions", concatHtml . intersperse (toHtml ", ") $ map showDist distributions)]
-            afterHtml  = distHtml ++ [Pages.renderDownloads totalDown recentDown {- versionDown $ packageVersion realpkg-}
+            afterHtml  = distHtml ++ [ Pages.renderDownloads totalDown recentDown {- versionDown $ packageVersion realpkg-}
+                                    , pkgStarsHtml
                                      -- [reverse index disabled] ,Pages.reversePackageSummary realpkg revr revCount
                                      ]
         -- bottom sections, currently only documentation
@@ -1672,7 +1683,7 @@ mkHtmlSearch HtmlUtilities{..}
                                    ("w" ++ featurename)
                                    ("Weight for " ++ featurename)
                     | feature <- Ix.range (minBound, maxBound :: PkgDocFeatures)
-                    , let featurename = show feature ] 
+                    , let featurename = show feature ]
               ]
           ]
         resetParamsForm termsStr =
