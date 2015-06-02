@@ -121,7 +121,8 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    , "reports.html", "report.html"
                    , "maintain-docs.html"
                    , "distro-monitor.html"
-                   , "revisions.html" ]
+                   , "revisions.html"
+                   , "dependencies.html" ]
 
     return $ \user core@CoreFeature{packageChangeHook}
               packages upload
@@ -476,6 +477,10 @@ mkHtmlCore HtmlUtilities{..}
             resourceDesc = [(GET, "Show detailed package information")]
           , resourceGet  = [("html", servePackagePage)]
           }
+      , (resourceAt "/package/:package/dependencies") {
+            resourceDesc = [(GET, "Show detailed package dependency information")]
+          , resourceGet = [("html", serveDependenciesPage)]
+          }
       {-
       , (extendResource $ coreIndexPage cores) {
             resourceGet = [("html", serveIndexPage)]
@@ -519,8 +524,7 @@ mkHtmlCore HtmlUtilities{..}
         let infoUrl = fmap (\_ -> preferredPackageUri versions "" pkgname) $ sumRange prefInfo
             beforeHtml = [ Pages.renderVersion realpkg (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl
                          , Pages.renderChangelog render
-                         , Pages.renderDependencies render
-                         , Pages.renderDetailedDependencies render]
+                         , Pages.renderDependencies render]
         -- and other package indices
         distributions <- queryPackageStatus pkgname
         -- [reverse index disabled] revCount <- revPackageSummary realpkg
@@ -561,6 +565,18 @@ mkHtmlCore HtmlUtilities{..}
       where
         showDist (dname, info) = toHtml (display dname ++ ":") +++
             anchor ! [href $ distroUrl info] << toHtml (display $ distroVersion info)
+
+    serveDependenciesPage :: DynamicPath -> ServerPartE Response
+    serveDependenciesPage dpath = do
+      pkgname <- packageInPath dpath
+      withPackagePreferred pkgname $ \pkg _ -> do
+        render <- liftIO $ packageRender pkg
+        template <- getTemplate templates "dependencies.html"
+        return $ toResponse $ template
+          [ "pkgname" $= pkgname
+          , "dependencies" $= Pages.renderDetailedDependencies render
+          , "flags" $= Pages.renderPackageFlags render
+          ]
 
     serveMaintainPage :: DynamicPath -> ServerPartE Response
     serveMaintainPage dpath = do
@@ -937,6 +953,10 @@ mkHtmlCandidates HtmlUtilities{..}
           , resourcePut    = [("html", putPackageCandidate)]
           , resourceDelete = [("html", doDeleteCandidate)]
           }
+      , (resourceAt "/package/:package/candidate/dependencies") {
+            resourceDesc = [(GET, "Show detailed candidate dependency information")]
+          , resourceGet = [("html", serveDependenciesPage)]
+          }
         -- form for uploading candidate
       , (resourceAt "/packages/candidates/upload") {
             resourceDesc = [ (GET, "Show package candidate upload form") ]
@@ -1005,8 +1025,7 @@ mkHtmlCandidates HtmlUtilities{..}
                    <$> queryGetPackageIndex
       prefInfo <- queryGetPreferredInfo pkgname
       let sectionHtml = [Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing,
-                         Pages.renderDependencies render,
-                         Pages.renderDetailedDependencies render] ++ Pages.renderFields render
+                         Pages.renderDependencies render] ++ Pages.renderFields render
           maintainHtml = anchor ! [href $ renderResource maintain [display $ packageId cand]] << "maintain"
       -- bottom sections, currently only documentation
       mdoctarblob <- queryDocumentation (packageId cand)
@@ -1020,6 +1039,19 @@ mkHtmlCandidates HtmlUtilities{..}
               warn -> [thediv ! [theclass "notification"] << [toHtml "Warnings:", unordList warn]]
       return $ toResponse $ Resource.XHtml $
           Pages.packagePage render [maintainHtml] warningBox sectionHtml [] mdocIndex docURL True
+
+    serveDependenciesPage :: DynamicPath -> ServerPartE Response
+    serveDependenciesPage dpath = do
+      candId <- packageInPath dpath
+      candRender <- liftIO . candidateRender =<< lookupCandidateId candId
+      let render = candPackageRender candRender
+      template <- getTemplate templates "dependencies.html"
+      return $ toResponse $ template
+                 [ "pkgname" $= candId
+                 , "suffix" $= "/candidate"
+                 , "dependencies" $= Pages.renderDetailedDependencies render
+                 , "flags" $= Pages.renderPackageFlags render
+                 ]
 
     servePublishForm :: DynamicPath -> ServerPartE Response
     servePublishForm dpath = do

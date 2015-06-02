@@ -2,6 +2,7 @@
 {-# LANGUAGE PatternGuards, RecordWildCards #-}
 module Distribution.Server.Pages.Package (
     packagePage,
+    renderPackageFlags,
     renderDependencies,
     renderDetailedDependencies,
     renderVersion,
@@ -66,7 +67,7 @@ packagePage render headLinks top sections bottom mdocIndex docURL isCandidate =
              top,
              pkgBody render sections,
              moduleSection render mdocIndex docURL,
-             packageFlags render,
+             renderPackageFlags render,
              downloadSection render,
              maintainerSection pkgid isCandidate,
              map pair bottom
@@ -187,8 +188,8 @@ maintainerSection pkgid isCandidate =
 
 -- | Render a table of the package's flags and along side it a tip
 -- indicating how to enable/disable flags with Cabal.
-packageFlags :: PackageRender -> [Html]
-packageFlags render =
+renderPackageFlags :: PackageRender -> [Html]
+renderPackageFlags render =
   case rendFlags render of
     [] -> mempty
     flags ->
@@ -247,9 +248,14 @@ tabulate items = table ! [theclass "properties"] <<
 
 renderDependencies :: PackageRender -> (String, Html)
 renderDependencies render =
-    ("Dependencies", case rendDepends render of
-                       []   -> toHtml "None"
-                       deps -> showDependencies deps)
+    ("Dependencies", summary +++ detailsLink)
+  where
+    summary = case rendDepends render of
+                []   -> toHtml "None"
+                deps -> showDependencies deps
+    detailsLink = thespan ! [thestyle "font-size: small"]
+                    << (" [" +++ anchor ! [href detailURL] << "details" +++ "]")
+    detailURL = rendPkgUri render </> "dependencies"
 
 showDependencies :: [Dependency] -> Html
 showDependencies deps = commaList (map showDependency deps)
@@ -266,28 +272,30 @@ showDependency (Dependency (PackageName pname) vs) = showPkg +++ vsHtml
         -- passing along the PackageRender, which is not the case here
         showPkg = anchor ! [href . packageURL $ PackageIdentifier (PackageName pname) (Version [] [])] << pname
 
-renderDetailedDependencies :: PackageRender -> (String, Html)
-renderDetailedDependencies pkgRender = ("Dependency Details", details)
+renderDetailedDependencies :: PackageRender -> Html
+renderDetailedDependencies pkgRender =
+    tabulate $ map (second (fromMaybe noDeps . render)) targets
   where
-    details = tabulate $
-              map (second (fromMaybe noHtml . render)) targets
-
     targets :: [(String, CondTreeDeps)]
     targets = maybeToList library ++ rendExecutableDeps pkgRender
       where
         library = (\lib -> ("library", lib)) `fmap` rendLibraryDeps pkgRender
 
+    noDeps = list [toHtml "No dependencies"]
+
     render :: CondTreeDeps -> Maybe Html
     render (P.CondNode isBuildable deps components)
         | null deps && null comps && isBuildable == Buildable = Nothing
-        | otherwise =
-            Just $ thediv ! [identifier "detailed-dependencies"] << unordList items
+        | otherwise = Just $ list items
       where
-        items = buildable ++ showDependencies deps : comps
+        items = buildable ++ map showDependency deps ++ comps
         comps = mapMaybe renderComponent components
         buildable = case isBuildable of
                       Buildable -> []
                       NotBuildable -> [strong << "buildable:" +++ " False"]
+
+    list :: [Html] -> Html
+    list items = thediv ! [identifier "detailed-dependencies"] << unordList items
 
     renderComponent :: (Condition ConfVar, CondTreeDeps, Maybe CondTreeDeps)
                     -> Maybe Html
