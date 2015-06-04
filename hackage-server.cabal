@@ -274,20 +274,20 @@ executable hackage-server
     csv        == 0.1.*,
     stm        >= 2.2 && < 2.5,
     acid-state >= 0.12.2,
-    happstack-server == 7.3.*,
+    happstack-server == 7.4.*,
     hslogger,
     mime-mail  ==0.4.*,
     HStringTemplate > 0.7 && < 0.9,
     lifted-base >= 0.2.1 && < 0.3,
     QuickCheck >= 2.5,
-    friendly-time >= 0.3 && < 0.4,
+    friendly-time >= 0.4 && < 0.5,
     cheapskate >= 0.1,
     blaze-html >= 0.7
 
   if ! flag(minimal)
     build-depends:
       snowball == 1.0.*,
-      tokenize >= 0.1.3 && < 0.2
+      tokenize >= 0.3 && < 0.4
 
   if flag(network-uri)
     build-depends: network-uri >= 2.6, network >= 2.6
