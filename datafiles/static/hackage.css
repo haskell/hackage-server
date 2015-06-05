@@ -41,6 +41,15 @@ a[href]:link { color: rgb(196,69,29); }
 a[href]:visited { color: rgb(171,105,84); }
 a[href]:hover { text-decoration:underline; }
 
+a.normal[href]:link { color: rgb(29,69,196); }
+a.normal[href]:visited { color: rgb(84,105,171); }
+
+a.unpreferred[href]:link { color: rgb(69,196,29); }
+a.unpreferred[href]:visited { color: rgb(105,171,84); }
+
+a.deprecated[href]:link { color: rgb(196,196,196); }
+a.deprecated[href]:visited { color: rgb(171,171,171); }
+
 /* @end */
 
 /* @group Fonts & Sizes */
