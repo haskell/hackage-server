@@ -172,7 +172,9 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
 
     versionsResource = fix $ \r -> VersionsResource
       { preferredResource        = resourceAt "/packages/preferred.:format"
-      , preferredPackageResource = resourceAt "/package/:package/preferred.:format"
+      , preferredPackageResource = (resourceAt "/package/:package/preferred.:format") {
+            resourceGet = [("json", handlePreferredPackageGet)]
+          }
       , preferredText = (resourceAt "/packages/preferred-versions") {
             resourceGet = [("txt", \_ -> textPreferred)]
           }
@@ -194,6 +196,23 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
       }
 
     textPreferred = fmap toResponse makePreferredVersions
+
+    handlePreferredPackageGet :: DynamicPath -> ServerPartE Response
+    handlePreferredPackageGet dpath = do
+      pkgname <- packageInPath dpath
+      pkgs <- lookupPackageName pkgname
+      prefInfo <- queryGetPreferredInfo pkgname
+      let
+        classifiedVersions = Map.fromListWith (++)
+          $ map (\(v, i) -> (i, [v]))
+            $ classifyVersions prefInfo
+              $ map packageVersion pkgs
+        versionType NormalVersion = "normal-version"
+        versionType DeprecatedVersion = "deprecated-version"
+        versionType UnpreferredVersion = "unpreferred-version"
+      return . toResponse . object
+        $ map (\(i, vs) -> (Text.pack . versionType $ i, array $ map (string . display) vs))
+          $ Map.toList classifiedVersions
 
     handlePackagesDeprecatedGet :: DynamicPath -> ServerPartE Response
     handlePackagesDeprecatedGet _ = do
