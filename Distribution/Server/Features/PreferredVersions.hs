@@ -173,6 +173,7 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
     versionsResource = fix $ \r -> VersionsResource
       { preferredResource        = resourceAt "/packages/preferred.:format"
       , preferredPackageResource = (resourceAt "/package/:package/preferred.:format") {
+            resourceDesc = [(GET, "List package's versions divided by type: normal, unpreferred, and deprecated")],
             resourceGet = [("json", handlePreferredPackageGet)]
           }
       , preferredText = (resourceAt "/packages/preferred-versions") {
