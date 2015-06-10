@@ -276,14 +276,14 @@ renderDetailedDependencies :: PackageRender -> Html
 renderDetailedDependencies pkgRender =
     tabulate $ map (second (fromMaybe noDeps . render)) targets
   where
-    targets :: [(String, CondTreeDeps)]
+    targets :: [(String, DependencyTree)]
     targets = maybeToList library ++ rendExecutableDeps pkgRender
       where
         library = (\lib -> ("library", lib)) `fmap` rendLibraryDeps pkgRender
 
     noDeps = list [toHtml "No dependencies"]
 
-    render :: CondTreeDeps -> Maybe Html
+    render :: DependencyTree -> Maybe Html
     render (P.CondNode isBuildable deps components)
         | null deps && null comps && isBuildable == Buildable = Nothing
         | otherwise = Just $ list items
@@ -297,7 +297,7 @@ renderDetailedDependencies pkgRender =
     list :: [Html] -> Html
     list items = thediv ! [identifier "detailed-dependencies"] << unordList items
 
-    renderComponent :: (Condition ConfVar, CondTreeDeps, Maybe CondTreeDeps)
+    renderComponent :: (Condition ConfVar, DependencyTree, Maybe DependencyTree)
                     -> Maybe Html
     renderComponent (condition, then', else')
         | Just thenHtml <- render then' =
@@ -341,8 +341,6 @@ renderDetailedDependencies pkgRender =
                 ver = if isAnyVersion versionRange
                         then ""
                         else display versionRange
-
-type CondTreeDeps = P.CondTree ConfVar [Dependency] IsBuildable
 
 renderVersion :: PackageId -> [(Version, VersionStatus)] -> Maybe String -> (String, Html)
 renderVersion (PackageIdentifier pname pversion) allVersions info =
@@ -393,7 +391,7 @@ renderFields render = [
         ("Home page",   linkField $ homepage desc),
         ("Bug tracker", linkField $ bugReports desc),
         ("Source repository", vList $ map sourceRepositoryField $ sourceRepos desc),
-        ("Executables", commaList . map toHtml $ map fst $ rendExecutableDeps render),
+        ("Executables", commaList . map toHtml $ rendExecNames render),
         ("Uploaded", uncurry renderUploadInfo (rendUploadInfo render))
       ]
    ++ [ ("Updated", renderUpdateInfo revisionNo utime uinfo)

@@ -121,8 +121,7 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    , "reports.html", "report.html"
                    , "maintain-docs.html"
                    , "distro-monitor.html"
-                   , "revisions.html"
-                   , "dependencies.html" ]
+                   , "revisions.html" ]
 
     return $ \user core@CoreFeature{packageChangeHook}
               packages upload
@@ -571,12 +570,7 @@ mkHtmlCore HtmlUtilities{..}
       pkgname <- packageInPath dpath
       withPackagePreferred pkgname $ \pkg _ -> do
         render <- liftIO $ packageRender pkg
-        template <- getTemplate templates "dependencies.html"
-        return $ toResponse $ template
-          [ "pkgname" $= pkgname
-          , "dependencies" $= Pages.renderDetailedDependencies render
-          , "flags" $= Pages.renderPackageFlags render
-          ]
+        return $ toResponse $ dependenciesPage False render
 
     serveMaintainPage :: DynamicPath -> ServerPartE Response
     serveMaintainPage dpath = do
@@ -1045,13 +1039,7 @@ mkHtmlCandidates HtmlUtilities{..}
       candId <- packageInPath dpath
       candRender <- liftIO . candidateRender =<< lookupCandidateId candId
       let render = candPackageRender candRender
-      template <- getTemplate templates "dependencies.html"
-      return $ toResponse $ template
-                 [ "pkgname" $= candId
-                 , "suffix" $= "/candidate"
-                 , "dependencies" $= Pages.renderDetailedDependencies render
-                 , "flags" $= Pages.renderPackageFlags render
-                 ]
+      return $ toResponse $ dependenciesPage True render
 
     servePublishForm :: DynamicPath -> ServerPartE Response
     servePublishForm dpath = do
@@ -1125,6 +1113,17 @@ mkHtmlCandidates HtmlUtilities{..}
       return $ toResponse $ Resource.XHtml $ hackagePage "Deleting candidates"
                   [form ! [theclass "box", XHtml.method "post", action $ deleteUri candidatesResource "" pkgid]
                       << input ! [thetype "submit", value "Delete package candidate"]]
+
+dependenciesPage :: Bool -> PackageRender -> Resource.XHtml
+dependenciesPage isCandidate render =
+    Resource.XHtml $ hackagePage (pkg ++ ": dependencies") $
+      [h2 << heading, Pages.renderDetailedDependencies render]
+       ++ Pages.renderPackageFlags render
+  where
+    pkg = display $ rendPkgId render
+    heading = "Dependencies for " +++ anchor ! [href link] << pkg
+    link = "/package/" ++ pkg
+            ++ if isCandidate then "/candidate" else ""
 
 
 {-------------------------------------------------------------------------------

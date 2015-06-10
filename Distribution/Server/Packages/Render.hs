@@ -4,6 +4,7 @@
 module Distribution.Server.Packages.Render (
     -- * Package render
     PackageRender(..)
+  , DependencyTree
   , IsBuildable (..)
   , doPackageRender
 
@@ -45,8 +46,9 @@ import Data.TarIndex (TarIndex, TarEntryOffset)
 data PackageRender = PackageRender {
     rendPkgId        :: PackageIdentifier,
     rendDepends      :: [Dependency],
-    rendLibraryDeps  :: Maybe (CondTree ConfVar [Dependency] IsBuildable),
-    rendExecutableDeps :: [(String, CondTree ConfVar [Dependency] IsBuildable)],
+    rendExecNames    :: [String],
+    rendLibraryDeps  :: Maybe DependencyTree,
+    rendExecutableDeps :: [(String, DependencyTree)],
     rendLicenseName  :: String,
     rendLicenseFiles :: [FilePath],
     rendMaintainer   :: Maybe String,
@@ -71,8 +73,9 @@ doPackageRender :: Users.Users -> PkgInfo -> PackageRender
 doPackageRender users info = PackageRender
     { rendPkgId        = pkgInfoId info
     , rendDepends      = flatDependencies genDesc
-    , rendLibraryDeps  = getDeps libBuildInfo `fmap` condLibrary genDesc
-    , rendExecutableDeps = second (getDeps buildInfo) `map` condExecutables genDesc
+    , rendExecNames    = map exeName (executables flatDesc)
+    , rendLibraryDeps  = depTree libBuildInfo `fmap` condLibrary genDesc
+    , rendExecutableDeps = second (depTree buildInfo) `map` condExecutables genDesc
     , rendLicenseName  = display (license desc) -- maybe make this a bit more human-readable
     , rendLicenseFiles = licenseFiles desc
     , rendMaintainer   = case maintainer desc of
@@ -110,15 +113,13 @@ doPackageRender users info = PackageRender
     desc     = packageDescription genDesc
     pkgUri   = "/package/" ++ display (pkgInfoId info)
 
-    getDeps getBuildInfo (CondNode ctData ds comps) =
-        CondNode isBuildable ds' $ map processComponent comps
-        where
-          ds' = sortDeps $ combineDepsBy intersectVersionIntervals ds
-          processComponent (cond, then', else') =
-              (cond, getDeps getBuildInfo then', getDeps getBuildInfo `fmap` else')
-          isBuildable = if buildable $ getBuildInfo ctData
-                          then Buildable
-                          else NotBuildable
+    depTree :: (a -> BuildInfo) -> CondTree ConfVar [Dependency] a -> DependencyTree
+    depTree getBuildInfo = mapTreeData isBuildable . mapTreeConstrs simplifyDeps
+      where
+        simplifyDeps = sortDeps . combineDepsBy intersectVersionIntervals
+        isBuildable ctData = if buildable $ getBuildInfo ctData
+                               then Buildable
+                               else NotBuildable
     
     moduleHasDocs :: Maybe TarIndex -> ModuleName -> Bool
     moduleHasDocs Nothing       = const False
@@ -135,6 +136,8 @@ doPackageRender users info = PackageRender
         ty <- repoType r
         loc <- repoLocation r
         return (ty, loc, r)
+
+type DependencyTree = CondTree ConfVar [Dependency] IsBuildable
 
 data IsBuildable = Buildable
                  | NotBuildable
