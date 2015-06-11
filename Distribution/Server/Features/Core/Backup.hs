@@ -86,9 +86,13 @@ doPackageImport (PartialIndex packages updatelog) entry = case entry of
     partial' <- case extractVersion other pkgId ".tar.gz" of
       Just version -> do
         bs <- restoreGetBlob blobId
-        blobIdUncompressed <- restoreAddBlob $ GZip.decompressNamed (foldr1 (</>) filename) (forceLast bs)
-        let tb = PkgTarball { pkgTarballGz = blobId,
-                              pkgTarballNoGz = blobIdUncompressed }
+        let bsDec = GZip.decompressNamed (foldr1 (</>) filename) (forceLast bs)
+        blobIdDec <- restoreAddBlob bsDec
+        -- TODO: This will force the gz blob into memory. Can we avoid that?
+        let tb = PkgTarball {
+                     pkgTarballGz   = blobInfoFromBS blobId bs
+                   , pkgTarballNoGz = blobIdDec
+                   }
         return $ partial { partialTarball = (version, tb):partialTarball partial }
       _ -> return partial
     return $! PartialIndex (Map.insert pkgId partial' packages) updatelog
@@ -206,8 +210,8 @@ tarballListToExport pkgId tarballInfos = csvToBackup (pkgPath pkgId "tarball.csv
   where (tarballs, infos) = unzip tarballInfos
         tarballName = display pkgId ++ ".tar.gz"
         tarballToExport :: (Int, PkgTarball) -> BackupEntry
-        tarballToExport (0, tb) = blobToBackup (pkgPath pkgId tarballName) (pkgTarballGz tb)
-        tarballToExport (n, tb) = blobToBackup (pkgPath pkgId (tarballName ++ "-" ++ show n)) (pkgTarballGz tb)
+        tarballToExport (0, tb) = blobToBackup (pkgPath pkgId tarballName) (blobInfoId (pkgTarballGz tb))
+        tarballToExport (n, tb) = blobToBackup (pkgPath pkgId (tarballName ++ "-" ++ show n)) (blobInfoId (pkgTarballGz tb))
 
 pkgPath :: PackageId -> String -> [String]
 pkgPath pkgId file = ["package", display pkgId, file]
@@ -233,7 +237,7 @@ packageUpdateLogToCSV updlog =
   where
     versionCSVVer = Version [0,1] []
     versionCSVKey = ["time", "pkgid", "revno", "user-name", "extrapath", "extracontent"]
-    entryToCSV (PackageEntry pkgid revno time username) =
+    entryToCSV (CabalFileEntry pkgid revno time username) =
       [ formatUTCTime time
       , display pkgid
       , show revno
@@ -249,6 +253,8 @@ packageUpdateLogToCSV updlog =
       , extrapath
       , BSC.unpack content
       ]
+    entryToCSV (MetadataEntry{}) =
+      undefined -- TODO
 
 importTarIndexEntries :: CSV -> Restore (Seq TarIndexEntry)
 importTarIndexEntries = fmap Seq.fromList . mapM fromRecord . drop 2
@@ -259,11 +265,10 @@ importTarIndexEntries = fmap Seq.fromList . mapM fromRecord . drop 2
        pkgid    <- parseText "pkgid" pkgidStr
        revno    <- parseRead "revno" revnoStr
        username <- parseText "user-name" usernameStr
-       return (PackageEntry pkgid revno utcTime username)
+       return (CabalFileEntry pkgid revno utcTime username)
 
     fromRecord [timeStr, "", "", "", extrapath, extracontent] = do
        utcTime <- parseUTCTime "time" timeStr
        return (ExtraEntry extrapath (BSC.pack extracontent) utcTime)
 
     fromRecord x = fail $ "Error index entries list: " ++ show x
-

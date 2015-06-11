@@ -16,6 +16,7 @@ import Distribution.Server.Framework.Logging
 import Distribution.Server.Features.StaticFiles (initStaticFilesFeature)
 import Distribution.Server.Features.Users    (initUserFeature, UserFeature)
 import Distribution.Server.Features.Core     (initCoreFeature, coreResource, queryGetPackageIndex)
+import Distribution.Server.Features.Security (initSecurityFeature)
 import Distribution.Server.Features.Upload   (initUploadFeature)
 import Distribution.Server.Features.Mirror   (initMirrorFeature)
 
@@ -87,6 +88,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                             initUserFeature env
     mkCoreFeature        <- logStartup "core" $
                             initCoreFeature env
+    mkSecurityFeature    <- logStartup "security" $
+                            initSecurityFeature env
     mkMirrorFeature      <- logStartup "mirror" $
                             initMirrorFeature env
     mkUploadFeature      <- logStartup "upload" $
@@ -153,6 +156,9 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     coreFeature     <- mkCoreFeature
                          usersFeature
 
+    securityFeature <- mkSecurityFeature
+                         coreFeature
+
     mirrorFeature   <- mkMirrorFeature
                          coreFeature
                          usersFeature
@@ -162,7 +168,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          coreFeature
 
 #ifndef MINIMAL
-    tarIndexCacheFeature <- mkTarIndexCacheFeature 
+    tarIndexCacheFeature <- mkTarIndexCacheFeature
                               usersFeature
 
     packageContentsFeature <- mkPackageContentsFeature
@@ -297,6 +303,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
         allFeatures =
          [ getFeatureInterface usersFeature
          , getFeatureInterface coreFeature
+         , getFeatureInterface securityFeature
          , getFeatureInterface mirrorFeature
          , getFeatureInterface uploadFeature
 #ifndef MINIMAL
@@ -364,4 +371,3 @@ featureShutdown = mapM_ abstractStateClose . featureState
 -- | Cleanly shut down all features' state components.
 shutdownAllFeatures :: [HackageFeature] -> IO ()
 shutdownAllFeatures   = mapM_ featureShutdown . reverse
-

@@ -167,10 +167,12 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
                             asyncCacheLogVerbosity = verbosity
                           }
 
-      registerHook itemUpdate         $ \_ -> prodAsyncCache mainCache
-                                           >> prodAsyncCache namesCache
-      registerHook packageChangeHook  $ \_ -> prodAsyncCache mainCache
-                                           >> prodAsyncCache namesCache
+      registerHook itemUpdate $ \_ -> do
+        prodAsyncCache mainCache  "item update"
+        prodAsyncCache namesCache "item update"
+      registerHook packageChangeHook $ \_ -> do
+        prodAsyncCache mainCache  "package change"
+        prodAsyncCache namesCache "package change"
 
       return feature
 

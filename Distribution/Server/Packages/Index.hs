@@ -14,6 +14,7 @@ import Distribution.Server.Framework.MemSize
 
 import Distribution.Server.Packages.Types
          ( CabalFileText(..), PkgInfo(..) )
+import Distribution.Server.Packages.Metadata
 import Distribution.Server.Users.Types
          ( UserName(..) )
 
@@ -36,15 +37,41 @@ import Data.Maybe (catMaybes)
 
 -- | Entries used to construct the contents of the hackage index tarball
 --
-data TarIndexEntry = PackageEntry !PackageId !RevisionNo !UTCTime !UserName
-                   | ExtraEntry !FilePath !ByteString !UTCTime
+data TarIndexEntry =
+    -- | Package cabal files
+    --
+    -- We keep a copy of the UserName because usernames can change (and if they
+    -- do, old entries in the index should remain the same); similarly, we
+    -- keep a copy of the upload time because the upload time of a package
+    -- can also be changed (this is used during mirroring, for instance).
+    --
+    -- The UTCTime and userName are used as file metadata in the tarball.
+    CabalFileEntry !PackageId !RevisionNo !UTCTime !UserName
+
+    -- | Package metadata
+    --
+    -- We add these whenever a new package tarball is uploaded.
+    --
+    -- This metadata entry can be for any revision of the packages
+    -- (not necessarily the latest) so we need to know the revision number.
+    --
+    -- Although we do not currently allow to change the upload time for package
+    -- tarballs, but I'm not sure why not (TODO) and it's conceivable we may
+    -- change this, so we record the original upload time.
+  | MetadataEntry !PackageId !RevisionNo !UTCTime
+
+    -- | Additional entries that we add to the tarball
+    --
+    -- This is currently used for @preferred-versions@.
+  | ExtraEntry !FilePath !ByteString !UTCTime
   deriving (Eq, Show)
 
 type RevisionNo = Int
 
 instance MemSize TarIndexEntry where
-  memSize (PackageEntry a b c d) = memSize4 a b c d
-  memSize (ExtraEntry   a b c)   = memSize3 a b c
+  memSize (CabalFileEntry a b c d) = memSize4 a b c d
+  memSize (MetadataEntry  a b c)   = memSize3 a b c
+  memSize (ExtraEntry     a b c)   = memSize3 a b c
 
 deriveSafeCopy 0 'base ''TarIndexEntry
 
@@ -60,7 +87,7 @@ write pkgs =
     -- in case we'll skip them
     mkTarEntry :: TarIndexEntry -> Maybe Tar.Entry
 
-    mkTarEntry (PackageEntry pkgid revno timestamp username) = do
+    mkTarEntry (CabalFileEntry pkgid revno timestamp username) = do
         pkginfo   <- PackageIndex.lookupPackageId pkgs pkgid
         cabalfile <- fmap (cabalFileByteString . fst) $
                      pkgMetadataRevisions pkginfo Vec.!? revno
@@ -73,6 +100,14 @@ write pkgs =
         PackageName pkgname = packageName pkgid
         fileName = pkgname </> display (packageVersion pkgid)
                            </> pkgname <.> "cabal"
+
+    mkTarEntry (MetadataEntry pkgid revno timestamp) = do
+        pkginfo <- PackageIndex.lookupPackageId pkgs pkgid
+        let (filePath, content) = computePkgMetadata pkginfo revno
+        tarPath <- either (const Nothing) Just $ Tar.toTarPath False filePath
+        let !tarEntry = addTimestampAndOwner timestamp (UserName "Hackage") $
+                          Tar.fileEntry tarPath content
+        return tarEntry
 
     mkTarEntry (ExtraEntry fileName content timestamp) = do
       tarPath <- either (const Nothing) Just $
@@ -101,7 +136,7 @@ write users =
   . extraEntries
   where
     setModTime pkgInfo entry =
-      let (utime, uuser) = pkgLatestUploadInfo pkgInfo in 
+      let (utime, uuser) = pkgLatestUploadInfo pkgInfo in
       entry {
         Tar.entryTime      = utcToUnixTime timestamp,
         Tar.entryOwnership = Tar.Ownership {

@@ -268,8 +268,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       case pkgLatestTarball (candPkgInfo pkg) of
         Nothing -> errNotFound "Tarball not found"
                      [MText "No tarball exists for this package version."]
-        Just (tarball, (uploadtime,_uid)) -> do
-          let blobId = pkgTarballGz tarball
+        Just (tarball, (uploadtime, _uid), _revNo) -> do
+          let blobId = blobInfoId $ pkgTarballGz tarball
           cacheControl [Public, NoTransform, maxAgeMinutes 10]
                        (BlobStorage.blobETag blobId)
           file <- liftIO $ BlobStorage.fetch store blobId
@@ -341,10 +341,11 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                                      (candWarnings candidate)
           time <- liftIO getCurrentTime
           let uploadInfo = (time, uid)
+              getTarball (tarball, _uploadInfo, _revNo) = tarball
           success <- updateAddPackage (packageId candidate)
                                       (pkgLatestCabalFileText pkgInfo)
                                       uploadInfo
-                                      (fmap fst $ pkgLatestTarball pkgInfo)
+                                      (fmap getTarball $ pkgLatestTarball pkgInfo)
           --FIXME: share code here with upload
           -- currently we do not create the initial maintainer group etc.
           if success
@@ -372,7 +373,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         users  <- queryGetUserDb
         index  <- queryGetPackageIndex
         let pkg = candPkgInfo cand
-        changeLog <- findToplevelFile pkg isChangeLogFile 
+        changeLog <- findToplevelFile pkg isChangeLogFile
                  >>= either (\_ -> return Nothing) (return . Just)
         readme    <- findToplevelFile pkg isReadmeFile
                  >>= either (\_ -> return Nothing) (return . Just)

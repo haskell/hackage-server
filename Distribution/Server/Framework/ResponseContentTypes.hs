@@ -37,34 +37,56 @@ import Data.Time.Locale.Compat (defaultTimeLocale)
 import Text.CSV (printCSV, CSV)
 import Control.DeepSeq
 
+import qualified Data.Digest.Pure.SHA as SHA
 
-data IndexTarballInfo = IndexTarballInfo
-                          !BS.Lazy.ByteString !Int !MD5Digest -- tar
-                          !BS.Lazy.ByteString !Int !MD5Digest -- tar.gz
-                          !UTCTime
+data IndexTarballInfo = IndexTarballInfo {
+      indexTarballUncompressed :: !TarballUncompressed
+    , indexTarballCompressed   :: !TarballCompressed
+    }
+
+-- TODO: SHA.Digest is an abstract datatype, and is just a simple wrapper
+-- around a bytestring. However, it is not strict in this bytestring, nor
+-- does it have an NFData instance. This might be a problem (here as well as
+-- in the NFData instance for TarballUncompressed and TarballCompressed).
+-- However, it might not be a problem, depending on how these digests are
+-- constructed. Since we might yet switch SHA package however I have not
+-- yet looked deeper into this.
+data TarballUncompressed = TarballUncompressed {
+      tarContent    :: !BS.Lazy.ByteString
+    , tarLength     :: !Int
+    , tarHashMD5    :: !MD5Digest
+    , tarHashSHA256 :: !(SHA.Digest SHA.SHA256State)
+    , tarModified   :: !UTCTime
+    }
+
+data TarballCompressed = TarballCompressed {
+      tarGzContent    :: !BS.Lazy.ByteString
+    , tarGzLength     :: !Int
+    , tarGzHashMD5    :: !MD5Digest
+    , tarGzHashSHA256 :: !(SHA.Digest SHA.SHA256State)
+    , tarGzModified   :: !UTCTime
+    }
 
 instance NFData IndexTarballInfo where
-  rnf (IndexTarballInfo a b c d e f g) = rnf (a,b,c,d,e,f,g)
+  rnf (IndexTarballInfo a b) = rnf (a,b)
+
+instance NFData TarballUncompressed where
+  rnf (TarballUncompressed a b c _d e) = rnf (a, b, c, e)
+
+instance NFData TarballCompressed where
+  rnf (TarballCompressed a b c _d e) = rnf (a, b, c, e)
 
 instance MemSize IndexTarballInfo where
-  memSize (IndexTarballInfo a b c d e f g) = memSize7 a b c d e f g
+  memSize (IndexTarballInfo a b) = memSize (a, b)
 
-indexTarballCompressed :: IndexTarballInfo -> TarballCompressed
-indexTarballCompressed (IndexTarballInfo _ _ _ bs len md5 time) =
-  TarballCompressed bs len md5 time
+instance MemSize TarballUncompressed where
+  memSize (TarballUncompressed a b c d e) = memSize5 a b c d e
 
-indexTarballUncompressed :: IndexTarballInfo -> TarballUncompressed
-indexTarballUncompressed (IndexTarballInfo bs len md5 _ _ _ time) =
-  TarballUncompressed bs len md5 time
-
-data TarballCompressed   = TarballCompressed   !BS.Lazy.ByteString !Int
-                                               !MD5Digest !UTCTime
-
-data TarballUncompressed = TarballUncompressed !BS.Lazy.ByteString !Int
-                                               !MD5Digest !UTCTime
+instance MemSize TarballCompressed where
+  memSize (TarballCompressed a b c d e) = memSize5 a b c d e
 
 instance ToMessage TarballCompressed where
-  toResponse (TarballCompressed bs len md5 time) =
+  toResponse (TarballCompressed bs len md5 _sha256 time) =
     mkResponseLen bs len
       [ ("Content-Type", "application/x-gzip")
       , ("Content-MD5",   show md5)
@@ -72,7 +94,7 @@ instance ToMessage TarballCompressed where
       ]
 
 instance ToMessage TarballUncompressed where
-  toResponse (TarballUncompressed bs len md5 time) =
+  toResponse (TarballUncompressed bs len md5 _sha256 time) =
     mkResponseLen bs len
       [ ("Content-Type", "application/x-tar")
       , ("Content-MD5",   show md5)

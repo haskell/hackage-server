@@ -26,6 +26,7 @@ import Distribution.Server.Features.Users
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Users.Users (userIdToName)
+import Distribution.Server.Packages.Index (TarIndexEntry(..))
 import qualified Distribution.Server.Packages.Index as Packages.Index
 import qualified Codec.Compression.GZip as GZip
 import Data.Digest.Pure.MD5 (md5)
@@ -33,12 +34,11 @@ import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
+import Distribution.Server.Features.Security.Migration
 
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime)
 import Data.Time.Locale.Compat (defaultTimeLocale)
-import Data.Map (Map)
-import qualified Data.Map as Map
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.Foldable as Foldable
@@ -52,6 +52,8 @@ import Data.Aeson (Value(..))
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Vector         as Vec
 import qualified Data.Text           as Text
+
+import qualified Data.Digest.Pure.SHA as SHA
 
 -- | The core feature, responsible for the main package index and all access
 -- and modifications of it.
@@ -68,6 +70,9 @@ data CoreFeature = CoreFeature {
     -- Queries
     -- | Retrieves the entire main package index.
     queryGetPackageIndex :: MonadIO m => m (PackageIndex PkgInfo),
+
+    -- | Retrieve the raw tarball info
+    queryGetIndexTarballInfo :: MonadIO m => m IndexTarballInfo,
 
     -- Update transactions
     -- | Adds a version of a package which did not previously exist in the
@@ -125,8 +130,18 @@ data CoreFeature = CoreFeature {
     -- | Notification of package or index changes.
     packageChangeHook :: Hook PackageChange (),
 
+    -- | Additional entries to be added before the index is updated/prodded
+    --
+    -- NOTE: Unlike a call to 'updateArchiveIndexEntry', this does NOT call
+    -- any additional hooks.
+    preIndexUpdateHook :: Hook PackageChange [TarIndexEntry],
+
     -- | Notification of tarball downloads.
-    packageDownloadHook :: Hook PackageId ()
+    packageDownloadHook :: Hook PackageId (),
+
+    -- | Notification that the index was updated
+    -- The hook will be called when the index cache was actually updated.
+    indexUpdatedHook :: Hook IndexTarballInfo ()
 }
 
 instance IsHackageFeature CoreFeature where
@@ -171,8 +186,8 @@ isPackageDelete _                             = Nothing
 
 -- | A predicate to use with `packageChangeHook` and `registerHookJust` for
 -- any kind of change to packages or extras.
-isPackageIndexChange ::  PackageChange -> Maybe ()
-isPackageIndexChange _ = Just ()
+isPackageIndexChange ::  PackageChange -> Maybe PackageChange
+isPackageIndexChange = Just
 
 {-
 -- Other examples we may want later...
@@ -241,21 +256,64 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
 
     -- Hooks
     packageChangeHook   <- newHook
+    preIndexUpdateHook  <- newHook
     packageDownloadHook <- newHook
 
     return $ \users -> do
 
       -- One-off complex migration
-      PackagesState {packageUpdateLog} <- queryState packagesState GetPackagesState
-      when (isNothing packageUpdateLog) $ do
-        userdb <- queryGetUserDb users
-        logTiming verbosity "migrating package update log" $
+      --
+      -- As part of the support for TUF we made two changes to the state:
+      --
+      -- * We made the index append-only, and added a package update log
+      --   to support this.
+      -- * We changed the PkgTarball data structure to contain BlobInfo rather
+      --   rather than BlobId; that is, we additionally record the length and
+      --   SHA256 hash for all blobs.
+      --
+      -- Additionally, we now need `targets.json` files for all versions of all
+      -- packages. For new packages we add these when the package is uploaded,
+      -- but for previously uploaded packages we need to add them.
+      --
+      -- Migrating the package tarball info and introducing metadata for
+      -- pre-existing packages requires a full search through the package DB.
+      -- Fortunately, since all these changes were introduced at the same time,
+      -- we can use the check for the existence of the update log to see if we
+      -- need any other kind of migration.
+
+      migrateUpdateLog <- (isNothing . packageUpdateLog) <$>
+                             queryState packagesState GetPackagesState
+      when migrateUpdateLog $ do
+        -- Migrate PackagesState (introduce package update log)
+        logTiming verbosity "migrating package update log" $ do
+          userdb <- queryGetUserDb users
           updateState packagesState (MigrateAddUpdateLog userdb)
+
+        -- Migrate PkgTarball
+        logTiming verbosity "migrating PkgTarball" $
+          migratePkgTarball_v1_to_v2 env packagesState
+
+        -- Add missing TUF metadata
+        --
+        -- We do this here rather than in the security feature so that this
+        -- happens before we set up the hook to update the hackage on package
+        -- changes (otherwise the index would continuously be updated during
+        -- this process, which would be far too expensive).
+        logTiming verbosity "add missing TUF metadata" $ do
+          PackagesState{packageIndex} <- queryState packagesState GetPackagesState
+          forM_ (PackageIndex.allPackages packageIndex) $ \pkgInfo -> do
+            case pkgLatestTarball pkgInfo of
+              Nothing -> return ()
+              Just (_tarball, (uploadTime, _uploadUserId), latestRev) ->
+                updateState packagesState $ AddOtherIndexEntry $
+                  MetadataEntry (pkgInfoId pkgInfo) latestRev uploadTime
 
       rec let (feature, getIndexTarball)
                 = coreFeature env users
                               packagesState indexTar
-                              packageChangeHook packageDownloadHook
+                              packageChangeHook
+                              preIndexUpdateHook
+                              packageDownloadHook
 
           -- Caches
           -- The index.tar.gz file
@@ -267,11 +325,12 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
                           asyncCacheLogVerbosity = verbosity
                         }
 
-      registerHookJust packageChangeHook isPackageIndexChange $ \_ ->
-        prodAsyncCache indexTar
+      registerHookJust packageChangeHook isPackageIndexChange $ \packageChange -> do
+        additionalEntries <- concat <$> runHook preIndexUpdateHook packageChange
+        forM_ additionalEntries $ updateState packagesState . AddOtherIndexEntry
+        prodAsyncCache indexTar "package change"
 
       return feature
-
 
 packagesStateComponent :: Verbosity -> FilePath -> IO (StateComponent AcidState PackagesState)
 packagesStateComponent verbosity stateDir = do
@@ -293,13 +352,16 @@ coreFeature :: ServerEnv
             -> StateComponent AcidState PackagesState
             -> AsyncCache IndexTarballInfo
             -> Hook PackageChange ()
+            -> Hook PackageChange [TarIndexEntry]
             -> Hook PackageId ()
             -> ( CoreFeature
                , IO IndexTarballInfo )
 
 coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
             packagesState cacheIndexTarball
-            packageChangeHook packageDownloadHook
+            packageChangeHook
+            preIndexUpdateHook
+            packageDownloadHook
   = (CoreFeature{..}, getIndexTarball)
   where
     coreFeatureInterface = (emptyHackageFeature "core") {
@@ -407,6 +469,13 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     queryGetPackageIndex :: MonadIO m => m (PackageIndex PkgInfo)
     queryGetPackageIndex = return . packageIndex =<< queryState packagesState GetPackagesState
 
+    queryGetIndexTarballInfo :: MonadIO m => m IndexTarballInfo
+    queryGetIndexTarballInfo = readAsyncCache cacheIndexTarball
+
+    -- Hooks
+    indexUpdatedHook :: Hook IndexTarballInfo ()
+    indexUpdatedHook = asyncCacheUpdatedHook cacheIndexTarball
+
     -- Update transactions
     --
     updateAddPackage :: MonadIO m => PackageId
@@ -466,7 +535,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     updateArchiveIndexEntry :: MonadIO m => FilePath -> ByteString -> UTCTime -> m ()
     updateArchiveIndexEntry entryName entryData entryTime = do
-      updateState packagesState (AddIndexExtraEntry entryName entryData entryTime)
+      updateState packagesState $
+        AddOtherIndexEntry $ ExtraEntry entryName entryData entryTime
       runHook_ packageChangeHook (PackageChangeIndexExtra entryName entryData entryTime)
 
     -- Cache updates
@@ -475,17 +545,31 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     getIndexTarball = do
       PackagesState index (Just updatelog) <- queryState packagesState GetPackagesState
       time   <- getCurrentTime
-      let indexTarball      = Packages.Index.write index (Foldable.toList updatelog)
-          indexTarballGz    = GZip.compress indexTarball
-          indexTarballLen   = fromIntegral $ BS.length indexTarball
-          indexTarballGzLen = fromIntegral $ BS.length indexTarballGz
-          indexTarballMD5   = md5 indexTarball
-          indexTarballGzMD5 = md5 indexTarballGz
+      let indexTarball         = Packages.Index.write index (Foldable.toList updatelog)
+          indexTarballGz       = GZip.compress indexTarball
+          indexTarballLen      = fromIntegral $ BS.length indexTarball
+          indexTarballGzLen    = fromIntegral $ BS.length indexTarballGz
+          indexTarballMD5      = md5 indexTarball
+          indexTarballGzMD5    = md5 indexTarballGz
+          indexTarballSHA256   = SHA.sha256 indexTarball
+          indexTarballGzSHA256 = SHA.sha256 indexTarballGz
           -- lazy construction, since it's forced by the async cache
-          resourceInfo = IndexTarballInfo
-                           indexTarball   indexTarballLen   indexTarballMD5
-                           indexTarballGz indexTarballGzLen indexTarballGzMD5
-                           time
+          resourceInfo = IndexTarballInfo {
+              indexTarballUncompressed = TarballUncompressed {
+                  tarContent    = indexTarball
+                , tarLength     = indexTarballLen
+                , tarHashMD5    = indexTarballMD5
+                , tarHashSHA256 = indexTarballSHA256
+                , tarModified   = time
+                }
+            , indexTarballCompressed = TarballCompressed {
+                  tarGzContent    = indexTarballGz
+                , tarGzLength     = indexTarballGzLen
+                , tarGzHashMD5    = indexTarballGzMD5
+                , tarGzHashSHA256 = indexTarballGzSHA256
+                , tarGzModified   = time
+                }
+            }
       return resourceInfo
 
     ------------------------------------------------------------------------------
@@ -514,35 +598,31 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
 
     servePackagesIndexTarGz :: DynamicPath -> ServerPartE Response
     servePackagesIndexTarGz _ = do
-      tarball@(Resource.TarballCompressed _ _ tarballmd5 _) <-
-        indexTarballCompressed <$> readAsyncCache cacheIndexTarball
-      cacheControl [Public, NoTransform, maxAgeMinutes 5]
-                   (ETag (show tarballmd5))
-      return (toResponse tarball)
+      tarball <- indexTarballCompressed <$> readAsyncCache cacheIndexTarball
+      let tarballmd5 = show $ tarGzHashMD5 tarball
+      cacheControl [Public, NoTransform, maxAgeMinutes 5] (ETag tarballmd5)
+      return $ toResponse tarball
 
     servePackagesIndexTarGzMd5 :: DynamicPath -> ServerPartE Response
     servePackagesIndexTarGzMd5 _ = do
-      (Resource.TarballCompressed _ _ tarballmd5 _) <-
-        indexTarballCompressed <$> readAsyncCache cacheIndexTarball
-      cacheControl [Public, NoTransform, maxAgeMinutes 5]
-                   (ETag (show tarballmd5))
-      return (toResponse (show tarballmd5))
+      tarball <- indexTarballCompressed <$> readAsyncCache cacheIndexTarball
+      let tarballmd5 = show $ tarGzHashMD5 tarball
+      cacheControl [Public, NoTransform, maxAgeMinutes 5] (ETag tarballmd5)
+      return $ toResponse tarballmd5
 
     servePackagesIndexTar :: DynamicPath -> ServerPartE Response
     servePackagesIndexTar _ = do
-      tarball@(Resource.TarballUncompressed _ _ tarballmd5 _) <-
-        indexTarballUncompressed <$> readAsyncCache cacheIndexTarball
-      cacheControl [Public, NoTransform, maxAgeMinutes 5]
-                   (ETag (show tarballmd5))
-      return (toResponse tarball)
+      tarball <- indexTarballUncompressed <$> readAsyncCache cacheIndexTarball
+      let tarballmd5 = show $ tarHashMD5 tarball
+      cacheControl [Public, NoTransform, maxAgeMinutes 5] (ETag tarballmd5)
+      return $ toResponse tarball
 
     servePackagesIndexTarMd5 :: DynamicPath -> ServerPartE Response
     servePackagesIndexTarMd5 _ = do
-      (Resource.TarballUncompressed _ _ tarballmd5 _) <-
-        indexTarballUncompressed <$> readAsyncCache cacheIndexTarball
-      cacheControl [Public, NoTransform, maxAgeMinutes 5]
-                   (ETag (show tarballmd5))
-      return (toResponse (show tarballmd5))
+      tarball <- indexTarballUncompressed <$> readAsyncCache cacheIndexTarball
+      let tarballmd5 = show $ tarHashMD5 tarball
+      cacheControl [Public, NoTransform, maxAgeMinutes 5] (ETag tarballmd5)
+      return $ toResponse tarballmd5
 
     -- TODO: should we include more information here? description and
     -- category for instance (but they are not readily available as long
@@ -570,8 +650,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       case pkgLatestTarball pkg of
         Nothing -> errNotFound "Tarball not found"
                      [MText "No tarball exists for this package version."]
-        Just (tarball, (uploadtime,_uid)) -> do
-          let blobId = pkgTarballGz tarball
+        Just (tarball, (uploadtime, _uid), _revNo) -> do
+          let blobId = blobInfoId $ pkgTarballGz tarball
           cacheControl [Public, NoTransform, maxAgeDays 30]
                        (BlobStorage.blobETag blobId)
           file <- liftIO $ BlobStorage.fetch store blobId

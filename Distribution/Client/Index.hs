@@ -16,20 +16,18 @@ module Distribution.Client.Index (
   ) where
 
 import qualified Codec.Archive.Tar       as Tar
-         ( read, write, Entries(..) )
+         ( read, Entries(..) )
 import qualified Codec.Archive.Tar.Entry as Tar
-         ( Entry(..), entryPath, fileEntry, toTarPath )
+         ( Entry(..), entryPath )
 
 import Distribution.Package
 import Distribution.Version
-import Distribution.Server.Packages.PackageIndex (PackageIndex)
-import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Text
-         ( display, simpleParse )
+         ( simpleParse )
 
 import Data.ByteString.Lazy (ByteString)
 import System.FilePath.Posix
-         ( (</>), (<.>), splitDirectories, normalise )
+         ( splitDirectories, normalise )
 import Prelude hiding (read)
 
 -- | Parse an uncompressed tar repository index file from a 'ByteString'.
@@ -58,4 +56,3 @@ read mkPackage indexFileContent = collect [] entries
       = let pkgid = PackageIdentifier (PackageName pkgname) version
          in Just (mkPackage pkgid e)
     entry _ = Nothing
-

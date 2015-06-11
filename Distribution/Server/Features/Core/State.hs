@@ -18,7 +18,6 @@ import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import Data.Monoid
 import Data.Time (UTCTime)
-import qualified Data.ByteString.Lazy as BS
 import qualified Data.Vector as Vec
 import qualified Data.Sequence as Seq
 import Data.Sequence (Seq)
@@ -35,7 +34,7 @@ data PackagesState = PackagesState {
 
 deriveSafeCopy 1 'extension ''PackagesState
 
---TODO: 
+--TODO:
 
 instance MemSize PackagesState where
     memSize (PackagesState a b) = 2 + memSize2 a b
@@ -72,7 +71,7 @@ addPackage2 pkgid cabalfile uploadinfo@(timestamp, _uid) username mtarball = do
                                                          (tarball, uploadinfo)
             }
             pkgindex'   = PackageIndex.insert pkginfo pkgindex
-            !pkgentry   = PackageEntry pkgid 0 timestamp username
+            !pkgentry   = CabalFileEntry pkgid 0 timestamp username
             updatelog'  = fmap (Seq.|> pkgentry) updatelog
         State.put $! PackagesState pkgindex' updatelog'
         return (Just pkginfo)
@@ -106,7 +105,7 @@ addPackageRevision2 pkgid cabalfile uploadinfo@(timestamp, _uid) username = do
             }
             pkgindex'   = PackageIndex.insert pkginfo' pkgindex
             newrevision = Vec.length (pkgMetadataRevisions pkginfo)
-            !pkgentry   = PackageEntry pkgid newrevision timestamp username
+            !pkgentry   = CabalFileEntry pkgid newrevision timestamp username
             updatelog'  = fmap (Seq.|> pkgentry) updatelog
         State.put $! PackagesState pkgindex' updatelog'
         return (Just pkginfo, pkginfo')
@@ -117,7 +116,7 @@ addPackageRevision2 pkgid cabalfile uploadinfo@(timestamp, _uid) username = do
               pkgTarballRevisions  = Vec.empty
             }
             pkgindex'   = PackageIndex.insert pkginfo pkgindex
-            !pkgentry   = PackageEntry pkgid 0 timestamp username
+            !pkgentry   = CabalFileEntry pkgid 0 timestamp username
             updatelog'  = fmap (Seq.|> pkgentry) updatelog
         State.put $! PackagesState pkgindex' updatelog'
         return (Nothing, pkginfo)
@@ -151,6 +150,9 @@ setPackageUploadTime pkgid time =
                                `Vec.snoc` (cabalfile, (time, uid))
       }
 
+updatePackageInfo :: PackageId -> PkgInfo -> Update PackagesState ()
+updatePackageInfo pkgid pkginfo = void $ alterPackage pkgid (const pkginfo)
+
 alterPackage :: PackageId -> (PkgInfo -> PkgInfo)
              -> Update PackagesState (Maybe (PkgInfo, PkgInfo))
 alterPackage pkgid alter = do
@@ -163,12 +165,11 @@ alterPackage pkgid alter = do
         State.put $! PackagesState pkgindex' updatelog
         return (Just (pkginfo, pkginfo'))
 
-addIndexExtraEntry :: FilePath -> BS.ByteString -> UTCTime
-                   -> Update PackagesState ()
-addIndexExtraEntry entrypath content timestamp = do
+-- | Add entries into the index (other than cabal files)
+addOtherIndexEntry :: TarIndexEntry -> Update PackagesState ()
+addOtherIndexEntry !extraentry = do
     PackagesState pkgindex updatelog <- State.get
-    let !extraentry = ExtraEntry entrypath content timestamp
-        updatelog'  = fmap (Seq.|> extraentry) updatelog
+    let updatelog' = fmap (Seq.|> extraentry) updatelog
     State.put $! PackagesState pkgindex updatelog'
 
 -- |Replace all existing packages and reports
@@ -187,7 +188,7 @@ migrateAddUpdateLog users = do
 initialUpdateLog :: Users -> PackageIndex PkgInfo -> Seq TarIndexEntry
 initialUpdateLog users pkgs =
     Seq.fromList
-      [ PackageEntry (packageId pkginfo) revno timestamp username
+      [ CabalFileEntry (packageId pkginfo) revno timestamp username
       | pkginfo <- PackageIndex.allPackages pkgs
       , (revno, pkgrev) <- zip [0..] (Vec.toList (pkgMetadataRevisions pkginfo))
         -- Note including all revisions for now, could include just last
@@ -205,7 +206,8 @@ makeAcidic ''PackagesState ['getPackagesState
                            ,'addPackageTarball
                            ,'setPackageUploader
                            ,'setPackageUploadTime
-                           ,'addIndexExtraEntry
+                           ,'updatePackageInfo
+                           ,'addOtherIndexEntry
                            ,'migrateAddUpdateLog
                            ]
 
@@ -222,4 +224,3 @@ instance Migrate PackagesState where
         packageIndex     = pkgs,
         packageUpdateLog = Nothing -- filled in by a more complex migration
       }
-

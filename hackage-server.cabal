@@ -124,6 +124,7 @@ executable hackage-server
     Distribution.Server.Packages.Render
     Distribution.Server.Packages.ChangeLog
     Distribution.Server.Packages.Readme
+    Distribution.Server.Packages.Metadata
 
     Distribution.Server.Pages.Distributions
     Distribution.Server.Pages.Group
@@ -158,6 +159,14 @@ executable hackage-server
     Distribution.Server.Features.Core
     Distribution.Server.Features.Core.State
     Distribution.Server.Features.Core.Backup
+    Distribution.Server.Features.Security
+    Distribution.Server.Features.Security.Cache
+    Distribution.Server.Features.Security.FileInfo
+    Distribution.Server.Features.Security.Layout
+    Distribution.Server.Features.Security.Migration
+    Distribution.Server.Features.Security.Orphans
+    Distribution.Server.Features.Security.ResponseContentTypes
+    Distribution.Server.Features.Security.State
     Distribution.Server.Features.Mirror
     Distribution.Server.Features.Upload
     Distribution.Server.Features.Upload.State
@@ -281,7 +290,15 @@ executable hackage-server
     QuickCheck >= 2.5,
     friendly-time >= 0.4 && < 0.5,
     cheapskate >= 0.1,
-    blaze-html >= 0.7
+    blaze-html >= 0.7,
+    -- TODO: hackage-security relies on network-uri. Not sure what the
+    -- reason behind the 'network-uri' build time flag is, but if it's
+    -- crucial that we may not rely on it, then we also need to make this
+    -- possibly in hackage-security, or else make security optional
+    hackage-security,
+    ed25519,
+    SHA,
+    binary
 
   if ! flag(minimal)
     build-depends:
