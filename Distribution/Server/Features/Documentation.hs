@@ -128,7 +128,7 @@ documentationFeature :: String
                      -> Hook PackageId ()
                      -> DocumentationFeature
 documentationFeature name
-                     ServerEnv{serverBlobStore = store}
+                     ServerEnv{serverBlobStore = store, serverBaseURI}
                      CoreResource{
                          packageInPath
                        , guardValidPackageId
@@ -277,25 +277,53 @@ documentationFeature name
                       -> ServerPartE Response
     withDocumentation self dpath func = do
       pkgid <- packageInPath dpath
-      -- lookupPackageId gives us the latest version if no version is specified:
+
+      -- lookupPackageId returns the latest version if no version is specified.
       pkginfo <- lookupPackageId pkgid
+
+      -- Set up the canonical URL to point to the unversioned path
+      let basedpath =
+            [ if var == "package"
+                then (var, unPackageName $ pkgName pkgid)
+                else e
+            | e@(var, _) <- dpath ]
+          basePkgPath   = (renderResource' self basedpath)
+          canonicalLink = show serverBaseURI ++ basePkgPath
+          canonicalHeader = "<" ++ canonicalLink ++ ">; rel=\"canonical\""
+
+      -- Link: <http://canonical.link>; rel="canonical"
+      -- See https://support.google.com/webmasters/answer/139066?hl=en#6
+      setHeaderM "Link" canonicalHeader
+
       case pkgVersion pkgid of
         -- if no version is given we want to redirect to the latest version
-        Version [] _ -> tempRedirect (renderResource' self dpath') (toResponse "")
+        Version [] _ -> tempRedirect latestPkgPath (toResponse "")
           where
             latest = packageId pkginfo
             dpath' = [ if var == "package"
                          then (var, display latest)
                          else e
                      | e@(var, _) <- dpath ]
-        _ -> do
+            latestPkgPath = (renderResource' self dpath')
+
+        _             -> do
           mdocs <- queryState documentationState $ LookupDocumentation pkgid
           case mdocs of
-            Nothing -> errNotFound "Not Found"
-                         [MText $ "There is no documentation for " ++ display pkgid]
+            Nothing ->
+              errNotFoundH "Not Found"
+                [MText $ "There is no documentation for " ++ display pkgid
+                  ++ ". See " ++ canonicalLink ++ " for the latest version."]
+              where
+                -- Essentially errNotFound, but overloaded to specify a header.
+                -- (Needed since errNotFound throws away result of setHeaderM)
+                errNotFoundH title message = throwError
+                  (ErrorResponse 404
+                  [("Link", canonicalHeader)]
+                  title message)
             Just blob -> do
               index <- liftIO $ cachedTarIndex blob
               func pkgid blob index
+
 
 -- Check the tar file is well formed and all files are within foo-1.0-docs/
 checkDocTarball :: PackageId -> BSL.ByteString -> Either String ()
