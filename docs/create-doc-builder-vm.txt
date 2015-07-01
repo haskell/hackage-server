@@ -1,14 +1,13 @@
 
 ## Instructions based on Debian 6.0 "squeeze"
 
-```
   sudo apt-get install debootstrap qemu-kvm virtinst libvirt-bin
-```
 
-Notes:
-On Debian 5.0 "lenny":  use kvm instead of qemu-kvm, install debootstrap from the latest Debian stable release
+(Notes:
+    On Debian 5.0 "lenny":  use kvm instead of qemu-kvm, install debootstrap 
+    from the latest Debian stable release)
 
-```
+
     sudo adduser $USER libvirt
     dd if=/dev/zero of=hackage-docs.disk bs=1024 count=5242880
     /sbin/mke2fs -F hackage-docs.disk
@@ -134,5 +133,3 @@ On Debian 5.0 "lenny":  use kvm instead of qemu-kvm, install debootstrap from th
         sed -e "s#@PIDFILE@#$HOME/hackage-docs/hd.pid#" -e "s#@HACKAGEBUILD@#$HOME/.cabal/bin/hackage-build#" -e "s#@DIRECTORY@#$HOME/hackage-docs#" -e "s#@EXTRA@#export PATH=$HOME/local/ghc-7.4.2/bin:$HOME/.cabal/bin:\$PATH#" < ../downloads/hackage-server/docs/run-doc-builder.sh.example > run-doc-builder.sh
         chmod +x run-doc-builder.sh
         echo '*/5 * * * * '"$HOME/hackage-docs/run-doc-builder.sh" | crontab -
-```
-
