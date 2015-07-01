@@ -17,45 +17,46 @@ import Text.XHtml.Strict
 -- to add a star (which prompts for authentication).
 renderStarsAnon :: Int -> PackageName -> (String, Html)
 renderStarsAnon numStars pkgname =
-  ( "Stars:",
-      form  ! [ action $    "star/" ++ unPackageName pkgname
+  ( "Stars",
+      form  ! [ action $ "/package/" ++ unPackageName pkgname ++ "/stars"
               , method      "POST" ]
       << thespan <<
-      (toHtml $ show numStars  ++ " " +++
-        ("[" +++
-        input ! [ thetype     "submit"
-                , value       "Star this package"
-                , theclass    "text-button" ]
-        +++ "]")
-      )
+      [ toHtml $  show numStars ++ " "
+      , toHtml $  ("[" +++
+          hidden  "_method" "PUT" +++
+          input ! [ thetype     "submit"
+                  , value       "Star this package"
+                  , theclass    "text-button" ]
+          +++ "]")
+      ]
   )
 
 -- A page that confirms a package was successfully starred and
 -- provides a link back to the package page.
-starConfirmationPage :: PackageName -> String -> String -> Resource.XHtml
-starConfirmationPage pkgname baseuri message =
+starConfirmationPage :: PackageName -> String -> Resource.XHtml
+starConfirmationPage pkgname message =
   Resource.XHtml $ hackagePage "Star a Package"
   [ h3 << message
   , br
-  , anchor ! [ href $ baseuri ++ "/package/" ++ unPackageName pkgname ] << "Return"
+  , anchor ! [ href $ "/package/" ++ unPackageName pkgname ] << "Return"
   ]
 
 -- Shown when a user has already starred a package.
 -- Gives an option to remove the star, and provides a link
 -- back to the package page.
-alreadyStarredPage :: PackageName -> String -> Resource.XHtml
-alreadyStarredPage pkgname baseuri =
+alreadyStarredPage :: PackageName -> Resource.XHtml
+alreadyStarredPage pkgname =
   Resource.XHtml $ hackagePage "Star a Package"
-  [ h3 << "You have already starred this package."
-  , form  ! [ action $ baseuri ++ "/package/unstar/" ++ unPackageName pkgname
+  [ h3 <<   "You have already starred this package."
+  , form  ! [ action $ "/package/" ++ unPackageName pkgname ++ "/stars"
             , method "POST" ]
       << thespan <<
       ("[" +++
+      hidden  "_method" "DELETE" +++
       input ! [ thetype     "submit"
               , value       "Remove star from this package"
               , theclass    "text-button" ]
       +++ "]")
   , br
-  , anchor ! [ href $ baseuri ++ "/package/" ++ unPackageName pkgname ]
-    << "Return"
+  , anchor ! [ href $ "/package/" ++ unPackageName pkgname ] << "Return"
   ]

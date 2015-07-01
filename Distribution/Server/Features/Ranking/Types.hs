@@ -38,12 +38,11 @@ initialStars = Stars Map.empty
 
 addStar :: PackageName -> UserId -> Stars -> Stars
 addStar pkgname uid stars = Stars $
-  adjust (Set.insert uid) pkgname somemap
+  alter f pkgname (extractMap stars)
     where
-      smap  = extractMap stars
-      somemap = if pkgname `Map.member` smap
-        then smap
-        else Map.insert pkgname Set.empty smap
+      f k = Just $ Set.insert uid $ case k of
+        Just key -> key
+        Nothing  -> Set.empty
 
 removeStar :: PackageName -> UserId -> Stars -> Stars
 removeStar pkgname uid vmap = Stars $
@@ -51,24 +50,18 @@ removeStar pkgname uid vmap = Stars $
 
 getUsersWhoStarred :: PackageName -> Stars -> Set UserId
 getUsersWhoStarred pkgname stars =
-  case pkgname `Map.member` smap of
-    True -> smap Map.! pkgname
-    False -> Set.empty
-  where
-    smap    = extractMap stars
+  Map.findWithDefault Set.empty pkgname $ extractMap stars
 
 -- Find out if a particular user starred a package
 askUserStarred :: PackageName -> UserId -> Stars -> Bool
 askUserStarred  pkgname uid stars =
-  case pkgname `Map.member` smap of
-    True -> uid `Set.member` (smap Map.! pkgname)
-    False -> False
-  where
-    smap = extractMap stars
+  Set.member uid $ getUsersWhoStarred pkgname stars
 
 getNumberOfStarsFor :: PackageName -> Stars -> Int
 getNumberOfStarsFor pkgname vmap =
-  Set.size (getUsersWhoStarred pkgname vmap)
+  Set.size $ getUsersWhoStarred pkgname vmap
 
 enumerate :: Stars -> [(String, Set UserId)]
-enumerate vmap = L.map (\(name, uids) -> (unPackageName name, uids)) $ Map.toList (extractMap vmap)
+enumerate vmap = L.map
+  (\(name, uids) -> (unPackageName name, uids)) $
+    Map.toList (extractMap vmap)

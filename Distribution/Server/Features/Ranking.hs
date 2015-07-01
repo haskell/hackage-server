@@ -28,8 +28,8 @@ import qualified Distribution.Server.Features.Ranking.Render as Render
 
 import Data.Aeson
 import Data.List as L
-import Data.Map as Map
-import Data.Set as Set
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HashMap
 
@@ -88,7 +88,7 @@ rankingFeature ::  ServerEnv
                 -> UserFeature                    -- To authenticate users
                 -> RankingFeature
 
-rankingFeature  ServerEnv{serverBaseURI}
+rankingFeature  ServerEnv{..}
                 starsState
                 CoreFeature {
                   coreResource = CoreResource { packageInPath
@@ -100,8 +100,7 @@ rankingFeature  ServerEnv{serverBaseURI}
   where
     rankingFeatureInterface   = (emptyHackageFeature "Package stars") {
         featureResources      = [ getEntireMapResource
-                                , addStarResource
-                                , removeStarResource
+                                , handleStarsResource
                                 , allUsersWhoStarredResource
           ]
       , featureState          = [abstractAcidStateComponent starsState]
@@ -111,41 +110,33 @@ rankingFeature  ServerEnv{serverBaseURI}
 -- | Define resources for this feature's URIs
 
     getEntireMapResource :: Resource
-    getEntireMapResource =
-      (resourceAt "/package/starstate") {
-        resourceDesc  = [(GET, "Returns the entire database of package stars.")]
-      , resourceGet   = [("json", getPackageStarMap)]
+    getEntireMapResource = (resourceAt "/stars") {
+      resourceDesc  = [(GET,    "Returns the entire database of package stars.")]
+    , resourceGet   = [("json", getPackageStarMap)]
     }
 
-    addStarResource :: Resource
-    addStarResource  =
-      (resourceAt "/package/star/:package") {
-        resourceDesc  = [ (GET, "Returns the number of stars a package has.")
-                        , (POST, "Adds a star to this package.")
+    handleStarsResource :: Resource
+    handleStarsResource = (resourceAt "/package/:package/stars") {
+      resourceDesc    = [ (GET,     "Returns the number of stars a package has.")
+                        , (PUT,     "Adds a star to this package.")
+                        , (DELETE,  "Remove a user's star from this package.")
                         ]
-      , resourceGet   = [("json", getPackageNumStars)]
-      , resourcePost  = [("",     starPackage)]
-    }
-
-    removeStarResource :: Resource
-    removeStarResource =
-      (resourceAt "/package/unstar/:package") {
-        resourceDesc  = [(POST, "Remove a user's star from this package.")]
-      , resourcePost  = [("",     removeStar)]
+    , resourceGet     = [("json", getPackageNumStars)]
+    , resourcePut     = [("",     addStar)]
+    , resourceDelete  = [("",     removeStar)]
     }
 
     allUsersWhoStarredResource :: Resource
-    allUsersWhoStarredResource =
-      (resourceAt "/package/whostarred/:package") {
-        resourceDesc  = [(GET, "Returns all of the users who have starred a package.")]
-      , resourceGet   = [("",     getAllPackageStars)]
+    allUsersWhoStarredResource = (resourceAt "/package/:package/stars/users") {
+      resourceDesc  = [(GET, "Returns all of the users who have starred this package.")]
+    , resourceGet   = [("",     getAllPackageStars)]
     }
 
 -- | Implementations of the how the above resources are handled.
 
     -- Add a star to :packageName (must match name exactly)
-    starPackage :: DynamicPath -> ServerPartE Response
-    starPackage dpath = do
+    addStar :: DynamicPath -> ServerPartE Response
+    addStar dpath = do
       uid     <- guardAuthorised [AnyKnownUser]
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
@@ -153,12 +144,11 @@ rankingFeature  ServerEnv{serverBaseURI}
 
       case alreadyStarred of
         True ->
-          ok . toResponse $ Render.alreadyStarredPage
-            pkgname (show serverBaseURI)
+          ok . toResponse $ Render.alreadyStarredPage pkgname
         False -> do
           updateState starsState $ RState.DbAddStar pkgname uid
           ok . toResponse $ Render.starConfirmationPage
-            pkgname (show serverBaseURI) "Package starred successfully"
+            pkgname "Package starred successfully"
 
     -- Removes a user's star from a package. If the user has not
     -- not starred this package, does nothing.
@@ -168,8 +158,13 @@ rankingFeature  ServerEnv{serverBaseURI}
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
       updateState starsState $ RState.DbRemoveStar pkgname uid
+
+      alreadyStarred <- didUserStar pkgname uid
+      let responseMsg = case alreadyStarred of
+            True -> "User has not starred this package."
+            False -> "Package unstarred successfully."
       ok . toResponse $ Render.starConfirmationPage
-        pkgname (show serverBaseURI) "Package unstarred successfully."
+        pkgname responseMsg
 
     -- Retrive the entire map (from package names -> # of stars)
     -- (Must be authenticated as an admin.)
