@@ -315,8 +315,8 @@ executable hackage-mirror
     Distribution.Client
     Distribution.Client.Cron
     Distribution.Client.UploadLog
+    Distribution.Client.Index
     Distribution.Server.Users.Types
-    Distribution.Server.Util.Index
     Distribution.Server.Util.Merge
   build-depends:
     base,
@@ -328,7 +328,8 @@ executable hackage-mirror
     network,  HTTP >= 4000.2.11,
     Cabal,
     safecopy, cereal, binary, mtl,
-    unix, aeson
+    unix, aeson,
+    SHA
   default-language: Haskell2010
   ghc-options: -Wall -fwarn-tabs
 
@@ -343,8 +344,8 @@ executable hackage-build
   main-is: BuildClient.hs
   other-modules:
     Distribution.Client
+    Distribution.Client.Index
     Distribution.Server.Users.Types
-    Distribution.Server.Util.Index
     Distribution.Server.Util.Merge
   build-depends:
     base,
@@ -359,6 +360,7 @@ executable hackage-build
     aeson >= 0.6.1.0,
     random,
     unix,
+    SHA,
     -- Runtime dependency only:
     hscolour >= 1.8
   default-language: Haskell2010
@@ -379,7 +381,7 @@ executable hackage-import
     Distribution.Client.DistroMap
     Distribution.Client.HtPasswdDb
     Distribution.Client.ParseApacheLogs
-    Distribution.Client.PkgIndex
+    Distribution.Client.Index
     Distribution.Client.TagsFile
     Distribution.Client.UserAddressesDb
   build-depends:
