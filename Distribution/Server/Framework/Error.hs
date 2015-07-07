@@ -25,6 +25,7 @@ module Distribution.Server.Framework.Error (
 
     -- * Handling errors
     ErrorResponse(..),
+    internalServerErrorResponse,
     runServerPartE,
     handleErrorResponse,
     messageToText,
@@ -34,7 +35,9 @@ module Distribution.Server.Framework.Error (
   ) where
 
 import Happstack.Server
-import Control.Monad.Error
+import Control.Monad.Except
+import Data.Monoid
+import qualified Happstack.Server.Internal.Monads as Happstack.Internal
 
 import qualified Data.Text.Lazy          as Text
 import qualified Data.Text.Lazy.Encoding as Text
@@ -49,7 +52,7 @@ ma ?! e = maybe (Left e) Right ma
 --
 -- So we can use the standard 'MonadError' methods like 'throwError'.
 --
-type ServerPartE a = ServerPartT (ErrorT ErrorResponse IO) a
+type ServerPartE a = ServerPartT (ExceptT ErrorResponse IO) a
 
 -- | A type for generic error reporting that should be sufficient for
 -- most purposes.
@@ -59,7 +62,22 @@ data ErrorResponse = ErrorResponse {
     errorHeaders:: [(String, String)],
     errorTitle  :: String,
     errorDetail :: [MessageSpan]
-} deriving (Eq, Show)
+    }
+    -- | Generic error; see comments for Monoid instance, below.
+  | GenericErrorResponse
+  deriving (Eq, Show)
+
+-- | Monoid instance for ErrorResponse
+--
+-- This is required for the MonadPlus instance. We report the first non-generic
+-- error we find.
+--
+-- TODO: It would be nicer to avoid the Monoid instance completely, but it
+-- seems that's rather tricky with the way Happstack is set up.
+instance Monoid ErrorResponse where
+  mempty = ErrorResponse 500 [] "Internal server error" []
+  GenericErrorResponse `mappend` b = b
+  a                    `mappend` _ = a
 
 instance ToMessage ErrorResponse where
   toResponse (ErrorResponse code hdrs title detail) =
@@ -71,6 +89,14 @@ instance ToMessage ErrorResponse where
           rsBody      = Text.encodeUtf8 (Text.pack rspbody),
           rsValidator = Nothing
         }
+  toResponse GenericErrorResponse = toResponse internalServerErrorResponse
+
+-- | Error response into a "Internal server error"
+--
+-- This is useful for code that needs to pattern match on ErrorResponse;
+-- in the case for GenericErrorResponse.
+internalServerErrorResponse :: ErrorResponse
+internalServerErrorResponse = ErrorResponse 500 [] "Internal server error" []
 
 -- | A message possibly including hypertext links.
 --
@@ -87,12 +113,6 @@ messageToText :: [MessageSpan] -> String
 messageToText []             = ""
 messageToText (MLink x _:xs) = x ++ messageToText xs
 messageToText (MText x  :xs) = x ++ messageToText xs
-
--- We don't want to use these methods directly anyway.
-instance Error ErrorResponse where
-    noMsg      = ErrorResponse 500 [] "Internal server error" []
-    strMsg str = ErrorResponse 500 [] "Internal server error" [MText str]
-
 
 errBadRequest    :: String -> [MessageSpan] -> ServerPartE a
 errBadRequest    title message = throwError (ErrorResponse 400 [] title message)
@@ -123,7 +143,7 @@ errInternalError       message = throwError (ErrorResponse 500 [] title message)
 -- To use a nicer custom formatted error response, use 'handleErrorResponse'.
 --
 runServerPartE :: ServerPartE a -> ServerPart a
-runServerPartE = mapServerPartT' (spUnwrapErrorT fallbackHandler)
+runServerPartE = mapServerPartT' (spUnwrapExceptT fallbackHandler)
   where
     fallbackHandler :: ErrorResponse -> ServerPart a
     fallbackHandler err = finishWith (toResponse err)
@@ -132,3 +152,19 @@ handleErrorResponse :: (ErrorResponse -> ServerPartE Response)
                     -> ServerPartE a -> ServerPartE a
 handleErrorResponse handler action =
     catchError action (\errResp -> handler errResp >>= finishWith)
+
+{-------------------------------------------------------------------------------
+  Happstack Auxiliary
+-------------------------------------------------------------------------------}
+
+-- | This is a direct adoptation of 'spUnwrapErrorT' but for 'ExceptT'
+spUnwrapExceptT :: Monad m => (e -> ServerPartT m a)
+                -> Request
+                -> UnWebT (ExceptT e m) a
+                -> UnWebT m a
+spUnwrapExceptT handler rq = \x -> do
+    err <- runExceptT x
+    case err of
+        Right a -> return a
+        Left e  -> Happstack.Internal.ununWebT $
+                     Happstack.Internal.runServerPartT (handler e) rq

@@ -7,7 +7,7 @@ module Distribution.Server.Features.TarIndexCache (
   ) where
 
 import Control.Exception (throwIO)
-import Control.Monad.Error (ErrorT(..))
+import Control.Monad.Except (ExceptT(..), runExceptT)
 
 import Data.Serialize (runGetLazy, runPutLazy)
 import Data.SafeCopy (safeGet, safePut)
@@ -19,7 +19,6 @@ import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Features.TarIndexCache.State
 import Distribution.Server.Features.Users
-import Distribution.Server.Packages.ChangeLog
 import Distribution.Server.Packages.Types (PkgTarball(..), PkgInfo(..), pkgLatestTarball)
 import Data.TarIndex
 import qualified Data.TarIndex as TarIndex
@@ -151,10 +150,10 @@ tarIndexCacheFeature ServerEnv{serverBlobStore = store}
     -- TODO: Specify *what* file wasn't found in the error. This will require another parameter.
     findToplevelFile :: PkgInfo -> (FilePath -> Bool)
                      -> IO (Either String (FilePath, ETag, TarEntryOffset, FilePath))
-    findToplevelFile pkg test = runErrorT $ do
-        (fp, etag, index) <- ErrorT $ packageTarball pkg
-        (offset, fname)   <- ErrorT $ return . maybe (Left "File not found") Right
-                                    $ findFile index
+    findToplevelFile pkg test = runExceptT $ do
+        (fp, etag, index) <- ExceptT $ packageTarball pkg
+        (offset, fname)   <- ExceptT $ return . maybe (Left "File not found") Right
+                                     $ findFile index
         return (fp, etag, offset, fname)
       where
         topdir :: FilePath

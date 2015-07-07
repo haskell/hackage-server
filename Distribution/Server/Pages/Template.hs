@@ -73,10 +73,11 @@ accountsURL :: URL
 accountsURL = "/accounts"
 
 -- URL of the admin front end
-adminURL :: URL
-adminURL = "/admin"
+--
+-- TODO: Currently unused.
+_adminURL :: URL
+_adminURL = "/admin"
 
 -- URL of the list of recent additions to the database
 recentAdditionsURL :: URL
 recentAdditionsURL = "/packages/recent"
-

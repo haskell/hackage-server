@@ -126,8 +126,9 @@ renderHaddock desc =
       Nothing  -> [paragraph << p | p <- paragraphs desc]
       Just doc -> [markup htmlMarkup doc]
 
-renderMarkdown :: BS.ByteString -> Html
-renderMarkdown = primHtml . Blaze.renderHtml . renderDoc . markdown opts
+-- TODO: Currently unused.
+_renderMarkdown :: BS.ByteString -> Html
+_renderMarkdown = primHtml . Blaze.renderHtml . renderDoc . markdown opts
                . T.decodeUtf8 . BS.toStrict
   where
     opts =
@@ -137,7 +138,6 @@ renderMarkdown = primHtml . Blaze.renderHtml . renderDoc . markdown opts
         , preserveHardBreaks = False
         , debug = False
         }
-
 
 -- Break text into paragraphs (separated by blank lines)
 paragraphs :: String -> [String]
@@ -342,7 +342,7 @@ renderFields render = [
         Nothing -> strong ! [theclass "warning"] << toHtml "none"
         Just n  -> toHtml n
     sourceRepositoryField sr = sourceRepositoryToHtml sr
-    
+
     rendLicense = case rendLicenseFiles render of
       []            -> toHtml (rendLicenseName render)
       [licenseFile] -> anchor ! [ href (rendPkgUri render </> "src" </> licenseFile) ]
