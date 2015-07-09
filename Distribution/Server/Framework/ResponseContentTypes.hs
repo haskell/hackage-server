@@ -136,6 +136,12 @@ instance ToMessage CSVFile where
     toContentType _ = "text/csv"
     toMessage (CSVFile csv) = packUTF8 (printCSV csv)
 
+newtype XMLResponse = XMLResponse BS.Lazy.ByteString
+
+instance ToMessage XMLResponse where
+  toContentType _ = "application/xml"
+  toMessage (XMLResponse bs) = bs
+
 mkResponse :: BS.Lazy.ByteString -> [(String, String)] -> Response
 mkResponse bs headers = Response {
     rsCode    = 200,
