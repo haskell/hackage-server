@@ -295,6 +295,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     siteMapFeature <- mkSitemapFeature
                         coreFeature
                         documentationCoreFeature
+                        tagsFeature
 
 #endif
 

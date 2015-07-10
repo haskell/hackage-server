@@ -10,6 +10,7 @@ import Distribution.Server.Framework
 
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Documentation
+import Distribution.Server.Features.Tags
 
 import Distribution.Package
 import Distribution.Text (display)
@@ -29,20 +30,23 @@ instance IsHackageFeature SitemapFeature where
 initSitemapFeature :: ServerEnv
                    -> IO ( CoreFeature
                       -> DocumentationFeature
+                      -> TagsFeature
                       -> IO SitemapFeature)
 initSitemapFeature env@ServerEnv{..} = do
-  return $ \coref@CoreFeature{..} docsCore@DocumentationFeature{..} -> do
+  return $ \coref@CoreFeature{..} docsCore@DocumentationFeature{..} tagsf@TagsFeature{..} -> do
     let feature = sitemapFeature env
-                  coref docsCore
+                  coref docsCore tagsf
     return feature
 
 sitemapFeature  :: ServerEnv
                 -> CoreFeature
                 -> DocumentationFeature
+                -> TagsFeature
                 -> SitemapFeature
 sitemapFeature  ServerEnv{..}
                 CoreFeature{..}
                 DocumentationFeature{..}
+                TagsFeature{..}
   = SitemapFeature{..} where
 
     sitemapFeatureInterface = (emptyHackageFeature "XML sitemap generation") {
@@ -57,6 +61,34 @@ sitemapFeature  ServerEnv{..}
 
     generateSitemap :: DynamicPath -> ServerPartE Response
     generateSitemap _ = do
+
+      -- Misc. pages
+      let miscPages =
+            [ "/index"
+            , "/accounts"
+            , "/packages"
+            , "/packages/search"
+            , "/packages/recent"
+            , "/packages/recent/revisions"
+            , "/packages/tags"
+            , "/packages/names"
+            , "/packages/top"
+            , "/packages/preferred"
+            , "/packages/deprecated"
+            , "/packages/candidates"
+            , "/packages/uploads"
+            , "/users"
+            , "/users/register-request"
+            , "/users/password-reset"
+            , "/upload"
+            , "/api"
+            , "/new-features"
+            ]
+          miscNodes = SM.makeURLNodes miscPages serverBaseURI "1.0"
+
+      alltags <- queryGetTagList
+      let tagURLs = map (("/packages/tag/" ++) . show . fst) alltags
+          tagNodes = SM.makeURLNodes tagURLs serverBaseURI "0.5"
 
       pkgIndex <- queryGetPackageIndex
       let pkgs = PackageIndex.allPackagesByName pkgIndex
@@ -87,7 +119,12 @@ sitemapFeature  ServerEnv{..}
           versionedDocNodes = SM.makeURLNodes versionedDocs serverBaseURI "0.25"
 
       -- Combine and build sitemap
-          allNodes = nameNodes ++ nameVersNodes ++ baseDocNodes ++ versionedDocNodes
+          allNodes = miscNodes
+            ++ tagNodes
+            ++ nameNodes
+            ++ nameVersNodes
+            ++ baseDocNodes
+            ++ versionedDocNodes
           sitemapXML = XMLResponse $ SM.nodesToSiteMap allNodes
 
       return $ toResponse sitemapXML
