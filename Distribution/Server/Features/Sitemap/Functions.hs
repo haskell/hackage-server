@@ -28,7 +28,7 @@ schemaAttr = Map.fromList [ (makeName "xmlns", pack "http://www.sitemaps.org/sch
 
 packageToNode :: URI.URI -> String -> String -> Node
 packageToNode baseuri priority pkgname =
-  makeNodeURL (show baseuri ++ "/package/" ++ pkgname) "2012-04-30" "monthly" priority
+  makeNodeURL (show baseuri ++ pkgname) "2012-04-30" "monthly" priority
 
 
 makeNodeURL :: String -> String -> String -> String -> Node

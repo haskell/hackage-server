@@ -94,26 +94,26 @@ sitemapFeature  ServerEnv{..}
       let pkgs = PackageIndex.allPackagesByName pkgIndex
 
       -- Unversioned package pages - always redirect to latest version.
-          names = [display . pkgName . pkgInfoId $ pkg
+          names = [("/package/" ++) . display . pkgName . pkgInfoId $ pkg
             | pkg <- L.map L.head pkgs]
           nameNodes= SM.makeURLNodes names serverBaseURI "1.0"
 
       -- Versioned package pages
-          nameVers = [(display . pkgName . pkgInfoId $ pkg) ++ "-" ++
+          nameVers = [(("/package/" ++) . display . pkgName . pkgInfoId $ pkg) ++ "-" ++
             (display . pkgVersion . pkgInfoId $ pkg) | pkg <- concat pkgs]
           nameVersNodes = SM.makeURLNodes nameVers serverBaseURI "0.25"
 
       -- Unversioned doc pages (for packages with valid documentation)
       basePkgNamesWithDocs <- mapParaM (queryHasDocumentation . pkgInfoId)
         (L.map L.head pkgs)
-      let baseDocs = [(display . pkgName . pkgInfoId . fst $ pkg) ++ "/docs"
+      let baseDocs = [(("/package/" ++) . display . pkgName . pkgInfoId . fst $ pkg) ++ "/docs"
             | pkg <- filter ((== True) . snd) basePkgNamesWithDocs]
           baseDocNodes = SM.makeURLNodes baseDocs serverBaseURI "1.0"
 
       -- Versioned doc pages
       docsAllVersions <- mapParaM (queryHasDocumentation . pkgInfoId)
         (concat pkgs)
-      let versionedDocs = [(display . pkgName . pkgInfoId . fst $ pkg) ++ "-" ++
+      let versionedDocs = [(("/package/" ++) . display . pkgName . pkgInfoId . fst $ pkg) ++ "-" ++
             (display . pkgVersion . pkgInfoId . fst $ pkg) ++ "/docs"
             | pkg <- filter ((== True) . snd) docsAllVersions]
           versionedDocNodes = SM.makeURLNodes versionedDocs serverBaseURI "0.25"
