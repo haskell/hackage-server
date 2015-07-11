@@ -87,7 +87,7 @@ sitemapFeature  ServerEnv{..}
           miscNodes = SM.makeURLNodes miscPages serverBaseURI "1.0"
 
       alltags <- queryGetTagList
-      let tagURLs = map (("/packages/tag/" ++) . show . fst) alltags
+      let tagURLs = map (("/packages/tag/" ++) . display . fst) alltags
           tagNodes = SM.makeURLNodes tagURLs serverBaseURI "0.5"
 
       pkgIndex <- queryGetPackageIndex
