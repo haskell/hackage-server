@@ -51,6 +51,8 @@ sitemapFeature  ServerEnv{..}
 
     sitemapFeatureInterface = (emptyHackageFeature "XML sitemap generation") {
       featureResources = [ xmlSitemapResource ]
+      , featureState = []
+      , featureDesc = "Dynamically generates a sitemap.xml."
     }
 
     xmlSitemapResource :: Resource
