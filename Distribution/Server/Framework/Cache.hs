@@ -7,7 +7,7 @@ module Distribution.Server.Framework.Cache (
     readAsyncCache,
     prodAsyncCache,
     syncAsyncCache,
-    
+
     AsyncUpdate,
     newAsyncUpdate,
     asyncUpdate,
@@ -15,16 +15,14 @@ module Distribution.Server.Framework.Cache (
 
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.STM
-import Control.Exception
 import Control.Monad
 import Control.Monad.Trans (MonadIO(liftIO))
 import Control.DeepSeq (NFData, rnf)
+import Control.Exception (SomeException)
+import qualified Control.Exception as E
 
 import Distribution.Server.Framework.Logging
 import qualified Distribution.Verbosity as Verbosity
-
-import Prelude hiding (catch)
-
 
 -- | An in-memory cache with asynchronous updates.
 --
@@ -83,7 +81,7 @@ prodAsyncCache (AsyncCache avar update) = liftIO $ update >>= writeAsyncVar avar
 -- has been evaluated. It has no effect later on since the async cache always
 -- has a value available (albeit perhaps a stale one).
 syncAsyncCache :: NFData a => AsyncCache a -> IO ()
-syncAsyncCache c = readAsyncCache c >>= evaluate . rnf >> return ()
+syncAsyncCache c = readAsyncCache c >>= E.evaluate . rnf >> return ()
 
 
 -------------------------------------------------
@@ -102,7 +100,7 @@ newAsyncVar delay syncForce verbosity logname force initial = do
 
     if syncForce
       then logTiming verbosity ("Cache '" ++ logname ++ "' initialised") $
-             evaluate (force initial)
+             E.evaluate (force initial)
       else atomically (writeTChan inChan initial)
 
     let loop = do
@@ -115,7 +113,7 @@ newAsyncVar delay syncForce verbosity logname force initial = do
           let value = last avail
 
           logTiming verbosity ("Cache '" ++ logname ++ "' updated") $ do
-            res <- try $ evaluate (force value `seq` value)
+            res <- E.try $ E.evaluate (force value `seq` value)
             atomically (writeTVar outVar res)
 
           loop
@@ -138,7 +136,7 @@ newAsyncVar delay syncForce verbosity logname force initial = do
 
 readAsyncVar :: AsyncVar state -> IO state
 readAsyncVar (AsyncVar _ outVar) =
-    atomically (readTVar outVar) >>= either throw return
+    atomically (readTVar outVar) >>= either E.throwIO return
 
 writeAsyncVar :: AsyncVar state -> state -> IO ()
 writeAsyncVar (AsyncVar inChan _) value =
@@ -166,7 +164,7 @@ newAsyncUpdate delay verbosity logname = do
           let action = last avail
 
           logTiming verbosity (logname ++ " updated") $
-            action `catch` \e ->
+            action `E.catch` \e ->
                loginfo verbosity $ "Exception in update " ++ logname ++ ": "
                                 ++ show (e :: SomeException)
 
