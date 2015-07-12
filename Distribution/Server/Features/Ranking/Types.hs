@@ -16,14 +16,16 @@ module Distribution.Server.Features.Ranking.Types
 
 import Distribution.Package (PackageName(..))
 import Distribution.Server.Users.Types (UserId(..))
+import Distribution.Server.Users.UserIdSet (UserIdSet)
+import qualified Distribution.Server.Users.UserIdSet as UserIdSet
 import Distribution.Server.Framework.MemSize
 
 import Data.Typeable
-import Data.Map as Map
-import Data.Set as Set
-import Data.List as L
+import Data.Map (Map)
+import qualified Data.Map as Map
 
-type StarMap = Map PackageName (Set UserId)
+
+type StarMap = Map PackageName UserIdSet
 
 data Stars = Stars {
   extractMap:: !StarMap
@@ -38,30 +40,30 @@ initialStars = Stars Map.empty
 
 addStar :: PackageName -> UserId -> Stars -> Stars
 addStar pkgname uid stars = Stars $
-  alter f pkgname (extractMap stars)
+  Map.alter f pkgname (extractMap stars)
     where
-      f k = Just $ Set.insert uid $ case k of
+      f k = Just $ UserIdSet.insert uid $ case k of
         Just key -> key
-        Nothing  -> Set.empty
+        Nothing  -> UserIdSet.empty
 
 removeStar :: PackageName -> UserId -> Stars -> Stars
 removeStar pkgname uid vmap = Stars $
-  adjust (Set.delete uid) pkgname (extractMap vmap)
+  Map.adjust (UserIdSet.delete uid) pkgname (extractMap vmap)
 
-getUsersWhoStarred :: PackageName -> Stars -> Set UserId
+getUsersWhoStarred :: PackageName -> Stars -> UserIdSet
 getUsersWhoStarred pkgname stars =
-  Map.findWithDefault Set.empty pkgname $ extractMap stars
+  Map.findWithDefault UserIdSet.empty pkgname $ extractMap stars
 
 -- Find out if a particular user starred a package
 askUserStarred :: PackageName -> UserId -> Stars -> Bool
 askUserStarred  pkgname uid stars =
-  Set.member uid $ getUsersWhoStarred pkgname stars
+  UserIdSet.member uid $ getUsersWhoStarred pkgname stars
 
 getNumberOfStarsFor :: PackageName -> Stars -> Int
 getNumberOfStarsFor pkgname vmap =
-  Set.size $ getUsersWhoStarred pkgname vmap
+  UserIdSet.size $ getUsersWhoStarred pkgname vmap
 
-enumerate :: Stars -> [(String, Set UserId)]
-enumerate vmap = L.map
+enumerate :: Stars -> [(String, UserIdSet)]
+enumerate vmap = map
   (\(name, uids) -> (unPackageName name, uids)) $
     Map.toList (extractMap vmap)

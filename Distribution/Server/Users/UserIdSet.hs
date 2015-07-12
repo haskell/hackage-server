@@ -5,6 +5,7 @@ module Distribution.Server.Users.UserIdSet (
     insert,
     delete,
     member,
+    size,
     toList,
     fromList,
     unions,
@@ -19,13 +20,14 @@ import Data.SafeCopy (SafeCopy(..), contain)
 import qualified Data.Serialize as Serialize
 import Data.Typeable (Typeable)
 import Control.DeepSeq
+import Data.Aeson (ToJSON)
 
 
 -- | A simple set of 'UserId's. Used to implement user groups, but can be used
 -- anywhere a set of users identified by 'UserId' is needed.
 --
 newtype UserIdSet = UserIdSet IntSet.IntSet
-  deriving (Eq, Monoid, Typeable, Show, NFData, MemSize)
+  deriving (Eq, Monoid, Typeable, Show, NFData, MemSize, ToJSON)
 
 empty :: UserIdSet
 empty = UserIdSet IntSet.empty
@@ -38,6 +40,9 @@ delete (UserId uid) (UserIdSet uidset) = UserIdSet (IntSet.delete uid uidset)
 
 member :: UserId -> UserIdSet -> Bool
 member (UserId uid) (UserIdSet uidset) = IntSet.member uid uidset
+
+size :: UserIdSet -> Int
+size (UserIdSet uidset) = IntSet.size uidset
 
 toList :: UserIdSet -> [UserId]
 toList (UserIdSet uidset) = map UserId (IntSet.toList uidset)

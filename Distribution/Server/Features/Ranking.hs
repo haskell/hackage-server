@@ -21,6 +21,7 @@ import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Users.Types (UserId(..))
+import Distribution.Server.Users.UserIdSet as UserIdSet
 
 import qualified Distribution.Server.Features.Ranking.State as RState
 import qualified Distribution.Server.Features.Ranking.Types as RTypes
@@ -29,7 +30,6 @@ import qualified Distribution.Server.Features.Ranking.Render as Render
 import Data.Aeson
 import Data.List as L
 import qualified Data.Map as Map
-import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HashMap
 
@@ -197,7 +197,7 @@ rankingFeature  ServerEnv{..}
       dbStarsMap <- queryState starsState RState.DbGetStars
 
       let users = RTypes.getUsersWhoStarred pkgname dbStarsMap
-          arr = Set.toList $ users
+          arr = UserIdSet.toList $ users
 
       ok . toResponse $ toJSON arr
 
