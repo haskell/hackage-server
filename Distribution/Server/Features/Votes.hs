@@ -21,7 +21,6 @@ import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Users.Types (UserId(..))
-import Distribution.Server.Users.UserIdSet as UserIdSet
 
 import qualified Distribution.Server.Features.Votes.State as RState
 import qualified Distribution.Server.Features.Votes.Types as RTypes
@@ -98,44 +97,60 @@ votesFeature  ServerEnv{..}
   = VotesFeature{..}
   where
     votesFeatureInterface   = (emptyHackageFeature "votes") {
-        featureResources      = [ getEntireMapResource
-                                , handleVotesResource
-                                , allUsersWhoVotedResource
-          ]
-      , featureState          = [abstractAcidStateComponent votesState]
+        featureResources = [ packagesVotesResource
+                           , packageVotesResource
+                           ]
+      , featureState     = [abstractAcidStateComponent votesState]
       }
 
 
--- | Define resources for this feature's URIs
+    -- Define resources for this feature's URIs
 
-    getEntireMapResource :: Resource
-    getEntireMapResource = (resourceAt "/packages/votes") {
+    packagesVotesResource :: Resource
+    packagesVotesResource = (resourceAt "/packages/votes.:format") {
       resourceDesc  = [(GET,    "Returns the entire database of package votes.")]
-    , resourceGet   = [("json", getPackageVoteMap)]
+    , resourceGet   = [("json", servePackageVotesGet)]
     }
 
-    handleVotesResource :: Resource
-    handleVotesResource = (resourceAt "/package/:package/votes") {
+    packageVotesResource :: Resource
+    packageVotesResource = (resourceAt "/package/:package/votes.:format") {
       resourceDesc    = [ (GET,     "Returns the number of votes a package has.")
                         , (PUT,     "Adds a vote to this package.")
                         , (DELETE,  "Remove a user's vote from this package.")
                         ]
-    , resourceGet     = [("json", getPackageNumVotes)]
-    , resourcePut     = [("",     addVote)]
-    , resourceDelete  = [("",     removeVote)]
+    , resourceGet     = [("json", servePackageNumVotesGet)]
+    , resourcePut     = [("",     servePackageVotePut)]
+    , resourceDelete  = [("",     servePackageVoteDelete)]
     }
 
-    allUsersWhoVotedResource :: Resource
-    allUsersWhoVotedResource = (resourceAt "/package/:package/votes/users") {
-      resourceDesc  = [(GET, "Returns all of the users who have voted for this package.")]
-    , resourceGet   = [("",     getAllPackageVotes)]
-    }
+    -- Implementations of the how the above resources are handled.
 
--- | Implementations of the how the above resources are handled.
+    -- Retrive the entire map (from package names -> # of votes)
+    -- (Must be authenticated as an admin.)
+    servePackageVotesGet :: DynamicPath -> ServerPartE Response
+    servePackageVotesGet _ = do
+      guardAuthorised [InGroup adminGroup]
+      dbVotesMap <- queryState votesState RState.DbGetVotes
+      ok . toResponse $ toJSON $ enumerate dbVotesMap
+
+    -- Get the number of votes a package has. If the package
+    -- has never been voted for, returns 0.
+    servePackageNumVotesGet :: DynamicPath -> ServerPartE Response
+    servePackageNumVotesGet dpath = do
+      pkgname <- packageInPath dpath
+      guardValidPackageName pkgname
+      dbVotesMap <- queryState votesState RState.DbGetVotes
+
+      let numVotes = getNumberOfVotesFor pkgname dbVotesMap
+          arr = objectL
+                  [ ("packageName", string $ unPackageName pkgname)
+                  , ("numVotes",    toJSON numVotes)
+                  ]
+      ok . toResponse $ toJSON arr
 
     -- Add a vote to :packageName (must match name exactly)
-    addVote :: DynamicPath -> ServerPartE Response
-    addVote dpath = do
+    servePackageVotePut :: DynamicPath -> ServerPartE Response
+    servePackageVotePut dpath = do
       uid     <- guardAuthorised [AnyKnownUser]
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
@@ -151,8 +166,8 @@ votesFeature  ServerEnv{..}
 
     -- Removes a user's vote from a package. If the user has not
     -- not voted for this package, does nothing.
-    removeVote :: DynamicPath -> ServerPartE Response
-    removeVote dpath = do
+    servePackageVoteDelete :: DynamicPath -> ServerPartE Response
+    servePackageVoteDelete dpath = do
       uid     <- guardAuthorised [AnyKnownUser]
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
@@ -165,42 +180,7 @@ votesFeature  ServerEnv{..}
       ok . toResponse $ Render.voteConfirmationPage
         pkgname responseMsg
 
-    -- Retrive the entire map (from package names -> # of votes)
-    -- (Must be authenticated as an admin.)
-    getPackageVoteMap :: DynamicPath -> ServerPartE Response
-    getPackageVoteMap _ = do
-      guardAuthorised [InGroup adminGroup]
-      dbVotesMap <- queryState votesState RState.DbGetVotes
-      ok . toResponse $ toJSON $ enumerate dbVotesMap
-
-    -- Get the number of votes a package has. If the package
-    -- has never been voted for, returns 0.
-    getPackageNumVotes :: DynamicPath -> ServerPartE Response
-    getPackageNumVotes dpath = do
-      pkgname <- packageInPath dpath
-      guardValidPackageName pkgname
-      dbVotesMap <- queryState votesState RState.DbGetVotes
-
-      let numVotes = getNumberOfVotesFor pkgname dbVotesMap
-          arr = objectL
-                  [ ("packageName", string $ unPackageName pkgname)
-                  , ("numVotes",    toJSON numVotes)
-                  ]
-      ok . toResponse $ toJSON arr
-
-    getAllPackageVotes :: DynamicPath -> ServerPartE Response
-    getAllPackageVotes dpath = do
-      guardAuthorised [InGroup adminGroup]
-      pkgname <- packageInPath dpath
-      guardValidPackageName pkgname
-      dbVotesMap <- queryState votesState RState.DbGetVotes
-
-      let users = RTypes.getUsersWhoVoted pkgname dbVotesMap
-          arr = UserIdSet.toList $ users
-
-      ok . toResponse $ toJSON arr
-
--- | Helper Functions (Used outside of responses, e.g. by other features.)
+    -- Helper Functions (Used outside of responses, e.g. by other features.)
 
     -- Returns true if a user has previously voted for the
     -- package in question.
@@ -222,7 +202,7 @@ votesFeature  ServerEnv{..}
       return $ Render.renderVotesAnon numVotes pkgname
 
 
--- | Helper functions for constructing JSON responses.
+-- Helper functions for constructing JSON responses.
 
 -- Use to construct a list of tuples that can be toJSON'd
 objectL :: [(String, Value)] -> Value
