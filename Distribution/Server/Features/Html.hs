@@ -15,7 +15,7 @@ import Distribution.Server.Features.BuildReports.Render
 import Distribution.Server.Features.PackageCandidates
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.DownloadCount
-import Distribution.Server.Features.Ranking
+import Distribution.Server.Features.Votes
 import Distribution.Server.Features.Search
 import Distribution.Server.Features.Search as Search
 import Distribution.Server.Features.PreferredVersions
@@ -103,7 +103,7 @@ initHtmlFeature :: ServerEnv
                     -> VersionsFeature
                     -- [reverse index disabled] -> ReverseFeature
                     -> TagsFeature -> DownloadFeature
-                    -> RankingFeature
+                    -> VotesFeature
                     -> ListFeature -> SearchFeature
                     -> MirrorFeature -> DistroFeature
                     -> DocumentationFeature
@@ -186,7 +186,7 @@ htmlFeature :: UserFeature
             -> VersionsFeature
             -> TagsFeature
             -> DownloadFeature
-            -> RankingFeature
+            -> VotesFeature
             -> ListFeature
             -> SearchFeature
             -> MirrorFeature
@@ -439,7 +439,7 @@ mkHtmlCore :: HtmlUtilities
            -> TarIndexCacheFeature
            -> ReportsFeature
            -> DownloadFeature
-           -> RankingFeature
+           -> VotesFeature
            -> DistroFeature
            -> PackageContentsFeature
            -> HtmlTags
@@ -462,7 +462,7 @@ mkHtmlCore HtmlUtilities{..}
            TarIndexCacheFeature{cachedTarIndex}
            reportsFeature
            DownloadFeature{recentPackageDownloads,totalPackageDownloads}
-           RankingFeature{..}
+           VotesFeature{..}
            DistroFeature{queryPackageStatus}
            PackageContentsFeature{packageRender}
            HtmlTags{..}
@@ -536,12 +536,12 @@ mkHtmlCore HtmlUtilities{..}
         -- (totalDown, versionDown) <- perVersionDownloads pkg
         totalDown <- cmFind pkgname `liftM` totalPackageDownloads
         recentDown <- cmFind pkgname `liftM` recentPackageDownloads
-        pkgStarsHtml <- renderStarsHtml pkgname
+        pkgVotesHtml <- renderVotesHtml pkgname
         let distHtml = case distributions of
                 [] -> []
                 _  -> [("Distributions", concatHtml . intersperse (toHtml ", ") $ map showDist distributions)]
             afterHtml  = distHtml ++ [ Pages.renderDownloads totalDown recentDown {- versionDown $ packageVersion realpkg-}
-                                    , pkgStarsHtml
+                                    , pkgVotesHtml
                                      -- [reverse index disabled] ,Pages.reversePackageSummary realpkg revr revCount
                                      ]
         -- bottom sections, currently only documentation

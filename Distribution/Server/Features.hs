@@ -43,7 +43,7 @@ import Distribution.Server.Features.EditCabalFiles      (initEditCabalFilesFeatu
 import Distribution.Server.Features.AdminFrontend       (initAdminFrontendFeature)
 import Distribution.Server.Features.AdminLog            (initAdminLogFeature)
 import Distribution.Server.Features.HoogleData          (initHoogleDataFeature)
-import Distribution.Server.Features.Ranking             (initRankingFeature)
+import Distribution.Server.Features.Votes               (initVotesFeature)
 #endif
 import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
 
@@ -139,8 +139,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                                initAdminFrontendFeature env
     mkHoogleDataFeature     <- logStartup "hoogle" $
                                initHoogleDataFeature env
-    mkRankingFeature        <- logStartup "ranking" $
-                               initRankingFeature env
+    mkVotesFeature          <- logStartup "votes" $
+                               initVotesFeature env
     mkAdminLogFeature       <- logStartup "admin log" $
                                initAdminLogFeature env
 #endif
@@ -225,7 +225,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          coreFeature
                          usersFeature
 
-    rankingFeature      <- mkRankingFeature
+    votesFeature    <- mkVotesFeature
                            coreFeature
                            usersFeature
 
@@ -267,7 +267,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          -- [reverse index disabled] reverseFeature
                          tagsFeature
                          downloadFeature
-                         rankingFeature
+                         votesFeature
                          listFeature
                          searchFeature
                          mirrorFeature
@@ -332,7 +332,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , editCabalFeature
          , adminFrontendFeature
          , getFeatureInterface hoogleDataFeature
-         , getFeatureInterface rankingFeature
+         , getFeatureInterface votesFeature
          , getFeatureInterface adminLogFeature
 #endif
          , staticFilesFeature
