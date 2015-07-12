@@ -238,32 +238,34 @@ uploadFeature ServerEnv{serverBlobStore = store}
     -- User groups and authentication
     trusteesGroupDescription :: UserGroup
     trusteesGroupDescription = UserGroup {
-        groupDesc = trusteeDescription,
-        queryUserList  = queryState  trusteesState   GetTrusteesList,
-        addUserList    = updateState trusteesState . AddHackageTrustee,
-        removeUserList = updateState trusteesState . RemoveHackageTrustee,
-        canAddGroup    = [adminGroup],
-        canRemoveGroup = [adminGroup]
+        groupDesc             = trusteeDescription,
+        queryUserGroup        = queryState  trusteesState   GetTrusteesList,
+        addUserToGroup        = updateState trusteesState . AddHackageTrustee,
+        removeUserFromGroup   = updateState trusteesState . RemoveHackageTrustee,
+        groupsAllowedToAdd    = [adminGroup],
+        groupsAllowedToDelete = [adminGroup]
     }
 
     uploadersGroupDescription :: UserGroup
     uploadersGroupDescription = UserGroup {
-        groupDesc      = uploaderDescription,
-        queryUserList  = queryState  uploadersState   GetUploadersList,
-        addUserList    = updateState uploadersState . AddHackageUploader,
-        removeUserList = updateState uploadersState . RemoveHackageUploader,
-        canAddGroup    = [adminGroup],
-        canRemoveGroup = [adminGroup]
+        groupDesc             = uploaderDescription,
+        queryUserGroup        = queryState  uploadersState   GetUploadersList,
+        addUserToGroup        = updateState uploadersState . AddHackageUploader,
+        removeUserFromGroup   = updateState uploadersState . RemoveHackageUploader,
+        groupsAllowedToAdd    = [adminGroup],
+        groupsAllowedToDelete = [adminGroup]
     }
 
     maintainersGroupDescription :: PackageName -> UserGroup
-    maintainersGroupDescription name = fix $ \u -> UserGroup {
-        groupDesc      = maintainerDescription name,
-        queryUserList  = queryState  maintainersState $ GetPackageMaintainers name,
-        addUserList    = updateState maintainersState . AddPackageMaintainer name,
-        removeUserList = updateState maintainersState . RemovePackageMaintainer name,
-        canAddGroup    = [u, adminGroup],
-        canRemoveGroup = [u, adminGroup]
+    maintainersGroupDescription name =
+      fix $ \thisgroup ->
+      UserGroup {
+        groupDesc             = maintainerDescription name,
+        queryUserGroup        = queryState  maintainersState $ GetPackageMaintainers name,
+        addUserToGroup        = updateState maintainersState . AddPackageMaintainer name,
+        removeUserFromGroup   = updateState maintainersState . RemovePackageMaintainer name,
+        groupsAllowedToAdd    = [thisgroup, adminGroup],
+        groupsAllowedToDelete = [thisgroup, adminGroup]
       }
 
     maintainerDescription :: PackageName -> GroupDescription
@@ -309,7 +311,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
              -- make package maintainers group for new package
             let existedBefore = packageExists pkgIndex pkgid
             when (not existedBefore) $
-                liftIO $ addUserList (maintainersGroup (packageName pkgid)) uid
+                liftIO $ addUserToGroup (maintainersGroup (packageName pkgid)) uid
             return uresult
           -- this is already checked in processUpload, and race conditions are highly unlikely but imaginable
           else errForbidden "Upload failed" [MText "Package already exists."]
@@ -320,7 +322,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
     processUpload :: PackageIndex PkgInfo -> Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)
     processUpload state uid res = do
         let pkg = packageId (uploadDesc res)
-        pkgGroup <- queryUserList (maintainersGroup (packageName pkg))
+        pkgGroup <- queryUserGroup (maintainersGroup (packageName pkg))
         if packageIdExists state pkg
           then uploadError versionExists --allow trustees to do this?
           else if packageExists state pkg && not (uid `Group.member` pkgGroup)

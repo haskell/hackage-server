@@ -1,80 +1,57 @@
-{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, ExistentialQuantification #-}
 module Distribution.Server.Users.Group (
-    UserList(..),
+    module UserIdSet,
     UserGroup(..),
     GroupDescription(..),
     nullDescription,
     groupName,
-    empty,
-    add,
-    remove,
-    member,
-    enumerate,
-    fromList,
-    unions,
-    queryGroups
+    queryUserGroups,
   ) where
 
 import Distribution.Server.Users.Types
+import Distribution.Server.Users.UserIdSet as UserIdSet
 import Distribution.Server.Framework.MemSize
 
-import qualified Data.IntSet as IntSet
-import Data.Monoid (Monoid)
-import Data.SafeCopy (SafeCopy(..), contain)
-import qualified Data.Serialize as Serialize
-import Data.Typeable (Typeable)
 import Control.DeepSeq
-import Control.Applicative ((<$>))
 
-import Prelude hiding (id)
 
--- | Some subset of users, eg those allowed to perform some action.
+-- | A stateful interface to a group of users. It provides actions for
+-- querying and modifying a user group.
 --
-newtype UserList = UserList IntSet.IntSet
-  deriving (Eq, Monoid, Typeable, Show, MemSize)
-
-empty :: UserList
-empty = UserList IntSet.empty
-
-add :: UserId -> UserList -> UserList
-add (UserId id) (UserList group) = UserList (IntSet.insert id group)
-
-remove :: UserId -> UserList -> UserList
-remove (UserId id) (UserList group) = UserList (IntSet.delete id group)
-
-member :: UserId -> UserList -> Bool
-member (UserId id) (UserList group) = IntSet.member id group
-
-enumerate :: UserList -> [UserId]
-enumerate (UserList group) = map UserId (IntSet.toList group)
-
-fromList :: [UserId] -> UserList
-fromList ids = UserList $ IntSet.fromList (map (\(UserId uid) -> uid) ids)
-
-unions :: [UserList] -> UserList
-unions groups = UserList (IntSet.unions [ group | UserList group <- groups ])
-
--- | An abstraction over a UserList for dynamically querying and modifying
--- a user group.
+-- This interface is meant not just for singleton user groups, but also
+-- collections of groups. Some features may provide a UserGroup parametrized
+-- by an argument (e.g. there's a maintainer group per-package).
 --
--- This structure is not only meant for singleton user groups, but also collections
--- of groups. Some features may provide a UserGroup parametrized by an argument.
+-- It includes a list of which other users groups are supposed to be allowed
+-- to edit this one: the 'canRemoveGroup' and 'canAddGroup' lists. One often
+-- wants a user group to be in its own 'canRemoveGroup' or 'canAddGroup'
+-- lists. This is easy using a recursive definition such as:
+--
+-- > let fooGroup = UserGroup { ... , canAddGroup = [adminGroup, fooGroup] }
 --
 data UserGroup = UserGroup {
-    -- a description of the group for display
+    -- | A description of the group for display purposes
     groupDesc :: GroupDescription,
-    -- dynamic querying for its members
-    queryUserList :: IO UserList,
-    -- dynamically add a member (does nothing if already exists)
-    -- creates the group if it didn't exist previously
-    addUserList :: UserId -> IO (),
-    -- dynamically remove a member (does nothing if not present)
-    -- creates the group if it didn't exist previously
-    removeUserList :: UserId -> IO (),
-    -- user groups which can remove from one
-    canRemoveGroup :: [UserGroup],
-    -- user groups which can add to this one  (use 'fix' to add to self)
-    canAddGroup :: [UserGroup]
+
+    -- | Query the current set of group members
+    queryUserGroup :: IO UserIdSet,
+
+    -- | Add a user to this group. This does nothing if it already exists.
+    -- It initialises the group state if it wasn't previously initialised.
+    addUserToGroup :: UserId -> IO (),
+
+    -- | Remove a user from this group. It does nothing if not present.
+    -- It initialises the group state if it wasn't previously initialised.
+    removeUserFromGroup :: UserId -> IO (),
+
+    -- | Other user groups which are authorised to remove users from this one
+    -- (which may include this one recursively).
+    --
+    groupsAllowedToDelete :: [UserGroup],
+
+    -- | User groups which are authorised to add members to this one (which
+    -- may include this one recursively).
+    --
+    groupsAllowedToAdd :: [UserGroup]
 }
 
 -- | A displayable description for a user group.
@@ -83,24 +60,25 @@ data UserGroup = UserGroup {
 -- called "A"; given a groupTitle  of "A" and a groupEntity of Just ("B",
 -- Just "C"), the title will be displayed as "A for <a href=C>B</a>".
 data GroupDescription = GroupDescription {
-    groupTitle :: String,
-    groupEntity :: Maybe (String, Maybe String),
-    groupPrologue  :: String
+    groupTitle    :: String,
+    groupEntity   :: Maybe (String, Maybe String),
+    groupPrologue :: String
 }
 
 nullDescription :: GroupDescription
-nullDescription = GroupDescription { groupTitle = "", groupEntity = Nothing, groupPrologue = "" }
+nullDescription =
+    GroupDescription {
+      groupTitle    = "",
+      groupEntity   = Nothing,
+      groupPrologue = ""
+    }
 
 groupName :: GroupDescription -> String
-groupName desc = groupTitle desc ++ maybe "" (\(for, _) -> " for " ++ for) (groupEntity desc)
+groupName desc =
+    groupTitle desc ++ maybe "" (\(for, _) -> " for " ++ for) (groupEntity desc)
 
-queryGroups :: [UserGroup] -> IO UserList
-queryGroups = fmap unions . mapM queryUserList
-
-
-instance SafeCopy UserList where
-  putCopy (UserList x) = contain $ Serialize.put x
-  getCopy = contain $ UserList <$> Serialize.get
+queryUserGroups :: [UserGroup] -> IO UserIdSet
+queryUserGroups = fmap UserIdSet.unions . mapM queryUserGroup
 
 -- for use in Caches, really...
 instance NFData GroupDescription where

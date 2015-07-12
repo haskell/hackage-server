@@ -29,7 +29,7 @@ import qualified Data.Set as Set
 
 import Distribution.Server.Features.Distro.Types
 import qualified Distribution.Server.Users.Group as Group
-import Distribution.Server.Users.Group (UserList)
+import Distribution.Server.Users.Group (UserIdSet)
 
 import Distribution.Package
 
@@ -137,9 +137,9 @@ addPackage distro package info dv@DistroVersions{..}
                       distroMap
       }
 
-getDistroMaintainers :: DistroName -> Distributions -> Maybe UserList
+getDistroMaintainers :: DistroName -> Distributions -> Maybe UserIdSet
 getDistroMaintainers name = Map.lookup name . nameMap
 
-modifyDistroMaintainers :: DistroName -> (UserList -> UserList) -> Distributions -> Distributions
+modifyDistroMaintainers :: DistroName -> (UserIdSet -> UserIdSet) -> Distributions -> Distributions
 modifyDistroMaintainers name func dists = dists {nameMap = Map.alter (Just . func . fromMaybe Group.empty) name (nameMap dists) }
 

@@ -263,7 +263,7 @@ initState server (admin, pass) = do
             updateAddUser uname (Users.UserAuth userAuth)
         Nothing -> fail "Couldn't parse admin name (should be alphanumeric)"
     case muid of
-        Right uid -> Group.addUserList adminGroup uid
+        Right uid -> Group.addUserToGroup adminGroup uid
         Left Users.ErrUserNameClash -> fail $ "Inconceivable!! failed to create admin user"
 
 -- The top-level server part.

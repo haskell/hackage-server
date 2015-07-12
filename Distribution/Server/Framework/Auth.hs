@@ -33,6 +33,7 @@ import Distribution.Server.Users.Types (UserId, UserName(..), UserAuth(..), User
 import qualified Distribution.Server.Users.Types as Users
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
+import qualified Distribution.Server.Users.UserIdSet as UserIdSet
 import Distribution.Server.Framework.AuthCrypt
 import Distribution.Server.Framework.AuthTypes
 import Distribution.Server.Framework.Error
@@ -142,8 +143,8 @@ checkPriviledged :: MonadIO m => Users.Users -> UserId -> [PrivilegeCondition] -
 checkPriviledged _users _uid [] = return False
 
 checkPriviledged users uid (InGroup ugroup:others) = do
-  uset <- liftIO $ Group.queryUserList ugroup
-  if Group.member uid uset
+  uset <- liftIO $ Group.queryUserGroup ugroup
+  if UserIdSet.member uid uset
     then return True
     else checkPriviledged users uid others
 

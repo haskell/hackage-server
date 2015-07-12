@@ -1742,9 +1742,9 @@ htmlGroupResource UserFeature{..} r@(GroupResource groupR userR getGroup) =
     getList dpath = do
         group    <- getGroup dpath
         userDb   <- queryGetUserDb
-        userlist <- liftIO . queryUserList $ group
+        usergroup <- liftIO . queryUserGroup $ group
         let unames = [ Users.userIdToName userDb uid
-                     | uid   <- Group.enumerate userlist ]
+                     | uid   <- Group.toList usergroup ]
         let baseUri = renderResource' groupR dpath
         return . toResponse . Resource.XHtml $ Pages.groupPage
             unames baseUri (False, False) (groupDesc group)
@@ -1752,9 +1752,9 @@ htmlGroupResource UserFeature{..} r@(GroupResource groupR userR getGroup) =
         group    <- getGroup dpath
         (canAdd, canDelete) <- lookupGroupEditAuth group
         userDb   <- queryGetUserDb
-        userlist <- liftIO . queryUserList $ group
+        usergroup <- liftIO . queryUserGroup $ group
         let unames = [ Users.userIdToName userDb uid
-                     | uid   <- Group.enumerate userlist ]
+                     | uid   <- Group.toList usergroup ]
         let baseUri = renderResource' groupR dpath
         return . toResponse . Resource.XHtml $ Pages.groupPage
             unames baseUri (canAdd, canDelete) (groupDesc group)

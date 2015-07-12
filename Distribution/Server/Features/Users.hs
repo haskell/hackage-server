@@ -18,7 +18,8 @@ import Distribution.Server.Users.State
 import Distribution.Server.Users.Backup
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
-import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..), UserList, nullDescription)
+import Distribution.Server.Users.Group
+         (UserGroup(..), GroupDescription(..), UserIdSet, nullDescription)
 
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
@@ -555,17 +556,17 @@ userFeature  usersState adminsState
     ------ User group management
     adminGroupDesc :: UserGroup
     adminGroupDesc = UserGroup {
-          groupDesc      = nullDescription { groupTitle = "Hackage admins" },
-          queryUserList  = queryState adminsState GetAdminList,
-          addUserList    =  updateState adminsState . AddHackageAdmin,
-          removeUserList =  updateState adminsState . RemoveHackageAdmin,
-          canAddGroup    = [adminGroupDesc],
-          canRemoveGroup = [adminGroupDesc]
+          groupDesc             = nullDescription { groupTitle = "Hackage admins" },
+          queryUserGroup        = queryState  adminsState   GetAdminList,
+          addUserToGroup        = updateState adminsState . AddHackageAdmin,
+          removeUserFromGroup   = updateState adminsState . RemoveHackageAdmin,
+          groupsAllowedToAdd    = [adminGroupDesc],
+          groupsAllowedToDelete = [adminGroupDesc]
         }
 
     groupAddUser :: UserGroup -> DynamicPath -> ServerPartE ()
     groupAddUser group _ = do
-        actorUid <- guardAuthorised (map InGroup (canAddGroup group))
+        actorUid <- guardAuthorised (map InGroup (groupsAllowedToAdd group))
         users <- queryState usersState GetUserDb
         muser <- optional $ look "user"
         reason <- optional $ look "reason"
@@ -574,22 +575,22 @@ userFeature  usersState adminsState
             Just ustr -> case simpleParse ustr >>= \uname -> Users.lookupUserName uname users of
                 Nothing      -> addError $ "No user with name " ++ show ustr ++ " found"
                 Just (uid,_) -> do
-                             liftIO $ addUserList group uid
+                             liftIO $ addUserToGroup group uid
                              runHook_ groupChangedHook (groupDesc group, True,actorUid,uid,fromMaybe "" reason)
        where addError = errBadRequest "Failed to add user" . return . MText
 
     groupDeleteUser :: UserGroup -> DynamicPath -> ServerPartE ()
     groupDeleteUser group dpath = do
-      actorUid <- guardAuthorised (map InGroup (canRemoveGroup group))
+      actorUid <- guardAuthorised (map InGroup (groupsAllowedToDelete group))
       uid <- lookupUserName =<< userNameInPath dpath
       reason <- localRq (\req -> req {rqMethod = POST}) . optional $ look "reason"
-      liftIO $ removeUserList group uid
+      liftIO $ removeUserFromGroup group uid
       runHook_ groupChangedHook (groupDesc group, False,actorUid,uid,fromMaybe "" reason)
 
     lookupGroupEditAuth :: UserGroup -> ServerPartE (Bool, Bool)
     lookupGroupEditAuth group = do
-      addList    <- liftIO . Group.queryGroups $ canAddGroup group
-      removeList <- liftIO . Group.queryGroups $ canRemoveGroup group
+      addList    <- liftIO . Group.queryUserGroups $ groupsAllowedToAdd group
+      removeList <- liftIO . Group.queryUserGroups $ groupsAllowedToDelete group
       uid <- guardAuthenticated
       let (canAdd, canDelete) = (uid `Group.member` addList, uid `Group.member` removeList)
       if not (canAdd || canDelete)
@@ -610,14 +611,14 @@ userFeature  usersState adminsState
             descr = groupDesc group
             groupUri = renderResource mainr []
             group' = group
-              { addUserList = \uid -> do
+              { addUserToGroup = \uid -> do
                     addGroupIndex uid groupUri descr
-                    addUserList group uid
-              , removeUserList = \uid -> do
+                    addUserToGroup group uid
+              , removeUserFromGroup = \uid -> do
                     removeGroupIndex uid groupUri
-                    removeUserList group uid
+                    removeUserFromGroup group uid
               }
-        ulist <- queryUserList group
+        ulist <- queryUserGroup group
         initGroupIndex ulist groupUri descr
         let groupr = GroupResource {
                 groupResource = (extendResourcePath "/.:format" mainr) {
@@ -653,7 +654,7 @@ userFeature  usersState adminsState
         sequence_
           [ do let group = mkGroup x
                    dpath = mkPath x
-               ulist <- queryUserList group
+               ulist <- queryUserGroup group
                initGroupIndex ulist (renderResource' mainr dpath) (groupDesc group)
           | x <- initialGroupData ]
 
@@ -661,12 +662,12 @@ userFeature  usersState adminsState
               let group = mkGroup x
                   dpath = mkPath x
                in group {
-                    addUserList = \uid -> do
+                    addUserToGroup = \uid -> do
                         addGroupIndex uid (renderResource' mainr dpath) (groupDesc group)
-                        addUserList group uid
-                  , removeUserList = \uid -> do
+                        addUserToGroup group uid
+                  , removeUserFromGroup = \uid -> do
                         removeGroupIndex uid (renderResource' mainr dpath)
-                        removeUserList group uid
+                        removeUserFromGroup group uid
                   }
 
             groupr = GroupResource {
@@ -688,7 +689,7 @@ userFeature  usersState adminsState
     serveUserGroupGet groupr dpath = do
       group    <- getGroup groupr dpath
       userDb   <- queryGetUserDb
-      userlist <- liftIO $ queryUserList group
+      userlist <- liftIO $ queryUserGroup group
       return . toResponse $ toJSON
           UserGroupResource {
             ui_title       = T.pack $ groupTitle (groupDesc group),
@@ -697,26 +698,26 @@ userFeature  usersState adminsState
                                  ui_username = Users.userIdToName userDb uid,
                                  ui_userid   = uid
                                }
-                             | uid <- Group.enumerate userlist ]
+                             | uid <- Group.toList userlist ]
           }
 
     --TODO: add serveUserGroupUserPost for the sake of the html frontend
     --      and then remove groupAddUser & groupDeleteUser
     serveUserGroupUserPut groupr dpath = do
       group <- getGroup groupr dpath
-      actorUid <- guardAuthorised (map InGroup (canAddGroup group))
+      actorUid <- guardAuthorised (map InGroup (groupsAllowedToAdd group))
       uid <- lookupUserName =<< userNameInPath dpath
       reason <- optional $ look "reason"
-      liftIO $ addUserList group uid
+      liftIO $ addUserToGroup group uid
       runHook_ groupChangedHook (groupDesc group, True,actorUid,uid,fromMaybe "" reason)
       goToList groupr dpath
 
     serveUserGroupUserDelete groupr dpath = do
       group <- getGroup groupr dpath
-      actorUid <- guardAuthorised (map InGroup (canRemoveGroup group))
+      actorUid <- guardAuthorised (map InGroup (groupsAllowedToDelete group))
       uid <- lookupUserName =<< userNameInPath dpath
       reason <- optional $ look "reason"
-      liftIO $ removeUserList group uid
+      liftIO $ removeUserFromGroup group uid
       runHook_ groupChangedHook (groupDesc group, False,actorUid,uid,fromMaybe "" reason)
       goToList groupr dpath
 
@@ -740,11 +741,11 @@ userFeature  usersState adminsState
       where
         keepSet m = if Set.null m then Nothing else Just m
 
-    initGroupIndex :: MonadIO m => UserList -> String -> GroupDescription -> m ()
+    initGroupIndex :: MonadIO m => UserIdSet -> String -> GroupDescription -> m ()
     initGroupIndex ulist uri desc =
         modifyMemState groupIndex $
           adjustGroupIndex
-            (IntMap.unionWith Set.union (IntMap.fromList . map mkEntry $ Group.enumerate ulist))
+            (IntMap.unionWith Set.union (IntMap.fromList . map mkEntry $ Group.toList ulist))
             (Map.insert uri desc)
       where
         mkEntry (UserId uid) = (uid, Set.singleton uri)

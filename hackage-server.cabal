@@ -144,6 +144,7 @@ executable hackage-server
     Distribution.Server.Users.Types
     Distribution.Server.Users.Backup
     Distribution.Server.Users.Users
+    Distribution.Server.Users.UserIdSet
 
     Distribution.Server.Util.Histogram
     Distribution.Server.Util.CountingMap

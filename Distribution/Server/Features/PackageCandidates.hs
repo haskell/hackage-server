@@ -308,7 +308,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
             }
         void $ updateState candidatesState $ AddCandidate candidate
         let group = maintainersGroup (packageName pkgid)
-        liftIO $ Group.addUserList group uid
+        liftIO $ Group.addUserToGroup group uid
         return candidate
 
     -- | Helper function for uploadCandidate.
@@ -318,7 +318,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         if not (isRight pkg)
           then uploadFailed "Name of package or package version does not match"
           else do
-            pkgGroup <- Group.queryUserList (maintainersGroup (packageName pkg))
+            pkgGroup <- Group.queryUserGroup (maintainersGroup (packageName pkg))
             if packageExists state pkg && not (uid `Group.member` pkgGroup)
               then uploadFailed "Not authorized to upload a candidate for this package"
               else return Nothing

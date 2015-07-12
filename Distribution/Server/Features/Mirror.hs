@@ -148,12 +148,12 @@ mirrorFeature ServerEnv{serverBlobStore = store}
       }
 
     mirrorersGroupDesc = UserGroup {
-        groupDesc      = nullDescription { groupTitle = "Mirror clients" },
-        queryUserList  = queryState  mirrorersState   GetMirrorClientsList,
-        addUserList    = updateState mirrorersState . AddMirrorClient,
-        removeUserList = updateState mirrorersState . RemoveMirrorClient,
-        canRemoveGroup = [adminGroup],
-        canAddGroup    = [adminGroup]
+        groupDesc             = nullDescription { groupTitle = "Mirror clients" },
+        queryUserGroup        = queryState  mirrorersState   GetMirrorClientsList,
+        addUserToGroup        = updateState mirrorersState . AddMirrorClient,
+        removeUserFromGroup   = updateState mirrorersState . RemoveMirrorClient,
+        groupsAllowedToDelete = [adminGroup],
+        groupsAllowedToAdd    = [adminGroup]
     }
 
 
