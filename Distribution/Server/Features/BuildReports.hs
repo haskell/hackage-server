@@ -37,10 +37,10 @@ data ReportsFeature = ReportsFeature {
     reportsFeatureInterface :: HackageFeature,
 
     packageReports :: DynamicPath -> ([(BuildReportId, BuildReport)] -> ServerPartE Response) -> ServerPartE Response,
-    packageReport :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog),
+    packageReport  :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog),
 
-    queryPackageReports :: MonadIO m => PackageId -> m [(BuildReportId, BuildReport)],
-    queryBuildLog :: MonadIO m => BuildLog -> m Resource.BuildLog,
+    queryPackageReports :: forall m. MonadIO m => PackageId -> m [(BuildReportId, BuildReport)],
+    queryBuildLog       :: forall m. MonadIO m => BuildLog  -> m Resource.BuildLog,
 
     reportsResource :: ReportsResource
 }

@@ -19,7 +19,7 @@ import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.List (isInfixOf)
 import Data.String ()
 import System.Directory
-import System.Exit
+import System.Exit (ExitCode(..))
 import System.FilePath
 import System.IO
 

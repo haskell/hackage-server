@@ -43,8 +43,8 @@ import Control.Concurrent (forkIO)
 data DownloadFeature = DownloadFeature {
     downloadFeatureInterface :: HackageFeature
   , downloadResource         :: DownloadResource
-  , totalPackageDownloads    :: MonadIO m => m TotalDownloads
-  , recentPackageDownloads   :: MonadIO m => m RecentDownloads
+  , totalPackageDownloads    :: forall m. MonadIO m => m TotalDownloads
+  , recentPackageDownloads   :: forall m. MonadIO m => m RecentDownloads
   }
 
 instance IsHackageFeature DownloadFeature where

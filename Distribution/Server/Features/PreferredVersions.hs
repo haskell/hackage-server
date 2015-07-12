@@ -46,8 +46,8 @@ import qualified Data.Vector         as Vector
 data VersionsFeature = VersionsFeature {
     versionsFeatureInterface :: HackageFeature,
 
-    queryGetPreferredInfo :: MonadIO m => PackageName -> m PreferredInfo,
-    queryGetDeprecatedFor :: MonadIO m => PackageName -> m (Maybe [PackageName]),
+    queryGetPreferredInfo :: forall m. MonadIO m => PackageName -> m PreferredInfo,
+    queryGetDeprecatedFor :: forall m. MonadIO m => PackageName -> m (Maybe [PackageName]),
 
     versionsResource :: VersionsResource,
     preferredHook  :: Hook (PackageName, PreferredInfo) (),
@@ -58,9 +58,9 @@ data VersionsFeature = VersionsFeature {
 
     doPreferredRender     :: PackageName -> ServerPartE PreferredRender,
     doDeprecatedRender    :: PackageName -> ServerPartE (Maybe [PackageName]),
-    doPreferredsRender    :: MonadIO m => m [(PackageName, PreferredRender)],
-    doDeprecatedsRender   :: MonadIO m => m [(PackageName, [PackageName])],
-    makePreferredVersions :: MonadIO m => m String,
+    doPreferredsRender    :: forall m. MonadIO m => m [(PackageName, PreferredRender)],
+    doDeprecatedsRender   :: forall m. MonadIO m => m [(PackageName, [PackageName])],
+    makePreferredVersions :: forall m. MonadIO m => m String,
     withPackagePreferred     :: forall a. PackageId -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a,
     withPackagePreferredPath :: forall a. DynamicPath -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a
 }
