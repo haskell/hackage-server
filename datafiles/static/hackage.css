@@ -49,14 +49,14 @@ a[href]:hover { text-decoration:underline; }
    For reasons, see:
       http://yui.yahooapis.com/3.1.1/build/cssfonts/fonts.css
  */
- 
+
 body {
 	font:11pt/1.4 sans-serif;
 	*font-size:small; /* for IE */
 	*font:x-small; /* for IE in quirks mode */
 }
 
-h1 { font-size: 146.5%; /* 19pt */ } 
+h1 { font-size: 146.5%; /* 19pt */ }
 h2 { font-size: 131%;   /* 17pt */ }
 h3 { font-size: 116%;   /* 15pt */ }
 h4 { font-size: 100%;   /* 13pt */ }
@@ -99,7 +99,7 @@ pre, code, kbd, samp, .src {
 
 /* @group Common */
 
-.caption, h1, h2, h3, h4, h5, h6 { 
+.caption, h1, h2, h3, h4, h5, h6 {
   font-weight: bold;
   color: rgb(78,98,114);
   margin: 0.8em 0 0.4em;
@@ -123,7 +123,7 @@ ul.links {
 
 ul.links li {
   display: inline;
-  border-left: 1px solid #d5d5d5; 
+  border-left: 1px solid #d5d5d5;
   white-space: nowrap;
   padding: 0;
 }
@@ -288,7 +288,7 @@ ul.links li form {
 ul.links li form input {
 	border:0px;
   padding:1px;
-	width: 8em; 
+	width: 8em;
 	background: rgb(235,235,235); /* url('/static/search.png') no-repeat 3px 4px; */
 }
 
@@ -486,7 +486,7 @@ ul.links li form button:hover {
 }
 
 #mini > * {
-  font-size: 93%; /* 12pt */  
+  font-size: 93%; /* 12pt */
 }
 
 #mini #module-list .caption,
@@ -650,3 +650,16 @@ ul.directory-list {
   list-style: none;
   margin: 0 0 0 2em;
 }
+
+.text-button {
+  font-size: small;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: rgb(196,69,29);
+}
+
+.text-button:hover {
+  text-decoration: underline;
+}
+

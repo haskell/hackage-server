@@ -43,6 +43,7 @@ import Distribution.Server.Features.EditCabalFiles      (initEditCabalFilesFeatu
 import Distribution.Server.Features.AdminFrontend       (initAdminFrontendFeature)
 import Distribution.Server.Features.AdminLog            (initAdminLogFeature)
 import Distribution.Server.Features.HoogleData          (initHoogleDataFeature)
+import Distribution.Server.Features.Ranking             (initRankingFeature)
 #endif
 import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
 
@@ -138,6 +139,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                                initAdminFrontendFeature env
     mkHoogleDataFeature     <- logStartup "hoogle" $
                                initHoogleDataFeature env
+    mkRankingFeature        <- logStartup "ranking" $
+                               initRankingFeature env
     mkAdminLogFeature       <- logStartup "admin log" $
                                initAdminLogFeature env
 #endif
@@ -162,7 +165,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          coreFeature
 
 #ifndef MINIMAL
-    tarIndexCacheFeature <- mkTarIndexCacheFeature 
+    tarIndexCacheFeature <- mkTarIndexCacheFeature
                               usersFeature
 
     packageContentsFeature <- mkPackageContentsFeature
@@ -222,6 +225,10 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          coreFeature
                          usersFeature
 
+    rankingFeature      <- mkRankingFeature
+                           coreFeature
+                           usersFeature
+
     tagsFeature     <- mkTagsFeature
                          coreFeature
                          uploadFeature
@@ -260,6 +267,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          -- [reverse index disabled] reverseFeature
                          tagsFeature
                          downloadFeature
+                         rankingFeature
                          listFeature
                          searchFeature
                          mirrorFeature
@@ -324,6 +332,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , editCabalFeature
          , adminFrontendFeature
          , getFeatureInterface hoogleDataFeature
+         , getFeatureInterface rankingFeature
          , getFeatureInterface adminLogFeature
 #endif
          , staticFilesFeature
