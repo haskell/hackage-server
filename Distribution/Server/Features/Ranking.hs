@@ -191,6 +191,7 @@ rankingFeature  ServerEnv{..}
 
     getAllPackageStars :: DynamicPath -> ServerPartE Response
     getAllPackageStars dpath = do
+      guardAuthorised [InGroup adminGroup]
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
       dbStarsMap <- queryState starsState RState.DbGetStars
