@@ -40,8 +40,8 @@ import qualified Text.XHtml.Strict as X
 -- | Define the prototype for this feature
 data RankingFeature = RankingFeature {
     rankingFeatureInterface :: HackageFeature
-  , didUserStar             :: MonadIO m => PackageName -> UserId -> m Bool
-  , pkgNumStars             :: MonadIO m => PackageName -> m Int
+  , didUserStar             :: forall m. MonadIO m => PackageName -> UserId -> m Bool
+  , pkgNumStars             :: forall m. MonadIO m => PackageName -> m Int
   , renderStarsHtml         :: PackageName -> ServerPartE (String, X.Html)
 }
 
