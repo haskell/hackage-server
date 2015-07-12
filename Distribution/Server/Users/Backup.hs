@@ -21,7 +21,7 @@ import Distribution.Server.Framework.BackupRestore
 import Distribution.Text (display)
 import Data.Version
 import Text.CSV (CSV, Record)
-import qualified Data.IntSet as IntSet
+
 
 -- Import for the user database
 userBackup :: RestoreBackup Users

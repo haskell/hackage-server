@@ -47,7 +47,7 @@ data PackageCandidatesFeature = PackageCandidatesFeature {
     candidatesResource         :: PackageCandidatesResource,
 
     -- queries
-    queryGetCandidateIndex :: MonadIO m => m (PackageIndex CandPkgInfo),
+    queryGetCandidateIndex :: forall m. MonadIO m => m (PackageIndex CandPkgInfo),
 
     postCandidate         :: ServerPartE Response,
     postPackageCandidate  :: DynamicPath -> ServerPartE Response,

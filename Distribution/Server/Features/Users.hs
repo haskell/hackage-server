@@ -73,10 +73,10 @@ data UserFeature = UserFeature {
     -- | Adds a user with a fresh name.
     updateAddUser     :: forall m. MonadIO m => UserName -> UserAuth -> m (Either Users.ErrUserNameClash UserId),
     -- | Sets the account-enabled status of an existing user to True or False.
-    updateSetUserEnabledStatus :: MonadIO m => UserId -> Bool
+    updateSetUserEnabledStatus :: forall m. MonadIO m => UserId -> Bool
                                -> m (Maybe (Either Users.ErrNoSuchUserId Users.ErrDeletedUser)),
     -- | Sets the credentials of an existing user.
-    updateSetUserAuth :: MonadIO m => UserId -> UserAuth
+    updateSetUserAuth :: forall m. MonadIO m => UserId -> UserAuth
                       -> m (Maybe (Either Users.ErrNoSuchUserId Users.ErrDeletedUser)),
 
     -- | Adds a user to a group based on a "user" path component.
