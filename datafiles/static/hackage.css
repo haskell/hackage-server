@@ -684,3 +684,12 @@ ul.directory-list {
   text-decoration: underline;
 }
 
+/* Preferred and deprecated versions */
+
+.deprecated {
+    color:#999999 !important;
+}
+
+.unpreferred {
+    color:#308014 !important;
+}
