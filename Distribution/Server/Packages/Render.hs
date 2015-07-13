@@ -4,6 +4,8 @@
 module Distribution.Server.Packages.Render (
     -- * Package render
     PackageRender(..)
+  , DependencyTree
+  , IsBuildable (..)
   , doPackageRender
 
     -- * Utils
@@ -12,6 +14,7 @@ module Distribution.Server.Packages.Render (
 
 import Data.Maybe (catMaybes, isJust, maybeToList)
 import Control.Monad (guard)
+import Control.Arrow (second)
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
 import qualified Data.Vector as Vec
@@ -44,6 +47,8 @@ data PackageRender = PackageRender {
     rendPkgId        :: PackageIdentifier,
     rendDepends      :: [Dependency],
     rendExecNames    :: [String],
+    rendLibraryDeps  :: Maybe DependencyTree,
+    rendExecutableDeps :: [(String, DependencyTree)],
     rendLicenseName  :: String,
     rendLicenseFiles :: [FilePath],
     rendMaintainer   :: Maybe String,
@@ -69,6 +74,8 @@ doPackageRender users info = PackageRender
     { rendPkgId        = pkgInfoId info
     , rendDepends      = flatDependencies genDesc
     , rendExecNames    = map exeName (executables flatDesc)
+    , rendLibraryDeps  = depTree libBuildInfo `fmap` condLibrary genDesc
+    , rendExecutableDeps = second (depTree buildInfo) `map` condExecutables genDesc
     , rendLicenseName  = display (license desc) -- maybe make this a bit more human-readable
     , rendLicenseFiles = licenseFiles desc
     , rendMaintainer   = case maintainer desc of
@@ -105,6 +112,14 @@ doPackageRender users info = PackageRender
     flatDesc = flattenPackageDescription genDesc
     desc     = packageDescription genDesc
     pkgUri   = "/package/" ++ display (pkgInfoId info)
+
+    depTree :: (a -> BuildInfo) -> CondTree ConfVar [Dependency] a -> DependencyTree
+    depTree getBuildInfo = mapTreeData isBuildable . mapTreeConstrs simplifyDeps
+      where
+        simplifyDeps = sortDeps . combineDepsBy intersectVersionIntervals
+        isBuildable ctData = if buildable $ getBuildInfo ctData
+                               then Buildable
+                               else NotBuildable
     
     moduleHasDocs :: Maybe TarIndex -> ModuleName -> Bool
     moduleHasDocs Nothing       = const False
@@ -121,6 +136,12 @@ doPackageRender users info = PackageRender
         ty <- repoType r
         loc <- repoLocation r
         return (ty, loc, r)
+
+type DependencyTree = CondTree ConfVar [Dependency] IsBuildable
+
+data IsBuildable = Buildable
+                 | NotBuildable
+                   deriving (Eq, Show)
 
 {-------------------------------------------------------------------------------
   Util
@@ -206,6 +227,17 @@ intersectVersions (Versions Some _) v@(Versions All _) = v
 intersectVersions v@(Versions All _) (Versions Some _) = v
 intersectVersions (Versions All v1) (Versions All v2) =
     Versions All $ intersectVersionIntervals v1 v2
+
+sortDeps :: [Dependency] -> [Dependency]
+sortDeps = sortOn $ \(Dependency pkgname _) -> map toLower (display pkgname)
+
+combineDepsBy :: (VersionIntervals -> VersionIntervals -> VersionIntervals)
+              -> [Dependency] -> [Dependency]
+combineDepsBy f =
+    map (\(pkgname, ver) -> Dependency pkgname (fromVersionIntervals ver))
+  . Map.toList
+  . Map.fromListWith f
+  . map (\(Dependency pkgname ver) -> (pkgname, toVersionIntervals ver))
 
 -- Same as @sortBy (comparing f)@, but without recomputing @f@.
 sortOn :: Ord b => (a -> b) -> [a] -> [a]

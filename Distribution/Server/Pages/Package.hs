@@ -2,7 +2,9 @@
 {-# LANGUAGE PatternGuards, RecordWildCards #-}
 module Distribution.Server.Pages.Package (
     packagePage,
+    renderPackageFlags,
     renderDependencies,
+    renderDetailedDependencies,
     renderVersion,
     renderFields,
     renderDownloads,
@@ -28,8 +30,9 @@ import Distribution.Text        (display)
 import Text.XHtml.Strict hiding (p, name, title, content)
 
 import Data.Monoid              (Monoid(..))
-import Data.Maybe               (maybeToList, isJust)
+import Data.Maybe               (fromMaybe, maybeToList, isJust, mapMaybe)
 import Data.List                (intersperse, intercalate)
+import Control.Arrow            (second)
 import System.FilePath.Posix    ((</>), (<.>), takeFileName)
 import Data.Time.Locale.Compat  (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
@@ -64,7 +67,7 @@ packagePage render headLinks top sections bottom mdocIndex docURL isCandidate =
              top,
              pkgBody render sections,
              moduleSection render mdocIndex docURL,
-             packageFlags render,
+             renderPackageFlags render,
              downloadSection render,
              maintainerSection pkgid isCandidate,
              map pair bottom
@@ -185,8 +188,8 @@ maintainerSection pkgid isCandidate =
 
 -- | Render a table of the package's flags and along side it a tip
 -- indicating how to enable/disable flags with Cabal.
-packageFlags :: PackageRender -> [Html]
-packageFlags render =
+renderPackageFlags :: PackageRender -> [Html]
+renderPackageFlags render =
   case rendFlags render of
     [] -> mempty
     flags ->
@@ -245,9 +248,14 @@ tabulate items = table ! [theclass "properties"] <<
 
 renderDependencies :: PackageRender -> (String, Html)
 renderDependencies render =
-    ("Dependencies", case rendDepends render of
-                       []   -> toHtml "None"
-                       deps -> showDependencies deps)
+    ("Dependencies", summary +++ detailsLink)
+  where
+    summary = case rendDepends render of
+                []   -> toHtml "None"
+                deps -> showDependencies deps
+    detailsLink = thespan ! [thestyle "font-size: small"]
+                    << (" [" +++ anchor ! [href detailURL] << "details" +++ "]")
+    detailURL = rendPkgUri render </> "dependencies"
 
 showDependencies :: [Dependency] -> Html
 showDependencies deps = commaList (map showDependency deps)
@@ -263,6 +271,76 @@ showDependency (Dependency (PackageName pname) vs) = showPkg +++ vsHtml
         -- nonetheless, we should ensure that the package exists /before/
         -- passing along the PackageRender, which is not the case here
         showPkg = anchor ! [href . packageURL $ PackageIdentifier (PackageName pname) (Version [] [])] << pname
+
+renderDetailedDependencies :: PackageRender -> Html
+renderDetailedDependencies pkgRender =
+    tabulate $ map (second (fromMaybe noDeps . render)) targets
+  where
+    targets :: [(String, DependencyTree)]
+    targets = maybeToList library ++ rendExecutableDeps pkgRender
+      where
+        library = (\lib -> ("library", lib)) `fmap` rendLibraryDeps pkgRender
+
+    noDeps = list [toHtml "No dependencies"]
+
+    render :: DependencyTree -> Maybe Html
+    render (P.CondNode isBuildable deps components)
+        | null deps && null comps && isBuildable == Buildable = Nothing
+        | otherwise = Just $ list items
+      where
+        items = buildable ++ map showDependency deps ++ comps
+        comps = mapMaybe renderComponent components
+        buildable = case isBuildable of
+                      Buildable -> []
+                      NotBuildable -> [strong << "buildable:" +++ " False"]
+
+    list :: [Html] -> Html
+    list items = thediv ! [identifier "detailed-dependencies"] << unordList items
+
+    renderComponent :: (Condition ConfVar, DependencyTree, Maybe DependencyTree)
+                    -> Maybe Html
+    renderComponent (condition, then', else')
+        | Just thenHtml <- render then' =
+                           Just $ strong << "if "
+                             +++ renderCond condition
+                             +++ thenHtml
+                             +++ maybe noHtml ((strong << "else") +++)
+                                 (render =<< else')
+        | Just elseHtml <- render =<< else' =
+                           Just $ strong << "if "
+                             +++ renderCond (notCond condition)
+                             +++ elseHtml
+        | otherwise = Nothing
+      where
+        notCond (CNot c) = c
+        notCond c = CNot c
+
+        renderCond :: Condition ConfVar -> Html
+        renderCond cond =
+            case cond of
+              (Var v) -> toHtml $ displayConfVar v
+              (Lit b) -> toHtml $ show b
+              (CNot c) -> "!" +++ renderParens 3 c
+              (COr c1 c2) -> renderParens 1 c1 +++ " || " +++ renderParens 1 c2
+              (CAnd c1 c2) -> renderParens 2 c1 +++ " && " +++ renderParens 2 c2
+          where
+            renderParens :: Int -> Condition ConfVar -> Html
+            renderParens precedence c
+                | COr _ _ <- c, precedence > 1 = parenthesized
+                | CAnd _ _ <- c, precedence > 2 = parenthesized
+                | otherwise = renderCond c
+              where
+                parenthesized = "(" +++ renderCond c +++ ")"
+
+            displayConfVar (OS os) = "os(" ++ display os ++ ")"
+            displayConfVar (Arch arch) = "arch(" ++ display arch ++ ")"
+            displayConfVar (Flag (FlagName f)) = "flag(" ++ f ++ ")"
+            displayConfVar (Impl compilerFlavor versionRange) =
+                "impl(" ++ display compilerFlavor ++ ver ++ ")"
+              where
+                ver = if isAnyVersion versionRange
+                        then ""
+                        else display versionRange
 
 renderVersion :: PackageId -> [(Version, VersionStatus)] -> Maybe String -> (String, Html)
 renderVersion (PackageIdentifier pname pversion) allVersions info =
