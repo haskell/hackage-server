@@ -562,6 +562,9 @@ mkHtmlCore HtmlUtilities{..}
                 _  -> concatHtml . (toHtml " in favor of ":) . intersperse (toHtml ", ") .
                       map (\for -> anchor ! [href $ corePackageNameUri cores "" for] << display for) $ fors]
               Nothing -> noHtml
+
+        cacheControlWithoutETag [Public, maxAgeMinutes 5]
+
         -- and put it all together
         return $ toResponse $ Resource.XHtml $
             Pages.packagePage render [tagLinks] [deprHtml]
