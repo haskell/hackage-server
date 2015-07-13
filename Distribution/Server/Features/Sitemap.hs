@@ -62,10 +62,13 @@ sitemapFeature  ServerEnv{..}
     , resourceGet = [("json", generateSitemap)]
     }
 
+    -- Generates a list of URL nodes corresponding to hackage pages, then
+    -- builds and returns an XML sitemap as a response.
     generateSitemap :: DynamicPath -> ServerPartE Response
     generateSitemap _ = do
 
       -- Misc. pages
+      -- e.g. ["http://myhackage.com/index", ...]
       let miscPages = map (show serverBaseURI ++)
             [ "/index"
             , "/accounts"
@@ -87,43 +90,75 @@ sitemapFeature  ServerEnv{..}
             , "/api"
             , "/new-features"
             ]
-          miscNodes = SM.makeURLNodes miscPages "1.0"
+          miscNodes = SM.urlsToNodes miscPages
+            "2012-04-30" "weekly" "0.75"
 
+      -- Pages for each individual tag.
       alltags <- queryGetTagList
       let tagPrefixURI = show serverBaseURI ++ "/packages/tag/"
+
+      --  tagURLs :: [path :: String]
+      --  e.g. ["http://myhackage.com/packages/tag/bsd", ...]
           tagURLs = map ((tagPrefixURI ++) . display . fst) alltags
-          tagNodes = SM.makeURLNodes tagURLs "0.5"
+          tagNodes = SM.urlsToNodes tagURLs
+            "2012-04-30" "daily" "0.5"
 
       pkgIndex <- queryGetPackageIndex
+
       let pkgs = PackageIndex.allPackagesByName pkgIndex
           prefixPkgURI = show serverBaseURI ++ "/package/"
 
-      -- Unversioned package pages - always redirect to latest version.
-          names = [((prefixPkgURI ++) . display . pkgName . pkgInfoId $ pkg
-                  {-, fst . snd . head . pkgMetadataRevisions $ pkg)-}
-                  , fst . snd . Vec.head . pkgMetadataRevisions $ pkg)
-                  | pkg <- L.map L.head pkgs]
-          nameNodes= SM.makeURLNodes' names "1.0"
+      --  Unversioned package pages - always redirect to latest version.
+      --  names :: [(path :: String, lastMod :: UTCTime)]
+      --  e.g. [("http://myhackage.com/packages/mypackage", "2012-04-30..."), ...]
+          names =
+            [ ((prefixPkgURI ++) . display . pkgName . pkgInfoId $ pkg
+            , fst . snd . Vec.head . pkgMetadataRevisions $ pkg)
+            | pkg <- L.map L.head pkgs
+            ]
+          nameNodes = SM.pathsAndDatesToNodes names
+            "daily" "1.0"
 
-      -- Versioned package pages
-          nameVers = [((prefixPkgURI ++) . display . pkgName . pkgInfoId $ pkg) ++ "-" ++
-            (display . pkgVersion . pkgInfoId $ pkg) | pkg <- concat pkgs]
-          nameVersNodes = SM.makeURLNodes nameVers "0.25"
+      --  Versioned package pages
+      --  nameVers :: [path :: String]
+      --  e.g. ["http://myhackage.com/packages/mypackage-1.0.2", ...]
+          nameVers =
+            [ ((prefixPkgURI ++) . display . pkgName . pkgInfoId $ pkg)
+              ++ "-" ++ (display . pkgVersion . pkgInfoId $ pkg)
+            | pkg <- concat pkgs
+            ]
+          nameVersNodes = SM.urlsToNodes nameVers
+            "2012-04-30" "monthly" "0.25"
 
-      -- Unversioned doc pages (for packages with valid documentation)
-      basePkgNamesWithDocs <- mapParaM (queryHasDocumentation . pkgInfoId)
-        (L.map L.head pkgs)
-      let baseDocs = [((prefixPkgURI ++) . display . pkgName . pkgInfoId . fst $ pkg) ++ "/docs"
-            | pkg <- filter ((== True) . snd) basePkgNamesWithDocs]
-          baseDocNodes = SM.makeURLNodes baseDocs "1.0"
+      --  Unversioned doc pages - always redirect to latest version.
+      --  (for packages with valid documentation)
+      basePkgNamesWithDocs <- mapParaM
+        (queryHasDocumentation . pkgInfoId) (L.map L.head pkgs)
+
+      --  baseDocs :: [path :: String]
+      --  e.g. ["http://myhackage.com/packages/mypackage/docs". ...]
+      let baseDocs =
+            [ ((prefixPkgURI ++) . display . pkgName . pkgInfoId . fst $ pkg)
+              ++ "/docs"
+            | pkg <- filter ((== True) . snd) basePkgNamesWithDocs
+            ]
+          baseDocNodes = SM.urlsToNodes baseDocs
+            "2012-04-30" "daily" "1.0"
 
       -- Versioned doc pages
-      versionedDocNames <- mapParaM (queryHasDocumentation . pkgInfoId)
-        (concat pkgs)
-      let versionedDocURIs = [((prefixPkgURI ++) . display . pkgName . pkgInfoId . fst $ pkg) ++ "-" ++
-            (display . pkgVersion . pkgInfoId . fst $ pkg) ++ "/docs"
-            | pkg <- filter ((== True) . snd) versionedDocNames]
-          versionedDocNodes = SM.makeURLNodes versionedDocURIs "0.25"
+      versionedDocNames <- mapParaM
+        (queryHasDocumentation . pkgInfoId) (concat pkgs)
+
+      --  versionedDocURIs :: [path :: String]
+      --  e.g. ["http://myhackage.com/packages/mypackage-1.0.2/docs", ...]
+      let versionedDocURIs =
+            [ ((prefixPkgURI ++) . display . pkgName . pkgInfoId . fst $ pkg)
+              ++ "-" ++
+              (display . pkgVersion . pkgInfoId . fst $ pkg) ++ "/docs"
+            | pkg <- filter ((== True) . snd) versionedDocNames
+            ]
+          versionedDocNodes = SM.urlsToNodes versionedDocURIs
+            "2012-04-30" "monthly" "0.25"
 
       -- Combine and build sitemap
           allNodes = miscNodes
