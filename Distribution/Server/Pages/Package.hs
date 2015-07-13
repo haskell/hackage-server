@@ -36,18 +36,24 @@ import Control.Arrow            (second)
 import System.FilePath.Posix    ((</>), (<.>), takeFileName)
 import Data.Time.Locale.Compat  (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
+import System.FilePath.Posix    (takeExtension)
 
-import Cheapskate (markdown, Options(..))
-import Cheapskate.Html (renderDoc)
+import qualified Cheapskate      as Markdown (markdown, Options(..))
+import qualified Cheapskate.Html as Markdown (renderDoc)
 
 import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
-import qualified Data.Text.Encoding as T (decodeUtf8)
+import qualified Data.Text                as T
+import qualified Data.Text.Encoding       as T
+import qualified Data.Text.Encoding.Error as T
 import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
 
 packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)]
-            -> [(String, Html)] -> Maybe TarIndex -> URL -> Bool
+            -> [(String, Html)] -> Maybe TarIndex -> Maybe BS.ByteString
+            -> URL -> Bool
             -> Html
-packagePage render headLinks top sections bottom mdocIndex docURL isCandidate =
+packagePage render headLinks top sections
+            bottom mdocIndex mreadMe
+            docURL isCandidate =
     hackagePageWith [canonical] docTitle docSubtitle docBody [docFooter]
   where
     pkgid   = rendPkgId render
@@ -70,6 +76,7 @@ packagePage render headLinks top sections bottom mdocIndex docURL isCandidate =
              renderPackageFlags render,
              downloadSection render,
              maintainerSection pkgid isCandidate,
+             readmeSection render mreadMe,
              map pair bottom
            ]
     bodyTitle = "The " ++ pkgName ++ " package"
@@ -97,30 +104,16 @@ pkgBody render sections =
  ++ propertySection sections
 
 descriptionSection :: PackageRender -> [Html]
-descriptionSection p@PackageRender{..} =
-        prologue p
+descriptionSection PackageRender{..} =
+        renderHaddock (description rendOther)
      ++ readmeLink
   where
     readmeLink = case rendReadme of
-      Just _ -> [ hr
-                , ulist << li << anchor ! [href readmeURL] << "ReadMe"
+      Just _ -> [ hr, toHtml "["
+                , anchor ! [href "#readme"] << "Skip to ReadMe"
+                , toHtml "]"
                 ]
       _      -> []
-    readmeURL  = rendPkgUri </> "readme"
-
-prologue :: PackageRender -> [Html]
-prologue PackageRender{..} =
-  renderHaddock (description rendOther)
-{-
-  --TODO: need to improve the display of the description / readme
-  -- just having both is too much in many cases. Perhaps we should
-  -- use the readme only if the description is empty. And otherwise just link.
-  -- Also, we need to limit the length of both the description and readme
-  -- or it pushes everything else off the page
-  (case rendReadme of
-    Nothing -> []
-    Just (_, readme) -> [renderMarkdown readme])
--}
 
 renderHaddock :: String -> [Html]
 renderHaddock []   = []
@@ -129,18 +122,38 @@ renderHaddock desc =
       Nothing  -> [paragraph << p | p <- paragraphs desc]
       Just doc -> [markup htmlMarkup doc]
 
--- TODO: Currently unused.
-_renderMarkdown :: BS.ByteString -> Html
-_renderMarkdown = primHtml . Blaze.renderHtml . renderDoc . markdown opts
+readmeSection :: PackageRender -> Maybe BS.ByteString -> [Html]
+readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
+                            , rendPkgId  = pkgid }
+              (Just content) =
+    [ h2 ! [identifier "readme"] << ("Readme for " ++ display pkgid)
+    , thediv ! [theclass "embedded-author-content"]
+            << if supposedToBeMarkdown filename
+                 then renderMarkdown content
+                 else pre << unpackUtf8 content
+    ]
+readmeSection _ _ = []
+
+renderMarkdown :: BS.ByteString -> Html
+renderMarkdown = primHtml . Blaze.renderHtml
+               . Markdown.renderDoc . Markdown.markdown opts
                . T.decodeUtf8 . BS.toStrict
   where
     opts =
-      Options
-        { sanitize = True
-        , allowRawHtml = False
-        , preserveHardBreaks = False
-        , debug = False
+      Markdown.Options
+        { Markdown.sanitize           = True
+        , Markdown.allowRawHtml       = False
+        , Markdown.preserveHardBreaks = False
+        , Markdown.debug              = False
         }
+
+supposedToBeMarkdown :: FilePath -> Bool
+supposedToBeMarkdown fname = takeExtension fname `elem` [".md", ".markdown"]
+
+unpackUtf8 :: BS.ByteString -> String
+unpackUtf8 = T.unpack
+           . T.decodeUtf8With T.lenientDecode
+           . BS.toStrict
 
 -- Break text into paragraphs (separated by blank lines)
 paragraphs :: String -> [String]

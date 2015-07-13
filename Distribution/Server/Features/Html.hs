@@ -47,6 +47,7 @@ import qualified Distribution.Server.Pages.Group as Pages
 -- [reverse index disabled] import qualified Distribution.Server.Pages.Reverse as Pages
 import qualified Distribution.Server.Pages.Index as Pages
 import Distribution.Server.Util.CountingMap (cmFind, cmToList)
+import Distribution.Server.Util.ServeTarball (loadTarEntry)
 
 import Distribution.Package
 import Distribution.Version
@@ -548,12 +549,20 @@ mkHtmlCore HtmlUtilities{..}
                                     , pkgVotesHtml
                                      -- [reverse index disabled] ,Pages.reversePackageSummary realpkg revr revCount
                                      ]
-        -- bottom sections, currently only documentation
+        -- bottom sections, currently documentation and readme
         mdoctarblob <- queryDocumentation realpkg
         mdocIndex   <- maybe (return Nothing)
                              (liftM Just . liftIO . cachedTarIndex)
                              mdoctarblob
         let docURL = packageDocsContentUri docs realpkg -- "/package" <//> display realpkg <//> "docs"
+
+        mreadme     <- case rendReadme render of
+                         Nothing -> return Nothing
+                         Just (tarfile, _, offset, _) ->
+                                either (\_err -> return Nothing)
+                                       (return . Just . snd)
+                            =<< liftIO (loadTarEntry tarfile offset)
+
         -- extra features like tags and downloads
         tags <- queryTagsForPackage pkgname
 
@@ -574,7 +583,7 @@ mkHtmlCore HtmlUtilities{..}
             Pages.packagePage render [tagLinks] [deprHtml]
                               (beforeHtml ++ middleHtml ++ afterHtml
                                 ++ buildStatusHtml)
-                              [] mdocIndex docURL False
+                              [] mdocIndex mreadme docURL False
       where
         showDist (dname, info) = toHtml (display dname ++ ":") +++
             anchor ! [href $ distroUrl info] << toHtml (display $ distroVersion info)
@@ -1035,18 +1044,27 @@ mkHtmlCandidates HtmlUtilities{..}
       let sectionHtml = [Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing,
                          Pages.renderDependencies render] ++ Pages.renderFields render
           maintainHtml = anchor ! [href $ renderResource maintain [display $ packageId cand]] << "maintain"
-      -- bottom sections, currently only documentation
+      -- bottom sections, currently documentation and readme
       mdoctarblob <- queryDocumentation (packageId cand)
       mdocIndex   <- maybe (return Nothing)
                            (liftM Just . liftIO . cachedTarIndex)
                            mdoctarblob
       let docURL = packageDocsContentUri docs (packageId cand)
+
+      mreadme     <- case rendReadme render of
+                       Nothing -> return Nothing
+                       Just (tarfile, _, offset, _) ->
+                              either (\_err -> return Nothing)
+                                     (return . Just . snd)
+                          =<< liftIO (loadTarEntry tarfile offset)
+
       -- also utilize hasIndexedPackage :: Bool
       let warningBox = case renderWarnings candRender of
               [] -> []
               warn -> [thediv ! [theclass "notification"] << [toHtml "Warnings:", unordList warn]]
       return $ toResponse $ Resource.XHtml $
-          Pages.packagePage render [maintainHtml] warningBox sectionHtml [] mdocIndex docURL True
+          Pages.packagePage render [maintainHtml] warningBox sectionHtml
+                            [] mdocIndex mreadme docURL True
 
     serveDependenciesPage :: DynamicPath -> ServerPartE Response
     serveDependenciesPage dpath = do
