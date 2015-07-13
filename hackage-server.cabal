@@ -216,7 +216,6 @@ executable hackage-server
       Distribution.Server.Features.Search.SearchIndex
       Distribution.Server.Features.Search.TermBag
       Distribution.Server.Features.Votes
-      Distribution.Server.Features.Votes.Types
       Distribution.Server.Features.Votes.State
       Distribution.Server.Features.Votes.Render
       Distribution.Server.Features.RecentPackages

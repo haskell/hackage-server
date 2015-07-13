@@ -7,15 +7,7 @@ module Distribution.Server.Features.Votes
   , initVotesFeature
   ) where
 
-import Distribution.Server.Features.Votes.Types
-  ( Votes(..)
-  , initialVotes
-  , getNumberOfVotesFor
-  , enumerate
-  )
-
-import qualified Distribution.Server.Features.Votes.State as RState
-import qualified Distribution.Server.Features.Votes.Types as RTypes
+import Distribution.Server.Features.Votes.State
 import qualified Distribution.Server.Features.Votes.Render as Render
 
 import Distribution.Server.Framework
@@ -65,29 +57,29 @@ initVotesFeature env@ServerEnv{serverStateDir} = do
     return feature
 
 -- | Define the backing store (i.e. database component)
-votesStateComponent :: FilePath -> IO (StateComponent AcidState Votes)
+votesStateComponent :: FilePath -> IO (StateComponent AcidState VotesState)
 votesStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "Votes") initialVotes
+  st <- openLocalStateFrom (stateDir </> "db" </> "Votes") initialVotesState
   return StateComponent {
       stateDesc    = "Backing store for Map PackageName -> Users who voted for it"
     , stateHandle  = st
-    , getState     = query st RState.DbGetVotes
-    , putState     = update st . RState.DbReplaceVotes
+    , getState     = query st GetVotesState
+    , putState     = update st . ReplaceVotesState
     , resetState   = votesStateComponent
     , backupState  = \_ _ -> []
     , restoreState = RestoreBackup {
                          restoreEntry    = error "Unexpected backup entry"
-                       , restoreFinalize = return $ Votes Map.empty
+                       , restoreFinalize = return $ VotesState Map.empty
                        }
    }
 
 
 -- | Default constructor for building this feature.
 votesFeature ::  ServerEnv
-                -> StateComponent AcidState Votes
-                -> CoreFeature                    -- To get site package list
-                -> UserFeature                    -- To authenticate users
-                -> VotesFeature
+             -> StateComponent AcidState VotesState
+             -> CoreFeature                    -- To get site package list
+             -> UserFeature                    -- To authenticate users
+             -> VotesFeature
 
 votesFeature  ServerEnv{..}
               votesState
@@ -128,10 +120,10 @@ votesFeature  ServerEnv{..}
     -- Retrive the entire map (from package names -> # of votes)
     servePackageVotesGet :: DynamicPath -> ServerPartE Response
     servePackageVotesGet _ = do
-      dbVotesMap <- queryState votesState RState.DbGetVotes
+      votesMap <- queryState votesState GetAllPackageVoteSets
       ok . toResponse $ objectL
         [ (display pkgname, toJSON (UserIdSet.size voterset))
-        | (pkgname, voterset) <- enumerate dbVotesMap ]
+        | (pkgname, voterset) <- Map.toList votesMap ]
 
     -- Get the number of votes a package has. If the package
     -- has never been voted for, returns 0.
@@ -139,14 +131,12 @@ votesFeature  ServerEnv{..}
     servePackageNumVotesGet dpath = do
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
-      dbVotesMap <- queryState votesState RState.DbGetVotes
-
-      let numVotes = getNumberOfVotesFor pkgname dbVotesMap
-          arr = objectL
-                  [ ("packageName", string $ unPackageName pkgname)
-                  , ("numVotes",    toJSON numVotes)
+      voteCount <- queryState votesState (GetPackageVoteCount pkgname)
+      let obj = objectL
+                  [ ("packageName", string $ display pkgname)
+                  , ("numVotes",    toJSON voteCount)
                   ]
-      ok . toResponse $ toJSON arr
+      ok . toResponse $ obj
 
     -- Add a vote to :packageName (must match name exactly)
     servePackageVotePut :: DynamicPath -> ServerPartE Response
@@ -154,29 +144,25 @@ votesFeature  ServerEnv{..}
       uid     <- guardAuthorised [AnyKnownUser]
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
-      alreadyVoted <- didUserVote pkgname uid
 
-      case alreadyVoted of
-        True ->
-          ok . toResponse $ Render.alreadyVotedPage pkgname
-        False -> do
-          updateState votesState $ RState.DbAddVote pkgname uid
-          ok . toResponse $ Render.voteConfirmationPage
-            pkgname "Package voted for successfully"
+      success <- updateState votesState (AddVote pkgname uid)
+      if success
+        then ok . toResponse $ Render.voteConfirmationPage pkgname 
+                                 "Package voted for successfully"
+        else ok . toResponse $ Render.alreadyVotedPage pkgname
 
-    -- Removes a user's vote from a package. If the user has not
-    -- not voted for this package, does nothing.
+    -- Removes a user's vote from a package. If the user has not voted
+    -- for this package, does nothing.
     servePackageVoteDelete :: DynamicPath -> ServerPartE Response
     servePackageVoteDelete dpath = do
       uid     <- guardAuthorised [AnyKnownUser]
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
-      updateState votesState $ RState.DbRemoveVote pkgname uid
 
-      alreadyVoted <- didUserVote pkgname uid
-      let responseMsg = case alreadyVoted of
-            True  -> "User has not voted for this package."
-            False -> "Package unvoted successfully."
+      success <- updateState votesState (RemoveVote pkgname uid)
+
+      let responseMsg | success   = "Package vote removed successfully."
+                      | otherwise = "User has not voted for this package."
       ok . toResponse $ Render.voteConfirmationPage
         pkgname responseMsg
 
@@ -185,15 +171,13 @@ votesFeature  ServerEnv{..}
     -- Returns true if a user has previously voted for the
     -- package in question.
     didUserVote :: MonadIO m => PackageName -> UserId -> m Bool
-    didUserVote pkgname uid = do
-      dbVotesMap <- queryState votesState RState.DbGetVotes
-      return $ RTypes.askUserVoted pkgname uid dbVotesMap
+    didUserVote pkgname uid =
+      queryState votesState (GetPackageUserVoted pkgname uid)
 
     -- Returns the number of votes a package has.
     pkgNumVotes :: MonadIO m => PackageName -> m Int
-    pkgNumVotes pkgname =  do
-      dbVotesMap <- queryState votesState RState.DbGetVotes
-      return $ getNumberOfVotesFor pkgname dbVotesMap
+    pkgNumVotes pkgname =
+      queryState votesState (GetPackageVoteCount pkgname)
 
     -- Renders the HTML for the "Votes:" section on package pages.
     renderVotesHtml :: PackageName -> ServerPartE (String, X.Html)
