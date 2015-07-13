@@ -485,6 +485,10 @@ mkHtmlCore HtmlUtilities{..}
             resourceDesc = [(GET, "Show detailed package information")]
           , resourceGet  = [("html", servePackagePage)]
           }
+      , (resourceAt "/package/:package/dependencies") {
+            resourceDesc = [(GET, "Show detailed package dependency information")]
+          , resourceGet = [("html", serveDependenciesPage)]
+          }
       {-
       , (extendResource $ coreIndexPage cores) {
             resourceGet = [("html", serveIndexPage)]
@@ -571,6 +575,13 @@ mkHtmlCore HtmlUtilities{..}
       where
         showDist (dname, info) = toHtml (display dname ++ ":") +++
             anchor ! [href $ distroUrl info] << toHtml (display $ distroVersion info)
+
+    serveDependenciesPage :: DynamicPath -> ServerPartE Response
+    serveDependenciesPage dpath = do
+      pkgname <- packageInPath dpath
+      withPackagePreferred pkgname $ \pkg _ -> do
+        render <- liftIO $ packageRender pkg
+        return $ toResponse $ dependenciesPage False render
 
     serveMaintainPage :: DynamicPath -> ServerPartE Response
     serveMaintainPage dpath = do
@@ -947,6 +958,10 @@ mkHtmlCandidates HtmlUtilities{..}
           , resourcePut    = [("html", putPackageCandidate)]
           , resourceDelete = [("html", doDeleteCandidate)]
           }
+      , (resourceAt "/package/:package/candidate/dependencies") {
+            resourceDesc = [(GET, "Show detailed candidate dependency information")]
+          , resourceGet = [("html", serveDependenciesPage)]
+          }
         -- form for uploading candidate
       , (resourceAt "/packages/candidates/upload") {
             resourceDesc = [ (GET, "Show package candidate upload form") ]
@@ -1030,6 +1045,13 @@ mkHtmlCandidates HtmlUtilities{..}
       return $ toResponse $ Resource.XHtml $
           Pages.packagePage render [maintainHtml] warningBox sectionHtml [] mdocIndex docURL True
 
+    serveDependenciesPage :: DynamicPath -> ServerPartE Response
+    serveDependenciesPage dpath = do
+      candId <- packageInPath dpath
+      candRender <- liftIO . candidateRender =<< lookupCandidateId candId
+      let render = candPackageRender candRender
+      return $ toResponse $ dependenciesPage True render
+
     servePublishForm :: DynamicPath -> ServerPartE Response
     servePublishForm dpath = do
       candidate <- packageInPath dpath >>= lookupCandidateId
@@ -1102,6 +1124,17 @@ mkHtmlCandidates HtmlUtilities{..}
       return $ toResponse $ Resource.XHtml $ hackagePage "Deleting candidates"
                   [form ! [theclass "box", XHtml.method "post", action $ deleteUri candidatesResource "" pkgid]
                       << input ! [thetype "submit", value "Delete package candidate"]]
+
+dependenciesPage :: Bool -> PackageRender -> Resource.XHtml
+dependenciesPage isCandidate render =
+    Resource.XHtml $ hackagePage (pkg ++ ": dependencies") $
+      [h2 << heading, Pages.renderDetailedDependencies render]
+       ++ Pages.renderPackageFlags render
+  where
+    pkg = display $ rendPkgId render
+    heading = "Dependencies for " +++ anchor ! [href link] << pkg
+    link = "/package/" ++ pkg
+            ++ if isCandidate then "/candidate" else ""
 
 
 {-------------------------------------------------------------------------------

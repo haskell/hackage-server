@@ -553,6 +553,11 @@ ul.links li form button:hover {
   margin: 0 0 0 2em;
 }
 
+#detailed-dependencies ul {
+  list-style: none;
+  margin: 0 0 0 2em;
+}
+
 #module-list li {
   clear: right;
 }
