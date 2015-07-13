@@ -62,8 +62,6 @@ getNumberOfVotesFor :: PackageName -> Votes -> Int
 getNumberOfVotesFor pkgname votes =
     UserIdSet.size $ getUsersWhoVoted pkgname votes
 
-enumerate :: Votes -> [(String, UserIdSet)]
-enumerate (Votes votes) =
-    map (\(name, uids) -> (unPackageName name, uids))
-        (Map.toList votes)
+enumerate :: Votes -> [(PackageName, UserIdSet)]
+enumerate (Votes votes) = Map.toList votes
 

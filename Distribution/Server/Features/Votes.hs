@@ -14,17 +14,20 @@ import Distribution.Server.Features.Votes.Types
   , enumerate
   )
 
-import Distribution.Server.Framework as F
-
-import Distribution.Package
-import Distribution.Server.Features.Core
-import Distribution.Server.Features.Users
-import Distribution.Server.Framework.BackupRestore
-import Distribution.Server.Users.Types (UserId(..))
-
 import qualified Distribution.Server.Features.Votes.State as RState
 import qualified Distribution.Server.Features.Votes.Types as RTypes
 import qualified Distribution.Server.Features.Votes.Render as Render
+
+import Distribution.Server.Framework
+import Distribution.Server.Framework.BackupRestore
+
+import Distribution.Server.Features.Core
+import Distribution.Server.Features.Users
+import Distribution.Server.Users.Types (UserId(..))
+import Distribution.Server.Users.UserIdSet as UserIdSet
+
+import Distribution.Package
+import Distribution.Text
 
 import Data.Aeson
 import qualified Data.Map as Map
@@ -69,7 +72,7 @@ votesStateComponent stateDir = do
       stateDesc    = "Backing store for Map PackageName -> Users who voted for it"
     , stateHandle  = st
     , getState     = query st RState.DbGetVotes
-    , putState     = F.update st . RState.DbReplaceVotes
+    , putState     = update st . RState.DbReplaceVotes
     , resetState   = votesStateComponent
     , backupState  = \_ _ -> []
     , restoreState = RestoreBackup {
@@ -87,16 +90,13 @@ votesFeature ::  ServerEnv
                 -> VotesFeature
 
 votesFeature  ServerEnv{..}
-                votesState
-                CoreFeature {
-                  coreResource = CoreResource { packageInPath
-                                              , guardValidPackageName
-                                              }
-                }
-                UserFeature{..}
+              votesState
+              CoreFeature { coreResource = CoreResource{..} }
+              UserFeature{..}
   = VotesFeature{..}
   where
     votesFeatureInterface   = (emptyHackageFeature "votes") {
+        featureDesc      = "Allow users to upvote packages",
         featureResources = [ packagesVotesResource
                            , packageVotesResource
                            ]
@@ -108,15 +108,15 @@ votesFeature  ServerEnv{..}
 
     packagesVotesResource :: Resource
     packagesVotesResource = (resourceAt "/packages/votes.:format") {
-      resourceDesc  = [(GET,    "Returns the entire database of package votes.")]
+      resourceDesc  = [(GET,    "Returns the number of votes for each package")]
     , resourceGet   = [("json", servePackageVotesGet)]
     }
 
     packageVotesResource :: Resource
     packageVotesResource = (resourceAt "/package/:package/votes.:format") {
-      resourceDesc    = [ (GET,     "Returns the number of votes a package has.")
-                        , (PUT,     "Adds a vote to this package.")
-                        , (DELETE,  "Remove a user's vote from this package.")
+      resourceDesc    = [ (GET,     "Returns the number of votes a package has")
+                        , (PUT,     "Adds a vote to this package")
+                        , (DELETE,  "Remove a user's vote from this package")
                         ]
     , resourceGet     = [("json", servePackageNumVotesGet)]
     , resourcePut     = [("",     servePackageVotePut)]
@@ -126,12 +126,12 @@ votesFeature  ServerEnv{..}
     -- Implementations of the how the above resources are handled.
 
     -- Retrive the entire map (from package names -> # of votes)
-    -- (Must be authenticated as an admin.)
     servePackageVotesGet :: DynamicPath -> ServerPartE Response
     servePackageVotesGet _ = do
-      guardAuthorised [InGroup adminGroup]
       dbVotesMap <- queryState votesState RState.DbGetVotes
-      ok . toResponse $ toJSON $ enumerate dbVotesMap
+      ok . toResponse $ objectL
+        [ (display pkgname, toJSON (UserIdSet.size voterset))
+        | (pkgname, voterset) <- enumerate dbVotesMap ]
 
     -- Get the number of votes a package has. If the package
     -- has never been voted for, returns 0.
