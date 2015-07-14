@@ -36,8 +36,8 @@ data SearchFeature = SearchFeature {
 
     searchPackagesResource :: Resource,
 
-    searchPackages        :: MonadIO m => [String] -> m [PackageName],
-    searchPackagesExplain :: MonadIO m
+    searchPackages        :: forall m. MonadIO m => [String] -> m [PackageName],
+    searchPackagesExplain :: forall m. MonadIO m
                           => SearchRankParameters PkgDocField PkgDocFeatures
                           -> [String]
                           -> m [(BM25F.Explanation PkgDocField PkgDocFeatures T.Text

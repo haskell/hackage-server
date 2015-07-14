@@ -1,4 +1,5 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, PatternGuards #-}
+{-# LANGUAGE RankNTypes, FlexibleContexts,
+             NamedFieldPuns, RecordWildCards, PatternGuards #-}
 module Distribution.Server.Features.Documentation (
     DocumentationFeature(..),
     DocumentationResource(..),
@@ -37,9 +38,9 @@ import Data.Aeson (toJSON)
 data DocumentationFeature = DocumentationFeature {
     documentationFeatureInterface :: HackageFeature,
 
-    queryHasDocumentation   :: MonadIO m => PackageIdentifier -> m Bool,
-    queryDocumentation      :: MonadIO m => PackageIdentifier -> m (Maybe BlobId),
-    queryDocumentationIndex :: MonadIO m => m (Map.Map PackageId BlobId),
+    queryHasDocumentation   :: forall m. MonadIO m => PackageIdentifier -> m Bool,
+    queryDocumentation      :: forall m. MonadIO m => PackageIdentifier -> m (Maybe BlobId),
+    queryDocumentationIndex :: forall m. MonadIO m => m (Map.Map PackageId BlobId),
 
     uploadDocumentation :: DynamicPath -> ServerPartE Response,
     deleteDocumentation :: DynamicPath -> ServerPartE Response,

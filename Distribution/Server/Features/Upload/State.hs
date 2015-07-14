@@ -7,8 +7,8 @@ import Distribution.Server.Framework.MemSize
 
 import Distribution.Package
 import qualified Distribution.Server.Users.Group as Group
-import Distribution.Server.Users.Group (UserList)
 import Distribution.Server.Users.Types (UserId)
+import Distribution.Server.Users.Group (UserIdSet)
 
 import Data.Acid     (Query, Update, makeAcidic)
 import Data.SafeCopy (base, deriveSafeCopy)
@@ -21,7 +21,7 @@ import qualified Data.Map as Map
 
 -------------------------------- Maintainer list
 data PackageMaintainers = PackageMaintainers {
-    maintainers :: Map.Map PackageName UserList
+    maintainers :: Map.Map PackageName UserIdSet
 } deriving (Eq, Show, Typeable)
 
 deriveSafeCopy 0 'base ''PackageMaintainers
@@ -32,20 +32,20 @@ instance MemSize PackageMaintainers where
 initialPackageMaintainers :: PackageMaintainers
 initialPackageMaintainers = PackageMaintainers Map.empty
 
-getPackageMaintainers :: PackageName -> Query PackageMaintainers UserList
+getPackageMaintainers :: PackageName -> Query PackageMaintainers UserIdSet
 getPackageMaintainers name = asks $ fromMaybe Group.empty . Map.lookup name . maintainers
 
-modifyPackageMaintainers :: PackageName -> (UserList -> UserList) -> Update PackageMaintainers ()
+modifyPackageMaintainers :: PackageName -> (UserIdSet -> UserIdSet) -> Update PackageMaintainers ()
 modifyPackageMaintainers name func = State.modify (\pm -> pm {maintainers = alterFunc (maintainers pm) })
     where alterFunc = Map.alter (Just . func . fromMaybe Group.empty) name
 
 addPackageMaintainer :: PackageName -> UserId -> Update PackageMaintainers ()
-addPackageMaintainer name uid = modifyPackageMaintainers name (Group.add uid)
+addPackageMaintainer name uid = modifyPackageMaintainers name (Group.insert uid)
 
 removePackageMaintainer :: PackageName -> UserId -> Update PackageMaintainers ()
-removePackageMaintainer name uid = modifyPackageMaintainers name (Group.remove uid)
+removePackageMaintainer name uid = modifyPackageMaintainers name (Group.delete uid)
 
-setPackageMaintainers :: PackageName -> UserList -> Update PackageMaintainers ()
+setPackageMaintainers :: PackageName -> UserIdSet -> Update PackageMaintainers ()
 setPackageMaintainers name ulist = modifyPackageMaintainers name (const ulist)
 
 allPackageMaintainers :: Query PackageMaintainers PackageMaintainers
@@ -65,7 +65,7 @@ makeAcidic ''PackageMaintainers ['getPackageMaintainers
 -------------------------------- Trustee list
 -- this could be reasonably merged into the above, as a PackageGroups data structure
 data HackageTrustees = HackageTrustees {
-    trusteeList :: !UserList
+    trusteeList :: !UserIdSet
 } deriving (Show, Typeable, Eq)
 
 deriveSafeCopy 0 'base ''HackageTrustees
@@ -79,19 +79,19 @@ initialHackageTrustees = HackageTrustees Group.empty
 getHackageTrustees :: Query HackageTrustees HackageTrustees
 getHackageTrustees = ask
 
-getTrusteesList :: Query HackageTrustees UserList
+getTrusteesList :: Query HackageTrustees UserIdSet
 getTrusteesList = asks trusteeList
 
-modifyHackageTrustees :: (UserList -> UserList) -> Update HackageTrustees ()
+modifyHackageTrustees :: (UserIdSet -> UserIdSet) -> Update HackageTrustees ()
 modifyHackageTrustees func = State.modify (\ht -> ht {trusteeList = func (trusteeList ht) })
 
 addHackageTrustee :: UserId -> Update HackageTrustees ()
-addHackageTrustee uid = modifyHackageTrustees (Group.add uid)
+addHackageTrustee uid = modifyHackageTrustees (Group.insert uid)
 
 removeHackageTrustee :: UserId -> Update HackageTrustees ()
-removeHackageTrustee uid = modifyHackageTrustees (Group.remove uid)
+removeHackageTrustee uid = modifyHackageTrustees (Group.delete uid)
 
-replaceHackageTrustees :: UserList -> Update HackageTrustees ()
+replaceHackageTrustees :: UserIdSet -> Update HackageTrustees ()
 replaceHackageTrustees ulist = modifyHackageTrustees (const ulist)
 
 makeAcidic ''HackageTrustees ['getHackageTrustees
@@ -103,7 +103,7 @@ makeAcidic ''HackageTrustees ['getHackageTrustees
 
 -------------------------------- Uploader list
 data HackageUploaders = HackageUploaders {
-    uploaderList :: !UserList
+    uploaderList :: !UserIdSet
 } deriving (Show, Typeable, Eq)
 
 $(deriveSafeCopy 0 'base ''HackageUploaders)
@@ -117,19 +117,19 @@ initialHackageUploaders = HackageUploaders Group.empty
 getHackageUploaders :: Query HackageUploaders HackageUploaders
 getHackageUploaders = ask
 
-getUploadersList :: Query HackageUploaders UserList
+getUploadersList :: Query HackageUploaders UserIdSet
 getUploadersList = asks uploaderList
 
-modifyHackageUploaders :: (UserList -> UserList) -> Update HackageUploaders ()
+modifyHackageUploaders :: (UserIdSet -> UserIdSet) -> Update HackageUploaders ()
 modifyHackageUploaders func = State.modify (\ht -> ht {uploaderList = func (uploaderList ht) })
 
 addHackageUploader :: UserId -> Update HackageUploaders ()
-addHackageUploader uid = modifyHackageUploaders (Group.add uid)
+addHackageUploader uid = modifyHackageUploaders (Group.insert uid)
 
 removeHackageUploader :: UserId -> Update HackageUploaders ()
-removeHackageUploader uid = modifyHackageUploaders (Group.remove uid)
+removeHackageUploader uid = modifyHackageUploaders (Group.delete uid)
 
-replaceHackageUploaders :: UserList -> Update HackageUploaders ()
+replaceHackageUploaders :: UserIdSet -> Update HackageUploaders ()
 replaceHackageUploaders ulist = modifyHackageUploaders (const ulist)
 
 makeAcidic ''HackageUploaders ['getHackageUploaders

@@ -31,7 +31,7 @@ data DistroFeature = DistroFeature {
     distroFeatureInterface :: HackageFeature,
     distroResource   :: DistroResource,
     maintainersGroup :: DynamicPath -> IO (Maybe UserGroup),
-    queryPackageStatus :: MonadIO m => PackageName -> m [(DistroName, DistroPackageInfo)]
+    queryPackageStatus :: forall m. MonadIO m => PackageName -> m [(DistroName, DistroPackageInfo)]
 }
 
 instance IsHackageFeature DistroFeature where
@@ -221,17 +221,17 @@ distroFeature UserFeature{..}
         case isDist of
           False -> return Nothing
           True  -> return . Just $ UserGroup
-            { groupDesc      = maintainerDescription dname
-            , queryUserList  = queryState distrosState $ GetDistroMaintainers dname
-            , addUserList    = updateState distrosState . AddDistroMaintainer dname
-            , removeUserList = updateState distrosState . RemoveDistroMaintainer dname
-            , canAddGroup    = [admins]
-            , canRemoveGroup = [admins]
+            { groupDesc             = maintainerGroupDescription dname
+            , queryUserGroup        = queryState distrosState $ GetDistroMaintainers dname
+            , addUserToGroup        = updateState distrosState . AddDistroMaintainer dname
+            , removeUserFromGroup   = updateState distrosState . RemoveDistroMaintainer dname
+            , groupsAllowedToAdd    = [admins]
+            , groupsAllowedToDelete = [admins]
             }
 
 
-maintainerDescription :: DistroName -> GroupDescription
-maintainerDescription dname = nullDescription
+maintainerGroupDescription :: DistroName -> GroupDescription
+maintainerGroupDescription dname = nullDescription
   { groupTitle = "Maintainers"
   , groupEntity = Just (str, Just $ "/distro/" ++ display dname)
   , groupPrologue = "Maintainers for a distribution can map packages to it."

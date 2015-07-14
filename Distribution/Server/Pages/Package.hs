@@ -2,7 +2,9 @@
 {-# LANGUAGE PatternGuards, RecordWildCards #-}
 module Distribution.Server.Pages.Package (
     packagePage,
+    renderPackageFlags,
     renderDependencies,
+    renderDetailedDependencies,
     renderVersion,
     renderFields,
     renderDownloads,
@@ -28,23 +30,30 @@ import Distribution.Text        (display)
 import Text.XHtml.Strict hiding (p, name, title, content)
 
 import Data.Monoid              (Monoid(..))
-import Data.Maybe               (maybeToList, isJust)
+import Data.Maybe               (fromMaybe, maybeToList, isJust, mapMaybe)
 import Data.List                (intersperse, intercalate)
+import Control.Arrow            (second)
 import System.FilePath.Posix    ((</>), (<.>), takeFileName)
 import Data.Time.Locale.Compat  (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
+import System.FilePath.Posix    (takeExtension)
 
-import Cheapskate (markdown, Options(..))
-import Cheapskate.Html (renderDoc)
+import qualified Cheapskate      as Markdown (markdown, Options(..))
+import qualified Cheapskate.Html as Markdown (renderDoc)
 
 import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
-import qualified Data.Text.Encoding as T (decodeUtf8)
+import qualified Data.Text                as T
+import qualified Data.Text.Encoding       as T
+import qualified Data.Text.Encoding.Error as T
 import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
 
 packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)]
-            -> [(String, Html)] -> Maybe TarIndex -> URL -> Bool
+            -> [(String, Html)] -> Maybe TarIndex -> Maybe BS.ByteString
+            -> URL -> Bool
             -> Html
-packagePage render headLinks top sections bottom mdocIndex docURL isCandidate =
+packagePage render headLinks top sections
+            bottom mdocIndex mreadMe
+            docURL isCandidate =
     hackagePageWith [canonical] docTitle docSubtitle docBody [docFooter]
   where
     pkgid   = rendPkgId render
@@ -64,9 +73,10 @@ packagePage render headLinks top sections bottom mdocIndex docURL isCandidate =
              top,
              pkgBody render sections,
              moduleSection render mdocIndex docURL,
-             packageFlags render,
+             renderPackageFlags render,
              downloadSection render,
              maintainerSection pkgid isCandidate,
+             readmeSection render mreadMe,
              map pair bottom
            ]
     bodyTitle = "The " ++ pkgName ++ " package"
@@ -94,30 +104,16 @@ pkgBody render sections =
  ++ propertySection sections
 
 descriptionSection :: PackageRender -> [Html]
-descriptionSection p@PackageRender{..} =
-        prologue p
+descriptionSection PackageRender{..} =
+        renderHaddock (description rendOther)
      ++ readmeLink
   where
     readmeLink = case rendReadme of
-      Just _ -> [ hr
-                , ulist << li << anchor ! [href readmeURL] << "ReadMe"
+      Just _ -> [ hr, toHtml "["
+                , anchor ! [href "#readme"] << "Skip to ReadMe"
+                , toHtml "]"
                 ]
       _      -> []
-    readmeURL  = rendPkgUri </> "readme"
-
-prologue :: PackageRender -> [Html]
-prologue PackageRender{..} =
-  renderHaddock (description rendOther)
-{-
-  --TODO: need to improve the display of the description / readme
-  -- just having both is too much in many cases. Perhaps we should
-  -- use the readme only if the description is empty. And otherwise just link.
-  -- Also, we need to limit the length of both the description and readme
-  -- or it pushes everything else off the page
-  (case rendReadme of
-    Nothing -> []
-    Just (_, readme) -> [renderMarkdown readme])
--}
 
 renderHaddock :: String -> [Html]
 renderHaddock []   = []
@@ -126,18 +122,38 @@ renderHaddock desc =
       Nothing  -> [paragraph << p | p <- paragraphs desc]
       Just doc -> [markup htmlMarkup doc]
 
+readmeSection :: PackageRender -> Maybe BS.ByteString -> [Html]
+readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
+                            , rendPkgId  = pkgid }
+              (Just content) =
+    [ h2 ! [identifier "readme"] << ("Readme for " ++ display pkgid)
+    , thediv ! [theclass "embedded-author-content"]
+            << if supposedToBeMarkdown filename
+                 then renderMarkdown content
+                 else pre << unpackUtf8 content
+    ]
+readmeSection _ _ = []
+
 renderMarkdown :: BS.ByteString -> Html
-renderMarkdown = primHtml . Blaze.renderHtml . renderDoc . markdown opts
+renderMarkdown = primHtml . Blaze.renderHtml
+               . Markdown.renderDoc . Markdown.markdown opts
                . T.decodeUtf8 . BS.toStrict
   where
     opts =
-      Options
-        { sanitize = True
-        , allowRawHtml = False
-        , preserveHardBreaks = False
-        , debug = False
+      Markdown.Options
+        { Markdown.sanitize           = True
+        , Markdown.allowRawHtml       = False
+        , Markdown.preserveHardBreaks = False
+        , Markdown.debug              = False
         }
 
+supposedToBeMarkdown :: FilePath -> Bool
+supposedToBeMarkdown fname = takeExtension fname `elem` [".md", ".markdown"]
+
+unpackUtf8 :: BS.ByteString -> String
+unpackUtf8 = T.unpack
+           . T.decodeUtf8With T.lenientDecode
+           . BS.toStrict
 
 -- Break text into paragraphs (separated by blank lines)
 paragraphs :: String -> [String]
@@ -185,8 +201,8 @@ maintainerSection pkgid isCandidate =
 
 -- | Render a table of the package's flags and along side it a tip
 -- indicating how to enable/disable flags with Cabal.
-packageFlags :: PackageRender -> [Html]
-packageFlags render =
+renderPackageFlags :: PackageRender -> [Html]
+renderPackageFlags render =
   case rendFlags render of
     [] -> mempty
     flags ->
@@ -245,9 +261,14 @@ tabulate items = table ! [theclass "properties"] <<
 
 renderDependencies :: PackageRender -> (String, Html)
 renderDependencies render =
-    ("Dependencies", case rendDepends render of
-                       []   -> toHtml "None"
-                       deps -> showDependencies deps)
+    ("Dependencies", summary +++ detailsLink)
+  where
+    summary = case rendDepends render of
+                []   -> toHtml "None"
+                deps -> showDependencies deps
+    detailsLink = thespan ! [thestyle "font-size: small"]
+                    << (" [" +++ anchor ! [href detailURL] << "details" +++ "]")
+    detailURL = rendPkgUri render </> "dependencies"
 
 showDependencies :: [Dependency] -> Html
 showDependencies deps = commaList (map showDependency deps)
@@ -263,6 +284,76 @@ showDependency (Dependency (PackageName pname) vs) = showPkg +++ vsHtml
         -- nonetheless, we should ensure that the package exists /before/
         -- passing along the PackageRender, which is not the case here
         showPkg = anchor ! [href . packageURL $ PackageIdentifier (PackageName pname) (Version [] [])] << pname
+
+renderDetailedDependencies :: PackageRender -> Html
+renderDetailedDependencies pkgRender =
+    tabulate $ map (second (fromMaybe noDeps . render)) targets
+  where
+    targets :: [(String, DependencyTree)]
+    targets = maybeToList library ++ rendExecutableDeps pkgRender
+      where
+        library = (\lib -> ("library", lib)) `fmap` rendLibraryDeps pkgRender
+
+    noDeps = list [toHtml "No dependencies"]
+
+    render :: DependencyTree -> Maybe Html
+    render (P.CondNode isBuildable deps components)
+        | null deps && null comps && isBuildable == Buildable = Nothing
+        | otherwise = Just $ list items
+      where
+        items = buildable ++ map showDependency deps ++ comps
+        comps = mapMaybe renderComponent components
+        buildable = case isBuildable of
+                      Buildable -> []
+                      NotBuildable -> [strong << "buildable:" +++ " False"]
+
+    list :: [Html] -> Html
+    list items = thediv ! [identifier "detailed-dependencies"] << unordList items
+
+    renderComponent :: (Condition ConfVar, DependencyTree, Maybe DependencyTree)
+                    -> Maybe Html
+    renderComponent (condition, then', else')
+        | Just thenHtml <- render then' =
+                           Just $ strong << "if "
+                             +++ renderCond condition
+                             +++ thenHtml
+                             +++ maybe noHtml ((strong << "else") +++)
+                                 (render =<< else')
+        | Just elseHtml <- render =<< else' =
+                           Just $ strong << "if "
+                             +++ renderCond (notCond condition)
+                             +++ elseHtml
+        | otherwise = Nothing
+      where
+        notCond (CNot c) = c
+        notCond c = CNot c
+
+        renderCond :: Condition ConfVar -> Html
+        renderCond cond =
+            case cond of
+              (Var v) -> toHtml $ displayConfVar v
+              (Lit b) -> toHtml $ show b
+              (CNot c) -> "!" +++ renderParens 3 c
+              (COr c1 c2) -> renderParens 1 c1 +++ " || " +++ renderParens 1 c2
+              (CAnd c1 c2) -> renderParens 2 c1 +++ " && " +++ renderParens 2 c2
+          where
+            renderParens :: Int -> Condition ConfVar -> Html
+            renderParens precedence c
+                | COr _ _ <- c, precedence > 1 = parenthesized
+                | CAnd _ _ <- c, precedence > 2 = parenthesized
+                | otherwise = renderCond c
+              where
+                parenthesized = "(" +++ renderCond c +++ ")"
+
+            displayConfVar (OS os) = "os(" ++ display os ++ ")"
+            displayConfVar (Arch arch) = "arch(" ++ display arch ++ ")"
+            displayConfVar (Flag (FlagName f)) = "flag(" ++ f ++ ")"
+            displayConfVar (Impl compilerFlavor versionRange) =
+                "impl(" ++ display compilerFlavor ++ ver ++ ")"
+              where
+                ver = if isAnyVersion versionRange
+                        then ""
+                        else display versionRange
 
 renderVersion :: PackageId -> [(Version, VersionStatus)] -> Maybe String -> (String, Html)
 renderVersion (PackageIdentifier pname pversion) allVersions info =
@@ -342,7 +433,7 @@ renderFields render = [
         Nothing -> strong ! [theclass "warning"] << toHtml "none"
         Just n  -> toHtml n
     sourceRepositoryField sr = sourceRepositoryToHtml sr
-    
+
     rendLicense = case rendLicenseFiles render of
       []            -> toHtml (rendLicenseName render)
       [licenseFile] -> anchor ! [ href (rendPkgUri render </> "src" </> licenseFile) ]

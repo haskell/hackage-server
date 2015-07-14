@@ -8,7 +8,8 @@ import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.MemSize
 
 import Distribution.Server.Users.Types
-import Distribution.Server.Users.Group as Group (UserList(..), add, remove, empty)
+import Distribution.Server.Users.Group (UserIdSet)
+import qualified Distribution.Server.Users.Group as Group
 import qualified Distribution.Server.Users.Users as Users
 
 import Data.Acid     (Query, Update, makeAcidic)
@@ -89,7 +90,7 @@ $(makeAcidic ''Users.Users [ 'addUserEnabled
 -----------------------------------------------------
 
 data HackageAdmins = HackageAdmins {
-    adminList :: !Group.UserList
+    adminList :: !Group.UserIdSet
 } deriving (Typeable, Eq, Show)
 
 $(deriveSafeCopy 0 'base ''HackageAdmins)
@@ -100,19 +101,19 @@ instance MemSize HackageAdmins where
 getHackageAdmins :: Query HackageAdmins HackageAdmins
 getHackageAdmins = ask
 
-getAdminList :: Query HackageAdmins UserList
+getAdminList :: Query HackageAdmins UserIdSet
 getAdminList = asks adminList
 
-modifyHackageAdmins :: (UserList -> UserList) -> Update HackageAdmins ()
+modifyHackageAdmins :: (UserIdSet -> UserIdSet) -> Update HackageAdmins ()
 modifyHackageAdmins func = State.modify (\users -> users { adminList = func (adminList users) })
 
 addHackageAdmin :: UserId -> Update HackageAdmins ()
-addHackageAdmin uid = modifyHackageAdmins (Group.add uid)
+addHackageAdmin uid = modifyHackageAdmins (Group.insert uid)
 
 removeHackageAdmin :: UserId -> Update HackageAdmins ()
-removeHackageAdmin uid = modifyHackageAdmins (Group.remove uid)
+removeHackageAdmin uid = modifyHackageAdmins (Group.delete uid)
 
-replaceHackageAdmins :: UserList -> Update HackageAdmins ()
+replaceHackageAdmins :: UserIdSet -> Update HackageAdmins ()
 replaceHackageAdmins ulist = modifyHackageAdmins (const ulist)
 
 initialHackageAdmins :: HackageAdmins
@@ -127,7 +128,7 @@ $(makeAcidic ''HackageAdmins
 
 --------------------------------------------------------------------------
 data MirrorClients = MirrorClients {
-    mirrorClients :: !Group.UserList
+    mirrorClients :: !Group.UserIdSet
 } deriving (Eq, Typeable, Show)
 
 $(deriveSafeCopy 0 'base ''MirrorClients)
@@ -138,19 +139,19 @@ instance MemSize MirrorClients where
 getMirrorClients :: Query MirrorClients MirrorClients
 getMirrorClients = ask
 
-getMirrorClientsList :: Query MirrorClients UserList
+getMirrorClientsList :: Query MirrorClients UserIdSet
 getMirrorClientsList = asks mirrorClients
 
-modifyMirrorClients :: (UserList -> UserList) -> Update MirrorClients ()
+modifyMirrorClients :: (UserIdSet -> UserIdSet) -> Update MirrorClients ()
 modifyMirrorClients func = State.modify (\users -> users { mirrorClients = func (mirrorClients users) })
 
 addMirrorClient :: UserId -> Update MirrorClients ()
-addMirrorClient uid = modifyMirrorClients (Group.add uid)
+addMirrorClient uid = modifyMirrorClients (Group.insert uid)
 
 removeMirrorClient :: UserId -> Update MirrorClients ()
-removeMirrorClient uid = modifyMirrorClients (Group.remove uid)
+removeMirrorClient uid = modifyMirrorClients (Group.delete uid)
 
-replaceMirrorClients :: UserList -> Update MirrorClients ()
+replaceMirrorClients :: UserIdSet -> Update MirrorClients ()
 replaceMirrorClients ulist = modifyMirrorClients (const ulist)
 
 initialMirrorClients :: MirrorClients

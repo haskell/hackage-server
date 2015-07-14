@@ -118,6 +118,8 @@ staticFilesFeature ServerEnv{serverStaticDir, serverTemplatesMode}
           rsCode    = errCode,
           rsHeaders = addHeaders (rsHeaders response) hdrs
         }
+    textErrorPage GenericErrorResponse =
+      textErrorPage internalServerErrorResponse
 
     htmlErrorPage :: ErrorResponse -> ServerPartE Response
     htmlErrorPage (ErrorResponse errCode hdrs errTitle message) = do
@@ -131,6 +133,8 @@ staticFilesFeature ServerEnv{serverStaticDir, serverTemplatesMode}
           rsCode    = errCode,
           rsHeaders = addHeaders (rsHeaders response) hdrs
         }
+    htmlErrorPage GenericErrorResponse =
+      htmlErrorPage internalServerErrorResponse
 
     toplevelFiles     = [("favicon.ico", "image/x-icon")]
     toplevelTemplates = map dropExtension staticFiles

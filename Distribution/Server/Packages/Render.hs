@@ -4,6 +4,8 @@
 module Distribution.Server.Packages.Render (
     -- * Package render
     PackageRender(..)
+  , DependencyTree
+  , IsBuildable (..)
   , doPackageRender
 
     -- * Utils
@@ -12,6 +14,7 @@ module Distribution.Server.Packages.Render (
 
 import Data.Maybe (catMaybes, isJust, maybeToList)
 import Control.Monad (guard)
+import Control.Arrow (second)
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
 import qualified Data.Vector as Vec
@@ -44,6 +47,8 @@ data PackageRender = PackageRender {
     rendPkgId        :: PackageIdentifier,
     rendDepends      :: [Dependency],
     rendExecNames    :: [String],
+    rendLibraryDeps  :: Maybe DependencyTree,
+    rendExecutableDeps :: [(String, DependencyTree)],
     rendLicenseName  :: String,
     rendLicenseFiles :: [FilePath],
     rendMaintainer   :: Maybe String,
@@ -69,6 +74,8 @@ doPackageRender users info = PackageRender
     { rendPkgId        = pkgInfoId info
     , rendDepends      = flatDependencies genDesc
     , rendExecNames    = map exeName (executables flatDesc)
+    , rendLibraryDeps  = depTree libBuildInfo `fmap` condLibrary genDesc
+    , rendExecutableDeps = second (depTree buildInfo) `map` condExecutables genDesc
     , rendLicenseName  = display (license desc) -- maybe make this a bit more human-readable
     , rendLicenseFiles = licenseFiles desc
     , rendMaintainer   = case maintainer desc of
@@ -105,6 +112,14 @@ doPackageRender users info = PackageRender
     flatDesc = flattenPackageDescription genDesc
     desc     = packageDescription genDesc
     pkgUri   = "/package/" ++ display (pkgInfoId info)
+
+    depTree :: (a -> BuildInfo) -> CondTree ConfVar [Dependency] a -> DependencyTree
+    depTree getBuildInfo = mapTreeData isBuildable . mapTreeConstrs simplifyDeps
+      where
+        simplifyDeps = sortDeps . combineDepsBy intersectVersionIntervals
+        isBuildable ctData = if buildable $ getBuildInfo ctData
+                               then Buildable
+                               else NotBuildable
     
     moduleHasDocs :: Maybe TarIndex -> ModuleName -> Bool
     moduleHasDocs Nothing       = const False
@@ -122,6 +137,12 @@ doPackageRender users info = PackageRender
         loc <- repoLocation r
         return (ty, loc, r)
 
+type DependencyTree = CondTree ConfVar [Dependency] IsBuildable
+
+data IsBuildable = Buildable
+                 | NotBuildable
+                   deriving (Eq, Show)
+
 {-------------------------------------------------------------------------------
   Util
 -------------------------------------------------------------------------------}
@@ -138,37 +159,85 @@ categorySplit xs = map (dropWhile isSpace) $ splitOn ',' xs
 -----------------------------------------------------------------------
 --
 -- Flatten the dependencies of a GenericPackageDescription into a
--- simple summary form. Dependency version ranges within each executable
--- or library are unioned, and the resulting sets are intersected.
+-- simple summary form. Library and executable dependency ranges
+-- are combined using intersection, except for dependencies within
+-- if and else branches, which are unioned together.
 --
 flatDependencies :: GenericPackageDescription -> [Dependency]
 flatDependencies =
       sortOn (\(Dependency pkgname _) -> map toLower (display pkgname))
-    . combineDepsBy intersectVersionIntervals
-    . concat
-    . map (combineDepsBy unionVersionIntervals)
-    . targetDeps
+    . pkgDeps
   where
-    combineDepsBy :: (VersionIntervals -> VersionIntervals -> VersionIntervals)
-                  -> [Dependency] -> [Dependency]
-    combineDepsBy f =
-        map (\(pkgname, ver) -> Dependency pkgname (fromVersionIntervals ver))
-      . Map.toList
-      . Map.fromListWith f
-      . map (\(Dependency pkgname ver) -> (pkgname, toVersionIntervals ver))
-
-    targetDeps :: GenericPackageDescription -> [[Dependency]]
-    targetDeps pkg = map condTreeDeps (maybeToList $ condLibrary pkg)
-                  ++ map (condTreeDeps . snd) (condExecutables pkg)
- 
-    condTreeDeps :: CondTree v [Dependency] a -> [Dependency]
-    condTreeDeps (CondNode _ ds comps) =
-        ds ++ concatMap fromComponent comps
+    pkgDeps :: GenericPackageDescription -> [Dependency]
+    pkgDeps pkg = fromMap $ Map.unionsWith intersectVersions $
+                      map condTreeDeps (maybeToList $ condLibrary pkg)
+                   ++ map (condTreeDeps . snd) (condExecutables pkg)
       where
-        fromComponent (_, then_part, Nothing) =
-          condTreeDeps then_part
-        fromComponent (_, then_part, Just else_part) =
-          condTreeDeps then_part ++ condTreeDeps else_part
+        fromMap = map fromPair . Map.toList
+        fromPair (pkgname, Versions _ ver) =
+            Dependency pkgname $ fromVersionIntervals ver
+
+    condTreeDeps :: CondTree v [Dependency] a -> PackageVersions
+    condTreeDeps (CondNode _ ds comps) =
+        Map.unionsWith intersectVersions $
+          toMap ds : map fromComponent comps
+      where
+        fromComponent (_, then_part, else_part) =
+            unionDeps (condTreeDeps then_part)
+                      (maybe Map.empty condTreeDeps else_part)
+        toMap = Map.fromListWith intersectVersions . map toPair
+        toPair (Dependency pkgname ver) =
+            (pkgname, Versions All $ toVersionIntervals ver)
+
+    unionDeps :: PackageVersions -> PackageVersions -> PackageVersions
+    unionDeps ds1 ds2 = Map.unionWith unionVersions
+                        (Map.union ds1 defaults) (Map.union ds2 defaults)
+      where
+        defaults = Map.map (const notSpecified) $ Map.union ds1 ds2
+        notSpecified = Versions Some $ toVersionIntervals noVersion
+
+-- | Version intervals for a dependency that also indicate whether the
+-- dependency has been specified on all branches. For example, package x's
+-- version intervals use 'All' while package y's version intervals use
+-- 'Some':
+--
+-- > if flag(f)
+-- >   build-depends: x < 1, y < 1
+-- > else
+-- >   build-depends: x >= 1
+--
+-- This distinction affects the intersection of intervals.
+data Versions = Versions Branches VersionIntervals
+
+data Branches = All | Some deriving Eq
+
+type PackageVersions = Map.Map PackageName Versions
+
+unionVersions :: Versions -> Versions -> Versions
+unionVersions (Versions b1 v1) (Versions b2 v2) =
+    let b3 = if b1 == Some || b2 == Some
+                then Some
+                else All
+    in Versions b3 $ unionVersionIntervals v1 v2
+
+intersectVersions :: Versions -> Versions -> Versions
+intersectVersions (Versions Some v1) (Versions Some v2) =
+    Versions Some $ unionVersionIntervals v1 v2
+intersectVersions (Versions Some _) v@(Versions All _) = v
+intersectVersions v@(Versions All _) (Versions Some _) = v
+intersectVersions (Versions All v1) (Versions All v2) =
+    Versions All $ intersectVersionIntervals v1 v2
+
+sortDeps :: [Dependency] -> [Dependency]
+sortDeps = sortOn $ \(Dependency pkgname _) -> map toLower (display pkgname)
+
+combineDepsBy :: (VersionIntervals -> VersionIntervals -> VersionIntervals)
+              -> [Dependency] -> [Dependency]
+combineDepsBy f =
+    map (\(pkgname, ver) -> Dependency pkgname (fromVersionIntervals ver))
+  . Map.toList
+  . Map.fromListWith f
+  . map (\(Dependency pkgname ver) -> (pkgname, toVersionIntervals ver))
 
 -- Same as @sortBy (comparing f)@, but without recomputing @f@.
 sortOn :: Ord b => (a -> b) -> [a] -> [a]

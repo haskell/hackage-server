@@ -11,7 +11,9 @@ module Distribution.Server.Features.Distro.Backup (
 import qualified Distribution.Server.Features.Distro.Distributions as Distros
 import Distribution.Server.Features.Distro.Distributions (DistroName, Distributions(..), DistroVersions(..), DistroPackageInfo(..))
 import Distribution.Server.Features.Distro.State
-import Distribution.Server.Users.Group (UserList(..))
+import Distribution.Server.Users.Types (UserId)
+import Distribution.Server.Users.UserIdSet (UserIdSet)
+import qualified Distribution.Server.Users.UserIdSet as UserIdSet
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
 
@@ -21,9 +23,9 @@ import Text.CSV (CSV, Record)
 
 import qualified Data.Map as Map
 import Data.Map (Map)
-import qualified Data.IntSet as IntSet
 import Data.List (foldl')
 import System.FilePath (takeExtension)
+
 
 dumpBackup  :: Distros -> [BackupEntry]
 dumpBackup allDist =
@@ -35,7 +37,7 @@ restoreBackup :: RestoreBackup Distros
 restoreBackup =
   updateDistros Distros.emptyDistributions Distros.emptyDistroVersions Map.empty
 
-updateDistros :: Distributions -> DistroVersions -> Map DistroName UserList -> RestoreBackup Distros
+updateDistros :: Distributions -> DistroVersions -> Map DistroName UserIdSet -> RestoreBackup Distros
 updateDistros distros versions maintainers = RestoreBackup {
     restoreEntry = \entry ->
       case entry of
@@ -75,23 +77,30 @@ addDistribution distro dists = do
     Just dists' -> return dists'
     Nothing     -> fail $ "Could not add distro: " ++ display distro
 
-importMaintainers :: CSV -> Map DistroName UserList -> Restore (Map DistroName UserList)
+importMaintainers :: CSV -> Map DistroName UserIdSet -> Restore (Map DistroName UserIdSet)
 importMaintainers = concatM . map fromRecord . drop 2
   where
-    fromRecord :: Record -> Map DistroName UserList -> Restore (Map DistroName UserList)
+    fromRecord :: Record -> Map DistroName UserIdSet -> Restore (Map DistroName UserIdSet)
     fromRecord (distroStr:idStr) maintainers = do
         distro <- parseText "distribution name" distroStr
-        ids <- mapM (parseRead "user id") idStr
-        return (Map.insert distro (UserList $ IntSet.fromList ids) maintainers)
+        uids <- mapM (parseText "user id") idStr
+        return (Map.insert distro (UserIdSet.fromList uids) maintainers)
     fromRecord x _ = fail $ "Invalid distro maintainer record: " ++ show x
 
 --------------------------------------------------------------------------
 distroUsersToExport :: Distributions -> BackupEntry
-distroUsersToExport distros = csvToBackup ["maintainers.csv"] (distroUsersToCSV assocUsers)
-  where assocUsers = map (\(name, UserList ul) -> (name, IntSet.toList ul)) . Map.toList $ Distros.nameMap distros
+distroUsersToExport distros =
+    csvToBackup ["maintainers.csv"] (distroUsersToCSV assocUsers)
+  where
+    assocUsers = map (\(name, uidset) -> (name, UserIdSet.toList uidset))
+               . Map.toList
+               $ Distros.nameMap distros
 
-distroUsersToCSV :: [(DistroName, [Int])] -> CSV
-distroUsersToCSV users = [showVersion distrosCSVVer]:distrosCSVKey:map (\(name, ids) -> display name:map show ids) users
+distroUsersToCSV :: [(DistroName, [UserId])] -> CSV
+distroUsersToCSV users =
+    [showVersion distrosCSVVer]
+  : distrosCSVKey
+  : map (\(name, uids) -> display name : map display uids) users
   where
     distrosCSVKey = ["distro", "maintainers"]
     distrosCSVVer = Version [0,1] ["unstable"]

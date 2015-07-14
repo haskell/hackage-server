@@ -46,8 +46,8 @@ import Network.URI (URI(..), uriToString)
 data LegacyPasswdsFeature = LegacyPasswdsFeature {
     legacyPasswdsFeatureInterface :: HackageFeature,
 
-    queryLegacyPasswds       :: MonadIO m => m LegacyPasswdsTable,
-    updateDeleteLegacyPasswd :: MonadIO m => UserId -> m Bool
+    queryLegacyPasswds       :: forall m. MonadIO m => m LegacyPasswdsTable,
+    updateDeleteLegacyPasswd :: forall m. MonadIO m => UserId -> m Bool
 }
 
 instance IsHackageFeature LegacyPasswdsFeature where

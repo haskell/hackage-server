@@ -36,7 +36,7 @@ import qualified Codec.Archive.Tar.Entry as Tar
 import Distribution.Server.Util.GZip (decompressNamed)
 import Control.Applicative
 import Control.Monad.State
-import Control.Monad.Error
+import Control.Monad.Except
 import Control.Monad.Writer
 import Data.Time (UTCTime)
 import qualified Data.Time as Time
@@ -279,14 +279,14 @@ completeBackups res = case res of
 
 -- internal import utils
 
-newtype Import a = Import { unImp :: StateT ImportState (ErrorT String IO) a }
+newtype Import a = Import { unImp :: StateT ImportState (ExceptT String IO) a }
   deriving (Functor, Applicative, Monad, MonadIO, MonadState ImportState)
 
 evalImport :: BlobStorage -> FilePath -> Bool
            -> [(String, AbstractRestoreBackup)]
            -> Import a -> IO (Either String a)
 evalImport store blobdir consumeBlobs featureBackups imp =
-    runErrorT (evalStateT (unImp imp) initState)
+    runExceptT (evalStateT (unImp imp) initState)
   where
     initState = initialImportState store blobdir consumeBlobs featureBackups
 

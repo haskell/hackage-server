@@ -11,8 +11,8 @@ module Distribution.Server.Users.Backup (
 
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users)
-import Distribution.Server.Users.Group (UserList(..))
-import qualified Distribution.Server.Users.Group as Group
+import Distribution.Server.Users.UserIdSet (UserIdSet)
+import qualified Distribution.Server.Users.UserIdSet as UserIdSet
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Framework.Auth as Auth
 
@@ -21,7 +21,7 @@ import Distribution.Server.Framework.BackupRestore
 import Distribution.Text (display)
 import Data.Version
 import Text.CSV (CSV, Record)
-import qualified Data.IntSet as IntSet
+
 
 -- Import for the user database
 userBackup :: RestoreBackup Users
@@ -70,8 +70,8 @@ insertUser users uid uinfo =
         Right users'                        -> return users'
 
 -- Import for a single group
-groupBackup :: [FilePath] -> RestoreBackup UserList
-groupBackup csvPath = updateGroupBackup Group.empty
+groupBackup :: [FilePath] -> RestoreBackup UserIdSet
+groupBackup csvPath = updateGroupBackup UserIdSet.empty
   where
     updateGroupBackup group = RestoreBackup {
         restoreEntry = \entry -> case entry of
@@ -87,10 +87,10 @@ groupBackup csvPath = updateGroupBackup Group.empty
       }
 
 -- parses a rather lax format. Any layout of integer ids separated by commas.
-importGroup :: CSV -> Restore UserList
+importGroup :: CSV -> Restore UserIdSet
 importGroup csv = do
     parsed <- mapM parseUserId (concat $ clean csv)
-    return . UserList . IntSet.fromList $ parsed
+    return . UserIdSet.fromList $ parsed
   where
     clean xs = if all null xs then [] else xs
     parseUserId uid = case reads uid of
@@ -99,8 +99,8 @@ importGroup csv = do
 
 -------------------------------------------------- Exporting
 -- group.csv
-groupToCSV :: UserList -> CSV
-groupToCSV (UserList list) = [map show (IntSet.toList list)]
+groupToCSV :: UserIdSet -> CSV
+groupToCSV uidset = [map show (UserIdSet.toList uidset)]
 
 -- auth.csv
 {- | Produces a CSV file for the users DB.

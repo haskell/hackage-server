@@ -65,7 +65,7 @@ data CoreFeature = CoreFeature {
 
     -- Queries
     -- | Retrieves the entire main package index.
-    queryGetPackageIndex :: MonadIO m => m (PackageIndex PkgInfo),
+    queryGetPackageIndex :: forall m. MonadIO m => m (PackageIndex PkgInfo),
 
     -- Update transactions
     -- | Adds a version of a package which did not previously exist in the
@@ -75,7 +75,7 @@ data CoreFeature = CoreFeature {
     --
     -- If a package was able to be newly added, runs a `PackageChangeAdd` hook
     -- when done and returns True.
-    updateAddPackage         :: MonadIO m => PackageId ->
+    updateAddPackage         :: forall m. MonadIO m => PackageId ->
                                 CabalFileText -> UploadInfo ->
                                 Maybe PkgTarball -> m Bool,
     -- | Deletes a version of an existing package, deleting the package if it
@@ -83,32 +83,32 @@ data CoreFeature = CoreFeature {
     --
     -- If a package was found and deleted, runs a `PackageChangeDelete` hook
     -- when done and returns True.
-    updateDeletePackage      :: MonadIO m => PackageId -> m Bool,
+    updateDeletePackage      :: forall m. MonadIO m => PackageId -> m Bool,
 
     -- | Adds a new Cabal file for this package version, creating it if
     -- necessary. Previous Cabal files are kept around.
     --
     -- Runs either a `PackageChangeAdd` or `PackageChangeInfo` hook, depending
     -- on whether a package with the given version already existed.
-    updateAddPackageRevision :: MonadIO m => PackageId ->
+    updateAddPackageRevision :: forall m. MonadIO m => PackageId ->
                                 CabalFileText -> UploadInfo -> m (),
     -- | Sets the source tarball for an existing package version. References to
     -- previous tarballs, if any, are kept around.
     --
     -- If this package was found, runs a `PackageChangeInfo` hook when done and
     -- returns True.
-    updateAddPackageTarball  :: MonadIO m => PackageId ->
+    updateAddPackageTarball  :: forall m. MonadIO m => PackageId ->
                                 PkgTarball -> UploadInfo -> m Bool,
     -- | Sets the uploader of an existing package version.
     --
     -- If this package was found, runs a `PackageChangeInfo` hook when done and
     -- returns True.
-    updateSetPackageUploader :: MonadIO m => PackageId -> UserId -> m Bool,
+    updateSetPackageUploader :: forall m. MonadIO m => PackageId -> UserId -> m Bool,
     -- | Sets the upload time of an existing package version.
     --
     -- If this package was found, runs a `PackageChangeInfo` hook when done and
     -- returns True.
-    updateSetPackageUploadTime :: MonadIO m => PackageId -> UTCTime -> m Bool,
+    updateSetPackageUploadTime :: forall m. MonadIO m => PackageId -> UTCTime -> m Bool,
 
     -- | Set an entry in the 00-index.tar file.
     --
@@ -118,7 +118,7 @@ data CoreFeature = CoreFeature {
     -- modification time for the tar entry.
     --
     -- This runs a `PackageChangeIndexExtra` hook when done.
-    updateArchiveIndexEntry  :: MonadIO m => String -> (ByteString, UTCTime) -> m (),
+    updateArchiveIndexEntry  :: forall m. MonadIO m => String -> (ByteString, UTCTime) -> m (),
 
     -- | Notification of package or index changes.
     packageChangeHook :: Hook PackageChange (),
@@ -205,13 +205,13 @@ data CoreResource = CoreResource {
     coreTarballUri     :: PackageId -> String,
 
     -- | Find a PackageId or PackageName inside a path.
-    packageInPath :: (MonadPlus m, FromReqURI a) => DynamicPath -> m a,
+    packageInPath :: forall m a. (MonadPlus m, FromReqURI a) => DynamicPath -> m a,
 
     -- | Find a tarball's PackageId from inside a path, doing some checking
     -- for consistency between the package and tarball.
     --
     -- TODO: This is a rather ad-hoc function. Do we really need it?
-    packageTarballInPath :: MonadPlus m => DynamicPath -> m PackageId,
+    packageTarballInPath :: forall m. MonadPlus m => DynamicPath -> m PackageId,
 
     -- | Check that a particular version of a package exists (guard fails if
     -- version is empty)

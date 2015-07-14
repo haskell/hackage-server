@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving,
-   TypeFamilies, TemplateHaskell,
-   RankNTypes, NamedFieldPuns, RecordWildCards, BangPatterns #-}
+             TypeFamilies, TemplateHaskell,
+             RankNTypes, NamedFieldPuns, RecordWildCards, BangPatterns #-}
 module Distribution.Server.Features.UserSignup (
     initUserSignupFeature,
     UserSignupFeature(..),
@@ -50,7 +50,7 @@ import Network.URI (URI(..), URIAuth(..))
 data UserSignupFeature = UserSignupFeature {
     userSignupFeatureInterface :: HackageFeature,
 
-    queryAllSignupResetInfo :: MonadIO m => m [SignupResetInfo]
+    queryAllSignupResetInfo :: forall m. MonadIO m => m [SignupResetInfo]
 }
 
 instance IsHackageFeature UserSignupFeature where
@@ -556,7 +556,7 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
         uid <- updateAddUser username userauth
            >>= either errNameClash return
         updateUserDetails uid acctDetails
-        liftIO $ addUserList uploadersGroup uid
+        liftIO $ addUserToGroup uploadersGroup uid
         seeOther (userPageUri userResource "" username) (toResponse ())
       where
         lookPasswd = body $ (,) <$> look "password"

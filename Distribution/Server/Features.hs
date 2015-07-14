@@ -44,6 +44,7 @@ import Distribution.Server.Features.AdminFrontend       (initAdminFrontendFeatur
 import Distribution.Server.Features.AdminLog            (initAdminLogFeature)
 import Distribution.Server.Features.HoogleData          (initHoogleDataFeature)
 import Distribution.Server.Features.Sitemap             (initSitemapFeature)
+import Distribution.Server.Features.Votes               (initVotesFeature)
 #endif
 import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
 
@@ -139,6 +140,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                                initAdminFrontendFeature env
     mkHoogleDataFeature     <- logStartup "hoogle" $
                                initHoogleDataFeature env
+    mkVotesFeature          <- logStartup "votes" $
+                               initVotesFeature env
     mkAdminLogFeature       <- logStartup "admin log" $
                                initAdminLogFeature env
     mkSitemapFeature        <- logStartup "sitemap" $
@@ -225,6 +228,10 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          coreFeature
                          usersFeature
 
+    votesFeature    <- mkVotesFeature
+                           coreFeature
+                           usersFeature
+
     tagsFeature     <- mkTagsFeature
                          coreFeature
                          uploadFeature
@@ -263,6 +270,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          -- [reverse index disabled] reverseFeature
                          tagsFeature
                          downloadFeature
+                         votesFeature
                          listFeature
                          searchFeature
                          mirrorFeature
@@ -332,6 +340,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , editCabalFeature
          , adminFrontendFeature
          , getFeatureInterface hoogleDataFeature
+         , getFeatureInterface votesFeature
          , getFeatureInterface adminLogFeature
          , getFeatureInterface siteMapFeature
 #endif

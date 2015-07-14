@@ -40,7 +40,6 @@ import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.MemSize
 
 import Control.Monad (guard)
-import Control.Monad.Error (Error(..))
 import Data.Maybe (fromMaybe)
 import Data.List  (sort, group)
 import qualified Data.Map as Map
@@ -69,7 +68,7 @@ instance MemSize Users where
 $(deriveSafeCopy 0 'base ''Users)
 
 checkinvariant :: Users -> Users
-checkinvariant users = assert (invariant users) users 
+checkinvariant users = assert (invariant users) users
 
 invariant :: Users -> Bool
 invariant Users{userIdMap, userNameMap, nextId} =
@@ -128,11 +127,6 @@ data ErrUserNameClash = ErrUserNameClash deriving Typeable
 data ErrUserIdClash   = ErrUserIdClash   deriving Typeable
 data ErrNoSuchUserId  = ErrNoSuchUserId  deriving Typeable
 data ErrDeletedUser   = ErrDeletedUser   deriving Typeable
-
-instance Error ErrUserNameClash
-instance Error ErrUserIdClash
-instance Error ErrNoSuchUserId
-instance Error ErrDeletedUser
 
 $(deriveSafeCopy 0 'base ''ErrUserNameClash)
 $(deriveSafeCopy 0 'base ''ErrUserIdClash)
@@ -308,4 +302,3 @@ enumerateActiveUsers :: Users -> [(UserId, UserInfo)]
 enumerateActiveUsers users =
     [ (UserId uid, uinfo) | (uid, uinfo) <- IntMap.assocs (userIdMap users)
                           , isActiveAccount (userStatus uinfo) ]
-
