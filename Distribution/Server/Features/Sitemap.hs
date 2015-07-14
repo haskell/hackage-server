@@ -103,13 +103,12 @@ sitemapFeature  ServerEnv{..}
             , "/packages/preferred"
             , "/packages/deprecated"
             , "/packages/candidates"
-            , "/packages/uploads"
+            , "/packages/uploaders"
             , "/users"
             , "/users/register-request"
             , "/users/password-reset"
             , "/upload"
             , "/api"
-            , "/new-features"
             ]
           miscNodes = SM.urlsToNodes miscPages
             pageBuildDate "weekly" "0.75"
