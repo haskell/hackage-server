@@ -26,14 +26,16 @@ module Distribution.Server.Features.Sitemap.Functions
   , pathsAndDatesToNodes
   ) where
 
+import Text.XML
+import Data.Text
+
 import qualified Data.Map as Map
 import Prelude hiding (writeFile)
-import Data.Text
-import Text.XML
-import qualified Data.ByteString.Lazy as L
-import qualified Network.URI as URI
+
 import Data.Time.Clock (UTCTime(..))
-import Data.Time.Calendar (Day(..), showGregorian)
+import Data.Time.Calendar (showGregorian)
+
+import qualified Data.ByteString.Lazy as L
 
 data URLNode = URLNode {
   location :: String
@@ -68,14 +70,14 @@ createURLNode l cf p url =
 -- | change frequencies and priorities.
 pathsAndDatesToNodes :: [(String, UTCTime)] -> String -> String -> [Node]
 pathsAndDatesToNodes urls changeFreqAll priorityAll =
-  Prelude.map (packageToNode' changeFreqAll priorityAll) urls
+  Prelude.map (createURLNode' changeFreqAll priorityAll) urls
 
--- Take url and lastmod time as last argument to facilitate mapping.
-packageToNode' :: String -> String -> (String, UTCTime) -> Node
-packageToNode' cf p nameAndDate =
+-- Take url and lastmod time tuple as last argument to facilitate mapping.
+createURLNode' :: String -> String -> (String, UTCTime) -> Node
+createURLNode' cf p urlAndDate =
   let node = URLNode {
-        location = fst nameAndDate
-      , lastmod = showGregorian . utctDay . snd $ nameAndDate
+        location = fst urlAndDate
+      , lastmod = showGregorian . utctDay . snd $ urlAndDate
       , changefreq = cf
       , priority = p
       } in

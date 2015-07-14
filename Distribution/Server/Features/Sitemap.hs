@@ -21,6 +21,9 @@ import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import qualified Data.Vector as Vec
 import qualified Data.List as L
 
+import Data.Time.Clock (UTCTime(..), getCurrentTime)
+import Data.Time.Calendar (showGregorian)
+
 data SitemapFeature = SitemapFeature {
   sitemapFeatureInterface :: HackageFeature
 }
@@ -33,27 +36,43 @@ initSitemapFeature :: ServerEnv
                       -> DocumentationFeature
                       -> TagsFeature
                       -> IO SitemapFeature)
+
 initSitemapFeature env@ServerEnv{..} = do
-  return $ \coref@CoreFeature{..} docsCore@DocumentationFeature{..} tagsf@TagsFeature{..} -> do
+  now       <- getCurrentTime
+  initTime  <- newMemStateWHNF now
+
+  return $ \coref@CoreFeature{..}
+            docsCore@DocumentationFeature{..}
+            tagsf@TagsFeature{..} -> do
+
     let feature = sitemapFeature env
                   coref docsCore tagsf
+                  initTime
     return feature
 
 sitemapFeature  :: ServerEnv
                 -> CoreFeature
                 -> DocumentationFeature
                 -> TagsFeature
+                -> MemState UTCTime
                 -> SitemapFeature
 sitemapFeature  ServerEnv{..}
                 CoreFeature{..}
                 DocumentationFeature{..}
                 TagsFeature{..}
+                initTime
   = SitemapFeature{..} where
 
     sitemapFeatureInterface = (emptyHackageFeature "XML sitemap generation") {
-      featureResources = [ xmlSitemapResource ]
-      , featureState = []
-      , featureDesc = "Dynamically generates a sitemap.xml."
+      featureResources  = [ xmlSitemapResource ]
+      , featureState    = []
+      , featureDesc     = "Dynamically generates a sitemap.xml."
+      , featureCaches   = [
+          CacheComponent {
+            cacheDesc       = "Records the time that this feature was initialized."
+          , getCacheMemSize = memSize <$> readMemState initTime
+          }
+        ]
     }
 
     xmlSitemapResource :: Resource
@@ -66,6 +85,8 @@ sitemapFeature  ServerEnv{..}
     -- builds and returns an XML sitemap as a response.
     generateSitemap :: DynamicPath -> ServerPartE Response
     generateSitemap _ = do
+
+      pageBuildDate <- showGregorian . utctDay <$> readMemState initTime
 
       -- Misc. pages
       -- e.g. ["http://myhackage.com/index", ...]
@@ -91,7 +112,7 @@ sitemapFeature  ServerEnv{..}
             , "/new-features"
             ]
           miscNodes = SM.urlsToNodes miscPages
-            "2012-04-30" "weekly" "0.75"
+            pageBuildDate "weekly" "0.75"
 
       -- Pages for each individual tag.
       alltags <- queryGetTagList
@@ -101,7 +122,7 @@ sitemapFeature  ServerEnv{..}
       --  e.g. ["http://myhackage.com/packages/tag/bsd", ...]
           tagURLs = map ((tagPrefixURI ++) . display . fst) alltags
           tagNodes = SM.urlsToNodes tagURLs
-            "2012-04-30" "daily" "0.5"
+            pageBuildDate "daily" "0.5"
 
       pkgIndex <- queryGetPackageIndex
 
@@ -128,7 +149,7 @@ sitemapFeature  ServerEnv{..}
             | pkg <- concat pkgs
             ]
           nameVersNodes = SM.urlsToNodes nameVers
-            "2012-04-30" "monthly" "0.25"
+            pageBuildDate "monthly" "0.25"
 
       --  Unversioned doc pages - always redirect to latest version.
       --  (for packages with valid documentation)
@@ -143,7 +164,7 @@ sitemapFeature  ServerEnv{..}
             | pkg <- filter ((== True) . snd) basePkgNamesWithDocs
             ]
           baseDocNodes = SM.urlsToNodes baseDocs
-            "2012-04-30" "daily" "1.0"
+            pageBuildDate "daily" "1.0"
 
       -- Versioned doc pages
       versionedDocNames <- mapParaM
@@ -158,7 +179,7 @@ sitemapFeature  ServerEnv{..}
             | pkg <- filter ((== True) . snd) versionedDocNames
             ]
           versionedDocNodes = SM.urlsToNodes versionedDocURIs
-            "2012-04-30" "monthly" "0.25"
+            pageBuildDate "monthly" "0.25"
 
       -- Combine and build sitemap
           allNodes = miscNodes
