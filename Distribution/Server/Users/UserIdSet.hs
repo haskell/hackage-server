@@ -20,6 +20,7 @@ import Data.SafeCopy (SafeCopy(..), contain)
 import qualified Data.Serialize as Serialize
 import Data.Typeable (Typeable)
 import Control.DeepSeq
+import Control.Applicative ((<$>))
 import Data.Aeson (ToJSON)
 
 
