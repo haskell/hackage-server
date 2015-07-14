@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, RecordWildCards, GeneralizedNewtypeDeriving, BangPatterns, FlexibleContexts #-}
+{-# LANGUAGE RankNTypes, RecordWildCards, GeneralizedNewtypeDeriving, BangPatterns, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Distribution.Server.Framework.BackupRestore (
@@ -142,10 +142,10 @@ parseRead label str = case reads str of
     [(value, "")] -> return value
     _ -> fail $ "Unable to parse " ++ label ++ ": " ++ show str
 
-parseUTCTime :: Monad m => String -> String -> m UTCTime
+parseUTCTime :: (Monad m, MonadError String m) => String -> String -> m UTCTime
 parseUTCTime label str =
     case Time.parseTime defaultTimeLocale timeFormatSpec str of
-      Nothing -> fail $ "Unable to parse UTC timestamp " ++ label ++ ": " ++ str
+      Nothing -> throwError $ "Unable to parse UTC timestamp " ++ label ++ ": " ++ str
       Just x  -> return x
 
 formatUTCTime :: UTCTime -> String
@@ -209,6 +209,11 @@ instance Monad Restore where
   RestoreAddBlob bs  f >>= g = RestoreAddBlob bs  $ \bid -> f bid >>= g
   RestoreGetBlob bid f >>= g = RestoreGetBlob bid $ \bs  -> f bs  >>= g
 
+instance MonadError [Char] Restore where
+  throwError = RestoreFail
+  catchError (RestoreFail s) h = h s
+  catchError x _ = x
+
 instance Functor Restore where
   fmap = liftM
 
@@ -268,7 +273,7 @@ finalizeBackups store list = forM list $ \name -> do
     liftIO $ putStrLn $ "finalising data for feature " ++ name
     mbackup  <- liftIO $ abstractRestoreFinalize (features Map.! name) store
     case mbackup of
-        Left err       -> fail $ "Error restoring data for feature " ++ name
+        Left err       -> throwError $ "Error restoring data for feature " ++ name
                               ++ ":" ++ err
         Right finalize -> return finalize
 
@@ -280,7 +285,7 @@ completeBackups res = case res of
 -- internal import utils
 
 newtype Import a = Import { unImp :: StateT ImportState (ExceptT String IO) a }
-  deriving (Functor, Applicative, Monad, MonadIO, MonadState ImportState)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadState ImportState, MonadError String)
 
 evalImport :: BlobStorage -> FilePath -> Bool
            -> [(String, AbstractRestoreBackup)]
@@ -340,7 +345,7 @@ addBlobsWritten blobidstr !blobid = do
 
 fromEntries :: Tar.Entries Tar.FormatError -> Import ()
 fromEntries Tar.Done        = return ()
-fromEntries (Tar.Fail err)  = fail $ "Problem in backup tarball: " ++ show err
+fromEntries (Tar.Fail err)  = throwError $ "Problem in backup tarball: " ++ show err
 fromEntries (Tar.Next x xs) = fromEntry x >> fromEntries xs
 
 fromEntry :: Tar.Entry -> Import ()
@@ -349,7 +354,7 @@ fromEntry entry =
       Tar.NormalFile bytes _  -> fromFile (Tar.entryPath entry) bytes
       Tar.Directory {}        -> return () -- ignore directory entries
       Tar.SymbolicLink target -> fromLink (Tar.entryPath entry) (Tar.fromLinkTarget target)
-      _ -> fail $ "Unexpected entry in backup tarball: " ++ Tar.entryPath entry
+      _ -> throwError $ "Unexpected entry in backup tarball: " ++ Tar.entryPath entry
 
 fromFile :: FilePath -> ByteString -> Import ()
 fromFile path contents = fromBackupEntry path (`BackupByteString` contents)
@@ -365,7 +370,7 @@ fromLink path linkTarget
       checkBlobIdAsExpected blobId blobIdStr blobFile
       fromBackupEntry path (`BackupBlob` blobId)
 
-  | otherwise = fail $ "Unexpected tar link entry: " ++ path
+  | otherwise = throwError $ "Unexpected tar link entry: " ++ path
                                            ++ " -> " ++ linkTarget
   where
     checkBlobWrittenCache blobIdStr getBlobId = do
@@ -386,12 +391,12 @@ fromLink path linkTarget
 
     checkBlobFileExists blobFile = do
       exists <- liftIO $ doesFileExist blobFile
-      when (not exists) $ fail $ "Missing blob file " ++ blobFile
+      when (not exists) $ throwError $ "Missing blob file " ++ blobFile
                        ++ "\nneeded by backup entry " ++ path
 
     checkBlobIdAsExpected blobId blobIdStr blobFile =
       when (Blob.blobMd5 blobId /= blobIdStr) $
-        fail $ "Incorrect blob file " ++ blobFile
+        throwError $ "Incorrect blob file " ++ blobFile
             ++ "\nit actually has an md5sum of " ++ Blob.blobMd5 blobId
 
 
@@ -404,10 +409,10 @@ fromBackupEntry path mkEntry
     Just restorer -> do
       res <- liftIO $ abstractRestoreEntry restorer store (mkEntry pathEnd)
       case res of
-        Left e          -> fail $ "Error importing '" ++ path ++ "' :" ++ e
+        Left e          -> throwError $ "Error importing '" ++ path ++ "' :" ++ e
         Right restorer' -> updateImportState featureName restorer'
-    Nothing -> fail $ "Backup tarball contains file for unknown feature: " ++ featureName
-fromBackupEntry path _ = fail $ "Backup tarball contains unexpected file: " ++ path
+    Nothing -> throwError $ "Backup tarball contains file for unknown feature: " ++ featureName
+fromBackupEntry path _ = throwError $ "Backup tarball contains unexpected file: " ++ path
 
 
 --------------------------------------------------------------------------------
@@ -443,10 +448,10 @@ equalTarBall tar1 tar2 = do
                                  then [tarPath ++ ": " ++ what ++ " did not match"]
                                  else []
   where
-    readTar :: Monad m => String -> ByteString -> m [Tar.Entry]
+    readTar :: (Monad m, MonadError String m) => String -> ByteString -> m [Tar.Entry]
     readTar err = entriesToList err . Tar.read
 
-    entriesToList :: (Monad m, Show a) => String -> Tar.Entries a -> m [Tar.Entry]
+    entriesToList :: (Monad m, MonadError String m, Show a) => String -> Tar.Entries a -> m [Tar.Entry]
     entriesToList err (Tar.Next entry entries) = liftM (entry :) $ entriesToList err entries
     entriesToList _   Tar.Done                 = return []
-    entriesToList err (Tar.Fail s)             = fail ("Could not read '" ++ err ++ "' tarball: " ++ show s)
+    entriesToList err (Tar.Fail s)             = throwError ("Could not read '" ++ err ++ "' tarball: " ++ show s)
