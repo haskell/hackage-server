@@ -99,10 +99,30 @@ splitDot :: String -> [String]
 splitDot = split (dropBlanks $ dropDelims $ whenElt (=='.'))
 
 splitHyphen :: String -> [String]
-splitHyphen = split (dropBlanks $ dropDelims $ whenElt (=='-'))
+splitHyphen = rejoinAdjacentParts '-'
+            . split (dropBlanks $ dropDelims $ whenElt (=='-'))
 
 splitCamlCase :: String -> [String]
-splitCamlCase = split (dropInitBlank $ condense $ keepDelimsL $ whenElt isUpper)
+splitCamlCase = rejoinAdjacentParts '-'
+              . split (dropInitBlank $ condense $ keepDelimsL $ whenElt isUpper)
+
+-- Given split components like ["foo", "bar", "baz"]
+-- recombine adjacent pairs and triples, like ["foo-bar", "bar-baz"]
+rejoinAdjacentParts :: Char -> [String] -> [String]
+rejoinAdjacentParts joiner parts =
+    triples parts ++ pairs parts ++ parts
+  where
+    -- only makes a difference for 3 components or more
+    pairs :: [String] -> [String]
+    pairs ts@(_:ts'@(_:_:_)) =
+        zipWith (\t t' -> t ++ joiner : t') ts ts'
+    pairs ts = ts
+
+     -- only makes a difference for 4 components or more
+    triples :: [String] -> [String]
+    triples ts@(_:ts'@(_:ts''@(_:_:_))) =
+        zipWith3 (\t t' t'' -> t ++ joiner : t' ++ joiner : t'') ts ts' ts''
+    triples ts = ts
 
 stripPrefixH :: String -> [String]
 stripPrefixH ('H':'S':frag)   | all isUpper frag = [frag]
