@@ -55,6 +55,7 @@ import Distribution.Text (display)
 import Distribution.PackageDescription
 
 import Data.List (intercalate, intersperse, insert, sortBy)
+import Data.List.Split (split, oneOf)
 import Data.Function (on)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -1556,9 +1557,10 @@ mkHtmlSearch HtmlUtilities{..}
                               <*> mplus (lookRead "limit") (pure 100)
                               <*> optional (look "explain")
         let explain = isJust mexplain
+        let words' = split (oneOf " -_.")
         case mtermsStr of
           Just termsStr | explain
-                        , terms <- words termsStr, not (null terms) -> do
+                        , terms <- words' termsStr, not (null terms) -> do
             params  <- queryString getSearchRankParameters
             results <- searchPackagesExplain params terms
             return $ toResponse $ Resource.XHtml $
@@ -1568,7 +1570,7 @@ mkHtmlSearch HtmlUtilities{..}
                 , toHtml $ explainResults results
                 ]
 
-          Just termsStr | terms <- words termsStr, not (null terms) -> do
+          Just termsStr | terms <- words' termsStr, not (null terms) -> do
             pkgIndex <- liftIO $ queryGetPackageIndex
             currentTime <- liftIO $ getCurrentTime
             pkgnames <- searchPackages terms
@@ -1863,4 +1865,3 @@ data HtmlUtilities = HtmlUtilities {
   , renderItem :: PackageItem -> Html
   , renderTags :: Set Tag -> [Html]
   }
-
