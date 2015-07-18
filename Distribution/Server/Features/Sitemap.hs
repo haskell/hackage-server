@@ -62,25 +62,32 @@ sitemapFeature  ServerEnv{..}
                 initTime
   = SitemapFeature{..} where
 
-    sitemapFeatureInterface = (emptyHackageFeature "XML sitemap generation") {
+    sitemapFeatureInterface = (emptyHackageFeature "sitemap") {
       featureResources  = [ xmlSitemapResource ]
       , featureState    = []
-      , featureDesc     = "Dynamically generates a sitemap.xml."
+      , featureDesc     = "Provides a sitemap.xml for search engines"
       , featureCaches   = []
     }
 
     xmlSitemapResource :: Resource
     xmlSitemapResource = (resourceAt "/sitemap.xml") {
-      resourceDesc = [(GET, "Returns a dynamically generated sitemap in XML form.")]
-    , resourceGet = [("xml", generateSitemap)]
+      resourceDesc = [(GET, "The dynamically generated sitemap, in XML format")]
+    , resourceGet = [("xml", serveSitemap)]
     }
 
+    serveSitemap :: DynamicPath -> ServerPartE Response
+    serveSitemap _ = do
+      sitemapXML <- liftIO generateSitemap
+      cacheControlWithoutETag [Public, maxAgeHours 1]
+      return (toResponse sitemapXML)
+
+    pageBuildDate :: String
     pageBuildDate = showGregorian (utctDay initTime)
 
     -- Generates a list of URL nodes corresponding to hackage pages, then
-    -- builds and returns an XML sitemap as a response.
-    generateSitemap :: DynamicPath -> ServerPartE Response
-    generateSitemap _ = do
+    -- builds and returns an XML sitemap.
+    generateSitemap :: IO XMLResponse
+    generateSitemap = do
 
       -- Misc. pages
       -- e.g. ["http://myhackage.com/index", ...]
@@ -183,7 +190,7 @@ sitemapFeature  ServerEnv{..}
             ++ versionedDocNodes
           sitemapXML = XMLResponse $ SM.nodesToSiteMap allNodes
 
-      return $ toResponse sitemapXML
+      return sitemapXML
 
     mapParaM :: Monad m => (a -> m b) -> [a] -> m [(a, b)]
     mapParaM f = mapM (\x -> (,) x `liftM` f x)
