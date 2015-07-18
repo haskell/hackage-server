@@ -38,8 +38,7 @@ initSitemapFeature :: ServerEnv
                       -> IO SitemapFeature)
 
 initSitemapFeature env@ServerEnv{..} = do
-  now       <- getCurrentTime
-  initTime  <- newMemStateWHNF now
+  initTime <- getCurrentTime
 
   return $ \coref@CoreFeature{..}
             docsCore@DocumentationFeature{..}
@@ -54,7 +53,7 @@ sitemapFeature  :: ServerEnv
                 -> CoreFeature
                 -> DocumentationFeature
                 -> TagsFeature
-                -> MemState UTCTime
+                -> UTCTime
                 -> SitemapFeature
 sitemapFeature  ServerEnv{..}
                 CoreFeature{..}
@@ -67,26 +66,21 @@ sitemapFeature  ServerEnv{..}
       featureResources  = [ xmlSitemapResource ]
       , featureState    = []
       , featureDesc     = "Dynamically generates a sitemap.xml."
-      , featureCaches   = [
-          CacheComponent {
-            cacheDesc       = "Records the time that this feature was initialized."
-          , getCacheMemSize = memSize <$> readMemState initTime
-          }
-        ]
+      , featureCaches   = []
     }
 
     xmlSitemapResource :: Resource
     xmlSitemapResource = (resourceAt "/sitemap.xml") {
       resourceDesc = [(GET, "Returns a dynamically generated sitemap in XML form.")]
-    , resourceGet = [("json", generateSitemap)]
+    , resourceGet = [("xml", generateSitemap)]
     }
+
+    pageBuildDate = showGregorian (utctDay initTime)
 
     -- Generates a list of URL nodes corresponding to hackage pages, then
     -- builds and returns an XML sitemap as a response.
     generateSitemap :: DynamicPath -> ServerPartE Response
     generateSitemap _ = do
-
-      pageBuildDate <- showGregorian . utctDay <$> readMemState initTime
 
       -- Misc. pages
       -- e.g. ["http://myhackage.com/index", ...]
@@ -193,3 +187,4 @@ sitemapFeature  ServerEnv{..}
 
     mapParaM :: Monad m => (a -> m b) -> [a] -> m [(a, b)]
     mapParaM f = mapM (\x -> (,) x `liftM` f x)
+
