@@ -231,6 +231,7 @@ executable hackage-server
       Distribution.Server.Features.UserSignup
       Distribution.Server.Features.StaticFiles
       Distribution.Server.Features.ServerIntrospect
+      Distribution.Server.Features.Sitemap
 
   if flag(debug)
     cpp-options: -DDEBUG
@@ -249,8 +250,9 @@ executable hackage-server
     base64-bytestring ==0.1.* || == 1.0.*,
     base16-bytestring ==0.1.*,
     bytestring >= 0.10.4.1,
-    --TODO: drop blaze builder in favour of bytestring-0.10 builder
-    blaze-builder,
+    --NOTE: blaze-builder-0.4 is now a compat package that uses
+    -- bytestring-0.10 builder
+    blaze-builder >= 0.4,
     text       >= 0.11,
     split      >= 0.2,
     time       >= 1.1 && < 1.6,
@@ -274,7 +276,6 @@ executable hackage-server
     aeson      >= 0.6.2,
     unordered-containers >= 0.2.3.0,
     rss        >= 3000.2.0.3,
-    HaXml      >= 1.24,
     Cabal      == 1.22.*,
     csv        == 0.1.*,
     stm        >= 2.2 && < 2.5,
@@ -287,7 +288,8 @@ executable hackage-server
     QuickCheck >= 2.5,
     friendly-time >= 0.4 && < 0.5,
     cheapskate >= 0.1,
-    blaze-html >= 0.7
+    blaze-html >= 0.7,
+    xmlgen     >= 0.6
 
   if ! flag(minimal)
     build-depends:
