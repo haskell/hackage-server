@@ -43,7 +43,7 @@ import Control.Applicative
 import Control.Monad
          ( unless, when )
 import Control.Monad.Except
-         ( ExceptT, runExceptT )
+         ( ExceptT, runExceptT, MonadError, throwError )
 import Control.Monad.Writer
          ( WriterT(..), MonadWriter, tell )
 import Control.Monad.Identity
@@ -70,7 +70,7 @@ unpackPackage :: UTCTime -> FilePath -> ByteString
 unpackPackage now tarGzFile contents =
   runUploadMonad $ do
     (pkgDesc, warnings, cabalEntry) <- basicChecks False now tarGzFile contents
-    mapM_ fail warnings
+    mapM_ throwError warnings
     extraChecks pkgDesc
     return (pkgDesc, cabalEntry)
 
@@ -91,22 +91,22 @@ basicChecks lax now tarGzFile contents = do
         where (tarFile, gz) = splitExtension (portableTakeFileName tarGzFile)
               (base,   tar) = splitExtension tarFile
   unless (ext == ".tar.gz") $
-    fail $ tarGzFile ++ " is not a gzipped tar file, it must have the .tar.gz extension"
+    throwError $ tarGzFile ++ " is not a gzipped tar file, it must have the .tar.gz extension"
 
   pkgid <- case simpleParse pkgidStr of
     Just pkgid
       | null . versionBranch . packageVersion $ pkgid
-      -> fail $ "Invalid package id " ++ quote pkgidStr
-             ++ ". It must include the package version number, and not just "
-             ++ "the package name, e.g. 'foo-1.0'."
+      -> throwError $ "Invalid package id " ++ quote pkgidStr
+                   ++ ". It must include the package version number, and not just "
+                   ++ "the package name, e.g. 'foo-1.0'."
 
       | display pkgid == pkgidStr -> return (pkgid :: PackageIdentifier)
 
       | not . null . versionTags . packageVersion $ pkgid
-      -> fail $ "Hackage no longer accepts packages with version tags: "
-             ++ intercalate ", " (versionTags (packageVersion pkgid))
-    _ -> fail $ "Invalid package id " ++ quote pkgidStr
-             ++ ". The tarball must use the name of the package."
+      -> throwError $ "Hackage no longer accepts packages with version tags: "
+                   ++ intercalate ", " (versionTags (packageVersion pkgid))
+    _ -> throwError $ "Invalid package id " ++ quote pkgidStr
+                   ++ ". The tarball must use the name of the package."
 
   -- Extract entries and check the tar format / portability
   let entries = tarballChecks lax now expectedDir
@@ -131,21 +131,21 @@ basicChecks lax now tarGzFile contents = do
                     -- ByteString (the whole tar file), so we make a
                     -- copy of it
                     return $ LBS.copy cabalEntry
-    [] -> fail $ "The " ++ quote cabalFileName
-              ++ " file is missing from the package tarball."
+    [] -> throwError $ "The " ++ quote cabalFileName
+                    ++ " file is missing from the package tarball."
 
   -- Parse the Cabal file
   let cabalFileContent = unpackUTF8 cabalEntry
   (pkgDesc, warnings) <- case parsePackageDescription cabalFileContent of
-    ParseFailed err -> fail $ showError (locatedErrorMsg err)
+    ParseFailed err -> throwError $ showError (locatedErrorMsg err)
     ParseOk warnings pkgDesc ->
       return (pkgDesc, map (showPWarning cabalFileName) warnings)
 
   -- Check that the name and version in Cabal file match
   when (packageName pkgDesc /= packageName pkgid) $
-    fail "Package name in the cabal file does not match the file name."
+    throwError "Package name in the cabal file does not match the file name."
   when (packageVersion pkgDesc /= packageVersion pkgid) $
-    fail "Package version in the cabal file does not match the file name."
+    throwError "Package version in the cabal file does not match the file name."
 
   return (pkgDesc, warnings, cabalEntry)
 
@@ -183,14 +183,13 @@ extraChecks genPkgDesc = do
       isDistError (PackageDistSuspicious {}) = False -- warn without refusing
       isDistError _                          = True
       (errors, warnings) = partition isDistError checks
-  mapM_ (fail . explanation) errors
+  mapM_ (throwError . explanation) errors
   mapM_ (warn . explanation) warnings
 
   -- Proprietary License check (only active in central-server branch)
-  when (not allowAllRightsReserved &&
-        license pkgDesc == AllRightsReserved)
-       (fail $ "This server does not accept packages with 'license' " ++
-               "field set to AllRightsReserved.")
+  when (not allowAllRightsReserved && license pkgDesc == AllRightsReserved) $
+    throwError $ "This server does not accept packages with 'license' "
+              ++ "field set to AllRightsReserved."
 
   -- Check reasonableness of names of exposed modules
   let topLevel = case library pkgDesc of
@@ -207,7 +206,7 @@ extraChecks genPkgDesc = do
 --      WriterT for warning messages
 --      Either for fatal errors
 newtype UploadMonad a = UploadMonad (WriterT [String] (ExceptT String Identity) a)
-  deriving (Functor, Applicative, Monad, MonadWriter [String])
+  deriving (Functor, Applicative, Monad, MonadWriter [String], MonadError String)
 
 warn :: String -> UploadMonad ()
 warn msg = tell [msg]
@@ -228,7 +227,7 @@ selectEntries :: (err -> String)
               -> UploadMonad [a]
 selectEntries formatErr select = extract []
   where
-    extract _        (Tar.Fail err)           = fail (formatErr err)
+    extract _        (Tar.Fail err)           = throwError (formatErr err)
     extract selected  Tar.Done                = return selected
     extract selected (Tar.Next entry entries) =
       case select entry of
