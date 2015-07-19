@@ -46,8 +46,8 @@ import qualified Data.Vector         as Vector
 data VersionsFeature = VersionsFeature {
     versionsFeatureInterface :: HackageFeature,
 
-    queryGetPreferredInfo :: MonadIO m => PackageName -> m PreferredInfo,
-    queryGetDeprecatedFor :: MonadIO m => PackageName -> m (Maybe [PackageName]),
+    queryGetPreferredInfo :: forall m. MonadIO m => PackageName -> m PreferredInfo,
+    queryGetDeprecatedFor :: forall m. MonadIO m => PackageName -> m (Maybe [PackageName]),
 
     versionsResource :: VersionsResource,
     preferredHook  :: Hook (PackageName, PreferredInfo) (),
@@ -58,9 +58,9 @@ data VersionsFeature = VersionsFeature {
 
     doPreferredRender     :: PackageName -> ServerPartE PreferredRender,
     doDeprecatedRender    :: PackageName -> ServerPartE (Maybe [PackageName]),
-    doPreferredsRender    :: MonadIO m => m [(PackageName, PreferredRender)],
-    doDeprecatedsRender   :: MonadIO m => m [(PackageName, [PackageName])],
-    makePreferredVersions :: MonadIO m => m String,
+    doPreferredsRender    :: forall m. MonadIO m => m [(PackageName, PreferredRender)],
+    doDeprecatedsRender   :: forall m. MonadIO m => m [(PackageName, [PackageName])],
+    makePreferredVersions :: forall m. MonadIO m => m String,
     withPackagePreferred     :: forall a. PackageId -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a,
     withPackagePreferredPath :: forall a. DynamicPath -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a
 }
@@ -172,7 +172,10 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
 
     versionsResource = fix $ \r -> VersionsResource
       { preferredResource        = resourceAt "/packages/preferred.:format"
-      , preferredPackageResource = resourceAt "/package/:package/preferred.:format"
+      , preferredPackageResource = (resourceAt "/package/:package/preferred.:format") {
+            resourceDesc = [(GET, "List package's versions divided by type: normal, unpreferred, and deprecated")],
+            resourceGet = [("json", handlePreferredPackageGet)]
+          }
       , preferredText = (resourceAt "/packages/preferred-versions") {
             resourceGet = [("txt", \_ -> textPreferred)]
           }
@@ -194,6 +197,23 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
       }
 
     textPreferred = fmap toResponse makePreferredVersions
+
+    handlePreferredPackageGet :: DynamicPath -> ServerPartE Response
+    handlePreferredPackageGet dpath = do
+      pkgname <- packageInPath dpath
+      pkgs <- lookupPackageName pkgname
+      prefInfo <- queryGetPreferredInfo pkgname
+      let
+        classifiedVersions = Map.fromListWith (++)
+          $ map (\(v, i) -> (i, [v]))
+            $ classifyVersions prefInfo
+              $ map packageVersion pkgs
+        versionType NormalVersion = "normal-version"
+        versionType DeprecatedVersion = "deprecated-version"
+        versionType UnpreferredVersion = "unpreferred-version"
+      return . toResponse . object
+        $ map (\(i, vs) -> (Text.pack . versionType $ i, array $ map (string . display) vs))
+          $ Map.toList classifiedVersions
 
     handlePackagesDeprecatedGet :: DynamicPath -> ServerPartE Response
     handlePackagesDeprecatedGet _ = do

@@ -40,8 +40,8 @@ import Text.CSV (CSV, Record)
 data UserDetailsFeature = UserDetailsFeature {
     userDetailsFeatureInterface :: HackageFeature,
 
-    queryUserDetails  :: UserId -> MonadIO m => m (Maybe AccountDetails),
-    updateUserDetails :: UserId -> AccountDetails -> MonadIO m => m ()
+    queryUserDetails  :: forall m. MonadIO m => UserId -> m (Maybe AccountDetails),
+    updateUserDetails :: forall m. MonadIO m => UserId -> AccountDetails -> m ()
 }
 
 instance IsHackageFeature UserDetailsFeature where

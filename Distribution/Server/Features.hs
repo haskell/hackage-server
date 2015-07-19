@@ -43,6 +43,8 @@ import Distribution.Server.Features.EditCabalFiles      (initEditCabalFilesFeatu
 import Distribution.Server.Features.AdminFrontend       (initAdminFrontendFeature)
 import Distribution.Server.Features.AdminLog            (initAdminLogFeature)
 import Distribution.Server.Features.HoogleData          (initHoogleDataFeature)
+import Distribution.Server.Features.Votes               (initVotesFeature)
+import Distribution.Server.Features.Sitemap             (initSitemapFeature)
 #endif
 import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
 
@@ -138,8 +140,12 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                                initAdminFrontendFeature env
     mkHoogleDataFeature     <- logStartup "hoogle" $
                                initHoogleDataFeature env
+    mkVotesFeature          <- logStartup "votes" $
+                               initVotesFeature env
     mkAdminLogFeature       <- logStartup "admin log" $
                                initAdminLogFeature env
+    mkSitemapFeature        <- logStartup "sitemap" $
+                               initSitemapFeature env
 #endif
 
     loginfo verbosity "Initialising features, part 2"
@@ -162,7 +168,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          coreFeature
 
 #ifndef MINIMAL
-    tarIndexCacheFeature <- mkTarIndexCacheFeature 
+    tarIndexCacheFeature <- mkTarIndexCacheFeature
                               usersFeature
 
     packageContentsFeature <- mkPackageContentsFeature
@@ -222,6 +228,10 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          coreFeature
                          usersFeature
 
+    votesFeature    <- mkVotesFeature
+                           coreFeature
+                           usersFeature
+
     tagsFeature     <- mkTagsFeature
                          coreFeature
                          uploadFeature
@@ -260,6 +270,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          -- [reverse index disabled] reverseFeature
                          tagsFeature
                          downloadFeature
+                         votesFeature
                          listFeature
                          searchFeature
                          mirrorFeature
@@ -288,6 +299,11 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
 
     adminLogFeature <- mkAdminLogFeature
                          usersFeature
+
+    siteMapFeature <- mkSitemapFeature
+                        coreFeature
+                        documentationCoreFeature
+                        tagsFeature
 
 #endif
 
@@ -324,7 +340,9 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , editCabalFeature
          , adminFrontendFeature
          , getFeatureInterface hoogleDataFeature
+         , getFeatureInterface votesFeature
          , getFeatureInterface adminLogFeature
+         , getFeatureInterface siteMapFeature
 #endif
          , staticFilesFeature
          , serverIntrospectFeature allFeatures

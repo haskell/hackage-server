@@ -119,8 +119,8 @@ type AlexInput = (Char, [Word8], String)
 alexGetByte :: AlexInput -> Maybe (Word8,AlexInput)
 alexGetByte (c,(b:bs),s) = Just (b,(c,bs,s))
 alexGetByte (c,[],[])    = Nothing
-alexGetByte (_,[],(c:s)) = case utf8Encode c of
-                             (b:bs) -> Just (b, (c, bs, s))
+alexGetByte (_,[],(c:s)) = let (b:bs) = utf8Encode c
+                           in Just (b, (c, bs, s))
 
 -- | Encode a Haskell String to a list of Word8 values, in UTF8 format.
 utf8Encode :: Char -> [Word8]

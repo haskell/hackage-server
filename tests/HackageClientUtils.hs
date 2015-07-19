@@ -12,7 +12,7 @@ import Data.Aeson (FromJSON(..), Value(..), (.:))
 import Network.HTTP hiding (user)
 import Network.URI
 import System.Directory
-import System.Exit
+import System.Exit (ExitCode(..))
 import System.FilePath
 import System.IO
 import System.IO.Error

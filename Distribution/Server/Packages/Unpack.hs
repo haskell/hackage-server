@@ -42,8 +42,8 @@ import Data.Time.Clock.POSIX
 import Control.Applicative
 import Control.Monad
          ( unless, when )
-import Control.Monad.Error
-         ( ErrorT(..) )
+import Control.Monad.Except
+         ( ExceptT, runExceptT )
 import Control.Monad.Writer
          ( WriterT(..), MonadWriter, tell )
 import Control.Monad.Identity
@@ -206,14 +206,14 @@ extraChecks genPkgDesc = do
 -- Monad for uploading packages:
 --      WriterT for warning messages
 --      Either for fatal errors
-newtype UploadMonad a = UploadMonad (WriterT [String] (ErrorT String Identity) a)
+newtype UploadMonad a = UploadMonad (WriterT [String] (ExceptT String Identity) a)
   deriving (Functor, Applicative, Monad, MonadWriter [String])
 
 warn :: String -> UploadMonad ()
 warn msg = tell [msg]
 
 runUploadMonad :: UploadMonad a -> Either String (a, [String])
-runUploadMonad (UploadMonad m) = runIdentity . runErrorT . runWriterT $ m
+runUploadMonad (UploadMonad m) = runIdentity . runExceptT . runWriterT $ m
 
 -- | Registered top-level nodes in the class hierarchy.
 allocatedTopLevelNodes :: [String]
@@ -259,14 +259,14 @@ tarballChecks lax now expectedDir =
                                _                            -> Tar.Fail e)
     fmapTarError f = Tar.foldEntries Tar.Next Tar.Done (Tar.Fail . f)
 
-checkFutureTimes :: UTCTime 
+checkFutureTimes :: UTCTime
                  -> Tar.Entries CombinedTarErrs
                  -> Tar.Entries CombinedTarErrs
 checkFutureTimes now =
     checkEntries checkEntry
   where
     -- Allow 30s for client clock skew
-    now' = addUTCTime 30 now 
+    now' = addUTCTime 30 now
     checkEntry entry
       | entryUTCTime > now'
       = Just (FutureTimeError posixPath entryUTCTime)

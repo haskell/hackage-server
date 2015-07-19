@@ -15,6 +15,7 @@ import Distribution.Server.Features.BuildReports.Render
 import Distribution.Server.Features.PackageCandidates
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.DownloadCount
+import Distribution.Server.Features.Votes
 import Distribution.Server.Features.Search
 import Distribution.Server.Features.Search as Search
 import Distribution.Server.Features.PreferredVersions
@@ -46,6 +47,7 @@ import qualified Distribution.Server.Pages.Group as Pages
 -- [reverse index disabled] import qualified Distribution.Server.Pages.Reverse as Pages
 import qualified Distribution.Server.Pages.Index as Pages
 import Distribution.Server.Util.CountingMap (cmFind, cmToList)
+import Distribution.Server.Util.ServeTarball (loadTarEntry)
 
 import Distribution.Package
 import Distribution.Version
@@ -102,6 +104,7 @@ initHtmlFeature :: ServerEnv
                     -> VersionsFeature
                     -- [reverse index disabled] -> ReverseFeature
                     -> TagsFeature -> DownloadFeature
+                    -> VotesFeature
                     -> ListFeature -> SearchFeature
                     -> MirrorFeature -> DistroFeature
                     -> DocumentationFeature
@@ -128,6 +131,7 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
               candidates versions
               -- [reverse index disabled] reverse
               tags download
+              rank
               list@ListFeature{itemUpdate}
               names mirror
               distros
@@ -141,6 +145,7 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
                             packages upload
                             candidates versions
                             tags download
+                            rank
                             list names
                             mirror distros
                             docsCore docsCandidates
@@ -182,6 +187,7 @@ htmlFeature :: UserFeature
             -> VersionsFeature
             -> TagsFeature
             -> DownloadFeature
+            -> VotesFeature
             -> ListFeature
             -> SearchFeature
             -> MirrorFeature
@@ -203,6 +209,7 @@ htmlFeature user
             candidates versions
             -- [reverse index disabled] ReverseFeature{..}
             tags download
+            rank
             list@ListFeature{getAllLists}
             names
             mirror distros
@@ -242,6 +249,7 @@ htmlFeature user
                                       tarIndexCache
                                       reportsCore
                                       download
+                                      rank
                                       distros
                                       packages
                                       htmlTags
@@ -432,6 +440,7 @@ mkHtmlCore :: HtmlUtilities
            -> TarIndexCacheFeature
            -> ReportsFeature
            -> DownloadFeature
+           -> VotesFeature
            -> DistroFeature
            -> PackageContentsFeature
            -> HtmlTags
@@ -454,6 +463,7 @@ mkHtmlCore HtmlUtilities{..}
            TarIndexCacheFeature{cachedTarIndex}
            reportsFeature
            DownloadFeature{recentPackageDownloads,totalPackageDownloads}
+           VotesFeature{..}
            DistroFeature{queryPackageStatus}
            PackageContentsFeature{packageRender}
            HtmlTags{..}
@@ -475,6 +485,10 @@ mkHtmlCore HtmlUtilities{..}
         (extendResource $ corePackagePage cores) {
             resourceDesc = [(GET, "Show detailed package information")]
           , resourceGet  = [("html", servePackagePage)]
+          }
+      , (resourceAt "/package/:package/dependencies") {
+            resourceDesc = [(GET, "Show detailed package dependency information")]
+          , resourceGet = [("html", serveDependenciesPage)]
           }
       {-
       , (extendResource $ coreIndexPage cores) {
@@ -527,18 +541,28 @@ mkHtmlCore HtmlUtilities{..}
         -- (totalDown, versionDown) <- perVersionDownloads pkg
         totalDown <- cmFind pkgname `liftM` totalPackageDownloads
         recentDown <- cmFind pkgname `liftM` recentPackageDownloads
+        pkgVotesHtml <- renderVotesHtml pkgname
         let distHtml = case distributions of
                 [] -> []
                 _  -> [("Distributions", concatHtml . intersperse (toHtml ", ") $ map showDist distributions)]
-            afterHtml  = distHtml ++ [Pages.renderDownloads totalDown recentDown {- versionDown $ packageVersion realpkg-}
+            afterHtml  = distHtml ++ [ Pages.renderDownloads totalDown recentDown {- versionDown $ packageVersion realpkg-}
+                                    , pkgVotesHtml
                                      -- [reverse index disabled] ,Pages.reversePackageSummary realpkg revr revCount
                                      ]
-        -- bottom sections, currently only documentation
+        -- bottom sections, currently documentation and readme
         mdoctarblob <- queryDocumentation realpkg
         mdocIndex   <- maybe (return Nothing)
                              (liftM Just . liftIO . cachedTarIndex)
                              mdoctarblob
         let docURL = packageDocsContentUri docs realpkg -- "/package" <//> display realpkg <//> "docs"
+
+        mreadme     <- case rendReadme render of
+                         Nothing -> return Nothing
+                         Just (tarfile, _, offset, _) ->
+                                either (\_err -> return Nothing)
+                                       (return . Just . snd)
+                            =<< liftIO (loadTarEntry tarfile offset)
+
         -- extra features like tags and downloads
         tags <- queryTagsForPackage pkgname
 
@@ -551,15 +575,25 @@ mkHtmlCore HtmlUtilities{..}
                 _  -> concatHtml . (toHtml " in favor of ":) . intersperse (toHtml ", ") .
                       map (\for -> anchor ! [href $ corePackageNameUri cores "" for] << display for) $ fors]
               Nothing -> noHtml
+
+        cacheControlWithoutETag [Public, maxAgeMinutes 5]
+
         -- and put it all together
         return $ toResponse $ Resource.XHtml $
             Pages.packagePage render [tagLinks] [deprHtml]
                               (beforeHtml ++ middleHtml ++ afterHtml
                                 ++ buildStatusHtml)
-                              [] mdocIndex docURL False
+                              [] mdocIndex mreadme docURL False
       where
         showDist (dname, info) = toHtml (display dname ++ ":") +++
             anchor ! [href $ distroUrl info] << toHtml (display $ distroVersion info)
+
+    serveDependenciesPage :: DynamicPath -> ServerPartE Response
+    serveDependenciesPage dpath = do
+      pkgname <- packageInPath dpath
+      withPackagePreferred pkgname $ \pkg _ -> do
+        render <- liftIO $ packageRender pkg
+        return $ toResponse $ dependenciesPage False render
 
     serveMaintainPage :: DynamicPath -> ServerPartE Response
     serveMaintainPage dpath = do
@@ -936,6 +970,10 @@ mkHtmlCandidates HtmlUtilities{..}
           , resourcePut    = [("html", putPackageCandidate)]
           , resourceDelete = [("html", doDeleteCandidate)]
           }
+      , (resourceAt "/package/:package/candidate/dependencies") {
+            resourceDesc = [(GET, "Show detailed candidate dependency information")]
+          , resourceGet = [("html", serveDependenciesPage)]
+          }
         -- form for uploading candidate
       , (resourceAt "/packages/candidates/upload") {
             resourceDesc = [ (GET, "Show package candidate upload form") ]
@@ -1006,18 +1044,34 @@ mkHtmlCandidates HtmlUtilities{..}
       let sectionHtml = [Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing,
                          Pages.renderDependencies render] ++ Pages.renderFields render
           maintainHtml = anchor ! [href $ renderResource maintain [display $ packageId cand]] << "maintain"
-      -- bottom sections, currently only documentation
+      -- bottom sections, currently documentation and readme
       mdoctarblob <- queryDocumentation (packageId cand)
       mdocIndex   <- maybe (return Nothing)
                            (liftM Just . liftIO . cachedTarIndex)
                            mdoctarblob
       let docURL = packageDocsContentUri docs (packageId cand)
+
+      mreadme     <- case rendReadme render of
+                       Nothing -> return Nothing
+                       Just (tarfile, _, offset, _) ->
+                              either (\_err -> return Nothing)
+                                     (return . Just . snd)
+                          =<< liftIO (loadTarEntry tarfile offset)
+
       -- also utilize hasIndexedPackage :: Bool
       let warningBox = case renderWarnings candRender of
               [] -> []
               warn -> [thediv ! [theclass "notification"] << [toHtml "Warnings:", unordList warn]]
       return $ toResponse $ Resource.XHtml $
-          Pages.packagePage render [maintainHtml] warningBox sectionHtml [] mdocIndex docURL True
+          Pages.packagePage render [maintainHtml] warningBox sectionHtml
+                            [] mdocIndex mreadme docURL True
+
+    serveDependenciesPage :: DynamicPath -> ServerPartE Response
+    serveDependenciesPage dpath = do
+      candId <- packageInPath dpath
+      candRender <- liftIO . candidateRender =<< lookupCandidateId candId
+      let render = candPackageRender candRender
+      return $ toResponse $ dependenciesPage True render
 
     servePublishForm :: DynamicPath -> ServerPartE Response
     servePublishForm dpath = do
@@ -1091,6 +1145,17 @@ mkHtmlCandidates HtmlUtilities{..}
       return $ toResponse $ Resource.XHtml $ hackagePage "Deleting candidates"
                   [form ! [theclass "box", XHtml.method "post", action $ deleteUri candidatesResource "" pkgid]
                       << input ! [thetype "submit", value "Delete package candidate"]]
+
+dependenciesPage :: Bool -> PackageRender -> Resource.XHtml
+dependenciesPage isCandidate render =
+    Resource.XHtml $ hackagePage (pkg ++ ": dependencies") $
+      [h2 << heading, Pages.renderDetailedDependencies render]
+       ++ Pages.renderPackageFlags render
+  where
+    pkg = display $ rendPkgId render
+    heading = "Dependencies for " +++ anchor ! [href link] << pkg
+    link = "/package/" ++ pkg
+            ++ if isCandidate then "/candidate" else ""
 
 
 {-------------------------------------------------------------------------------
@@ -1672,7 +1737,7 @@ mkHtmlSearch HtmlUtilities{..}
                                    ("w" ++ featurename)
                                    ("Weight for " ++ featurename)
                     | feature <- Ix.range (minBound, maxBound :: PkgDocFeatures)
-                    , let featurename = show feature ] 
+                    , let featurename = show feature ]
               ]
           ]
         resetParamsForm termsStr =
@@ -1731,9 +1796,9 @@ htmlGroupResource UserFeature{..} r@(GroupResource groupR userR getGroup) =
     getList dpath = do
         group    <- getGroup dpath
         userDb   <- queryGetUserDb
-        userlist <- liftIO . queryUserList $ group
+        usergroup <- liftIO . queryUserGroup $ group
         let unames = [ Users.userIdToName userDb uid
-                     | uid   <- Group.enumerate userlist ]
+                     | uid   <- Group.toList usergroup ]
         let baseUri = renderResource' groupR dpath
         return . toResponse . Resource.XHtml $ Pages.groupPage
             unames baseUri (False, False) (groupDesc group)
@@ -1741,9 +1806,9 @@ htmlGroupResource UserFeature{..} r@(GroupResource groupR userR getGroup) =
         group    <- getGroup dpath
         (canAdd, canDelete) <- lookupGroupEditAuth group
         userDb   <- queryGetUserDb
-        userlist <- liftIO . queryUserList $ group
+        usergroup <- liftIO . queryUserGroup $ group
         let unames = [ Users.userIdToName userDb uid
-                     | uid   <- Group.enumerate userlist ]
+                     | uid   <- Group.toList usergroup ]
         let baseUri = renderResource' groupR dpath
         return . toResponse . Resource.XHtml $ Pages.groupPage
             unames baseUri (canAdd, canDelete) (groupDesc group)

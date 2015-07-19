@@ -11,7 +11,7 @@ module Distribution.Server.Features.Distro.Types where
 import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Users.State()
-import Distribution.Server.Users.Group (UserList)
+import Distribution.Server.Users.Group (UserIdSet)
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -42,7 +42,7 @@ instance Text DistroName where
 
 -- | Listing of known distirbutions and their maintainers
 data Distributions = Distributions {
-    nameMap :: !(Map.Map DistroName UserList)
+    nameMap :: !(Map.Map DistroName UserIdSet)
 }
  deriving (Eq, Typeable, Show)
 

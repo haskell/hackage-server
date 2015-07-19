@@ -25,7 +25,7 @@ import Data.Maybe
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Trans
-import Control.Monad.Error
+import Control.Monad.Except
 import Control.Monad.State
 import Control.Monad.Reader
 import Data.ByteString.Lazy (ByteString)
@@ -425,7 +425,7 @@ putPackage doMirrorUploaders baseURI (PkgIndexInfo pkgid mtime muname _muid) loc
 
 newtype MirrorSession a
       = MirrorSession {
-          unMirror :: ErrorT MirrorError
+          unMirror :: ExceptT MirrorError
                         (ReaderT (Verbosity, Bool, IORef ErrorState)
                           (BrowserAction (HandleStream ByteString)))
                         a
@@ -462,7 +462,7 @@ runMirrorSession :: Verbosity -> Bool -> ErrorState -> MirrorSession a
                  -> IO (Either MirrorError a, ErrorState)
 runMirrorSession verbosity keepGoing st (MirrorSession m) = do
   stRef <- newIORef st
-  result <- browse (runReaderT (runErrorT m) (verbosity, keepGoing, stRef))
+  result <- browse (runReaderT (runExceptT m) (verbosity, keepGoing, stRef))
               `catch` (return . Left . MirrorIOError)
               `catch` \ae -> case ae of
                                UserInterrupt -> return (Left Interrupted)
@@ -478,8 +478,7 @@ runMirrorSession verbosity keepGoing st (MirrorSession m) = do
 -- This policy action behaves like a state machine action, updating the monad
 -- state and if it decides it has to fail hard, by making use of error monad.
 
-data MirrorError = MirrorGeneralError String
-                 | MirrorIOError IOError
+data MirrorError = MirrorIOError IOError
                  | GetEntityError Entity ErrorResponse
                  | ParseEntityError Entity URI String
                  | PutPackageError PackageId ErrorResponse
@@ -489,11 +488,7 @@ data MirrorError = MirrorGeneralError String
 data Entity = EntityIndex | EntityLog | EntityPackage PackageId
   deriving Show
 
-instance Error MirrorError where
-  strMsg = MirrorGeneralError
-
 formatMirrorError :: MirrorError -> String
-formatMirrorError (MirrorGeneralError msg)  = msg
 formatMirrorError (MirrorIOError      ioe)  = formatIOError ioe
 formatMirrorError (GetEntityError entity rsp) =
     "Failed to download " ++ formatEntity entity
@@ -918,13 +913,13 @@ validateOpts args = do
         else return int
 
 readConfigFile :: FilePath -> IO (Either String (URI, URI))
-readConfigFile configFile = runErrorT $ do
-    config   <- ErrorT $ tryIO $ readFile configFile
+readConfigFile configFile = runExceptT $ do
+    config   <- ExceptT $ tryIO $ readFile configFile
     [fr, to] <- case lines config of
                   [fr, to] -> return [fr, to]
                   _        -> fail "Invalid config file format"
-    frURI    <- ErrorT . return $ validateHackageURI fr
-    toURI    <- ErrorT . return $ validateHackageURI to
+    frURI    <- ExceptT . return $ validateHackageURI fr
+    toURI    <- ExceptT . return $ validateHackageURI to
     return (frURI, toURI)
   where
     tryIO :: IO a -> IO (Either String a)

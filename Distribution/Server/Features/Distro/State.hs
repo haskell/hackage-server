@@ -8,7 +8,7 @@ import qualified Distribution.Server.Features.Distro.Distributions as Dist
 import Distribution.Server.Features.Distro.Distributions
     (DistroName, Distributions, DistroVersions, DistroPackageInfo)
 
-import Distribution.Server.Users.Group (UserList)
+import Distribution.Server.Users.Group (UserIdSet)
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Users.State ()
@@ -92,19 +92,19 @@ packageStatus package
 distroPackageStatus :: DistroName -> PackageName -> Query Distros (Maybe DistroPackageInfo)
 distroPackageStatus distro package = asks $ Dist.distroPackageStatus distro package . distVersions
 
-getDistroMaintainers :: DistroName -> Query Distros UserList
+getDistroMaintainers :: DistroName -> Query Distros UserIdSet
 getDistroMaintainers name = liftM (fromMaybe Group.empty . Dist.getDistroMaintainers name) (asks distDistros)
 
-modifyDistroMaintainers :: DistroName -> (UserList -> UserList) -> Update Distros ()
+modifyDistroMaintainers :: DistroName -> (UserIdSet -> UserIdSet) -> Update Distros ()
 modifyDistroMaintainers name func = modify (\distros -> distros {distDistros = Dist.modifyDistroMaintainers name func (distDistros distros) })
 
 addDistroMaintainer :: DistroName -> UserId -> Update Distros ()
-addDistroMaintainer name uid = modifyDistroMaintainers name (Group.add uid)
+addDistroMaintainer name uid = modifyDistroMaintainers name (Group.insert uid)
 
 removeDistroMaintainer :: DistroName -> UserId -> Update Distros ()
-removeDistroMaintainer name uid = modifyDistroMaintainers name (Group.remove uid)
+removeDistroMaintainer name uid = modifyDistroMaintainers name (Group.delete uid)
 
-replaceDistroMaintainers :: DistroName -> UserList -> Update Distros ()
+replaceDistroMaintainers :: DistroName -> UserIdSet -> Update Distros ()
 replaceDistroMaintainers name ulist = modifyDistroMaintainers name (const ulist)
 
 makeAcidic

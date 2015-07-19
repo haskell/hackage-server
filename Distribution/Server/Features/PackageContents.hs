@@ -25,9 +25,12 @@ import Distribution.Package
 import qualified Cheapskate      as Markdown (markdown, Options(..))
 import qualified Cheapskate.Html as Markdown (renderDoc)
 import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
-import qualified Data.Text.Encoding as T (decodeUtf8)
+import qualified Data.Text                as T
+import qualified Data.Text.Encoding       as T
+import qualified Data.Text.Encoding.Error as T
 import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
 import qualified Text.XHtml.Strict as XHtml
+import           Text.XHtml.Strict ((<<), (!))
 import System.FilePath.Posix (takeExtension)
 
 
@@ -124,9 +127,9 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
       case mChangeLog of
         Left err ->
           errNotFound "Changelog not found" [MText err]
-        Right (tarfile, etag, offset, name) -> do
+        Right (tarfile, etag, offset, filename) -> do
           cacheControl [Public, maxAgeDays 30] etag
-          liftIO $ serveTarEntry tarfile offset name
+          liftIO $ serveTarEntry tarfile offset filename
 
     serveChangeLogHtml :: DynamicPath -> ServerPartE Response
     serveChangeLogHtml dpath = do
@@ -136,16 +139,20 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
         Left err ->
           errNotFound "Changelog not found" [MText err]
         Right (tarfile, etag, offset, filename) -> do
-          (_, contents) <- either (\err -> errInternalError [MText err]) return
-                       =<< liftIO (loadTarEntry tarfile offset)
+          contents <- either (\err -> errInternalError [MText err])
+                             (return . snd)
+                  =<< liftIO (loadTarEntry tarfile offset)
           cacheControl [Public, maxAgeDays 30] etag
           return $ toResponse $ Resource.XHtml $
-            let title = "Changelog for " ++ display (packageId pkg)
-             in hackagePage title
-                  [ XHtml.h2 XHtml.<< title
-                  , linkToPlainTextVersion "changelog.txt" filename
-                  , renderMarkdown contents ]
-
+            let title = "Changelog for " ++ display (packageId pkg) in
+            hackagePage title
+              [ XHtml.h2 << title
+              , XHtml.thediv ! [XHtml.theclass "embedded-author-content"]
+                            << if supposedToBeMarkdown filename
+                                 then renderMarkdown contents
+                                 else XHtml.thediv ! [XHtml.theclass "preformatted"]
+                                                  << unpackUtf8 contents
+              ]
 
     serveReadmeText :: DynamicPath -> ServerPartE Response
     serveReadmeText dpath = do
@@ -154,9 +161,9 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
       case mReadme of
         Left err ->
           errNotFound "Readme not found" [MText err]
-        Right (tarfile, etag, offset, name) -> do
+        Right (tarfile, etag, offset, filename) -> do
           cacheControl [Public, maxAgeDays 30] etag
-          liftIO $ serveTarEntry tarfile offset name
+          liftIO $ serveTarEntry tarfile offset filename
 
     serveReadmeHtml :: DynamicPath -> ServerPartE Response
     serveReadmeHtml dpath = do
@@ -166,15 +173,20 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
         Left err ->
           errNotFound "Readme not found" [MText err]
         Right (tarfile, etag, offset, filename) -> do
-          (_, contents) <- either (\err -> errInternalError [MText err]) return
-                       =<< liftIO (loadTarEntry tarfile offset)
+          contents <- either (\err -> errInternalError [MText err])
+                             (return . snd)
+                  =<< liftIO (loadTarEntry tarfile offset)
           cacheControl [Public, maxAgeDays 30] etag
           return $ toResponse $ Resource.XHtml $
             let title = "Readme for " ++ display (packageId pkg) in
             hackagePage title
-              [ XHtml.h2 XHtml.<< title
-              , linkToPlainTextVersion "readme.txt" filename
-              , renderMarkdown contents ]
+              [ XHtml.h2 << title
+              , XHtml.thediv ! [XHtml.theclass "embedded-author-content"]
+                            << if supposedToBeMarkdown filename
+                                 then renderMarkdown contents
+                                 else XHtml.thediv ! [XHtml.theclass "preformatted"]
+                                                  << unpackUtf8 contents
+              ]
 
     -- return: not-found error or tarball
     serveContents :: DynamicPath -> ServerPartE Response
@@ -202,16 +214,10 @@ renderMarkdown = XHtml.primHtml . Blaze.renderHtml
         , Markdown.debug              = False
         }
 
-linkToPlainTextVersion :: String -> String -> XHtml.Html
-linkToPlainTextVersion link fname
-  | supposedToBeMarkdown = XHtml.noHtml
-  | otherwise
-  = XHtml.toHtml
-    [ XHtml.toHtml "If this renders badly as markdown, "
-    , XHtml.anchor XHtml.! [XHtml.href link]
-                   XHtml.<< "see the plain text version"
-    , XHtml.hr
-    ]
-  where
-    supposedToBeMarkdown = takeExtension fname `elem` [".md", ".markdown"]
+supposedToBeMarkdown :: FilePath -> Bool
+supposedToBeMarkdown fname = takeExtension fname `elem` [".md", ".markdown"]
 
+unpackUtf8 :: BS.ByteString -> String
+unpackUtf8 = T.unpack
+           . T.decodeUtf8With T.lenientDecode
+           . BS.toStrict

@@ -29,10 +29,10 @@ data PlatformFeature = PlatformFeature {
 
     platformResource :: PlatformResource,
 
-    platformVersions      :: MonadIO m => PackageName -> m [Version],
-    platformPackageLatest :: MonadIO m => m [(PackageName, Version)],
-    setPlatform           :: MonadIO m => PackageName -> [Version] -> m (),
-    removePlatform        :: MonadIO m => PackageName -> m ()
+    platformVersions      :: forall m. MonadIO m => PackageName -> m [Version],
+    platformPackageLatest :: forall m. MonadIO m => m [(PackageName, Version)],
+    setPlatform           :: forall m. MonadIO m => PackageName -> [Version] -> m (),
+    removePlatform        :: forall m. MonadIO m => PackageName -> m ()
 }
 
 instance IsHackageFeature PlatformFeature where

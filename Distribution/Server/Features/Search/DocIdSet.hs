@@ -57,7 +57,7 @@ instance MVG.MVector MVU.MVector DocId where
   basicLength (MVU_DocId vw) = MVG.basicLength vw
   basicUnsafeSlice start end (MVU_DocId vw) = MVU_DocId $ MVG.basicUnsafeSlice start end vw
   basicOverlaps (MVU_DocId vw1) (MVU_DocId vw2) = MVG.basicOverlaps vw1 vw2
-  basicUnsafeNew size  = MVU_DocId `liftM` MVG.basicUnsafeNew size
+  basicUnsafeNew sz = MVU_DocId `liftM` MVG.basicUnsafeNew sz
   basicUnsafeRead (MVU_DocId vw) ix   = DocId `liftM` MVG.basicUnsafeRead vw ix
   basicUnsafeWrite (MVU_DocId vw) ix (DocId word) = MVG.basicUnsafeWrite vw ix word
 

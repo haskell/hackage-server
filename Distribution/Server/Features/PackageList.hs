@@ -88,7 +88,7 @@ initListFeature :: ServerEnv
                     -> TagsFeature
                     -> VersionsFeature
                     -> IO ListFeature)
-initListFeature ServerEnv{ serverVerbosity = verbosity } = do
+initListFeature _env = do
     itemCache  <- newMemStateWHNF Map.empty
     itemUpdate <- newHook
 

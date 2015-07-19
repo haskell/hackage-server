@@ -1,6 +1,5 @@
 -- | Miscellaneous utility functions
 {-# LANGUAGE ViewPatterns #-}
-{-# OPTIONS_GHC -Wall #-}
 module Util (
     explode
   , trim
@@ -12,7 +11,7 @@ module Util (
 import Data.Char
 import Data.Aeson
 import System.IO
-import System.Exit
+import System.Exit (exitFailure)
 
 import qualified Data.ByteString.Lazy.Char8 as LBS
 
