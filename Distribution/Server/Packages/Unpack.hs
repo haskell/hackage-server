@@ -134,6 +134,11 @@ basicChecks lax now tarGzFile contents = do
     [] -> throwError $ "The " ++ quote cabalFileName
                     ++ " file is missing from the package tarball."
 
+  when (startsWithBOM cabalEntry) $
+    throwError $ "The cabal file starts with a Unicode byte order mark (BOM), "
+              ++ "which causes problems for older versions of cabal. Please "
+              ++ "save the package's cabal file as UTF8 without the BOM."
+
   -- Parse the Cabal file
   let cabalFileContent = unpackUTF8 cabalEntry
   (pkgDesc, warnings) <- case parsePackageDescription cabalFileContent of
@@ -334,3 +339,8 @@ explainTarError (FutureTimeError entryname time) =
 
 quote :: String -> String
 quote s = "'" ++ s ++ "'"
+
+-- | Whether a UTF8 BOM is at the beginning of the input
+startsWithBOM :: ByteString -> Bool
+startsWithBOM bs = LBS.take 3 bs == LBS.pack [0xEF, 0xBB, 0xBF]
+
