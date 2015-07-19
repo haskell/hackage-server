@@ -129,7 +129,7 @@ sitemapFeature  ServerEnv{..}
 
 generateSitemap :: URI
                 -> T.Text
-                -> Tag
+                -> [Tag]
                 -> PackageIndex.PackageIndex PkgInfo
                 -> Map.Map PackageId a
                 -> ByteString
