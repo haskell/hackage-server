@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, DeriveDataTypeable, StandaloneDeriving, OverloadedStrings #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, DeriveDataTypeable, OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -----------------------------------------------------------------------------
 -- |
@@ -137,6 +137,7 @@ instance ToMessage CSVFile where
     toMessage (CSVFile csv) = packUTF8 (printCSV csv)
 
 newtype XMLResponse = XMLResponse BS.Lazy.ByteString
+  deriving (MemSize, NFData)
 
 instance ToMessage XMLResponse where
   toContentType _ = "application/xml"

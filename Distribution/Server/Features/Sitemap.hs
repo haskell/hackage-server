@@ -1,5 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
-
+{-# LANGUAGE RecordWildCards, NamedFieldPuns, RecursiveDo #-}
 
 module Distribution.Server.Features.Sitemap (
   SitemapFeature(..)
@@ -37,16 +36,26 @@ initSitemapFeature :: ServerEnv
                       -> TagsFeature
                       -> IO SitemapFeature)
 
-initSitemapFeature env@ServerEnv{..} = do
+initSitemapFeature env@ServerEnv{ serverCacheDelay,
+                                  serverVerbosity = verbosity} = do
   initTime <- getCurrentTime
 
   return $ \coref@CoreFeature{..}
             docsCore@DocumentationFeature{..}
             tagsf@TagsFeature{..} -> do
 
-    let feature = sitemapFeature env
-                  coref docsCore tagsf
-                  initTime
+    rec let (feature, updateSitemapCache) =
+              sitemapFeature env coref docsCore tagsf
+                             initTime sitemapCache
+
+        sitemapCache <- newAsyncCacheNF updateSitemapCache
+                          defaultAsyncCachePolicy {
+                            asyncCacheName         = "sitemap.xml",
+                            asyncCacheUpdateDelay  = serverCacheDelay,
+                            asyncCacheSyncInit     = False,
+                            asyncCacheLogVerbosity = verbosity
+                          }
+
     return feature
 
 sitemapFeature  :: ServerEnv
@@ -54,19 +63,35 @@ sitemapFeature  :: ServerEnv
                 -> DocumentationFeature
                 -> TagsFeature
                 -> UTCTime
-                -> SitemapFeature
+                -> AsyncCache XMLResponse
+                -> (SitemapFeature, IO XMLResponse)
 sitemapFeature  ServerEnv{..}
                 CoreFeature{..}
                 DocumentationFeature{..}
                 TagsFeature{..}
                 initTime
-  = SitemapFeature{..} where
+                sitemapCache
+  = (SitemapFeature{..}, updateSitemapCache)
+  where
 
     sitemapFeatureInterface = (emptyHackageFeature "sitemap") {
       featureResources  = [ xmlSitemapResource ]
       , featureState    = []
       , featureDesc     = "Provides a sitemap.xml for search engines"
-      , featureCaches   = []
+      , featureCaches   =
+          [ CacheComponent {
+              cacheDesc       = "sitemap.xml",
+              getCacheMemSize = memSize <$> readAsyncCache sitemapCache
+            }
+          ]
+      , featurePostInit = do
+          syncAsyncCache sitemapCache
+          addCronJob serverCron CronJob {
+            cronJobName      = "regenerate the cached sitemap.xml",
+            cronJobFrequency = DailyJobFrequency,
+            cronJobOneShot   = False,
+            cronJobAction    = prodAsyncCache sitemapCache
+          }
     }
 
     xmlSitemapResource :: Resource
@@ -77,8 +102,8 @@ sitemapFeature  ServerEnv{..}
 
     serveSitemap :: DynamicPath -> ServerPartE Response
     serveSitemap _ = do
-      sitemapXML <- liftIO generateSitemap
-      cacheControlWithoutETag [Public, maxAgeHours 1]
+      sitemapXML <- liftIO $ readAsyncCache sitemapCache
+      cacheControlWithoutETag [Public, maxAgeDays 1]
       return (toResponse sitemapXML)
 
     pageBuildDate :: String
@@ -86,8 +111,8 @@ sitemapFeature  ServerEnv{..}
 
     -- Generates a list of URL nodes corresponding to hackage pages, then
     -- builds and returns an XML sitemap.
-    generateSitemap :: IO XMLResponse
-    generateSitemap = do
+    updateSitemapCache :: IO XMLResponse
+    updateSitemapCache = do
 
       -- Misc. pages
       -- e.g. ["http://myhackage.com/index", ...]
