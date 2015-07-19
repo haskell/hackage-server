@@ -149,8 +149,8 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
             , deprecatedPackageResource
             , preferredText
             ]
-        --FIXME: don't we need to set the preferred-versions on init?
-      , featurePostInit = updateDeprecatedTags
+      , featurePostInit = do updateDeprecatedTags
+                             updateIndexPreferredState
       , featureState    = [abstractAcidStateComponent preferredState]
       }
 
@@ -302,10 +302,8 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
                   True  -> do
                       void $ updateState preferredState $ SetPreferredRanges pkgname prefs
                       void $ updateState preferredState $ SetDeprecatedVersions pkgname deprs
+                      liftIO updateIndexPreferredState
                       newInfo <- queryState preferredState $ GetPreferredInfo pkgname
-                      prefVersions <- makePreferredVersions
-                      now <- liftIO getCurrentTime
-                      updateArchiveIndexEntry "preferred-versions" (BS.pack prefVersions, now)
                       runHook_ preferredHook (pkgname, newInfo)
                       return ()
                   False -> preferredError "Not all of the selected versions are in the main index."
@@ -367,6 +365,12 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
     doDeprecatedsRender :: MonadIO m => m [(PackageName, [PackageName])]
     doDeprecatedsRender = queryState preferredState GetPreferredVersions >>=
         return . Map.toList . deprecatedMap
+
+    updateIndexPreferredState :: IO ()
+    updateIndexPreferredState = do
+      prefVersions <- makePreferredVersions
+      now <- getCurrentTime
+      updateArchiveIndexEntry "preferred-versions" (BS.pack prefVersions, now)
 
     makePreferredVersions :: MonadIO m => m String
     makePreferredVersions = queryState preferredState GetPreferredVersions >>= \(PreferredVersions prefs _) -> do
