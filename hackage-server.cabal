@@ -1,5 +1,5 @@
 name:         hackage-server
-version:      0.5.0
+version:      0.5.1
 category:     Distribution
 synopsis:     The Hackage web server
 description:  The new implementation of the Hackage web server, based on the
