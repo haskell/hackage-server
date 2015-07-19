@@ -19,11 +19,12 @@ import Distribution.Server.Packages.Types
 
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import qualified Data.Vector as Vec
+import qualified Data.Map  as Map
 import qualified Data.Text as T
-
+import Data.ByteString.Lazy (ByteString)
 import Data.Time.Clock (UTCTime(..), getCurrentTime)
 import Data.Time.Calendar (showGregorian)
-
+import Network.URI
 
 
 data SitemapFeature = SitemapFeature {
@@ -109,117 +110,118 @@ sitemapFeature  ServerEnv{..}
       cacheControlWithoutETag [Public, maxAgeDays 1]
       return (toResponse sitemapXML)
 
-    pageBuildDate :: T.Text
-    pageBuildDate = T.pack (showGregorian (utctDay initTime))
-
     -- Generates a list of sitemap entries corresponding to hackage pages, then
     -- builds and returns an XML sitemap.
     updateSitemapCache :: IO XMLResponse
     updateSitemapCache = do
 
-      -- Misc. pages
-      -- e.g. ["http://myhackage.com/index", ...]
-      let miscPages =
-            [ "/index"
-            , "/accounts"
-            , "/packages"
-            , "/packages/search"
-            , "/packages/recent"
-            , "/packages/recent/revisions"
-            , "/packages/tags"
-            , "/packages/names"
-            , "/packages/top"
-            , "/packages/preferred"
-            , "/packages/deprecated"
-            , "/packages/candidates"
-            , "/packages/uploaders"
-            , "/users"
-            , "/users/register-request"
-            , "/users/password-reset"
-            , "/upload"
-            , "/api"
-            ]
-          miscEntries = urlsToSitemapEntries miscPages
-                                             pageBuildDate Weekly 0.75
-
-      -- Pages for each individual tag.
-      alltags <- queryGetTagList
-      let tagPrefixURI = "/packages/tag/"
-
-      --  tagURLs :: [path :: String]
-      --  e.g. ["http://myhackage.com/packages/tag/bsd", ...]
-          tagURLs    = map ((tagPrefixURI ++) . display . fst) alltags
-          tagEntries = urlsToSitemapEntries tagURLs
-                                            pageBuildDate Daily 0.5
-
+      alltags  <- queryGetTagList
       pkgIndex <- queryGetPackageIndex
+      docIndex <- queryDocumentationIndex
 
-      let pkgs = PackageIndex.allPackagesByName pkgIndex
-          prefixPkgURI = "/package/"
+      let sitemap = generateSitemap serverBaseURI pageBuildDate
+                                    (map fst alltags)
+                                    pkgIndex docIndex
+      return (XMLResponse sitemap)
 
-      --  Unversioned package pages - always redirect to latest version.
-      --  names :: [(path :: String, lastMod :: UTCTime)]
-      --  e.g. [("http://myhackage.com/packages/mypackage", "2012-04-30..."), ...]
-          names =
-            [ ((prefixPkgURI ++) . display . pkgName . pkgInfoId $ pkg
-            , fst . snd . Vec.head . pkgMetadataRevisions $ pkg)
-            | pkg <- map head pkgs
-            ]
-          nameEntries = pathsAndDatesToSitemapEntries names
-                                                      Daily 1.0
+    pageBuildDate :: T.Text
+    pageBuildDate = T.pack (showGregorian (utctDay initTime))
 
-      --  Versioned package pages
-      --  nameVers :: [path :: String]
-      --  e.g. ["http://myhackage.com/packages/mypackage-1.0.2", ...]
-          nameVers =
-            [ ((prefixPkgURI ++) . display . pkgName . pkgInfoId $ pkg)
-              ++ "-" ++ (display . pkgVersion . pkgInfoId $ pkg)
-            | pkg <- concat pkgs
-            ]
-          nameVersEntries = urlsToSitemapEntries nameVers
-                                                 pageBuildDate Monthly 0.25
+generateSitemap :: URI
+                -> T.Text
+                -> Tag
+                -> PackageIndex.PackageIndex PkgInfo
+                -> Map.Map PackageId a
+                -> ByteString
+generateSitemap serverBaseURI pageBuildDate alltags pkgIndex docIndex =
+    renderSitemap serverBaseURI allEntries
+  where
+    -- Combine and build sitemap
+    allEntries = miscEntries
+              ++ tagEntries
+              ++ nameEntries
+              ++ nameVersEntries
+              ++ baseDocEntries
+              ++ versionedDocEntries
 
-      --  Unversioned doc pages - always redirect to latest version.
-      --  (for packages with valid documentation)
-      basePkgNamesWithDocs <- mapParaM
-        (queryHasDocumentation . pkgInfoId) (map head pkgs)
+    -- Misc. pages
+    -- e.g. ["http://myhackage.com/index", ...]
+    miscEntries = urlsToSitemapEntries miscPages pageBuildDate Weekly 0.75
+    miscPages   =
+      [ "/index"
+      , "/accounts"
+      , "/packages"
+      , "/packages/search"
+      , "/packages/recent"
+      , "/packages/recent/revisions"
+      , "/packages/tags"
+      , "/packages/names"
+      , "/packages/top"
+      , "/packages/preferred"
+      , "/packages/deprecated"
+      , "/packages/candidates"
+      , "/packages/uploaders"
+      , "/users"
+      , "/users/register-request"
+      , "/users/password-reset"
+      , "/upload"
+      , "/api"
+      ]
 
-      --  baseDocs :: [path :: String]
-      --  e.g. ["http://myhackage.com/packages/mypackage/docs". ...]
-      let baseDocs =
-            [ ((prefixPkgURI ++) . display . pkgName . pkgInfoId . fst $ pkg)
-              ++ "/docs"
-            | pkg <- filter ((== True) . snd) basePkgNamesWithDocs
-            ]
-          baseDocEntries = urlsToSitemapEntries baseDocs
-                                                pageBuildDate Daily 1.0
+    -- Pages for each individual tag.
+    --  tagURLs :: [path :: String]
+    --  e.g. ["http://myhackage.com/packages/tag/bsd", ...]
+    tagEntries =
+      urlsToSitemapEntries
+        [ "/packages/tag/" ++  display tag
+        | tag <- alltags ]
+        pageBuildDate Daily 0.5
 
-      -- Versioned doc pages
-      versionedDocNames <- mapParaM
-        (queryHasDocumentation . pkgInfoId) (concat pkgs)
+    pkgss = PackageIndex.allPackagesByName pkgIndex
+    prefixPkgURI = "/package/"
 
-      --  versionedDocURIs :: [path :: String]
-      --  e.g. ["http://myhackage.com/packages/mypackage-1.0.2/docs", ...]
-      let versionedDocURIs =
-            [ ((prefixPkgURI ++) . display . pkgName . pkgInfoId . fst $ pkg)
-              ++ "-" ++
-              (display . pkgVersion . pkgInfoId . fst $ pkg) ++ "/docs"
-            | pkg <- filter ((== True) . snd) versionedDocNames
-            ]
-          versionedDocEntries = urlsToSitemapEntries versionedDocURIs
-                                                     pageBuildDate Monthly 0.25
+    --  Unversioned package pages - always redirect to latest version.
+    --  names :: [(path :: String, lastMod :: UTCTime)]
+    --  e.g. [("http://myhackage.com/packages/mypackage", "2012-04-30..."), ...]
+    nameEntries =
+      pathsAndDatesToSitemapEntries
+        [ ( prefixPkgURI ++ display (packageName pkg)
+          , uploadtime)
+        | pkg <- map head pkgss
+        , let (_, (uploadtime, _user)) = Vec.head (pkgMetadataRevisions pkg)
+        ]
+        Daily 1.0
 
-      -- Combine and build sitemap
-          allEntries = miscEntries
-            ++ tagEntries
-            ++ nameEntries
-            ++ nameVersEntries
-            ++ baseDocEntries
-            ++ versionedDocEntries
-          sitemapXML = XMLResponse (renderSitemap serverBaseURI allEntries)
+    --  Versioned package pages
+    --  nameVers :: [path :: String]
+    --  e.g. ["http://myhackage.com/packages/mypackage-1.0.2", ...]
+    nameVersEntries =
+      urlsToSitemapEntries
+        [ prefixPkgURI ++ display (packageId pkg)
+        | pkg <- concat pkgss
+        ]
+        pageBuildDate Monthly 0.25
 
-      return sitemapXML
+    --  Unversioned doc pages - always redirect to latest version.
+    --  (for packages with valid documentation)
+    --  baseDocs :: [path :: String]
+    --  e.g. ["http://myhackage.com/packages/mypackage/docs". ...]
+    baseDocEntries =
+      urlsToSitemapEntries
+        [ prefixPkgURI ++ display (packageName pkg) ++ "/docs"
+        | pkg <- map head pkgss
+        , Map.member (packageId pkg) docIndex
+        ]
+        pageBuildDate Daily 1.0
 
-    mapParaM :: Monad m => (a -> m b) -> [a] -> m [(a, b)]
-    mapParaM f = mapM (\x -> (,) x `liftM` f x)
+    -- Versioned doc pages
+    --  versionedDocURIs :: [path :: String]
+    --  e.g. ["http://myhackage.com/packages/mypackage-1.0.2/docs", ...]
+    versionedDocEntries =
+      urlsToSitemapEntries
+        [ prefixPkgURI ++ display (packageId pkg) ++ "/docs"
+        |  pkg <- concat pkgss
+        , Map.member (packageId pkg) docIndex
+        ]
+        pageBuildDate Monthly 0.25
 
