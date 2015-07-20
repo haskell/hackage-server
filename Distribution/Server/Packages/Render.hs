@@ -14,7 +14,7 @@ module Distribution.Server.Packages.Render (
 
 import Data.Maybe (catMaybes, isJust, maybeToList)
 import Control.Monad (guard)
-import Control.Arrow (second)
+import Control.Arrow (second, (&&&))
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
 import qualified Data.Vector as Vec
@@ -161,40 +161,51 @@ categorySplit xs = map (dropWhile isSpace) $ splitOn ',' xs
 -- Flatten the dependencies of a GenericPackageDescription into a
 -- simple summary form. Library and executable dependency ranges
 -- are combined using intersection, except for dependencies within
--- if and else branches, which are unioned together.
+-- if and else branches, which are unioned together. Skip
+-- dependencies introduced by manual flags.
 --
 flatDependencies :: GenericPackageDescription -> [Dependency]
-flatDependencies =
-      sortOn (\(Dependency pkgname _) -> map toLower (display pkgname))
-    . pkgDeps
+flatDependencies pkg =
+      sortOn (\(Dependency pkgname _) -> map toLower (display pkgname)) pkgDeps
   where
-    pkgDeps :: GenericPackageDescription -> [Dependency]
-    pkgDeps pkg = fromMap $ Map.unionsWith intersectVersions $
-                      map condTreeDeps (maybeToList $ condLibrary pkg)
-                   ++ map (condTreeDeps . snd) (condExecutables pkg)
+    pkgDeps :: [Dependency]
+    pkgDeps = fromMap $ Map.unionsWith intersectVersions $
+                  map condTreeDeps (maybeToList $ condLibrary pkg)
+               ++ map (condTreeDeps . snd) (condExecutables pkg)
       where
         fromMap = map fromPair . Map.toList
         fromPair (pkgname, Versions _ ver) =
             Dependency pkgname $ fromVersionIntervals ver
 
-    condTreeDeps :: CondTree v [Dependency] a -> PackageVersions
+    manualFlags :: FlagAssignment
+    manualFlags = map assignment . filter flagManual $ genPackageFlags pkg
+        where assignment = flagName &&& flagDefault
+
+    condTreeDeps :: CondTree ConfVar [Dependency] a -> PackageVersions
     condTreeDeps (CondNode _ ds comps) =
         Map.unionsWith intersectVersions $
           toMap ds : map fromComponent comps
       where
-        fromComponent (_, then_part, else_part) =
-            unionDeps (condTreeDeps then_part)
-                      (maybe Map.empty condTreeDeps else_part)
+        fromComponent (cond, then_part, else_part) =
+            let thenDeps = condTreeDeps then_part
+                elseDeps = maybe Map.empty condTreeDeps else_part
+            in case evalCondition manualFlags cond of
+                 Just True -> thenDeps
+                 Just False -> elseDeps
+                 Nothing -> unionPackageVersions thenDeps elseDeps
+
         toMap = Map.fromListWith intersectVersions . map toPair
         toPair (Dependency pkgname ver) =
             (pkgname, Versions All $ toVersionIntervals ver)
 
-    unionDeps :: PackageVersions -> PackageVersions -> PackageVersions
-    unionDeps ds1 ds2 = Map.unionWith unionVersions
-                        (Map.union ds1 defaults) (Map.union ds2 defaults)
-      where
-        defaults = Map.map (const notSpecified) $ Map.union ds1 ds2
-        notSpecified = Versions Some $ toVersionIntervals noVersion
+-- Note that 'unionPackageVersions Map.empty' is not identity.
+unionPackageVersions :: PackageVersions -> PackageVersions -> PackageVersions
+unionPackageVersions ds1 ds2 = Map.unionWith unionVersions
+                               (Map.union ds1 defaults)
+                               (Map.union ds2 defaults)
+  where
+    defaults = Map.map (const notSpecified) $ Map.union ds1 ds2
+    notSpecified = Versions Some $ toVersionIntervals noVersion
 
 -- | Version intervals for a dependency that also indicate whether the
 -- dependency has been specified on all branches. For example, package x's
@@ -238,6 +249,23 @@ combineDepsBy f =
   . Map.toList
   . Map.fromListWith f
   . map (\(Dependency pkgname ver) -> (pkgname, toVersionIntervals ver))
+
+-- | Evaluate a 'Condition' with a partial 'FlagAssignment', returning
+-- | 'Nothing' if the result depends on additional variables.
+evalCondition :: FlagAssignment -> Condition ConfVar -> Maybe Bool
+evalCondition flags cond =
+    let eval = evalCondition flags
+    in case cond of
+         Var (Flag f) -> lookup f flags
+         Var _ -> Nothing
+         Lit b -> Just b
+         CNot c -> not `fmap` eval c
+         COr c1 c2 -> eval $ CNot (CNot c1 `CAnd` CNot c2)
+         CAnd c1 c2 -> case (eval c1, eval c2) of
+                         (Just False, _) -> Just False
+                         (_, Just False) -> Just False
+                         (Just True, Just True) -> Just True
+                         _ -> Nothing
 
 -- Same as @sortBy (comparing f)@, but without recomputing @f@.
 sortOn :: Ord b => (a -> b) -> [a] -> [a]
