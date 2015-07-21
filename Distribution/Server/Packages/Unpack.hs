@@ -33,6 +33,8 @@ import Distribution.Server.Util.Parse
 import Distribution.License
          ( License(..) )
 
+import Data.Maybe
+         ( isJust )
 import Data.List
          ( nub, (\\), partition, intercalate )
 import Data.Time
@@ -195,6 +197,12 @@ extraChecks genPkgDesc = do
   when (not allowAllRightsReserved && license pkgDesc == AllRightsReserved) $
     throwError $ "This server does not accept packages with 'license' "
               ++ "field set to AllRightsReserved."
+
+  -- Check for an existing x-revision
+  when (isJust (lookup "x-revision" (customFieldsPD pkgDesc))) $
+    throwError $ "Newly uploaded packages must not specify the 'x-revision' "
+              ++ "field in their .cabal file. This is only used for "
+              ++ "post-release revisions."
 
   -- Check reasonableness of names of exposed modules
   let topLevel = case library pkgDesc of
