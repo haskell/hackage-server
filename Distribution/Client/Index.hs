@@ -38,9 +38,10 @@ import Prelude hiding (read)
 -- belonging to a package are ignored.
 --
 read :: (PackageIdentifier -> Tar.Entry -> pkg)
+     -> (FilePath -> Bool) -- ^ Should this file be included?
      -> ByteString
      -> Either String [pkg]
-read mkPackage indexFileContent = collect [] entries
+read mkPackage includeFile indexFileContent = collect [] entries
   where
     entries = Tar.read indexFileContent
     collect es' Tar.Done        = Right es'
@@ -53,6 +54,7 @@ read mkPackage indexFileContent = collect [] entries
       | [pkgname,versionStr,_] <- splitDirectories (normalise (Tar.entryPath e))
       , Just version <- simpleParse versionStr
       , [] <- versionTags version
+      , True <- includeFile (Tar.entryPath e)
       = let pkgid = PackageIdentifier (PackageName pkgname) version
          in Just (mkPackage pkgid e)
     entry _ = Nothing

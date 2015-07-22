@@ -341,10 +341,19 @@ executable hackage-mirror
     Distribution.Client.Cron
     Distribution.Client.UploadLog
     Distribution.Client.Index
+    Distribution.Client.Mirror.CmdLine
+    Distribution.Client.Mirror.Config
+    Distribution.Client.Mirror.Repo.Hackage2
+    Distribution.Client.Mirror.Repo.Local
+    Distribution.Client.Mirror.Repo.Util
+    Distribution.Client.Mirror.Repo.Types
+    Distribution.Client.Mirror.Repo
+    Distribution.Client.Mirror.Session
+    Distribution.Client.Mirror.State
     Distribution.Server.Users.Types
     Distribution.Server.Util.Merge
   build-depends:
-    base,
+    base, transformers,
     containers, array, vector, bytestring, text, pretty,
     filepath, directory,
     time,     random,
@@ -354,8 +363,20 @@ executable hackage-mirror
     Cabal,
     safecopy, cereal, binary, mtl,
     unix, aeson,
-    SHA
-  default-language: Haskell2010
+    SHA,
+    parsec,
+    process >= 1.2.0,
+    hackage-security,
+    hackage-security-HTTP
+  default-language:   Haskell2010
+  default-extensions: FlexibleContexts
+                      FlexibleInstances
+                      GeneralizedNewtypeDeriving
+                      MultiParamTypeClasses
+                      PatternGuards
+                      RecordWildCards
+  other-extensions:   CPP
+
   ghc-options: -Wall -fwarn-tabs
 
   if flag(network-uri)
