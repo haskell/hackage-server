@@ -204,7 +204,7 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
 renderMarkdown :: BS.ByteString -> XHtml.Html
 renderMarkdown = XHtml.primHtml . Blaze.renderHtml
                . Markdown.renderDoc . Markdown.markdown opts
-               . T.decodeUtf8 . BS.toStrict
+               . T.decodeUtf8With T.lenientDecode . BS.toStrict
   where
     opts =
       Markdown.Options
