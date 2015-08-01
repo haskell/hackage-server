@@ -1,5 +1,7 @@
 -- Unpack a tarball containing a Cabal package
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE FlexibleContexts #-}
+
 module Distribution.Server.Packages.Unpack (
     unpackPackage,
     unpackPackageRaw,
@@ -351,4 +353,3 @@ quote s = "'" ++ s ++ "'"
 -- | Whether a UTF8 BOM is at the beginning of the input
 startsWithBOM :: ByteString -> Bool
 startsWithBOM bs = LBS.take 3 bs == LBS.pack [0xEF, 0xBB, 0xBF]
-
