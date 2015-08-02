@@ -22,7 +22,9 @@ import Distribution.Server.Features.Core.State
 import Distribution.Server.Features.Core.Backup
 
 import Distribution.Server.Features.Users
+import qualified Distribution.Server.Users.Users as Users
 
+import qualified Distribution.Server.Packages.Render as Render
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Types (UserId)
 import Distribution.Server.Users.Users (userIdToName)
@@ -39,6 +41,7 @@ import Data.Time.Format (formatTime)
 import Data.Time.Locale.Compat (defaultTimeLocale)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe (maybeToList)
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
 
@@ -46,7 +49,7 @@ import Distribution.Text (display)
 import Distribution.Package
 import Distribution.Version (Version(..))
 
-import Data.Aeson (Value(..))
+import Data.Aeson ((.=), Value(..), ToJSON(..), object)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Vector         as Vec
 import qualified Data.Text           as Text
@@ -333,7 +336,10 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
         resourceDesc = [(GET, "List of all packages")]
       , resourceGet  = [("json", servePackageList)]
       }
-    corePackagePage = resourceAt "/package/:package.:format"
+    corePackagePage = (resourceAt "/package/:package.:format") {
+        resourceDesc = [(GET, "Package description")]
+      , resourceGet  = [("json", servePackageOverview)]
+      }
     corePackageRedirect = (resourceAt "/package/") {
         resourceDesc = [(GET,  "Redirect to /packages/")]
       , resourceGet  = [("", \_ -> seeOther "/packages/" $ toResponse ())]
@@ -512,6 +518,31 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
                 (Text.pack "packageName", String (Text.pack str))
               ]
       return . toResponse $ Array (Vec.fromList json)
+
+    -- TODO: Most of the package information comes from custom
+    --       types that have not got ToJSON instances yet, so they
+    --       are currently just `show`n. Extend the ToJSON instance
+    --       in Distribution.Server.Package.Render
+    servePackageOverview :: DynamicPath -> ServerPartE Response
+    servePackageOverview dpath = do
+      pkgid@(PackageIdentifier name version) <- packageInPath dpath
+      pkgIndex <- queryGetPackageIndex
+      users    <- queryGetUserDb
+      let versionStr p = Text.intercalate (Text.singleton '.')
+                         . map (Text.pack . show)
+                         . versionBranch
+                         . pkgVersion
+                         . pkgInfoId $ p
+      let packagesJson =
+           case version of
+            Version [] _ ->
+              object
+              $ map (\p -> versionStr p .= Render.doPackageRender users p)
+              $ PackageIndex.lookupPackageName pkgIndex name
+            _ -> maybe (object [])
+                 (toJSON . Render.doPackageRender users)
+                 (PackageIndex.lookupPackageId pkgIndex pkgid)
+      return . toResponse $ packagesJson
 
     -- result: tarball or not-found error
     servePackageTarball :: DynamicPath -> ServerPartE Response
