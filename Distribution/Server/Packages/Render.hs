@@ -1,6 +1,8 @@
 -- TODO: Review and possibly move elsewhere. This code was part of the
 -- RecentPackages (formerly "Check") feature, but that caused some cyclic
 -- dependencies.
+{-# LANGUAGE OverloadedStrings #-}
+
 module Distribution.Server.Packages.Render (
     -- * Package render
     PackageRender(..)
@@ -14,7 +16,9 @@ module Distribution.Server.Packages.Render (
 
 import Data.Maybe (catMaybes, isJust, maybeToList)
 import Control.Monad (guard)
-import Control.Arrow (second, (&&&))
+import Control.Arrow ((&&&), second)
+import           Data.Aeson ((.=))
+import qualified Data.Aeson as A
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
 import qualified Data.Vector as Vec
@@ -69,6 +73,29 @@ data PackageRender = PackageRender {
     rendOther        :: PackageDescription
 }
 
+instance A.ToJSON PackageRender where
+  toJSON p = A.object [
+      "pkgId"   .= show (rendPkgId p)
+    , "depends" .= map show (rendDepends p)
+    , "execNames" .= (rendExecNames p)
+    , "libraryDeps" .= show (rendLibraryDeps p)
+    , "executableDeps" .= show (rendExecutableDeps p)
+    , "licenseName" .= rendLicenseName p
+    , "licenseFiles" .= rendLicenseFiles p
+    , "maintainer" .= rendMaintainer p
+    , "category" .= rendCategory p
+    , "repoHeads" .= map show (rendRepoHeads p)
+    , "modules" .= show ((rendModules p) Nothing) -- TODO probably wrong?
+    , "hasTarball" .= rendHasTarball p
+    , "changeLog" .= show (rendChangeLog p)
+    , "readme" .= show (rendReadme p)
+    , "uploadInfo" .= show (rendUploadInfo p)
+    , "updateInfo" .= show (rendUpdateInfo p)
+    , "pkgUri" .= rendPkgUri p
+    , "flags" .= map show (rendFlags p)
+    , "other" .= show (rendOther p)
+    ]
+
 doPackageRender :: Users.Users -> PkgInfo -> PackageRender
 doPackageRender users info = PackageRender
     { rendPkgId        = pkgInfoId info
@@ -120,7 +147,7 @@ doPackageRender users info = PackageRender
         isBuildable ctData = if buildable $ getBuildInfo ctData
                                then Buildable
                                else NotBuildable
-    
+
     moduleHasDocs :: Maybe TarIndex -> ModuleName -> Bool
     moduleHasDocs Nothing       = const False
     moduleHasDocs (Just doctar) = isJust . TarIndex.lookup doctar
@@ -270,4 +297,3 @@ evalCondition flags cond =
 -- Same as @sortBy (comparing f)@, but without recomputing @f@.
 sortOn :: Ord b => (a -> b) -> [a] -> [a]
 sortOn f xs = map snd (sortBy (comparing fst) [(f x, x) | x <- xs])
-
