@@ -156,6 +156,7 @@ executable hackage-server
     Distribution.Server.Util.GZip
     Distribution.Server.Util.ContentType
     Distribution.Server.Util.SigTerm
+    Distribution.Server.Util.ReadDigest
 
     Distribution.Server.Features
     Distribution.Server.Features.Core
