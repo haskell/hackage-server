@@ -81,11 +81,12 @@ packagePageTemplate render headLinks deprHtml sections
   , "sourceRepo"      $= (vList $ map sourceRepositoryToHtml (sourceRepos desc))
   , "executables"     $= (commaList . map toHtml $ rendExecNames render)
   , "uploadTime"      $= (uncurry renderUploadInfo $ rendUploadInfo render)
-  ]
-  ++ mapTuples
-    [ ("updated", renderUpdateInfo revisionNo utime uinfo)
+  , "updateTime"      $= [ renderUpdateInfo revisionNo utime uinfo
       | (revisionNo, utime, uinfo) <- maybeToList (rendUpdateInfo render) ]
-
+  , "flags"           $= Old.renderPackageFlags render
+  , "downloads"       $= Old.downloadSection render
+  , "maintainerOptions" $= Old.maintainerSection pkgid isCandidate
+  ]
   ++ mapTuples sections
   ++ [ "cabalVersion"    $= display cabalVersion
     ]
