@@ -41,6 +41,7 @@ import Distribution.Server.Features.Distro.Distributions (DistroPackageInfo(..))
 -- [reverse index disabled] import Distribution.Server.Packages.Reverse
 
 import qualified Distribution.Server.Pages.Package as Pages
+import qualified Distribution.Server.Pages.PackageFromTemplate as PagesNew
 import Distribution.Server.Pages.Template
 import Distribution.Server.Pages.Util
 import qualified Distribution.Server.Pages.Group as Pages
@@ -124,7 +125,10 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    , "reports.html", "report.html"
                    , "maintain-docs.html"
                    , "distro-monitor.html"
-                   , "revisions.html" ]
+                   , "revisions.html"
+                   , "package-page.html"
+                   ]
+
 
     return $ \user core@CoreFeature{packageChangeHook}
               packages upload
@@ -531,9 +535,6 @@ mkHtmlCore HtmlUtilities{..}
         -- get additional information from other features
         prefInfo <- queryGetPreferredInfo pkgname
         let infoUrl = fmap (\_ -> preferredPackageUri versions "" pkgname) $ sumRange prefInfo
-            beforeHtml = [ Pages.renderVersion realpkg (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl
-                         , Pages.renderChangelog render
-                         , Pages.renderDependencies render]
         -- and other package indices
         distributions <- queryPackageStatus pkgname
         -- [reverse index disabled] revCount <- revPackageSummary realpkg
@@ -569,6 +570,7 @@ mkHtmlCore HtmlUtilities{..}
         let tagLinks = toHtml [anchor ! [href "/packages/tags"] << "Tags", toHtml ": ",
                                toHtml (renderTags tags)]
         deprs <- queryGetDeprecatedFor pkgname
+
         let deprHtml = case deprs of
               Just fors -> paragraph ! [thestyle "color: red"] << [toHtml "Deprecated", case fors of
                 [] -> noHtml
@@ -579,11 +581,26 @@ mkHtmlCore HtmlUtilities{..}
         cacheControlWithoutETag [Public, maxAgeMinutes 5]
 
         -- and put it all together
-        return $ toResponse $ Resource.XHtml $
-            Pages.packagePage render [tagLinks] [deprHtml]
-                              (beforeHtml ++ middleHtml ++ afterHtml
-                                ++ buildStatusHtml)
-                              [] mdocIndex mreadme docURL False
+        template <- getTemplate templates "package-page.html"
+
+        return $ toResponse . template $ PagesNew.packagePageTemplate
+          render [tagLinks] [deprHtml]
+          (middleHtml ++ afterHtml ++ buildStatusHtml)
+          [] mdocIndex mreadme docURL False
+          ++
+          [ "versions"      $= snd (Pages.renderVersion realpkg
+              (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl)
+          , "changelog"     $= snd (Pages.renderChangelog render)
+          , "dependencies"  $= snd (Pages.renderDependencies render)
+          , "votes"         $= snd pkgVotesHtml
+          , "downloads"     $= Pages.renderDownloads totalDown recentDown
+          ]
+
+        {-return $ toResponse $ Resource.XHtml $ Pages.packagePage -}
+          {-render [tagLinks] [deprHtml]-}
+          {-(beforeHtml ++ middleHtml ++ afterHtml-}
+            {-++ buildStatusHtml)-}
+          {-[] mdocIndex mreadme docURL False-}
       where
         showDist (dname, info) = toHtml (display dname ++ ":") +++
             anchor ! [href $ distroUrl info] << toHtml (display $ distroVersion info)
