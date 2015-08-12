@@ -543,10 +543,7 @@ mkHtmlCore HtmlUtilities{..}
         totalDown <- cmFind pkgname `liftM` totalPackageDownloads
         recentDown <- cmFind pkgname `liftM` recentPackageDownloads
         pkgVotesHtml <- renderVotesHtml pkgname
-        let distHtml = case distributions of
-                [] -> []
-                _  -> [("Distributions", concatHtml . intersperse (toHtml ", ") $ map showDist distributions)]
-            afterHtml  = distHtml ++ [ Pages.renderDownloads totalDown recentDown {- versionDown $ packageVersion realpkg-}
+        let afterHtml  = [ Pages.renderDownloads totalDown recentDown {- versionDown $ packageVersion realpkg-}
                                     , pkgVotesHtml
                                      -- [reverse index disabled] ,Pages.reversePackageSummary realpkg revr revCount
                                      ]
@@ -585,7 +582,7 @@ mkHtmlCore HtmlUtilities{..}
 
         return $ toResponse . template $ PagesNew.packagePageTemplate
           render [tagLinks] [deprHtml]
-          (middleHtml ++ afterHtml ++ buildStatusHtml)
+          (middleHtml ++ afterHtml)
           [] mdocIndex mreadme docURL False
           ++
           [ "versions"      $= snd (Pages.renderVersion realpkg
@@ -594,6 +591,11 @@ mkHtmlCore HtmlUtilities{..}
           , "dependencies"  $= snd (Pages.renderDependencies render)
           , "votes"         $= snd pkgVotesHtml
           , "downloads"     $= Pages.renderDownloads totalDown recentDown
+          , "distributions" $= case distributions of
+              [] -> []
+              _  -> [concatHtml . intersperse (toHtml ", ")
+                      $ map showDist distributions]
+          , "buildStatus"   $= buildStatusHtml
           ]
 
         {-return $ toResponse $ Resource.XHtml $ Pages.packagePage -}
