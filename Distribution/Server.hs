@@ -167,12 +167,19 @@ initialise config = do
 -- | Actually run the server, i.e. start accepting client http connections.
 --
 run :: Server -> IO ()
-run server = do
+run server@Server{ serverEnv = env } = do
     -- We already check this in Main, so we expect this check to always
     -- succeed, but just in case...
     let staticDir = serverStaticDir (serverEnv server)
     exists <- doesDirectoryExist staticDir
     when (not exists) $ fail $ "The static files directory " ++ staticDir ++ " does not exist."
+
+    addCronJob (serverCron env) CronJob {
+      cronJobName      = "Checkpoint all the server state",
+      cronJobFrequency = WeeklyJobFrequency,
+      cronJobOneShot   = False,
+      cronJobAction    = checkpoint server
+    }
 
     runServer listenOn $ do
 
@@ -253,6 +260,11 @@ serverState server = [ (featureName feature, mconcat (featureState feature))
 -- To accomplish this, we import a 'null' tarball, finalizing immediately after initializing import
 initState ::  Server -> (String, String) -> IO ()
 initState server (admin, pass) = do
+    -- We take the opportunity to checkpoint all the acid-state components
+    -- upon first initialisation as this helps with migration problems later.
+    -- https://github.com/acid-state/acid-state/issues/20
+    checkpoint server
+
     let store = serverBlobStore (serverEnv server)
     void . Import.importBlank store $ map (second abstractStateRestore) (serverState server)
     -- create default admin user
