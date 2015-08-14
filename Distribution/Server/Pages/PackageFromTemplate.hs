@@ -16,6 +16,7 @@ import Distribution.Server.Packages.ModuleForest
 import Distribution.Server.Packages.Render
 import Distribution.Server.Users.Types (userStatus, userName, isActiveAccount)
 import Data.TarIndex (TarIndex)
+import Distribution.Server.Features.Distro.Types
 
 import Distribution.Package
 import Distribution.PackageDescription as P
@@ -46,100 +47,133 @@ import qualified Distribution.Server.Pages.Package as Old
 import Data.Time.Clock (UTCTime)
 import Distribution.Server.Users.Types (UserInfo)
 
-packagePageTemplate :: PackageRender -> [Html] -> [Html] -> [(String, Html)]
+packagePageTemplate :: PackageRender -> [Html]
             -> [(String, Html)] -> Maybe TarIndex -> Maybe BS.ByteString
             -> URL -> Bool
+            -> [(DistroName, DistroPackageInfo)]
             -> [TemplateAttr]
-packagePageTemplate render headLinks deprHtml sections
+packagePageTemplate render headLinks
             bottom mdocIndex mreadMe
-            docURL isCandidate =
-  [ "docTitle"        $= pkgName ++ case synopsis (rendOther render) of
+            docURL isCandidate distributions =
+  [ "pkgName"         $= pkgName
+  , "docTitle"        $= pkgName ++ case synopsis (rendOther render) of
       ""    -> ""
       short -> ": " ++ short
-  , "pkgName"         $= pkgName
   , "headLinks"       $= case headLinks of
       []    -> []
       items -> (map (\item -> "[" +++ item +++ "] ") items)
-  , "deprecatedMsg"   $= deprHtml
-  , "pkgDescription"  $= descriptionSection render
-  , "skipToReadme"    $= skipToReadme render
+  , "pkgDescription"  $= Old.renderHaddock (description $ rendOther render)
   ]
   ++
   [ "moduleList"      $= Old.moduleSection render mdocIndex docURL
   , "dependencyList"  $= snd (Old.renderDependencies render)
   ]
   ++
-  [ "readme"          $= Old.readmeSection render mreadMe
-  , "license"         $= Old.rendLicense render
-  , "copyright"       $= renderCopyright
+  [ "package"         $= optionalPackageInfoTemplate ]
+  ++
+  [ "license"         $= Old.rendLicense render
   , "author"          $= (toHtml $ author desc)
   , "maintainer"      $= (Old.maintainField $ rendMaintainer render)
-  , "stability"       $= determineStability desc
   , "categories"      $= (commaList . map Old.categoryField $ rendCategory render)
-  , "homePage"        $= (Old.linkField $ homepage desc)
-  , "bugTracker"      $= (Old.linkField $ bugReports desc)
   , "sourceRepo"      $= (vList $ map sourceRepositoryToHtml (sourceRepos desc))
   , "executables"     $= (commaList . map toHtml $ rendExecNames render)
   , "uploadTime"      $= (uncurry renderUploadInfo $ rendUploadInfo render)
-  , "updateTime"      $= [ renderUpdateInfo revisionNo utime uinfo
-      | (revisionNo, utime, uinfo) <- maybeToList (rendUpdateInfo render) ]
-  , "flags"           $= Old.renderPackageFlags render
-  , "downloads"       $= Old.downloadSection render
+  , "downloadSection" $= Old.downloadSection render
   , "maintainerOptions" $= Old.maintainerSection pkgid isCandidate
   ]
-  ++ mapTuples sections
-  ++ [ "cabalVersion"    $= display cabalVersion
-    ]
-    where
-      pkgid   = rendPkgId render
-      pkgVer  = display $ pkgVersion pkgid
-      pkgName = display $ packageName pkgid
+  ++
+  [ "cabalVersion"    $= display cabalVersion
+  ]
+  where
+    optionalPackageInfoTemplate = templateDict $
+      [ templateVal "hasReadme"
+          (if rendReadme render == Nothing then False else True)
+      , templateVal "readme"
+          (Old.readmeSection render mreadMe)
+      ] ++
+      [ templateVal "hasHomePage"
+          (if (homepage desc  == []) then False else True)
+      , templateVal "homePageUrl"
+          (homepage desc)
+      ] ++
+      [ templateVal "hasBugTracker"
+          (if bugReports desc == [] then False else True)
+      , templateVal "bugTracker"
+          (bugReports desc)
+      ] ++
+      [ templateVal "hasDistributions"
+          (if distributions == [] then False else True)
+      , templateVal "distributions"
+          (concatHtml . intersperse (toHtml ", ") $ map showDist distributions)
+      ] ++
+      [ templateVal "hasUpdateTime"
+          (case rendUpdateInfo render of Nothing -> False; _ -> True)
+      , templateVal "updateTime" [ renderUpdateInfo revisionNo utime uinfo
+          | (revisionNo, utime, uinfo) <- maybeToList (rendUpdateInfo render) ]
+      ] ++
+      [ templateVal "hasChangelog"
+          (if rendChangeLog render == Nothing then False else True)
+      , templateVal "changelog"
+          (renderChangelog render)
+      ] ++
+      [ templateVal "hasCopyright"
+          (if P.copyright desc == "" then False else True)
+      , templateVal "copyright"
+          renderCopyright
+      ] ++
+      [ templateVal "hasStability"
+          (if stability desc == "" then False else True)
+      , templateVal "stability"
+          (renderStability desc)
+      ] ++
+      [ templateVal "hasFlags"
+          (if rendFlags render == [] then False else True)
+      , templateVal "flags"
+          (Old.renderPackageFlags render)
+      ]
+      where
+        showDist (dname, info) = toHtml (display dname ++ ":") +++
+            anchor ! [href $ distroUrl info] << toHtml (display $ distroVersion info)
 
-      desc = rendOther render
+    pkgid   = rendPkgId render
+    pkgVer  = display $ pkgVersion pkgid
+    pkgName = display $ packageName pkgid
 
-      renderCopyright :: Html
-      renderCopyright = toHtml $ case text of
-        "" -> "None Provided"
-        _ -> text
-        where text = P.copyright desc
+    desc = rendOther render
 
-      renderUpdateInfo :: Int -> UTCTime -> Maybe UserInfo -> Html
-      renderUpdateInfo revisionNo utime uinfo =
-          renderUploadInfo utime uinfo +++ " to " +++
-          anchor ! [href revisionsURL] << ("revision " +++ show revisionNo)
-        where
-          revisionsURL = display (rendPkgId render) </> "revisions/"
+    renderCopyright :: Html
+    renderCopyright = toHtml $ case text of
+      "" -> "None Provided"
+      _ -> text
+      where text = P.copyright desc
 
-      renderUploadInfo :: UTCTime -> Maybe UserInfo-> Html
-      renderUploadInfo utime uinfo =
-          formatTime defaultTimeLocale "%c" utime +++ " by " +++ user
-        where
-          uname   = maybe "Unknown" (display . userName) uinfo
-          uactive = maybe False (isActiveAccount . userStatus) uinfo
-          user  | uactive   = anchor ! [href $ "/user/" ++ uname] << uname
-                | otherwise = toHtml uname
+    renderUpdateInfo :: Int -> UTCTime -> Maybe UserInfo -> Html
+    renderUpdateInfo revisionNo utime uinfo =
+        renderUploadInfo utime uinfo +++ " to " +++
+        anchor ! [href revisionsURL] << ("revision " +++ show revisionNo)
+      where
+        revisionsURL = display (rendPkgId render) </> "revisions/"
 
-descriptionSection :: PackageRender -> [Html]
-descriptionSection PackageRender{..} =
-        Old.renderHaddock (description rendOther)
+    renderUploadInfo :: UTCTime -> Maybe UserInfo-> Html
+    renderUploadInfo utime uinfo =
+        formatTime defaultTimeLocale "%c" utime +++ " by " +++ user
+      where
+        uname   = maybe "Unknown" (display . userName) uinfo
+        uactive = maybe False (isActiveAccount . userStatus) uinfo
+        user  | uactive   = anchor ! [href $ "/user/" ++ uname] << uname
+              | otherwise = toHtml uname
 
-skipToReadme :: PackageRender -> [Html]
-skipToReadme r = case rendReadme r of
-  Just _ -> [ hr
-            , toHtml "["
-            , anchor ! [href "#readme"] << "Skip to ReadMe"
-            , toHtml "]"
-            ]
-  _      -> []
+    renderChangelog :: PackageRender -> Html
+    renderChangelog render = case rendChangeLog render of
+      Nothing            -> toHtml "None available"
+      Just (_,_,_,fname) -> anchor ! [href (rendPkgUri render </> "changelog")] << takeFileName fname
 
-mapTuples :: [(String, Html)] -> [TemplateAttr]
-mapTuples = map (\(a,b) -> a $= b)
+    renderStability :: PackageDescription -> Html
+    renderStability desc = case actualStability of
+      "" -> toHtml "Unknown"
+      _  -> toHtml actualStability
+      where actualStability = stability desc
 
-determineStability :: PackageDescription -> Html
-determineStability desc
-  | actualStability == "" = toHtml "Unknown"
-  | otherwise             = toHtml actualStability
-  where actualStability = stability desc
 
 sourceRepositoryToHtml :: SourceRepo -> Html
 sourceRepositoryToHtml sr

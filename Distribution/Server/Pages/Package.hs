@@ -17,6 +17,8 @@ module Distribution.Server.Pages.Package
   , linkField
   , descriptionSection
   , renderHaddock
+  , maintainerSection
+  , downloadSection
   ) where
 
 import Distribution.Server.Features.PreferredVersions
@@ -461,7 +463,7 @@ rendLicense render = case rendLicenseFiles render of
   _licenseFiles -> toHtml (rendLicenseName render)
                     +++ "["
                     +++ anchor ! [ href (rendPkgUri render </> "src") ]
-                              << "multiple licese files"
+                              << "multiple license files"
                     +++ "]"
 
 
