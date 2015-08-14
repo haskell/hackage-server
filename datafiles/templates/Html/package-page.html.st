@@ -5,7 +5,7 @@
   <title>
     $docTitle$
   </title>
-  <!-- <link rel="canonical" href="http://localhost:8080/package/" $pkgName$ /> -->
+  <link rel="canonical" href="http://localhost:8080/package/$pkgName$" />
 </head>
 
 <body>
@@ -19,14 +19,20 @@
       $headLinks$
     </div>
 
-    $deprecatedMsg$
     <!-- Optional -->
+    $deprecatedMsg$
+    <!-- /Optional -->
 
     $pkgDescription$
 
-    $skipToReadme$
     <!-- Optional -->
+    $if(package.hasReadme)$
+    <hr>
+    [<a href="#readme">Skip to Readme</a>]
+    $endif$
+    <!-- /Optional -->
 
+    <div id="properties">
     <h2>Properties</h2>
     <table class="properties">
       <tbody>
@@ -38,12 +44,12 @@
 
         <tr>
           <th>Change log</th>
-          <td>$changelog$</td>
+          <td>$package.changelog$</td>
         </tr>
 
         <tr>
           <th>Dependencies</th>
-          <td>$dependencies$</td>
+          <td>$dependencyList$</td>
         </tr>
 
         <tr>
@@ -51,8 +57,9 @@
           <td>$license$</td>
         </tr>
         <tr>
+
           <th>Copyright</th>
-          <td>$copyright$</td>
+          <td>$package.copyright$</td>
         </tr>
         <tr>
           <th>Author</th>
@@ -64,20 +71,31 @@
         </tr>
         <tr>
           <th>Stability</th>
-          <td>$stability$</td>
+          <td>$package.stability$</td>
         </tr>
         <tr>
           <th>Category</th>
           <td>$categories$</td>
         </tr>
+
+        $if(package.hasHomePage)$
         <tr>
           <th>Home page</th>
-          <td>$homePage$</td>
+          <td>
+            <a href=$package.homePageUrl$>$package.homePageUrl$</a>
+          </td>
         </tr>
+        $endif$
+
+        $if(package.hasBugTracker)$
         <tr>
           <th>Bug tracker</th>
-          <td>$bugTracker$</td>
+          <td>
+            <a href="$package.bugTracker$">$package.bugTracker$</a>
+          </td>
         </tr>
+        $endif$
+
         <tr>
           <th>Source repository</th>
           <td>$sourceRepo$</td>
@@ -86,18 +104,26 @@
           <th>Uploaded</th>
           <td>$uploadTime$</td>
         </tr>
+
+        $if(package.hasUpdateTime)$
         <tr>
           <th>Updated</th>
-          <td>$updateTime$</td>
+          <td>$package.updateTime$</td>
         </tr>
+        $endif$
+
+        $if(package.hasDistributions)$
         <tr>
           <th>Distributions</th>
           <td>$distributions$</td>
         </tr>
+        $endif$
+
         <tr>
           <th>Downloads</th>
           <td>$downloads$</td>
         </tr>
+
         <tr>
           <th>Votes</th>
           <td>$votes$</td>
@@ -108,16 +134,31 @@
         </tr>
       </tbody>
     </table>
+    </div> <!-- /properties -->
 
-    $moduleList$
+    <div id="modules">
+      $moduleList$
+    </div>
 
-    $flags$
+    $if(package.hasFlags)$
+    <div id="flags">
+      $package.flags$
+    </div>
+    $endif$
 
-    $downloads$
+    <div id="downloads">
+      $downloadSection$
+    </div>
 
-    $maintainerOptions$
+    <div id="maintainer-corner">
+      $maintainerOptions$
+    </div>
 
-    $readme$
+    $if(package.hasReadme)$
+    <div id="readme-container">
+      $readme$
+    </div>
+    $endif$
 
   </div> <!-- /content -->
 

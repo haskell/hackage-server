@@ -528,10 +528,9 @@ mkHtmlCore HtmlUtilities{..}
         render <- liftIO $ packageRender pkg
         let realpkg = rendPkgId render
             pkgname = packageName realpkg
-            middleHtml = Pages.renderFields render
+
         -- render the build status line
         buildStatus <- renderBuildStatus documentationFeature reportsFeature realpkg
-        let buildStatusHtml = [("Status", buildStatus)]
         -- get additional information from other features
         prefInfo <- queryGetPreferredInfo pkgname
         let infoUrl = fmap (\_ -> preferredPackageUri versions "" pkgname) $ sumRange prefInfo
@@ -540,13 +539,12 @@ mkHtmlCore HtmlUtilities{..}
         -- [reverse index disabled] revCount <- revPackageSummary realpkg
         -- We don't currently keep per-version downloads in memory
         -- (totalDown, versionDown) <- perVersionDownloads pkg
+        --
         totalDown <- cmFind pkgname `liftM` totalPackageDownloads
         recentDown <- cmFind pkgname `liftM` recentPackageDownloads
+
         pkgVotesHtml <- renderVotesHtml pkgname
-        let afterHtml  = [ Pages.renderDownloads totalDown recentDown {- versionDown $ packageVersion realpkg-}
-                                    , pkgVotesHtml
-                                     -- [reverse index disabled] ,Pages.reversePackageSummary realpkg revr revCount
-                                     ]
+
         -- bottom sections, currently documentation and readme
         mdoctarblob <- queryDocumentation realpkg
         mdocIndex   <- maybe (return Nothing)
@@ -581,31 +579,17 @@ mkHtmlCore HtmlUtilities{..}
         template <- getTemplate templates "package-page.html"
 
         return $ toResponse . template $ PagesNew.packagePageTemplate
-          render [tagLinks] [deprHtml]
-          (middleHtml ++ afterHtml)
-          [] mdocIndex mreadme docURL False
+          render [tagLinks]
+          [] mdocIndex mreadme docURL False distributions
           ++
           [ "versions"      $= snd (Pages.renderVersion realpkg
               (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl)
-          , "changelog"     $= snd (Pages.renderChangelog render)
-          , "dependencies"  $= snd (Pages.renderDependencies render)
           , "votes"         $= snd pkgVotesHtml
-          , "downloads"     $= Pages.renderDownloads totalDown recentDown
-          , "distributions" $= case distributions of
-              [] -> []
-              _  -> [concatHtml . intersperse (toHtml ", ")
-                      $ map showDist distributions]
-          , "buildStatus"   $= buildStatusHtml
+          , "downloads"     $= snd (Pages.renderDownloads totalDown recentDown)
+          , "buildStatus"   $= buildStatus
           ]
-
-        {-return $ toResponse $ Resource.XHtml $ Pages.packagePage -}
-          {-render [tagLinks] [deprHtml]-}
-          {-(beforeHtml ++ middleHtml ++ afterHtml-}
-            {-++ buildStatusHtml)-}
-          {-[] mdocIndex mreadme docURL False-}
-      where
-        showDist (dname, info) = toHtml (display dname ++ ":") +++
-            anchor ! [href $ distroUrl info] << toHtml (display $ distroVersion info)
+          ++
+          [ "deprecatedMsg" $= deprHtml]
 
     serveDependenciesPage :: DynamicPath -> ServerPartE Response
     serveDependenciesPage dpath = do
