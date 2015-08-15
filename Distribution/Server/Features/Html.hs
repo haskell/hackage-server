@@ -115,7 +115,7 @@ initHtmlFeature :: ServerEnv
                     -> UserDetailsFeature
                     -> IO HtmlFeature)
 
-initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
+initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                           serverCacheDelay,
                           serverVerbosity = verbosity} = do
     -- Page templates
@@ -145,7 +145,7 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
               usersdetails -> do
       -- do rec, tie the knot
       rec let (feature, packageIndex, packagesPage) =
-                htmlFeature user core
+                htmlFeature env user core
                             packages upload
                             candidates versions
                             tags download
@@ -183,7 +183,8 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
 
       return feature
 
-htmlFeature :: UserFeature
+htmlFeature :: ServerEnv
+            -> UserFeature
             -> CoreFeature
             -> PackageContentsFeature
             -> UploadFeature
@@ -207,7 +208,8 @@ htmlFeature :: UserFeature
             -> Templates
             -> (HtmlFeature, IO Response, IO Response)
 
-htmlFeature user
+htmlFeature env@ServerEnv{..}
+            user
             core@CoreFeature{queryGetPackageIndex}
             packages upload
             candidates versions
@@ -243,7 +245,8 @@ htmlFeature user
       , featureReloadFiles = reloadTemplates templates
       }
 
-    htmlCore       = mkHtmlCore       utilities
+    htmlCore       = mkHtmlCore       env
+                                      utilities
                                       user
                                       core
                                       versions
@@ -434,7 +437,8 @@ data HtmlCore = HtmlCore {
     htmlCoreResources :: [Resource]
   }
 
-mkHtmlCore :: HtmlUtilities
+mkHtmlCore :: ServerEnv
+           -> HtmlUtilities
            -> UserFeature
            -> CoreFeature
            -> VersionsFeature
@@ -453,7 +457,8 @@ mkHtmlCore :: HtmlUtilities
            -> AsyncCache Response
            -> Templates
            -> HtmlCore
-mkHtmlCore HtmlUtilities{..}
+mkHtmlCore env@ServerEnv{serverBaseURI}
+           HtmlUtilities{..}
            UserFeature{queryGetUserDb}
            CoreFeature{coreResource}
            VersionsFeature{ versionsResource
@@ -559,37 +564,43 @@ mkHtmlCore HtmlUtilities{..}
                                        (return . Just . snd)
                             =<< liftIO (loadTarEntry tarfile offset)
 
-        -- extra features like tags and downloads
         tags <- queryTagsForPackage pkgname
-
-        let tagLinks = toHtml [anchor ! [href "/packages/tags"] << "Tags", toHtml ": ",
-                               toHtml (renderTags tags)]
         deprs <- queryGetDeprecatedFor pkgname
-
-        let deprHtml = case deprs of
-              Just fors -> paragraph ! [thestyle "color: red"] << [toHtml "Deprecated", case fors of
-                [] -> noHtml
-                _  -> concatHtml . (toHtml " in favor of ":) . intersperse (toHtml ", ") .
-                      map (\for -> anchor ! [href $ corePackageNameUri cores "" for] << display for) $ fors]
-              Nothing -> noHtml
 
         cacheControlWithoutETag [Public, maxAgeMinutes 5]
 
         -- and put it all together
         template <- getTemplate templates "package-page.html"
 
-        return $ toResponse . template $ PagesNew.packagePageTemplate
-          render [tagLinks]
-          [] mdocIndex mreadme docURL False distributions
+        return $ toResponse . template $
+          PagesNew.packagePageTemplate render
+            mdocIndex mreadme
+            docURL distributions
           ++
-          [ "versions"      $= snd (Pages.renderVersion realpkg
+          [ "baseurl"           $= show (serverBaseURI)
+          , "versions"          $= snd (Pages.renderVersion realpkg
               (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl)
-          , "votes"         $= snd pkgVotesHtml
-          , "downloads"     $= snd (Pages.renderDownloads totalDown recentDown)
-          , "buildStatus"   $= buildStatus
+          , "votes"             $= snd pkgVotesHtml
+          , "downloads"         $= snd (Pages.renderDownloads totalDown recentDown)
+          , "buildStatus"       $= buildStatus
+          , "maintainerOptions" $= (PagesNew.maintainerSection pkgid False)
+          , "tags"              $= (renderTags tags)
           ]
           ++
-          [ "deprecatedMsg" $= deprHtml]
+          [ "isDeprecated"  $= (if deprs == Nothing then False else True)
+          , "deprecatedMsg" $= (deprHtml deprs)
+          ]
+            where
+              deprHtml :: Maybe [PackageName] -> Html
+              deprHtml deprs = case deprs of
+                Just fors -> case fors of
+                    [] -> noHtml
+                    _  -> concatHtml . (toHtml " in favor of ":) .
+                          intersperse (toHtml ", ") .
+                          map (packageNameLink) $ fors
+                Nothing -> noHtml
+
+
 
     serveDependenciesPage :: DynamicPath -> ServerPartE Response
     serveDependenciesPage dpath = do
