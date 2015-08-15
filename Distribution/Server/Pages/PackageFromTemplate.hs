@@ -3,6 +3,7 @@ module Distribution.Server.Pages.PackageFromTemplate
   ( packagePageTemplate
   , renderVersion
   , latestVersion
+  , maintainerSection
   ) where
 
 import Distribution.Server.Framework.Templating
@@ -47,21 +48,17 @@ import qualified Distribution.Server.Pages.Package as Old
 import Data.Time.Clock (UTCTime)
 import Distribution.Server.Users.Types (UserInfo)
 
-packagePageTemplate :: PackageRender -> [Html]
-            -> [(String, Html)] -> Maybe TarIndex -> Maybe BS.ByteString
-            -> URL -> Bool
-            -> [(DistroName, DistroPackageInfo)]
+packagePageTemplate :: PackageRender
+            -> Maybe TarIndex -> Maybe BS.ByteString
+            -> URL -> [(DistroName, DistroPackageInfo)]
             -> [TemplateAttr]
-packagePageTemplate render headLinks
-            bottom mdocIndex mreadMe
-            docURL isCandidate distributions =
+packagePageTemplate render
+            mdocIndex mreadMe
+            docURL distributions =
   [ "pkgName"         $= pkgName
   , "docTitle"        $= pkgName ++ case synopsis (rendOther render) of
       ""    -> ""
       short -> ": " ++ short
-  , "headLinks"       $= case headLinks of
-      []    -> []
-      items -> (map (\item -> "[" +++ item +++ "] ") items)
   , "pkgDescription"  $= Old.renderHaddock (description $ rendOther render)
   ]
   ++
@@ -79,7 +76,6 @@ packagePageTemplate render headLinks
   , "executables"     $= (commaList . map toHtml $ rendExecNames render)
   , "uploadTime"      $= (uncurry renderUploadInfo $ rendUploadInfo render)
   , "downloadSection" $= Old.downloadSection render
-  , "maintainerOptions" $= Old.maintainerSection pkgid isCandidate
   ]
   ++
   [ "cabalVersion"    $= display cabalVersion
@@ -89,7 +85,7 @@ packagePageTemplate render headLinks
       [ templateVal "hasReadme"
           (if rendReadme render == Nothing then False else True)
       , templateVal "readme"
-          (Old.readmeSection render mreadMe)
+          (readmeSection render mreadMe)
       ] ++
       [ templateVal "hasHomePage"
           (if (homepage desc  == []) then False else True)
@@ -143,7 +139,7 @@ packagePageTemplate render headLinks
 
     renderCopyright :: Html
     renderCopyright = toHtml $ case text of
-      "" -> "None Provided"
+      "" -> "None provided"
       _ -> text
       where text = P.copyright desc
 
@@ -174,6 +170,12 @@ packagePageTemplate render headLinks
       _  -> toHtml actualStability
       where actualStability = stability desc
 
+maintainerSection :: PackageId -> Bool -> Html
+maintainerSection pkgid isCandidate =
+    ulist << li << anchor ! [href maintainURL] << "edit package information"
+  where
+    maintainURL | isCandidate = "candidate/maintain"
+                | otherwise   = display (packageName pkgid) </> "maintain"
 
 sourceRepositoryToHtml :: SourceRepo -> Html
 sourceRepositoryToHtml sr
@@ -300,8 +302,38 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
       Nothing -> noHtml;
       Just str -> " (" +++ (anchor ! [href str] << "info") +++ ")"
 
+readmeSection :: PackageRender -> Maybe BS.ByteString -> [Html]
+readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
+                            , rendPkgId  = pkgid }
+              (Just content) =
+    [ h2 ! [identifier "readme"] << ("Readme for " ++ display pkgid)
+    , thediv ! [theclass "embedded-author-content"]
+            << if supposedToBeMarkdown filename
+                 then renderMarkdown content
+                 else pre << unpackUtf8 content
+    ]
+readmeSection _ _ = []
 
+renderMarkdown :: BS.ByteString -> Html
+renderMarkdown = primHtml . Blaze.renderHtml
+               . Markdown.renderDoc . Markdown.markdown opts
+               . T.decodeUtf8With T.lenientDecode . BS.toStrict
+  where
+    opts =
+      Markdown.Options
+        { Markdown.sanitize           = True
+        , Markdown.allowRawHtml       = False
+        , Markdown.preserveHardBreaks = False
+        , Markdown.debug              = False
+        }
 
+supposedToBeMarkdown :: FilePath -> Bool
+supposedToBeMarkdown fname = takeExtension fname `elem` [".md", ".markdown"]
+
+unpackUtf8 :: BS.ByteString -> String
+unpackUtf8 = T.unpack
+           . T.decodeUtf8With T.lenientDecode
+           . BS.toStrict
 -----------------------------------------------------------------------------
 commaList :: [Html] -> Html
 commaList = concatHtml . intersperse (toHtml ", ")

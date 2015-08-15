@@ -5,7 +5,7 @@
   <title>
     $docTitle$
   </title>
-  <link rel="canonical" href="http://localhost:8080/package/$pkgName$" />
+  <link rel="canonical" href="$baseurl$/package/$pkgName$" />
 </head>
 
 <body>
@@ -14,23 +14,26 @@
   <div id="content">
 
     <h1>The $pkgName$ package</h1>
-
     <div style="font-size: small">
+      [<a href="/packages/tags">Tags</a>:$tags$]
       $headLinks$
     </div>
 
     <!-- Optional -->
-    $deprecatedMsg$
+    $if(isDeprecated)$
+    <div id="deprecated">
+      Deprecated.
+      $deprecatedMsg$
+    </div>
+    $endif$
     <!-- /Optional -->
 
     $pkgDescription$
 
-    <!-- Optional -->
     $if(package.hasReadme)$
     <hr>
     [<a href="#readme">Skip to Readme</a>]
     $endif$
-    <!-- /Optional -->
 
     <div id="properties">
     <h2>Properties</h2>
@@ -151,12 +154,15 @@
     </div>
 
     <div id="maintainer-corner">
+      <h4>Maintainer's Corner</h4>
+      <p>For package maintainers and hackage trustees</p>
       $maintainerOptions$
     </div>
 
     $if(package.hasReadme)$
     <div id="readme-container">
-      $readme$
+      <h2 id="readme">Readme for $pkgName$</h2>
+      $package.readme$
     </div>
     $endif$
 
