@@ -63,6 +63,7 @@ serveLegacyPosts upload = msum
 serveLegacyGets :: ServerPartE Response
 serveLegacyGets = msum
   [ simpleMove "00-index.tar.gz" "/packages/index.tar.gz"
+  , simpleMove "00-index.tar" "/packages/index.tar"
   , dir "packages" $ msum
       [ dir "archive" $ serveArchiveTree
       , simpleMove "hackage.html"    "/"
@@ -150,4 +151,3 @@ simpleMove from to = dir from $ simpleMoveTo to
 
 simpleMoveTo :: String -> ServerPartE Response
 simpleMoveTo to = method GET >> nullDir >> movedPermanently to (toResponse "")
-

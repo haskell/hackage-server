@@ -16,18 +16,22 @@ import qualified Data.Digest.Pure.SHA as SHA
 -- | Read a SHA digest
 --
 -- When the digest is forced the whole thing is forced.
---
--- TODO: Is this predefined somewhere?
-readDigestSHA :: Binary (SHA.Digest t) => String -> SHA.Digest t
-readDigestSHA = Binary.decode . force . BS.L.pack . translate
+readDigestSHA :: Binary (SHA.Digest t) => String -> Either String (SHA.Digest t)
+readDigestSHA = readDigest
 
 -- | Read an MD5 digest
-readDigestMD5 :: String -> MD5Digest
-readDigestMD5 = Binary.decode . force . BS.L.pack . translate
+readDigestMD5 :: String -> Either String MD5Digest
+readDigestMD5 = readDigest
 
 {-------------------------------------------------------------------------------
   Auxiliary
 -------------------------------------------------------------------------------}
+
+readDigest :: Binary a => String -> Either String a
+readDigest str =
+   case Binary.decodeOrFail . force . BS.L.pack . translate $ str of
+     Left  (_, _, err) -> Left  err
+     Right (_, _, a)   -> Right a
 
 -- | Translate a string of hex chars to the correspondin Word8 values
 -- (i.e., the length of the output will be half the length of the input)

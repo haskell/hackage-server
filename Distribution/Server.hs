@@ -55,6 +55,8 @@ import Data.Function (on)
 import qualified System.Log.Logger as HsLogger
 import Control.Exception.Lifted as Lifted
 
+import qualified Hackage.Security.Util.Path as Sec
+
 import Paths_hackage_server (getDataDir)
 
 
@@ -73,12 +75,14 @@ data ServerConfig = ServerConfig {
   confCacheDelay:: Int
 } deriving (Show)
 
-confDbStateDir, confBlobStoreDir,
-  confStaticFilesDir, confTemplatesDir :: ServerConfig -> FilePath
+confDbStateDir, confBlobStoreDir :: ServerConfig -> FilePath
 confDbStateDir   config = confStateDir config </> "db"
 confBlobStoreDir config = confStateDir config </> "blobs"
+
+confStaticFilesDir, confTemplatesDir, confTUFDir :: ServerConfig -> FilePath
 confStaticFilesDir config = confStaticDir config </> "static"
 confTemplatesDir   config = confStaticDir config </> "templates"
+confTUFDir         config = confStaticDir config </> "TUF"
 
 defaultServerConfig :: IO ServerConfig
 defaultServerConfig = do
@@ -123,13 +127,16 @@ mkServerEnv config@(ServerConfig verbosity hostURI _
     let blobStoreDir  = confBlobStoreDir   config
         staticDir     = confStaticFilesDir config
         templatesDir  = confTemplatesDir   config
+        tufDir'       = confTUFDir         config
 
     store   <- BlobStorage.open blobStoreDir
     cron    <- newCron verbosity
+    tufDir  <- Sec.makeAbsolute $ Sec.fromFilePath tufDir'
 
     let env = ServerEnv {
             serverStaticDir     = staticDir,
             serverTemplatesDir  = templatesDir,
+            serverTUFDir        = tufDir,
             serverTemplatesMode = NormalMode,
             serverStateDir      = stateDir,
             serverBlobStore     = store,
@@ -265,8 +272,9 @@ initState server (admin, pass) = do
     -- https://github.com/acid-state/acid-state/issues/20
     checkpoint server
 
-    let store = serverBlobStore (serverEnv server)
-    void . Import.importBlank store $ map (second abstractStateRestore) (serverState server)
+    let store  = serverBlobStore (serverEnv server)
+        stores = BlobStorage.BlobStores store []
+    void . Import.importBlank stores $ map (second abstractStateRestore) (serverState server)
     -- create default admin user
     let UserFeature{updateAddUser, adminGroup} = serverUserFeature server
     muid <- case simpleParse admin of
@@ -352,4 +360,3 @@ tearDownTemp (TempServer tid) = do
     killThread tid
     -- give the server enough time to release the bind
     threadDelay $ 1000000
-

@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving,
-             ScopedTypeVariables, TypeFamilies, BangPatterns, CPP #-}
+             ScopedTypeVariables, TypeFamilies, BangPatterns, CPP,
+             RecordWildCards #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Server.BlobStorage
@@ -17,6 +18,7 @@ module Distribution.Server.Framework.BlobStorage (
     blobMd5,
     readBlobId,
     blobETag,
+    blobMd5Digest,
     open,
     add,
     addWith,
@@ -25,6 +27,8 @@ module Distribution.Server.Framework.BlobStorage (
     fetch,
     filepath,
     BlobId_v0,
+    BlobStores(..),
+    find,
   ) where
 
 import Distribution.Server.Framework.MemSize
@@ -44,6 +48,7 @@ import Data.SafeCopy
 import System.Directory
 import System.IO
 import Data.Aeson
+import System.Posix.Files as Posix (createLink)
 
 -- For the lazy MD5 computation
 import Data.Digest.Pure.MD5 (MD5Digest, MD5Context)
@@ -72,7 +77,10 @@ newtype BlobId = BlobId MD5Digest
   deriving (Eq, Ord, Show, Typeable, MemSize)
 
 instance ToJSON BlobId where
-  toJSON (BlobId md5digest) = toJSON (show md5digest)
+  toJSON = toJSON . blobMd5
+
+blobMd5Digest :: BlobId -> MD5Digest
+blobMd5Digest (BlobId digest) = digest
 
 blobMd5 :: BlobId -> String
 blobMd5 (BlobId digest) = show digest
@@ -80,8 +88,8 @@ blobMd5 (BlobId digest) = show digest
 blobETag :: BlobId -> ETag
 blobETag = ETag . blobMd5
 
-readBlobId :: String -> BlobId
-readBlobId = BlobId . readDigestMD5
+readBlobId :: String -> Either String BlobId
+readBlobId = either Left (Right . BlobId) . readDigestMD5
 
 instance SafeCopy BlobId where
   version = 2
@@ -311,10 +319,6 @@ lazyMD5 = go initialCtx . makeBlocks blockLen
 data ByteStringWithMd5 = BsChunk  !BSS.ByteString ByteStringWithMd5
                        | BsEndMd5 !MD5Digest
 
-{------------------------------------------------------------------------------
-  Lazy MD5 computation
-------------------------------------------------------------------------------}
-
 -- | Binding to the C @fsync@ function
 fsync :: Fd -> IO ()
 fsync (Fd fd) =
@@ -336,3 +340,37 @@ instance SafeCopy BlobId_v0
 instance Migrate BlobId where
     type MigrateFrom BlobId = BlobId_v0
     migrate (BlobId_v0 digest) = BlobId digest
+
+{-------------------------------------------------------------------------------
+  Multiple blob stores
+-------------------------------------------------------------------------------}
+
+data BlobStores = BlobStores {
+    -- | Main blob store
+    blobStoresMain :: BlobStorage
+
+    -- | Auxiliary blob stores
+    --
+    -- These are used only when adding new blobs into the main blob store
+  , blobStoresAux :: [BlobStorage]
+  }
+
+-- | Check if a blob with the specified ID exists in any of the stores, and if
+-- exists, hardlink it to the main store.
+find :: BlobStores -> BlobId -> IO Bool
+find BlobStores{..} blobId = do
+     existsInMainStore <- doesFileExist $ filepath blobStoresMain blobId
+     if existsInMainStore
+       then return True
+       else checkAux blobStoresAux
+  where
+    checkAux :: [BlobStorage] -> IO Bool
+    checkAux []             = return False
+    checkAux (store:stores) = do
+       existsHere <- doesFileExist pathHere
+       if existsHere
+         then createLink pathHere pathMain >> return True
+         else checkAux stores
+     where
+       pathHere = filepath store          blobId
+       pathMain = filepath blobStoresMain blobId

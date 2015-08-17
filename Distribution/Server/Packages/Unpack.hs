@@ -1,7 +1,8 @@
 -- Unpack a tarball containing a Cabal package
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
-
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Distribution.Server.Packages.Unpack (
     unpackPackage,
     unpackPackageRaw,
@@ -236,12 +237,14 @@ allocatedTopLevelNodes = [
         "Distribution", "DotNet", "Foreign", "Graphics", "Language",
         "Network", "Numeric", "Prelude", "Sound", "System", "Test", "Text"]
 
-selectEntries :: (err -> String)
+selectEntries :: forall err a.
+                 (err -> String)
               -> (Tar.Entry -> Maybe a)
               -> Tar.Entries err
               -> UploadMonad [a]
 selectEntries formatErr select = extract []
   where
+    extract :: [a] -> Tar.Entries err -> UploadMonad [a]
     extract _        (Tar.Fail err)           = throwError (formatErr err)
     extract selected  Tar.Done                = return selected
     extract selected (Tar.Next entry entries) =

@@ -31,8 +31,8 @@ import Network.Browser
 import Network.URI (URI(..), URIAuth(..), parseURI)
 
 import Distribution.Client.UploadLog as UploadLog (read, Entry(..))
+import Distribution.Client.Index as PackageIndex (read)
 import Distribution.Server.Users.Types (UserId(..), UserName(UserName))
-import Distribution.Server.Util.Index as PackageIndex (read)
 import Distribution.Server.Util.Merge
 import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.Package

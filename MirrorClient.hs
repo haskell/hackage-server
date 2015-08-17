@@ -12,7 +12,7 @@ import Distribution.Client.Cron (cron, rethrowSignalsAsExceptions, Signal(..))
 import Distribution.Server.Util.Parse (packUTF8, unpackUTF8)
 
 import Distribution.Server.Users.Types (UserId(..), UserName(UserName))
-import Distribution.Server.Util.Index as PackageIndex (read)
+import Distribution.Client.Index as PackageIndex (read)
 import Distribution.Server.Util.Merge
 import Distribution.Package
 import Distribution.Version

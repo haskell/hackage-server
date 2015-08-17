@@ -378,8 +378,10 @@ uploadFeature ServerEnv{serverBlobStore = store}
             mres <- liftIO $ BlobStorage.consumeFileWith store file processPackage
             case mres of
                 Left  err -> throwError err
-                Right ((res, blobIdDecompressed), blobId) ->
+                Right ((res, blobIdDecompressed), blobId) -> do
+                    infoGz <- liftIO $ blobInfoFromId store blobId
+                    let tarball = PkgTarball {
+                                      pkgTarballGz   = infoGz
+                                    , pkgTarballNoGz = blobIdDecompressed
+                                    }
                     return (uid, res, tarball)
-                  where
-                    tarball = PkgTarball { pkgTarballGz   = blobId,
-                                           pkgTarballNoGz = blobIdDecompressed }
