@@ -124,7 +124,7 @@
 
         <tr>
           <th>Downloads</th>
-          <td>$downloads$</td>
+          <td>$totalDownloads$ total ($recentDownloads$ in the last 30 days)</td>
         </tr>
 
         <tr>
@@ -156,7 +156,11 @@
     <div id="maintainer-corner">
       <h4>Maintainer's Corner</h4>
       <p>For package maintainers and hackage trustees</p>
-      $maintainerOptions$
+      <ul>
+        <li>
+          <a href="$pkgName$/maintain">edit package information</a>
+        </li>
+      </ul>
     </div>
 
     $if(package.hasReadme)$
