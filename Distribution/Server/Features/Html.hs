@@ -72,6 +72,7 @@ import Data.Time.Format (formatTime)
 import Data.Time.Clock (getCurrentTime)
 import qualified Data.Time.Format.Human as HumanTime
 import Data.Time.Locale.Compat (defaultTimeLocale)
+import qualified Data.ByteString.Lazy as BS (ByteString)
 
 import Text.XHtml.Strict
 import qualified Text.XHtml.Strict as XHtml
@@ -457,7 +458,7 @@ mkHtmlCore :: ServerEnv
            -> AsyncCache Response
            -> Templates
            -> HtmlCore
-mkHtmlCore env@ServerEnv{serverBaseURI}
+mkHtmlCore ServerEnv{serverBaseURI}
            HtmlUtilities{..}
            UserFeature{queryGetUserDb}
            CoreFeature{coreResource}
@@ -528,67 +529,56 @@ mkHtmlCore env@ServerEnv{serverBaseURI}
     servePackagePage :: DynamicPath -> ServerPartE Response
     servePackagePage dpath = do
       pkgid <- packageInPath dpath
+
       withPackagePreferred pkgid $ \pkg pkgs -> do
-        -- get the PackageRender from the PkgInfo
         render <- liftIO $ packageRender pkg
+
         let realpkg = rendPkgId render
             pkgname = packageName realpkg
+            docURL  = packageDocsContentUri docs realpkg
 
-        -- render the build status line
-        buildStatus <- renderBuildStatus documentationFeature reportsFeature realpkg
-        -- get additional information from other features
-        prefInfo <- queryGetPreferredInfo pkgname
-        let infoUrl = fmap (\_ -> preferredPackageUri versions "" pkgname) $ sumRange prefInfo
-        -- and other package indices
+        prefInfo      <- queryGetPreferredInfo pkgname
         distributions <- queryPackageStatus pkgname
-        -- [reverse index disabled] revCount <- revPackageSummary realpkg
-        -- We don't currently keep per-version downloads in memory
-        -- (totalDown, versionDown) <- perVersionDownloads pkg
-        --
-        totalDown <- cmFind pkgname `liftM` totalPackageDownloads
-        recentDown <- cmFind pkgname `liftM` recentPackageDownloads
+        totalDown     <- cmFind pkgname `liftM` totalPackageDownloads
+        recentDown    <- cmFind pkgname `liftM` recentPackageDownloads
+        pkgVotesHtml  <- renderVotesHtml pkgname
+        mdoctarblob   <- queryDocumentation realpkg
+        tags          <- queryTagsForPackage pkgname
+        deprs         <- queryGetDeprecatedFor pkgname
+        mreadme       <- makeReadme render
 
-        pkgVotesHtml <- renderVotesHtml pkgname
+        buildStatus   <- renderBuildStatus
+          documentationFeature reportsFeature realpkg
+        mdocIndex     <- maybe (return Nothing)
+          (liftM Just . liftIO . cachedTarIndex) mdoctarblob
 
-        -- bottom sections, currently documentation and readme
-        mdoctarblob <- queryDocumentation realpkg
-        mdocIndex   <- maybe (return Nothing)
-                             (liftM Just . liftIO . cachedTarIndex)
-                             mdoctarblob
-        let docURL = packageDocsContentUri docs realpkg -- "/package" <//> display realpkg <//> "docs"
+        let infoUrl = fmap (\_ -> preferredPackageUri versions "" pkgname) $
+              sumRange prefInfo
 
-        mreadme     <- case rendReadme render of
-                         Nothing -> return Nothing
-                         Just (tarfile, _, offset, _) ->
-                                either (\_err -> return Nothing)
-                                       (return . Just . snd)
-                            =<< liftIO (loadTarEntry tarfile offset)
-
-        tags <- queryTagsForPackage pkgname
-        deprs <- queryGetDeprecatedFor pkgname
-
+        -- Put it all together
+        template <- getTemplate templates "package-page.html"
         cacheControlWithoutETag [Public, maxAgeMinutes 5]
 
-        -- and put it all together
-        template <- getTemplate templates "package-page.html"
-
         return $ toResponse . template $
+          -- Items not related to IO (mostly pure functions)
           PagesNew.packagePageTemplate render
             mdocIndex mreadme
             docURL distributions
           ++
+          -- IO-related items
           [ "baseurl"           $= show (serverBaseURI)
-          , "versions"          $= snd (Pages.renderVersion realpkg
+          , "versions"          $= (PagesNew.renderVersion realpkg
               (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl)
-          , "votes"             $= snd pkgVotesHtml
-          , "downloads"         $= snd (Pages.renderDownloads totalDown recentDown)
+          , "votes"             $= pkgVotesHtml
+          , "totalDownloads"    $= totalDown
+          , "recentDownloads"   $= recentDown
           , "buildStatus"       $= buildStatus
-          , "maintainerOptions" $= (PagesNew.maintainerSection pkgid False)
           , "tags"              $= (renderTags tags)
           ]
           ++
-          [ "isDeprecated"  $= (if deprs == Nothing then False else True)
-          , "deprecatedMsg" $= (deprHtml deprs)
+          -- Optional items
+          [ "isDeprecated"      $= (if deprs == Nothing then False else True)
+          , "deprecatedMsg"     $= (deprHtml deprs)
           ]
             where
               deprHtml :: Maybe [PackageName] -> Html
@@ -600,7 +590,12 @@ mkHtmlCore env@ServerEnv{serverBaseURI}
                           map (packageNameLink) $ fors
                 Nothing -> noHtml
 
-
+              makeReadme :: MonadIO m => PackageRender -> m (Maybe BS.ByteString)
+              makeReadme render = case rendReadme render of
+                Just (tarfile, _, offset, _) ->
+                      either (\_err -> return Nothing) (return . Just . snd) =<<
+                        liftIO (loadTarEntry tarfile offset)
+                Nothing -> return Nothing
 
     serveDependenciesPage :: DynamicPath -> ServerPartE Response
     serveDependenciesPage dpath = do

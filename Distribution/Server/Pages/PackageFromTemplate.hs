@@ -3,7 +3,6 @@ module Distribution.Server.Pages.PackageFromTemplate
   ( packagePageTemplate
   , renderVersion
   , latestVersion
-  , maintainerSection
   ) where
 
 import Distribution.Server.Framework.Templating
@@ -47,13 +46,15 @@ import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
 import qualified Distribution.Server.Pages.Package as Old
 import Data.Time.Clock (UTCTime)
 import Distribution.Server.Users.Types (UserInfo)
+import Distribution.Server.Util.ServeTarball (loadTarEntry)
+import Control.Monad.Trans (liftIO)
 
 packagePageTemplate :: PackageRender
             -> Maybe TarIndex -> Maybe BS.ByteString
             -> URL -> [(DistroName, DistroPackageInfo)]
             -> [TemplateAttr]
 packagePageTemplate render
-            mdocIndex mreadMe
+            mdocIndex mreadme
             docURL distributions =
   [ "pkgName"         $= pkgName
   , "docTitle"        $= pkgName ++ case synopsis (rendOther render) of
@@ -85,7 +86,7 @@ packagePageTemplate render
       [ templateVal "hasReadme"
           (if rendReadme render == Nothing then False else True)
       , templateVal "readme"
-          (readmeSection render mreadMe)
+          (readmeSection render mreadme)
       ] ++
       [ templateVal "hasHomePage"
           (if (homepage desc  == []) then False else True)
@@ -170,12 +171,37 @@ packagePageTemplate render
       _  -> toHtml actualStability
       where actualStability = stability desc
 
-maintainerSection :: PackageId -> Bool -> Html
-maintainerSection pkgid isCandidate =
-    ulist << li << anchor ! [href maintainURL] << "edit package information"
+-- #ToDo: Pick out several interesting versions to display, with a link to
+-- display all versions.
+renderVersion :: PackageId -> [(Version, VersionStatus)] -> Maybe String -> Html
+renderVersion (PackageIdentifier pname pversion) allVersions info =
+  versionList +++ infoHtml
   where
-    maintainURL | isCandidate = "candidate/maintain"
-                | otherwise   = display (packageName pkgid) </> "maintain"
+    (earlierVersions, laterVersionsInc) = span ((<pversion) . fst) allVersions
+
+    (mThisVersion, laterVersions) = case laterVersionsInc of
+            (v:later) | fst v == pversion -> (Just v, later)
+            later -> (Nothing, later)
+
+    versionList = commaList $ map versionedLink earlierVersions
+      ++ (case pversion of
+            Version [] [] -> []
+            _ -> [strong ! (maybe [] (status . snd) mThisVersion) << display pversion]
+        )
+      ++ map versionedLink laterVersions
+
+    versionedLink (v, s) = anchor !
+      (status s ++ [href $ packageURL $ PackageIdentifier pname v]) <<
+        display v
+
+    status st = case st of
+        NormalVersion -> []
+        DeprecatedVersion  -> [theclass "deprecated"]
+        UnpreferredVersion -> [theclass "unpreferred"]
+
+    infoHtml = case info of
+      Nothing -> noHtml
+      Just str -> " (" +++ (anchor ! [href str] << "info") +++ ")"
 
 sourceRepositoryToHtml :: SourceRepo -> Html
 sourceRepositoryToHtml sr
@@ -263,44 +289,6 @@ latestVersion (PackageIdentifier pname pversion) allVersions =
   versionLink (last allVersions)
   where
     versionLink v = anchor ! [href $ packageURL $ PackageIdentifier pname v] << display v
-
-renderVersion :: PackageId -> [(Version, VersionStatus)] -> Maybe String -> (String, Html)
-renderVersion (PackageIdentifier pname pversion) allVersions info =
-  ( if null earlierVersions && null laterVersions then "Version" else "Versions"
-  , unordList versionList +++ infoHtml
-  )
-  where
-    (earlierVersions, laterVersionsInc) = span ((<pversion) . fst) allVersions
-
-    (mThisVersion, laterVersions) = case laterVersionsInc of
-        (v:later) | fst v == pversion -> (Just v, later)
-        later -> (Nothing, later)
-
-    vmax = 2
-    versionList =
-      if length olderVersions <= vmax then olderVersions
-        else [versionedLink' (head earlierVersions) "..."] ++ reverse (take vmax (reverse olderVersions))
-      ++ currentVersion ++
-      if length newerVersions <= vmax then newerVersions
-      else take vmax newerVersions ++ [versionedLink' (last laterVersions) "..."]
-      where
-        olderVersions = map versionedLink earlierVersions
-        currentVersion = case pversion of
-          Version [] [] -> []
-          _ -> [strong ! (maybe [] (status . snd) mThisVersion) << display pversion]
-        newerVersions = map versionedLink laterVersions
-
-    versionedLink (v, s) = anchor ! (status s ++ [href $ packageURL $ PackageIdentifier pname v]) << display v
-    versionedLink' (v, s) str  = anchor ! (status s ++ [href $ packageURL $ PackageIdentifier pname v]) << str
-
-    status st = case st of
-        NormalVersion -> []
-        DeprecatedVersion  -> [theclass "deprecated"]
-        UnpreferredVersion -> [theclass "unpreferred"]
-
-    infoHtml = case info of
-      Nothing -> noHtml;
-      Just str -> " (" +++ (anchor ! [href str] << "info") +++ ")"
 
 readmeSection :: PackageRender -> Maybe BS.ByteString -> [Html]
 readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
