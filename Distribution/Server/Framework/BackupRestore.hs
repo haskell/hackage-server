@@ -1,4 +1,11 @@
-{-# LANGUAGE RankNTypes, RecordWildCards, GeneralizedNewtypeDeriving, BangPatterns, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE BangPatterns               #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Distribution.Server.Framework.BackupRestore (
@@ -41,6 +48,7 @@ import Control.Monad.Writer
 import Data.Time (UTCTime)
 import qualified Data.Time as Time
 import Data.Time.Locale.Compat (defaultTimeLocale)
+import Data.Typeable (Typeable, typeOf)
 
 import Distribution.Server.Util.Merge
 import Distribution.Server.Util.Parse (unpackUTF8)
@@ -137,10 +145,12 @@ importCSV filename inp = case parseCSV filename (unpackUTF8 inp) of
     chopLastRecord ([""]:[]) = []
     chopLastRecord (x:xs) = x : chopLastRecord xs
 
-parseRead :: (Read a, Monad m) => String -> String -> m a
+parseRead :: forall a m. (Read a, Monad m, Typeable a) => String -> String -> m a
 parseRead label str = case reads str of
     [(value, "")] -> return value
-    _ -> fail $ "Unable to parse " ++ label ++ ": " ++ show str
+    _ -> fail $ "Unable to 'read' " ++ label ++ " "
+             ++ show str
+             ++ " as type " ++ show (typeOf (undefined :: a))
 
 parseUTCTime :: (Monad m, MonadError String m) => String -> String -> m UTCTime
 parseUTCTime label str =
@@ -155,9 +165,11 @@ timeFormatSpec :: String
 timeFormatSpec = "%Y-%m-%d %H:%M:%S%Q %z"
 
 -- Parse a string, throw an error if it's bad
-parseText :: (Text a, Monad m) => String -> String -> m a
+parseText :: forall a m. (Text a, Monad m, Typeable a) => String -> String -> m a
 parseText label text = case simpleParse text of
-    Nothing -> fail $ "Unable to parse " ++ label ++ ": " ++ show text
+    Nothing -> fail $ "Unable to 'simpleParse' " ++ label ++ " "
+                   ++ show text
+                   ++ " as type " ++ show (typeOf (undefined :: a))
     Just a -> return a
 
 {-------------------------------------------------------------------------------

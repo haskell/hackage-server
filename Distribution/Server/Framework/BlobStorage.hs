@@ -15,6 +15,7 @@ module Distribution.Server.Framework.BlobStorage (
     BlobStorage,
     BlobId,
     blobMd5,
+    readBlobId,
     blobETag,
     open,
     add,
@@ -29,6 +30,7 @@ module Distribution.Server.Framework.BlobStorage (
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.CacheControl (ETag(..))
+import Distribution.Server.Util.ReadDigest
 
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Digest.Pure.MD5 as MD5
@@ -77,6 +79,9 @@ blobMd5 (BlobId digest) = show digest
 
 blobETag :: BlobId -> ETag
 blobETag = ETag . blobMd5
+
+readBlobId :: String -> BlobId
+readBlobId = BlobId . readDigestMD5
 
 instance SafeCopy BlobId where
   version = 2
@@ -331,4 +336,3 @@ instance SafeCopy BlobId_v0
 instance Migrate BlobId where
     type MigrateFrom BlobId = BlobId_v0
     migrate (BlobId_v0 digest) = BlobId digest
-
