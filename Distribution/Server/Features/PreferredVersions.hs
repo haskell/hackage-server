@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, 
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards,
              PatternGuards, OverloadedStrings #-}
 module Distribution.Server.Features.PreferredVersions (
     VersionsFeature(..),
@@ -28,7 +28,6 @@ import Distribution.Package
 import Distribution.Version
 import Distribution.Text
 
-import Data.Either   (rights)
 import Data.Function (fix)
 import Data.List (intercalate, find)
 import Data.Maybe (isJust, fromMaybe, catMaybes)
@@ -36,7 +35,6 @@ import Data.Time.Clock (getCurrentTime)
 import Control.Arrow (second)
 import Control.Applicative (optional)
 import qualified Data.Map as Map
-import qualified Data.Set as Set
 import qualified Data.ByteString.Lazy.Char8 as BS (pack) -- Only used for ASCII data
 import Data.Aeson (Value(..))
 import qualified Data.HashMap.Strict as HashMap
@@ -50,7 +48,6 @@ data VersionsFeature = VersionsFeature {
     queryGetDeprecatedFor :: forall m. MonadIO m => PackageName -> m (Maybe [PackageName]),
 
     versionsResource :: VersionsResource,
-    preferredHook  :: Hook (PackageName, PreferredInfo) (),
     deprecatedHook :: Hook (PackageName, Maybe [PackageName]) (),
     putDeprecated :: PackageName -> ServerPartE Bool,
     putPreferred  :: PackageName -> ServerPartE (),
@@ -60,7 +57,7 @@ data VersionsFeature = VersionsFeature {
     doDeprecatedRender    :: PackageName -> ServerPartE (Maybe [PackageName]),
     doPreferredsRender    :: forall m. MonadIO m => m [(PackageName, PreferredRender)],
     doDeprecatedsRender   :: forall m. MonadIO m => m [(PackageName, [PackageName])],
-    makePreferredVersions :: forall m. MonadIO m => m String,
+
     withPackagePreferred     :: forall a. PackageId -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a,
     withPackagePreferredPath :: forall a. DynamicPath -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a
 }
@@ -94,49 +91,43 @@ initVersionsFeature :: ServerEnv
                         -> UploadFeature
                         -> TagsFeature
                         -> IO VersionsFeature)
-initVersionsFeature ServerEnv{serverStateDir} = do
-    preferredState <- preferredStateComponent serverStateDir
-    preferredHook  <- newHook
+initVersionsFeature env@ServerEnv{serverStateDir} = do
+    preferredState <- preferredStateComponent False serverStateDir
     deprecatedHook <- newHook
 
     return $ \core upload tags -> do
-      let feature = versionsFeature core upload tags
-                                    preferredState preferredHook deprecatedHook
+
+      let feature = versionsFeature env
+                                    core upload tags
+                                    preferredState deprecatedHook
       return feature
 
-preferredStateComponent :: FilePath -> IO (StateComponent AcidState PreferredVersions)
-preferredStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "PreferredVersions") initialPreferredVersions
+preferredStateComponent :: Bool -> FilePath -> IO (StateComponent AcidState PreferredVersions)
+preferredStateComponent freshDB stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "PreferredVersions")
+                           (initialPreferredVersions freshDB)
   return StateComponent {
       stateDesc    = "Preferred package versions"
     , stateHandle  = st
     , getState     = query st GetPreferredVersions
     , putState     = update st . ReplacePreferredVersions
-    , resetState   = preferredStateComponent
+    , resetState   = preferredStateComponent True
     , backupState  = \_ -> backupPreferredVersions
     , restoreState = restorePreferredVersions
     }
 
-versionsFeature :: CoreFeature
+versionsFeature :: ServerEnv
+                -> CoreFeature
                 -> UploadFeature
                 -> TagsFeature
                 -> StateComponent AcidState PreferredVersions
-                -> Hook (PackageName, PreferredInfo) ()
                 -> Hook (PackageName, Maybe [PackageName]) ()
                 -> VersionsFeature
--- FIXME this packageInPath punning and shadowing makes
--- things harder to understand and modify later
-versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
-                                                      , guardValidPackageName
-                                                      , lookupPackageName
-                                                      }
-                           , queryGetPackageIndex
-                           , updateArchiveIndexEntry
-                           }
+versionsFeature ServerEnv{ serverVerbosity = verbosity }
+                CoreFeature{..}
                 UploadFeature{..}
                 TagsFeature{..}
                 preferredState
-                preferredHook
                 deprecatedHook
   = VersionsFeature{..}
   where
@@ -150,7 +141,7 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
             , preferredText
             ]
       , featurePostInit = do updateDeprecatedTags
-                             updateIndexPreferredState
+                             ephemeralPrefsMigration
       , featureState    = [abstractAcidStateComponent preferredState]
       }
 
@@ -161,15 +152,10 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
     queryGetDeprecatedFor name = queryState preferredState (GetDeprecatedFor name)
 
     updateDeprecatedTags = do
-      pkgs <- fmap (Map.keys . deprecatedMap) $ queryState preferredState GetPreferredVersions
-      setCalculatedTag (Tag "deprecated") (Set.fromDistinctAscList pkgs)
+      pkgs <- deprecatedMap <$> queryState preferredState GetPreferredVersions
+      setCalculatedTag (Tag "deprecated") (Map.keysSet pkgs)
 
-    updatePackageDeprecation :: MonadIO m => PackageName -> Maybe [PackageName] -> m ()
-    updatePackageDeprecation pkgname deprs = liftIO $ do
-      updateState preferredState $ SetDeprecatedFor pkgname deprs
-      runHook_ deprecatedHook (pkgname, deprs)
-      updateDeprecatedTags
-
+    CoreResource{..} = coreResource
     versionsResource = fix $ \r -> VersionsResource
       { preferredResource        = resourceAt "/packages/preferred.:format"
       , preferredPackageResource = (resourceAt "/package/:package/preferred.:format") {
@@ -196,7 +182,7 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
           renderResource (deprecatedPackageResource r) [display pkgid, format]
       }
 
-    textPreferred = fmap toResponse makePreferredVersions
+    textPreferred = toResponse <$> makeGlobalPreferredVersions
 
     handlePreferredPackageGet :: DynamicPath -> ServerPartE Response
     handlePreferredPackageGet dpath = do
@@ -264,6 +250,12 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
                 ok $ toResponse ()
         _ -> errBadRequest "bad json format or content" []
 
+    updatePackageDeprecation :: MonadIO m => PackageName -> Maybe [PackageName] -> m ()
+    updatePackageDeprecation pkgname deprs = liftIO $ do
+      updateState preferredState $ SetDeprecatedFor pkgname deprs
+      runHook_ deprecatedHook (pkgname, deprs)
+      updateDeprecatedTags
+
     ---------------------------
     -- This is a function used by the HTML feature to select the version to display.
     -- It could be enhanced by displaying a search page in the case of failure,
@@ -294,23 +286,36 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
     putPreferred pkgname = do
       pkgs <- lookupPackageName pkgname
       guardAuthorisedAsMaintainerOrTrustee pkgname
-      pref <- optional $ fmap lines $ look "preferred"
-      depr <- optional $ fmap (rights . map snd . filter ((=="deprecated") . fst)) $ lookPairs
-      case sequence . map simpleParse =<< pref of
-          Just prefs -> case sequence . map simpleParse =<< depr of
-              Just deprs -> case all (`elem` map packageVersion pkgs) deprs of
-                  True  -> do
-                      void $ updateState preferredState $ SetPreferredRanges pkgname prefs
-                      void $ updateState preferredState $ SetDeprecatedVersions pkgname deprs
-                      liftIO updateIndexPreferredState
-                      newInfo <- queryState preferredState $ GetPreferredInfo pkgname
-                      runHook_ preferredHook (pkgname, newInfo)
-                      return ()
-                  False -> preferredError "Not all of the selected versions are in the main index."
-              Nothing -> preferredError "Version could not be parsed."
-          Nothing -> preferredError "Expected format of the preferred ranges field is one version range per line, e.g. '<2.3 || 3.*' (see Cabal documentation for the syntax)."
+      (prefs, deprs) <- lookPrefRangeDeprecatedVersions pkgs
+
+      prefinfo <- updateState preferredState (SetPreferredInfo pkgname prefs deprs)
+      updateIndexPackagePreferredVersions pkgname prefinfo
       where
-        preferredError = errBadRequest "Preferred ranges failed" . return . MText
+        lookPrefRangeDeprecatedVersions pkgs = do
+          prefStrs <- lines <$> look "preferred"
+          deprStrs <- looks "deprecated"
+          either preferredError return $ do
+            prefs <- mapM simpleParse prefStrs ?! rangeFormatMsg
+            deprs <- mapM simpleParse deprStrs ?! "Version could not be parsed."
+            guard (all (`elem` map packageVersion pkgs) deprs)
+              ?! "A selected version does not exist"
+            return (prefs, deprs)
+
+        preferredError detail =
+          errBadRequest "Setting the preferred ranges failed" [MText detail]
+
+        rangeFormatMsg = "The expected format of the preferred ranges field is "
+                      ++ "one version range per line, e.g. '<2.3 || 3.*' "
+                      ++ "(the same as the .cabal version range syntax, see "
+                      ++ "the Cabal documentation)."
+
+    updateIndexPackagePreferredVersions :: MonadIO m => PackageName -> PreferredInfo -> m ()
+    updateIndexPackagePreferredVersions pkgname prefinfo = do
+      now <- liftIO $ getCurrentTime
+      let prefEntryName = display pkgname </> "preferred-versions"
+          prefContent   = fromMaybe "" $
+                          formatSinglePreferredVersions pkgname prefinfo
+      updateArchiveIndexEntry prefEntryName (BS.pack prefContent) now
 
     putDeprecated :: PackageName -> ServerPartE Bool
     putDeprecated pkgname = do
@@ -343,7 +348,7 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
     renderPrefInfo :: PreferredInfo -> PreferredRender
     renderPrefInfo pref = PreferredRender {
         rendSumRange = maybe "-any" display $ sumRange pref,
-        rendRanges = map display $ preferredRanges pref,
+        rendRanges   = map display $ preferredRanges pref,
         rendVersions = deprecatedVersions pref
     }
 
@@ -366,19 +371,20 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
     doDeprecatedsRender = queryState preferredState GetPreferredVersions >>=
         return . Map.toList . deprecatedMap
 
-    updateIndexPreferredState :: IO ()
-    updateIndexPreferredState = do
-      prefVersions <- makePreferredVersions
-      now <- getCurrentTime
-      updateArchiveIndexEntry "preferred-versions" (BS.pack prefVersions, now)
+    makeGlobalPreferredVersions :: (Functor m, MonadIO m) => m String
+    makeGlobalPreferredVersions = do
+      prefs <- preferredMap <$> queryState preferredState GetPreferredVersions
+      return $! formatGlobalPreferredVersions (Map.toList prefs)
 
-    makePreferredVersions :: MonadIO m => m String
-    makePreferredVersions = queryState preferredState GetPreferredVersions >>= \(PreferredVersions prefs _) -> do
-        return . unlines . (topText++) . map (display . uncurry Dependency) . Map.toList $ Map.mapMaybe sumRange prefs
-    -- note: setting noVersion is kind of useless..
-    -- $ unionWith const (Map.mapMaybe sumRange deprs) (Map.map (const noVersion) prefs)
+    formatSinglePreferredVersions :: PackageName -> PreferredInfo -> Maybe String
+    formatSinglePreferredVersions pkgname pref =
+      display . Dependency pkgname <$> sumRange pref
+
+    formatGlobalPreferredVersions :: [(PackageName, PreferredInfo)] -> String
+    formatGlobalPreferredVersions =
+        unlines . (topText++)
+                . catMaybes . map (uncurry formatSinglePreferredVersions)
       where
-        -- hard coded..
         topText =
           [ "-- A global set of preferred versions."
           , "--"
@@ -390,6 +396,17 @@ versionsFeature CoreFeature{ coreResource=CoreResource{ packageInPath
           , "-- constructing install plans."
           , "--"
           ]
+
+    -- One-off complex migration
+    ephemeralPrefsMigration = do
+      PreferredVersions {migratedEphemeralPrefs, preferredMap}
+        <- queryState preferredState GetPreferredVersions
+      unless migratedEphemeralPrefs $
+        logTiming verbosity "preferred-versions migration" $ do
+          sequence_
+            [ updateIndexPackagePreferredVersions pkgname prefinfo
+            | (pkgname, prefinfo) <- Map.toList preferredMap ]
+          updateState preferredState SetMigratedEphemeralPrefs
 
 {------------------------------------------------------------------------------
   Some aeson auxiliary functions

@@ -29,6 +29,7 @@ import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
+import Distribution.Server.Features.Security.Migration
 
 import Distribution.Server.Util.ServeTarball
 
@@ -122,23 +123,31 @@ initPackageCandidatesFeature :: ServerEnv
                                  -> TarIndexCacheFeature
                                  -> IO PackageCandidatesFeature)
 initPackageCandidatesFeature env@ServerEnv{serverStateDir} = do
-    candidatesState <- candidatesStateComponent serverStateDir
+    candidatesState <- candidatesStateComponent False serverStateDir
 
     return $ \user core upload tarIndexCache -> do
+      -- one-off migration
+      CandidatePackages{candidateMigratedPkgTarball = migratedPkgTarball} <-
+        queryState candidatesState GetCandidatePackages
+      unless migratedPkgTarball $ do
+        migrateCandidatePkgTarball_v1_to_v2 env candidatesState
+        updateState candidatesState SetMigratedPkgTarball
+
       let feature = candidatesFeature env
                                       user core upload tarIndexCache
                                       candidatesState
       return feature
 
-candidatesStateComponent :: FilePath -> IO (StateComponent AcidState CandidatePackages)
-candidatesStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "CandidatePackages") initialCandidatePackages
+candidatesStateComponent :: Bool -> FilePath -> IO (StateComponent AcidState CandidatePackages)
+candidatesStateComponent freshDB stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "CandidatePackages")
+                           (initialCandidatePackages freshDB)
   return StateComponent {
       stateDesc    = "Candidate packages"
     , stateHandle  = st
     , getState     = query st GetCandidatePackages
     , putState     = update st . ReplaceCandidatePackages
-    , resetState   = candidatesStateComponent
+    , resetState   = candidatesStateComponent True
     , backupState  = \_ -> backupCandidates
     , restoreState = restoreCandidates
   }
@@ -268,8 +277,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       case pkgLatestTarball (candPkgInfo pkg) of
         Nothing -> errNotFound "Tarball not found"
                      [MText "No tarball exists for this package version."]
-        Just (tarball, (uploadtime,_uid)) -> do
-          let blobId = pkgTarballGz tarball
+        Just (tarball, (uploadtime, _uid), _revNo) -> do
+          let blobId = blobInfoId $ pkgTarballGz tarball
           cacheControl [Public, NoTransform, maxAgeMinutes 10]
                        (BlobStorage.blobETag blobId)
           file <- liftIO $ BlobStorage.fetch store blobId
@@ -341,10 +350,11 @@ candidatesFeature ServerEnv{serverBlobStore = store}
                                      (candWarnings candidate)
           time <- liftIO getCurrentTime
           let uploadInfo = (time, uid)
+              getTarball (tarball, _uploadInfo, _revNo) = tarball
           success <- updateAddPackage (packageId candidate)
                                       (pkgLatestCabalFileText pkgInfo)
                                       uploadInfo
-                                      (fmap fst $ pkgLatestTarball pkgInfo)
+                                      (fmap getTarball $ pkgLatestTarball pkgInfo)
           --FIXME: share code here with upload
           -- currently we do not create the initial maintainer group etc.
           if success
@@ -372,7 +382,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         users  <- queryGetUserDb
         index  <- queryGetPackageIndex
         let pkg = candPkgInfo cand
-        changeLog <- findToplevelFile pkg isChangeLogFile 
+        changeLog <- findToplevelFile pkg isChangeLogFile
                  >>= either (\_ -> return Nothing) (return . Just)
         readme    <- findToplevelFile pkg isReadmeFile
                  >>= either (\_ -> return Nothing) (return . Just)

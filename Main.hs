@@ -782,7 +782,8 @@ testBackupAction opts = do
       -- And then restore from the external representation into these new empty
       -- copies.
       loginfo verbosity "Restoring from backup tarball"
-      res <- restoreServerBackup store' dump1Tar linkBlobs
+      let stores' = BlobStorage.BlobStores store' [store]
+      res <- restoreServerBackup stores' dump1Tar linkBlobs
                                  (map (second abstractStateRestore) state')
       case res of
         Nothing  -> return ()
@@ -880,11 +881,12 @@ restoreAction opts [tarFile] = do
     checkAccidentalDataLoss =<< Server.hasSavedState config
 
     withServer config False $ \server -> do
-        let state = Server.serverState server
-            store = Server.serverBlobStore (Server.serverEnv server)
+        let state  = Server.serverState server
+            store  = Server.serverBlobStore (Server.serverEnv server)
+            stores = BlobStorage.BlobStores store []
 
         loginfo verbosity "Parsing import tarball..."
-        res <- restoreServerBackup store tarFile False
+        res <- restoreServerBackup stores tarFile False
                                    (map (second abstractStateRestore) state)
         case res of
             Just err -> fail err
@@ -936,4 +938,3 @@ reqArgFlag :: ArgPlaceHolder -> SFlags -> LFlags -> Description
            -> (a -> Flag String) -> (Flag String -> a -> a)
            -> OptDescr a
 reqArgFlag ad = reqArg' ad Flag flagToList
-

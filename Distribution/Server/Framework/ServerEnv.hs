@@ -7,6 +7,8 @@ import Distribution.Server.Framework.Templating (TemplatesMode)
 
 import qualified Network.URI as URI
 
+import qualified Hackage.Security.Util.Path as Sec
+
 -- | The internal server environment as used by 'HackageFeature's.
 --
 -- It contains various bits of static information (and handles of
@@ -20,6 +22,9 @@ data ServerEnv = ServerEnv {
 
     -- | The location of the server's template files
     serverTemplatesDir :: FilePath,
+
+    -- | The location of TUF data (signed root info, private keys)
+    serverTUFDir :: Sec.AbsolutePath,
 
     -- | Default templates mode
     serverTemplatesMode :: TemplatesMode,
@@ -57,4 +62,3 @@ data ServerEnv = ServerEnv {
 
     serverVerbosity  :: Verbosity
 }
-

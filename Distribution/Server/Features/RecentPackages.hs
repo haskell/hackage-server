@@ -60,7 +60,7 @@ initRecentPackagesFeature env@ServerEnv{serverCacheDelay, serverVerbosity = verb
                            }
 
       registerHookJust packageChangeHook isPackageChangeAny $ \_ ->
-        prodAsyncCache cacheRecent
+        prodAsyncCache cacheRecent "package change"
 
       return feature
 

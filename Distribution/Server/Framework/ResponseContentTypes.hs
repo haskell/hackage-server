@@ -1,4 +1,8 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, DeriveDataTypeable, OverloadedStrings #-}
+{-# LANGUAGE DeriveDataTypeable         #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE StandaloneDeriving         #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -----------------------------------------------------------------------------
 -- |
@@ -26,7 +30,7 @@ import Happstack.Server
          , noContentLength )
 
 import qualified Data.ByteString.Lazy as BS.Lazy
-import Data.Digest.Pure.MD5 (MD5Digest)
+import Data.Digest.Pure.MD5 (MD5Digest, md5)
 import Text.RSS (RSS)
 import qualified Text.RSS as RSS (rssToXML, showXML)
 import qualified Text.XHtml.Strict as XHtml (Html, showHtml)
@@ -37,23 +41,100 @@ import Data.Time.Locale.Compat (defaultTimeLocale)
 import Text.CSV (printCSV, CSV)
 import Control.DeepSeq
 
+import qualified Data.Digest.Pure.SHA as SHA
 
-data IndexTarball = IndexTarball !BS.Lazy.ByteString !Int !MD5Digest !UTCTime
+-- | The index tarball
+--
+-- We cache the compressed and uncompressed incremental tarball, as well as
+-- the compressed legacy tarball for cabal's benefit
+data IndexTarballInfo = IndexTarballInfo {
+      indexTarballLegacyGz :: !TarballCompressed
+    , indexTarballIncremUn :: !TarballUncompressed
+    , indexTarballIncremGz :: !TarballCompressed
+    }
 
-instance ToMessage IndexTarball where
-  toResponse (IndexTarball bs len md5 time) = mkResponseLen bs len
-    [ ("Content-Type", "application/x-gzip")
-    , ("Content-MD5",   md5str)
-    , ("Last-modified", formatLastModifiedTime time)
-    ]
-    where md5str = show md5
+-- TODO: SHA.Digest is an abstract datatype, and is just a simple wrapper
+-- around a bytestring. However, it is not strict in this bytestring, nor
+-- does it have an NFData instance. This might be a problem (here as well as
+-- in the NFData instance for TarballUncompressed and TarballCompressed).
+-- However, it might not be a problem, depending on how these digests are
+-- constructed. Since we might yet switch SHA package however I have not
+-- yet looked deeper into this.
+data TarballUncompressed = TarballUncompressed {
+      tarContent    :: !BS.Lazy.ByteString
+    , tarLength     :: !Int
+    , tarHashMD5    :: !MD5Digest
+    , tarHashSHA256 :: !(SHA.Digest SHA.SHA256State)
+    , tarModified   :: !UTCTime
+    }
 
-instance NFData IndexTarball where
-  rnf (IndexTarball a b c d) = rnf (a,b,c,d)
+data TarballCompressed = TarballCompressed {
+      tarGzContent    :: !BS.Lazy.ByteString
+    , tarGzLength     :: !Int
+    , tarGzHashMD5    :: !MD5Digest
+    , tarGzHashSHA256 :: !(SHA.Digest SHA.SHA256State)
+    , tarGzModified   :: !UTCTime
+    }
 
-instance MemSize IndexTarball where
-  memSize (IndexTarball a b c d) = memSize4 a b c d
+mkTarballUncompressed :: UTCTime -> BS.Lazy.ByteString -> TarballUncompressed
+mkTarballUncompressed time indexTarball = TarballUncompressed {
+      tarContent    = indexTarball
+    , tarLength     = indexTarballLen
+    , tarHashMD5    = indexTarballMD5
+    , tarHashSHA256 = indexTarballSHA256
+    , tarModified   = time
+    }
+  where
+    indexTarballLen    = fromIntegral $ BS.Lazy.length indexTarball
+    indexTarballMD5    = md5 indexTarball
+    indexTarballSHA256 = SHA.sha256 indexTarball
 
+mkTarballCompressed :: UTCTime -> BS.Lazy.ByteString -> TarballCompressed
+mkTarballCompressed time indexTarballGz = TarballCompressed {
+      tarGzContent    = indexTarballGz
+    , tarGzLength     = indexTarballGzLen
+    , tarGzHashMD5    = indexTarballGzMD5
+    , tarGzHashSHA256 = indexTarballGzSHA256
+    , tarGzModified   = time
+    }
+  where
+    indexTarballGzLen    = fromIntegral $ BS.Lazy.length indexTarballGz
+    indexTarballGzMD5    = md5 indexTarballGz
+    indexTarballGzSHA256 = SHA.sha256 indexTarballGz
+
+instance NFData IndexTarballInfo where
+  rnf (IndexTarballInfo a b c) = rnf (a, b, c)
+
+instance NFData TarballUncompressed where
+  rnf (TarballUncompressed a b c _d e) = rnf (a, b, c, e)
+
+instance NFData TarballCompressed where
+  rnf (TarballCompressed a b c _d e) = rnf (a, b, c, e)
+
+instance MemSize IndexTarballInfo where
+  memSize (IndexTarballInfo a b c) = memSize3 a b c
+
+instance MemSize TarballUncompressed where
+  memSize (TarballUncompressed a b c d e) = memSize5 a b c d e
+
+instance MemSize TarballCompressed where
+  memSize (TarballCompressed a b c d e) = memSize5 a b c d e
+
+instance ToMessage TarballCompressed where
+  toResponse TarballCompressed{..} =
+    mkResponseLen tarGzContent tarGzLength
+      [ ("Content-Type", "application/x-gzip")
+      , ("Content-MD5",   show tarGzHashMD5)
+      , ("Last-modified", formatLastModifiedTime tarGzModified)
+      ]
+
+instance ToMessage TarballUncompressed where
+  toResponse TarballUncompressed{..} =
+    mkResponseLen tarContent tarLength
+      [ ("Content-Type", "application/x-tar")
+      , ("Content-MD5",   show tarHashMD5)
+      , ("Last-modified", formatLastModifiedTime tarModified)
+      ]
 
 data PackageTarball = PackageTarball BS.Lazy.ByteString BlobId UTCTime
 

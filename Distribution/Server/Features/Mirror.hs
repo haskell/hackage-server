@@ -182,8 +182,11 @@ mirrorFeature ServerEnv{serverBlobStore = store}
         case res of
           Left err -> badRequest (toResponse err)
           Right ((((pkg, _pkgStr), warnings), blobIdDecompressed), blobId) -> do
-            let tarball = PkgTarball { pkgTarballGz   = blobId,
-                                       pkgTarballNoGz = blobIdDecompressed }
+            infoGz <- liftIO $ blobInfoFromId store blobId
+            let tarball = PkgTarball {
+                              pkgTarballGz   = infoGz
+                            , pkgTarballNoGz = blobIdDecompressed
+                            }
             existed <- updateAddPackageTarball (packageId pkg) tarball uploadinfo
             if existed
               then return . toResponse $ unlines warnings
@@ -245,4 +248,3 @@ mirrorFeature ServerEnv{serverBlobStore = store}
                                          (CabalFileText fileContent) uploadData
                 let filename = display pkgid <.> "cabal"
                 return . toResponse $ unlines $ map (showPWarning filename) warnings
-

@@ -7,6 +7,7 @@ module Distribution.Server.Framework.Cache (
     readAsyncCache,
     prodAsyncCache,
     syncAsyncCache,
+    asyncCacheUpdatedHook,
 
     AsyncUpdate,
     newAsyncUpdate,
@@ -22,6 +23,7 @@ import Control.Exception (SomeException)
 import qualified Control.Exception as E
 
 import Distribution.Server.Framework.Logging
+import Distribution.Server.Framework.Hook
 import qualified Distribution.Verbosity as Verbosity
 
 -- | An in-memory cache with asynchronous updates.
@@ -73,8 +75,9 @@ newAsyncCache eval update (AsyncCachePolicy delay syncForce verbosity logname) =
 readAsyncCache :: MonadIO m => AsyncCache a -> m a
 readAsyncCache (AsyncCache avar _) = liftIO $ readAsyncVar avar
 
-prodAsyncCache :: MonadIO m => AsyncCache a -> m ()
-prodAsyncCache (AsyncCache avar update) = liftIO $ update >>= writeAsyncVar avar
+prodAsyncCache :: MonadIO m => AsyncCache a -> ProdReason -> m ()
+prodAsyncCache (AsyncCache avar update) reason =
+    liftIO $ update >>= writeAsyncVar avar reason
 
 -- | Only needed if you use asynchronous initialisation
 -- (i.e. ''asyncCacheSyncInit' = False@). Waits until the value in the cache
@@ -83,13 +86,22 @@ prodAsyncCache (AsyncCache avar update) = liftIO $ update >>= writeAsyncVar avar
 syncAsyncCache :: NFData a => AsyncCache a -> IO ()
 syncAsyncCache c = readAsyncCache c >>= E.evaluate . rnf >> return ()
 
+-- | Register a hook to be run whenever the cache is actually updated
+--
+-- One use case for this is defining caches that are dependent on each other
+-- (i.e., when cache B should be updated whenever cache A is).
+asyncCacheUpdatedHook :: AsyncCache a -> Hook a ()
+asyncCacheUpdatedHook (AsyncCache var _) = asyncVarUpdatedHook var
 
 -------------------------------------------------
 -- A mutable variable with asynchronous updates
 --
 
-data AsyncVar state = AsyncVar !(TChan state)
+type ProdReason = String
+
+data AsyncVar state = AsyncVar !(TChan (ProdReason, state))
                                !(TVar (Either SomeException state))
+                               !(Hook state ())
 
 newAsyncVar :: Int -> Bool -> Verbosity -> String
             -> (state -> ()) -> state -> IO (AsyncVar state)
@@ -97,11 +109,12 @@ newAsyncVar delay syncForce verbosity logname force initial = do
 
     inChan <- atomically newTChan
     outVar <- atomically (newTVar (Right initial))
+    hook   <- newHook
 
     if syncForce
       then logTiming verbosity ("Cache '" ++ logname ++ "' initialised") $
              E.evaluate (force initial)
-      else atomically (writeTChan inChan initial)
+      else atomically (writeTChan inChan ("initial", initial))
 
     let loop = do
 
@@ -110,16 +123,19 @@ newAsyncVar delay syncForce verbosity logname force initial = do
           avail   <- readAllAvailable inChan
           -- We have a series of new values.
           -- We want the last one, skipping all intermediate updates.
-          let value = last avail
+          let (reason, value) = last avail
 
-          logTiming verbosity ("Cache '" ++ logname ++ "' updated") $ do
+          logTiming verbosity ("Cache '" ++ logname ++ "' updated (" ++ reason ++ ")") $ do
             res <- E.try $ E.evaluate (force value `seq` value)
             atomically (writeTVar outVar res)
+            case res of
+              Left _err -> return () -- Don't run hook on error values
+              Right val -> runHook_ hook val
 
           loop
 
     void $ forkIO loop
-    return (AsyncVar inChan outVar)
+    return (AsyncVar inChan outVar hook)
   where
     -- get a list of all the input states currently queued
     readAllAvailable chan =
@@ -135,13 +151,16 @@ newAsyncVar delay syncForce verbosity logname force initial = do
                     readAll (x:xs)
 
 readAsyncVar :: AsyncVar state -> IO state
-readAsyncVar (AsyncVar _ outVar) =
+readAsyncVar (AsyncVar _ outVar _) =
     atomically (readTVar outVar) >>= either E.throwIO return
 
-writeAsyncVar :: AsyncVar state -> state -> IO ()
-writeAsyncVar (AsyncVar inChan _) value =
-    atomically (writeTChan inChan value)
+writeAsyncVar :: AsyncVar state -> ProdReason -> state -> IO ()
+writeAsyncVar (AsyncVar inChan _ _) reason value =
+    atomically (writeTChan inChan (reason, value))
 
+--
+asyncVarUpdatedHook :: AsyncVar state -> Hook state ()
+asyncVarUpdatedHook (AsyncVar _ _ hook) = hook
 
 -----------------------------------------------------------------
 -- A mechanism for async updates with multiple update prevention

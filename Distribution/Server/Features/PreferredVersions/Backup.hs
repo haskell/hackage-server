@@ -21,7 +21,8 @@ import Control.Monad (guard)
 -------------------------------------------------------------------------------}
 
 restorePreferredVersions :: RestoreBackup PreferredVersions
-restorePreferredVersions = updatePreferredVersions emptyPreferredVersions
+restorePreferredVersions =
+  updatePreferredVersions (initialPreferredVersions True)
 
 updatePreferredVersions :: PreferredVersions -> RestoreBackup PreferredVersions
 updatePreferredVersions st = RestoreBackup {
@@ -86,7 +87,7 @@ parsePackageName str = fail $ "Could not parse package name '" ++ str ++ "'"
 -------------------------------------------------------------------------------}
 
 backupPreferredVersions :: PreferredVersions -> [BackupEntry]
-backupPreferredVersions (PreferredVersions preferredMap deprecatedMap) =
+backupPreferredVersions (PreferredVersions preferredMap deprecatedMap _) =
      map backupPreferredInfo (Map.toList preferredMap)
   ++ map backupDeprecated (Map.toList deprecatedMap)
 
@@ -113,4 +114,3 @@ backupDeprecated (name, deprecatedFor) =
 
 pkgPath :: PackageName -> String -> [String]
 pkgPath pkgname file = ["package", display pkgname, file]
-
