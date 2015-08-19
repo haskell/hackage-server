@@ -4,6 +4,9 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Distribution.Server.Packages.Unpack (
+    CombinedTarErrs(..),
+    checkEntries,
+    checkUselessPermissions,
     unpackPackage,
     unpackPackageRaw,
   ) where
@@ -36,31 +39,35 @@ import Distribution.Server.Util.Parse
 import Distribution.License
          ( License(..) )
 
-import Data.Maybe
-         ( isJust )
-import Data.List
-         ( nub, (\\), partition, intercalate )
-import Data.Time
-         ( UTCTime(..), fromGregorian, addUTCTime )
-import Data.Time.Clock.POSIX
-         ( posixSecondsToUTCTime )
 import Control.Applicative
 import Control.Monad
          ( unless, when )
 import Control.Monad.Except
          ( ExceptT, runExceptT, MonadError, throwError )
-import Control.Monad.Writer
-         ( WriterT(..), MonadWriter, tell )
 import Control.Monad.Identity
          ( Identity(..) )
-import qualified Distribution.Server.Util.GZip as GZip
+import Control.Monad.Writer
+         ( WriterT(..), MonadWriter, tell )
+import Data.Bits
+         ( (.&.) )
 import Data.ByteString.Lazy
          ( ByteString )
 import qualified Data.ByteString.Lazy as LBS
+import Data.List
+         ( nub, (\\), partition, intercalate )
+import Data.Maybe
+         ( isJust )
+import Data.Time
+         ( UTCTime(..), fromGregorian, addUTCTime )
+import Data.Time.Clock.POSIX
+         ( posixSecondsToUTCTime )
+import qualified Distribution.Server.Util.GZip as GZip
 import System.FilePath
          ( (</>), (<.>), splitDirectories, splitExtension, normalise )
 import qualified System.FilePath.Windows
          ( takeFileName )
+import Text.Printf
+         ( printf )
 
 -- Whether to allow upload of "all rights reserved" packages
 allowAllRightsReserved :: Bool
@@ -257,6 +264,7 @@ data CombinedTarErrs =
    | PortabilityError Tar.PortabilityError
    | TarBombError     FilePath FilePath
    | FutureTimeError  FilePath UTCTime
+   | PermissionsError FilePath Tar.Permissions
 
 tarballChecks :: Bool -> UTCTime -> FilePath
               -> Tar.Entries Tar.FormatError
@@ -264,6 +272,7 @@ tarballChecks :: Bool -> UTCTime -> FilePath
 tarballChecks lax now expectedDir =
     (if not lax then checkFutureTimes now else id)
   . checkTarbomb expectedDir
+  . checkUselessPermissions
   . (if lax then ignoreShortTrailer
             else fmapTarError (either id PortabilityError)
                . Tar.checkPortability)
@@ -301,6 +310,22 @@ checkTarbomb expectedTopDir =
       case splitDirectories (Tar.entryPath entry) of
         (topDir:_) | topDir == expectedTopDir -> Nothing
         _ -> Just $ TarBombError (Tar.entryPath entry) expectedTopDir
+
+checkUselessPermissions :: Tar.Entries CombinedTarErrs -> Tar.Entries CombinedTarErrs
+checkUselessPermissions =
+    checkEntries checkEntry
+  where
+    checkEntry entry =
+      case Tar.entryContent entry of
+        (Tar.NormalFile _ _) -> checkPermissions 0o644 (Tar.entryPermissions entry)
+        (Tar.Directory) -> checkPermissions 0o755 (Tar.entryPermissions entry)
+        _ -> Nothing
+      where
+        checkPermissions expected actual =
+            if expected .&. actual /= expected
+                then Just $ PermissionsError (Tar.entryPath entry) actual
+                else Nothing
+
 
 checkEntries :: (Tar.Entry -> Maybe e) -> Tar.Entries e -> Tar.Entries e
 checkEntries checkEntry =
@@ -349,6 +374,13 @@ explainTarError (FutureTimeError entryname time) =
  ++ "problem can be caused by having a misconfigured system time, or by bugs "
  ++ "in the tools (tarballs created by 'cabal sdist' on Windows with "
  ++ "cabal-install-1.18.0.2 or older have this problem)."
+explainTarError (PermissionsError entryname mode) =
+    "The tarball entry " ++ quote entryname ++ " has file permissions that are "
+ ++ "broken: " ++ (showMode mode) ++ ". Permissions must be 644 at a minimum "
+ ++ "for files and 755 for directories."
+  where
+    showMode :: Tar.Permissions -> String
+    showMode m = printf "%.3o" (fromIntegral m :: Int)
 
 quote :: String -> String
 quote s = "'" ++ s ++ "'"
