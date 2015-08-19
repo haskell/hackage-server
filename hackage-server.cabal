@@ -512,3 +512,22 @@ Test-Suite CreateUserTest
     build-depends: network-uri >= 2.6, network >= 2.6
   else
     build-depends: network-uri < 2.6, network < 2.6
+
+Test-Suite PackageTests
+    type:           exitcode-stdio-1.0
+    main-is:        PackageTestMain.hs
+    hs-source-dirs: ., tests
+    default-language: Haskell2010
+    ghc-options:    -threaded -Wall -fno-warn-orphans
+    build-depends:  base,
+                    bytestring,
+                    filepath,
+                    mtl,
+                    tar,
+                    text,
+                    time,
+                    zlib,
+                    Cabal,
+                    test-framework,
+                    test-framework-hunit,
+                    HUnit
