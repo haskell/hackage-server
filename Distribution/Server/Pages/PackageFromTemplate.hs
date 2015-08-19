@@ -49,6 +49,25 @@ import Distribution.Server.Users.Types (UserInfo)
 import Distribution.Server.Util.ServeTarball (loadTarEntry)
 import Control.Monad.Trans (liftIO)
 
+-- | Populates template variables for the package page.
+-- | There are 3 separate namespaces provided:
+--
+-- | 1) Top Level
+--      ($varName$)
+--    Most of these variables are specific to Hackage, including things
+--    like download counts and build status.
+--
+-- | 2) The "package" namespace
+--      ($package.varName$)
+--   This is the minimal amount of information needed to upload a package
+--   to Hackage, as per the information provided by
+--   the 'cabal init' and 'cabal check' commands.
+--
+-- | 3) The "package.optional" namespace
+--      ($package.optional.hasVarName$ and $package.optional.varName$)
+--   This includes everything else that may or may not be present, such
+--   package descriptions or categories (which can either be missing or empty),
+--   but do not prevent a package from being uploaded to Hackage.
 packagePageTemplate :: PackageRender
             -> Maybe TarIndex -> Maybe BS.ByteString
             -> URL -> [(DistroName, DistroPackageInfo)]
@@ -56,81 +75,108 @@ packagePageTemplate :: PackageRender
 packagePageTemplate render
             mdocIndex mreadme
             docURL distributions =
-  [ "pkgName"         $= pkgName
-  , "docTitle"        $= pkgName ++ case synopsis (rendOther render) of
-      ""    -> ""
-      short -> ": " ++ short
-  , "pkgDescription"  $= Old.renderHaddock (description $ rendOther render)
-  ]
-  ++
-  [ "moduleList"      $= Old.moduleSection render mdocIndex docURL
-  , "dependencyList"  $= snd (Old.renderDependencies render)
-  ]
-  ++
-  [ "package"         $= optionalPackageInfoTemplate ]
-  ++
-  [ "license"         $= Old.rendLicense render
-  , "author"          $= (toHtml $ author desc)
-  , "maintainer"      $= (Old.maintainField $ rendMaintainer render)
-  , "categories"      $= (commaList . map Old.categoryField $ rendCategory render)
-  , "sourceRepo"      $= (vList $ map sourceRepositoryToHtml (sourceRepos desc))
-  , "executables"     $= (commaList . map toHtml $ rendExecNames render)
-  , "uploadTime"      $= (uncurry renderUploadInfo $ rendUploadInfo render)
-  , "downloadSection" $= Old.downloadSection render
-  ]
-  ++
-  [ "cabalVersion"    $= display cabalVersion
+  [ "package"           $= packageFieldsTemplate
+  , "hackage"           $= hackageFieldsTemplate
+  , "moduleList"        $= Old.moduleSection render mdocIndex docURL
+  , "executables"       $= (commaList . map toHtml $ rendExecNames render)
+  , "downloadsSection"  $= Old.downloadSection render
+  , "cabalVersion"      $= display cabalVersion
+  , "stability"         $= renderStability desc
   ]
   where
-    optionalPackageInfoTemplate = templateDict $
-      [ templateVal "hasReadme"
-          (if rendReadme render == Nothing then False else True)
-      , templateVal "readme"
-          (readmeSection render mreadme)
-      ] ++
-      [ templateVal "hasHomePage"
-          (if (homepage desc  == []) then False else True)
-      , templateVal "homePageUrl"
-          (homepage desc)
-      ] ++
-      [ templateVal "hasBugTracker"
-          (if bugReports desc == [] then False else True)
-      , templateVal "bugTracker"
-          (bugReports desc)
-      ] ++
-      [ templateVal "hasDistributions"
-          (if distributions == [] then False else True)
-      , templateVal "distributions"
-          (concatHtml . intersperse (toHtml ", ") $ map showDist distributions)
+    hackageFieldsTemplate = templateDict $
+      [ templateVal "uploadTime"
+          (uncurry renderUploadInfo $ rendUploadInfo render)
       ] ++
       [ templateVal "hasUpdateTime"
           (case rendUpdateInfo render of Nothing -> False; _ -> True)
       , templateVal "updateTime" [ renderUpdateInfo revisionNo utime uinfo
           | (revisionNo, utime, uinfo) <- maybeToList (rendUpdateInfo render) ]
       ] ++
+      [ templateVal "hasDistributions"
+          (if distributions == [] then False else True)
+      , templateVal "distributions"
+          (concatHtml . intersperse (toHtml ", ") $ map showDist distributions)
+      ] ++
+      [ templateVal "hasFlags"
+          (if rendFlags render == [] then False else True)
+      , templateVal "flagsSection"
+          (Old.renderPackageFlags render)
+      ]
+        where
+          showDist (dname, info) = toHtml (display dname ++ ":") +++
+              anchor ! [href $ distroUrl info] << toHtml (display $ distroVersion info)
+    -- Fields from the .cabal file.
+    -- Access via "$package.varname$"
+    packageFieldsTemplate = templateDict $
+      [ templateVal "name"          pkgName
+      , templateVal "version"       pkgVer
+      , templateVal "license"       (Old.rendLicense render)
+      , templateVal "author"        (toHtml $ author desc)
+      , templateVal "maintainer"    (Old.maintainField $ rendMaintainer render)
+      , templateVal "build-depends" (snd (Old.renderDependencies render))
+      , templateVal "optional"      optionalPackageInfoTemplate
+      ]
+
+    -- Fields that may be empty, along with booleans to see if they're present.
+    -- Access via "$package.optional.varname$"
+    optionalPackageInfoTemplate = templateDict $
+      [ templateVal "hasSourceRepository"
+          (if sourceRepos desc == [] then False else True)
+      , templateVal "source-repository"
+          (vList $ map sourceRepositoryToHtml (sourceRepos desc))
+      ] ++
+
+      [ templateVal "hasCategories"
+          (if rendCategory render == [] then False else True)
+      , templateVal "category"
+          (commaList . map Old.categoryField $ rendCategory render)
+      ] ++
+
+      [ templateVal "hasDescription"
+          (if (description $ rendOther render) == [] then False else True)
+      , templateVal "description"
+          (Old.renderHaddock (description $ rendOther render))
+      ] ++
+
+      [ templateVal "hasSynopsis"
+          (if synopsis (rendOther render) == "" then False else True)
+      , templateVal "synopsis"
+          (synopsis (rendOther render))
+      ] ++
+
+      [ templateVal "hasReadme"
+          (if rendReadme render == Nothing then False else True)
+      , templateVal "readme"
+          (readmeSection render mreadme)
+      ] ++
+
+      [ templateVal "hasHomePage"
+          (if (homepage desc  == []) then False else True)
+      , templateVal "homepage"
+          (homepage desc)
+      ] ++
+
+      [ templateVal "hasBugTracker"
+          (if bugReports desc == [] then False else True)
+      , templateVal "bugTracker"
+          (bugReports desc)
+      ] ++
+
+
+
       [ templateVal "hasChangelog"
           (if rendChangeLog render == Nothing then False else True)
       , templateVal "changelog"
           (renderChangelog render)
       ] ++
+
       [ templateVal "hasCopyright"
           (if P.copyright desc == "" then False else True)
       , templateVal "copyright"
           renderCopyright
-      ] ++
-      [ templateVal "hasStability"
-          (if stability desc == "" then False else True)
-      , templateVal "stability"
-          (renderStability desc)
-      ] ++
-      [ templateVal "hasFlags"
-          (if rendFlags render == [] then False else True)
-      , templateVal "flags"
-          (Old.renderPackageFlags render)
       ]
-      where
-        showDist (dname, info) = toHtml (display dname ++ ":") +++
-            anchor ! [href $ distroUrl info] << toHtml (display $ distroVersion info)
+
 
     pkgid   = rendPkgId render
     pkgVer  = display $ pkgVersion pkgid
