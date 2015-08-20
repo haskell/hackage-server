@@ -1,4 +1,11 @@
-{-# LANGUAGE RankNTypes, RecordWildCards, GeneralizedNewtypeDeriving, BangPatterns, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE BangPatterns               #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Distribution.Server.Framework.BackupRestore (
@@ -10,6 +17,9 @@ module Distribution.Server.Framework.BackupRestore (
     parseText,
     parseRead,
     parseUTCTime, formatUTCTime,
+    parseVersion,
+    parseBlobId,
+    parseSHA,
 
     equalTarBall,
 
@@ -23,13 +33,15 @@ module Distribution.Server.Framework.BackupRestore (
     Restore,
     restoreAddBlob,
     restoreGetBlob,
+    restoreFindBlob,
 
     AbstractRestoreBackup(..),
     abstractRestoreBackup
   ) where
 
 import qualified Distribution.Server.Framework.BlobStorage as Blob
-import Distribution.Server.Framework.BlobStorage (BlobStorage, BlobId)
+import Distribution.Server.Framework.BlobStorage (BlobStores(..), BlobId)
+import Distribution.Server.Util.ReadDigest
 
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
@@ -41,6 +53,7 @@ import Control.Monad.Writer
 import Data.Time (UTCTime)
 import qualified Data.Time as Time
 import Data.Time.Locale.Compat (defaultTimeLocale)
+import Data.Typeable (Typeable, typeOf)
 
 import Distribution.Server.Util.Merge
 import Distribution.Server.Util.Parse (unpackUTF8)
@@ -54,7 +67,11 @@ import Text.CSV hiding (csv)
 import Distribution.Text
 import Data.Map (Map)
 import Data.List (sortBy)
-
+import Data.Version (Version)
+import qualified Data.Version as Version
+import Text.ParserCombinators.ReadP (readP_to_S)
+import Data.Binary (Binary)
+import qualified Data.Digest.Pure.SHA as SHA
 
 --------------------------------------------------------------------------------
 -- Creating/restoring backups                                                 --
@@ -82,8 +99,8 @@ restoreBackupUnimplemented = RestoreBackup {
   }
 
 data AbstractRestoreBackup = AbstractRestoreBackup {
-    abstractRestoreEntry    :: BlobStorage -> BackupEntry -> IO (Either String AbstractRestoreBackup)
-  , abstractRestoreFinalize :: BlobStorage -> IO (Either String (IO ()))
+    abstractRestoreEntry    :: BlobStores -> BackupEntry -> IO (Either String AbstractRestoreBackup)
+  , abstractRestoreFinalize :: BlobStores -> IO (Either String (IO ()))
   }
 
 abstractRestoreBackup :: (st -> IO ()) -> RestoreBackup st -> AbstractRestoreBackup
@@ -137,10 +154,12 @@ importCSV filename inp = case parseCSV filename (unpackUTF8 inp) of
     chopLastRecord ([""]:[]) = []
     chopLastRecord (x:xs) = x : chopLastRecord xs
 
-parseRead :: (Read a, Monad m) => String -> String -> m a
-parseRead label str = case reads str of
-    [(value, "")] -> return value
-    _ -> fail $ "Unable to parse " ++ label ++ ": " ++ show str
+parseRead :: forall a m. (Read a, Monad m, Typeable a) => String -> String -> m a
+parseRead label str = case readConsume reads str of
+    [value] -> return value
+    _       -> fail $ "Unable to 'read' " ++ label ++ " "
+                   ++ show str
+                   ++ " as type " ++ show (typeOf (undefined :: a))
 
 parseUTCTime :: (Monad m, MonadError String m) => String -> String -> m UTCTime
 parseUTCTime label str =
@@ -155,10 +174,31 @@ timeFormatSpec :: String
 timeFormatSpec = "%Y-%m-%d %H:%M:%S%Q %z"
 
 -- Parse a string, throw an error if it's bad
-parseText :: (Text a, Monad m) => String -> String -> m a
+parseText :: forall a m. (Text a, Monad m, Typeable a) => String -> String -> m a
 parseText label text = case simpleParse text of
-    Nothing -> fail $ "Unable to parse " ++ label ++ ": " ++ show text
+    Nothing -> fail $ "Unable to 'simpleParse' " ++ label ++ " "
+                   ++ show text
+                   ++ " as type " ++ show (typeOf (undefined :: a))
     Just a -> return a
+
+parseVersion :: Monad m => String -> String -> m Version
+parseVersion label str = case readConsume (readP_to_S Version.parseVersion) str of
+    [value] -> return value
+    _       -> fail $ "Unable to parse " ++ label ++ " " ++ show str
+
+parseBlobId :: Monad m => String -> String -> m BlobId
+parseBlobId label str = case Blob.readBlobId str of
+    Right blobId -> return blobId
+    Left  err    -> fail $ "Unable to parse " ++ label ++ show str ++ ": " ++ err
+
+parseSHA :: (Binary (SHA.Digest t), Monad m) => String -> String -> m (SHA.Digest t)
+parseSHA label str = case readDigestSHA str of
+    Right digest -> return digest
+    Left  err    -> fail $ "Unable to parse " ++ label ++ show str ++ ": " ++ err
+
+-- | Variation on 'read' that only returns matches that consume entire input.
+readConsume :: ReadS a -> String -> [a]
+readConsume p = map fst . filter (null . snd) . p
 
 {-------------------------------------------------------------------------------
   Restore Monad
@@ -200,14 +240,16 @@ data Restore a = RestoreDone a
                | RestoreFail String
                | RestoreAddBlob ByteString (BlobId -> Restore a)
                | RestoreGetBlob BlobId (ByteString -> Restore a)
+               | RestoreFindBlob BlobId (Bool -> Restore a)
 
 instance Monad Restore where
   return = RestoreDone
   fail   = RestoreFail
-  RestoreDone x        >>= g = g x
-  RestoreFail err      >>= _ = RestoreFail err
-  RestoreAddBlob bs  f >>= g = RestoreAddBlob bs  $ \bid -> f bid >>= g
-  RestoreGetBlob bid f >>= g = RestoreGetBlob bid $ \bs  -> f bs  >>= g
+  RestoreDone x         >>= g = g x
+  RestoreFail err       >>= _ = RestoreFail err
+  RestoreAddBlob  bs  f >>= g = RestoreAddBlob  bs  $ \bid -> f bid >>= g
+  RestoreGetBlob  bid f >>= g = RestoreGetBlob  bid $ \bs  -> f bs  >>= g
+  RestoreFindBlob bid f >>= g = RestoreFindBlob bid $ \b   -> f b   >>= g
 
 instance MonadError [Char] Restore where
   throwError = RestoreFail
@@ -221,14 +263,15 @@ instance Applicative Restore where
   pure      = return
   mf <*> mx = do f <- mf ; x <- mx ; return (f x)
 
-runRestore :: BlobStorage -> Restore a -> IO (Either String a)
-runRestore store = go
+runRestore :: BlobStores -> Restore a -> IO (Either String a)
+runRestore stores = go
   where
     go :: forall a. Restore a -> IO (Either String a)
     go (RestoreDone a)        = return (Right a)
     go (RestoreFail err)      = return (Left err)
-    go (RestoreAddBlob bs f)  = Blob.add   store bs  >>= go . f
-    go (RestoreGetBlob bid f) = Blob.fetch store bid >>= go . f
+    go (RestoreAddBlob  bs  f) = Blob.add   (blobStoresMain stores) bs  >>= go . f
+    go (RestoreGetBlob  bid f) = Blob.fetch (blobStoresMain stores) bid >>= go . f
+    go (RestoreFindBlob bid f) = Blob.find                  stores  bid >>= go . f
 
 restoreAddBlob :: ByteString -> Restore BlobId
 restoreAddBlob = (`RestoreAddBlob` RestoreDone)
@@ -236,12 +279,16 @@ restoreAddBlob = (`RestoreAddBlob` RestoreDone)
 restoreGetBlob :: BlobId -> Restore ByteString
 restoreGetBlob = (`RestoreGetBlob` RestoreDone)
 
+-- | Do we have a blob with the specified ID?
+restoreFindBlob :: BlobId -> Restore Bool
+restoreFindBlob = (`RestoreFindBlob` RestoreDone)
+
 --------------------------------------------------------------------------------
 -- Import a backup                                                            --
 --------------------------------------------------------------------------------
 
 -- featureBackups must contain a SINGLE entry for each feature
-restoreServerBackup :: BlobStorage -> FilePath -> Bool
+restoreServerBackup :: BlobStores -> FilePath -> Bool
                     -> [(String, AbstractRestoreBackup)] -> IO (Maybe String)
 restoreServerBackup store tarFile consumeBlobs featureBackups = do
     checkBlobDirExists
@@ -259,7 +306,7 @@ restoreServerBackup store tarFile consumeBlobs featureBackups = do
         ++ "tar file " ++ tarFile
 
 -- A variant of importTar that finalizes immediately.
-importBlank :: BlobStorage -> [(String, AbstractRestoreBackup)] -> IO (Maybe String)
+importBlank :: BlobStores -> [(String, AbstractRestoreBackup)] -> IO (Maybe String)
 importBlank store featureBackups = do
     finalizers <- evalImport store "not-used" False featureBackups $
         finalizeBackups store (map fst featureBackups)
@@ -267,7 +314,7 @@ importBlank store featureBackups = do
 
 -- | Call restoreFinalize for every backup. Caller must ensure that every
 -- feature name is in the map.
-finalizeBackups :: BlobStorage -> [String] -> Import [IO ()]
+finalizeBackups :: BlobStores -> [String] -> Import [IO ()]
 finalizeBackups store list = forM list $ \name -> do
     features <- gets importStates
     liftIO $ putStrLn $ "finalising data for feature " ++ name
@@ -287,7 +334,7 @@ completeBackups res = case res of
 newtype Import a = Import { unImp :: StateT ImportState (ExceptT String IO) a }
   deriving (Functor, Applicative, Monad, MonadIO, MonadState ImportState, MonadError String)
 
-evalImport :: BlobStorage -> FilePath -> Bool
+evalImport :: BlobStores -> FilePath -> Bool
            -> [(String, AbstractRestoreBackup)]
            -> Import a -> IO (Either String a)
 evalImport store blobdir consumeBlobs featureBackups imp =
@@ -300,7 +347,7 @@ data ImportState = ImportState {
     importStates    :: !(Map String AbstractRestoreBackup),
 
     -- | The blob storage we are writing to
-    importBlobStore :: BlobStorage,
+    importBlobStore :: BlobStores,
 
     -- | The backup blob dir we are reading from
     importBlobDir   :: FilePath,
@@ -316,7 +363,7 @@ data ImportState = ImportState {
     importBlobsWritten :: Map String BlobId
   }
 
-initialImportState :: BlobStorage -> FilePath -> Bool
+initialImportState :: BlobStores -> FilePath -> Bool
                    -> [(String, AbstractRestoreBackup)]
                    -> ImportState
 initialImportState store blobdir consumeBlobs featureBackups = ImportState {
@@ -373,6 +420,7 @@ fromLink path linkTarget
   | otherwise = throwError $ "Unexpected tar link entry: " ++ path
                                            ++ " -> " ++ linkTarget
   where
+    checkBlobWrittenCache :: String -> Import BlobId -> Import BlobId
     checkBlobWrittenCache blobIdStr getBlobId = do
       mblobId <- lookupBlobWritten blobIdStr
       case mblobId of
@@ -382,18 +430,21 @@ fromLink path linkTarget
           addBlobsWritten blobIdStr blobId
           return blobId
 
+    importBlobFile :: FilePath -> Import BlobId
     importBlobFile blobFile = do
-      store        <- gets importBlobStore
+      stores       <- gets importBlobStore
       consumeBlobs <- gets importConsumeBlobs
       if consumeBlobs
-        then liftIO $ Blob.consumeFile store blobFile
-        else liftIO $ Blob.add store =<< BS.readFile blobFile
+        then liftIO $ Blob.consumeFile (blobStoresMain stores) blobFile
+        else liftIO $ Blob.add (blobStoresMain stores) =<< BS.readFile blobFile
 
+    checkBlobFileExists :: FilePath -> Import ()
     checkBlobFileExists blobFile = do
       exists <- liftIO $ doesFileExist blobFile
       when (not exists) $ throwError $ "Missing blob file " ++ blobFile
                        ++ "\nneeded by backup entry " ++ path
 
+    checkBlobIdAsExpected :: BlobId -> String -> FilePath -> Import ()
     checkBlobIdAsExpected blobId blobIdStr blobFile =
       when (Blob.blobMd5 blobId /= blobIdStr) $
         throwError $ "Incorrect blob file " ++ blobFile

@@ -225,12 +225,15 @@ renderPackageFlags render =
           ,tbody << map flagRow flags]
         flagsHeadings = [th << "Name"
                         ,th << "Description"
-                        ,th << "Default"]
+                        ,th << "Default"
+                        ,th << "Type"]
         flagRow flag =
           tr << [td ! [theclass "flag-name"]   << code (case flagName flag of FlagName name -> name)
                 ,td ! [theclass "flag-desc"]   << flagDescription flag
                 ,td ! [theclass (if flagDefault flag then "flag-enabled" else "flag-disabled")] <<
-                 if flagDefault flag then "Enabled" else "Disabled"]
+                 if flagDefault flag then "Enabled" else "Disabled"
+                ,td ! [theclass (if flagManual flag then "flag-manual" else "flag-automatic")] <<
+                 if flagManual flag then "Manual" else "Automatic"]
         code = (thespan ! [theclass "code"] <<)
 
 moduleSection :: PackageRender -> Maybe TarIndex -> URL -> [Html]

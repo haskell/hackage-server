@@ -24,20 +24,26 @@ data PartialCandidate = PartialCandidate {
 type PartialCandidates = Map PackageId PartialCandidate
 
 restoreCandidates :: RestoreBackup CandidatePackages
-restoreCandidates = updateCandidates Map.empty Map.empty
+restoreCandidates = updateCandidates (PartialIndex Map.empty Nothing) Map.empty
 
 -- We keep the partial packages separate from the rest of the candidate info
 -- so that we can reuse more of CoreBackup
 updateCandidates :: PartialIndex -> PartialCandidates -> RestoreBackup CandidatePackages
-updateCandidates packageMap candidateMap = RestoreBackup {
+updateCandidates packageIndex@(PartialIndex packageMap _) candidateMap =
+  RestoreBackup {
     restoreEntry = \entry -> do
-      packageMap'   <- doPackageImport   packageMap   entry
+      packageIndex'   <- doPackageImport   packageIndex   entry
       candidateMap' <- doCandidateImport candidateMap entry
-      return (updateCandidates packageMap' candidateMap')
+      return (updateCandidates packageIndex' candidateMap')
   , restoreFinalize = do
       let combined = combineMaps packageMap candidateMap
       results <- mapM mkCandidate (Map.toList combined)
-      return $ CandidatePackages (PackageIndex.fromList results)
+      return $ CandidatePackages {
+          candidateList = PackageIndex.fromList results
+          -- If we restore from a back up there can be no pending transactions
+          -- so nothing to migrate
+        , candidateMigratedPkgTarball = True
+        }
   }
   where
     mkCandidate :: (PackageId, (Maybe PartialPkg, Maybe PartialCandidate)) -> Restore CandPkgInfo

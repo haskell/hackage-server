@@ -94,7 +94,7 @@ sitemapFeature  ServerEnv{..}
             cronJobName      = "regenerate the cached sitemap.xml",
             cronJobFrequency = DailyJobFrequency,
             cronJobOneShot   = False,
-            cronJobAction    = prodAsyncCache sitemapCache
+            cronJobAction    = prodAsyncCache sitemapCache "cron"
           }
     }
 
@@ -224,4 +224,3 @@ generateSitemap serverBaseURI pageBuildDate alltags pkgIndex docIndex =
         , Map.member (packageId pkg) docIndex
         ]
         pageBuildDate Monthly 0.25
-

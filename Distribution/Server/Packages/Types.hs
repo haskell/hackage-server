@@ -16,10 +16,12 @@
 module Distribution.Server.Packages.Types where
 
 import Distribution.Server.Users.Types (UserId(..))
-import Distribution.Server.Framework.BlobStorage (BlobId, BlobId_v0)
+import Distribution.Server.Framework.BlobStorage (BlobId, BlobId_v0, BlobStorage)
 import Distribution.Server.Framework.Instances (PackageIdentifier_v0)
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Util.Parse (unpackUTF8)
+import Distribution.Server.Features.Security.Orphans ()
+import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
 import Distribution.Package
          ( PackageIdentifier(..), Package(..) )
@@ -28,9 +30,7 @@ import Distribution.PackageDescription
 import Distribution.PackageDescription.Parse
          ( parsePackageDescription, ParseResult(..) )
 
-import qualified Data.Vector as Vec
 import Control.Applicative
-import qualified Data.Serialize as Serialize
 import Data.Serialize (Serialize)
 import Data.ByteString.Lazy (ByteString)
 import Data.Time.Clock (UTCTime(..))
@@ -39,20 +39,18 @@ import Data.Typeable (Typeable)
 import Data.List (sortBy)
 import Data.Ord (comparing)
 import Data.SafeCopy
+import qualified Data.ByteString.Lazy as BS.L
+import qualified Data.Serialize       as Serialize
+import qualified Data.Vector          as Vec
 
+import qualified Data.Digest.Pure.SHA as SHA
+
+{-------------------------------------------------------------------------------
+  Datatypes
+-------------------------------------------------------------------------------}
 
 newtype CabalFileText = CabalFileText { cabalFileByteString :: ByteString }
   deriving (Eq, MemSize)
-
-cabalFileString :: CabalFileText -> String
-cabalFileString = unpackUTF8 . cabalFileByteString
-
-instance SafeCopy CabalFileText where
-  putCopy (CabalFileText bs) = contain $ Serialize.put bs
-  getCopy = contain $ CabalFileText <$> Serialize.get
-
-instance Show CabalFileText where
-    show cft = "CabalFileText (Data.ByteString.Lazy.Char8.pack (Distribution.Simple.Utils.toUTF8 " ++ show (cabalFileString cft) ++ "))"
 
 -- | The information we keep about a particular version of a package.
 --
@@ -76,14 +74,88 @@ data PkgInfo = PkgInfo {
 
 } deriving (Eq, Typeable, Show)
 
-instance Package PkgInfo where packageId = pkgInfoId
+data PkgInfo_v2 = PkgInfo_v2 {
+    v2_pkgInfoId            :: !PackageIdentifier,
+    v2_pkgMetadataRevisions :: !(Vec.Vector (CabalFileText, UploadInfo)),
+    v2_pkgTarballRevisions  :: !(Vec.Vector (PkgTarball, UploadInfo))
+}
 
-data PkgTarball = PkgTarball {
-   pkgTarballGz   :: !BlobId,
-   pkgTarballNoGz :: !BlobId
+data PkgInfo_v1 = PkgInfo_v1 {
+    v1_pkgInfoId     :: !PackageIdentifier,
+    v1_pkgData       :: !CabalFileText,
+    v1_pkgTarball    :: ![(PkgTarball, UploadInfo)],
+    v1_pkgDataOld    :: ![(CabalFileText, UploadInfo)],
+    v1_pkgUploadData :: !UploadInfo
+}
+
+data PkgInfo_v0 = PkgInfo_v0  !PackageIdentifier_v0 !CabalFileText
+                              ![(PkgTarball_v0, UploadInfo_v0)]
+                              ![(CabalFileText, UploadInfo_v0)]
+                              !UploadInfo_v0
+
+data BlobInfo = BlobInfo {
+    blobInfoId         :: !BlobId,
+    blobInfoLength     :: !Int,
+    blobInfoHashSHA256 :: !(SHA.Digest SHA.SHA256State)
 } deriving (Eq, Typeable, Show)
 
+data PkgTarball =
+    PkgTarball {
+      pkgTarballGz   :: !BlobInfo,
+      pkgTarballNoGz :: !BlobId
+    }
+  -- | Legacy PkgTarball info. Only here for migration purposes (the "proper"
+  -- translation from PkgTarball_v1 to this PkgTarball requires access to the blob
+  -- store and is therefore not pure.)
+  | PkgTarball_v2_v1 PkgTarball_v1
+  deriving (Eq, Typeable, Show)
+
+data PkgTarball_v1 = PkgTarball_v1 {
+   v1_pkgTarballGz   :: !BlobId,
+   v1_pkgTarballNoGz :: !BlobId
+} deriving (Eq, Typeable, Show)
+
+data PkgTarball_v0 = PkgTarball_v0 !BlobId_v0 !BlobId_v0
+
 type UploadInfo = (UTCTime, UserId)
+type UploadInfo_v0 = (UTCTime_v0, UserId_v0)
+
+newtype UTCTime_v0 = UTCTime_v0 UTCTime
+newtype UserId_v0 = UserId_v0 Int
+
+{-------------------------------------------------------------------------------
+  MemCopy instances
+-------------------------------------------------------------------------------}
+
+instance MemSize PkgInfo where
+    memSize (PkgInfo a b c) = memSize3 a b c
+
+instance MemSize PkgTarball where
+    memSize (PkgTarball a b)     = memSize2 a b
+    memSize (PkgTarball_v2_v1 a) = memSize a
+
+instance MemSize PkgTarball_v1 where
+    memSize (PkgTarball_v1 a b) = memSize2 a b
+
+instance MemSize BlobInfo where
+    memSize (BlobInfo a b c) = memSize3 a b c
+
+{-------------------------------------------------------------------------------
+  Other instances
+-------------------------------------------------------------------------------}
+
+instance Show CabalFileText where
+    show cft = "CabalFileText (Data.ByteString.Lazy.Char8.pack (Distribution.Simple.Utils.toUTF8 " ++ show (cabalFileString cft) ++ "))"
+
+instance Package PkgInfo where
+    packageId = pkgInfoId
+
+{-------------------------------------------------------------------------------
+  Utility
+-------------------------------------------------------------------------------}
+
+cabalFileString :: CabalFileText -> String
+cabalFileString = unpackUTF8 . cabalFileByteString
 
 pkgOriginalRevision :: PkgInfo -> (CabalFileText, UploadInfo)
 pkgOriginalRevision = Vec.head . pkgMetadataRevisions
@@ -115,8 +187,21 @@ pkgLatestUploadUser = snd . pkgLatestUploadInfo
 pkgNumRevisions :: PkgInfo -> Int
 pkgNumRevisions = Vec.length . pkgMetadataRevisions
 
-pkgLatestTarball :: PkgInfo -> Maybe (PkgTarball, UploadInfo)
-pkgLatestTarball = (Vec.!? 0) . pkgTarballRevisions
+-- | The latest tarball for a package (if any)
+--
+-- For packages with a @.cabal@ file but no tarball we return 'Nothing'.
+-- For other package we return the latest tarball, corresponding upload info
+-- and revision number. The revision number will normally be 1, but may be
+-- higher if more tarballs were uploaded for this package (on the central
+-- Hackage server we disallow this).
+pkgLatestTarball :: PkgInfo -> Maybe (PkgTarball, UploadInfo, Int)
+pkgLatestTarball pkginfo =
+   if Vec.null tarballs
+     then Nothing
+     else let (tarball, uploadInfo) = Vec.last tarballs
+          in Just (tarball, uploadInfo, Vec.length tarballs - 1)
+  where
+    tarballs = pkgTarballRevisions pkginfo
 
 -- | The information held in a parsed .cabal file (used by cabal-install)
 pkgDesc :: PkgInfo -> GenericPackageDescription
@@ -127,26 +212,70 @@ pkgDesc pkgInfo =
       ParseFailed e -> error ("Internal error: " ++ show e)
       ParseOk _ x   -> x
 
-deriveSafeCopy 4 'extension ''PkgInfo
-deriveSafeCopy 2 'extension ''PkgTarball
+blobInfoFromBS :: BlobId -> ByteString -> BlobInfo
+blobInfoFromBS blobId bs = BlobInfo {
+      blobInfoId         = blobId
+    , blobInfoLength     = fromIntegral $ BS.L.length bs
+    , blobInfoHashSHA256 = SHA.sha256 bs
+    }
 
-instance MemSize PkgInfo where
-    memSize (PkgInfo a b c) = memSize3 a b c
+blobInfoFromId :: BlobStorage -> BlobId -> IO BlobInfo
+blobInfoFromId store blobId =
+    blobInfoFromBS blobId <$> BlobStorage.fetch store blobId
 
-instance MemSize PkgTarball where
-    memSize (PkgTarball a b) = memSize2 a b
+{-------------------------------------------------------------------------------
+  SafeCopy instances
+-------------------------------------------------------------------------------}
 
---------------------------
--- Old SafeCopy versions
---
+instance SafeCopy CabalFileText where
+  putCopy (CabalFileText bs) = contain $ Serialize.put bs
+  getCopy = contain $ CabalFileText <$> Serialize.get
 
-data PkgInfo_v2 = PkgInfo_v2 {
-    v2_pkgInfoId            :: !PackageIdentifier,
-    v2_pkgMetadataRevisions :: !(Vec.Vector (CabalFileText, UploadInfo)),
-    v2_pkgTarballRevisions  :: !(Vec.Vector (PkgTarball, UploadInfo))
-}
+instance Serialize UTCTime_v0 where
+  put (UTCTime_v0 time) = do
+    Serialize.put (toModifiedJulianDay $ utctDay time)
+    Serialize.put (toRational $ utctDayTime time)
+  get = do
+    day  <- Serialize.get
+    secs <- Serialize.get
+    return (UTCTime_v0 (UTCTime (ModifiedJulianDay day) (fromRational secs)))
 
+instance Serialize UserId_v0 where
+  put (UserId_v0 x) = Serialize.put x
+  get = UserId_v0 <$> Serialize.get
+
+instance SafeCopy PkgTarball_v0
+instance Serialize PkgTarball_v0 where
+    put (PkgTarball_v0 a b) = Serialize.put a >> Serialize.put b
+    get = PkgTarball_v0 <$> Serialize.get <*> Serialize.get
+
+deriveSafeCopy 2 'extension ''PkgTarball_v1
+deriveSafeCopy 3 'extension ''PkgTarball
+
+deriveSafeCopy 1 'base ''BlobInfo
+
+instance SafeCopy  PkgInfo_v0
+instance Serialize PkgInfo_v0 where
+    put (PkgInfo_v0 a (CabalFileText b) c d e) =
+         Serialize.put a
+      >> Serialize.put b
+      >> Serialize.put c
+      >> Serialize.put [ (bs, uinf) | (CabalFileText bs, uinf) <- d ]
+      >> Serialize.put e
+    get = PkgInfo_v0 <$>
+         Serialize.get
+     <*> (CabalFileText <$> Serialize.get)
+     <*> Serialize.get
+     <*> (map (\(bs,uinf) -> (CabalFileText bs, uinf)) <$> Serialize.get)
+     <*> Serialize.get
+
+deriveSafeCopy 2 'extension ''PkgInfo_v1
 deriveSafeCopy 3 'extension ''PkgInfo_v2
+deriveSafeCopy 4 'extension ''PkgInfo
+
+{-------------------------------------------------------------------------------
+  Migration
+-------------------------------------------------------------------------------}
 
 instance Migrate PkgInfo where
     type MigrateFrom PkgInfo = PkgInfo_v2
@@ -162,16 +291,6 @@ instance Migrate PkgInfo where
         pkgTarballRevisions  = v2_pkgTarballRevisions
       }
 
-data PkgInfo_v1 = PkgInfo_v1 {
-    v1_pkgInfoId     :: !PackageIdentifier,
-    v1_pkgData       :: !CabalFileText,
-    v1_pkgTarball    :: ![(PkgTarball, UploadInfo)],
-    v1_pkgDataOld    :: ![(CabalFileText, UploadInfo)],
-    v1_pkgUploadData :: !UploadInfo
-}
-
-deriveSafeCopy 2 'extension ''PkgInfo_v1
-
 instance Migrate PkgInfo_v2 where
     type MigrateFrom PkgInfo_v2 = PkgInfo_v1
     migrate (PkgInfo_v1 {..}) =
@@ -184,61 +303,20 @@ instance Migrate PkgInfo_v2 where
         v2_pkgTarballRevisions  = Vec.fromList v1_pkgTarball
       }
 
-data PkgInfo_v0 = PkgInfo_v0  !PackageIdentifier_v0 !CabalFileText
-                              ![(PkgTarball_v0, UploadInfo_v0)]
-                              ![(CabalFileText, UploadInfo_v0)]
-                              !UploadInfo_v0
-
-instance SafeCopy  PkgInfo_v0
-instance Serialize PkgInfo_v0 where
-    put (PkgInfo_v0 a (CabalFileText b) c d e) =
-         Serialize.put a
-      >> Serialize.put b
-      >> Serialize.put c
-      >> Serialize.put [ (bs, uinf) | (CabalFileText bs, uinf) <- d ]
-      >> Serialize.put e
-    get = PkgInfo_v0 <$> 
-         Serialize.get
-     <*> (CabalFileText <$> Serialize.get)
-     <*> Serialize.get
-     <*> (map (\(bs,uinf) -> (CabalFileText bs, uinf)) <$> Serialize.get)
-     <*> Serialize.get
-
 instance Migrate PkgInfo_v1 where
     type MigrateFrom PkgInfo_v1 = PkgInfo_v0
     migrate (PkgInfo_v0 a b c d e) =
       PkgInfo_v1 (migrate a) b
-                 [ (migrate pt, migrateUploadInfo ui) | (pt, ui) <- c ]
+                 [ (migrate (migrate pt), migrateUploadInfo ui) | (pt, ui) <- c ]
                  [ (cf, (migrateUploadInfo ui)) | (cf, ui) <- d ]
                  (migrateUploadInfo e)
       where
         migrateUploadInfo (UTCTime_v0 ts, UserId_v0 uid) = (ts, UserId uid)
 
-
-type UploadInfo_v0 = (UTCTime_v0, UserId_v0)
-
-newtype UTCTime_v0 = UTCTime_v0 UTCTime
-instance Serialize UTCTime_v0 where
-  put (UTCTime_v0 time) = do
-    Serialize.put (toModifiedJulianDay $ utctDay time)
-    Serialize.put (toRational $ utctDayTime time)
-  get = do
-    day  <- Serialize.get
-    secs <- Serialize.get
-    return (UTCTime_v0 (UTCTime (ModifiedJulianDay day) (fromRational secs)))
-
-newtype UserId_v0 = UserId_v0 Int
-instance Serialize UserId_v0 where
-  put (UserId_v0 x) = Serialize.put x
-  get = UserId_v0 <$> Serialize.get
-
-
-data PkgTarball_v0 = PkgTarball_v0 !BlobId_v0 !BlobId_v0
-instance SafeCopy PkgTarball_v0
-instance Serialize PkgTarball_v0 where
-    put (PkgTarball_v0 a b) = Serialize.put a >> Serialize.put b
-    get = PkgTarball_v0 <$> Serialize.get <*> Serialize.get
-
 instance Migrate PkgTarball where
-    type MigrateFrom PkgTarball = PkgTarball_v0
-    migrate (PkgTarball_v0 a b) = PkgTarball (migrate a) (migrate b)
+    type MigrateFrom PkgTarball = PkgTarball_v1
+    migrate = PkgTarball_v2_v1
+
+instance Migrate PkgTarball_v1 where
+    type MigrateFrom PkgTarball_v1 = PkgTarball_v0
+    migrate (PkgTarball_v0 a b) = PkgTarball_v1 (migrate a) (migrate b)

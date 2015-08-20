@@ -120,6 +120,7 @@ votesFeature  ServerEnv{..}
     -- Retrive the entire map (from package names -> # of votes)
     servePackageVotesGet :: DynamicPath -> ServerPartE Response
     servePackageVotesGet _ = do
+      cacheControlWithoutETag [Public, maxAgeMinutes 10]
       votesMap <- queryState votesState GetAllPackageVoteSets
       ok . toResponse $ objectL
         [ (display pkgname, toJSON (UserIdSet.size voterset))
@@ -131,6 +132,7 @@ votesFeature  ServerEnv{..}
     servePackageNumVotesGet dpath = do
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
+      cacheControlWithoutETag [Public, maxAgeMinutes 10]
       voteCount <- queryState votesState (GetPackageVoteCount pkgname)
       let obj = objectL
                   [ ("packageName", string $ display pkgname)

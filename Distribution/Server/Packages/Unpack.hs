@@ -1,6 +1,12 @@
 -- Unpack a tarball containing a Cabal package
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Distribution.Server.Packages.Unpack (
+    CombinedTarErrs(..),
+    checkEntries,
+    checkUselessPermissions,
     unpackPackage,
     unpackPackageRaw,
   ) where
@@ -33,29 +39,35 @@ import Distribution.Server.Util.Parse
 import Distribution.License
          ( License(..) )
 
-import Data.List
-         ( nub, (\\), partition, intercalate )
-import Data.Time
-         ( UTCTime(..), fromGregorian, addUTCTime )
-import Data.Time.Clock.POSIX
-         ( posixSecondsToUTCTime )
 import Control.Applicative
 import Control.Monad
          ( unless, when )
 import Control.Monad.Except
          ( ExceptT, runExceptT, MonadError, throwError )
-import Control.Monad.Writer
-         ( WriterT(..), MonadWriter, tell )
 import Control.Monad.Identity
          ( Identity(..) )
-import qualified Distribution.Server.Util.GZip as GZip
+import Control.Monad.Writer
+         ( WriterT(..), MonadWriter, tell )
+import Data.Bits
+         ( (.&.) )
 import Data.ByteString.Lazy
          ( ByteString )
 import qualified Data.ByteString.Lazy as LBS
+import Data.List
+         ( nub, (\\), partition, intercalate )
+import Data.Maybe
+         ( isJust )
+import Data.Time
+         ( UTCTime(..), fromGregorian, addUTCTime )
+import Data.Time.Clock.POSIX
+         ( posixSecondsToUTCTime )
+import qualified Distribution.Server.Util.GZip as GZip
 import System.FilePath
          ( (</>), (<.>), splitDirectories, splitExtension, normalise )
 import qualified System.FilePath.Windows
          ( takeFileName )
+import Text.Printf
+         ( printf )
 
 -- Whether to allow upload of "all rights reserved" packages
 allowAllRightsReserved :: Bool
@@ -196,6 +208,12 @@ extraChecks genPkgDesc = do
     throwError $ "This server does not accept packages with 'license' "
               ++ "field set to AllRightsReserved."
 
+  -- Check for an existing x-revision
+  when (isJust (lookup "x-revision" (customFieldsPD pkgDesc))) $
+    throwError $ "Newly uploaded packages must not specify the 'x-revision' "
+              ++ "field in their .cabal file. This is only used for "
+              ++ "post-release revisions."
+
   -- Check reasonableness of names of exposed modules
   let topLevel = case library pkgDesc of
                  Nothing -> []
@@ -226,12 +244,14 @@ allocatedTopLevelNodes = [
         "Distribution", "DotNet", "Foreign", "Graphics", "Language",
         "Network", "Numeric", "Prelude", "Sound", "System", "Test", "Text"]
 
-selectEntries :: (err -> String)
+selectEntries :: forall err a.
+                 (err -> String)
               -> (Tar.Entry -> Maybe a)
               -> Tar.Entries err
               -> UploadMonad [a]
 selectEntries formatErr select = extract []
   where
+    extract :: [a] -> Tar.Entries err -> UploadMonad [a]
     extract _        (Tar.Fail err)           = throwError (formatErr err)
     extract selected  Tar.Done                = return selected
     extract selected (Tar.Next entry entries) =
@@ -244,6 +264,7 @@ data CombinedTarErrs =
    | PortabilityError Tar.PortabilityError
    | TarBombError     FilePath FilePath
    | FutureTimeError  FilePath UTCTime
+   | PermissionsError FilePath Tar.Permissions
 
 tarballChecks :: Bool -> UTCTime -> FilePath
               -> Tar.Entries Tar.FormatError
@@ -251,6 +272,7 @@ tarballChecks :: Bool -> UTCTime -> FilePath
 tarballChecks lax now expectedDir =
     (if not lax then checkFutureTimes now else id)
   . checkTarbomb expectedDir
+  . checkUselessPermissions
   . (if lax then ignoreShortTrailer
             else fmapTarError (either id PortabilityError)
                . Tar.checkPortability)
@@ -288,6 +310,22 @@ checkTarbomb expectedTopDir =
       case splitDirectories (Tar.entryPath entry) of
         (topDir:_) | topDir == expectedTopDir -> Nothing
         _ -> Just $ TarBombError (Tar.entryPath entry) expectedTopDir
+
+checkUselessPermissions :: Tar.Entries CombinedTarErrs -> Tar.Entries CombinedTarErrs
+checkUselessPermissions =
+    checkEntries checkEntry
+  where
+    checkEntry entry =
+      case Tar.entryContent entry of
+        (Tar.NormalFile _ _) -> checkPermissions 0o644 (Tar.entryPermissions entry)
+        (Tar.Directory) -> checkPermissions 0o755 (Tar.entryPermissions entry)
+        _ -> Nothing
+      where
+        checkPermissions expected actual =
+            if expected .&. actual /= expected
+                then Just $ PermissionsError (Tar.entryPath entry) actual
+                else Nothing
+
 
 checkEntries :: (Tar.Entry -> Maybe e) -> Tar.Entries e -> Tar.Entries e
 checkEntries checkEntry =
@@ -336,6 +374,13 @@ explainTarError (FutureTimeError entryname time) =
  ++ "problem can be caused by having a misconfigured system time, or by bugs "
  ++ "in the tools (tarballs created by 'cabal sdist' on Windows with "
  ++ "cabal-install-1.18.0.2 or older have this problem)."
+explainTarError (PermissionsError entryname mode) =
+    "The tarball entry " ++ quote entryname ++ " has file permissions that are "
+ ++ "broken: " ++ (showMode mode) ++ ". Permissions must be 644 at a minimum "
+ ++ "for files and 755 for directories."
+  where
+    showMode :: Tar.Permissions -> String
+    showMode m = printf "%.3o" (fromIntegral m :: Int)
 
 quote :: String -> String
 quote s = "'" ++ s ++ "'"
@@ -343,4 +388,3 @@ quote s = "'" ++ s ++ "'"
 -- | Whether a UTF8 BOM is at the beginning of the input
 startsWithBOM :: ByteString -> Bool
 startsWithBOM bs = LBS.take 3 bs == LBS.pack [0xEF, 0xBB, 0xBF]
-
