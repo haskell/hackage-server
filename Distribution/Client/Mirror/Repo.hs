@@ -161,11 +161,19 @@ uploadPackage :: TargetRepo
               -> FilePath
               -> FilePath
               -> MirrorSession ()
-uploadPackage TargetHackage2{..} doMirrorUploaders =
-    Hackage2.uploadPackage targetRepoURI doMirrorUploaders
-uploadPackage TargetLocal{..} _doMirrorUploaders =
-    -- _doMirrorUploaders only relevant for smart repos
-    Local.uploadPackage targetRepoPath
+uploadPackage targetRepo doMirrorUploaders pkgInfo locCab locTgz =
+     case targetRepo of
+       TargetHackage2{..} ->
+         Hackage2.uploadPackage targetRepoURI
+                                doMirrorUploaders
+                                pkgInfo
+                                locCab
+                                locTgz
+       TargetLocal{..} ->
+         -- doMirrorUploaders and locCab not relevant for local repo
+         Local.uploadPackage targetRepoPath
+                             pkgInfo
+                             locTgz
 
 {-------------------------------------------------------------------------------
   Finalizing
