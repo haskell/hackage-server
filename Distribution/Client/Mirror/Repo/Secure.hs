@@ -68,7 +68,9 @@ withSourceRepo verbosity httpLib uri cacheDir threshold keys callback = do
           }
 
         repoOpts :: Sec.Remote.RepoOpts
-        repoOpts = Sec.Remote.defaultRepoOpts
+        repoOpts = Sec.Remote.defaultRepoOpts {
+            Sec.Remote.repoAllowAdditionalMirrors = False
+          }
 
         logger :: Sec.LogMessage -> IO ()
         logger msg = when (verbosity >= verbose) $
