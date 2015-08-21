@@ -217,5 +217,5 @@ handleChecked :: Exception e
               -> (Sec.Throws e => MirrorSession a)
               -> MirrorSession a
 handleChecked handler act = do
-    run <- askRun
-    liftCont (Sec.catchChecked (run act)) handler
+    run <- askUnlift
+    liftCont (Sec.catchChecked (unlift run act)) handler

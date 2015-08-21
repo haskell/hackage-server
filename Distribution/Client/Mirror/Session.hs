@@ -4,6 +4,7 @@
 -- lists for imports of Distribution.Client in the Mirror.* modules.)
 {-# LANGUAGE DeriveDataTypeable  #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RankNTypes          #-}
 module Distribution.Client.Mirror.Session (
     -- * MirrorSession
     MirrorSession -- Opaque
@@ -11,7 +12,9 @@ module Distribution.Client.Mirror.Session (
   , mirrorError
   , mirrorAskHttpLib
   , liftCont
-  , askRun
+  , Unlift(..)
+  , askUnlift
+  , mirrorFinally
     -- * Errors
   , MirrorError(..)
   , Entity(..)
@@ -190,10 +193,12 @@ runMirrorSession verbosity keepGoing st (MirrorSession m) = do
 mirrorError :: MirrorError -> MirrorSession a
 mirrorError = liftIO . throwIO
 
+newtype Unlift = Unlift { unlift :: forall a. MirrorSession a -> IO a }
+
 -- | Unlifting from MirrorSession to IO (@monad-unlift@ style)
-askRun :: MirrorSession (MirrorSession a -> IO a)
-askRun = MirrorSession $ ReaderT $ \env ->
-    return $ \act -> runReaderT (unMirror act) env
+askUnlift :: MirrorSession Unlift
+askUnlift = MirrorSession $ ReaderT $ \env ->
+    return $ Unlift $ \act -> runReaderT (unMirror act) env
 
 -- | Lift a continuation in IO to a continuation in MirrorSession
 --
@@ -204,7 +209,14 @@ askRun = MirrorSession $ ReaderT $ \env ->
 -- > liftCont :: ContT r IO a -> ContT r MirrorSession a
 liftCont :: ((a -> IO            b) -> IO            b)
          -> ((a -> MirrorSession b) -> MirrorSession b)
-liftCont f g = askRun >>= \run -> liftIO $ f $ \a -> run (g a)
+liftCont f g = do
+    run <- askUnlift
+    liftIO $ f $ \a -> unlift run (g a)
+
+mirrorFinally :: MirrorSession a -> MirrorSession b -> MirrorSession a
+mirrorFinally a b = do
+    run <- askUnlift
+    liftIO $ unlift run a `finally` unlift run b
 
 mirrorAskHttpLib :: MirrorSession Sec.HttpLib
 mirrorAskHttpLib = MirrorSession $ do
