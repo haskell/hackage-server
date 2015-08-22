@@ -183,11 +183,12 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
         prodAsyncCache mainCache  "item update"
         prodAsyncCache namesCache "item update"
       registerHook packageChangeHook $ \_ -> do
+        prodAsyncCache mainCache  "package change"
+        prodAsyncCache namesCache "package change"
 
       return feature
 
-htmlFeature :: ServerEnv
-            -> UserFeature
+htmlFeature :: UserFeature
             -> CoreFeature
             -> PackageContentsFeature
             -> UploadFeature

@@ -409,7 +409,7 @@ renderDownloads totalDown recentDown {- versionDown version -} =
 renderFields :: PackageRender -> [(String, Html)]
 renderFields render = [
         -- Cabal-Version
-        ("License",     rendLicense render),
+        ("License",     rendLicense),
         ("Copyright",   toHtml $ P.copyright desc),
         ("Author",      toHtml $ author desc),
         ("Maintainer",  maintainField $ rendMaintainer render),
@@ -439,32 +439,24 @@ renderFields render = [
       where
         revisionsURL = display (rendPkgId render) </> "revisions/"
 
-linkField :: String -> Html
-linkField url = case url of
-    [] -> noHtml
-    _  -> anchor ! [href url] << url
+    linkField url = case url of
+        [] -> noHtml
+        _  -> anchor ! [href url] << url
+    categoryField cat = anchor ! [href $ "/packages/#cat:" ++ cat] << cat
+    maintainField mnt = case mnt of
+        Nothing -> strong ! [theclass "warning"] << toHtml "none"
+        Just n  -> toHtml n
+    sourceRepositoryField sr = sourceRepositoryToHtml sr
 
-sourceRepositoryField :: SourceRepo -> Html
-sourceRepositoryField sr = sourceRepositoryToHtml sr
-
-categoryField :: String -> Html
-categoryField cat = anchor ! [href $ "/packages/#cat:" ++ cat] << cat
-
-maintainField :: Maybe String -> Html
-maintainField mnt = case mnt of
-    Nothing -> strong ! [theclass "warning"] << toHtml "none"
-    Just n  -> toHtml n
-
-rendLicense :: PackageRender -> Html
-rendLicense render = case rendLicenseFiles render of
-  []            -> toHtml (rendLicenseName render)
-  [licenseFile] -> anchor ! [ href (rendPkgUri render </> "src" </> licenseFile) ]
-                          << rendLicenseName render
-  _licenseFiles -> toHtml (rendLicenseName render)
-                    +++ "["
-                    +++ anchor ! [ href (rendPkgUri render </> "src") ]
-                              << "multiple license files"
-                    +++ "]"
+    rendLicense = case rendLicenseFiles render of
+      []            -> toHtml (rendLicenseName render)
+      [licenseFile] -> anchor ! [ href (rendPkgUri render </> "src" </> licenseFile) ]
+                             << rendLicenseName render
+      _licenseFiles -> toHtml (rendLicenseName render)
+                       +++ "["
+                       +++ anchor ! [ href (rendPkgUri render </> "src") ]
+                                 << "multiple licese files"
+                       +++ "]"
 
 
 sourceRepositoryToHtml :: SourceRepo -> Html
