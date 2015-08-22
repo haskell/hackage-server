@@ -52,10 +52,11 @@
           <th>Change log</th>
           <td>$package.optional.changelog$</td>
         </tr>
+        $endif$
 
         <tr>
           <th>Dependencies</th>
-          <td>$package.build-depends$</td>
+          <td>$package.buildDepends$</td>
         </tr>
 
         <tr>
@@ -87,7 +88,7 @@
         $if(package.optional.hasCategories)$
         <tr>
           <th>Category</th>
-          <td>$package.optional.category</td>
+          <td>$package.optional.category$</td>
         </tr>
         $endif$
 
@@ -95,7 +96,7 @@
         <tr>
           <th>Home page</th>
           <td>
-            <a href=$package.optional.homepage>
+            <a href=$package.optional.homepage$>
               $package.optional.homepage$
             </a>
           </td>
@@ -116,13 +117,13 @@
         $if(package.optional.hasSourceRepository)$
         <tr>
           <th>Source repository</th>
-          <td>$package.optional.source-repository$</td>
+          <td>$package.optional.sourceRepository$</td>
         </tr>
         $endif$
 
         <tr>
           <th>Uploaded</th>
-          <td>$uploadTime$</td>
+          <td>$hackage.uploadTime$</td>
         </tr>
 
         $if(hackage.hasUpdateTime)$
@@ -167,7 +168,7 @@
     $endif$
 
     <div id="downloads">
-      $downloadsSection$
+      $downloadSection$
     </div>
 
     <div id="maintainer-corner">

@@ -201,6 +201,7 @@ executable hackage-server
       Distribution.Server.Features.DownloadCount.Backup
       Distribution.Server.Features.EditCabalFiles
       Distribution.Server.Features.Html
+      Distribution.Server.Features.Html.HtmlUtilities
       Distribution.Server.Features.HoogleData
       Distribution.Server.Features.HaskellPlatform
       Distribution.Server.Features.HaskellPlatform.State
