@@ -179,10 +179,10 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                             asyncCacheLogVerbosity = verbosity
                           }
 
-      registerHook itemUpdate         $ \_ -> prodAsyncCache mainCache
-                                           >> prodAsyncCache namesCache
-      registerHook packageChangeHook  $ \_ -> prodAsyncCache mainCache
-                                           >> prodAsyncCache namesCache
+      registerHook itemUpdate $ \_ -> do
+        prodAsyncCache mainCache  "item update"
+        prodAsyncCache namesCache "item update"
+      registerHook packageChangeHook $ \_ -> do
 
       return feature
 
@@ -1101,6 +1101,8 @@ mkHtmlCandidates HtmlUtilities{..}
           ]
         -- note: each of the lists here should be non-empty, according to PackageIndex
       where showCands pkgs =
+                -- TODO: Duncan changed this to packageSynopsis but without an
+                -- accomponaying definition of packageSynposis. Changed back for now.
                 let desc = packageDescription . pkgDesc . candPkgInfo $ last pkgs
                     pkgname = packageName desc
                 in  [ anchor ! [href $ packageCandidatesUri candidates "" pkgname ] << display pkgname
@@ -1313,10 +1315,10 @@ mkHtmlPreferred HtmlUtilities{..}
     servePutPreferred dpath = do
       pkgname <- packageInPath dpath
       putPreferred pkgname
-      return $ toResponse $ Resource.XHtml $ hackagePage "Set preferred versions"
-        [ h2 << "Set preferred versions"
+      return $ toResponse $ Resource.XHtml $ hackagePage "Updated preferred versions"
+        [ h2 << "Updated the preferred versions"
         , paragraph <<
-            [ toHtml "Set the "
+            [ toHtml "Updated the "
             , anchor ! [href $ preferredPackageUri versionsResource "" pkgname] << "preferred versions"
             , toHtml " for "
             , packageNameLink pkgname
@@ -1331,7 +1333,7 @@ mkHtmlPreferred HtmlUtilities{..}
       return $ toResponse $ Resource.XHtml $ hackagePage dtitle
          [ h2 << dtitle
          , paragraph <<
-            [ toHtml "Set the "
+            [ toHtml "Updated the "
             , anchor ! [href $ deprecatedPackageUri versionsResource "" pkgname] << "deprecated status"
             , toHtml " for "
             , packageNameLink pkgname

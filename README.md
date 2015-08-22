@@ -25,6 +25,10 @@ You'll need to do the following to get hackage-server's dependency `text-icu` to
     hackage-server init
     hackage-server run
 
+If you want to run the server directly from the build tree, run
+
+    dist/build/hackage-server/hackage-server run --static-dir=datafiles/
+
 By default the server runs on port `8080` with the following settings:
 
     URL:      http://localhost:8080/

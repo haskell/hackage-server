@@ -13,6 +13,7 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.List
 import Data.Time
+import Data.Time.Calendar.Easter
 
 import Distribution.Server.Framework.Logging
 
@@ -27,6 +28,7 @@ data CronJob = CronJob {
                }
 
 data JobFrequency = DailyJobFrequency
+                  | WeeklyJobFrequency
                     -- add more as needed
                   | TestJobFrequency NominalDiffTime
 
@@ -76,10 +78,14 @@ removeExpiredJobs stateVar =
 ------------------------------------------------------------------------------
 
 nextJobTime :: UTCTime -> JobFrequency -> UTCTime
-nextJobTime now DailyJobFrequency = now { 
-                                      utctDay     = addDays 1 (utctDay now),
-                                      utctDayTime = 0
-                                   }
+nextJobTime now DailyJobFrequency  = now {
+                                        utctDay     = addDays 1 (utctDay now),
+                                        utctDayTime = 0
+                                     }
+nextJobTime now WeeklyJobFrequency = now {
+                                        utctDay     = sundayAfter (utctDay now),
+                                        utctDayTime = 0
+                                     }
 nextJobTime now (TestJobFrequency sec) = addUTCTime sec now 
 
 disarmTimer :: CronState -> IO ()
