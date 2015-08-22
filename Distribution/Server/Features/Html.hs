@@ -29,6 +29,7 @@ import Distribution.Server.Features.Documentation
 import Distribution.Server.Features.TarIndexCache
 import Distribution.Server.Features.UserDetails
 import Distribution.Server.Features.EditCabalFiles
+import Distribution.Server.Features.Html.HtmlUtilities
 
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Group as Group
@@ -49,6 +50,7 @@ import qualified Distribution.Server.Pages.Group as Pages
 import qualified Distribution.Server.Pages.Index as Pages
 import Distribution.Server.Util.CountingMap (cmFind, cmToList)
 import Distribution.Server.Util.ServeTarball (loadTarEntry)
+import Distribution.Simple.Utils ( cabalVersion )
 
 import Distribution.Package
 import Distribution.Version
@@ -459,7 +461,7 @@ mkHtmlCore :: ServerEnv
            -> Templates
            -> HtmlCore
 mkHtmlCore ServerEnv{serverBaseURI}
-           HtmlUtilities{..}
+           utilities@HtmlUtilities{..}
            UserFeature{queryGetUserDb}
            CoreFeature{coreResource}
            VersionsFeature{ versionsResource
@@ -560,42 +562,30 @@ mkHtmlCore ServerEnv{serverBaseURI}
         cacheControlWithoutETag [Public, maxAgeMinutes 5]
 
         return $ toResponse . template $
+          -- IO-related items
+          [ "baseurl"           $= show (serverBaseURI)
+          , "cabalVersion"      $= display cabalVersion
+          , "tags"              $= (renderTags tags)
+          , "versions"          $= (PagesNew.renderVersion realpkg
+              (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl)
+          , "totalDownloads"    $= totalDown
+          , "recentDownloads"   $= recentDown
+          , "votesSection"      $= pkgVotesHtml
+          , "buildStatus"       $= buildStatus
+          ] ++
           -- Items not related to IO (mostly pure functions)
           PagesNew.packagePageTemplate render
             mdocIndex mreadme
             docURL distributions
-          ++
-          -- IO-related items
-          [ "baseurl"           $= show (serverBaseURI)
-          , "versions"          $= (PagesNew.renderVersion realpkg
-              (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl)
-          , "votes"             $= pkgVotesHtml
-          , "totalDownloads"    $= totalDown
-          , "recentDownloads"   $= recentDown
-          , "buildStatus"       $= buildStatus
-          , "tags"              $= (renderTags tags)
-          ]
-          ++
-          -- Optional items
-          [ "isDeprecated"      $= (if deprs == Nothing then False else True)
-          , "deprecatedMsg"     $= (deprHtml deprs)
-          ]
-            where
-              deprHtml :: Maybe [PackageName] -> Html
-              deprHtml deprs = case deprs of
-                Just fors -> case fors of
-                    [] -> noHtml
-                    _  -> concatHtml . (toHtml " in favor of ":) .
-                          intersperse (toHtml ", ") .
-                          map (packageNameLink) $ fors
-                Nothing -> noHtml
-
-              makeReadme :: MonadIO m => PackageRender -> m (Maybe BS.ByteString)
-              makeReadme render = case rendReadme render of
-                Just (tarfile, _, offset, _) ->
-                      either (\_err -> return Nothing) (return . Just . snd) =<<
-                        liftIO (loadTarEntry tarfile offset)
-                Nothing -> return Nothing
+            deprs
+            utilities
+          where
+            makeReadme :: MonadIO m => PackageRender -> m (Maybe BS.ByteString)
+            makeReadme render = case rendReadme render of
+              Just (tarfile, _, offset, _) ->
+                    either (\_err -> return Nothing) (return . Just . snd) =<<
+                      liftIO (loadTarEntry tarfile offset)
+              Nothing -> return Nothing
 
     serveDependenciesPage :: DynamicPath -> ServerPartE Response
     serveDependenciesPage dpath = do
@@ -1830,46 +1820,3 @@ htmlGroupResource UserFeature{..} r@(GroupResource groupR userR getGroup) =
         groupDeleteUser group dpath
         goToList dpath
     goToList dpath = seeOther (renderResource' (groupResource r) dpath) (toResponse ())
-
-{-------------------------------------------------------------------------------
-  Util
--------------------------------------------------------------------------------}
-
-htmlUtilities :: CoreFeature -> TagsFeature -> HtmlUtilities
-htmlUtilities CoreFeature{coreResource}
-              TagsFeature{tagsResource} = HtmlUtilities{..}
-  where
-    packageLink :: PackageId -> Html
-    packageLink pkgid = anchor ! [href $ corePackageIdUri cores "" pkgid] << display pkgid
-
-    packageNameLink :: PackageName -> Html
-    packageNameLink pkgname = anchor ! [href $ corePackageNameUri cores "" pkgname] << display pkgname
-
-    renderItem :: PackageItem -> Html
-    renderItem item = li ! classes <<
-          [ packageNameLink pkgname
-          , toHtml $ " " ++ ptype (itemHasLibrary item) (itemNumExecutables item)
-                         ++ ": " ++ itemDesc item
-          , " (" +++ renderTags (itemTags item) +++ ")"
-          ]
-      where pkgname = itemName item
-            ptype _ 0 = "library"
-            ptype lib num = (if lib then "library and " else "")
-                         ++ (case num of 1 -> "program"; _ -> "programs")
-            classes = case classList of [] -> []; _ -> [theclass $ unwords classList]
-            classList = (case itemDeprecated item of Nothing -> []; _ -> ["deprecated"])
-
-    renderTags :: Set Tag -> [Html]
-    renderTags tags = intersperse (toHtml ", ")
-        (map (\tg -> anchor ! [href $ tagUri tagsResource "" tg] << display tg)
-          $ Set.toList tags)
-
-    cores = coreResource
-
-data HtmlUtilities = HtmlUtilities {
-    packageLink :: PackageId -> Html
-  , packageNameLink :: PackageName -> Html
-  , renderItem :: PackageItem -> Html
-  , renderTags :: Set Tag -> [Html]
-  }
-
