@@ -258,7 +258,7 @@ sanitiseTarball verbosity tmpdir tgzpath = do
           newtgz = GZ.compress $ Tar.write $ reverse okentries
       when (length allentries /= length okentries) $
         warn verbosity $ "sanitising tarball for " ++ tgzpath
-      (tmpfp, tmph) <- openTempFile tmpdir "tmp.tgz"
+      (tmpfp, tmph) <- openBinaryTempFileWithDefaultPermissions tmpdir "tmp.tgz"
       hClose tmph
       BS.writeFile tmpfp newtgz
       renameFile tmpfp tgzpath
