@@ -18,6 +18,57 @@ You'll need to do the following to get hackage-server's dependency `text-icu` to
     sudo apt-get update
     sudo apt-get install unzip libicu-dev
 
+## Setting up security infrastructure
+
+Out of the box the server comes with some example keys and TUF metadata. The
+example keys are in `example-keys/`; these keys were used to create
+
+    datafiles/TUF/root.json
+    datafiles/TUF/mirrors.json
+    datafiles/TUF/timestamp.private
+    datafiles/TUF/snapshot.private
+
+While these files will enable you to start the server without doing anything
+else, you should replace all these files before deploying your server. In the
+remainder of this section we will explain how to do that.
+
+The first step is to create your own keys using the
+[hackage-repo-tool](http://hackage.haskell.org/package/hackage-repo-tool):
+
+    hackage-repo-tool create-keys --keys /path/to/keys
+
+Then copy over the timestamp and snapshot keys to the TUF directory:
+
+    cp /path/to/keys/timestamp/<id>.private datafiles/TUF/timestamp.private
+    cp /path/to/keys/snapshot/<id>.private  datafiles/TUF/snapshot.private
+
+Create root information:
+
+    hackage-repo-tool create-root --keys /path/to/keys -o datafiles/TUF/root.json
+
+And finally create a list of mirrors (this is necessary even if you don't have
+any mirrors):
+
+    hackage-repo-tool create-mirrors --keys /path/to/keys -o datafiles/TUF/mirrors.json
+
+The `create-mirrors` command takes a list of mirrors as additional arguments if
+you do want to list mirrors.
+
+In order for secure clients to bootstrap the root security metadata from your
+server, you will need to provide them with the public key IDs of your root keys;
+you can find these as the file names of the files created in
+`/path/to/keys/root` (as well as in the generated root.json under the
+`signed.roles.root.keyids`). An example `cabal` client configuration might look
+something like
+
+    remote-repo my-private-hackage
+      url: http://example.com:8080/
+      secure: True
+      root-keys: 865cc6ce84231ccc990885b1addc92646b7377dd8bb920bdfe3be4d20c707796
+                 dd86074061a8a6570348e489aae306b997ed3ccdf87d567260c4568f8ac2cbee
+                 e4182227adac4f3d0f60c9e9392d720e07a8586e6f271ddcc1697e1eeab73390
+      key-threshold: 2
+
 ## Running
 
     cabal install -j --enable-tests
@@ -104,7 +155,7 @@ target "mirror"
   post-mirror-hook: "shell command to execute"
 ```
 Recognized types are hackage2, secure and local. The target server name was displayed when you ran
-```bash 
+```bash
    hackage-server run.
 ```
 
