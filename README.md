@@ -91,11 +91,21 @@ To try it out:
    http://localhost:8080/packages/mirrorers/
 1. Create a config file that contains the source and target
    servers. Assuming you are cloning the packages on
-   <http://hackage.haskell.org> locally, you could create a config
-   file as follows:
+   <http://hackage.haskell.org> locally, create the file servers.cfg:
+```
+source "hackage"
+  uri: http://hackage.haskell.org
+  type: hackage2
 
-```bash
-echo -e "http://hackage.haskell.org\nhttp://admin:admin@localhost:8080/" > servers.cfg
+target "mirror"
+  uri: http://admin:admin@localhost:8080/
+  type: local
+
+  post-mirror-hook: "shell command to execute"
+```
+Recognized types are hackage2, secure and local. The target server name was displayed when you ran
+```bash 
+   hackage-server run.
 ```
 
 1. Run the client, pointing to the config file:
