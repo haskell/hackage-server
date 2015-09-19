@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, TemplateHaskell #-}
+{-# LANGUAGE DeriveDataTypeable, TemplateHaskell, DeriveGeneric #-}
 
 module Data.StringTable (
 
@@ -12,6 +12,7 @@ module Data.StringTable (
  ) where
 
 import Prelude hiding (lookup)
+import Data.Aeson
 import qualified Data.List as List
 import qualified Data.Array.Unboxed as A
 import Data.Array.Unboxed ((!))
@@ -19,6 +20,7 @@ import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable (Typeable)
 import qualified Data.ByteString.Char8 as BS
 import Data.Word (Word32)
+import GHC.Generics
 
 import Distribution.Server.Framework.Instances()
 import Distribution.Server.Framework.MemSize
@@ -29,7 +31,9 @@ data StringTable id
          = StringTable
                !BS.ByteString          -- all the strings concatenated
                !(A.UArray Int Word32)  -- offset table
-  deriving (Show, Typeable)
+  deriving (Show, Typeable, Generic)
+
+instance ToJSON id => ToJSON (StringTable id) where
 
 $(deriveSafeCopy 0 'base ''StringTable)
 

@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, DeriveDataTypeable, TemplateHaskell #-}
+{-# LANGUAGE DeriveGeneric, OverloadedStrings #-}
 
 module Data.TarIndex (
 
@@ -15,6 +16,8 @@ module Data.TarIndex (
 #endif
   ) where
 
+import Data.Aeson
+import qualified Data.Aeson as A
 import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable (Typeable)
 
@@ -22,6 +25,7 @@ import Codec.Archive.Tar (Entry(..), EntryContent(..), Entries(..), entryPath)
 import qualified Data.StringTable as StringTable
 import Data.StringTable (StringTable)
 import qualified Data.IntTrie as IntTrie
+import GHC.Generics
 
 import Data.IntTrie (IntTrie)
 import qualified System.FilePath.Posix as FilePath
@@ -59,8 +63,14 @@ data TarIndex = TarIndex
 
   -- Mapping of sequences of filepath component ids to tar entry offsets.
   !(IntTrie PathComponentId TarEntryOffset)
-  deriving (Show, Typeable)
+  deriving (Show, Generic, Typeable)
 
+instance A.ToJSON TarIndex where
+  toJSON (TarIndex sTable iTrie) =
+    A.object ["stringtable" .= sTable
+             ,"entryoffsets" .= iTrie
+             ]
+--instance A.FromJSON TarIndex where
 
 data TarIndexEntry = TarFileEntry !TarEntryOffset
                    | TarDir [(FilePath, TarIndexEntry)]

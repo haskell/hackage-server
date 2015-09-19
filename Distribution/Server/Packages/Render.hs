@@ -1,7 +1,7 @@
 -- TODO: Review and possibly move elsewhere. This code was part of the
 -- RecentPackages (formerly "Check") feature, but that caused some cyclic
 -- dependencies.
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, RankNTypes #-}
 
 module Distribution.Server.Packages.Render (
     -- * Package render
@@ -15,17 +15,20 @@ module Distribution.Server.Packages.Render (
   ) where
 
 import Data.Maybe (catMaybes, isJust, maybeToList)
-import Control.Monad (guard)
+import Control.Monad (guard, mzero)
 import Control.Arrow ((&&&), second)
-import           Data.Aeson ((.=))
+import           Data.Aeson ((.=),(.:),(.:?))
 import qualified Data.Aeson as A
+import qualified Data.Aeson.Types as A
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
 import qualified Data.Vector as Vec
 import Data.Ord (comparing)
 import Data.List (sortBy, intercalate)
+import qualified Data.Text as T
 import Data.Time.Clock (UTCTime)
 import System.FilePath.Posix ((</>), (<.>))
+import Text.Read             (readMaybe)
 
 -- Cabal
 import Distribution.PackageDescription
@@ -75,25 +78,25 @@ data PackageRender = PackageRender {
 
 instance A.ToJSON PackageRender where
   toJSON p = A.object [
-      "pkgId"   .= show (rendPkgId p)
-    , "depends" .= map show (rendDepends p)
-    , "execNames" .= (rendExecNames p)
-    , "libraryDeps" .= show (rendLibraryDeps p)
-    , "executableDeps" .= show (rendExecutableDeps p)
-    , "licenseName" .= rendLicenseName p
-    , "licenseFiles" .= rendLicenseFiles p
-    , "maintainer" .= rendMaintainer p
-    , "category" .= rendCategory p
-    , "repoHeads" .= map show (rendRepoHeads p)
-    , "modules" .= show ((rendModules p) Nothing) -- TODO probably wrong?
-    , "hasTarball" .= rendHasTarball p
-    , "changeLog" .= show (rendChangeLog p)
-    , "readme" .= show (rendReadme p)
-    , "uploadInfo" .= show (rendUploadInfo p)
-    , "updateInfo" .= show (rendUpdateInfo p)
-    , "pkgUri" .= rendPkgUri p
-    , "flags" .= map show (rendFlags p)
-    , "other" .= show (rendOther p)
+      "pkgId"          .= toJSONPackageIdentifier (rendPkgId p)
+    , "depends"        .= map toJSONDependency (rendDepends p)
+    , "execNames"      .= (rendExecNames p)
+    , "libraryDeps"    .= fmap toJSONDependencyTree (rendLibraryDeps p)
+    , "executableDeps" .= map (\(str,dep) -> [A.String (T.pack str), toJSONDependencyTree dep]) (rendExecutableDeps p)
+    , "licenseName"    .= rendLicenseName p
+    , "licenseFiles"   .= rendLicenseFiles p
+    , "maintainer"     .= rendMaintainer p
+    , "category"       .= rendCategory p
+    , "repoHeads"      .= map toJSONRepoTuple (rendRepoHeads p)
+    , "modules"        .= show ((rendModules p) Nothing) -- TODO probably wrong?
+    , "hasTarball"     .= rendHasTarball p
+    , "changeLog"      .= show (rendChangeLog p)
+    , "readme"         .= show (rendReadme p)
+    , "uploadInfo"     .= show (rendUploadInfo p)
+    , "updateInfo"     .= show (rendUpdateInfo p)
+    , "pkgUri"         .= rendPkgUri p
+    , "flags"          .= map show (rendFlags p)
+    , "other"          .= show (rendOther p)
     ]
 
 doPackageRender :: Users.Users -> PkgInfo -> PackageRender
@@ -168,7 +171,7 @@ type DependencyTree = CondTree ConfVar [Dependency] IsBuildable
 
 data IsBuildable = Buildable
                  | NotBuildable
-                   deriving (Eq, Show)
+                   deriving (Eq, Show, Read)
 
 {-------------------------------------------------------------------------------
   Util
@@ -297,3 +300,218 @@ evalCondition flags cond =
 -- Same as @sortBy (comparing f)@, but without recomputing @f@.
 sortOn :: Ord b => (a -> b) -> [a] -> [a]
 sortOn f xs = map snd (sortBy (comparing fst) [(f x, x) | x <- xs])
+
+-- Orphan Aeson 'instances' for Cabal's `PackageIdentifier`
+toJSONPackageIdentifier :: PackageIdentifier -> A.Value
+toJSONPackageIdentifier (PackageIdentifier n v) =
+  A.object ["name" .= unPackageName n
+           ,"version" .= toJSONVersion v
+           ]
+
+fromJSONPackageIdentifier :: A.Value -> A.Parser PackageIdentifier
+fromJSONPackageIdentifier (A.Object v) =
+  PackageIdentifier
+  <$> (PackageName <$> v .: "name")
+  <*> (fromJSONVersion =<< v .: "version")
+fromJSONPackageIdentifier _ = mzero
+
+-- Orphan Aeson 'instances' for Cabal's `Version`
+toJSONVersion :: Version -> A.Value
+toJSONVersion (Version brnch tgs) =
+  A.object ["branch" .= brnch
+           ,"tags"   .= tgs
+           ]
+
+fromJSONVersion :: A.Value -> A.Parser Version
+fromJSONVersion (A.Object v) = Version <$> v .: "branch" <*> v .: "tags"
+fromJSONVersion _          = mzero
+
+toJSONDependency :: Dependency -> A.Value
+toJSONDependency (Dependency pName vRange) =
+  A.object ["name"         .= unPackageName pName
+           ,"versionrange" .= show          vRange
+           ]
+
+fromJSONDependency :: A.Value -> A.Parser Dependency
+fromJSONDependency (A.Object v) = do
+  nm     <- PackageName <$> v .: "name"
+  mRange <- v .: "versionrange"
+  case readMaybe mRange of
+    Nothing -> mzero
+    Just r  -> return (Dependency nm r)
+fromJSONDependency _ = mzero
+
+toJSONRepoTuple :: (RepoType,String,SourceRepo) -> A.Value
+toJSONRepoTuple (rt,s,sr) =
+  A.object [ "repotype"   .= show rt
+           , "s"          .= s
+           , "sourcerepo" .= toJSONSourceRepo sr
+           ]
+
+fromJSONRepoTuple :: A.Value -> A.Parser (RepoType, String, SourceRepo)
+fromJSONRepoTuple (A.Object v) = do
+  mRT <- readMaybe <$> v .: "repotype"
+  s   <- v .: "s"
+  sr  <- fromJSONSourceRepo =<< v .: "sourcerepo"
+  case mRT of
+    Nothing -> mzero
+    Just rt -> return (rt,s,sr)
+
+toJSONSourceRepo :: SourceRepo -> A.Value
+toJSONSourceRepo (SourceRepo rk mRT mLoc mMod mBranch mTag mSubdir) =
+    A.object .catMaybes $
+    [ Just ("repokind" .= show rk)
+    , (("repotype" .=) . show) <$> mRT
+    , ("repolocation" .=)      <$> mLoc
+    , ("repomodule" .=)        <$> mMod
+    , ("repobranch" .=)        <$> mBranch
+    , ("repotag" .=)           <$> mTag
+    , ("reposubdir" .=)        <$> mSubdir
+    ]
+
+fromJSONSourceRepo :: A.Value -> A.Parser SourceRepo
+fromJSONSourceRepo (A.Object v) =
+  SourceRepo
+  <$> (read <$> v .:  "repokind")
+  <*> ((maybe Nothing read) <$> v .:? "repotype")
+  <*> (v .:? "repolocation")
+  <*> (v .:? "repomodule")
+  <*> (v .:? "repobranch")
+  <*> (v .:? "repotag")
+  <*> (v .:? "reposubdir")
+
+toJSONCondTree :: (Condition v -> A.Value)
+               -> (c -> A.Value)
+               -> (a -> A.Value)
+               -> CondTree v c a
+               -> A.Value
+toJSONCondTree sV sC sA (CondNode a c comps) =
+  A.object [ "data" .= sA a
+           , "constraints" .= sC c
+           , "components"  .= map toJSONComponents comps
+           ]
+ where toJSONComponents (cond, subTree, mSubTree) =
+         let mSubPart = case mSubTree of
+                          Nothing -> []
+                          Just t  -> [toJSONCondTree sV sC sA t]
+         in [sV cond, toJSONCondTree sV sC sA subTree] ++  mSubPart
+        --  in A.Array (Vec.fromList $ [sV cond, toJSONCondTree sV sC sA subTree]
+        --                           ++ mSubPart)
+
+fromJSONCondTree :: (A.Value -> A.Parser (Condition v))
+                 -> (A.Value -> A.Parser c)
+                 -> (A.Value -> A.Parser a)
+                 -> A.Value
+                 -> A.Parser (CondTree v c a)
+fromJSONCondTree toV toC toA (A.Object v) = do
+  dataPart <- v .: "data"
+  consrPart <- v .: "constraints"
+  compsPart <- v .: "components"
+  case compsPart of
+    A.Array cs -> do
+      comps <- mapM toTuple (Vec.toList cs)
+      CondNode <$> (toA dataPart) <*> (toC consrPart) <*> pure (comps)
+  -- CondNode
+  -- <$> toA     =<< v .: "data"
+  -- <*> toC     =<< v .: "constraints"
+  -- <*> (mapM toTuple =<< v .: "components")
+  where --toTuple
+        --  :: A.Value
+        --  -> A.Parser (Condition v, CondTree v c a, Maybe (CondTree v c a))
+        toTuple (A.Array arr) = case Vec.toList arr of
+          [valCond, valSubTree, valMSubTree] ->
+            (,,)
+            <$> toV valCond
+            <*> fromJSONCondTree      toV toC toA valSubTree
+            <*> fromJSONMaybeCondTree toV toC toA valMSubTree
+          [valCond, valSubTree] ->
+            (,,)
+            <$> toV valCond
+            <*> fromJSONCondTree toV toC toA valSubTree
+            <*> pure Nothing
+          _ -> mzero
+
+fromJSONMaybeCondTree :: (A.Value -> A.Parser (Condition v))
+                      -> (A.Value -> A.Parser c)
+                      -> (A.Value -> A.Parser a)
+                      -> A.Value
+                      -> A.Parser (Maybe (CondTree v c a))
+fromJSONMaybeCondTree toV toC toA v = do
+  parsedV <- A.parseJSON v :: A.Parser A.Value
+  parsedT <- fromJSONCondTree toV toC toA v -- :: A.Parser (CondTree v c a)
+  case parsedV of
+    A.Null     -> return Nothing
+    A.Object _ -> Just <$> return parsedT
+
+toJSONDependencyTree :: DependencyTree -> A.Value
+toJSONDependencyTree cTree =
+  toJSONCondTree toJSONConditionConfVar
+                 (\v -> A.Array . Vec.fromList . map toJSONDependency $ v)
+                 toJSONIsBuildable
+                 cTree
+
+toJSONConditionConfVar :: Condition ConfVar -> A.Value
+toJSONConditionConfVar x = case x of
+  Var c -> A.object ["tag" .= ("Var" :: String)
+                    ,"value" .= toJSONConfVar c]
+  Lit b -> A.object ["tag" .= ("Lit" :: String)
+                    ,"value" .= b]
+  CNot c -> A.object ["tag" .= ("CNot" :: String)
+                     ,"value" .= toJSONConditionConfVar c]
+  COr a b -> A.object ["tag" .= ("COr" :: String)
+                      ,"value" .= [toJSONConditionConfVar a
+                                  ,toJSONConditionConfVar b]
+                      ]
+  CAnd a b -> A.object ["tag" .= ("CAnd" :: String)
+                       ,"value" .= [toJSONConditionConfVar a
+                                   ,toJSONConditionConfVar b]
+                       ]
+
+fromJSONConditionConfVar :: A.Value -> A.Parser (Condition ConfVar)
+fromJSONConditionConfVar (A.Object v) = do
+  t <- v .: "tag"
+  case (t :: String) of
+    --"Var" -> Var <$> fromJSONConfVar =<< v .: "value"
+    "Lit" -> Lit <$> v .: "value"
+    -- "CNot" -> CNot <$> fromJSONConfVar =<< v .: "value"
+    -- TODO finish
+    -- "COr"  -> do
+    --    xs <- v .: "value"
+    --    case xs of
+    --      A.Array vs ->
+    -- (fromJSONConfVar =<< V.:)
+    --         "Var" -> Var <$> fromJSONConfVar =<< v .: "value"
+
+fromJSONDependencyTree :: A.Value -> A.Parser DependencyTree
+fromJSONDependencyTree v =
+  fromJSONCondTree fromJSONConditionConfVar fromJSONDependencyList fromJSONIsBuildable v
+
+fromJSONDependencyList :: A.Value -> A.Parser [Dependency]
+fromJSONDependencyList (A.Array xs) = mapM fromJSONDependency . Vec.toList $ xs
+
+toJSONConfVar :: ConfVar -> A.Value
+toJSONConfVar (OS o) = A.object ["tag" .= ("OS" :: String), "value" .= show o]
+toJSONConfVar (Arch a) = A.object ["tag" .= ("Arch" :: String), "value" .= show a]
+toJSONConfVar (Flag f) = A.object ["tag" .= ("Flag" :: String), "value" .= show f]
+toJSONConfVar (Impl cf vr) =
+  A.object ["tag" .= ("Impl" :: String)
+           , "value" .= A.object ["compilerflavor" .= show cf
+                                 ,"versionrange"   .= show vr]
+           ]
+
+fromJSONConfVar :: A.Value -> A.Parser ConfVar
+fromJSONConfVar (A.Object v) = do
+  t <- v .: "tag"
+  case (t :: String) of
+    "OS"   -> OS   <$> (read <$> v .: "value")
+    "Arch" -> Arch <$> (read <$> v .: "value")
+    "Flag" -> Flag <$> (read <$> v .: "value")
+    "Impl" -> Impl <$> (read <$> v .: "compilerflavor") <*> (read <$> v .: "versionrange")
+
+
+toJSONIsBuildable :: IsBuildable -> A.Value
+toJSONIsBuildable = A.String . T.pack . show
+
+fromJSONIsBuildable :: A.Value -> A.Parser IsBuildable
+fromJSONIsBuildable (A.String s) = maybe mzero return (readMaybe $ T.unpack s)
+fromJSONIsBuildable _          = mzero
