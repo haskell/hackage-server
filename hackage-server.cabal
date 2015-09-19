@@ -269,7 +269,8 @@ executable hackage-server
     tar        == 0.4.* && >= 0.4.0.1,
     async      == 2.0.*,
     cereal     >= 0.4,
-    safecopy   >= 0.6 && < 0.9,
+    -- safecopy lower bound bump brings in bug fix on TH, needed for GHC 7.10
+    safecopy   >= 0.8.5 && < 0.9,
     crypto-api >= 0.12 && < 0.14,
     pureMD5    >= 0.2,
     xhtml      >= 3000.1,
