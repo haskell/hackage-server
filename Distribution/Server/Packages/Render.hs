@@ -572,36 +572,41 @@ toJSONVersionRange :: VersionRange -> A.Value
 toJSONVersionRange v = A.object ["tag" .= tag, "value" .= val]
   where
   (tag,val) = case v of
-    AnyVersion -> ("Any" :: String, A.Null)
-    ThisVersion            v   -> ("This", toJSONVersion v)
-    LaterVersion           v   -> ("Later", toJSONVersion v)
-    EarlierVersion         v   -> ("Earlier", toJSONVersion v)
-    WildcardVersion        v   -> ("Wildcard", toJSONVersion v)
-    UnionVersionRanges     a b -> ("UnionRanges", A.Array (Vec.fromList
+    AnyVersion -> ("AnyVersion" :: String, A.Null)
+    ThisVersion            v   -> ("ThisVersion", toJSONVersion v)
+    LaterVersion           v   -> ("LaterVersion", toJSONVersion v)
+    EarlierVersion         v   -> ("EarlierVersion", toJSONVersion v)
+    WildcardVersion        v   -> ("WildcardVersion", toJSONVersion v)
+    UnionVersionRanges     a b -> ("UnionVersionRanges", A.Array (Vec.fromList
                                     [toJSONVersionRange a
                                     ,toJSONVersionRange b]))
-    IntersectVersionRanges a b -> ("IntersectRanges", A.Array (Vec.fromList
-                                    [toJSONVersionRange a
-                                    ,toJSONVersionRange b]))
-    VersionRangeParens     v   -> ("VersionParens", toJSONVersionRange v)
+    IntersectVersionRanges a b ->
+      ("IntersectVersionRanges", A.Array (Vec.fromList
+                                          [toJSONVersionRange a
+                                          ,toJSONVersionRange b]))
+    VersionRangeParens     v   -> ("VersionRangeParens", toJSONVersionRange v)
 
 fromJSONVersionRange :: A.Value -> A.Parser VersionRange
 fromJSONVersionRange (A.Object v) = do
   tag <- v .: "tag" :: A.Parser String
   val <- v .: "value"
   case tag of
-    "Any"           -> return AnyVersion
-    "Later"         -> LaterVersion       <$> (fromJSONVersion =<< v .: "value")
-    "Earlier"       -> EarlierVersion     <$> (fromJSONVersion =<< v .: "value")
-    "Wildcard"      -> WildcardVersion    <$> (fromJSONVersion =<< v .: "value")
-    "VersionParens" -> VersionRangeParens <$> (fromJSONVersionRange =<< v .: "value")
+    "AnyVersion"         -> return AnyVersion
+    "LaterVersion"       -> LaterVersion <$>
+      (fromJSONVersion =<< v .: "value")
+    "EarlierVersion"     -> EarlierVersion <$>
+      (fromJSONVersion =<< v .: "value")
+    "WildcardVersion"    -> WildcardVersion <$>
+      (fromJSONVersion =<< v .: "value")
+    "VersionRangeParens" -> VersionRangeParens <$>
+      (fromJSONVersionRange =<< v .: "value")
     _ -> case val of
            A.Array xArray -> case (tag, Vec.toList xArray) of
-             ("UnionRanges", [aVal,bVal]) ->
+             ("UnionVersionRanges", [aVal,bVal]) ->
                UnionVersionRanges
                <$> fromJSONVersionRange aVal
                <*> fromJSONVersionRange bVal
-             ("IntersectRanges", [aVal,bVal]) ->
+             ("IntersectVersionRanges", [aVal,bVal]) ->
                IntersectVersionRanges
                <$> fromJSONVersionRange aVal
                <*> fromJSONVersionRange bVal
