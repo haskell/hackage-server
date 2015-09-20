@@ -1,3 +1,4 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- | Handler helpers to use HTTP cache headers: @Cache-Control@ and @ETag@.
 --
@@ -13,7 +14,10 @@ module Distribution.Server.Framework.CacheControl (
 import Happstack.Server.Types
 import Happstack.Server.Monads
 
+import Data.Aeson
+import qualified Data.Aeson as A
 import Data.List
+import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as BS8
 import Data.Hashable
 import Numeric
@@ -57,7 +61,14 @@ setCacheControl ctls =
     setHeaderM "Cache-Control" hdr
 
 newtype ETag = ETag String
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, ToJSON, FromJSON)
+
+-- instance ToJSON ETag where
+--   toJSON (ETag s) = toJSON s
+--
+-- instance FromJSON ETag where
+--   parseJSON (A.String s) = return . ETag . T.unpack  $ s
+--   parseJSON _            = mzero
 
 formatETag :: ETag -> String
 formatETag (ETag etag) = '"' : etag ++ ['"']
@@ -76,4 +87,3 @@ handleETag expectedtag = do
 
 etagFromHash :: Hashable a => a -> ETag
 etagFromHash x = ETag (showHex (fromIntegral (hash x) :: Word) "")
-

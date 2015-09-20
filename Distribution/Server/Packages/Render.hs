@@ -31,6 +31,7 @@ import System.FilePath.Posix ((</>), (<.>))
 import Text.Read             (readMaybe)
 
 -- Cabal
+import Distribution.License
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
 import Distribution.Package
@@ -88,15 +89,15 @@ instance A.ToJSON PackageRender where
     , "maintainer"     .= rendMaintainer p
     , "category"       .= rendCategory p
     , "repoHeads"      .= map toJSONRepoTuple (rendRepoHeads p)
-    , "modules"        .= show ((rendModules p) Nothing) -- TODO probably wrong?
+    -- , "modules"        .= show ((rendModules p) Nothing) -- TODO probably wrong? Can't serialize a function anyway
     , "hasTarball"     .= rendHasTarball p
-    , "changeLog"      .= show (rendChangeLog p)
-    , "readme"         .= show (rendReadme p)
-    , "uploadInfo"     .= show (rendUploadInfo p)
-    , "updateInfo"     .= show (rendUpdateInfo p)
+    , "changeLog"      .= rendChangeLog p
+    , "readme"         .= rendReadme p
+    , "uploadInfo"     .= rendUploadInfo p
+    , "updateInfo"     .= rendUpdateInfo p
     , "pkgUri"         .= rendPkgUri p
-    , "flags"          .= map show (rendFlags p)
-    , "other"          .= show (rendOther p)
+    , "flags"          .= map toJSONFlag (rendFlags p)
+    , "other"          .= toJSONPackageDescription (rendOther p)
     ]
 
 doPackageRender :: Users.Users -> PkgInfo -> PackageRender
@@ -328,8 +329,8 @@ fromJSONVersion _          = mzero
 
 toJSONDependency :: Dependency -> A.Value
 toJSONDependency (Dependency pName vRange) =
-  A.object ["name"         .= unPackageName pName
-           ,"versionrange" .= show          vRange
+  A.object ["name"         .= unPackageName      pName
+           ,"versionrange" .= toJSONVersionRange vRange
            ]
 
 fromJSONDependency :: A.Value -> A.Parser Dependency
@@ -395,8 +396,6 @@ toJSONCondTree sV sC sA (CondNode a c comps) =
                           Nothing -> []
                           Just t  -> [toJSONCondTree sV sC sA t]
          in [sV cond, toJSONCondTree sV sC sA subTree] ++  mSubPart
-        --  in A.Array (Vec.fromList $ [sV cond, toJSONCondTree sV sC sA subTree]
-        --                           ++ mSubPart)
 
 fromJSONCondTree :: (A.Value -> A.Parser (Condition v))
                  -> (A.Value -> A.Parser c)
@@ -411,14 +410,7 @@ fromJSONCondTree toV toC toA (A.Object v) = do
     A.Array cs -> do
       comps <- mapM toTuple (Vec.toList cs)
       CondNode <$> (toA dataPart) <*> (toC consrPart) <*> pure (comps)
-  -- CondNode
-  -- <$> toA     =<< v .: "data"
-  -- <*> toC     =<< v .: "constraints"
-  -- <*> (mapM toTuple =<< v .: "components")
-  where --toTuple
-        --  :: A.Value
-        --  -> A.Parser (Condition v, CondTree v c a, Maybe (CondTree v c a))
-        toTuple (A.Array arr) = case Vec.toList arr of
+  where toTuple (A.Array arr) = case Vec.toList arr of
           [valCond, valSubTree, valMSubTree] ->
             (,,)
             <$> toV valCond
@@ -438,7 +430,7 @@ fromJSONMaybeCondTree :: (A.Value -> A.Parser (Condition v))
                       -> A.Parser (Maybe (CondTree v c a))
 fromJSONMaybeCondTree toV toC toA v = do
   parsedV <- A.parseJSON v :: A.Parser A.Value
-  parsedT <- fromJSONCondTree toV toC toA v -- :: A.Parser (CondTree v c a)
+  parsedT <- fromJSONCondTree toV toC toA v
   case parsedV of
     A.Null     -> return Nothing
     A.Object _ -> Just <$> return parsedT
@@ -471,28 +463,39 @@ fromJSONConditionConfVar :: A.Value -> A.Parser (Condition ConfVar)
 fromJSONConditionConfVar (A.Object v) = do
   t <- v .: "tag"
   case (t :: String) of
-    --"Var" -> Var <$> fromJSONConfVar =<< v .: "value"
+    "Var" -> fmap Var $ fromJSONConfVar =<< v.: "value"
     "Lit" -> Lit <$> v .: "value"
-    -- "CNot" -> CNot <$> fromJSONConfVar =<< v .: "value"
-    -- TODO finish
-    -- "COr"  -> do
-    --    xs <- v .: "value"
-    --    case xs of
-    --      A.Array vs ->
-    -- (fromJSONConfVar =<< V.:)
-    --         "Var" -> Var <$> fromJSONConfVar =<< v .: "value"
+    "CNot" -> fmap CNot $ fromJSONConditionConfVar =<< v .: "value"
+    _      -> do
+        xs <- v .: "value"
+        case xs of
+          A.Array vs -> case Vec.toList vs of
+            [condA, condB] ->
+              let constr = case t of
+                             "COr" -> return COr
+                             "CAnd" -> return CAnd
+                             _      -> mzero
+              in constr
+                 <*> fromJSONConditionConfVar condA
+                 <*> fromJSONConditionConfVar condB
+            _ -> mzero
+          _ -> mzero
 
 fromJSONDependencyTree :: A.Value -> A.Parser DependencyTree
-fromJSONDependencyTree v =
-  fromJSONCondTree fromJSONConditionConfVar fromJSONDependencyList fromJSONIsBuildable v
+fromJSONDependencyTree v = fromJSONCondTree
+  fromJSONConditionConfVar fromJSONDependencyList fromJSONIsBuildable v
 
 fromJSONDependencyList :: A.Value -> A.Parser [Dependency]
 fromJSONDependencyList (A.Array xs) = mapM fromJSONDependency . Vec.toList $ xs
+fromJSONDependencyList _            = mzero
 
 toJSONConfVar :: ConfVar -> A.Value
-toJSONConfVar (OS o) = A.object ["tag" .= ("OS" :: String), "value" .= show o]
-toJSONConfVar (Arch a) = A.object ["tag" .= ("Arch" :: String), "value" .= show a]
-toJSONConfVar (Flag f) = A.object ["tag" .= ("Flag" :: String), "value" .= show f]
+toJSONConfVar (OS o) = A.object ["tag" .= ("OS" :: String)
+                                ,"value" .= show o]
+toJSONConfVar (Arch a) = A.object ["tag" .= ("Arch" :: String)
+                                  ,"value" .= show a]
+toJSONConfVar (Flag f) = A.object ["tag" .= ("Flag" :: String)
+                                  ,"value" .= show f]
 toJSONConfVar (Impl cf vr) =
   A.object ["tag" .= ("Impl" :: String)
            , "value" .= A.object ["compilerflavor" .= show cf
@@ -507,7 +510,7 @@ fromJSONConfVar (A.Object v) = do
     "Arch" -> Arch <$> (read <$> v .: "value")
     "Flag" -> Flag <$> (read <$> v .: "value")
     "Impl" -> Impl <$> (read <$> v .: "compilerflavor") <*> (read <$> v .: "versionrange")
-
+fromJSONConfVar _ = mzero
 
 toJSONIsBuildable :: IsBuildable -> A.Value
 toJSONIsBuildable = A.String . T.pack . show
@@ -515,3 +518,119 @@ toJSONIsBuildable = A.String . T.pack . show
 fromJSONIsBuildable :: A.Value -> A.Parser IsBuildable
 fromJSONIsBuildable (A.String s) = maybe mzero return (readMaybe $ T.unpack s)
 fromJSONIsBuildable _          = mzero
+
+toJSONFlagName :: FlagName -> A.Value
+toJSONFlagName (FlagName n) = A.String (T.pack n)
+
+fromJSONFlagName :: A.Value -> A.Parser FlagName
+fromJSONFlagName (A.String s) = return . FlagName . T.unpack $ s
+
+toJSONFlag :: Flag -> A.Value
+toJSONFlag (MkFlag n d deflt m) =
+  A.object ["name" .= toJSONFlagName n
+           ,"description" .= d
+           ,"default" .= deflt
+           ,"manual" .= m
+           ]
+
+fromJSONFlag :: A.Value -> A.Parser Flag
+fromJSONFlag (A.Object v) =
+  MkFlag
+  <$> (fromJSONFlagName =<< v .: "name")
+  <*> v .: "description"
+  <*> v .: "default"
+  <*> v .: "manual"
+fromJSONFlag _ = mzero
+
+toJSONPackageDescription :: PackageDescription -> A.Value
+toJSONPackageDescription d =
+  A.object [ "package" .= toJSONPackageIdentifier (package d)
+           , "license" .= toJSONLicense (license d)
+           , "licenseFiles" .= licenseFiles d
+           , "copyright" .= copyright d
+           , "maintainer" .= maintainer d
+           , "author" .= author d
+           , "stability" .= stability d
+           , "testedwith" .= show (testedWith d)
+           , "homepage" .= homepage d
+           , "pkgurl" .= pkgUrl d
+           , "bugreports" .= bugReports d
+           , "sourcerepos" .= map toJSONSourceRepo (sourceRepos d)
+           , "synopsis" .= synopsis d
+           , "description" .= description d
+           , "category" .= category d
+           , "customfieldspd" .= customFieldsPD d
+           , "builddepends" .= map toJSONDependency (buildDepends d)
+           , "specversionraw" .= show (specVersionRaw d)
+           , "buildtype" .= maybe A.Null toJSONBuildType (buildType d)
+           -- lirbary, exe, tests, benchmarks, all seem to be evaluating
+           -- to [] in my tests. why?
+           , "library" .= show  (library d)        -- These four are shown
+           , "executables" .= show (executables d) -- instead of json'd
+           , "testsuites" .= show  (testSuites d)  -- too much typing
+           , "benchmarks" .= show  (benchmarks d)  -- for now. TODO
+           , "datafiles" .= dataFiles d
+           , "datadir" .= dataDir d
+           , "extraSrcFiles" .= extraSrcFiles d
+           , "extraTmpFiles" .= extraTmpFiles d
+           , "extraDocFiles" .= extraDocFiles d
+           ]
+
+toJSONLicense :: License -> A.Value
+toJSONLicense = A.String . T.pack . show
+
+fromJSONLicense :: A.Value -> A.Parser License
+fromJSONLicense (A.String s) = return . read . T.unpack $ s
+
+toJSONBuildType :: BuildType -> A.Value
+toJSONBuildType = A.String . T.pack . show
+
+fromJSONBuildType :: A.Value -> A.Parser BuildType
+fromJSONBuildType (A.String s) = return . read . T.unpack $ s
+
+toJSONBenchmark :: Benchmark -> A.Value
+toJSONBenchmark (Benchmark n i b e) =
+  A.object ["name" .= n
+           ,"interface" .= show i
+           -- ,"buildinfo" .= b todo
+           ,"enabled" .= e
+           ]
+
+toJSONVersionRange :: VersionRange -> A.Value
+toJSONVersionRange v = A.object ["tag" .= tag, "value" .= val]
+  where
+  (tag,val) = case v of
+    AnyVersion -> ("Any" :: String, A.Null)
+    ThisVersion            v   -> ("This", toJSONVersion v)
+    LaterVersion           v   -> ("Later", toJSONVersion v)
+    EarlierVersion         v   -> ("Earlier", toJSONVersion v)
+    WildcardVersion        v   -> ("Wildcard", toJSONVersion v)
+    UnionVersionRanges     a b -> ("UnionRanges", A.Array (Vec.fromList
+                                    [toJSONVersionRange a
+                                    ,toJSONVersionRange b]))
+    IntersectVersionRanges a b -> ("IntersectRanges", A.Array (Vec.fromList
+                                    [toJSONVersionRange a
+                                    ,toJSONVersionRange b]))
+    VersionRangeParens     v   -> ("VersionParens", toJSONVersionRange v)
+
+fromJSONVersionRange :: A.Value -> A.Parser VersionRange
+fromJSONVersionRange (A.Object v) = do
+  tag <- v .: "tag" :: A.Parser String
+  val <- v .: "value"
+  case tag of
+    "Any"           -> return AnyVersion
+    "Later"         -> LaterVersion       <$> (fromJSONVersion =<< v .: "value")
+    "Earlier"       -> EarlierVersion     <$> (fromJSONVersion =<< v .: "value")
+    "Wildcard"      -> WildcardVersion    <$> (fromJSONVersion =<< v .: "value")
+    "VersionParens" -> VersionRangeParens <$> (fromJSONVersionRange =<< v .: "value")
+    _ -> case val of
+           A.Array xArray -> case (tag, Vec.toList xArray) of
+             ("UnionRanges", [aVal,bVal]) ->
+               UnionVersionRanges
+               <$> fromJSONVersionRange aVal
+               <*> fromJSONVersionRange bVal
+             ("IntersectRanges", [aVal,bVal]) ->
+               IntersectVersionRanges
+               <$> fromJSONVersionRange aVal
+               <*> fromJSONVersionRange bVal
+             _ -> mzero

@@ -24,6 +24,7 @@ import Data.Aeson (ToJSON, FromJSON)
 import Data.SafeCopy (base, extension, deriveSafeCopy, Migrate(..))
 import Data.Typeable (Typeable)
 import Data.Hashable
+import GHC.Generics
 
 
 newtype UserId = UserId Int
@@ -41,10 +42,30 @@ data UserInfo = UserInfo {
 data UserStatus = AccountEnabled  UserAuth
                 | AccountDisabled (Maybe UserAuth)
                 | AccountDeleted
-    deriving (Eq, Show, Typeable)
+    deriving (Eq, Show, Typeable, Generic)
+
+-- This ToJSON instance ignores the UserAuth component
+-- so that password hashes are harder to leak
+instance ToJSON UserStatus where
+  toJSON (AccountEnabled _)  = String "AccountEnabled"
+  toJSON (AccountDisabled _) = String "AccountDisabled"
+  toJSON AccountDeleted      = String "AccountDeleted"
+
+emptyAuth :: UserAuth
+emptyAuth = UserAuth (PasswdHash "")
+
+instance FromJSON UserStatus where
+  parseJSON (String "AccountEnabled")  =
+    return $ AccountEnabled emptyAuth
+  parseJSON (String "AccountDisabled") =
+    return $ AccountDisabled $ Just emptyAuth
+  parseJSON (String "AccountDeleted")  =
+    return $ AccountDeleted
+
 
 newtype UserAuth = UserAuth PasswdHash
     deriving (Show, Eq, Typeable)
+
 
 isActiveAccount :: UserStatus -> Bool
 isActiveAccount (AccountEnabled  _) = True
