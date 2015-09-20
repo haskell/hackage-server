@@ -1,4 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, TemplateHaskell #-}
+{-# LANGUAGE DeriveGeneric, OverloadedStrings #-}
+
 module Distribution.Server.Users.Types (
     module Distribution.Server.Users.Types,
     module Distribution.Server.Framework.AuthTypes
@@ -15,9 +17,10 @@ import qualified Text.PrettyPrint          as Disp
 import qualified Data.Char as Char
 
 import Control.Applicative ((<$>))
-import Data.Aeson (ToJSON, FromJSON)
+import Data.Aeson
 import Data.SafeCopy (base, deriveSafeCopy)
 import Data.Typeable (Typeable)
+import GHC.Generics
 
 
 newtype UserId = UserId Int
@@ -29,15 +32,38 @@ newtype UserName  = UserName String
 data UserInfo = UserInfo {
                   userName   :: !UserName,
                   userStatus :: !UserStatus
-                } deriving (Eq, Show, Typeable)
+                } deriving (Eq, Show, Typeable, Generic)
+
+instance ToJSON UserInfo where
+instance FromJSON UserInfo where
 
 data UserStatus = AccountEnabled  UserAuth
                 | AccountDisabled (Maybe UserAuth)
                 | AccountDeleted
-    deriving (Eq, Show, Typeable)
+    deriving (Eq, Show, Typeable, Generic)
+
+-- This ToJSON instance ignores the UserAuth component
+-- so that password hashes are harder to leak
+instance ToJSON UserStatus where
+  toJSON (AccountEnabled _)  = String "AccountEnabled"
+  toJSON (AccountDisabled _) = String "AccountDisabled"
+  toJSON AccountDeleted      = String "AccountDeleted"
+
+emptyAuth :: UserAuth
+emptyAuth = UserAuth (PasswdHash "")
+
+instance FromJSON UserStatus where
+  parseJSON (String "AccountEnabled")  =
+    return $ AccountEnabled emptyAuth
+  parseJSON (String "AccountDisabled") =
+    return $ AccountDisabled $ Just emptyAuth
+  parseJSON (String "AccountDeleted")  =
+    return $ AccountDeleted
+
 
 newtype UserAuth = UserAuth PasswdHash
     deriving (Show, Eq, Typeable)
+
 
 isActiveAccount :: UserStatus -> Bool
 isActiveAccount (AccountEnabled  _) = True
