@@ -66,7 +66,6 @@ import Distribution.Text (display)
 import Distribution.Package
 import Distribution.Version (Version(..))
 
-
 -- | The core feature, responsible for the main package index and all access
 -- and modifications of it.
 --

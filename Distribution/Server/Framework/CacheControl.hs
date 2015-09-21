@@ -13,12 +13,9 @@ module Distribution.Server.Framework.CacheControl (
 import Happstack.Server.Types
 import Happstack.Server.Monads
 
-import Data.Aeson
-import qualified Data.Aeson as A
 import Data.List
 import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as BS8
-
 
 data CacheControl = MaxAge Int | Public | Private | NoCache | NoTransform
 
@@ -58,13 +55,6 @@ setCacheControl ctls =
 
 newtype ETag = ETag String
   deriving (Eq, Ord, Show, ToJSON, FromJSON)
-
--- instance ToJSON ETag where
---   toJSON (ETag s) = toJSON s
---
--- instance FromJSON ETag where
---   parseJSON (A.String s) = return . ETag . T.unpack  $ s
---   parseJSON _            = mzero
 
 formatETag :: ETag -> String
 formatETag (ETag etag) = '"' : etag ++ ['"']

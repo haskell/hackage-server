@@ -31,7 +31,6 @@ data StringTable id
                !(A.UArray Int Word32)  -- offset table
   deriving (Show, Typeable)
 
-
 $(deriveSafeCopy 0 'base ''StringTable)
 
 instance MemSize (StringTable id) where
