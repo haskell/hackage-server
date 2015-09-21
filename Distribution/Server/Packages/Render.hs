@@ -14,7 +14,7 @@ module Distribution.Server.Packages.Render (
   , categorySplit,
   ) where
 
-import Data.Maybe (catMaybes, isJust, maybeToList)
+import Control.Applicative ((<$>),(<*>))
 import Control.Monad (guard, mzero)
 import Control.Arrow ((&&&), second)
 import           Data.Aeson ((.=),(.:),(.:?))
@@ -22,6 +22,7 @@ import qualified Data.Aeson as A
 import qualified Data.Aeson.Types as A
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
+import Data.Maybe (catMaybes, isJust, maybeToList)
 import qualified Data.Vector as Vec
 import Data.Ord (comparing)
 import Data.List (sortBy, intercalate)
