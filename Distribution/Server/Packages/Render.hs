@@ -14,7 +14,7 @@ module Distribution.Server.Packages.Render (
   , categorySplit,
   ) where
 
-import Control.Applicative ((<$>),(<*>))
+import Control.Applicative ((<$>), (<*>), pure)
 import Control.Monad (guard, mzero)
 import Control.Arrow (second, (&&&))
 import Data.Aeson ((.=),(.:),(.:?))
