@@ -18,7 +18,7 @@ module Distribution.Server.Features.Core (
   ) where
 
 -- stdlib
-import Data.Aeson (Value(..))
+import Data.Aeson ((.=), Value(..), ToJSON(..), object)
 import Data.ByteString.Lazy (ByteString)
 import Data.Maybe (isNothing)
 import Data.Time.Clock (UTCTime, getCurrentTime)
@@ -59,8 +59,6 @@ import Data.Maybe (maybeToList)
 import Distribution.Text (display)
 import Distribution.Package
 import Distribution.Version (Version(..))
-
-import Data.Aeson ((.=), Value(..), ToJSON(..), object)
 
 -- | The core feature, responsible for the main package index and all access
 -- and modifications of it.

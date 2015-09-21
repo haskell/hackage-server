@@ -66,7 +66,6 @@ instance FromJSON UserStatus where
 newtype UserAuth = UserAuth PasswdHash
     deriving (Show, Eq, Typeable)
 
-
 isActiveAccount :: UserStatus -> Bool
 isActiveAccount (AccountEnabled  _) = True
 isActiveAccount (AccountDisabled _) = True
