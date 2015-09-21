@@ -14,7 +14,7 @@ author:       Duncan Coutts <duncan@community.haskell.org>,
               Matthew Gruen <wikigracenotes@gmail.com>
 maintainer:   Duncan Coutts <duncan@community.haskell.org>,
               Matthew Gruen <wikigracenotes@gmail.com>
-copyright:    2008-2014 Duncan Coutts,
+copyright:    2008-2015 Duncan Coutts,
               2012-2013 Edsko de Vries,
               2013 Google Inc.,
               2010-2011 Matthew Gruen,
@@ -124,6 +124,7 @@ executable hackage-server
     Distribution.Server.Packages.Render
     Distribution.Server.Packages.ChangeLog
     Distribution.Server.Packages.Readme
+    Distribution.Server.Packages.Metadata
 
     Distribution.Server.Pages.Distributions
     Distribution.Server.Pages.Group
@@ -148,19 +149,27 @@ executable hackage-server
 
     Distribution.Server.Util.Histogram
     Distribution.Server.Util.CountingMap
-    Distribution.Server.Util.Index
-    Distribution.Server.Util.NameIndex
     Distribution.Server.Util.Parse
     Distribution.Server.Util.ServeTarball
     Distribution.Server.Util.TarIndex
     Distribution.Server.Util.GZip
     Distribution.Server.Util.ContentType
     Distribution.Server.Util.SigTerm
+    Distribution.Server.Util.ReadDigest
 
     Distribution.Server.Features
     Distribution.Server.Features.Core
     Distribution.Server.Features.Core.State
     Distribution.Server.Features.Core.Backup
+    Distribution.Server.Features.Security
+    Distribution.Server.Features.Security.Backup
+    Distribution.Server.Features.Security.Cache
+    Distribution.Server.Features.Security.FileInfo
+    Distribution.Server.Features.Security.Layout
+    Distribution.Server.Features.Security.Migration
+    Distribution.Server.Features.Security.Orphans
+    Distribution.Server.Features.Security.ResponseContentTypes
+    Distribution.Server.Features.Security.State
     Distribution.Server.Features.Mirror
     Distribution.Server.Features.Upload
     Distribution.Server.Features.Upload.State
@@ -290,7 +299,15 @@ executable hackage-server
     friendly-time >= 0.4 && < 0.5,
     cheapskate >= 0.1,
     blaze-html >= 0.7,
-    xmlgen     >= 0.6
+    xmlgen     >= 0.6,
+    -- TODO: hackage-security relies on network-uri. Not sure what the
+    -- reason behind the 'network-uri' build time flag is, but if it's
+    -- crucial that we may not rely on it, then we also need to make this
+    -- possibly in hackage-security, or else make security optional
+    hackage-security,
+    ed25519,
+    SHA,
+    binary
 
   if ! flag(minimal)
     build-depends:
@@ -324,11 +341,20 @@ executable hackage-mirror
     Distribution.Client
     Distribution.Client.Cron
     Distribution.Client.UploadLog
+    Distribution.Client.Index
+    Distribution.Client.Mirror.CmdLine
+    Distribution.Client.Mirror.Config
+    Distribution.Client.Mirror.Repo.Hackage2
+    Distribution.Client.Mirror.Repo.Local
+    Distribution.Client.Mirror.Repo.Util
+    Distribution.Client.Mirror.Repo.Types
+    Distribution.Client.Mirror.Repo
+    Distribution.Client.Mirror.Session
+    Distribution.Client.Mirror.State
     Distribution.Server.Users.Types
-    Distribution.Server.Util.Index
     Distribution.Server.Util.Merge
   build-depends:
-    base,
+    base, transformers,
     containers, array, vector, bytestring, text, pretty,
     filepath, directory,
     time,     random,
@@ -337,8 +363,21 @@ executable hackage-mirror
     network,  HTTP >= 4000.2.11,
     Cabal,
     safecopy, cereal, binary, mtl,
-    unix, aeson
-  default-language: Haskell2010
+    unix, aeson,
+    SHA,
+    parsec,
+    process >= 1.2.0,
+    hackage-security,
+    hackage-security-HTTP
+  default-language:   Haskell2010
+  default-extensions: FlexibleContexts
+                      FlexibleInstances
+                      GeneralizedNewtypeDeriving
+                      MultiParamTypeClasses
+                      PatternGuards
+                      RecordWildCards
+  other-extensions:   CPP
+
   ghc-options: -Wall -fwarn-tabs
 
   if flag(network-uri)
@@ -352,8 +391,8 @@ executable hackage-build
   main-is: BuildClient.hs
   other-modules:
     Distribution.Client
+    Distribution.Client.Index
     Distribution.Server.Users.Types
-    Distribution.Server.Util.Index
     Distribution.Server.Util.Merge
   build-depends:
     base,
@@ -368,6 +407,7 @@ executable hackage-build
     aeson >= 0.6.1.0,
     random,
     unix,
+    SHA,
     -- Runtime dependency only:
     hscolour >= 1.8
   default-language: Haskell2010
@@ -388,7 +428,7 @@ executable hackage-import
     Distribution.Client.DistroMap
     Distribution.Client.HtPasswdDb
     Distribution.Client.ParseApacheLogs
-    Distribution.Client.PkgIndex
+    Distribution.Client.Index
     Distribution.Client.TagsFile
     Distribution.Client.UserAddressesDb
   build-depends:
@@ -473,3 +513,22 @@ Test-Suite CreateUserTest
     build-depends: network-uri >= 2.6, network >= 2.6
   else
     build-depends: network-uri < 2.6, network < 2.6
+
+Test-Suite PackageTests
+    type:           exitcode-stdio-1.0
+    main-is:        PackageTestMain.hs
+    hs-source-dirs: ., tests
+    default-language: Haskell2010
+    ghc-options:    -threaded -Wall -fno-warn-orphans
+    build-depends:  base,
+                    bytestring,
+                    filepath,
+                    mtl,
+                    tar,
+                    text,
+                    time,
+                    zlib,
+                    Cabal,
+                    test-framework,
+                    test-framework-hunit,
+                    HUnit

@@ -27,6 +27,7 @@ module Distribution.Server.Packages.PackageIndex (
 
     -- * Queries
     indexSize,
+    numPackageVersions,
     packageNames,
 
     -- ** Precise lookups
@@ -339,6 +340,11 @@ searchByNameSubstring (PackageIndex m) searchterm =
 indexSize :: Package pkg => PackageIndex pkg -> Int
 indexSize (PackageIndex m) = Map.size m
 
+-- | The number of package versions
+-- (i.e., we should have @length . allPackages == numPackageVersions@)
+numPackageVersions ::PackageIndex pkg -> Int
+numPackageVersions (PackageIndex m) = sum . map (length . snd) $ Map.toList m
+
 -- | Get an ascending list of package names in the index.
 packageNames :: Package pkg => PackageIndex pkg -> [PackageName]
 packageNames (PackageIndex m) = Map.keys m
@@ -350,4 +356,3 @@ instance (Package pkg, SafeCopy pkg) => SafeCopy (PackageIndex pkg) where
   getCopy = contain $ do
     packages <- safeGet
     return $ fromList packages
-

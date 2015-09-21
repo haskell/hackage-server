@@ -2,6 +2,7 @@
 module Distribution.Client
   ( -- * Command line handling
     validateHackageURI
+  , validateHackageURI'
   , validatePackageIds
     -- * Fetching info from source and destination servers
   , PkgIndexInfo(..)
@@ -31,8 +32,8 @@ import Network.Browser
 import Network.URI (URI(..), URIAuth(..), parseURI)
 
 import Distribution.Client.UploadLog as UploadLog (read, Entry(..))
+import Distribution.Client.Index as PackageIndex (read)
 import Distribution.Server.Users.Types (UserId(..), UserName(UserName))
-import Distribution.Server.Util.Index as PackageIndex (read)
 import Distribution.Server.Util.Merge
 import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.Package
@@ -67,11 +68,14 @@ import qualified System.FilePath.Posix as Posix
 
 validateHackageURI :: String -> Either String URI
 validateHackageURI str = case parseURI str of
-  Nothing                          -> Left ("invalid URL " ++ str)
-  Just uri
-    | uriScheme uri /= "http:"     -> Left ("only http URLs are supported " ++ str)
-    | isNothing (uriAuthority uri) -> Left ("server name required in URL " ++ str)
-    | otherwise                    -> Right uri
+    Nothing  -> Left ("invalid URL " ++ str)
+    Just uri -> validateHackageURI' uri
+
+validateHackageURI' :: URI -> Either String URI
+validateHackageURI' uri
+    | uriScheme uri /= "http:"     = Left $ "only http URLs are supported " ++ show uri
+    | isNothing (uriAuthority uri) = Left $ "server name required in URL " ++ show uri
+    | otherwise                    = Right uri
 
 validatePackageIds :: [String] -> Either String [PackageId]
 validatePackageIds pkgstrs =
@@ -116,7 +120,7 @@ downloadOldIndex uri cacheDir = do
 
       pkgids <- withFile indexFile ReadMode $ \hnd -> do
         content <- BS.hGetContents hnd
-        case PackageIndex.read (\pkgid _ -> pkgid) (GZip.decompressNamed indexFile content) of
+        case PackageIndex.read (\pkgid _ -> pkgid) (const True) (GZip.decompressNamed indexFile content) of
           Right pkgs     -> return pkgs
           Left  theError ->
               die $ "Error parsing index at " ++ show uri ++ ": " ++ theError
@@ -170,7 +174,7 @@ readNewIndex :: FilePath -> HttpSession [PkgIndexInfo]
 readNewIndex cacheDir = do
     liftIO $ withFile indexFile ReadMode $ \hnd -> do
       content <- BS.hGetContents hnd
-      case PackageIndex.read selectDetails (GZip.decompressNamed indexFile content) of
+      case PackageIndex.read selectDetails (const True) (GZip.decompressNamed indexFile content) of
         Left theError ->
             error ("Error parsing index at " ++ show indexFile ++ ": "
                 ++ theError)

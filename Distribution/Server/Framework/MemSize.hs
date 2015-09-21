@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 module Distribution.Server.Framework.MemSize (
   MemSize(..),
   memSizeMb, memSizeKb,
@@ -15,6 +16,8 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.IntSet as IntSet
 import Data.IntSet (IntSet)
+import Data.Sequence (Seq)
+import qualified Data.Foldable as Foldable
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
@@ -29,6 +32,8 @@ import Distribution.PackageDescription (FlagName(..))
 import Distribution.Version  (Version(..), VersionRange, foldVersionRange')
 import Distribution.System   (Arch(..), OS(..))
 import Distribution.Compiler (CompilerFlavor(..), CompilerId(..))
+
+import qualified Data.Digest.Pure.SHA as SHA
 
 -------------------------------------------------------------------------------
 -- Mem size class and instances
@@ -141,6 +146,9 @@ instance MemSize a => MemSize (Set a) where
 instance MemSize IntSet where
   memSize s = 4 * IntSet.size s --estimate
 
+instance MemSize a => MemSize (Seq a) where
+  memSize s = sum [ 5 + memSize v | v <- Foldable.toList s ] --estimate
+
 instance MemSize BS.ByteString where
   memSize s = let (w,t) = divMod (BS.length s) wordSize
                in 5 + w + signum t
@@ -200,3 +208,9 @@ instance MemSize CompilerFlavor where
 
 instance MemSize CompilerId where
     memSize (CompilerId a b) = memSize2 a b
+
+instance MemSize (SHA.Digest SHA.SHA256State) where
+    memSize _ = memSize (undefined :: SHA.SHA256State) -- TODO: Verify
+
+instance MemSize (SHA.SHA256State) where
+    memSize _ = 8 * memSize (undefined :: Word32)

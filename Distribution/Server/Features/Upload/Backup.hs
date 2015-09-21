@@ -48,7 +48,7 @@ importMaintainers = concatM . map fromRecord . drop 2
     fromRecord :: Record -> Map PackageName UserIdSet -> Restore (Map PackageName UserIdSet)
     fromRecord (packageStr:idStr) mains = do
         pkgname <- parseText "package name" packageStr
-        ids <- mapM (parseRead "user id") idStr
+        ids <- mapM (parseText "user id") idStr
         return (Map.insert pkgname (UserIdSet.fromList ids) mains)
     fromRecord x _ = fail $ "Invalid package maintainer record: " ++ show x
 
@@ -63,4 +63,3 @@ maintToCSV users = [showVersion pkgCSVVer]:pkgCSVKey:
   where
     pkgCSVKey = ["package", "maintainers"]
     pkgCSVVer = Version [0,1] ["unstable"]
-

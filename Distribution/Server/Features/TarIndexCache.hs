@@ -19,7 +19,7 @@ import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Features.TarIndexCache.State
 import Distribution.Server.Features.Users
-import Distribution.Server.Packages.Types (PkgTarball(..), PkgInfo(..), pkgLatestTarball)
+import Distribution.Server.Packages.Types
 import Data.TarIndex
 import qualified Data.TarIndex as TarIndex
 import Distribution.Server.Util.ServeTarball (constructTarIndex)
@@ -138,7 +138,7 @@ tarIndexCacheFeature ServerEnv{serverBlobStore = store}
 
     packageTarball :: PkgInfo -> IO (Either String (FilePath, ETag, TarIndex))
     packageTarball pkginfo
-      | Just (pkgTarball, _uploadinfo) <- pkgLatestTarball pkginfo = do
+      | Just (pkgTarball, _uploadinfo, _revNo) <- pkgLatestTarball pkginfo = do
         let blobid = pkgTarballNoGz pkgTarball
             fp     = BlobStorage.filepath store blobid
             etag   = BlobStorage.blobETag blobid
