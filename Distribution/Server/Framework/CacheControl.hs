@@ -13,6 +13,7 @@ module Distribution.Server.Framework.CacheControl (
 import Happstack.Server.Types
 import Happstack.Server.Monads
 
+import Data.Aeson (ToJSON, FromJSON)
 import Data.List
 import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as BS8
