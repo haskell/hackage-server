@@ -345,6 +345,7 @@ ul.links li form button:hover {
   height: 80%;
   top: 10%;
   padding: 0;
+  max-width: 90%;
 }
 
 #synopsis .caption {
