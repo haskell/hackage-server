@@ -192,7 +192,9 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
     candidatesCoreResource = fix $ \r -> CoreResource {
 -- TODO: There is significant overlap between this definition and the one in Core
-        corePackagesPage = resourceAt "/packages/candidates/.:format"
+        corePackagesPage = (resourceAt "/packages/candidates/.:format") {
+            resourcePost = [("txt", \_ -> postCandidatePlain)]
+          }
       , corePackagePage = resourceAt "/package/:package/candidate.:format"
       , coreCabalFile = (resourceAt "/package/:package/candidate/:cabal.cabal") {
             resourceDesc = [(GET, "Candidate .cabal file")]
@@ -244,6 +246,11 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     postCandidate = do
         pkgInfo <- uploadCandidate (const True)
         seeOther (corePackageIdUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
+
+    postCandidatePlain :: ServerPartE Response
+    postCandidatePlain = do
+        pkgInfo <- uploadCandidate (const True)
+        ok $ toResponse $ unlines $ candWarnings pkgInfo
 
     -- POST to /:package/candidates/
     postPackageCandidate :: DynamicPath -> ServerPartE Response
