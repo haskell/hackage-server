@@ -29,7 +29,7 @@ import Distribution.Version
 import Distribution.Text        (display)
 import Text.XHtml.Strict hiding (p, name, title, content)
 
-import Data.Monoid              (Monoid(..))
+import Data.Monoid              (Monoid(..), (<>))
 import Data.Maybe               (fromMaybe, maybeToList, isJust, mapMaybe)
 import Data.List                (intersperse, intercalate)
 import Control.Arrow            (second)
@@ -37,8 +37,9 @@ import System.FilePath.Posix    ((</>), (<.>), takeFileName)
 import Data.Time.Locale.Compat  (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
 import System.FilePath.Posix    (takeExtension)
+import Network.URI              (isRelativeReference)
 
-import qualified Cheapskate      as Markdown (markdown, Options(..))
+import qualified Cheapskate      as Markdown (markdown, Options(..), Inline(Link), walk)
 import qualified Cheapskate.Html as Markdown (renderDoc)
 
 import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
@@ -126,18 +127,25 @@ readmeSection :: PackageRender -> Maybe BS.ByteString -> [Html]
 readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
                             , rendPkgId  = pkgid }
               (Just content) =
-    [ h2 ! [identifier "readme"] << ("Readme for " ++ display pkgid)
+    [ h2 ! [identifier "readme"] << ("Readme for " ++ name)
     , thediv ! [theclass "embedded-author-content"]
             << if supposedToBeMarkdown filename
-                 then renderMarkdown content
+                 then renderMarkdown (T.pack name) content
                  else pre << unpackUtf8 content
-    ]
+    ] where
+      name = display pkgid
 readmeSection _ _ = []
 
-renderMarkdown :: BS.ByteString -> Html
-renderMarkdown = primHtml . Blaze.renderHtml
-               . Markdown.renderDoc . Markdown.markdown opts
-               . T.decodeUtf8With T.lenientDecode . BS.toStrict
+updateRelativeLinks name (Markdown.Link inls url title) =
+  Markdown.Link inls url' title
+  where url' = if isRelativeReference $ T.unpack url then name <> T.pack "/src" <> url else url
+updateRelativeLinks _ x = x
+
+renderMarkdown :: T.Text -> BS.ByteString -> Html
+renderMarkdown name = primHtml . Blaze.renderHtml
+               . Markdown.renderDoc . Markdown.walk (updateRelativeLinks name)
+               . Markdown.markdown opts . T.decodeUtf8With T.lenientDecode
+               . BS.toStrict
   where
     opts =
       Markdown.Options
