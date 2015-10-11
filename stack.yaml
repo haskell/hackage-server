@@ -1,0 +1,10 @@
+resolver: lts-3.8
+extra-deps:
+    - cheapskate-0.1.0.4
+    - ed25519-0.0.4.0
+    - friendly-time-0.4
+    - hackage-security-0.3.0.0
+    - hackage-security-HTTP-0.1.0.2
+    - rss-3000.2.0.5
+    - snowball-1.0.0.1
+    - tokenize-0.3.0
