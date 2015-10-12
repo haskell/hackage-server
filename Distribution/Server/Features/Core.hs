@@ -21,14 +21,15 @@ module Distribution.Server.Features.Core (
 import Data.Aeson ((.=), Value(..), ToJSON(..), object)
 import Data.ByteString.Lazy (ByteString)
 import Data.Maybe (isNothing)
-import Data.Time.Clock (UTCTime, getCurrentTime)
-import Data.Time.Format (formatTime)
-import Data.Time.Locale.Compat (defaultTimeLocale)
 import qualified Codec.Compression.GZip as GZip
 import qualified Data.Foldable          as Foldable
 import qualified Data.HashMap.Strict    as HashMap
 import qualified Data.Text              as Text
+import Data.Time.Clock (UTCTime, getCurrentTime)
+import Data.Time.Format (formatTime)
+import Data.Time.Locale.Compat (defaultTimeLocale)
 import qualified Data.Vector            as Vec
+
 
 -- hackage
 import Distribution.Server.Features.Core.Backup
@@ -44,7 +45,6 @@ import qualified Distribution.Server.Packages.Render as Render
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Types (UserId, userName)
 import Distribution.Server.Users.Users (userIdToName, lookupUserId)
-import qualified Distribution.Server.Framework.BlobStorage          as BlobStorage
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import qualified Distribution.Server.Packages.Index                 as Packages.Index
 import qualified Distribution.Server.Packages.PackageIndex          as PackageIndex
@@ -54,6 +54,11 @@ import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (maybeToList)
+import Distribution.Server.Packages.PackageIndex (PackageIndex)
+import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
+
+import qualified Distribution.Server.Packages.Index                 as Packages.Index
+import qualified Distribution.Server.Packages.PackageIndex          as PackageIndex
 
 -- Cabal
 import Distribution.Text (display)
