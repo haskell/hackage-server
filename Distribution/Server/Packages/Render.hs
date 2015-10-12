@@ -642,7 +642,6 @@ toJSONBenchmark (Benchmark n i b e) =
 
 toJSONVersionRange :: VersionRange -> A.Value
 toJSONVersionRange vr = let toJ = toJSONVersion
-                            toJR = toJSONVersionRange
                             t    = (id :: T.Text -> T.Text)
                         in
   foldVersionRange'
