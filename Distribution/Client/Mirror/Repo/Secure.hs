@@ -98,7 +98,7 @@ downloadIndex rep Sec.Cache{..} rootKeys threshold =
       _hasUpdates <- liftIO $ do
         requiresBootstrap <- Sec.requiresBootstrap rep
         when requiresBootstrap $ Sec.bootstrap rep rootKeys threshold
-        Sec.checkForUpdates rep Nothing -- Sec.CheckExpiry
+        Sec.checkForUpdates rep Sec.CheckExpiry
       -- TODO: Is this hasUpdates values useful anywhere?
       readIndex (show rep) indexPath
   where
