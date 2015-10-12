@@ -651,10 +651,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
               ]
       return . toResponse $ Array (Vec.fromList json)
 
-    -- TODO: Most of the package information comes from custom
-    --       types that have not got ToJSON instances yet, so they
-    --       are currently just `show`n. Extend the ToJSON instance
-    --       in Distribution.Server.Package.Render
+    -- Serve a JSON package overview
     servePackageOverview :: DynamicPath -> ServerPartE Response
     servePackageOverview dpath = do
       pkgid@(PackageIdentifier name version) <- packageInPath dpath
