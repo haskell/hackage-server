@@ -608,6 +608,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       tarball <- indexTarballLegacyGz <$> readAsyncCache cacheIndexTarball
       let tarballmd5 = show $ tarGzHashMD5 tarball
       cacheControl [Public, NoTransform, maxAgeMinutes 5] (ETag tarballmd5)
+      enableRange
       return $ toResponse tarball
 
     serveIncremPackagesIndexTarGz :: DynamicPath -> ServerPartE Response
@@ -615,6 +616,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       tarball <- indexTarballIncremGz <$> readAsyncCache cacheIndexTarball
       let tarballmd5 = show $ tarGzHashMD5 tarball
       cacheControl [Public, NoTransform, maxAgeMinutes 5] (ETag tarballmd5)
+      enableRange
       return $ toResponse tarball
 
     serveIncremPackagesIndexTar :: DynamicPath -> ServerPartE Response
@@ -623,7 +625,6 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       let tarballmd5 = show $ tarHashMD5 tarball
       cacheControl [Public, NoTransform, maxAgeMinutes 5] (ETag tarballmd5)
       enableRange
-      enableGZip' 3 -- Low compression level to save server CPU
       return $ toResponse tarball
 
     -- TODO: should we include more information here? description and
