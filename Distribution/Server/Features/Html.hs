@@ -1661,9 +1661,11 @@ mkHtmlSearch HtmlUtilities{..}
             , anchor ! [href "http://www.haskell.org/hoogle/"] << "Hoogle"
             ]
 
-        explainResults :: [(Search.Explanation PkgDocField PkgDocFeatures T.Text, PackageName)] -> [Html]
-        explainResults results =
+        explainResults :: (Maybe PackageName, [(Search.Explanation PkgDocField PkgDocFeatures T.Text, PackageName)]) -> [Html]
+        explainResults (exactMatch, results) =
             [ h2 << "Results"
+            , h3 << "Exact Matches"
+            , maybe noHtml (toHtml . display) exactMatch
             , case results of
                 []          -> noHtml
                 ((explanation1, _):_) ->

@@ -325,11 +325,11 @@ pruneRelevantResults softLimit hardLimit =
 
 -----------------------------
 
-queryExplain :: (Ix field, Bounded field, Ix feature, Bounded feature) =>
+queryExplain :: (Ix field, Bounded field, Ix feature, Bounded feature, Ord key) =>
                 SearchEngine doc key field feature ->
-                [Term] -> [(BM25F.Explanation field feature Term, key)]
+                [Term] -> (Maybe key, [(BM25F.Explanation field feature Term, key)])
 queryExplain se@SearchEngine{ searchIndex,
-                              searchConfig     = SearchConfig{transformQueryTerm},
+                              searchConfig     = SearchConfig{transformQueryTerm, makeKey},
                               searchRankParams = SearchRankParameters{..} }
       terms =
 
@@ -342,7 +342,13 @@ queryExplain se@SearchEngine{ searchIndex,
                                    | field <- range (minBound, maxBound) ]
                     ]
 
-      rawresults :: [Maybe (TermId, DocIdSet)] 
+      exactMatch :: Maybe DocId
+      exactMatch = case terms of
+                     [] -> Nothing
+                     [x] -> SI.lookupDocKeyReal searchIndex (makeKey x)
+                     (_:_) -> Nothing
+
+      rawresults :: [Maybe (TermId, DocIdSet)]
       rawresults = map (SI.lookupTerm searchIndex) lookupTerms
 
       termids   :: [TermId]
