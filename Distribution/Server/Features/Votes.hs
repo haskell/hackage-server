@@ -35,7 +35,7 @@ data VotesFeature = VotesFeature {
     votesFeatureInterface :: HackageFeature
   , didUserVote             :: forall m. MonadIO m => PackageName -> UserId -> m Bool
   , pkgNumVotes             :: forall m. MonadIO m => PackageName -> m Int
-  , renderVotesHtml         :: PackageName -> ServerPartE (String, X.Html)
+  , renderVotesHtml         :: PackageName -> ServerPartE X.Html
 }
 
 -- | Implement the isHackageFeature 'interface'
@@ -149,7 +149,7 @@ votesFeature  ServerEnv{..}
 
       success <- updateState votesState (AddVote pkgname uid)
       if success
-        then ok . toResponse $ Render.voteConfirmationPage pkgname 
+        then ok . toResponse $ Render.voteConfirmationPage pkgname
                                  "Package voted for successfully"
         else ok . toResponse $ Render.alreadyVotedPage pkgname
 
@@ -182,7 +182,7 @@ votesFeature  ServerEnv{..}
       queryState votesState (GetPackageVoteCount pkgname)
 
     -- Renders the HTML for the "Votes:" section on package pages.
-    renderVotesHtml :: PackageName -> ServerPartE (String, X.Html)
+    renderVotesHtml :: PackageName -> ServerPartE X.Html
     renderVotesHtml pkgname = do
       numVotes <- pkgNumVotes pkgname
       return $ Render.renderVotesAnon numVotes pkgname

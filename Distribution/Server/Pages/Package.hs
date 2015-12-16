@@ -1,14 +1,24 @@
 -- Body of the HTML page for a package
 {-# LANGUAGE PatternGuards, RecordWildCards #-}
-module Distribution.Server.Pages.Package (
-    packagePage,
-    renderPackageFlags,
-    renderDependencies,
-    renderDetailedDependencies,
-    renderVersion,
-    renderFields,
-    renderDownloads,
-    renderChangelog
+module Distribution.Server.Pages.Package
+  ( packagePage
+  , renderPackageFlags
+  , renderDependencies
+  , renderDetailedDependencies
+  , renderVersion
+  , renderFields
+  , renderDownloads
+  , renderChangelog
+  , moduleSection
+  , readmeSection
+  , rendLicense
+  , maintainField
+  , categoryField
+  , linkField
+  , descriptionSection
+  , renderHaddock
+  , maintainerSection
+  , downloadSection
   ) where
 
 import Distribution.Server.Features.PreferredVersions
@@ -110,7 +120,8 @@ descriptionSection PackageRender{..} =
      ++ readmeLink
   where
     readmeLink = case rendReadme of
-      Just _ -> [ hr, toHtml "["
+      Just _ -> [ hr
+                , toHtml "["
                 , anchor ! [href "#readme"] << "Skip to ReadMe"
                 , toHtml "]"
                 ]
@@ -406,7 +417,7 @@ renderDownloads totalDown recentDown {- versionDown version -} =
 renderFields :: PackageRender -> [(String, Html)]
 renderFields render = [
         -- Cabal-Version
-        ("License",     rendLicense),
+        ("License",     rendLicense render),
         ("Copyright",   toHtml $ P.copyright desc),
         ("Author",      toHtml $ author desc),
         ("Maintainer",  maintainField $ rendMaintainer render),
@@ -436,24 +447,32 @@ renderFields render = [
       where
         revisionsURL = display (rendPkgId render) </> "revisions/"
 
-    linkField url = case url of
-        [] -> noHtml
-        _  -> anchor ! [href url] << url
-    categoryField cat = anchor ! [href $ "/packages/#cat:" ++ cat] << cat
-    maintainField mnt = case mnt of
-        Nothing -> strong ! [theclass "warning"] << toHtml "none"
-        Just n  -> toHtml n
-    sourceRepositoryField sr = sourceRepositoryToHtml sr
+linkField :: String -> Html
+linkField url = case url of
+    [] -> noHtml
+    _  -> anchor ! [href url] << url
 
-    rendLicense = case rendLicenseFiles render of
-      []            -> toHtml (rendLicenseName render)
-      [licenseFile] -> anchor ! [ href (rendPkgUri render </> "src" </> licenseFile) ]
-                             << rendLicenseName render
-      _licenseFiles -> toHtml (rendLicenseName render)
-                       +++ "["
-                       +++ anchor ! [ href (rendPkgUri render </> "src") ]
-                                 << "multiple license files"
-                       +++ "]"
+sourceRepositoryField :: SourceRepo -> Html
+sourceRepositoryField sr = sourceRepositoryToHtml sr
+
+categoryField :: String -> Html
+categoryField cat = anchor ! [href $ "/packages/#cat:" ++ cat] << cat
+
+maintainField :: Maybe String -> Html
+maintainField mnt = case mnt of
+    Nothing -> strong ! [theclass "warning"] << toHtml "none"
+    Just n  -> toHtml n
+
+rendLicense :: PackageRender -> Html
+rendLicense render = case rendLicenseFiles render of
+  []            -> toHtml (rendLicenseName render)
+  [licenseFile] -> anchor ! [ href (rendPkgUri render </> "src" </> licenseFile) ]
+                          << rendLicenseName render
+  _licenseFiles -> toHtml (rendLicenseName render)
+                    +++ "["
+                    +++ anchor ! [ href (rendPkgUri render </> "src") ]
+                              << "multiple license files"
+                    +++ "]"
 
 
 sourceRepositoryToHtml :: SourceRepo -> Html

@@ -130,6 +130,7 @@ executable hackage-server
     Distribution.Server.Pages.Group
     Distribution.Server.Pages.Index
     Distribution.Server.Pages.Package
+    Distribution.Server.Pages.PackageFromTemplate
     Distribution.Server.Pages.Package.HaddockHtml
     Distribution.Server.Pages.Package.HaddockLex
     Distribution.Server.Pages.Package.HaddockParse
@@ -210,6 +211,7 @@ executable hackage-server
       Distribution.Server.Features.DownloadCount.Backup
       Distribution.Server.Features.EditCabalFiles
       Distribution.Server.Features.Html
+      Distribution.Server.Features.Html.HtmlUtilities
       Distribution.Server.Features.HoogleData
       Distribution.Server.Features.HaskellPlatform
       Distribution.Server.Features.HaskellPlatform.State
