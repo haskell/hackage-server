@@ -30,6 +30,8 @@ import Distribution.PackageDescription.Configuration (flattenPackageDescription)
 import qualified Data.Text as T
 import qualified Data.Map as Map
 
+import Control.Applicative (optional)
+import Data.Aeson
 
 data SearchFeature = SearchFeature {
     searchFeatureInterface :: HackageFeature,
@@ -100,8 +102,8 @@ searchFeature ServerEnv{serverBaseURI} CoreFeature{..} ListFeature{getAllLists}
       }
     -- /packages/search?terms=happstack
     searchPackagesResource = (resourceAt "/packages/search.:format") {
-        resourceDesc = [(GET, "Search for packages matching query terms")]
---        resourceGet  = [("json", handlerGetOpenSearch)]
+        resourceDesc = [(GET, "Search for packages matching query terms")],
+        resourceGet  = [("json", handlerGetJsonSearch)]
       }
 
 --  searchSuggestResource = (resourceAt "/packages/suggest.:format") {
@@ -170,9 +172,22 @@ searchFeature ServerEnv{serverBaseURI} CoreFeature{..} ListFeature{getAllLists}
       let xmlstr = renderTemplate (template ["serverhost" $= show serverBaseURI])
       return $ toResponse (OpenSearchXml xmlstr)
 
+    handlerGetJsonSearch :: DynamicPath -> ServerPartE Response
+    handlerGetJsonSearch _ = do
+      mtermsStr <-
+        queryString $ optional (look "terms")
+      case mtermsStr of
+        Just termsStr | terms <- words termsStr, not (null terms) -> do
+          pkgnames <- searchPackages terms
+          ok (toResponse (toJSON (map packageNameJSON pkgnames)))
+
+        _ ->
+          errBadRequest "Invalid search request" [MText $ "Empty terms query"]
+      where packageNameJSON pkgName =
+              object [ T.pack "name" .= unPackageName pkgName ]
+
 {-
     suggestJson :: ServerPartE Response
     suggestJson =
     --TODO: open search supports a suggest / autocomplete system
 -}
-
