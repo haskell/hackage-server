@@ -15,9 +15,10 @@ module Distribution.Server.Features.Search.SearchIndex (
     lookupTermId,
     lookupDocId,
     lookupDocKey,
-    
+    lookupDocKeyReal,
+
     getTerm,
-    
+
     invariant,
   ) where
 
@@ -170,14 +171,16 @@ lookupDocId SearchIndex{docIdMap} docid =
     errNotFound = error $ "lookupDocId: not found " ++ show docid
 
 lookupDocKey :: Ord key => SearchIndex key field feature -> key -> Maybe (DocTermIds field)
-lookupDocKey SearchIndex{docKeyMap, docIdMap} key = do
+lookupDocKey SearchIndex{docKeyMap, docIdMap} key =
     case Map.lookup key docKeyMap of
       Nothing    -> Nothing
       Just docid ->
         case IntMap.lookup (fromEnum docid) docIdMap of
           Nothing                          -> error "lookupDocKey: internal error"
-          Just (DocInfo _key doctermids _) -> Just doctermids
+          Just (DocInfo _ doctermids _) -> Just doctermids
 
+lookupDocKeyReal :: Ord key => SearchIndex key field feature -> key -> Maybe DocId
+lookupDocKeyReal SearchIndex{docKeyMap} key = Map.lookup key docKeyMap
 
 getTerm :: SearchIndex key field feature -> TermId -> Term
 getTerm SearchIndex{termIdMap} termId =

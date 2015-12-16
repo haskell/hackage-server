@@ -22,6 +22,7 @@ import NLP.Snowball
 import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.Text (display)
+import Data.Text (unpack)
 
 
 type PkgSearchEngine = SearchEngine
@@ -50,7 +51,8 @@ pkgSearchConfig =
       documentKey           = packageName . fst,
       extractDocumentTerms  = extractTokens . fst,
       transformQueryTerm    = normaliseQueryToken,
-      documentFeatureValue  = getFeatureValue
+      documentFeatureValue  = getFeatureValue,
+      makeKey               = PackageName . unpack
   }
   where
     extractTokens :: PackageDescription -> PkgDocField -> [Text]

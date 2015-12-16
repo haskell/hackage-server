@@ -42,8 +42,9 @@ data SearchFeature = SearchFeature {
     searchPackagesExplain :: forall m. MonadIO m
                           => SearchRankParameters PkgDocField PkgDocFeatures
                           -> [String]
-                          -> m [(BM25F.Explanation PkgDocField PkgDocFeatures T.Text
-                                ,PackageName)]
+                          -> m (Maybe PackageName,
+                               [(BM25F.Explanation PkgDocField PkgDocFeatures T.Text
+                                ,PackageName)])
 }
 
 instance IsHackageFeature SearchFeature where
@@ -158,7 +159,7 @@ searchFeature ServerEnv{serverBaseURI} CoreFeature{..} ListFeature{getAllLists}
     searchPackagesExplain :: MonadIO m
                           => SearchRankParameters PkgDocField PkgDocFeatures
                           -> [String]
-                          -> m [(BM25F.Explanation PkgDocField PkgDocFeatures T.Text, PackageName)]
+                          -> m (Maybe PackageName, [(BM25F.Explanation PkgDocField PkgDocFeatures T.Text, PackageName)])
     searchPackagesExplain params terms = do
         se <- readMemState searchEngineState
         let results = SearchEngine.queryExplain
