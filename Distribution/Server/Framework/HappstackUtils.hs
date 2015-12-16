@@ -70,7 +70,7 @@ mime x =
     Map.findWithDefault thedefault (drop 1 (takeExtension x)) mimeTypes'
   where
     thedefault      = "text/plain; charset=utf-8"
-    mimeTypes'      = mimeTypes `Map.union` customMimeTypes
+    mimeTypes'      = customMimeTypes `Map.union` mimeTypes
     customMimeTypes = Map.fromList
       [ ("xhtml", "application/xhtml+xml; charset=utf-8")
       , ("html" , "text/html; charset=utf-8")
