@@ -452,7 +452,7 @@ renderFields render = [
       _licenseFiles -> toHtml (rendLicenseName render)
                        +++ "["
                        +++ anchor ! [ href (rendPkgUri render </> "src") ]
-                                 << "multiple licese files"
+                                 << "multiple license files"
                        +++ "]"
 
 
