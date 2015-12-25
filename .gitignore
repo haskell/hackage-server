@@ -7,5 +7,3 @@ tags
 .cabal-sandbox
 cabal.sandbox.config
 TAGS
-datafiles/TUF/*.json
-datafiles/TUF/*.private
