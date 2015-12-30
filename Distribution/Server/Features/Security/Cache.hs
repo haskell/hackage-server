@@ -15,6 +15,7 @@ import Control.DeepSeq
 import Control.Exception
 import Data.Time
 import Data.Time.Clock.POSIX
+import System.IO (IOMode(..))
 import System.Posix.Files
 import System.Posix.IO
 import System.Posix.Types (EpochTime)
@@ -221,8 +222,8 @@ updateSecurityFileCache env = do
   Auxiliary
 -------------------------------------------------------------------------------}
 
-getFile :: Sec.AbsolutePath -> IO (BS.Lazy.ByteString, FileStatus)
-getFile file = Sec.withFileInReadMode file $ \h -> do
+getFile :: Sec.Path Sec.Absolute -> IO (BS.Lazy.ByteString, FileStatus)
+getFile file = Sec.withFile file ReadMode $ \h -> do
     -- It's a bit of a dance to get the file modification time while keeping
     -- the handle open. If we first call 'hGetContents' it will close the
     -- handle and the call to handleToFd will fail. So we must do that first,

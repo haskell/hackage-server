@@ -24,7 +24,7 @@ data ServerEnv = ServerEnv {
     serverTemplatesDir :: FilePath,
 
     -- | The location of TUF data (signed root info, private keys)
-    serverTUFDir :: Sec.AbsolutePath,
+    serverTUFDir :: Sec.Path Sec.Absolute,
 
     -- | Default templates mode
     serverTemplatesMode :: TemplatesMode,

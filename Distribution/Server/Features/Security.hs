@@ -167,7 +167,7 @@ securityStateComponent env stateDir = do
       , restoreState = securityRestore timestampKey snapshotKey
       }
   where
-    readKey :: Sec.AbsolutePath -> IO (Some Sec.Key)
+    readKey :: Sec.Path Sec.Absolute -> IO (Some Sec.Key)
     readKey fp = do
       mKey <- Sec.readJSON_NoKeys_NoLayout fp
       case mKey of
