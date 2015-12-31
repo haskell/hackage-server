@@ -17,19 +17,17 @@ import qualified Data.ByteString.Lazy as BS.Lazy
 
 -- hackage
 import Distribution.Server.Framework.ResponseContentTypes
+import Distribution.Server.Features.Security.SHA256
 
 -- hackage-security
 import qualified Hackage.Security.Server as Sec
-import qualified Data.Digest.Pure.SHA    as SHA
 
 -- | TUF file
---
--- TODO: See note for TarballUncompressed about strictness and SHA.Digest
 data TUFFile a = TUFFile {
     tufFileContent    :: !BS.Lazy.ByteString
   , tufFileLength     :: !Int
   , tufFileHashMD5    :: !MD5Digest
-  , tufFileHashSHA256 :: !(SHA.Digest SHA.SHA256State)
+  , tufFileHashSHA256 :: !SHA256Digest
   , tufFileModified   :: !UTCTime
   , tufFileExpires    :: !UTCTime
   }
@@ -40,7 +38,7 @@ type Root      = TUFFile Sec.Root
 type Mirrors   = TUFFile Sec.Mirrors
 
 instance NFData (TUFFile a) where
-  rnf (TUFFile a b c _d e f) = rnf (a, b, c, e, f)
+  rnf (TUFFile a b c d e f) = rnf (a, b, c, d, e, f)
 
 instance ToMessage (TUFFile a) where
   toResponse TUFFile{..} =

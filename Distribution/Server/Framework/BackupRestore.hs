@@ -42,6 +42,7 @@ module Distribution.Server.Framework.BackupRestore (
 import qualified Distribution.Server.Framework.BlobStorage as Blob
 import Distribution.Server.Framework.BlobStorage (BlobStores(..), BlobId)
 import Distribution.Server.Util.ReadDigest
+import Distribution.Server.Features.Security.SHA256
 
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
@@ -70,8 +71,6 @@ import Data.List (sortBy)
 import Data.Version (Version)
 import qualified Data.Version as Version
 import Text.ParserCombinators.ReadP (readP_to_S)
-import Data.Binary (Binary)
-import qualified Data.Digest.Pure.SHA as SHA
 
 --------------------------------------------------------------------------------
 -- Creating/restoring backups                                                 --
@@ -191,8 +190,8 @@ parseBlobId label str = case Blob.readBlobId str of
     Right blobId -> return blobId
     Left  err    -> fail $ "Unable to parse " ++ label ++ show str ++ ": " ++ err
 
-parseSHA :: (Binary (SHA.Digest t), Monad m) => String -> String -> m (SHA.Digest t)
-parseSHA label str = case readDigestSHA str of
+parseSHA :: Monad m => String -> String -> m SHA256Digest
+parseSHA label str = case readDigest str of
     Right digest -> return digest
     Left  err    -> fail $ "Unable to parse " ++ label ++ show str ++ ": " ++ err
 

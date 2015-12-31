@@ -123,7 +123,7 @@ migratePkgs ServerEnv{ serverBlobStore = store } updatePackage precomputed =
         case Map.lookup (blobMd5 v1_pkgTarballGz) precomputed of
           Just (strSHA256, len) -> do
             -- We assume all SHA hashes in the precomputed list parse OK
-            let Right sha256 = readDigestSHA strSHA256
+            let Right sha256 = readDigest strSHA256
                 stats  = MigrationStats 1 0
                 infoGz = BlobInfo {
                     blobInfoId         = v1_pkgTarballGz

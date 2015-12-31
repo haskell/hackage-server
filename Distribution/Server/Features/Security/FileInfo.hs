@@ -9,10 +9,10 @@ import qualified Data.Map as Map
 import Distribution.Server.Packages.Types
 import Distribution.Server.Framework.ResponseContentTypes
 import Distribution.Server.Features.Security.ResponseContentTypes
+import Distribution.Server.Features.Security.SHA256
 
 -- hackage-security
 import qualified Hackage.Security.Server as Sec
-import qualified Data.Digest.Pure.SHA    as SHA
 
 {-------------------------------------------------------------------------------
   Extract file info
@@ -37,11 +37,11 @@ instance FileInfo (TUFFile a) where
   Auxiliary
 -------------------------------------------------------------------------------}
 
-mkFileInfo :: Int -> SHA.Digest SHA.SHA256State -> Sec.FileInfo
-mkFileInfo len sha256 = Sec.FileInfo {
+mkFileInfo :: Int -> SHA256Digest -> Sec.FileInfo
+mkFileInfo len digest = Sec.FileInfo {
       fileInfoLength = Sec.FileLength len
-    , fileInfoHashes = Map.fromList [hashSHA256 sha256]
+    , fileInfoHashes = Map.fromList [hashSHA256 digest]
     }
 
-hashSHA256 :: SHA.Digest SHA.SHA256State -> (Sec.HashFn, Sec.Hash)
-hashSHA256 hash = (Sec.HashFnSHA256, Sec.Hash $ SHA.showDigest hash)
+hashSHA256 :: SHA256Digest -> (Sec.HashFn, Sec.Hash)
+hashSHA256 digest = (Sec.HashFnSHA256, Sec.Hash $ show digest)

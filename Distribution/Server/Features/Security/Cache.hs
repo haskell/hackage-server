@@ -29,13 +29,13 @@ import Distribution.Server.Features.Security.Layout
 import Distribution.Server.Features.Security.ResponseContentTypes
 import Distribution.Server.Features.Security.State
 import Distribution.Server.Features.Core
+import qualified Distribution.Server.Features.Security.SHA256 as SHA
 
 -- Hackage security
 import qualified Hackage.Security.Server    as Sec
 import qualified Hackage.Security.Key.Env   as Sec.KeyEnv
 import qualified Hackage.Security.Util.Lens as Sec.Lens
 import qualified Hackage.Security.Util.Path as Sec
-import qualified Data.Digest.Pure.SHA       as SHA
 
 {-------------------------------------------------------------------------------
   The security cache

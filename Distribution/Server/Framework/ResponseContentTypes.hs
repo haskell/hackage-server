@@ -24,6 +24,7 @@ import Distribution.Server.Framework.BlobStorage
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Util.Parse (packUTF8)
+import Distribution.Server.Features.Security.SHA256
 
 import Happstack.Server
          ( ToMessage(..), Response(..), RsFlags(..), Length(NoContentLength), nullRsFlags, mkHeaders
@@ -41,8 +42,6 @@ import Data.Time.Locale.Compat (defaultTimeLocale)
 import Text.CSV (printCSV, CSV)
 import Control.DeepSeq
 
-import qualified Data.Digest.Pure.SHA as SHA
-
 -- | The index tarball
 --
 -- We cache the compressed and uncompressed incremental tarball, as well as
@@ -53,18 +52,11 @@ data IndexTarballInfo = IndexTarballInfo {
     , indexTarballIncremGz :: !TarballCompressed
     }
 
--- TODO: SHA.Digest is an abstract datatype, and is just a simple wrapper
--- around a bytestring. However, it is not strict in this bytestring, nor
--- does it have an NFData instance. This might be a problem (here as well as
--- in the NFData instance for TarballUncompressed and TarballCompressed).
--- However, it might not be a problem, depending on how these digests are
--- constructed. Since we might yet switch SHA package however I have not
--- yet looked deeper into this.
 data TarballUncompressed = TarballUncompressed {
       tarContent    :: !BS.Lazy.ByteString
     , tarLength     :: !Int
     , tarHashMD5    :: !MD5Digest
-    , tarHashSHA256 :: !(SHA.Digest SHA.SHA256State)
+    , tarHashSHA256 :: !SHA256Digest
     , tarModified   :: !UTCTime
     }
 
@@ -72,7 +64,7 @@ data TarballCompressed = TarballCompressed {
       tarGzContent    :: !BS.Lazy.ByteString
     , tarGzLength     :: !Int
     , tarGzHashMD5    :: !MD5Digest
-    , tarGzHashSHA256 :: !(SHA.Digest SHA.SHA256State)
+    , tarGzHashSHA256 :: !SHA256Digest
     , tarGzModified   :: !UTCTime
     }
 
@@ -87,7 +79,7 @@ mkTarballUncompressed time indexTarball = TarballUncompressed {
   where
     indexTarballLen    = fromIntegral $ BS.Lazy.length indexTarball
     indexTarballMD5    = md5 indexTarball
-    indexTarballSHA256 = SHA.sha256 indexTarball
+    indexTarballSHA256 = sha256 indexTarball
 
 mkTarballCompressed :: UTCTime -> BS.Lazy.ByteString -> TarballCompressed
 mkTarballCompressed time indexTarballGz = TarballCompressed {
@@ -100,16 +92,16 @@ mkTarballCompressed time indexTarballGz = TarballCompressed {
   where
     indexTarballGzLen    = fromIntegral $ BS.Lazy.length indexTarballGz
     indexTarballGzMD5    = md5 indexTarballGz
-    indexTarballGzSHA256 = SHA.sha256 indexTarballGz
+    indexTarballGzSHA256 = sha256 indexTarballGz
 
 instance NFData IndexTarballInfo where
   rnf (IndexTarballInfo a b c) = rnf (a, b, c)
 
 instance NFData TarballUncompressed where
-  rnf (TarballUncompressed a b c _d e) = rnf (a, b, c, e)
+  rnf (TarballUncompressed a b c d e) = rnf (a, b, c, d, e)
 
 instance NFData TarballCompressed where
-  rnf (TarballCompressed a b c _d e) = rnf (a, b, c, e)
+  rnf (TarballCompressed a b c d e) = rnf (a, b, c, d, e)
 
 instance MemSize IndexTarballInfo where
   memSize (IndexTarballInfo a b c) = memSize3 a b c
