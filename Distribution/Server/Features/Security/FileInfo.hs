@@ -1,6 +1,9 @@
 -- | Extract file info from response types
 {-# LANGUAGE RecordWildCards #-}
-module Distribution.Server.Features.Security.FileInfo (FileInfo(..)) where
+module Distribution.Server.Features.Security.FileInfo (
+    FileInfo(..)
+  , mkFileInfo
+  ) where
 
 -- stdlib
 import qualified Data.Map as Map
@@ -8,7 +11,6 @@ import qualified Data.Map as Map
 -- hackage
 import Distribution.Server.Packages.Types
 import Distribution.Server.Framework.ResponseContentTypes
-import Distribution.Server.Features.Security.ResponseContentTypes
 import Distribution.Server.Features.Security.SHA256
 
 -- hackage-security
@@ -29,9 +31,6 @@ instance FileInfo TarballCompressed where
 
 instance FileInfo BlobInfo where
   fileInfo BlobInfo{..} = mkFileInfo blobInfoLength blobInfoHashSHA256
-
-instance FileInfo (TUFFile a) where
-  fileInfo TUFFile{..} = mkFileInfo tufFileLength tufFileHashSHA256
 
 {-------------------------------------------------------------------------------
   Auxiliary

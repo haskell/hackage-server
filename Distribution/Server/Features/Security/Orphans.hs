@@ -11,6 +11,7 @@ module Distribution.Server.Features.Security.Orphans where
 -- stdlib
 import Data.SafeCopy
 import Data.Serialize
+import Data.Digest.Pure.MD5
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Crypto.Sign.Ed25519  as Ed25519
 
@@ -44,6 +45,9 @@ instance SafeCopy Sec.FileVersion where
 instance Serialize Sec.FileVersion where
   put (Sec.FileVersion v) = put v
   get = Sec.FileVersion `fmap` get
+
+instance SafeCopy MD5Digest where
+ -- use default Serialize instance (provided by the pureMD5 package)
 
 {-------------------------------------------------------------------------------
   MemSize instances

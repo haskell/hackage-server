@@ -33,8 +33,6 @@ import qualified Distribution.Server.Features.Security.SHA256 as SHA
 
 -- Hackage security
 import qualified Hackage.Security.Server    as Sec
-import qualified Hackage.Security.Key.Env   as Sec.KeyEnv
-import qualified Hackage.Security.Util.Lens as Sec.Lens
 import qualified Hackage.Security.Util.Path as Sec
 
 {-------------------------------------------------------------------------------
@@ -113,13 +111,12 @@ computeSnapshot securityState now coreFeature SecurityFileCache{..} = do
         raw         = Sec.renderJSON layout signed
         md5         = Crypto.hash raw
         sha256      = SHA.sha256  raw
-    return TUFFile {
-        tufFileContent    = raw
-      , tufFileLength     = fromIntegral $ BS.Lazy.length raw
-      , tufFileHashMD5    = md5
-      , tufFileHashSHA256 = sha256
-      , tufFileModified   = now
-      , tufFileExpires    = expiryTime snapshot
+    return $ Snapshot TUFFile {
+        _tufFileContent    = raw
+      , _tufFileLength     = fromIntegral $ BS.Lazy.length raw
+      , _tufFileHashMD5    = md5
+      , _tufFileHashSHA256 = sha256
+      , _tufFileModified   = now
       }
   where
     layout = Sec.hackageRepoLayout
@@ -143,13 +140,12 @@ computeTimestamp securityState now snapshot = do
         sha256    = SHA.sha256  raw
     -- We don't actually use the SHA256 of the timestamp for anything; we
     -- compute it just for uniformity's sake.
-    return TUFFile {
-        tufFileContent    = raw
-      , tufFileLength     = fromIntegral $ BS.Lazy.length raw
-      , tufFileHashMD5    = md5
-      , tufFileHashSHA256 = sha256
-      , tufFileModified   = now
-      , tufFileExpires    = expiryTime timestamp
+    return $ Timestamp TUFFile {
+        _tufFileContent    = raw
+      , _tufFileLength     = fromIntegral $ BS.Lazy.length raw
+      , _tufFileHashMD5    = md5
+      , _tufFileHashSHA256 = sha256
+      , _tufFileModified   = now
       }
   where
     layout = Sec.hackageRepoLayout
@@ -176,40 +172,23 @@ instance NFData SecurityFileCache where
   rnf (SecurityFileCache a b) = rnf (a, b)
 
 updateSecurityFileCache :: ServerEnv -> IO SecurityFileCache
-updateSecurityFileCache env = do
-    (keyEnv, root) <- do
-      (content, status) <- getFile $ onDiskRoot env
-      (root :: Sec.Signed Sec.Root) <-
-        case Sec.parseJSON_Keys_NoLayout Sec.KeyEnv.empty content of
-          Left  err    -> throwIO err
-          Right parsed -> return parsed
-      return (Sec.rootKeys (Sec.signed root), TUFFile {
-          tufFileContent    = content
-        , tufFileLength     = fromIntegral $ BS.Lazy.length content
-        , tufFileHashMD5    = Crypto.hash content
-        , tufFileHashSHA256 = SHA.sha256  content
-        , tufFileModified   = lastModified status
-        , tufFileExpires    = expiryTime $ Sec.signed root
-        })
+updateSecurityFileCache env =
+    SecurityFileCache <$> (Root    <$> getTUFFile (onDiskRoot    env))
+                      <*> (Mirrors <$> getTUFFile (onDiskMirrors env))
 
-    mirrors <- do
-      (content, status) <- getFile $ onDiskMirrors env
-      (mirrors :: Sec.Signed Sec.Mirrors) <-
-        case Sec.parseJSON_Keys_NoLayout keyEnv content of
-          Left  err    -> throwIO err
-          Right parsed -> return parsed
-      return TUFFile {
-          tufFileContent    = content
-        , tufFileLength     = fromIntegral $ BS.Lazy.length content
-        , tufFileHashMD5    = Crypto.hash content
-        , tufFileHashSHA256 = SHA.sha256  content
-        , tufFileModified   = lastModified status
-        , tufFileExpires    = expiryTime $ Sec.signed mirrors
-        }
+{-------------------------------------------------------------------------------
+  Auxiliary
+-------------------------------------------------------------------------------}
 
-    return SecurityFileCache {
-        securityFileCacheRoot    = root
-      , securityFileCacheMirrors = mirrors
+getTUFFile :: Sec.Path Sec.Absolute -> IO TUFFile
+getTUFFile file = do
+    (content, status) <- getFile file
+    return $ TUFFile {
+        _tufFileContent    = content
+      , _tufFileLength     = fromIntegral $ BS.Lazy.length content
+      , _tufFileHashMD5    = Crypto.hash content
+      , _tufFileHashSHA256 = SHA.sha256  content
+      , _tufFileModified   = lastModified status
       }
   where
     lastModified :: FileStatus -> UTCTime
@@ -217,10 +196,6 @@ updateSecurityFileCache env = do
 
     convertTime :: EpochTime -> UTCTime
     convertTime = posixSecondsToUTCTime . realToFrac
-
-{-------------------------------------------------------------------------------
-  Auxiliary
--------------------------------------------------------------------------------}
 
 getFile :: Sec.Path Sec.Absolute -> IO (BS.Lazy.ByteString, FileStatus)
 getFile file = Sec.withFile file ReadMode $ \h -> do
@@ -234,15 +209,3 @@ getFile file = Sec.withFile file ReadMode $ \h -> do
     content <- BS.Lazy.hGetContents h'
     evaluate $ rnf content
     return (content, status)
-
--- | Extract the expiry from any of the TUF files we deal with here
---
--- NOTE: All of the files we deal with here (root, mirrors, snapshot, timestamp)
--- are guaranteed to have an expiry time, but this is not true for _all_ TUF
--- files. Calling this function on a file without ane xpiry time will result in
--- a runtime exception.
-expiryTime :: Sec.HasHeader a => a -> UTCTime
-expiryTime = go . Sec.Lens.get Sec.fileExpires
-  where
-    go (Sec.FileExpires (Just expiry)) = expiry
-    go _ = error "expiryTime: Missing expiry time"
