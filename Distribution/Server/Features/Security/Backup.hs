@@ -71,6 +71,7 @@ securityRestore securityTimestampKey
       return SecurityState{
           securityTimestampVersion = fromMaybe reset partialTimestampVersion
         , securitySnapshotVersion  = fromMaybe reset partialSnapshotVersion
+        , securityLastUpdate       = Nothing
         , ..
         }
 
