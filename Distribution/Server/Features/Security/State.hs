@@ -8,15 +8,20 @@ module Distribution.Server.Features.Security.State where
 -- stdlib
 import Control.Monad.Reader
 import Data.Acid
+import Data.Maybe (fromJust)
 import Data.SafeCopy
 import Data.Time
 import Data.Typeable
-import qualified Control.Monad.State as State
+import qualified Control.Monad.State  as State
+import qualified Crypto.Classes       as Crypto
+import qualified Data.ByteString.Lazy as BS.Lazy
 
 -- hackage
 import Distribution.Server.Features.Security.FileInfo
 import Distribution.Server.Features.Security.Orphans ()
+import Distribution.Server.Features.Security.ResponseContentTypes
 import Distribution.Server.Framework.MemSize
+import qualified Distribution.Server.Features.Security.SHA256 as SHA
 
 -- hackage-security
 import Hackage.Security.Util.Some
@@ -107,6 +112,99 @@ nextSnapshotVersion = do
     State.put $ st { securitySnapshotVersion = Sec.versionIncrement fv }
     return fv
 
+-- | Construct the TUF files
+--
+-- Returns 'Nothing' if the 'securityLastUpdate' field is 'Nothing'.
+--
+-- TODO: Compute length, MD5 and SHA256 hashes simultenously when updating
+-- any of these TUF files.
+constructTUFFiles :: Query SecurityState (Maybe (Timestamp, Snapshot))
+constructTUFFiles = do
+    mUpdate <- asks securityLastUpdate
+    case mUpdate of
+      Nothing -> return Nothing
+      Just TUFUpdate{..} -> do
+        snapshotVersion  <- asks securitySnapshotVersion
+        snapshotKey      <- asks securitySnapshotKey
+        timestampVersion <- asks securityTimestampVersion
+        timestampKey     <- asks securityTimestampKey
+
+        -- Construct new snapshot
+        let snapshot = Sec.Snapshot {
+                Sec.snapshotVersion     = snapshotVersion
+              , Sec.snapshotExpires     = Sec.expiresInDays tufUpdateTime 3
+              , Sec.snapshotInfoRoot    = toSecFileInfo tufUpdateInfoRoot
+              , Sec.snapshotInfoMirrors = toSecFileInfo tufUpdateInfoMirrors
+              , Sec.snapshotInfoTarGz   = toSecFileInfo tufUpdateInfoTarGz
+              , Sec.snapshotInfoTar     = Just $ toSecFileInfo tufUpdateInfoTar
+              }
+            ssSigned = Sec.withSignatures layout [snapshotKey] snapshot
+            ssRaw    = Sec.renderJSON layout ssSigned
+            ssMD5    = Crypto.hash ssRaw
+            ssSHA256 = SHA.sha256  ssRaw
+            ssFile   = Snapshot TUFFile {
+                _tufFileContent    = ssRaw
+              , _tufFileLength     = fromIntegral $ BS.Lazy.length ssRaw
+              , _tufFileHashMD5    = ssMD5
+              , _tufFileHashSHA256 = ssSHA256
+              , _tufFileModified   = tufUpdateTime
+              }
+
+        -- Construct timestamp
+        -- We don't actually use the SHA256 of the timestamp for anything; we
+        -- compute it just for uniformity's sake.
+        let timestamp   = Sec.Timestamp {
+                timestampVersion      = timestampVersion
+              , timestampExpires      = Sec.expiresInDays tufUpdateTime 3
+              , timestampInfoSnapshot = secFileInfo ssFile
+              }
+            ttSigned    = Sec.withSignatures layout [timestampKey] timestamp
+            ttRaw       = Sec.renderJSON layout ttSigned
+            ttMD5       = Crypto.hash ttRaw
+            ttSHA256    = SHA.sha256  ttRaw
+            ttFile      = Timestamp TUFFile {
+                _tufFileContent    = ttRaw
+              , _tufFileLength     = fromIntegral $ BS.Lazy.length ttRaw
+              , _tufFileHashMD5    = ttMD5
+              , _tufFileHashSHA256 = ttSHA256
+              , _tufFileModified   = tufUpdateTime
+              }
+
+        return $ Just (ttFile, ssFile)
+  where
+    layout = Sec.hackageRepoLayout
+
+-- | Update the security state
+--
+-- If the update is the same as the last one stored, and the current one is not
+-- yet sufficiently old, then we ignore this update and return the old state.
+--
+-- NOTE: We pass in the maximum age as an argument so that if we change the
+-- policy then we can still accurately replay the old log.
+updateSecurityState :: Int        -- ^ Maximum age of previous update in secs
+                    -> TUFUpdate
+                    -> Update SecurityState (Timestamp, Snapshot)
+updateSecurityState maxAge newUpdate = do
+    oldUpdate <- State.gets securityLastUpdate
+    when (needUpdate oldUpdate newUpdate) $ do
+      _newTimestampVersion <- nextTimestampVersion
+      _newSnapshotVersion  <- nextSnapshotVersion
+      State.modify $ \st -> st { securityLastUpdate = Just newUpdate }
+    fromJust `liftM` liftQuery constructTUFFiles
+  where
+    needUpdate :: Maybe TUFUpdate -> TUFUpdate -> Bool
+    needUpdate Nothing    _   = True
+    needUpdate (Just old) new = changed old new || tooOld old new
+
+    -- Did the files change (ignoring time)?
+    changed :: TUFUpdate -> TUFUpdate -> Bool
+    changed old new = old /= new{tufUpdateTime = tufUpdateTime old}
+
+    -- Is the existing update too told?
+    tooOld :: TUFUpdate -> TUFUpdate -> Bool
+    tooOld old new = (tufUpdateTime new `diffUTCTime` tufUpdateTime old)
+                  >= (fromIntegral maxAge)
+
 makeAcidic ''SecurityState [
     'getSecurityState
   , 'replaceSecurityState
@@ -114,6 +212,8 @@ makeAcidic ''SecurityState [
   , 'getTimestampKey
   , 'nextSnapshotVersion
   , 'nextTimestampVersion
+  , 'constructTUFFiles
+  , 'updateSecurityState
   ]
 
 {-------------------------------------------------------------------------------

@@ -32,7 +32,6 @@ import Distribution.Server.Features.Core
 import qualified Distribution.Server.Features.Security.SHA256 as SHA
 
 -- Hackage security
-import qualified Hackage.Security.Server    as Sec
 import qualified Hackage.Security.Util.Path as Sec
 
 {-------------------------------------------------------------------------------
@@ -53,9 +52,6 @@ import qualified Hackage.Security.Util.Path as Sec
   Hence, we all keep these together in the single cache. Note that it _is_
   ok to update the index without updating the TUF data, because the index
   is append only.
-
-  TODO: Compute length, MD5 and SHA256 hashes simultenously when updating
-  any of these TUF files.
 -------------------------------------------------------------------------------}
 
 data SecurityCache = SecurityCache {
@@ -73,82 +69,28 @@ updateSecurityCache :: StateComponent AcidState SecurityState
                     -> CoreFeature
                     -> IO SecurityCache
 updateSecurityCache securityState securityFileCache coreFeature = do
-    now       <- getCurrentTime
-    files     <- readAsyncCache securityFileCache
-    snapshot  <- computeSnapshot  securityState now coreFeature files
-    timestamp <- computeTimestamp securityState now snapshot
+    now                   <- getCurrentTime
+    SecurityFileCache{..} <- readAsyncCache securityFileCache
+    IndexTarballInfo{..}  <- queryGetIndexTarballInfo coreFeature
+
+    let maxAge = 60 * 60 -- Don't update cache if unchanged and younger than 1hr
+        tufUpdate = TUFUpdate{
+            tufUpdateTime        = now
+          , tufUpdateInfoRoot    = fileInfo securityFileCacheRoot
+          , tufUpdateInfoMirrors = fileInfo securityFileCacheMirrors
+          , tufUpdateInfoTarGz   = fileInfo indexTarballIncremGz
+          , tufUpdateInfoTar     = fileInfo indexTarballIncremUn
+          }
+
+    (timestamp, snapshot) <- updateState securityState $
+                               UpdateSecurityState maxAge tufUpdate
 
     return SecurityCache {
         securityCacheTimestamp = timestamp
       , securityCacheSnapshot  = snapshot
-      , securityCacheRoot      = securityFileCacheRoot    files
-      , securityCacheMirrors   = securityFileCacheMirrors files
+      , securityCacheRoot      = securityFileCacheRoot
+      , securityCacheMirrors   = securityFileCacheMirrors
       }
-
--- | Compute new snapshot
-computeSnapshot :: StateComponent AcidState SecurityState
-                -> UTCTime
-                -> CoreFeature
-                -> SecurityFileCache
-                -> IO Snapshot
-computeSnapshot securityState now coreFeature SecurityFileCache{..} = do
-    indexTarballInfo <- queryGetIndexTarballInfo coreFeature
-    snapshotVersion  <- updateState securityState NextSnapshotVersion
-    snapshotKey      <- queryState  securityState GetSnapshotKey
-    let rootInfo    = secFileInfo securityFileCacheRoot
-        mirrorsInfo = secFileInfo securityFileCacheMirrors
-        tarGzInfo   = secFileInfo $ indexTarballIncremGz indexTarballInfo
-        tarInfo     = secFileInfo $ indexTarballIncremUn indexTarballInfo
-        snapshot    = Sec.Snapshot {
-                          Sec.snapshotVersion     = snapshotVersion
-                        , Sec.snapshotExpires     = Sec.expiresInDays now 3
-                        , Sec.snapshotInfoRoot    = rootInfo
-                        , Sec.snapshotInfoMirrors = mirrorsInfo
-                        , Sec.snapshotInfoTarGz   = tarGzInfo
-                        , Sec.snapshotInfoTar     = Just tarInfo
-                        }
-        signed      = Sec.withSignatures layout [snapshotKey] snapshot
-        raw         = Sec.renderJSON layout signed
-        md5         = Crypto.hash raw
-        sha256      = SHA.sha256  raw
-    return $ Snapshot TUFFile {
-        _tufFileContent    = raw
-      , _tufFileLength     = fromIntegral $ BS.Lazy.length raw
-      , _tufFileHashMD5    = md5
-      , _tufFileHashSHA256 = sha256
-      , _tufFileModified   = now
-      }
-  where
-    layout = Sec.hackageRepoLayout
-
--- | Compute new timestamp
-computeTimestamp :: StateComponent AcidState SecurityState
-                 -> UTCTime
-                 -> Snapshot
-                 -> IO Timestamp
-computeTimestamp securityState now snapshot = do
-    timestampVersion <- updateState securityState NextTimestampVersion
-    timestampKey     <- queryState  securityState GetTimestampKey
-    let timestamp = Sec.Timestamp {
-                        timestampVersion      = timestampVersion
-                      , timestampExpires      = Sec.expiresInDays now 3
-                      , timestampInfoSnapshot = secFileInfo snapshot
-                      }
-        signed    = Sec.withSignatures layout [timestampKey] timestamp
-        raw       = Sec.renderJSON layout signed
-        md5       = Crypto.hash raw
-        sha256    = SHA.sha256  raw
-    -- We don't actually use the SHA256 of the timestamp for anything; we
-    -- compute it just for uniformity's sake.
-    return $ Timestamp TUFFile {
-        _tufFileContent    = raw
-      , _tufFileLength     = fromIntegral $ BS.Lazy.length raw
-      , _tufFileHashMD5    = md5
-      , _tufFileHashSHA256 = sha256
-      , _tufFileModified   = now
-      }
-  where
-    layout = Sec.hackageRepoLayout
 
 {-------------------------------------------------------------------------------
   The security file cache
