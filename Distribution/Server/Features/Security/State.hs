@@ -14,28 +14,13 @@ import Data.Typeable
 import qualified Control.Monad.State as State
 
 -- hackage
-import Distribution.Server.Framework.MemSize
+import Distribution.Server.Features.Security.FileInfo
 import Distribution.Server.Features.Security.Orphans ()
-import Distribution.Server.Features.Security.SHA256
+import Distribution.Server.Framework.MemSize
 
 -- hackage-security
 import Hackage.Security.Util.Some
 import qualified Hackage.Security.Server as Sec
-
--- | Simplified form of the FileInfo used in hackage-security
-data FileInfo = FileInfo {
-    fileInfoLength :: Int
-  , fileInfoSHA256 :: SHA256Digest
-  }
-  deriving (Typeable, Show, Eq)
-
-deriveSafeCopy 0 'base ''FileInfo
-
-instance MemSize FileInfo where
-  memSize FileInfo{..} =
-    memSize2
-      fileInfoLength
-      fileInfoSHA256
 
 -- | Input that determines the TUF files
 --

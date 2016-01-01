@@ -95,10 +95,10 @@ computeSnapshot securityState now coreFeature SecurityFileCache{..} = do
     indexTarballInfo <- queryGetIndexTarballInfo coreFeature
     snapshotVersion  <- updateState securityState NextSnapshotVersion
     snapshotKey      <- queryState  securityState GetSnapshotKey
-    let rootInfo    = fileInfo securityFileCacheRoot
-        mirrorsInfo = fileInfo securityFileCacheMirrors
-        tarGzInfo   = fileInfo $ indexTarballIncremGz indexTarballInfo
-        tarInfo     = fileInfo $ indexTarballIncremUn indexTarballInfo
+    let rootInfo    = secFileInfo securityFileCacheRoot
+        mirrorsInfo = secFileInfo securityFileCacheMirrors
+        tarGzInfo   = secFileInfo $ indexTarballIncremGz indexTarballInfo
+        tarInfo     = secFileInfo $ indexTarballIncremUn indexTarballInfo
         snapshot    = Sec.Snapshot {
                           Sec.snapshotVersion     = snapshotVersion
                         , Sec.snapshotExpires     = Sec.expiresInDays now 3
@@ -132,7 +132,7 @@ computeTimestamp securityState now snapshot = do
     let timestamp = Sec.Timestamp {
                         timestampVersion      = timestampVersion
                       , timestampExpires      = Sec.expiresInDays now 3
-                      , timestampInfoSnapshot = fileInfo snapshot
+                      , timestampInfoSnapshot = secFileInfo snapshot
                       }
         signed    = Sec.withSignatures layout [timestampKey] timestamp
         raw       = Sec.renderJSON layout signed

@@ -50,8 +50,8 @@ instance ToMessage TUFFile where
       , ("Last-modified", formatLastModifiedTime (tufFileModified file))
       ]
 
-instance FileInfo TUFFile where
-  fileInfo file = mkFileInfo (tufFileLength file) (tufFileHashSHA256 file)
+instance HasFileInfo TUFFile where
+  fileInfo file = FileInfo (tufFileLength file) (tufFileHashSHA256 file)
 
 {-------------------------------------------------------------------------------
   Wrappers around TUFFile
@@ -76,16 +76,16 @@ instance IsTUFFile TUFFile where
   tufFileModified   TUFFile{..} = _tufFileModified
 
 newtype Timestamp = Timestamp { timestampFile :: TUFFile }
-  deriving (Typeable, Show, Eq, NFData, ToMessage, IsTUFFile, FileInfo)
+  deriving (Typeable, Show, Eq, NFData, ToMessage, IsTUFFile, HasFileInfo)
 
 newtype Snapshot = Snapshot { snapshotFile :: TUFFile }
-  deriving (Typeable, Show, Eq, NFData, ToMessage, IsTUFFile, FileInfo)
+  deriving (Typeable, Show, Eq, NFData, ToMessage, IsTUFFile, HasFileInfo)
 
 newtype Root = Root { rootFile :: TUFFile }
-  deriving (Typeable, Show, Eq, NFData, ToMessage, IsTUFFile, FileInfo)
+  deriving (Typeable, Show, Eq, NFData, ToMessage, IsTUFFile, HasFileInfo)
 
 newtype Mirrors = Mirrors { mirrorsFile :: TUFFile }
-  deriving (Typeable, Show, Eq, NFData, ToMessage, IsTUFFile, FileInfo)
+  deriving (Typeable, Show, Eq, NFData, ToMessage, IsTUFFile, HasFileInfo)
 
 deriveSafeCopy 0 'base ''Timestamp
 deriveSafeCopy 0 'base ''Snapshot
