@@ -7,7 +7,7 @@ This is the `hackage-server` code. This is what powers <http://hackage.haskell.o
 ## Installing ICU
 
 ICU stands for "International Components for Unicode". The `icu4c` is a set
-of libraries that provide Uncicode and Globalization support.
+of libraries that provide Unicode and Globalization support.
 The [text-icu](https://hackage.haskell.org/package/text-icu) Haskell package
 uses the [icu4c](http://icu-project.org/apiref/icu4c/) library to build.
 
