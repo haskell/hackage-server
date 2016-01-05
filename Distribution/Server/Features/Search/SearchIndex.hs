@@ -14,6 +14,7 @@ module Distribution.Server.Features.Search.SearchIndex (
     lookupTerm,
     lookupTermId,
     lookupDocId,
+    lookupDocId',
     lookupDocKey,
     lookupDocKeyReal,
 
@@ -170,6 +171,11 @@ lookupDocId SearchIndex{docIdMap} docid =
   where
     errNotFound = error $ "lookupDocId: not found " ++ show docid
 
+lookupDocId' :: SearchIndex key field feature -> DocId -> key
+lookupDocId' searchIndex docId = dockey
+  where
+    (dockey, _, _) = lookupDocId searchIndex docId
+
 lookupDocKey :: Ord key => SearchIndex key field feature -> key -> Maybe (DocTermIds field)
 lookupDocKey SearchIndex{docKeyMap, docIdMap} key =
     case Map.lookup key docKeyMap of
@@ -223,7 +229,7 @@ getDocTermIds SearchIndex{docIdMap} docid =
 -- delete indexdoc
 
 -- | This is the representation for documents to be added to the index.
--- Documents may 
+-- Documents may
 --
 type DocTerms         field   = field   -> [Term]
 type DocFeatureValues feature = feature -> Float
@@ -278,7 +284,7 @@ deleteDoc key si@SearchIndex{docKeyMap}
       . deleteDocEntry docid key
       . deleteTermToDocIdEntries (Set.toList oldTerms) docid
       $ si
-  
+
   | otherwise = si
 
 
@@ -312,7 +318,7 @@ docTermIdsTermSet si doctermids =
 --
 
 -- | Add an entry into the 'Term' to 'DocId' mapping.
-insertTermToDocIdEntry :: Term -> DocId -> 
+insertTermToDocIdEntry :: Term -> DocId ->
                           SearchIndex key field feature ->
                           SearchIndex key field feature
 insertTermToDocIdEntry term !docid si@SearchIndex{termMap, termIdMap, nextTermId} =
@@ -406,4 +412,3 @@ instance MemSize TermInfo where
 
 instance MemSize key => MemSize (DocInfo key field feature) where
   memSize (DocInfo a b c) = memSize3 a b c
-
