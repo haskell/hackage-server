@@ -99,10 +99,12 @@ executable hackage-server
     Distribution.Server.Framework.AuthCrypt
     Distribution.Server.Framework.BlobStorage
     Distribution.Server.Framework.Cache
+    Distribution.Server.Framework.Cron
     Distribution.Server.Framework.Error
     Distribution.Server.Framework.Logging
     Distribution.Server.Framework.Feature
     Distribution.Server.Framework.Hook
+    Distribution.Server.Framework.HtmlFormWrapper
     Distribution.Server.Framework.Instances
     Distribution.Server.Framework.MemState
     Distribution.Server.Framework.MemSize
@@ -187,6 +189,7 @@ executable hackage-server
       Distribution.Server.Features.LegacyPasswds
       Distribution.Server.Features.LegacyPasswds.Auth
       Distribution.Server.Features.PackageContents
+      Distribution.Server.Features.AdminFrontend
       Distribution.Server.Features.AdminLog
       Distribution.Server.Features.BuildReports
       Distribution.Server.Features.BuildReports.BuildReport
@@ -226,6 +229,7 @@ executable hackage-server
       Distribution.Server.Features.Search.SearchEngine
       Distribution.Server.Features.Search.SearchIndex
       Distribution.Server.Features.Search.TermBag
+      Distribution.Server.Features.Sitemap.Functions
       Distribution.Server.Features.Votes
       Distribution.Server.Features.Votes.State
       Distribution.Server.Features.Votes.Render
@@ -277,7 +281,7 @@ executable hackage-server
     network    >= 2.1,
     unix       >= 2.6,
     zlib       >= 0.5.3 && < 0.6,
-    tar        == 0.4.* && >= 0.4.0.1,
+    tar        >= 0.4.0.1 && < 0.4.3,
     async      == 2.0.*,
     cereal     >= 0.4,
     safecopy   >= 0.6 && < 0.9,
@@ -348,6 +352,7 @@ executable hackage-mirror
     Distribution.Client.Mirror.Repo.Hackage2
     Distribution.Client.Mirror.Repo.Local
     Distribution.Client.Mirror.Repo.Util
+    Distribution.Client.Mirror.Repo.Secure
     Distribution.Client.Mirror.Repo.Types
     Distribution.Client.Mirror.Repo
     Distribution.Client.Mirror.Session
