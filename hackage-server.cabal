@@ -282,7 +282,8 @@ executable hackage-server
     network    >= 2.1,
     unix       >= 2.6,
     zlib       >= 0.5.3 && < 0.6,
-    tar        >= 0.4.0.1 && < 0.5,
+    -- we need new features from tar 0.4.3, and 0.4.3 and 0.4.4 are blacklisted
+    tar        >= 0.4.5 && < 0.5,
     async      == 2.0.*,
     cereal     >= 0.4,
     safecopy   >= 0.6 && < 0.9,
@@ -292,7 +293,7 @@ executable hackage-server
     aeson      >= 0.6.2,
     unordered-containers >= 0.2.3.0,
     rss        >= 3000.2.0.3,
-    Cabal      >= 1.22,
+    Cabal      >= 1.22 && < 1.25,
     csv        == 0.1.*,
     stm        >= 2.2 && < 2.5,
     acid-state >= 0.12.2,

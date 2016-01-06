@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE NamedFieldPuns, RecordWildCards, BangPatterns,
+{-# LANGUAGE NamedFieldPuns, RecordWildCards, BangPatterns, CPP,
              StandaloneDeriving, GeneralizedNewtypeDeriving #-}
 module Distribution.Server.Features.EditCabalFiles (
     initEditCabalFilesFeature
@@ -256,6 +256,9 @@ checkPackageDescriptions
      copyrightA maintainerA authorA stabilityA testedWithA homepageA
      pkgUrlA bugReportsA sourceReposA synopsisA descriptionA
      categoryA customFieldsA _buildDependsA specVersionA buildTypeA
+#if MIN_VERSION_Cabal(1,23,0)
+     _setupBuildInfoA
+#endif
      _libraryA _executablesA _testSuitesA _benchmarksA dataFilesA dataDirA
      extraSrcFilesA extraTmpFilesA extraDocFilesA)
   (PackageDescription
@@ -263,6 +266,9 @@ checkPackageDescriptions
      copyrightB maintainerB authorB stabilityB testedWithB homepageB
      pkgUrlB bugReportsB sourceReposB synopsisB descriptionB
      categoryB customFieldsB _buildDependsB specVersionB buildTypeB
+#if MIN_VERSION_Cabal(1,23,0)
+     _setupBuildInfoB
+#endif
      _libraryB _executablesB _testSuitesB _benchmarksB dataFilesB dataDirB
      extraSrcFilesB extraTmpFilesB extraDocFilesB)
   = do
@@ -349,11 +355,12 @@ checkDependencies _ [] [dep@(Dependency (PackageName "base") _)] =
 
 checkDependencies componentName ds1 ds2 =
     fmapCheck canonicaliseDeps
-      (checkList "Cannot add or remove dependencies, \
-                \just change the version constraints"
-                (checkDependency componentName))
+      (checkList err (checkDependency componentName))
       ds1 ds2
   where
+    err = "Cannot add or remove dependencies, "
+       ++ "just change the version constraints"
+
     -- Allow a limited degree of adding and removing deps: only when they
     -- are additional constraints on an existing package.
     canonicaliseDeps :: [Dependency] -> [Dependency]
@@ -369,8 +376,10 @@ checkDependency componentName (Dependency pkgA verA) (Dependency pkgB verB)
                               " component's dependency on " ++ display pkgA)
                              display
                              verA verB
-  | otherwise    = fail "Cannot change which packages are dependencies, \
-                        \just their version constraints."
+  | otherwise    = fail err
+  where
+    err = "Cannot change which packages are dependencies, "
+       ++ "just their version constraints."
 
 checkLibrary :: Check Library
 checkLibrary (Library modulesA reexportedA requiredSigsA exposedSigsA
@@ -404,10 +413,12 @@ checkBenchmark (Benchmark _nameA interfaceA buildInfoA _enabledA)
 
 checkBuildInfo :: Check BuildInfo
 checkBuildInfo biA biB =
-  checkSame "Cannot change build information \
-            \(just the dependency version constraints)"
+  checkSame err
             (biA { targetBuildDepends = [] })
             (biB { targetBuildDepends = [] })
+  where
+    err = "Cannot change build information "
+       ++ "(just the dependency version constraints)"
 
 changesOk :: Eq a => String -> (a -> String) -> Check a
 changesOk what render a b
