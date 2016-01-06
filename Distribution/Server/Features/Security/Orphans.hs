@@ -9,6 +9,7 @@
 module Distribution.Server.Features.Security.Orphans where
 
 -- stdlib
+import Control.DeepSeq
 import Data.SafeCopy
 import Data.Serialize
 import Data.Digest.Pure.MD5
@@ -20,6 +21,7 @@ import Distribution.Server.Framework.MemSize
 
 -- hackage-security
 import Hackage.Security.Util.Some
+import Text.JSON.Canonical (Int54)
 import qualified Hackage.Security.Server      as Sec
 import qualified Hackage.Security.Util.Pretty as Sec
 
@@ -49,6 +51,15 @@ instance Serialize Sec.FileVersion where
 instance SafeCopy MD5Digest where
  -- use default Serialize instance (provided by the pureMD5 package)
 
+-- Before hackage-security moved to Int64, it was using Int, so in order to
+-- keep the Serialize instance the same, that's what we translate to here.
+instance SafeCopy Int54 where
+  -- use default Serialize instance
+
+instance Serialize Int54 where
+   put = put . (fromIntegral :: Int54 -> Int)
+   get = (fromIntegral :: Int -> Int54) `fmap` get
+
 {-------------------------------------------------------------------------------
   MemSize instances
 -------------------------------------------------------------------------------}
@@ -67,3 +78,13 @@ instance MemSize (Ed25519.SecretKey) where
 
 instance MemSize Sec.FileVersion where
   memSize (Sec.FileVersion v) = memSize v
+
+instance MemSize Int54 where
+  memSize _ = 4
+
+{-------------------------------------------------------------------------------
+  NFData instances
+-------------------------------------------------------------------------------}
+
+instance NFData Int54 where
+  rnf a = a `seq` ()

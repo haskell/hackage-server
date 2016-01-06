@@ -26,11 +26,12 @@ import Distribution.Server.Features.Security.FileInfo
 import Distribution.Server.Features.Security.Orphans ()
 import Distribution.Server.Features.Security.SHA256
 import Distribution.Server.Framework.ResponseContentTypes
+import Text.JSON.Canonical (Int54)
 
 -- | Serialized TUF file along with some metadata necessary to serve the file
 data TUFFile = TUFFile {
     _tufFileContent    :: !BS.Lazy.ByteString
-  , _tufFileLength     :: !Int
+  , _tufFileLength     :: !Int54
   , _tufFileHashMD5    :: !MD5Digest
   , _tufFileHashSHA256 :: !SHA256Digest
   , _tufFileModified   :: !UTCTime
@@ -44,7 +45,7 @@ instance NFData TUFFile where
 
 instance ToMessage TUFFile where
   toResponse file =
-    mkResponseLen (tufFileContent file) (tufFileLength file) [
+    mkResponseLen (tufFileContent file) (fromIntegral (tufFileLength file)) [
         ("Content-Type", "text/json")
       , ("Content-MD5",   show (tufFileHashMD5 file))
       , ("Last-modified", formatLastModifiedTime (tufFileModified file))
@@ -63,7 +64,7 @@ instance HasFileInfo TUFFile where
 
 class IsTUFFile a where
   tufFileContent    :: a -> BS.Lazy.ByteString
-  tufFileLength     :: a -> Int
+  tufFileLength     :: a -> Int54
   tufFileHashMD5    :: a -> MD5Digest
   tufFileHashSHA256 :: a -> SHA256Digest
   tufFileModified   :: a -> UTCTime
