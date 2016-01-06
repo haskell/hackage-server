@@ -1,7 +1,7 @@
 -- |  Response types used by the security feature
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Distribution.Server.Features.Security.ResponseContentTypes (
     TUFFile(..)
