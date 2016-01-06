@@ -25,11 +25,17 @@ import qualified Hackage.Security.Server as Sec
 
 {-------------------------------------------------------------------------------
   Extract file info
+
+  NOTE: The HasFileInfo instances for 'TarballUncompressed' and co go from Int
+  to Int54; if Int == Int32 (and the MemSize instance seems to suggest that it
+  is), then this is an upcast; in that case, we should worry when the index gets
+  larger than 2 GB (won't happen any time soon). If Int == Int64, then this is a
+  downcast but I doubt we'll have files larger than 2^53 any time soon :)
 -------------------------------------------------------------------------------}
 
 -- | Simplified form of the FileInfo used in hackage-security
 data FileInfo = FileInfo {
-    fileInfoLength :: Int
+    fileInfoLength :: Sec.Int54
   , fileInfoSHA256 :: SHA256Digest
   }
   deriving (Typeable, Show, Eq)
@@ -46,13 +52,13 @@ class HasFileInfo a where
   fileInfo :: a -> FileInfo
 
 instance HasFileInfo TarballUncompressed where
-  fileInfo TarballUncompressed{..} = FileInfo tarLength tarHashSHA256
+  fileInfo TarballUncompressed{..} = FileInfo (fromIntegral tarLength) tarHashSHA256
 
 instance HasFileInfo TarballCompressed where
-  fileInfo TarballCompressed{..} = FileInfo tarGzLength tarGzHashSHA256
+  fileInfo TarballCompressed{..} = FileInfo (fromIntegral tarGzLength) tarGzHashSHA256
 
 instance HasFileInfo BlobInfo where
-  fileInfo BlobInfo{..} = FileInfo blobInfoLength blobInfoHashSHA256
+  fileInfo BlobInfo{..} = FileInfo (fromIntegral blobInfoLength) blobInfoHashSHA256
 
 {-------------------------------------------------------------------------------
   Auxiliary
