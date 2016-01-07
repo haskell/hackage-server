@@ -482,7 +482,7 @@ sourceRepositoryToHtml sr
       Just Darcs
        | (Just url, Nothing, Nothing) <-
          (repoLocation sr, repoModule sr, repoBranch sr) ->
-          concatHtml [toHtml "darcs get ",
+          concatHtml [toHtml "darcs clone ",
                       anchor ! [href url] << toHtml url,
                       case repoTag sr of
                           Just tag' -> toHtml (" --tag " ++ tag')
