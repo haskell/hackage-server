@@ -19,7 +19,7 @@ module Distribution.Server.Util.CabalRevisions
 -- NB: This module avoids to import any hackage-server modules
 import Distribution.Package
 import Distribution.Text (display)
-import Distribution.Version (intersectVersionRanges)
+import Distribution.Version
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Parse
          (parsePackageDescription, sourceRepoFieldDescrs)
@@ -142,18 +142,18 @@ checkGenericPackageDescription
 
 checkPackageDescriptions :: Check PackageDescription
 checkPackageDescriptions
-  (PackageDescription
+  pdA@(PackageDescription
      packageIdA licenseA licenseFileA
      copyrightA maintainerA authorA stabilityA testedWithA homepageA
      pkgUrlA bugReportsA sourceReposA synopsisA descriptionA
-     categoryA customFieldsA _buildDependsA specVersionA buildTypeA
+     categoryA customFieldsA _buildDependsA _specVersionRawA buildTypeA
      _libraryA _executablesA _testSuitesA _benchmarksA dataFilesA dataDirA
      extraSrcFilesA extraTmpFilesA extraDocFilesA)
-  (PackageDescription
+  pdB@(PackageDescription
      packageIdB licenseB licenseFileB
      copyrightB maintainerB authorB stabilityB testedWithB homepageB
      pkgUrlB bugReportsB sourceReposB synopsisB descriptionB
-     categoryB customFieldsB _buildDependsB specVersionB buildTypeB
+     categoryB customFieldsB _buildDependsB _specVersionRawB buildTypeB
      _libraryB _executablesB _testSuitesB _benchmarksB dataFilesB dataDirB
      extraSrcFilesB extraTmpFilesB extraDocFilesB)
   = do
@@ -179,8 +179,6 @@ checkPackageDescriptions
   changesOk "synopsis"    id synopsisA synopsisB
   changesOk "description" id descriptionA descriptionB
   changesOk "category"    id categoryA categoryB
-  checkSame "Cannot change the Cabal spec version"
-            specVersionA specVersionB
   checkSame "Cannot change the build-type"
             buildTypeA buildTypeB
   checkSame "Cannot change the data files"
@@ -195,8 +193,28 @@ checkPackageDescriptions
   checkSame "Cannot change custom/extension fields"
             (filter (\(f,_) -> f /= "x-revision") customFieldsA)
             (filter (\(f,_) -> f /= "x-revision") customFieldsB)
+
+  checkSpecVersionRaw pdA pdB
+
   checkRevision customFieldsA customFieldsB
 
+checkSpecVersionRaw :: Check PackageDescription
+checkSpecVersionRaw pdA pdB
+  | specVersionA `withinRange` range110To120
+  , specVersionB `withinRange` range110To120
+  = changesOk "cabal-version" display specVersionA specVersionB
+
+  | otherwise
+  = checkSame "Cannot change the Cabal spec version"
+              specVersionA specVersionB
+  where
+    specVersionA = specVersion pdA
+    specVersionB = specVersion pdB
+
+    -- nothing interesting changed within the  Cabal >=1.10 && <1.21 range
+    -- therefore we allow to change the spec version within this interval
+    range110To120 = (orLaterVersion (Version [1,10] [])) `intersectVersionRanges`
+                    (earlierVersion (Version [1,21] []))
 
 checkRevision :: Check [(String, String)]
 checkRevision customFieldsA customFieldsB =
