@@ -152,6 +152,7 @@ executable hackage-server
 
     Distribution.Server.Util.Histogram
     Distribution.Server.Util.CountingMap
+    Distribution.Server.Util.CabalRevisions
     Distribution.Server.Util.Parse
     Distribution.Server.Util.ServeTarball
     Distribution.Server.Util.TarIndex

@@ -626,7 +626,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
           pkgname      = packageName pkginfo
           revisions    = reverse $ Vec.toList (pkgMetadataRevisions pkginfo)
           numRevisions = pkgNumRevisions pkginfo
-          revchanges   = [ case diffCabalRevisions pkgid
+          revchanges   = [ case diffCabalRevisionsByteString
                                   (cabalFileByteString old)
                                   (cabalFileByteString new)
                            of Left _err     -> []
