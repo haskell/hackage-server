@@ -36,6 +36,7 @@ import Data.List
 import qualified Data.Char as Char
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.Map as Map
+import Control.Applicative
 import Control.Monad.Except  (ExceptT, runExceptT, throwError)
 import Control.Monad.Writer (MonadWriter(..), Writer, runWriter)
 
@@ -59,7 +60,7 @@ runCheck c = case runWriter . runExceptT . unCheckM $ c of
                (Right (), changes) -> Right changes
 
 instance Monad CheckM where
-  return         = pure
+  return         = Control.Applicative.pure
   CheckM m >>= f = CheckM (m >>= unCheckM . f)
   fail           = CheckM . throwError
 
