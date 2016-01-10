@@ -309,7 +309,7 @@ executable hackage-server
     -- reason behind the 'network-uri' build time flag is, but if it's
     -- crucial that we may not rely on it, then we also need to make this
     -- possibly in hackage-security, or else make security optional
-    hackage-security,
+    hackage-security < 0.5,
     ed25519,
     SHA,
     binary
