@@ -33,8 +33,6 @@ import Distribution.Version  (Version(..), VersionRange, foldVersionRange')
 import Distribution.System   (Arch(..), OS(..))
 import Distribution.Compiler (CompilerFlavor(..), CompilerId(..))
 
-import qualified Data.Digest.Pure.SHA as SHA
-
 -------------------------------------------------------------------------------
 -- Mem size class and instances
 --
@@ -208,9 +206,3 @@ instance MemSize CompilerFlavor where
 
 instance MemSize CompilerId where
     memSize (CompilerId a b) = memSize2 a b
-
-instance MemSize (SHA.Digest SHA.SHA256State) where
-    memSize _ = memSize (undefined :: SHA.SHA256State) -- TODO: Verify
-
-instance MemSize (SHA.SHA256State) where
-    memSize _ = 8 * memSize (undefined :: Word32)

@@ -172,6 +172,7 @@ executable hackage-server
     Distribution.Server.Features.Security.Migration
     Distribution.Server.Features.Security.Orphans
     Distribution.Server.Features.Security.ResponseContentTypes
+    Distribution.Server.Features.Security.SHA256
     Distribution.Server.Features.Security.State
     Distribution.Server.Features.Mirror
     Distribution.Server.Features.Upload
@@ -281,7 +282,8 @@ executable hackage-server
     network    >= 2.1,
     unix       >= 2.6,
     zlib       >= 0.5.3 && < 0.6,
-    tar        >= 0.4.0.1 && < 0.5,
+    -- we need new features from tar 0.4.3, and 0.4.3 and 0.4.4 are blacklisted
+    tar        >= 0.4.5 && < 0.5,
     async      == 2.0.*,
     cereal     >= 0.4,
     safecopy   >= 0.6 && < 0.9,
@@ -291,7 +293,7 @@ executable hackage-server
     aeson      >= 0.6.2,
     unordered-containers >= 0.2.3.0,
     rss        >= 3000.2.0.3,
-    Cabal      == 1.22.*,
+    Cabal      >= 1.22 && < 1.25,
     csv        == 0.1.*,
     stm        >= 2.2 && < 2.5,
     acid-state >= 0.12.2,
@@ -305,13 +307,10 @@ executable hackage-server
     cheapskate >= 0.1,
     blaze-html >= 0.7,
     xmlgen     >= 0.6,
-    -- TODO: hackage-security relies on network-uri. Not sure what the
-    -- reason behind the 'network-uri' build time flag is, but if it's
-    -- crucial that we may not rely on it, then we also need to make this
-    -- possibly in hackage-security, or else make security optional
-    hackage-security,
+    hackage-security >= 0.5,
     ed25519,
-    SHA,
+    byteable,
+    cryptohash,
     binary
 
   if ! flag(minimal)
@@ -370,13 +369,15 @@ executable hackage-mirror
     Cabal,
     safecopy, cereal, binary, mtl,
     unix, aeson,
-    SHA,
+    byteable,
+    cryptohash,
     parsec,
     process >= 1.2.0,
     hackage-security >= 0.2,
     hackage-security-HTTP
   default-language:   Haskell2010
-  default-extensions: FlexibleContexts
+  default-extensions: ExistentialQuantification
+                      FlexibleContexts
                       FlexibleInstances
                       GeneralizedNewtypeDeriving
                       MultiParamTypeClasses
@@ -413,7 +414,8 @@ executable hackage-build
     aeson >= 0.6.1.0,
     random,
     unix,
-    SHA,
+    byteable,
+    cryptohash,
     -- Runtime dependency only:
     hscolour >= 1.8
   default-language: Haskell2010
