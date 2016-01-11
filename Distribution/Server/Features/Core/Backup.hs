@@ -20,6 +20,7 @@ import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BlobStorage (BlobId, blobMd5)
 import Distribution.Server.Users.Types (UserName(..))
+import Distribution.Server.Features.Security.SHA256
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Distribution.Package
@@ -43,8 +44,6 @@ import qualified Distribution.Server.Util.GZip as GZip
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.Char8 as BSC
 import System.FilePath ((</>))
-
-import qualified Data.Digest.Pure.SHA as SHA
 
 packagesBackup :: RestoreBackup PackagesState
 packagesBackup = updatePackages (PartialIndex Map.empty Nothing)
@@ -72,7 +71,7 @@ data PartialPkg = PartialPkg {
 data TarballInfo = TarballInfo {
     infoTarGzMD5    :: BlobId
   , infoTarGzLength :: Int
-  , infoTarGzSHA256 :: SHA.Digest SHA.SHA256State
+  , infoTarGzSHA256 :: SHA256Digest
   , infoTarMD5      :: BlobId
   }
 
