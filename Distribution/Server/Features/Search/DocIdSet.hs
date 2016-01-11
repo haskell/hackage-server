@@ -60,6 +60,7 @@ instance MVG.MVector MVU.MVector DocId where
   basicUnsafeNew sz = MVU_DocId `liftM` MVG.basicUnsafeNew sz
   basicUnsafeRead (MVU_DocId vw) ix   = DocId `liftM` MVG.basicUnsafeRead vw ix
   basicUnsafeWrite (MVU_DocId vw) ix (DocId word) = MVG.basicUnsafeWrite vw ix word
+  basicInitialize (MVU_DocId vw) = MVG.basicInitialize vw
 
 -- represented as a sorted sequence of ids
 invariant :: DocIdSet -> Bool
