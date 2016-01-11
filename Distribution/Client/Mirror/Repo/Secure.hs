@@ -13,13 +13,13 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Cont
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (fromMaybe)
+import Data.Time (getCurrentTime)
 import Network.URI (URI)
 import System.Directory
 import System.FilePath
 import System.IO
-import qualified Data.ByteString as BS
-import qualified Data.ByteString as BS.L
+import qualified Data.ByteString.Lazy as BS.L
 
 -- Cabal
 import Distribution.Package
@@ -33,11 +33,11 @@ import Distribution.Client.Mirror.Repo.Types
 
 -- hackage-security
 import qualified Hackage.Security.Client                    as Sec
-import qualified Hackage.Security.Client.Repository.Cache   as Sec
+import qualified Hackage.Security.Client.Repository.Cache   as Sec.Cache
 import qualified Hackage.Security.Client.Repository.HttpLib as Sec
 import qualified Hackage.Security.Client.Repository.Remote  as Sec.Remote
 import qualified Hackage.Security.Util.Checked              as Sec
-import qualified Hackage.Security.Util.Path                 as Sec.Path
+import qualified Hackage.Security.Util.Path                 as Sec
 import qualified Hackage.Security.Util.Pretty               as Sec
 
 withSourceRepo :: Verbosity
@@ -48,7 +48,7 @@ withSourceRepo :: Verbosity
                -> Maybe [Sec.KeyId]
                -> (SourceRepo -> IO a) -> IO a
 withSourceRepo verbosity httpLib uri cacheDir threshold keys callback = do
-    cacheDir' <- Sec.Path.makeAbsolute (Sec.Path.fromFilePath cacheDir)
+    cacheDir' <- Sec.makeAbsolute (Sec.fromFilePath cacheDir)
 
     -- It is important that we get the compressed index _as it exists_
     -- on the server because we cannot reliably recreate it (with the same
@@ -56,24 +56,21 @@ withSourceRepo verbosity httpLib uri cacheDir threshold keys callback = do
     -- layout where we want the compressed index to be stored, and we tell
     -- the repository that it should always download the compressed index.
 
-    let rp :: Sec.Path.UnrootedPath -> Sec.CachePath
-        rp = Sec.Path.rootPath Sec.Path.Rooted
+    let rp :: Sec.Path Sec.Unrooted -> Sec.CachePath
+        rp = Sec.rootPath
 
-        cache :: Sec.Cache
-        cache = Sec.Cache {
-            Sec.cacheRoot   = cacheDir'
-          , Sec.cacheLayout = Sec.cabalCacheLayout {
-                Sec.cacheLayoutIndexTarGz =
-                  Just $ rp $ Sec.Path.fragment' "00-index.tar.gz"
+        cache :: Sec.Cache.Cache
+        cache = Sec.Cache.Cache {
+            Sec.Cache.cacheRoot   = cacheDir'
+          , Sec.Cache.cacheLayout = Sec.cabalCacheLayout {
+                Sec.cacheLayoutIndexTarGz = rp $ Sec.fragment "00-index.tar.gz"
               }
           }
 
-        repoOptions :: Sec.Remote.RepoOpts
-        repoOptions = Sec.Remote.RepoOpts
-           { repoAllowContentCompression = True
-           , repoWantCompressedIndex = True
-           , repoAllowAdditionalMirrors = True
-           }
+        repoOpts :: Sec.Remote.RepoOpts
+        repoOpts = Sec.Remote.defaultRepoOpts {
+            Sec.Remote.repoAllowAdditionalMirrors = False
+          }
 
         logger :: Sec.LogMessage -> IO ()
         logger msg = when (verbosity >= verbose) $
@@ -82,9 +79,10 @@ withSourceRepo verbosity httpLib uri cacheDir threshold keys callback = do
     Sec.Remote.withRepository
       httpLib
       [uri]
-      repoOptions
+      repoOpts
       cache
       Sec.hackageRepoLayout
+      Sec.hackageIndexLayout
       logger $ \rep ->
         callback SourceSecure {
             sourceRepository    = rep
@@ -93,28 +91,29 @@ withSourceRepo verbosity httpLib uri cacheDir threshold keys callback = do
           , sourceRepoThreshold = fromMaybe (Sec.KeyThreshold 0) threshold
           }
 
-downloadIndex :: Sec.Repository
-              -> Sec.Cache
+downloadIndex :: Sec.Repository down
+              -> Sec.Cache.Cache
               -> [Sec.KeyId]
               -> Sec.KeyThreshold
               -> MirrorSession [PkgIndexInfo]
-downloadIndex rep Sec.Cache{..} rootKeys threshold =
+downloadIndex rep Sec.Cache.Cache{..} rootKeys threshold =
     handleChecked (mirrorError . verificationError) $
     handleChecked (mirrorError . remoteError)       $ do
       _hasUpdates <- liftIO $ do
         requiresBootstrap <- Sec.requiresBootstrap rep
         when requiresBootstrap $ Sec.bootstrap rep rootKeys threshold
-        Sec.checkForUpdates rep Sec.CheckExpiry
+        now <- getCurrentTime
+        Sec.checkForUpdates rep (Just now)
       -- TODO: Is this hasUpdates values useful anywhere?
       readIndex (show rep) indexPath
   where
     verificationError = GetEntityError EntityIndex . GetVerificationError
     remoteError       = GetEntityError EntityIndex . GetRemoteError
 
-    indexPath = Sec.Path.toFilePath $
+    indexPath = Sec.toFilePath $
       Sec.anchorCachePath cacheRoot (Sec.cacheLayoutIndexTar cacheLayout)
 
-downloadPackage :: Sec.Repository
+downloadPackage :: Sec.Repository down
                 -> PackageId
                 -> FilePath
                 -> FilePath
@@ -124,9 +123,10 @@ downloadPackage rep pkgId locCab locTgz =
    handleChecked (return . Just . GetVerificationError) $
    handleChecked (return . Just . GetRemoteError)       $
      liftIO $ do
-       Sec.downloadPackage rep pkgId $ \tempPath ->
-         renameFile (Sec.Path.toFilePath tempPath) locTgz
-       BS.writeFile locCab =<< Sec.getCabalFile rep pkgId
+       Sec.downloadPackage' rep pkgId locTgz
+       cabalFile <- Sec.withIndex rep $ \Sec.IndexCallbacks{..} ->
+         Sec.trusted `liftM` indexLookupCabal pkgId
+       BS.L.writeFile locCab cabalFile
        return Nothing
 
 -- | Finalize the mirror (copy over index and TUF files)
@@ -161,20 +161,20 @@ downloadPackage rep pkgId locCab locTgz =
 -- start versioning files on the server as described in the TUF spec; however,
 -- since this is only applies to a few files, and clients will simply retry when
 -- they get a verification error, it's not a priority.
-finalizeLocalMirror :: Sec.Cache -> FilePath -> MirrorSession ()
+finalizeLocalMirror :: Sec.Cache.Cache -> FilePath -> MirrorSession ()
 finalizeLocalMirror cache targetRepoPath = liftIO $ do
-    repoRoot <- Sec.Path.makeAbsolute $ Sec.Path.fromFilePath targetRepoPath
+    repoRoot <- Sec.makeAbsolute $ Sec.fromFilePath targetRepoPath
     finalizeLocalMirror' cache repoRoot
 
-finalizeLocalMirror' :: Sec.Cache -> Sec.Path.AbsolutePath -> IO ()
+finalizeLocalMirror' :: Sec.Cache.Cache -> Sec.Path Sec.Absolute -> IO ()
 finalizeLocalMirror' cache repoRoot = (`runContT` return) $ do
     -- TODO: We need to think about updating these files atomically
-    cp Sec.cacheLayoutIndexTar                Sec.repoLayoutIndexTar
-    cp (fromJust . Sec.cacheLayoutIndexTarGz) Sec.repoLayoutIndexTarGz
-    cp Sec.cacheLayoutMirrors                 Sec.repoLayoutMirrors
-    cp Sec.cacheLayoutRoot                    Sec.repoLayoutRoot
-    cp Sec.cacheLayoutSnapshot                Sec.repoLayoutSnapshot
-    cp Sec.cacheLayoutTimestamp               Sec.repoLayoutTimestamp
+    cp Sec.cacheLayoutIndexTar   Sec.repoLayoutIndexTar
+    cp Sec.cacheLayoutIndexTarGz Sec.repoLayoutIndexTarGz
+    cp Sec.cacheLayoutMirrors    Sec.repoLayoutMirrors
+    cp Sec.cacheLayoutRoot       Sec.repoLayoutRoot
+    cp Sec.cacheLayoutSnapshot   Sec.repoLayoutSnapshot
+    cp Sec.cacheLayoutTimestamp  Sec.repoLayoutTimestamp
   where
     cp :: (Sec.CacheLayout -> Sec.CachePath)
        -> (Sec.RepoLayout  -> Sec.RepoPath)
@@ -182,8 +182,9 @@ finalizeLocalMirror' cache repoRoot = (`runContT` return) $ do
     cp src dst = copyFileAtomic (cacheFP cache src) (repoFP repoRoot dst)
 
     copyFileAtomic :: FilePath -> FilePath -> ContT r IO ()
-    copyFileAtomic src dst = ContT $ \callback ->
-      bracket (openTempFile (takeDirectory dst) (takeFileName dst))
+    copyFileAtomic src dst = ContT $ \callback -> do
+      let (dir, template) = splitFileName dst
+      bracket (openBinaryTempFileWithDefaultPermissions dir template)
               (\(temp, h) -> ignoreIOErrors (hClose h >> removeFile temp)) $
               (\(temp, h) -> do
                  BS.L.hPut h =<< BS.L.readFile src
@@ -195,22 +196,22 @@ finalizeLocalMirror' cache repoRoot = (`runContT` return) $ do
     ignoreIOErrors :: IO () -> IO ()
     ignoreIOErrors = handle $ \(_ :: IOException) -> return ()
 
-cacheTargetIndex :: Sec.Cache -> FilePath -> MirrorSession ()
+cacheTargetIndex :: Sec.Cache.Cache -> FilePath -> MirrorSession ()
 cacheTargetIndex cache targetCache = liftIO $
-     copyFile (cacheFP cache $ fromJust . Sec.cacheLayoutIndexTarGz)
+     copyFile (cacheFP cache Sec.cacheLayoutIndexTarGz)
               (targetCachedIndexPath targetCache)
 
 {-------------------------------------------------------------------------------
   Auxiliary
 -------------------------------------------------------------------------------}
 
-cacheFP :: Sec.Cache -> (Sec.CacheLayout -> Sec.CachePath) -> FilePath
-cacheFP Sec.Cache{..} f = Sec.Path.toFilePath
-                        $ Sec.anchorCachePath cacheRoot
-                        $ f cacheLayout
+cacheFP :: Sec.Cache.Cache -> (Sec.CacheLayout -> Sec.CachePath) -> FilePath
+cacheFP Sec.Cache.Cache{..} f = Sec.toFilePath
+                              $ Sec.anchorCachePath cacheRoot
+                              $ f cacheLayout
 
-repoFP :: Sec.Path.AbsolutePath -> (Sec.RepoLayout -> Sec.RepoPath) -> FilePath
-repoFP repoRoot f = Sec.Path.toFilePath
+repoFP :: Sec.Path Sec.Absolute -> (Sec.RepoLayout -> Sec.RepoPath) -> FilePath
+repoFP repoRoot f = Sec.toFilePath
                   $ Sec.anchorRepoPathLocally repoRoot
                   $ f Sec.hackageRepoLayout
 
@@ -219,5 +220,5 @@ handleChecked :: Exception e
               -> (Sec.Throws e => MirrorSession a)
               -> MirrorSession a
 handleChecked handler act = do
-    run <- askRun
-    liftCont (Sec.catchChecked (run act)) handler
+    run <- askUnlift
+    liftCont (Sec.catchChecked (unlift run act)) handler

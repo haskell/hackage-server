@@ -24,8 +24,8 @@ data SourceRepo =
       }
 
     -- | Secure repo
-  | SourceSecure {
-        sourceRepository    :: Sec.Repository
+  | forall down. SourceSecure {
+        sourceRepository    :: Sec.Repository down
       , sourceRepoCache     :: Sec.Cache
       , sourceRepoRootKeys  :: [Sec.KeyId]
       , sourceRepoThreshold :: Sec.KeyThreshold

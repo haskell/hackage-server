@@ -1,11 +1,15 @@
 -- |  Response types used by the security feature
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Distribution.Server.Features.Security.ResponseContentTypes (
     TUFFile(..)
-  , Timestamp
-  , Snapshot
-  , Root
-  , Mirrors
+  , IsTUFFile(..)
+  , Timestamp(..)
+  , Snapshot(..)
+  , Root(..)
+  , Mirrors(..)
   ) where
 
 -- stdlib
@@ -13,39 +17,77 @@ import Happstack.Server
 import Control.DeepSeq
 import Data.Digest.Pure.MD5 (MD5Digest)
 import Data.Time
+import Data.Typeable
+import Data.SafeCopy
 import qualified Data.ByteString.Lazy as BS.Lazy
 
 -- hackage
+import Distribution.Server.Features.Security.FileInfo
+import Distribution.Server.Features.Security.Orphans ()
+import Distribution.Server.Features.Security.SHA256
 import Distribution.Server.Framework.ResponseContentTypes
 
--- hackage-security
-import qualified Hackage.Security.Server as Sec
-import qualified Data.Digest.Pure.SHA    as SHA
-
--- | TUF file
---
--- TODO: See note for TarballUncompressed about strictness and SHA.Digest
-data TUFFile a = TUFFile {
-    tufFileContent    :: !BS.Lazy.ByteString
-  , tufFileLength     :: !Int
-  , tufFileHashMD5    :: !MD5Digest
-  , tufFileHashSHA256 :: !(SHA.Digest SHA.SHA256State)
-  , tufFileModified   :: !UTCTime
-  , tufFileExpires    :: !UTCTime
+-- | Serialized TUF file along with some metadata necessary to serve the file
+data TUFFile = TUFFile {
+    _tufFileContent    :: !BS.Lazy.ByteString
+  , _tufFileLength     :: !Int
+  , _tufFileHashMD5    :: !MD5Digest
+  , _tufFileHashSHA256 :: !SHA256Digest
+  , _tufFileModified   :: !UTCTime
   }
+  deriving (Typeable, Show, Eq)
 
-type Timestamp = TUFFile Sec.Timestamp
-type Snapshot  = TUFFile Sec.Snapshot
-type Root      = TUFFile Sec.Root
-type Mirrors   = TUFFile Sec.Mirrors
+deriveSafeCopy 0 'base ''TUFFile
 
-instance NFData (TUFFile a) where
-  rnf (TUFFile a b c _d e f) = rnf (a, b, c, e, f)
+instance NFData TUFFile where
+  rnf (TUFFile a b c d e) = rnf (a, b, c, d, e)
 
-instance ToMessage (TUFFile a) where
-  toResponse TUFFile{..} =
-    mkResponseLen tufFileContent tufFileLength [
+instance ToMessage TUFFile where
+  toResponse file =
+    mkResponseLen (tufFileContent file) (tufFileLength file) [
         ("Content-Type", "text/json")
-      , ("Content-MD5",   show tufFileHashMD5)
-      , ("Last-modified", formatLastModifiedTime tufFileModified)
+      , ("Content-MD5",   show (tufFileHashMD5 file))
+      , ("Last-modified", formatLastModifiedTime (tufFileModified file))
       ]
+
+instance HasFileInfo TUFFile where
+  fileInfo file = FileInfo (tufFileLength file) (tufFileHashSHA256 file)
+
+{-------------------------------------------------------------------------------
+  Wrappers around TUFFile
+
+  (We originally had a phantom type argument here indicating what kind of TUF
+  file this is, but that lead to problems with 'deriveSafeCopy'; now we use a
+  bunch of newtype wrappers instead.)
+-------------------------------------------------------------------------------}
+
+class IsTUFFile a where
+  tufFileContent    :: a -> BS.Lazy.ByteString
+  tufFileLength     :: a -> Int
+  tufFileHashMD5    :: a -> MD5Digest
+  tufFileHashSHA256 :: a -> SHA256Digest
+  tufFileModified   :: a -> UTCTime
+
+instance IsTUFFile TUFFile where
+  tufFileContent    TUFFile{..} = _tufFileContent
+  tufFileLength     TUFFile{..} = _tufFileLength
+  tufFileHashMD5    TUFFile{..} = _tufFileHashMD5
+  tufFileHashSHA256 TUFFile{..} = _tufFileHashSHA256
+  tufFileModified   TUFFile{..} = _tufFileModified
+
+newtype Timestamp = Timestamp { timestampFile :: TUFFile }
+  deriving (Typeable, Show, Eq, NFData, ToMessage, IsTUFFile, HasFileInfo)
+
+newtype Snapshot = Snapshot { snapshotFile :: TUFFile }
+  deriving (Typeable, Show, Eq, NFData, ToMessage, IsTUFFile, HasFileInfo)
+
+newtype Root = Root { rootFile :: TUFFile }
+  deriving (Typeable, Show, Eq, NFData, ToMessage, IsTUFFile, HasFileInfo)
+
+newtype Mirrors = Mirrors { mirrorsFile :: TUFFile }
+  deriving (Typeable, Show, Eq, NFData, ToMessage, IsTUFFile, HasFileInfo)
+
+deriveSafeCopy 0 'base ''Timestamp
+deriveSafeCopy 0 'base ''Snapshot
+deriveSafeCopy 0 'base ''Root
+deriveSafeCopy 0 'base ''Mirrors

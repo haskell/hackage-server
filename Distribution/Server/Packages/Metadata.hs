@@ -42,7 +42,7 @@ pkgTarballTargets revNo pkgId pkgTarball = Sec.Targets {
       targetsVersion     = Sec.FileVersion revNo
     , targetsExpires     = Sec.expiresNever
     , targetsTargets     = Sec.FileMap.fromList [
-                               (inRepoPkgTarGz pkgId, fileInfo pkgTarballGz)
+                               (inRepoPkgTarGz pkgId, secFileInfo pkgTarballGz)
                              ]
     , targetsDelegations = Nothing
     }
