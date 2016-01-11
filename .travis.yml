@@ -29,6 +29,6 @@ install:
 script:
  - cabal configure --enable-tests --disable-optimization
  - cabal build -j1
- - cabal test
+ - cabal test --show-details=streaming
 
 # EOF
