@@ -5,6 +5,7 @@ module Distribution.Server.Features.Core (
     initCoreFeature,
 
     -- * Change events
+    PackageUpdate(..),
     PackageChange(..),
     isPackageChangeAny,
     isPackageAdd,
@@ -142,6 +143,17 @@ data CoreFeature = CoreFeature {
 instance IsHackageFeature CoreFeature where
     getFeatureInterface = coreFeatureInterface
 
+-- | How was a package updated?
+data PackageUpdate
+    -- | Cabal file was updated
+    = PackageUpdatedCabalFile
+    -- | A new tarball was uploaded
+    | PackageUpdatedTarball
+    -- | Package uploader was modified
+    | PackageUpdatedUploader
+    -- | Package upload time was modified
+    | PackageUpdatedUploadTime
+
 -- | This is designed so that you can pattern match on just the kinds of
 -- events you are interested in.
 data PackageChange
@@ -151,7 +163,7 @@ data PackageChange
     -- the package index.
     | PackageChangeDelete PkgInfo
     -- | A package was updated from the first `PkgInfo` to the second.
-    | PackageChangeInfo   PkgInfo PkgInfo
+    | PackageChangeInfo PackageUpdate PkgInfo PkgInfo
     -- | A file has changed in the package index tar not covered by any of the
     -- other change types.
     | PackageChangeIndexExtra String ByteString UTCTime
@@ -164,7 +176,7 @@ data PackageChange
 isPackageChangeAny :: PackageChange -> Maybe (PackageId, Maybe PkgInfo)
 isPackageChangeAny (PackageChangeAdd        pkginfo) = Just (packageId pkginfo, Just pkginfo)
 isPackageChangeAny (PackageChangeDelete     pkginfo) = Just (packageId pkginfo, Nothing)
-isPackageChangeAny (PackageChangeInfo     _ pkginfo) = Just (packageId pkginfo, Just pkginfo)
+isPackageChangeAny (PackageChangeInfo   _ _ pkginfo) = Just (packageId pkginfo, Just pkginfo)
 isPackageChangeAny  PackageChangeIndexExtra {}       = Nothing
 
 -- | A predicate to use with `packageChangeHook` and `registerHookJust` for
@@ -511,7 +523,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
         Nothing ->
           runHook_ packageChangeHook  (PackageChangeAdd newpkginfo)
         Just oldpkginfo ->
-          runHook_ packageChangeHook  (PackageChangeInfo oldpkginfo newpkginfo)
+          runHook_ packageChangeHook  (PackageChangeInfo PackageUpdatedCabalFile oldpkginfo newpkginfo)
 
     updateAddPackageTarball :: MonadIO m => PackageId -> PkgTarball -> UploadInfo -> m Bool
     updateAddPackageTarball pkgid tarball uploadinfo = do
@@ -519,7 +531,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       case mpkginfo of
         Nothing -> return False
         Just (oldpkginfo, newpkginfo) -> do
-          runHook_ packageChangeHook  (PackageChangeInfo oldpkginfo newpkginfo)
+          runHook_ packageChangeHook  (PackageChangeInfo PackageUpdatedTarball oldpkginfo newpkginfo)
           return True
 
     updateSetPackageUploader pkgid userid = do
@@ -527,7 +539,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       case mpkginfo of
         Nothing -> return False
         Just (oldpkginfo, newpkginfo) -> do
-          runHook_ packageChangeHook  (PackageChangeInfo oldpkginfo newpkginfo)
+          runHook_ packageChangeHook  (PackageChangeInfo PackageUpdatedUploader oldpkginfo newpkginfo)
           return True
 
     updateSetPackageUploadTime pkgid time = do
@@ -535,7 +547,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       case mpkginfo of
         Nothing -> return False
         Just (oldpkginfo, newpkginfo) -> do
-          runHook_ packageChangeHook  (PackageChangeInfo oldpkginfo newpkginfo)
+          runHook_ packageChangeHook  (PackageChangeInfo PackageUpdatedUploadTime oldpkginfo newpkginfo)
           return True
 
     updateArchiveIndexEntry :: MonadIO m => FilePath -> ByteString -> UTCTime -> m ()
