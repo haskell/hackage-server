@@ -67,8 +67,19 @@ initSecurityFeature env = do
        -- TODO: We cannot deal with deletes (they are a problem elsewhere too)
        registerHook (preIndexUpdateHook coreFeature) $ \chg -> return $
          case chg of
-           PackageChangeAdd    pkg   -> indexEntriesFor pkg
-           PackageChangeInfo _ new   -> indexEntriesFor new
+           PackageChangeAdd      pkg -> indexEntriesFor pkg
+           PackageChangeInfo s _ new -> case s of
+             PackageUpdatedTarball    -> indexEntriesFor new
+             -- .cabal file is not recorded in the TUF metadata
+             -- (until we have author signing anyway)
+             PackageUpdatedCabalFile  -> []
+             -- the uploader is not included in the TUF metadata
+             PackageUpdatedUploader   -> []
+             -- upload time is not included in the TUF metadata
+             -- (it is recorded in the MetadataEntry because we use it for
+             -- the tarball construction, but it doesn't affect the contents
+             -- of the TUF metadata)
+             PackageUpdatedUploadTime -> []
            PackageChangeDelete _     -> []
            PackageChangeIndexExtra{} -> []
 
