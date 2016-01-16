@@ -230,7 +230,7 @@ checkRevision customFieldsA customFieldsB =
         Just s  | [(n,"")] <- reads s -> n :: Int
         _                             -> 0
 
-checkCondTree :: Check a -> Check (ComponentName, CondTree ConfVar [Dependency] a)
+checkCondTree :: (ComponentName -> Check a) -> Check (ComponentName, CondTree ConfVar [Dependency] a)
 checkCondTree checkElem (componentName, condNodeA)
                         (_            , condNodeB) =
     checkCondNode condNodeA condNodeB
@@ -240,7 +240,7 @@ checkCondTree checkElem (componentName, condNodeA)
       checkDependencies componentName constraintsA constraintsB
       checkList "Cannot add or remove 'if' conditionals"
                 checkComponent componentsA componentsB
-      checkElem dataA dataB
+      checkElem componentName dataA dataB
 
     checkComponent (condA, ifPartA, thenPartA)
                    (condB, ifPartB, thenPartB) = do
@@ -281,8 +281,9 @@ checkDependency componentName (Dependency pkgA verA) (Dependency pkgB verB)
   | otherwise    = fail "Cannot change which packages are dependencies, \
                         \just their version constraints."
 
-checkLibrary :: Check Library
-checkLibrary (Library modulesA reexportedA requiredSigsA exposedSigsA
+checkLibrary :: ComponentName -> Check Library
+checkLibrary componentName
+             (Library modulesA reexportedA requiredSigsA exposedSigsA
                       exposedA buildInfoA)
              (Library modulesB reexportedB requiredSigsB exposedSigsB
                       exposedB buildInfoB) = do
@@ -291,32 +292,40 @@ checkLibrary (Library modulesA reexportedA requiredSigsA exposedSigsA
   checkSame "Cannot change the required signatures" requiredSigsA requiredSigsB
   checkSame "Cannot change the exposed signatures"  exposedSigsA  exposedSigsB
   checkSame "Cannot change the package exposed status" exposedA exposedB
-  checkBuildInfo buildInfoA buildInfoB
+  checkBuildInfo componentName buildInfoA buildInfoB
 
-checkExecutable :: Check Executable
-checkExecutable (Executable _nameA pathA buildInfoA)
+checkExecutable :: ComponentName -> Check Executable
+checkExecutable componentName
+                (Executable _nameA pathA buildInfoA)
                 (Executable _nameB pathB buildInfoB) = do
   checkSame "Cannot change build information" pathA pathB
-  checkBuildInfo buildInfoA buildInfoB
+  checkBuildInfo componentName buildInfoA buildInfoB
 
-checkTestSuite :: Check TestSuite
-checkTestSuite (TestSuite _nameA interfaceA buildInfoA _enabledA)
+checkTestSuite :: ComponentName -> Check TestSuite
+checkTestSuite componentName
+               (TestSuite _nameA interfaceA buildInfoA _enabledA)
                (TestSuite _nameB interfaceB buildInfoB _enabledB) = do
   checkSame "Cannot change test-suite type" interfaceA interfaceB
-  checkBuildInfo buildInfoA buildInfoB
+  checkBuildInfo componentName buildInfoA buildInfoB
 
-checkBenchmark :: Check Benchmark
-checkBenchmark (Benchmark _nameA interfaceA buildInfoA _enabledA)
+checkBenchmark :: ComponentName -> Check Benchmark
+checkBenchmark componentName
+               (Benchmark _nameA interfaceA buildInfoA _enabledA)
                (Benchmark _nameB interfaceB buildInfoB _enabledB) = do
   checkSame "Cannot change benchmark type" interfaceA interfaceB
-  checkBuildInfo buildInfoA buildInfoB
+  checkBuildInfo componentName buildInfoA buildInfoB
 
-checkBuildInfo :: Check BuildInfo
-checkBuildInfo biA biB =
-  checkSame "Cannot change build information \
-            \(just the dependency version constraints)"
-            (biA { targetBuildDepends = [] })
-            (biB { targetBuildDepends = [] })
+checkBuildInfo :: ComponentName -> Check BuildInfo
+checkBuildInfo componentName biA biB = do
+    changesOkList changesOk
+              ("'other-extensions' in " ++ showComponentName componentName ++ " component")
+              display
+              (otherExtensions biA) (otherExtensions biB)
+
+    checkSame "Cannot change build information \
+              \(just the dependency version constraints)"
+              (biA { targetBuildDepends = [], otherExtensions = [] })
+              (biB { targetBuildDepends = [], otherExtensions = [] })
 
 changesOk :: Eq a => String -> (a -> String) -> Check a
 changesOk what render a b
