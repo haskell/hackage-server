@@ -64,6 +64,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Vector as Vec
 import Data.Maybe (fromMaybe, isJust)
+import Data.Monoid ((<>))
 import qualified Data.Text as T
 import Data.Traversable (traverse)
 import Control.Applicative (optional)
@@ -1581,7 +1582,7 @@ mkHtmlSearch HtmlUtilities{..}
               hackagePage "Package search" $
                 [ toHtml $ searchForm termsStr False
                 , toHtml $ resultsArea pkgIndex currentTime pkgDetails offset limit moreResults termsStr
-                , alternativeSearch
+                , alternativeSearchTerms termsStr
                 ]
 
           _ ->
@@ -1655,10 +1656,21 @@ mkHtmlSearch HtmlUtilities{..}
         alternativeSearch =
           paragraph <<
             [ toHtml "Alternatively, if you are looking for a particular function then try "
-            , anchor ! [href "http://holumbus.fh-wedel.de/hayoo/hayoo.html"] << "Hayoo"
+            , anchor ! [href hayooBaseLink] << "Hayoo"
             , toHtml " or "
-            , anchor ! [href "http://www.haskell.org/hoogle/"] << "Hoogle"
+            , anchor ! [href hoogleBaseLink] << "Hoogle"
             ]
+        alternativeSearchTerms termsStr =
+          paragraph <<
+            [ toHtml "Alternatively, if you are looking for a particular function then try "
+            , anchor ! [href (hayooLink termsStr)] << "Hayoo"
+            , toHtml " or "
+            , anchor ! [href (hoogleLink termsStr)] << "Hoogle"
+            ]
+        hayooBaseLink  = "http://holumbus.fh-wedel.de/hayoo/hayoo.html"
+        hoogleBaseLink = "http://www.haskell.org/hoogle/"
+        hayooLink termsStr  = "http://hayoo.fh-wedel.de/?query=" <> termsStr
+        hoogleLink termsStr = "http://www.haskell.org/hoogle/?hoogle=" <> termsStr
 
         explainResults :: (Maybe PackageName, [(Search.Explanation PkgDocField PkgDocFeatures T.Text, PackageName)]) -> [Html]
         explainResults (exactMatch, results) =
