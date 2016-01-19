@@ -337,8 +337,8 @@ changesOkList :: (String -> (a -> String) -> Check a)
 changesOkList changesOkElem what render = go
   where
     go []     []     = return ()
-    go (a:_)  []     = logChange (Change ("added "   ++ what) (render a) "")
-    go []     (b:_)  = logChange (Change ("removed " ++ what) "" (render b))
+    go (a:_)  []     = logChange (Change ("removed " ++ what) (render a) "")
+    go []     (b:_)  = logChange (Change ("added "   ++ what) "" (render b))
     go (a:as) (b:bs) = changesOkElem what render a b >> go as bs
 
 checkSame :: Eq a => String -> Check a
