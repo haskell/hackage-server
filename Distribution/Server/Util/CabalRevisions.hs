@@ -35,8 +35,9 @@ import Text.PrettyPrint as Doc
 import Data.List
 import qualified Data.Char as Char
 import Data.ByteString.Lazy (ByteString)
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import Control.Applicative
+import Control.Monad
 import Control.Monad.Except  (ExceptT, runExceptT, throwError)
 import Control.Monad.Writer (MonadWriter(..), Writer, runWriter)
 
@@ -251,35 +252,63 @@ checkCondTree checkElem (componentName, condNodeA)
                  checkCondNode thenPartA thenPartB
 
 checkDependencies :: ComponentName -> Check [Dependency]
--- Special case: there are some pretty weird broken packages out there, see
---   https://github.com/haskell/hackage-server/issues/303
-checkDependencies _ [] [dep@(Dependency (PackageName "base") _)] =
-    logChange (Change ("added dependency on") (display dep) "")
+checkDependencies componentName ds1 ds2 = do
+    forM_ removed $ \(Dependency pn _) -> do
+        fail ("Cannot remove existing dependency on " ++ display pn ++
+              " in " ++ showComponentName componentName ++ " component")
 
-checkDependencies componentName ds1 ds2 =
-    fmapCheck canonicaliseDeps
-      (checkList "Cannot add or remove dependencies, \
-                \just change the version constraints"
-                (checkDependency componentName))
-      ds1 ds2
+    forM_ added $ \(dep@(Dependency pn _)) ->
+        if pn `elem` additionWhitelist
+           then logChange (Change ("added dependency on") (display dep) "")
+           else fail ("Cannot add new dependency on " ++ display pn ++
+                      " in " ++ showComponentName componentName ++ " component")
+
+    forM_ changed $ \(pkgn, (verA, verB)) -> do
+        changesOk ("the " ++ showComponentName componentName ++
+                   " component's dependency on " ++ display pkgn)
+                   display verA verB
   where
-    -- Allow a limited degree of adding and removing deps: only when they
-    -- are additional constraints on an existing package.
-    canonicaliseDeps :: [Dependency] -> [Dependency]
-    canonicaliseDeps =
-        map (\(pkgname, verrange) -> Dependency pkgname verrange)
-      . Map.toList
-      . Map.fromListWith (flip intersectVersionRanges)
-      . map (\(Dependency pkgname verrange) -> (pkgname, verrange))
+    (removed, changed, added) = computeCanonDepChange ds1 ds2
 
-checkDependency :: ComponentName -> Check Dependency
-checkDependency componentName (Dependency pkgA verA) (Dependency pkgB verB)
-  | pkgA == pkgB = changesOk ("the " ++ showComponentName componentName ++
-                              " component's dependency on " ++ display pkgA)
-                             display
-                             verA verB
-  | otherwise    = fail "Cannot change which packages are dependencies, \
-                        \just their version constraints."
+    additionWhitelist :: [PackageName]
+    additionWhitelist =
+    -- Special case: there are some pretty weird broken packages out there, see
+    --   https://github.com/haskell/hackage-server/issues/303
+    -- which need us to add a new dep on `base`
+        [ PackageName "base"
+
+    -- See also https://github.com/haskell/hackage-server/issues/472
+    --
+    -- this is mostly to allow to add dependencies on `base-orphans == 0`
+    -- as otherwise we have no way to express when a package is
+    -- incompatible with the recently introduced `base-orphans` package
+    -- which started adopting orphan instances; in the long-term we need a
+    -- more general approach to this, as otherwise we'll end up adding
+    -- ad-hoc exceptions like this one. See e.g.
+    --   https://github.com/haskell/cabal/issues/3061
+    --
+        , PackageName "base-orphans"
+        ]
+
+-- The result tuple represents the 3 canonicalised dependency
+-- (removed deps (old ranges), retained deps (old & new ranges), added deps (new ranges))
+-- or expressed as set-operations: (A \ B, (A ∩ B), B \ A)
+computeCanonDepChange :: [Dependency] -> [Dependency] -> ([Dependency],[(PackageName,(VersionRange,VersionRange))],[Dependency])
+computeCanonDepChange depsA depsB
+    = ( mapToDeps (a `Map.difference` b)
+      , Map.toList $ Map.intersectionWith (,) a b
+      , mapToDeps (b `Map.difference` a)
+      )
+  where
+    a = depsToMapWithCanonVerRange depsA
+    b = depsToMapWithCanonVerRange depsB
+
+    depsToMapWithCanonVerRange
+        = Map.fromListWith (flip intersectVersionRanges) .
+          map (\(Dependency pkgname verrange) -> (pkgname, verrange))
+
+    mapToDeps
+        = map (\(pkgname, verrange) -> Dependency pkgname verrange) . Map.toList
 
 checkLibrary :: ComponentName -> Check Library
 checkLibrary componentName
@@ -324,8 +353,8 @@ checkBuildInfo componentName biA biB = do
 
     checkSame "Cannot change build information \
               \(just the dependency version constraints)"
-              (biA { targetBuildDepends = [], otherExtensions = [] })
-              (biB { targetBuildDepends = [], otherExtensions = [] })
+              (biA { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [] })
+              (biB { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [] })
 
 changesOk :: Eq a => String -> (a -> String) -> Check a
 changesOk what render a b
@@ -363,10 +392,6 @@ checkMaybe :: String -> Check a -> Check (Maybe a)
 checkMaybe _   _     Nothing  Nothing  = return ()
 checkMaybe _   check (Just x) (Just y) = check x y
 checkMaybe msg _     _        _        = fail msg
-
-fmapCheck :: (b -> a) -> Check a -> Check b
-fmapCheck f check a b =
-  check (f a) (f b)
 
 --TODO: export from Cabal
 ppSourceRepo :: SourceRepo -> Doc
