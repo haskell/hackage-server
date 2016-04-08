@@ -67,7 +67,10 @@ data PackageRender = PackageRender {
     -- If PackageRender is the One True Resource Representation, should they
     -- instead be fields of PackageRender?
     rendOther        :: PackageDescription
-} deriving (Show)
+}
+
+instance Show PackageRender where
+  show pr = "FIXME how do we render rendModules?"
 
 doPackageRender :: Users.Users -> PkgInfo -> PackageRender
 doPackageRender users info = PackageRender
