@@ -70,13 +70,15 @@ packagePage render headLinks top sections
     pkgid   = rendPkgId render
     pkgName = display $ packageName pkgid
 
+    pkgUrl = "/package/" ++ pkgName
+
     canonical = thelink ! [ rel "canonical"
-                          , href ("/package/" ++ pkgName) ] << noHtml
+                          , href pkgUrl ] << noHtml
     docTitle = pkgName
             ++ case synopsis (rendOther render) of
                  ""    -> ""
                  short -> ": " ++ short
-    docSubtitle = toHtml docTitle
+    docSubtitle = anchor ! [href pkgUrl] << docTitle
 
     docBody = h1 << bodyTitle
           : concat [
