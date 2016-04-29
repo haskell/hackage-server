@@ -371,10 +371,12 @@ notifyResponse e = do
     getFailedPermanent (GetError resp) =
        case resp of
          ErrorResponse _ (4,0,4)    _ _ -> True
+         ErrorResponse _ (4,1,0)    _ _ -> True
          ErrorResponse _ _otherCode _ _ -> False
     getFailedPermanent (GetRemoteError (Sec.SomeRemoteError theError)) =
        case cast theError of
          Just (Sec.HTTP.UnexpectedResponse _ (4,0,4)) -> True
+         Just (Sec.HTTP.UnexpectedResponse _ (4,1,0)) -> True
          _otherwise                                   -> False
     getFailedPermanent (GetVerificationError _) = False
     getFailedPermanent (GetInvalidPackage _)    = True
