@@ -46,7 +46,7 @@ instance NFData TUFFile where
 instance ToMessage TUFFile where
   toResponse file =
     mkResponseLen (tufFileContent file) (fromIntegral (tufFileLength file)) [
-        ("Content-Type", "text/json")
+        ("Content-Type", "application/json")
       , ("Content-MD5",   show (tufFileHashMD5 file))
       , ("Last-modified", formatLastModifiedTime (tufFileModified file))
       ]
