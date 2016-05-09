@@ -47,7 +47,7 @@ instance ToMessage TUFFile where
   toResponse file =
     mkResponseLen (tufFileContent file) (fromIntegral (tufFileLength file)) [
         ("Content-Type", "application/json")
-      , ("Content-MD5",   show (tufFileHashMD5 file))
+      , ("Content-MD5",   formatMD5Digest (tufFileHashMD5 file))
       , ("Last-modified", formatLastModifiedTime (tufFileModified file))
       ]
 
