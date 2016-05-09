@@ -1,3 +1,5 @@
+-- TODO: check why this is needed:
+{-# OPTIONS_GHC -fsimpl-tick-factor=150 #-}
 module Distribution.Server.Features.LegacyRedirects (
     legacyRedirectsFeature
   ) where
