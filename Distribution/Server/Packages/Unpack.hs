@@ -197,8 +197,9 @@ extraChecks genPkgDesc = do
 
   let pureChecks = checkPackage genPkgDesc (Just pkgDesc)
       checks = pureChecks -- ++ fileChecks
-      isDistError (PackageDistSuspicious {}) = False -- warn without refusing
-      isDistError _                          = True
+      isDistError (PackageDistSuspicious     {}) = False -- just a warning
+      isDistError (PackageDistSuspiciousWarn {}) = False -- just a warning
+      isDistError _                              = True
       (errors, warnings) = partition isDistError checks
   mapM_ (throwError . explanation) errors
   mapM_ (warn . explanation) warnings
