@@ -148,15 +148,15 @@ checkPackageDescriptions
      copyrightA maintainerA authorA stabilityA testedWithA homepageA
      pkgUrlA bugReportsA sourceReposA synopsisA descriptionA
      categoryA customFieldsA _buildDependsA _specVersionRawA buildTypeA
-     _libraryA _executablesA _testSuitesA _benchmarksA dataFilesA dataDirA
-     extraSrcFilesA extraTmpFilesA extraDocFilesA)
+     customSetupA _libraryA _executablesA _testSuitesA _benchmarksA
+     dataFilesA dataDirA extraSrcFilesA extraTmpFilesA extraDocFilesA)
   pdB@(PackageDescription
      packageIdB licenseB licenseFileB
      copyrightB maintainerB authorB stabilityB testedWithB homepageB
      pkgUrlB bugReportsB sourceReposB synopsisB descriptionB
      categoryB customFieldsB _buildDependsB _specVersionRawB buildTypeB
-     _libraryB _executablesB _testSuitesB _benchmarksB dataFilesB dataDirB
-     extraSrcFilesB extraTmpFilesB extraDocFilesB)
+     customSetupB _libraryB _executablesB _testSuitesB _benchmarksB
+     dataFilesB dataDirB extraSrcFilesB extraTmpFilesB extraDocFilesB)
   = do
   checkSame "Don't be silly! You can't change the package name!"
             (packageName packageIdA) (packageName packageIdB)
@@ -196,6 +196,7 @@ checkPackageDescriptions
             (filter (\(f,_) -> f /= "x-revision") customFieldsB)
 
   checkSpecVersionRaw pdA pdB
+  checkSetupBuildInfo customSetupA customSetupB
 
   checkRevision customFieldsA customFieldsB
 
@@ -309,6 +310,29 @@ computeCanonDepChange depsA depsB
 
     mapToDeps
         = map (\(pkgname, verrange) -> Dependency pkgname verrange) . Map.toList
+
+checkSetupBuildInfo :: Check (Maybe SetupBuildInfo)
+checkSetupBuildInfo Nothing  Nothing = return ()
+checkSetupBuildInfo (Just _) Nothing =
+    fail "Cannot remove a custom-setup section"
+
+checkSetupBuildInfo Nothing (Just (SetupBuildInfo setupDependsA _internalA)) =
+    logChange $ Change ("added a 'custom-setup' section with 'setup-depends'")
+                       (intercalate ", " (map display setupDependsA)) ""
+
+checkSetupBuildInfo (Just (SetupBuildInfo setupDependsA _internalA))
+                    (Just (SetupBuildInfo setupDependsB _internalB)) = do
+    forM_ removed $ \dep ->
+      logChange $ Change ("'setup-depends' dependencies") (display dep) ""
+    forM_ added $ \dep ->
+      logChange $ Change ("'setup-depends' dependencies") "" (display dep)
+    forM_ changed $ \(pkgn, (verA, verB)) ->
+        changesOk ("the 'setup-depends' dependency on " ++ display pkgn)
+                  display verA verB
+  where
+    (removed, changed, added) =
+      computeCanonDepChange setupDependsA setupDependsB
+
 
 checkLibrary :: ComponentName -> Check Library
 checkLibrary componentName
