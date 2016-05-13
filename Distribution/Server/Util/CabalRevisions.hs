@@ -239,7 +239,7 @@ checkCondTree checkElem (componentName, condNodeA)
   where
     checkCondNode (CondNode dataA constraintsA componentsA)
                   (CondNode dataB constraintsB componentsB) = do
-      checkDependencies componentName constraintsA constraintsB
+      checkDependencies componentName PackageDependency constraintsA constraintsB
       checkList "Cannot add or remove 'if' conditionals"
                 checkComponent componentsA componentsB
       checkElem componentName dataA dataB
@@ -252,8 +252,13 @@ checkCondTree checkElem (componentName, condNodeA)
       checkMaybe "Cannot add or remove the 'else' part in conditionals"
                  checkCondNode thenPartA thenPartB
 
-checkDependencies :: ComponentName -> Check [Dependency]
-checkDependencies componentName ds1 ds2 = do
+data DependencyType
+    = PackageDependency     -- ^ build-depends
+    | BuildToolDependency   -- ^ build-tools
+  deriving (Eq)
+
+checkDependencies :: ComponentName -> DependencyType -> Check [Dependency]
+checkDependencies componentName s ds1 ds2 = do
     forM_ removed $ \(Dependency pn _) -> do
         fail ("Cannot remove existing dependency on " ++ display pn ++
               " in " ++ showComponentName componentName ++ " component")
@@ -272,11 +277,12 @@ checkDependencies componentName ds1 ds2 = do
     (removed, changed, added) = computeCanonDepChange ds1 ds2
 
     additionWhitelist :: [PackageName]
-    additionWhitelist =
+    additionWhitelist
+        | s == PackageDependency =
     -- Special case: there are some pretty weird broken packages out there, see
     --   https://github.com/haskell/hackage-server/issues/303
     -- which need us to add a new dep on `base`
-        [ PackageName "base"
+            [ PackageName "base"
 
     -- See also https://github.com/haskell/hackage-server/issues/472
     --
@@ -288,8 +294,10 @@ checkDependencies componentName ds1 ds2 = do
     -- ad-hoc exceptions like this one. See e.g.
     --   https://github.com/haskell/cabal/issues/3061
     --
-        , PackageName "base-orphans"
-        ]
+            , PackageName "base-orphans"
+            ]
+    -- No whitelist for build-tools
+        | otherwise = []
 
 -- The result tuple represents the 3 canonicalised dependency
 -- (removed deps (old ranges), retained deps (old & new ranges), added deps (new ranges))
@@ -333,7 +341,6 @@ checkSetupBuildInfo (Just (SetupBuildInfo setupDependsA _internalA))
     (removed, changed, added) =
       computeCanonDepChange setupDependsA setupDependsB
 
-
 checkLibrary :: ComponentName -> Check Library
 checkLibrary componentName
              (Library modulesA reexportedA requiredSigsA exposedSigsA
@@ -375,10 +382,12 @@ checkBuildInfo componentName biA biB = do
               display
               (otherExtensions biA) (otherExtensions biB)
 
+    checkDependencies componentName BuildToolDependency (buildTools biA) (buildTools biB)
+
     checkSame "Cannot change build information \
               \(just the dependency version constraints)"
-              (biA { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [] })
-              (biB { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [] })
+              (biA { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [], buildTools = [] })
+              (biB { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [], buildTools = [] })
 
 changesOk :: Eq a => String -> (a -> String) -> Check a
 changesOk what render a b
