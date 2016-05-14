@@ -1,17 +1,45 @@
-from zsol/haskell-platform-2013.2.0.0
-
-env HOME /home/haskell
+FROM haskell:7.10.2
 
 # dependencies
-run sudo apt-get update && sudo apt-get install -yy unzip libicu48 libicu-dev postfix
-run cabal update
-run curl -LO https://github.com/haskell/hackage-server/archive/master.zip
+RUN apt-get update && apt-get install -yy unzip libicu-dev postfix
+RUN cabal update
 
-run unzip master.zip
+# haskell dependencies
+RUN mkdir /build
+WORKDIR /build
+ADD ./hackage-server.cabal ./hackage-server.cabal
+RUN cabal sandbox init
+RUN cabal install --only-dependencies --enable-tests -j
+ENV PATH /build/.cabal-sandbox/bin:$PATH
 
-workdir /home/haskell/hackage-server-master
+# needed for creating TUF keys
+RUN cabal install hackage-repo-tool
 
-run cabal install --only-dependencies
-run cabal configure && cabal build
+# add code
+# note: this must come after installing the dependencies, such that
+# we don't need to rebuilt the dependencies every time the code changes
+ADD . /build
 
-cmd echo "Binaries are in ./dist/build/hackage-*"
+# generate keys (needed for tests)
+RUN hackage-repo-tool create-keys --keys keys
+RUN cp keys/timestamp/*.private datafiles/TUF/timestamp.private
+RUN cp keys/snapshot/*.private datafiles/TUF/snapshot.private
+RUN hackage-repo-tool create-root --keys keys -o datafiles/TUF/root.json
+RUN hackage-repo-tool create-mirrors --keys keys -o datafiles/TUF/mirrors.json
+
+# build & test & install hackage
+RUN cabal configure -f-build-hackage-mirror --enable-tests
+RUN cabal build
+# tests currently don't pass: the hackage-security work introduced some
+# backup/restore errors (though they look harmless)
+# see https://github.com/haskell/hackage-server/issues/425
+#RUN cabal test
+RUN cabal copy && cabal register
+
+# setup server runtime environment
+RUN mkdir /runtime
+RUN cp -r /build/datafiles /runtime/datafiles
+WORKDIR /runtime
+RUN hackage-server init --static-dir=datafiles
+CMD hackage-server run --static-dir=datafiles
+EXPOSE 8080

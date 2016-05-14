@@ -99,10 +99,12 @@ executable hackage-server
     Distribution.Server.Framework.AuthCrypt
     Distribution.Server.Framework.BlobStorage
     Distribution.Server.Framework.Cache
+    Distribution.Server.Framework.Cron
     Distribution.Server.Framework.Error
     Distribution.Server.Framework.Logging
     Distribution.Server.Framework.Feature
     Distribution.Server.Framework.Hook
+    Distribution.Server.Framework.HtmlFormWrapper
     Distribution.Server.Framework.Instances
     Distribution.Server.Framework.MemState
     Distribution.Server.Framework.MemSize
@@ -130,6 +132,7 @@ executable hackage-server
     Distribution.Server.Pages.Group
     Distribution.Server.Pages.Index
     Distribution.Server.Pages.Package
+    Distribution.Server.Pages.PackageFromTemplate
     Distribution.Server.Pages.Package.HaddockHtml
     Distribution.Server.Pages.Package.HaddockLex
     Distribution.Server.Pages.Package.HaddockParse
@@ -149,6 +152,7 @@ executable hackage-server
 
     Distribution.Server.Util.Histogram
     Distribution.Server.Util.CountingMap
+    Distribution.Server.Util.CabalRevisions
     Distribution.Server.Util.Parse
     Distribution.Server.Util.ServeTarball
     Distribution.Server.Util.TarIndex
@@ -169,6 +173,7 @@ executable hackage-server
     Distribution.Server.Features.Security.Migration
     Distribution.Server.Features.Security.Orphans
     Distribution.Server.Features.Security.ResponseContentTypes
+    Distribution.Server.Features.Security.SHA256
     Distribution.Server.Features.Security.State
     Distribution.Server.Features.Mirror
     Distribution.Server.Features.Upload
@@ -186,6 +191,7 @@ executable hackage-server
       Distribution.Server.Features.LegacyPasswds
       Distribution.Server.Features.LegacyPasswds.Auth
       Distribution.Server.Features.PackageContents
+      Distribution.Server.Features.AdminFrontend
       Distribution.Server.Features.AdminLog
       Distribution.Server.Features.BuildReports
       Distribution.Server.Features.BuildReports.BuildReport
@@ -210,6 +216,7 @@ executable hackage-server
       Distribution.Server.Features.DownloadCount.Backup
       Distribution.Server.Features.EditCabalFiles
       Distribution.Server.Features.Html
+      Distribution.Server.Features.Html.HtmlUtilities
       Distribution.Server.Features.HoogleData
       Distribution.Server.Features.HaskellPlatform
       Distribution.Server.Features.HaskellPlatform.State
@@ -224,6 +231,7 @@ executable hackage-server
       Distribution.Server.Features.Search.SearchEngine
       Distribution.Server.Features.Search.SearchIndex
       Distribution.Server.Features.Search.TermBag
+      Distribution.Server.Features.Sitemap.Functions
       Distribution.Server.Features.Votes
       Distribution.Server.Features.Votes.State
       Distribution.Server.Features.Votes.Render
@@ -248,13 +256,13 @@ executable hackage-server
       Distribution.Server.Features.Crash
 
   build-depends:
-    base       == 4.*,
+    base       >= 4.6 && < 5,
     filepath   >= 1.1,
     directory  >= 1.0 && < 1.3,
     random     >= 1.0,
     array      >= 0.1,
     vector     >= 0.10,
-    containers >= 0.4,
+    containers >= 0.5 && < 0.6,
     pretty     >= 1.0,
     base64-bytestring ==0.1.* || == 1.0.*,
     base16-bytestring ==0.1.*,
@@ -275,17 +283,17 @@ executable hackage-server
     network    >= 2.1,
     unix       >= 2.6,
     zlib       >= 0.5.3 && < 0.6,
-    tar        == 0.4.* && >= 0.4.0.1,
+    tar        >= 0.4.5 && < 0.6,
     async      == 2.0.*,
     cereal     >= 0.4,
-    safecopy   >= 0.6 && < 0.9,
+    safecopy   >= 0.8.3 && < 0.9,
     crypto-api >= 0.12 && < 0.14,
     pureMD5    >= 0.2,
     xhtml      >= 3000.1,
     aeson      >= 0.6.2,
     unordered-containers >= 0.2.3.0,
     rss        >= 3000.2.0.3,
-    Cabal      == 1.22.*,
+    Cabal      == 1.24.*,
     csv        == 0.1.*,
     stm        >= 2.2 && < 2.5,
     acid-state >= 0.12.2,
@@ -299,13 +307,10 @@ executable hackage-server
     cheapskate >= 0.1,
     blaze-html >= 0.7,
     xmlgen     >= 0.6,
-    -- TODO: hackage-security relies on network-uri. Not sure what the
-    -- reason behind the 'network-uri' build time flag is, but if it's
-    -- crucial that we may not rely on it, then we also need to make this
-    -- possibly in hackage-security, or else make security optional
-    hackage-security,
+    hackage-security == 0.5.*,
     ed25519,
-    SHA,
+    byteable,
+    cryptohash,
     binary
 
   if ! flag(minimal)
@@ -346,6 +351,7 @@ executable hackage-mirror
     Distribution.Client.Mirror.Repo.Hackage2
     Distribution.Client.Mirror.Repo.Local
     Distribution.Client.Mirror.Repo.Util
+    Distribution.Client.Mirror.Repo.Secure
     Distribution.Client.Mirror.Repo.Types
     Distribution.Client.Mirror.Repo
     Distribution.Client.Mirror.Session
@@ -363,13 +369,15 @@ executable hackage-mirror
     Cabal,
     safecopy, cereal, binary, mtl,
     unix, aeson,
-    SHA,
+    byteable,
+    cryptohash,
     parsec,
     process >= 1.2.0,
-    hackage-security,
+    hackage-security >= 0.5.1 && < 0.6,
     hackage-security-HTTP
   default-language:   Haskell2010
-  default-extensions: FlexibleContexts
+  default-extensions: ExistentialQuantification
+                      FlexibleContexts
                       FlexibleInstances
                       GeneralizedNewtypeDeriving
                       MultiParamTypeClasses
@@ -406,7 +414,8 @@ executable hackage-build
     aeson >= 0.6.1.0,
     random,
     unix,
-    SHA,
+    byteable,
+    cryptohash,
     -- Runtime dependency only:
     hscolour >= 1.8
   default-language: Haskell2010

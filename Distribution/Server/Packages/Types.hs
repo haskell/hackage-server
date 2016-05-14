@@ -21,6 +21,7 @@ import Distribution.Server.Framework.Instances (PackageIdentifier_v0)
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.Server.Features.Security.Orphans ()
+import Distribution.Server.Features.Security.SHA256
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
 import Distribution.Package
@@ -42,8 +43,6 @@ import Data.SafeCopy
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Serialize       as Serialize
 import qualified Data.Vector          as Vec
-
-import qualified Data.Digest.Pure.SHA as SHA
 
 {-------------------------------------------------------------------------------
   Datatypes
@@ -96,7 +95,7 @@ data PkgInfo_v0 = PkgInfo_v0  !PackageIdentifier_v0 !CabalFileText
 data BlobInfo = BlobInfo {
     blobInfoId         :: !BlobId,
     blobInfoLength     :: !Int,
-    blobInfoHashSHA256 :: !(SHA.Digest SHA.SHA256State)
+    blobInfoHashSHA256 :: !SHA256Digest
 } deriving (Eq, Typeable, Show)
 
 data PkgTarball =
@@ -216,7 +215,7 @@ blobInfoFromBS :: BlobId -> ByteString -> BlobInfo
 blobInfoFromBS blobId bs = BlobInfo {
       blobInfoId         = blobId
     , blobInfoLength     = fromIntegral $ BS.L.length bs
-    , blobInfoHashSHA256 = SHA.sha256 bs
+    , blobInfoHashSHA256 = sha256 bs
     }
 
 blobInfoFromId :: BlobStorage -> BlobId -> IO BlobInfo

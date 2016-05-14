@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Distribution.Server.Features.Search.SearchEngine (
     SearchEngine,
@@ -55,7 +56,9 @@ data SearchConfig doc key field feature = SearchConfig {
        documentKey          :: doc -> key,
        extractDocumentTerms :: doc -> field -> [Term],
        transformQueryTerm   :: Term -> field -> Term,
-       documentFeatureValue :: doc -> feature -> Float
+       documentFeatureValue :: doc -> feature -> Float,
+       makeKey :: Term -> key
+
      }
 
 data SearchRankParameters field feature = SearchRankParameters {
@@ -176,7 +179,7 @@ insertDoc :: (Ord key, Ix field, Bounded field, Ix feature, Bounded feature) =>
              SearchEngine doc key field feature ->
              SearchEngine doc key field feature
 insertDoc doc se@SearchEngine{ searchConfig = SearchConfig {
-                                 documentKey, 
+                                 documentKey,
                                  extractDocumentTerms,
                                  documentFeatureValue
                                }
@@ -204,11 +207,11 @@ deleteDoc key se@SearchEngine{searchIndex} =
         updateCachedFieldLengths oldDoc Nothing $
           se { searchIndex = searchIndex' }
 
-query :: (Ix field, Bounded field, Ix feature, Bounded feature) =>
+query :: (Ix field, Bounded field, Ix feature, Bounded feature, Ord key) =>
          SearchEngine doc key field feature ->
          [Term] -> [key]
 query se@SearchEngine{ searchIndex,
-                       searchConfig     = SearchConfig{transformQueryTerm},
+                       searchConfig     = SearchConfig{transformQueryTerm, makeKey},
                        searchRankParams = SearchRankParameters{..} }
       terms =
 
@@ -223,8 +226,15 @@ query se@SearchEngine{ searchIndex,
                     ]
 
       -- Then we look up all the normalised terms in the index.
-      rawresults :: [Maybe (TermId, DocIdSet)] 
+      rawresults :: [Maybe (TermId, DocIdSet)]
       rawresults = map (SI.lookupTerm searchIndex) lookupTerms
+
+      -- Check if there is one term then it exactly matches a package
+      exactMatch :: Maybe DocId
+      exactMatch = case terms of
+                     [] -> Nothing
+                     [x] -> SI.lookupDocKeyReal searchIndex (makeKey x)
+                     (_:_) -> Nothing
 
       -- For the terms that occur in the index, this gives us the term's id
       -- and the set of documents that the term occurs in.
@@ -254,17 +264,22 @@ query se@SearchEngine{ searchIndex,
       -- What we ought to have instead is an Array (Int, field) TermId, and
       -- make the scoring use the appropriate termid for each field, but to
       -- consider them the "same" term.
-   in rankResults se termids (DocIdSet.toList unrankedResults)
+   in rankResults se exactMatch termids (DocIdSet.toList unrankedResults)
 
-rankResults :: (Ix field, Bounded field, Ix feature, Bounded feature) =>
-               SearchEngine doc key field feature ->
+rankResults :: forall field key feature doc .
+               (Ix field, Bounded field, Ix feature, Bounded feature) =>
+               SearchEngine doc key field feature -> Maybe DocId ->
                [TermId] -> [DocId] -> [key]
-rankResults se@SearchEngine{searchIndex} queryTerms docids =
-    map snd
-  $ sortBy (flip compare `on` fst)
+rankResults se@SearchEngine{searchIndex} exactMatch queryTerms docids =
+    maybe id prependExactMatch exactMatch (map snd
+    $ sortBy (flip compare `on` fst)
       [ (relevanceScore se queryTerms doctermids docfeatvals, dockey)
       | docid <- docids
-      , let (dockey, doctermids, docfeatvals) = SI.lookupDocId searchIndex docid ]
+      , maybe True (/= docid) exactMatch
+      , let (dockey, doctermids, docfeatvals) = SI.lookupDocId searchIndex docid ])
+  where
+    prependExactMatch :: DocId -> [key] -> [key]
+    prependExactMatch docid keys = SI.lookupDocId' searchIndex docid : keys
 
 relevanceScore :: (Ix field, Bounded field, Ix feature, Bounded feature) =>
                   SearchEngine doc key field feature ->
@@ -308,11 +323,11 @@ pruneRelevantResults softLimit hardLimit =
 
 -----------------------------
 
-queryExplain :: (Ix field, Bounded field, Ix feature, Bounded feature) =>
+queryExplain :: (Ix field, Bounded field, Ix feature, Bounded feature, Ord key) =>
                 SearchEngine doc key field feature ->
-                [Term] -> [(BM25F.Explanation field feature Term, key)]
+                [Term] -> (Maybe key, [(BM25F.Explanation field feature Term, key)])
 queryExplain se@SearchEngine{ searchIndex,
-                              searchConfig     = SearchConfig{transformQueryTerm},
+                              searchConfig     = SearchConfig{transformQueryTerm, makeKey},
                               searchRankParams = SearchRankParameters{..} }
       terms =
 
@@ -325,7 +340,13 @@ queryExplain se@SearchEngine{ searchIndex,
                                    | field <- range (minBound, maxBound) ]
                     ]
 
-      rawresults :: [Maybe (TermId, DocIdSet)] 
+      exactMatch :: Maybe DocId
+      exactMatch = case terms of
+                     [] -> Nothing
+                     [x] -> SI.lookupDocKeyReal searchIndex (makeKey x)
+                     (_:_) -> Nothing
+
+      rawresults :: [Maybe (TermId, DocIdSet)]
       rawresults = map (SI.lookupTerm searchIndex) lookupTerms
 
       termids   :: [TermId]
@@ -338,12 +359,14 @@ queryExplain se@SearchEngine{ searchIndex,
                           paramResultsetHardLimit
                           docidsets
 
-   in rankExplainResults se termids (DocIdSet.toList unrankedResults)
+   in ( fmap (SI.lookupDocId' searchIndex) exactMatch
+      , rankExplainResults se termids (DocIdSet.toList unrankedResults)
+      )
 
 rankExplainResults :: (Ix field, Bounded field, Ix feature, Bounded feature) =>
-                      SearchEngine doc key field feature -> 
+                      SearchEngine doc key field feature ->
                       [TermId] ->
-                      [DocId] -> 
+                      [DocId] ->
                       [(BM25F.Explanation field feature Term, key)]
 rankExplainResults se@SearchEngine{searchIndex} queryTerms docids =
     sortBy (flip compare `on` (BM25F.overallScore . fst))
@@ -355,7 +378,7 @@ explainRelevanceScore :: (Ix field, Bounded field, Ix feature, Bounded feature) 
                          SearchEngine doc key field feature ->
                          [TermId] ->
                          DocTermIds field ->
-                         DocFeatVals feature -> 
+                         DocFeatVals feature ->
                          BM25F.Explanation field feature Term
 explainRelevanceScore SearchEngine{bm25Context, searchIndex}
                       queryTerms doctermids docfeatvals =
@@ -380,4 +403,3 @@ noFeatures _ = error "noFeatures"
 
 instance MemSize key => MemSize (SearchEngine doc key field feature) where
   memSize SearchEngine {searchIndex} = 25 + memSize searchIndex
-

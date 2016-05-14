@@ -222,7 +222,11 @@ uploadFeature ServerEnv{serverBlobStore = store}
       }
 
     uploadResource = UploadResource
-          { uploadIndexPage      = (extendResource (corePackagesPage coreResource)) { resourcePost = [] }
+          { uploadIndexPage      = (extendResource (corePackagesPage coreResource)) {
+              resourcePost =
+                [ ("txt", \_ -> uploadPlain)
+                ]
+            }
           , deletePackagePage    = (extendResource (corePackagePage coreResource))  { resourceDelete = [] }
           , maintainersGroupResource = maintainersGroupResource
           , trusteesGroupResource    = trusteesGroupResource
@@ -233,6 +237,12 @@ uploadFeature ServerEnv{serverBlobStore = store}
           , trusteeUri  = \format -> renderResource (groupResource trusteesGroupResource)  [format]
           , uploaderUri = \format -> renderResource (groupResource uploadersGroupResource) [format]
           }
+
+
+    uploadPlain :: ServerPartE Response
+    uploadPlain = nullDir >> do
+      upResult <- uploadPackage
+      ok $ toResponse $ unlines $ uploadWarnings upResult
 
     --------------------------------------------------------------------------------
     -- User groups and authentication

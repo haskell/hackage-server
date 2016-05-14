@@ -39,10 +39,10 @@ computePkgMetadata pkg revNo = (inIndexPkgMetadata pkgId, raw)
 
 pkgTarballTargets :: Int -> PackageIdentifier -> PkgTarball -> Sec.Targets
 pkgTarballTargets revNo pkgId pkgTarball = Sec.Targets {
-      targetsVersion     = Sec.FileVersion revNo
+      targetsVersion     = Sec.FileVersion (fromIntegral revNo)
     , targetsExpires     = Sec.expiresNever
     , targetsTargets     = Sec.FileMap.fromList [
-                               (inRepoPkgTarGz pkgId, fileInfo pkgTarballGz)
+                               (inRepoPkgTarGz pkgId, secFileInfo pkgTarballGz)
                              ]
     , targetsDelegations = Nothing
     }

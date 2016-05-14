@@ -1,14 +1,24 @@
 -- Body of the HTML page for a package
 {-# LANGUAGE PatternGuards, RecordWildCards #-}
-module Distribution.Server.Pages.Package (
-    packagePage,
-    renderPackageFlags,
-    renderDependencies,
-    renderDetailedDependencies,
-    renderVersion,
-    renderFields,
-    renderDownloads,
-    renderChangelog
+module Distribution.Server.Pages.Package
+  ( packagePage
+  , renderPackageFlags
+  , renderDependencies
+  , renderDetailedDependencies
+  , renderVersion
+  , renderFields
+  , renderDownloads
+  , renderChangelog
+  , moduleSection
+  , readmeSection
+  , rendLicense
+  , maintainField
+  , categoryField
+  , linkField
+  , descriptionSection
+  , renderHaddock
+  , maintainerSection
+  , downloadSection
   ) where
 
 import Distribution.Server.Features.PreferredVersions
@@ -29,7 +39,7 @@ import Distribution.Version
 import Distribution.Text        (display)
 import Text.XHtml.Strict hiding (p, name, title, content)
 
-import Data.Monoid              (Monoid(..))
+import Data.Monoid              (Monoid(..), (<>))
 import Data.Maybe               (fromMaybe, maybeToList, isJust, mapMaybe)
 import Data.List                (intersperse, intercalate)
 import Control.Arrow            (second)
@@ -37,8 +47,9 @@ import System.FilePath.Posix    ((</>), (<.>), takeFileName)
 import Data.Time.Locale.Compat  (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
 import System.FilePath.Posix    (takeExtension)
+import Network.URI              (isRelativeReference)
 
-import qualified Cheapskate      as Markdown (markdown, Options(..))
+import qualified Cheapskate      as Markdown (markdown, Options(..), Inline(Link), walk)
 import qualified Cheapskate.Html as Markdown (renderDoc)
 
 import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
@@ -59,13 +70,15 @@ packagePage render headLinks top sections
     pkgid   = rendPkgId render
     pkgName = display $ packageName pkgid
 
+    pkgUrl = "/package/" ++ pkgName
+
     canonical = thelink ! [ rel "canonical"
-                          , href ("/package/" ++ pkgName) ] << noHtml
+                          , href pkgUrl ] << noHtml
     docTitle = pkgName
             ++ case synopsis (rendOther render) of
                  ""    -> ""
                  short -> ": " ++ short
-    docSubtitle = toHtml docTitle
+    docSubtitle = anchor ! [href pkgUrl] << docTitle
 
     docBody = h1 << bodyTitle
           : concat [
@@ -109,7 +122,8 @@ descriptionSection PackageRender{..} =
      ++ readmeLink
   where
     readmeLink = case rendReadme of
-      Just _ -> [ hr, toHtml "["
+      Just _ -> [ hr
+                , toHtml "["
                 , anchor ! [href "#readme"] << "Skip to ReadMe"
                 , toHtml "]"
                 ]
@@ -126,18 +140,25 @@ readmeSection :: PackageRender -> Maybe BS.ByteString -> [Html]
 readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
                             , rendPkgId  = pkgid }
               (Just content) =
-    [ h2 ! [identifier "readme"] << ("Readme for " ++ display pkgid)
+    [ h2 ! [identifier "readme"] << ("Readme for " ++ name)
     , thediv ! [theclass "embedded-author-content"]
             << if supposedToBeMarkdown filename
-                 then renderMarkdown content
+                 then renderMarkdown (T.pack name) content
                  else pre << unpackUtf8 content
-    ]
+    ] where
+      name = display pkgid
 readmeSection _ _ = []
 
-renderMarkdown :: BS.ByteString -> Html
-renderMarkdown = primHtml . Blaze.renderHtml
-               . Markdown.renderDoc . Markdown.markdown opts
-               . T.decodeUtf8With T.lenientDecode . BS.toStrict
+updateRelativeLinks name (Markdown.Link inls url title) =
+  Markdown.Link inls url' title
+  where url' = if isRelativeReference $ T.unpack url then name <> T.pack "/src" <> url else url
+updateRelativeLinks _ x = x
+
+renderMarkdown :: T.Text -> BS.ByteString -> Html
+renderMarkdown name = primHtml . Blaze.renderHtml
+               . Markdown.renderDoc . Markdown.walk (updateRelativeLinks name)
+               . Markdown.markdown opts . T.decodeUtf8With T.lenientDecode
+               . BS.toStrict
   where
     opts =
       Markdown.Options
@@ -398,7 +419,7 @@ renderDownloads totalDown recentDown {- versionDown version -} =
 renderFields :: PackageRender -> [(String, Html)]
 renderFields render = [
         -- Cabal-Version
-        ("License",     rendLicense),
+        ("License",     rendLicense render),
         ("Copyright",   toHtml $ P.copyright desc),
         ("Author",      toHtml $ author desc),
         ("Maintainer",  maintainField $ rendMaintainer render),
@@ -428,24 +449,32 @@ renderFields render = [
       where
         revisionsURL = display (rendPkgId render) </> "revisions/"
 
-    linkField url = case url of
-        [] -> noHtml
-        _  -> anchor ! [href url] << url
-    categoryField cat = anchor ! [href $ "/packages/#cat:" ++ cat] << cat
-    maintainField mnt = case mnt of
-        Nothing -> strong ! [theclass "warning"] << toHtml "none"
-        Just n  -> toHtml n
-    sourceRepositoryField sr = sourceRepositoryToHtml sr
+linkField :: String -> Html
+linkField url = case url of
+    [] -> noHtml
+    _  -> anchor ! [href url] << url
 
-    rendLicense = case rendLicenseFiles render of
-      []            -> toHtml (rendLicenseName render)
-      [licenseFile] -> anchor ! [ href (rendPkgUri render </> "src" </> licenseFile) ]
-                             << rendLicenseName render
-      _licenseFiles -> toHtml (rendLicenseName render)
-                       +++ "["
-                       +++ anchor ! [ href (rendPkgUri render </> "src") ]
-                                 << "multiple licese files"
-                       +++ "]"
+sourceRepositoryField :: SourceRepo -> Html
+sourceRepositoryField sr = sourceRepositoryToHtml sr
+
+categoryField :: String -> Html
+categoryField cat = anchor ! [href $ "/packages/#cat:" ++ cat] << cat
+
+maintainField :: Maybe String -> Html
+maintainField mnt = case mnt of
+    Nothing -> strong ! [theclass "warning"] << toHtml "none"
+    Just n  -> toHtml n
+
+rendLicense :: PackageRender -> Html
+rendLicense render = case rendLicenseFiles render of
+  []            -> toHtml (rendLicenseName render)
+  [licenseFile] -> anchor ! [ href (rendPkgUri render </> "src" </> licenseFile) ]
+                          << rendLicenseName render
+  _licenseFiles -> toHtml (rendLicenseName render)
+                    +++ "["
+                    +++ anchor ! [ href (rendPkgUri render </> "src") ]
+                              << "multiple license files"
+                    +++ "]"
 
 
 sourceRepositoryToHtml :: SourceRepo -> Html
@@ -455,7 +484,7 @@ sourceRepositoryToHtml sr
       Just Darcs
        | (Just url, Nothing, Nothing) <-
          (repoLocation sr, repoModule sr, repoBranch sr) ->
-          concatHtml [toHtml "darcs get ",
+          concatHtml [toHtml "darcs clone ",
                       anchor ! [href url] << toHtml url,
                       case repoTag sr of
                           Just tag' -> toHtml (" --tag " ++ tag')

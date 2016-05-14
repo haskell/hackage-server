@@ -67,7 +67,7 @@ data PackageRender = PackageRender {
     -- If PackageRender is the One True Resource Representation, should they
     -- instead be fields of PackageRender?
     rendOther        :: PackageDescription
-} deriving (Show)
+}
 
 doPackageRender :: Users.Users -> PkgInfo -> PackageRender
 doPackageRender users info = PackageRender

@@ -35,7 +35,6 @@ import System.Directory
 import System.Console.GetOpt
 import System.Process
 import System.IO
-import System.IO.Error
 
 import Paths_hackage_server (version)
 
@@ -505,7 +504,7 @@ mkPackageFailed opts = do
   where
     readFailedCache :: FilePath -> IO (S.Set PackageId)
     readFailedCache cache_dir = do
-        pkgstrs <- handleDoesNotExist (return []) $ liftM lines $ readFile (cache_dir </> "failed")
+        pkgstrs <- handleDoesNotExist [] $ liftM lines $ readFile (cache_dir </> "failed")
         case validatePackageIds pkgstrs of
             Left theError -> die theError
             Right pkgs -> return (S.fromList pkgs)
@@ -523,7 +522,7 @@ buildPackage :: Verbosity -> BuildOpts -> BuildConfig
 buildPackage verbosity opts config docInfo = do
     let pkgid = docInfoPackage docInfo
     notice verbosity ("Building " ++ display pkgid)
-    handleDoesNotExist (return ()) $
+    handleDoesNotExist () $
         removeDirectoryRecursive $ installDirectory opts
     createDirectory $ installDirectory opts
 
@@ -610,7 +609,7 @@ buildPackage verbosity opts config docInfo = do
     void $ cabal opts "install" pkg_flags (Just buildLogHnd)
 
     -- Grab the report for the package we want. Stash it for safe keeping.
-    report <- handleDoesNotExist (return Nothing) $ do
+    report <- handleDoesNotExist Nothing $ do
                 renameFile (installDirectory opts </> "reports"
                                 </> display pkgid <.> "report")
                            resultReportFile
@@ -907,14 +906,4 @@ validateOpts args = do
   where
 
     accum flags = foldr (flip (.)) id flags
-
-{------------------------------------------------------------------------------
-  Auxiliary
-------------------------------------------------------------------------------}
-
-handleDoesNotExist :: IO a -> IO a -> IO a
-handleDoesNotExist handler act
-    = handleJust (\e -> if isDoesNotExistError e then Just () else Nothing)
-                 (\() -> handler)
-                 act
 

@@ -29,6 +29,7 @@ import Distribution.Server.Features.Documentation
 import Distribution.Server.Features.TarIndexCache
 import Distribution.Server.Features.UserDetails
 import Distribution.Server.Features.EditCabalFiles
+import Distribution.Server.Features.Html.HtmlUtilities
 
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Group as Group
@@ -41,6 +42,7 @@ import Distribution.Server.Features.Distro.Distributions (DistroPackageInfo(..))
 -- [reverse index disabled] import Distribution.Server.Packages.Reverse
 
 import qualified Distribution.Server.Pages.Package as Pages
+import qualified Distribution.Server.Pages.PackageFromTemplate as PagesNew
 import Distribution.Server.Pages.Template
 import Distribution.Server.Pages.Util
 import qualified Distribution.Server.Pages.Group as Pages
@@ -48,6 +50,7 @@ import qualified Distribution.Server.Pages.Group as Pages
 import qualified Distribution.Server.Pages.Index as Pages
 import Distribution.Server.Util.CountingMap (cmFind, cmToList)
 import Distribution.Server.Util.ServeTarball (loadTarEntry)
+import Distribution.Simple.Utils ( cabalVersion )
 
 import Distribution.Package
 import Distribution.Version
@@ -61,6 +64,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Vector as Vec
 import Data.Maybe (fromMaybe, isJust)
+import Data.Monoid ((<>))
 import qualified Data.Text as T
 import Data.Traversable (traverse)
 import Control.Applicative (optional)
@@ -71,6 +75,7 @@ import Data.Time.Format (formatTime)
 import Data.Time.Clock (getCurrentTime)
 import qualified Data.Time.Format.Human as HumanTime
 import Data.Time.Locale.Compat (defaultTimeLocale)
+import qualified Data.ByteString.Lazy as BS (ByteString)
 
 import Text.XHtml.Strict
 import qualified Text.XHtml.Strict as XHtml
@@ -114,7 +119,7 @@ initHtmlFeature :: ServerEnv
                     -> UserDetailsFeature
                     -> IO HtmlFeature)
 
-initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
+initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                           serverCacheDelay,
                           serverVerbosity = verbosity} = do
     -- Page templates
@@ -124,7 +129,10 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    , "reports.html", "report.html"
                    , "maintain-docs.html"
                    , "distro-monitor.html"
-                   , "revisions.html" ]
+                   , "revisions.html"
+                   , "package-page.html"
+                   ]
+
 
     return $ \user core@CoreFeature{packageChangeHook}
               packages upload
@@ -141,7 +149,7 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
               usersdetails -> do
       -- do rec, tie the knot
       rec let (feature, packageIndex, packagesPage) =
-                htmlFeature user core
+                htmlFeature env user core
                             packages upload
                             candidates versions
                             tags download
@@ -181,7 +189,8 @@ initHtmlFeature ServerEnv{serverTemplatesDir, serverTemplatesMode,
 
       return feature
 
-htmlFeature :: UserFeature
+htmlFeature :: ServerEnv
+            -> UserFeature
             -> CoreFeature
             -> PackageContentsFeature
             -> UploadFeature
@@ -205,7 +214,8 @@ htmlFeature :: UserFeature
             -> Templates
             -> (HtmlFeature, IO Response, IO Response)
 
-htmlFeature user
+htmlFeature env@ServerEnv{..}
+            user
             core@CoreFeature{queryGetPackageIndex}
             packages upload
             candidates versions
@@ -241,7 +251,8 @@ htmlFeature user
       , featureReloadFiles = reloadTemplates templates
       }
 
-    htmlCore       = mkHtmlCore       utilities
+    htmlCore       = mkHtmlCore       env
+                                      utilities
                                       user
                                       core
                                       versions
@@ -432,7 +443,8 @@ data HtmlCore = HtmlCore {
     htmlCoreResources :: [Resource]
   }
 
-mkHtmlCore :: HtmlUtilities
+mkHtmlCore :: ServerEnv
+           -> HtmlUtilities
            -> UserFeature
            -> CoreFeature
            -> VersionsFeature
@@ -451,7 +463,8 @@ mkHtmlCore :: HtmlUtilities
            -> AsyncCache Response
            -> Templates
            -> HtmlCore
-mkHtmlCore HtmlUtilities{..}
+mkHtmlCore ServerEnv{serverBaseURI}
+           utilities@HtmlUtilities{..}
            UserFeature{queryGetUserDb}
            CoreFeature{coreResource}
            VersionsFeature{ versionsResource
@@ -521,74 +534,61 @@ mkHtmlCore HtmlUtilities{..}
     servePackagePage :: DynamicPath -> ServerPartE Response
     servePackagePage dpath = do
       pkgid <- packageInPath dpath
+
       withPackagePreferred pkgid $ \pkg pkgs -> do
-        -- get the PackageRender from the PkgInfo
         render <- liftIO $ packageRender pkg
+
         let realpkg = rendPkgId render
             pkgname = packageName realpkg
-            middleHtml = Pages.renderFields render
-        -- render the build status line
-        buildStatus <- renderBuildStatus documentationFeature reportsFeature realpkg
-        let buildStatusHtml = [("Status", buildStatus)]
-        -- get additional information from other features
-        prefInfo <- queryGetPreferredInfo pkgname
-        let infoUrl = fmap (\_ -> preferredPackageUri versions "" pkgname) $ sumRange prefInfo
-            beforeHtml = [ Pages.renderVersion realpkg (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl
-                         , Pages.renderChangelog render
-                         , Pages.renderDependencies render]
-        -- and other package indices
+            docURL  = packageDocsContentUri docs realpkg
+
+        prefInfo      <- queryGetPreferredInfo pkgname
         distributions <- queryPackageStatus pkgname
-        -- [reverse index disabled] revCount <- revPackageSummary realpkg
-        -- We don't currently keep per-version downloads in memory
-        -- (totalDown, versionDown) <- perVersionDownloads pkg
-        totalDown <- cmFind pkgname `liftM` totalPackageDownloads
-        recentDown <- cmFind pkgname `liftM` recentPackageDownloads
-        pkgVotesHtml <- renderVotesHtml pkgname
-        let distHtml = case distributions of
-                [] -> []
-                _  -> [("Distributions", concatHtml . intersperse (toHtml ", ") $ map showDist distributions)]
-            afterHtml  = distHtml ++ [ Pages.renderDownloads totalDown recentDown {- versionDown $ packageVersion realpkg-}
-                                    , pkgVotesHtml
-                                     -- [reverse index disabled] ,Pages.reversePackageSummary realpkg revr revCount
-                                     ]
-        -- bottom sections, currently documentation and readme
-        mdoctarblob <- queryDocumentation realpkg
-        mdocIndex   <- maybe (return Nothing)
-                             (liftM Just . liftIO . cachedTarIndex)
-                             mdoctarblob
-        let docURL = packageDocsContentUri docs realpkg -- "/package" <//> display realpkg <//> "docs"
+        totalDown     <- cmFind pkgname `liftM` totalPackageDownloads
+        recentDown    <- cmFind pkgname `liftM` recentPackageDownloads
+        pkgVotesHtml  <- renderVotesHtml pkgname
+        mdoctarblob   <- queryDocumentation realpkg
+        tags          <- queryTagsForPackage pkgname
+        deprs         <- queryGetDeprecatedFor pkgname
+        mreadme       <- makeReadme render
 
-        mreadme     <- case rendReadme render of
-                         Nothing -> return Nothing
-                         Just (tarfile, _, offset, _) ->
-                                either (\_err -> return Nothing)
-                                       (return . Just . snd)
-                            =<< liftIO (loadTarEntry tarfile offset)
+        buildStatus   <- renderBuildStatus
+          documentationFeature reportsFeature realpkg
+        mdocIndex     <- maybe (return Nothing)
+          (liftM Just . liftIO . cachedTarIndex) mdoctarblob
 
-        -- extra features like tags and downloads
-        tags <- queryTagsForPackage pkgname
+        let infoUrl = fmap (\_ -> preferredPackageUri versions "" pkgname) $
+              sumRange prefInfo
 
-        let tagLinks = toHtml [anchor ! [href "/packages/tags"] << "Tags", toHtml ": ",
-                               toHtml (renderTags tags)]
-        deprs <- queryGetDeprecatedFor pkgname
-        let deprHtml = case deprs of
-              Just fors -> paragraph ! [thestyle "color: red"] << [toHtml "Deprecated", case fors of
-                [] -> noHtml
-                _  -> concatHtml . (toHtml " in favor of ":) . intersperse (toHtml ", ") .
-                      map (\for -> anchor ! [href $ corePackageNameUri cores "" for] << display for) $ fors]
-              Nothing -> noHtml
-
+        -- Put it all together
+        template <- getTemplate templates "package-page.html"
         cacheControlWithoutETag [Public, maxAgeMinutes 5]
 
-        -- and put it all together
-        return $ toResponse $ Resource.XHtml $
-            Pages.packagePage render [tagLinks] [deprHtml]
-                              (beforeHtml ++ middleHtml ++ afterHtml
-                                ++ buildStatusHtml)
-                              [] mdocIndex mreadme docURL False
-      where
-        showDist (dname, info) = toHtml (display dname ++ ":") +++
-            anchor ! [href $ distroUrl info] << toHtml (display $ distroVersion info)
+        return $ toResponse . template $
+          -- IO-related items
+          [ "baseurl"           $= show (serverBaseURI)
+          , "cabalVersion"      $= display cabalVersion
+          , "tags"              $= (renderTags tags)
+          , "versions"          $= (PagesNew.renderVersion realpkg
+              (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl)
+          , "totalDownloads"    $= totalDown
+          , "recentDownloads"   $= recentDown
+          , "votesSection"      $= pkgVotesHtml
+          , "buildStatus"       $= buildStatus
+          ] ++
+          -- Items not related to IO (mostly pure functions)
+          PagesNew.packagePageTemplate render
+            mdocIndex mreadme
+            docURL distributions
+            deprs
+            utilities
+          where
+            makeReadme :: MonadIO m => PackageRender -> m (Maybe BS.ByteString)
+            makeReadme render = case rendReadme render of
+              Just (tarfile, _, offset, _) ->
+                    either (\_err -> return Nothing) (return . Just . snd) =<<
+                      liftIO (loadTarEntry tarfile offset)
+              Nothing -> return Nothing
 
     serveDependenciesPage :: DynamicPath -> ServerPartE Response
     serveDependenciesPage dpath = do
@@ -627,7 +627,7 @@ mkHtmlCore HtmlUtilities{..}
           pkgname      = packageName pkginfo
           revisions    = reverse $ Vec.toList (pkgMetadataRevisions pkginfo)
           numRevisions = pkgNumRevisions pkginfo
-          revchanges   = [ case diffCabalRevisions pkgid
+          revchanges   = [ case diffCabalRevisionsByteString
                                   (cabalFileByteString old)
                                   (cabalFileByteString new)
                            of Left _err     -> []
@@ -1582,7 +1582,7 @@ mkHtmlSearch HtmlUtilities{..}
               hackagePage "Package search" $
                 [ toHtml $ searchForm termsStr False
                 , toHtml $ resultsArea pkgIndex currentTime pkgDetails offset limit moreResults termsStr
-                , alternativeSearch
+                , alternativeSearchTerms termsStr
                 ]
 
           _ ->
@@ -1656,14 +1656,27 @@ mkHtmlSearch HtmlUtilities{..}
         alternativeSearch =
           paragraph <<
             [ toHtml "Alternatively, if you are looking for a particular function then try "
-            , anchor ! [href "http://holumbus.fh-wedel.de/hayoo/hayoo.html"] << "Hayoo"
+            , anchor ! [href hayooBaseLink] << "Hayoo"
             , toHtml " or "
-            , anchor ! [href "http://www.haskell.org/hoogle/"] << "Hoogle"
+            , anchor ! [href hoogleBaseLink] << "Hoogle"
             ]
+        alternativeSearchTerms termsStr =
+          paragraph <<
+            [ toHtml "Alternatively, if you are looking for a particular function then try "
+            , anchor ! [href (hayooLink termsStr)] << "Hayoo"
+            , toHtml " or "
+            , anchor ! [href (hoogleLink termsStr)] << "Hoogle"
+            ]
+        hayooBaseLink  = "http://holumbus.fh-wedel.de/hayoo/hayoo.html"
+        hoogleBaseLink = "http://www.haskell.org/hoogle/"
+        hayooLink termsStr  = "http://hayoo.fh-wedel.de/?query=" <> termsStr
+        hoogleLink termsStr = "http://www.haskell.org/hoogle/?hoogle=" <> termsStr
 
-        explainResults :: [(Search.Explanation PkgDocField PkgDocFeatures T.Text, PackageName)] -> [Html]
-        explainResults results =
+        explainResults :: (Maybe PackageName, [(Search.Explanation PkgDocField PkgDocFeatures T.Text, PackageName)]) -> [Html]
+        explainResults (exactMatch, results) =
             [ h2 << "Results"
+            , h3 << "Exact Matches"
+            , maybe noHtml (toHtml . display) exactMatch
             , case results of
                 []          -> noHtml
                 ((explanation1, _):_) ->
@@ -1825,45 +1838,3 @@ htmlGroupResource UserFeature{..} r@(GroupResource groupR userR getGroup) =
         groupDeleteUser group dpath
         goToList dpath
     goToList dpath = seeOther (renderResource' (groupResource r) dpath) (toResponse ())
-
-{-------------------------------------------------------------------------------
-  Util
--------------------------------------------------------------------------------}
-
-htmlUtilities :: CoreFeature -> TagsFeature -> HtmlUtilities
-htmlUtilities CoreFeature{coreResource}
-              TagsFeature{tagsResource} = HtmlUtilities{..}
-  where
-    packageLink :: PackageId -> Html
-    packageLink pkgid = anchor ! [href $ corePackageIdUri cores "" pkgid] << display pkgid
-
-    packageNameLink :: PackageName -> Html
-    packageNameLink pkgname = anchor ! [href $ corePackageNameUri cores "" pkgname] << display pkgname
-
-    renderItem :: PackageItem -> Html
-    renderItem item = li ! classes <<
-          [ packageNameLink pkgname
-          , toHtml $ " " ++ ptype (itemHasLibrary item) (itemNumExecutables item)
-                         ++ ": " ++ itemDesc item
-          , " (" +++ renderTags (itemTags item) +++ ")"
-          ]
-      where pkgname = itemName item
-            ptype _ 0 = "library"
-            ptype lib num = (if lib then "library and " else "")
-                         ++ (case num of 1 -> "program"; _ -> "programs")
-            classes = case classList of [] -> []; _ -> [theclass $ unwords classList]
-            classList = (case itemDeprecated item of Nothing -> []; _ -> ["deprecated"])
-
-    renderTags :: Set Tag -> [Html]
-    renderTags tags = intersperse (toHtml ", ")
-        (map (\tg -> anchor ! [href $ tagUri tagsResource "" tg] << display tg)
-          $ Set.toList tags)
-
-    cores = coreResource
-
-data HtmlUtilities = HtmlUtilities {
-    packageLink :: PackageId -> Html
-  , packageNameLink :: PackageName -> Html
-  , renderItem :: PackageItem -> Html
-  , renderTags :: Set Tag -> [Html]
-  }
