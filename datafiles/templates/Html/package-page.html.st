@@ -3,16 +3,16 @@
 <head>
   $hackageCssTheme()$
   <title>
-    $package.name$
-    $if(package.optional.hasSynopsis)$
-      : $package.optional.synopsis$
-    $endif$
+    $package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$
   </title>
   <link rel="canonical" href="$baseurl$/package/$package.name$" />
 </head>
 
 <body>
-  $hackagePageHeader()$
+  $hackagePageHeader(title={
+    <a class="caption" href="$baseurl$/package/$package.name$">
+    $package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$
+    </a>})$
 
   <div id="content">
 

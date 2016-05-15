@@ -169,8 +169,10 @@ distroFeature UserFeature{..}
         guardAuthorised_ [AnyKnownUser] --TODO: use the per-distro maintainer groups
         lookCSVFile $ \csv ->
             case csvToPackageList csv of
-                Nothing -> fail $ "Could not parse CSV File to a distro package list"
-                Just list -> do
+                Left  msg  ->
+                    badRequest $ toResponse $
+                      "Could not parse CSV File to a distro package list: " ++ msg
+                Right list -> do
                     void $ updateState distrosState $ PutDistroPackageList dname list
                     ok $ toResponse "Ok!"
 
@@ -252,12 +254,13 @@ packageListToCSV :: [(PackageName, DistroPackageInfo)] -> CSVFile
 packageListToCSV entries
     = CSVFile $ map (\(pn,DistroPackageInfo version url) -> [display pn, showVersion version, url]) entries
 
-csvToPackageList :: CSVFile -> Maybe [(PackageName, DistroPackageInfo)]
+csvToPackageList :: CSVFile -> Either String [(PackageName, DistroPackageInfo)]
 csvToPackageList (CSVFile records)
     = mapM fromRecord records
  where
-    fromRecord [packageStr, versionStr, uri] = do
-        package <- simpleParse packageStr
-        version <- simpleParse versionStr
-        return (package, DistroPackageInfo version uri)
-    fromRecord _ = fail $ "Invalid distribution record"
+    fromRecord [packageStr, versionStr, uri]
+      | Just package <- simpleParse packageStr
+      , Just version <- simpleParse versionStr
+      = return (package, DistroPackageInfo version uri)
+    fromRecord rec
+      = Left $ "Invalid distro package entry: " ++ show rec
