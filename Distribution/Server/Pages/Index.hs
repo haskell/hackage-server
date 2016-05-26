@@ -3,6 +3,7 @@
 module Distribution.Server.Pages.Index (packageIndex) where
 
 import Distribution.Server.Pages.Template       ( hackagePage )
+import Distribution.Server.Pages.Util           ( packageType )
 
 import Distribution.Package
 import Distribution.PackageDescription
@@ -34,6 +35,8 @@ data PackageIndexInfo = PackageIndexInfo {
                             pii_categories :: ![Category],
                             pii_hasLibrary :: !Bool,
                             pii_numExecutables :: !Int,
+                            pii_numTests :: !Int,
+                            pii_numBenchmarks :: !Int,
                             pii_synopsis :: !String
                         }
 
@@ -43,6 +46,8 @@ mkPackageIndexInfo pd = PackageIndexInfo {
                             pii_categories = categories pd,
                             pii_hasLibrary = hasLibs pd,
                             pii_numExecutables = length (executables pd),
+                            pii_numTests = length (testSuites pd),
+                            pii_numBenchmarks = length (benchmarks pd),
                             pii_synopsis = synopsis pd
                         }
 
@@ -92,13 +97,8 @@ formatPkg pkg = li << (pkgLink : toHtml (" " ++ ptype) : defn)
         defn
           | null (pii_synopsis pkg) = []
           | otherwise = [toHtml (": " ++ trim (pii_synopsis pkg))]
-        ptype
-          | pii_numExecutables pkg == 0 = "library"
-          | pii_hasLibrary pkg = "library and " ++ programs
-          | otherwise = programs
-          where programs
-                  | pii_numExecutables pkg > 1 = "programs"
-                  | otherwise = "program"
+        ptype = packageType (pii_hasLibrary pkg) (pii_numExecutables pkg)
+                            (pii_numTests pkg) (pii_numBenchmarks pkg)
         trim s
           | length s < 90 = s
           | otherwise = reverse (dropWhile (/= ',') (reverse (take 76 s))) ++ " ..."

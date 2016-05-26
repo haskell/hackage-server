@@ -1614,7 +1614,7 @@ mkHtmlSearch HtmlUtilities{..}
             renderSearchResult :: PackageItem -> Html
             renderSearchResult item = li ! classes <<
               [ packageNameLink pkgname
-              , toHtml $ " " ++ ptype (itemHasLibrary item) (itemNumExecutables item)
+              , toHtml $ " " ++ ptype
               , br
               , toHtml (itemDesc item)
               , br
@@ -1629,9 +1629,8 @@ mkHtmlSearch HtmlUtilities{..}
                           $ PackageIndex.lookupPackageName pkgIndex pkgname
                 -- takes current time as argument so it can say how many $X ago something was
                 humanTime = HumanTime.humanReadableTime' currentTime timestamp
-                ptype _ 0 = "library"
-                ptype lib num = (if lib then "library and " else "")
-                                ++ (case num of 1 -> "program"; _ -> "programs")
+                ptype = packageType (itemHasLibrary item) (itemNumExecutables item)
+                                    (itemNumTests item) (itemNumBenchmarks item)
                 classes = case classList of [] -> []; _ -> [theclass $ unwords classList]
                 classList = (case itemDeprecated item of Nothing -> []; _ -> ["deprecated"])
 

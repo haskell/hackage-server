@@ -34,14 +34,13 @@ htmlUtilities CoreFeature{coreResource}
     renderItem :: PackageItem -> Html
     renderItem item = li ! classes <<
           [ packageNameLink pkgname
-          , toHtml $ " " ++ ptype (itemHasLibrary item) (itemNumExecutables item)
+          , toHtml $ " " ++ ptype
                          ++ ": " ++ itemDesc item
           , " (" +++ renderTags (itemTags item) +++ ")"
           ]
       where pkgname = itemName item
-            ptype _ 0 = "library"
-            ptype lib num = (if lib then "library and " else "")
-                         ++ (case num of 1 -> "program"; _ -> "programs")
+            ptype = packageType (itemHasLibrary item) (itemNumExecutables item)
+                                (itemNumTests item) (itemNumBenchmarks item)
             classes = case classList of [] -> []; _ -> [theclass $ unwords classList]
             classList = (case itemDeprecated item of Nothing -> []; _ -> ["deprecated"])
 
