@@ -52,7 +52,7 @@ instance ToMessage TUFFile where
       ]
 
 instance HasFileInfo TUFFile where
-  fileInfo file = FileInfo (tufFileLength file) (tufFileHashSHA256 file)
+  fileInfo file = FileInfo (tufFileLength file) (tufFileHashSHA256 file) (Just $ tufFileHashMD5 file)
 
 {-------------------------------------------------------------------------------
   Wrappers around TUFFile

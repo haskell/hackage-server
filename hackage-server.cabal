@@ -307,7 +307,7 @@ executable hackage-server
     cheapskate >= 0.1,
     blaze-html >= 0.7,
     xmlgen     >= 0.6,
-    hackage-security == 0.5.*,
+    hackage-security >= 0.5.2 && < 0.6,
     ed25519,
     byteable,
     cryptohash,
