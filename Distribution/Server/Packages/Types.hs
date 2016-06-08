@@ -31,6 +31,7 @@ import Distribution.PackageDescription
 import Distribution.PackageDescription.Parse
          ( parsePackageDescription, ParseResult(..) )
 
+import Data.Digest.Pure.MD5 (MD5Digest)
 import Control.Applicative
 import Data.Serialize (Serialize)
 import Data.ByteString.Lazy (ByteString)
@@ -97,6 +98,9 @@ data BlobInfo = BlobInfo {
     blobInfoLength     :: !Int,
     blobInfoHashSHA256 :: !SHA256Digest
 } deriving (Eq, Typeable, Show)
+
+blobInfoHashMD5 :: BlobInfo -> MD5Digest
+blobInfoHashMD5 = BlobStorage.blobMd5Digest . blobInfoId
 
 data PkgTarball =
     PkgTarball {

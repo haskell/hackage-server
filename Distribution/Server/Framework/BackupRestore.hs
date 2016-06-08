@@ -20,6 +20,7 @@ module Distribution.Server.Framework.BackupRestore (
     parseVersion,
     parseBlobId,
     parseSHA,
+    parseMD5,
 
     equalTarBall,
 
@@ -43,6 +44,7 @@ import qualified Distribution.Server.Framework.BlobStorage as Blob
 import Distribution.Server.Framework.BlobStorage (BlobStores(..), BlobId)
 import Distribution.Server.Util.ReadDigest
 import Distribution.Server.Features.Security.SHA256
+import Data.Digest.Pure.MD5 (MD5Digest)
 
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
@@ -192,6 +194,11 @@ parseBlobId label str = case Blob.readBlobId str of
 
 parseSHA :: Monad m => String -> String -> m SHA256Digest
 parseSHA label str = case readDigest str of
+    Right digest -> return digest
+    Left  err    -> fail $ "Unable to parse " ++ label ++ show str ++ ": " ++ err
+
+parseMD5 :: Monad m => String -> String -> m MD5Digest
+parseMD5 label str = case readDigest str of
     Right digest -> return digest
     Left  err    -> fail $ "Unable to parse " ++ label ++ show str ++ ": " ++ err
 

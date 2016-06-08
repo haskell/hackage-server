@@ -39,10 +39,10 @@ securityBackup = (:[]) . csvToBackup ["partialstate.csv"] . exportSecurityState
 -- > "version" , "timestamp" , <timestamp version>
 -- > "version" , "snapshot"  , <snapshot version>
 -- > "update"  , "time"      , <time of last update>
--- > "update"  , "info"      , "root"    , <file length> , <SHA256>
--- > "update"  , "info"      , "mirrors" , <file length> , <SHA256>
--- > "update"  , "info"      , "tarGz"   , <file length> , <SHA256>
--- > "update"  , "info"      , "tar"     , <file length> , <SHA256>
+-- > "update"  , "info"      , "root"    , <file length> , <SHA256> [, <MD5> ]
+-- > "update"  , "info"      , "mirrors" , <file length> , <SHA256> [, <MD5> ]
+-- > "update"  , "info"      , "tarGz"   , <file length> , <SHA256> [, <MD5> ]
+-- > "update"  , "info"      , "tar"     , <file length> , <SHA256> [, <MD5> ]
 --
 -- Version 0.1 was prior to the introduction of 'TUFUpdate' and looked like:
 --
@@ -68,7 +68,8 @@ exportSecurityState SecurityState{..} = [
     versionCSVVer = Version [0,2] []
 
     fileInfoCSV file FileInfo{..} =
-      ["update", "info", file, show fileInfoLength, show fileInfoSHA256]
+      ["update", "info", file, show fileInfoLength, show fileInfoSHA256] ++
+      [ show x | Just x <- [fileInfoMD5] ]
 
 {-------------------------------------------------------------------------------
   Restore
@@ -176,6 +177,12 @@ import_v1 = mapM_ fromRecord
     fromInfoRecord [strFileLength, strSHA256] = do
       fileInfoLength <- parseRead "file length" strFileLength
       fileInfoSHA256 <- parseSHA "file SHA256" strSHA256
+      let fileInfoMD5 = Nothing
+      return FileInfo{..}
+    fromInfoRecord [strFileLength, strSHA256, strMD5] = do
+      fileInfoLength <- parseRead "file length" strFileLength
+      fileInfoSHA256 <- parseSHA "file SHA256" strSHA256
+      fileInfoMD5    <- Just `liftM` parseMD5  "file MD5" strMD5
       return FileInfo{..}
     fromInfoRecord otherRecord =
       fail $ "Unexpected info record: " ++ show otherRecord
