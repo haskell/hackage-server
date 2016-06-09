@@ -13,8 +13,16 @@ before_cache:
   - rm -fv $HOME/.cabal/packages/hackage.haskell.org/00-index.tar
 
 notifications:
-  email: false
-  irc: "chat.freenode.net#hackage"
+  email:
+    # email is sent to the committer and the author, but only if they have access to this repository
+    # see https://docs.travis-ci.com/user/notifications/#Email-notifications for details
+    on_success: never
+    on_failure: always
+  irc:
+    channels:
+      - "chat.freenode.net#hackage"
+    template:
+      - "\x0313lens\x0f/\x0306%{branch}\x0f \x0314%{commit}\x0f %{message} \x0302\x1f%{build_url}\x0f"
 
 matrix:
   include:
