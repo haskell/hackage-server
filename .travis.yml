@@ -22,7 +22,7 @@ notifications:
     channels:
       - "chat.freenode.net#hackage"
     template:
-      - "\x0313lens\x0f/\x0306%{branch}\x0f \x0314%{commit}\x0f %{message} \x0302\x1f%{build_url}\x0f"
+      - "\x0313hackage-server\x0f/\x0306%{branch}\x0f \x0314%{commit}\x0f %{message} \x0302\x1f%{build_url}\x0f"
 
 matrix:
   include:
@@ -77,9 +77,9 @@ script:
  ## from here on, CWD is inside the extracted source-tarball
  ## Check that the resulting source distribution can be built w/o and w/ tests
  ## first pass, w/o tests
- - cabal new-build --disable-tests --disable-benchmarks -v2
+ - cabal new-build --disable-tests --disable-benchmarks
  ## and now with tests & benchmarks
- - cabal new-build ${TEST} ${BENCH} -v2
+ - cabal new-build ${TEST} ${BENCH}
 
  # there's no 'cabal new-test' yet, so call tests directly for now
  - T=PackageTests;  ./dist-newstyle/build/*/build/$T/$T --plain
