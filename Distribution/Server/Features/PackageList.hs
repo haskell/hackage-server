@@ -76,13 +76,13 @@ data PackageItem = PackageItem {
 }
 
 instance MemSize PackageItem where
-    memSize (PackageItem a b c d e f g) = memSize7 a b c d e f g
+    memSize (PackageItem a b c d e f g h i) = memSize9 a b c d e f g h i
 
 
 emptyPackageItem :: PackageName -> PackageItem
 emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" 0
                                    -- [reverse index disabled] 0
-                                   False 0
+                                   False 0 0 0
 
 
 initListFeature :: ServerEnv
