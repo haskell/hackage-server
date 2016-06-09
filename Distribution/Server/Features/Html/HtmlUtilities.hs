@@ -12,6 +12,7 @@ import Distribution.Text (display)
 import Data.List (intersperse)
 import Data.Set (Set)
 import Distribution.Server.Features.PackageList
+import Distribution.Server.Pages.Util (packageType)
 import Distribution.Package
 
 data HtmlUtilities = HtmlUtilities {
