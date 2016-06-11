@@ -1,4 +1,6 @@
+{-# LANGUAGE CApiFFI #-}
 {-# LANGUAGE OverloadedStrings #-}
+
 module HackageClientUtils where
 
 import Control.Concurrent
@@ -88,8 +90,12 @@ runServerChecked root args = do
       Just ExitSuccess -> return ()
       _                -> die "Bad exit code from server"
 
+foreign import capi safe "unistd.h sync" c_sync :: IO ()
+
 runServer :: FilePath -> [String] -> IO (Maybe ExitCode)
 runServer root args = do
+    -- attempt to reduce failures on Travis by syncing fs before starting up server
+    c_sync
     -- ideally, cabal-install should tell us where to find build artifacts
     mserver <- findFile dirs "hackage-server"
     case mserver of
