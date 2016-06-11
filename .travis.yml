@@ -83,6 +83,7 @@ script:
 
  # there's no 'cabal new-test' yet, so call tests directly for now
  - T=PackageTests;  ./dist-newstyle/build/*/build/$T/$T --plain
+ - T=HashTests;     ./dist-newstyle/build/*/build/$T/$T
  - T=HighLevelTest; ./dist-newstyle/build/*/build/$T/$T
 
 # EOF
