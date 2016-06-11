@@ -21,6 +21,7 @@ import Distribution.Server.Framework.Instances (PackageIdentifier_v0)
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.Server.Features.Security.Orphans ()
+import Distribution.Server.Features.Security.MD5
 import Distribution.Server.Features.Security.SHA256
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
@@ -31,7 +32,6 @@ import Distribution.PackageDescription
 import Distribution.PackageDescription.Parse
          ( parsePackageDescription, ParseResult(..) )
 
-import Data.Digest.Pure.MD5 (MD5Digest)
 import Control.Applicative
 import Data.Serialize (Serialize)
 import Data.ByteString.Lazy (ByteString)

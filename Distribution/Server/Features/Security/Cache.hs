@@ -29,6 +29,7 @@ import Distribution.Server.Features.Security.Layout
 import Distribution.Server.Features.Security.ResponseContentTypes
 import Distribution.Server.Features.Security.State
 import Distribution.Server.Features.Core
+import qualified Distribution.Server.Features.Security.MD5 as MD5
 import qualified Distribution.Server.Features.Security.SHA256 as SHA
 
 -- Hackage security
@@ -128,7 +129,7 @@ getTUFFile file = do
     return $ TUFFile {
         _tufFileContent    = content
       , _tufFileLength     = fromIntegral $ BS.Lazy.length content
-      , _tufFileHashMD5    = Crypto.hash content
+      , _tufFileHashMD5    = MD5.md5     content
       , _tufFileHashSHA256 = SHA.sha256  content
       , _tufFileModified   = lastModified status
       }

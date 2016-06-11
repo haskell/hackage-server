@@ -8,7 +8,6 @@ module Distribution.Server.Util.ReadDigest (
 
 import Data.Binary (Binary)
 import Data.Bits
-import Data.Digest.Pure.MD5
 import Data.Word (Word8)
 import qualified Data.Binary          as Binary
 import qualified Data.ByteString      as BS.Strict
@@ -19,8 +18,6 @@ class ReadDigest a where
   readDigest :: String -> Either String a
   default readDigest :: Binary a => String -> Either String a
   readDigest = decodeBase16
-
-instance ReadDigest MD5Digest
 
 -- | Read encoding in base-16 format and then use 'Binary' instance to decode
 decodeBase16 :: Binary a => String -> Either String a

@@ -25,6 +25,7 @@ import Distribution.Server.Framework.BlobStorage
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Util.Parse (packUTF8)
+import Distribution.Server.Features.Security.MD5
 import Distribution.Server.Features.Security.SHA256
 
 import Happstack.Server
@@ -34,7 +35,6 @@ import Happstack.Server
 import qualified Data.ByteString       as BS
 import qualified Data.ByteString.Lazy  as BS.Lazy
 import qualified Data.ByteString.Char8 as BS.Char8
-import Data.Digest.Pure.MD5 (MD5Digest, md5)
 import qualified Data.Binary     as Binary
 import qualified Data.Binary.Put as Binary
 import qualified Data.ByteString.Base64 as Base64

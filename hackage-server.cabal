@@ -183,6 +183,7 @@ executable hackage-server
     Distribution.Server.Features.Security.Cache
     Distribution.Server.Features.Security.FileInfo
     Distribution.Server.Features.Security.Layout
+    Distribution.Server.Features.Security.MD5
     Distribution.Server.Features.Security.Migration
     Distribution.Server.Features.Security.Orphans
     Distribution.Server.Features.Security.ResponseContentTypes

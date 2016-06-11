@@ -15,7 +15,6 @@ module Distribution.Server.Features.Security.ResponseContentTypes (
 -- stdlib
 import Happstack.Server
 import Control.DeepSeq
-import Data.Digest.Pure.MD5 (MD5Digest)
 import Data.Time
 import Data.Typeable
 import Data.SafeCopy
@@ -24,6 +23,7 @@ import qualified Data.ByteString.Lazy as BS.Lazy
 -- hackage
 import Distribution.Server.Features.Security.FileInfo
 import Distribution.Server.Features.Security.Orphans ()
+import Distribution.Server.Features.Security.MD5
 import Distribution.Server.Features.Security.SHA256
 import Distribution.Server.Framework.ResponseContentTypes
 import Text.JSON.Canonical (Int54)

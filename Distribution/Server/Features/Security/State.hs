@@ -21,6 +21,7 @@ import Distribution.Server.Features.Security.FileInfo
 import Distribution.Server.Features.Security.Orphans ()
 import Distribution.Server.Features.Security.ResponseContentTypes
 import Distribution.Server.Framework.MemSize
+import qualified Distribution.Server.Features.Security.MD5 as MD5
 import qualified Distribution.Server.Features.Security.SHA256 as SHA
 
 -- hackage-security
@@ -140,7 +141,7 @@ constructTUFFiles = do
               }
             ssSigned = Sec.withSignatures layout [snapshotKey] snapshot
             ssRaw    = Sec.renderJSON layout ssSigned
-            ssMD5    = Crypto.hash ssRaw
+            ssMD5    = MD5.md5     ssRaw
             ssSHA256 = SHA.sha256  ssRaw
             ssFile   = Snapshot TUFFile {
                 _tufFileContent    = ssRaw
@@ -160,7 +161,7 @@ constructTUFFiles = do
               }
             ttSigned    = Sec.withSignatures layout [timestampKey] timestamp
             ttRaw       = Sec.renderJSON layout ttSigned
-            ttMD5       = Crypto.hash ttRaw
+            ttMD5       = MD5.md5     ttRaw
             ttSHA256    = SHA.sha256  ttRaw
             ttFile      = Timestamp TUFFile {
                 _tufFileContent    = ttRaw

@@ -16,8 +16,8 @@ import Data.SafeCopy
 import qualified Data.Map as Map
 
 -- hackage
+import Distribution.Server.Features.Security.MD5
 import Distribution.Server.Features.Security.SHA256
-import Data.Digest.Pure.MD5 (MD5Digest)
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Framework.ResponseContentTypes
 import Distribution.Server.Packages.Types

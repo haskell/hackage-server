@@ -43,8 +43,8 @@ module Distribution.Server.Framework.BackupRestore (
 import qualified Distribution.Server.Framework.BlobStorage as Blob
 import Distribution.Server.Framework.BlobStorage (BlobStores(..), BlobId)
 import Distribution.Server.Util.ReadDigest
+import Distribution.Server.Features.Security.MD5
 import Distribution.Server.Features.Security.SHA256
-import Data.Digest.Pure.MD5 (MD5Digest)
 
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Entry as Tar

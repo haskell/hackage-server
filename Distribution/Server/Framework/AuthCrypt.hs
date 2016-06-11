@@ -9,10 +9,10 @@ module Distribution.Server.Framework.AuthCrypt (
    QopInfo(..),
   ) where
 
+import Distribution.Server.Features.Security.MD5
 import Distribution.Server.Framework.AuthTypes
 import Distribution.Server.Users.Types (UserName(..))
 
-import Data.Digest.Pure.MD5 (md5)
 import qualified Data.ByteString.Lazy.Char8 as BS.Lazy -- Only used for ASCII data
 import Data.List (intercalate)
 
