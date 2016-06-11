@@ -68,7 +68,7 @@ data CoreFeature = CoreFeature {
     queryGetPackageIndex :: forall m. MonadIO m => m (PackageIndex PkgInfo),
 
     -- | Retrieve the raw tarball info
-    queryGetIndexTarballInfo :: MonadIO m => m IndexTarballInfo,
+    queryGetIndexTarballInfo :: forall m. MonadIO m => m IndexTarballInfo,
 
     -- Update transactions
     -- | Adds a version of a package which did not previously exist in the
