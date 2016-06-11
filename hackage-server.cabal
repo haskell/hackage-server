@@ -301,8 +301,6 @@ executable hackage-server
     async      == 2.1.*,
     cereal     >= 0.4,
     safecopy   >= 0.8.3 && < 0.9,
-    crypto-api >= 0.12 && < 0.14,
-    pureMD5    >= 0.2,
     xhtml      >= 3000.1,
     aeson      >= 0.6.2,
     unordered-containers >= 0.2.3.0,
@@ -323,6 +321,7 @@ executable hackage-server
     xmlgen     >= 0.6,
     hackage-security >= 0.5.2 && < 0.6,
     ed25519,
+    cryptohash-md5    == 0.11.*,
     cryptohash-sha256 == 0.11.*,
     binary
 
@@ -581,10 +580,9 @@ Test-Suite HashTests
                     bytestring,
                     cereal,
                     containers,
-                    crypto-api,
+                    cryptohash-md5,
                     cryptohash-sha256,
                     deepseq,
-                    pureMD5,
                     safecopy,
                     text,
                     time,

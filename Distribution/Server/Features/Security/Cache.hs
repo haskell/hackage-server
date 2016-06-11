@@ -19,7 +19,6 @@ import System.IO (IOMode(..))
 import System.Posix.Files
 import System.Posix.IO
 import System.Posix.Types (EpochTime)
-import qualified Crypto.Classes             as Crypto
 import qualified Data.ByteString.Lazy.Char8 as BS.Lazy
 
 -- Hackage

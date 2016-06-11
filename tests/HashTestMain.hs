@@ -11,10 +11,6 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Char8 as BC8
 import Data.Bits
 
-import qualified  Data.Binary      as Bin
-import qualified  Data.Binary.Get  as Bin
-import qualified  Data.Binary.Put  as Bin
-
 import qualified Data.Serialize as Ser
 
 import Distribution.Server.Util.ReadDigest
@@ -70,8 +66,9 @@ sha256tests = testGroup "Distribution.Server.Features.Security.SHA256"
 md5tests = testGroup "Distribution.Server.Features.Security.MD5"
     [ testGroup l
       [ testCase "Show"          $ show digest @?= hexref -- NB: w/o quotation marks
-      , testCase "Binary.put"    $ Bin.runPut (Bin.put digest) @?= hex2bs hexref
-      , testCase "Binary.get"    $ Bin.runGet (Bin.get :: Bin.Get MD5Digest) (hex2bs hexref) @?= digest
+      -- MD5Digest has no Binary instances anymore
+      -- , testCase "Binary.put"    $ Bin.runPut (Bin.put digest) @?= hex2bs hexref
+      -- , testCase "Binary.get"    $ Bin.runGet (Bin.get :: Bin.Get MD5Digest) (hex2bs hexref) @?= digest
       , testCase "Serialize.put" $ Ser.runPutLazy (Ser.put digest) @?= hex2bs hexref
       , testCase "Serialize.get" $ Ser.runGetLazy (Ser.get :: Ser.Get MD5Digest) (hex2bs hexref) @?= Right digest
       , testCase "readDigest"    $ readDigest hexref @?= Right digest

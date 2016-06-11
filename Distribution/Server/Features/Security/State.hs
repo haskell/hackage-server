@@ -13,7 +13,6 @@ import Data.SafeCopy
 import Data.Time
 import Data.Typeable
 import qualified Control.Monad.State  as State
-import qualified Crypto.Classes       as Crypto
 import qualified Data.ByteString.Lazy as BS.Lazy
 
 -- hackage
