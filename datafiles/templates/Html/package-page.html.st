@@ -19,6 +19,7 @@
     <h1>The $package.name$ package</h1>
     <div style="font-size: small">
       [<a href="/packages/tags">Tags</a>:$tags$]
+      <a href="/package/$package.name$/tags/edit">[ Propose Tags ]</a>
     </div>
 
     $if(isDeprecated)$

@@ -279,7 +279,7 @@ htmlFeature env@ServerEnv{..}
                                       docsCandidates tarIndexCache
                                       candidates templates
     htmlPreferred  = mkHtmlPreferred  utilities core versions
-    htmlTags       = mkHtmlTags       utilities core list tags
+    htmlTags       = mkHtmlTags       utilities core upload list tags
     htmlSearch     = mkHtmlSearch     utilities core list names
 
     htmlResources = concat [
@@ -473,7 +473,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
                           , withPackagePreferred
                           }
            UploadFeature{guardAuthorisedAsMaintainerOrTrustee}
-           TagsFeature{queryTagsForPackage}
+           TagsFeature{queryTagsForPackage, queryReviewTagsForPackage }
            documentationFeature@DocumentationFeature{documentationResource, queryDocumentation}
            TarIndexCacheFeature{cachedTarIndex}
            reportsFeature
@@ -1438,6 +1438,7 @@ data HtmlTags = HtmlTags {
 
 mkHtmlTags :: HtmlUtilities
            -> CoreFeature
+           -> UploadFeature
            -> ListFeature
            -> TagsFeature
            -> HtmlTags
@@ -1447,6 +1448,7 @@ mkHtmlTags HtmlUtilities{..}
                         , lookupPackageName
                         }
                       }
+           UploadFeature{guardAuthorisedAsUploaderOrMaintainerOrTrustee}
            ListFeature{makeItemList}
            TagsFeature{..} = HtmlTags{..}
   where
@@ -1527,14 +1529,28 @@ mkHtmlTags HtmlUtilities{..}
     serveTagsForm dpath = do
       pkgname <- packageInPath dpath
       currTags <- queryTagsForPackage pkgname
+      revTags <- queryReviewTagsForPackage pkgname
       let tagsStr = concat . intersperse ", " . map display . Set.toList $ currTags
-      return $ toResponse $ Resource.XHtml $ hackagePage "Edit package tags"
-        [paragraph << [toHtml "Set tags for ", packageNameLink pkgname],
-         form ! [theclass "box", XHtml.method "post", action $ packageTagsUri tags "" pkgname] <<
-          [ hidden "_method" "PUT"
-          , dlist . ddef . toHtml $ makeInput [thetype "text", value tagsStr] "tags" "Set tags to "
-          , paragraph << input ! [thetype "submit", value "Set tags"]
-          ]]
+          tagForm = toResponse $ Resource.XHtml $ hackagePage "Edit package tags"
+            [paragraph << [toHtml "Set tags for ", packageNameLink pkgname],
+             form ! [theclass "box", XHtml.method "post", action $ packageTagsUri tags "" pkgname] <<
+              [ hidden "_method" "PUT"
+              , dlist . ddef . toHtml $ makeInput [thetype "text", value tagsStr] "tags" "Set tags to "
+              , paragraph << input ! [thetype "submit", value "Set tags"]
+              ]]
+          tagRForm = toResponse $ Resource.XHtml $ hackagePage "Edit package tags"
+            [paragraph << [toHtml "Set tags for ", packageNameLink pkgname],
+             form ! [theclass "box", XHtml.method "post", action $ packageTagsUri tags "" pkgname] <<
+              [ hidden "_method" "PUT"
+              , dlist . ddef . toHtml $ makeInput [thetype "text", value tagsStr] "tags" "Set tags to "
+              , paragraph << input ! [thetype "submit", value "Set tags"]
+              ], paragraph << ["Proposals" ++ (show revTags)]]
+      user <- guardAuthorisedAsUploaderOrMaintainerOrTrustee pkgname
+      case user of
+        "Uploaders" -> return tagForm
+        otherwise   -> case revTags of
+            Nothing -> return tagForm
+            Just s -> return tagRForm
 
 {-------------------------------------------------------------------------------
   Search

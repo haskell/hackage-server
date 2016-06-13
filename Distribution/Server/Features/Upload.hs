@@ -59,6 +59,7 @@ data UploadFeature = UploadFeature {
     maintainersGroup   :: PackageName -> UserGroup,
 
     -- | Requiring being logged in as the maintainer of a package.
+    guardAuthorisedAsUploaderOrMaintainerOrTrustee :: PackageName -> ServerPartE String,
     guardAuthorisedAsMaintainer          :: PackageName -> ServerPartE (),
     -- | Requiring being logged in as the maintainer of a package or a trustee.
     guardAuthorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE (),
@@ -297,6 +298,17 @@ uploadFeature ServerEnv{serverBlobStore = store}
     guardAuthorisedAsMaintainer :: PackageName -> ServerPartE ()
     guardAuthorisedAsMaintainer pkgname =
       guardAuthorised_ [InGroup (maintainersGroup pkgname)]
+
+    guardAuthorisedAsUploaderOrMaintainerOrTrustee :: PackageName -> ServerPartE String
+    guardAuthorisedAsUploaderOrMaintainerOrTrustee pkgname= do
+        mt <- guardAuthorised' [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
+        upl <- guardAuthorised' [AnyKnownUser]
+        if mt
+            then return "MaintainersOrTrustees"
+            else
+                if  upl
+                    then return "Uploaders"
+                    else return ""
 
     guardAuthorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE ()
     guardAuthorisedAsMaintainerOrTrustee pkgname =

@@ -1,7 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, GeneralizedNewtypeDeriving #-}
 
 module Distribution.Server.Features.Tags.State where
-
 import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.MemSize
 
@@ -65,10 +64,18 @@ data PackageTags = PackageTags {
     packageTags :: Map PackageName (Set Tag),
     -- a secondary reverse mapping
     tagPackages :: Map Tag (Set PackageName)
+    -- tags(add, remove) set for review by the maintainer
+    -- reviewTags :: Map PackageName (Set Tag, Set Tag)
 } deriving (Eq, Show, Typeable)
+
+-- Packagename (Proposed Additions, Proposed Deletions)
+data ReviewTags = ReviewTags (Map PackageName (Set Tag, Set Tag)) deriving (Eq, Show)
 
 emptyPackageTags :: PackageTags
 emptyPackageTags = PackageTags Map.empty Map.empty
+
+emptyReviewTags :: ReviewTags
+emptyReviewTags = ReviewTags Map.empty
 
 tagToPackages :: Tag -> PackageTags -> Set PackageName
 tagToPackages tag = Map.findWithDefault Set.empty tag . tagPackages
@@ -142,6 +149,8 @@ renameTag tag tag' pkgTags@(PackageTags _ packages) =
 
 $(deriveSafeCopy 0 'base ''Tag)
 $(deriveSafeCopy 0 'base ''PackageTags)
+$(deriveSafeCopy 0 'base ''ReviewTags)
+
 
 instance NFData PackageTags where
     rnf (PackageTags a b) = rnf a `seq` rnf b
@@ -167,11 +176,21 @@ getPackageTags = ask
 replacePackageTags :: PackageTags -> Update PackageTags ()
 replacePackageTags = put
 
+getReviewTags :: Query ReviewTags ReviewTags
+getReviewTags = ask
+
+replaceReviewTags :: ReviewTags -> Update ReviewTags ()
+replaceReviewTags = put
+
 setPackageTags :: PackageName -> Set Tag -> Update PackageTags ()
 setPackageTags name tagList = modify $ setTags name tagList
 
 setTagPackages :: Tag -> Set PackageName -> Update PackageTags ()
 setTagPackages tag pkgList = modify $ setTag tag pkgList
+
+-- setReviewPackageTags :: PackageName -> (Set Tag, Set Tag) -> Update PackageTags ()
+-- setReviewPackageTags name (tagList1, taglist2) = modify $ setTags name reviewTags
+
 
 -- | Tag a package. Returns True if the element was inserted, and False if
 -- the tag as already present (same result though)
@@ -191,7 +210,36 @@ removePackageTag name tag = do
         Nothing -> return False
         Just pkgTags' -> put pkgTags' >> return True
 
-makeAcidic ''PackageTags ['tagsForPackage
+clearReviewTags :: PackageName -> Update ReviewTags ()
+clearReviewTags pkgname
+    = do
+        ReviewTags  m <- get
+        put (ReviewTags (Map.insert pkgname (Set.empty,Set.empty) m))
+
+
+insertReviewTags :: PackageName -> Set Tag -> Set Tag -> Update ReviewTags ()
+insertReviewTags pkgname add del
+    = do
+        ReviewTags  m <- get
+        put (ReviewTags (Map.insertWith (insertReviewHelper) pkgname (add,del) m))
+
+insertReviewHelper :: (Set Tag, Set Tag) -> (Set Tag, Set Tag) -> (Set Tag, Set Tag)
+insertReviewHelper (a,b) (c,d) = (Set.union a c, Set.union b d)
+
+lookupReviewTags :: PackageName -> Query ReviewTags (Maybe (Set Tag, Set Tag))
+lookupReviewTags pkgname
+    = do ReviewTags m <- ask
+         return (Map.lookup pkgname m)
+
+$(makeAcidic ''ReviewTags ['insertReviewTags
+                          ,'lookupReviewTags
+                          ,'getReviewTags
+                          ,'clearReviewTags
+                          ,'replaceReviewTags
+                          ])
+
+
+$(makeAcidic ''PackageTags ['tagsForPackage
                          ,'packagesForTag
                          ,'getTagList
                          ,'getPackageTags
@@ -200,5 +248,5 @@ makeAcidic ''PackageTags ['tagsForPackage
                          ,'setTagPackages
                          ,'addPackageTag
                          ,'removePackageTag
-                         ]
+                         ])
 
