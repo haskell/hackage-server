@@ -264,7 +264,7 @@ data CombinedTarErrs =
      FormatError      Tar.FormatError
    | PortabilityError Tar.PortabilityError
    | TarBombError     FilePath FilePath
-   | FutureTimeError  FilePath UTCTime
+   | FutureTimeError  FilePath UTCTime UTCTime
    | PermissionsError FilePath Tar.Permissions
 
 tarballChecks :: Bool -> UTCTime -> FilePath
@@ -296,7 +296,7 @@ checkFutureTimes now =
     now' = addUTCTime 30 now
     checkEntry entry
       | entryUTCTime > now'
-      = Just (FutureTimeError posixPath entryUTCTime)
+      = Just (FutureTimeError posixPath entryUTCTime now')
       where
         entryUTCTime = posixSecondsToUTCTime (realToFrac (Tar.entryTime entry))
         posixPath    = Tar.fromTarPathToPosixPath (Tar.entryTarPath entry)
@@ -368,13 +368,13 @@ explainTarError (FormatError formateror) =
     "There is an error in the format of the tar file: " ++ show formateror
  ++ ". Check that it is a valid tar file (e.g. 'tar -xtf thefile.tar'). "
  ++ "You may need to re-create the package tarball and try again."
-explainTarError (FutureTimeError entryname time) =
+explainTarError (FutureTimeError entryname time serverTime) =
     "The tarball entry " ++ quote entryname ++ " has a file timestamp that is "
- ++ "in the future (" ++ show time ++ "). This tends to cause problems "
- ++ "for build systems and other tools, so hackage does not allow it. This "
- ++ "problem can be caused by having a misconfigured system time, or by bugs "
- ++ "in the tools (tarballs created by 'cabal sdist' on Windows with "
- ++ "cabal-install-1.18.0.2 or older have this problem)."
+ ++ "in the future (" ++ show time ++ " vs this server's time of " ++ show serverTime
+ ++ "). This tends to cause problems for build systems and other tools, so hackage "
+ ++ "does not allow it. This problem can be caused by having a misconfigured system "
+ ++ "time, or by bugs in the tools (tarballs created by 'cabal sdist' on Windows "
+ ++ "with cabal-install-1.18.0.2 or older have this problem)."
 explainTarError (PermissionsError entryname mode) =
     "The tarball entry " ++ quote entryname ++ " has file permissions that are "
  ++ "broken: " ++ (showMode mode) ++ ". Permissions must be 644 at a minimum "
