@@ -63,7 +63,7 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Vector as Vec
-import Data.Maybe (fromMaybe, isJust)
+import Data.Maybe (fromMaybe, isJust, fromJust)
 import Data.Monoid ((<>))
 import qualified Data.Text as T
 import Data.Traversable (traverse)
@@ -131,6 +131,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    , "distro-monitor.html"
                    , "revisions.html"
                    , "package-page.html"
+                   , "tag-interface.html"
                    ]
 
 
@@ -270,6 +271,7 @@ htmlFeature env@ServerEnv{..}
                                       cachePackagesPage
                                       cacheNamesPage
                                       templates
+                                      list
     htmlUsers      = mkHtmlUsers      user usersdetails
     htmlUploads    = mkHtmlUploads    utilities upload
     htmlDocUploads = mkHtmlDocUploads utilities core docsCore templates
@@ -437,7 +439,8 @@ htmlFeature env@ServerEnv{..}
 
 {-------------------------------------------------------------------------------
   Core
--------------------------------------------------------------------------------}
+-----------------------------------------------------------------------------
+-}
 
 data HtmlCore = HtmlCore {
     htmlCoreResources :: [Resource]
@@ -462,18 +465,19 @@ mkHtmlCore :: ServerEnv
            -> AsyncCache Response
            -> AsyncCache Response
            -> Templates
+           -> ListFeature
            -> HtmlCore
 mkHtmlCore ServerEnv{serverBaseURI}
            utilities@HtmlUtilities{..}
            UserFeature{queryGetUserDb}
-           CoreFeature{coreResource}
+           CoreFeature{coreResource , queryGetPackageIndex}
            VersionsFeature{ versionsResource
                           , queryGetDeprecatedFor
                           , queryGetPreferredInfo
                           , withPackagePreferred
                           }
            UploadFeature{guardAuthorisedAsMaintainerOrTrustee}
-           TagsFeature{queryTagsForPackage, queryReviewTagsForPackage }
+           TagsFeature{queryTagsForPackage}
            documentationFeature@DocumentationFeature{documentationResource, queryDocumentation}
            TarIndexCacheFeature{cachedTarIndex}
            reportsFeature
@@ -486,6 +490,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
            cachePackagesPage
            cacheNamesPage
            templates
+           ListFeature{makeItemList}
   = HtmlCore{..}
   where
     cores@CoreResource{packageInPath, lookupPackageName, lookupPackageId} = coreResource
@@ -512,6 +517,11 @@ mkHtmlCore ServerEnv{serverBaseURI}
       -}
       , (resourceAt "/packages/names" ) {
             resourceGet = [("html", const $ readAsyncCache cacheNamesPage)]
+          }
+      , (resourceAt "/packages/names/experiment" ) {
+            resourceDesc = [(GET, "Show detailed package dependency information")]
+        , resourceGet = [("html",
+                serveMaintainPage')]
           }
       , (extendResource $ corePackagesPage cores) {
             resourceDesc = [(GET, "Show package index")]
@@ -610,6 +620,17 @@ mkHtmlCore ServerEnv{serverBaseURI}
         , "versions" $= map packageId pkgs
         ]
 
+    serveMaintainPage' :: DynamicPath -> ServerPartE Response
+    serveMaintainPage' _ = do
+      pkgIndex <- queryGetPackageIndex
+      let packageNames = Pages.toPackageNames pkgIndex
+      pkgDetails <- liftIO $ makeItemList packageNames
+      let rowList = map (makeRow) pkgDetails
+          tabledata = "" +++ rowList +++""
+      template <- getTemplate templates "tag-interface.html"
+      return $ toResponse $ template
+        [ "tabledata" $= tabledata ]
+
     serveDistroMonitorPage :: DynamicPath -> ServerPartE Response
     serveDistroMonitorPage dpath = do
       pkgname <- packageInPath dpath
@@ -661,7 +682,8 @@ mkHtmlCore ServerEnv{serverBaseURI}
 
 {-------------------------------------------------------------------------------
   Users
--------------------------------------------------------------------------------}
+-----------------------------------------------------------------------------
+-}
 
 data HtmlUsers = HtmlUsers {
     htmlUsersResources :: [Resource]
@@ -775,7 +797,8 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
 
 {-------------------------------------------------------------------------------
   Uploads
--------------------------------------------------------------------------------}
+-----------------------------------------------------------------------------
+-}
 
 data HtmlUploads = HtmlUploads {
     htmlUploadsResources :: [Resource]
@@ -823,7 +846,8 @@ mkHtmlUploads HtmlUtilities{..} UploadFeature{..} = HtmlUploads{..}
 
 {-------------------------------------------------------------------------------
   Documentation uploads
--------------------------------------------------------------------------------}
+-----------------------------------------------------------------------------
+-}
 
 data HtmlDocUploads = HtmlDocUploads {
     htmlDocUploadsResources :: [Resource]
@@ -870,7 +894,8 @@ mkHtmlDocUploads HtmlUtilities{..} CoreFeature{coreResource} DocumentationFeatur
 
 {-------------------------------------------------------------------------------
   Build reports
--------------------------------------------------------------------------------}
+-----------------------------------------------------------------------------
+-}
 
 data HtmlReports = HtmlReports {
     htmlReportsResources :: [Resource]
@@ -916,7 +941,8 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
 
 {-------------------------------------------------------------------------------
   Candidates
--------------------------------------------------------------------------------}
+-----------------------------------------------------------------------------
+-}
 
 data HtmlCandidates = HtmlCandidates {
     htmlCandidatesResources :: [Resource]
@@ -1173,7 +1199,8 @@ dependenciesPage isCandidate render =
 
 {-------------------------------------------------------------------------------
   Preferred versions
--------------------------------------------------------------------------------}
+-----------------------------------------------------------------------------
+-}
 
 data HtmlPreferred = HtmlPreferred {
     htmlPreferredResources :: [Resource]
@@ -1391,7 +1418,8 @@ mkHtmlPreferred HtmlUtilities{..}
 
 {-------------------------------------------------------------------------------
   Downloads
--------------------------------------------------------------------------------}
+-----------------------------------------------------------------------------
+-}
 
 data HtmlDownloads = HtmlDownloads {
     htmlDownloadsResources :: [Resource]
@@ -1429,7 +1457,8 @@ mkHtmlDownloads HtmlUtilities{..} DownloadFeature{..} = HtmlDownloads{..}
 
 {-------------------------------------------------------------------------------
   Tags
--------------------------------------------------------------------------------}
+-----------------------------------------------------------------------------
+-}
 
 data HtmlTags = HtmlTags {
     htmlTagsResources :: [Resource]
@@ -1522,7 +1551,7 @@ mkHtmlTags HtmlUtilities{..}
       _       <- lookupPackageName pkgname -- TODO: necessary?
       putTags pkgname
       return $ toResponse $ Resource.XHtml $ hackagePage "Set tags"
-          [toHtml "Put tags for ", packageNameLink pkgname]
+          [toHtml "Suggested tags for ", packageNameLink pkgname]
 
     -- serve form for editing, to be received by putTags
     serveTagsForm :: DynamicPath -> ServerPartE Response
@@ -1530,31 +1559,43 @@ mkHtmlTags HtmlUtilities{..}
       pkgname <- packageInPath dpath
       currTags <- queryTagsForPackage pkgname
       revTags <- queryReviewTagsForPackage pkgname
-      let tagsStr = concat . intersperse ", " . map display . Set.toList $ currTags
+      let toStr = concat . intersperse ", " . map display . Set.toList
+          tagsStr = toStr currTags
+          addns = toStr $ fst $ fromJust revTags
+          delns = toStr $ snd $ fromJust revTags
           tagForm = toResponse $ Resource.XHtml $ hackagePage "Edit package tags"
             [paragraph << [toHtml "Set tags for ", packageNameLink pkgname],
-             form ! [theclass "box", XHtml.method "post", action $ packageTagsUri tags "" pkgname] <<
+             thediv ! [theclass "box"] << [paragraph << [bold $ toHtml "Current Tags", br, toHtml tagsStr],
+             form ! [  XHtml.method "post", action $ packageTagsUri tags "" pkgname] <<
               [ hidden "_method" "PUT"
-              , dlist . ddef . toHtml $ makeInput [thetype "text", value tagsStr] "tags" "Set tags to "
-              , paragraph << input ! [thetype "submit", value "Set tags"]
-              ]]
+              , dlist . ddef . toHtml $ makeInput [thetype "text", value " "] "addns" "Propose Additions "
+              , dlist . ddef . toHtml $ makeInput [thetype "text", value " "] "delns" "Propose Deletions "
+              ,
+               paragraph << input ! [thetype "submit", value "Propose tags"]
+              ]]]
           tagRForm = toResponse $ Resource.XHtml $ hackagePage "Edit package tags"
             [paragraph << [toHtml "Set tags for ", packageNameLink pkgname],
-             form ! [theclass "box", XHtml.method "post", action $ packageTagsUri tags "" pkgname] <<
+             thediv ! [theclass "box"] << [paragraph << [bold $ toHtml "Current Tags", br, toHtml tagsStr],
+             form ! [  XHtml.method "post", action $ packageTagsUri tags "" pkgname] <<
               [ hidden "_method" "PUT"
-              , dlist . ddef . toHtml $ makeInput [thetype "text", value tagsStr] "tags" "Set tags to "
-              , paragraph << input ! [thetype "submit", value "Set tags"]
-              ], paragraph << ["Proposals" ++ (show revTags)]]
+              , dlist . ddef . toHtml $ makeInput [thetype "text", value " "] "addns" "Propose Additions "
+              , dlist . ddef . toHtml $ makeInput [thetype "text", value " "] "delns" "Propose Deletions "
+              ,
+               paragraph << input ! [thetype "submit", value "Propose tags"]
+              ], paragraph << [big $ toHtml "Proposals", br, bold $ toHtml "additions: ", toHtml addns, br,  bold $ toHtml "deletions: ", toHtml delns]]]
       user <- guardAuthorisedAsUploaderOrMaintainerOrTrustee pkgname
       case user of
         "Uploaders" -> return tagForm
-        otherwise   -> case revTags of
+        _   -> case revTags of
             Nothing -> return tagForm
-            Just s -> return tagRForm
+            Just _ -> return tagRForm
+
+
 
 {-------------------------------------------------------------------------------
   Search
--------------------------------------------------------------------------------}
+-----------------------------------------------------------------------------
+-}
 
 data HtmlSearch = HtmlSearch {
     htmlSearchResources :: [Resource]
@@ -1813,7 +1854,8 @@ mkHtmlSearch HtmlUtilities{..}
 
 {-------------------------------------------------------------------------------
   Groups
--------------------------------------------------------------------------------}
+-----------------------------------------------------------------------------
+-}
 
 htmlGroupResource :: UserFeature -> GroupResource -> [Resource]
 htmlGroupResource UserFeature{..} r@(GroupResource groupR userR getGroup) =

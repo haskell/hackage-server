@@ -10,6 +10,7 @@ import Distribution.Server.Framework
 
 import Distribution.Server.Features.Core
 -- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies
+import Distribution.Server.Features.Votes
 import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.PreferredVersions
@@ -55,11 +56,15 @@ data PackageItem = PackageItem {
     itemDeprecated :: !(Maybe [PackageName]),
     -- The description of the package from its Cabal file
     itemDesc :: !String,
+    -- Maintainer of the package
+    itemMaintainer :: !String,
     -- Whether the item is in the Haskell Platform
   --itemPlatform :: Bool,
+    -- Author of the package (Probably won't be used in display)
+    itemVotes :: Int,
     -- The total number of downloads. (For sorting, not displaying.)
     -- Updated periodically.
-    itemDownloads :: !Int,
+    itemDownloads :: Int,
     -- The number of direct revdeps. (Likewise.)
     -- also: distinguish direct/flat?
     -- [reverse index disabled] itemRevDepsCount :: !Int,
@@ -76,11 +81,11 @@ data PackageItem = PackageItem {
 }
 
 instance MemSize PackageItem where
-    memSize (PackageItem a b c d e f g h i) = memSize9 a b c d e f g h i
+    memSize (PackageItem a b c d e f g h i j k) = memSize11 a b c d e f g h i j k
 
 
 emptyPackageItem :: PackageName -> PackageItem
-emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" 0
+emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" "" 0 0
                                    -- [reverse index disabled] 0
                                    False 0 0 0
 
@@ -89,6 +94,7 @@ initListFeature :: ServerEnv
                 -> IO (CoreFeature
                     -- [reverse index disabled] -> ReverseFeature
                     -> DownloadFeature
+                    -> VotesFeature
                     -> TagsFeature
                     -> VersionsFeature
                     -> IO ListFeature)
@@ -99,11 +105,12 @@ initListFeature _env = do
     return $ \core@CoreFeature{..}
               -- [reverse index disabled] revs
               download
+              votesf@VotesFeature{..}
               tagsf@TagsFeature{..}
               versions@VersionsFeature{..} -> do
 
       let (feature, modifyItem, updateDesc) =
-            listFeature core download tagsf versions
+            listFeature core download votesf tagsf versions
                         itemCache itemUpdate
 
       registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, _) ->
@@ -117,11 +124,18 @@ initListFeature _env = do
               modifyItem pkgname (updateReverseItem revCount)
           runHook' itemUpdate $ Set.fromDistinctAscList pkgs
       -}
+
+      registerHook votesUpdated $ \(pkgname, _) -> do
+          votes <- pkgNumVotes pkgname
+          modifyItem pkgname (updateVoteItem votes)
+          runHook_ itemUpdate (Set.singleton pkgname)
+
       registerHook tagsUpdated $ \(pkgs, _) -> do
           forM_ (Set.toList pkgs) $ \pkgname -> do
               tags <- queryTagsForPackage pkgname
               modifyItem pkgname (updateTagItem tags)
           runHook_ itemUpdate pkgs
+
       registerHook deprecatedHook $ \(pkgname, mpkgs) -> do
           modifyItem pkgname (updateDeprecation mpkgs)
           runHook_ itemUpdate (Set.singleton pkgname)
@@ -131,6 +145,7 @@ initListFeature _env = do
 
 listFeature :: CoreFeature
             -> DownloadFeature
+            -> VotesFeature
             -> TagsFeature
             -> VersionsFeature
             -> MemState (Map PackageName PackageItem)
@@ -140,7 +155,7 @@ listFeature :: CoreFeature
                 PackageName -> IO ())
 
 listFeature CoreFeature{..}
-            DownloadFeature{..} TagsFeature{..} VersionsFeature{..}
+            DownloadFeature{..} VotesFeature{..} TagsFeature{..} VersionsFeature{..}
             itemCache itemUpdate
   = (ListFeature{..}, modifyItem, updateDesc)
   where
@@ -201,11 +216,13 @@ listFeature CoreFeature{..}
         -- [reverse index disabled] revCount <- query . GetReverseCount $ pkgname
         tags  <- queryTagsForPackage pkgname
         downs <- recentPackageDownloads
+        votes <- pkgNumVotes pkgname
         deprs <- queryGetDeprecatedFor pkgname
         return $ (,) pkgname $ (updateDescriptionItem (pkgDesc pkg) $ emptyPackageItem pkgname) {
             itemTags       = tags
           , itemDeprecated = deprs
           , itemDownloads  = cmFind pkgname downs
+          , itemVotes = votes
             -- [reverse index disabled] , itemRevDepsCount = directReverseCount revCount
           }
 
@@ -234,6 +251,8 @@ updateDescriptionItem genDesc item =
         -- This checks if the library is buildable. However, since
         -- desc is flattened, we might miss some flags. Perhaps use the
         -- CondTree instead.
+        -- itemAuthor = author desc,
+        itemMaintainer = maintainer desc,
         itemHasLibrary = hasLibs desc,
         itemNumExecutables = length . filter (buildable . buildInfo) $ executables desc,
         itemNumTests = length . filter (buildable . testBuildInfo) $ testSuites desc,
@@ -245,7 +264,11 @@ updateTagItem tags item =
     item {
         itemTags = tags
     }
-
+updateVoteItem :: Int -> PackageItem -> PackageItem
+updateVoteItem votes item =
+    item {
+    itemVotes = votes
+    }
 updateDeprecation :: Maybe [PackageName] -> PackageItem -> PackageItem
 updateDeprecation pkgs item =
     item {

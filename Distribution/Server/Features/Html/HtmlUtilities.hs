@@ -19,6 +19,7 @@ data HtmlUtilities = HtmlUtilities {
     packageLink :: PackageId -> Html
   , packageNameLink :: PackageName -> Html
   , renderItem :: PackageItem -> Html
+  , makeRow :: PackageItem -> Html
   , renderTags :: Set Tag -> [Html]
   }
 
@@ -31,6 +32,16 @@ htmlUtilities CoreFeature{coreResource}
 
     packageNameLink :: PackageName -> Html
     packageNameLink pkgname = anchor ! [href $ corePackageNameUri cores "" pkgname] << display pkgname
+
+    makeRow :: PackageItem -> Html
+    makeRow item = tr << [ td $ packageNameLink $ itemName item
+                         , td $ toHtml $ show $ itemDownloads item
+                         , td $ toHtml $ show $ itemVotes item
+                         , td $ toHtml $ itemDesc item
+                         , td $ " (" +++ renderTags (itemTags item) +++ ")"
+                         , td $ toHtml $ itemMaintainer item
+                         ]
+
 
     renderItem :: PackageItem -> Html
     renderItem item = li ! classes <<

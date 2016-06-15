@@ -14,7 +14,6 @@ import Control.Applicative (optional)
 import Distribution.Server.Framework
 import Distribution.Server.Framework.Auth
 import Distribution.Server.Framework.BackupDump
-import Debug.Trace
 
 import Distribution.Server.Features.Tags.State
 import Distribution.Server.Features.Tags.Backup
@@ -224,27 +223,30 @@ tagsFeature CoreFeature{ queryGetPackageIndex
     putTags :: PackageName -> ServerPartE ()
     putTags pkgname = do
       guardValidPackageName pkgname
-      -- a <- guardAuthorised' [InGroup uploadersGroup]
-      mtags <- optional $ look "tags"
-      case simpleParse =<< mtags of
-          Just (TagList tags) -> do
-                 user <- guardAuthorisedAsUploaderOrMaintainerOrTrustee pkgname
-                 case user of
-                    "Uploaders" -> do
-                        calcTags <- queryTagsForPackage pkgname
-                        let tagSet = Set.difference (Set.fromList tags) calcTags
-                        let tagRem = Set.difference calcTags (Set.fromList tags)
-                        void $ updateState tagsReview $ InsertReviewTags pkgname tagSet tagRem
-                        return ()
-                    otherwise -> do
-                        calcTags <- fmap (packageToTags pkgname) $ readMemState calculatedTags
-                        let tagSet = Set.fromList tags `Set.union` calcTags
-                            add = Set.difference (Set.fromList tags) calcTags
-                            del = Set.difference calcTags (Set.fromList tags)
-                        void $ updateState tagsState $ SetPackageTags pkgname tagSet
-                        void $ updateState tagsReview $ ClearReviewTags pkgname
-                        runHook_ tagsUpdated (Set.singleton pkgname, tagSet)
-                        return ()
+      addns <- optional $ look "addns"
+      delns <- optional $ look "delns"
+      case simpleParse =<< addns of
+          Just (TagList add) -> do
+                case simpleParse =<< delns of
+                    Just (TagList del) -> do
+                        user <- guardAuthorisedAsUploaderOrMaintainerOrTrustee pkgname
+                        case user of
+                            "Uploaders" -> do
+                                calcTags <- queryTagsForPackage pkgname
+                                let addTags = Set.fromList add `Set.difference` calcTags
+                                let delTags = Set.fromList del `Set.intersection` calcTags
+                                void $ updateState tagsReview $ InsertReviewTags pkgname addTags delTags
+                                return ()
+                            _ -> do
+                                calcTags <- queryTagsForPackage pkgname
+                                let tagSet = (addTags `Set.union` calcTags) `Set.difference` delTags
+                                    addTags = Set.fromList add
+                                    delTags = Set.fromList del
+                                void $ updateState tagsState $ SetPackageTags pkgname tagSet
+                                void $ updateState tagsReview $ ClearReviewTags pkgname
+                                runHook_ tagsUpdated (Set.singleton pkgname, tagSet)
+                                return ()
+                    _ -> errBadRequest "Tags not recognized" [MText "Couldn't parse your tag list. It should be comma separated with any number of alphanumerical tags. Tags can also also have -+#*."]
           Nothing -> errBadRequest "Tags not recognized" [MText "Couldn't parse your tag list. It should be comma separated with any number of alphanumerical tags. Tags can also also have -+#*."]
 
 

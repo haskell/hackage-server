@@ -32,9 +32,10 @@ import qualified Text.XHtml.Strict as X
 
 -- | Define the prototype for this feature
 data VotesFeature = VotesFeature {
-    votesFeatureInterface :: HackageFeature
+    votesFeatureInterface   :: HackageFeature
   , didUserVote             :: forall m. MonadIO m => PackageName -> UserId -> m Bool
   , pkgNumVotes             :: forall m. MonadIO m => PackageName -> m Int
+  , votesUpdated             :: Hook (PackageName, Int) ()
   , renderVotesHtml         :: PackageName -> ServerPartE X.Html
 }
 
@@ -49,11 +50,13 @@ initVotesFeature :: ServerEnv
                       -> IO VotesFeature)
 initVotesFeature env@ServerEnv{serverStateDir} = do
   dbVotesState      <- votesStateComponent serverStateDir
+  updateVotes <- newHook
 
   return $ \coref@CoreFeature{..} userf@UserFeature{..} -> do
     let feature = votesFeature env
                   dbVotesState
-                  coref userf
+                  coref userf updateVotes
+
     return feature
 
 -- | Define the backing store (i.e. database component)
@@ -79,12 +82,14 @@ votesFeature ::  ServerEnv
              -> StateComponent AcidState VotesState
              -> CoreFeature                    -- To get site package list
              -> UserFeature                    -- To authenticate users
+             -> Hook (PackageName, Int) ()
              -> VotesFeature
 
 votesFeature  ServerEnv{..}
               votesState
               CoreFeature { coreResource = CoreResource{..} }
               UserFeature{..}
+              votesUpdated
   = VotesFeature{..}
   where
     votesFeatureInterface   = (emptyHackageFeature "votes") {
@@ -133,7 +138,7 @@ votesFeature  ServerEnv{..}
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
       cacheControlWithoutETag [Public, maxAgeMinutes 10]
-      voteCount <- queryState votesState (GetPackageVoteCount pkgname)
+      voteCount <- pkgNumVotes pkgname
       let obj = objectL
                   [ ("packageName", string $ display pkgname)
                   , ("numVotes",    toJSON voteCount)
@@ -146,8 +151,12 @@ votesFeature  ServerEnv{..}
       uid     <- guardAuthorised [AnyKnownUser]
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
-
+      number <- pkgNumVotes pkgname
       success <- updateState votesState (AddVote pkgname uid)
+      if success
+        then runHook_ votesUpdated (pkgname, number+1)
+        else return ()
+
       if success
         then ok . toResponse $ Render.voteConfirmationPage pkgname
                                  "Package voted for successfully"
@@ -160,9 +169,11 @@ votesFeature  ServerEnv{..}
       uid     <- guardAuthorised [AnyKnownUser]
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
-
+      number <- pkgNumVotes pkgname
       success <- updateState votesState (RemoveVote pkgname uid)
-
+      if success
+        then runHook_ votesUpdated (pkgname, number-1)
+        else return ()
       let responseMsg | success   = "Package vote removed successfully."
                       | otherwise = "User has not voted for this package."
       ok . toResponse $ Render.voteConfirmationPage
