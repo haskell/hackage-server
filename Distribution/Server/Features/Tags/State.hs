@@ -64,9 +64,8 @@ data PackageTags = PackageTags {
     packageTags :: Map PackageName (Set Tag),
     -- a secondary reverse mapping
     tagPackages :: Map Tag (Set PackageName)
-    -- tags(add, remove) set for review by the maintainer
-    -- reviewTags :: Map PackageName (Set Tag, Set Tag)
 } deriving (Eq, Show, Typeable)
+
 
 -- Packagename (Proposed Additions, Proposed Deletions)
 data ReviewTags = ReviewTags (Map PackageName (Set Tag, Set Tag)) deriving (Eq, Show)
@@ -95,6 +94,7 @@ alterTags name mtagList (PackageTags tags packages) =
 
 setTags :: PackageName -> Set Tag -> PackageTags -> PackageTags
 setTags pkgname tagList = alterTags pkgname (keepSet tagList)
+
 
 deletePackageTags :: PackageName -> PackageTags -> PackageTags
 deletePackageTags name = alterTags name Nothing
@@ -223,6 +223,12 @@ insertReviewTags pkgname add del
         ReviewTags  m <- get
         put (ReviewTags (Map.insertWith (insertReviewHelper) pkgname (add,del) m))
 
+insertReviewTags_ :: PackageName -> Set Tag -> Set Tag -> Update ReviewTags ()
+insertReviewTags_ pkgname add del
+    = do
+        ReviewTags  m <- get
+        put (ReviewTags (Map.insert pkgname (add,del) m))
+
 insertReviewHelper :: (Set Tag, Set Tag) -> (Set Tag, Set Tag) -> (Set Tag, Set Tag)
 insertReviewHelper (a,b) (c,d) = (Set.union a c, Set.union b d)
 
@@ -231,7 +237,10 @@ lookupReviewTags pkgname
     = do ReviewTags m <- ask
          return (Map.lookup pkgname m)
 
+
+
 $(makeAcidic ''ReviewTags ['insertReviewTags
+                          ,'insertReviewTags_
                           ,'lookupReviewTags
                           ,'getReviewTags
                           ,'clearReviewTags

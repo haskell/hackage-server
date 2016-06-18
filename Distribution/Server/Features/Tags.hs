@@ -32,6 +32,7 @@ import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
 import Distribution.License
 
+import Data.Maybe(fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
@@ -225,6 +226,8 @@ tagsFeature CoreFeature{ queryGetPackageIndex
       guardValidPackageName pkgname
       addns <- optional $ look "addns"
       delns <- optional $ look "delns"
+      raddns <- optional $ look "raddns"
+      rdelns <- optional $ look "rdelns"
       case simpleParse =<< addns of
           Just (TagList add) -> do
                 case simpleParse =<< delns of
@@ -234,16 +237,25 @@ tagsFeature CoreFeature{ queryGetPackageIndex
                             "Uploaders" -> do
                                 calcTags <- queryTagsForPackage pkgname
                                 let addTags = Set.fromList add `Set.difference` calcTags
-                                let delTags = Set.fromList del `Set.intersection` calcTags
+                                    delTags = Set.fromList del `Set.intersection` calcTags
                                 void $ updateState tagsReview $ InsertReviewTags pkgname addTags delTags
                                 return ()
                             _ -> do
                                 calcTags <- queryTagsForPackage pkgname
+                                revTags <- queryReviewTagsForPackage pkgname
                                 let tagSet = (addTags `Set.union` calcTags) `Set.difference` delTags
                                     addTags = Set.fromList add
                                     delTags = Set.fromList del
+                                    rdel = case simpleParse =<< rdelns of
+                                        Just (TagList rdel) -> rdel
+                                        Nothing -> []
+                                    radd = case simpleParse =<< raddns of
+                                        Just (TagList radd) -> radd
+                                        Nothing -> []
+                                    addRev = Set.difference (fst $ fromMaybe (Set.empty, Set.empty) revTags) (Set.fromList add `Set.union` Set.fromList radd)
+                                    delRev = Set.difference (snd $ fromMaybe (Set.empty, Set.empty) revTags) (Set.fromList del `Set.union` Set.fromList rdel)
                                 void $ updateState tagsState $ SetPackageTags pkgname tagSet
-                                void $ updateState tagsReview $ ClearReviewTags pkgname
+                                void $ updateState tagsReview $ InsertReviewTags_ pkgname addRev delRev
                                 runHook_ tagsUpdated (Set.singleton pkgname, tagSet)
                                 return ()
                     _ -> errBadRequest "Tags not recognized" [MText "Couldn't parse your tag list. It should be comma separated with any number of alphanumerical tags. Tags can also also have -+#*."]
