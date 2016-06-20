@@ -32,7 +32,7 @@ import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
 import Distribution.License
 
-import Data.Maybe(fromMaybe)
+import Data.Maybe(fromMaybe, fromJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
@@ -50,6 +50,7 @@ data TagsFeature = TagsFeature {
     queryGetTagList     :: forall m. MonadIO m => m [(Tag, Set PackageName)],
     queryTagsForPackage :: forall m. MonadIO m => PackageName -> m (Set Tag),
     queryReviewTagsForPackage :: forall m. MonadIO m => PackageName -> m (Maybe (Set Tag,Set Tag)),
+    queryAliasForTag :: MonadIO m => Tag -> m (Maybe Tag),
 
     -- All package names that were modified, and all tags that were modified
     -- In almost all cases, one of these will be a singleton. Happstack
@@ -68,7 +69,8 @@ data TagsFeature = TagsFeature {
     withTagPath :: forall a. DynamicPath -> (Tag -> Set PackageName -> ServerPartE a) -> ServerPartE a,
     collectTags :: forall m. MonadIO m => Set PackageName -> m (Map PackageName (Set Tag)),
 
-    putTags     :: PackageName -> ServerPartE ()
+    putTags     :: PackageName -> ServerPartE (),
+    mergeTags     :: Tag -> ServerPartE ()
 
 }
 
@@ -80,6 +82,8 @@ data TagsResource = TagsResource {
     tagListing :: Resource,
     packageTagsListing :: Resource,
     packageTagsEdit :: Resource,
+    tagAliasEdit :: Resource,
+    tagAliasEditForm :: Resource,
 
     tagUri :: String -> Tag -> String,
     tagsUri :: String -> String,
@@ -93,20 +97,23 @@ initTagsFeature :: ServerEnv
 initTagsFeature ServerEnv{serverStateDir} = do
     tagsState <- tagsStateComponent serverStateDir
     tagsReview <- tagsReviewComponent serverStateDir
+    tagAlias <- tagsAliasComponent serverStateDir
     specials  <- newMemStateWHNF emptyPackageTags
     updateTag <- newHook
 
     return $ \core@CoreFeature{..} upload -> do
-      let feature = tagsFeature core upload tagsState tagsReview specials updateTag
+      let feature = tagsFeature core upload tagsState tagsReview tagAlias specials updateTag
 
       registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, mpkginfo) ->
         case mpkginfo of
           Nothing      -> return ()
           Just pkginfo -> do
             let pkgname = packageName pkgid
-                tags = Set.fromList . constructImmutableTags . pkgDesc $ pkginfo
-            updateState tagsState . SetPackageTags pkgname $ tags
-            runHook_ updateTag (Set.singleton pkgname, tags)
+                tags = constructImmutableTags . pkgDesc $ pkginfo
+            aliases <- sequence $ map (\tag -> queryState tagAlias $ GetTagAlias tag) tags
+            let newtags = Set.fromList $ map fromJust aliases
+            updateState tagsState . SetPackageTags pkgname $ newtags
+            runHook_ updateTag (Set.singleton pkgname, newtags)
 
       return feature
 
@@ -122,6 +129,20 @@ tagsStateComponent stateDir = do
     , restoreState = tagsBackup
     , resetState   = tagsStateComponent
     }
+
+tagsAliasComponent :: FilePath -> IO (StateComponent AcidState TagAlias)
+tagsAliasComponent stateDir = do
+  st <- openLocalStateFrom (stateDir </> "db" </> "Tags" </> "Alias") emptyTagAlias
+  return StateComponent {
+      stateDesc    = "Tags Alias"
+    , stateHandle  = st
+    , getState     = query st GetTagAliasesState
+    , putState     = update st . AddTagAliasesState
+    -- , backupState  = \_ pkgTags -> [csvToBackup ["tags.csv"] $ tagsToCSV pkgTags]
+    -- , restoreState = tagsBackup
+    -- , resetState   = tagsStateComponent
+    }
+
 
 tagsReviewComponent :: FilePath -> IO (StateComponent AcidState ReviewTags)
 tagsReviewComponent stateDir = do
@@ -142,6 +163,7 @@ tagsFeature :: CoreFeature
             -> UploadFeature
             -> StateComponent AcidState PackageTags
             -> StateComponent AcidState ReviewTags
+            -> StateComponent AcidState TagAlias
             -> MemState PackageTags
             -> Hook (Set PackageName, Set Tag) ()
             -> TagsFeature
@@ -152,6 +174,7 @@ tagsFeature CoreFeature{ queryGetPackageIndex
             UploadFeature{ guardAuthorisedAsUploaderOrMaintainerOrTrustee }
             tagsState
             tagsReview
+            tagsAlias
             calculatedTags
             tagsUpdated
   = TagsFeature{..}
@@ -159,6 +182,8 @@ tagsFeature CoreFeature{ queryGetPackageIndex
     tagsResource = fix $ \r -> TagsResource
         { tagsListing = resourceAt "/packages/tags/.:format"
         , tagListing = resourceAt "/packages/tag/:tag.:format"
+        , tagAliasEdit = resourceAt "/packages/tag/:tag/alias"
+        , tagAliasEditForm = resourceAt "/packages/tag/:tag/alias/edit"
         , packageTagsListing = resourceAt "/package/:package/tags.:format"
         , packageTagsEdit    = resourceAt "/package/:package/tags/edit"
         , tagUri = \format tag -> renderResource (tagListing r) [display tag, format]
@@ -200,6 +225,9 @@ tagsFeature CoreFeature{ queryGetPackageIndex
     queryTagsForPackage :: MonadIO m => PackageName -> m (Set Tag)
     queryTagsForPackage pkgname = queryState tagsState (TagsForPackage pkgname)
 
+    queryAliasForTag :: MonadIO m => Tag -> m (Maybe Tag)
+    queryAliasForTag tag = queryState tagsAlias (GetTagAlias tag)
+
     queryReviewTagsForPackage :: MonadIO m => PackageName -> m (Maybe (Set Tag,Set Tag))
     queryReviewTagsForPackage pkgname = queryState tagsReview (LookupReviewTags pkgname)
 
@@ -221,6 +249,29 @@ tagsFeature CoreFeature{ queryGetPackageIndex
         pkgMap <- liftM packageTags $ queryState tagsState GetPackageTags
         return $ Map.fromDistinctAscList . map (\pkg -> (pkg, Map.findWithDefault Set.empty pkg pkgMap)) $ Set.toList pkgs
 
+
+    mergeTags :: Tag -> ServerPartE ()
+    mergeTags deprTag = do
+        tags <- optional $ look "tags"
+        index <- queryGetPackageIndex
+        case simpleParse =<< tags of
+            Just (Tag orig) -> do
+                void $ updateState tagsAlias $ AddTagAlias (Tag orig) deprTag
+                void $ constructMergedTagIndex (Tag orig) deprTag index
+            _ -> errBadRequest "Tag not recognised" [MText "Couldn't parse tag. It should be a single tag."]
+
+    -- tags on merging
+    constructMergedTagIndex :: forall m. MonadIO m => Tag -> Tag -> PackageIndex PkgInfo -> m (PackageTags)
+    constructMergedTagIndex orig depr = foldM addToTags emptyPackageTags . PackageIndex.allPackagesByName
+      where addToTags calcTags pkgList = do
+                let info = pkgDesc $ last pkgList
+                    !pn = packageName info
+                pkgTags <- queryTagsForPackage pn
+                let newTags = if (depr `elem` pkgTags) then (Set.delete depr (Set.insert orig pkgTags)) else pkgTags
+                void $ updateState tagsState $ SetPackageTags pn newTags
+                runHook_ tagsUpdated (Set.singleton pn, newTags)
+                return (setTags pn newTags calcTags)
+
     putTags :: PackageName -> ServerPartE ()
     putTags pkgname = do
       guardValidPackageName pkgname
@@ -235,16 +286,20 @@ tagsFeature CoreFeature{ queryGetPackageIndex
                         user <- guardAuthorisedAsUploaderOrMaintainerOrTrustee pkgname
                         case user of
                             "Uploaders" -> do
+                                aliases <- sequence $ map (\tag -> queryState tagsAlias $ GetTagAlias tag) add
                                 calcTags <- queryTagsForPackage pkgname
-                                let addTags = Set.fromList add `Set.difference` calcTags
+                                let add_ = map fromJust aliases
+                                    addTags = Set.fromList add_ `Set.difference` calcTags
                                     delTags = Set.fromList del `Set.intersection` calcTags
                                 void $ updateState tagsReview $ InsertReviewTags pkgname addTags delTags
                                 return ()
                             _ -> do
                                 calcTags <- queryTagsForPackage pkgname
+                                aliases <- sequence $ map (\tag -> queryState tagsAlias $ GetTagAlias tag) add
                                 revTags <- queryReviewTagsForPackage pkgname
                                 let tagSet = (addTags `Set.union` calcTags) `Set.difference` delTags
-                                    addTags = Set.fromList add
+                                    add_ = map fromJust aliases
+                                    addTags = Set.fromList add_
                                     delTags = Set.fromList del
                                     rdel = case simpleParse =<< rdelns of
                                         Just (TagList rdel) -> rdel
@@ -281,6 +336,8 @@ constructImmutableTagIndex = foldl' addToTags emptyPackageTags . PackageIndex.al
                 !pn = packageName info
                 !tags = constructImmutableTags info
             in setTags pn (Set.fromList tags) calcTags
+
+
 
 -- These are constructed when a package is uploaded/on startup
 constructCategoryTags :: PackageDescription -> [Tag]

@@ -63,7 +63,7 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Vector as Vec
-import Data.Maybe (fromMaybe, isJust, fromJust)
+import Data.Maybe (fromMaybe, isJust)
 import Data.Monoid ((<>))
 import qualified Data.Text as T
 import Data.Traversable (traverse)
@@ -1476,10 +1476,11 @@ mkHtmlTags :: HtmlUtilities
 mkHtmlTags HtmlUtilities{..}
            CoreFeature{ coreResource = CoreResource{
                           packageInPath
+                        , tagInPath
                         , lookupPackageName
                         }
                       }
-           UploadFeature{guardAuthorisedAsUploaderOrMaintainerOrTrustee}
+           UploadFeature{guardAuthorisedAsUploaderOrMaintainerOrTrustee,guardAuthorisedAsTrustee}
            ListFeature{makeItemList}
            TagsFeature{..}
            templates
@@ -1500,6 +1501,12 @@ mkHtmlTags HtmlUtilities{..}
           }
       , (extendResource $ packageTagsListing tags) {
             resourcePut = [("html", putPackageTags)], resourceGet = [("html", showPackageTags)]
+          }
+      , (extendResource $ tagAliasEdit tags) {
+            resourcePut = [("html", putAliasEdit)]
+          }
+      , (extendResource $ tagAliasEditForm tags) {
+            resourceGet = [("html", serveAliasForm)]
           }
       , tagEdit -- (extendResource $ packageTagsEdit tags) { resourceGet = [("html", serveTagsForm)] }
       ]
@@ -1522,8 +1529,32 @@ mkHtmlTags HtmlUtilities{..}
               ]
             tagItem tg = anchor ! [href $ tagUri tags "" tg] << display tg
 
+    putAliasEdit :: DynamicPath -> ServerPartE Response
+    putAliasEdit dpath = do
+        let tagname = snd (dpath !! 0)
+        mergeTags (Tag tagname)
+        return $ toResponse $ Resource.XHtml $ hackagePage ("Merged Tag " ++  tagname) $
+            [ paragraph << ["Return to"]
+            , anchor ! [href "/packages/tags"] << tagname
+            ]
+
+    serveAliasForm :: DynamicPath -> ServerPartE Response
+    serveAliasForm dpath = do
+        tagname <- tagInPath dpath
+        guardAuthorisedAsTrustee
+        let aliasForm = [ h2 << ("Merge Tag " ++ tagname)
+                        , form ! [theclass "box", XHtml.method "post", action ("/packages/tag/" ++ tagname ++ "/alias")] <<
+                            [ hidden "_method" "PUT"
+                            , input ! [value " ", name "tags", identifier "tags"]
+                            , toHtml "Tag(s) to merge with"
+                            , input ! [thetype "submit", value "Merge"]
+                            ]
+                        ]
+        return $ toResponse $ Resource.XHtml $ hackagePage ("Merge Tag " ++ tagname) $ aliasForm
+
     serveTagListing :: DynamicPath -> ServerPartE Response
-    serveTagListing dpath =
+    serveTagListing dpath = do
+      tagname <- tagInPath dpath
       withTagPath dpath $ \tg pkgnames -> do
         let tagd = "Packages tagged " ++ display tg
             pkgs = Set.toList pkgnames
@@ -1537,6 +1568,7 @@ mkHtmlTags HtmlUtilities{..}
                 [] -> toHtml "No packages have this tag."
                 _  -> toHtml
                   [ paragraph << [if count==1 then "1 package has" else show count ++ " packages have", " this tag."]
+                  , anchor ! [href $  tagname ++ "/alias/edit"] << "[Merge tag]"
                   , paragraph ! [theclass "toc"] << [toHtml "Related tags: ", toHtml $ showHistogram histogram]
                   , ulist ! [theclass "packages"] << map renderItem items ]
           ]

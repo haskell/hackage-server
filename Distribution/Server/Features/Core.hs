@@ -230,7 +230,8 @@ data CoreResource = CoreResource {
 
     -- | Find a PackageId or PackageName inside a path.
     packageInPath :: forall m a. (MonadPlus m, FromReqURI a) => DynamicPath -> m a,
-
+    -- | Find a TagName inside a path.
+    tagInPath     :: forall m a. (MonadPlus m, FromReqURI a) => DynamicPath -> m a,
     -- | Find a tarball's PackageId from inside a path, doing some checking
     -- for consistency between the package and tarball.
     --
@@ -447,6 +448,8 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       renderResource corePackageTarball [display pkgid, display pkgid]
 
     packageInPath dpath = maybe mzero return (lookup "package" dpath >>= fromReqURI)
+
+    tagInPath dpath = maybe mzero return (lookup "tag" dpath >>= fromReqURI)
 
     packageTarballInPath dpath = do
       PackageIdentifier name version <- packageInPath dpath

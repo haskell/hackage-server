@@ -70,11 +70,38 @@ data PackageTags = PackageTags {
 -- Packagename (Proposed Additions, Proposed Deletions)
 data ReviewTags = ReviewTags (Map PackageName (Set Tag, Set Tag)) deriving (Eq, Show)
 
+data TagAlias = TagAlias (Map Tag (Set Tag))
+
+addTagAlias :: Tag -> Tag -> Update TagAlias ()
+addTagAlias tag alias= do
+        TagAlias  m <- get
+        put (TagAlias (Map.insertWith (Set.union) tag (Set.singleton alias) m))
+
+lookupTagAlias :: Tag -> Query TagAlias (Maybe (Set Tag))
+lookupTagAlias tag
+    = do TagAlias m <- ask
+         return (Map.lookup tag m)
+
+getTagAlias :: Tag -> Query TagAlias (Maybe Tag)
+getTagAlias tag
+    = do TagAlias m <- ask
+         return (canonical tag m) where
+            canonical tag m
+                | tag `elem` (Map.keys m) = Just tag
+                | tag `elem` (foldr Set.union Set.empty $ Map.elems m) = Just (lookupKey tag m)
+                | otherwise = Just tag
+                where
+                    lookupKey key m = (Map.keys $ Map.filter (tag `elem` ) m) !! 0
+
 emptyPackageTags :: PackageTags
 emptyPackageTags = PackageTags Map.empty Map.empty
 
 emptyReviewTags :: ReviewTags
 emptyReviewTags = ReviewTags Map.empty
+
+emptyTagAlias :: TagAlias
+emptyTagAlias = TagAlias Map.empty
+
 
 tagToPackages :: Tag -> PackageTags -> Set PackageName
 tagToPackages tag = Map.findWithDefault Set.empty tag . tagPackages
@@ -94,7 +121,6 @@ alterTags name mtagList (PackageTags tags packages) =
 
 setTags :: PackageName -> Set Tag -> PackageTags -> PackageTags
 setTags pkgname tagList = alterTags pkgname (keepSet tagList)
-
 
 deletePackageTags :: PackageName -> PackageTags -> PackageTags
 deletePackageTags name = alterTags name Nothing
@@ -150,7 +176,7 @@ renameTag tag tag' pkgTags@(PackageTags _ packages) =
 $(deriveSafeCopy 0 'base ''Tag)
 $(deriveSafeCopy 0 'base ''PackageTags)
 $(deriveSafeCopy 0 'base ''ReviewTags)
-
+$(deriveSafeCopy 0 'base ''TagAlias)
 
 instance NFData PackageTags where
     rnf (PackageTags a b) = rnf a `seq` rnf b
@@ -181,6 +207,13 @@ getReviewTags = ask
 
 replaceReviewTags :: ReviewTags -> Update ReviewTags ()
 replaceReviewTags = put
+
+getTagAliasesState :: Query TagAlias TagAlias
+getTagAliasesState = ask
+
+addTagAliasesState :: TagAlias -> Update TagAlias ()
+addTagAliasesState = put
+
 
 setPackageTags :: PackageName -> Set Tag -> Update PackageTags ()
 setPackageTags name tagList = modify $ setTags name tagList
@@ -247,6 +280,12 @@ $(makeAcidic ''ReviewTags ['insertReviewTags
                           ,'replaceReviewTags
                           ])
 
+$(makeAcidic ''TagAlias ['addTagAlias
+                        ,'getTagAlias
+                        ,'lookupTagAlias
+                        ,'addTagAliasesState
+                        ,'getTagAliasesState
+                      ])
 
 $(makeAcidic ''PackageTags ['tagsForPackage
                          ,'packagesForTag
@@ -258,4 +297,5 @@ $(makeAcidic ''PackageTags ['tagsForPackage
                          ,'addPackageTag
                          ,'removePackageTag
                          ])
+
 
