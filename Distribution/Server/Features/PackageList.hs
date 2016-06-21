@@ -60,11 +60,11 @@ data PackageItem = PackageItem {
     itemMaintainer :: !String,
     -- Whether the item is in the Haskell Platform
   --itemPlatform :: Bool,
-    -- Author of the package (Probably won't be used in display)
-    itemVotes :: Int,
+    -- Number of votes for the package
+    itemVotes :: !Int,
     -- The total number of downloads. (For sorting, not displaying.)
     -- Updated periodically.
-    itemDownloads :: Int,
+    itemDownloads :: !Int,
     -- The number of direct revdeps. (Likewise.)
     -- also: distinguish direct/flat?
     -- [reverse index disabled] itemRevDepsCount :: !Int,
@@ -251,7 +251,6 @@ updateDescriptionItem genDesc item =
         -- This checks if the library is buildable. However, since
         -- desc is flattened, we might miss some flags. Perhaps use the
         -- CondTree instead.
-        -- itemAuthor = author desc,
         itemMaintainer = maintainer desc,
         itemHasLibrary = hasLibs desc,
         itemNumExecutables = length . filter (buildable . buildInfo) $ executables desc,

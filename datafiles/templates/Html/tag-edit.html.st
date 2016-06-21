@@ -11,6 +11,9 @@
     .reject{
         color:red;
     }
+    .eadd, .edel{
+        clear:both;
+    }
     #additions, #deletions{
         list-style: none;
         margin: 0px;
@@ -22,7 +25,7 @@
         display: inline-block;
         border: 1px solid black;
     }
-    #additions li :hover, #deletions li :hover {
+    #additions :hover, #deletions :hover {
         background: white;
     }
 
@@ -58,19 +61,22 @@
           </div>
           $endif$
           $if(istrustee)$
-          <div id="trustee" class = "proposals">
-              <big>Proposals</big>
-              <span class="eadd"><br><b>additions: </b>
-                  <ul id ="additions"></ul></span>
+              <div id="trustee" class = "proposals">
+                  <big>Proposals</big>
+                  <span class="eadd"><br><b>additions: </b>
+                      <ul id ="additions"></ul>
+                  </span>
+                  <div style="clear:both">  </div>
                   <span class="edel"><br><b>deletions: </b>
-                      <ul id = "deletions"></ul></span>
-                  </div>
-                  $endif$
-
+                      <ul id = "deletions"></ul>
+                  </span>
               </div>
-          </div>
-          $footer()$
-      </body>
+          $endif$
+          <div style="clear:both">  </div>
+        </div>
+      </div>
+      $footer()$
+    </body>
     <script>
     if ("$addns$".trim() == "" || "$delns$".trim() == ""){
     if ("$addns$".trim() != "")

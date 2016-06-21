@@ -35,7 +35,7 @@ data VotesFeature = VotesFeature {
     votesFeatureInterface   :: HackageFeature
   , didUserVote             :: forall m. MonadIO m => PackageName -> UserId -> m Bool
   , pkgNumVotes             :: forall m. MonadIO m => PackageName -> m Int
-  , votesUpdated             :: Hook (PackageName, Int) ()
+  , votesUpdated            :: Hook (PackageName, Int) ()
   , renderVotesHtml         :: PackageName -> ServerPartE X.Html
 }
 

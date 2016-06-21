@@ -440,8 +440,7 @@ htmlFeature env@ServerEnv{..}
 
 {-------------------------------------------------------------------------------
   Core
------------------------------------------------------------------------------
--}
+-------------------------------------------------------------------------------}
 
 data HtmlCore = HtmlCore {
     htmlCoreResources :: [Resource]
@@ -519,10 +518,10 @@ mkHtmlCore ServerEnv{serverBaseURI}
       , (resourceAt "/packages/names" ) {
             resourceGet = [("html", const $ readAsyncCache cacheNamesPage)]
           }
-      , (resourceAt "/packages/names/experiment" ) {
+      , (resourceAt "/packages/names/tags" ) {
             resourceDesc = [(GET, "Show detailed package dependency information")]
         , resourceGet = [("html",
-                serveMaintainPage')]
+                serveTagIndex)]
           }
       , (extendResource $ corePackagesPage cores) {
             resourceDesc = [(GET, "Show package index")]
@@ -621,13 +620,13 @@ mkHtmlCore ServerEnv{serverBaseURI}
         , "versions" $= map packageId pkgs
         ]
 
-    serveMaintainPage' :: DynamicPath -> ServerPartE Response
-    serveMaintainPage' _ = do
+    serveTagIndex :: DynamicPath -> ServerPartE Response
+    serveTagIndex _ = do
       pkgIndex <- queryGetPackageIndex
       let packageNames = Pages.toPackageNames pkgIndex
       pkgDetails <- liftIO $ makeItemList packageNames
       let rowList = map (makeRow) pkgDetails
-          tabledata = "" +++ rowList +++""
+          tabledata = "" +++ rowList +++ ""
       template <- getTemplate templates "tag-interface.html"
       return $ toResponse $ template
         [ "tabledata" $= tabledata ]
@@ -683,8 +682,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
 
 {-------------------------------------------------------------------------------
   Users
------------------------------------------------------------------------------
--}
+-------------------------------------------------------------------------------}
 
 data HtmlUsers = HtmlUsers {
     htmlUsersResources :: [Resource]
@@ -798,8 +796,7 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
 
 {-------------------------------------------------------------------------------
   Uploads
------------------------------------------------------------------------------
--}
+-------------------------------------------------------------------------------}
 
 data HtmlUploads = HtmlUploads {
     htmlUploadsResources :: [Resource]
@@ -847,8 +844,7 @@ mkHtmlUploads HtmlUtilities{..} UploadFeature{..} = HtmlUploads{..}
 
 {-------------------------------------------------------------------------------
   Documentation uploads
------------------------------------------------------------------------------
--}
+-------------------------------------------------------------------------------}
 
 data HtmlDocUploads = HtmlDocUploads {
     htmlDocUploadsResources :: [Resource]
@@ -895,8 +891,7 @@ mkHtmlDocUploads HtmlUtilities{..} CoreFeature{coreResource} DocumentationFeatur
 
 {-------------------------------------------------------------------------------
   Build reports
------------------------------------------------------------------------------
--}
+-------------------------------------------------------------------------------}
 
 data HtmlReports = HtmlReports {
     htmlReportsResources :: [Resource]
@@ -942,8 +937,7 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
 
 {-------------------------------------------------------------------------------
   Candidates
------------------------------------------------------------------------------
--}
+-------------------------------------------------------------------------------}
 
 data HtmlCandidates = HtmlCandidates {
     htmlCandidatesResources :: [Resource]
@@ -1200,8 +1194,7 @@ dependenciesPage isCandidate render =
 
 {-------------------------------------------------------------------------------
   Preferred versions
------------------------------------------------------------------------------
--}
+-------------------------------------------------------------------------------}
 
 data HtmlPreferred = HtmlPreferred {
     htmlPreferredResources :: [Resource]
@@ -1419,8 +1412,7 @@ mkHtmlPreferred HtmlUtilities{..}
 
 {-------------------------------------------------------------------------------
   Downloads
------------------------------------------------------------------------------
--}
+-------------------------------------------------------------------------------}
 
 data HtmlDownloads = HtmlDownloads {
     htmlDownloadsResources :: [Resource]
@@ -1458,8 +1450,7 @@ mkHtmlDownloads HtmlUtilities{..} DownloadFeature{..} = HtmlDownloads{..}
 
 {-------------------------------------------------------------------------------
   Tags
------------------------------------------------------------------------------
--}
+-------------------------------------------------------------------------------}
 
 data HtmlTags = HtmlTags {
     htmlTagsResources :: [Resource]
@@ -1480,7 +1471,7 @@ mkHtmlTags HtmlUtilities{..}
                         , lookupPackageName
                         }
                       }
-           UploadFeature{guardAuthorisedAsUploaderOrMaintainerOrTrustee,guardAuthorisedAsTrustee}
+           UploadFeature{authorisedAsAnyUser, authorisedAsMaintainerOrTrustee, guardAuthorisedAsTrustee}
            ListFeature{makeItemList}
            TagsFeature{..}
            templates
@@ -1533,21 +1524,24 @@ mkHtmlTags HtmlUtilities{..}
     putAliasEdit dpath = do
         let tagname = snd (dpath !! 0)
         mergeTags (Tag tagname)
-        return $ toResponse $ Resource.XHtml $ hackagePage ("Merged Tag " ++  tagname) $
-            [ paragraph << ["Return to"]
-            , anchor ! [href "/packages/tags"] << tagname
+        return $ toResponse $ Resource.XHtml $ hackagePage "Merged Tag"  $
+            [ h2 << "Merged tag"
+            , toHtml "Return to "
+            , anchor ! [href $ "/packages/tags"] << "tag listings"
             ]
 
     serveAliasForm :: DynamicPath -> ServerPartE Response
     serveAliasForm dpath = do
         tagname <- tagInPath dpath
         guardAuthorisedAsTrustee
-        let aliasForm = [ h2 << ("Merge Tag " ++ tagname)
-                        , form ! [theclass "box", XHtml.method "post", action ("/packages/tag/" ++ tagname ++ "/alias")] <<
-                            [ hidden "_method" "PUT"
-                            , input ! [value " ", name "tags", identifier "tags"]
-                            , toHtml "Tag(s) to merge with"
-                            , input ! [thetype "submit", value "Merge"]
+        let aliasForm = [ thediv ! [theclass "box"] <<
+                            [h2 << ("Merge Tag " ++ tagname)
+                            , form ! [XHtml.method "post", action ("/packages/tag/" ++ tagname ++ "/alias")] <<
+                                [ hidden "_method" "PUT"
+                                , input ! [value "", name "tags", identifier "tags"]
+                                , toHtml " (Tag to merge with) ", br
+                                , input ! [thetype "submit", value "Merge"]
+                                ]
                             ]
                         ]
         return $ toResponse $ Resource.XHtml $ hackagePage ("Merge Tag " ++ tagname) $ aliasForm
@@ -1588,40 +1582,16 @@ mkHtmlTags HtmlUtilities{..}
       putTags pkgname
       currTags <- queryTagsForPackage pkgname
       revTags <- queryReviewTagsForPackage pkgname
-      let toStr = concat . intersperse ", " . map display . Set.toList
-          tagsStr = toStr currTags
-          addns = toStr $ fst $ fromMaybe (Set.empty, Set.empty) revTags
-          delns = toStr $ snd $ fromMaybe (Set.empty, Set.empty) revTags
-          disp = thediv ! [theclass "box"] << [ paragraph << [bold $ toHtml "Current Tags: ", toHtml tagsStr, br],
-                                                paragraph << [bold $ toHtml "Additions to be reviewed: ", toHtml addns, br],
-                                                paragraph << [bold $ toHtml "Deletions to be reviewed: ", toHtml delns, br]
-                                              ]
-
-      return $ toResponse $ Resource.XHtml $ hackagePage "Package Tags" [ big $ bold $ toHtml $ display pkgname
-                                                                        , disp
-                                                                        , anchor ![href $ "tags/edit" ] << "Propose a tag?", toHtml " or "
-                                                                        , toHtml "return to ", packageNameLink pkgname, br
-                                                                        ]
+      let disp = renderReviewTags currTags revTags pkgname
+      return $ toResponse $ Resource.XHtml $ hackagePage "Package Tags" disp
 
     showPackageTags :: DynamicPath -> ServerPartE Response
     showPackageTags dpath = do
       pkgname <- packageInPath dpath
       currTags <- queryTagsForPackage pkgname
       revTags <- queryReviewTagsForPackage pkgname
-      let toStr = concat . intersperse ", " . map display . Set.toList
-          tagsStr = toStr currTags
-          addns = toStr $ fst $ fromMaybe (Set.empty, Set.empty) revTags
-          delns = toStr $ snd $ fromMaybe (Set.empty, Set.empty) revTags
-          disp = thediv ! [theclass "box"] << [ paragraph << [bold $ toHtml "Current Tags: ", toHtml tagsStr, br],
-                                                paragraph << [bold $ toHtml "Additions to be reviewed: ", toHtml addns, br],
-                                                paragraph << [bold $ toHtml "Deletions to be reviewed: ", toHtml delns, br]
-                                              ]
-
-      return $ toResponse $ Resource.XHtml $ hackagePage "Package Tags" [ big $ bold $ toHtml $ display pkgname
-                                                                        , disp
-                                                                        , anchor ![href $ "tags/edit" ] << "Propose a tag?", toHtml " or "
-                                                                        , toHtml "return to ", packageNameLink pkgname, br
-                                                                        ]
+      let disp = renderReviewTags currTags revTags pkgname
+      return $ toResponse $ Resource.XHtml $ hackagePage "Package Tags" disp
 
     -- serve form for editing, to be received by putTags
     serveTagsForm :: DynamicPath -> ServerPartE Response
@@ -1632,33 +1602,27 @@ mkHtmlTags HtmlUtilities{..}
       template <- getTemplate templates "tag-edit.html"
       let toStr = concat . intersperse ", " . map display . Set.toList
           tagsStr = toStr currTags
-          addns = toStr $ fst $ fromMaybe (Set.empty,Set.empty) revTags
-          delns = toStr $ snd $ fromMaybe (Set.empty, Set.empty) revTags
-
-
-      user <- guardAuthorisedAsUploaderOrMaintainerOrTrustee pkgname
-      case user of
-        "Uploaders" -> return $ toResponse . template $
+          addns = toStr $ fst  revTags
+          delns = toStr $ snd  revTags
+      trustainer <- authorisedAsMaintainerOrTrustee pkgname
+      user <- authorisedAsAnyUser
+      if trustainer || user
+        then return $ toResponse . template $
           [ "pkgname"           $= display pkgname
           , "addns"             $= addns
-          , "tags"              $= (tagsStr)
+          , "tags"              $= tagsStr
           , "delns"             $= delns
-          , "isuser"            $= "true"
+          , "istrustee"         $= trustainer
+          , "isuser"            $= if trustainer then False else True
           ]
-        _   -> return $toResponse . template $
-          [ "pkgname"           $= display pkgname
-          , "addns"             $= addns
-          , "tags"              $= (tagsStr)
-          , "delns"             $= delns
-          , "istrustee"         $= "false"
-          ]
+        else return $ toResponse $ Resource.XHtml $ hackagePage "Error" $ [h2 << "Authorization Error"
+                                                                            , paragraph << "You need to be logged in to propose tags"]
 
 
 
 {-------------------------------------------------------------------------------
   Search
------------------------------------------------------------------------------
--}
+-------------------------------------------------------------------------------}
 
 data HtmlSearch = HtmlSearch {
     htmlSearchResources :: [Resource]
@@ -1917,8 +1881,7 @@ mkHtmlSearch HtmlUtilities{..}
 
 {-------------------------------------------------------------------------------
   Groups
------------------------------------------------------------------------------
--}
+-------------------------------------------------------------------------------}
 
 htmlGroupResource :: UserFeature -> GroupResource -> [Resource]
 htmlGroupResource UserFeature{..} r@(GroupResource groupR userR getGroup) =
