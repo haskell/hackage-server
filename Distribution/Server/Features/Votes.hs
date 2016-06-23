@@ -16,7 +16,6 @@ import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Users
 import Distribution.Server.Users.Types (UserId(..))
-import Distribution.Server.Users.UserIdSet as UserIdSet
 
 import Distribution.Package
 import Distribution.Text
@@ -35,7 +34,8 @@ data VotesFeature = VotesFeature {
     votesFeatureInterface   :: HackageFeature
   , didUserVote             :: forall m. MonadIO m => PackageName -> UserId -> m Bool
   , pkgNumVotes             :: forall m. MonadIO m => PackageName -> m Int
-  , votesUpdated            :: Hook (PackageName, Int) ()
+  , pkgNumScore           :: forall m. MonadIO m => PackageName -> m Float
+  , votesUpdated            :: Hook (PackageName, Float) ()
   , renderVotesHtml         :: PackageName -> ServerPartE X.Html
 }
 
@@ -50,7 +50,7 @@ initVotesFeature :: ServerEnv
                       -> IO VotesFeature)
 initVotesFeature env@ServerEnv{serverStateDir} = do
   dbVotesState      <- votesStateComponent serverStateDir
-  updateVotes <- newHook
+  updateVotes       <- newHook
 
   return $ \coref@CoreFeature{..} userf@UserFeature{..} -> do
     let feature = votesFeature env
@@ -82,7 +82,7 @@ votesFeature ::  ServerEnv
              -> StateComponent AcidState VotesState
              -> CoreFeature                    -- To get site package list
              -> UserFeature                    -- To authenticate users
-             -> Hook (PackageName, Int) ()
+             -> Hook (PackageName, Float) ()
              -> VotesFeature
 
 votesFeature  ServerEnv{..}
@@ -116,7 +116,7 @@ votesFeature  ServerEnv{..}
                         , (DELETE,  "Remove a user's vote from this package")
                         ]
     , resourceGet     = [("json", servePackageNumVotesGet)]
-    , resourcePut     = [("",     servePackageVotePut)]
+    , resourcePost     = [("",     servePackageVotePut)]
     , resourceDelete  = [("",     servePackageVoteDelete)]
     }
 
@@ -128,8 +128,7 @@ votesFeature  ServerEnv{..}
       cacheControlWithoutETag [Public, maxAgeMinutes 10]
       votesMap <- queryState votesState GetAllPackageVoteSets
       ok . toResponse $ objectL
-        [ (display pkgname, toJSON (UserIdSet.size voterset))
-        | (pkgname, voterset) <- Map.toList votesMap ]
+        [ (display pkgname, toJSON (votesScore pkgMap)) | (pkgname, pkgMap) <- Map.toList votesMap ]
 
     -- Get the number of votes a package has. If the package
     -- has never been voted for, returns 0.
@@ -151,16 +150,12 @@ votesFeature  ServerEnv{..}
       uid     <- guardAuthorised [AnyKnownUser]
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
-      number <- pkgNumVotes pkgname
-      success <- updateState votesState (AddVote pkgname uid)
-      if success
-        then runHook_ votesUpdated (pkgname, number+1)
-        else return ()
-
-      if success
-        then ok . toResponse $ Render.voteConfirmationPage pkgname
-                                 "Package voted for successfully"
-        else ok . toResponse $ Render.alreadyVotedPage pkgname
+      score <- look "score"
+      let score' = read score :: Int
+      _ <- updateState votesState (AddVote pkgname uid score')
+      pkgScore <- pkgNumScore pkgname
+      runHook_ votesUpdated (pkgname, pkgScore)
+      ok . toResponse $ Render.voteConfirmationPage pkgname "Package voted for successfully"
 
     -- Removes a user's vote from a package. If the user has not voted
     -- for this package, does nothing.
@@ -169,10 +164,10 @@ votesFeature  ServerEnv{..}
       uid     <- guardAuthorised [AnyKnownUser]
       pkgname <- packageInPath dpath
       guardValidPackageName pkgname
-      number <- pkgNumVotes pkgname
       success <- updateState votesState (RemoveVote pkgname uid)
+      pkgScore <- pkgNumScore pkgname
       if success
-        then runHook_ votesUpdated (pkgname, number-1)
+        then runHook_ votesUpdated (pkgname, pkgScore)
         else return ()
       let responseMsg | success   = "Package vote removed successfully."
                       | otherwise = "User has not voted for this package."
@@ -191,6 +186,10 @@ votesFeature  ServerEnv{..}
     pkgNumVotes :: MonadIO m => PackageName -> m Int
     pkgNumVotes pkgname =
       queryState votesState (GetPackageVoteCount pkgname)
+
+    pkgNumScore :: MonadIO m => PackageName -> m Float
+    pkgNumScore pkgname =
+      queryState votesState (GetPackageVoteScore pkgname)
 
     -- Renders the HTML for the "Votes:" section on package pages.
     renderVotesHtml :: PackageName -> ServerPartE X.Html

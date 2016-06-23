@@ -9,7 +9,7 @@ import qualified Data.Set as Set
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Core
 import Distribution.Text (display)
-import Data.List (intersperse)
+import Data.List (intersperse, intercalate)
 import Data.Set (Set)
 import Data.Maybe (fromMaybe)
 import Distribution.Server.Features.PackageList
@@ -23,6 +23,7 @@ data HtmlUtilities = HtmlUtilities {
   , makeRow :: PackageItem -> Html
   , renderTags :: Set Tag -> [Html]
   , renderReviewTags :: Set Tag -> (Set Tag, Set Tag) -> PackageName -> [Html]
+  , renderDeps :: PackageName -> [PackageName] -> Html
   }
 
 htmlUtilities :: CoreFeature -> TagsFeature -> HtmlUtilities
@@ -39,6 +40,7 @@ htmlUtilities CoreFeature{coreResource}
     makeRow item = tr << [ td $ packageNameLink $ itemName item
                          , td $ toHtml $ show $ itemDownloads item
                          , td $ toHtml $ show $ itemVotes item
+                         , td $ toHtml $ show $ itemRevDepsCount item
                          , td $ toHtml $ itemDesc item
                          , td $ " (" +++ renderTags (itemTags item) +++ ")"
                          , td $ toHtml $ itemMaintainer item
@@ -80,5 +82,12 @@ htmlUtilities CoreFeature{coreResource}
             , anchor ![href $ "tags/edit" ] << "Propose a tag?", toHtml " or "
             , toHtml "return to ", packageNameLink pkgname, br
             ]
+    renderDeps :: PackageName -> [PackageName] -> Html
+    renderDeps pkg deps = summary +++ detailsLink
+      where
+        summary = intersperse (toHtml ", ") $ map packageNameLink deps
+        detailsLink = thespan ! [thestyle "font-size: small"]
+                        << (" [" +++ anchor ! [href detailURL] << "details" +++ "]")
+        detailURL = "/package/" ++ (unPackageName pkg) ++ "/reverse"
 
     cores = coreResource

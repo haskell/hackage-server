@@ -6,6 +6,30 @@
     $package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$
   </title>
   <link rel="canonical" href="$baseurl$/package/$package.name$" />
+  <script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
+    <style>
+      .cool {
+          color: gold;
+      }
+      .uncool {
+          color: black;
+      }
+      .star-rating {
+          margin:0;
+          list-style-type: none;
+          font-size: 150%;
+          color: black;
+      }
+      .star-rating li {
+          float: left;
+          margin: 0 1% 0 1%;
+      }
+      .clear-rating {
+          float: left;
+          clear: both;
+          margin-bottom:1%;
+      }
+    </style>
 </head>
 
 <body>
@@ -141,10 +165,19 @@
         </tr>
         $endif$
 
+        $if(hasrdeps)$
+        <tr>
+          <th>ReverseDependencies</th>
+          <td>$rdeps$</td>
+        </tr>
+        $endif$
+
+        $if(hasexecs)$
         <tr>
           <th>Executables</th>
           <td>$executables$</td>
         </tr>
+        $endif$
 
         <tr>
           <th>Downloads</th>
@@ -153,7 +186,16 @@
 
         <tr>
           <th>Votes</th>
-          <td>$votesSection$</td>
+          <td>$score$ ($votes$ Votes)
+            <ul class="star-rating">
+                <li class="star" id="1">&lambda;</li>
+                <li class="star" id="2">&lambda;</li>
+                <li class="star" id="3">&lambda;</li>
+                <li class="star" id="4">&lambda;</li>
+                <li class="star" id="5">&lambda;</li>
+            </ul>
+            <a href="" class="clear-rating">Clear Rating</a>
+          </td>
         </tr>
         <tr>
           <th>Status</th>
@@ -201,4 +243,47 @@
   $footer()$
 
 </body>
+<script>
+        var url = '/package/$package.name$/votes';
+        var star = {
+            "selected": false
+        };
+        \$('.star').mouseenter(function() {
+            if (star.selected === false) {
+                fill_stars(this.id, "in");
+            }
+        });
+        \$('.star').mouseleave(function() {
+            if (star.selected === false) {
+                fill_stars(this.id, "out");
+            }
+        });
+        \$('.star').click(function() {
+            fill_stars(5, "out");
+            fill_stars(this.id, "in");
+            star.selected = true;
+            star.id = this.id;
+            var formData = {score : this.id}
+            \$.post(url, formData).done(function (data){});
+        });
+        \$('.clear-rating').click(function(e) {
+            e.preventDefault()
+            fill_stars(5, "out");
+            star.selected = false;
+            \$.ajax({
+            url: url,
+            type: 'DELETE',
+            // success: function(result) {}
+        });
+        });
+
+        var fill_stars = function(num, direction){
+            if (direction === "in")
+                for (i = 0; i <= parseInt(num); i++)
+                    \$("#" + i).removeClass('uncool').addClass('cool');
+            else
+                for (i = 0; i <= parseInt(num); i++)
+                    \$("#" + i).removeClass('cool').addClass('uncool');
+        }
+    </script>
 </html>

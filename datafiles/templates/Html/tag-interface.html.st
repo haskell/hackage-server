@@ -16,7 +16,7 @@
 
     <table id ="table">
       <thead>
-        <tr><th>Name</th><th>Downloads</th><th>Votes</th><th>Description</th><th>Tags</th><th>Maintainer</th></tr>
+        <tr><th>Name</th><th>DLs</th><th>Rating</th><th>RevDeps</th><th>Description</th><th>Tags</th><th>Maintainer</th></tr>
       </thead>
       <tbody>
         $tabledata$
@@ -33,7 +33,19 @@
 
 
     \$(document).ready(function() {
-      \$('#table').DataTable();
+      \$('#table').DataTable({
+        "bJQueryUI": true,
+        "bAutoWidth": false, // Disable the auto width calculation
+        "aoColumns": [
+          { "sWidth": "15%" },
+          { "sWidth": "10%" },
+          { "sWidth": "10%" },
+          { "sWidth": "10%" },
+          { "sWidth": "25%" },
+          { "sWidth": "15%" },
+          { "sWidth": "15%" }
+        ]
+      });
 
       \$('input.global_filter').on( 'keyup click', function () {
         filterGlobal();
