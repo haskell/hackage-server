@@ -142,6 +142,11 @@
         $endif$
 
         <tr>
+          <th>Executables</th>
+          <td>$executables$</td>
+        </tr>
+
+        <tr>
           <th>Downloads</th>
           <td>$totalDownloads$ total ($recentDownloads$ in the last 30 days)</td>
         </tr>

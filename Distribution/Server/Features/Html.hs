@@ -440,7 +440,8 @@ htmlFeature env@ServerEnv{..}
 
 {-------------------------------------------------------------------------------
   Core
--------------------------------------------------------------------------------}
+------------------------------------------------------------------------------
+-}
 
 data HtmlCore = HtmlCore {
     htmlCoreResources :: [Resource]
@@ -551,6 +552,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
         let realpkg = rendPkgId render
             pkgname = packageName realpkg
             docURL  = packageDocsContentUri docs realpkg
+            execs = concat $ intersperse ", " $ map (exeName) $ executables . packageDescription . pkgDesc $ pkg
 
         prefInfo      <- queryGetPreferredInfo pkgname
         distributions <- queryPackageStatus pkgname
@@ -582,6 +584,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
           , "versions"          $= (PagesNew.renderVersion realpkg
               (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl)
           , "totalDownloads"    $= totalDown
+          , "executables"       $= if (null execs) then "None" else execs
           , "recentDownloads"   $= recentDown
           , "votesSection"      $= pkgVotesHtml
           , "buildStatus"       $= buildStatus
@@ -682,7 +685,8 @@ mkHtmlCore ServerEnv{serverBaseURI}
 
 {-------------------------------------------------------------------------------
   Users
--------------------------------------------------------------------------------}
+------------------------------------------------------------------------------
+-}
 
 data HtmlUsers = HtmlUsers {
     htmlUsersResources :: [Resource]
@@ -796,7 +800,8 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
 
 {-------------------------------------------------------------------------------
   Uploads
--------------------------------------------------------------------------------}
+------------------------------------------------------------------------------
+-}
 
 data HtmlUploads = HtmlUploads {
     htmlUploadsResources :: [Resource]
@@ -844,7 +849,8 @@ mkHtmlUploads HtmlUtilities{..} UploadFeature{..} = HtmlUploads{..}
 
 {-------------------------------------------------------------------------------
   Documentation uploads
--------------------------------------------------------------------------------}
+------------------------------------------------------------------------------
+-}
 
 data HtmlDocUploads = HtmlDocUploads {
     htmlDocUploadsResources :: [Resource]
@@ -891,7 +897,8 @@ mkHtmlDocUploads HtmlUtilities{..} CoreFeature{coreResource} DocumentationFeatur
 
 {-------------------------------------------------------------------------------
   Build reports
--------------------------------------------------------------------------------}
+------------------------------------------------------------------------------
+-}
 
 data HtmlReports = HtmlReports {
     htmlReportsResources :: [Resource]
@@ -937,7 +944,8 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
 
 {-------------------------------------------------------------------------------
   Candidates
--------------------------------------------------------------------------------}
+------------------------------------------------------------------------------
+-}
 
 data HtmlCandidates = HtmlCandidates {
     htmlCandidatesResources :: [Resource]
@@ -1194,7 +1202,8 @@ dependenciesPage isCandidate render =
 
 {-------------------------------------------------------------------------------
   Preferred versions
--------------------------------------------------------------------------------}
+------------------------------------------------------------------------------
+-}
 
 data HtmlPreferred = HtmlPreferred {
     htmlPreferredResources :: [Resource]
@@ -1412,7 +1421,8 @@ mkHtmlPreferred HtmlUtilities{..}
 
 {-------------------------------------------------------------------------------
   Downloads
--------------------------------------------------------------------------------}
+------------------------------------------------------------------------------
+-}
 
 data HtmlDownloads = HtmlDownloads {
     htmlDownloadsResources :: [Resource]
@@ -1450,7 +1460,8 @@ mkHtmlDownloads HtmlUtilities{..} DownloadFeature{..} = HtmlDownloads{..}
 
 {-------------------------------------------------------------------------------
   Tags
--------------------------------------------------------------------------------}
+------------------------------------------------------------------------------
+-}
 
 data HtmlTags = HtmlTags {
     htmlTagsResources :: [Resource]
@@ -1622,7 +1633,8 @@ mkHtmlTags HtmlUtilities{..}
 
 {-------------------------------------------------------------------------------
   Search
--------------------------------------------------------------------------------}
+------------------------------------------------------------------------------
+-}
 
 data HtmlSearch = HtmlSearch {
     htmlSearchResources :: [Resource]
@@ -1881,7 +1893,8 @@ mkHtmlSearch HtmlUtilities{..}
 
 {-------------------------------------------------------------------------------
   Groups
--------------------------------------------------------------------------------}
+------------------------------------------------------------------------------
+-}
 
 htmlGroupResource :: UserFeature -> GroupResource -> [Resource]
 htmlGroupResource UserFeature{..} r@(GroupResource groupR userR getGroup) =
