@@ -333,7 +333,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
     processUpload state uid res = do
         let pkg = packageId (uploadDesc res)
         pkgGroup <- queryUserGroup (maintainersGroup (packageName pkg))
-        if packageIdExists state pkg
+        if normalisedPackageIdExists state pkg
           then uploadError versionExists --allow trustees to do this?
           else if packageExists state pkg && not (uid `Group.member` pkgGroup)
                  then uploadError (notMaintainer pkg)

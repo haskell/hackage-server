@@ -15,6 +15,7 @@ module Distribution.Server.Features.Core (
     -- * Misc other utils
     packageExists,
     packageIdExists,
+    normalisedPackageIdExists,
   ) where
 
 -- stdlib
@@ -715,3 +716,21 @@ packageExists, packageIdExists :: (Package pkg, Package pkg') => PackageIndex pk
 packageExists   pkgs pkg = not . null $ PackageIndex.lookupPackageName pkgs (packageName pkg)
 -- | Whether a particular package version exists in the given package index.
 packageIdExists pkgs pkg = maybe False (const True) $ PackageIndex.lookupPackageId pkgs (packageId pkg)
+
+-- | Whether a parituclar normalised version exists in the given package index.
+normalisedPackageIdExists :: (Package pkg, Package pkg') => PackageIndex pkg -> pkg' -> Bool
+normalisedPackageIdExists pkgs pkg =
+    elem (normalisedPackageId pkg) $ map normalisedPackageId $ PackageIndex.lookupPackageName pkgs (packageName pkg)
+  where
+    normalisedPackageId :: Package pkg  => pkg -> PackageIdentifier
+    normalisedPackageId pkg' = case packageId pkg' of
+        PackageIdentifier name ver -> PackageIdentifier name (normaliseVersion ver)
+
+    normaliseVersion :: Version -> Version
+    normaliseVersion (Version vs _) = Version (n vs) []
+      where
+        n vs' = case foldr f [] vs' of
+            []   -> [0]
+            vs'' -> vs''
+        f 0 [] = []
+        f x xs = (x : xs)
