@@ -26,12 +26,14 @@ import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Data.Maybe (fromMaybe)
+import Data.List (dropWhileEnd)
 import Data.Time.Clock (getCurrentTime)
 import Data.Function (fix)
 import Data.ByteString.Lazy (ByteString)
 
 import Distribution.Package
 import Distribution.PackageDescription (GenericPackageDescription)
+import Distribution.Version (Version(..))
 import Distribution.Text (display)
 import qualified Distribution.Server.Util.GZip as GZip
 
@@ -333,7 +335,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
     processUpload state uid res = do
         let pkg = packageId (uploadDesc res)
         pkgGroup <- queryUserGroup (maintainersGroup (packageName pkg))
-        if packageIdExists state pkg
+        if packageIdExistsModuloNormalisedVersion state pkg
           then uploadError versionExists --allow trustees to do this?
           else if packageExists state pkg && not (uid `Group.member` pkgGroup)
                  then uploadError (notMaintainer pkg)
@@ -395,3 +397,25 @@ uploadFeature ServerEnv{serverBlobStore = store}
                                     , pkgTarballNoGz = blobIdDecompressed
                                     }
                     return (uid, res, tarball)
+
+-- | Whether a particular version of package exists in the package index, but
+-- where we consider versions with trailing 0s to be equivalent, e.g. 1.0
+--
+packageIdExistsModuloNormalisedVersion :: (Package pkg, Package pkg')
+                                       => PackageIndex pkg -> pkg' -> Bool
+packageIdExistsModuloNormalisedVersion pkgs pkg =
+    elem (normalisedPackageId pkg)
+         (map normalisedPackageId
+              (PackageIndex.lookupPackageName pkgs (packageName pkg)))
+  where
+    normalisedPackageId :: Package pkg  => pkg -> PackageId
+    normalisedPackageId pkg' = case packageId pkg' of
+      PackageIdentifier name ver -> PackageIdentifier name (normaliseVersion ver)
+
+    normaliseVersion :: Version -> Version
+    normaliseVersion (Version vs _) = Version (n vs) []
+      where
+        n vs' = case dropWhileEnd (== 0) vs' of
+            []   -> [0]
+            vs'' -> vs''
+
