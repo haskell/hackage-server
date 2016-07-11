@@ -2,6 +2,7 @@ build-cache
 mirror-cache
 state
 dist
+dist-newstyle
 tags
 *.swp
 .cabal-sandbox
