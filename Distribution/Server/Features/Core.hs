@@ -22,6 +22,7 @@ module Distribution.Server.Features.Core (
 import Data.Aeson (Value(..))
 import Data.ByteString.Lazy (ByteString)
 import Data.Maybe (isNothing)
+import Data.List (dropWhileEnd)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime)
 import Data.Time.Locale.Compat (defaultTimeLocale)
@@ -717,7 +718,7 @@ packageExists   pkgs pkg = not . null $ PackageIndex.lookupPackageName pkgs (pac
 -- | Whether a particular package version exists in the given package index.
 packageIdExists pkgs pkg = maybe False (const True) $ PackageIndex.lookupPackageId pkgs (packageId pkg)
 
--- | Whether a parituclar normalised version exists in the given package index.
+-- | Whether a particular normalised version exists in the given package index.
 normalisedPackageIdExists :: (Package pkg, Package pkg') => PackageIndex pkg -> pkg' -> Bool
 normalisedPackageIdExists pkgs pkg =
     elem (normalisedPackageId pkg) $ map normalisedPackageId $ PackageIndex.lookupPackageName pkgs (packageName pkg)
@@ -729,8 +730,6 @@ normalisedPackageIdExists pkgs pkg =
     normaliseVersion :: Version -> Version
     normaliseVersion (Version vs _) = Version (n vs) []
       where
-        n vs' = case foldr f [] vs' of
+        n vs' = case dropWhileEnd (== 0) vs' of
             []   -> [0]
             vs'' -> vs''
-        f 0 [] = []
-        f x xs = (x : xs)
