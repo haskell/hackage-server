@@ -231,8 +231,8 @@ reverseFeature CoreFeature{..}
     renderReverseWith :: MonadIO m => PackageName -> ReverseDisplay -> (Maybe VersionStatus -> Bool) -> m ReversePageRender
     renderReverseWith pkg rev filterFunc = do
         let rev' = map fst $ Map.toList rev
-        versionCount <- sequence $ map (\p -> queryState reverseState $ GetReverseCount p) (pkg:rev')
-        let counts = zip (pkg:rev') (map (fst . countUtil) versionCount)
+        revcount <- mapM revPackageStats (pkg:rev')
+        let counts = zip (pkg:rev') (map directCount revcount)
             toRender (i, i') (pkgname, (version, status)) = case filterFunc status of
                 False -> (,) (i, i'+1) Nothing
                 True  -> (,) (i+1, i') $ Just $ ReverseRender {
@@ -261,17 +261,17 @@ reverseFeature CoreFeature{..}
     revPackageFlat :: MonadIO m => PackageName -> m [(PackageName, Int)]
     revPackageFlat pkgname = do
         deps <- queryState reverseState $ GetDependenciesI pkgname
-        counts <- sequence $ map (\dep -> queryState reverseState $ GetReverseCount dep) $ Set.toList deps
-        return $ zip (Set.toList deps) (map (fst . countUtil) counts)
+        counts <- mapM revPackageStats $ Set.toList deps
+        return $ zip (Set.toList deps) (map totalCount counts)
 
     revPackageStats :: MonadIO m => PackageName -> m ReverseCount
     revPackageStats pkgname = do
         count <- queryState reverseState (GetReverseCount pkgname)
-        return $ toReverseCount count
+        return count
 
     revPackageSummary :: MonadIO m => PackageId -> m (Int, Int)
     revPackageSummary pkg = do
-        count <- queryState reverseState $ GetReverseCountId pkg
+        count <- queryState reverseState (GetReverseCountId pkg)
         return count
 
     -- -- This returns a list of (package name, direct dependencies, flat dependencies)
@@ -285,6 +285,6 @@ reverseFeature CoreFeature{..}
     revSummary = do
         ReverseIndex index _ _ <- queryReverseIndex
         let pkgnames = packageNames index
-        counts <- sequence $ map (\pkg -> queryState reverseState $ GetReverseCount pkg) pkgnames
-        let counts' = map countUtil counts
-        return $ zip3 pkgnames (map fst counts') (map snd counts')
+            util pii = sortBy (\(_,d1,_) (_,d2,_) -> compare d1 d2) pii
+        counts <- mapM revPackageStats pkgnames
+        return $ util $ zip3 pkgnames (map directCount counts) (map totalCount counts)

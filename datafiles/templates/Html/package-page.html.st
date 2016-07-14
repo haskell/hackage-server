@@ -186,7 +186,7 @@
 
         <tr>
           <th>Votes</th>
-          <td>$score$ ($votes$ Votes)
+          <td>$score$ ($votes$ votes)
             <ul class="star-rating">
                 <li class="star" id="1">&lambda;</li>
                 <li class="star" id="2">&lambda;</li>

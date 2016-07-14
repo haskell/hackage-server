@@ -40,8 +40,8 @@ htmlUtilities CoreFeature{coreResource}
     makeRow item = tr << [ td $ packageNameLink $ itemName item
                          , td $ toHtml $ show $ itemDownloads item
                          , td $ toHtml $ show $ itemVotes item
-                         , td $ toHtml $ show $ itemRevDepsCount item
                          , td $ toHtml $ itemDesc item
+                         , td $ toHtml $ show $ itemRevDepsCount item
                          , td $ " (" +++ renderTags (itemTags item) +++ ")"
                          , td $ toHtml $ itemMaintainer item
                          ]

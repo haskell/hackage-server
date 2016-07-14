@@ -464,7 +464,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
       , (resourceAt "/packages/names" ) {
             resourceGet = [("html", const $ readAsyncCache cacheNamesPage)]
           }
-      , (resourceAt "/packages/names/tags" ) {
+      , (resourceAt "/packages/browse" ) {
             resourceDesc = [(GET, "Show detailed package dependency information")]
         , resourceGet = [("html",
                 serveTagIndex)]
@@ -582,7 +582,9 @@ mkHtmlCore ServerEnv{serverBaseURI}
           tabledata = "" +++ rowList +++ ""
       template <- getTemplate templates "tag-interface.html"
       return $ toResponse $ template
-        [ "tabledata" $= tabledata ]
+        [ "heading"   $= "All packages"
+        , "content"   $= "A browsable index of all the packages"
+        , "tabledata" $= tabledata ]
 
     serveDistroMonitorPage :: DynamicPath -> ServerPartE Response
     serveDistroMonitorPage dpath = do
@@ -1514,19 +1516,23 @@ mkHtmlTags HtmlUtilities{..}
         let tagd = "Packages tagged " ++ display tg
             pkgs = Set.toList pkgnames
         items <- liftIO $ makeItemList pkgs
-        let (mtag, histogram) = Map.updateLookupWithKey (\_ _ -> Nothing) tg $ tagHistogram items
+        let rowList = map (makeRow) items
+            (mtag, histogram) = Map.updateLookupWithKey (\_ _ -> Nothing) tg $ tagHistogram items
             -- make a 'related tags' section, so exclude this tag from the histogram
             count = fromMaybe 0 mtag
-        return $ toResponse $ Resource.XHtml $ hackagePage tagd $
-          [ h2 << tagd
-          , case items of
+        template <- getTemplate templates "tag-interface.html"
+        return $ toResponse $ template
+          [ "heading"   $= tagd
+          , "content"   $=  case items of
                 [] -> toHtml "No packages have this tag."
                 _  -> toHtml
                   [ paragraph << [if count==1 then "1 package has" else show count ++ " packages have", " this tag."]
                   , anchor ! [href $  tagname ++ "/alias/edit"] << "[Merge tag]"
                   , paragraph ! [theclass "toc"] << [toHtml "Related tags: ", toHtml $ showHistogram histogram]
-                  , ulist ! [theclass "packages"] << map renderItem items ]
+                  ]
+          , "tabledata" $= rowList
           ]
+
      where
       showHistogram hist = (++takeHtml) . intersperse (toHtml ", ") $
             map histogramEntry $ take takeAmount sortHist
@@ -1945,22 +1951,19 @@ mkHtmlReverse HtmlUtilities{..}
 
     serveReverse :: Bool -> DynamicPath -> ServerPartE Response
     serveReverse isRecent dpath = do
-        pkgn <- packageInPath dpath
-        pkgid <- lookupPackageName pkgn
-        let pkgname = packageName (head pkgid)
-            packageid = packageId (head pkgid)
-        rdisp <- case packageVersion (head pkgid) of
+        pkgid <- packageInPath dpath
+        let pkgname = pkgName pkgid
+        rdisp <- case packageVersion pkgid of
                   Version [] [] -> revPackageName pkgname
-                  _             -> withPackageVersion packageid $ \_ -> revPackageId packageid
+                  _             -> withPackageVersion pkgid $ \_ -> revPackageId pkgid
         render <- (if isRecent then renderReverseRecent else renderReverseOld) pkgname rdisp
         return $ toResponse $ Resource.XHtml $ hackagePage (display pkgname ++ " - Reverse dependencies ") $
-            reversePackageRender packageid (corePackageIdUri "") isRecent render
+            reversePackageRender pkgid (corePackageIdUri "") isRecent render
 
     serveReverseFlat :: DynamicPath -> ServerPartE Response
     serveReverseFlat dpath = do
-        pkgn <- packageInPath dpath
-        pkgid <- lookupPackageName pkgn
-        let pkgname = packageName (head pkgid)
+        pkg <- packageInPath dpath
+        let pkgname = pkgName pkg
         revCount <- revPackageStats pkgname
         pairs <- revPackageFlat pkgname
         return $ toResponse $ Resource.XHtml $ hackagePage (display pkgname ++ "Flattened reverse dependencies") $
@@ -1968,12 +1971,12 @@ mkHtmlReverse HtmlUtilities{..}
 
     serveReverseStats :: DynamicPath -> ServerPartE Response
     serveReverseStats dpath = do
-        pkgn <- packageInPath dpath
-        pkgid <- lookupPackageName pkgn
-        let pkgname = packageName (head pkgid)
+        pkg <- packageInPath dpath
+        let pkgname = pkgName pkg
+        pkgids <- lookupPackageName pkgname
         revCount <- revPackageStats pkgname
         return $ toResponse $ Resource.XHtml $ hackagePage (display pkgname ++ "Reverse dependency statistics") $
-            reverseStatsRender pkgname (map packageVersion pkgid) (corePackageIdUri "") revCount
+            reverseStatsRender pkgname (map packageVersion pkgids) (corePackageIdUri "") revCount
 
     serveReverseList :: DynamicPath -> ServerPartE Response
     serveReverseList _ = do

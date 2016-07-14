@@ -21,7 +21,7 @@ import Data.SafeCopy hiding (Version)
 import Data.Typeable (Typeable)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Bimap (Bimap)
+import Data.Bimap (Bimap, (!), (!>))
 import qualified Data.Bimap as Bimap
 import Control.Applicative
 import Data.Set (Set)
@@ -33,7 +33,7 @@ import Control.Monad.State (put, get)
 import Control.Monad.Reader (ask, asks)
 import Data.Graph (Graph, Vertex)
 import qualified Data.Graph as Gr
-import Data.Array ((!), accum)
+import qualified Data.Array as Arr ((!), accum)
 
 type NodeId = Int
 type RevDeps = Graph
@@ -77,7 +77,7 @@ addPackage :: PackageId -> [PackageId]
 addPackage pkgid deps ri@(ReverseIndex pindex revs nodemap) =
     let index = PackageIndex.insert pkgid pindex
         npm = Bimap.tryInsert pkgid (Bimap.size nodemap) nodemap
-        rd = insEdges (map (\d -> (npm Bimap.! d, [npm Bimap.! pkgid])) deps) revs
+        rd = insEdges (map (\d -> (npm ! d, [npm ! pkgid])) deps) revs
     in ri {
         duplicatedIndex = index,
         reverseDependencies = rd,
@@ -88,7 +88,7 @@ removePackage :: PackageId -> [PackageId]
               -> ReverseIndex -> ReverseIndex
 removePackage pkgid deps ri@(ReverseIndex pindex revs nodemap) =
     let index = PackageIndex.deletePackageId pkgid pindex
-        rd = delEdges (map (\d -> (nodemap Bimap.! d, [nodemap Bimap.! pkgid])) deps) revs
+        rd = delEdges (map (\d -> (nodemap ! d, [nodemap ! pkgid])) deps) revs
     in ri {
         duplicatedIndex = index,
         reverseDependencies = rd,
@@ -100,8 +100,8 @@ changePackage :: PackageId -> [PackageId] -> [PackageId]
 changePackage pkgid deps deps' ri@(ReverseIndex pindex revs nodemap) =
     let index = PackageIndex.insert pkgid pindex
         npm = Bimap.tryInsert pkgid (Bimap.size nodemap) nodemap
-        rd  = delEdges (map (\d -> (npm Bimap.! d, [npm Bimap.! pkgid])) deps) revs
-        rd' = insEdges (map (\d -> (npm Bimap.! d, [npm Bimap.! pkgid])) deps') rd
+        rd  = delEdges (map (\d -> (npm ! d, [npm ! pkgid])) deps) revs
+        rd' = insEdges (map (\d -> (npm ! d, [npm ! pkgid])) deps') rd
     in ri {
         duplicatedIndex = index,
         reverseDependencies = rd',
@@ -113,9 +113,9 @@ getAllVersions index = map packageVersion . PackageIndex.lookupPackageName index
 
 constructRevDeps :: PackageIndex PkgInfo -> Bimap PackageId NodeId -> RevDeps
 constructRevDeps index nodemap =
-    let allPackages = PackageIndex.allPackages index
+    let allPackages = concatMap (take 5) $ PackageIndex.allPackagesByName index
         packageIds = map packageId allPackages
-        edges = concatMap (\pkg -> map (\dep -> (nodemap Bimap.! dep, (nodemap Bimap.!) . packageId $ pkg)) (getAllDependencies pkg index) ) allPackages
+        edges = concatMap (\pkg -> map (\dep -> (nodemap ! dep, (nodemap !) . packageId $ pkg)) (getAllDependencies pkg index) ) allPackages
     in Gr.buildG (0, maxNodes) edges
 
 getAllDependencies :: Package pkg => PkgInfo -> PackageIndex pkg -> [PackageId]
@@ -135,10 +135,13 @@ getAllDependencies pkg index =
 --------------------------------------------------------------------------------
 -- Calculating ReverseDisplays
 data ReverseCount = ReverseCount {
-    directReverseCount :: Int,
-    flattenedReverseCount :: Int,
-    versionReverseCount :: Map Version Int
+    directCount :: Int,
+    totalCount :: Int,
+    versionCount :: Map Version Int
 } deriving (Show, Eq, Typeable, Ord)
+
+instance MemSize ReverseCount where
+    memSize (ReverseCount a b c) = memSize3 a b c
 
 type ReverseDisplay = Map PackageName (Version, Maybe VersionStatus)
 
@@ -146,20 +149,20 @@ type VersionIndex = (PackageName -> (PreferredInfo, [Version]))
 
 perPackageReverse :: VersionIndex -> ReverseIndex -> PackageName -> ReverseDisplay
 perPackageReverse indexFunc (ReverseIndex index revs nodemap) pkg =
-    if any (/= 0) (map (outdeg revs . (nodemap Bimap.!)) packageids)
+    if any (/= 0) (map (outdeg revs . (nodemap !)) packageids)
         then constructReverseDisplay indexFunc packagemap
         else Map.empty
     where
         packageids = map packageId $ PackageIndex.lookupPackageName index pkg
-        packagemap = toPackageMap $ map (nodemap Bimap.!>) (concatMap (suc revs . (nodemap Bimap.!)) packageids)
+        packagemap = toPackageMap $ map (nodemap !>) (concatMap (suc revs . (nodemap !)) packageids)
 
 perVersionReverse :: VersionIndex -> ReverseIndex -> PackageId -> ReverseDisplay
 perVersionReverse indexFunc (ReverseIndex _ revs nodemap) pkg =
-    if (/= 0) (outdeg revs (nodemap Bimap.! pkg))
+    if (/= 0) (outdeg revs (nodemap ! pkg))
         then constructReverseDisplay indexFunc packagemap
         else Map.empty
     where
-        packagemap = toPackageMap $ map (nodemap Bimap.!>) $ (suc revs . (nodemap Bimap.!)) pkg
+        packagemap = toPackageMap $ map (nodemap !>) $ (suc revs . (nodemap !)) pkg
 
 constructReverseDisplay :: VersionIndex -> Map PackageName (Set Version) -> ReverseDisplay
 constructReverseDisplay indexFunc deps =
@@ -175,18 +178,18 @@ getDisplayInfo preferred index pkgname = (,)
 
 ----------------------------Graph Utility----------
 suc :: RevDeps -> Vertex -> [Vertex]
-suc g v = g ! v
+suc g v = g Arr.! v
 
 outdeg :: RevDeps -> Vertex -> Int
 outdeg r = length . suc r
 
 insEdges :: [(NodeId, [NodeId])] -> RevDeps -> RevDeps
 insEdges edges revdeps =
-    accum (union) revdeps edges
+    Arr.accum (union) revdeps edges
 
 delEdges :: [(NodeId, [NodeId])] -> RevDeps -> RevDeps
 delEdges edges revdeps =
-    accum (\\) revdeps edges
+    Arr.accum (\\) revdeps edges
 
 --------------------------------------
 countUtil :: [(Version,Int,Int)] -> (Int,Int)
@@ -210,6 +213,7 @@ instance (SafeCopy a, SafeCopy b, Ord a, Ord b) => SafeCopy (Bimap a b) where
 --     getCopy = contain $ fmap (Gr.buildG (0,maxNodes)) safeGet
 
 $(deriveSafeCopy 0 'base ''ReverseIndex)
+$(deriveSafeCopy 0 'base ''ReverseCount)
 
 initialReverseIndex :: ReverseIndex
 initialReverseIndex = emptyReverseIndex
@@ -239,28 +243,29 @@ getDependencies :: PackageName -> Query ReverseIndex (Set PackageName)
 getDependencies pkg = do
     ReverseIndex index revdeps nodemap <- ask
     let packageIds = map packageId $ PackageIndex.lookupPackageName index pkg
-        pkgname p = packageName . (nodemap Bimap.!>) $ p
-    return $ Set.fromList (map (pkgname) (concatMap (suc revdeps . (nodemap Bimap.!)) packageIds))
+        pkgname p = packageName . (nodemap !>) $ p
+    return $ Set.fromList (map (pkgname) (concatMap (suc revdeps . (nodemap !)) packageIds))
 
 getDependenciesI :: PackageName -> Query ReverseIndex (Set PackageName)
 getDependenciesI pkg = do
     ReverseIndex index revdeps nodemap <- ask
     let packageIds = map packageId $ PackageIndex.lookupPackageName index pkg
-        pkgname p = packageName . (nodemap Bimap.!>) $ p
-        reachables = Set.fromList (map (pkgname) (concatMap (\p -> Gr.reachable revdeps (nodemap Bimap.! p)) packageIds))
+        pkgname p = packageName . (nodemap !>) $ p
+        reachables = Set.fromList (map (pkgname) (concatMap (\p -> Gr.reachable revdeps (nodemap ! p)) packageIds))
     return $ Set.difference reachables (Set.singleton pkg)
 
 
-getReverseCount :: PackageName -> Query ReverseIndex [(Version,Int,Int)]
+getReverseCount :: PackageName -> Query ReverseIndex ReverseCount
 getReverseCount pkg = do
     ReverseIndex index revdeps nodemap <- ask
     let packageIds = map packageId $ PackageIndex.lookupPackageName index pkg
-    return $ map (\p -> (pkgVersion p, outdeg revdeps (nodemap Bimap.! p), length (Gr.reachable revdeps (nodemap Bimap.! p) ) - 1)) packageIds
+        vii = map (\p -> (pkgVersion p, outdeg revdeps (nodemap ! p), length (Gr.reachable revdeps (nodemap ! p) ) - 1)) packageIds
+    return  $ toReverseCount vii
 
 getReverseCountId :: PackageId -> Query ReverseIndex (Int,Int)
 getReverseCountId pkg = do
     ReverseIndex _ revdeps nodemap <- ask
-    return $ (outdeg revdeps (nodemap Bimap.! pkg), length (Gr.reachable revdeps (nodemap Bimap.! pkg)) - 1)
+    return $ (outdeg revdeps (nodemap ! pkg), length (Gr.reachable revdeps (nodemap ! pkg)) - 1)
 
 
 $(makeAcidic ''ReverseIndex ['getReverseIndex

@@ -12,11 +12,21 @@
   $hackagePageHeader()$
 
   <div id="content">
-    <h2>All packages by name</h2>
+    <h2>$heading$</h2>
+
+  $content$
 
     <table id ="table">
       <thead>
-        <tr><th>Name</th><th>DLs</th><th>Rating</th><th>RevDeps</th><th>Description</th><th>Tags</th><th>Maintainer</th></tr>
+        <tr>
+            <th><div style="width:100px">Name</div></th>
+            <th><div style="width:40px">DLs</div></th>
+            <th><div style="width:40px">Rating</div></th>
+            <th><div style="width:150px">Description</div></th>
+            <th><div style="width:40px">RDeps</div></th>
+            <th><div style="width:120px">Tags</div></th>
+            <th><div style="width:40px">Maintainer</div></th>
+        </tr>
       </thead>
       <tbody>
         $tabledata$
@@ -31,19 +41,13 @@
         ).draw();
     }
 
-
     \$(document).ready(function() {
-      \$('#table').DataTable({
-        "bJQueryUI": true,
-        "bAutoWidth": false, // Disable the auto width calculation
-        "aoColumns": [
-          { "sWidth": "15%" },
-          { "sWidth": "10%" },
-          { "sWidth": "10%" },
-          { "sWidth": "10%" },
-          { "sWidth": "25%" },
-          { "sWidth": "15%" },
-          { "sWidth": "15%" }
+      \$('#table').removeAttr('width').DataTable({
+        autoWidth: false,
+        columnDefs: [
+            { width: '200px', targets: 0 },
+            { width: '200px', targets: 1 },
+            { width: '200px', targets: 2 }
         ]
       });
 

@@ -75,19 +75,19 @@ data PackageItem = PackageItem {
     -- How many test suites (>=0) this package has.
     itemNumTests :: !Int,
     -- How many benchmarks (>=0) this package has.
-    itemNumBenchmarks :: !Int
-    -- Hotness: a more heuristic way to sort packages. presently non-existent.
-  --itemHotness :: Int
+    itemNumBenchmarks :: !Int,
+    -- Hotness: a more heuristic way to sort packages
+    -- Hotness = recent downloads + stars + 2 * no rev deps
+    itemHotness :: !Float
 }
 
 instance MemSize PackageItem where
-    memSize (PackageItem a b c d e f g h i j k l) = memSize12 a b c d e f g h i j k l
+    memSize (PackageItem a b c d e f g h i j k l m) = memSize13 a b c d e f g h i j k l m
 
 
 emptyPackageItem :: PackageName -> PackageItem
 emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" ""
-                                   0 0 0 False 0 0 0
-
+                                   0 0 0 False 0 0 0 0
 
 initListFeature :: ServerEnv
                 -> IO (CoreFeature
@@ -222,7 +222,8 @@ listFeature CoreFeature{..}
           , itemDeprecated = deprs
           , itemDownloads  = cmFind pkgname downs
           , itemVotes = votes
-          , itemRevDepsCount = directReverseCount revCount
+          , itemRevDepsCount = directCount revCount
+          , itemHotness = votes + fromIntegral (cmFind pkgname downs) + fromIntegral (directCount revCount)*2
           }
 
     ------------------------------
@@ -262,11 +263,14 @@ updateTagItem tags item =
     item {
         itemTags = tags
     }
+
 updateVoteItem :: Float -> PackageItem -> PackageItem
 updateVoteItem score item =
     item {
-    itemVotes = score
+        itemVotes = score,
+        itemHotness = score + fromIntegral (itemDownloads item) + fromIntegral (itemRevDepsCount item)*2
     }
+
 updateDeprecation :: Maybe [PackageName] -> PackageItem -> PackageItem
 updateDeprecation pkgs item =
     item {
@@ -276,12 +280,13 @@ updateDeprecation pkgs item =
 updateReverseItem :: ReverseCount -> PackageItem -> PackageItem
 updateReverseItem revCount item =
     item {
-        itemRevDepsCount = directReverseCount revCount
+        itemRevDepsCount = directCount revCount,
+        itemHotness = fromIntegral (directCount revCount)*2 + (itemVotes item) + fromIntegral (itemDownloads item)
     }
-
 
 updateDownload :: Int -> PackageItem -> PackageItem
 updateDownload count item =
     item {
-        itemDownloads = count
+        itemDownloads = count,
+        itemHotness = fromIntegral count + (itemVotes item) + fromIntegral (itemRevDepsCount item)*2
     }
