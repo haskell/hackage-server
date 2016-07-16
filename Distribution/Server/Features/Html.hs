@@ -163,7 +163,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                             tarIndexCache
                             reportsCore
                             usersdetails
-                            (htmlUtilities core tags)
+                            (htmlUtilities core tags user)
                             (reverseHtmlUtil reversef)
                             mainCache namesCache
                             templates

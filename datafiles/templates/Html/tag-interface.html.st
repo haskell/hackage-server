@@ -43,12 +43,9 @@
 
     \$(document).ready(function() {
       \$('#table').removeAttr('width').DataTable({
-        autoWidth: false,
-        columnDefs: [
-            { width: '200px', targets: 0 },
-            { width: '200px', targets: 1 },
-            { width: '200px', targets: 2 }
-        ]
+        "bProcessing": true,
+        "bDeferRender": true,
+        "autoWidth": false
       });
 
       \$('input.global_filter').on( 'keyup click', function () {

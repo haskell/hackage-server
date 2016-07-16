@@ -15,6 +15,7 @@ import Data.Maybe (fromMaybe)
 import Distribution.Server.Features.PackageList
 import Distribution.Server.Pages.Util (packageType)
 import Distribution.Package
+import Distribution.Server.Features.Users
 
 data HtmlUtilities = HtmlUtilities {
     packageLink :: PackageId -> Html
@@ -26,9 +27,9 @@ data HtmlUtilities = HtmlUtilities {
   , renderDeps :: PackageName -> [PackageName] -> Html
   }
 
-htmlUtilities :: CoreFeature -> TagsFeature -> HtmlUtilities
+htmlUtilities :: CoreFeature -> TagsFeature -> UserFeature -> HtmlUtilities
 htmlUtilities CoreFeature{coreResource}
-              TagsFeature{tagsResource} = HtmlUtilities{..}
+              TagsFeature{tagsResource} UserFeature{userResource} = HtmlUtilities{..}
   where
     packageLink :: PackageId -> Html
     packageLink pkgid = anchor ! [href $ corePackageIdUri cores "" pkgid] << display pkgid
@@ -43,7 +44,7 @@ htmlUtilities CoreFeature{coreResource}
                          , td $ toHtml $ itemDesc item
                          , td $ toHtml $ show $ itemRevDepsCount item
                          , td $ " (" +++ renderTags (itemTags item) +++ ")"
-                         , td $ toHtml $ itemMaintainer item
+                         , td $ anchor ! [href $ userPageUri userResource "" (itemMaintainer item)] << display (itemMaintainer item)
                          ]
 
 

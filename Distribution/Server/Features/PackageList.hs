@@ -13,11 +13,14 @@ import Distribution.Server.Features.ReverseDependencies
 import Distribution.Server.Features.Votes
 import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.Tags
+import Distribution.Server.Features.Users
+import Distribution.Server.Users.Users
 import Distribution.Server.Features.PreferredVersions
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Util.CountingMap (cmFind)
 
 import Distribution.Server.Packages.Types
+import Distribution.Server.Users.Types
 import Distribution.Server.Features.ReverseDependencies
 
 import Distribution.Package
@@ -57,7 +60,7 @@ data PackageItem = PackageItem {
     -- The description of the package from its Cabal file
     itemDesc :: !String,
     -- Maintainer of the package
-    itemMaintainer :: !String,
+    itemMaintainer :: UserName,
     -- Whether the item is in the Haskell Platform
     -- itemPlatform :: Bool,
     -- Number of votes for the package
@@ -86,7 +89,7 @@ instance MemSize PackageItem where
 
 
 emptyPackageItem :: PackageName -> PackageItem
-emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" ""
+emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" (UserName "")
                                    0 0 0 False 0 0 0 0
 
 initListFeature :: ServerEnv
@@ -96,6 +99,7 @@ initListFeature :: ServerEnv
                     -> VotesFeature
                     -> TagsFeature
                     -> VersionsFeature
+                    -> UserFeature
                     -> IO ListFeature)
 initListFeature _env = do
     itemCache  <- newMemStateWHNF Map.empty
@@ -106,10 +110,11 @@ initListFeature _env = do
               download
               votesf@VotesFeature{..}
               tagsf@TagsFeature{..}
-              versions@VersionsFeature{..} -> do
+              versions@VersionsFeature{..}
+              users@UserFeature{..} -> do
 
       let (feature, modifyItem, updateDesc) =
-            listFeature core revs download votesf tagsf versions
+            listFeature core revs download votesf tagsf versions users
                         itemCache itemUpdate
 
       registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, _) ->
@@ -147,6 +152,7 @@ listFeature :: CoreFeature
             -> VotesFeature
             -> TagsFeature
             -> VersionsFeature
+            -> UserFeature
             -> MemState (Map PackageName PackageItem)
             -> Hook (Set PackageName) ()
             -> (ListFeature,
@@ -154,7 +160,7 @@ listFeature :: CoreFeature
                 PackageName -> IO ())
 
 listFeature CoreFeature{..}
-            ReverseFeature{..} DownloadFeature{..} VotesFeature{..} TagsFeature{..} VersionsFeature{..}
+            ReverseFeature{..} DownloadFeature{..} VotesFeature{..} TagsFeature{..} VersionsFeature{..} UserFeature{..}
             itemCache itemUpdate
   = (ListFeature{..}, modifyItem, updateDesc)
   where
@@ -212,6 +218,7 @@ listFeature CoreFeature{..}
     constructItem :: PkgInfo -> IO (PackageName, PackageItem)
     constructItem pkg = do
         let pkgname = packageName pkg
+        users <- queryGetUserDb
         revCount <- revPackageStats pkgname
         tags  <- queryTagsForPackage pkgname
         downs <- recentPackageDownloads
@@ -219,6 +226,7 @@ listFeature CoreFeature{..}
         deprs <- queryGetDeprecatedFor pkgname
         return $ (,) pkgname $ (updateDescriptionItem (pkgDesc pkg) $ emptyPackageItem pkgname) {
             itemTags       = tags
+          , itemMaintainer = userIdToName users (pkgLatestUploadUser pkg)
           , itemDeprecated = deprs
           , itemDownloads  = cmFind pkgname downs
           , itemVotes = votes
@@ -251,7 +259,7 @@ updateDescriptionItem genDesc item =
         -- This checks if the library is buildable. However, since
         -- desc is flattened, we might miss some flags. Perhaps use the
         -- CondTree instead.
-        itemMaintainer = maintainer desc,
+        -- itemMaintainer = maintainer desc,
         itemHasLibrary = hasLibs desc,
         itemNumExecutables = length . filter (buildable . buildInfo) $ executables desc,
         itemNumTests = length . filter (buildable . testBuildInfo) $ testSuites desc,
