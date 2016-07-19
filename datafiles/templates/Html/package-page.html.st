@@ -24,11 +24,6 @@
           float: left;
           margin: 0 1% 0 1%;
       }
-      .clear-rating {
-          float: left;
-          clear: both;
-          margin-bottom:1%;
-      }
     </style>
 </head>
 
@@ -42,7 +37,7 @@
 
     <h1>The $package.name$ package</h1>
     <div style="font-size: small">
-      [<a href="/packages/tags">Tags</a>:$tags$]
+      [<a href="/packages/tags">Tags: </a>$tags$]
       <a href="/package/$package.name$/tags/edit">[ Propose Tags ]</a>
     </div>
 
@@ -187,14 +182,15 @@
         <tr>
           <th>Votes</th>
           <td>$score$ ($votes$ votes)
+              my rating : $myrating$
             <ul class="star-rating">
                 <li class="star" id="1">&lambda;</li>
                 <li class="star" id="2">&lambda;</li>
                 <li class="star" id="3">&lambda;</li>
-                <li class="star" id="4">&lambda;</li>
-                <li class="star" id="5">&lambda;</li>
             </ul>
-            <a href="" class="clear-rating">Clear Rating</a>
+            <div style="font-size: small">
+                [<a href="" class="clear-rating">Clear Rating</a>]
+            </div>
           </td>
         </tr>
         <tr>

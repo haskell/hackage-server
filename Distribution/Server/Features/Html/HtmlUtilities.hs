@@ -9,7 +9,7 @@ import qualified Data.Set as Set
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Core
 import Distribution.Text (display)
-import Data.List (intersperse, intercalate)
+import Data.List (intersperse)
 import Data.Set (Set)
 import Data.Maybe (fromMaybe)
 import Distribution.Server.Features.PackageList
