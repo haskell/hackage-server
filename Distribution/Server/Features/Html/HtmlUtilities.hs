@@ -44,9 +44,10 @@ htmlUtilities CoreFeature{coreResource}
                          , td $ toHtml $ itemDesc item
                          , td $ toHtml $ show $ itemRevDepsCount item
                          , td $ " (" +++ renderTags (itemTags item) +++ ")"
-                         , td $ anchor ! [href $ userPageUri userResource "" (itemMaintainer item)] << display (itemMaintainer item)
+                         , td $ "" +++ (intersperse (toHtml ", ") (map renderUser (itemMaintainer item)))
                          ]
-
+        where
+            renderUser user = anchor ! [href $ userPageUri userResource "" user] << display user
 
     renderItem :: PackageItem -> Html
     renderItem item = li ! classes <<

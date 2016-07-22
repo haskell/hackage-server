@@ -52,7 +52,7 @@ emptyReverseIndex :: ReverseIndex
 emptyReverseIndex = ReverseIndex (PackageIndex.fromList []) emptyGraph Bimap.empty
 
 maxNodes :: Int
-maxNodes = 150000
+maxNodes = 20000
 
 emptyGraph :: Graph
 emptyGraph = Gr.buildG (0, maxNodes) []
@@ -66,7 +66,6 @@ constructReverseIndex index =
     }
     where
         nodePkgMap = foldr (uncurry Bimap.insert) Bimap.empty $ zip (map packageId (PackageIndex.allPackages index)) [0..]
-
         constructDupIndex :: PackageIndex PkgInfo -> PackageIndex PackageId
         constructDupIndex = PackageIndex.fromList
           . map packageId

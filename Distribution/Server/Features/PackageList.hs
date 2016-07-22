@@ -33,6 +33,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
+import qualified Data.Vector as Vec
 
 
 data ListFeature = ListFeature {
@@ -60,7 +61,7 @@ data PackageItem = PackageItem {
     -- The description of the package from its Cabal file
     itemDesc :: !String,
     -- Maintainer of the package
-    itemMaintainer :: UserName,
+    itemMaintainer :: [UserName],
     -- Whether the item is in the Haskell Platform
     -- itemPlatform :: Bool,
     -- Number of votes for the package
@@ -89,7 +90,7 @@ instance MemSize PackageItem where
 
 
 emptyPackageItem :: PackageName -> PackageItem
-emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" (UserName "")
+emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" []
                                    0 0 0 False 0 0 0 0
 
 initListFeature :: ServerEnv
@@ -226,7 +227,7 @@ listFeature CoreFeature{..}
         deprs <- queryGetDeprecatedFor pkgname
         return $ (,) pkgname $ (updateDescriptionItem (pkgDesc pkg) $ emptyPackageItem pkgname) {
             itemTags       = tags
-          , itemMaintainer = userIdToName users (pkgLatestUploadUser pkg)
+          , itemMaintainer = Vec.toList $ Vec.map (userIdToName users) (Vec.map snd $ Vec.map snd (pkgMetadataRevisions pkg))
           , itemDeprecated = deprs
           , itemDownloads  = cmFind pkgname downs
           , itemVotes = votes

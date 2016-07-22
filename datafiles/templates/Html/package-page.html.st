@@ -180,17 +180,19 @@
         </tr>
 
         <tr>
-          <th>Votes</th>
+          <th>Rating</th>
           <td>$score$ ($votes$ votes)
-              my rating : $myrating$
+          $if(myrating)$
+            <div style="font-size: small">
+                [my rating : $myrating$]
+                [<a href="" class="clear-rating">Clear Rating</a>]
+            </div>
+          $endif$
             <ul class="star-rating">
                 <li class="star" id="1">&lambda;</li>
                 <li class="star" id="2">&lambda;</li>
                 <li class="star" id="3">&lambda;</li>
             </ul>
-            <div style="font-size: small">
-                [<a href="" class="clear-rating">Clear Rating</a>]
-            </div>
           </td>
         </tr>
         <tr>

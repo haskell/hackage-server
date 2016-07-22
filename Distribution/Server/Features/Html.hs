@@ -504,6 +504,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
         recentDown    <- cmFind pkgname `liftM` recentPackageDownloads
         pkgVotes      <- pkgNumVotes pkgname
         pkgScore      <- pkgNumScore pkgname
+        -- myRating      <-
         mdoctarblob   <- queryDocumentation realpkg
         rdeps         <- queryReverseDeps pkgname
         tags          <- queryTagsForPackage pkgname
