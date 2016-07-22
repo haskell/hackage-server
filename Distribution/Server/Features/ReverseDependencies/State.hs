@@ -33,7 +33,7 @@ import Control.Monad.State (put, get)
 import Control.Monad.Reader (ask, asks)
 import Data.Graph (Graph, Vertex)
 import qualified Data.Graph as Gr
-import qualified Data.Array as Arr ((!), accum)
+import qualified Data.Array as Arr ((!), accum, bounds)
 
 type NodeId = Int
 type RevDeps = Graph
@@ -49,13 +49,7 @@ instance MemSize ReverseIndex where
 
 
 emptyReverseIndex :: ReverseIndex
-emptyReverseIndex = ReverseIndex (PackageIndex.fromList []) emptyGraph Bimap.empty
-
-maxNodes :: Int
-maxNodes = 20000
-
-emptyGraph :: Graph
-emptyGraph = Gr.buildG (0, maxNodes) []
+emptyReverseIndex = ReverseIndex (PackageIndex.fromList []) (Gr.buildG (0, 20000) []) Bimap.empty
 
 constructReverseIndex :: PackageIndex PkgInfo -> ReverseIndex
 constructReverseIndex index =
@@ -75,8 +69,9 @@ addPackage :: PackageId -> [PackageId]
            -> ReverseIndex -> ReverseIndex
 addPackage pkgid deps ri@(ReverseIndex pindex revs nodemap) =
     let index = PackageIndex.insert pkgid pindex
+        rd' | revSize revs < Bimap.size nodemap = arrDouble revs | otherwise = revs
         npm = Bimap.tryInsert pkgid (Bimap.size nodemap) nodemap
-        rd = insEdges (map (\d -> (npm ! d, [npm ! pkgid])) deps) revs
+        rd = insEdges (map (\d -> (npm ! d, [npm ! pkgid])) deps) rd'
     in ri {
         duplicatedIndex = index,
         reverseDependencies = rd,
@@ -115,7 +110,7 @@ constructRevDeps index nodemap =
     let allPackages = concatMap (take 5) $ PackageIndex.allPackagesByName index
         packageIds = map packageId allPackages
         edges = concatMap (\pkg -> map (\dep -> (nodemap ! dep, (nodemap !) . packageId $ pkg)) (getAllDependencies pkg index) ) allPackages
-    in Gr.buildG (0, maxNodes) edges
+    in Gr.buildG (0, Bimap.size nodemap) edges
 
 getAllDependencies :: Package pkg => PkgInfo -> PackageIndex pkg -> [PackageId]
 getAllDependencies pkg index =
@@ -190,6 +185,12 @@ delEdges :: [(NodeId, [NodeId])] -> RevDeps -> RevDeps
 delEdges edges revdeps =
     Arr.accum (\\) revdeps edges
 
+revSize :: RevDeps -> Int
+revSize rev = snd $ Arr.bounds rev
+
+arrDouble :: RevDeps -> RevDeps
+arrDouble rev =
+    Gr.buildG (0, 2*(revSize rev)) (Gr.edges rev)
 --------------------------------------
 countUtil :: [(Version,Int,Int)] -> (Int,Int)
 countUtil vcc = foldr (\(_,a, b) (as, bs) -> (a + as, b + bs)) (0,0) vcc
