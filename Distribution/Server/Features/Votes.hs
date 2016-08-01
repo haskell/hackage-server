@@ -155,7 +155,7 @@ votesFeature  ServerEnv{..}
       _ <- updateState votesState (AddVote pkgname uid score')
       pkgScore <- pkgNumScore pkgname
       runHook_ votesUpdated (pkgname, pkgScore)
-      ok . toResponse $ Render.voteConfirmationPage pkgname "Package voted for successfully"
+      ok . toResponse $ "Package voted for successfully"
 
     -- Removes a user's vote from a package. If the user has not voted
     -- for this package, does nothing.
@@ -171,8 +171,7 @@ votesFeature  ServerEnv{..}
         else return ()
       let responseMsg | success   = "Package vote removed successfully."
                       | otherwise = "User has not voted for this package."
-      ok . toResponse $ Render.voteConfirmationPage
-        pkgname responseMsg
+      ok . toResponse $ responseMsg
 
     -- Helper Functions (Used outside of responses, e.g. by other features.)
 

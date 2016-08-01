@@ -86,7 +86,7 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
 
         reverseTable = thediv << table << reverseTableRows
         reverseTableRows =
-            [ tr << [ th << "Package name", th << "Version", th << "Reverse dependencies" ] ] ++
+            [ tr ! [theclass "fancy"] << [ th << "Package name", th << "Version", th << "Reverse dependencies" ] ] ++
             [ tr ! [theclass (if odd n then "odd" else "even")] <<
                 [ td << anchor ! [href $ packageLink $ PackageIdentifier (packageName pkg) $ Version [] [] ] << display (packageName pkg)
                 , td << anchor ! (renderStatus status ++ [href $ packageLink pkg]) << display (packageVersion pkg)
@@ -115,7 +115,7 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
 
         reverseTable = thediv << table << reverseTableRows
         reverseTableRows =
-            [ tr << [ th << "Package name", th << "Total reverse dependencies" ] ] ++
+            [ tr  ! [theclass "fancy"] << [ th << "Package name", th << "Total reverse dependencies" ] ] ++
             [ tr ! [theclass (if odd n then "odd" else "even")] <<
                 [ td << toPackage pkg
                 , td << [ toHtml $ (show count) ++ " (", anchor ! [href $ reverseAllUri reverseResource "" pkg] << "view", toHtml ")" ]
@@ -144,7 +144,7 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
 
         versionTable = thediv << table << versionTableRows
         versionTableRows =
-            [ tr << [ th << "Version", th << "Reverse dependency count" ] ] ++
+            [ tr ! [theclass "fancy"] << [ th << "Version", th << "Reverse dependency count" ] ] ++
             [ tr ! [theclass (if odd n then "odd" else "even")] <<
                 [ td << anchor ! [href $ packageLink pkgid ] << display version
                 , td << [ toHtml $ show (Map.findWithDefault 0 version versions) ++ " ("
@@ -165,7 +165,7 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
       where
         reverseTable = thediv << table << reverseTableRows
         reverseTableRows =
-            [ tr << [ th << "Package name", th << "Total", th << "Direct" ] ] ++
+            [ tr ! [theclass "fancy"] << [ th << "Package name", th << "Total", th << "Direct" ] ] ++
             [ tr ! [theclass (if odd n then "odd" else "even")] <<
                 [ td << anchor ! [href $ packageLink pkgname ] << display pkgname
                 , td << [ toHtml $ show flat ++ " (", anchor ! [href $ reverseStatsUri reverseResource "" pkgname ] << "view", toHtml ")" ]

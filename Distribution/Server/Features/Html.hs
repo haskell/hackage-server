@@ -532,12 +532,12 @@ mkHtmlCore ServerEnv{serverBaseURI}
               (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl)
           , "totalDownloads"    $= totalDown
           , "hasexecs"          $= (if (null execs) then False else True)
-          , "executables"       $= (intersperse ", " execs)
           , "recentDownloads"   $= recentDown
           , "votes"             $= pkgVotes
           , "score"             $= pkgScore
-          , "hasrdeps"          $= (if (null rdeps) then False else True)
-          , "rdeps"             $= renderDeps pkgname rdeps
+          , "hasrdeps"          $= (if (rdeps == ([],[])) then False else True)
+          , "rdeps"             $= renderPkgPageDeps pkgname rdeps
+          , "rdepsummary"      $= renderDeps pkgname rdeps
           , "buildStatus"       $= buildStatus
           ] ++
           -- Items not related to IO (mostly pure functions)

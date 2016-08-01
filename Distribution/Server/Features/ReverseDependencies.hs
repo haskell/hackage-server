@@ -49,8 +49,7 @@ data ReverseFeature = ReverseFeature {
     reverseHook :: Hook [PackageId] (),
 
     queryReverseIndex :: forall m. MonadIO m => m ReverseIndex,
-    queryReverseDeps :: forall m. MonadIO m => PackageName -> m [PackageName],
-
+    queryReverseDeps :: forall m. MonadIO m => PackageName -> m ([PackageName], [PackageName]),
     revPackageId :: forall m. MonadIO m => PackageId -> m ReverseDisplay,
     revPackageName :: forall m. MonadIO m => PackageName -> m ReverseDisplay,
     renderReverseRecent :: forall m. MonadIO m => PackageName -> ReverseDisplay -> m ReversePageRender,
@@ -205,10 +204,12 @@ reverseFeature CoreFeature{..}
     queryReverseIndex :: MonadIO m => m ReverseIndex
     queryReverseIndex = queryState reverseState GetReverseIndex
 
-    queryReverseDeps :: MonadIO m => PackageName -> m [PackageName]
+    queryReverseDeps :: MonadIO m => PackageName -> m ([PackageName], [PackageName])
     queryReverseDeps pkgname = do
         rdeps <- queryState reverseState $ GetDependencies pkgname
-        return $ Set.toList rdeps
+        rdepsall <- queryState reverseState $ GetDependenciesI pkgname
+        let indirect = Set.difference rdepsall rdeps
+        return (Set.toList rdeps, Set.toList indirect)
 
     revPackageId :: MonadIO m => PackageId -> m ReverseDisplay
     revPackageId pkgid = do

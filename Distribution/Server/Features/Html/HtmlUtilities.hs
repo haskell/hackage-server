@@ -11,7 +11,6 @@ import Distribution.Server.Features.Core
 import Distribution.Text (display)
 import Data.List (intersperse)
 import Data.Set (Set)
-import Data.Maybe (fromMaybe)
 import Distribution.Server.Features.PackageList
 import Distribution.Server.Pages.Util (packageType)
 import Distribution.Package
@@ -24,7 +23,8 @@ data HtmlUtilities = HtmlUtilities {
   , makeRow :: PackageItem -> Html
   , renderTags :: Set Tag -> [Html]
   , renderReviewTags :: Set Tag -> (Set Tag, Set Tag) -> PackageName -> [Html]
-  , renderDeps :: PackageName -> [PackageName] -> Html
+  , renderDeps :: PackageName -> ([PackageName], [PackageName]) -> Html
+  , renderPkgPageDeps :: PackageName -> ([PackageName], [PackageName]) -> Html
   }
 
 htmlUtilities :: CoreFeature -> TagsFeature -> UserFeature -> HtmlUtilities
@@ -84,10 +84,22 @@ htmlUtilities CoreFeature{coreResource}
             , anchor ![href $ "tags/edit" ] << "Propose a tag?", toHtml " or "
             , toHtml "return to ", packageNameLink pkgname, br
             ]
-    renderDeps :: PackageName -> [PackageName] -> Html
-    renderDeps pkg deps = summary +++ detailsLink
+
+    renderPkgPageDeps :: PackageName -> ([PackageName], [PackageName])-> Html
+    renderPkgPageDeps pkg (direct, indirect) =
+        map toHtml [show (length direct), " direct", ", ", show (length indirect), " indirect "] +++
+            thespan ! [thestyle "font-size: small", theclass "revdepdetails"]
+                << (" [" +++ anchor ! [href ""] << "details" +++ "]")
+
+    renderDeps :: PackageName -> ([PackageName], [PackageName])-> Html
+    renderDeps pkg (direct, indirect) =
+        (if null direct then (toHtml "") else summary "Direct" direct) +++
+        (if null indirect then (toHtml "") else summary "Indirect" indirect) +++
+        detailsLink
       where
-        summary = intersperse (toHtml ", ") $ map packageNameLink deps
+        summary title_ dep = thediv << [ bold (toHtml title_), br
+                                     , p << (intersperse (toHtml ", ") $ map packageNameLink dep)
+                                     ]
         detailsLink = thespan ! [thestyle "font-size: small"]
                         << (" [" +++ anchor ! [href detailURL] << "details" +++ "]")
         detailURL = "/package/" ++ (unPackageName pkg) ++ "/reverse"
