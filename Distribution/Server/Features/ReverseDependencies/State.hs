@@ -15,8 +15,8 @@ import Distribution.PackageDescription
 import Distribution.Version
 
 import Data.Acid (Query, Update, makeAcidic)
-import Data.List (foldl', union, (\\))
-import Data.Maybe (isJust, mapMaybe, maybeToList, fromMaybe)
+import Data.List (union, (\\))
+import Data.Maybe (maybeToList)
 import Data.SafeCopy hiding (Version)
 import Data.Typeable (Typeable)
 import Data.Map (Map)
@@ -27,10 +27,9 @@ import Control.Applicative
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Control.Monad (void)
-import Data.STRef
 import Control.Monad.ST
 import Control.Monad.State (put, get)
-import Control.Monad.Reader (ask, asks)
+import Control.Monad.Reader (ask)
 import Data.Graph (Graph, Vertex)
 import qualified Data.Graph as Gr
 import qualified Data.Array as Arr ((!), accum, bounds)
@@ -108,7 +107,6 @@ getAllVersions index = map packageVersion . PackageIndex.lookupPackageName index
 constructRevDeps :: PackageIndex PkgInfo -> Bimap PackageId NodeId -> RevDeps
 constructRevDeps index nodemap =
     let allPackages = concatMap (take 5) $ PackageIndex.allPackagesByName index
-        packageIds = map packageId allPackages
         edges = concatMap (\pkg -> map (\dep -> (nodemap ! dep, (nodemap !) . packageId $ pkg)) (getAllDependencies pkg index) ) allPackages
     in Gr.buildG (0, Bimap.size nodemap) edges
 
@@ -118,7 +116,7 @@ getAllDependencies pkg index =
     where
         desc = pkgDesc pkg
         toDepsList :: [CondTree v [Dependency] a] -> [PackageId]
-        toDepsList l = map (packageId) (concatMap ((PackageIndex.lookupDependency index)) $ concatMap harvestDependencies l)
+        toDepsList l = map packageId (concatMap (PackageIndex.lookupDependency index) $ concatMap harvestDependencies l)
         -- | Collect all dependencies from all branches of a condition tree.
         harvestDependencies :: CondTree v [Dependency] a -> [Dependency]
         harvestDependencies (CondNode _ deps comps) = deps ++ concatMap forComponent comps
@@ -159,8 +157,8 @@ perVersionReverse indexFunc (ReverseIndex _ revs nodemap) pkg =
         packagemap = toPackageMap $ map (nodemap !>) $ (suc revs . (nodemap !)) pkg
 
 constructReverseDisplay :: VersionIndex -> Map PackageName (Set Version) -> ReverseDisplay
-constructReverseDisplay indexFunc deps =
-    Map.mapMaybeWithKey (uncurry maybeBestVersion . indexFunc) deps
+constructReverseDisplay indexFunc =
+    Map.mapMaybeWithKey (uncurry maybeBestVersion . indexFunc)
 
 getDisplayInfo :: PreferredVersions -> PackageIndex PkgInfo -> VersionIndex
 getDisplayInfo preferred index pkgname = (,)
@@ -179,7 +177,7 @@ outdeg r = length . suc r
 
 insEdges :: [(NodeId, [NodeId])] -> RevDeps -> RevDeps
 insEdges edges revdeps =
-    Arr.accum (union) revdeps edges
+    Arr.accum union revdeps edges
 
 delEdges :: [(NodeId, [NodeId])] -> RevDeps -> RevDeps
 delEdges edges revdeps =
@@ -190,16 +188,16 @@ revSize rev = snd $ Arr.bounds rev
 
 arrDouble :: RevDeps -> RevDeps
 arrDouble rev =
-    Gr.buildG (0, 2*(revSize rev)) (Gr.edges rev)
+    Gr.buildG (0, 2*revSize rev) (Gr.edges rev)
 --------------------------------------
 countUtil :: [(Version,Int,Int)] -> (Int,Int)
-countUtil vcc = foldr (\(_,a, b) (as, bs) -> (a + as, b + bs)) (0,0) vcc
+countUtil = foldr (\(_,a, b) (as, bs) -> (a + as, b + bs)) (0,0)
 
 toPackageMap :: [PackageId] -> Map PackageName (Set Version)
-toPackageMap assocs = Map.fromListWith (Set.union) [(k, Set.singleton v) | PackageIdentifier k v <- assocs]
+toPackageMap assocs = Map.fromListWith Set.union [(k, Set.singleton v) | PackageIdentifier k v <- assocs]
 
 toReverseCount :: [(Version, Int , Int)] -> ReverseCount
-toReverseCount assocs = ReverseCount (fst count) (snd count) (Map.fromListWith (+) [(k, v) | (k, v, _) <- assocs])
+toReverseCount assocs = uncurry ReverseCount count (Map.fromListWith (+) [(k, v) | (k, v, _) <- assocs])
     where
         count = countUtil assocs
 
@@ -243,15 +241,15 @@ getDependencies :: PackageName -> Query ReverseIndex (Set PackageName)
 getDependencies pkg = do
     ReverseIndex index revdeps nodemap <- ask
     let packageIds = map packageId $ PackageIndex.lookupPackageName index pkg
-        pkgname p = packageName . (nodemap !>) $ p
-    return $ Set.fromList (map (pkgname) (concatMap (suc revdeps . (nodemap !)) packageIds))
+        pkgname = packageName . (nodemap !>)
+    return $ Set.fromList (map pkgname (concatMap (suc revdeps . (nodemap !)) packageIds))
 
 getDependenciesI :: PackageName -> Query ReverseIndex (Set PackageName)
 getDependenciesI pkg = do
     ReverseIndex index revdeps nodemap <- ask
     let packageIds = map packageId $ PackageIndex.lookupPackageName index pkg
-        pkgname p = packageName . (nodemap !>) $ p
-        reachables = Set.fromList (map (pkgname) (concatMap (\p -> Gr.reachable revdeps (nodemap ! p)) packageIds))
+        pkgname = packageName . (nodemap !>)
+        reachables = Set.fromList (map pkgname (concatMap (\p -> Gr.reachable revdeps (nodemap ! p)) packageIds))
     return $ Set.difference reachables (Set.singleton pkg)
 
 
@@ -265,7 +263,7 @@ getReverseCount pkg = do
 getReverseCountId :: PackageId -> Query ReverseIndex (Int,Int)
 getReverseCountId pkg = do
     ReverseIndex _ revdeps nodemap <- ask
-    return $ (outdeg revdeps (nodemap ! pkg), length (Gr.reachable revdeps (nodemap ! pkg)) - 1)
+    return (outdeg revdeps (nodemap ! pkg), length (Gr.reachable revdeps (nodemap ! pkg)) - 1)
 
 
 $(makeAcidic ''ReverseIndex ['getReverseIndex

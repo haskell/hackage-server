@@ -44,7 +44,7 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
             versionBox = if hasVersion && total /= allCounts
                 then thediv ! [theclass "notification"] << [toHtml $ "These statistics only apply to this version of " ++ display pkgname ++ ". See also ",  anchor ! [href $ reverseNameUri reverseResource "" pkgname] << [toHtml "packages which depend on ", emphasize << "any", toHtml " version"], toHtml $ " (all " ++ show total ++ " of them)."]
                 else noHtml
-            allCounts = fst counts + snd counts
+            allCounts = uncurry (+) counts
             otherCount = case total - allCounts of
                 diff | diff > 0 -> paragraph << [show diff ++ " packages depend on versions of " ++ display pkgid ++ " other than this one."]
                 _ -> noHtml
@@ -56,13 +56,12 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
                           packageAnchor, toHtml "."]
           ]
         (0, count) ->
-          [ paragraph << [toHtml "No packages depend on ",
+          paragraph << [toHtml "No packages depend on ",
                           if hasVersion then noHtml else toHtml "some version of ",
                           packageAnchor,
                           toHtml $ pageText 0 ++ " However, ",
                           altVersions count nonPageText otherLink,
-                          toHtml "."]
-          ] ++ [otherCount, statLinks]
+                          toHtml "."] : [otherCount, statLinks]
         (count, count') ->
           [ (paragraph<<) $ [ mainVersions count pageText packageAnchor, toHtml " (listed below)." ]
             ++ if count' > 0 then [ toHtml " Additionally, "
@@ -86,7 +85,7 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
 
         reverseTable = thediv << table << reverseTableRows
         reverseTableRows =
-            [ tr ! [theclass "fancy"] << [ th << "Package name", th << "Version", th << "Reverse dependencies" ] ] ++
+            tr ! [theclass "fancy"] << [ th << "Package name", th << "Version", th << "Reverse dependencies" ] :
             [ tr ! [theclass (if odd n then "odd" else "even")] <<
                 [ td << anchor ! [href $ packageLink $ PackageIdentifier (packageName pkg) $ Version [] [] ] << display (packageName pkg)
                 , td << anchor ! (renderStatus status ++ [href $ packageLink pkg]) << display (packageVersion pkg)
@@ -104,7 +103,7 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
         _ ->
           [ paragraph << if total == flat
             then [toHtml "All packages which use ", toPackage pkgname, toHtml " depend on it ", anchor ! [href $ reverseNameUri reverseResource "" pkgname] << "directly", toHtml $ ". " ++ onlyPackage total]
-            else [toPackage pkgname, toHtml $ " has ", anchor ! [href $ reverseNameUri reverseResource "" pkgname] << num total "packages" "package", toHtml $ " which directly " ++ num' total "depend" "depends" ++ " on it, but there are more packages which depend on ", emphasize << "those", toHtml $ " packages. If you flatten the tree of reverse dependencies, you'll find " ++ show flat ++ " packages which use " ++ display pkgname ++ ", and " ++ show (flat-total) ++ " which do so without depending directly on it. All of these packages are listed below."]
+            else [toPackage pkgname, toHtml " has ", anchor ! [href $ reverseNameUri reverseResource "" pkgname] << num total "packages" "package", toHtml $ " which directly " ++ num' total "depend" "depends" ++ " on it, but there are more packages which depend on ", emphasize << "those", toHtml $ " packages. If you flatten the tree of reverse dependencies, you'll find " ++ show flat ++ " packages which use " ++ display pkgname ++ ", and " ++ show (flat-total) ++ " which do so without depending directly on it. All of these packages are listed below."]
           , paragraph << [toHtml "See also the ", anchor ! [href $ reverseStatsUri reverseResource "" pkgname] << "statistics for specific versions", toHtml $ " of " ++ display pkgname ++ "."]
           , reverseTable
           ]
@@ -115,7 +114,7 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
 
         reverseTable = thediv << table << reverseTableRows
         reverseTableRows =
-            [ tr  ! [theclass "fancy"] << [ th << "Package name", th << "Total reverse dependencies" ] ] ++
+            (tr  ! [theclass "fancy"] << [ th << "Package name", th << "Total reverse dependencies" ]) :
             [ tr ! [theclass (if odd n then "odd" else "even")] <<
                 [ td << toPackage pkg
                 , td << [ toHtml $ (show count) ++ " (", anchor ! [href $ reverseAllUri reverseResource "" pkg] << "view", toHtml ")" ]
@@ -144,7 +143,7 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
 
         versionTable = thediv << table << versionTableRows
         versionTableRows =
-            [ tr ! [theclass "fancy"] << [ th << "Version", th << "Reverse dependency count" ] ] ++
+            (tr ! [theclass "fancy"] << [ th << "Version", th << "Reverse dependency count" ]) :
             [ tr ! [theclass (if odd n then "odd" else "even")] <<
                 [ td << anchor ! [href $ packageLink pkgid ] << display version
                 , td << [ toHtml $ show (Map.findWithDefault 0 version versions) ++ " ("
@@ -159,13 +158,13 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
     -- /packages/reverse
     reversePackagesRender :: (PackageName -> String) -> Int -> [(PackageName, Int, Int)] -> [Html]
     reversePackagesRender packageLink pkgCount triples =
-            h2 << ("Reverse dependencies") :
+            h2 << "Reverse dependencies" :
           [ paragraph << [ "Hackage has " ++ show pkgCount ++ " packages. Here are all the packages that have package that depend on them:"]
           , reverseTable ]
       where
         reverseTable = thediv << table << reverseTableRows
         reverseTableRows =
-            [ tr ! [theclass "fancy"] << [ th << "Package name", th << "Total", th << "Direct" ] ] ++
+            (tr ! [theclass "fancy"] << [ th << "Package name", th << "Total", th << "Direct" ]) :
             [ tr ! [theclass (if odd n then "odd" else "even")] <<
                 [ td << anchor ! [href $ packageLink pkgname ] << display pkgname
                 , td << [ toHtml $ show flat ++ " (", anchor ! [href $ reverseStatsUri reverseResource "" pkgname ] << "view", toHtml ")" ]

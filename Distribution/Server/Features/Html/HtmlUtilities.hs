@@ -1,4 +1,4 @@
-{-# LANGUAGE RecursiveDo, FlexibleContexts, RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE FlexibleContexts, RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.Html.HtmlUtilities (
   HtmlUtilities(..),
   htmlUtilities
@@ -9,7 +9,7 @@ import qualified Data.Set as Set
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Core
 import Distribution.Text (display)
-import Data.List (intersperse)
+import Data.List (intersperse, intercalate)
 import Data.Set (Set)
 import Distribution.Server.Features.PackageList
 import Distribution.Server.Pages.Util (packageType)
@@ -24,7 +24,7 @@ data HtmlUtilities = HtmlUtilities {
   , renderTags :: Set Tag -> [Html]
   , renderReviewTags :: Set Tag -> (Set Tag, Set Tag) -> PackageName -> [Html]
   , renderDeps :: PackageName -> ([PackageName], [PackageName]) -> Html
-  , renderPkgPageDeps :: PackageName -> ([PackageName], [PackageName]) -> Html
+  , renderPkgPageDeps :: ([PackageName], [PackageName]) -> Html
   }
 
 htmlUtilities :: CoreFeature -> TagsFeature -> UserFeature -> HtmlUtilities
@@ -44,7 +44,7 @@ htmlUtilities CoreFeature{coreResource}
                          , td $ toHtml $ itemDesc item
                          , td $ toHtml $ show $ itemRevDepsCount item
                          , td $ " (" +++ renderTags (itemTags item) +++ ")"
-                         , td $ "" +++ (intersperse (toHtml ", ") (map renderUser (itemMaintainer item)))
+                         , td $ "" +++ intersperse (toHtml ", ") (map renderUser (itemMaintainer item))
                          ]
         where
             renderUser user = anchor ! [href $ userPageUri userResource "" user] << display user
@@ -60,7 +60,7 @@ htmlUtilities CoreFeature{coreResource}
             ptype = packageType (itemHasLibrary item) (itemNumExecutables item)
                                 (itemNumTests item) (itemNumBenchmarks item)
             classes = case classList of [] -> []; _ -> [theclass $ unwords classList]
-            classList = (case itemDeprecated item of Nothing -> []; _ -> ["deprecated"])
+            classList = case itemDeprecated item of Nothing -> []; _ -> ["deprecated"]
 
     renderTags :: Set Tag -> [Html]
     renderTags tags = intersperse (toHtml ", ")
@@ -70,7 +70,7 @@ htmlUtilities CoreFeature{coreResource}
     -- The page displayed at /package/:package/tags
     renderReviewTags :: Set Tag -> (Set Tag, Set Tag) -> PackageName -> [Html]
     renderReviewTags currTags revTags pkgname=
-        let toStr = concat . intersperse ", " . map display . Set.toList
+        let toStr = intercalate ", " . map display . Set.toList
             tagsStr = toStr currTags
             addns = toStr $ fst revTags
             delns = toStr $ snd revTags
@@ -81,12 +81,12 @@ htmlUtilities CoreFeature{coreResource}
         in
             [ big $ bold $ toHtml $ display pkgname
             , disp
-            , anchor ![href $ "tags/edit" ] << "Propose a tag?", toHtml " or "
+            , anchor ![href "tags/edit" ] << "Propose a tag?", toHtml " or "
             , toHtml "return to ", packageNameLink pkgname, br
             ]
 
-    renderPkgPageDeps :: PackageName -> ([PackageName], [PackageName])-> Html
-    renderPkgPageDeps pkg (direct, indirect) =
+    renderPkgPageDeps :: ([PackageName], [PackageName])-> Html
+    renderPkgPageDeps (direct, indirect) =
         map toHtml [show (length direct), " direct", ", ", show (length indirect), " indirect "] +++
             thespan ! [thestyle "font-size: small", theclass "revdepdetails"]
                 << (" [" +++ anchor ! [href ""] << "details" +++ "]")
@@ -98,10 +98,10 @@ htmlUtilities CoreFeature{coreResource}
         detailsLink
       where
         summary title_ dep = thediv << [ bold (toHtml title_), br
-                                     , p << (intersperse (toHtml ", ") $ map packageNameLink dep)
+                                     , p << intersperse (toHtml ", ") (map packageNameLink dep)
                                      ]
         detailsLink = thespan ! [thestyle "font-size: small"]
                         << (" [" +++ anchor ! [href detailURL] << "details" +++ "]")
-        detailURL = "/package/" ++ (unPackageName pkg) ++ "/reverse"
+        detailURL = "/package/" ++ unPackageName pkg ++ "/reverse"
 
     cores = coreResource

@@ -525,19 +525,19 @@ mkHtmlCore ServerEnv{serverBaseURI}
 
         return $ toResponse . template $
           -- IO-related items
-          [ "baseurl"           $= show (serverBaseURI)
+          [ "baseurl"           $= show serverBaseURI
           , "cabalVersion"      $= display cabalVersion
-          , "tags"              $= (renderTags tags)
-          , "versions"          $= (PagesNew.renderVersion realpkg
-              (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl)
+          , "tags"              $= renderTags tags
+          , "versions"          $= PagesNew.renderVersion realpkg
+              (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl
           , "totalDownloads"    $= totalDown
-          , "hasexecs"          $= (if (null execs) then False else True)
+          , "hasexecs"          $= not (null execs)
           , "recentDownloads"   $= recentDown
           , "votes"             $= pkgVotes
           , "score"             $= pkgScore
-          , "hasrdeps"          $= (if (rdeps == ([],[])) then False else True)
-          , "rdeps"             $= renderPkgPageDeps pkgname rdeps
-          , "rdepsummary"      $= renderDeps pkgname rdeps
+          , "hasrdeps"          $= not (rdeps == ([],[]))
+          , "rdeps"             $= renderPkgPageDeps rdeps
+          , "rdepsummary"       $= renderDeps pkgname rdeps
           , "buildStatus"       $= buildStatus
           ] ++
           -- Items not related to IO (mostly pure functions)
@@ -579,7 +579,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
       pkgIndex <- queryGetPackageIndex
       let packageNames = Pages.toPackageNames pkgIndex
       pkgDetails <- liftIO $ makeItemList packageNames
-      let rowList = map (makeRow) pkgDetails
+      let rowList = map makeRow pkgDetails
           tabledata = "" +++ rowList +++ ""
       template <- getTemplate templates "tag-interface.html"
       return $ toResponse $ template
@@ -1405,7 +1405,7 @@ mkHtmlDownloads HtmlUtilities{..} DownloadFeature{..} = HtmlDownloads{..}
             [ tr << [ th << "Package name", th << "Downloads" ] ] ++
             [ tr ! [theclass (if odd n then "odd" else "even")] <<
                 [ td << packageNameLink pkgname
-                , td << [ toHtml $ (show count) ] ]
+                , td << [ toHtml (show count) ] ]
             | ((pkgname, count), n) <- zip pkgList [(1::Int)..] ]
 
     sortedPackages :: RecentDownloads -> [(PackageName, Int)]
@@ -1471,12 +1471,12 @@ mkHtmlTags HtmlUtilities{..}
         tagList <- queryGetTagList
         let withCounts = filter ((>0) . snd) . map (\(tg, pkgs) -> (tg, Set.size pkgs)) $ tagList
             countSort = sortBy (flip compare `on` snd) withCounts
-        return $ toResponse $ Resource.XHtml $ hackagePage "Hackage tags" $
+        return $ toResponse $ Resource.XHtml $ hackagePage "Hackage tags"
           [ h2 << "Hackage tags"
           , h4 << "By name"
-          , paragraph ! [theclass "toc"] << (intersperse (toHtml ", ") $ map (tagItem . fst) withCounts)
+          , paragraph ! [theclass "toc"] << intersperse (toHtml ", ") (map (tagItem . fst) withCounts)
           , h4 << "By frequency"
-          , paragraph ! [theclass "toc"] << (intersperse (toHtml ", ") $ map (toHtml . tagCountItem) countSort)
+          , paragraph ! [theclass "toc"] << intersperse (toHtml ", ") (map (toHtml . tagCountItem) countSort)
           ]
       where tagCountItem (tg, count) =
               [ tagItem tg
@@ -1486,12 +1486,12 @@ mkHtmlTags HtmlUtilities{..}
 
     putAliasEdit :: DynamicPath -> ServerPartE Response
     putAliasEdit dpath = do
-        let tagname = snd (dpath !! 0)
+        tagname <- tagInPath dpath
         mergeTags (Tag tagname)
-        return $ toResponse $ Resource.XHtml $ hackagePage "Merged Tag"  $
+        return $ toResponse $ Resource.XHtml $ hackagePage "Merged Tag"
             [ h2 << "Merged tag"
             , toHtml "Return to "
-            , anchor ! [href $ "/packages/tags"] << "tag listings"
+            , anchor ! [href "/packages/tags"] << "tag listings"
             ]
 
     serveAliasForm :: DynamicPath -> ServerPartE Response
@@ -1508,7 +1508,7 @@ mkHtmlTags HtmlUtilities{..}
                                 ]
                             ]
                         ]
-        return $ toResponse $ Resource.XHtml $ hackagePage ("Merge Tag " ++ tagname) $ aliasForm
+        return $ toResponse $ Resource.XHtml $ hackagePage ("Merge Tag " ++ tagname) aliasForm
 
     serveTagListing :: DynamicPath -> ServerPartE Response
     serveTagListing dpath = do
@@ -1517,7 +1517,7 @@ mkHtmlTags HtmlUtilities{..}
         let tagd = "Packages tagged " ++ display tg
             pkgs = Set.toList pkgnames
         items <- liftIO $ makeItemList pkgs
-        let rowList = map (makeRow) items
+        let rowList = map makeRow items
             (mtag, histogram) = Map.updateLookupWithKey (\_ _ -> Nothing) tg $ tagHistogram items
             -- make a 'related tags' section, so exclude this tag from the histogram
             count = fromMaybe 0 mtag
@@ -1568,7 +1568,7 @@ mkHtmlTags HtmlUtilities{..}
       currTags <- queryTagsForPackage pkgname
       revTags <- queryReviewTagsForPackage pkgname
       template <- getTemplate templates "tag-edit.html"
-      let toStr = concat . intersperse ", " . map display . Set.toList
+      let toStr = intercalate ", " . map display . Set.toList
           tagsStr = toStr currTags
           addns = toStr $ fst  revTags
           delns = toStr $ snd  revTags
@@ -1581,9 +1581,9 @@ mkHtmlTags HtmlUtilities{..}
           , "tags"              $= tagsStr
           , "delns"             $= delns
           , "istrustee"         $= trustainer
-          , "isuser"            $= if trustainer then False else True
+          , "isuser"            $= not trustainer
           ]
-        else return $ toResponse $ Resource.XHtml $ hackagePage "Error" $ [h2 << "Authorization Error"
+        else return $ toResponse $ Resource.XHtml $ hackagePage "Error" [h2 << "Authorization Error"
                                                                             , paragraph << "You need to be logged in to propose tags"]
 
 
@@ -1694,7 +1694,7 @@ mkHtmlSearch HtmlUtilities{..}
                 ptype = packageType (itemHasLibrary item) (itemNumExecutables item)
                                     (itemNumTests item) (itemNumBenchmarks item)
                 classes = case classList of [] -> []; _ -> [theclass $ unwords classList]
-                classList = (case itemDeprecated item of Nothing -> []; _ -> ["deprecated"])
+                classList = case itemDeprecated item of Nothing -> []; _ -> ["deprecated"]
 
             range = (offset, offset + length pkgDetails)
             moreResultsLink =
@@ -1821,8 +1821,8 @@ mkHtmlSearch HtmlUtilities{..}
         resetParamsForm termsStr =
           let SearchRankParameters{..} = defaultSearchRankParameters in
           form ! [XHtml.method "GET", action "/packages/search"] <<
-            (concat $
-              [ input ! [ thetype "submit", value "Reset parameters" ]
+            concat
+             ([ input ! [ thetype "submit", value "Reset parameters" ]
               , input ! [ thetype "hidden", name "terms", value termsStr ]
               , input ! [ thetype "hidden", name "explain" ]
               , input ! [ thetype "hidden", name "k1", value (show paramK1) ] ]

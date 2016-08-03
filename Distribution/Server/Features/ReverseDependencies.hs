@@ -2,7 +2,6 @@
 module Distribution.Server.Features.ReverseDependencies (
     ReverseFeature(..),
     ReverseCount(..),
-    reverseResource,
     ReverseResource(..),
     reverseHook,
     initReverseFeature,
@@ -18,8 +17,6 @@ import Distribution.Server.Features.PreferredVersions
 import Distribution.Server.Packages.PackageIndex (packageNames)
 
 import Distribution.Server.Features.ReverseDependencies.State
-
-import Distribution.Server.Features.PreferredVersions
 import qualified Distribution.Server.Framework.Cache as Cache
 
 import Distribution.Package
@@ -116,7 +113,7 @@ reverseStateComponent stateDir = do
     , getState     = query st GetReverseIndex
     , putState     = update st . ReplaceReverseIndex
     -- Nothing for now
-    , backupState  = \_ revDeps -> []
+    , backupState  = \_ _ -> []
     , restoreState = RestoreBackup {
                          restoreEntry    = error "Unexpected backup entry"
                        , restoreFinalize = return emptyReverseIndex
@@ -175,16 +172,16 @@ reverseFeature CoreFeature{..}
     setReverse pkg deps = do
       modifyMemState calculatedRI (addPackage pkg deps)
       void $ updateState reverseState $ AddReversePackage pkg deps
-      runHook_ reverseHook ([pkg])
+      runHook_ reverseHook [pkg]
 
 
     reverseResource = fix $ \r -> ReverseResource
-          { reversePackage = resourceAt ("/package/:package/reverse.:format")
-          , reversePackageOld = resourceAt ("/package/:package/reverse/old.:format")
-          , reversePackageAll = resourceAt ("/package/:package/reverse/all.:format")
-          , reversePackageStats = resourceAt ("/package/:package/reverse/summary.:format")
-          , reversePackages = resourceAt ("/packages/reverse.:format")
-          , reversePackagesAll = resourceAt ("/packages/reverse/all.:format")
+          { reversePackage = resourceAt "/package/:package/reverse.:format"
+          , reversePackageOld = resourceAt "/package/:package/reverse/old.:format"
+          , reversePackageAll = resourceAt "/package/:package/reverse/all.:format"
+          , reversePackageStats = resourceAt "/package/:package/reverse/summary.:format"
+          , reversePackages = resourceAt "/packages/reverse.:format"
+          , reversePackagesAll = resourceAt "/packages/reverse/all.:format"
 
           , reverseUri = \format pkg -> renderResource (reversePackage r) [display pkg, format]
           , reverseNameUri = \format pkg -> renderResource (reversePackage r) [display pkg, format]
@@ -234,13 +231,11 @@ reverseFeature CoreFeature{..}
         let rev' = map fst $ Map.toList rev
         revcount <- mapM revPackageStats (pkg:rev')
         let counts = zip (pkg:rev') (map directCount revcount)
-            toRender (i, i') (pkgname, (version, status)) = case filterFunc status of
-                False -> (,) (i, i'+1) Nothing
-                True  -> (,) (i+1, i') $ Just $ ReverseRender {
-                    rendRevPkg = PackageIdentifier pkgname version,
-                    rendRevStatus = status,
-                    rendRevCount = fromJust $ lookup pkgname counts
-                }
+            toRender (i, i') (pkgname, (version, status)) = if filterFunc status then (,) (i+1, i') $ Just ReverseRender {
+                                                                rendRevPkg = PackageIdentifier pkgname version,
+                                                                rendRevStatus = status,
+                                                                rendRevCount = fromJust $ lookup pkgname counts
+                                                            } else (,) (i, i'+1) Nothing
             (res, rlist) = mapAccumL toRender (0, 0) (Map.toList rev)
             pkgCount = fromJust $ lookup pkg counts
         return $ ReversePageRender (catMaybes rlist) res pkgCount
@@ -266,14 +261,12 @@ reverseFeature CoreFeature{..}
         return $ zip (Set.toList deps) (map totalCount counts)
 
     revPackageStats :: MonadIO m => PackageName -> m ReverseCount
-    revPackageStats pkgname = do
-        count <- queryState reverseState (GetReverseCount pkgname)
-        return count
+    revPackageStats pkgname =
+        queryState reverseState (GetReverseCount pkgname)
 
     revPackageSummary :: MonadIO m => PackageId -> m (Int, Int)
-    revPackageSummary pkg = do
-        count <- queryState reverseState (GetReverseCountId pkg)
-        return count
+    revPackageSummary pkg =
+        queryState reverseState (GetReverseCountId pkg)
 
     -- -- This returns a list of (package name, direct dependencies, flat dependencies)
     -- -- for all packages. An interesting fact: it even does so for packages which
@@ -286,6 +279,6 @@ reverseFeature CoreFeature{..}
     revSummary = do
         ReverseIndex index _ _ <- queryReverseIndex
         let pkgnames = packageNames index
-            util pii = sortBy (\(_,d1,_) (_,d2,_) -> compare d1 d2) pii
+            util = sortBy (\(_,d1,_) (_,d2,_) -> compare d1 d2)
         counts <- mapM revPackageStats pkgnames
         return $ util $ zip3 pkgnames (map directCount counts) (map totalCount counts)

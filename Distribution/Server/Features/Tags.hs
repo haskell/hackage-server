@@ -107,7 +107,7 @@ initTagsFeature ServerEnv{serverStateDir} = do
           Just pkginfo -> do
             let pkgname = packageName pkgid
                 tags = constructImmutableTags . pkgDesc $ pkginfo
-            aliases <- sequence $ map (\tag -> queryState tagAlias $ GetTagAlias tag) tags
+            aliases <- mapM (queryState tagAlias . GetTagAlias) tags
             let newtags = Set.fromList aliases
             updateState tagsState . SetPackageTags pkgname $ newtags
             runHook_ updateTag (Set.singleton pkgname, newtags)
@@ -196,8 +196,8 @@ tagsFeature CoreFeature{ queryGetPackageIndex
     initImmutableTags = do
             index <- queryGetPackageIndex
             let calcTags = tagPackages $ constructImmutableTagIndex index
-            aliases <- sequence $ map (\tag -> queryState tagsAlias $ GetTagAlias tag) $ Map.keys calcTags
-            let calcTags' = Map.toList . Map.fromListWith (Set.union) $ zip aliases (Map.elems calcTags)
+            aliases <- mapM (queryState tagsAlias . GetTagAlias) $ Map.keys calcTags
+            let calcTags' = Map.toList . Map.fromListWith Set.union $ zip aliases (Map.elems calcTags)
             forM_ calcTags' $ uncurry setCalculatedTag
 
     queryGetTagList :: MonadIO m => m [(Tag, Set PackageName)]
@@ -241,13 +241,13 @@ tagsFeature CoreFeature{ queryGetPackageIndex
             _ -> errBadRequest "Tag not recognised" [MText "Couldn't parse tag. It should be a single tag."]
 
     -- tags on merging
-    constructMergedTagIndex :: forall m. (Functor m, MonadIO m) => Tag -> Tag -> PackageIndex PkgInfo -> m (PackageTags)
+    constructMergedTagIndex :: forall m. (Functor m, MonadIO m) => Tag -> Tag -> PackageIndex PkgInfo -> m PackageTags
     constructMergedTagIndex orig depr = foldM addToTags emptyPackageTags . PackageIndex.allPackagesByName
       where addToTags calcTags pkgList = do
                 let info = pkgDesc $ last pkgList
                     !pn = packageName info
                 pkgTags <- queryTagsForPackage pn
-                if (Set.member depr pkgTags)
+                if Set.member depr pkgTags
                     then do
                         let newTags = Set.delete depr (Set.insert orig pkgTags)
                         void $ updateState tagsState $ SetPackageTags pn newTags
@@ -263,7 +263,7 @@ tagsFeature CoreFeature{ queryGetPackageIndex
       raddns <- optional $ look "raddns"
       rdelns <- optional $ look "rdelns"
       case simpleParse =<< addns of
-          Just (TagList add) -> do
+          Just (TagList add) ->
                 case simpleParse =<< delns of
                     Just (TagList del) -> do
                         trustainer <- authorisedAsMaintainerOrTrustee pkgname
@@ -271,7 +271,7 @@ tagsFeature CoreFeature{ queryGetPackageIndex
                         if trustainer
                             then do
                                 calcTags <- queryTagsForPackage pkgname
-                                aliases <- sequence $ map (\tag -> queryState tagsAlias $ GetTagAlias tag) add
+                                aliases <- mapM (queryState tagsAlias . GetTagAlias) add
                                 revTags <- queryReviewTagsForPackage pkgname
                                 let tagSet = (addTags `Set.union` calcTags) `Set.difference` delTags
                                     addTags = Set.fromList aliases
@@ -290,7 +290,7 @@ tagsFeature CoreFeature{ queryGetPackageIndex
                                 return ()
                             else if user
                                 then do
-                                    aliases <- sequence $ map (\tag -> queryState tagsAlias $ GetTagAlias tag) add
+                                    aliases <- mapM (queryState tagsAlias . GetTagAlias) add
                                     calcTags <- queryTagsForPackage pkgname
                                     let addTags = Set.fromList aliases `Set.difference` calcTags
                                         delTags = Set.fromList del `Set.intersection` calcTags
@@ -340,11 +340,11 @@ constructImmutableTags genDesc =
         !ht = hasTests desc
         !hb = hasBenchmarks desc
     in licenseToTag l
-    ++ (if hl then [Tag "library"] else [])
-    ++ (if he then [Tag "program"] else [])
-    ++ (if ht then [Tag "test"] else [])
-    ++ (if hb then [Tag "benchmark"] else [])
-    ++ (constructCategoryTags desc)
+    ++ [Tag "library" | hl] -- (if hl then [Tag "library"] else [])
+    ++ [Tag "program" | he]
+    ++ [Tag "test" | ht]
+    ++ [Tag "benchmark" | hb]
+    ++ constructCategoryTags desc
   where
     licenseToTag :: License -> [Tag]
     licenseToTag l = case l of

@@ -28,7 +28,7 @@ import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
 
 import Control.Concurrent
-import Data.Maybe (catMaybes)
+import Data.Maybe (mapMaybe)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -186,14 +186,13 @@ listFeature CoreFeature{..}
 
     modifyItem pkgname token = do
         hasItem <- fmap (Map.member pkgname) $ readMemState itemCache
-        case hasItem of
-            True  -> modifyMemState itemCache $ Map.adjust token pkgname
-            False -> do
-                index <- queryGetPackageIndex
-                let pkgs = PackageIndex.lookupPackageName index pkgname
-                case pkgs of
-                    [] -> return () --this shouldn't happen
-                    _  -> modifyMemState itemCache . uncurry Map.insert =<< constructItem (last pkgs)
+        if hasItem then modifyMemState itemCache $ Map.adjust token pkgname
+                   else (do
+                           index <- queryGetPackageIndex
+                           let pkgs = PackageIndex.lookupPackageName index pkgname
+                           case pkgs of
+                               [] -> return () --this shouldn't happen
+                               _  -> modifyMemState itemCache . uncurry Map.insert =<< constructItem (last pkgs))
     updateDesc pkgname = do
         index <- queryGetPackageIndex
         let pkgs = PackageIndex.lookupPackageName index pkgname
@@ -239,7 +238,7 @@ listFeature CoreFeature{..}
     makeItemList :: [PackageName] -> IO [PackageItem]
     makeItemList pkgnames = do
         mainMap <- readMemState itemCache
-        return $ catMaybes $ map (flip Map.lookup mainMap) pkgnames
+        return $ mapMaybe (`Map.lookup` mainMap) pkgnames
 
     makeItemMap :: Map PackageName a -> IO (Map PackageName (PackageItem, a))
     makeItemMap pkgmap = do
@@ -290,12 +289,12 @@ updateReverseItem :: ReverseCount -> PackageItem -> PackageItem
 updateReverseItem revCount item =
     item {
         itemRevDepsCount = directCount revCount,
-        itemHotness = fromIntegral (directCount revCount)*2 + (itemVotes item) + fromIntegral (itemDownloads item)
+        itemHotness = fromIntegral (directCount revCount)*2 + itemVotes item + fromIntegral (itemDownloads item)
     }
 
 updateDownload :: Int -> PackageItem -> PackageItem
 updateDownload count item =
     item {
         itemDownloads = count,
-        itemHotness = fromIntegral count + (itemVotes item) + fromIntegral (itemRevDepsCount item)*2
+        itemHotness = fromIntegral count + itemVotes item + fromIntegral (itemRevDepsCount item)*2
     }

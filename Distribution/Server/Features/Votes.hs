@@ -25,6 +25,7 @@ import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HashMap
 
+import Control.Monad (when)
 import Control.Arrow (first)
 import qualified Text.XHtml.Strict as X
 
@@ -34,7 +35,7 @@ data VotesFeature = VotesFeature {
     votesFeatureInterface   :: HackageFeature
   , didUserVote             :: forall m. MonadIO m => PackageName -> UserId -> m Bool
   , pkgNumVotes             :: forall m. MonadIO m => PackageName -> m Int
-  , pkgNumScore           :: forall m. MonadIO m => PackageName -> m Float
+  , pkgNumScore             :: forall m. MonadIO m => PackageName -> m Float
   , votesUpdated            :: Hook (PackageName, Float) ()
   , renderVotesHtml         :: PackageName -> ServerPartE X.Html
 }
@@ -166,9 +167,7 @@ votesFeature  ServerEnv{..}
       guardValidPackageName pkgname
       success <- updateState votesState (RemoveVote pkgname uid)
       pkgScore <- pkgNumScore pkgname
-      if success
-        then runHook_ votesUpdated (pkgname, pkgScore)
-        else return ()
+      when success $ runHook_ votesUpdated (pkgname, pkgScore)
       let responseMsg | success   = "Package vote removed successfully."
                       | otherwise = "User has not voted for this package."
       ok . toResponse $ responseMsg

@@ -74,7 +74,7 @@ data TagAlias = TagAlias (Map Tag (Set Tag)) deriving (Eq, Show, Typeable)
 addTagAlias :: Tag -> Tag -> Update TagAlias ()
 addTagAlias tag alias = do
         TagAlias  m <- get
-        put (TagAlias (Map.insertWith (Set.union) tag (Set.singleton alias) m))
+        put (TagAlias (Map.insertWith Set.union tag (Set.singleton alias) m))
 
 lookupTagAlias :: Tag -> Query TagAlias (Maybe (Set Tag))
 lookupTagAlias tag
@@ -84,9 +84,9 @@ lookupTagAlias tag
 getTagAlias :: Tag -> Query TagAlias Tag
 getTagAlias tag
     = do TagAlias m <- ask
-         if tag `elem` (Map.keys m)
+         if tag `elem` Map.keys m
             then return tag
-            else if tag `Set.member` (foldr Set.union Set.empty $ Map.elems m)
+            else if tag `Set.member` foldr Set.union Set.empty (Map.elems m)
                 then return $ head (Map.keys $ Map.filter (tag `Set.member`) m)
                 else return tag
 
@@ -119,7 +119,7 @@ setTags :: PackageName -> Set Tag -> PackageTags -> PackageTags
 setTags pkgname tagList = alterTags pkgname (keepSet tagList)
 
 setAliases :: Tag -> Set Tag -> TagAlias -> TagAlias
-setAliases tag aliases (TagAlias ta) = TagAlias (Map.insertWith (Set.union) tag aliases ta)
+setAliases tag aliases (TagAlias ta) = TagAlias (Map.insertWith Set.union tag aliases ta)
 
 deletePackageTags :: PackageName -> PackageTags -> PackageTags
 deletePackageTags name = alterTags name Nothing
@@ -127,20 +127,16 @@ deletePackageTags name = alterTags name Nothing
 addTag :: PackageName -> Tag -> PackageTags -> Maybe PackageTags
 addTag name tag (PackageTags tags packages review) =
     let existing = Map.findWithDefault Set.empty name tags
-    in case tag `Set.member` existing of
-        True  -> Nothing
-        False -> Just $ PackageTags (addSetMap name tag tags)
-                                    (addSetMap tag name packages)
-                                    review
+    in if tag `Set.member` existing then Nothing else Just $ PackageTags (addSetMap name tag tags)
+                                   (addSetMap tag name packages)
+                                   review
 
 removeTag :: PackageName -> Tag -> PackageTags -> Maybe PackageTags
 removeTag name tag (PackageTags tags packages review) =
     let existing = Map.findWithDefault Set.empty name tags
-    in case tag `Set.member` existing of
-        True -> Just $ PackageTags (removeSetMap name tag tags)
-                                   (removeSetMap tag name packages)
-                                   review
-        False -> Nothing
+    in if tag `Set.member` existing then Just $ PackageTags (removeSetMap name tag tags)
+                                  (removeSetMap tag name packages)
+                                  review else Nothing
 
 addSetMap :: (Ord k, Ord a) => k -> a -> Map k (Set a) -> Map k (Set a)
 addSetMap key val = Map.alter (Just . Set.insert val . fromMaybe Set.empty) key
