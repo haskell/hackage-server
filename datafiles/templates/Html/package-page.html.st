@@ -177,7 +177,7 @@
                 [my rating : $myrating$]
             </div>
           $endif$
-                [<a href="" class="clear-rating">Clear Rating</a>]
+                [<a href="" class="clear-rating">clear rating</a>]
             <ul class="star-rating">
                 <li class="star" id="1">&lambda;</li>
                 <li class="star" id="2">&lambda;</li>
@@ -185,10 +185,17 @@
             </ul>
           </td>
         </tr>
+
+        <tr>
+            <th>Related</th>
+            <td>$related$</td>
+        </tr>
+
         <tr>
           <th>Status</th>
           <td>$buildStatus$</td>
         </tr>
+
       </tbody>
     </table>
     </div> <!-- /properties -->

@@ -280,6 +280,7 @@ htmlFeature env@ServerEnv{..}
                                       cacheNamesPage
                                       templates
                                       list
+                                      names
     htmlUsers      = mkHtmlUsers      user usersdetails
     htmlUploads    = mkHtmlUploads    utilities upload
     htmlDocUploads = mkHtmlDocUploads utilities core docsCore templates
@@ -410,6 +411,7 @@ mkHtmlCore :: ServerEnv
            -> AsyncCache Response
            -> Templates
            -> ListFeature
+           -> SearchFeature
            -> HtmlCore
 mkHtmlCore ServerEnv{serverBaseURI}
            utilities@HtmlUtilities{..}
@@ -437,6 +439,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
            cacheNamesPage
            templates
            ListFeature{makeItemList}
+           SearchFeature{..}
   = HtmlCore{..}
   where
     cores@CoreResource{packageInPath, lookupPackageName, lookupPackageId} = coreResource
@@ -504,12 +507,16 @@ mkHtmlCore ServerEnv{serverBaseURI}
         recentDown    <- cmFind pkgname `liftM` recentPackageDownloads
         pkgVotes      <- pkgNumVotes pkgname
         pkgScore      <- pkgNumScore pkgname
-        -- myRating      <-
+        -- TODO: myRating
         mdoctarblob   <- queryDocumentation realpkg
         rdeps         <- queryReverseDeps pkgname
         tags          <- queryTagsForPackage pkgname
         deprs         <- queryGetDeprecatedFor pkgname
         mreadme       <- makeReadme render
+        pkgnames <- searchPackages [unPackageName pkgname]
+        let (pageResults, moreResults) = splitAt 5 pkgnames
+        pkgDetails <- liftIO $ makeItemList pageResults
+        let related = toHtml $ resultsArea pkgDetails moreResults (unPackageName pkgname)
 
         buildStatus   <- renderBuildStatus
           documentationFeature reportsFeature realpkg
@@ -535,6 +542,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
           , "recentDownloads"   $= recentDown
           , "votes"             $= pkgVotes
           , "score"             $= pkgScore
+          , "related"           $= related
           , "hasrdeps"          $= not (rdeps == ([],[]))
           , "rdeps"             $= renderPkgPageDeps rdeps
           , "rdepsummary"       $= renderDeps pkgname rdeps
@@ -547,6 +555,22 @@ mkHtmlCore ServerEnv{serverBaseURI}
             deprs
             utilities
           where
+            resultsArea pkgDetails moreResults termsStr =
+                [ case pkgDetails of
+                    [] -> toHtml "No matches"
+                    _  -> toHtml
+                          [ thediv << (intersperse (toHtml ", ") $ map (packageNameLink . itemName) (tail pkgDetails))
+                          , if null moreResults
+                              then noHtml
+                              else anchor ! [href moreResultsLink]
+                                         << "More results..."
+                          ]
+                ]
+              where
+                moreResultsLink =
+                    "/packages/search?"
+                 ++ "terms="   ++ escapeURIString isUnreserved termsStr
+
             makeReadme :: MonadIO m => PackageRender -> m (Maybe BS.ByteString)
             makeReadme render = case rendReadme render of
               Just (tarfile, _, offset, _) ->

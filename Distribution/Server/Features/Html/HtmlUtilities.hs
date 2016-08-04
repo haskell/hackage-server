@@ -17,11 +17,11 @@ import Distribution.Package
 import Distribution.Server.Features.Users
 
 data HtmlUtilities = HtmlUtilities {
-    packageLink :: PackageId -> Html
-  , packageNameLink :: PackageName -> Html
-  , renderItem :: PackageItem -> Html
-  , makeRow :: PackageItem -> Html
-  , renderTags :: Set Tag -> [Html]
+    packageLink      :: PackageId -> Html
+  , packageNameLink  :: PackageName -> Html
+  , renderItem       :: PackageItem -> Html
+  , makeRow          :: PackageItem -> Html
+  , renderTags       :: Set Tag -> [Html]
   , renderReviewTags :: Set Tag -> (Set Tag, Set Tag) -> PackageName -> [Html]
   , renderDeps :: PackageName -> ([PackageName], [PackageName]) -> Html
   , renderPkgPageDeps :: ([PackageName], [PackageName]) -> Html
