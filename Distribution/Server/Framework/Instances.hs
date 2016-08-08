@@ -269,8 +269,10 @@ instance Text UTCTime where
 instance Arbitrary PackageName where
   arbitrary = PackageName <$> vectorOf 4 (choose ('a', 'z'))
 
+#if !(MIN_VERSION_QuickCheck(2,9,0))
 instance Arbitrary Version where
   arbitrary = Version <$> listOf1 (choose (1, 15)) <*> pure []
+#endif
 
 instance Arbitrary PackageIdentifier where
   arbitrary = PackageIdentifier <$> arbitrary <*> arbitrary
