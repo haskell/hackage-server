@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE DeriveGeneric, RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.ReverseDependencies (
     ReverseFeature(..),
     ReverseCount(..),
@@ -37,6 +37,9 @@ import qualified Data.Set as Set
 import Control.Monad (liftM, forever)
 import Control.Monad.Trans (MonadIO)
 import Control.Concurrent.Chan
+import Data.Aeson
+import GHC.Generics hiding (packageName)
+import Data.ByteString.Lazy (ByteString)
 
 data ReverseFeature = ReverseFeature {
     reverseFeatureInterface :: HackageFeature,
@@ -54,7 +57,8 @@ data ReverseFeature = ReverseFeature {
     revPackageFlat :: forall m. MonadIO m => PackageName -> m [(PackageName, Int)],
     revPackageStats :: forall m. MonadIO m => PackageName -> m ReverseCount,
     revPackageSummary :: forall m. MonadIO m => PackageId -> m (Int, Int),
-    revSummary :: forall m. MonadIO m => m [(PackageName, Int, Int)]
+    revSummary :: forall m. MonadIO m => m [(PackageName, Int, Int)],
+    revJSON :: forall m. MonadIO m => m ByteString
 }
 
 instance IsHackageFeature ReverseFeature where
@@ -132,6 +136,18 @@ data ReversePageRender = ReversePageRender {
     rendFilterCount :: (Int, Int),
     rendPageTotal :: Int
 }
+
+-- data Node = Node {id::Int, label::String} deriving Generic
+data Edge = Edge {
+    id::Int,
+    name::String,
+    deps::[String]
+    } deriving Generic
+-- data JGraph = JGraph { nodes::[Node], edges::[Edge]} deriving Generic
+-- instance ToJSON Node
+instance ToJSON Edge
+-- instance ToJSON JGraph
+-- instance ToJSON PackageName
 
 reverseFeature :: CoreFeature
                -> Chan (IO [PackageId])
@@ -219,6 +235,15 @@ reverseFeature CoreFeature{..}
         dispInfo <- revDisplayInfo
         revs <- queryReverseIndex
         return $ perPackageReverse dispInfo revs pkgname
+
+    revJSON :: MonadIO m => m ByteString
+    revJSON = do
+        ReverseIndex _ revdeps nodemap <- queryReverseIndex
+        let assoc = takeWhile (\(a,_) -> a < Bimap.size nodemap) $ Arr.assocs . Gr.transposeG $ revdeps
+            nodeToString node = unPackageName (packageName (nodemap Bimap.!> node))
+            -- nodes = map (uncurry Node) $ map (\n -> (fst n, nodeToString (fst n))) assoc
+            edges = map (\(a,b) -> Edge a (nodeToString a) (map (\x-> nodeToString x) b)) assoc
+        return $ encode edges
 
     revDisplayInfo :: MonadIO m => m VersionIndex
     revDisplayInfo = do

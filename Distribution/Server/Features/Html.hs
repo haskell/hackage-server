@@ -133,6 +133,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    , "package-page.html"
                    , "tag-interface.html"
                    , "tag-edit.html"
+                   , "graph.html"
                    ]
 
 
@@ -433,7 +434,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
            PackageContentsFeature{packageRender}
            HtmlTags{..}
            HtmlReverse{..}
-           ReverseFeature{queryReverseDeps}
+           ReverseFeature{queryReverseDeps, revJSON}
            HtmlPreferred{..}
            cachePackagesPage
            cacheNamesPage
@@ -472,6 +473,18 @@ mkHtmlCore ServerEnv{serverBaseURI}
         , resourceGet = [("html",
                 serveTagIndex)]
           }
+      , (resourceAt "/packages/graph.json" ) {
+            resourceDesc = [(GET, "Show JSON of package dependency information")]
+        , resourceGet = [("json",
+                serveGraphJSON)]
+          }
+
+      , (resourceAt "/packages/graph" ) {
+            resourceDesc = [(GET, "Show graph of package dependency information")]
+        , resourceGet = [("html",
+                serveGraph)]
+          }
+
       , (extendResource $ corePackagesPage cores) {
             resourceDesc = [(GET, "Show package index")]
           , resourceGet  = [("html", const $ readAsyncCache cachePackagesPage)]
@@ -610,6 +623,16 @@ mkHtmlCore ServerEnv{serverBaseURI}
         [ "heading"   $= "All packages"
         , "content"   $= "A browsable index of all the packages"
         , "tabledata" $= tabledata ]
+
+    serveGraphJSON :: DynamicPath -> ServerPartE Response
+    serveGraphJSON _ = do
+        graph <- revJSON
+        ok . toResponse $ graph
+
+    serveGraph :: DynamicPath -> ServerPartE Response
+    serveGraph _ = do
+      template <- getTemplate templates "graph.html"
+      return $ toResponse $ template []
 
     serveDistroMonitorPage :: DynamicPath -> ServerPartE Response
     serveDistroMonitorPage dpath = do
