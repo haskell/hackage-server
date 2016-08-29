@@ -1308,7 +1308,7 @@ mkHtmlPreferred HtmlUtilities{..}
                   , intercalate ", " (map display deprs)]
         , toHtml "The version range given to this package, therefore, is " +++ strong (toHtml $ rendSumRange pref)
         , h4 << "Versions affected"
-        , paragraph << "Blue versions are normal versions. Green are those out of any preferred version ranges. Gray are deprecated."
+        , paragraph << "Orange versions are normal versions. Green are those out of any preferred version ranges. Gray are deprecated."
         , paragraph << (snd $ Pages.renderVersion
                                   (PackageIdentifier pkgname $ Version [] [])
                                   (classifyVersions prefInfo $ map packageVersion pkgs) Nothing)
