@@ -131,7 +131,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    , "distro-monitor.html"
                    , "revisions.html"
                    , "package-page.html"
-                   , "tag-interface.html"
+                   , "table-interface.html"
                    , "tag-edit.html"
                    , "graph.html"
                    ]
@@ -618,7 +618,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
       pkgDetails <- liftIO $ makeItemList packageNames
       let rowList = map makeRow pkgDetails
           tabledata = "" +++ rowList +++ ""
-      template <- getTemplate templates "tag-interface.html"
+      template <- getTemplate templates "table-interface.html"
       return $ toResponse $ template
         [ "heading"   $= "All packages"
         , "content"   $= "A browsable index of all the packages"
@@ -1568,7 +1568,7 @@ mkHtmlTags HtmlUtilities{..}
             (mtag, histogram) = Map.updateLookupWithKey (\_ _ -> Nothing) tg $ tagHistogram items
             -- make a 'related tags' section, so exclude this tag from the histogram
             count = fromMaybe 0 mtag
-        template <- getTemplate templates "tag-interface.html"
+        template <- getTemplate templates "table-interface.html"
         return $ toResponse $ template
           [ "heading"   $= tagd
           , "content"   $=  case items of
@@ -1693,7 +1693,7 @@ mkHtmlSearch HtmlUtilities{..}
 
             let rowList = map makeRow pkgDetails
                 tabledata = "" +++ rowList
-            template <- getTemplate templates "tag-interface.html"
+            template <- getTemplate templates "table-interface.html"
             return $ toResponse $ template
               [ "heading"   $= toHtml (searchForm termsStr False)
               , "content"   $= "A browsable index of all the packages"

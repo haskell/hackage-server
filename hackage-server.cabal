@@ -585,6 +585,7 @@ Test-Suite PackageTests
                     Cabal,
                     test-framework,
                     test-framework-hunit,
+                    bimap      == 0.3.*,
                     HUnit
 
 Test-Suite HashTests
@@ -612,4 +613,5 @@ Test-Suite HashTests
                     vector,
                     -- test-specific dependencies
                     tasty       == 0.11.*,
+                    bimap      == 0.3.*,
                     tasty-hunit >= 0.9.2 && < 0.10

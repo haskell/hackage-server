@@ -4,7 +4,7 @@
     <head>
         <title>Hackage Dependencies Graph</title>
         <script src="/static/graph/vivagraph.js"></script>
-        <script src="/static/graph/jquery.min.js"></script>`
+        <script src="/static/jquery.min.js"></script>`
         <script src="/static/graph/tmpl.js"></script>
 
         <link rel="stylesheet" href="/static/graph/graph.css">

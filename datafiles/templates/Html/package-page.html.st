@@ -6,7 +6,7 @@
     $package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$
   </title>
   <link rel="canonical" href="$baseurl$/package/$package.name$" />
-  <script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
+  <script src="/static/jquery.min.js"></script>
 </head>
 
 <body>
@@ -16,7 +16,6 @@
     </a>})$
 
   <div id="content">
-
     <h1>The $package.name$ package</h1>
     <div style="font-size: small">
       [ <a href="/packages/tags">Tags: </a>$tags$ ]
@@ -35,15 +34,14 @@
     $endif$
 
     $if(package.optional.hasReadme)$
-    <hr>
-    [<a href="#readme">Skip to Readme</a>]
+      <hr>
+      [<a href="#readme">Skip to Readme</a>]
     $endif$
 
     <div id="properties">
     <h2>Properties</h2>
     <table class="properties">
       <tbody>
-
         <tr>
           <th>Versions</th>
           <td>$versions$</td>
@@ -77,6 +75,7 @@
           <th>Author</th>
           <td>$package.author$</td>
         </tr>
+
         <tr>
           <th>Maintainer</th>
           <td>$package.maintainer$</td>
@@ -174,14 +173,14 @@
           <td>$score$ ($votes$ votes)
           $if(myrating)$
             <div style="font-size: small">
-                [my rating : $myrating$]
+              [my rating : $myrating$]
             </div>
           $endif$
-                [<a href="" class="clear-rating">clear rating</a>]
+              [<a href="" class="clear-rating">clear rating</a>]
             <ul class="star-rating">
-                <li class="star" id="1">&lambda;</li>
-                <li class="star" id="2">&lambda;</li>
-                <li class="star" id="3">&lambda;</li>
+              <li class="star" id="1">&lambda;</li>
+              <li class="star" id="2">&lambda;</li>
+              <li class="star" id="3">&lambda;</li>
             </ul>
           </td>
         </tr>
