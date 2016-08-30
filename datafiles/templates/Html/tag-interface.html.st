@@ -33,6 +33,7 @@
       </tbody>
     </table>
 
+  $footer$
   </div>
   <script>
     function filterGlobal () {
