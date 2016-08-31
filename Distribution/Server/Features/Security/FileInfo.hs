@@ -38,18 +38,15 @@ import qualified Hackage.Security.Server as Sec
 -- | Simplified form of the FileInfo used in hackage-security
 data FileInfo = FileInfo {
     fileInfoLength :: !Sec.Int54
-  , fileInfoSHA256 :: SHA256Digest
-  , fileInfoMD5    :: Maybe MD5Digest
+  , fileInfoSHA256 :: !SHA256Digest
+  , fileInfoMD5    :: !(Maybe MD5Digest)
   }
   deriving (Typeable, Show, Eq)
 
 deriveSafeCopy 1 'extension ''FileInfo
 
 instance MemSize FileInfo where
-  memSize FileInfo{..} =
-    memSize2
-      fileInfoLength
-      fileInfoSHA256
+  memSize (FileInfo a b c) = memSize3 a b c
 
 class HasFileInfo a where
   fileInfo :: a -> FileInfo
