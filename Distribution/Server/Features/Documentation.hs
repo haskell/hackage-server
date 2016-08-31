@@ -32,6 +32,9 @@ import Data.Function (fix)
 
 import Data.Aeson (toJSON)
 
+import Data.Time.Clock (NominalDiffTime, diffUTCTime, getCurrentTime)
+import System.Directory (getModificationTime)
+
 -- TODO:
 -- 1. Write an HTML view for organizing uploads
 -- 2. Have cabal generate a standard doc tarball, and serve that here
@@ -201,7 +204,9 @@ documentationFeature name
     serveDocumentationTar dpath =
       withDocumentation (packageDocsWhole documentationResource)
                         dpath $ \_ blobid _ -> do
-        cacheControl [Public, maxAgeDays 1]
+        age <- liftIO . getFileAge $ BlobStorage.filepath store blobid
+        let maxAge = documentationCacheTime age
+        cacheControl [Public, maxAge]
                      (BlobStorage.blobETag blobid)
         file <- liftIO $ BlobStorage.fetch store blobid
         return $ toResponse $ Resource.DocTarball file blobid
@@ -216,9 +221,22 @@ documentationFeature name
             etag    = BlobStorage.blobETag blob
         -- if given a directory, the default page is index.html
         -- the root directory within the tarball is e.g. foo-1.0-docs/
+        age <- liftIO $ getFileAge tarball
+        let maxAge = documentationCacheTime age
         ServerTarball.serveTarball (display pkgid ++ " documentation")
                                    [{-no index-}] (display pkgid ++ "-docs")
-                                   tarball index [Public, maxAgeDays 1] etag
+                                   tarball index [Public, maxAge] etag
+
+    -- The cache time for documentation starts at ten minutes and
+    -- increases exponentially for four days, when it cuts off at
+    -- a maximum of one day.
+    documentationCacheTime :: NominalDiffTime -> CacheControl
+    documentationCacheTime t
+      -- We check if it's been four days instead of just capping the time
+      -- with max because there's no point in doing the whole calculation
+      -- for old documentation if we're going to throw it away anyway.
+      | t > 3600*24*4 = maxAgeDays 1
+      | otherwise = maxAgeSeconds $ 60*10 + ceiling (exp (3.28697e-5 * fromInteger (ceiling t) :: Double))
 
     uploadDocumentation :: DynamicPath -> ServerPartE Response
     uploadDocumentation dpath = do
@@ -344,3 +362,6 @@ checkDocTarball pkgid =
 
 mapParaM :: Monad m => (a -> m b) -> [a] -> m [(a, b)]
 mapParaM f = mapM (\x -> (,) x `liftM` f x)
+
+getFileAge :: FilePath -> IO NominalDiffTime
+getFileAge file = diffUTCTime <$> getCurrentTime <*> getModificationTime file
