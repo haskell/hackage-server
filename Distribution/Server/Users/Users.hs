@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, TemplateHaskell, NamedFieldPuns #-}
+{-# LANGUAGE TypeFamilies #-}
 module Distribution.Server.Users.Users (
     -- * Users type
     Users,
@@ -44,7 +45,8 @@ import Data.Maybe (fromMaybe)
 import Data.List  (sort, group)
 import qualified Data.Map as Map
 import qualified Data.IntMap as IntMap
-import Data.SafeCopy (base, deriveSafeCopy)
+import qualified Data.Set as S
+import Data.SafeCopy (base, deriveSafeCopy, extension, Migrate(..))
 import Data.Typeable (Typeable)
 import Control.Exception (assert)
 
@@ -58,14 +60,37 @@ data Users = Users {
     -- | A map from active UserNames to the UserId for that name
     userNameMap :: !(Map.Map UserName UserId),
     -- | The next available UserId
-    nextId      :: !UserId
+    nextId      :: !UserId,
+    -- | A map from 'AuthToken' to 'UserId' for quick token based auth
+    authTokenMap :: !(Map.Map AuthToken UserId)
+  }
+  deriving (Eq, Typeable, Show)
+
+data Users_v0 = Users_v0 {
+    -- | A map from UserId to UserInfo
+    userIdMap_v0   :: !(IntMap.IntMap UserInfo),
+    -- | A map from active UserNames to the UserId for that name
+    userNameMap_v0 :: !(Map.Map UserName UserId),
+    -- | The next available UserId
+    nextId_v0      :: !UserId
   }
   deriving (Eq, Typeable, Show)
 
 instance MemSize Users where
-  memSize (Users a b c) = memSize3 a b c
+  memSize (Users a b c d) = memSize4 a b c d
 
-$(deriveSafeCopy 0 'base ''Users)
+instance Migrate Users where
+    type MigrateFrom Users = Users_v0
+    migrate v0 =
+        Users
+        { userIdMap = userIdMap_v0 v0
+        , userNameMap = userNameMap_v0 v0
+        , nextId = nextId_v0 v0
+        , authTokenMap = Map.empty
+        }
+
+$(deriveSafeCopy 0 'base ''Users_v0)
+$(deriveSafeCopy 1 'extension ''Users)
 
 checkinvariant :: Users -> Users
 checkinvariant users = assert (invariant users) users
@@ -119,7 +144,8 @@ emptyUsers :: Users
 emptyUsers = Users {
     userIdMap   = IntMap.empty,
     userNameMap = Map.empty,
-    nextId      = UserId 0
+    nextId      = UserId 0,
+    authTokenMap = Map.empty
   }
 
 -- error codes
@@ -182,7 +208,8 @@ addUser name status users =
         userid@(UserId uid) = nextId users
         uinfo = UserInfo {
           userName   = name,
-          userStatus = status
+          userStatus = status,
+          userTokens = UserTokenSet S.empty
         }
         users' = checkinvariant users {
           userIdMap   = IntMap.insert uid uinfo (userIdMap users),
