@@ -16,6 +16,8 @@ module Distribution.Server.Users.Users (
     setUserEnabledStatus,
     setUserAuth,
     setUserName,
+    addAuthToken,
+    revokeAuthToken,
 
     -- * Lookup
     lookupUserId,
@@ -34,6 +36,7 @@ module Distribution.Server.Users.Users (
     ErrUserIdClash(..),
     ErrNoSuchUserId(..),
     ErrDeletedUser(..),
+    ErrTokenNotOwned(..)
   ) where
 
 import Distribution.Server.Users.Types
@@ -97,11 +100,12 @@ checkinvariant :: Users -> Users
 checkinvariant users = assert (invariant users) users
 
 invariant :: Users -> Bool
-invariant Users{userIdMap, userNameMap, nextId} =
+invariant Users{userIdMap, userNameMap, nextId, authTokenMap} =
       nextIdIsRight
    && noUserNameOverlap
    && userNameMapComplete
    && userNameMapConsistent
+   && authTokenMapConsistent
   where
     nextIdIsRight =
       --  1) the next id should be 0 if the userIdMap is empty
@@ -133,13 +137,32 @@ invariant Users{userIdMap, userNameMap, nextId} =
               Nothing    -> False
               Just uinfo -> userName uinfo == uname
           | (uname, UserId uid) <- Map.toList userNameMap ]
-
   -- the point is, user names can be recycled but user ids never are
   -- this simplifies things because other user groups in the system do not
   -- need to be adjusted when an account is enabled/disabled/deleted
   -- it also allows us to track historical info, like name of uploader
   -- even if that user name has been recycled, the user ids will be distinct.
 
+    -- every registered token must map to a users token set
+    -- and vice versa
+    authTokenMapConsistent =
+      and
+      [ and
+        [ case IntMap.lookup uid userIdMap of
+            Nothing -> False
+            Just uinfo ->
+                let (UserTokenSet userToks) = userTokens uinfo
+                in S.member token userToks
+        | (token, UserId uid) <- Map.toList authTokenMap
+        ]
+      , and
+        [ Map.lookup token authTokenMap == Just uid
+        | (token, uid) <- concatMap getUserTokList (IntMap.toList userIdMap)
+        ]
+      ]
+    getUserTokList (uid, uinfo) =
+        let (UserTokenSet userToks) = userTokens uinfo
+        in map (\t -> (t, UserId uid)) $ S.toList userToks
 
 emptyUsers :: Users
 emptyUsers = Users {
@@ -154,11 +177,13 @@ data ErrUserNameClash = ErrUserNameClash deriving Typeable
 data ErrUserIdClash   = ErrUserIdClash   deriving Typeable
 data ErrNoSuchUserId  = ErrNoSuchUserId  deriving Typeable
 data ErrDeletedUser   = ErrDeletedUser   deriving Typeable
+data ErrTokenNotOwned = ErrTokenNotOwned deriving Typeable
 
 $(deriveSafeCopy 0 'base ''ErrUserNameClash)
 $(deriveSafeCopy 0 'base ''ErrUserIdClash)
 $(deriveSafeCopy 0 'base ''ErrNoSuchUserId)
 $(deriveSafeCopy 0 'base ''ErrDeletedUser)
+$(deriveSafeCopy 0 'base ''ErrTokenNotOwned)
 
 (?!) :: Maybe a -> e -> Either e a
 ma ?! e = maybe (Left e) Right ma
@@ -327,6 +352,42 @@ setUserName (UserId uid) newname users = do
     }
   where
     userNameInUse uname = Map.member uname (userNameMap users)
+
+-- | Register a new auth token for a user account
+addAuthToken ::
+    UserId -> AuthToken -> Users
+    -> Either ErrNoSuchUserId Users
+addAuthToken (UserId uid) token users =
+    do userinfo <- lookupUserId (UserId uid) users ?! ErrNoSuchUserId
+       let (UserTokenSet tokenSet) = userTokens userinfo
+           userinfo' =
+               userinfo { userTokens = UserTokenSet (S.insert token tokenSet) }
+           users' =
+               users
+               { userIdMap = IntMap.insert uid userinfo' (userIdMap users)
+               , authTokenMap = Map.insert token (UserId uid) (authTokenMap users)
+               }
+       return $! checkinvariant users'
+
+-- | Revoke an auth token from a user account
+revokeAuthToken ::
+    UserId -> AuthToken -> Users
+    -> Either (Either ErrNoSuchUserId ErrTokenNotOwned) Users
+revokeAuthToken (UserId uid) token users =
+    do userinfo <- lookupUserId (UserId uid) users ?! Left ErrNoSuchUserId
+       let (UserTokenSet tokenSet) = userTokens userinfo
+       () <-
+           if S.member token tokenSet
+           then Right ()
+           else Left (Right ErrTokenNotOwned)
+       let userinfo' =
+               userinfo { userTokens = UserTokenSet (S.delete token tokenSet) }
+           users' =
+               users
+               { userIdMap = IntMap.insert uid userinfo' (userIdMap users)
+               , authTokenMap = Map.delete token (authTokenMap users)
+               }
+       return $! checkinvariant users'
 
 enumerateAllUsers :: Users -> [(UserId, UserInfo)]
 enumerateAllUsers users =

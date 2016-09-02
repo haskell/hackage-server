@@ -53,6 +53,18 @@ setUserName :: UserId -> UserName -> Update Users.Users (Maybe (Either Users.Err
 setUserName uid uname =
   updateUsers_ $ Users.setUserName uid uname
 
+addAuthToken ::
+    UserId -> AuthToken
+    -> Update Users.Users (Maybe Users.ErrNoSuchUserId)
+addAuthToken uid authToken =
+  updateUsers_ $ Users.addAuthToken uid authToken
+
+revokeAuthToken ::
+    UserId -> AuthToken
+    -> Update Users.Users (Maybe (Either Users.ErrNoSuchUserId Users.ErrTokenNotOwned))
+revokeAuthToken uid authToken =
+  updateUsers_ $ Users.revokeAuthToken uid authToken
+
 -- updates the user db with a simpler function
 updateUsers_ :: (Users.Users -> Either err Users.Users) -> Update Users.Users (Maybe err)
 updateUsers_ upd = do
@@ -85,6 +97,8 @@ $(makeAcidic ''Users.Users [ 'addUserEnabled
                           , 'deleteUser
                           , 'getUserDb
                           , 'replaceUserDb
+                          , 'addAuthToken
+                          , 'revokeAuthToken
                           ])
 
 -----------------------------------------------------
@@ -163,4 +177,3 @@ $(makeAcidic ''MirrorClients
                     ,'addMirrorClient
                     ,'removeMirrorClient
                     ,'replaceMirrorClients])
-
