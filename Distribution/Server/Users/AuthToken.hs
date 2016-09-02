@@ -3,6 +3,7 @@
 module Distribution.Server.Users.AuthToken
     ( AuthToken(..)
     , generateAuthToken
+    , parseAuthToken
     )
 where
 
@@ -40,8 +41,18 @@ generateAuthToken =
            (withSystemRandom . asGenIO) (`uniformVector` 64)
        return (AuthToken $ T.decodeUtf8 randomBytes)
 
+parseAuthToken :: T.Text -> Either String AuthToken
+parseAuthToken t
+    | T.length t /= 32 = Left "auth token must be 32 charaters long"
+    | T.all Char.isHexDigit t = Left "only hex digits are allowed in tokens"
+    | otherwise = Right (AuthToken t)
+
 instance Text AuthToken where
     disp (AuthToken tok) = Disp.text . T.unpack $ tok
-    parse = AuthToken . T.pack <$> Parse.munch1 Char.isHexDigit
+    parse =
+        Parse.munch1 Char.isHexDigit >>= \x ->
+        case parseAuthToken (T.pack x) of
+          Left err -> fail err
+          Right ok -> return ok
 
 $(deriveSafeCopy 0 'base ''AuthToken)

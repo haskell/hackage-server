@@ -53,6 +53,7 @@ import qualified Data.Map as Map
 import qualified Text.ParserCombinators.ReadP as Parse
 import Data.Maybe (listToMaybe)
 import Data.List  (intercalate)
+import qualified Data.Text.Encoding as T
 
 
 ------------------------------------------------------------------------
@@ -104,7 +105,8 @@ checkAuthenticated realm users = do
     return $ case getHeaderAuth req of
       Just (BasicAuth,  ahdr) -> checkBasicAuth  users realm ahdr
       Just (DigestAuth, ahdr) -> checkDigestAuth users       ahdr req
-      Nothing                 -> Left NoAuthError
+      Just (KeyAuth, ahdr) -> checkKeyAuth users ahdr
+      Nothing -> Left NoAuthError
   where
     getHeaderAuth :: Request -> Maybe (AuthType, BS.ByteString)
     getHeaderAuth req =
@@ -112,12 +114,13 @@ checkAuthenticated realm users = do
           Just hdr
             |  BS.isPrefixOf (BS.pack "Digest ") hdr
             -> Just (DigestAuth, BS.drop 7 hdr)
-
+            |  BS.isPrefixOf (BS.pack "ApiKey ") hdr
+            -> Just (KeyAuth, BS.drop 7 hdr)
             |  BS.isPrefixOf (BS.pack "Basic ") hdr
             -> Just (BasicAuth,  BS.drop 6 hdr)
           _ -> Nothing
 
-data AuthType = BasicAuth | DigestAuth
+data AuthType = BasicAuth | DigestAuth | KeyAuth
 
 
 data PrivilegeCondition = InGroup    Group.UserGroup
@@ -155,6 +158,20 @@ checkPriviledged users uid (IsUserId uid':others) =
 
 checkPriviledged _ _ (AnyKnownUser:_) = return True
 
+------------------------------------------------------------------------
+-- Key auth method
+--
+
+-- | Handle a key auth request
+checkKeyAuth :: Users.Users -> BS.ByteString -> Either AuthError (UserId, UserInfo)
+checkKeyAuth users ahdr =
+    do parsedToken <-
+           case Users.parseAuthToken (T.decodeUtf8 ahdr) of
+             Left _ -> Left BadApiKeyError -- TODO: should we display more infos?
+             Right ok -> Right ok
+       (uid, uinfo) <- Users.lookupAuthToken parsedToken users ?! BadApiKeyError
+       _ <- getUserAuth uinfo ?! UserStatusError uid uinfo
+       return (uid, uinfo)
 
 ------------------------------------------------------------------------
 -- Basic auth method
@@ -331,6 +348,7 @@ data AuthError = NoAuthError
                | NoSuchUserError       UserName
                | UserStatusError       UserId UserInfo
                | PasswordMismatchError UserId UserInfo
+               | BadApiKeyError
   deriving Show
 
 authErrorResponse :: MonadIO m => RealmName -> AuthError -> m ErrorResponse
@@ -345,7 +363,9 @@ authErrorResponse realm autherr = do
     toErrorResponse UnrecognizedAuthError =
       ErrorResponse 400 [] "Authorization scheme not recognized" []
 
+    toErrorResponse BadApiKeyError =
+      ErrorResponse 401 [] "Bad api key" []
+
     -- we don't want to leak info for the other cases, so same message for them all:
     toErrorResponse _ =
       ErrorResponse 401 [] "Username or password incorrect" []
-

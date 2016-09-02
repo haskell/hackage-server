@@ -20,6 +20,7 @@ module Distribution.Server.Users.Users (
     -- * Lookup
     lookupUserId,
     lookupUserName,
+    lookupAuthToken,
 
     -- ** Lookup utils
     userIdToName,
@@ -174,6 +175,12 @@ lookupUserName uname users = do
       Just uid -> Just (uid, fromMaybe impossible (lookupUserId uid users))
   where
     impossible = error "lookupUserName: invariant violation"
+
+lookupAuthToken :: AuthToken -> Users -> Maybe (UserId, UserInfo)
+lookupAuthToken authTok users =
+    do uid <- Map.lookup authTok (authTokenMap users)
+       uinfo <- lookupUserId uid users
+       return (uid, uinfo)
 
 -- | Convert a 'UserId' to a 'UserName'. If the user id doesn't exist,
 -- an ugly placeholder is used instead.
