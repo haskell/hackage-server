@@ -21,6 +21,7 @@ import Distribution.Server.Framework.BackupRestore
 import Distribution.Text (display)
 import Data.Version
 import Text.CSV (CSV, Record)
+import qualified Data.Set as S
 
 
 -- Import for the user database
@@ -44,23 +45,36 @@ importAuth :: CSV -> Users -> Restore Users
 importAuth = concatM . map fromRecord . drop 2
   where
     fromRecord :: Record -> Users -> Restore Users
-    fromRecord [idStr, nameStr, "enabled", auth] users = do
-        uid   <- parseText "user id"   idStr
-        uname <- parseText "user name" nameStr
-        let uauth = UserAuth (PasswdHash auth)
-        insertUser users uid $ UserInfo uname (AccountEnabled uauth)
-    fromRecord [idStr, nameStr, "disabled", auth] users = do
-        uid   <- parseText "user id"   idStr
-        uname <- parseText "user name" nameStr
-        let uauth | null auth = Nothing
-                  | otherwise = Just (UserAuth (PasswdHash auth))
-        insertUser users uid $ UserInfo uname (AccountDisabled uauth)
-    fromRecord [idStr, nameStr, "deleted", ""] users = do
-        uid   <- parseText "user id"   idStr
-        uname <- parseText "user name" nameStr
-        insertUser users uid $ UserInfo uname AccountDeleted
-
-    fromRecord x _ = fail $ "Error processing auth record: " ++ show x
+    fromRecord record users =
+        case record of
+          (idStr : nameStr : authStatus : auth : more) ->
+              do uid   <- parseText "user id"   idStr
+                 uname <- parseText "user name" nameStr
+                 authState <-
+                     case authStatus of
+                       "enabled" ->
+                           return . AccountEnabled . UserAuth . PasswdHash $ auth
+                       "disabled" ->
+                           let mayAuth =
+                                   if null auth then Nothing
+                                   else Just . UserAuth . PasswdHash $ auth
+                           in return $ AccountDisabled mayAuth
+                       "deleted" ->
+                           return AccountDeleted
+                       badAuthStatus ->
+                           fail $
+                           "Error processing record " ++ show record
+                           ++ ". Bad auth status: " ++ show badAuthStatus
+                 tokenSet <-
+                     case more of
+                       [tokenList] ->
+                           do let toks = words tokenList
+                              parsedTokens <- mapM (parseText "token") toks
+                              return (UserTokenSet $ S.fromList parsedTokens)
+                       _ ->
+                           return (UserTokenSet S.empty)
+                 insertUser users uid $ UserInfo uname authState tokenSet
+          x -> fail $ "Error processing auth record: " ++ show x
 
 insertUser :: Users -> UserId -> UserInfo -> Restore Users
 insertUser users uid uinfo =
@@ -107,7 +121,7 @@ groupToCSV uidset = [map show (UserIdSet.toList uidset)]
    .
    Format:
    .
-   User Id,User name,(enabled|disabled|deleted),pwd-hash
+   User Id,User name,(enabled|disabled|deleted),pwd-hash,token1 token2 ... tokenN
  -}
 -- have a "safe" argument to this function that doesn't export password hashes?
 usersToCSV :: BackupType -> Users -> CSV
@@ -122,6 +136,8 @@ usersToCSV backuptype users
       , if backuptype == FullBackup
         then infoToAuth uinfo
         else scrubbedAuth uinfo
+      , let (UserTokenSet ts) = userTokens uinfo
+        in unwords $ map display (S.toList ts)
       ]
 
  where
@@ -157,4 +173,3 @@ usersToCSV backuptype users
         AccountEnabled        (UserAuth (PasswdHash hash))  -> hash
         AccountDisabled (Just (UserAuth (PasswdHash hash))) -> hash
         _                                                   -> ""
-
