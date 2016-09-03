@@ -166,9 +166,9 @@ checkPriviledged _ _ (AnyKnownUser:_) = return True
 checkKeyAuth :: Users.Users -> BS.ByteString -> Either AuthError (UserId, UserInfo)
 checkKeyAuth users ahdr =
     do parsedToken <-
-           case Users.parseAuthToken (T.decodeUtf8 ahdr) of
+           case Users.parseOriginalToken (T.decodeUtf8 ahdr) of
              Left _ -> Left BadApiKeyError -- TODO: should we display more infos?
-             Right ok -> Right ok
+             Right ok -> Right (Users.convertToken ok)
        (uid, uinfo) <- Users.lookupAuthToken parsedToken users ?! BadApiKeyError
        _ <- getUserAuth uinfo ?! UserStatusError uid uinfo
        return (uid, uinfo)
