@@ -175,6 +175,7 @@ executable hackage-server
     Distribution.Server.Util.ContentType
     Distribution.Server.Util.SigTerm
     Distribution.Server.Util.ReadDigest
+    Distribution.Server.Util.Nonce
 
     Distribution.Server.Features
     Distribution.Server.Features.Core
@@ -325,7 +326,6 @@ executable hackage-server
     cryptohash-md5    == 0.11.*,
     cryptohash-sha256 == 0.11.*,
     binary,
-    mwc-random >= 0.13 && < 0.14,
     base16-bytestring >= 0.1 && < 0.2
 
   if ! flag(minimal)
@@ -388,7 +388,6 @@ executable hackage-mirror
     cryptohash-sha256,
     parsec,
     process >= 1.2.0,
-    mwc-random >= 0.13 && < 0.14,
     base16-bytestring >= 0.1 && < 0.2,
     hackage-security >= 0.5.1 && < 0.6,
     hackage-security-HTTP
@@ -433,7 +432,6 @@ executable hackage-build
     random,
     unix,
     cryptohash-sha256,
-    mwc-random >= 0.13 && < 0.14,
     base16-bytestring >= 0.1 && < 0.2,
     -- Runtime dependency only:
     hscolour >= 1.8
