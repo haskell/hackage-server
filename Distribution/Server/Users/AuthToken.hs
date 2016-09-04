@@ -47,7 +47,7 @@ convertToken (OriginalToken bs) =
 viewOriginalToken :: OriginalToken -> T.Text
 viewOriginalToken (OriginalToken ot) = T.decodeUtf8 . BS16.encode $ ot
 
--- | Generate a random 64 byte auth token. The token is represented as
+-- | Generate a random 32 byte auth token. The token is represented as
 -- in textual base16 way so it can easily be printed and parsed.
 -- Note that this operation is not very efficient because it
 -- calls 'withSystemRandom' for each token, but for the current
