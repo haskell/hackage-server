@@ -49,10 +49,10 @@ import Data.Maybe (fromMaybe)
 import Data.List  (sort, group)
 import qualified Data.Map as Map
 import qualified Data.IntMap as IntMap
-import qualified Data.Set as S
 import Data.SafeCopy (base, deriveSafeCopy, extension, Migrate(..))
 import Data.Typeable (Typeable)
 import Control.Exception (assert)
+import qualified Data.Text as T
 
 
 -- | The entire collection of users. Manages the mapping between 'UserName'
@@ -151,8 +151,8 @@ invariant Users{userIdMap, userNameMap, nextId, authTokenMap} =
         [ case IntMap.lookup uid userIdMap of
             Nothing -> False
             Just uinfo ->
-                let (UserTokenSet userToks) = userTokens uinfo
-                in S.member token userToks
+                let (UserTokenMap userToks) = userTokens uinfo
+                in Map.member token userToks
         | (token, UserId uid) <- Map.toList authTokenMap
         ]
       , and
@@ -161,8 +161,8 @@ invariant Users{userIdMap, userNameMap, nextId, authTokenMap} =
         ]
       ]
     getUserTokList (uid, uinfo) =
-        let (UserTokenSet userToks) = userTokens uinfo
-        in map (\t -> (t, UserId uid)) $ S.toList userToks
+        let (UserTokenMap userToks) = userTokens uinfo
+        in map (\t -> (t, UserId uid)) $ map fst $ Map.toList userToks
 
 emptyUsers :: Users
 emptyUsers = Users {
@@ -241,7 +241,7 @@ addUser name status users =
         uinfo = UserInfo {
           userName   = name,
           userStatus = status,
-          userTokens = UserTokenSet S.empty
+          userTokens = UserTokenMap Map.empty
         }
         users' = checkinvariant users {
           userIdMap   = IntMap.insert uid uinfo (userIdMap users),
@@ -355,13 +355,16 @@ setUserName (UserId uid) newname users = do
 
 -- | Register a new auth token for a user account
 addAuthToken ::
-    UserId -> AuthToken -> Users
+    UserId -> AuthToken -> T.Text -> Users
     -> Either ErrNoSuchUserId Users
-addAuthToken (UserId uid) token users =
+addAuthToken (UserId uid) token description users =
     do userinfo <- lookupUserId (UserId uid) users ?! ErrNoSuchUserId
-       let (UserTokenSet tokenSet) = userTokens userinfo
+       let (UserTokenMap tokenMap) = userTokens userinfo
            userinfo' =
-               userinfo { userTokens = UserTokenSet (S.insert token tokenSet) }
+               userinfo
+               { userTokens =
+                       UserTokenMap (Map.insert token description tokenMap)
+               }
            users' =
                users
                { userIdMap = IntMap.insert uid userinfo' (userIdMap users)
@@ -375,13 +378,13 @@ revokeAuthToken ::
     -> Either (Either ErrNoSuchUserId ErrTokenNotOwned) Users
 revokeAuthToken (UserId uid) token users =
     do userinfo <- lookupUserId (UserId uid) users ?! Left ErrNoSuchUserId
-       let (UserTokenSet tokenSet) = userTokens userinfo
+       let (UserTokenMap tokenMap) = userTokens userinfo
        () <-
-           if S.member token tokenSet
+           if Map.member token tokenMap
            then Right ()
            else Left (Right ErrTokenNotOwned)
        let userinfo' =
-               userinfo { userTokens = UserTokenSet (S.delete token tokenSet) }
+               userinfo { userTokens = UserTokenMap (Map.delete token tokenMap) }
            users' =
                users
                { userIdMap = IntMap.insert uid userinfo' (userIdMap users)

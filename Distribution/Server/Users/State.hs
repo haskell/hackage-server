@@ -18,6 +18,7 @@ import Data.Typeable (Typeable)
 
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
+import qualified Data.Text as T
 
 initialUsers :: Users.Users
 initialUsers = Users.emptyUsers
@@ -54,10 +55,10 @@ setUserName uid uname =
   updateUsers_ $ Users.setUserName uid uname
 
 addAuthToken ::
-    UserId -> AuthToken
+    UserId -> AuthToken -> T.Text
     -> Update Users.Users (Maybe Users.ErrNoSuchUserId)
-addAuthToken uid authToken =
-  updateUsers_ $ Users.addAuthToken uid authToken
+addAuthToken uid authToken description =
+  updateUsers_ $ Users.addAuthToken uid authToken description
 
 revokeAuthToken ::
     UserId -> AuthToken

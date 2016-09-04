@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Distribution.Server.Users.Backup (
     -- Importing user data
     userBackup,
@@ -20,8 +21,12 @@ import Distribution.Server.Framework.BackupDump (BackupType(..))
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Text (display)
 import Data.Version
+import Data.Monoid
 import Text.CSV (CSV, Record)
-import qualified Data.Set as S
+import qualified Data.Map as M
+import qualified Data.ByteString.Base64 as B64
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 
 
 -- Import for the user database
@@ -44,6 +49,17 @@ updateUserBackup users = RestoreBackup {
 importAuth :: CSV -> Users -> Restore Users
 importAuth = concatM . map fromRecord . drop 2
   where
+    decodeTokenPair tokenPair =
+        case T.splitOn "|" tokenPair of
+            [k, v] ->
+                do tok <- parseText "token" (T.unpack k)
+                   desc <-
+                       case B64.decode (T.encodeUtf8 v) of
+                         Left errMsg -> fail errMsg
+                         Right ok ->
+                             return (T.decodeUtf8 ok)
+                   return (tok, desc)
+            _ -> fail $ "Bad token pair: " ++ show tokenPair
     fromRecord :: Record -> Users -> Restore Users
     fromRecord record users =
         case record of
@@ -69,10 +85,10 @@ importAuth = concatM . map fromRecord . drop 2
                      case more of
                        [tokenList] ->
                            do let toks = words tokenList
-                              parsedTokens <- mapM (parseText "token") toks
-                              return (UserTokenSet $ S.fromList parsedTokens)
+                              parsedTokens <- mapM (decodeTokenPair . T.pack) toks
+                              return (UserTokenMap $ M.fromList parsedTokens)
                        _ ->
-                           return (UserTokenSet S.empty)
+                           return (UserTokenMap M.empty)
                  insertUser users uid $ UserInfo uname authState tokenSet
           x -> fail $ "Error processing auth record: " ++ show x
 
@@ -121,7 +137,7 @@ groupToCSV uidset = [map show (UserIdSet.toList uidset)]
    .
    Format:
    .
-   User Id,User name,(enabled|disabled|deleted),pwd-hash,token1 token2 ... tokenN
+   User Id,User name,(enabled|disabled|deleted),pwd-hash,token1|descB64-1 token2|descB64-2 ... tokenN|descB64-N
  -}
 -- have a "safe" argument to this function that doesn't export password hashes?
 usersToCSV :: BackupType -> Users -> CSV
@@ -136,16 +152,22 @@ usersToCSV backuptype users
       , if backuptype == FullBackup
         then infoToAuth uinfo
         else scrubbedAuth uinfo
-      , let (UserTokenSet ts) = userTokens uinfo
-        in unwords $ map display (S.toList ts)
+      , let (UserTokenMap ts) = userTokens uinfo
+        in unwords $ map encodeTokenPair (M.toList ts)
       ]
 
  where
+    encodeTokenPair (token, desc) =
+        display token
+        <> "|"
+        <> T.unpack (T.decodeUtf8 $ B64.encode $ T.encodeUtf8 desc)
+
     usersCSVKey =
        [ "uid"
        , "name"
        , "status"
        , "auth-info"
+       , "tokens"
        ]
     userCSVVer = Version [0,2] []
 

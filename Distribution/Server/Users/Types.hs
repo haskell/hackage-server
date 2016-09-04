@@ -17,7 +17,7 @@ import qualified Distribution.Compat.ReadP as Parse
 import qualified Text.PrettyPrint          as Disp
 import qualified Data.Char as Char
 import qualified Data.Text as T
-import qualified Data.Set as S
+import qualified Data.Map as M
 
 import Control.Applicative ((<$>))
 import Data.Aeson (ToJSON, FromJSON)
@@ -34,7 +34,7 @@ newtype UserName  = UserName String
 data UserInfo = UserInfo {
                   userName   :: !UserName,
                   userStatus :: !UserStatus,
-                  userTokens :: !UserTokenSet
+                  userTokens :: !UserTokenMap
                 } deriving (Eq, Show, Typeable)
 
 data UserInfo_v0 = UserInfo_v0 {
@@ -47,7 +47,8 @@ data UserStatus = AccountEnabled  UserAuth
                 | AccountDeleted
     deriving (Eq, Show, Typeable)
 
-newtype UserTokenSet = UserTokenSet (S.Set AuthToken)
+newtype UserTokenMap
+    = UserTokenMap { unUserTokenMap :: M.Map AuthToken T.Text }
     deriving (Show, Eq, Typeable, MemSize)
 
 newtype UserAuth = UserAuth PasswdHash
@@ -86,13 +87,13 @@ instance Migrate UserInfo where
         UserInfo
         { userName = userName_v0 v0
         , userStatus = userStatus_v0 v0
-        , userTokens = UserTokenSet S.empty
+        , userTokens = UserTokenMap M.empty
         }
 
 $(deriveSafeCopy 0 'base ''UserId)
 $(deriveSafeCopy 0 'base ''UserName)
 $(deriveSafeCopy 1 'base ''UserAuth)
 $(deriveSafeCopy 0 'base ''UserStatus)
-$(deriveSafeCopy 0 'base ''UserTokenSet)
+$(deriveSafeCopy 0 'base ''UserTokenMap)
 $(deriveSafeCopy 0 'base ''UserInfo_v0)
 $(deriveSafeCopy 1 'extension ''UserInfo)
