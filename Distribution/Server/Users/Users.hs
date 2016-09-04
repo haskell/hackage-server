@@ -70,31 +70,8 @@ data Users = Users {
   }
   deriving (Eq, Typeable, Show)
 
-data Users_v0 = Users_v0 {
-    -- | A map from UserId to UserInfo
-    userIdMap_v0   :: !(IntMap.IntMap UserInfo),
-    -- | A map from active UserNames to the UserId for that name
-    userNameMap_v0 :: !(Map.Map UserName UserId),
-    -- | The next available UserId
-    nextId_v0      :: !UserId
-  }
-  deriving (Eq, Typeable, Show)
-
 instance MemSize Users where
   memSize (Users a b c d) = memSize4 a b c d
-
-instance Migrate Users where
-    type MigrateFrom Users = Users_v0
-    migrate v0 =
-        Users
-        { userIdMap = userIdMap_v0 v0
-        , userNameMap = userNameMap_v0 v0
-        , nextId = nextId_v0 v0
-        , authTokenMap = Map.empty
-        }
-
-$(deriveSafeCopy 0 'base ''Users_v0)
-$(deriveSafeCopy 1 'extension ''Users)
 
 checkinvariant :: Users -> Users
 checkinvariant users = assert (invariant users) users
@@ -404,3 +381,26 @@ enumerateActiveUsers :: Users -> [(UserId, UserInfo)]
 enumerateActiveUsers users =
     [ (UserId uid, uinfo) | (uid, uinfo) <- IntMap.assocs (userIdMap users)
                           , isActiveAccount (userStatus uinfo) ]
+
+data Users_v0 = Users_v0 {
+    -- | A map from UserId to UserInfo
+    userIdMap_v0   :: !(IntMap.IntMap UserInfo),
+    -- | A map from active UserNames to the UserId for that name
+    userNameMap_v0 :: !(Map.Map UserName UserId),
+    -- | The next available UserId
+    nextId_v0      :: !UserId
+  }
+  deriving (Eq, Typeable, Show)
+
+instance Migrate Users where
+    type MigrateFrom Users = Users_v0
+    migrate v0 =
+        Users
+        { userIdMap = userIdMap_v0 v0
+        , userNameMap = userNameMap_v0 v0
+        , nextId = nextId_v0 v0
+        , authTokenMap = Map.empty
+        }
+
+$(deriveSafeCopy 0 'base ''Users_v0)
+$(deriveSafeCopy 1 'extension ''Users)

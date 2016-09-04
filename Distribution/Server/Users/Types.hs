@@ -37,11 +37,6 @@ data UserInfo = UserInfo {
                   userTokens :: !UserTokenMap
                 } deriving (Eq, Show, Typeable)
 
-data UserInfo_v0 = UserInfo_v0 {
-                  userName_v0   :: !UserName,
-                  userStatus_v0 :: !UserStatus
-                } deriving (Eq, Show, Typeable)
-
 data UserStatus = AccountEnabled  UserAuth
                 | AccountDisabled (Maybe UserAuth)
                 | AccountDeleted
@@ -80,6 +75,11 @@ instance Text UserName where
 
 isValidUserNameChar :: Char -> Bool
 isValidUserNameChar c = (c < '\127' && Char.isAlphaNum c) || (c == '_')
+
+data UserInfo_v0 = UserInfo_v0 {
+                  userName_v0   :: !UserName,
+                  userStatus_v0 :: !UserStatus
+                } deriving (Eq, Show, Typeable)
 
 instance Migrate UserInfo where
     type MigrateFrom UserInfo = UserInfo_v0

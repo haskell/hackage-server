@@ -494,64 +494,66 @@ userFeature templates usersState adminsState
             [MText "Cannot disable account, it has already been deleted"]
 
     serveUserManagement :: DynamicPath -> ServerPartE Response
-    serveUserManagement dpath =
-        do (UserName username) <- userNameInPath dpath
-           uid <- lookupUserName (UserName username)
-           guardAuthorised [IsUserId uid, InGroup adminGroup]
-           userInfo <- lookupUserInfo uid
-           let (UserTokenMap knownTokens) = userTokens userInfo
-           template <- getTemplate templates "manage.html"
-           let mkTok (t, desc) =
-                   templateDict
-                   [ templateVal "hash" (display t)
-                   , templateVal "description" desc
-                   ]
-           ok $ toResponse $ template
-               [ "username" $= username
-               , "tokens" $= map mkTok (Map.toList knownTokens)
-               ]
+    serveUserManagement dpath = do
+      (UserName username) <- userNameInPath dpath
+      uid <- lookupUserName (UserName username)
+      guardAuthorised_ [IsUserId uid, InGroup adminGroup]
+      userInfo <- lookupUserInfo uid
+      let (UserTokenMap knownTokens) = userTokens userInfo
+      template <- getTemplate templates "manage.html"
+      let mkTok (t, desc) =
+              templateDict
+              [ templateVal "hash" (display t)
+              , templateVal "description" desc
+              ]
+      ok $ toResponse $ template
+          [ "username" $= username
+          , "tokens" $= map mkTok (Map.toList knownTokens)
+          ]
 
     runUserManagementAction :: DynamicPath -> ServerPartE Response
-    runUserManagementAction dpath =
-        do (UserName username) <- userNameInPath dpath
-           uid <- lookupUserName (UserName username)
-           guardAuthorised [IsUserId uid, InGroup adminGroup]
-           action <- look "action"
-           case action of
-             "new-auth-key" ->
-                 do origTok <- liftIO generateOriginalToken
-                    let storeTok = convertToken origTok
-                    desc <- T.pack <$> look "description"
-                    res <- updateState usersState (AddAuthToken uid storeTok desc)
-                    template <- getTemplate templates "token-created.html"
-                    case res of
-                        Nothing ->
-                            ok $ toResponse $ template
-                            [ "username" $= username
-                            , "token" $= viewOriginalToken origTok
-                            ]
-                        Just Users.ErrNoSuchUserId ->
-                            errInternalError [MText "uid does not exist"]
-             "revoke-auth-key" ->
-                 do authToken <- parseAuthToken . T.pack <$> look "auth-key"
-                    case authToken of
-                      Left err ->
-                          fail $ "Bad auth token: " ++ err
-                      Right at ->
-                          do res <-
-                                 updateState usersState (RevokeAuthToken uid at)
-                             template <- getTemplate templates "token-revoked.html"
-                             case res of
-                               Nothing ->
-                                   ok $ toResponse $ template
-                                   [ "username" $= username
-                                   ]
-                               Just (Left Users.ErrNoSuchUserId) ->
-                                   errInternalError [MText "uid does not exist"]
-                               Just (Right Users.ErrTokenNotOwned) ->
-                                   errBadRequest "Token not owned"
-                                   [MText "Cannot revoke this token, wrong owner!"]
-             _ -> fail "Fatal error: missing implementation for this action"
+    runUserManagementAction dpath = do
+      (UserName username) <- userNameInPath dpath
+      uid <- lookupUserName (UserName username)
+      guardAuthorised_ [IsUserId uid, InGroup adminGroup]
+      action <- look "action"
+      case action of
+        "new-auth-key" -> do
+          origTok <- liftIO generateOriginalToken
+          let storeTok = convertToken origTok
+          desc <- T.pack <$> look "description"
+          res <- updateState usersState (AddAuthToken uid storeTok desc)
+          template <- getTemplate templates "token-created.html"
+          case res of
+            Nothing ->
+              ok $ toResponse $ template
+              [ "username" $= username
+              , "token" $= viewOriginalToken origTok
+              ]
+            Just Users.ErrNoSuchUserId ->
+              errInternalError [MText "uid does not exist"]
+        "revoke-auth-key" -> do
+          authToken <- parseAuthToken . T.pack <$> look "auth-key"
+          case authToken of
+            Left err ->
+              errBadRequest "Bad auth token"
+              [MText "The token you have provided is malformed"]
+            Right at -> do
+              res <- updateState usersState (RevokeAuthToken uid at)
+              template <- getTemplate templates "token-revoked.html"
+              case res of
+                Nothing ->
+                  ok $ toResponse $ template
+                  [ "username" $= username
+                  ]
+                Just (Left Users.ErrNoSuchUserId) ->
+                  errInternalError [MText "uid does not exist"]
+                Just (Right Users.ErrTokenNotOwned) ->
+                  errBadRequest "Token not owned"
+                  [MText "Cannot revoke this token, wrong owner!"]
+        _ ->
+          errBadRequest "Missing or wrong action"
+          [MText "The action you have provided does not exist"]
 
     --
     --  Exported utils for looking up user names in URLs\/paths
