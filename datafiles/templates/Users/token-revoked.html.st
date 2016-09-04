@@ -2,16 +2,16 @@
 <html>
 <head>
 $hackageCssTheme()$
-<title>Api key revoked | Hackage</title>
+<title>Auth token revoked | Hackage</title>
 </head>
 
 <body>
 $hackagePageHeader()$
 
 <div id="content">
-<h2>Revoked api key for $username$</h2>
+<h2>Revoked auth token for $username$</h2>
 <p>
-  Your api key was revoked and it can no longer be used for authentication.
+  Your auth token was revoked and it can no longer be used for authentication.
 </p>
 
 <ul>

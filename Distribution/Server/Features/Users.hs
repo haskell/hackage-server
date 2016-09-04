@@ -518,7 +518,7 @@ userFeature templates usersState adminsState
       guardAuthorised_ [IsUserId uid, InGroup adminGroup]
       action <- look "action"
       case action of
-        "new-auth-key" -> do
+        "new-auth-token" -> do
           origTok <- liftIO generateOriginalToken
           let storeTok = convertToken origTok
           desc <- T.pack <$> look "description"
@@ -532,8 +532,8 @@ userFeature templates usersState adminsState
               ]
             Just Users.ErrNoSuchUserId ->
               errInternalError [MText "uid does not exist"]
-        "revoke-auth-key" -> do
-          authToken <- parseAuthToken . T.pack <$> look "auth-key"
+        "revoke-auth-token" -> do
+          authToken <- parseAuthToken . T.pack <$> look "auth-token"
           case authToken of
             Left err ->
               errBadRequest "Bad auth token"

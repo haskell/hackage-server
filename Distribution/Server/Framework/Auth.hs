@@ -105,8 +105,8 @@ checkAuthenticated realm users = do
     return $ case getHeaderAuth req of
       Just (BasicAuth,  ahdr) -> checkBasicAuth  users realm ahdr
       Just (DigestAuth, ahdr) -> checkDigestAuth users       ahdr req
-      Just (KeyAuth, ahdr) -> checkKeyAuth users ahdr
-      Nothing -> Left NoAuthError
+      Just (KeyAuth, ahdr)    -> checkAccessTokenAuth users ahdr
+      Nothing                 -> Left NoAuthError
   where
     getHeaderAuth :: Request -> Maybe (AuthType, BS.ByteString)
     getHeaderAuth req =
@@ -159,12 +159,13 @@ checkPriviledged users uid (IsUserId uid':others) =
 checkPriviledged _ _ (AnyKnownUser:_) = return True
 
 ------------------------------------------------------------------------
--- Key auth method
+-- Access token method
 --
 
--- | Handle a key auth request
-checkKeyAuth :: Users.Users -> BS.ByteString -> Either AuthError (UserId, UserInfo)
-checkKeyAuth users ahdr =
+-- | Handle a auth request using an access token
+checkAccessTokenAuth ::
+    Users.Users -> BS.ByteString -> Either AuthError (UserId, UserInfo)
+checkAccessTokenAuth users ahdr =
     do parsedToken <-
            case Users.parseOriginalToken (T.decodeUtf8 ahdr) of
              Left _ -> Left BadApiKeyError -- TODO: should we display more infos?
@@ -364,7 +365,7 @@ authErrorResponse realm autherr = do
       ErrorResponse 400 [] "Authorization scheme not recognized" []
 
     toErrorResponse BadApiKeyError =
-      ErrorResponse 401 [] "Bad api key" []
+      ErrorResponse 401 [] "Bad auth token" []
 
     -- we don't want to leak info for the other cases, so same message for them all:
     toErrorResponse _ =
