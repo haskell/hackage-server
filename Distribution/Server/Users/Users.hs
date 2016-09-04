@@ -46,7 +46,7 @@ import Distribution.Server.Framework.MemSize
 
 import Control.Monad (guard)
 import Data.Maybe (fromMaybe)
-import Data.List  (sort, group)
+import Data.List  (sort, group, foldl')
 import qualified Data.Map as Map
 import qualified Data.IntMap as IntMap
 import Data.SafeCopy (base, deriveSafeCopy, extension, Migrate(..))
@@ -259,6 +259,9 @@ insertUserAccount userId@(UserId uid) uinfo users = do
     guard (not userNameInUse || isUserDeleted)  ?! Right ErrUserNameClash
     return $! checkinvariant users {
           userIdMap   = IntMap.insert uid uinfo (userIdMap users),
+          authTokenMap =
+              foldl' (\om (tok, _) -> Map.insert tok userId om)
+                  (authTokenMap users) usertoks,
           userNameMap = if isUserDeleted
                           then userNameMap users
                           else Map.insert (userName uinfo) userId (userNameMap users),
@@ -266,6 +269,7 @@ insertUserAccount userId@(UserId uid) uinfo users = do
                         in UserId (max nextid (uid + 1))
         }
   where
+    usertoks = Map.toList $ unUserTokenMap $ userTokens uinfo
     userIdInUse   = IntMap.member uid (userIdMap users)
     userNameInUse = Map.member (userName uinfo) (userNameMap users)
     isUserDeleted = case userStatus uinfo of

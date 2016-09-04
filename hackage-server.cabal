@@ -40,6 +40,7 @@ data-files:
   templates/UserSignupReset/*.html.st
   templates/UserSignupReset/*.email.st
   templates/AdminFrontend/*.html.st
+  templates/Users/*.html.st
 
   static/*.css
   static/*.ico

@@ -61,14 +61,14 @@ generateOriginalToken =
 
 parseAuthToken :: T.Text -> Either String AuthToken
 parseAuthToken t
-    | T.length t /= 64 = Left "auth token must be 32 charaters long"
-    | T.all Char.isHexDigit t = Left "only hex digits are allowed in tokens"
+    | T.length t /= 64 = Left "auth token must be 64 charaters long"
+    | not (T.all Char.isHexDigit t) = Left "only hex digits are allowed in tokens"
     | otherwise = Right (AuthToken t)
 
 parseOriginalToken :: T.Text -> Either String OriginalToken
 parseOriginalToken t
-    | T.length t /= 64 = Left "original auth token must be 32 charaters long"
-    | T.all Char.isHexDigit t = Left "only hex digits are allowed in tokens"
+    | T.length t /= 64 = Left "original auth token must be 64 charaters long"
+    | not (T.all Char.isHexDigit t) = Left "only hex digits are allowed in tokens"
     | otherwise = Right (OriginalToken $ fst $ BS16.decode $ T.encodeUtf8 t)
 
 instance Text AuthToken where
