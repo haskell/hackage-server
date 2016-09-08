@@ -17,7 +17,7 @@ import Data.Maybe (catMaybes)
 import Data.Attoparsec.Char8 (Parser)
 import Data.Map (Map)
 import Data.Time.Calendar (Day)
-import Data.Time.Format (parseTime)
+import Data.Time.Format (parseTimeM)
 import qualified Data.ByteString.Char8      as SBS
 import qualified Data.Attoparsec.Char8      as Att
 import qualified Data.ByteString.Lazy.Char8 as LBS
@@ -94,7 +94,7 @@ parseGET :: (SBS.ByteString, SBS.ByteString, SBS.ByteString) -> Maybe (PackageNa
 parseGET (pkgNameStr, pkgVersionStr, dayStr) = do
   name    <- simpleParse . SBS.unpack $ pkgNameStr
   version <- simpleParse . SBS.unpack $ pkgVersionStr
-  day     <- parseTime defaultTimeLocale "%d/%b/%Y:%T %z" . SBS.unpack $ dayStr
+  day     <- parseTimeM True defaultTimeLocale "%d/%b/%Y:%T %z" . SBS.unpack $ dayStr
   return (name, version, day)
 
 methodGET, packagesDir, archiveDir, targzExt :: SBS.ByteString

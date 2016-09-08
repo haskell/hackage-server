@@ -26,7 +26,7 @@ import Distribution.PackageDescription.Parse (parsePackageDescription)
 import Distribution.ParseUtils (ParseResult(..), locatedErrorMsg, showPWarning)
 
 import Data.Time.Clock (getCurrentTime)
-import Data.Time.Format (formatTime, parseTime)
+import Data.Time.Format (formatTime, parseTimeM)
 import Data.Time.Locale.Compat (defaultTimeLocale)
 import qualified Distribution.Server.Util.GZip as GZip
 
@@ -221,7 +221,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
         guardAuthorised_ [InGroup mirrorGroup]
         pkgid <- packageInPath dpath
         timeContent <- expectTextPlain
-        case parseTime defaultTimeLocale "%c" (unpackUTF8 timeContent) of
+        case parseTimeM True defaultTimeLocale "%c" (unpackUTF8 timeContent) of
           Nothing -> errBadRequest "Could not parse upload time" []
           Just t  -> do
             existed <- updateSetPackageUploadTime pkgid t
