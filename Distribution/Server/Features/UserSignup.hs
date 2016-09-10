@@ -404,8 +404,7 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
 
     nonceInPath :: MonadPlus m => DynamicPath -> m Nonce
     nonceInPath dpath =
-        do raw <- maybe mzero return (lookup "nonce" dpath)
-           parseNonceM raw
+        maybe mzero return (lookup "nonce" dpath >>= parseNonceM)
 
     lookupSignupInfo :: Nonce -> ServerPartE SignupResetInfo
     lookupSignupInfo nonce = querySignupInfo nonce
