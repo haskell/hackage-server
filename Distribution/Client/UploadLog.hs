@@ -38,7 +38,7 @@ import Data.Time.Clock
 import Data.Time.LocalTime
          ( zonedTimeToUTC )
 import Data.Time.Format
-         ( readsTime, formatTime )
+         ( readSTime, formatTime )
 import Data.Time.Locale.Compat
          ( defaultTimeLocale )
 import Data.List
@@ -54,7 +54,7 @@ instance Text Entry where
         Disp.text (formatTime defaultTimeLocale "%c" time)
     <+> disp user <+> disp pkgid
   parse = do
-    time <- Parse.readS_to_P (readsTime defaultTimeLocale "%c")
+    time <- Parse.readS_to_P (readSTime True defaultTimeLocale "%c")
     Parse.skipSpaces
     user <- parse
     Parse.skipSpaces
