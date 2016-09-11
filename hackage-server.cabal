@@ -54,6 +54,14 @@ data-files:
 
 extra-source-files:
   tests/permissions-tarballs/*.tar.gz
+  tests/unpack-checks/correct-package-0.1.0.0/LICENSE
+  tests/unpack-checks/correct-package-0.1.0.0/Main.hs
+  tests/unpack-checks/correct-package-0.1.0.0/Setup.hs
+  tests/unpack-checks/correct-package-0.1.0.0/correct-package.cabal
+  tests/unpack-checks/missing-configure-0.1.0.0/LICENSE
+  tests/unpack-checks/missing-configure-0.1.0.0/Main.hs
+  tests/unpack-checks/missing-configure-0.1.0.0/Setup.hs
+  tests/unpack-checks/missing-configure-0.1.0.0/missing-configure.cabal
 
 source-repository head
   type: git
@@ -558,6 +566,7 @@ Test-Suite PackageTests
     ghc-options:    -threaded -Wall -fno-warn-orphans
     build-depends:  base,
                     bytestring,
+                    containers,
                     filepath,
                     mtl,
                     tar,
