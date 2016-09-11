@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, TemplateHaskell, NamedFieldPuns #-}
+{-# LANGUAGE TypeFamilies #-}
 module Distribution.Server.Users.Users (
     -- * Users type
     Users,
@@ -15,10 +16,13 @@ module Distribution.Server.Users.Users (
     setUserEnabledStatus,
     setUserAuth,
     setUserName,
+    addAuthToken,
+    revokeAuthToken,
 
     -- * Lookup
     lookupUserId,
     lookupUserName,
+    lookupAuthToken,
 
     -- ** Lookup utils
     userIdToName,
@@ -32,6 +36,7 @@ module Distribution.Server.Users.Users (
     ErrUserIdClash(..),
     ErrNoSuchUserId(..),
     ErrDeletedUser(..),
+    ErrTokenNotOwned(..)
   ) where
 
 import Distribution.Server.Users.Types
@@ -41,12 +46,13 @@ import Distribution.Server.Framework.MemSize
 
 import Control.Monad (guard)
 import Data.Maybe (fromMaybe)
-import Data.List  (sort, group)
+import Data.List  (sort, group, foldl')
 import qualified Data.Map as Map
 import qualified Data.IntMap as IntMap
-import Data.SafeCopy (base, deriveSafeCopy)
+import Data.SafeCopy (base, deriveSafeCopy, extension, Migrate(..))
 import Data.Typeable (Typeable)
 import Control.Exception (assert)
+import qualified Data.Text as T
 
 
 -- | The entire collection of users. Manages the mapping between 'UserName'
@@ -58,24 +64,25 @@ data Users = Users {
     -- | A map from active UserNames to the UserId for that name
     userNameMap :: !(Map.Map UserName UserId),
     -- | The next available UserId
-    nextId      :: !UserId
+    nextId      :: !UserId,
+    -- | A map from 'AuthToken' to 'UserId' for quick token based auth
+    authTokenMap :: !(Map.Map AuthToken UserId)
   }
   deriving (Eq, Typeable, Show)
 
 instance MemSize Users where
-  memSize (Users a b c) = memSize3 a b c
-
-$(deriveSafeCopy 0 'base ''Users)
+  memSize (Users a b c d) = memSize4 a b c d
 
 checkinvariant :: Users -> Users
 checkinvariant users = assert (invariant users) users
 
 invariant :: Users -> Bool
-invariant Users{userIdMap, userNameMap, nextId} =
+invariant Users{userIdMap, userNameMap, nextId, authTokenMap} =
       nextIdIsRight
    && noUserNameOverlap
    && userNameMapComplete
    && userNameMapConsistent
+   && authTokenMapConsistent
   where
     nextIdIsRight =
       --  1) the next id should be 0 if the userIdMap is empty
@@ -107,19 +114,39 @@ invariant Users{userIdMap, userNameMap, nextId} =
               Nothing    -> False
               Just uinfo -> userName uinfo == uname
           | (uname, UserId uid) <- Map.toList userNameMap ]
-
   -- the point is, user names can be recycled but user ids never are
   -- this simplifies things because other user groups in the system do not
   -- need to be adjusted when an account is enabled/disabled/deleted
   -- it also allows us to track historical info, like name of uploader
   -- even if that user name has been recycled, the user ids will be distinct.
 
+    -- every registered token must map to a users token set
+    -- and vice versa
+    authTokenMapConsistent =
+      and
+      [ and
+        [ case IntMap.lookup uid userIdMap of
+            Nothing -> False
+            Just uinfo ->
+                let (UserTokenMap userToks) = userTokens uinfo
+                in Map.member token userToks
+        | (token, UserId uid) <- Map.toList authTokenMap
+        ]
+      , and
+        [ Map.lookup token authTokenMap == Just uid
+        | (token, uid) <- concatMap getUserTokList (IntMap.toList userIdMap)
+        ]
+      ]
+    getUserTokList (uid, uinfo) =
+        let (UserTokenMap userToks) = userTokens uinfo
+        in map (\t -> (t, UserId uid)) $ map fst $ Map.toList userToks
 
 emptyUsers :: Users
 emptyUsers = Users {
     userIdMap   = IntMap.empty,
     userNameMap = Map.empty,
-    nextId      = UserId 0
+    nextId      = UserId 0,
+    authTokenMap = Map.empty
   }
 
 -- error codes
@@ -127,11 +154,13 @@ data ErrUserNameClash = ErrUserNameClash deriving Typeable
 data ErrUserIdClash   = ErrUserIdClash   deriving Typeable
 data ErrNoSuchUserId  = ErrNoSuchUserId  deriving Typeable
 data ErrDeletedUser   = ErrDeletedUser   deriving Typeable
+data ErrTokenNotOwned = ErrTokenNotOwned deriving Typeable
 
 $(deriveSafeCopy 0 'base ''ErrUserNameClash)
 $(deriveSafeCopy 0 'base ''ErrUserIdClash)
 $(deriveSafeCopy 0 'base ''ErrNoSuchUserId)
 $(deriveSafeCopy 0 'base ''ErrDeletedUser)
+$(deriveSafeCopy 0 'base ''ErrTokenNotOwned)
 
 (?!) :: Maybe a -> e -> Either e a
 ma ?! e = maybe (Left e) Right ma
@@ -148,6 +177,12 @@ lookupUserName uname users = do
       Just uid -> Just (uid, fromMaybe impossible (lookupUserId uid users))
   where
     impossible = error "lookupUserName: invariant violation"
+
+lookupAuthToken :: AuthToken -> Users -> Maybe (UserId, UserInfo)
+lookupAuthToken authTok users =
+    do uid <- Map.lookup authTok (authTokenMap users)
+       uinfo <- lookupUserId uid users
+       return (uid, uinfo)
 
 -- | Convert a 'UserId' to a 'UserName'. If the user id doesn't exist,
 -- an ugly placeholder is used instead.
@@ -182,7 +217,8 @@ addUser name status users =
         userid@(UserId uid) = nextId users
         uinfo = UserInfo {
           userName   = name,
-          userStatus = status
+          userStatus = status,
+          userTokens = UserTokenMap Map.empty
         }
         users' = checkinvariant users {
           userIdMap   = IntMap.insert uid uinfo (userIdMap users),
@@ -200,6 +236,9 @@ insertUserAccount userId@(UserId uid) uinfo users = do
     guard (not userNameInUse || isUserDeleted)  ?! Right ErrUserNameClash
     return $! checkinvariant users {
           userIdMap   = IntMap.insert uid uinfo (userIdMap users),
+          authTokenMap =
+              foldl' (\om (tok, _) -> Map.insert tok userId om)
+                  (authTokenMap users) usertoks,
           userNameMap = if isUserDeleted
                           then userNameMap users
                           else Map.insert (userName uinfo) userId (userNameMap users),
@@ -207,6 +246,7 @@ insertUserAccount userId@(UserId uid) uinfo users = do
                         in UserId (max nextid (uid + 1))
         }
   where
+    usertoks = Map.toList $ unUserTokenMap $ userTokens uinfo
     userIdInUse   = IntMap.member uid (userIdMap users)
     userNameInUse = Map.member (userName uinfo) (userNameMap users)
     isUserDeleted = case userStatus uinfo of
@@ -294,6 +334,45 @@ setUserName (UserId uid) newname users = do
   where
     userNameInUse uname = Map.member uname (userNameMap users)
 
+-- | Register a new auth token for a user account
+addAuthToken ::
+    UserId -> AuthToken -> T.Text -> Users
+    -> Either ErrNoSuchUserId Users
+addAuthToken (UserId uid) token description users =
+    do userinfo <- lookupUserId (UserId uid) users ?! ErrNoSuchUserId
+       let (UserTokenMap tokenMap) = userTokens userinfo
+           userinfo' =
+               userinfo
+               { userTokens =
+                       UserTokenMap (Map.insert token description tokenMap)
+               }
+           users' =
+               users
+               { userIdMap = IntMap.insert uid userinfo' (userIdMap users)
+               , authTokenMap = Map.insert token (UserId uid) (authTokenMap users)
+               }
+       return $! checkinvariant users'
+
+-- | Revoke an auth token from a user account
+revokeAuthToken ::
+    UserId -> AuthToken -> Users
+    -> Either (Either ErrNoSuchUserId ErrTokenNotOwned) Users
+revokeAuthToken (UserId uid) token users =
+    do userinfo <- lookupUserId (UserId uid) users ?! Left ErrNoSuchUserId
+       let (UserTokenMap tokenMap) = userTokens userinfo
+       () <-
+           if Map.member token tokenMap
+           then Right ()
+           else Left (Right ErrTokenNotOwned)
+       let userinfo' =
+               userinfo { userTokens = UserTokenMap (Map.delete token tokenMap) }
+           users' =
+               users
+               { userIdMap = IntMap.insert uid userinfo' (userIdMap users)
+               , authTokenMap = Map.delete token (authTokenMap users)
+               }
+       return $! checkinvariant users'
+
 enumerateAllUsers :: Users -> [(UserId, UserInfo)]
 enumerateAllUsers users =
     [ (UserId uid, uinfo) | (uid, uinfo) <- IntMap.assocs (userIdMap users) ]
@@ -302,3 +381,26 @@ enumerateActiveUsers :: Users -> [(UserId, UserInfo)]
 enumerateActiveUsers users =
     [ (UserId uid, uinfo) | (uid, uinfo) <- IntMap.assocs (userIdMap users)
                           , isActiveAccount (userStatus uinfo) ]
+
+data Users_v0 = Users_v0 {
+    -- | A map from UserId to UserInfo
+    userIdMap_v0   :: !(IntMap.IntMap UserInfo),
+    -- | A map from active UserNames to the UserId for that name
+    userNameMap_v0 :: !(Map.Map UserName UserId),
+    -- | The next available UserId
+    nextId_v0      :: !UserId
+  }
+  deriving (Eq, Typeable, Show)
+
+instance Migrate Users where
+    type MigrateFrom Users = Users_v0
+    migrate v0 =
+        Users
+        { userIdMap = userIdMap_v0 v0
+        , userNameMap = userNameMap_v0 v0
+        , nextId = nextId_v0 v0
+        , authTokenMap = Map.empty
+        }
+
+$(deriveSafeCopy 0 'base ''Users_v0)
+$(deriveSafeCopy 1 'extension ''Users)

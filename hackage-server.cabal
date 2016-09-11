@@ -40,6 +40,7 @@ data-files:
   templates/UserSignupReset/*.html.st
   templates/UserSignupReset/*.email.st
   templates/AdminFrontend/*.html.st
+  templates/Users/*.html.st
 
   static/*.css
   static/*.ico
@@ -161,6 +162,7 @@ executable hackage-server
     Distribution.Server.Users.Types
     Distribution.Server.Users.Backup
     Distribution.Server.Users.Users
+    Distribution.Server.Users.AuthToken
     Distribution.Server.Users.UserIdSet
 
     Distribution.Server.Util.Histogram
@@ -173,6 +175,7 @@ executable hackage-server
     Distribution.Server.Util.ContentType
     Distribution.Server.Util.SigTerm
     Distribution.Server.Util.ReadDigest
+    Distribution.Server.Util.Nonce
 
     Distribution.Server.Features
     Distribution.Server.Features.Core
@@ -322,7 +325,8 @@ executable hackage-server
     ed25519,
     cryptohash-md5    == 0.11.*,
     cryptohash-sha256 == 0.11.*,
-    binary
+    binary,
+    base16-bytestring >= 0.1 && < 0.2
 
   if ! flag(minimal)
     build-depends:
@@ -384,6 +388,7 @@ executable hackage-mirror
     cryptohash-sha256,
     parsec,
     process >= 1.2.0,
+    base16-bytestring >= 0.1 && < 0.2,
     hackage-security >= 0.5.1 && < 0.6,
     hackage-security-HTTP
   default-language:   Haskell2010
@@ -427,6 +432,7 @@ executable hackage-build
     random,
     unix,
     cryptohash-sha256,
+    base16-bytestring >= 0.1 && < 0.2,
     -- Runtime dependency only:
     hscolour >= 1.8
   default-language: Haskell2010

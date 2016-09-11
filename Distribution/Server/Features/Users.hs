@@ -11,6 +11,7 @@ module Distribution.Server.Features.Users (
 
 import Distribution.Server.Framework
 import Distribution.Server.Framework.BackupDump
+import Distribution.Server.Framework.Templating
 import qualified Distribution.Server.Framework.Auth as Auth
 
 import Distribution.Server.Users.Types
@@ -154,6 +155,8 @@ data UserResource = UserResource {
     enabledResource  :: Resource,
     -- | The admin group.
     adminResource :: GroupResource,
+    -- | Manage a user
+    manageUserResource :: Resource,
 
     -- | URI for `userList` given a format.
     userListUri :: String -> String,
@@ -164,7 +167,9 @@ data UserResource = UserResource {
     -- | URI for `enabledResource` given a format and name.
     userEnabledUri  :: String -> UserName -> String,
     -- | URI for `adminResource` given a format.
-    adminPageUri :: String -> String
+    adminPageUri :: String -> String,
+    -- | URI for `manageUserResource` give a format and name
+    manageUserUri :: String -> UserName -> String
 }
 
 instance FromReqURI UserName where
@@ -195,7 +200,7 @@ instance MemSize GroupIndex where
 
 -- TODO: add renaming
 initUserFeature :: ServerEnv -> IO (IO UserFeature)
-initUserFeature ServerEnv{serverStateDir} = do
+initUserFeature ServerEnv{serverStateDir, serverTemplatesDir, serverTemplatesMode} = do
   -- Canonical state
   usersState  <- usersStateComponent  serverStateDir
   adminsState <- adminsStateComponent serverStateDir
@@ -208,6 +213,13 @@ initUserFeature ServerEnv{serverStateDir} = do
   authFailHook  <- newHook
   groupChangedHook <- newHook
 
+  -- Load templates
+  templates <-
+      loadTemplates serverTemplatesMode
+      [serverTemplatesDir, serverTemplatesDir </> "Users"]
+      [ "manage.html", "token-created.html", "token-revoked.html"
+      ]
+
   return $ do
     -- Slightly tricky: we have an almost recursive knot between the group
     -- resource management functions, and creating the admin group
@@ -216,7 +228,8 @@ initUserFeature ServerEnv{serverStateDir} = do
     -- Instead of trying to pull it apart, we just use a 'do rec'
     --
     rec let (feature@UserFeature{groupResourceAt}, adminGroupDesc)
-              = userFeature usersState
+              = userFeature templates
+                            usersState
                             adminsState
                             groupIndex
                             userAdded authFailHook groupChangedHook
@@ -253,7 +266,8 @@ adminsStateComponent stateDir = do
     , resetState   = adminsStateComponent
     }
 
-userFeature :: StateComponent AcidState Users.Users
+userFeature :: Templates
+            -> StateComponent AcidState Users.Users
             -> StateComponent AcidState HackageAdmins
             -> MemState GroupIndex
             -> Hook () ()
@@ -262,7 +276,7 @@ userFeature :: StateComponent AcidState Users.Users
             -> UserGroup
             -> GroupResource
             -> (UserFeature, UserGroup)
-userFeature  usersState adminsState
+userFeature templates usersState adminsState
              groupIndex userAdded authFailHook groupChangedHook
              adminGroup adminResource
   = (UserFeature {..}, adminGroupDesc)
@@ -275,6 +289,7 @@ userFeature  usersState adminsState
             , userPage
             , passwordResource
             , enabledResource
+            , manageUserResource
             ]
           ++ [
               groupResource adminResource
@@ -306,6 +321,14 @@ userFeature  usersState adminsState
           , resourcePut    = [ ("", serveUserPut) ]
           , resourceDelete = [ ("", serveUserDelete) ]
           }
+      , manageUserResource =
+              (resourceAt "/user/:username/manage.:format")
+              { resourceDesc =
+                      [ (GET, "user management page")
+                      ]
+              , resourceGet = [ ("", serveUserManagement) ]
+              , resourcePost = [ ("", runUserManagementAction)]
+              }
       , passwordResource = resourceAt "/user/:username/password.:format"
                            --TODO: PUT
       , enabledResource  = (resourceAt "/user/:username/enabled.:format") {
@@ -328,6 +351,8 @@ userFeature  usersState adminsState
           renderResource (enabledResource  r) [display uname, format]
       , adminPageUri = \format ->
           renderResource (groupResource adminResource) [format]
+      , manageUserUri = \format uname ->
+          renderResource (manageUserResource r) [display uname, format]
       }
 
     -- Queries and updates
@@ -467,6 +492,68 @@ userFeature  usersState adminsState
         Just (Right Users.ErrDeletedUser) ->
           errBadRequest "User deleted"
             [MText "Cannot disable account, it has already been deleted"]
+
+    serveUserManagement :: DynamicPath -> ServerPartE Response
+    serveUserManagement dpath = do
+      (UserName username) <- userNameInPath dpath
+      uid <- lookupUserName (UserName username)
+      guardAuthorised_ [IsUserId uid, InGroup adminGroup]
+      userInfo <- lookupUserInfo uid
+      let (UserTokenMap knownTokens) = userTokens userInfo
+      template <- getTemplate templates "manage.html"
+      let mkTok (t, desc) =
+              templateDict
+              [ templateVal "hash" (display t)
+              , templateVal "description" desc
+              ]
+      ok $ toResponse $ template
+          [ "username" $= username
+          , "tokens" $= map mkTok (Map.toList knownTokens)
+          ]
+
+    runUserManagementAction :: DynamicPath -> ServerPartE Response
+    runUserManagementAction dpath = do
+      (UserName username) <- userNameInPath dpath
+      uid <- lookupUserName (UserName username)
+      guardAuthorised_ [IsUserId uid, InGroup adminGroup]
+      action <- look "action"
+      case action of
+        "new-auth-token" -> do
+          origTok <- liftIO generateOriginalToken
+          let storeTok = convertToken origTok
+          desc <- T.pack <$> look "description"
+          res <- updateState usersState (AddAuthToken uid storeTok desc)
+          template <- getTemplate templates "token-created.html"
+          case res of
+            Nothing ->
+              ok $ toResponse $ template
+              [ "username" $= username
+              , "token" $= viewOriginalToken origTok
+              ]
+            Just Users.ErrNoSuchUserId ->
+              errInternalError [MText "uid does not exist"]
+        "revoke-auth-token" -> do
+          authToken <- parseAuthToken . T.pack <$> look "auth-token"
+          case authToken of
+            Left err ->
+              errBadRequest "Bad auth token"
+              [MText "The token you have provided is malformed"]
+            Right at -> do
+              res <- updateState usersState (RevokeAuthToken uid at)
+              template <- getTemplate templates "token-revoked.html"
+              case res of
+                Nothing ->
+                  ok $ toResponse $ template
+                  [ "username" $= username
+                  ]
+                Just (Left Users.ErrNoSuchUserId) ->
+                  errInternalError [MText "uid does not exist"]
+                Just (Right Users.ErrTokenNotOwned) ->
+                  errBadRequest "Token not owned"
+                  [MText "Cannot revoke this token, wrong owner!"]
+        _ ->
+          errBadRequest "Missing or wrong action"
+          [MText "The action you have provided does not exist"]
 
     --
     --  Exported utils for looking up user names in URLs\/paths

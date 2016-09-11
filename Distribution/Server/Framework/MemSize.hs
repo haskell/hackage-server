@@ -20,6 +20,7 @@ import Data.Sequence (Seq)
 import qualified Data.Foldable as Foldable
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString.Short as BSS
 import qualified Data.Text as T
 import Data.Time (UTCTime, Day)
 import Data.Ix
@@ -159,6 +160,11 @@ instance MemSize a => MemSize (Seq a) where
 instance MemSize BS.ByteString where
   memSize s = let (w,t) = divMod (BS.length s) wordSize
                in 5 + w + signum t
+
+instance MemSize BSS.ShortByteString where
+  memSize s =
+      let (w,t) = divMod (BSS.length s) wordSize
+      in 5 + w + signum t
 
 instance MemSize LBS.ByteString where
   memSize s = sum [ 1 + memSize c | c <- LBS.toChunks s ]

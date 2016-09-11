@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts, TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Distribution.Server.Users.Backup (
     -- Importing user data
     userBackup,
@@ -20,7 +21,12 @@ import Distribution.Server.Framework.BackupDump (BackupType(..))
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Text (display)
 import Data.Version
+import Data.Monoid
 import Text.CSV (CSV, Record)
+import qualified Data.Map as M
+import qualified Data.ByteString.Base64 as B64
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 
 
 -- Import for the user database
@@ -43,24 +49,48 @@ updateUserBackup users = RestoreBackup {
 importAuth :: CSV -> Users -> Restore Users
 importAuth = concatM . map fromRecord . drop 2
   where
+    decodeTokenPair tokenPair =
+        case T.splitOn "|" tokenPair of
+            [k, v] ->
+                do tok <- parseText "token" (T.unpack k)
+                   desc <-
+                       case B64.decode (T.encodeUtf8 v) of
+                         Left errMsg -> fail errMsg
+                         Right ok ->
+                             return (T.decodeUtf8 ok)
+                   return (tok, desc)
+            _ -> fail $ "Bad token pair: " ++ show tokenPair
     fromRecord :: Record -> Users -> Restore Users
-    fromRecord [idStr, nameStr, "enabled", auth] users = do
-        uid   <- parseText "user id"   idStr
-        uname <- parseText "user name" nameStr
-        let uauth = UserAuth (PasswdHash auth)
-        insertUser users uid $ UserInfo uname (AccountEnabled uauth)
-    fromRecord [idStr, nameStr, "disabled", auth] users = do
-        uid   <- parseText "user id"   idStr
-        uname <- parseText "user name" nameStr
-        let uauth | null auth = Nothing
-                  | otherwise = Just (UserAuth (PasswdHash auth))
-        insertUser users uid $ UserInfo uname (AccountDisabled uauth)
-    fromRecord [idStr, nameStr, "deleted", ""] users = do
-        uid   <- parseText "user id"   idStr
-        uname <- parseText "user name" nameStr
-        insertUser users uid $ UserInfo uname AccountDeleted
-
-    fromRecord x _ = fail $ "Error processing auth record: " ++ show x
+    fromRecord record users =
+        case record of
+          (idStr : nameStr : authStatus : auth : more) ->
+              do uid   <- parseText "user id"   idStr
+                 uname <- parseText "user name" nameStr
+                 authState <-
+                     case authStatus of
+                       "enabled" ->
+                           return . AccountEnabled . UserAuth . PasswdHash $ auth
+                       "disabled" ->
+                           let mayAuth =
+                                   if null auth then Nothing
+                                   else Just . UserAuth . PasswdHash $ auth
+                           in return $ AccountDisabled mayAuth
+                       "deleted" ->
+                           return AccountDeleted
+                       badAuthStatus ->
+                           fail $
+                           "Error processing record " ++ show record
+                           ++ ". Bad auth status: " ++ show badAuthStatus
+                 tokenSet <-
+                     case more of
+                       [tokenList] ->
+                           do let toks = words tokenList
+                              parsedTokens <- mapM (decodeTokenPair . T.pack) toks
+                              return (UserTokenMap $ M.fromList parsedTokens)
+                       _ ->
+                           return (UserTokenMap M.empty)
+                 insertUser users uid $ UserInfo uname authState tokenSet
+          x -> fail $ "Error processing auth record: " ++ show x
 
 insertUser :: Users -> UserId -> UserInfo -> Restore Users
 insertUser users uid uinfo =
@@ -107,7 +137,7 @@ groupToCSV uidset = [map show (UserIdSet.toList uidset)]
    .
    Format:
    .
-   User Id,User name,(enabled|disabled|deleted),pwd-hash
+   User Id,User name,(enabled|disabled|deleted),pwd-hash,token1|descB64-1 token2|descB64-2 ... tokenN|descB64-N
  -}
 -- have a "safe" argument to this function that doesn't export password hashes?
 usersToCSV :: BackupType -> Users -> CSV
@@ -122,14 +152,22 @@ usersToCSV backuptype users
       , if backuptype == FullBackup
         then infoToAuth uinfo
         else scrubbedAuth uinfo
+      , let (UserTokenMap ts) = userTokens uinfo
+        in unwords $ map encodeTokenPair (M.toList ts)
       ]
 
  where
+    encodeTokenPair (token, desc) =
+        display token
+        <> "|"
+        <> T.unpack (T.decodeUtf8 $ B64.encode $ T.encodeUtf8 desc)
+
     usersCSVKey =
        [ "uid"
        , "name"
        , "status"
        , "auth-info"
+       , "tokens"
        ]
     userCSVVer = Version [0,2] []
 
@@ -157,4 +195,3 @@ usersToCSV backuptype users
         AccountEnabled        (UserAuth (PasswdHash hash))  -> hash
         AccountDisabled (Just (UserAuth (PasswdHash hash))) -> hash
         _                                                   -> ""
-

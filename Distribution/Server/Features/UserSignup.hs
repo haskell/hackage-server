@@ -5,7 +5,7 @@ module Distribution.Server.Features.UserSignup (
     initUserSignupFeature,
     UserSignupFeature(..),
     SignupResetInfo(..),
-    
+
     accountSuitableForPasswordReset
   ) where
 
@@ -20,6 +20,7 @@ import Distribution.Server.Features.UserDetails
 
 import Distribution.Server.Users.Group
 import Distribution.Server.Users.Types
+import Distribution.Server.Util.Nonce
 import qualified Distribution.Server.Users.Users as Users
 
 import Data.Map (Map)
@@ -101,9 +102,6 @@ data SignupResetInfo = SignupInfo {
 newtype SignupResetTable = SignupResetTable (Map Nonce SignupResetInfo)
   deriving (Eq, Show, Typeable, MemSize)
 
-newtype Nonce = Nonce ByteString
-  deriving (Eq, Ord, Show, Typeable, MemSize)
-
 emptySignupResetTable :: SignupResetTable
 emptySignupResetTable = SignupResetTable Map.empty
 
@@ -113,20 +111,6 @@ instance MemSize SignupResetInfo where
 
 $(deriveSafeCopy 0 'base ''SignupResetInfo)
 $(deriveSafeCopy 0 'base ''SignupResetTable)
-$(deriveSafeCopy 0 'base ''Nonce)
-
-------------------------------
--- Nonces
---
-
-newRandomNonce :: IO Nonce
-newRandomNonce = do
-  raw <- withFile "/dev/urandom" ReadMode $ \h ->
-           BS.hGet h 10
-  return $! Nonce (Base16.encode raw)
-
-renderNonce :: Nonce -> String
-renderNonce (Nonce nonce) = BS.unpack nonce
 
 ------------------------------
 -- State queries and updates
@@ -226,8 +210,8 @@ importSignupInfo = sequence . map fromRecord . drop 2
     fromRecord :: Record -> Restore (Nonce, SignupResetInfo)
     fromRecord [nonceStr, usernameStr, realnameStr, emailStr, timestampStr] = do
         timestamp <- parseUTCTime "timestamp" timestampStr
-        let nonce      = Nonce (BS.pack nonceStr)
-            signupinfo = SignupInfo {
+        nonce <- parseNonceM nonceStr
+        let signupinfo = SignupInfo {
               signupUserName     = T.pack usernameStr,
               signupRealName     = T.pack realnameStr,
               signupContactEmail = T.pack emailStr,
@@ -259,8 +243,8 @@ importResetInfo = sequence . map fromRecord . drop 2
     fromRecord [nonceStr, useridStr, timestampStr] = do
         userid <- parseText "userid" useridStr
         timestamp <- parseUTCTime "timestamp" timestampStr
-        let nonce      = Nonce (BS.pack nonceStr)
-            signupinfo = ResetInfo {
+        nonce <- parseNonceM nonceStr
+        let signupinfo = ResetInfo {
               resetUserId    = userid,
               nonceTimestamp = timestamp
             }
@@ -289,7 +273,7 @@ initUserSignupFeature :: ServerEnv
                           -> UserDetailsFeature
                           -> UploadFeature
                           -> IO UserSignupFeature)
-initUserSignupFeature env@ServerEnv{ serverStateDir, serverTemplatesDir, 
+initUserSignupFeature env@ServerEnv{ serverStateDir, serverTemplatesDir,
                                      serverTemplatesMode } = do
     -- Canonical state
     signupResetState <- signupResetStateComponent serverStateDir
@@ -419,7 +403,8 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
     --
 
     nonceInPath :: MonadPlus m => DynamicPath -> m Nonce
-    nonceInPath dpath = maybe mzero return (Nonce . BS.pack <$> lookup "nonce" dpath)
+    nonceInPath dpath =
+        maybe mzero return (lookup "nonce" dpath >>= parseNonceM)
 
     lookupSignupInfo :: Nonce -> ServerPartE SignupResetInfo
     lookupSignupInfo nonce = querySignupInfo nonce
@@ -445,7 +430,7 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
 
         (username, realname, useremail) <- lookUserNameEmail
 
-        nonce     <- liftIO newRandomNonce
+        nonce     <- liftIO (newRandomNonce 10)
         timestamp <- liftIO getCurrentTime
         let signupInfo = SignupInfo {
               signupUserName     = username,
@@ -591,7 +576,7 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
         guardEmailMatches mudetails supplied_useremail
         AccountDetails{..} <- guardSuitableAccountType uinfo mudetails
 
-        nonce     <- liftIO newRandomNonce
+        nonce     <- liftIO (newRandomNonce 10)
         timestamp <- liftIO getCurrentTime
         let resetInfo = ResetInfo {
               resetUserId    = uid,
@@ -701,4 +686,3 @@ accountSuitableForPasswordReset
     (AccountDetails { accountKind = Just AccountKindRealUser })
                                     = True
 accountSuitableForPasswordReset _ _ = False
-
