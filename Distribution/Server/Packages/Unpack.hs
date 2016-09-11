@@ -213,8 +213,9 @@ tarOps pkgId tarIndex = CheckPackageContentOps {
     -- root. We convert the requested file paths into the tar index format.
     relative = normalise . (display pkgId </>)
     -- Build the map. In case of multiple intries for a file, we want the
-    -- first entry in the tar file to win. Since the tarIndex is the reversed
-    -- tar file, we need to reverse it back.
+    -- last entry in the tar file to win (per tar append-to-update semantics).
+    -- Since the tarIndex list is the reversed tar file, we need to reverse it
+    -- back since with Map.fromList later entries win.
     fileMap = Map.fromList (reverse tarIndex)
 
     resolvePath :: Int -> FilePath -> Either String (Maybe File)
