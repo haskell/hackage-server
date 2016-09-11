@@ -499,10 +499,10 @@ userFeature templates usersState adminsState
       template <- getTemplate templates "manage.html"
       ok $ toResponse $
         template
-          [ "username" $= userName uinfo
+          [ "username" $= display (userName uinfo)
           , "tokens"   $= 
               [ templateDict
-                  [ templateVal "hash" authtok
+                  [ templateVal "hash" (display authtok)
                   , templateVal "description" desc
                   ]
               | (authtok, desc) <- Map.toList (userTokens uinfo) ]
@@ -524,7 +524,7 @@ userFeature templates usersState adminsState
             Nothing ->
               ok $ toResponse $
                 template
-                  [ "username" $= userName uinfo
+                  [ "username" $= display (userName uinfo)
                   , "token"    $= viewOriginalToken origTok
                   ]
             Just Users.ErrNoSuchUserId ->
@@ -542,7 +542,7 @@ userFeature templates usersState adminsState
               case res of
                 Nothing ->
                   ok $ toResponse $
-                    template [ "username" $= userName uinfo ]
+                    template [ "username" $= display (userName uinfo) ]
                 Just (Left Users.ErrNoSuchUserId) ->
                   errInternalError [MText "uid does not exist"]
                 Just (Right Users.ErrTokenNotOwned) ->

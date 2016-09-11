@@ -10,11 +10,10 @@ module Distribution.Server.Users.AuthToken
 where
 
 import Distribution.Server.Framework.MemSize
-import Distribution.Server.Framework.Templating
 import Distribution.Server.Util.Nonce
 
 import Distribution.Text
-         ( Text(..), display )
+         ( Text(..) )
 import qualified Distribution.Compat.ReadP as Parse
 import qualified Text.PrettyPrint          as Disp
 import qualified Data.Char as Char
@@ -72,9 +71,6 @@ parseAuthToken t
 
 renderAuthToken :: AuthToken -> T.Text
 renderAuthToken (AuthToken bss) = T.decodeUtf8 $ BS16.encode $ BSS.fromShort bss
-
-instance ToSElem AuthToken where
-  toSElem = toSElem . display
 
 instance Text AuthToken where
     disp tok = Disp.text . T.unpack . renderAuthToken $ tok

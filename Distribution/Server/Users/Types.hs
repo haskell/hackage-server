@@ -8,11 +8,10 @@ module Distribution.Server.Users.Types (
 
 import Distribution.Server.Framework.AuthTypes
 import Distribution.Server.Framework.MemSize
-import Distribution.Server.Framework.Templating
 import Distribution.Server.Users.AuthToken
 
 import Distribution.Text
-         ( Text(..), display )
+         ( Text(..) )
 import qualified Distribution.Server.Util.Parse as Parse
 import qualified Distribution.Compat.ReadP as Parse
 import qualified Text.PrettyPrint          as Disp
@@ -69,9 +68,6 @@ instance Text UserId where
 instance Text UserName where
     disp (UserName name) = Disp.text name
     parse = UserName <$> Parse.munch1 isValidUserNameChar
-
-instance ToSElem UserName where
-    toSElem = toSElem . display
 
 isValidUserNameChar :: Char -> Bool
 isValidUserNameChar c = (c < '\127' && Char.isAlphaNum c) || (c == '_')
