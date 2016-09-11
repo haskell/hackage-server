@@ -723,6 +723,9 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
                 [ toHtml $ display uname ++ " is part of the following groups:"
                 , unordList uriPairs
                 ]
+        , hr
+        , anchor ! [href $ manageUserUri users "" uname] <<
+            "Click here to manage this account"
         ]
 
     addUserForm :: DynamicPath -> ServerPartE Response
