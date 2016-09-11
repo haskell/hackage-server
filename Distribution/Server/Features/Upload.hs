@@ -335,11 +335,18 @@ uploadFeature ServerEnv{serverBlobStore = store}
     processUpload state uid res = do
         let pkg = packageId (uploadDesc res)
         pkgGroup <- queryUserGroup (maintainersGroup (packageName pkg))
-        if packageIdExistsModuloNormalisedVersion state pkg
-          then uploadError versionExists --allow trustees to do this?
-          else if packageExists state pkg && not (uid `Group.member` pkgGroup)
-                 then uploadError (notMaintainer pkg)
-                 else return Nothing
+        case () of
+          _ | packageExists state pkg && not (uid `Group.member` pkgGroup)
+           -> uploadError (notMaintainer pkg)
+
+            | packageIdExists state pkg
+           -> uploadError versionExists
+
+            | packageIdExistsModuloNormalisedVersion state pkg
+           -> uploadError normVerExists
+
+            | otherwise
+           -> return Nothing
       where
         uploadError = return . Just . ErrorResponse 403 [] "Upload failed" . return . MText
         versionExists = "This version of the package has already been uploaded.\n\nAs a matter of "
@@ -347,6 +354,12 @@ uploadFeature ServerEnv{serverBlobStore = store}
                      ++ "(so we can guarantee stable md5sums etc). The usual recommendation is "
                      ++ "to upload a new version, and if necessary blacklist the existing one. "
                      ++ "In extraordinary circumstances, contact the administrators."
+        normVerExists = "A version of the package has already been uploaded that differs only in "
+                     ++ "trailing zeros.\n\nAs a matter of policy, to avoid confusion, we no "
+                     ++ "longer not allow uploading different package versions that differ only "
+                     ++ "in trailing zeros. For example if version 1.2.0 has been uploaded then "
+                     ++ "version 1.2 cannot subsequently be upload. "
+                     ++ "If this is a major problem please contact the administrators."
         notMaintainer pkg = "You are not authorised to upload new versions of this package. The "
                      ++ "package '" ++ display (packageName pkg) ++ "' exists already and you "
                      ++ "are not a member of the maintainer group for this package.\n\n"
