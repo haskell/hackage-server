@@ -103,9 +103,10 @@ checkAuthenticated :: ServerMonad m => RealmName -> Users.Users -> m (Either Aut
 checkAuthenticated realm users = do
     req <- askRq
     return $ case getHeaderAuth req of
-      Just (BasicAuth,  ahdr) -> checkBasicAuth  users realm ahdr
       Just (DigestAuth, ahdr) -> checkDigestAuth users       ahdr req
-      Just (AuthToken,  ahdr) -> checkTokenAuth  users ahdr
+      Just _ | plainHttp req  -> Left InsecureAuthError
+      Just (BasicAuth,  ahdr) -> checkBasicAuth  users realm ahdr
+      Just (AuthToken,  ahdr) -> checkTokenAuth  users       ahdr
       Nothing                 -> Left NoAuthError
   where
     getHeaderAuth :: Request -> Maybe (AuthType, BS.ByteString)
@@ -119,6 +120,18 @@ checkAuthenticated realm users = do
             |  BS.isPrefixOf (BS.pack "Basic ") hdr
             -> Just (BasicAuth,  BS.drop 6 hdr)
           _ -> Nothing
+
+    -- The idea here is if you're using https by putting the hackage-server
+    -- behind a reverse proxy then you can get the proxy to set this header
+    -- so that we can know if the request is comming in by https or plain http.
+    plainHttp :: Request -> Bool
+    plainHttp req =
+        case getHeader "X-Forwarded-Proto" req of
+          -- So we only reject insecure connections in setups where the
+          -- proxy passes "X-Forwarded-Proto: http" for the non-secure
+          -- rather than rejecting in all setups where no header is provided.
+          Just hdr | hdr == BS.pack "http" -> True
+          _                                -> False
 
 data AuthType = BasicAuth | DigestAuth | AuthToken
 
@@ -346,6 +359,7 @@ getPasswdHash (UserAuth hash) = hash
 
 data AuthError = NoAuthError
                | UnrecognizedAuthError
+               | InsecureAuthError
                | NoSuchUserError       UserName
                | UserStatusError       UserId UserInfo
                | PasswordMismatchError UserId UserInfo
@@ -363,6 +377,13 @@ authErrorResponse realm autherr = do
 
     toErrorResponse UnrecognizedAuthError =
       ErrorResponse 400 [] "Authorization scheme not recognized" []
+
+    toErrorResponse InsecureAuthError =
+      ErrorResponse 400 [] "Authorization scheme not allowed over plain http"
+        [ MText $ "HTTP Basic and X-ApiKey authorization methods leak "
+               ++ "information when used over plain HTTP. Either use HTTPS "
+               ++ "or if you must use plain HTTP for authorised requests then "
+               ++ "use HTTP Digest authentication." ]
 
     toErrorResponse BadApiKeyError =
       ErrorResponse 401 [] "Bad auth token" []
