@@ -181,8 +181,8 @@ checkTokenAuth :: Users.Users -> BS.ByteString
 checkTokenAuth users ahdr = do
     parsedToken <-
       case Users.parseOriginalToken (T.decodeUtf8 ahdr) of
-        Left _   -> Left BadApiKeyError
-        Right ok -> Right (Users.convertToken ok)
+        Left _    -> Left BadApiKeyError
+        Right tok -> Right (Users.convertToken tok)
     (uid, uinfo) <- Users.lookupAuthToken parsedToken users ?! BadApiKeyError
     _ <- getUserAuth uinfo ?! UserStatusError uid uinfo
     return (uid, uinfo)
