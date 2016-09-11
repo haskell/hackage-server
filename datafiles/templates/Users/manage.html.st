@@ -17,6 +17,20 @@ $hackagePageHeader()$
   You can register API authentication token to use them to for example have services like continouos integration upload packages on your behalf without providing them your username and/or password.
 </p>
 
+<p>
+  To authenticate using this token, you must set the <code>Authorization</code> header for the request you would like to authenticate:
+</p>
+
+<pre>
+Authorization: X-ApiKey [YOUR-TOKEN-HERE]
+</pre>
+
+<p>
+  You can try it out from the command line using curl:
+</p>
+
+<pre>curl --header "Authorization: X-ApiKey [YOUR-TOKEN-HERE]" [HACKAGE-TARGET-PAGE]</pre>
+
 <h4>Active tokens</h4>
 <ul>
 $tokens:{token|
