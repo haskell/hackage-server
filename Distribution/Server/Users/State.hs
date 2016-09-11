@@ -54,15 +54,13 @@ setUserName :: UserId -> UserName -> Update Users.Users (Maybe (Either Users.Err
 setUserName uid uname =
   updateUsers_ $ Users.setUserName uid uname
 
-addAuthToken ::
-    UserId -> AuthToken -> T.Text
-    -> Update Users.Users (Maybe Users.ErrNoSuchUserId)
+addAuthToken :: UserId -> AuthToken -> T.Text
+             -> Update Users.Users (Maybe Users.ErrNoSuchUserId)
 addAuthToken uid authToken description =
   updateUsers_ $ Users.addAuthToken uid authToken description
 
-revokeAuthToken ::
-    UserId -> AuthToken
-    -> Update Users.Users (Maybe (Either Users.ErrNoSuchUserId Users.ErrTokenNotOwned))
+revokeAuthToken :: UserId -> AuthToken
+                -> Update Users.Users (Maybe (Either Users.ErrNoSuchUserId Users.ErrTokenNotOwned))
 revokeAuthToken uid authToken =
   updateUsers_ $ Users.revokeAuthToken uid authToken
 

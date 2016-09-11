@@ -27,9 +27,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS -- Only used for ASCII data
-import qualified Data.ByteString.Base16 as Base16
 import Data.Char (isSpace, isPrint)
 
 import Data.Typeable (Typeable)
@@ -40,7 +38,6 @@ import Data.SafeCopy (base, deriveSafeCopy)
 import Distribution.Text (display)
 import Data.Time (UTCTime(..), getCurrentTime, addDays)
 import Text.CSV (CSV, Record)
-import System.IO
 import Network.Mail.Mime
 import Network.URI (URI(..), URIAuth(..))
 

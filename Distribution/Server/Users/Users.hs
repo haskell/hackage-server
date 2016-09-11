@@ -44,7 +44,7 @@ import Distribution.Server.Users.Types
 import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.MemSize
 
-import Control.Monad (guard)
+import Control.Monad (guard, unless)
 import Data.Maybe (fromMaybe)
 import Data.List  (sort, group, foldl')
 import qualified Data.Map as Map
@@ -126,10 +126,8 @@ invariant Users{userIdMap, userNameMap, nextId, authTokenMap} =
       and
       [ and
         [ case IntMap.lookup uid userIdMap of
-            Nothing -> False
-            Just uinfo ->
-                let (UserTokenMap userToks) = userTokens uinfo
-                in Map.member token userToks
+            Nothing    -> False
+            Just uinfo -> Map.member token (userTokens uinfo)
         | (token, UserId uid) <- Map.toList authTokenMap
         ]
       , and
@@ -137,9 +135,8 @@ invariant Users{userIdMap, userNameMap, nextId, authTokenMap} =
         | (token, uid) <- concatMap getUserTokList (IntMap.toList userIdMap)
         ]
       ]
-    getUserTokList (uid, uinfo) =
-        let (UserTokenMap userToks) = userTokens uinfo
-        in map (\t -> (t, UserId uid)) $ map fst $ Map.toList userToks
+    getUserTokList (uid, uinfo) = [ (t, UserId uid)
+                                  | t <- Map.keys (userTokens uinfo) ]
 
 emptyUsers :: Users
 emptyUsers = Users {
@@ -218,7 +215,7 @@ addUser name status users =
         uinfo = UserInfo {
           userName   = name,
           userStatus = status,
-          userTokens = UserTokenMap Map.empty
+          userTokens = Map.empty
         }
         users' = checkinvariant users {
           userIdMap   = IntMap.insert uid uinfo (userIdMap users),
@@ -237,8 +234,9 @@ insertUserAccount userId@(UserId uid) uinfo users = do
     return $! checkinvariant users {
           userIdMap   = IntMap.insert uid uinfo (userIdMap users),
           authTokenMap =
-              foldl' (\om (tok, _) -> Map.insert tok userId om)
-                  (authTokenMap users) usertoks,
+              foldl' (\om tok -> Map.insert tok userId om)
+                     (authTokenMap users)
+                     (Map.keys (userTokens uinfo)),
           userNameMap = if isUserDeleted
                           then userNameMap users
                           else Map.insert (userName uinfo) userId (userNameMap users),
@@ -246,7 +244,6 @@ insertUserAccount userId@(UserId uid) uinfo users = do
                         in UserId (max nextid (uid + 1))
         }
   where
-    usertoks = Map.toList $ unUserTokenMap $ userTokens uinfo
     userIdInUse   = IntMap.member uid (userIdMap users)
     userNameInUse = Map.member (userName uinfo) (userNameMap users)
     isUserDeleted = case userStatus uinfo of
@@ -335,43 +332,33 @@ setUserName (UserId uid) newname users = do
     userNameInUse uname = Map.member uname (userNameMap users)
 
 -- | Register a new auth token for a user account
-addAuthToken ::
-    UserId -> AuthToken -> T.Text -> Users
-    -> Either ErrNoSuchUserId Users
-addAuthToken (UserId uid) token description users =
-    do userinfo <- lookupUserId (UserId uid) users ?! ErrNoSuchUserId
-       let (UserTokenMap tokenMap) = userTokens userinfo
-           userinfo' =
-               userinfo
-               { userTokens =
-                       UserTokenMap (Map.insert token description tokenMap)
-               }
-           users' =
-               users
-               { userIdMap = IntMap.insert uid userinfo' (userIdMap users)
-               , authTokenMap = Map.insert token (UserId uid) (authTokenMap users)
-               }
-       return $! checkinvariant users'
+addAuthToken :: UserId -> AuthToken -> T.Text -> Users
+             -> Either ErrNoSuchUserId Users
+addAuthToken (UserId uid) token description users = do
+    userinfo <- lookupUserId (UserId uid) users ?! ErrNoSuchUserId
+    let userinfo' = userinfo {
+                      userTokens = Map.insert token description
+                                              (userTokens userinfo)
+                    }
+    return $! checkinvariant users {
+      userIdMap    = IntMap.insert uid userinfo' (userIdMap users),
+      authTokenMap = Map.insert token (UserId uid) (authTokenMap users)
+    }
 
 -- | Revoke an auth token from a user account
-revokeAuthToken ::
-    UserId -> AuthToken -> Users
-    -> Either (Either ErrNoSuchUserId ErrTokenNotOwned) Users
-revokeAuthToken (UserId uid) token users =
-    do userinfo <- lookupUserId (UserId uid) users ?! Left ErrNoSuchUserId
-       let (UserTokenMap tokenMap) = userTokens userinfo
-       () <-
-           if Map.member token tokenMap
-           then Right ()
-           else Left (Right ErrTokenNotOwned)
-       let userinfo' =
-               userinfo { userTokens = UserTokenMap (Map.delete token tokenMap) }
-           users' =
-               users
-               { userIdMap = IntMap.insert uid userinfo' (userIdMap users)
-               , authTokenMap = Map.delete token (authTokenMap users)
-               }
-       return $! checkinvariant users'
+revokeAuthToken :: UserId -> AuthToken -> Users
+                -> Either (Either ErrNoSuchUserId ErrTokenNotOwned) Users
+revokeAuthToken (UserId uid) token users = do
+    userinfo <- lookupUserId (UserId uid) users ?! Left ErrNoSuchUserId
+    unless (Map.member token (userTokens userinfo)) $
+      Left (Right ErrTokenNotOwned)
+    let userinfo' = userinfo {
+                      userTokens = Map.delete token (userTokens userinfo)
+                    }
+    return $! checkinvariant users {
+      userIdMap    = IntMap.insert uid userinfo' (userIdMap users),
+      authTokenMap = Map.delete token (authTokenMap users)
+    }
 
 enumerateAllUsers :: Users -> [(UserId, UserInfo)]
 enumerateAllUsers users =

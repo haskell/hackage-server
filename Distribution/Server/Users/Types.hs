@@ -8,10 +8,11 @@ module Distribution.Server.Users.Types (
 
 import Distribution.Server.Framework.AuthTypes
 import Distribution.Server.Framework.MemSize
+import Distribution.Server.Framework.Templating
 import Distribution.Server.Users.AuthToken
 
 import Distribution.Text
-         ( Text(..) )
+         ( Text(..), display )
 import qualified Distribution.Server.Util.Parse as Parse
 import qualified Distribution.Compat.ReadP as Parse
 import qualified Text.PrettyPrint          as Disp
@@ -34,17 +35,13 @@ newtype UserName  = UserName String
 data UserInfo = UserInfo {
                   userName   :: !UserName,
                   userStatus :: !UserStatus,
-                  userTokens :: !UserTokenMap
+                  userTokens :: !(M.Map AuthToken T.Text) -- tokens and descriptions
                 } deriving (Eq, Show, Typeable)
 
 data UserStatus = AccountEnabled  UserAuth
                 | AccountDisabled (Maybe UserAuth)
                 | AccountDeleted
     deriving (Eq, Show, Typeable)
-
-newtype UserTokenMap
-    = UserTokenMap { unUserTokenMap :: M.Map AuthToken T.Text }
-    deriving (Show, Eq, Typeable, MemSize)
 
 newtype UserAuth = UserAuth PasswdHash
     deriving (Show, Eq, Typeable)
@@ -73,6 +70,9 @@ instance Text UserName where
     disp (UserName name) = Disp.text name
     parse = UserName <$> Parse.munch1 isValidUserNameChar
 
+instance ToSElem UserName where
+    toSElem = toSElem . display
+
 isValidUserNameChar :: Char -> Bool
 isValidUserNameChar c = (c < '\127' && Char.isAlphaNum c) || (c == '_')
 
@@ -87,13 +87,12 @@ instance Migrate UserInfo where
         UserInfo
         { userName = userName_v0 v0
         , userStatus = userStatus_v0 v0
-        , userTokens = UserTokenMap M.empty
+        , userTokens = M.empty
         }
 
 $(deriveSafeCopy 0 'base ''UserId)
 $(deriveSafeCopy 0 'base ''UserName)
 $(deriveSafeCopy 1 'base ''UserAuth)
 $(deriveSafeCopy 0 'base ''UserStatus)
-$(deriveSafeCopy 0 'base ''UserTokenMap)
 $(deriveSafeCopy 0 'base ''UserInfo_v0)
 $(deriveSafeCopy 1 'extension ''UserInfo)

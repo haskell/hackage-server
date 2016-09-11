@@ -105,7 +105,7 @@ checkAuthenticated realm users = do
     return $ case getHeaderAuth req of
       Just (BasicAuth,  ahdr) -> checkBasicAuth  users realm ahdr
       Just (DigestAuth, ahdr) -> checkDigestAuth users       ahdr req
-      Just (KeyAuth, ahdr)    -> checkAccessTokenAuth users ahdr
+      Just (AuthToken,  ahdr) -> checkTokenAuth  users ahdr
       Nothing                 -> Left NoAuthError
   where
     getHeaderAuth :: Request -> Maybe (AuthType, BS.ByteString)
@@ -114,13 +114,13 @@ checkAuthenticated realm users = do
           Just hdr
             |  BS.isPrefixOf (BS.pack "Digest ") hdr
             -> Just (DigestAuth, BS.drop 7 hdr)
-            |  BS.isPrefixOf (BS.pack "ApiKey ") hdr
-            -> Just (KeyAuth, BS.drop 7 hdr)
+            |  BS.isPrefixOf (BS.pack "X-ApiKey ") hdr
+            -> Just (AuthToken, BS.drop 9 hdr)
             |  BS.isPrefixOf (BS.pack "Basic ") hdr
             -> Just (BasicAuth,  BS.drop 6 hdr)
           _ -> Nothing
 
-data AuthType = BasicAuth | DigestAuth | KeyAuth
+data AuthType = BasicAuth | DigestAuth | AuthToken
 
 
 data PrivilegeCondition = InGroup    Group.UserGroup
@@ -159,20 +159,20 @@ checkPriviledged users uid (IsUserId uid':others) =
 checkPriviledged _ _ (AnyKnownUser:_) = return True
 
 ------------------------------------------------------------------------
--- Access token method
+-- Auth token method
 --
 
 -- | Handle a auth request using an access token
-checkAccessTokenAuth ::
-    Users.Users -> BS.ByteString -> Either AuthError (UserId, UserInfo)
-checkAccessTokenAuth users ahdr =
-    do parsedToken <-
-           case Users.parseOriginalToken (T.decodeUtf8 ahdr) of
-             Left _ -> Left BadApiKeyError -- TODO: should we display more infos?
-             Right ok -> Right (Users.convertToken ok)
-       (uid, uinfo) <- Users.lookupAuthToken parsedToken users ?! BadApiKeyError
-       _ <- getUserAuth uinfo ?! UserStatusError uid uinfo
-       return (uid, uinfo)
+checkTokenAuth :: Users.Users -> BS.ByteString
+               -> Either AuthError (UserId, UserInfo)
+checkTokenAuth users ahdr = do
+    parsedToken <-
+      case Users.parseOriginalToken (T.decodeUtf8 ahdr) of
+        Left _   -> Left BadApiKeyError
+        Right ok -> Right (Users.convertToken ok)
+    (uid, uinfo) <- Users.lookupAuthToken parsedToken users ?! BadApiKeyError
+    _ <- getUserAuth uinfo ?! UserStatusError uid uinfo
+    return (uid, uinfo)
 
 ------------------------------------------------------------------------
 -- Basic auth method

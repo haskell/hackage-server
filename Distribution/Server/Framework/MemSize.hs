@@ -162,9 +162,8 @@ instance MemSize BS.ByteString where
                in 5 + w + signum t
 
 instance MemSize BSS.ShortByteString where
-  memSize s =
-      let (w,t) = divMod (BSS.length s) wordSize
-      in 5 + w + signum t
+  memSize s = let (w,t) = divMod (BSS.length s) wordSize
+               in 1 + w + signum t
 
 instance MemSize LBS.ByteString where
   memSize s = sum [ 1 + memSize c | c <- LBS.toChunks s ]

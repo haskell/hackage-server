@@ -247,9 +247,8 @@ usersStateComponent stateDir = do
     , stateHandle  = st
     , getState     = query st GetUserDb
     , putState     = update st . ReplaceUserDb
-    , backupState  = \backuptype users ->
-        [csvToBackup ["users.csv"] (usersToCSV backuptype users)]
-    , restoreState = userBackup
+    , backupState  = usersBackup
+    , restoreState = usersRestore
     , resetState   = usersStateComponent
     }
 
@@ -326,8 +325,8 @@ userFeature templates usersState adminsState
               { resourceDesc =
                       [ (GET, "user management page")
                       ]
-              , resourceGet = [ ("", serveUserManagement) ]
-              , resourcePost = [ ("", runUserManagementAction)]
+              , resourceGet  = [ ("", serveUserManagementGet) ]
+              , resourcePost = [ ("", serveUserManagementPost) ]
               }
       , passwordResource = resourceAt "/user/:username/password.:format"
                            --TODO: PUT
@@ -493,67 +492,64 @@ userFeature templates usersState adminsState
           errBadRequest "User deleted"
             [MText "Cannot disable account, it has already been deleted"]
 
-    serveUserManagement :: DynamicPath -> ServerPartE Response
-    serveUserManagement dpath = do
-      (UserName username) <- userNameInPath dpath
-      uid <- lookupUserName (UserName username)
+    serveUserManagementGet :: DynamicPath -> ServerPartE Response
+    serveUserManagementGet dpath = do
+      (uid, uinfo)  <- lookupUserNameFull =<< userNameInPath dpath
       guardAuthorised_ [IsUserId uid, InGroup adminGroup]
-      userInfo <- lookupUserInfo uid
-      let (UserTokenMap knownTokens) = userTokens userInfo
       template <- getTemplate templates "manage.html"
-      let mkTok (t, desc) =
-              templateDict
-              [ templateVal "hash" (display t)
-              , templateVal "description" desc
-              ]
-      ok $ toResponse $ template
-          [ "username" $= username
-          , "tokens" $= map mkTok (Map.toList knownTokens)
+      ok $ toResponse $
+        template
+          [ "username" $= userName uinfo
+          , "tokens"   $= 
+              [ templateDict
+                  [ templateVal "hash" authtok
+                  , templateVal "description" desc
+                  ]
+              | (authtok, desc) <- Map.toList (userTokens uinfo) ]
           ]
 
-    runUserManagementAction :: DynamicPath -> ServerPartE Response
-    runUserManagementAction dpath = do
-      (UserName username) <- userNameInPath dpath
-      uid <- lookupUserName (UserName username)
+    serveUserManagementPost :: DynamicPath -> ServerPartE Response
+    serveUserManagementPost dpath = do
+      (uid, uinfo)  <- lookupUserNameFull =<< userNameInPath dpath
       guardAuthorised_ [IsUserId uid, InGroup adminGroup]
       action <- look "action"
       case action of
         "new-auth-token" -> do
-          origTok <- liftIO generateOriginalToken
-          let storeTok = convertToken origTok
           desc <- T.pack <$> look "description"
-          res <- updateState usersState (AddAuthToken uid storeTok desc)
           template <- getTemplate templates "token-created.html"
+          origTok  <- liftIO generateOriginalToken
+          let storeTok = convertToken origTok
+          res <- updateState usersState (AddAuthToken uid storeTok desc)
           case res of
             Nothing ->
-              ok $ toResponse $ template
-              [ "username" $= username
-              , "token" $= viewOriginalToken origTok
-              ]
+              ok $ toResponse $
+                template
+                  [ "username" $= userName uinfo
+                  , "token"    $= viewOriginalToken origTok
+                  ]
             Just Users.ErrNoSuchUserId ->
               errInternalError [MText "uid does not exist"]
+
         "revoke-auth-token" -> do
-          authToken <- parseAuthToken . T.pack <$> look "auth-token"
-          case authToken of
-            Left err ->
-              errBadRequest "Bad auth token"
-              [MText "The token you have provided is malformed"]
-            Right at -> do
-              res <- updateState usersState (RevokeAuthToken uid at)
-              template <- getTemplate templates "token-revoked.html"
+          mauthToken <- parseAuthToken . T.pack <$> look "auth-token"
+          template <- getTemplate templates "token-revoked.html"
+          case mauthToken of
+            Left err -> errBadRequest "Bad auth token"
+                          [MText "The auth token provided is malformed: "
+                          ,MText err]
+            Right authToken -> do
+              res <- updateState usersState (RevokeAuthToken uid authToken)
               case res of
                 Nothing ->
-                  ok $ toResponse $ template
-                  [ "username" $= username
-                  ]
+                  ok $ toResponse $
+                    template [ "username" $= userName uinfo ]
                 Just (Left Users.ErrNoSuchUserId) ->
                   errInternalError [MText "uid does not exist"]
                 Just (Right Users.ErrTokenNotOwned) ->
-                  errBadRequest "Token not owned"
-                  [MText "Cannot revoke this token, wrong owner!"]
-        _ ->
-          errBadRequest "Missing or wrong action"
-          [MText "The action you have provided does not exist"]
+                  errBadRequest "Invalid auth token"
+                    [MText "Cannot revoke this token, no such token."]
+
+        _ -> errBadRequest "Invalid form action" []
 
     --
     --  Exported utils for looking up user names in URLs\/paths

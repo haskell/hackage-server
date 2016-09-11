@@ -10,23 +10,21 @@ module Distribution.Server.Users.AuthToken
 where
 
 import Distribution.Server.Framework.MemSize
+import Distribution.Server.Framework.Templating
 import Distribution.Server.Util.Nonce
 
 import Distribution.Text
-         ( Text(..) )
+         ( Text(..), display )
 import qualified Distribution.Compat.ReadP as Parse
 import qualified Text.PrettyPrint          as Disp
 import qualified Data.Char as Char
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import qualified Data.Vector as V
-import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString.Base16 as BS16
 import qualified Crypto.Hash.SHA256 as SHA256
 
 import Control.Applicative ((<$>))
-import Data.Aeson (ToJSON, FromJSON)
 import Data.SafeCopy
 import Data.Typeable (Typeable)
 
@@ -74,6 +72,9 @@ parseAuthToken t
 
 renderAuthToken :: AuthToken -> T.Text
 renderAuthToken (AuthToken bss) = T.decodeUtf8 $ BS16.encode $ BSS.fromShort bss
+
+instance ToSElem AuthToken where
+  toSElem = toSElem . display
 
 instance Text AuthToken where
     disp tok = Disp.text . T.unpack . renderAuthToken $ tok

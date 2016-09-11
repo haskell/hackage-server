@@ -24,11 +24,9 @@ newtype Nonce = Nonce ByteString
   deriving (Eq, Ord, Show, Typeable, MemSize)
 
 newRandomNonce :: Int -> IO Nonce
-newRandomNonce len = do
-  raw <-
-      withFile "/dev/urandom" ReadMode $ \h ->
-      BS.hGet h len
-  return $! Nonce raw
+newRandomNonce len =
+    withFile "/dev/urandom" ReadMode $ \h ->
+      fmap Nonce (BS.hGet h len)
 
 getRawNonceBytes :: Nonce -> ByteString
 getRawNonceBytes (Nonce b) = b
@@ -42,12 +40,10 @@ parseNonce t
     | otherwise = Right (Nonce $ fst $ Base16.decode $ BS.pack t)
 
 parseNonceM :: Monad m => String -> m Nonce
-parseNonceM t =
-    case parseNonce t of
-      Left err -> fail err
-      Right ok -> return ok
+parseNonceM = either fail return . parseNonce
 
--- Nonce and Nonce_v0 have the same type, but the "new" nonce is
+
+-- | Nonce and Nonce_v0 have the same type, but the "new" nonce is
 -- internally NOT base16 encoded
 newtype Nonce_v0 = Nonce_v0 ByteString
   deriving (Eq, Ord, Show, Typeable, MemSize)
