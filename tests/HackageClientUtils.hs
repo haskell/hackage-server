@@ -1,4 +1,6 @@
+{-# LANGUAGE CApiFFI #-}
 {-# LANGUAGE OverloadedStrings #-}
+
 module HackageClientUtils where
 
 import Control.Concurrent
@@ -9,6 +11,7 @@ import Data.List (isInfixOf, isSuffixOf)
 import Data.Maybe
 import Data.String ()
 import Data.Aeson (FromJSON(..), Value(..), (.:))
+import Data.Version (showVersion)
 import Network.HTTP hiding (user)
 import Network.URI
 import System.Directory
@@ -30,6 +33,8 @@ import HttpUtils ( ExpectedCode
                  , Authorization(..)
                  )
 import qualified HttpUtils as Http
+
+import qualified Paths_hackage_server as Paths
 
 withServerRunning :: FilePath -> IO () -> IO ()
 withServerRunning root f
@@ -85,11 +90,26 @@ runServerChecked root args = do
       Just ExitSuccess -> return ()
       _                -> die "Bad exit code from server"
 
+foreign import capi safe "unistd.h sync" c_sync :: IO ()
+
 runServer :: FilePath -> [String] -> IO (Maybe ExitCode)
-runServer root args = run server args'
+runServer root args = do
+    -- attempt to reduce failures on Travis by syncing fs before starting up server
+    c_sync
+    -- ideally, cabal-install should tell us where to find build artifacts
+    mserver <- findFile dirs "hackage-server"
+    case mserver of
+        Nothing -> fail ("couldn't find 'hackage-server' test-executable in "
+                         ++ show dirs)
+        Just server -> run server args'
   where
-    server = root </> "dist/build/hackage-server/hackage-server"
+    dirs = [ root </> "dist-newstyle/build/hackage-server-" ++ ver
+                  </> "build/hackage-server/" -- cabal new-build
+           , root </> "dist/build/hackage-server/" -- cabal test
+           ]
     args'  = ("--static-dir=" ++ root </> "datafiles/") : args
+
+    ver = showVersion Paths.version
 
 {------------------------------------------------------------------------------
   Access to individual Hackage features

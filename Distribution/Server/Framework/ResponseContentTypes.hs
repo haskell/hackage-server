@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
@@ -25,22 +24,16 @@ import Distribution.Server.Framework.BlobStorage
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Util.Parse (packUTF8)
+import Distribution.Server.Features.Security.MD5
 import Distribution.Server.Features.Security.SHA256
 
 import Happstack.Server
          ( ToMessage(..), Response(..), RsFlags(..), Length(NoContentLength), nullRsFlags, mkHeaders
          , noContentLength )
 
-import qualified Data.ByteString       as BS
 import qualified Data.ByteString.Lazy  as BS.Lazy
 import qualified Data.ByteString.Char8 as BS.Char8
-import Data.Digest.Pure.MD5 (MD5Digest, md5)
-import qualified Data.Binary     as Binary
-import qualified Data.Binary.Put as Binary
 import qualified Data.ByteString.Base64 as Base64
-#if MIN_VERSION_binary(0,8,3)
-import Data.ByteString.Builder.Extra as BS
-#endif
 import Text.RSS (RSS)
 import qualified Text.RSS as RSS (rssToXML, showXML)
 import qualified Text.XHtml.Strict as XHtml (Html, showHtml)
@@ -157,20 +150,6 @@ instance ToMessage DocTarball where
 -- | Format an 'MD5Digest' in Base64 as required for the \"Content-MD5\" header.
 formatMD5Digest :: MD5Digest -> String
 formatMD5Digest = BS.Char8.unpack . Base64.encode . md5DigestBytes
-
-md5DigestBytes :: MD5Digest -> BS.ByteString
-md5DigestBytes =
-    toBs . Binary.put
-  where
-    toBs :: Binary.Put -> BS.ByteString
-#if MIN_VERSION_binary(0,8,3)
-    -- with later binary versions we can control the buffer size precisely:
-    toBs = BS.Lazy.toStrict
-         . BS.toLazyByteStringWith (BS.untrimmedStrategy 16 0) BS.Lazy.empty
-         . Binary.execPut
-#else
-    toBs = BS.Lazy.toStrict . Binary.runPut
-#endif
 
 formatLastModifiedTime :: UTCTime -> String
 formatLastModifiedTime = Time.formatTime defaultTimeLocale rfc822DateFormat

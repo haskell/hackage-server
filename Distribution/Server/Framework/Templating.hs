@@ -25,6 +25,7 @@ module Distribution.Server.Framework.Templating (
     templateDict,
     templateVal,
     templateEnumDesriptor,
+    ToSElem(..),
   ) where
 
 import Text.StringTemplate

@@ -723,6 +723,9 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
                 [ toHtml $ display uname ++ " is part of the following groups:"
                 , unordList uriPairs
                 ]
+        , hr
+        , anchor ! [href $ manageUserUri users "" uname] <<
+            "Click here to manage this account"
         ]
 
     addUserForm :: DynamicPath -> ServerPartE Response
@@ -1308,7 +1311,7 @@ mkHtmlPreferred HtmlUtilities{..}
                   , intercalate ", " (map display deprs)]
         , toHtml "The version range given to this package, therefore, is " +++ strong (toHtml $ rendSumRange pref)
         , h4 << "Versions affected"
-        , paragraph << "Blue versions are normal versions. Green are those out of any preferred version ranges. Gray are deprecated."
+        , paragraph << "Orange versions are normal versions. Green are those out of any preferred version ranges. Gray are deprecated."
         , paragraph << (snd $ Pages.renderVersion
                                   (PackageIdentifier pkgname $ Version [] [])
                                   (classifyVersions prefInfo $ map packageVersion pkgs) Nothing)
@@ -1614,7 +1617,7 @@ mkHtmlSearch HtmlUtilities{..}
             renderSearchResult :: PackageItem -> Html
             renderSearchResult item = li ! classes <<
               [ packageNameLink pkgname
-              , toHtml $ " " ++ ptype (itemHasLibrary item) (itemNumExecutables item)
+              , toHtml $ " " ++ ptype
               , br
               , toHtml (itemDesc item)
               , br
@@ -1629,9 +1632,8 @@ mkHtmlSearch HtmlUtilities{..}
                           $ PackageIndex.lookupPackageName pkgIndex pkgname
                 -- takes current time as argument so it can say how many $X ago something was
                 humanTime = HumanTime.humanReadableTime' currentTime timestamp
-                ptype _ 0 = "library"
-                ptype lib num = (if lib then "library and " else "")
-                                ++ (case num of 1 -> "program"; _ -> "programs")
+                ptype = packageType (itemHasLibrary item) (itemNumExecutables item)
+                                    (itemNumTests item) (itemNumBenchmarks item)
                 classes = case classList of [] -> []; _ -> [theclass $ unwords classList]
                 classList = (case itemDeprecated item of Nothing -> []; _ -> ["deprecated"])
 

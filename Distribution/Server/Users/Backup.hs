@@ -1,11 +1,11 @@
 {-# LANGUAGE FlexibleContexts, TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Distribution.Server.Users.Backup (
     -- Importing user data
-    userBackup,
-    importGroup,
+    usersRestore,
     groupBackup,
     -- Exporting user data
-    usersToCSV,
+    usersBackup,
     groupToCSV
   ) where
 
@@ -16,16 +16,19 @@ import qualified Distribution.Server.Users.UserIdSet as UserIdSet
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Framework.Auth as Auth
 
-import Distribution.Server.Framework.BackupDump (BackupType(..))
+import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Text (display)
 import Data.Version
+import Data.Monoid
 import Text.CSV (CSV, Record)
+import qualified Data.Map as M
+import qualified Data.Text as T
 
 
 -- Import for the user database
-userBackup :: RestoreBackup Users
-userBackup = updateUserBackup Users.emptyUsers
+usersRestore :: RestoreBackup Users
+usersRestore = updateUserBackup Users.emptyUsers
 
 updateUserBackup :: Users -> RestoreBackup Users
 updateUserBackup users = RestoreBackup {
@@ -33,6 +36,10 @@ updateUserBackup users = RestoreBackup {
       BackupByteString ["users.csv"] bs -> do
         csv <- importCSV "users.csv" bs
         users' <- importAuth csv users
+        return (updateUserBackup users')
+      BackupByteString ["authtokens.csv"] bs -> do
+        csv <- importCSV "authtokens.csv" bs
+        users' <- importAuthTokens csv users
         return (updateUserBackup users')
       _ ->
         return (updateUserBackup users)
@@ -48,17 +55,17 @@ importAuth = concatM . map fromRecord . drop 2
         uid   <- parseText "user id"   idStr
         uname <- parseText "user name" nameStr
         let uauth = UserAuth (PasswdHash auth)
-        insertUser users uid $ UserInfo uname (AccountEnabled uauth)
+        insertUser users uid $ UserInfo uname (AccountEnabled uauth) M.empty
     fromRecord [idStr, nameStr, "disabled", auth] users = do
         uid   <- parseText "user id"   idStr
         uname <- parseText "user name" nameStr
         let uauth | null auth = Nothing
                   | otherwise = Just (UserAuth (PasswdHash auth))
-        insertUser users uid $ UserInfo uname (AccountDisabled uauth)
+        insertUser users uid $ UserInfo uname (AccountDisabled uauth) M.empty
     fromRecord [idStr, nameStr, "deleted", ""] users = do
         uid   <- parseText "user id"   idStr
         uname <- parseText "user name" nameStr
-        insertUser users uid $ UserInfo uname AccountDeleted
+        insertUser users uid $ UserInfo uname AccountDeleted M.empty
 
     fromRecord x _ = fail $ "Error processing auth record: " ++ show x
 
@@ -68,6 +75,22 @@ insertUser users uid uinfo =
         Left (Left Users.ErrUserIdClash)    -> fail $ "duplicate user id " ++ display uid
         Left (Right Users.ErrUserNameClash) -> fail $ "duplicate user name " ++ display (userName uinfo)
         Right users'                        -> return users'
+
+importAuthTokens :: CSV -> Users -> Restore Users
+importAuthTokens = concatM . map fromRecord . drop 2
+  where
+    fromRecord :: Record -> Users -> Restore Users
+    fromRecord [idStr, tokenStr, descr] users = do
+        uid   <- parseText "user id"    idStr
+        token <- parseText "auth token" tokenStr
+        addAuthToken uid token (T.pack descr) users
+    fromRecord x _ = fail $ "Error processing auth record: " ++ show x
+
+    addAuthToken uid token descr users =
+      case Users.addAuthToken uid token descr users of
+        Right users' -> return users'
+        Left Users.ErrNoSuchUserId ->
+          fail $ "auth token for non-existant user id " ++ display uid
 
 -- Import for a single group
 groupBackup :: [FilePath] -> RestoreBackup UserIdSet
@@ -102,6 +125,13 @@ importGroup csv = do
 groupToCSV :: UserIdSet -> CSV
 groupToCSV uidset = [map show (UserIdSet.toList uidset)]
 
+
+usersBackup :: BackupType -> Users -> [BackupEntry]
+usersBackup backuptype users =
+  [ csvToBackup ["users.csv"] (usersToCSV backuptype users)
+  , csvToBackup ["authtokens.csv"] (authTokensToCSV backuptype users)
+  ]
+
 -- auth.csv
 {- | Produces a CSV file for the users DB.
    .
@@ -109,7 +139,6 @@ groupToCSV uidset = [map show (UserIdSet.toList uidset)]
    .
    User Id,User name,(enabled|disabled|deleted),pwd-hash
  -}
--- have a "safe" argument to this function that doesn't export password hashes?
 usersToCSV :: BackupType -> Users -> CSV
 usersToCSV backuptype users
     = ([showVersion userCSVVer]:) $
@@ -157,4 +186,27 @@ usersToCSV backuptype users
         AccountEnabled        (UserAuth (PasswdHash hash))  -> hash
         AccountDisabled (Just (UserAuth (PasswdHash hash))) -> hash
         _                                                   -> ""
+
+-- authtokens.csv
+{- | Produces a CSV file for the users auth tokens.
+   .
+   Format:
+   .
+   User Id,Token,Description
+ -}
+authTokensToCSV :: BackupType -> Users -> CSV
+authTokensToCSV backuptype users =
+    [ [showVersion (Version [0,1] [])]
+    , [ "uid"
+      , "token"
+      , "description"
+      ]
+    ]
+ ++ [ [ display uid
+      , display token
+      , T.unpack descr
+      ]
+    | backuptype == FullBackup
+    , (uid, uinfo)   <- Users.enumerateAllUsers users
+    , (token, descr) <- M.toList (userTokens uinfo) ]
 

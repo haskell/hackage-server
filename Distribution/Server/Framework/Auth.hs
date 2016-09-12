@@ -46,13 +46,14 @@ import qualified Data.ByteString.Char8 as BS -- Only used for Digest headers
 
 import Control.Monad
 import qualified Data.ByteString.Base64 as Base64
-import Data.Char (intToDigit, isAsciiLower)
+import Data.Char (intToDigit, isAsciiLower, isAscii, isAlphaNum, toLower)
 import System.Random (randomRs, newStdGen)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Text.ParserCombinators.ReadP as Parse
 import Data.Maybe (listToMaybe)
 import Data.List  (intercalate)
+import qualified Data.Text.Encoding as T
 
 
 ------------------------------------------------------------------------
@@ -102,8 +103,10 @@ checkAuthenticated :: ServerMonad m => RealmName -> Users.Users -> m (Either Aut
 checkAuthenticated realm users = do
     req <- askRq
     return $ case getHeaderAuth req of
-      Just (BasicAuth,  ahdr) -> checkBasicAuth  users realm ahdr
       Just (DigestAuth, ahdr) -> checkDigestAuth users       ahdr req
+      Just _ | plainHttp req  -> Left InsecureAuthError
+      Just (BasicAuth,  ahdr) -> checkBasicAuth  users realm ahdr
+      Just (AuthToken,  ahdr) -> checkTokenAuth  users       ahdr
       Nothing                 -> Left NoAuthError
   where
     getHeaderAuth :: Request -> Maybe (AuthType, BS.ByteString)
@@ -112,12 +115,13 @@ checkAuthenticated realm users = do
           Just hdr
             |  BS.isPrefixOf (BS.pack "Digest ") hdr
             -> Just (DigestAuth, BS.drop 7 hdr)
-
+            |  BS.isPrefixOf (BS.pack "X-ApiKey ") hdr
+            -> Just (AuthToken, BS.drop 9 hdr)
             |  BS.isPrefixOf (BS.pack "Basic ") hdr
             -> Just (BasicAuth,  BS.drop 6 hdr)
           _ -> Nothing
 
-data AuthType = BasicAuth | DigestAuth
+data AuthType = BasicAuth | DigestAuth | AuthToken
 
 
 data PrivilegeCondition = InGroup    Group.UserGroup
@@ -155,6 +159,81 @@ checkPriviledged users uid (IsUserId uid':others) =
 
 checkPriviledged _ _ (AnyKnownUser:_) = return True
 
+
+------------------------------------------------------------------------
+-- Are we using plain http?
+--
+
+-- | The idea here is if you're using https by putting the hackage-server
+-- behind a reverse proxy then you can get the proxy to set this header
+-- so that we can know if the request is comming in by https or plain http.
+--
+-- We only reject insecure connections in setups where the proxy passes
+-- "Forwarded: proto=http" or "X-Forwarded-Proto: http" for the non-secure
+-- rather than rejecting in all setups where no header is provided.
+--
+plainHttp :: Request -> Bool
+plainHttp req
+  | Just fwd      <- getHeader "Forwarded" req
+  , Just fwdprops <- parseForwardedHeader fwd
+  , Just "http"   <- Map.lookup "proto" fwdprops
+  = True
+
+  | Just xfwd <- getHeader "X-Forwarded-Proto" req
+  , xfwd == BS.pack "http"
+  = True
+
+  | otherwise
+  = False
+  where
+    -- "Forwarded" header parser derived from RFC 7239
+    -- https://tools.ietf.org/html/rfc7239
+    parseForwardedHeader :: BS.ByteString -> Maybe (Map String String)
+    parseForwardedHeader =
+        fmap Map.fromList . parse . BS.unpack
+      where
+        parse :: String -> Maybe [(String, String)]
+        parse s = listToMaybe [ x | (x, "") <- Parse.readP_to_S parser s ]
+
+        parser :: Parse.ReadP [(String, String)]
+        parser = Parse.skipSpaces
+              >> Parse.sepBy1 forwardedPair
+                       (Parse.skipSpaces >> Parse.char ';' >> Parse.skipSpaces)
+
+        forwardedPair :: Parse.ReadP (String, String)
+        forwardedPair = do
+          theName <- token
+          void $ Parse.char '='
+          theValue <- quotedString Parse.+++ token
+          return (map toLower theName, theValue)
+
+        token :: Parse.ReadP String
+        token = Parse.munch1 (\c -> isAscii c
+                                && (isAlphaNum c || c `elem` "!#$%&'*+-.^_`|~"))
+
+        quotedString :: Parse.ReadP String
+        quotedString =
+          join Parse.between
+               (Parse.char '"')
+               (Parse.many $ (Parse.char '\\' >> Parse.get)
+                    Parse.<++ Parse.satisfy (/='"'))
+
+
+------------------------------------------------------------------------
+-- Auth token method
+--
+
+-- | Handle a auth request using an access token
+checkTokenAuth :: Users.Users -> BS.ByteString
+               -> Either AuthError (UserId, UserInfo)
+checkTokenAuth users ahdr = do
+    parsedToken <-
+      case Users.parseOriginalToken (T.decodeUtf8 ahdr) of
+        Left _    -> Left BadApiKeyError
+        Right tok -> Right (Users.convertToken tok)
+    (uid, uinfo) <- Users.lookupAuthToken parsedToken users ?! BadApiKeyError
+    _ <- getUserAuth uinfo ?! UserStatusError uid uinfo
+    return (uid, uinfo)
 
 ------------------------------------------------------------------------
 -- Basic auth method
@@ -328,9 +407,11 @@ getPasswdHash (UserAuth hash) = hash
 
 data AuthError = NoAuthError
                | UnrecognizedAuthError
+               | InsecureAuthError
                | NoSuchUserError       UserName
                | UserStatusError       UserId UserInfo
                | PasswordMismatchError UserId UserInfo
+               | BadApiKeyError
   deriving Show
 
 authErrorResponse :: MonadIO m => RealmName -> AuthError -> m ErrorResponse
@@ -345,7 +426,16 @@ authErrorResponse realm autherr = do
     toErrorResponse UnrecognizedAuthError =
       ErrorResponse 400 [] "Authorization scheme not recognized" []
 
+    toErrorResponse InsecureAuthError =
+      ErrorResponse 400 [] "Authorization scheme not allowed over plain http"
+        [ MText $ "HTTP Basic and X-ApiKey authorization methods leak "
+               ++ "information when used over plain HTTP. Either use HTTPS "
+               ++ "or if you must use plain HTTP for authorised requests then "
+               ++ "use HTTP Digest authentication." ]
+
+    toErrorResponse BadApiKeyError =
+      ErrorResponse 401 [] "Bad auth token" []
+
     -- we don't want to leak info for the other cases, so same message for them all:
     toErrorResponse _ =
       ErrorResponse 401 [] "Username or password incorrect" []
-

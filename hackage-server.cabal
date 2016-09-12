@@ -26,6 +26,8 @@ license-file: LICENSE
 
 build-type: Simple
 cabal-version: >=1.10
+tested-with: GHC==8.0.1, GHC==7.10.3, GHC==7.8.4, GHC==7.6.3
+
 data-dir: datafiles
 data-files:
   templates/*.html.st
@@ -38,10 +40,28 @@ data-files:
   templates/UserSignupReset/*.html.st
   templates/UserSignupReset/*.email.st
   templates/AdminFrontend/*.html.st
+  templates/Users/*.html.st
 
   static/*.css
   static/*.ico
   static/*.png
+
+  TUF/README.md
+  TUF/mirrors.json
+  TUF/root.json
+  TUF/snapshot.private
+  TUF/timestamp.private
+
+extra-source-files:
+  tests/permissions-tarballs/*.tar.gz
+  tests/unpack-checks/correct-package-0.1.0.0/LICENSE
+  tests/unpack-checks/correct-package-0.1.0.0/Main.hs
+  tests/unpack-checks/correct-package-0.1.0.0/Setup.hs
+  tests/unpack-checks/correct-package-0.1.0.0/correct-package.cabal
+  tests/unpack-checks/missing-configure-0.1.0.0/LICENSE
+  tests/unpack-checks/missing-configure-0.1.0.0/Main.hs
+  tests/unpack-checks/missing-configure-0.1.0.0/Setup.hs
+  tests/unpack-checks/missing-configure-0.1.0.0/missing-configure.cabal
 
 source-repository head
   type: git
@@ -87,6 +107,8 @@ executable hackage-server
     buildable: False
   main-is: Main.hs
   other-modules:
+    Paths_hackage_server
+
     Data.IntTrie
     Data.StringTable
     Data.TarIndex
@@ -148,6 +170,7 @@ executable hackage-server
     Distribution.Server.Users.Types
     Distribution.Server.Users.Backup
     Distribution.Server.Users.Users
+    Distribution.Server.Users.AuthToken
     Distribution.Server.Users.UserIdSet
 
     Distribution.Server.Util.Histogram
@@ -160,6 +183,7 @@ executable hackage-server
     Distribution.Server.Util.ContentType
     Distribution.Server.Util.SigTerm
     Distribution.Server.Util.ReadDigest
+    Distribution.Server.Util.Nonce
 
     Distribution.Server.Features
     Distribution.Server.Features.Core
@@ -167,9 +191,9 @@ executable hackage-server
     Distribution.Server.Features.Core.Backup
     Distribution.Server.Features.Security
     Distribution.Server.Features.Security.Backup
-    Distribution.Server.Features.Security.Cache
     Distribution.Server.Features.Security.FileInfo
     Distribution.Server.Features.Security.Layout
+    Distribution.Server.Features.Security.MD5
     Distribution.Server.Features.Security.Migration
     Distribution.Server.Features.Security.Orphans
     Distribution.Server.Features.Security.ResponseContentTypes
@@ -272,7 +296,7 @@ executable hackage-server
     blaze-builder >= 0.4,
     text       >= 0.11,
     split      >= 0.2,
-    time       >= 1.1 && < 1.6,
+    time       >= 1.1 && < 1.7,
     time-locale-compat >= 0.1.0.1,
 --    old-locale >= 1.0,
     deepseq    == 1.1.* || > 1.3.0,
@@ -284,11 +308,9 @@ executable hackage-server
     unix       >= 2.6,
     zlib       >= 0.5.3 && < 0.6,
     tar        >= 0.4.5 && < 0.6,
-    async      == 2.0.*,
-    cereal     >= 0.4,
-    safecopy   >= 0.8.3 && < 0.9,
-    crypto-api >= 0.12 && < 0.14,
-    pureMD5    >= 0.2,
+    async      == 2.1.*,
+    cereal     == 0.5.*,
+    safecopy   >= 0.9.1 && < 0.10,
     xhtml      >= 3000.1,
     aeson      >= 0.6.2,
     unordered-containers >= 0.2.3.0,
@@ -302,16 +324,17 @@ executable hackage-server
     mime-mail  ==0.4.*,
     HStringTemplate > 0.7 && < 0.9,
     lifted-base >= 0.2.1 && < 0.3,
-    QuickCheck >= 2.5,
+    QuickCheck >= 2.5 && < 2.10,
     friendly-time >= 0.4 && < 0.5,
     cheapskate >= 0.1,
     blaze-html >= 0.7,
     xmlgen     >= 0.6,
-    hackage-security == 0.5.*,
+    hackage-security >= 0.5.2 && < 0.6,
     ed25519,
-    byteable,
-    cryptohash,
-    binary
+    cryptohash-md5    == 0.11.*,
+    cryptohash-sha256 == 0.11.*,
+    binary,
+    base16-bytestring >= 0.1 && < 0.2
 
   if ! flag(minimal)
     build-depends:
@@ -342,6 +365,7 @@ executable hackage-mirror
     buildable: False
   main-is: MirrorClient.hs
   other-modules:
+    Paths_hackage_server
     Distribution.Client
     Distribution.Client.Cron
     Distribution.Client.UploadLog
@@ -369,10 +393,10 @@ executable hackage-mirror
     Cabal,
     safecopy, cereal, binary, mtl,
     unix, aeson,
-    byteable,
-    cryptohash,
+    cryptohash-sha256,
     parsec,
     process >= 1.2.0,
+    base16-bytestring >= 0.1 && < 0.2,
     hackage-security >= 0.5.1 && < 0.6,
     hackage-security-HTTP
   default-language:   Haskell2010
@@ -397,6 +421,7 @@ executable hackage-build
     buildable: False
   main-is: BuildClient.hs
   other-modules:
+    Paths_hackage_server
     Distribution.Client
     Distribution.Client.Index
     Distribution.Server.Users.Types
@@ -414,8 +439,8 @@ executable hackage-build
     aeson >= 0.6.1.0,
     random,
     unix,
-    byteable,
-    cryptohash,
+    cryptohash-sha256,
+    base16-bytestring >= 0.1 && < 0.2,
     -- Runtime dependency only:
     hscolour >= 1.8
   default-language: Haskell2010
@@ -433,6 +458,7 @@ executable hackage-import
     buildable: False
   main-is: ImportClient.hs
   other-modules:
+    Paths_hackage_server
     Distribution.Client.DistroMap
     Distribution.Client.HtPasswdDb
     Distribution.Client.ParseApacheLogs
@@ -463,7 +489,16 @@ executable hackage-import
 Test-Suite HighLevelTest
     type:           exitcode-stdio-1.0
     main-is:        HighLevelTest.hs
+    other-modules:
+      Paths_hackage_server
+      HackageClientUtils
+      Run
+      MailUtils
+      HttpUtils
+      Package
+      Util
     hs-source-dirs: tests
+
     default-language: Haskell2010
     ghc-options:    -threaded -Wall
     build-depends:  base,
@@ -525,11 +560,13 @@ Test-Suite CreateUserTest
 Test-Suite PackageTests
     type:           exitcode-stdio-1.0
     main-is:        PackageTestMain.hs
+    other-modules:  Distribution.Server.Packages.UnpackTest
     hs-source-dirs: ., tests
     default-language: Haskell2010
     ghc-options:    -threaded -Wall -fno-warn-orphans
     build-depends:  base,
                     bytestring,
+                    containers,
                     filepath,
                     mtl,
                     tar,
@@ -540,3 +577,30 @@ Test-Suite PackageTests
                     test-framework,
                     test-framework-hunit,
                     HUnit
+
+Test-Suite HashTests
+    type:           exitcode-stdio-1.0
+    main-is:        HashTestMain.hs
+    hs-source-dirs: ., tests
+    default-language: Haskell2010
+    ghc-options:    -threaded -Wall -fno-warn-orphans
+    build-depends:
+                    -- version constraints inherited from executables
+                    Cabal,
+                    array,
+                    base,
+                    base16-bytestring,
+                    binary,
+                    bytestring,
+                    cereal,
+                    containers,
+                    cryptohash-md5,
+                    cryptohash-sha256,
+                    deepseq,
+                    safecopy,
+                    text,
+                    time,
+                    vector,
+                    -- test-specific dependencies
+                    tasty       == 0.11.*,
+                    tasty-hunit >= 0.9.2 && < 0.10

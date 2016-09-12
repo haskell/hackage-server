@@ -3,7 +3,7 @@ module Distribution.Server.Framework.MemSize (
   MemSize(..),
   memSizeMb, memSizeKb,
   memSize0, memSize1, memSize2, memSize3, memSize4,
-  memSize5, memSize6, memSize7, memSize10,
+  memSize5, memSize6, memSize7, memSize8, memSize9, memSize10,
   memSizeUArray, memSizeUVector
   ) where
 
@@ -20,6 +20,7 @@ import Data.Sequence (Seq)
 import qualified Data.Foldable as Foldable
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString.Short as BSS
 import qualified Data.Text as T
 import Data.Time (UTCTime, Day)
 import Data.Ix
@@ -56,6 +57,8 @@ memSize4 :: (MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> 
 memSize5 :: (MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> a3 -> a4 -> Int
 memSize6 :: (MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> a3 -> a4 -> a5 -> Int
 memSize7 :: (MemSize a6, MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> a3 -> a4 -> a5 -> a6 -> Int
+memSize8 :: (MemSize a7, MemSize a6, MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> a3 -> a4 -> a5 -> a6 -> a7 -> Int
+memSize9 :: (MemSize a8, MemSize a7, MemSize a6, MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> a3 -> a4 -> a5 -> a6 -> a7 -> a8 -> Int
 memSize10 :: (MemSize a9, MemSize a8, MemSize a7, MemSize a6, MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> a3 -> a4 -> a5 -> a6 -> a7 -> a8 -> a9 -> Int
 
 
@@ -73,7 +76,14 @@ memSize7 a b c d e
          f g         = 8 + memSize a + memSize b + memSize c
                          + memSize d + memSize e + memSize f
                          + memSize g
-
+memSize8 a b c d e
+         f g h       = 9 + memSize a + memSize b + memSize c
+                         + memSize d + memSize e + memSize f
+                         + memSize g + memSize h
+memSize9 a b c d e
+         f g h i     = 10 + memSize a + memSize b + memSize c
+                          + memSize d + memSize e + memSize f
+                          + memSize g + memSize h + memSize i
 memSize10 a b c d e
           f g h i j  = 11 + memSize a + memSize b + memSize c
                           + memSize d + memSize e + memSize f
@@ -150,6 +160,10 @@ instance MemSize a => MemSize (Seq a) where
 instance MemSize BS.ByteString where
   memSize s = let (w,t) = divMod (BS.length s) wordSize
                in 5 + w + signum t
+
+instance MemSize BSS.ShortByteString where
+  memSize s = let (w,t) = divMod (BSS.length s) wordSize
+               in 1 + w + signum t
 
 instance MemSize LBS.ByteString where
   memSize s = sum [ 1 + memSize c | c <- LBS.toChunks s ]

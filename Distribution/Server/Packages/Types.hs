@@ -21,6 +21,7 @@ import Distribution.Server.Framework.Instances (PackageIdentifier_v0)
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.Server.Features.Security.Orphans ()
+import Distribution.Server.Features.Security.MD5
 import Distribution.Server.Features.Security.SHA256
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
@@ -97,6 +98,9 @@ data BlobInfo = BlobInfo {
     blobInfoLength     :: !Int,
     blobInfoHashSHA256 :: !SHA256Digest
 } deriving (Eq, Typeable, Show)
+
+blobInfoHashMD5 :: BlobInfo -> MD5Digest
+blobInfoHashMD5 = BlobStorage.blobMd5Digest . blobInfoId
 
 data PkgTarball =
     PkgTarball {

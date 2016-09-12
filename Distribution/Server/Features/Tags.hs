@@ -242,9 +242,13 @@ constructImmutableTags genDesc =
         !l = license desc
         !hl = hasLibs desc
         !he = hasExes desc
+        !ht = hasTests desc
+        !hb = hasBenchmarks desc
     in licenseToTag l
     ++ (if hl then [Tag "library"] else [])
     ++ (if he then [Tag "program"] else [])
+    ++ (if ht then [Tag "test"] else [])
+    ++ (if hb then [Tag "benchmark"] else [])
   where
     licenseToTag :: License -> [Tag]
     licenseToTag l = case l of
