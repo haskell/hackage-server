@@ -105,6 +105,7 @@ adminFrontendFeature _env templates
     serveAdminPortalGet :: DynamicPath -> ServerPartE Response
     serveAdminPortalGet _ = do
         guardAuthorised_ [InGroup adminGroup]
+        cacheControlWithoutETag [Private]
         template    <- getTemplate templates "admin.html"
 
         findAccount <- optional (look "find-account")
@@ -161,6 +162,7 @@ adminFrontendFeature _env templates
     serveAdminAccountsGet :: DynamicPath -> ServerPartE Response
     serveAdminAccountsGet _ = do
         guardAuthorised_ [InGroup adminGroup]
+        cacheControlWithoutETag [Private]
         template <- getTemplate templates "accounts.html"
         accounts <- Users.enumerateAllUsers <$> queryGetUserDb
         ok $ toResponse $ template
@@ -171,6 +173,7 @@ adminFrontendFeature _env templates
     serveAdminSignupsGet :: DynamicPath -> ServerPartE Response
     serveAdminSignupsGet _ = do
         guardAuthorised_ [InGroup adminGroup]
+        cacheControlWithoutETag [Private]
         template      <- getTemplate templates "signups.html"
         allSignupInfo <- queryAllSignupResetInfo
         ok $ toResponse $ template
@@ -181,6 +184,7 @@ adminFrontendFeature _env templates
     serveAdminResetsGet :: DynamicPath -> ServerPartE Response
     serveAdminResetsGet _ = do
         guardAuthorised_ [InGroup adminGroup]
+        cacheControlWithoutETag [Private]
         template     <- getTemplate templates "resets.html"
         usersdb      <- queryGetUserDb
         allResetInfo <- queryAllSignupResetInfo
@@ -193,6 +197,7 @@ adminFrontendFeature _env templates
     serveAdminLegacyGet :: DynamicPath -> ServerPartE Response
     serveAdminLegacyGet _ = do
         guardAuthorised_ [InGroup adminGroup]
+        cacheControlWithoutETag [Private]
         template     <- getTemplate templates "legacy.html"
         usersdb      <- queryGetUserDb
         legacyUsers  <- enumerateAllUserLegacyPasswd <$> queryLegacyPasswds
@@ -213,6 +218,7 @@ adminFrontendFeature _env templates
     serveAdminAccountGet :: DynamicPath -> ServerPartE Response
     serveAdminAccountGet dpath = do
         guardAuthorised_ [InGroup adminGroup]
+        cacheControlWithoutETag [Private]
         template  <- getTemplate templates "account.html"
         uid       <- maybe mzero return (simpleParse =<< lookup "uid" dpath)
         uinfo     <- lookupUserInfo uid
