@@ -46,7 +46,7 @@ import qualified Data.ByteString.Char8 as BS -- Only used for Digest headers
 
 import Control.Monad
 import qualified Data.ByteString.Base64 as Base64
-import Data.Char (intToDigit, isAsciiLower)
+import Data.Char (intToDigit, isAsciiLower, isAscii, isAlphaNum, toLower)
 import System.Random (randomRs, newStdGen)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -121,18 +121,6 @@ checkAuthenticated realm users = do
             -> Just (BasicAuth,  BS.drop 6 hdr)
           _ -> Nothing
 
-    -- The idea here is if you're using https by putting the hackage-server
-    -- behind a reverse proxy then you can get the proxy to set this header
-    -- so that we can know if the request is comming in by https or plain http.
-    plainHttp :: Request -> Bool
-    plainHttp req =
-        case getHeader "X-Forwarded-Proto" req of
-          -- So we only reject insecure connections in setups where the
-          -- proxy passes "X-Forwarded-Proto: http" for the non-secure
-          -- rather than rejecting in all setups where no header is provided.
-          Just hdr | hdr == BS.pack "http" -> True
-          _                                -> False
-
 data AuthType = BasicAuth | DigestAuth | AuthToken
 
 
@@ -170,6 +158,66 @@ checkPriviledged users uid (IsUserId uid':others) =
     else checkPriviledged users uid others
 
 checkPriviledged _ _ (AnyKnownUser:_) = return True
+
+
+------------------------------------------------------------------------
+-- Are we using plain http?
+--
+
+-- | The idea here is if you're using https by putting the hackage-server
+-- behind a reverse proxy then you can get the proxy to set this header
+-- so that we can know if the request is comming in by https or plain http.
+--
+-- We only reject insecure connections in setups where the proxy passes
+-- "Forwarded: proto=http" or "X-Forwarded-Proto: http" for the non-secure
+-- rather than rejecting in all setups where no header is provided.
+--
+plainHttp :: Request -> Bool
+plainHttp req
+  | Just fwd      <- getHeader "Forwarded" req
+  , Just fwdprops <- parseForwardedHeader fwd
+  , Just "http"   <- Map.lookup "proto" fwdprops
+  = True
+
+  | Just xfwd <- getHeader "X-Forwarded-Proto" req
+  , xfwd == BS.pack "http"
+  = True
+
+  | otherwise
+  = False
+  where
+    -- "Forwarded" header parser derived from RFC 7239
+    -- https://tools.ietf.org/html/rfc7239
+    parseForwardedHeader :: BS.ByteString -> Maybe (Map String String)
+    parseForwardedHeader =
+        fmap Map.fromList . parse . BS.unpack
+      where
+        parse :: String -> Maybe [(String, String)]
+        parse s = listToMaybe [ x | (x, "") <- Parse.readP_to_S parser s ]
+
+        parser :: Parse.ReadP [(String, String)]
+        parser = Parse.skipSpaces
+              >> Parse.sepBy1 forwardedPair
+                       (Parse.skipSpaces >> Parse.char ';' >> Parse.skipSpaces)
+
+        forwardedPair :: Parse.ReadP (String, String)
+        forwardedPair = do
+          theName <- token
+          void $ Parse.char '='
+          theValue <- quotedString Parse.+++ token
+          return (map toLower theName, theValue)
+
+        token :: Parse.ReadP String
+        token = Parse.munch1 (\c -> isAscii c
+                                && (isAlphaNum c || c `elem` "!#$%&'*+-.^_`|~"))
+
+        quotedString :: Parse.ReadP String
+        quotedString =
+          join Parse.between
+               (Parse.char '"')
+               (Parse.many $ (Parse.char '\\' >> Parse.get)
+                    Parse.<++ Parse.satisfy (/='"'))
+
 
 ------------------------------------------------------------------------
 -- Auth token method
