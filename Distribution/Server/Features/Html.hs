@@ -518,7 +518,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
           , resourceGet  = [("html", const $ readAsyncCache cachePackagesPage)]
           }
       , maintainPackage
-      , (resourceAt "/package/:package/distro-monitor") {
+      , (resourceAt "/package/:package/distro-monitor.:format") {
             resourceDesc = [(GET, "A handy page for distro package change monitor tools")]
           , resourceGet  = [("html", serveDistroMonitorPage)]
           }
@@ -594,6 +594,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
     serveDependenciesPage dpath = do
       pkgname <- packageInPath dpath
       withPackagePreferred pkgname $ \pkg _ -> do
+        cacheControlWithoutETag [Public, maxAgeMinutes 30]
         render <- liftIO $ packageRender pkg
         return $ toResponse $ dependenciesPage False render
 
@@ -602,6 +603,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
       pkgname <- packageInPath dpath
       pkgs <- lookupPackageName pkgname
       guardAuthorisedAsMaintainerOrTrustee (pkgname :: PackageName)
+      cacheControl [Public, NoCache] (etagFromHash (length pkgs))
       template <- getTemplate templates "maintain.html"
       return $ toResponse $ template
         [ "pkgname"  $= pkgname
@@ -612,6 +614,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
     serveDistroMonitorPage dpath = do
       pkgname <- packageInPath dpath
       pkgs <- lookupPackageName pkgname
+      cacheControl [Public, maxAgeHours 3] (etagFromHash (length pkgs))
       template <- getTemplate templates "distro-monitor.html"
       return $ toResponse $ template
         [ "pkgname"  $= pkgname
@@ -622,7 +625,6 @@ mkHtmlCore ServerEnv{serverBaseURI}
     serveCabalRevisionsPage dpath = do
       pkginfo  <- packageInPath dpath >>= lookupPackageId
       users    <- queryGetUserDb
-      template <- getTemplate templates "revisions.html"
       let pkgid        = packageId pkginfo
           pkgname      = packageName pkginfo
           revisions    = reverse $ Vec.toList (pkgMetadataRevisions pkginfo)
@@ -634,6 +636,8 @@ mkHtmlCore ServerEnv{serverBaseURI}
                               Right changes -> changes
                          | ((new, _), (old, _)) <- zip revisions (tail revisions) ]
 
+      cacheControl [NoCache] (etagFromHash numRevisions)
+      template <- getTemplate templates "revisions.html"
       return $ toResponse $ template
         [ "pkgname"   $= pkgname
         , "pkgid"     $= pkgid
@@ -890,6 +894,7 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
     servePackageReports :: DynamicPath -> ServerPartE Response
     servePackageReports dpath = packageReports dpath $ \reports -> do
         pkgid <- packageInPath dpath
+        cacheControl [Public, maxAgeMinutes 30] (etagFromHash (length reports))
         template <- getTemplate templates "reports.html"
         return $ toResponse $ template
           [ "pkgid" $= (pkgid :: PackageIdentifier)
@@ -901,6 +906,7 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
         (repid, report, mlog) <- packageReport dpath
         mlog' <- traverse queryBuildLog mlog
         pkgid <- packageInPath dpath
+        cacheControlWithoutETag [Public, maxAgeDays 30]
         template <- getTemplate templates "report.html"
         return $ toResponse $ template
           [ "pkgid" $= (pkgid :: PackageIdentifier)
@@ -1819,6 +1825,7 @@ htmlGroupResource UserFeature{..} r@(GroupResource groupR userR getGroup) =
         let unames = [ Users.userIdToName userDb uid
                      | uid   <- Group.toList usergroup ]
         let baseUri = renderResource' groupR dpath
+        cacheControl [NoCache] (etagFromHash unames)
         return . toResponse . Resource.XHtml $ Pages.groupPage
             unames baseUri (False, False) (groupDesc group)
     getEditList dpath = do
@@ -1829,6 +1836,7 @@ htmlGroupResource UserFeature{..} r@(GroupResource groupR userR getGroup) =
         let unames = [ Users.userIdToName userDb uid
                      | uid   <- Group.toList usergroup ]
         let baseUri = renderResource' groupR dpath
+        cacheControl [NoCache] (etagFromHash unames)
         return . toResponse . Resource.XHtml $ Pages.groupPage
             unames baseUri (canAdd, canDelete) (groupDesc group)
     postUser dpath = do

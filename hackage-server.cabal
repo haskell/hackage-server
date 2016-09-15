@@ -334,7 +334,8 @@ executable hackage-server
     cryptohash-md5    == 0.11.*,
     cryptohash-sha256 == 0.11.*,
     binary,
-    base16-bytestring >= 0.1 && < 0.2
+    base16-bytestring >= 0.1 && < 0.2,
+    hashable  == 1.2.*
 
   if ! flag(minimal)
     build-depends:
@@ -393,6 +394,7 @@ executable hackage-mirror
     Cabal,
     safecopy, cereal, binary, mtl,
     unix, aeson,
+    hashable,
     cryptohash-sha256,
     parsec,
     process >= 1.2.0,
@@ -437,6 +439,7 @@ executable hackage-build
     Cabal,
     safecopy, cereal, binary, mtl,
     aeson >= 0.6.1.0,
+    hashable,
     random,
     unix,
     cryptohash-sha256,
