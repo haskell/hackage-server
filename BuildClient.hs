@@ -11,6 +11,7 @@ import Distribution.Client.Cron (cron, rethrowSignalsAsExceptions,
 
 import Distribution.Package
 import Distribution.Text
+import qualified Text.PrettyPrint          as Disp
 import Distribution.Verbosity
 import Distribution.Simple.Utils hiding (intercalate)
 import Distribution.Version (Version(..))
@@ -23,7 +24,7 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.Trans
 import qualified Data.ByteString.Lazy as BS
-import qualified Data.Set as S
+import qualified Data.Map as M
 
 import qualified Codec.Compression.GZip  as GZip
 import qualified Codec.Archive.Tar       as Tar
@@ -55,7 +56,9 @@ data BuildOpts = BuildOpts {
                      bo_dryRun     :: Bool,
                      bo_prune      :: Bool,
                      bo_username   :: Maybe String,
-                     bo_password   :: Maybe String
+                     bo_password   :: Maybe String,
+                     bo_buildAttempts :: Int
+                     -- ^ how many times to attempt to rebuild a failing package
                  }
 
 data BuildConfig = BuildConfig {
@@ -486,9 +489,10 @@ buildOnce opts pkgs = keepGoing $ do
       unless (update_ec == ExitSuccess) $
           die "Could not 'cabal update' from specified server"
 
-
--- Builds a little memoised function that can tell us whether a
--- particular package failed to build its documentation
+-- | Builds a little memoised function that can tell us whether a
+-- particular package failed to build its documentation, a function to mark a
+-- package as having failed, and a function to write the final failed list back
+-- to disk.
 mkPackageFailed :: BuildOpts
                 -> IO (PackageId -> IO Bool, PackageId -> IO (), IO ())
 mkPackageFailed opts = do
@@ -496,22 +500,33 @@ mkPackageFailed opts = do
     cache_var   <- newIORef init_failed
 
     let mark_as_failed pkg_id = atomicModifyIORef cache_var $ \already_failed ->
-                                  (S.insert pkg_id already_failed, ())
-        has_failed     pkg_id = liftM (pkg_id `S.member`) $ readIORef cache_var
+                                  (M.insertWith (+) pkg_id 1 already_failed, ())
+        has_failed     pkg_id = f <$> readIORef cache_var
+          where f cache = M.findWithDefault 0 pkg_id cache > bo_buildAttempts opts
         persist               = readIORef cache_var >>= writeFailedCache (bo_stateDir opts)
 
     return (has_failed, mark_as_failed, persist)
   where
-    readFailedCache :: FilePath -> IO (S.Set PackageId)
+    readFailedCache :: FilePath -> IO (M.Map PackageId Int)
     readFailedCache cache_dir = do
         pkgstrs <- handleDoesNotExist [] $ liftM lines $ readFile (cache_dir </> "failed")
-        case validatePackageIds pkgstrs of
+        let (pkgids, attempts) = unzip $ map (parseLine . words) pkgstrs
+               where
+                 parseLine [pkg_id] = (pkg_id, 1)
+                 parseLine [pkg_id, attempts']
+                   | [(n,_)] <- reads attempts' = (pkg_id, n)
+                   | otherwise                  = (pkg_id, 1)
+                 parseLine other = error $ "failed to parse failed list line: "++show other
+        case validatePackageIds pkgids of
             Left theError -> die theError
-            Right pkgs -> return (S.fromList pkgs)
+            Right pkgs -> return (M.fromList $ zip pkgs attempts)
 
-    writeFailedCache :: FilePath -> S.Set PackageId -> IO ()
+    writeFailedCache :: FilePath -> M.Map PackageId Int -> IO ()
     writeFailedCache cache_dir pkgs =
-      writeFile (cache_dir </> "failed") $ unlines $ map display $ S.toList pkgs
+      writeFile (cache_dir </> "failed")
+      $ unlines
+      $ map (\(pkgid,n) -> show $ disp pkgid Disp.<+> disp n)
+      $ M.assocs pkgs
 
 
 -- | Build documentation and return @(Just tgz)@ for the built tgz file
@@ -778,7 +793,8 @@ data BuildFlags = BuildFlags {
     flagInterval   :: Maybe String,
     flagPrune      :: Bool,
     flagUsername   :: Maybe String,
-    flagPassword   :: Maybe String
+    flagPassword   :: Maybe String,
+    flagBuildAttempts :: Maybe Int
 }
 
 emptyBuildFlags :: BuildFlags
@@ -795,6 +811,7 @@ emptyBuildFlags = BuildFlags {
   , flagPrune      = False
   , flagUsername   = Nothing
   , flagPassword   = Nothing
+  , flagBuildAttempts = Nothing
   }
 
 buildFlagDescrs :: [OptDescr (BuildFlags -> BuildFlags)]
@@ -848,6 +865,12 @@ buildFlagDescrs =
   , Option [] ["init-password"]
       (ReqArg (\passwd opts -> opts { flagPassword = Just passwd }) "PASSWORD")
       "The password of the Hackage user to run the build as (used with init)"
+
+  , Option [] ["build-attempts"]
+      (ReqArg (\attempts opts -> case reads attempts of
+                                 [(attempts', "")] -> opts { flagBuildAttempts = Just attempts' }
+                                 _ -> error "Can't parse attempt count") "ATTEMPTS")
+      "How many times to attempt to build a package before giving up"
   ]
 
 validateOpts :: [String] -> IO (Mode, BuildOpts)
@@ -869,7 +892,8 @@ validateOpts args = do
                    bo_dryRun     = flagDryRun flags,
                    bo_prune      = flagPrune flags,
                    bo_username   = flagUsername flags,
-                   bo_password   = flagPassword flags
+                   bo_password   = flagPassword flags,
+                   bo_buildAttempts = fromMaybe 10 $ flagBuildAttempts flags
                }
 
         mode = case args' of
