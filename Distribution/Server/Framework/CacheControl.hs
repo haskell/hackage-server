@@ -17,6 +17,7 @@ import Data.List
 import qualified Data.ByteString.Char8 as BS8
 import Data.Hashable
 import Numeric
+import Data.Word
 
 
 data CacheControl = MaxAge Int | Public | Private | NoCache | NoTransform
