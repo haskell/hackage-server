@@ -20,11 +20,13 @@ import Data.List
 import Data.Maybe
 import Data.IORef
 import Data.Time
+import Control.Applicative ((<$>), (<*>))
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.Map as M
+import qualified Data.Set as S
 
 import qualified Codec.Compression.GZip  as GZip
 import qualified Codec.Archive.Tar       as Tar
@@ -136,6 +138,23 @@ initialise opts uri auxUris
          writeCabalConfig opts config
   where
     readMissingOpt prompt = maybe (putStrLn prompt >> getLine) return
+
+
+-- | Parse the @00-index.cache@ file of the available package repositories.
+parseRepositoryIndices :: IO (S.Set PackageIdentifier)
+parseRepositoryIndices = do
+    cabalDir <- getAppUserDataDirectory "cabal/packages"
+    cacheDirs <- listDirectory cabalDir
+    indexFiles <- filterM doesFileExist $ map (\dir -> cabalDir </> dir </> "00-index.cache") cacheDirs
+    S.unions <$> mapM readCache indexFiles
+  where
+    readCache fname =
+        S.fromList . mapMaybe parseLine . lines <$> readFile fname
+    parseLine line
+      | "pkg:" : name : ver : _ <- words line
+      = PackageIdentifier <$> simpleParse name <*> simpleParse ver
+      | otherwise
+      = Nothing
 
 writeConfig :: BuildOpts -> BuildConfig -> IO ()
 writeConfig opts BuildConfig {
@@ -391,6 +410,11 @@ getDocumentationStats verbosity config didFail = do
 buildOnce :: BuildOpts -> [PackageId] -> IO ()
 buildOnce opts pkgs = keepGoing $ do
     config <- readConfig opts
+    -- Due to caching sometimes the package repository state may lag behind the
+    -- documentation index. Consequently, we make sure that the packages we are
+    -- going to build actually appear in the repository before building. See
+    -- #543.
+    repoIndex <- parseRepositoryIndices
 
     notice verbosity "Initialising"
     (has_failed, mark_as_failed, persist_failed) <- mkPackageFailed opts
@@ -409,6 +433,7 @@ buildOnce opts pkgs = keepGoing $ do
         -- Find those files *not* marked as having documentation in our cache
         let toBuild :: [DocInfo]
             toBuild = filter shouldBuild
+                    . filter (flip S.member repoIndex . docInfoPackage)
                     . latestFirst
                     . map (sortBy (flip (comparing docInfoPackageVersion)))
                     . groupBy (equating  docInfoPackageName)
