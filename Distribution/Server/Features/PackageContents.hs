@@ -216,7 +216,7 @@ renderMarkdown = XHtml.primHtml . Blaze.renderHtml
         }
 
 convertNewLine :: C8.ByteString -> C8.ByteString
-convertNewLine = C8.concat . C8.split '\r'
+convertNewLine = C8.filter (/= '\r')
 
 supposedToBeMarkdown :: FilePath -> Bool
 supposedToBeMarkdown fname = takeExtension fname `elem` [".md", ".markdown"]
