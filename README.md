@@ -154,12 +154,13 @@ source "hackage"
   type: hackage2
 
 target "mirror"
-  uri: http://admin:admin@localhost:8080/
-  type: local
+  uri: http://admin:admin@localhost:8080
+  type: hackage2
 
   post-mirror-hook: "shell command to execute"
 ```
-Recognized types are hackage2, secure and local. The target server name was displayed when you ran
+Recognized types are hackage2, secure and local. The target server name was displayed when you ran. Note, the target must _not_ have a trailing slash, or confusion will tend to occur.
+
 ```bash
    hackage-server run.
 ```
