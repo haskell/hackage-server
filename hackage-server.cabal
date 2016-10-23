@@ -43,6 +43,7 @@ data-files:
   templates/Users/*.html.st
 
   static/*.css
+  static/*.js
   static/*.ico
   static/*.png
 
