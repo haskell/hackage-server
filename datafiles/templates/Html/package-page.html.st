@@ -170,7 +170,7 @@
 
         <tr>
           <th>Rating</th>
-          <td>$score$ ($votes$ votes)
+          <td>$score$ ($votes$ ratings)
           $if(userRating)$
             <input type="hidden" id="userRating" value="$userRating$">
           $endif$
