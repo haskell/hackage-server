@@ -37,7 +37,7 @@ $hackagePageHeader()$
 </ul>
 <p>In addition to the main package list page, there are a few other package indices:</p>
 <ul>
-<li><a href="/packages">All packages sorted by category (this is the "classic" standard view, for those who miss it).</a>
+<li><a href="/packages">All packages sorted by category (this is the "classic" standard view, for those who miss it).</a></li>
 <li><a href="/packages/tags">All tags</a></li>
 <!-- <li><a href="/packages/names">All packages by name</a>, with tags</li> -->
 <!-- <li><a href="/packages/reverse">All packages with reverse dependencies</a></li> -->
