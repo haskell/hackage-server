@@ -62,11 +62,9 @@
                     "language": {
                           "search": "Filter:"
                      },
-                     "columnDefs": [
-                        { "type": "package", "targets": 0 }
-                     ],
                     "columnDefs": [
-                        { className: "dt-body-right", "targets": [1, 2, 4 ] }
+			{ type: "package", "targets": [0] },
+                        { className: "dt-body-right", "targets": [1, 2, 3 ] }
                      ]
                 });
 
