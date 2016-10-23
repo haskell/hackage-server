@@ -44,7 +44,6 @@ data-files:
 
   static/*.css
   static/*.ico
-  static/*.js
   static/*.min.js
   static/*.png
 
