@@ -45,10 +45,11 @@ data-files:
   static/*.css
   static/*.ico
   static/*.js
+  static/*.min.js
   static/*.png
 
-  static/datatables/*.js
-  static/datatables/*.css
+  static/datatables/jquery.dataTables.min.css
+  static/datatables/jquery.dataTables.min.js
   static/graph/*.js
   static/graph/*.css
   static/images/*.png
