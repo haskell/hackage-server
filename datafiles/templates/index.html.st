@@ -84,35 +84,29 @@ at <a href="mailto:admin@hackage.haskell.org">admin@hackage.haskell.org</a></p>
 
 <h1>Hackage 2</h1>
 
-<p>Well-Typed and the <a href="http://industry.haskell.org/">Industrial Haskell Group</a> (IHG) are very pleased to announce that Hackage 2 is now powering the official Hackage server.</p>
-
-<p>Read on for an overview of the new features, system improvements, and for details of how you can help to make Hackage 2 even better.</p>
-
+<p>The "Hackage 2" codebase was deployed as the official Hackage in September 2013,
+   spearheaded by <a href="https://www.well-typed.com/">Well-Typed</a> and the <a href="http://industry.haskell.org/">Industrial Haskell Group</a> (IHG).</p>
+   
 <h2 id="support-from-the-industrial-haskell-group">Support from the Industrial Haskell Group</h2>
 
 <a href="http://industry.haskell.org/"><img style="float: left; margin-right: 1em" src="/static/ihg-logo.png" height="90" alt="The IHG logo" /></a>
 
-<p>The IHG is a consortium of companies that rely on Haskell. The IHG members have funded the effort to get Hackage 2 up to feature parity and get it ready for the switchover. The IHG funded this effort because while the volunteer effort got us the “first 90%” of the way there (including adding a number of new features) there was still the “last 90%” to do to get it production ready.</p>
+<p>The IHG is a consortium of companies that rely on Haskell. 
+   While the volunteer effort got us the “first 90%” of the way there (including adding a number of new features) there was still the “last 90%” to do to get it production ready.
+   IHG members funded the effort to get Hackage 2 up to feature parity and get it ready for the switchover.</p>
 
-<p>The IHG members decided to fund Hackage 2 not just because they are good citizens, but out of enlightened self-interest. Hackage has over 5000 packages written by over 1000 people — including the world’s best Haskell developers. This is a massive resource. The IHG members recognise that improvements to the tools and infrastructure that the community uses helps the community to produce more and better code. This is a benefit to everyone in the community — including the commercial users.</p>
+<p>Hackage has over 5000 packages written by over 1000 people — including the world’s best Haskell developers. This is a massive resource. The IHG members recognise that improvements to the tools and infrastructure that the community uses helps the community to produce more and better code. This is a benefit to everyone in the community — including the commercial users.</p>
 
 <p>The IHG is keen to increase its membership so that more resources can be dedicated to improving the Haskell development platform. If your organisation relies on Haskell in some way then you may want to consider joining. See the <a href="http://industry.haskell.org/">IHG website</a> for more details or contact <a href="mailto:info@industry.haskell.org">info@industry.haskell.org</a>.</p>
 
-<p>Despite the help of the IHG in getting to this point, Hackage is a community project, and its success depends on the community maintaining and further improving the new server. The code is <a href="http://github.com/haskell/hackage-server">now on github</a> so it is easier to contribute, and now that the server is live there is more immediate gratification for volunteers contributing fixes and new features.</p>
-
 <h2 id="support-from-the-smartest-cdn">The fastest Content Distribution Network</h2>
 
-<a href="https://www.fastly.com/"><img style="float: left; margin-right: 1em" src="/static/fastly-logo.png" height="90" alt="Fastly's logo" /></a>
+<a href="https://www.fastly.com/"><img style="float: left; margin-right: 1em" src="/static/fastly-logo.png" height="80" alt="Fastly's logo" /></a>
 
-<p>As the needs of the Haskell.org community increase, Hackage and other parts of our infrastructure demand increasing amounts of bandwidth, lower latency, and more storage and compute resources. Hackage contains code written from people all over the world, and uptime as well as speed are paramount to a clean user experience when developing.</p>
+<p>As the needs of the Haskell.org community increase, Hackage and other parts of our infrastructure demand increasing amounts of bandwidth, lower latency, and more storage and compute resources. Hackage contains code written from people all over the world, and uptime as well as speed are important to developers.</p>
 
 <p><a href="https://www.fastly.com/">Fastly.com</a> has offered the Haskell.org community unlimited access to their CDN, allowing us to push TBs of data through their edge systems, provide resource shielding for servers, and get real-time analytics for all our users and data.</p>
-
-<h2 id="new-features">New features</h2>
-<p>Though our main priority has been feature parity so that we can switch over, volunteers have contributed several new features, including better package search, a new site theme, improved security, the ability to fix package dependencies after a release, changelogs, and a REST-style interface.</p>
-
-<p>See the <a href="/new-features">new features</a> page for more details on these, plus details of other features that are partially implemented or are in need of improvement.</p>
-
+   
 </div>
 </body>
 </html>
