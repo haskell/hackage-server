@@ -454,4 +454,4 @@ candidatesFeature ServerEnv{serverBlobStore = store}
         Right (fp, etag, index) ->
           serveTarball (display (packageId pkg) ++ " candidate source tarball")
                        ["index.html"] (display (packageId pkg)) fp index
-                       [Public, maxAgeMinutes 5] etag
+                       [Public, maxAgeMinutes 5] etag Nothing

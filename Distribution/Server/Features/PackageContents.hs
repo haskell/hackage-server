@@ -199,7 +199,7 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
         Right (fp, etag, index) ->
           serveTarball (display (packageId pkg) ++ " source tarball")
                        ["index.html"] (display (packageId pkg)) fp index
-                       [Public, maxAgeDays 30] etag
+                       [Public, maxAgeDays 30] etag Nothing
 
 renderMarkdown :: BS.ByteString -> XHtml.Html
 renderMarkdown = XHtml.primHtml . Blaze.renderHtml

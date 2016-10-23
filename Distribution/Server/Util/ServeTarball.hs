@@ -52,8 +52,9 @@ serveTarball :: (MonadIO m, MonadPlus m)
              -> TarIndex   -- index for tarball
              -> [CacheControl]
              -> ETag       -- the etag
+             -> Maybe (BS.ByteString -> BS.ByteString) -- optional transform to files
              -> ServerPartT m Response
-serveTarball descr indices tarRoot tarball tarIndex cacheCtls etag = do
+serveTarball descr indices tarRoot tarball tarIndex cacheCtls etag transform = do
     rq <- askRq
     action GET $ remainingPath $ \paths -> do
 
@@ -74,7 +75,7 @@ serveTarball descr indices tarRoot tarball tarIndex cacheCtls etag = do
                Just (TarIndex.TarFileEntry off)
                    -> do
                  cacheControl cacheCtls etag
-                 tfe <- liftIO $ serveTarEntry tarball off path
+                 tfe <- liftIO $ serveTarEntry_ transform tarball off path
                  ok (toResponse tfe)
                _ -> mzero
 
@@ -116,19 +117,27 @@ renderDirIndex descr topdir topentries =
 
 
 loadTarEntry :: FilePath -> TarIndex.TarEntryOffset -> IO (Either String (Tar.FileSize, BS.ByteString))
-loadTarEntry tarfile off = do
+loadTarEntry = loadTarEntry_ Nothing
+
+loadTarEntry_ :: Maybe (BS.ByteString -> BS.ByteString) -> FilePath -> TarIndex.TarEntryOffset -> IO (Either String (Tar.FileSize, BS.ByteString))
+loadTarEntry_ transform tarfile off = do
   htar <- openFile tarfile ReadMode
   hSeek htar AbsoluteSeek (fromIntegral $ off * 512)
   header <- BS.hGet htar 512
   case Tar.read header of
     (Tar.Next Tar.Entry{Tar.entryContent = Tar.NormalFile _ size} _) -> do
          body <- BS.hGet htar (fromIntegral size)
-         return $ Right (size, body)
+         case transform of
+              Just f -> let x = f body in return $ Right (BS.length x, x)
+              Nothing -> return $ Right (size, body)
     _ -> fail "failed to read entry from tar file"
 
 serveTarEntry :: FilePath -> TarIndex.TarEntryOffset -> FilePath -> IO Response
-serveTarEntry tarfile off fname = do
-    Right (size, body) <- loadTarEntry tarfile off
+serveTarEntry = serveTarEntry_ Nothing
+
+serveTarEntry_ :: Maybe (BS.ByteString -> BS.ByteString) -> FilePath -> TarIndex.TarEntryOffset -> FilePath -> IO Response
+serveTarEntry_ transform tarfile off fname = do
+    Right (size, body) <- loadTarEntry_ transform tarfile off
     return . ((setHeader "Content-Length" (show size)) .
               (setHeader "Content-Type" mimeType)) $
               resultBS 200 body
@@ -145,4 +154,3 @@ constructTarIndexFromFile file = do
 constructTarIndex :: BS.ByteString -> Either String TarIndex
 constructTarIndex = either (\e -> Left ("bad tar file: " ++ show e)) Right
                   . TarIndex.construct . Tar.read
-

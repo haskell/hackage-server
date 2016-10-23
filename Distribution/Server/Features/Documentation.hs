@@ -26,7 +26,10 @@ import Distribution.Text
 import Distribution.Package
 import Distribution.Version (Version(..))
 
-import qualified Data.ByteString.Lazy as BSL
+import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Lazy.Char8 as BSL
+import qualified Data.ByteString.Lazy.Search as BSL
+import qualified Data.ByteString.Char8 as BS
 import qualified Data.Map as Map
 import Data.Function (fix)
 
@@ -225,7 +228,13 @@ documentationFeature name
         let maxAge = documentationCacheTime age
         ServerTarball.serveTarball (display pkgid ++ " documentation")
                                    [{-no index-}] (display pkgid ++ "-docs")
-                                   tarball index [Public, maxAge] etag
+                                   tarball index [Public, maxAge] etag (Just rewriteDocs)
+
+    rewriteDocs :: ByteString -> ByteString
+    rewriteDocs dochtml = case BSL.breakFindAfter (BS.pack "<head>") dochtml of
+                ((h,t),True) -> h `BSL.append` extraJs `BSL.append` t
+                _ -> dochtml
+        where extraJs = BSL.pack "<script src=\"/static/jquery.min.js\"></script><script src=\"/static/hackage-haddock.js\"></script>"
 
     -- The cache time for documentation starts at ten minutes and
     -- increases exponentially for four days, when it cuts off at
@@ -345,7 +354,7 @@ documentationFeature name
 
 
 -- Check the tar file is well formed and all files are within foo-1.0-docs/
-checkDocTarball :: PackageId -> BSL.ByteString -> Either String ()
+checkDocTarball :: PackageId -> ByteString -> Either String ()
 checkDocTarball pkgid =
      checkEntries
    . fmapErr (either id show) . Tar.checkTarbomb (display pkgid ++ "-docs")
