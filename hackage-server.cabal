@@ -431,7 +431,7 @@ executable hackage-build
   build-depends:
     base,
     containers, array, vector, bytestring, text, pretty,
-    filepath, directory, process >= 1.0,
+    filepath, directory >= 1.2.5, process >= 1.0,
     time,
     time-locale-compat >= 0.1.0.1,
     tar,      zlib,
