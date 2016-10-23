@@ -44,7 +44,14 @@ data-files:
 
   static/*.css
   static/*.ico
+  static/*.js
   static/*.png
+
+  static/datatables/*.js
+  static/datatables/*.css
+  static/graph/*.js
+  static/graph/*.css
+  static/images/*.png
 
   TUF/README.md
   TUF/mirrors.json
