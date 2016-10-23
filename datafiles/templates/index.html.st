@@ -16,14 +16,13 @@ $hackagePageHeader()$
 Each package is in the <a href="http://www.haskell.org/cabal">Cabal</a> format,
 a standard way of packaging Haskell source code that makes it easy to build
 and install.
-(Hackage and Cabal are components of a broader Haskell infrastructure effort
-called <a href="http://hackage.haskell.org/trac/hackage/">Hackage</a>.)
+
 These pages are a basic web interface to the Hackage package database.
 </p>
 
-<p>This isn't the <em>official</em> Hackage. It's an in-progress
-rewrite of the server using the <a href="/package/happstack">happstack</a> web
-framework. <!-- links to places to comment -->
+  <p>This isn't the <em>official</em> Hackage, which is at
+  <a href="http://hackage.haskell.org">http://hackage.haskell.org</a>.
+  Rather, this is being run either for development purposes or by a third-party.
 </p>
 
 <h3>Finding packages</h3>
@@ -84,4 +83,3 @@ We'd like to make it as simple as possible for anyone to <a href="https://github
 </div>
 </body>
 </html>
-
