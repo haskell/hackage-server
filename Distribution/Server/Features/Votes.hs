@@ -36,6 +36,7 @@ data VotesFeature = VotesFeature {
   , didUserVote             :: forall m. MonadIO m => PackageName -> UserId -> m Bool
   , pkgNumVotes             :: forall m. MonadIO m => PackageName -> m Int
   , pkgNumScore             :: forall m. MonadIO m => PackageName -> m Float
+  , pkgUserVote             :: forall m. MonadIO m => PackageName -> UserId -> m (Maybe Score)
   , votesUpdated            :: Hook (PackageName, Float) ()
   , renderVotesHtml         :: PackageName -> ServerPartE X.Html
 }
@@ -188,6 +189,10 @@ votesFeature  ServerEnv{..}
     pkgNumScore :: MonadIO m => PackageName -> m Float
     pkgNumScore pkgname =
       queryState votesState (GetPackageVoteScore pkgname)
+
+    pkgUserVote :: MonadIO m => PackageName -> UserId -> m (Maybe Score)
+    pkgUserVote pkgname uid =
+      queryState votesState (GetPackageUserVote pkgname uid)
 
     -- Renders the HTML for the "Votes:" section on package pages.
     renderVotesHtml :: PackageName -> ServerPartE X.Html

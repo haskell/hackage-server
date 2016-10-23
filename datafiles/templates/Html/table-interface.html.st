@@ -15,14 +15,14 @@
         <div id="content">
             <h2>$heading$</h2>
             $content$
-            <table id="table" style="width:650" class="fancy">
+            <table id="table" style="width:650" class="fancy row-border order-column compact">
                 <thead>
                     <tr>
                         <th><div style="width:100px">Name</div></th>
                         <th><div style="width:40px">DLs</div></th>
-                        <th><div style="width:50px">Score</div></th>
+                        <th><div style="width:50px">Rating</div></th>
+                        <th><div style="width:50px">Rev Deps</div></th>
                         <th><div style="width:160px">Description</div></th>
-                        <th><div style="width:50px">RDeps</div></th>
                         <th><div style="width:140px">Tags</div></th>
                         <th><div style="width:100px">Maintainer</div></th>
                     </tr>
@@ -41,10 +41,33 @@
             }
 
             \$(document).ready(function() {
+
+                \$.extend( jQuery.fn.dataTableExt.oSort, {
+                   "package-pre": function ( a ) {
+                        return [a.search(/deprecated/),a];
+                    },
+                    "package-asc": function (a, b) {
+                        return ((a < b) ? -1 : ((a > b) ? 1 : 0));
+                    },
+                    "package-desc": function (a, b) {
+                        return ((a < b) ? 1 : ((a > b) ?  -1 : 0));
+                    }
+                } );
+
                 \$('#table').removeAttr('width').DataTable({
                     "bProcessing": true,
                     "bDeferRender": true,
-                    "autoWidth": false
+                    "autoWidth": false,
+		    "pageLength":50,
+                    "language": {
+                          "search": "Filter:"
+                     },
+                     "columnDefs": [
+                        { "type": "package", "targets": 0 }
+                     ],
+                    "columnDefs": [
+                        { className: "dt-body-right", "targets": [1, 2, 4 ] }
+                     ]
                 });
 
                 \$('input.global_filter').on('keyup click', function() {

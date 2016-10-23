@@ -10,7 +10,7 @@ $hackagePageHeader()$
 
 <div id="content">
 <h2>Uploading packages and package candidates</h2>
-<p>Uploading a package puts it in the <a href="/packages/">main package index</a>
+<p>Uploading a package puts it in the <a href="/packages/browse">main package index</a>
 so that anyone can download it and view information about it. You can only
 upload a package version once, so try to get it right the first time!
 </p>

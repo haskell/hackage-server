@@ -38,16 +38,20 @@ htmlUtilities CoreFeature{coreResource}
     packageNameLink pkgname = anchor ! [href $ corePackageNameUri cores "" pkgname] << display pkgname
 
     makeRow :: PackageItem -> Html
-    makeRow item = tr << [ td $ packageNameLink $ itemName item
+    makeRow item = tr << [ td $ itemNameHtml
                          , td $ toHtml $ show $ itemDownloads item
-                         , td $ toHtml $ show $ itemVotes item
-                         , td $ toHtml $ itemDesc item
+                         , td $ toHtml $ show $ itemVotes item / 2
                          , td $ toHtml $ show $ itemRevDepsCount item
+                         , td $ toHtml $ itemDesc item
                          , td $ " (" +++ renderTags (itemTags item) +++ ")"
                          , td $ "" +++ intersperse (toHtml ", ") (map renderUser (itemMaintainer item))
                          ]
         where
             renderUser user = anchor ! [href $ userPageUri userResource "" user] << display user
+            itemNameHtml = packageNameLink (itemName item) +++
+                               case itemDeprecated item of
+                                       Just pkgs -> " (deprecated in favor of " +++ intersperse (toHtml ", ") (map packageNameLink pkgs) +++ ")"
+                                       Nothing -> toHtml ""
 
     renderItem :: PackageItem -> Html
     renderItem item = li ! classes <<

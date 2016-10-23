@@ -171,10 +171,8 @@
         <tr>
           <th>Rating</th>
           <td>$score$ ($votes$ votes)
-          $if(myrating)$
-            <div style="font-size: small">
-              [my rating : $myrating$]
-            </div>
+          $if(userRating)$
+            <input type="hidden" id="userRating" value="$userRating$">
           $endif$
               [<a href="" class="clear-rating">clear rating</a>]
             <ul class="star-rating">

@@ -190,14 +190,14 @@ arrDouble :: RevDeps -> RevDeps
 arrDouble rev =
     Gr.buildG (0, 2*revSize rev) (Gr.edges rev)
 --------------------------------------
-countUtil :: [(Version,Int,Int)] -> (Int,Int)
-countUtil = foldr (\(_,a, b) (as, bs) -> (a + as, b + bs)) (0,0)
+countUtil :: [(Version, Set PackageName, Int)] -> (Int, Int)
+countUtil = (\(x,y) -> (Set.size x, y)) . foldr (\(_,a, b) (as, bs) -> (Set.union a as, b + bs)) (Set.empty,0)
 
 toPackageMap :: [PackageId] -> Map PackageName (Set Version)
 toPackageMap assocs = Map.fromListWith Set.union [(k, Set.singleton v) | PackageIdentifier k v <- assocs]
 
-toReverseCount :: [(Version, Int , Int)] -> ReverseCount
-toReverseCount assocs = uncurry ReverseCount count (Map.fromListWith (+) [(k, v) | (k, v, _) <- assocs])
+toReverseCount :: [(Version, Set PackageName , Int)] -> ReverseCount
+toReverseCount assocs = uncurry ReverseCount count (Map.fromListWith (+) [(k, Set.size v) | (k, v, _) <- assocs])
     where
         count = countUtil assocs
 
@@ -257,7 +257,8 @@ getReverseCount :: PackageName -> Query ReverseIndex ReverseCount
 getReverseCount pkg = do
     ReverseIndex index revdeps nodemap <- ask
     let packageIds = map packageId $ PackageIndex.lookupPackageName index pkg
-        vii = map (\p -> (pkgVersion p, outdeg revdeps (nodemap ! p), length (Gr.reachable revdeps (nodemap ! p) ) - 1)) packageIds
+        pkgname = packageName . (nodemap !>)
+        vii = map (\p -> (pkgVersion p, Set.fromList . map pkgname . suc revdeps $ (nodemap ! p), length (Gr.reachable revdeps (nodemap ! p) ) - 1)) packageIds
     return  $ toReverseCount vii
 
 getReverseCountId :: PackageId -> Query ReverseIndex (Int,Int)

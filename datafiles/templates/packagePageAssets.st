@@ -153,7 +153,9 @@
       score: this.id
     }
     \$.post(votesUrl, formData).done(function(data) {
-        modal.open({ content: data});
+        if(data != "Package voted for successfully") {
+            modal.open({ content: data});
+	}
     });
   });
   \$('.clear-rating').click(function(e) {
@@ -164,11 +166,18 @@
       url: votesUrl,
       type: 'DELETE',
       success: function(result) {
-        modal.open({ content: result });
+        if(result != "Package vote removed successfully") {
+          modal.open({ content: result });
+	}
       }
     });
   });
-
+  \$(function() {
+       var userRating = parseInt(\$("#userRating").val(),10);
+       if(userRating > 0) {fill_stars(userRating,"in")}
+       star.selected = true;
+       star.id=userRating
+  });
   var fill_stars = function(num, direction) {
     if (direction === "in")
       for (i = 0; i <= parseInt(num); i++)

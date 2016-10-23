@@ -14,7 +14,10 @@ import Distribution.Server.Features.Votes
 import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Users
+import Distribution.Server.Features.Upload(UploadFeature(..))
 import Distribution.Server.Users.Users
+import qualified Distribution.Server.Users.UserIdSet as UserIdSet
+import Distribution.Server.Users.Group(UserGroup(..), GroupDescription(..))
 import Distribution.Server.Features.PreferredVersions
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Util.CountingMap (cmFind)
@@ -101,6 +104,7 @@ initListFeature :: ServerEnv
                     -> TagsFeature
                     -> VersionsFeature
                     -> UserFeature
+                    -> UploadFeature
                     -> IO ListFeature)
 initListFeature _env = do
     itemCache  <- newMemStateWHNF Map.empty
@@ -112,14 +116,25 @@ initListFeature _env = do
               votesf@VotesFeature{..}
               tagsf@TagsFeature{..}
               versions@VersionsFeature{..}
-              users@UserFeature{..} -> do
+              users@UserFeature{..}
+              uploads@UploadFeature{..} -> do
 
       let (feature, modifyItem, updateDesc) =
-            listFeature core revs download votesf tagsf versions users
+            listFeature core revs download votesf tagsf versions users uploads
                         itemCache itemUpdate
 
       registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, _) ->
         updateDesc (packageName pkgid)
+
+      registerHook groupChangedHook $ \(gd,_,_,_,_) ->
+         case fmap (PackageName . fst) (groupEntity gd) of
+              Just pkgname -> do
+                   maintainers <- queryUserGroup (maintainersGroup pkgname)
+                   users <- queryGetUserDb
+                   modifyItem pkgname (\x -> x {itemMaintainer = map (userIdToName users) (UserIdSet.toList maintainers)})
+                   runHook_ itemUpdate (Set.singleton pkgname)
+              Nothing -> return ()
+
 
       registerHook reverseHook $ \pkgids -> do
           let pkgs = map pkgName pkgids
@@ -154,6 +169,7 @@ listFeature :: CoreFeature
             -> TagsFeature
             -> VersionsFeature
             -> UserFeature
+            -> UploadFeature
             -> MemState (Map PackageName PackageItem)
             -> Hook (Set PackageName) ()
             -> (ListFeature,
@@ -161,7 +177,7 @@ listFeature :: CoreFeature
                 PackageName -> IO ())
 
 listFeature CoreFeature{..}
-            ReverseFeature{..} DownloadFeature{..} VotesFeature{..} TagsFeature{..} VersionsFeature{..} UserFeature{..}
+            ReverseFeature{..} DownloadFeature{..} VotesFeature{..} TagsFeature{..} VersionsFeature{..} UserFeature{..} UploadFeature{..}
             itemCache itemUpdate
   = (ListFeature{..}, modifyItem, updateDesc)
   where
@@ -224,9 +240,11 @@ listFeature CoreFeature{..}
         downs <- recentPackageDownloads
         votes <- pkgNumScore pkgname
         deprs <- queryGetDeprecatedFor pkgname
+        maintainers <- queryUserGroup (maintainersGroup pkgname)
+
         return $ (,) pkgname $ (updateDescriptionItem (pkgDesc pkg) $ emptyPackageItem pkgname) {
             itemTags       = tags
-          , itemMaintainer = Vec.toList $ Vec.map (userIdToName users) (Vec.map snd $ Vec.map snd (pkgMetadataRevisions pkg))
+          , itemMaintainer = map (userIdToName users) (UserIdSet.toList maintainers)
           , itemDeprecated = deprs
           , itemDownloads  = cmFind pkgname downs
           , itemVotes = votes

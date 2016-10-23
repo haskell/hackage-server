@@ -416,7 +416,7 @@ mkHtmlCore :: ServerEnv
            -> HtmlCore
 mkHtmlCore ServerEnv{serverBaseURI}
            utilities@HtmlUtilities{..}
-           UserFeature{queryGetUserDb}
+           UserFeature{queryGetUserDb, getAuthentication}
            CoreFeature{coreResource , queryGetPackageIndex}
            VersionsFeature{ versionsResource
                           , queryGetDeprecatedFor
@@ -469,9 +469,9 @@ mkHtmlCore ServerEnv{serverBaseURI}
             resourceGet = [("html", const $ readAsyncCache cacheNamesPage)]
           }
       , (resourceAt "/packages/browse" ) {
-            resourceDesc = [(GET, "Show detailed package dependency information")]
+            resourceDesc = [(GET, "Show browsable list of all packages")]
         , resourceGet = [("html",
-                serveTagIndex)]
+                serveBrowsePage)]
           }
       , (resourceAt "/packages/graph.json" ) {
             resourceDesc = [(GET, "Show JSON of package dependency information")]
@@ -519,8 +519,9 @@ mkHtmlCore ServerEnv{serverBaseURI}
         totalDown     <- cmFind pkgname `liftM` totalPackageDownloads
         recentDown    <- cmFind pkgname `liftM` recentPackageDownloads
         pkgVotes      <- pkgNumVotes pkgname
-        pkgScore      <- pkgNumScore pkgname
-        -- TODO: myRating
+        pkgScore      <- fmap (/2) $ pkgNumScore pkgname
+        auth          <- getAuthentication
+        userRating      <- case auth of Just (uid,_) -> pkgUserVote pkgname uid; _ -> return Nothing
         mdoctarblob   <- queryDocumentation realpkg
         rdeps         <- queryReverseDeps pkgname
         tags          <- queryTagsForPackage pkgname
@@ -554,6 +555,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
           , "hasexecs"          $= not (null execs)
           , "recentDownloads"   $= recentDown
           , "votes"             $= pkgVotes
+          , "userRating"        $= userRating
           , "score"             $= pkgScore
           , "related"           $= related
           , "hasrdeps"          $= not (rdeps == ([],[]))
@@ -611,8 +613,9 @@ mkHtmlCore ServerEnv{serverBaseURI}
         , "versions" $= map packageId pkgs
         ]
 
-    serveTagIndex :: DynamicPath -> ServerPartE Response
-    serveTagIndex _ = do
+
+    serveBrowsePage :: DynamicPath -> ServerPartE Response
+    serveBrowsePage _ = do
       pkgIndex <- queryGetPackageIndex
       let packageNames = Pages.toPackageNames pkgIndex
       pkgDetails <- liftIO $ makeItemList packageNames
@@ -1576,6 +1579,7 @@ mkHtmlTags HtmlUtilities{..}
                 _  -> toHtml
                   [ paragraph << [if count==1 then "1 package has" else show count ++ " packages have", " this tag."]
                   , anchor ! [href $  tagname ++ "/alias/edit"] << "[Merge tag]"
+                  , toHtml " (trustees only)"
                   , paragraph ! [theclass "toc"] << [toHtml "Related tags: ", toHtml $ showHistogram histogram]
                   ]
           , "tabledata" $= rowList
@@ -1684,10 +1688,12 @@ mkHtmlSearch HtmlUtilities{..}
                 , toHtml $ explainResults results
                 ]
 
-          Just termsStr | terms <- words termsStr, not (null terms) -> do
+          Just termsStr | terms <- words termsStr -> do
             -- pkgIndex <- liftIO $ queryGetPackageIndex
             -- currentTime <- liftIO $ getCurrentTime
-            pkgnames <- searchPackages terms
+            pkgnames <- if null terms
+                        then fmap Pages.toPackageNames queryGetPackageIndex
+                        else searchPackages terms
             -- let (pageResults, moreResults) = splitAt limit (drop offset pkgnames)
             pkgDetails <- liftIO $ makeItemList pkgnames
 

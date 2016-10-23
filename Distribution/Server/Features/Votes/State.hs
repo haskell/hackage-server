@@ -78,11 +78,15 @@ getPackageVoteScore pkgname = do
       Nothing     -> return 0
       Just m -> return $! votesScore m
 
-
 getPackageUserVoted :: PackageName -> UserId -> Query VotesState Bool
 getPackageUserVoted pkgname uid = do
     VotesState votes <- ask
     return $! userVotedForPackage pkgname uid votes
+
+getPackageUserVote :: PackageName -> UserId -> Query VotesState (Maybe Score)
+getPackageUserVote pkgname uid = do
+    VotesState votes <- ask
+    return $! Map.lookup uid =<< Map.lookup pkgname votes
 
 getAllPackageVoteSets :: Query VotesState (Map PackageName (Map UserId Score))
 getAllPackageVoteSets = do
@@ -105,6 +109,7 @@ makeAcidic
   , 'getPackageVoteCount
   , 'getPackageVoteScore
   , 'getPackageUserVoted
+  , 'getPackageUserVote
   , 'getAllPackageVoteSets
   , 'getVotesState
   , 'replaceVotesState
