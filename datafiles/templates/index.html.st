@@ -16,7 +16,7 @@ $hackagePageHeader()$
    to download and install packages (or people get the packages via their distro).</p>
 <p>This web interface to Hackage lets you:</p>
 <ul>
-<li><a href="/packages">Browse</a> the packages (sorted by category)</li>
+<li><a href="/packages/browse">Browse</a> the packages</li>
 <li><a href="/packages/search">Search</a> for packages by keyword (in the name or description)</li>
 <li>See what packages have been <a href="/packages/recent">uploaded recently</a></li>
 <li><a href="/upload">Upload</a> your own packages to Hackage (note that you'll need an <a href="/accounts">account</a>)</li>
@@ -32,15 +32,16 @@ $hackagePageHeader()$
 </ul>
 <p>Guidelines for Hackage Packages:</p>
 <ul>
-<li>All packages should follow the <a href="https://wiki.haskell.org/Package_versioning_policy">Package Versioning Policy (PVP)</a>.</li>
+<li>All packages should follow the <a href="http://pvp.haskell.org/">Package Versioning Policy (PVP)</a>.</li>
 <li>Packages cannot be deleted, so you should consider uploading new versions packages as a <a href="http://hackage.haskell.org/packages/candidates/upload">package candidate</a> and testing before publishing it to the main index.</li>
 </ul>
 <p>In addition to the main package list page, there are a few other package indices:</p>
 <ul>
+<li><a href="/packages">All packages sorted by category (this is the "classic" standard view, for those who miss it).</a>
 <li><a href="/packages/tags">All tags</a></li>
-<li><a href="/packages/names">All packages by name</a>, with tags</li>
+<!-- <li><a href="/packages/names">All packages by name</a>, with tags</li> -->
 <!-- <li><a href="/packages/reverse">All packages with reverse dependencies</a></li> -->
-<li><a href="/packages/top">All packages by download</a></li>
+<!-- <li><a href="/packages/top">All packages by download</a></li> -->
 <li><a href="/packages/preferred">All packages with preferred versions</a></li>
 <li><a href="/packages/deprecated">All deprecated packages</a></li>
 <li><a href="/packages/candidates">All candidate packages</a></li>
@@ -50,6 +51,7 @@ $hackagePageHeader()$
 
 <ul>
 <li><a href="https://wiki.haskell.org/Taking_over_a_package">Taking over a package</a> on Hackage</li>
+<li><a href="https://wiki.haskell.org/Abandoning_a_package">Abandoning a package</a> on hackage</li>
 <li><a href="https://wiki.haskell.org/Hackage_trustees">Hackage trustees</a> and what they do</li>
 <li>Submitting <a href="https://wiki.haskell.org/Library_submissions">changes for the core libraries</a></li>
 </ul>
@@ -59,8 +61,13 @@ $hackagePageHeader()$
 <p>For issues with accounts or permissions please contact the administrators by email
 at <a href="mailto:admin@hackage.haskell.org">admin@hackage.haskell.org</a></p>
 
-<p>For bugs with the site code or server/hosting issues, please report them in our <a
-href="https://github.com/haskell/hackage-server/issues">issue tracker</a>.
+<p>For bugs with the site code or server/hosting issues, please report them in our 
+   <a href="https://github.com/haskell/hackage-server/issues">issue tracker</a>.</p>
+   
+<p>Infrastructure status information is available at <a href="http://status.haskell.org">status.haskell.org</a> 
+   and automated uptime information at <a href="http://auto-status.haskell.org/">auto-status.haskell.org</a>.
+   Serious issues requiring immediate action should be reported to <a href="mailto:admin@haskell.org">admin@haskell.org</a> or on the
+   #haskell-infrastructure irc channel on freenode.</p>
 
 <h2 id="contributing-to-the-development">Contributing to the development</h2>
 
