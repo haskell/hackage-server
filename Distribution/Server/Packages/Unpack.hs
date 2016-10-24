@@ -285,6 +285,19 @@ extraChecks genPkgDesc pkgId tarIndex = do
               ++ "field in their .cabal file. This is only used for "
               ++ "post-release revisions."
 
+  -- Check too-short package description
+
+  when (not (null (description pkgDesc)) && length (description pkgDesc) <= length (synopsis pkgDesc)) $
+        throwError $ "The 'description' field should be longer than the 'synopsis' "
+                ++ "field. "
+                ++ "The 'description' field content is typically shown by tooling "
+                ++ "(e.g. 'cabal info', Haddock, Hackage) below the 'synopsis' which "
+                ++ "serves as a headline. "
+                ++ "Please refer to <https://www.haskell.org/"
+                ++ "cabal/users-guide/developing-packages.html#package-properties>"
+                ++ " for more details."
+
+
   -- Check reasonableness of names of exposed modules
   let topLevel = case library pkgDesc of
                  Nothing -> []
