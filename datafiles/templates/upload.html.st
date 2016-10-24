@@ -41,7 +41,7 @@ yourself or to mark it as unsupported.
 
 <h3>Upload forms</h3>
 <p>Some last formalities: to upload a package, you'll need a Hackage
-<a href="accounts.html">username</a> and password. (Alternatively, there's a
+<a href="accounts">username</a> and password. (Alternatively, there's a
 command-line interface via cabal-install, which also needs the same username
 and password.)
 </p>
