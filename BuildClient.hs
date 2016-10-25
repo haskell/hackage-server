@@ -478,9 +478,10 @@ buildOnce opts pkgs = keepGoing $ do
     shouldBuild :: DocInfo -> Bool
     shouldBuild docInfo =
         case docInfoHasDocs docInfo of
-          DocsNotBuilt -> null pkgs || any (isSelectedPackage pkgid) pkgs
-          _            -> False
+          DocsNotBuilt -> null pkgs || is_selected
+          _            -> is_selected -- rebuild package if the user explicitly requested it
       where
+        is_selected = any (isSelectedPackage pkgid) pkgs
         pkgid = docInfoPackage docInfo
 
     -- do versionless matching if no version was given
