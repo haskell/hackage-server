@@ -918,7 +918,7 @@ validateOpts args = do
                    bo_prune      = flagPrune flags,
                    bo_username   = flagUsername flags,
                    bo_password   = flagPassword flags,
-                   bo_buildAttempts = fromMaybe 10 $ flagBuildAttempts flags
+                   bo_buildAttempts = fromMaybe 3 $ flagBuildAttempts flags
                }
 
         mode = case args' of
