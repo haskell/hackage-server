@@ -604,7 +604,7 @@ buildPackage verbosity opts config docInfo = do
              -- Always build the package, even when it's been built
              -- before. This lets us regenerate documentation when
              -- dependencies are updated.
-             "--reinstall",
+             "--reinstall", "--force-reinstalls",
              -- We know where this documentation will
              -- eventually be hosted, bake that in.
              -- The wiki claims we shouldn't include the
