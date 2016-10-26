@@ -19,7 +19,7 @@ import qualified Data.Char as Char
 import qualified Data.Text as T
 import qualified Data.Map as M
 
-import Control.Applicative ((<$>))
+import Control.Applicative ((<$>), (<*>), pure)
 import Control.Monad (mzero)
 import Data.Aeson ((.:), (.=), ToJSON(..), FromJSON(..), Value(..), object)
 import Data.SafeCopy (base, extension, deriveSafeCopy, Migrate(..))
@@ -57,7 +57,7 @@ emptyAuth = UserAuth (PasswdHash "")
 
 instance FromJSON UserInfo where
   parseJSON (Object o) =
-    UserInfo <$> o .: "name" <*> o .: "status" <*> pure mempty
+    UserInfo <$> o .: "name" <*> o .: "status" <*> pure M.empty
   parseJSON _ = mzero
 
 instance ToJSON UserInfo where
