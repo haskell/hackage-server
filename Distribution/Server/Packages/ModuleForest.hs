@@ -2,12 +2,15 @@
 -- Inspiration (read: copied, renamed and simplified) from:
 -- http://code.haskell.org/haddock/src/Haddock/ModuleTree.hs
 
+{-# LANGUAGE DeriveGeneric #-}
+
 module Distribution.Server.Packages.ModuleForest (
   ModuleForest,
   ModuleTree(..),
   moduleForest
   ) where
 
+import GHC.Generics
 import Distribution.ModuleName ( ModuleName, components )
 
 --------------------------------------------------------------------------------
@@ -18,7 +21,7 @@ data ModuleTree = Node !String       -- Part of module name
                        !Bool         -- Is this an existing module?
                        !Bool         -- Are there corresponding API docs?
                         ModuleForest -- Sub modules
-    deriving (Show, Eq)
+    deriving (Show, Eq, Generic)
 
 --------------------------------------------------------------------------------
 

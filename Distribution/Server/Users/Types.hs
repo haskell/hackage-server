@@ -1,5 +1,5 @@
-{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, TemplateHaskell #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DeriveDataTypeable, DeriveGeneric, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings, TemplateHaskell, TypeFamilies #-}
 module Distribution.Server.Users.Types (
     module Distribution.Server.Users.Types,
     module Distribution.Server.Users.AuthToken,
@@ -20,7 +20,8 @@ import qualified Data.Text as T
 import qualified Data.Map as M
 
 import Control.Applicative ((<$>))
-import Data.Aeson (ToJSON, FromJSON)
+import Control.Monad (mzero)
+import Data.Aeson ((.:), (.=), ToJSON(..), FromJSON(..), Value(..), object)
 import Data.SafeCopy (base, extension, deriveSafeCopy, Migrate(..))
 import Data.Typeable (Typeable)
 import Data.Hashable
@@ -37,7 +38,7 @@ data UserInfo = UserInfo {
                   userName   :: !UserName,
                   userStatus :: !UserStatus,
                   userTokens :: !(M.Map AuthToken T.Text) -- tokens and descriptions
-                } deriving (Eq, Show, Typeable)
+                } deriving (Eq, Show, Typeable, Generic)
 
 data UserStatus = AccountEnabled  UserAuth
                 | AccountDisabled (Maybe UserAuth)
@@ -54,6 +55,14 @@ instance ToJSON UserStatus where
 emptyAuth :: UserAuth
 emptyAuth = UserAuth (PasswdHash "")
 
+instance FromJSON UserInfo where
+  parseJSON (Object o) =
+    UserInfo <$> o .: "name" <*> o .: "status" <*> pure mempty
+  parseJSON _ = mzero
+
+instance ToJSON UserInfo where
+  toJSON (UserInfo nm st _) = object ["name" .= nm, "status" .= st]
+
 instance FromJSON UserStatus where
   parseJSON (String "AccountEnabled")  =
     return $ AccountEnabled emptyAuth
@@ -61,6 +70,7 @@ instance FromJSON UserStatus where
     return $ AccountDisabled $ Just emptyAuth
   parseJSON (String "AccountDeleted")  =
     return $ AccountDeleted
+  parseJSON _ = mzero
 
 
 newtype UserAuth = UserAuth PasswdHash
