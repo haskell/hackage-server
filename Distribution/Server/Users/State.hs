@@ -18,6 +18,7 @@ import Data.Typeable (Typeable)
 
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
+import qualified Data.Text as T
 
 initialUsers :: Users.Users
 initialUsers = Users.emptyUsers
@@ -53,6 +54,16 @@ setUserName :: UserId -> UserName -> Update Users.Users (Maybe (Either Users.Err
 setUserName uid uname =
   updateUsers_ $ Users.setUserName uid uname
 
+addAuthToken :: UserId -> AuthToken -> T.Text
+             -> Update Users.Users (Maybe Users.ErrNoSuchUserId)
+addAuthToken uid authToken description =
+  updateUsers_ $ Users.addAuthToken uid authToken description
+
+revokeAuthToken :: UserId -> AuthToken
+                -> Update Users.Users (Maybe (Either Users.ErrNoSuchUserId Users.ErrTokenNotOwned))
+revokeAuthToken uid authToken =
+  updateUsers_ $ Users.revokeAuthToken uid authToken
+
 -- updates the user db with a simpler function
 updateUsers_ :: (Users.Users -> Either err Users.Users) -> Update Users.Users (Maybe err)
 updateUsers_ upd = do
@@ -85,6 +96,8 @@ $(makeAcidic ''Users.Users [ 'addUserEnabled
                           , 'deleteUser
                           , 'getUserDb
                           , 'replaceUserDb
+                          , 'addAuthToken
+                          , 'revokeAuthToken
                           ])
 
 -----------------------------------------------------
@@ -163,4 +176,3 @@ $(makeAcidic ''MirrorClients
                     ,'addMirrorClient
                     ,'removeMirrorClient
                     ,'replaceMirrorClients])
-

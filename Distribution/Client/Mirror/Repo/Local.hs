@@ -11,7 +11,6 @@ import System.Directory
 import System.FilePath
 
 -- Cabal
-import Distribution.Package
 import Distribution.Text
 
 -- hackage
@@ -55,19 +54,12 @@ downloadIndex root _cacheDir = do
 uploadPackage :: FilePath
               -> PkgIndexInfo
               -> FilePath
-              -> FilePath
               -> MirrorSession ()
-uploadPackage targetRepoPath pkginfo locCab locTgz = liftIO $ do
+uploadPackage targetRepoPath pkginfo locTgz = liftIO $ do
     createDirectoryIfMissing True pkgDir
-    createDirectoryIfMissing True cabalDir
     copyFile locTgz pkgFile
-    copyFile locCab cabalFile
   where
-    pkgDir    = targetRepoPath </> "package"
-    cabalDir  = targetRepoPath </> "index"
-                               </> display (packageName pkgid)
-                               </> display (packageVersion pkgid)
-    pkgFile   = pkgDir   </> display pkgid <.> "tar.gz"
-    cabalFile = cabalDir </> display (packageName pkgid) <.> "cabal"
+    pkgDir  = targetRepoPath </> "package"
+    pkgFile = pkgDir   </> display pkgid <.> "tar.gz"
 
     PkgIndexInfo pkgid _ _ _ = pkginfo

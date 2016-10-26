@@ -45,7 +45,6 @@ import Distribution.Compat.ReadP (readS_to_P)
 import qualified Data.ByteString as SBS
 import qualified Data.ByteString.Lazy as LBS
 #endif
-import Data.Digest.Pure.MD5 (MD5Digest)
 
 
 deriveSafeCopy 2 'extension ''PackageName
@@ -107,7 +106,9 @@ instance SafeCopy OS where
     putCopy HaLVM       = contain $ putWord8 11
     putCopy IOS         = contain $ putWord8 12
     putCopy DragonFly   = contain $ putWord8 13
-    putCopy Ghcjs       = contain $ putWord8 14 --Grr
+    putCopy Ghcjs       = contain $ putWord8 14
+    putCopy Hurd        = contain $ putWord8 15
+    putCopy Android     = contain $ putWord8 16
 
     getCopy = contain $ do
       tag <- getWord8
@@ -126,7 +127,9 @@ instance SafeCopy OS where
         11 -> return HaLVM
         12 -> return IOS
         13 -> return DragonFly
-        14 -> return Ghcjs --Grr
+        14 -> return Ghcjs
+        15 -> return Hurd
+        16 -> return Android
         _  -> fail "SafeCopy OS getCopy: unexpected tag"
 
 instance SafeCopy  Arch where
@@ -242,12 +245,6 @@ instance NFData Day where
     rnf (ModifiedJulianDay a) = rnf a
 #endif
 
-instance NFData MD5Digest where
-    rnf = rnf . show  --TODO: MD5Digest should be a newtype wrapper and an instance of NFData
-
-instance MemSize MD5Digest where
-  memSize _ = 7 --TODO: pureMD5 package wastes 5 words!
-
 instance MemSize Response where
     memSize (Response a b c d e) = memSize5 a b c d e
     memSize (SendFile{})         = 42
@@ -276,8 +273,10 @@ instance Text UTCTime where
 instance Arbitrary PackageName where
   arbitrary = PackageName <$> vectorOf 4 (choose ('a', 'z'))
 
+#if !(MIN_VERSION_QuickCheck(2,9,0))
 instance Arbitrary Version where
   arbitrary = Version <$> listOf1 (choose (1, 15)) <*> pure []
+#endif
 
 instance Arbitrary PackageIdentifier where
   arbitrary = PackageIdentifier <$> arbitrary <*> arbitrary

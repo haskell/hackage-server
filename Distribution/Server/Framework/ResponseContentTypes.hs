@@ -20,17 +20,20 @@
 module Distribution.Server.Framework.ResponseContentTypes where
 
 import Distribution.Server.Framework.BlobStorage
-         ( BlobId, blobMd5 )
+         ( BlobId, blobMd5Digest )
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Util.Parse (packUTF8)
+import Distribution.Server.Features.Security.MD5
+import Distribution.Server.Features.Security.SHA256
 
 import Happstack.Server
          ( ToMessage(..), Response(..), RsFlags(..), Length(NoContentLength), nullRsFlags, mkHeaders
          , noContentLength )
 
-import qualified Data.ByteString.Lazy as BS.Lazy
-import Data.Digest.Pure.MD5 (MD5Digest, md5)
+import qualified Data.ByteString.Lazy  as BS.Lazy
+import qualified Data.ByteString.Char8 as BS.Char8
+import qualified Data.ByteString.Base64 as Base64
 import Text.RSS (RSS)
 import qualified Text.RSS as RSS (rssToXML, showXML)
 import qualified Text.XHtml.Strict as XHtml (Html, showHtml)
@@ -40,8 +43,6 @@ import qualified Data.Time.Format as Time (formatTime)
 import Data.Time.Locale.Compat (defaultTimeLocale)
 import Text.CSV (printCSV, CSV)
 import Control.DeepSeq
-
-import qualified Data.Digest.Pure.SHA as SHA
 
 -- | The index tarball
 --
@@ -53,18 +54,11 @@ data IndexTarballInfo = IndexTarballInfo {
     , indexTarballIncremGz :: !TarballCompressed
     }
 
--- TODO: SHA.Digest is an abstract datatype, and is just a simple wrapper
--- around a bytestring. However, it is not strict in this bytestring, nor
--- does it have an NFData instance. This might be a problem (here as well as
--- in the NFData instance for TarballUncompressed and TarballCompressed).
--- However, it might not be a problem, depending on how these digests are
--- constructed. Since we might yet switch SHA package however I have not
--- yet looked deeper into this.
 data TarballUncompressed = TarballUncompressed {
       tarContent    :: !BS.Lazy.ByteString
     , tarLength     :: !Int
     , tarHashMD5    :: !MD5Digest
-    , tarHashSHA256 :: !(SHA.Digest SHA.SHA256State)
+    , tarHashSHA256 :: !SHA256Digest
     , tarModified   :: !UTCTime
     }
 
@@ -72,7 +66,7 @@ data TarballCompressed = TarballCompressed {
       tarGzContent    :: !BS.Lazy.ByteString
     , tarGzLength     :: !Int
     , tarGzHashMD5    :: !MD5Digest
-    , tarGzHashSHA256 :: !(SHA.Digest SHA.SHA256State)
+    , tarGzHashSHA256 :: !SHA256Digest
     , tarGzModified   :: !UTCTime
     }
 
@@ -87,7 +81,7 @@ mkTarballUncompressed time indexTarball = TarballUncompressed {
   where
     indexTarballLen    = fromIntegral $ BS.Lazy.length indexTarball
     indexTarballMD5    = md5 indexTarball
-    indexTarballSHA256 = SHA.sha256 indexTarball
+    indexTarballSHA256 = sha256 indexTarball
 
 mkTarballCompressed :: UTCTime -> BS.Lazy.ByteString -> TarballCompressed
 mkTarballCompressed time indexTarballGz = TarballCompressed {
@@ -100,16 +94,16 @@ mkTarballCompressed time indexTarballGz = TarballCompressed {
   where
     indexTarballGzLen    = fromIntegral $ BS.Lazy.length indexTarballGz
     indexTarballGzMD5    = md5 indexTarballGz
-    indexTarballGzSHA256 = SHA.sha256 indexTarballGz
+    indexTarballGzSHA256 = sha256 indexTarballGz
 
 instance NFData IndexTarballInfo where
   rnf (IndexTarballInfo a b c) = rnf (a, b, c)
 
 instance NFData TarballUncompressed where
-  rnf (TarballUncompressed a b c _d e) = rnf (a, b, c, e)
+  rnf (TarballUncompressed a b c d e) = rnf (a, b, c, d, e)
 
 instance NFData TarballCompressed where
-  rnf (TarballCompressed a b c _d e) = rnf (a, b, c, e)
+  rnf (TarballCompressed a b c d e) = rnf (a, b, c, d, e)
 
 instance MemSize IndexTarballInfo where
   memSize (IndexTarballInfo a b c) = memSize3 a b c
@@ -124,7 +118,7 @@ instance ToMessage TarballCompressed where
   toResponse TarballCompressed{..} =
     mkResponseLen tarGzContent tarGzLength
       [ ("Content-Type", "application/x-gzip")
-      , ("Content-MD5",   show tarGzHashMD5)
+      , ("Content-MD5",   formatMD5Digest tarGzHashMD5)
       , ("Last-modified", formatLastModifiedTime tarGzModified)
       ]
 
@@ -132,7 +126,7 @@ instance ToMessage TarballUncompressed where
   toResponse TarballUncompressed{..} =
     mkResponseLen tarContent tarLength
       [ ("Content-Type", "application/x-tar")
-      , ("Content-MD5",   show tarHashMD5)
+      , ("Content-MD5",   formatMD5Digest tarHashMD5)
       , ("Last-modified", formatLastModifiedTime tarModified)
       ]
 
@@ -141,19 +135,21 @@ data PackageTarball = PackageTarball BS.Lazy.ByteString BlobId UTCTime
 instance ToMessage PackageTarball where
   toResponse (PackageTarball bs blobid time) = mkResponse bs
     [ ("Content-Type",  "application/x-gzip")
-    , ("Content-MD5",   md5sum)
+    , ("Content-MD5",   formatMD5Digest (blobMd5Digest blobid))
     , ("Last-modified", formatLastModifiedTime time)
     ]
-    where md5sum = blobMd5 blobid
 
 data DocTarball = DocTarball BS.Lazy.ByteString BlobId
 
 instance ToMessage DocTarball where
   toResponse (DocTarball bs blobid) = mkResponse bs
     [ ("Content-Type",  "application/x-tar")
-    , ("Content-MD5",   md5sum)
+    , ("Content-MD5",   formatMD5Digest (blobMd5Digest blobid))
     ]
-    where md5sum = blobMd5 blobid
+
+-- | Format an 'MD5Digest' in Base64 as required for the \"Content-MD5\" header.
+formatMD5Digest :: MD5Digest -> String
+formatMD5Digest = BS.Char8.unpack . Base64.encode . md5DigestBytes
 
 formatLastModifiedTime :: UTCTime -> String
 formatLastModifiedTime = Time.formatTime defaultTimeLocale rfc822DateFormat

@@ -614,6 +614,10 @@ p.tip {
 */
 }
 
+.embedded-author-content img {
+  max-width: 100%;
+}
+
 /* Misc admin forms */
 
 form.box {

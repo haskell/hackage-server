@@ -6,6 +6,11 @@ This is the `hackage-server` code. This is what powers <http://hackage.haskell.o
 
 ## Installing ICU
 
+ICU stands for "International Components for Unicode". The `icu4c` is a set
+of libraries that provide Unicode and Globalization support.
+The [text-icu](https://hackage.haskell.org/package/text-icu) Haskell package
+uses the [icu4c](http://icu-project.org/apiref/icu4c/) library to build.
+
 You'll need to do the following to get hackage-server's dependency `text-icu` to build:
 
 ### Mac OS X
@@ -17,6 +22,57 @@ You'll need to do the following to get hackage-server's dependency `text-icu` to
 
     sudo apt-get update
     sudo apt-get install unzip libicu-dev
+
+## Setting up security infrastructure
+
+Out of the box the server comes with some example keys and TUF metadata. The
+example keys are in `example-keys/`; these keys were used to create
+
+    datafiles/TUF/root.json
+    datafiles/TUF/mirrors.json
+    datafiles/TUF/timestamp.private
+    datafiles/TUF/snapshot.private
+
+While these files will enable you to start the server without doing anything
+else, you should replace all these files before deploying your server. In the
+remainder of this section we will explain how to do that.
+
+The first step is to create your own keys using the
+[hackage-repo-tool](http://hackage.haskell.org/package/hackage-repo-tool):
+
+    hackage-repo-tool create-keys --keys /path/to/keys
+
+Then copy over the timestamp and snapshot keys to the TUF directory:
+
+    cp /path/to/keys/timestamp/<id>.private datafiles/TUF/timestamp.private
+    cp /path/to/keys/snapshot/<id>.private  datafiles/TUF/snapshot.private
+
+Create root information:
+
+    hackage-repo-tool create-root --keys /path/to/keys -o datafiles/TUF/root.json
+
+And finally create a list of mirrors (this is necessary even if you don't have
+any mirrors):
+
+    hackage-repo-tool create-mirrors --keys /path/to/keys -o datafiles/TUF/mirrors.json
+
+The `create-mirrors` command takes a list of mirrors as additional arguments if
+you do want to list mirrors.
+
+In order for secure clients to bootstrap the root security metadata from your
+server, you will need to provide them with the public key IDs of your root keys;
+you can find these as the file names of the files created in
+`/path/to/keys/root` (as well as in the generated root.json under the
+`signed.roles.root.keyids`). An example `cabal` client configuration might look
+something like
+
+    remote-repo my-private-hackage
+      url: http://example.com:8080/
+      secure: True
+      root-keys: 865cc6ce84231ccc990885b1addc92646b7377dd8bb920bdfe3be4d20c707796
+                 dd86074061a8a6570348e489aae306b997ed3ccdf87d567260c4568f8ac2cbee
+                 e4182227adac4f3d0f60c9e9392d720e07a8586e6f271ddcc1697e1eeab73390
+      key-threshold: 2
 
 ## Running
 
@@ -91,11 +147,24 @@ To try it out:
    http://localhost:8080/packages/mirrorers/
 1. Create a config file that contains the source and target
    servers. Assuming you are cloning the packages on
-   <http://hackage.haskell.org> locally, you could create a config
-   file as follows:
+   <http://hackage.haskell.org> locally, create the file servers.cfg:
+```
+source "hackage"
+  uri: http://hackage.haskell.org
+  type: secure
+
+target "mirror"
+  uri: http://admin:admin@localhost:8080
+  type: hackage2
+
+  post-mirror-hook: "shell command to execute"
+```
+Recognized types are hackage2, secure and local. The target server name was displayed when you ran. Note, the target must _not_ have a trailing slash, or confusion will tend to occur.
+
+Also note that you should mirror _from_ hackage2 or secure typically and mirror _to_ hackage2. Only mirroring from secure will include dependency revision information.
 
 ```bash
-echo -e "http://hackage.haskell.org\nhttp://admin:admin@localhost:8080/" > servers.cfg
+   hackage-server run.
 ```
 
 1. Run the client, pointing to the config file:

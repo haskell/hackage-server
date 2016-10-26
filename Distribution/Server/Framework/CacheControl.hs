@@ -7,6 +7,7 @@ module Distribution.Server.Framework.CacheControl (
     cacheControlWithoutETag,
     CacheControl(..),
     ETag(..),
+    etagFromHash,
     maxAgeSeconds, maxAgeMinutes, maxAgeHours, maxAgeDays, maxAgeMonths,
   ) where
 
@@ -17,6 +18,9 @@ import Data.Aeson (ToJSON, FromJSON)
 import Data.List
 import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as BS8
+import Data.Hashable
+import Numeric
+import Data.Word
 
 data CacheControl = MaxAge Int | Public | Private | NoCache | NoTransform
 
@@ -71,3 +75,6 @@ handleETag expectedtag = do
       Just actualtag | formatETag expectedtag == BS8.unpack actualtag
         -> finishWith (noContentLength . result 304 $ "")
       _ -> return ()
+
+etagFromHash :: Hashable a => a -> ETag
+etagFromHash x = ETag (showHex (fromIntegral (hash x) :: Word) "")

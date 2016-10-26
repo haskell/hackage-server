@@ -1,37 +1,40 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Distribution.Server.Util.ReadDigest (
-    readDigestSHA
-  , readDigestMD5
+    ReadDigest(..)
+  , decodeBase16
+  , readBase16
   ) where
 
-import Control.DeepSeq
 import Data.Binary (Binary)
 import Data.Bits
-import Data.Digest.Pure.MD5
 import Data.Word (Word8)
 import qualified Data.Binary          as Binary
-import qualified Data.ByteString.Lazy as BS.L
-import qualified Data.Digest.Pure.SHA as SHA
+import qualified Data.ByteString      as BS.Strict
+import qualified Data.ByteString.Lazy as BS.Lazy
 
--- | Read a SHA digest
+class ReadDigest a where
+  -- | Read a digest. The default instance uses 'decodeBase16'.
+  readDigest :: String -> Either String a
+  default readDigest :: Binary a => String -> Either String a
+  readDigest = decodeBase16
+
+-- | Read encoding in base-16 format and then use 'Binary' instance to decode
+decodeBase16 :: Binary a => String -> Either String a
+decodeBase16 str =
+    case Binary.decodeOrFail . BS.Lazy.fromStrict . readBase16 $ str of
+      Left  (_, _, err) -> Left  err
+      Right (_, _, a)   -> Right a
+
+-- | Read base-16 encoded string
 --
--- When the digest is forced the whole thing is forced.
-readDigestSHA :: Binary (SHA.Digest t) => String -> Either String (SHA.Digest t)
-readDigestSHA = readDigest
-
--- | Read an MD5 digest
-readDigestMD5 :: String -> Either String MD5Digest
-readDigestMD5 = readDigest
-
-{-------------------------------------------------------------------------------
-  Auxiliary
--------------------------------------------------------------------------------}
-
-readDigest :: Binary a => String -> Either String a
-readDigest str =
-   case Binary.decodeOrFail . force . BS.L.pack . translate $ str of
-     Left  (_, _, err) -> Left  err
-     Right (_, _, a)   -> Right a
+-- For instance, the string "deadbeef" will be turned into a 4-byte bytestring
+-- @[0xDE, 0xAD, 0xBE, 0xEF]@
+--
+-- TODO: This uses 'error' if the characters out of range. Might be nicer to
+-- use @Either String ..@ here too (though less performant).
+readBase16 :: String -> BS.Strict.ByteString
+readBase16 = BS.Strict.pack . translate
 
 -- | Translate a string of hex chars to the correspondin Word8 values
 -- (i.e., the length of the output will be half the length of the input)

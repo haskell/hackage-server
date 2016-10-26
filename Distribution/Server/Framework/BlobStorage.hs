@@ -31,13 +31,14 @@ module Distribution.Server.Framework.BlobStorage (
     find,
   ) where
 
+import Distribution.Server.Features.Security.MD5
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.CacheControl (ETag(..))
 import Distribution.Server.Util.ReadDigest
 
+import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Lazy as BSL
-import qualified Data.Digest.Pure.MD5 as MD5
 import Data.Typeable (Typeable)
 import Data.Serialize
 import System.FilePath ((</>))
@@ -49,13 +50,6 @@ import System.Directory
 import System.IO
 import Data.Aeson
 import System.Posix.Files as Posix (createLink)
-
--- For the lazy MD5 computation
-import Data.Digest.Pure.MD5 (MD5Digest, MD5Context)
-import Crypto.Classes (initialCtx, updateCtx, finalize, blockLength)
-import Crypto.Types (ByteLength)
-import qualified Crypto.Util (for)
-import qualified Data.ByteString as BSS
 
 -- For fsync
 import System.Posix.Types (Fd(..))
@@ -89,7 +83,7 @@ blobETag :: BlobId -> ETag
 blobETag = ETag . blobMd5
 
 readBlobId :: String -> Either String BlobId
-readBlobId = either Left (Right . BlobId) . readDigestMD5
+readBlobId = either Left (Right . BlobId) . readDigest
 
 instance SafeCopy BlobId where
   version = 2
@@ -164,7 +158,7 @@ consumeFileWith store filePath check =
       Right res -> return (Right (res, blobId), True)
 
 hBlobId :: Handle -> IO BlobId
-hBlobId hnd = evaluate . BlobId . MD5.md5 =<< BSL.hGetContents hnd
+hBlobId hnd = evaluate . BlobId . md5 =<< BSL.hGetContents hnd
 
 fileBlobId :: FilePath -> IO BlobId
 fileBlobId file = bracket (openBinaryFile file ReadMode) hClose hBlobId
@@ -175,8 +169,7 @@ withIncoming :: BlobStorage -> BSL.ByteString
 withIncoming store content action = do
     (file, hnd) <- openBinaryTempFile (incomingDir store) "new"
     handleExceptions file hnd $ do
-        md5 <- hPutGetMd5 hnd content
-        let blobId = BlobId md5
+        blobId <- BlobId <$> hPutGetMd5 hnd content
         fd <- handleToFd hnd -- This closes the handle, see docs for handleToFd
         fsync fd
         closeFd fd
@@ -185,7 +178,7 @@ withIncoming store content action = do
     hPutGetMd5 hnd = go . lazyMD5
       where
         go (BsChunk bs cs) = BSS.hPut hnd bs >> go cs
-        go (BsEndMd5 md5)  = return md5
+        go (BsEndMd5 md5val)  = return md5val
 
     handleExceptions tmpFile tmpHandle =
       handle $ \err -> do
@@ -256,68 +249,6 @@ open storeDir = do
                 ++ d
                 ++ "\" does not"
     return store
-
-{------------------------------------------------------------------------------
-  Lazy MD5 computation
-------------------------------------------------------------------------------}
-
--- | Adapted from crypto-api
---
--- This function is defined in crypto-api but not exported, and moreover
--- not lazy enough.
---
--- Guaranteed not to return an empty list
-makeBlocks :: ByteLength -> BSL.ByteString -> [BSS.ByteString]
-makeBlocks len = go . BSL.toChunks
-  where
-    go :: [BSS.ByteString] -> [BSS.ByteString]
-    go [] = [BSS.empty]
-    go (bs:bss)
-      | BSS.length bs >= len =
-          let l = BSS.length bs - BSS.length bs `rem` len
-              (blocks, leftover) = BSS.splitAt l bs
-          in blocks : go (leftover : bss)
-      | otherwise =
-          case bss of
-            []           -> [bs]
-            (bs' : bss') -> go (BSS.append bs bs' : bss')
-
--- | Compute the MD5 checksum of a lazy bytestring without reading the entire
--- thing into memory
---
--- Example usage:
---
--- > do bs <- BSL.readFile srcPath
--- >   md5 <- writeFileGetMd5 destPath bs'
--- >   putStrLn $ "MD5 is " ++ show md5
--- > where
--- >   writeFileGetMd5 file content =
--- >       withFile file WriteMode $ \hnd ->
--- >         go hnd (lazyMD5 content)
--- >     where
--- >       go hnd (BsChunk bs cs) = BSS.hPut hnd bs >> go hnd cs
--- >       go _   (BsEndMd5 md5)  = return md5
---
--- Note that this lazily reads the file, then lazily writes it again, and
--- finally we get the MD5 checksum of the whole file. This example program
--- will run in constant memory.
---
-lazyMD5 :: BSL.ByteString -> ByteStringWithMd5
-lazyMD5 = go initialCtx . makeBlocks blockLen
-  where
-    blockLen = (blockLength `Crypto.Util.for` (undefined :: MD5Digest)) `div` 8
-
-    go :: MD5Context
-       -> [BSS.ByteString]
-       -> ByteStringWithMd5
-    go !md5ctx [lastBlock] =
-      BsChunk lastBlock $! (BsEndMd5 (finalize md5ctx lastBlock))
-    go !md5ctx (block : blocks') =
-      BsChunk block (go (updateCtx md5ctx block) blocks')
-    go _ [] = error "impossible"
-
-data ByteStringWithMd5 = BsChunk  !BSS.ByteString ByteStringWithMd5
-                       | BsEndMd5 !MD5Digest
 
 -- | Binding to the C @fsync@ function
 fsync :: Fd -> IO ()

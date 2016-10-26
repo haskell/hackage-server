@@ -15,21 +15,19 @@ import Text.XHtml.Strict
 -- When the user is not authenticated/logged in, simply
 -- display the number of votes the package has and a link
 -- to add a vote (which prompts for authentication).
-renderVotesAnon :: Int -> PackageName -> (String, Html)
+renderVotesAnon :: Int -> PackageName -> Html
 renderVotesAnon numVotes pkgname =
-  ( "Votes",
-      form  ! [ action $ "/package/" ++ unPackageName pkgname ++ "/votes"
-              , method      "POST" ]
-      << thespan <<
-      [ toHtml $  show numVotes ++ " "
-      , toHtml $  ("[" +++
-          hidden  "_method" "PUT" +++
-          input ! [ thetype     "submit"
-                  , value       "Vote for this package"
-                  , theclass    "text-button" ]
-          +++ "]")
-      ]
-  )
+  form  ! [ action $ "/package/" ++ unPackageName pkgname ++ "/votes"
+          , method      "POST" ]
+  << thespan <<
+  [ toHtml $  show numVotes ++ " "
+  , toHtml $  ("[" +++
+      hidden  "_method" "PUT" +++
+      input ! [ thetype     "submit"
+              , value       "Vote for this package"
+              , theclass    "text-button" ]
+      +++ "]")
+  ]
 
 -- A page that confirms a package was successfully voted for and
 -- provides a link back to the package page.

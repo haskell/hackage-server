@@ -193,6 +193,7 @@ data RunFlags = RunFlags {
     flagRunTmpDir          :: Flag FilePath,
     flagRunTemp            :: Flag Bool,
     flagRunCacheDelay      :: Flag String,
+    flagRunLiveTemplates   :: Flag Bool,
     -- Online backup flags
     flagRunBackupOutputDir :: Flag FilePath,
     flagRunBackupLinkBlobs :: Flag Bool,
@@ -210,6 +211,7 @@ defaultRunFlags = RunFlags {
     flagRunTmpDir          = NoFlag,
     flagRunTemp            = Flag False,
     flagRunCacheDelay      = NoFlag,
+    flagRunLiveTemplates   = Flag False,
     flagRunBackupOutputDir = Flag "backups",
     flagRunBackupLinkBlobs = Flag False,
     flagRunBackupScrubbed  = Flag False
@@ -236,6 +238,8 @@ runCommand =
                ++ "Similarly,\n"
                ++ " $ kill -USR2 $the_pid\n"
                ++ "starts an online backup.\n"
+               ++ "Reload html (and other) templates:\n"
+               ++ " $ kill -HUP $the_pid\n"
     options _  =
       [ optionVerbosity
           flagRunVerbosity (\v flags -> flags { flagRunVerbosity = v })
@@ -281,6 +285,10 @@ runCommand =
            "identifying information (for development use)")
           flagRunBackupScrubbed (\v flags -> flags { flagRunBackupScrubbed = v })
           (noArg (Flag True))
+      , option [] ["live-templates"]
+          "Do not cache templates, for quicker feedback during development."
+          flagRunLiveTemplates (\v flags -> flags { flagRunLiveTemplates = v })
+          (noArg (Flag True))
       ]
 
 runAction :: RunFlags -> IO ()
@@ -305,11 +313,13 @@ runAction opts = do
                         confStaticDir  = staticDir,
                         confTmpDir     = tmpDir,
                         confCacheDelay = cacheDelay,
+                        confLiveTemplates = liveTemplates,
                         confVerbosity  = verbosity
                     }
         outputDir = fromFlag (flagRunBackupOutputDir opts)
         linkBlobs = fromFlag (flagRunBackupLinkBlobs opts)
-        scrubbed = fromFlag (flagRunBackupScrubbed opts)
+        scrubbed  = fromFlag (flagRunBackupScrubbed  opts)
+        liveTemplates = fromFlag (flagRunLiveTemplates opts)
 
     checkBlankServerState =<< Server.hasSavedState config
     checkStaticDir staticDir (flagRunStaticDir opts)

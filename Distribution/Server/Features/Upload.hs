@@ -26,12 +26,14 @@ import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Data.Maybe (fromMaybe)
+import Data.List (dropWhileEnd)
 import Data.Time.Clock (getCurrentTime)
 import Data.Function (fix)
 import Data.ByteString.Lazy (ByteString)
 
 import Distribution.Package
 import Distribution.PackageDescription (GenericPackageDescription)
+import Distribution.Version (Version(..))
 import Distribution.Text (display)
 import qualified Distribution.Server.Util.GZip as GZip
 
@@ -222,7 +224,11 @@ uploadFeature ServerEnv{serverBlobStore = store}
       }
 
     uploadResource = UploadResource
-          { uploadIndexPage      = (extendResource (corePackagesPage coreResource)) { resourcePost = [] }
+          { uploadIndexPage      = (extendResource (corePackagesPage coreResource)) {
+              resourcePost =
+                [ ("txt", \_ -> uploadPlain)
+                ]
+            }
           , deletePackagePage    = (extendResource (corePackagePage coreResource))  { resourceDelete = [] }
           , maintainersGroupResource = maintainersGroupResource
           , trusteesGroupResource    = trusteesGroupResource
@@ -233,6 +239,12 @@ uploadFeature ServerEnv{serverBlobStore = store}
           , trusteeUri  = \format -> renderResource (groupResource trusteesGroupResource)  [format]
           , uploaderUri = \format -> renderResource (groupResource uploadersGroupResource) [format]
           }
+
+
+    uploadPlain :: ServerPartE Response
+    uploadPlain = nullDir >> do
+      upResult <- uploadPackage
+      ok $ toResponse $ unlines $ uploadWarnings upResult
 
     --------------------------------------------------------------------------------
     -- User groups and authentication
@@ -323,11 +335,18 @@ uploadFeature ServerEnv{serverBlobStore = store}
     processUpload state uid res = do
         let pkg = packageId (uploadDesc res)
         pkgGroup <- queryUserGroup (maintainersGroup (packageName pkg))
-        if packageIdExists state pkg
-          then uploadError versionExists --allow trustees to do this?
-          else if packageExists state pkg && not (uid `Group.member` pkgGroup)
-                 then uploadError (notMaintainer pkg)
-                 else return Nothing
+        case () of
+          _ | packageExists state pkg && not (uid `Group.member` pkgGroup)
+           -> uploadError (notMaintainer pkg)
+
+            | packageIdExists state pkg
+           -> uploadError versionExists
+
+            | packageIdExistsModuloNormalisedVersion state pkg
+           -> uploadError normVerExists
+
+            | otherwise
+           -> return Nothing
       where
         uploadError = return . Just . ErrorResponse 403 [] "Upload failed" . return . MText
         versionExists = "This version of the package has already been uploaded.\n\nAs a matter of "
@@ -335,6 +354,12 @@ uploadFeature ServerEnv{serverBlobStore = store}
                      ++ "(so we can guarantee stable md5sums etc). The usual recommendation is "
                      ++ "to upload a new version, and if necessary blacklist the existing one. "
                      ++ "In extraordinary circumstances, contact the administrators."
+        normVerExists = "A version of the package has already been uploaded that differs only in "
+                     ++ "trailing zeros.\n\nAs a matter of policy, to avoid confusion, we no "
+                     ++ "longer not allow uploading different package versions that differ only "
+                     ++ "in trailing zeros. For example if version 1.2.0 has been uploaded then "
+                     ++ "version 1.2 cannot subsequently be upload. "
+                     ++ "If this is a major problem please contact the administrators."
         notMaintainer pkg = "You are not authorised to upload new versions of this package. The "
                      ++ "package '" ++ display (packageName pkg) ++ "' exists already and you "
                      ++ "are not a member of the maintainer group for this package.\n\n"
@@ -385,3 +410,25 @@ uploadFeature ServerEnv{serverBlobStore = store}
                                     , pkgTarballNoGz = blobIdDecompressed
                                     }
                     return (uid, res, tarball)
+
+-- | Whether a particular version of package exists in the package index, but
+-- where we consider versions with trailing 0s to be equivalent, e.g. 1.0
+--
+packageIdExistsModuloNormalisedVersion :: (Package pkg, Package pkg')
+                                       => PackageIndex pkg -> pkg' -> Bool
+packageIdExistsModuloNormalisedVersion pkgs pkg =
+    elem (normalisedPackageId pkg)
+         (map normalisedPackageId
+              (PackageIndex.lookupPackageName pkgs (packageName pkg)))
+  where
+    normalisedPackageId :: Package pkg  => pkg -> PackageId
+    normalisedPackageId pkg' = case packageId pkg' of
+      PackageIdentifier name ver -> PackageIdentifier name (normaliseVersion ver)
+
+    normaliseVersion :: Version -> Version
+    normaliseVersion (Version vs _) = Version (n vs) []
+      where
+        n vs' = case dropWhileEnd (== 0) vs' of
+            []   -> [0]
+            vs'' -> vs''
+

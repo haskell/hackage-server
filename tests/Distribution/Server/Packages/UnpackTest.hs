@@ -4,7 +4,6 @@ module Distribution.Server.Packages.UnpackTest (
   ) where
 
 import qualified Codec.Archive.Tar       as Tar
-import qualified Codec.Archive.Tar.Entry as Tar
 import qualified Codec.Archive.Tar.Check as Tar
 import qualified Codec.Compression.GZip as GZip
 import qualified Data.ByteString.Lazy as BL
@@ -14,11 +13,8 @@ import Distribution.Server.Packages.Unpack
 import Control.Monad (when)
 import Test.HUnit
 
-deriving instance Eq e => Eq (Tar.Entries e)
-deriving instance Eq Tar.Entry
 deriving instance Eq Tar.PortabilityError
 deriving instance Eq Tar.FileNameError
-deriving instance Eq Tar.FormatError
 deriving instance Eq CombinedTarErrs
 
 -- | Test that check permissions does the right thing

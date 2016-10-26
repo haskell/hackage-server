@@ -11,6 +11,7 @@ import System.Environment
 import System.Exit (exitWith, ExitCode(..))
 import System.FilePath
 import System.IO
+import System.IO.Error
 import System.Process (callCommand)
 import qualified Codec.Archive.Tar      as Tar
 import qualified Codec.Compression.GZip as GZ
@@ -175,13 +176,20 @@ mirrorPackages :: Verbosity
                -> MirrorSession ()
 mirrorPackages verbosity opts sourceRepo targetRepo pkgsToMirror = do
     authenticate targetRepo
-    mapM_ mirrorPackage pkgsToMirror
-  where
-    mirrorPackage pkginfo@(PkgIndexInfo pkgid _ _ _) = do
-      let locTgz = stateDir opts </> display pkgid <.> "tar.gz"
-          locCab = stateDir opts </> display pkgid <.> "cabal"
+    mapM_ (mirrorPackage verbosity opts sourceRepo targetRepo) pkgsToMirror
 
-      liftIO $ notice verbosity $ "mirroring " ++ display pkgid
+mirrorPackage :: Verbosity
+              -> MirrorOpts
+              -> SourceRepo
+              -> TargetRepo
+              -> PkgIndexInfo
+              -> MirrorSession ()
+mirrorPackage verbosity opts sourceRepo targetRepo pkginfo = do
+     liftIO $ notice verbosity $ "mirroring " ++ display pkgid
+     go `mirrorFinally` removeTempFiles
+  where
+    go :: MirrorSession ()
+    go = do
       rsp <- downloadPackage sourceRepo pkgid locCab locTgz
       case rsp of
         Just theError ->
@@ -190,6 +198,19 @@ mirrorPackages verbosity opts sourceRepo targetRepo pkgsToMirror = do
           notifyResponse GetPackageOk
           liftIO $ sanitiseTarball verbosity (stateDir opts) locTgz
           uploadPackage targetRepo (mirrorUploaders opts) pkginfo locCab locTgz
+
+    removeTempFiles :: MirrorSession ()
+    removeTempFiles = liftIO $ handle ignoreDoesNotExist $ do
+      removeFile locTgz
+      removeFile locCab
+
+    ignoreDoesNotExist :: IOException -> IO ()
+    ignoreDoesNotExist ex = if isDoesNotExistError ex then return ()
+                                                      else throwIO ex
+
+    PkgIndexInfo pkgid _ _ _ = pkginfo
+    locTgz = stateDir opts </> display pkgid <.> "tar.gz"
+    locCab = stateDir opts </> display pkgid <.> "cabal"
 
 {-------------------------------------------------------------------------------
   Operations on the the index
@@ -237,7 +258,7 @@ sanitiseTarball verbosity tmpdir tgzpath = do
           newtgz = GZ.compress $ Tar.write $ reverse okentries
       when (length allentries /= length okentries) $
         warn verbosity $ "sanitising tarball for " ++ tgzpath
-      (tmpfp, tmph) <- openTempFile tmpdir "tmp.tgz"
+      (tmpfp, tmph) <- openBinaryTempFileWithDefaultPermissions tmpdir "tmp.tgz"
       hClose tmph
       BS.writeFile tmpfp newtgz
       renameFile tmpfp tgzpath

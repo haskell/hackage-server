@@ -9,10 +9,9 @@
 module Distribution.Server.Features.Security.Orphans where
 
 -- stdlib
+import Control.DeepSeq
 import Data.SafeCopy
 import Data.Serialize
-import Data.Binary (Binary)
-import qualified Data.Binary          as Binary
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Crypto.Sign.Ed25519  as Ed25519
 
@@ -21,9 +20,9 @@ import Distribution.Server.Framework.MemSize
 
 -- hackage-security
 import Hackage.Security.Util.Some
+import Text.JSON.Canonical (Int54)
 import qualified Hackage.Security.Server      as Sec
 import qualified Hackage.Security.Util.Pretty as Sec
-import qualified Data.Digest.Pure.SHA         as SHA
 
 {-------------------------------------------------------------------------------
   SafeCopy instances
@@ -48,12 +47,14 @@ instance Serialize Sec.FileVersion where
   put (Sec.FileVersion v) = put v
   get = Sec.FileVersion `fmap` get
 
-instance SafeCopy (SHA.Digest SHA.SHA256State) where
+-- Before hackage-security moved to Int64, it was using Int, so in order to
+-- keep the Serialize instance the same, that's what we translate to here.
+instance SafeCopy Int54 where
+  -- use default Serialize instance
 
--- Annoyingly, SHA.Digest has a Binary instance but not a Serialize instance
-instance Serialize (SHA.Digest SHA.SHA256State) where
-  put = put . BinaryToCerealAdapter
-  get = fromBinaryToCerealAdapter `fmap` get
+instance Serialize Int54 where
+   put = put . (fromIntegral :: Int54 -> Int)
+   get = (fromIntegral :: Int -> Int54) `fmap` get
 
 {-------------------------------------------------------------------------------
   MemSize instances
@@ -74,22 +75,12 @@ instance MemSize (Ed25519.SecretKey) where
 instance MemSize Sec.FileVersion where
   memSize (Sec.FileVersion v) = memSize v
 
+instance MemSize Int54 where
+  memSize _ = 4
+
 {-------------------------------------------------------------------------------
-  Auxiliary
+  NFData instances
 -------------------------------------------------------------------------------}
 
--- | binary-to-cereal adapter
---
--- Use of this adapter has a slight overhead, as we need to length-prefix
--- the encoding we get from Binary.
-newtype BinaryToCerealAdapter a = BinaryToCerealAdapter {
-      fromBinaryToCerealAdapter :: a
-    }
-
--- We use a lazy bytestring as the envelope
-instance Binary a => Serialize (BinaryToCerealAdapter a) where
-  put (BinaryToCerealAdapter a) = put $ Binary.encode a
-  get = do envelope <- get
-           case Binary.decodeOrFail envelope of
-             Left  (_, _, err) -> fail err
-             Right (_, _, a)   -> return $ BinaryToCerealAdapter a
+instance NFData Int54 where
+  rnf a = a `seq` ()

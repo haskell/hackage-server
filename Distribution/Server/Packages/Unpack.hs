@@ -27,7 +27,8 @@ import Distribution.PackageDescription.Parse
 import Distribution.PackageDescription.Configuration
          ( flattenPackageDescription )
 import Distribution.PackageDescription.Check
-         ( PackageCheck(..), checkPackage )
+         ( PackageCheck(..), checkPackage, CheckPackageContentOps(..)
+         , checkPackageContent )
 import Distribution.ParseUtils
          ( ParseResult(..), locatedErrorMsg, showPWarning )
 import Distribution.Text
@@ -53,10 +54,13 @@ import Data.Bits
 import Data.ByteString.Lazy
          ( ByteString )
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString.Lazy.Char8
 import Data.List
-         ( nub, (\\), partition, intercalate )
+         ( nub, (\\), partition, intercalate, isPrefixOf )
 import Data.Maybe
          ( isJust )
+import qualified Data.Map.Strict as Map
+         ( fromList, lookup )
 import Data.Time
          ( UTCTime(..), fromGregorian, addUTCTime )
 import Data.Time.Clock.POSIX
@@ -66,6 +70,9 @@ import System.FilePath
          ( (</>), (<.>), splitDirectories, splitExtension, normalise )
 import qualified System.FilePath.Windows
          ( takeFileName )
+import qualified System.FilePath.Posix
+         ( takeFileName, takeDirectory, addTrailingPathSeparator
+         , dropTrailingPathSeparator )
 import Text.Printf
          ( printf )
 
@@ -81,9 +88,10 @@ unpackPackage :: UTCTime -> FilePath -> ByteString
                         ((GenericPackageDescription, ByteString), [String])
 unpackPackage now tarGzFile contents =
   runUploadMonad $ do
-    (pkgDesc, warnings, cabalEntry) <- basicChecks False now tarGzFile contents
+    (pkgId, tarIndex) <- tarPackageChecks False now tarGzFile contents
+    (pkgDesc, warnings, cabalEntry) <- basicChecks pkgId tarIndex
     mapM_ throwError warnings
-    extraChecks pkgDesc
+    extraChecks pkgDesc pkgId tarIndex
     return (pkgDesc, cabalEntry)
 
 unpackPackageRaw :: FilePath -> ByteString
@@ -91,14 +99,15 @@ unpackPackageRaw :: FilePath -> ByteString
                            ((GenericPackageDescription, ByteString), [String])
 unpackPackageRaw tarGzFile contents =
   runUploadMonad $ do
-    (pkgDesc, _warnings, cabalEntry) <- basicChecks True noTime tarGzFile contents
+    (pkgId, tarIndex) <- tarPackageChecks True noTime tarGzFile contents
+    (pkgDesc, _warnings, cabalEntry) <- basicChecks pkgId tarIndex
     return (pkgDesc, cabalEntry)
   where
     noTime = UTCTime (fromGregorian 1970 1 1) 0
 
-basicChecks :: Bool -> UTCTime -> FilePath -> ByteString
-            -> UploadMonad (GenericPackageDescription, [String], ByteString)
-basicChecks lax now tarGzFile contents = do
+tarPackageChecks :: Bool -> UTCTime -> FilePath -> ByteString
+                 -> UploadMonad (PackageIdentifier, TarIndex)
+tarPackageChecks lax now tarGzFile contents = do
   let (pkgidStr, ext) = (base, tar ++ gz)
         where (tarFile, gz) = splitExtension (portableTakeFileName tarGzFile)
               (base,   tar) = splitExtension tarFile
@@ -125,14 +134,27 @@ basicChecks lax now tarGzFile contents = do
               $ Tar.read (GZip.decompressNamed tarGzFile contents)
       expectedDir = display pkgid
 
+      selectEntry entry = case Tar.entryContent entry of
+        Tar.NormalFile bs _         -> Just (normalise (Tar.entryPath entry), NormalFile bs)
+        Tar.Directory               -> Just (normalise (Tar.entryPath entry), Directory)
+        Tar.SymbolicLink linkTarget -> Just (normalise (Tar.entryPath entry), Link (Tar.fromLinkTarget linkTarget))
+        Tar.HardLink     linkTarget -> Just (normalise (Tar.entryPath entry), Link (Tar.fromLinkTarget linkTarget))
+        _                           -> Nothing
+  files <- selectEntries explainTarError selectEntry entries
+  return (pkgid, files)
+
+type TarIndex = [(FilePath, File)]
+data File = Directory | NormalFile ByteString | Link FilePath deriving Show
+
+basicChecks :: PackageIdentifier
+            -> TarIndex
+            -> UploadMonad (GenericPackageDescription, [String], ByteString)
+basicChecks pkgid tarIndex = do
   -- Extract the .cabal file from the tarball
-  let selectEntry entry = case Tar.entryContent entry of
-        Tar.NormalFile bs _ | cabalFileName == normalise (Tar.entryPath entry)
-                           -> Just bs
-        _                  -> Nothing
+  let cabalEntries = [ content | (fp, NormalFile content) <- tarIndex
+                               , fp == cabalFileName ]
       PackageName name  = packageName pkgid
       cabalFileName     = display pkgid </> name <.> "cabal"
-  cabalEntries <- selectEntries explainTarError selectEntry entries
   cabalEntry   <- case cabalEntries of
     -- NB: tar files *can* contain more than one entry for the same filename.
     -- (This was observed in practice with the package CoreErlang-0.0.1).
@@ -178,27 +200,76 @@ basicChecks lax now tarGzFile contents = do
 portableTakeFileName :: FilePath -> String
 portableTakeFileName = System.FilePath.Windows.takeFileName
 
--- Miscellaneous checks on package description
-extraChecks :: GenericPackageDescription -> UploadMonad ()
-extraChecks genPkgDesc = do
-  let pkgDesc = flattenPackageDescription genPkgDesc
-  -- various checks
+tarOps :: PackageIdentifier -> TarIndex -> CheckPackageContentOps UploadMonad
+tarOps pkgId tarIndex = CheckPackageContentOps {
+  doesFileExist        = fileExist    . relative,
+  doesDirectoryExist   = dirExist . relative . System.FilePath.Posix.addTrailingPathSeparator,
+  getDirectoryContents = dirContents . System.FilePath.Posix.dropTrailingPathSeparator . relative,
+  getFileContents      = fileContents . relative
+}
+  where
+    -- The tar index has names like <pkgid>/foo.cabal, but the
+    -- CheckPackageContentOps requests files without specifying the pkgid
+    -- root. We convert the requested file paths into the tar index format.
+    relative = normalise . (display pkgId </>)
+    -- Build the map. In case of multiple intries for a file, we want the
+    -- last entry in the tar file to win (per tar append-to-update semantics).
+    -- Since the tarIndex list is the reversed tar file, we need to reverse it
+    -- back since with Map.fromList later entries win.
+    fileMap = Map.fromList (reverse tarIndex)
 
-  --FIXME: do the content checks. The dev version of Cabal generalises
-  -- checkPackageContent to work in any monad, we just need to provide
-  -- a record of ops that will do checks inside the tarball. We should
-  -- gather a map of files and dirs and have these just to map lookups:
-  --
-  -- > checkTarballContents = CheckPackageContentOps {
-  -- >   doesFileExist      = Set.member fileMap,
-  -- >   doesDirectoryExist = Set.member dirsMap
-  -- > }
-  -- > fileChecks <- checkPackageContent checkTarballContents pkgDesc
+    resolvePath :: Int -> FilePath -> Either String (Maybe File)
+    resolvePath 0 path =
+      Left ("Too many links redirects when looking for file " ++ quote path)
+    resolvePath n path =
+      case Map.lookup path fileMap of
+        Just (Link fp) -> resolvePath (n-1) fp
+        Just entry -> Right (Just entry)
+        Nothing -> Right Nothing
+
+    fileExist path =
+      case resolvePath 10 path of
+        Left err -> throwError err
+        Right (Just NormalFile{}) -> return True
+        Right _ -> return False
+    dirExist path =
+      case resolvePath 10 path of
+        Left err -> throwError err
+        Right (Just Directory) -> return True
+        -- Some .tar files miss some directory entries, though it has files in
+        -- those directories. That's enough for the directory to be created,
+        -- thus we should consider it to exist.
+        _ -> return (any ((path `isPrefixOf`) . fst) tarIndex)
+    -- O(n). Only used once to find all .cabal files in the package root. Some
+    -- .tar files have duplicate entries for the same .cabal file, so we use
+    -- nub.
+    dirContents dir =
+      return (nub [ fileName
+                  | (fp, _) <- tarIndex
+                  , System.FilePath.Posix.takeDirectory fp == dir
+                  , let fileName = System.FilePath.Posix.takeFileName fp
+                  , fileName /= "" ])
+    fileContents path =
+      case Map.lookup path fileMap of
+        Just (NormalFile contents) ->
+          return (Data.ByteString.Lazy.Char8.unpack contents)
+        Just (Link fp) -> fileContents fp
+        _ -> throwError ("getFileContents: file does not exist: " ++ path)
+
+-- Miscellaneous checks on package description
+extraChecks :: GenericPackageDescription
+            -> PackageIdentifier
+            -> TarIndex
+            -> UploadMonad ()
+extraChecks genPkgDesc pkgId tarIndex = do
+  let pkgDesc = flattenPackageDescription genPkgDesc
+  fileChecks <- checkPackageContent (tarOps pkgId tarIndex) pkgDesc
 
   let pureChecks = checkPackage genPkgDesc (Just pkgDesc)
-      checks = pureChecks -- ++ fileChecks
-      isDistError (PackageDistSuspicious {}) = False -- warn without refusing
-      isDistError _                          = True
+      checks = pureChecks ++ fileChecks
+      isDistError (PackageDistSuspicious     {}) = False -- just a warning
+      isDistError (PackageDistSuspiciousWarn {}) = False -- just a warning
+      isDistError _                              = True
       (errors, warnings) = partition isDistError checks
   mapM_ (throwError . explanation) errors
   mapM_ (warn . explanation) warnings
@@ -263,7 +334,7 @@ data CombinedTarErrs =
      FormatError      Tar.FormatError
    | PortabilityError Tar.PortabilityError
    | TarBombError     FilePath FilePath
-   | FutureTimeError  FilePath UTCTime
+   | FutureTimeError  FilePath UTCTime UTCTime
    | PermissionsError FilePath Tar.Permissions
 
 tarballChecks :: Bool -> UTCTime -> FilePath
@@ -295,7 +366,7 @@ checkFutureTimes now =
     now' = addUTCTime 30 now
     checkEntry entry
       | entryUTCTime > now'
-      = Just (FutureTimeError posixPath entryUTCTime)
+      = Just (FutureTimeError posixPath entryUTCTime now')
       where
         entryUTCTime = posixSecondsToUTCTime (realToFrac (Tar.entryTime entry))
         posixPath    = Tar.fromTarPathToPosixPath (Tar.entryTarPath entry)
@@ -367,13 +438,13 @@ explainTarError (FormatError formateror) =
     "There is an error in the format of the tar file: " ++ show formateror
  ++ ". Check that it is a valid tar file (e.g. 'tar -xtf thefile.tar'). "
  ++ "You may need to re-create the package tarball and try again."
-explainTarError (FutureTimeError entryname time) =
+explainTarError (FutureTimeError entryname time serverTime) =
     "The tarball entry " ++ quote entryname ++ " has a file timestamp that is "
- ++ "in the future (" ++ show time ++ "). This tends to cause problems "
- ++ "for build systems and other tools, so hackage does not allow it. This "
- ++ "problem can be caused by having a misconfigured system time, or by bugs "
- ++ "in the tools (tarballs created by 'cabal sdist' on Windows with "
- ++ "cabal-install-1.18.0.2 or older have this problem)."
+ ++ "in the future (" ++ show time ++ " vs this server's time of " ++ show serverTime
+ ++ "). This tends to cause problems for build systems and other tools, so hackage "
+ ++ "does not allow it. This problem can be caused by having a misconfigured system "
+ ++ "time, or by bugs in the tools (tarballs created by 'cabal sdist' on Windows "
+ ++ "with cabal-install-1.18.0.2 or older have this problem)."
 explainTarError (PermissionsError entryname mode) =
     "The tarball entry " ++ quote entryname ++ " has file permissions that are "
  ++ "broken: " ++ (showMode mode) ++ ". Permissions must be 644 at a minimum "

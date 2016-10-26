@@ -29,7 +29,7 @@ import Distribution.Server.Framework
 import qualified Distribution.Server.Framework.BackupRestore as Import
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Framework.Auth as Auth
-import Distribution.Server.Framework.Templating (TemplatesMode(NormalMode))
+import Distribution.Server.Framework.Templating (TemplatesMode(..))
 import Distribution.Server.Framework.AuthTypes (PasswdPlain(..))
 import Distribution.Server.Framework.HtmlFormWrapper (htmlFormWrapperHack)
 
@@ -72,7 +72,8 @@ data ServerConfig = ServerConfig {
   confStateDir  :: FilePath,
   confStaticDir :: FilePath,
   confTmpDir    :: FilePath,
-  confCacheDelay:: Int
+  confCacheDelay:: Int,
+  confLiveTemplates :: Bool
 } deriving (Show)
 
 confDbStateDir, confBlobStoreDir :: ServerConfig -> FilePath
@@ -102,7 +103,8 @@ defaultServerConfig = do
     confStateDir  = "state",
     confStaticDir = dataDir,
     confTmpDir    = "state" </> "tmp",
-    confCacheDelay= 0
+    confCacheDelay= 0,
+    confLiveTemplates = False
   }
 
 data Server = Server {
@@ -122,7 +124,7 @@ hasSavedState = doesDirectoryExist . confDbStateDir
 mkServerEnv :: ServerConfig -> IO ServerEnv
 mkServerEnv config@(ServerConfig verbosity hostURI _
                                     stateDir _ tmpDir
-                                    cacheDelay) = do
+                                    cacheDelay liveTemplates) = do
     createDirectoryIfMissing False stateDir
     let blobStoreDir  = confBlobStoreDir   config
         staticDir     = confStaticFilesDir config
@@ -137,7 +139,8 @@ mkServerEnv config@(ServerConfig verbosity hostURI _
             serverStaticDir     = staticDir,
             serverTemplatesDir  = templatesDir,
             serverTUFDir        = tufDir,
-            serverTemplatesMode = NormalMode,
+            serverTemplatesMode = if liveTemplates then DesignMode
+                                                   else NormalMode,
             serverStateDir      = stateDir,
             serverBlobStore     = store,
             serverCron          = cron,

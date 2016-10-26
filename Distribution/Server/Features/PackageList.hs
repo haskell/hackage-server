@@ -66,19 +66,23 @@ data PackageItem = PackageItem {
     -- Whether there's a library here.
     itemHasLibrary :: !Bool,
     -- How many executables (>=0) this package has.
-    itemNumExecutables :: !Int
+    itemNumExecutables :: !Int,
+    -- How many test suites (>=0) this package has.
+    itemNumTests :: !Int,
+    -- How many benchmarks (>=0) this package has.
+    itemNumBenchmarks :: !Int
     -- Hotness: a more heuristic way to sort packages. presently non-existent.
   --itemHotness :: Int
 }
 
 instance MemSize PackageItem where
-    memSize (PackageItem a b c d e f g) = memSize7 a b c d e f g
+    memSize (PackageItem a b c d e f g h i) = memSize9 a b c d e f g h i
 
 
 emptyPackageItem :: PackageName -> PackageItem
 emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" 0
                                    -- [reverse index disabled] 0
-                                   False 0
+                                   False 0 0 0
 
 
 initListFeature :: ServerEnv
@@ -231,7 +235,9 @@ updateDescriptionItem genDesc item =
         -- desc is flattened, we might miss some flags. Perhaps use the
         -- CondTree instead.
         itemHasLibrary = hasLibs desc,
-        itemNumExecutables = length . filter (buildable . buildInfo) $ executables desc
+        itemNumExecutables = length . filter (buildable . buildInfo) $ executables desc,
+        itemNumTests = length . filter (buildable . testBuildInfo) $ testSuites desc,
+        itemNumBenchmarks = length . filter (buildable . benchmarkBuildInfo) $ benchmarks desc
     }
 
 updateTagItem :: Set Tag -> PackageItem -> PackageItem
