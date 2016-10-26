@@ -2,6 +2,7 @@
 -- RecentPackages (formerly "Check") feature, but that caused some cyclic
 -- dependencies.
 {-# LANGUAGE FlexibleInstances, DeriveGeneric, OverloadedStrings, RankNTypes, TypeSynonymInstances #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Distribution.Server.Packages.Render (
     -- * Package render
@@ -16,14 +17,13 @@ module Distribution.Server.Packages.Render (
   ) where
 
 import Control.Applicative ((<$>), (<*>), pure)
-import Control.Monad (guard, mzero)
+import Control.Monad (guard)
 import Control.Arrow ((&&&), second)
-import           Data.Aeson ((.=),(.:),(.:?))
+import           Data.Aeson ((.=))
 import qualified Data.Aeson as A
-import qualified Data.Aeson.Types as A
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
-import Data.Maybe (catMaybes, isJust, mapMaybe, maybeToList)
+import Data.Maybe (isJust, mapMaybe, maybeToList)
 import qualified Data.Vector as Vec
 import Data.Ord (comparing)
 import Data.List (sortBy, intercalate)
@@ -31,11 +31,10 @@ import qualified Data.Text as T
 import Data.Time.Clock (UTCTime)
 import GHC.Generics
 import System.FilePath.Posix ((</>), (<.>))
-import Text.Read             (readMaybe)
 
 -- Cabal
 import Distribution.Compiler (CompilerFlavor)
-import Distribution.License
+import Distribution.License (License)
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
 import Distribution.Package
@@ -83,7 +82,6 @@ data PackageRender = PackageRender {
     -- instead be fields of PackageRender?
     rendOther        :: PackageDescription
 }
-
 
 doPackageRender :: Users.Users -> PkgInfo -> PackageRender
 doPackageRender users info = PackageRender

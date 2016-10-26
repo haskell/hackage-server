@@ -36,7 +36,6 @@ import Distribution.Server.Features.Core.State
 import Distribution.Server.Features.Security.Migration
 import Distribution.Server.Features.Users
 import Distribution.Server.Framework
-import Distribution.Server.Framework.Instances
 import Distribution.Server.Packages.Index (TarIndexEntry(..))
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 
@@ -44,7 +43,7 @@ import qualified Distribution.Server.Packages.Render as Render
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Types (UserId, userName)
 import Distribution.Server.Users.Users (userIdToName, lookupUserId)
-import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
+import qualified Distribution.Server.Framework.BlobStorage          as BlobStorage
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import qualified Distribution.Server.Packages.Index                 as Packages.Index
 import qualified Distribution.Server.Packages.PackageIndex          as PackageIndex

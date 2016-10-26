@@ -32,7 +32,6 @@ import Data.Serialize as Serialize
 import Data.SafeCopy hiding (Version)
 import Test.QuickCheck
 
-import qualified Data.Aeson as A
 import Data.Aeson.Types as Aeson
 
 import Happstack.Server

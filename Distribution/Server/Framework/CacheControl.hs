@@ -1,5 +1,4 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
 -- | Handler helpers to use HTTP cache headers: @Cache-Control@ and @ETag@.
 --
 module Distribution.Server.Framework.CacheControl (
@@ -16,7 +15,6 @@ import Happstack.Server.Monads
 
 import Data.Aeson (ToJSON, FromJSON)
 import Data.List
-import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as BS8
 import Data.Hashable
 import Numeric
