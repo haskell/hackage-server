@@ -33,7 +33,7 @@ module Distribution.Server.Framework.BlobStorage (
 
 import Distribution.Server.Features.Security.MD5
 import Distribution.Server.Framework.MemSize
-import Distribution.Server.Framework.Instances ()
+-- import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.CacheControl (ETag(..))
 import Distribution.Server.Util.ReadDigest
 
