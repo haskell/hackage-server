@@ -566,7 +566,7 @@ mkPackageFailed opts = do
 
     writeFailedCache :: FilePath -> M.Map PackageId Int -> IO ()
     writeFailedCache cache_dir pkgs =
-      writeFile (cache_dir </> "failed")
+      writeUTF8File (cache_dir </> "failed")
       $ unlines
       $ map (\(pkgid,n) -> show $ disp pkgid Disp.<+> disp n)
       $ M.assocs pkgs
