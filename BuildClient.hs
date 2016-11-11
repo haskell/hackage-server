@@ -8,6 +8,7 @@ import Network.URI (URI(..), parseRelativeReference, relativeTo)
 import Distribution.Client
 import Distribution.Client.Cron (cron, rethrowSignalsAsExceptions,
                                  Signal(..), ReceivedSignal(..))
+import qualified Distribution.Client.Index as Index
 
 import Distribution.Package
 import Distribution.Text
@@ -18,6 +19,7 @@ import Distribution.Version (Version(..))
 
 import Data.List
 import Data.Maybe
+import Data.Ord (Down(..))
 import Data.IORef
 import Data.Time
 import Control.Applicative ((<$>), (<*>))
@@ -26,10 +28,10 @@ import Control.Monad
 import Control.Monad.Trans
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.Map as M
-import qualified Data.Set as S
 
 import qualified Codec.Compression.GZip  as GZip
 import qualified Codec.Archive.Tar       as Tar
+import qualified Codec.Archive.Tar.Entry as Tar
 
 import System.Environment
 import System.Exit(exitFailure, ExitCode(..))
@@ -59,8 +61,9 @@ data BuildOpts = BuildOpts {
                      bo_prune      :: Bool,
                      bo_username   :: Maybe String,
                      bo_password   :: Maybe String,
-                     bo_buildAttempts :: Int
+                     bo_buildAttempts :: Int,
                      -- ^ how many times to attempt to rebuild a failing package
+                     bo_buildOrder :: BuildOrder
                  }
 
 data BuildConfig = BuildConfig {
@@ -69,6 +72,12 @@ data BuildConfig = BuildConfig {
                        bc_username :: String,
                        bc_password :: String
                    }
+
+data BuildOrder = LatestVersionFirst
+                  -- ^ First build all of the latest versions of each package
+                  -- Then go back and build all the older versions
+                | MostRecentlyUploadedFirst
+                  -- ^ Build in order of upload date.
 
 srcName :: URI -> String
 srcName uri = fromMaybe (show uri) (uriHostName uri)
@@ -139,22 +148,21 @@ initialise opts uri auxUris
   where
     readMissingOpt prompt = maybe (putStrLn prompt >> getLine) return
 
-
 -- | Parse the @00-index.cache@ file of the available package repositories.
-parseRepositoryIndices :: IO (S.Set PackageIdentifier)
-parseRepositoryIndices = do
+parseRepositoryIndices :: Verbosity -> IO (M.Map PackageIdentifier Tar.EpochTime)
+parseRepositoryIndices verbosity = do
     cabalDir <- getAppUserDataDirectory "cabal/packages"
     cacheDirs <- listDirectory cabalDir
-    indexFiles <- filterM doesFileExist $ map (\dir -> cabalDir </> dir </> "00-index.cache") cacheDirs
-    S.unions <$> mapM readCache indexFiles
+    indexFiles <- filterM doesFileExist $ map (\dir -> cabalDir </> dir </> "00-index.tar") cacheDirs
+    M.unions <$> mapM readIndex indexFiles
   where
-    readCache fname =
-        S.fromList . mapMaybe parseLine . lines <$> readFile fname
-    parseLine line
-      | "pkg:" : name : ver : _ <- words line
-      = PackageIdentifier <$> simpleParse name <*> simpleParse ver
-      | otherwise
-      = Nothing
+    readIndex fname = do
+        bs <- BS.readFile fname
+        let mkPkg pkg entry = (pkg, Tar.entryTime entry)
+        case Index.read mkPkg (".cabal" `isSuffixOf`) bs of
+          Left msg -> do warn verbosity $ "failed to read package index "++show fname++": "++msg
+                         return M.empty
+          Right pkgs -> return $ M.fromList pkgs
 
 writeConfig :: BuildOpts -> BuildConfig -> IO ()
 writeConfig opts BuildConfig {
@@ -410,34 +418,43 @@ getDocumentationStats verbosity config didFail = do
 buildOnce :: BuildOpts -> [PackageId] -> IO ()
 buildOnce opts pkgs = keepGoing $ do
     config <- readConfig opts
-    -- Due to caching sometimes the package repository state may lag behind the
-    -- documentation index. Consequently, we make sure that the packages we are
-    -- going to build actually appear in the repository before building. See
-    -- #543.
-    repoIndex <- parseRepositoryIndices
 
     notice verbosity "Initialising"
     (has_failed, mark_as_failed, persist_failed) <- mkPackageFailed opts
 
     flip finally persist_failed $ do
         updatePackageIndex
+        -- Due to caching sometimes the package repository state may lag behind the
+        -- documentation index. Consequently, we make sure that the packages we are
+        -- going to build actually appear in the repository before building. See
+        -- #543.
+        repoIndex <- parseRepositoryIndices verbosity
+
         pkgIdsHaveDocs <- getDocumentationStats verbosity config has_failed
         infoStats verbosity Nothing pkgIdsHaveDocs
 
-        -- First build all of the latest versions of each package
-        -- Then go back and build all the older versions
-        -- NOTE: assumes all these lists are non-empty
-        let latestFirst :: [[DocInfo]] -> [DocInfo]
-            latestFirst ids = map head ids ++ concatMap tail ids
+        let orderBuilds :: BuildOrder -> [DocInfo] -> [DocInfo]
+            orderBuilds LatestVersionFirst =
+                  latestFirst
+                . map (sortBy (flip (comparing docInfoPackageVersion)))
+                . groupBy (equating  docInfoPackageName)
+                . sortBy  (comparing docInfoPackageName)
+              where
+                -- NOTE: assumes all these lists are non-empty
+                latestFirst :: [[DocInfo]] -> [DocInfo]
+                latestFirst ids = map head ids ++ concatMap tail ids
+
+            orderBuilds MostRecentlyUploadedFirst =
+                  map snd
+                . sortBy (comparing fst)
+                . mapMaybe (\pkg -> fmap (\uploadTime -> (Down uploadTime, pkg)) (M.lookup (docInfoPackage pkg) repoIndex))
+
 
         -- Find those files *not* marked as having documentation in our cache
         let toBuild :: [DocInfo]
             toBuild = filter shouldBuild
-                    . filter (flip S.member repoIndex . docInfoPackage)
-                    . latestFirst
-                    . map (sortBy (flip (comparing docInfoPackageVersion)))
-                    . groupBy (equating  docInfoPackageName)
-                    . sortBy  (comparing docInfoPackageName)
+                    . filter (flip M.member repoIndex . docInfoPackage)
+                    . orderBuilds (bo_buildOrder opts)
                     $ pkgIdsHaveDocs
 
         notice verbosity $ show (length toBuild) ++ " package(s) to build"
@@ -820,7 +837,8 @@ data BuildFlags = BuildFlags {
     flagPrune      :: Bool,
     flagUsername   :: Maybe String,
     flagPassword   :: Maybe String,
-    flagBuildAttempts :: Maybe Int
+    flagBuildAttempts :: Maybe Int,
+    flagBuildOrder :: Maybe BuildOrder
 }
 
 emptyBuildFlags :: BuildFlags
@@ -838,6 +856,7 @@ emptyBuildFlags = BuildFlags {
   , flagUsername   = Nothing
   , flagPassword   = Nothing
   , flagBuildAttempts = Nothing
+  , flagBuildOrder = Nothing
   }
 
 buildFlagDescrs :: [OptDescr (BuildFlags -> BuildFlags)]
@@ -897,6 +916,14 @@ buildFlagDescrs =
                                  [(attempts', "")] -> opts { flagBuildAttempts = Just attempts' }
                                  _ -> error "Can't parse attempt count") "ATTEMPTS")
       "How many times to attempt to build a package before giving up"
+
+  , Option [] ["build-order"]
+     (ReqArg (\order opts -> let set o = opts { flagBuildOrder = Just o }
+                             in case order of
+                                "latest-version-first" -> set LatestVersionFirst
+                                "recent-uploads-first" -> set MostRecentlyUploadedFirst
+                                _                      -> error "Can't parse build order") "ORDER")
+     "What order should packages be built in? (latest-version-first or recent-uploads-first)"
   ]
 
 validateOpts :: [String] -> IO (Mode, BuildOpts)
@@ -919,7 +946,8 @@ validateOpts args = do
                    bo_prune      = flagPrune flags,
                    bo_username   = flagUsername flags,
                    bo_password   = flagPassword flags,
-                   bo_buildAttempts = fromMaybe 3 $ flagBuildAttempts flags
+                   bo_buildAttempts = fromMaybe 3 $ flagBuildAttempts flags,
+                   bo_buildOrder = fromMaybe LatestVersionFirst $ flagBuildOrder flags
                }
 
         mode = case args' of
