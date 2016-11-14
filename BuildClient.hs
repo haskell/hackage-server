@@ -40,6 +40,7 @@ import System.Directory
 import System.Console.GetOpt
 import System.Process
 import System.IO
+import Control.Concurrent
 
 import Paths_hackage_server (version)
 
@@ -432,6 +433,7 @@ buildOnce opts pkgs = keepGoing $ do
 
         pkgIdsHaveDocs <- getDocumentationStats verbosity config has_failed
         infoStats verbosity Nothing pkgIdsHaveDocs
+        threadDelay (10^7)
 
         let orderBuilds :: BuildOrder -> [DocInfo] -> [DocInfo]
             orderBuilds LatestVersionFirst =
