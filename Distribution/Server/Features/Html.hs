@@ -621,6 +621,8 @@ mkHtmlCore ServerEnv{serverBaseURI}
       pkgDetails <- liftIO $ makeItemList packageNames
       let rowList = map makeRow pkgDetails
           tabledata = "" +++ rowList +++ ""
+      cacheControl [Public, maxAgeHours 1]
+                   (etagFromHash (PackageIndex.indexSize pkgIndex))
       template <- getTemplate templates "table-interface.html"
       return $ toResponse $ template
         [ "heading"   $= "All packages"
@@ -630,10 +632,13 @@ mkHtmlCore ServerEnv{serverBaseURI}
     serveGraphJSON :: DynamicPath -> ServerPartE Response
     serveGraphJSON _ = do
         graph <- revJSON
+        --TODO: use proper type for graph with ETag
+        cacheControl [Public, maxAgeMinutes 30] (etagFromHash graph)
         ok . toResponse $ graph
 
     serveGraph :: DynamicPath -> ServerPartE Response
     serveGraph _ = do
+      cacheControlWithoutETag [Public, maxAgeDays 1] -- essentially static
       template <- getTemplate templates "graph.html"
       return $ toResponse $ template []
 
