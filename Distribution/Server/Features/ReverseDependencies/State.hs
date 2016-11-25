@@ -38,9 +38,9 @@ type NodeId = Int
 type RevDeps = Graph
 
 data ReverseIndex = ReverseIndex {
-    duplicatedIndex :: PackageIndex PackageId,
-    reverseDependencies :: RevDeps,
-    packageNodeIdMap :: Bimap PackageId NodeId
+    duplicatedIndex     :: !(PackageIndex PackageId),
+    reverseDependencies :: !RevDeps,
+    packageNodeIdMap    :: !(Bimap PackageId NodeId)
 } deriving (Eq, Show, Typeable)
 
 instance MemSize ReverseIndex where
