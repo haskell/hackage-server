@@ -88,14 +88,13 @@ initReverseFeature :: ServerEnv
                        -> VersionsFeature
                        -> IO ReverseFeature)
 initReverseFeature ServerEnv{serverVerbosity = verbosity, serverStateDir} = do
-    revChan <- newChan
     reverseState <- reverseStateComponent serverStateDir
     updateReverse <- newHook
     memState  <- newMemStateWHNF emptyReverseIndex
 
     return $ \core@CoreFeature{..}
              versionsf@VersionsFeature{..} -> do
-      let feature = reverseFeature core revChan versionsf reverseState memState updateReverse
+      let feature = reverseFeature core versionsf reverseState memState updateReverse
 
       registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, mpkginfo) ->
         case mpkginfo of
@@ -103,9 +102,7 @@ initReverseFeature ServerEnv{serverVerbosity = verbosity, serverStateDir} = do
             Just pkginfo -> do
                 index <- queryGetPackageIndex
                 updateState reverseState (AddReversePackage pkgid (getAllDependencies pkginfo index))
-                let pkgdeps = [pkgid]
-                writeChan revChan (return pkgdeps)
-                runHook_ updateReverse pkgdeps
+                runHook_ updateReverse [pkgid]
 
       return feature
 
@@ -151,7 +148,6 @@ instance ToJSON Edge
 -- instance ToJSON PackageName
 
 reverseFeature :: CoreFeature
-               -> Chan (IO [PackageId])
                -> VersionsFeature
                -> StateComponent AcidState ReverseIndex
                -> MemState ReverseIndex
@@ -159,7 +155,6 @@ reverseFeature :: CoreFeature
                -> ReverseFeature
 
 reverseFeature CoreFeature{..}
-               reverseStream
                VersionsFeature{..}
                reverseState
                calculatedRI
