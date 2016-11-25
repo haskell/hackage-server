@@ -1481,7 +1481,6 @@ mkHtmlTags :: HtmlUtilities
 mkHtmlTags HtmlUtilities{..}
            CoreFeature{ coreResource = CoreResource{
                           packageInPath
-                        , tagInPath
                         , lookupPackageName
                         }
                       }
@@ -1637,6 +1636,9 @@ mkHtmlTags HtmlUtilities{..}
         else return $ toResponse $ Resource.XHtml $ hackagePage "Error" [h2 << "Authorization Error"
                                                                             , paragraph << "You need to be logged in to propose tags"]
 
+-- | Find a TagName inside a path.
+tagInPath :: forall m a. (MonadPlus m, FromReqURI a) => DynamicPath -> m a
+tagInPath dpath = maybe mzero return (lookup "tag" dpath >>= fromReqURI)
 
 
 {-------------------------------------------------------------------------------
