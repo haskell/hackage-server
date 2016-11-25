@@ -222,20 +222,20 @@ getReverseIndex = ask
 replaceReverseIndex :: ReverseIndex -> Update ReverseIndex ()
 replaceReverseIndex = put
 
-addReversePackage :: PackageId -> [PackageId] -> Update ReverseIndex [PackageId]
+addReversePackage :: PackageId -> [PackageId] -> Update ReverseIndex ()
 addReversePackage pkgid deps = get >>= \revs ->
     let revs' = addPackage pkgid deps revs
-    in put revs' >> return [pkgid]
+    in put revs'
 
-removeReversePackage :: PackageId -> [PackageId] -> Update ReverseIndex [PackageId]
+removeReversePackage :: PackageId -> [PackageId] -> Update ReverseIndex ()
 removeReversePackage pkgid deps = get >>= \revs ->
     let revs' = removePackage pkgid deps revs
-    in put revs' >> return [pkgid]
+    in put revs'
 
-changeReversePackage :: PackageId -> [PackageId] -> [PackageId] -> Update ReverseIndex [PackageId]
+changeReversePackage :: PackageId -> [PackageId] -> [PackageId] -> Update ReverseIndex ()
 changeReversePackage pkgid deps deps' = get >>= \revs ->
     let revs' = changePackage pkgid deps deps' revs
-    in put revs' >> return [pkgid]
+    in put revs'
 
 getDependencies :: PackageName -> Query ReverseIndex (Set PackageName)
 getDependencies pkg = do

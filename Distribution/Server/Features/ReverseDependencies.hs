@@ -102,7 +102,8 @@ initReverseFeature ServerEnv{serverVerbosity = verbosity, serverStateDir} = do
             Nothing -> return () --PackageRemoveHook
             Just pkginfo -> do
                 index <- queryGetPackageIndex
-                pkgdeps <- updateState reverseState (AddReversePackage pkgid (getAllDependencies pkginfo index))
+                updateState reverseState (AddReversePackage pkgid (getAllDependencies pkginfo index))
+                let pkgdeps = [pkgid]
                 writeChan revChan (return pkgdeps)
                 runHook_ updateReverse pkgdeps
 
@@ -187,7 +188,7 @@ reverseFeature CoreFeature{..}
     setReverse :: PackageId -> [PackageId] -> IO ()
     setReverse pkg deps = do
       modifyMemState calculatedRI (addPackage pkg deps)
-      void $ updateState reverseState $ AddReversePackage pkg deps
+      updateState reverseState $ AddReversePackage pkg deps
       runHook_ reverseHook [pkg]
 
 
