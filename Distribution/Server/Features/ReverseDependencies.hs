@@ -90,11 +90,10 @@ initReverseFeature :: ServerEnv
 initReverseFeature ServerEnv{serverVerbosity = verbosity, serverStateDir} = do
     reverseState <- reverseStateComponent serverStateDir
     updateReverse <- newHook
-    memState  <- newMemStateWHNF emptyReverseIndex
 
     return $ \core@CoreFeature{..}
              versionsf@VersionsFeature{..} -> do
-      let feature = reverseFeature core versionsf reverseState memState updateReverse
+      let feature = reverseFeature core versionsf reverseState updateReverse
 
       registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, mpkginfo) ->
         case mpkginfo of
@@ -150,14 +149,12 @@ instance ToJSON Edge
 reverseFeature :: CoreFeature
                -> VersionsFeature
                -> StateComponent AcidState ReverseIndex
-               -> MemState ReverseIndex
                -> Hook [PackageId] ()
                -> ReverseFeature
 
 reverseFeature CoreFeature{..}
                VersionsFeature{..}
                reverseState
-               calculatedRI
                reverseHook
   = ReverseFeature{..}
   where
@@ -165,12 +162,7 @@ reverseFeature CoreFeature{..}
         featureResources = map ($ reverseResource) []
       , featurePostInit = initReverseIndex
       , featureState    = [abstractAcidStateComponent reverseState]
-      , featureCaches   = [
-            CacheComponent {
-              cacheDesc       = "reverse index",
-              getCacheMemSize = memSize <$> readMemState calculatedRI
-            }
-          ]
+      , featureCaches   = []
       }
 
     initReverseIndex :: IO ()
@@ -182,7 +174,6 @@ reverseFeature CoreFeature{..}
 
     setReverse :: PackageId -> [PackageId] -> IO ()
     setReverse pkg deps = do
-      modifyMemState calculatedRI (addPackage pkg deps)
       updateState reverseState $ AddReversePackage pkg deps
       runHook_ reverseHook [pkg]
 
