@@ -52,7 +52,7 @@ emptyReverseIndex = ReverseIndex (PackageIndex.fromList []) (Gr.buildG (0, 20000
 
 constructReverseIndex :: PackageIndex PkgInfo -> ReverseIndex
 constructReverseIndex index =
-    emptyReverseIndex {
+    ReverseIndex {
         duplicatedIndex = constructDupIndex index,
         reverseDependencies = constructRevDeps index nodePkgMap,
         packageNodeIdMap = nodePkgMap
