@@ -241,6 +241,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     tagsFeature     <- mkTagsFeature
                          coreFeature
                          uploadFeature
+                         usersFeature
 
     versionsFeature <- mkVersionsFeature
                          coreFeature

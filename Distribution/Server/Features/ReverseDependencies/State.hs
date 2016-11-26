@@ -21,7 +21,7 @@ import Data.SafeCopy hiding (Version)
 import Data.Typeable (Typeable)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Bimap (Bimap, (!>), member)
+import Data.Bimap (Bimap, (!>), (!), member)
 import qualified Data.Bimap as Bimap
 import Control.Applicative
 import Data.Set (Set)

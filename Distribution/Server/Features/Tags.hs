@@ -19,6 +19,7 @@ import Distribution.Server.Features.Tags.State
 import Distribution.Server.Features.Tags.Backup
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Upload
+import Distribution.Server.Features.Users
 import Distribution.Server.Framework.BackupRestore
 
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
@@ -67,8 +68,8 @@ data TagsFeature = TagsFeature {
 
     withTagPath :: forall a. DynamicPath -> (Tag -> Set PackageName -> ServerPartE a) -> ServerPartE a,
     collectTags :: forall m. MonadIO m => Set PackageName -> m (Map PackageName (Set Tag)),
-    putTags     :: PackageName -> ServerPartE (),
-    mergeTags     :: Tag -> ServerPartE ()
+    putTags     :: Maybe String -> Maybe String -> Maybe String -> Maybe String -> PackageName -> ServerPartE (),
+    mergeTags   :: Maybe String -> Tag -> ServerPartE ()
 
 }
 
@@ -91,6 +92,7 @@ data TagsResource = TagsResource {
 initTagsFeature :: ServerEnv
                 -> IO (CoreFeature
                     -> UploadFeature
+                    -> UserFeature
                     -> IO TagsFeature)
 initTagsFeature ServerEnv{serverStateDir} = do
     tagsState <- tagsStateComponent serverStateDir
@@ -98,8 +100,8 @@ initTagsFeature ServerEnv{serverStateDir} = do
     specials  <- newMemStateWHNF emptyPackageTags
     updateTag <- newHook
 
-    return $ \core@CoreFeature{..} upload -> do
-      let feature = tagsFeature core upload tagsState tagAlias specials updateTag
+    return $ \core@CoreFeature{..} upload user -> do
+      let feature = tagsFeature core upload user tagsState tagAlias specials updateTag
 
       registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, mpkginfo) ->
         case mpkginfo of
@@ -142,16 +144,16 @@ tagsAliasComponent stateDir = do
 
 tagsFeature :: CoreFeature
             -> UploadFeature
+            -> UserFeature
             -> StateComponent AcidState PackageTags
             -> StateComponent AcidState TagAlias
             -> MemState PackageTags
             -> Hook (Set PackageName, Set Tag) ()
             -> TagsFeature
 
-tagsFeature CoreFeature{ queryGetPackageIndex
-                       , coreResource = CoreResource { guardValidPackageName }
-                       }
-            UploadFeature{authorisedAsAnyUser, authorisedAsMaintainerOrTrustee}
+tagsFeature CoreFeature{ queryGetPackageIndex }
+            UploadFeature{ maintainersGroup, trusteesGroup }
+            UserFeature{ guardAuthorised' }
             tagsState
             tagsAlias
             calculatedTags
@@ -230,12 +232,11 @@ tagsFeature CoreFeature{ queryGetPackageIndex
         pkgMap <- liftM packageTags $ queryState tagsState GetPackageTags
         return $ Map.fromDistinctAscList . map (\pkg -> (pkg, Map.findWithDefault Set.empty pkg pkgMap)) $ Set.toList pkgs
 
-    mergeTags :: Tag -> ServerPartE ()
-    mergeTags deprTag = do
-        tags <- optional $ look "tags"
-        index <- queryGetPackageIndex
-        case simpleParse =<< tags of
+    mergeTags :: Maybe String -> Tag -> ServerPartE ()
+    mergeTags targetTag deprTag =
+        case simpleParse =<< targetTag of
             Just (Tag orig) -> do
+                index <- queryGetPackageIndex
                 void $ updateState tagsAlias $ AddTagAlias (Tag orig) deprTag
                 void $ constructMergedTagIndex (Tag orig) deprTag index
             _ -> errBadRequest "Tag not recognised" [MText "Couldn't parse tag. It should be a single tag."]
@@ -255,19 +256,14 @@ tagsFeature CoreFeature{ queryGetPackageIndex
                         return $ setTags pn newTags calcTags
                     else return $ setTags pn pkgTags calcTags
 
-    putTags :: PackageName -> ServerPartE ()
-    putTags pkgname = do
-      guardValidPackageName pkgname
-      addns <- optional $ look "addns"
-      delns <- optional $ look "delns"
-      raddns <- optional $ look "raddns"
-      rdelns <- optional $ look "rdelns"
+    putTags :: Maybe String -> Maybe String -> Maybe String -> Maybe String -> PackageName -> ServerPartE ()
+    putTags addns delns raddns rdelns pkgname =
       case simpleParse =<< addns of
           Just (TagList add) ->
                 case simpleParse =<< delns of
                     Just (TagList del) -> do
-                        trustainer <- authorisedAsMaintainerOrTrustee pkgname
-                        user <- authorisedAsAnyUser
+                        trustainer <- guardAuthorised' [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
+                        user <- guardAuthorised' [AnyKnownUser]
                         if trustainer
                             then do
                                 calcTags <- queryTagsForPackage pkgname

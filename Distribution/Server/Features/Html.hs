@@ -291,7 +291,7 @@ htmlFeature env@ServerEnv{..}
                                       docsCandidates tarIndexCache
                                       candidates templates
     htmlPreferred  = mkHtmlPreferred  utilities core versions
-    htmlTags       = mkHtmlTags       utilities core upload list tags templates
+    htmlTags       = mkHtmlTags       utilities core upload user list tags templates
     htmlReverse    = mkHtmlReverse    utilities core versions list revf reverseH
     htmlSearch     = mkHtmlSearch     utilities core list names templates
 
@@ -416,7 +416,7 @@ mkHtmlCore :: ServerEnv
            -> HtmlCore
 mkHtmlCore ServerEnv{serverBaseURI}
            utilities@HtmlUtilities{..}
-           UserFeature{queryGetUserDb, getAuthentication}
+           UserFeature{queryGetUserDb, checkAuthenticated}
            CoreFeature{coreResource , queryGetPackageIndex}
            VersionsFeature{ versionsResource
                           , queryGetDeprecatedFor
@@ -520,8 +520,8 @@ mkHtmlCore ServerEnv{serverBaseURI}
         recentDown    <- cmFind pkgname `liftM` recentPackageDownloads
         pkgVotes      <- pkgNumVotes pkgname
         pkgScore      <- fmap (/2) $ pkgNumScore pkgname
-        auth          <- getAuthentication
-        userRating      <- case auth of Just (uid,_) -> pkgUserVote pkgname uid; _ -> return Nothing
+        auth          <- checkAuthenticated
+        userRating    <- case auth of Just (uid,_) -> pkgUserVote pkgname uid; _ -> return Nothing
         mdoctarblob   <- queryDocumentation realpkg
         rdeps         <- queryReverseDeps pkgname
         tags          <- queryTagsForPackage pkgname
@@ -1479,6 +1479,7 @@ data HtmlTags = HtmlTags {
 mkHtmlTags :: HtmlUtilities
            -> CoreFeature
            -> UploadFeature
+           -> UserFeature
            -> ListFeature
            -> TagsFeature
            -> Templates
@@ -1487,10 +1488,12 @@ mkHtmlTags HtmlUtilities{..}
            CoreFeature{ coreResource = CoreResource{
                           packageInPath
                         , lookupPackageName
+                        , guardValidPackageName
                         }
                       }
-           UploadFeature{authorisedAsAnyUser, authorisedAsMaintainerOrTrustee, guardAuthorisedAsTrustee}
-           ListFeature{makeItemList}
+           UploadFeature{ maintainersGroup, trusteesGroup }
+           UserFeature{ guardAuthorised', guardAuthorised_ }
+           ListFeature{ makeItemList }
            TagsFeature{..}
            templates
            = HtmlTags{..}
@@ -1541,7 +1544,8 @@ mkHtmlTags HtmlUtilities{..}
     putAliasEdit :: DynamicPath -> ServerPartE Response
     putAliasEdit dpath = do
         tagname <- tagInPath dpath
-        mergeTags (Tag tagname)
+        targetTag <- optional $ look "tags"
+        mergeTags targetTag (Tag tagname)
         return $ toResponse $ Resource.XHtml $ hackagePage "Merged Tag"
             [ h2 << "Merged tag"
             , toHtml "Return to "
@@ -1551,7 +1555,8 @@ mkHtmlTags HtmlUtilities{..}
     serveAliasForm :: DynamicPath -> ServerPartE Response
     serveAliasForm dpath = do
         tagname <- tagInPath dpath
-        guardAuthorisedAsTrustee
+        guardAuthorised_ [InGroup trusteesGroup]
+
         let aliasForm = [ thediv ! [theclass "box"] <<
                             [h2 << ("Merge Tag " ++ tagname)
                             , form ! [XHtml.method "post", action ("/packages/tag/" ++ tagname ++ "/alias")] <<
@@ -1601,8 +1606,13 @@ mkHtmlTags HtmlUtilities{..}
     putPackageTags :: DynamicPath -> ServerPartE Response
     putPackageTags dpath = do
       pkgname <- packageInPath dpath
-      _       <- lookupPackageName pkgname -- TODO: necessary?
-      putTags pkgname
+      guardValidPackageName pkgname
+      addns <- optional $ look "addns"
+      delns <- optional $ look "delns"
+      raddns <- optional $ look "raddns"
+      rdelns <- optional $ look "rdelns"
+
+      putTags addns delns raddns rdelns pkgname
       currTags <- queryTagsForPackage pkgname
       revTags <- queryReviewTagsForPackage pkgname
       let disp = renderReviewTags currTags revTags pkgname
@@ -1627,8 +1637,8 @@ mkHtmlTags HtmlUtilities{..}
           tagsStr = toStr currTags
           addns = toStr $ fst  revTags
           delns = toStr $ snd  revTags
-      trustainer <- authorisedAsMaintainerOrTrustee pkgname
-      user <- authorisedAsAnyUser
+      trustainer <- guardAuthorised' [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
+      user <- guardAuthorised' [AnyKnownUser]
       if trustainer || user
         then return $ toResponse . template $
           [ "pkgname"           $= display pkgname

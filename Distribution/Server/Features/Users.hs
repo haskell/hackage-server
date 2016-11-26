@@ -64,7 +64,7 @@ data UserFeature = UserFeature {
     -- | Require being logged in, giving the id of the current user.
     guardAuthenticated :: ServerPartE UserId,
     -- | Gets the authentication if it exists.
-    getAuthentication :: ServerPartE (Maybe (UserId, UserInfo)),
+    checkAuthenticated :: ServerPartE (Maybe (UserId, UserInfo)),
     -- | A hook to override the default authentication error in particular
     -- circumstances.
     authFailHook       :: Hook Auth.AuthError (Maybe ErrorResponse),
@@ -422,8 +422,8 @@ userFeature templates usersState adminsState
           throwError (fromMaybe defaultResponse overrideResponse)
 
     -- Check if there is an authenticated userid, and return info, if so.
-    getAuthentication :: ServerPartE (Maybe (UserId, UserInfo))
-    getAuthentication = do
+    checkAuthenticated :: ServerPartE (Maybe (UserId, UserInfo))
+    checkAuthenticated = do
         users <- queryGetUserDb
         either (const Nothing) Just `fmap` Auth.checkAuthenticated Auth.hackageRealm users
 
