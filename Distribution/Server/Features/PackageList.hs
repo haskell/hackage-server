@@ -24,7 +24,6 @@ import Distribution.Server.Util.CountingMap (cmFind)
 
 import Distribution.Server.Packages.Types
 import Distribution.Server.Users.Types
-import Distribution.Server.Features.ReverseDependencies
 
 import Distribution.Package
 import Distribution.PackageDescription
@@ -36,7 +35,6 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-import qualified Data.Vector as Vec
 
 
 data ListFeature = ListFeature {

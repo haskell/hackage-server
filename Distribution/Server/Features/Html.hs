@@ -39,7 +39,6 @@ import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Users.Group (UserGroup(..))
 import Distribution.Server.Features.Distro.Distributions (DistroPackageInfo(..))
-import Distribution.Server.Features.ReverseDependencies
 
 import qualified Distribution.Server.Pages.Package as Pages
 import qualified Distribution.Server.Pages.PackageFromTemplate as PagesNew
@@ -60,7 +59,6 @@ import Distribution.PackageDescription
 import Data.List (intercalate, intersperse, insert, sortBy)
 import Data.Function (on)
 import qualified Data.Map as Map
-import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Vector as Vec
 import Data.Maybe (fromMaybe, isJust)
@@ -72,8 +70,6 @@ import Data.Array (Array, listArray)
 import qualified Data.Array as Array
 import qualified Data.Ix    as Ix
 import Data.Time.Format (formatTime)
-import Data.Time.Clock (getCurrentTime)
-import qualified Data.Time.Format.Human as HumanTime
 import Data.Time.Locale.Compat (defaultTimeLocale)
 import qualified Data.ByteString.Lazy as BS (ByteString)
 
@@ -1487,7 +1483,6 @@ mkHtmlTags :: HtmlUtilities
 mkHtmlTags HtmlUtilities{..}
            CoreFeature{ coreResource = CoreResource{
                           packageInPath
-                        , lookupPackageName
                         , guardValidPackageName
                         }
                       }

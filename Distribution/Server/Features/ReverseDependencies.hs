@@ -44,12 +44,12 @@ data ReverseFeature = ReverseFeature {
     queryReverseDeps :: forall m. MonadIO m => PackageName -> m ([PackageName], [PackageName]),
     revPackageId :: forall m. MonadIO m => PackageId -> m ReverseDisplay,
     revPackageName :: forall m. MonadIO m => PackageName -> m ReverseDisplay,
-    renderReverseRecent :: forall m. MonadIO m => PackageName -> ReverseDisplay -> m ReversePageRender,
-    renderReverseOld :: forall m. MonadIO m => PackageName -> ReverseDisplay -> m ReversePageRender,
-    revPackageFlat :: forall m. MonadIO m => PackageName -> m [(PackageName, Int)],
-    revPackageStats :: forall m. MonadIO m => PackageName -> m ReverseCount,
-    revPackageSummary :: forall m. MonadIO m => PackageId -> m (Int, Int),
-    revSummary :: forall m. MonadIO m => m [(PackageName, Int, Int)],
+    renderReverseRecent :: forall m. (Functor m, MonadIO m) => PackageName -> ReverseDisplay -> m ReversePageRender,
+    renderReverseOld :: forall m. (Functor m, MonadIO m) => PackageName -> ReverseDisplay -> m ReversePageRender,
+    revPackageFlat :: forall m. (Functor m, MonadIO m) => PackageName -> m [(PackageName, Int)],
+    revPackageStats :: forall m. (Functor m, MonadIO m) => PackageName -> m ReverseCount,
+    revPackageSummary :: forall m. (Functor m, MonadIO m) => PackageId -> m (Int, Int),
+    revSummary :: forall m. (Functor m, MonadIO m) => m [(PackageName, Int, Int)],
     revJSON :: forall m. MonadIO m => m ByteString
 }
 
@@ -218,7 +218,7 @@ reverseFeature CoreFeature{..}
         prefs <- queryGetPreferredVersions
         return $ getDisplayInfo prefs pkgIndex
 
-    renderReverseWith :: MonadIO m => PackageName -> ReverseDisplay -> (Maybe VersionStatus -> Bool) -> m ReversePageRender
+    renderReverseWith :: (Functor m, MonadIO m) => PackageName -> ReverseDisplay -> (Maybe VersionStatus -> Bool) -> m ReversePageRender
     renderReverseWith pkg rev filterFunc = do
         let rev' = map fst $ Map.toList rev
         revcount <- mapM revPackageStats (pkg:rev')
@@ -232,13 +232,13 @@ reverseFeature CoreFeature{..}
             pkgCount = fromJust $ lookup pkg counts
         return $ ReversePageRender (catMaybes rlist) res pkgCount
 
-    renderReverseRecent :: MonadIO m => PackageName -> ReverseDisplay -> m ReversePageRender
+    renderReverseRecent :: (Functor m, MonadIO m) => PackageName -> ReverseDisplay -> m ReversePageRender
     renderReverseRecent pkg rev = renderReverseWith pkg rev $ \status -> case status of
         Just DeprecatedVersion -> False
         Nothing -> False
         _ -> True
 
-    renderReverseOld :: MonadIO m => PackageName -> ReverseDisplay -> m ReversePageRender
+    renderReverseOld :: (Functor m, MonadIO m) => PackageName -> ReverseDisplay -> m ReversePageRender
     renderReverseOld pkg rev = renderReverseWith pkg rev $ \status -> case status of
         Just DeprecatedVersion -> True
         Nothing -> True
@@ -268,7 +268,7 @@ reverseFeature CoreFeature{..}
     -- -- still no versions. TODO: use this fact to make an index of dependencies which
     -- -- are not in Hackage at all, which might be useful for fixing accidentally
     -- -- broken packages.
-    revSummary :: MonadIO m => m [(PackageName, Int, Int)]
+    revSummary :: (Functor m, MonadIO m) => m [(PackageName, Int, Int)]
     revSummary = do
         index <- queryGetPackageIndex
         let pkgnames = packageNames index
