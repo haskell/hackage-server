@@ -9,10 +9,7 @@ module Distribution.Server.Features.Tags (
     constructTagIndex
   ) where
 
-import Control.Applicative (optional)
-
 import Distribution.Server.Framework
-import Distribution.Server.Framework.Auth
 import Distribution.Server.Framework.BackupDump
 
 import Distribution.Server.Features.Tags.State
@@ -20,7 +17,6 @@ import Distribution.Server.Features.Tags.Backup
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Users
-import Distribution.Server.Framework.BackupRestore
 
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)

@@ -11,7 +11,7 @@ module Distribution.Server.Features.ReverseDependencies (
 import Distribution.Server.Framework
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.PreferredVersions
-import Distribution.Server.Packages.PackageIndex (packageNames, allPackagesByName, allPackages)
+import Distribution.Server.Packages.PackageIndex (packageNames, allPackagesByName)
 import Distribution.Server.Packages.Types (pkgInfoId)
 
 import Distribution.Server.Features.ReverseDependencies.State
@@ -150,7 +150,7 @@ reverseFeature CoreFeature{..}
     initReverseIndex :: IO ()
     initReverseIndex = do
             index <- queryGetPackageIndex
---            writeMemState reverseMemState $ constructReverseIndex index
+            -- We build the proper index earlier, this just fires the reverse hooks
             let allPackages = map pkgInfoId $ concat $ allPackagesByName index
             runHook_ reverseHook allPackages
 
@@ -246,19 +246,19 @@ reverseFeature CoreFeature{..}
 
     -- -- This could also differentiate between direct and indirect dependencies
     -- -- with a bit more calculation.
-    revPackageFlat :: MonadIO m => PackageName -> m [(PackageName, Int)]
+    revPackageFlat :: (Functor m, MonadIO m) => PackageName -> m [(PackageName, Int)]
     revPackageFlat pkgname = do
         pkgIndex <- queryGetPackageIndex
         deps <- getDependenciesI' pkgname pkgIndex <$> readMemState reverseMemState
         counts <- mapM revPackageStats $ Set.toList deps
         return $ zip (Set.toList deps) (map totalCount counts)
 
-    revPackageStats :: MonadIO m => PackageName -> m ReverseCount
+    revPackageStats :: (Functor m, MonadIO m) => PackageName -> m ReverseCount
     revPackageStats pkgname = do
             pkgIndex <- queryGetPackageIndex
             getReverseCount' pkgname pkgIndex <$> readMemState reverseMemState
 
-    revPackageSummary :: MonadIO m => PackageId -> m (Int, Int)
+    revPackageSummary :: (Functor m, MonadIO m) => PackageId -> m (Int, Int)
     revPackageSummary pkg = getReverseCountId' pkg <$> readMemState reverseMemState
 
     -- -- This returns a list of (package name, direct dependencies, flat dependencies)

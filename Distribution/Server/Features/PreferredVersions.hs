@@ -289,7 +289,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
             []   ->  packageError [MText $ "No such package in package index. ", MLink "Search for related terms instead?" $ "/packages/search?terms=" ++ (display $ pkgName pkgid)]
             pkg -> case find ((== packageVersion pkgid) . packageVersion) pkg of
                 Nothing  -> packageError [MText $ "No such package version for " ++ display (packageName pkgid)]
-                Just pkg -> func pkg
+                Just pkg' -> func pkg'
       where packageError = errNotFound "Package not found"
 
     withPackagePreferredPath :: DynamicPath -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a

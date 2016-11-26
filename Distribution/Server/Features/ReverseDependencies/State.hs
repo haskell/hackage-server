@@ -3,8 +3,6 @@
 module Distribution.Server.Features.ReverseDependencies.State where
 
 import Distribution.Server.Packages.Types
-import Distribution.Server.Features.Core
-import Distribution.Server.Features.Core.State
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Features.PreferredVersions.State
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
@@ -26,7 +24,6 @@ import qualified Data.Bimap as Bimap
 import Control.Applicative
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Control.Monad (void)
 import Control.Monad.State (put, get)
 import Control.Monad.Reader (ask)
 import Data.Graph (Graph, Vertex)
