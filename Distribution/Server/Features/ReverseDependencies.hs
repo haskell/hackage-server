@@ -3,40 +3,32 @@ module Distribution.Server.Features.ReverseDependencies (
     ReverseFeature(..),
     ReverseCount(..),
     ReverseResource(..),
-    reverseHook,
     initReverseFeature,
     ReverseRender(..),
     ReversePageRender(..),
   ) where
 
-import Data.Acid (query, update)
 import Distribution.Server.Framework
-import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.PreferredVersions
-import Distribution.Server.Packages.PackageIndex (packageNames)
+import Distribution.Server.Packages.PackageIndex (packageNames, allPackagesByName, allPackages)
+import Distribution.Server.Packages.Types (pkgInfoId)
 
 import Distribution.Server.Features.ReverseDependencies.State
-import qualified Distribution.Server.Framework.Cache as Cache
 
 import Distribution.Package
 import Distribution.Text (display)
-import Distribution.Version
 
 import Data.List (mapAccumL, sortBy)
 import Data.Maybe (catMaybes, fromJust)
-import Data.Function (fix, on)
-import Data.Bimap (Bimap)
+import Data.Function (fix)
 import qualified Data.Bimap as Bimap
-import Data.Graph (Graph)
 import qualified Data.Array as Arr
 import qualified Data.Graph as Gr
-import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Control.Monad (liftM, forever)
 import Control.Monad.Trans (MonadIO)
-import Control.Concurrent.Chan
 import Data.Aeson
 import GHC.Generics hiding (packageName)
 import Data.ByteString.Lazy (ByteString)
@@ -87,40 +79,25 @@ initReverseFeature :: ServerEnv
                    -> IO (CoreFeature
                        -> VersionsFeature
                        -> IO ReverseFeature)
-initReverseFeature ServerEnv{serverVerbosity = verbosity, serverStateDir} = do
-    reverseState <- reverseStateComponent serverStateDir
+initReverseFeature _ = do
     updateReverse <- newHook
 
     return $ \core@CoreFeature{..}
              versionsf@VersionsFeature{..} -> do
-      let feature = reverseFeature core versionsf reverseState updateReverse
+      idx <- queryGetPackageIndex
+      memState <- newMemStateWHNF (constructReverseIndex idx)
+
+      let feature = reverseFeature core versionsf memState updateReverse
 
       registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, mpkginfo) ->
         case mpkginfo of
             Nothing -> return () --PackageRemoveHook
             Just pkginfo -> do
                 index <- queryGetPackageIndex
-                updateState reverseState (AddReversePackage pkgid (getAllDependencies pkginfo index))
+                modifyMemState memState (addPackage pkgid (getAllDependencies pkginfo index))
                 runHook_ updateReverse [pkgid]
 
       return feature
-
-reverseStateComponent :: FilePath -> IO (StateComponent AcidState ReverseIndex)
-reverseStateComponent stateDir = do
-  st <- openLocalStateFrom (stateDir </> "db" </> "Reverse") emptyReverseIndex
-  return StateComponent {
-      stateDesc    = "Reverse Index"
-    , stateHandle  = st
-    , getState     = query st GetReverseIndex
-    , putState     = update st . ReplaceReverseIndex
-    -- Nothing for now
-    , backupState  = \_ _ -> []
-    , restoreState = RestoreBackup {
-                         restoreEntry    = error "Unexpected backup entry"
-                       , restoreFinalize = return emptyReverseIndex
-                       }
-    , resetState   = reverseStateComponent
-    }
 
 data ReverseRender = ReverseRender {
     rendRevPkg :: PackageId,
@@ -148,34 +125,34 @@ instance ToJSON Edge
 
 reverseFeature :: CoreFeature
                -> VersionsFeature
-               -> StateComponent AcidState ReverseIndex
+               -> MemState ReverseIndex
                -> Hook [PackageId] ()
                -> ReverseFeature
 
 reverseFeature CoreFeature{..}
                VersionsFeature{..}
-               reverseState
+               reverseMemState
                reverseHook
   = ReverseFeature{..}
   where
     reverseFeatureInterface = (emptyHackageFeature "reverse") {
         featureResources = map ($ reverseResource) []
-      , featurePostInit = initReverseIndex
-      , featureState    = [abstractAcidStateComponent reverseState]
-      , featureCaches   = []
+      , featurePostInit  = initReverseIndex
+      , featureState     = []
+      , featureCaches    = [
+              CacheComponent {
+                     cacheDesc       = "reverse index",
+                     getCacheMemSize = memSize <$> readMemState reverseMemState
+               }
+             ]
       }
 
     initReverseIndex :: IO ()
     initReverseIndex = do
             index <- queryGetPackageIndex
-            let ReverseIndex _ revdeps nodemap = constructReverseIndex index
-                assoc = takeWhile (\(a,_) -> a < Bimap.size nodemap) $ Arr.assocs . Gr.transposeG $ revdeps
-            forM_ (map (\(a,b) -> (nodemap Bimap.!> a, map (nodemap Bimap.!>) b)) assoc) $ uncurry setReverse
-
-    setReverse :: PackageId -> [PackageId] -> IO ()
-    setReverse pkg deps = do
-      updateState reverseState $ AddReversePackage pkg deps
-      runHook_ reverseHook [pkg]
+--            writeMemState reverseMemState $ constructReverseIndex index
+            let allPackages = map pkgInfoId $ concat $ allPackagesByName index
+            runHook_ reverseHook allPackages
 
 
     reverseResource = fix $ \r -> ReverseResource
@@ -202,13 +179,15 @@ reverseFeature CoreFeature{..}
     -- If VersionStatus caching is used, revPackageId and revPackageName could be
     -- reduced to a single map lookup (see Distribution.Server.Packages.Reverse).
     queryReverseIndex :: MonadIO m => m ReverseIndex
-    queryReverseIndex = queryState reverseState GetReverseIndex
+    queryReverseIndex = readMemState reverseMemState
 
     queryReverseDeps :: MonadIO m => PackageName -> m ([PackageName], [PackageName])
     queryReverseDeps pkgname = do
-        rdeps <- queryState reverseState $ GetDependencies pkgname
-        rdepsall <- queryState reverseState $ GetDependenciesI pkgname
-        let indirect = Set.difference rdepsall rdeps
+        pkgIndex <- queryGetPackageIndex
+        ms <- readMemState reverseMemState
+        let rdeps = getDependencies' pkgname pkgIndex ms
+            rdepsall = getDependenciesI' pkgname pkgIndex ms
+            indirect = Set.difference rdepsall rdeps
         return (Set.toList rdeps, Set.toList indirect)
 
     revPackageId :: MonadIO m => PackageId -> m ReverseDisplay
@@ -220,12 +199,13 @@ reverseFeature CoreFeature{..}
     revPackageName :: MonadIO m => PackageName -> m ReverseDisplay
     revPackageName pkgname = do
         dispInfo <- revDisplayInfo
+        pkgIndex <- queryGetPackageIndex
         revs <- queryReverseIndex
-        return $ perPackageReverse dispInfo revs pkgname
+        return $ perPackageReverse dispInfo pkgIndex revs pkgname
 
     revJSON :: MonadIO m => m ByteString
     revJSON = do
-        ReverseIndex _ revdeps nodemap <- queryReverseIndex
+        ReverseIndex revdeps nodemap <- queryReverseIndex
         let assoc = takeWhile (\(a,_) -> a < Bimap.size nodemap) $ Arr.assocs . Gr.transposeG $ revdeps
             nodeToString node = unPackageName (packageName (nodemap Bimap.!> node))
             -- nodes = map (uncurry Node) $ map (\n -> (fst n, nodeToString (fst n))) assoc
@@ -268,17 +248,18 @@ reverseFeature CoreFeature{..}
     -- -- with a bit more calculation.
     revPackageFlat :: MonadIO m => PackageName -> m [(PackageName, Int)]
     revPackageFlat pkgname = do
-        deps <- queryState reverseState $ GetDependenciesI pkgname
+        pkgIndex <- queryGetPackageIndex
+        deps <- getDependenciesI' pkgname pkgIndex <$> readMemState reverseMemState
         counts <- mapM revPackageStats $ Set.toList deps
         return $ zip (Set.toList deps) (map totalCount counts)
 
     revPackageStats :: MonadIO m => PackageName -> m ReverseCount
-    revPackageStats pkgname =
-        queryState reverseState (GetReverseCount pkgname)
+    revPackageStats pkgname = do
+            pkgIndex <- queryGetPackageIndex
+            getReverseCount' pkgname pkgIndex <$> readMemState reverseMemState
 
     revPackageSummary :: MonadIO m => PackageId -> m (Int, Int)
-    revPackageSummary pkg =
-        queryState reverseState (GetReverseCountId pkg)
+    revPackageSummary pkg = getReverseCountId' pkg <$> readMemState reverseMemState
 
     -- -- This returns a list of (package name, direct dependencies, flat dependencies)
     -- -- for all packages. An interesting fact: it even does so for packages which
@@ -289,7 +270,7 @@ reverseFeature CoreFeature{..}
     -- -- broken packages.
     revSummary :: MonadIO m => m [(PackageName, Int, Int)]
     revSummary = do
-        ReverseIndex index _ _ <- queryReverseIndex
+        index <- queryGetPackageIndex
         let pkgnames = packageNames index
             util = sortBy (\(_,d1,_) (_,d2,_) -> compare d1 d2)
         counts <- mapM revPackageStats pkgnames

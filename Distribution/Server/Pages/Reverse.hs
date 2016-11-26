@@ -5,7 +5,6 @@ module Distribution.Server.Pages.Reverse (
   ) where
 
 import Distribution.Server.Features.ReverseDependencies
-import Distribution.Server.Features.ReverseDependencies.State
 import Distribution.Server.Features.PreferredVersions
 
 
@@ -181,4 +180,3 @@ reverseHtmlUtil ReverseFeature{reverseResource} = ReverseHtmlUtil{..}
                     , toHtml " and "
                     , anchor ! [href $ reverseNameUri reverseResource "" (packageName pkgid) ] << show direct
                     , toHtml " total"]
-
