@@ -502,6 +502,12 @@ Test-Suite HighLevelTest
       Util
     hs-source-dirs: tests
 
+    -- This tells cabal that this test depends on the executable
+    -- component 'hackage-server' from this very same package, as well
+    -- as adding the build-folder where the `hackage-server`
+    -- executable can be found in front of $PATH
+    build-tools: hackage-server
+
     default-language: Haskell2010
     ghc-options:    -threaded -Wall
     build-depends:  base,
