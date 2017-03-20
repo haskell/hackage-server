@@ -25,7 +25,7 @@ $if(title)$
 $title$
 </div>
 $else$
-<a class="caption" href="/">Hackage :: [Package]</a>
+<a class="caption" href="/">next.hackage</a>
 $endif$
 
 </div>
