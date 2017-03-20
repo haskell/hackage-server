@@ -1,5 +1,5 @@
 -- Body of the HTML page for a package
-{-# LANGUAGE PatternGuards, RecordWildCards #-}
+{-# LANGUAGE PatternGuards, RecordWildCards, ViewPatterns #-}
 module Distribution.Server.Pages.Package
   ( packagePage
   , renderPackageFlags
@@ -36,6 +36,8 @@ import Distribution.Package
 import Distribution.PackageDescription as P
 import Distribution.Simple.Utils ( cabalVersion )
 import Distribution.Version
+import Distribution.Types.Dependency
+import Distribution.Types.CondTree
 import Distribution.Text        (display)
 import Text.XHtml.Strict hiding (p, name, title, content)
 
@@ -249,7 +251,7 @@ renderPackageFlags render =
                         ,th << "Default"
                         ,th << "Type"]
         flagRow flag =
-          tr << [td ! [theclass "flag-name"]   << code (case flagName flag of FlagName name -> name)
+          tr << [td ! [theclass "flag-name"]   << code (unFlagName (flagName flag))
                 ,td ! [theclass "flag-desc"]   << flagDescription flag
                 ,td ! [theclass (if flagDefault flag then "flag-enabled" else "flag-disabled")] <<
                  if flagDefault flag then "Enabled" else "Disabled"
@@ -298,7 +300,7 @@ showDependencies :: [Dependency] -> Html
 showDependencies deps = commaList (map showDependency deps)
 
 showDependency ::  Dependency -> Html
-showDependency (Dependency (PackageName pname) vs) = showPkg +++ vsHtml
+showDependency (Dependency (unPackageName -> pname) vs) = showPkg +++ vsHtml
   where vsHtml = if vs == anyVersion then noHtml
                                      else toHtml (" (" ++ display vs ++ ")")
         -- mb_vers links to latest version in range. This is a bit computationally
@@ -307,7 +309,7 @@ showDependency (Dependency (PackageName pname) vs) = showPkg +++ vsHtml
                     PackageIndex.lookupPackageName vmap (PackageName pname)-}
         -- nonetheless, we should ensure that the package exists /before/
         -- passing along the PackageRender, which is not the case here
-        showPkg = anchor ! [href . packageURL $ PackageIdentifier (PackageName pname) (Version [] [])] << pname
+        showPkg = anchor ! [href . packageURL $ PackageIdentifier (mkPackageName pname) nullVersion] << pname
 
 renderDetailedDependencies :: PackageRender -> Html
 renderDetailedDependencies pkgRender =
@@ -334,9 +336,9 @@ renderDetailedDependencies pkgRender =
     list :: [Html] -> Html
     list items = thediv ! [identifier "detailed-dependencies"] << unordList items
 
-    renderComponent :: (Condition ConfVar, DependencyTree, Maybe DependencyTree)
+    renderComponent :: (CondBranch ConfVar [Dependency] IsBuildable)
                     -> Maybe Html
-    renderComponent (condition, then', else')
+    renderComponent (CondBranch condition then' else')
         | Just thenHtml <- render then' =
                            Just $ strong << "if "
                              +++ renderCond condition
@@ -371,7 +373,7 @@ renderDetailedDependencies pkgRender =
 
             displayConfVar (OS os) = "os(" ++ display os ++ ")"
             displayConfVar (Arch arch) = "arch(" ++ display arch ++ ")"
-            displayConfVar (Flag (FlagName f)) = "flag(" ++ f ++ ")"
+            displayConfVar (Flag fn) = "flag(" ++ unFlagName fn ++ ")"
             displayConfVar (Impl compilerFlavor versionRange) =
                 "impl(" ++ display compilerFlavor ++ ver ++ ")"
               where
@@ -388,7 +390,7 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
             later -> (Nothing, later)
         versionList = commaList $ map versionedLink earlierVersions
                                ++ (case pversion of
-                                      Version [] [] -> []
+                                      v | v == nullVersion -> []
                                       _ -> [strong ! (maybe [] (status . snd) mThisVersion) << display pversion]
                                   )
                                ++ map versionedLink laterVersions

@@ -37,11 +37,11 @@ import Distribution.Server.Users.Types (UserId(..), UserName(UserName))
 import Distribution.Server.Util.Merge
 import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.Package
-import Distribution.Version
 import Distribution.Verbosity
 import Distribution.Simple.Utils
 import Distribution.Text
 
+import Data.Version
 import Data.List
 import Data.Maybe
 import Control.Applicative

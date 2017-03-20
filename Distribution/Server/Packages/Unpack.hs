@@ -16,9 +16,11 @@ import qualified Codec.Archive.Tar.Entry as Tar
 import qualified Codec.Archive.Tar.Check as Tar
 
 import Distribution.Version
-         ( Version(..) )
+         ( Version(..), nullVersion )
+import Distribution.Types.PackageName
+         ( unPackageName )
 import Distribution.Package
-         ( PackageIdentifier, packageVersion, packageName, PackageName(..) )
+         ( PackageIdentifier, packageVersion, packageName, PackageName )
 import Distribution.PackageDescription
          ( GenericPackageDescription(..), PackageDescription(..)
          , exposedModules )
@@ -32,13 +34,14 @@ import Distribution.PackageDescription.Check
 import Distribution.ParseUtils
          ( ParseResult(..), locatedErrorMsg, showPWarning )
 import Distribution.Text
-         ( display, simpleParse )
+         ( Text(..), display, simpleParse )
 import Distribution.ModuleName
          ( components )
 import Distribution.Server.Util.Parse
          ( unpackUTF8 )
 import Distribution.License
          ( License(..) )
+import qualified Distribution.Compat.ReadP as Parse
 
 import Control.Applicative
 import Control.Monad
@@ -65,6 +68,7 @@ import Data.Time
          ( UTCTime(..), fromGregorian, addUTCTime )
 import Data.Time.Clock.POSIX
          ( posixSecondsToUTCTime )
+import qualified Data.Version
 import qualified Distribution.Server.Util.GZip as GZip
 import System.FilePath
          ( (</>), (<.>), splitDirectories, splitExtension, normalise )
@@ -73,6 +77,7 @@ import qualified System.FilePath.Windows
 import qualified System.FilePath.Posix
          ( takeFileName, takeDirectory, addTrailingPathSeparator
          , dropTrailingPathSeparator )
+import qualified Text.PrettyPrint as Disp
 import Text.Printf
          ( printf )
 
@@ -105,6 +110,21 @@ unpackPackageRaw tarGzFile contents =
   where
     noTime = UTCTime (fromGregorian 1970 1 1) 0
 
+data TaggedPackageId = TaggedPackageId {
+        taggedPkgName    :: PackageName,
+        taggedPkgVersion :: Data.Version.Version
+    }
+
+instance Text TaggedPackageId where
+    disp (TaggedPackageId n v)
+        | v == Data.Version.Version [] [] = disp n
+        | otherwise = disp n Disp.<> Disp.char '-' Disp.<> disp v
+
+    parse = do
+        n <- parse
+        v <- (Parse.char '-' >> parse) Parse.<++ return (Data.Version.Version [] [])
+        return (TaggedPackageId n v)
+
 tarPackageChecks :: Bool -> UTCTime -> FilePath -> ByteString
                  -> UploadMonad (PackageIdentifier, TarIndex)
 tarPackageChecks lax now tarGzFile contents = do
@@ -114,18 +134,22 @@ tarPackageChecks lax now tarGzFile contents = do
   unless (ext == ".tar.gz") $
     throwError $ tarGzFile ++ " is not a gzipped tar file, it must have the .tar.gz extension"
 
-  pkgid <- case simpleParse pkgidStr of
-    Just pkgid
-      | null . versionBranch . packageVersion $ pkgid
+  pkgid <- case (simpleParse pkgidStr, simpleParse pkgidStr) of
+    (Just pkgid, Just tagged_pkgid)
+      | (== nullVersion) . packageVersion $ pkgid
       -> throwError $ "Invalid package id " ++ quote pkgidStr
                    ++ ". It must include the package version number, and not just "
                    ++ "the package name, e.g. 'foo-1.0'."
 
       | display pkgid == pkgidStr -> return (pkgid :: PackageIdentifier)
 
-      | not . null . versionTags . packageVersion $ pkgid
+      -- NB: we have to use 'TaggedPackageId' here, because the 'PackageId'
+      -- parser will drop tags.
+      | not . null . Data.Version.versionTags . taggedPkgVersion $ tagged_pkgid
       -> throwError $ "Hackage no longer accepts packages with version tags: "
-                   ++ intercalate ", " (versionTags (packageVersion pkgid))
+                   ++ intercalate ", " (Data.Version.versionTags
+                                            (taggedPkgVersion tagged_pkgid))
+
     _ -> throwError $ "Invalid package id " ++ quote pkgidStr
                    ++ ". The tarball must use the name of the package."
 
@@ -153,7 +177,7 @@ basicChecks pkgid tarIndex = do
   -- Extract the .cabal file from the tarball
   let cabalEntries = [ content | (fp, NormalFile content) <- tarIndex
                                , fp == cabalFileName ]
-      PackageName name  = packageName pkgid
+      name  = unPackageName (packageName pkgid)
       cabalFileName     = display pkgid </> name <.> "cabal"
   cabalEntry   <- case cabalEntries of
     -- NB: tar files *can* contain more than one entry for the same filename.

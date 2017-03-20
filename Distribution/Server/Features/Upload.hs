@@ -33,7 +33,7 @@ import Data.ByteString.Lazy (ByteString)
 
 import Distribution.Package
 import Distribution.PackageDescription (GenericPackageDescription)
-import Distribution.Version (Version(..))
+import Distribution.Version (Version, mkVersion, versionNumbers)
 import Distribution.Text (display)
 import qualified Distribution.Server.Util.GZip as GZip
 
@@ -426,7 +426,7 @@ packageIdExistsModuloNormalisedVersion pkgs pkg =
       PackageIdentifier name ver -> PackageIdentifier name (normaliseVersion ver)
 
     normaliseVersion :: Version -> Version
-    normaliseVersion (Version vs _) = Version (n vs) []
+    normaliseVersion v = mkVersion (n (versionNumbers v))
       where
         n vs' = case dropWhileEnd (== 0) vs' of
             []   -> [0]

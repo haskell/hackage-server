@@ -24,7 +24,7 @@ import qualified Codec.Archive.Tar.Check as Tar
 
 import Distribution.Text
 import Distribution.Package
-import Distribution.Version (Version(..))
+import Distribution.Version (nullVersion)
 
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Map as Map
@@ -314,9 +314,9 @@ documentationFeature name
       -- See https://support.google.com/webmasters/answer/139066?hl=en#6
       setHeaderM "Link" canonicalHeader
 
-      case pkgVersion pkgid of
+      case pkgVersion pkgid == nullVersion of
         -- if no version is given we want to redirect to the latest version
-        Version [] _ -> tempRedirect latestPkgPath (toResponse "")
+        True -> tempRedirect latestPkgPath (toResponse "")
           where
             latest = packageId pkginfo
             dpath' = [ if var == "package"
@@ -325,7 +325,7 @@ documentationFeature name
                      | e@(var, _) <- dpath ]
             latestPkgPath = (renderResource' self dpath')
 
-        _             -> do
+        False -> do
           mdocs <- queryState documentationState $ LookupDocumentation pkgid
           case mdocs of
             Nothing ->

@@ -14,7 +14,7 @@ import Distribution.Text
 import qualified Text.PrettyPrint          as Disp
 import Distribution.Verbosity
 import Distribution.Simple.Utils hiding (intercalate)
-import Distribution.Version (Version(..))
+import Distribution.Version (Version, nullVersion)
 
 import Data.List
 import Data.Maybe
@@ -484,7 +484,8 @@ buildOnce opts pkgs = keepGoing $ do
         pkgid = docInfoPackage docInfo
 
     -- do versionless matching if no version was given
-    isSelectedPackage pkgid pkgid'@(PackageIdentifier _ (Version [] _)) =
+    isSelectedPackage pkgid pkgid'@(PackageIdentifier _ v)
+        | nullVersion == v =
         packageName pkgid == packageName pkgid'
     isSelectedPackage pkgid pkgid' =
         pkgid == pkgid'
