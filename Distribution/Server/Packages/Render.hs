@@ -14,7 +14,7 @@ module Distribution.Server.Packages.Render (
 
 import Data.Maybe (catMaybes, isJust, maybeToList)
 import Control.Monad (guard)
-import Control.Arrow (second, (&&&))
+import Control.Arrow (second, (&&&), (***))
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
 import qualified Data.Vector as Vec
@@ -30,6 +30,9 @@ import Distribution.Package
 import Distribution.Text
 import Distribution.Version
 import Distribution.ModuleName as ModuleName
+import Distribution.Types.Dependency
+import Distribution.Types.CondTree
+import Distribution.Types.UnqualComponentName
 
 -- hackage-server
 import Distribution.Server.Framework.CacheControl (ETag)
@@ -73,9 +76,10 @@ doPackageRender :: Users.Users -> PkgInfo -> PackageRender
 doPackageRender users info = PackageRender
     { rendPkgId        = pkgInfoId info
     , rendDepends      = flatDependencies genDesc
-    , rendExecNames    = map exeName (executables flatDesc)
+    , rendExecNames    = map (unUnqualComponentName . exeName) (executables flatDesc)
     , rendLibraryDeps  = depTree libBuildInfo `fmap` condLibrary genDesc
-    , rendExecutableDeps = second (depTree buildInfo) `map` condExecutables genDesc
+    , rendExecutableDeps = (unUnqualComponentName *** depTree buildInfo)
+                                `map` condExecutables genDesc
     , rendLicenseName  = display (license desc) -- maybe make this a bit more human-readable
     , rendLicenseFiles = licenseFiles desc
     , rendMaintainer   = case maintainer desc of
@@ -186,7 +190,7 @@ flatDependencies pkg =
         Map.unionsWith intersectVersions $
           toMap ds : map fromComponent comps
       where
-        fromComponent (cond, then_part, else_part) =
+        fromComponent (CondBranch cond then_part else_part) =
             let thenDeps = condTreeDeps then_part
                 elseDeps = maybe Map.empty condTreeDeps else_part
             in case evalCondition manualFlags cond of

@@ -26,8 +26,9 @@ import Distribution.Server.Users.Types
 
 import Distribution.Text
          ( display )
+import Distribution.Types.PackageName
 import Distribution.Package
-         ( Package, PackageId, PackageName(..), packageName, packageVersion )
+         ( Package, PackageId, packageName, packageVersion )
 import Data.Time.Clock
          ( UTCTime )
 import Data.Time.Clock.POSIX
@@ -105,7 +106,7 @@ writeIncremental pkgs =
                           Tar.fileEntry tarPath cabalfile
         return tarEntry
       where
-        PackageName pkgname = packageName pkgid
+        pkgname = unPackageName (packageName pkgid)
         fileName = pkgname </> display (packageVersion pkgid)
                            </> pkgname <.> "cabal"
 
@@ -211,6 +212,6 @@ writeLegacyAux externalPackageRep updateEntry extras =
               $ externalPackageRep pkg
       where
         Right tarPath = Tar.toTarPath False fileName
-        PackageName name = packageName pkg
+        name = unPackageName $ packageName pkg
         fileName = name </> display (packageVersion pkg)
                         </> name <.> "cabal"

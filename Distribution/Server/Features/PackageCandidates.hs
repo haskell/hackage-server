@@ -36,6 +36,8 @@ import Distribution.Server.Pages.Template (hackagePage)
 
 import Distribution.Text
 import Distribution.Package
+import Distribution.Version
+import Distribution.Types.Dependency
 
 import qualified Cheapskate      as Markdown (markdown, Options(..))
 import qualified Cheapskate.Html as Markdown (renderDoc)
@@ -279,7 +281,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     putPackageCandidate :: DynamicPath -> ServerPartE Response
     putPackageCandidate dpath = do
       pkgid <- packageInPath dpath
-      guard (packageVersion pkgid /= Version [] [])
+      guard (packageVersion pkgid /= nullVersion)
       pkgInfo <- uploadCandidate (==pkgid)
       seeOther (corePackageIdUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
 
@@ -294,7 +296,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     serveCandidateTarball :: DynamicPath -> ServerPartE Response
     serveCandidateTarball dpath = do
       pkgid <- packageTarballInPath dpath
-      guard (pkgVersion pkgid /= Version [] [])
+      guard (pkgVersion pkgid /= nullVersion)
       pkg   <- lookupCandidateId pkgid
       case pkgLatestTarball (candPkgInfo pkg) of
         Nothing -> errNotFound "Tarball not found"
@@ -434,7 +436,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     -- (If we change that, we should move the 'guard' to 'guardValidPackageId')
     lookupCandidateId :: PackageId -> ServerPartE CandPkgInfo
     lookupCandidateId pkgid = do
-      guard (pkgVersion pkgid /= Version [] [])
+      guard (pkgVersion pkgid /= nullVersion)
       state <- queryState candidatesState GetCandidatePackages
       case PackageIndex.lookupPackageId (candidateList state) pkgid of
         Just pkg -> return pkg
