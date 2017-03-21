@@ -1,5 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RecordWildCards #-}
 module Distribution.Client.Mirror.Repo.Secure (
     withSourceRepo
   , downloadIndex

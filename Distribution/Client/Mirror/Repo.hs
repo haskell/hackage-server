@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 module Distribution.Client.Mirror.Repo (
     -- * Repository types
     SourceRepo(..)
