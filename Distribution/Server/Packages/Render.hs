@@ -7,6 +7,7 @@ module Distribution.Server.Packages.Render (
   , DependencyTree
   , IsBuildable (..)
   , doPackageRender
+  , ModSigIndex(..)
 
     -- * Utils
   , categorySplit,
@@ -43,6 +44,11 @@ import Distribution.Server.Users.Types
 import qualified Data.TarIndex as TarIndex
 import Data.TarIndex (TarIndex, TarEntryOffset)
 
+data ModSigIndex = ModSigIndex {
+        modIndex :: ModuleForest,
+        sigIndex :: ModuleForest
+    }
+
 -- This should provide the caller enough information to encode the package information
 -- in its particular format (text, html, json) with minimal effort on its part.
 -- This is why some fields of PackageDescription are preprocessed, and others aren't.
@@ -57,7 +63,11 @@ data PackageRender = PackageRender {
     rendMaintainer   :: Maybe String,
     rendCategory     :: [String],
     rendRepoHeads    :: [(RepoType, String, SourceRepo)],
-    rendModules      :: Maybe TarIndex -> Maybe ModuleForest,
+    -- | The optional 'TarIndex' is of the documentation tarball; we use this
+    -- to test if a module actually has a corresponding documentation HTML
+    -- file we can link to.  If no 'TarIndex' is provided, it is assumed
+    -- all links are dead.
+    rendModules      :: Maybe TarIndex -> Maybe ModSigIndex,
     rendHasTarball   :: Bool,
     rendChangeLog    :: Maybe (FilePath, ETag, TarEntryOffset, FilePath),
     rendReadme       :: Maybe (FilePath, ETag, TarEntryOffset, FilePath),
@@ -91,11 +101,7 @@ doPackageRender users info = PackageRender
                            []  -> []
                            str -> categorySplit str
     , rendRepoHeads    = catMaybes (map rendRepo $ sourceRepos desc)
-    , rendModules      = \docindex ->
-                             fmap (moduleForest
-                           . map (\m -> (m, moduleHasDocs docindex m))
-                           . exposedModules)
-                          (library flatDesc)
+    , rendModules      = renderModules
     , rendHasTarball   = not . Vec.null $ pkgTarballRevisions info
     , rendChangeLog    = Nothing -- populated later
     , rendReadme       = Nothing -- populated later
@@ -124,7 +130,18 @@ doPackageRender users info = PackageRender
         isBuildable ctData = if buildable $ getBuildInfo ctData
                                then Buildable
                                else NotBuildable
-    
+
+    renderModules docindex
+      | Just lib <- library flatDesc
+      = let mod_ix = mkForest $ exposedModules lib
+                           -- Assumes that there is an HTML per reexport
+                           ++ map moduleReexportName (reexportedModules lib)
+            sig_ix = mkForest $ signatures lib
+            mkForest = moduleForest . map (\m -> (m, moduleHasDocs docindex m))
+        in Just (ModSigIndex { modIndex = mod_ix, sigIndex = sig_ix })
+      | otherwise
+      = Nothing
+
     moduleHasDocs :: Maybe TarIndex -> ModuleName -> Bool
     moduleHasDocs Nothing       = const False
     moduleHasDocs (Just doctar) = isJust . TarIndex.lookup doctar
