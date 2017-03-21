@@ -275,11 +275,16 @@ renderPackageFlags render =
 moduleSection :: PackageRender -> Maybe TarIndex -> URL -> [Html]
 moduleSection render mdocIndex docURL =
     maybeToList $ fmap msect (rendModules render mdocIndex)
-  where msect libModuleForrest = toHtml
-            [ h2 << "Modules"
-            , renderModuleForest docURL libModuleForrest
-            , renderDocIndexLink
-            ]
+  where msect ModSigIndex{ modIndex = m, sigIndex = s } = toHtml $
+            (if not (null s)
+                then [ h2 << "Signatures"
+                     , renderModuleForest docURL s ]
+                else []) ++
+            (if not (null m)
+                then [ h2 << "Modules"
+                     , renderModuleForest docURL m ]
+                else []) ++
+            [renderDocIndexLink]
         renderDocIndexLink
           | isJust mdocIndex =
             let docIndexURL = docURL </> "doc-index.html"
