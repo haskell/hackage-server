@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 module Distribution.Client.Mirror.State (
     MirrorState(..)
   , MirrorEnv(..)
