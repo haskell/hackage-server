@@ -36,6 +36,7 @@ import Data.List
 import qualified Data.Char as Char
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Except  (ExceptT, runExceptT, throwError)
@@ -300,7 +301,7 @@ checkDependencies componentName s ds1 ds2 = do
 
     forM_ added $ \(dep@(Dependency pn _)) ->
         if pn `elem` additionWhitelist
-           then logChange (Change ("added dependency on") (display dep) "")
+           then logChange (Change ("added dependency on") "" (display dep))
            else fail ("Cannot add new dependency on " ++ display pn ++
                       " in " ++ showComponentName componentName ++ " component")
 
@@ -368,7 +369,7 @@ checkSetupBuildInfo (Just _) Nothing =
 
 checkSetupBuildInfo Nothing (Just (SetupBuildInfo setupDependsA _internalA)) =
     logChange $ Change ("added a 'custom-setup' section with 'setup-depends'")
-                       (intercalate ", " (map display setupDependsA)) ""
+                       "[implicit]" (intercalate ", " (map display setupDependsA))
 
 checkSetupBuildInfo (Just (SetupBuildInfo setupDependsA _internalA))
                     (Just (SetupBuildInfo setupDependsB _internalB)) = do
@@ -419,10 +420,9 @@ checkBenchmark componentName
 
 checkBuildInfo :: ComponentName -> Check BuildInfo
 checkBuildInfo componentName biA biB = do
-    changesOkList changesOk
-              ("'other-extensions' in " ++ showComponentName componentName ++ " component")
+    changesOkSet ("'other-extensions' in " ++ showComponentName componentName ++ " component")
               display
-              (otherExtensions biA) (otherExtensions biB)
+              (Set.fromList $ otherExtensions biA) (Set.fromList $ otherExtensions biB)
 
     checkDependencies componentName BuildToolDependency (buildTools biA) (buildTools biB)
 
@@ -444,6 +444,18 @@ changesOkList changesOkElem what render = go
     go (a:_)  []     = logChange (Change ("removed " ++ what) (render a) "")
     go []     (b:_)  = logChange (Change ("added "   ++ what) "" (render b))
     go (a:as) (b:bs) = changesOkElem what render a b >> go as bs
+
+changesOkSet :: Ord a => String -> (a -> String) -> Check (Set.Set a)
+changesOkSet what render old new = do
+    unless (Set.null removed) $
+        logChange (Change ("removed " ++ what) (renderSet removed) "")
+    unless (Set.null added) $
+        logChange (Change ("added " ++ what) "" (renderSet added))
+    return ()
+  where
+    added   = new Set.\\ old
+    removed = old Set.\\ new
+    renderSet = intercalate ", " . map render . Set.toList
 
 checkSame :: Eq a => String -> Check a
 checkSame msg x y | x == y    = return ()
