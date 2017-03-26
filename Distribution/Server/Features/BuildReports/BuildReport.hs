@@ -32,8 +32,10 @@ module Distribution.Server.Features.BuildReports.BuildReport (
 
 import Distribution.Package
          ( PackageIdentifier(..) )
+import Distribution.Types.GenericPackageDescription
+         ( FlagName, mkFlagName, unFlagName )
 import Distribution.PackageDescription
-         ( FlagName(..), FlagAssignment )
+         ( FlagAssignment )
 --import Distribution.Version
 --         ( Version )
 import Distribution.System
@@ -271,15 +273,15 @@ sortedFieldDescrs :: [FieldDescr BuildReport]
 sortedFieldDescrs = sortBy (comparing fieldName) fieldDescrs
 
 dispFlag :: (FlagName, Bool) -> Disp.Doc
-dispFlag (FlagName name, True)  =                  Disp.text name
-dispFlag (FlagName name, False) = Disp.char '-' <> Disp.text name
+dispFlag (fn, True)  =                  Disp.text (unFlagName fn)
+dispFlag (fn, False) = Disp.char '-' <> Disp.text (unFlagName fn)
 
 parseFlag :: Parse.ReadP r (FlagName, Bool)
 parseFlag = do
   name <- Parse.munch1 (\c -> Char.isAlphaNum c || c == '_' || c == '-')
   case name of
-    ('-':flag) -> return (FlagName flag, False)
-    flag       -> return (FlagName flag, True)
+    ('-':flag) -> return (mkFlagName flag, False)
+    flag       -> return (mkFlagName flag, True)
 
 instance Text.Text InstallOutcome where
   disp PlanningFailed  = Disp.text "PlanningFailed"

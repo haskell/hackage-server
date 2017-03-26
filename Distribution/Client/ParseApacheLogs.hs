@@ -11,13 +11,12 @@ import Distribution.Version (Version)
 import Distribution.Text    (display, simpleParse)
 
 import Control.Monad ((>=>))
-import System.Locale (defaultTimeLocale)
 import Data.List (intercalate)
 import Data.Maybe (catMaybes)
 import Data.Attoparsec.Char8 (Parser)
 import Data.Map (Map)
 import Data.Time.Calendar (Day)
-import Data.Time.Format (parseTime)
+import Data.Time.Format (parseTime, defaultTimeLocale)
 import qualified Data.ByteString.Char8      as SBS
 import qualified Data.Attoparsec.Char8      as Att
 import qualified Data.ByteString.Lazy.Char8 as LBS

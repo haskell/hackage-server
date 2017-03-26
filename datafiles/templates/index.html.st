@@ -9,22 +9,31 @@ $hackageCssTheme()$
 $hackagePageHeader()$
 
 <div id="content">
-<h2>About Hackage</h2>
+<h2>About next.hackage</h2>
+<p>next.hackage is an experimental Hackage server for
+upcoming features in Cabal that have not yet accepted by
+Hackage.  Presently, it is a staging ground for
+packages that use Backpack, an experimental new feature for package-level
+modular development in GHC 8.2.</p>
 
-<p>Hackage is a collection of released
-<a href="http://www.haskell.org/">Haskell</a> packages.
-Each package is in the <a href="http://www.haskell.org/cabal">Cabal</a> format,
-a standard way of packaging Haskell source code that makes it easy to build
-and install.
-(Hackage and Cabal are components of a broader Haskell infrastructure effort
-called <a href="http://hackage.haskell.org/trac/hackage/">Hackage</a>.)
-These pages are a basic web interface to the Hackage package database.
-</p>
+<h3>Installing next.hackage</h3>
 
-<p>This isn't the <em>official</em> Hackage. It's an in-progress
-rewrite of the server using the <a href="/package/happstack">happstack</a> web
-framework. <!-- links to places to comment -->
-</p>
+<p>In your <code>.cabal/config</code> file, add the following block:</p>
+
+<pre>
+remote-repo next-hackage
+  url: http://next.hackage.haskell.org:8080/
+  secure: True
+  root-keys: 015ccb40c3cd254a7de458b048ba672c47e59195b3c8969cd85b686de2d49e2b
+             0553aa6ab1e93a7c37d1d91670721b3b1ea8e976289c9709ebaaa9773df4538e
+             f9cfba99add8cb35e94d16c1819903373ad45e9702557f0b4ec2cf10f2738216
+  key-threshold: 2
+</pre>
+
+<h3>Uploading packages</h3>
+
+<p>Email registration is not yet working, so please email <code>ezyang@mit.edu</code>
+if you'd like to setup an account.</p>
 
 <h3>Finding packages</h3>
 

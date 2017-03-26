@@ -9,3 +9,7 @@ tags
 .stack-work
 cabal.sandbox.config
 TAGS
+datafiles/TUF/mirrors.json
+datafiles/TUF/root.json
+datafiles/TUF/snapshot.private
+datafiles/TUF/timestamp.private

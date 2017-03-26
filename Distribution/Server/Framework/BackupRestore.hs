@@ -327,7 +327,7 @@ finalizeBackups store list = forM list $ \name -> do
     mbackup  <- liftIO $ abstractRestoreFinalize (features Map.! name) store
     case mbackup of
         Left err       -> throwError $ "Error restoring data for feature " ++ name
-                              ++ ":" ++ err
+                              ++ ": " ++ err
         Right finalize -> return finalize
 
 completeBackups :: Either String [IO ()] -> IO (Maybe String)

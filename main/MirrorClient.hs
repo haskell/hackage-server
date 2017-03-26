@@ -233,8 +233,9 @@ subsetIndex pkgids =
       any (\pkgid -> matchPackage pkgid pkgid') pkgids
 
     matchPackage :: PackageId -> PackageId -> Bool
-    matchPackage (PackageIdentifier name  (Version [] _))
-                 (PackageIdentifier name' _             ) = name == name'
+    matchPackage (PackageIdentifier name  v)
+                 (PackageIdentifier name' _)
+                 | nullVersion == v = name == name'
     matchPackage pkgid pkgid' = pkgid == pkgid'
 
 {-------------------------------------------------------------------------------

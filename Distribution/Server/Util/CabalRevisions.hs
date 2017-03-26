@@ -17,6 +17,12 @@ module Distribution.Server.Util.CabalRevisions
     ) where
 
 -- NB: This module avoids to import any hackage-server modules
+import Distribution.Types.Dependency
+import Distribution.Types.ExeDependency
+import Distribution.Types.LegacyExeDependency
+import Distribution.Types.UnqualComponentName
+import Distribution.Types.CondTree
+import Distribution.Types.ForeignLib
 import Distribution.Package
 import Distribution.Text (display)
 import Distribution.Version
@@ -110,8 +116,8 @@ checkCabalFileRevision old new = do
 
 checkGenericPackageDescription :: Check GenericPackageDescription
 checkGenericPackageDescription
-    (GenericPackageDescription descrA flagsA libsA exesA testsA benchsA)
-    (GenericPackageDescription descrB flagsB libsB exesB testsB benchsB) = do
+    (GenericPackageDescription descrA flagsA libsA sublibsA flibsA exesA testsA benchsA)
+    (GenericPackageDescription descrB flagsB libsB sublibsB flibsB exesB testsB benchsB) = do
 
     checkPackageDescriptions descrA descrB
 
@@ -121,6 +127,16 @@ checkGenericPackageDescription
       (checkCondTree checkLibrary)
       (withComponentName' CLibName <$> libsA)
       (withComponentName' CLibName <$> libsB)
+
+    checkListAssoc "Cannot add or remove sub-library sections"
+      (checkCondTree checkLibrary)
+      (withComponentName CSubLibName <$> sublibsA)
+      (withComponentName CSubLibName <$> sublibsB)
+
+    checkListAssoc "Cannot add or remove foreign-library sections"
+      (checkCondTree checkForeignLib)
+      (withComponentName CFLibName <$> flibsA)
+      (withComponentName CFLibName <$> flibsB)
 
     checkListAssoc "Cannot add or remove executable sections"
       (checkCondTree checkExecutable)
@@ -183,14 +199,16 @@ checkPackageDescriptions
      copyrightA maintainerA authorA stabilityA testedWithA homepageA
      pkgUrlA bugReportsA sourceReposA synopsisA descriptionA
      categoryA customFieldsA _buildDependsA _specVersionRawA buildTypeA
-     customSetupA _libraryA _executablesA _testSuitesA _benchmarksA
+     customSetupA _libraryA _subLibrariesA _executablesA _foreignLibsA
+     _testSuitesA _benchmarksA
      dataFilesA dataDirA extraSrcFilesA extraTmpFilesA extraDocFilesA)
   pdB@(PackageDescription
      packageIdB licenseB licenseFileB
      copyrightB maintainerB authorB stabilityB testedWithB homepageB
      pkgUrlB bugReportsB sourceReposB synopsisB descriptionB
      categoryB customFieldsB _buildDependsB _specVersionRawB buildTypeB
-     customSetupB _libraryB _executablesB _testSuitesB _benchmarksB
+     customSetupB _libraryB _subLibrariesB _executablesB _foreignLibsB
+     _testSuitesB _benchmarksB
      dataFilesB dataDirB extraSrcFilesB extraTmpFilesB extraDocFilesB)
   = do
   checkSame "Don't be silly! You can't change the package name!"
@@ -250,8 +268,8 @@ checkSpecVersionRaw pdA pdB
 
     -- nothing interesting changed within the  Cabal >=1.10 && <1.21 range
     -- therefore we allow to change the spec version within this interval
-    range110To120 = (orLaterVersion (Version [1,10] [])) `intersectVersionRanges`
-                    (earlierVersion (Version [1,21] []))
+    range110To120 = (orLaterVersion (mkVersion [1,10])) `intersectVersionRanges`
+                    (earlierVersion (mkVersion [1,21]))
 
 checkRevision :: Check [(String, String)]
 checkRevision customFieldsA customFieldsB =
@@ -279,8 +297,8 @@ checkCondTree checkElem (componentName, condNodeA)
                 checkComponent componentsA componentsB
       checkElem componentName dataA dataB
 
-    checkComponent (condA, ifPartA, thenPartA)
-                   (condB, ifPartB, thenPartB) = do
+    checkComponent (CondBranch condA ifPartA thenPartA)
+                   (CondBranch condB ifPartB thenPartB) = do
       checkSame "Cannot change the 'if' condition expressions"
                 condA condB
       checkCondNode ifPartA ifPartB
@@ -317,7 +335,7 @@ checkDependencies componentName s ds1 ds2 = do
     -- Special case: there are some pretty weird broken packages out there, see
     --   https://github.com/haskell/hackage-server/issues/303
     -- which need us to add a new dep on `base`
-            [ PackageName "base"
+            [ mkPackageName "base"
 
     -- See also https://github.com/haskell/hackage-server/issues/472
     --
@@ -329,7 +347,7 @@ checkDependencies componentName s ds1 ds2 = do
     -- ad-hoc exceptions like this one. See e.g.
     --   https://github.com/haskell/cabal/issues/3061
     --
-            , PackageName "base-orphans"
+            , mkPackageName "base-orphans"
             ]
     -- No whitelist for build-tools
         | otherwise = []
@@ -353,6 +371,44 @@ computeCanonDepChange depsA depsB
 
     mapToDeps
         = map (\(pkgname, verrange) -> Dependency pkgname verrange) . Map.toList
+
+checkExeDependencies :: ComponentName -> Check [ExeDependency]
+checkExeDependencies componentName ds1 ds2 = do
+    forM_ removed $ \(ExeDependency pn cn _) -> do
+        fail ("Cannot remove existing build-tool-depends on " ++ display pn ++
+              ":" ++ display cn ++ " in " ++ showComponentName componentName ++ " component")
+
+    forM_ added $ \(ExeDependency pn cn _) ->
+        fail ("Cannot add new build-tool-depends on " ++ display pn ++
+              ":" ++ display cn ++ " in " ++ showComponentName componentName ++ " component")
+
+    forM_ changed $ \((pkgn, cn), (verA, verB)) -> do
+        changesOk ("the " ++ showComponentName componentName ++
+                   " component's build-tool-depends on " ++ display pkgn ++
+                   ":" ++ display cn)
+                   display verA verB
+  where
+    (removed, changed, added) = computeCanonExeDepChange ds1 ds2
+
+-- The result tuple represents the 3 canonicalised dependency
+-- (removed deps (old ranges), retained deps (old & new ranges), added deps (new ranges))
+-- or expressed as set-operations: (A \ B, (A ∩ B), B \ A)
+computeCanonExeDepChange :: [ExeDependency] -> [ExeDependency] -> ([ExeDependency],[((PackageName,UnqualComponentName),(VersionRange,VersionRange))],[ExeDependency])
+computeCanonExeDepChange depsA depsB
+    = ( mapToDeps (a `Map.difference` b)
+      , Map.toList $ Map.intersectionWith (,) a b
+      , mapToDeps (b `Map.difference` a)
+      )
+  where
+    a = depsToMapWithCanonVerRange depsA
+    b = depsToMapWithCanonVerRange depsB
+
+    depsToMapWithCanonVerRange
+        = Map.fromListWith (flip intersectVersionRanges) .
+          map (\(ExeDependency pn cn verrange) -> ((pn, cn), verrange))
+
+    mapToDeps
+        = map (\((pn, cn), verrange) -> ExeDependency pn cn verrange) . Map.toList
 
 checkSetupBuildInfo :: Check (Maybe SetupBuildInfo)
 checkSetupBuildInfo Nothing  Nothing = return ()
@@ -389,6 +445,18 @@ checkLibrary componentName
   checkSame "Cannot change the package exposed status" exposedA exposedB
   checkBuildInfo componentName buildInfoA buildInfoB
 
+checkForeignLib :: ComponentName -> Check ForeignLib
+checkForeignLib componentName
+             (ForeignLib nameA typeA optionsA buildInfoA verA verLinuxA modDefA)
+             (ForeignLib nameB typeB optionsB buildInfoB verB verLinuxB modDefB) = do
+  checkSame "Cannot change the foreign library name" nameA nameB
+  checkSame "Cannot change the foreign library type" typeA typeB
+  checkSame "Cannot change the foreign library options" optionsA optionsB
+  checkSame "Cannot change the foreign library version" verA verB
+  checkSame "Cannot change the foreign library version for Linux" verLinuxA verLinuxB
+  checkSame "Cannot change the module definition files" modDefA modDefB
+  checkBuildInfo componentName buildInfoA buildInfoB
+
 checkExecutable :: ComponentName -> Check Executable
 checkExecutable componentName
                 (Executable _nameA pathA buildInfoA)
@@ -398,15 +466,15 @@ checkExecutable componentName
 
 checkTestSuite :: ComponentName -> Check TestSuite
 checkTestSuite componentName
-               (TestSuite _nameA interfaceA buildInfoA _enabledA)
-               (TestSuite _nameB interfaceB buildInfoB _enabledB) = do
+               (TestSuite _nameA interfaceA buildInfoA)
+               (TestSuite _nameB interfaceB buildInfoB) = do
   checkSame "Cannot change test-suite type" interfaceA interfaceB
   checkBuildInfo componentName buildInfoA buildInfoB
 
 checkBenchmark :: ComponentName -> Check Benchmark
 checkBenchmark componentName
-               (Benchmark _nameA interfaceA buildInfoA _enabledA)
-               (Benchmark _nameB interfaceB buildInfoB _enabledB) = do
+               (Benchmark _nameA interfaceA buildInfoA)
+               (Benchmark _nameB interfaceB buildInfoB) = do
   checkSame "Cannot change benchmark type" interfaceA interfaceB
   checkBuildInfo componentName buildInfoA buildInfoB
 
@@ -417,12 +485,20 @@ checkBuildInfo componentName biA biB = do
               display
               (otherExtensions biA) (otherExtensions biB)
 
-    checkDependencies componentName BuildToolDependency (buildTools biA) (buildTools biB)
+    checkExeDependencies componentName
+        (buildToolDepends biA) (buildToolDepends biB)
+
+    checkDependencies componentName BuildToolDependency
+        (map legacyExeToDependency (buildTools biA))
+        (map legacyExeToDependency (buildTools biB))
 
     checkSame "Cannot change build information \
               \(just the dependency version constraints)"
-              (biA { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [], buildTools = [] })
-              (biB { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [], buildTools = [] })
+              (biA { targetBuildDepends = [], otherExtensions = [], buildTools = [] })
+              (biB { targetBuildDepends = [], otherExtensions = [], buildTools = [] })
+  where
+    legacyExeToDependency (LegacyExeDependency s vr)
+        = Dependency (mkPackageName s) vr
 
 changesOk :: Eq a => String -> (a -> String) -> Check a
 changesOk what render a b
