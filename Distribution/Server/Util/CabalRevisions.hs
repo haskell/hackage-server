@@ -115,8 +115,7 @@ checkGenericPackageDescription
 
     checkPackageDescriptions descrA descrB
 
-    checkSame "Sorry, cannot edit the package flags"
-      flagsA flagsB
+    checkList "Cannot add or remove flags" checkFlag flagsA flagsB
 
     checkMaybe "Cannot add or remove library sections"
       (checkCondTree checkLibrary)
@@ -140,6 +139,42 @@ checkGenericPackageDescription
   where
     withComponentName  f (name, condTree) = (name, (f name, condTree))
     withComponentName' f        condTree  = (f,             condTree)
+
+
+checkFlag :: Check Flag
+checkFlag flagOld flagNew = do
+    -- This check is applied via 'checkList' and for simplicity we
+    -- disallow renaming/reordering flags (even though reordering
+    -- would be fine semantically)
+    checkSame "Cannot change ordering of flags"
+              (flagName flagOld) (flagName flagNew)
+
+    -- Automatic flags' defaults may be changed as they don't make new
+    -- configurations reachable by the solver that weren't before
+    --
+    -- Moreover, automatic flags may be converted into manual flags
+    -- but not the other way round.
+    --
+    -- NB: We always allow to change the flag description as it has
+    --     purely informational value
+    when (flagManual flagOld) $ do
+        checkSame "Cannot change the default of a manual flag"
+                  (flagDefault flagOld) (flagDefault flagNew)
+
+        checkSame "Cannot change a manual flag into an automatic flag"
+                  (flagManual flagOld) (flagManual flagNew)
+
+    let FlagName fname = flagName flagOld
+
+    changesOk ("type of flag '" ++ fname ++ "'")
+              (\b -> if b then "manual" else "automatic")
+              (flagManual flagOld) (flagManual flagNew)
+
+    changesOk ("default of flag '" ++ fname ++ "'") display
+              (flagDefault flagOld) (flagDefault flagNew)
+
+    changesOk ("description of flag '" ++ fname ++ "'") id
+              (flagDescription flagOld) (flagDescription flagNew)
 
 checkPackageDescriptions :: Check PackageDescription
 checkPackageDescriptions
