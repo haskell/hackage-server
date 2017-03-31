@@ -199,7 +199,7 @@ getValidateResult :: Authorization -> String
                   -> IO (String, Maybe ValidateResult)
 getValidateResult auth url = do
           body <- execRequest auth (getRequest url)
-          result <- (Just <$> invokeHtml5Validate body) `catch` handler
+          result <- (Just `fmap` invokeHtml5Validate body) `catch` handler
           return (body, result)
   where handler :: IOException -> IO (Maybe ValidateResult)
         handler _ = return Nothing
