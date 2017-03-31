@@ -18,7 +18,7 @@ module HttpUtils (
   , execRequest'
   , responseHeader
   , execPostFile
-  -- * Interface to html5.validator.nu
+  -- * Interface to validator.w3.org
   , validate
 ) where
 
@@ -155,9 +155,9 @@ badResponse rsp =
         ++ rspBody rsp
 
 {------------------------------------------------------------------------------
-  Interface to html5.validator.nu
+  Interface to validator.w3.org
 
-  NOTE: We only parse bits of the information returned by html5.validator.nu
+  NOTE: We only parse bits of the information returned by validator.w3.org
 ------------------------------------------------------------------------------}
 
 data ValidateResult = ValidateResult {
