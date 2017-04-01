@@ -517,6 +517,8 @@ Test-Suite HighLevelTest
                     directory,
                     filepath,
                     HTTP,
+                    io-streams == 1.3.*,
+                    http-streams >= 0.8.4 && < 0.9,
                     network,
                     process,
                     tar,
