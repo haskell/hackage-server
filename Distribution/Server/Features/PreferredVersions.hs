@@ -46,7 +46,7 @@ data VersionsFeature = VersionsFeature {
 
     queryGetPreferredInfo :: forall m. MonadIO m => PackageName -> m PreferredInfo,
     queryGetDeprecatedFor :: forall m. MonadIO m => PackageName -> m (Maybe [PackageName]),
-
+    queryGetPreferredVersions :: forall m. MonadIO m => m PreferredVersions,
     versionsResource :: VersionsResource,
     deprecatedHook :: Hook (PackageName, Maybe [PackageName]) (),
     putDeprecated :: PackageName -> ServerPartE Bool,
@@ -59,6 +59,7 @@ data VersionsFeature = VersionsFeature {
     doDeprecatedsRender   :: forall m. MonadIO m => m [(PackageName, [PackageName])],
 
     withPackagePreferred     :: forall a. PackageId -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a,
+    withPackageVersion :: forall a. PackageId -> (PkgInfo -> ServerPartE a) -> ServerPartE a,
     withPackagePreferredPath :: forall a. DynamicPath -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a
 }
 
@@ -150,6 +151,9 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
 
     queryGetDeprecatedFor :: MonadIO m => PackageName -> m (Maybe [PackageName])
     queryGetDeprecatedFor name = queryState preferredState (GetDeprecatedFor name)
+
+    queryGetPreferredVersions :: MonadIO m => m PreferredVersions
+    queryGetPreferredVersions = queryState preferredState GetPreferredVersions
 
     updateDeprecatedTags = do
       pkgs <- deprecatedMap <$> queryState preferredState GetPreferredVersions
@@ -264,7 +268,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
     withPackagePreferred pkgid func = do
       pkgIndex <- queryGetPackageIndex
       case PackageIndex.lookupPackageName pkgIndex (packageName pkgid) of
-            []   ->  packageError [MText "No such package in package index"]
+            []   ->  packageError [MText $ "No such package in package index. ", MLink "Search for related terms instead?" $ "/packages/search?terms=" ++ (display $ pkgName pkgid)]
             pkgs  | pkgVersion pkgid == Version [] [] -> queryState preferredState (GetPreferredInfo $ packageName pkgid) >>= \info -> do
                 let rangeToCheck = sumRange info
                 case maybe id (\r -> filter (flip withinRange r . packageVersion)) rangeToCheck pkgs of
@@ -275,6 +279,17 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
             pkgs -> case find ((== packageVersion pkgid) . packageVersion) pkgs of
                 Nothing  -> packageError [MText $ "No such package version for " ++ display (packageName pkgid)]
                 Just pkg -> func pkg pkgs
+      where packageError = errNotFound "Package not found"
+
+    withPackageVersion :: PackageId -> (PkgInfo -> ServerPartE a) -> ServerPartE a
+    withPackageVersion pkgid func = do
+        pkgIndex <- queryGetPackageIndex
+        guard (packageVersion pkgid /= Version [] [])
+        case PackageIndex.lookupPackageName pkgIndex (packageName pkgid) of
+            []   ->  packageError [MText $ "No such package in package index. ", MLink "Search for related terms instead?" $ "/packages/search?terms=" ++ (display $ pkgName pkgid)]
+            pkg -> case find ((== packageVersion pkgid) . packageVersion) pkg of
+                Nothing  -> packageError [MText $ "No such package version for " ++ display (packageName pkgid)]
+                Just pkg -> func pkg
       where packageError = errNotFound "Package not found"
 
     withPackagePreferredPath :: DynamicPath -> (PkgInfo -> [PkgInfo] -> ServerPartE a) -> ServerPartE a

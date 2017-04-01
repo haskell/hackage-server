@@ -1,7 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies, TemplateHaskell, GeneralizedNewtypeDeriving #-}
 
 module Distribution.Server.Features.Tags.State where
-
 import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.MemSize
 
@@ -64,11 +63,38 @@ data PackageTags = PackageTags {
     -- the primary index
     packageTags :: Map PackageName (Set Tag),
     -- a secondary reverse mapping
-    tagPackages :: Map Tag (Set PackageName)
+    tagPackages :: Map Tag (Set PackageName),
+    -- Packagename (Proposed Additions, Proposed Deletions)
+    reviewTags :: Map PackageName (Set Tag, Set Tag)
 } deriving (Eq, Show, Typeable)
 
+
+data TagAlias = TagAlias (Map Tag (Set Tag)) deriving (Eq, Show, Typeable)
+
+addTagAlias :: Tag -> Tag -> Update TagAlias ()
+addTagAlias tag alias = do
+        TagAlias  m <- get
+        put (TagAlias (Map.insertWith Set.union tag (Set.singleton alias) m))
+
+lookupTagAlias :: Tag -> Query TagAlias (Maybe (Set Tag))
+lookupTagAlias tag
+    = do TagAlias m <- ask
+         return (Map.lookup tag m)
+
+getTagAlias :: Tag -> Query TagAlias Tag
+getTagAlias tag
+    = do TagAlias m <- ask
+         if tag `elem` Map.keys m
+            then return tag
+            else if tag `Set.member` foldr Set.union Set.empty (Map.elems m)
+                then return $ head (Map.keys $ Map.filter (tag `Set.member`) m)
+                else return tag
+
 emptyPackageTags :: PackageTags
-emptyPackageTags = PackageTags Map.empty Map.empty
+emptyPackageTags = PackageTags Map.empty Map.empty Map.empty
+
+emptyTagAlias :: TagAlias
+emptyTagAlias = TagAlias Map.empty
 
 tagToPackages :: Tag -> PackageTags -> Set PackageName
 tagToPackages tag = Map.findWithDefault Set.empty tag . tagPackages
@@ -77,36 +103,40 @@ packageToTags :: PackageName -> PackageTags -> Set Tag
 packageToTags pkg = Map.findWithDefault Set.empty pkg . packageTags
 
 alterTags :: PackageName -> Maybe (Set Tag) -> PackageTags -> PackageTags
-alterTags name mtagList (PackageTags tags packages) =
+alterTags name mtagList pt@(PackageTags tags packages _) =
     let tagList = fromMaybe Set.empty mtagList
         oldTags = Map.findWithDefault Set.empty name tags
         adjustPlusTags pkgMap tag' = addSetMap tag' name pkgMap
         adjustMinusTags pkgMap tag' = removeSetMap tag' name pkgMap
         packages' = flip (foldl' adjustPlusTags) (Set.toList $ Set.difference tagList oldTags)
                   $ foldl' adjustMinusTags packages (Set.toList $ Set.difference oldTags tagList)
-    in PackageTags (Map.alter (const mtagList) name tags) packages'
+    in pt{
+        packageTags = Map.alter (const mtagList) name tags,
+        tagPackages = packages'
+    }
 
 setTags :: PackageName -> Set Tag -> PackageTags -> PackageTags
 setTags pkgname tagList = alterTags pkgname (keepSet tagList)
+
+setAliases :: Tag -> Set Tag -> TagAlias -> TagAlias
+setAliases tag aliases (TagAlias ta) = TagAlias (Map.insertWith Set.union tag aliases ta)
 
 deletePackageTags :: PackageName -> PackageTags -> PackageTags
 deletePackageTags name = alterTags name Nothing
 
 addTag :: PackageName -> Tag -> PackageTags -> Maybe PackageTags
-addTag name tag (PackageTags tags packages) =
+addTag name tag (PackageTags tags packages review) =
     let existing = Map.findWithDefault Set.empty name tags
-    in case tag `Set.member` existing of
-        True  -> Nothing
-        False -> Just $ PackageTags (addSetMap name tag tags)
-                                    (addSetMap tag name packages)
+    in if tag `Set.member` existing then Nothing else Just $ PackageTags (addSetMap name tag tags)
+                                   (addSetMap tag name packages)
+                                   review
 
 removeTag :: PackageName -> Tag -> PackageTags -> Maybe PackageTags
-removeTag name tag (PackageTags tags packages) =
+removeTag name tag (PackageTags tags packages review) =
     let existing = Map.findWithDefault Set.empty name tags
-    in case tag `Set.member` existing of
-        True -> Just $ PackageTags (removeSetMap name tag tags)
-                                   (removeSetMap tag name packages)
-        False -> Nothing
+    in if tag `Set.member` existing then Just $ PackageTags (removeSetMap name tag tags)
+                                  (removeSetMap tag name packages)
+                                  review else Nothing
 
 addSetMap :: (Ord k, Ord a) => k -> a -> Map k (Set a) -> Map k (Set a)
 addSetMap key val = Map.alter (Just . Set.insert val . fromMaybe Set.empty) key
@@ -115,14 +145,14 @@ removeSetMap :: (Ord k, Ord a) => k -> a -> Map k (Set a) -> Map k (Set a)
 removeSetMap key val = Map.update (keepSet . Set.delete val) key
 
 alterTag :: Tag -> Maybe (Set PackageName) -> PackageTags -> PackageTags
-alterTag tag mpkgList (PackageTags tags packages) =
+alterTag tag mpkgList (PackageTags tags packages review) =
     let pkgList = fromMaybe Set.empty mpkgList
         oldPkgs = Map.findWithDefault Set.empty tag packages
         adjustPlusPkgs tagMap name' = addSetMap name' tag tagMap
         adjustMinusPkgs tagMap name' = removeSetMap name' tag tagMap
         tags' = flip (foldl' adjustPlusPkgs) (Set.toList $ Set.difference pkgList oldPkgs)
               $ foldl' adjustMinusPkgs tags (Set.toList $ Set.difference oldPkgs pkgList)
-    in PackageTags tags' (Map.alter (const mpkgList) tag packages)
+    in PackageTags tags' (Map.alter (const mpkgList) tag packages) review
 
 keepSet :: Ord a => Set a -> Maybe (Set a)
 keepSet s = if Set.null s then Nothing else Just s
@@ -135,19 +165,20 @@ deleteTag :: Tag -> PackageTags -> PackageTags
 deleteTag tag = alterTag tag Nothing
 
 renameTag :: Tag -> Tag -> PackageTags -> PackageTags
-renameTag tag tag' pkgTags@(PackageTags _ packages) =
+renameTag tag tag' pkgTags@(PackageTags _ packages _) =
     let oldPkgs = Map.findWithDefault Set.empty tag packages
     in setTag tag' oldPkgs . deleteTag tag $ pkgTags
 -------------------------------------------------------------------------------
 
 $(deriveSafeCopy 0 'base ''Tag)
 $(deriveSafeCopy 0 'base ''PackageTags)
+$(deriveSafeCopy 0 'base ''TagAlias)
 
 instance NFData PackageTags where
-    rnf (PackageTags a b) = rnf a `seq` rnf b
+    rnf (PackageTags a b c) = rnf a `seq` rnf b `seq` rnf c
 
 instance MemSize PackageTags where
-    memSize (PackageTags a b) = memSize2 a b
+    memSize (PackageTags a b c) = memSize3 a b c
 
 initialPackageTags :: PackageTags
 initialPackageTags = emptyPackageTags
@@ -167,11 +198,19 @@ getPackageTags = ask
 replacePackageTags :: PackageTags -> Update PackageTags ()
 replacePackageTags = put
 
+getTagAliasesState :: Query TagAlias TagAlias
+getTagAliasesState = ask
+
+addTagAliasesState :: TagAlias -> Update TagAlias ()
+addTagAliasesState = put
+
+
 setPackageTags :: PackageName -> Set Tag -> Update PackageTags ()
 setPackageTags name tagList = modify $ setTags name tagList
 
 setTagPackages :: Tag -> Set PackageName -> Update PackageTags ()
 setTagPackages tag pkgList = modify $ setTag tag pkgList
+
 
 -- | Tag a package. Returns True if the element was inserted, and False if
 -- the tag as already present (same result though)
@@ -191,7 +230,37 @@ removePackageTag name tag = do
         Nothing -> return False
         Just pkgTags' -> put pkgTags' >> return True
 
-makeAcidic ''PackageTags ['tagsForPackage
+clearReviewTags :: PackageName -> Update PackageTags ()
+clearReviewTags pkgname = do
+        PackageTags p t r <- get
+        put (PackageTags p t (Map.insert pkgname (Set.empty,Set.empty) r))
+
+insertReviewTags :: PackageName -> Set Tag -> Set Tag -> Update PackageTags ()
+insertReviewTags pkgname add del = do
+        PackageTags p t r <- get
+        put (PackageTags p t (Map.insertWith insertReviewHelper pkgname (add,del) r))
+
+insertReviewTags' :: PackageName -> Set Tag -> Set Tag -> Update PackageTags ()
+insertReviewTags' pkgname add del = do
+        PackageTags p t r <- get
+        put (PackageTags p t (Map.insert pkgname (add,del) r))
+
+
+insertReviewHelper :: (Set Tag, Set Tag) -> (Set Tag, Set Tag) -> (Set Tag, Set Tag)
+insertReviewHelper (a,b) (c,d) = (Set.union a c, Set.union b d)
+
+lookupReviewTags :: PackageName -> Query PackageTags (Set Tag, Set Tag)
+lookupReviewTags pkgname = asks $ Map.findWithDefault (Set.empty, Set.empty) pkgname . reviewTags
+
+
+$(makeAcidic ''TagAlias ['addTagAlias
+                        ,'getTagAlias
+                        ,'lookupTagAlias
+                        ,'addTagAliasesState
+                        ,'getTagAliasesState
+                      ])
+
+$(makeAcidic ''PackageTags ['tagsForPackage
                          ,'packagesForTag
                          ,'getTagList
                          ,'getPackageTags
@@ -200,5 +269,10 @@ makeAcidic ''PackageTags ['tagsForPackage
                          ,'setTagPackages
                          ,'addPackageTag
                          ,'removePackageTag
-                         ]
+                         ,'insertReviewTags
+                         ,'insertReviewTags'
+                         ,'lookupReviewTags
+                         ,'clearReviewTags
+                         ])
+
 

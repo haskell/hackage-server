@@ -120,7 +120,7 @@ doPackageRender users info = PackageRender
         isBuildable ctData = if buildable $ getBuildInfo ctData
                                then Buildable
                                else NotBuildable
-    
+
     moduleHasDocs :: Maybe TarIndex -> ModuleName -> Bool
     moduleHasDocs Nothing       = const False
     moduleHasDocs (Just doctar) = isJust . TarIndex.lookup doctar
@@ -149,8 +149,9 @@ data IsBuildable = Buildable
 
 categorySplit :: String -> [String]
 categorySplit xs | all isSpace xs = []
-categorySplit xs = map (dropWhile isSpace) $ splitOn ',' xs
+categorySplit xs = if last res == "" then init res else res
   where
+    res = map (dropWhile isSpace) $ splitOn ',' xs
     splitOn x ys = front : case back of
                            [] -> []
                            (_:ys') -> splitOn x ys'

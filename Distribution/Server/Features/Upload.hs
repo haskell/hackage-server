@@ -59,7 +59,10 @@ data UploadFeature = UploadFeature {
     maintainersGroup   :: PackageName -> UserGroup,
 
     -- | Requiring being logged in as the maintainer of a package.
+    authorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE Bool,
+    authorisedAsAnyUser :: ServerPartE Bool,
     guardAuthorisedAsMaintainer          :: PackageName -> ServerPartE (),
+    guardAuthorisedAsTrustee             :: ServerPartE (),
     -- | Requiring being logged in as the maintainer of a package or a trustee.
     guardAuthorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE (),
 
@@ -297,6 +300,18 @@ uploadFeature ServerEnv{serverBlobStore = store}
     guardAuthorisedAsMaintainer :: PackageName -> ServerPartE ()
     guardAuthorisedAsMaintainer pkgname =
       guardAuthorised_ [InGroup (maintainersGroup pkgname)]
+
+    guardAuthorisedAsTrustee :: ServerPartE ()
+    guardAuthorisedAsTrustee =
+        guardAuthorised_ [InGroup trusteesGroup]
+
+    authorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE Bool
+    authorisedAsMaintainerOrTrustee pkgname=
+        guardAuthorised' [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
+
+    authorisedAsAnyUser :: ServerPartE Bool
+    authorisedAsAnyUser =
+        guardAuthorised' [AnyKnownUser]
 
     guardAuthorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE ()
     guardAuthorisedAsMaintainerOrTrustee pkgname =

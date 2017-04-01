@@ -2,14 +2,18 @@
 module Distribution.Server.Framework.MemSize (
   MemSize(..),
   memSizeMb, memSizeKb,
-  memSize0, memSize1, memSize2, memSize3, memSize4,
-  memSize5, memSize6, memSize7, memSize8, memSize9, memSize10,
+  memSize0, memSize1, memSize2, memSize3, memSize4, memSize5,
+  memSize6, memSize7, memSize8, memSize9, memSize10, memSize11, memSize13,
   memSizeUArray, memSizeUVector
   ) where
 
 import Data.Word
 import qualified Data.Map as Map
 import Data.Map (Map)
+import qualified Data.Bimap as Bimap
+import Data.Bimap (Bimap)
+import qualified Data.Graph as Gr
+import Data.Graph (Graph)
 import qualified Data.IntMap as IntMap
 import Data.IntMap (IntMap)
 import qualified Data.Set as Set
@@ -60,8 +64,8 @@ memSize7 :: (MemSize a6, MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize
 memSize8 :: (MemSize a7, MemSize a6, MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> a3 -> a4 -> a5 -> a6 -> a7 -> Int
 memSize9 :: (MemSize a8, MemSize a7, MemSize a6, MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> a3 -> a4 -> a5 -> a6 -> a7 -> a8 -> Int
 memSize10 :: (MemSize a9, MemSize a8, MemSize a7, MemSize a6, MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> a3 -> a4 -> a5 -> a6 -> a7 -> a8 -> a9 -> Int
-
-
+memSize11 :: (MemSize a10, MemSize a9, MemSize a8, MemSize a7, MemSize a6, MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> a3 -> a4 -> a5 -> a6 -> a7 -> a8 -> a9 -> a10 -> Int
+memSize13 :: (MemSize a12, MemSize a11, MemSize a10, MemSize a9, MemSize a8, MemSize a7, MemSize a6, MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> a3 -> a4 -> a5 -> a6 -> a7 -> a8 -> a9 -> a10 -> a11 -> a12 ->Int
 memSize0             = 0
 memSize1 a           = 2 + memSize a
 memSize2 a b         = 3 + memSize a + memSize b
@@ -89,6 +93,20 @@ memSize10 a b c d e
                           + memSize d + memSize e + memSize f
                           + memSize g + memSize h + memSize i
                           + memSize j
+
+memSize11 a b c d e
+          f g h i j k= 12 + memSize a + memSize b + memSize c
+                          + memSize d + memSize e + memSize f
+                          + memSize g + memSize h + memSize i
+                          + memSize j + memSize k
+
+memSize13 a b c d e f g
+          h i j k l m= 14 + memSize a + memSize b + memSize c
+                          + memSize d + memSize e + memSize f
+                          + memSize g + memSize h + memSize i
+                          + memSize j + memSize k + memSize l
+                          + memSize m
+
 
 instance MemSize (a -> b) where
   memSize _ = 0
@@ -145,8 +163,14 @@ instance (MemSize a, MemSize b) => MemSize (Either a b) where
 instance (MemSize a, MemSize b) => MemSize (Map a b) where
   memSize m = sum [ 6 + memSize k + memSize v | (k,v) <- Map.toList m ]
 
+instance (MemSize a, MemSize b) => MemSize (Bimap a b) where
+  memSize m = sum [ 6 + memSize k + memSize v | (k,v) <- Bimap.toList m ]
+
 instance MemSize a => MemSize (IntMap a) where
   memSize m = sum [ 8 + memSize v | v <- IntMap.elems m ]
+
+instance MemSize Graph where
+  memSize m = sum [ 6 + memSize v | v <- Gr.edges m ]
 
 instance MemSize a => MemSize (Set a) where
   memSize m = sum [ 5 + memSize v | v <- Set.elems m ]

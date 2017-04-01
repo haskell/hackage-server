@@ -6,6 +6,7 @@
     $package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$
   </title>
   <link rel="canonical" href="$baseurl$/package/$package.name$" />
+  <script src="/static/jquery.min.js"></script>
 </head>
 
 <body>
@@ -15,10 +16,10 @@
     </a>})$
 
   <div id="content">
-
     <h1>The $package.name$ package</h1>
     <div style="font-size: small">
-      [<a href="/packages/tags">Tags</a>:$tags$]
+      [ <a href="/packages/tags">Tags: </a>$tags$ ]
+      [ <a href="/package/$package.name$/tags/edit">Propose Tags </a> ]
     </div>
 
     $if(isDeprecated)$
@@ -33,15 +34,14 @@
     $endif$
 
     $if(package.optional.hasReadme)$
-    <hr>
-    [<a href="#readme">Skip to Readme</a>]
+      <hr>
+      [<a href="#readme">Skip to Readme</a>]
     $endif$
 
     <div id="properties">
     <h2>Properties</h2>
     <table class="properties">
       <tbody>
-
         <tr>
           <th>Versions</th>
           <td>$versions$</td>
@@ -75,6 +75,7 @@
           <th>Author</th>
           <td>$package.author$</td>
         </tr>
+
         <tr>
           <th>Maintainer</th>
           <td>$package.maintainer$</td>
@@ -140,19 +141,60 @@
         </tr>
         $endif$
 
+        $if(hasrdeps)$
+        <tr>
+          <th>ReverseDependencies</th>
+          <td>$rdeps$</td>
+        </tr>
+        <script>
+          \$('.revdepdetails').click(function(e) {
+            e.preventDefault();
+            var html = '$rdepsummary$'
+            modal.open({ content: html});
+
+          });
+        </script>
+        $endif$
+
+        $if(hasexecs)$
+        <tr>
+          <th>Executables</th>
+          <td>$executables$</td>
+        </tr>
+        $endif$
+
         <tr>
           <th>Downloads</th>
           <td>$totalDownloads$ total ($recentDownloads$ in the last 30 days)</td>
         </tr>
 
         <tr>
-          <th>Votes</th>
-          <td>$votesSection$</td>
+          <th>Rating</th>
+          <td>$score$ ($votes$ votes)
+          $if(myrating)$
+            <div style="font-size: small">
+              [my rating : $myrating$]
+            </div>
+          $endif$
+              [<a href="" class="clear-rating">clear rating</a>]
+            <ul class="star-rating">
+              <li class="star" id="1">&lambda;</li>
+              <li class="star" id="2">&lambda;</li>
+              <li class="star" id="3">&lambda;</li>
+            </ul>
+          </td>
         </tr>
+
+        <tr>
+            <th>Related</th>
+            <td>$related$</td>
+        </tr>
+
         <tr>
           <th>Status</th>
           <td>$buildStatus$</td>
         </tr>
+
       </tbody>
     </table>
     </div> <!-- /properties -->
@@ -190,9 +232,8 @@
     </div>
     $endif$
 
-  </div> <!-- /content -->
-
+  </div>
+  $packagePageAssets()$
   $footer()$
-
 </body>
 </html>

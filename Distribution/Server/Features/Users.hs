@@ -5,7 +5,6 @@ module Distribution.Server.Features.Users (
     initUserFeature,
     UserFeature(..),
     UserResource(..),
-
     GroupResource(..),
   ) where
 
@@ -61,6 +60,7 @@ data UserFeature = UserFeature {
     guardAuthorised_   :: [PrivilegeCondition] -> ServerPartE (),
     -- | Require any of a set of privileges, giving the id of the current user.
     guardAuthorised    :: [PrivilegeCondition] -> ServerPartE UserId,
+    guardAuthorised'    :: [PrivilegeCondition] -> ServerPartE Bool,
     -- | Require being logged in, giving the id of the current user.
     guardAuthenticated :: ServerPartE UserId,
     -- | A hook to override the default authentication error in particular
@@ -388,6 +388,13 @@ userFeature templates usersState adminsState
         uid   <- guardAuthenticatedWithErrHook users
         Auth.guardPriviledged users uid privconds
         return uid
+
+    guardAuthorised' :: [PrivilegeCondition] -> ServerPartE Bool
+    guardAuthorised' privconds = do
+        users <- queryGetUserDb
+        uid   <- guardAuthenticatedWithErrHook users
+        valid <- Auth.checkPriviledged users uid privconds
+        return valid
 
     -- Simply check if the user is authenticated as some user, without any
     -- check that they have any particular priveledges. Only useful as a

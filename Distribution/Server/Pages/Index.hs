@@ -1,6 +1,6 @@
 -- Generate an HTML page listing all available packages
 
-module Distribution.Server.Pages.Index (packageIndex) where
+module Distribution.Server.Pages.Index where
 
 import Distribution.Server.Pages.Template       ( hackagePage )
 import Distribution.Server.Pages.Util           ( packageType )
@@ -21,7 +21,6 @@ import qualified Text.XHtml.Strict as XHtml ( name )
 import Data.Char (toLower, toUpper, isSpace)
 import Data.List (intersperse, sortBy, groupBy, nub, maximumBy)
 
-
 packageIndex :: PackageIndex.PackageIndex PkgInfo -> Html
 packageIndex = formatPkgGroups
                  . map (mkPackageIndexInfo
@@ -29,6 +28,15 @@ packageIndex = formatPkgGroups
                       . pkgDesc
                       . maximumBy (comparing packageVersion))
                  . PackageIndex.allPackagesByName
+
+toPackageNames :: PackageIndex.PackageIndex PkgInfo -> [PackageName]
+toPackageNames = map (pii_pkgName
+                      . mkPackageIndexInfo
+                      . flattenPackageDescription
+                      . pkgDesc
+                      . maximumBy (comparing packageVersion))
+                 . PackageIndex.allPackagesByName
+
 
 data PackageIndexInfo = PackageIndexInfo {
                             pii_pkgName :: !PackageName,
