@@ -18,7 +18,7 @@ import qualified Data.Text.Encoding.Error as T
 import qualified Data.Text.Read           as T
 import Data.Functor
 import Data.Char (chr)
-import Data.Time (UTCTime, parseTime, zonedTimeToUTC)
+import Data.Time (UTCTime, parseTimeM, zonedTimeToUTC)
 import System.Locale (defaultTimeLocale)
 
 type UserAddressesDb = [UserEntry]
@@ -67,7 +67,7 @@ parseLine line
         fixTimeBreakage fs = fs
 
     readTime = fmap zonedTimeToUTC
-             . parseTime defaultTimeLocale "%c"
+             . parseTimeM True defaultTimeLocale "%c"
 
 -- Unfortunately the file uses mixed encoding, mostly UTF8
 -- but some Latin1 and some Html escape sequences
