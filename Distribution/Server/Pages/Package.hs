@@ -149,6 +149,7 @@ readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
       name = display pkgid
 readmeSection _ _ = []
 
+updateRelativeLinks :: T.Text -> Markdown.Inline -> Markdown.Inline
 updateRelativeLinks name (Markdown.Link inls url title) =
   Markdown.Link inls url' title
   where url' = if isRelativeReference $ T.unpack url then name <> T.pack "/src" <> url else url
@@ -423,7 +424,7 @@ renderFields render = [
         ("Copyright",   toHtml $ P.copyright desc),
         ("Author",      toHtml $ author desc),
         ("Maintainer",  maintainField $ rendMaintainer render),
-        ("Stability",   toHtml $ stability desc),
+--        ("Stability",   toHtml $ stability desc),
         ("Category",    commaList . map categoryField $ rendCategory render),
         ("Home page",   linkField $ homepage desc),
         ("Bug tracker", linkField $ bugReports desc),
