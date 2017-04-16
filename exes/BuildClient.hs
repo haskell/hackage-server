@@ -36,7 +36,11 @@ import qualified Codec.Archive.Tar.Entry as Tar
 import System.Environment
 import System.Exit(exitFailure, ExitCode(..))
 import System.FilePath
-import System.Directory
+import System.Directory (canonicalizePath, createDirectoryIfMissing,
+                         doesFileExist, doesDirectoryExist, getDirectoryContents,
+                         renameFile, removeFile, getAppUserDataDirectory,
+                         createDirectory, removeDirectoryRecursive,
+                         createDirectoryIfMissing)
 import System.Console.GetOpt
 import System.Process
 import System.IO
@@ -164,6 +168,13 @@ parseRepositoryIndices verbosity = do
           Left msg -> do warn verbosity $ "failed to read package index "++show fname++": "++msg
                          return M.empty
           Right pkgs -> return $ M.fromList pkgs
+
+    -- stolen from directory-1.2.5
+    listDirectory :: FilePath -> IO [FilePath]
+    listDirectory path =
+      (filter f) <$> (getDirectoryContents path)
+      where f filename = filename /= "." && filename /= ".."
+
 
 writeConfig :: BuildOpts -> BuildConfig -> IO ()
 writeConfig opts BuildConfig {
