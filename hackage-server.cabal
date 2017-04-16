@@ -77,10 +77,6 @@ flag debug
   description: Include debugging features
   manual: True
 
-flag build-hackage-import
-  default: False
-  manual: True
-
 -- Requires working local outgoing email
 flag test-create-user
   default: False
@@ -454,15 +450,31 @@ executable hackage-build
   ghc-options: -Wall -fwarn-tabs -threaded
 
 executable hackage-import
-  if ! flag(build-hackage-import)
-    buildable: False
+  -- TODO/FIXME: the code has bitrotten
+  buildable: False
 
   hs-source-dirs: exes
   main-is: ImportClient.hs
 
   build-depends: lib-server
                  -- version constraints inherited from lib-server
+               , Cabal
+               , HTTP
+               , aeson
+               , async
                , base
+               , bytestring
+               , csv
+               , directory
+               , filepath
+               , mtl
+               , network-uri
+               , tar
+               , text
+               , time
+               , time-locale-compat
+               , unordered-containers
+               , vector
 
   default-language: Haskell2010
   ghc-options: -Wall -fwarn-tabs
