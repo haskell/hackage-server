@@ -304,7 +304,6 @@ executable hackage-server
     -- we use Control.Monad.Except, introduced in mtl-2.2.1
     mtl        >= 2.2.1,
     parsec     == 3.1.*,
-    network    >= 2.1,
     unix       >= 2.6,
     zlib       >= 0.5.3 && < 0.6,
     tar        >= 0.4.5 && < 0.6,
@@ -336,6 +335,11 @@ executable hackage-server
     binary,
     base16-bytestring >= 0.1 && < 0.2,
     hashable  == 1.2.*
+
+  if flag(network-uri)
+    build-depends: network-uri >= 2.6, network >= 2.6
+  else
+    build-depends: network-uri < 2.6, network < 2.6
 
   if ! flag(minimal)
     build-depends:
@@ -391,6 +395,7 @@ executable hackage-mirror
     time-locale-compat >= 0.1.0.1,
     tar,      zlib,
     network,  HTTP >= 4000.2.11,
+    network-uri,
     Cabal,
     safecopy, cereal, binary, mtl,
     unix, aeson,
@@ -436,6 +441,7 @@ executable hackage-build
     time-locale-compat >= 0.1.0.1,
     tar,      zlib,
     network,  HTTP,
+    network-uri,
     Cabal,
     safecopy, cereal, binary, mtl,
     aeson >= 0.6.1.0,
@@ -520,6 +526,7 @@ Test-Suite HighLevelTest
                     io-streams == 1.3.*,
                     http-streams >= 0.8.4 && < 0.9,
                     network,
+                    network-uri,
                     process,
                     tar,
                     unix,
@@ -552,6 +559,7 @@ Test-Suite CreateUserTest
                     filepath,
                     HTTP,
                     network,
+                    network-uri,
                     process,
                     tar,
                     unix,
