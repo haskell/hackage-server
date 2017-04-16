@@ -400,10 +400,15 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
             UnpreferredVersion -> [theclass "unpreferred"]
         infoHtml = case info of Nothing -> noHtml; Just str -> " (" +++ (anchor ! [href str] << "info") +++ ")"
 
+-- This is currently only used by the candidate view as the normal
+-- package view is using the new template-based rendering
+--
+-- TODO: when converting the candidate view to the template-based
+-- rendering the "warning" needs to be reimplemented
 renderChangelog :: PackageRender -> (String, Html)
 renderChangelog render =
     ("Change log", case rendChangeLog render of
-                     Nothing            -> toHtml "None available"
+                     Nothing            -> strong ! [theclass "warning"] << toHtml "None available"
                      Just (_,_,_,fname) -> anchor ! [href changeLogURL]
                                                  << takeFileName fname)
   where

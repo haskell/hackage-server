@@ -38,7 +38,6 @@ import Distribution.Server.Packages.Render
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Users.Group (UserGroup(..))
-import Distribution.Server.Features.Distro.Distributions (DistroPackageInfo(..))
 -- [reverse index disabled] import Distribution.Server.Packages.Reverse
 
 import qualified Distribution.Server.Pages.Package as Pages
@@ -60,7 +59,6 @@ import Distribution.PackageDescription
 import Data.List (intercalate, intersperse, insert, sortBy)
 import Data.Function (on)
 import qualified Data.Map as Map
-import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Vector as Vec
 import Data.Maybe (fromMaybe, isJust)
@@ -1043,6 +1041,7 @@ mkHtmlCandidates HtmlUtilities{..}
         ]
     {-some useful URIs here: candidateUri check "" pkgid, packageCandidatesUri check "" pkgid, publishUri check "" pkgid-}
 
+    -- TODO: convert to template-based generation like 'servePackagePage' does
     serveCandidatePage :: Resource -> DynamicPath -> ServerPartE Response
     serveCandidatePage maintain dpath = do
       cand <- packageInPath dpath >>= lookupCandidateId
@@ -1053,8 +1052,10 @@ mkHtmlCandidates HtmlUtilities{..}
                      . flip PackageIndex.lookupPackageName pkgname
                    <$> queryGetPackageIndex
       prefInfo <- queryGetPreferredInfo pkgname
-      let sectionHtml = [Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing,
-                         Pages.renderDependencies render] ++ Pages.renderFields render
+      let sectionHtml = [ Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing
+                        , Pages.renderChangelog render
+                        , Pages.renderDependencies render
+                        ] ++ Pages.renderFields render
           maintainHtml = anchor ! [href $ renderResource maintain [display $ packageId cand]] << "maintain"
       -- bottom sections, currently documentation and readme
       mdoctarblob <- queryDocumentation (packageId cand)
