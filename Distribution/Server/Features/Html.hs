@@ -1069,7 +1069,8 @@ mkHtmlCandidates HtmlUtilities{..}
       -- also utilize hasIndexedPackage :: Bool
       let warningBox = case renderWarnings candRender of
               [] -> []
-              warn -> [thediv ! [theclass "notification"] << [toHtml "Warnings:", unordList warn]]
+              warn -> [thediv ! [theclass "candidate-warn"] << [paragraph << strong (toHtml "Warnings:"), unordList warn]]
+
       return $ toResponse $ Resource.XHtml $
           Pages.packagePage render [maintainHtml] warningBox sectionHtml
                             [] mdocIndex mreadme docURL True

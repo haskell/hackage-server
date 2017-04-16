@@ -82,6 +82,7 @@ packagePage render headLinks top sections
 
     docBody = h1 << bodyTitle
           : concat [
+             candidateBanner,
              renderHeads,
              top,
              pkgBody render sections,
@@ -93,6 +94,12 @@ packagePage render headLinks top sections
              map pair bottom
            ]
     bodyTitle = "The " ++ pkgName ++ " package"
+
+    candidateBanner
+      | isCandidate = [ thediv ! [theclass "candidate-info"]
+                        << [ paragraph << [ strong (toHtml "This is a package candidate release!")
+                                          , toHtml " Here you can preview how this package release will appear once published to the main package index (which can be accomplished via the 'maintain' link below). Please note that once a package has been published to the main package index it cannot be undone!" ] ] ]
+      | otherwise = []
 
     renderHeads = case headLinks of
         [] -> []
