@@ -582,13 +582,6 @@ mkHtmlCore ServerEnv{serverBaseURI}
             docURL distributions
             deprs
             utilities
-          where
-            makeReadme :: MonadIO m => PackageRender -> m (Maybe BS.ByteString)
-            makeReadme render = case rendReadme render of
-              Just (tarfile, _, offset, _) ->
-                    either (\_err -> return Nothing) (return . Just . snd) =<<
-                      liftIO (loadTarEntry tarfile offset)
-              Nothing -> return Nothing
 
     serveDependenciesPage :: DynamicPath -> ServerPartE Response
     serveDependenciesPage dpath = do
@@ -658,6 +651,14 @@ mkHtmlCore ServerEnv{serverBaseURI}
                 , templateVal "changes" changes
                 ]
 
+
+-- | Common helper used by 'serveCandidatePage' and 'servePackagePage'
+makeReadme :: MonadIO m => PackageRender -> m (Maybe BS.ByteString)
+makeReadme render = case rendReadme render of
+  Just (tarfile, _, offset, _) ->
+        either (\_err -> return Nothing) (return . Just . snd) =<<
+          liftIO (loadTarEntry tarfile offset)
+  Nothing -> return Nothing
 
 {-------------------------------------------------------------------------------
   Users
@@ -1062,12 +1063,7 @@ mkHtmlCandidates HtmlUtilities{..}
                            mdoctarblob
       let docURL = packageDocsContentUri docs (packageId cand)
 
-      mreadme     <- case rendReadme render of
-                       Nothing -> return Nothing
-                       Just (tarfile, _, offset, _) ->
-                              either (\_err -> return Nothing)
-                                     (return . Just . snd)
-                          =<< liftIO (loadTarEntry tarfile offset)
+      mreadme     <- makeReadme render
 
       -- also utilize hasIndexedPackage :: Bool
       let warningBox = case renderWarnings candRender of
