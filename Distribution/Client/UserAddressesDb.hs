@@ -19,7 +19,7 @@ import qualified Data.Text.Read           as T
 import Data.Functor
 import Data.Char (chr)
 import Data.Time (UTCTime, parseTime, zonedTimeToUTC)
-import System.Locale (defaultTimeLocale)
+import Data.Time.Format (defaultTimeLocale)
 
 type UserAddressesDb = [UserEntry]
 type UserEntry    = (UserName, UserRealName, UserAddress, UTCTime, UserName)

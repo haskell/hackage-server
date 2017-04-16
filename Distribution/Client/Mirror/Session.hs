@@ -5,6 +5,10 @@
 {-# LANGUAGE DeriveDataTypeable  #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Distribution.Client.Mirror.Session (
     -- * MirrorSession
     MirrorSession -- Opaque
