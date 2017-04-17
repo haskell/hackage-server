@@ -96,15 +96,25 @@ runServer :: FilePath -> [String] -> IO (Maybe ExitCode)
 runServer root args = do
     -- attempt to reduce failures on Travis by syncing fs before starting up server
     c_sync
-    -- ideally, cabal-install should tell us where to find build artifacts
-    mserver <- findFile dirs "hackage-server"
+    -- ideally, cabal-install should tell us where to find build
+    -- artifacts ... and actually it does if we use `build-tools:
+    -- hackage-server` via the PATH variable!
+
+    mserverViaPath <- findExecutable "hackage-server"
+
+    mserver <- case mserverViaPath of
+      Just fn -> return (Just fn)
+      Nothing -> findFile dirs "hackage-server" -- TODO: remove this fallback at some point
+
     case mserver of
-        Nothing -> fail ("couldn't find 'hackage-server' test-executable in "
+        Nothing -> fail ("couldn't find 'hackage-server' test-executable in $PATH nor "
                          ++ show dirs)
-        Just server -> run server args'
+        Just server -> do
+            putStrLn $ "using " ++ show server
+            run server args'
   where
     dirs = [ root </> "dist-newstyle/build/hackage-server-" ++ ver
-                  </> "build/hackage-server/" -- cabal new-build
+                  </> "build/hackage-server/" -- cabal-1.24 new-build
            , root </> "dist/build/hackage-server/" -- cabal test
            ]
     args'  = ("--static-dir=" ++ root </> "datafiles/") : args

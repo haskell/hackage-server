@@ -5,7 +5,7 @@
   System requirements:
 
   1. Port `testPort` (currently 8392) must be available on localhost
-  2. You must allow for outgoing HTTP traffic, as we POST to html5.validator.nu
+  2. You must allow for outgoing HTTP traffic, as we POST to validator.w3.org
      for HTML validation.
 -}
 

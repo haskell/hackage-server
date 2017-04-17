@@ -80,10 +80,13 @@
           <td>$package.maintainer$</td>
         </tr>
 
+        <!-- Obsolete/deprecated 'Stability' field hidden
+             c.f. http://stackoverflow.com/questions/3841218/conventions-for-stability-field-of-cabal-packages
         <tr>
           <th>Stability</th>
           <td>$stability$</td>
         </tr>
+        -->
 
         $if(package.optional.hasCategories)$
         <tr>

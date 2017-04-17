@@ -23,7 +23,6 @@
 
 $if(title)$
 $title$
-</div>
 $else$
 <a class="caption" href="/">Hackage :: [Package]</a>
 $endif$

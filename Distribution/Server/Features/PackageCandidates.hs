@@ -32,15 +32,29 @@ import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Features.Security.Migration
 
 import Distribution.Server.Util.ServeTarball
+import Distribution.Server.Pages.Template (hackagePage)
 
 import Distribution.Text
 import Distribution.Package
+
+import qualified Cheapskate      as Markdown (markdown, Options(..))
+import qualified Cheapskate.Html as Markdown (renderDoc)
+import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
+import qualified Data.Text                as T
+import qualified Data.Text.Encoding       as T
+import qualified Data.Text.Encoding.Error as T
+import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
+import qualified Data.ByteString.Char8 as C8
+import qualified Text.XHtml.Strict as XHtml
+import           Text.XHtml.Strict ((<<), (!))
+import System.FilePath.Posix (takeExtension)
 
 import Data.Version
 import Data.Function (fix)
 import Data.List (find)
 import Data.Time.Clock (getCurrentTime)
 import qualified Data.Vector as Vec
+
 
 data PackageCandidatesFeature = PackageCandidatesFeature {
     candidatesFeatureInterface :: HackageFeature,
@@ -229,8 +243,9 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       , candidateContents = (resourceAt "/package/:package/candidate/src/..") {
             resourceGet = [("", serveContents)]
           }
-      , candidateChangeLog = (resourceAt "/package/:package/candidate/changelog") {
-            resourceGet = [("changelog", serveChangeLog)]
+      , candidateChangeLog = (resourceAt "/package/:package/candidate/changelog.:format") {
+            resourceGet = [("txt",  serveChangeLogText)
+                          ,("html", serveChangeLogHtml)]
           }
       , packageCandidatesUri = \format pkgname ->
           renderResource (packageCandidatesPage r) [display pkgname, format]
@@ -432,16 +447,41 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 -------------------------------------------------------------------------------}
 
     -- result: changelog or not-found error
-    serveChangeLog :: DynamicPath -> ServerPartE Response
-    serveChangeLog dpath = do
+    serveChangeLogText :: DynamicPath -> ServerPartE Response
+    serveChangeLogText dpath = do
       pkg        <- packageInPath dpath >>= lookupCandidateId
       mChangeLog <- liftIO $ findToplevelFile (candPkgInfo pkg) isChangeLogFile
       case mChangeLog of
         Left err ->
           errNotFound "Changelog not found" [MText err]
-        Right (fp, etag, offset, name) -> do
+        Right (tarfile, etag, offset, filename) -> do
           cacheControl [Public, maxAgeMinutes 5] etag
-          liftIO $ serveTarEntry fp offset name -- TODO: We've already loaded the contents; refactor
+          liftIO $ serveTarEntry tarfile offset filename
+          -- TODO: We've already loaded the contents; refactor
+
+    serveChangeLogHtml :: DynamicPath -> ServerPartE Response
+    serveChangeLogHtml dpath = do
+      pkg     <- packageInPath dpath >>= lookupCandidateId
+      mReadme <- liftIO $ findToplevelFile (candPkgInfo pkg) isChangeLogFile
+      case mReadme of
+        Left err ->
+          errNotFound "Changelog not found" [MText err]
+        Right (tarfile, etag, offset, filename) -> do
+          contents <- either (\err -> errInternalError [MText err])
+                             (return . snd)
+                  =<< liftIO (loadTarEntry tarfile offset)
+          cacheControl [Public, maxAgeDays 30] etag
+          return $ toResponse $ Resource.XHtml $
+            let title = "Changelog for " ++ display (packageId pkg) in
+            hackagePage title
+              [ XHtml.h2 << title
+              , XHtml.thediv ! [XHtml.theclass "embedded-author-content"]
+                            << if supposedToBeMarkdown filename
+                                 then renderMarkdown contents
+                                 else XHtml.thediv ! [XHtml.theclass "preformatted"]
+                                                  << unpackUtf8 contents
+              ]
+
 
     -- return: not-found error or tarball
     serveContents :: DynamicPath -> ServerPartE Response
@@ -455,3 +495,27 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           serveTarball (display (packageId pkg) ++ " candidate source tarball")
                        ["index.html"] (display (packageId pkg)) fp index
                        [Public, maxAgeMinutes 5] etag
+
+renderMarkdown :: BS.ByteString -> XHtml.Html
+renderMarkdown = XHtml.primHtml . Blaze.renderHtml
+               . Markdown.renderDoc . Markdown.markdown opts
+               . T.decodeUtf8With T.lenientDecode . convertNewLine . BS.toStrict
+  where
+    opts =
+      Markdown.Options
+        { Markdown.sanitize           = True
+        , Markdown.allowRawHtml       = False
+        , Markdown.preserveHardBreaks = False
+        , Markdown.debug              = False
+        }
+
+convertNewLine :: C8.ByteString -> C8.ByteString
+convertNewLine = C8.filter (/= '\r')
+
+supposedToBeMarkdown :: FilePath -> Bool
+supposedToBeMarkdown fname = takeExtension fname `elem` [".md", ".markdown"]
+
+unpackUtf8 :: BS.ByteString -> String
+unpackUtf8 = T.unpack
+           . T.decodeUtf8With T.lenientDecode
+           . BS.toStrict

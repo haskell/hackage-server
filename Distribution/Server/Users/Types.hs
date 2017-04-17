@@ -23,13 +23,14 @@ import Control.Applicative ((<$>))
 import Data.Aeson (ToJSON, FromJSON)
 import Data.SafeCopy (base, extension, deriveSafeCopy, Migrate(..))
 import Data.Typeable (Typeable)
+import Data.Hashable
 
 
 newtype UserId = UserId Int
   deriving (Eq, Ord, Read, Show, Typeable, MemSize, ToJSON, FromJSON)
 
 newtype UserName  = UserName String
-  deriving (Eq, Ord, Read, Show, Typeable, MemSize, ToJSON, FromJSON)
+  deriving (Eq, Ord, Read, Show, Typeable, MemSize, ToJSON, FromJSON, Hashable)
 
 data UserInfo = UserInfo {
                   userName   :: !UserName,

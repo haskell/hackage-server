@@ -497,6 +497,7 @@ userFeature templates usersState adminsState
       (uid, uinfo)  <- lookupUserNameFull =<< userNameInPath dpath
       guardAuthorised_ [IsUserId uid, InGroup adminGroup]
       template <- getTemplate templates "manage.html"
+      cacheControlWithoutETag [Private]
       ok $ toResponse $
         template
           [ "username" $= display (userName uinfo)
@@ -512,6 +513,7 @@ userFeature templates usersState adminsState
     serveUserManagementPost dpath = do
       (uid, uinfo)  <- lookupUserNameFull =<< userNameInPath dpath
       guardAuthorised_ [IsUserId uid, InGroup adminGroup]
+      cacheControlWithoutETag [Private]
       action <- look "action"
       case action of
         "new-auth-token" -> do

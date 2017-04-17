@@ -38,7 +38,6 @@ import Distribution.Server.Packages.Render
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Users.Group (UserGroup(..))
-import Distribution.Server.Features.Distro.Distributions (DistroPackageInfo(..))
 -- [reverse index disabled] import Distribution.Server.Packages.Reverse
 
 import qualified Distribution.Server.Pages.Package as Pages
@@ -60,7 +59,6 @@ import Distribution.PackageDescription
 import Data.List (intercalate, intersperse, insert, sortBy)
 import Data.Function (on)
 import qualified Data.Map as Map
-import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Vector as Vec
 import Data.Maybe (fromMaybe, isJust)
@@ -518,7 +516,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
           , resourceGet  = [("html", const $ readAsyncCache cachePackagesPage)]
           }
       , maintainPackage
-      , (resourceAt "/package/:package/distro-monitor") {
+      , (resourceAt "/package/:package/distro-monitor.:format") {
             resourceDesc = [(GET, "A handy page for distro package change monitor tools")]
           , resourceGet  = [("html", serveDistroMonitorPage)]
           }
@@ -582,18 +580,12 @@ mkHtmlCore ServerEnv{serverBaseURI}
             docURL distributions
             deprs
             utilities
-          where
-            makeReadme :: MonadIO m => PackageRender -> m (Maybe BS.ByteString)
-            makeReadme render = case rendReadme render of
-              Just (tarfile, _, offset, _) ->
-                    either (\_err -> return Nothing) (return . Just . snd) =<<
-                      liftIO (loadTarEntry tarfile offset)
-              Nothing -> return Nothing
 
     serveDependenciesPage :: DynamicPath -> ServerPartE Response
     serveDependenciesPage dpath = do
       pkgname <- packageInPath dpath
       withPackagePreferred pkgname $ \pkg _ -> do
+        cacheControlWithoutETag [Public, maxAgeMinutes 30]
         render <- liftIO $ packageRender pkg
         return $ toResponse $ dependenciesPage False render
 
@@ -602,6 +594,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
       pkgname <- packageInPath dpath
       pkgs <- lookupPackageName pkgname
       guardAuthorisedAsMaintainerOrTrustee (pkgname :: PackageName)
+      cacheControl [Public, NoCache] (etagFromHash (length pkgs))
       template <- getTemplate templates "maintain.html"
       return $ toResponse $ template
         [ "pkgname"  $= pkgname
@@ -612,6 +605,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
     serveDistroMonitorPage dpath = do
       pkgname <- packageInPath dpath
       pkgs <- lookupPackageName pkgname
+      cacheControl [Public, maxAgeHours 3] (etagFromHash (length pkgs))
       template <- getTemplate templates "distro-monitor.html"
       return $ toResponse $ template
         [ "pkgname"  $= pkgname
@@ -622,7 +616,6 @@ mkHtmlCore ServerEnv{serverBaseURI}
     serveCabalRevisionsPage dpath = do
       pkginfo  <- packageInPath dpath >>= lookupPackageId
       users    <- queryGetUserDb
-      template <- getTemplate templates "revisions.html"
       let pkgid        = packageId pkginfo
           pkgname      = packageName pkginfo
           revisions    = reverse $ Vec.toList (pkgMetadataRevisions pkginfo)
@@ -634,6 +627,8 @@ mkHtmlCore ServerEnv{serverBaseURI}
                               Right changes -> changes
                          | ((new, _), (old, _)) <- zip revisions (tail revisions) ]
 
+      cacheControl [NoCache] (etagFromHash numRevisions)
+      template <- getTemplate templates "revisions.html"
       return $ toResponse $ template
         [ "pkgname"   $= pkgname
         , "pkgid"     $= pkgid
@@ -654,6 +649,14 @@ mkHtmlCore ServerEnv{serverBaseURI}
                 , templateVal "changes" changes
                 ]
 
+
+-- | Common helper used by 'serveCandidatePage' and 'servePackagePage'
+makeReadme :: MonadIO m => PackageRender -> m (Maybe BS.ByteString)
+makeReadme render = case rendReadme render of
+  Just (tarfile, _, offset, _) ->
+        either (\_err -> return Nothing) (return . Just . snd) =<<
+          liftIO (loadTarEntry tarfile offset)
+  Nothing -> return Nothing
 
 {-------------------------------------------------------------------------------
   Users
@@ -890,6 +893,7 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
     servePackageReports :: DynamicPath -> ServerPartE Response
     servePackageReports dpath = packageReports dpath $ \reports -> do
         pkgid <- packageInPath dpath
+        cacheControl [Public, maxAgeMinutes 30] (etagFromHash (length reports))
         template <- getTemplate templates "reports.html"
         return $ toResponse $ template
           [ "pkgid" $= (pkgid :: PackageIdentifier)
@@ -901,6 +905,7 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
         (repid, report, mlog) <- packageReport dpath
         mlog' <- traverse queryBuildLog mlog
         pkgid <- packageInPath dpath
+        cacheControlWithoutETag [Public, maxAgeDays 30]
         template <- getTemplate templates "report.html"
         return $ toResponse $ template
           [ "pkgid" $= (pkgid :: PackageIdentifier)
@@ -1036,6 +1041,7 @@ mkHtmlCandidates HtmlUtilities{..}
         ]
     {-some useful URIs here: candidateUri check "" pkgid, packageCandidatesUri check "" pkgid, publishUri check "" pkgid-}
 
+    -- TODO: convert to template-based generation like 'servePackagePage' does
     serveCandidatePage :: Resource -> DynamicPath -> ServerPartE Response
     serveCandidatePage maintain dpath = do
       cand <- packageInPath dpath >>= lookupCandidateId
@@ -1046,8 +1052,10 @@ mkHtmlCandidates HtmlUtilities{..}
                      . flip PackageIndex.lookupPackageName pkgname
                    <$> queryGetPackageIndex
       prefInfo <- queryGetPreferredInfo pkgname
-      let sectionHtml = [Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing,
-                         Pages.renderDependencies render] ++ Pages.renderFields render
+      let sectionHtml = [ Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing
+                        , Pages.renderChangelog render
+                        , Pages.renderDependencies render
+                        ] ++ Pages.renderFields render
           maintainHtml = anchor ! [href $ renderResource maintain [display $ packageId cand]] << "maintain"
       -- bottom sections, currently documentation and readme
       mdoctarblob <- queryDocumentation (packageId cand)
@@ -1056,17 +1064,13 @@ mkHtmlCandidates HtmlUtilities{..}
                            mdoctarblob
       let docURL = packageDocsContentUri docs (packageId cand)
 
-      mreadme     <- case rendReadme render of
-                       Nothing -> return Nothing
-                       Just (tarfile, _, offset, _) ->
-                              either (\_err -> return Nothing)
-                                     (return . Just . snd)
-                          =<< liftIO (loadTarEntry tarfile offset)
+      mreadme     <- makeReadme render
 
       -- also utilize hasIndexedPackage :: Bool
       let warningBox = case renderWarnings candRender of
               [] -> []
-              warn -> [thediv ! [theclass "notification"] << [toHtml "Warnings:", unordList warn]]
+              warn -> [thediv ! [theclass "candidate-warn"] << [paragraph << strong (toHtml "Warnings:"), unordList warn]]
+
       return $ toResponse $ Resource.XHtml $
           Pages.packagePage render [maintainHtml] warningBox sectionHtml
                             [] mdocIndex mreadme docURL True
@@ -1819,6 +1823,7 @@ htmlGroupResource UserFeature{..} r@(GroupResource groupR userR getGroup) =
         let unames = [ Users.userIdToName userDb uid
                      | uid   <- Group.toList usergroup ]
         let baseUri = renderResource' groupR dpath
+        cacheControl [NoCache] (etagFromHash unames)
         return . toResponse . Resource.XHtml $ Pages.groupPage
             unames baseUri (False, False) (groupDesc group)
     getEditList dpath = do
@@ -1829,6 +1834,7 @@ htmlGroupResource UserFeature{..} r@(GroupResource groupR userR getGroup) =
         let unames = [ Users.userIdToName userDb uid
                      | uid   <- Group.toList usergroup ]
         let baseUri = renderResource' groupR dpath
+        cacheControl [NoCache] (etagFromHash unames)
         return . toResponse . Resource.XHtml $ Pages.groupPage
             unames baseUri (canAdd, canDelete) (groupDesc group)
     postUser dpath = do

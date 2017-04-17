@@ -29,6 +29,7 @@ import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
 import qualified Data.Text.Encoding.Error as T
 import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
+import qualified Data.ByteString.Char8 as C8
 import qualified Text.XHtml.Strict as XHtml
 import           Text.XHtml.Strict ((<<), (!))
 import System.FilePath.Posix (takeExtension)
@@ -204,7 +205,7 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
 renderMarkdown :: BS.ByteString -> XHtml.Html
 renderMarkdown = XHtml.primHtml . Blaze.renderHtml
                . Markdown.renderDoc . Markdown.markdown opts
-               . T.decodeUtf8With T.lenientDecode . BS.toStrict
+               . T.decodeUtf8With T.lenientDecode . convertNewLine . BS.toStrict
   where
     opts =
       Markdown.Options
@@ -213,6 +214,9 @@ renderMarkdown = XHtml.primHtml . Blaze.renderHtml
         , Markdown.preserveHardBreaks = False
         , Markdown.debug              = False
         }
+
+convertNewLine :: C8.ByteString -> C8.ByteString
+convertNewLine = C8.filter (/= '\r')
 
 supposedToBeMarkdown :: FilePath -> Bool
 supposedToBeMarkdown fname = takeExtension fname `elem` [".md", ".markdown"]

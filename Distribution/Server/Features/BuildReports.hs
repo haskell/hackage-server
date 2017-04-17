@@ -194,7 +194,9 @@ buildReportsFeature name
       (repid, _, mlog) <- packageReport dpath
       case mlog of
         Nothing -> errNotFound "Log not found" [MText $ "Build log for report " ++ display repid ++ " not found"]
-        Just logId -> toResponse <$> queryBuildLog logId
+        Just logId -> do
+          cacheControlWithoutETag [Public, maxAgeDays 30]
+          toResponse <$> queryBuildLog logId
 
     -- result: auth error, not-found error, parse error, or redirect
     submitBuildReport :: DynamicPath -> ServerPartE Response

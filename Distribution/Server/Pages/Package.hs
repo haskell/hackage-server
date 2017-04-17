@@ -82,6 +82,7 @@ packagePage render headLinks top sections
 
     docBody = h1 << bodyTitle
           : concat [
+             candidateBanner,
              renderHeads,
              top,
              pkgBody render sections,
@@ -93,6 +94,17 @@ packagePage render headLinks top sections
              map pair bottom
            ]
     bodyTitle = "The " ++ pkgName ++ " package"
+
+    candidateBanner
+      | isCandidate = [ thediv ! [theclass "candidate-info"]
+                        << [ paragraph << [ strong (toHtml "This is a package candidate release!")
+                                          , toHtml " Here you can preview how this package release will appear once published to the main package index (which can be accomplished via the 'maintain' link below)."
+                                          , toHtml " Please note that once a package has been published to the main package index it cannot be undone!"
+                                          , toHtml " Please consult the "
+                                          , anchor ! [href "/upload"] << "package uploading documentation"
+                                          , toHtml " for more information."
+                                          ] ] ]
+      | otherwise = []
 
     renderHeads = case headLinks of
         [] -> []
@@ -149,6 +161,7 @@ readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
       name = display pkgid
 readmeSection _ _ = []
 
+updateRelativeLinks :: T.Text -> Markdown.Inline -> Markdown.Inline
 updateRelativeLinks name (Markdown.Link inls url title) =
   Markdown.Link inls url' title
   where url' = if isRelativeReference $ T.unpack url then name <> T.pack "/src" <> url else url
@@ -399,10 +412,15 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
             UnpreferredVersion -> [theclass "unpreferred"]
         infoHtml = case info of Nothing -> noHtml; Just str -> " (" +++ (anchor ! [href str] << "info") +++ ")"
 
+-- This is currently only used by the candidate view as the normal
+-- package view is using the new template-based rendering
+--
+-- TODO: when converting the candidate view to the template-based
+-- rendering the "warning" needs to be reimplemented
 renderChangelog :: PackageRender -> (String, Html)
 renderChangelog render =
     ("Change log", case rendChangeLog render of
-                     Nothing            -> toHtml "None available"
+                     Nothing            -> strong ! [theclass "warning"] << toHtml "None available"
                      Just (_,_,_,fname) -> anchor ! [href changeLogURL]
                                                  << takeFileName fname)
   where
@@ -423,7 +441,7 @@ renderFields render = [
         ("Copyright",   toHtml $ P.copyright desc),
         ("Author",      toHtml $ author desc),
         ("Maintainer",  maintainField $ rendMaintainer render),
-        ("Stability",   toHtml $ stability desc),
+--        ("Stability",   toHtml $ stability desc),
         ("Category",    commaList . map categoryField $ rendCategory render),
         ("Home page",   linkField $ homepage desc),
         ("Bug tracker", linkField $ bugReports desc),
