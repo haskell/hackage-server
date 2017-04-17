@@ -98,7 +98,12 @@ packagePage render headLinks top sections
     candidateBanner
       | isCandidate = [ thediv ! [theclass "candidate-info"]
                         << [ paragraph << [ strong (toHtml "This is a package candidate release!")
-                                          , toHtml " Here you can preview how this package release will appear once published to the main package index (which can be accomplished via the 'maintain' link below). Please note that once a package has been published to the main package index it cannot be undone!" ] ] ]
+                                          , toHtml " Here you can preview how this package release will appear once published to the main package index (which can be accomplished via the 'maintain' link below)."
+                                          , toHtml " Please note that once a package has been published to the main package index it cannot be undone!"
+                                          , toHtml " Please consult the "
+                                          , anchor ! [href "/upload"] << "package uploading documentation"
+                                          , toHtml " for more information."
+                                          ] ] ]
       | otherwise = []
 
     renderHeads = case headLinks of
