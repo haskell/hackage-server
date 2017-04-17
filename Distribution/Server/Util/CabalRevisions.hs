@@ -330,6 +330,13 @@ checkDependencies componentName s ds1 ds2 = do
     --   https://github.com/haskell/cabal/issues/3061
     --
             , PackageName "base-orphans"
+    -- The network/network-uri package split resulted in some packages
+    -- not using the proper conditional boilerplate to exclude
+    -- the situation of network-uri >= 2.6 && network < 2.6
+    -- See also
+    --   http://hackage.haskell.org/package/network-uri-flag
+    --
+            , PackageName "network-uri-flag"
             ]
     -- No whitelist for build-tools
         | otherwise = []
