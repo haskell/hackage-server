@@ -402,7 +402,7 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
                                ++ map versionedLink laterVersions
         versionedLink (v, s) = anchor ! (status s ++ [href $ packageURL $ PackageIdentifier pname v]) << display v
         status st = case st of
-            NormalVersion -> []
+            NormalVersion -> [theclass "normal"]
             DeprecatedVersion  -> [theclass "deprecated"]
             UnpreferredVersion -> [theclass "unpreferred"]
         infoHtml = case info of Nothing -> noHtml; Just str -> " (" +++ (anchor ! [href str] << "info") +++ ")"
