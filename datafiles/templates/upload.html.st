@@ -75,23 +75,28 @@ See the notes at the bottom of the page.
   <li>
     Occasional changes to the GHC base package can mean that some work needs to be done to make packages compatible across a range of versions.
     See <a href="https://github.com/haskell-infra/hackage-trustees/blob/master/cookbook.md">these notes</a> for some tips in how to do so.
-    
+
     There are some notes for upgrading <a href="http://www.haskell.org/haskellwiki/Upgrading_packages">much older</a> packages as well.
   </li>
 
-<h3>Documentation</h3>
+  <li>
+    The hackage-server attempts to build documentation for library
+    packages, but this can fail. Maintainers can generate their own
+    documentation and upload it by using something along the lines of the
+    shell script below (note that the last two commands are the key ones):
 
-<p>
-The hackage-server attempts to build documentation for library packages, but this can fail. Maintainers can generate their own documentation and upload it by using something along the lines of the shell script below (note that the last two commands are the key ones):</p>
-<pre>
+    <pre>
+#!/bin/sh
 set -e
 
-dir=$(mktemp -d dist-docs.XXXXXX)
-trap 'rm -r "$dir"' EXIT
+dir=\$(mktemp -d dist-docs.XXXXXX)
+trap 'rm -r "\$dir"' EXIT
 
-cabal haddock --builddir="$dir" --for-hackage --haddock-option=--hyperlinked-source
-cabal upload -d $dir/*-docs.tar.gz
+cabal haddock --builddir="\$dir" --for-hackage --haddock-option=--hyperlinked-source
+# Starting with cabal 2.0, `--publish` is needed for uploading to non-candidate releases
+cabal upload -d \$dir/*-docs.tar.gz
 </pre>
+  </li>
 
 </ul>
 
