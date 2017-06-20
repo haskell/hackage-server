@@ -154,7 +154,7 @@
         </tr>
         <tr>
           <th>Status</th>
-          <td>$buildStatus$</td>
+	  <td>$buildStatus$<br/><a href="https://matrix.hackage.haskell.org/package/$package.name$">Hackage Matrix CI</a></td>
         </tr>
       </tbody>
     </table>

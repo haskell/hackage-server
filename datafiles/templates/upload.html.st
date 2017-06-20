@@ -19,6 +19,21 @@ upload a package version once and this cannot be undone</em>, so try to get it r
 To reduce the risk of mistakes it's recommended to use the <a href="#candidates">package candidates feature</a> described below.
 </p>
 
+<p>Because each package added to the main package index has a cost of
+operation and maintenance associated to it, your package should
+strive to provide value for the community by <em>being intended to be
+useful to others</em>, which entails giving your package a meaningful
+synopsis/description as well as ensuring your package is installable
+by helping with providing accurate meta-data.
+</p>
+
+<p>In the course of the curation process, the
+<a href="/packages/trustees">Hackage Trustees</a> need to be
+able to contact you, to inform you about and help you resolve issues with
+your package (including its meta-data) which affect the Hackage
+ecosystem.
+</p>
+
 <p>Packages must be in the form produced by Cabal's
 <a href="http://www.haskell.org/cabal/users-guide/installing-packages.html#setup-sdist">sdist</a> command:
 a gzipped tar file <em>package</em>-<em>version</em><tt>.tar.gz</tt>
