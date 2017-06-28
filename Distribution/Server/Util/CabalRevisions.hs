@@ -60,15 +60,27 @@ newtype CheckM a = CheckM { unCheckM :: ExceptT String (Writer [Change]) a }
 runCheck :: CheckM () -> Either String [Change]
 runCheck c = case runWriter . runExceptT . unCheckM $ c of
                (Left err, _      ) -> Left err
-               (Right (), changes) -> Right changes
+               (Right (), changes)
+                 | any isRelevantChange changes -> Right changes
+                 | otherwise ->
+                   Left "Only irrelevant changes, don't bother making this revision."
+
+isRelevantChange :: Change -> Bool
+isRelevantChange (Change r _ _ _) = r
 
 instance Monad CheckM where
   return         = Control.Applicative.pure
   CheckM m >>= f = CheckM (m >>= unCheckM . f)
   fail           = CheckM . throwError
 
-data Change = Change String String String -- what, from, to
+data Change = Change Bool String String String -- relevant, what, from, to
   deriving Show
+
+-- Note: relevancy
+--
+-- If we have only irrelevant changes, than there is no point to make
+-- a revision. In other words for changes to be accepted, there should
+-- be at least one relevant change.
 
 logChange :: Change -> CheckM ()
 logChange change = CheckM (tell [change])
@@ -206,7 +218,7 @@ checkPackageDescriptions
   changesOk "author"     id authorA authorB
   checkSame "The stability field is unused, don't bother changing it."
             stabilityA stabilityB
-  changesOk "tested-with" (show . ppTestedWith) testedWithA testedWithB
+  changesOk' False "tested-with" (show . ppTestedWith) testedWithA testedWithB
   changesOk "homepage" id homepageA homepageB
   checkSame "The package-url field is unused, don't bother changing it."
             pkgUrlA pkgUrlB
@@ -301,7 +313,7 @@ checkDependencies componentName s ds1 ds2 = do
 
     forM_ added $ \(dep@(Dependency pn _)) ->
         if pn `elem` additionWhitelist
-           then logChange (Change ("added dependency on") "" (display dep))
+           then logChange (Change True ("added dependency on") "" (display dep))
            else fail ("Cannot add new dependency on " ++ display pn ++
                       " in " ++ showComponentName componentName ++ " component")
 
@@ -368,15 +380,16 @@ checkSetupBuildInfo (Just _) Nothing =
     fail "Cannot remove a custom-setup section"
 
 checkSetupBuildInfo Nothing (Just (SetupBuildInfo setupDependsA _internalA)) =
-    logChange $ Change ("added a 'custom-setup' section with 'setup-depends'")
+    logChange $ Change True
+                       ("added a 'custom-setup' section with 'setup-depends'")
                        "[implicit]" (intercalate ", " (map display setupDependsA))
 
 checkSetupBuildInfo (Just (SetupBuildInfo setupDependsA _internalA))
                     (Just (SetupBuildInfo setupDependsB _internalB)) = do
     forM_ removed $ \dep ->
-      logChange $ Change ("'setup-depends' dependencies") (display dep) ""
+      logChange $ Change True ("'setup-depends' dependencies") (display dep) ""
     forM_ added $ \dep ->
-      logChange $ Change ("'setup-depends' dependencies") "" (display dep)
+      logChange $ Change True ("'setup-depends' dependencies") "" (display dep)
     forM_ changed $ \(pkgn, (verA, verB)) ->
         changesOk ("the 'setup-depends' dependency on " ++ display pkgn)
                   display verA verB
@@ -431,26 +444,29 @@ checkBuildInfo componentName biA biB = do
               (biA { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [], buildTools = [] })
               (biB { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [], buildTools = [] })
 
-changesOk :: Eq a => String -> (a -> String) -> Check a
-changesOk what render a b
+changesOk' :: Eq a => Bool -> String -> (a -> String) -> Check a
+changesOk' rel what render a b
   | a == b    = return ()
-  | otherwise = logChange (Change what (render a) (render b))
+  | otherwise = logChange (Change rel what (render a) (render b))
+
+changesOk :: Eq a => String -> (a -> String) -> Check a
+changesOk = changesOk' True
 
 changesOkList :: (String -> (a -> String) -> Check a)
               -> String -> (a -> String) -> Check [a]
 changesOkList changesOkElem what render = go
   where
     go []     []     = return ()
-    go (a:_)  []     = logChange (Change ("removed " ++ what) (render a) "")
-    go []     (b:_)  = logChange (Change ("added "   ++ what) "" (render b))
+    go (a:_)  []     = logChange (Change True ("removed " ++ what) (render a) "")
+    go []     (b:_)  = logChange (Change True ("added "   ++ what) "" (render b))
     go (a:as) (b:bs) = changesOkElem what render a b >> go as bs
 
 changesOkSet :: Ord a => String -> (a -> String) -> Check (Set.Set a)
 changesOkSet what render old new = do
     unless (Set.null removed) $
-        logChange (Change ("removed " ++ what) (renderSet removed) "")
+        logChange (Change True ("removed " ++ what) (renderSet removed) "")
     unless (Set.null added) $
-        logChange (Change ("added " ++ what) "" (renderSet added))
+        logChange (Change True ("added " ++ what) "" (renderSet added))
     return ()
   where
     added   = new Set.\\ old
