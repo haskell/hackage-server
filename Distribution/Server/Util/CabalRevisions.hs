@@ -20,6 +20,7 @@ module Distribution.Server.Util.CabalRevisions
 import Distribution.Package
 import Distribution.Text (display)
 import Distribution.Version
+import Distribution.Compiler (CompilerFlavor)
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Parse
          (parsePackageDescription, sourceRepoFieldDescrs)
@@ -30,7 +31,7 @@ import Distribution.ParseUtils (FieldDescr(..))
 import Distribution.Text (Text(..))
 import Distribution.Simple.LocalBuildInfo (ComponentName(..) ,showComponentName)
 import Text.PrettyPrint as Doc
-         (nest, empty, isEmpty, (<+>), colon, (<>), text, vcat, ($+$), Doc)
+         (nest, empty, isEmpty, (<+>), colon, (<>), text, vcat, ($+$), Doc, hsep, punctuate)
 
 import Data.List
 import qualified Data.Char as Char
@@ -205,8 +206,7 @@ checkPackageDescriptions
   changesOk "author"     id authorA authorB
   checkSame "The stability field is unused, don't bother changing it."
             stabilityA stabilityB
-  checkSame "The tested-with field is unused, don't bother changing it."
-            testedWithA testedWithB
+  changesOk "tested-with" (show . ppTestedWith) testedWithA testedWithB
   changesOk "homepage" id homepageA homepageB
   checkSame "The package-url field is unused, don't bother changing it."
             pkgUrlA pkgUrlB
@@ -479,6 +479,11 @@ checkMaybe :: String -> Check a -> Check (Maybe a)
 checkMaybe _   _     Nothing  Nothing  = return ()
 checkMaybe _   check (Just x) (Just y) = check x y
 checkMaybe msg _     _        _        = fail msg
+
+ppTestedWith :: [(CompilerFlavor, VersionRange)] -> Doc
+ppTestedWith = hsep . punctuate colon . map (uncurry ppPair)
+  where
+    ppPair compiler vr = text (display compiler) <+> text (display vr)
 
 --TODO: export from Cabal
 ppSourceRepo :: SourceRepo -> Doc
