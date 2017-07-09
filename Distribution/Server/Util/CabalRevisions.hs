@@ -302,7 +302,7 @@ checkCondTree checkElem (componentName, condNodeA)
   where
     checkCondNode (CondNode dataA constraintsA componentsA)
                   (CondNode dataB constraintsB componentsB) = do
-      checkDependencies componentName PackageDependency constraintsA constraintsB
+      checkDependencies componentName LibDependency constraintsA constraintsB
       checkList "Cannot add or remove 'if' conditionals"
                 checkComponent componentsA componentsB
       checkElem componentName dataA dataB
@@ -316,8 +316,9 @@ checkCondTree checkElem (componentName, condNodeA)
                  checkCondNode thenPartA thenPartB
 
 data DependencyType
-    = PackageDependency     -- ^ build-depends
+    = LibDependency         -- ^ build-depends
     | BuildToolDependency   -- ^ build-tools
+    | PkgConfigDependency   -- ^ pkgconfig-depends
   deriving (Eq)
 
 checkDependencies :: ComponentName -> DependencyType -> Check [Dependency]
@@ -342,11 +343,13 @@ checkDependencies componentName s ds1 ds2 = do
     cnameStr = showComponentName componentName
 
     depKind = case s of
-      PackageDependency   -> "library dependency"
+      LibDependency       -> "library dependency"
       BuildToolDependency -> "tool dependency"
+      PkgConfigDependency -> "pkg-config dependency"
 
-    additionWhitelist
-        | s == PackageDependency =
+    additionWhitelist :: [PackageName]
+    additionWhitelist = case s of
+        LibDependency ->
     -- Special case: there are some pretty weird broken packages out there, see
     --   https://github.com/haskell/hackage-server/issues/303
     -- which need us to add a new dep on `base`
@@ -371,8 +374,21 @@ checkDependencies componentName s ds1 ds2 = do
     --
             , PackageName "network-uri-flag"
             ]
-    -- No whitelist for build-tools
-        | otherwise = []
+
+        BuildToolDependency ->
+    -- list of trusted tools cabal supports w/o explicit build-tools
+    -- c.f. Distribution.Simple.BuildToolDepends.desugarBuildTool
+    -- and 'knownSuffixHandlers' in "Distribution.Client.Init.Heuristics"
+            [ PackageName "alex"
+            , PackageName "c2hs"
+            , PackageName "cpphs"
+            , PackageName "greencard"
+            , PackageName "happy"
+            , PackageName "hsc2hs"
+            ]
+
+    -- No whitelist for pkg-config
+        PkgConfigDependency -> []
 
 -- The result tuple represents the 3 canonicalised dependency
 -- (removed deps (old ranges), retained deps (old & new ranges), added deps (new ranges))
@@ -458,11 +474,12 @@ checkBuildInfo componentName biA biB = do
               (Set.fromList $ otherExtensions biA) (Set.fromList $ otherExtensions biB)
 
     checkDependencies componentName BuildToolDependency (buildTools biA) (buildTools biB)
+    checkDependencies componentName PkgConfigDependency (pkgconfigDepends biA) (pkgconfigDepends biB)
 
     checkSame "Cannot change build information \
               \(just the dependency version constraints)"
-              (biA { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [], buildTools = [] })
-              (biB { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [], buildTools = [] })
+              (biA { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [], buildTools = [], pkgconfigDepends = [] })
+              (biB { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [], buildTools = [], pkgconfigDepends = [] })
 
 changesOk' :: Eq a => Severity -> String -> (a -> String) -> Check a
 changesOk' rel what render a b
