@@ -145,7 +145,8 @@ diffCabalRevisionsByteString oldRevision newRevision =
 
 -- orphan
 instance ToSElem Change where
-  toSElem (Change change from to) =
+  toSElem (Change severity change from to) =
     toSElem (Map.fromList [("what", change)
+                          ,("severity", show severity)
                           ,("from", from)
                           ,("to", to)])
