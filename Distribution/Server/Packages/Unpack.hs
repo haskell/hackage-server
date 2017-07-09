@@ -186,11 +186,19 @@ basicChecks pkgid tarIndex = do
   when (packageVersion pkgDesc /= packageVersion pkgid) $
     throwError "Package version in the cabal file does not match the file name."
 
+  -- check for reserved/magic package names
+  when (packageName pkgid `elem` reservedPkgNames) $
+    throwError "Package name is reserved."
+
   return (pkgDesc, warnings, cabalEntry)
 
   where
     showError (Nothing, msg) = msg
     showError (Just n, msg) = "line " ++ show n ++ ": " ++ msg
+
+    -- these names are reserved for the time being, as they have
+    -- special meaning in cabal's UI
+    reservedPkgNames = map PackageName ["all","any","none","setup","lib","exe","test"]
 
 -- | The issue is that browsers can upload the file name using either unix
 -- or windows convention, so we need to take the basename using either
