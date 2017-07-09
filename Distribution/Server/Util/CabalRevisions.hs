@@ -20,6 +20,7 @@ module Distribution.Server.Util.CabalRevisions
 import Distribution.Package
 import Distribution.Text (display)
 import Distribution.Version
+import Distribution.Compiler (CompilerFlavor)
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Parse
          (parsePackageDescription, sourceRepoFieldDescrs)
@@ -30,9 +31,10 @@ import Distribution.ParseUtils (FieldDescr(..))
 import Distribution.Text (Text(..))
 import Distribution.Simple.LocalBuildInfo (ComponentName(..) ,showComponentName)
 import Text.PrettyPrint as Doc
-         (nest, empty, isEmpty, (<+>), colon, (<>), text, vcat, ($+$), Doc)
+         (nest, empty, isEmpty, (<+>), colon, (<>), text, vcat, ($+$), Doc, hsep, punctuate)
 
 import Data.List
+import qualified Data.Semigroup as S
 import qualified Data.Char as Char
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.Map.Strict as Map
@@ -41,6 +43,7 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Except  (ExceptT, runExceptT, throwError)
 import Control.Monad.Writer (MonadWriter(..), Writer, runWriter)
+import Data.Foldable (foldMap)
 
 import qualified Data.ByteString.Lazy.Char8 as BS
 
@@ -59,15 +62,40 @@ newtype CheckM a = CheckM { unCheckM :: ExceptT String (Writer [Change]) a }
 runCheck :: CheckM () -> Either String [Change]
 runCheck c = case runWriter . runExceptT . unCheckM $ c of
                (Left err, _      ) -> Left err
-               (Right (), changes) -> Right changes
+               (Right (), changes)
+                 | foldMap changeSeverity changes /= Trivial -> Right changes
+                 | otherwise ->
+                   Left "Only trivial changes, don't bother making this revision."
+
+changeSeverity :: Change -> Severity
+changeSeverity (Change s _ _ _) = s
 
 instance Monad CheckM where
   return         = Control.Applicative.pure
   CheckM m >>= f = CheckM (m >>= unCheckM . f)
   fail           = CheckM . throwError
 
-data Change = Change String String String -- what, from, to
+-- | If we have only 'Trivial' changes, then there is no point to make
+-- a revision. In other words for changes to be accepted, there should
+-- be at least one 'Normal' change.
+data Severity
+    = Normal
+    | Trivial
+  deriving (Eq, Ord, Show, Enum, Bounded)
+
+instance S.Semigroup Severity where
+    Normal  <> _ = Normal
+    Trivial <> x = x
+
+-- | "Max" monoid.
+instance S.Monoid Severity where
+    mempty = Trivial
+    mappend = (S.<>)
+
+data Change = Change Severity String String String -- severity, what, from, to
   deriving Show
+
+
 
 logChange :: Change -> CheckM ()
 logChange change = CheckM (tell [change])
@@ -205,8 +233,7 @@ checkPackageDescriptions
   changesOk "author"     id authorA authorB
   checkSame "The stability field is unused, don't bother changing it."
             stabilityA stabilityB
-  checkSame "The tested-with field is unused, don't bother changing it."
-            testedWithA testedWithB
+  changesOk' Trivial "tested-with" (show . ppTestedWith) testedWithA testedWithB
   changesOk "homepage" id homepageA homepageB
   checkSame "The package-url field is unused, don't bother changing it."
             pkgUrlA pkgUrlB
@@ -301,7 +328,7 @@ checkDependencies componentName s ds1 ds2 = do
 
     forM_ added $ \(dep@(Dependency pn _)) ->
         if pn `elem` additionWhitelist
-           then logChange (Change ("added dependency on") "" (display dep))
+           then logChange (Change Normal ("added dependency on") "" (display dep))
            else fail ("Cannot add new dependency on " ++ display pn ++
                       " in " ++ showComponentName componentName ++ " component")
 
@@ -368,15 +395,16 @@ checkSetupBuildInfo (Just _) Nothing =
     fail "Cannot remove a custom-setup section"
 
 checkSetupBuildInfo Nothing (Just (SetupBuildInfo setupDependsA _internalA)) =
-    logChange $ Change ("added a 'custom-setup' section with 'setup-depends'")
+    logChange $ Change Normal
+                       ("added a 'custom-setup' section with 'setup-depends'")
                        "[implicit]" (intercalate ", " (map display setupDependsA))
 
 checkSetupBuildInfo (Just (SetupBuildInfo setupDependsA _internalA))
                     (Just (SetupBuildInfo setupDependsB _internalB)) = do
     forM_ removed $ \dep ->
-      logChange $ Change ("'setup-depends' dependencies") (display dep) ""
+      logChange $ Change Normal ("'setup-depends' dependencies") (display dep) ""
     forM_ added $ \dep ->
-      logChange $ Change ("'setup-depends' dependencies") "" (display dep)
+      logChange $ Change Normal ("'setup-depends' dependencies") "" (display dep)
     forM_ changed $ \(pkgn, (verA, verB)) ->
         changesOk ("the 'setup-depends' dependency on " ++ display pkgn)
                   display verA verB
@@ -431,26 +459,29 @@ checkBuildInfo componentName biA biB = do
               (biA { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [], buildTools = [] })
               (biB { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [], buildTools = [] })
 
-changesOk :: Eq a => String -> (a -> String) -> Check a
-changesOk what render a b
+changesOk' :: Eq a => Severity -> String -> (a -> String) -> Check a
+changesOk' rel what render a b
   | a == b    = return ()
-  | otherwise = logChange (Change what (render a) (render b))
+  | otherwise = logChange (Change rel what (render a) (render b))
+
+changesOk :: Eq a => String -> (a -> String) -> Check a
+changesOk = changesOk' Normal
 
 changesOkList :: (String -> (a -> String) -> Check a)
               -> String -> (a -> String) -> Check [a]
 changesOkList changesOkElem what render = go
   where
     go []     []     = return ()
-    go (a:_)  []     = logChange (Change ("removed " ++ what) (render a) "")
-    go []     (b:_)  = logChange (Change ("added "   ++ what) "" (render b))
+    go (a:_)  []     = logChange (Change Normal ("removed " ++ what) (render a) "")
+    go []     (b:_)  = logChange (Change Normal ("added "   ++ what) "" (render b))
     go (a:as) (b:bs) = changesOkElem what render a b >> go as bs
 
 changesOkSet :: Ord a => String -> (a -> String) -> Check (Set.Set a)
 changesOkSet what render old new = do
     unless (Set.null removed) $
-        logChange (Change ("removed " ++ what) (renderSet removed) "")
+        logChange (Change Normal ("removed " ++ what) (renderSet removed) "")
     unless (Set.null added) $
-        logChange (Change ("added " ++ what) "" (renderSet added))
+        logChange (Change Normal ("added " ++ what) "" (renderSet added))
     return ()
   where
     added   = new Set.\\ old
@@ -479,6 +510,11 @@ checkMaybe :: String -> Check a -> Check (Maybe a)
 checkMaybe _   _     Nothing  Nothing  = return ()
 checkMaybe _   check (Just x) (Just y) = check x y
 checkMaybe msg _     _        _        = fail msg
+
+ppTestedWith :: [(CompilerFlavor, VersionRange)] -> Doc
+ppTestedWith = hsep . punctuate colon . map (uncurry ppPair)
+  where
+    ppPair compiler vr = text (display compiler) <+> text (display vr)
 
 --TODO: export from Cabal
 ppSourceRepo :: SourceRepo -> Doc
