@@ -43,6 +43,7 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Except  (ExceptT, runExceptT, throwError)
 import Control.Monad.Writer (MonadWriter(..), Writer, runWriter)
+import Data.Foldable (foldMap)
 
 import qualified Data.ByteString.Lazy.Char8 as BS
 
@@ -87,7 +88,7 @@ instance S.Semigroup Severity where
     Trivial <> x = x
 
 -- | "Max" monoid.
-instance Monoid Severity where
+instance S.Monoid Severity where
     mempty = Trivial
     mappend = (S.<>)
 
