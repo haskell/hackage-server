@@ -323,23 +323,28 @@ data DependencyType
 checkDependencies :: ComponentName -> DependencyType -> Check [Dependency]
 checkDependencies componentName s ds1 ds2 = do
     forM_ removed $ \(Dependency pn _) -> do
-        fail ("Cannot remove existing dependency on " ++ display pn ++
-              " in " ++ showComponentName componentName ++ " component")
+        fail (unwords [ "Cannot remove existing", depKind, "on", display'' pn
+                      , "in", cnameStr, " component"])
 
     forM_ added $ \(dep@(Dependency pn _)) ->
         if pn `elem` additionWhitelist
-           then logChange (Change Normal ("added dependency on") "" (display dep))
-           else fail ("Cannot add new dependency on " ++ display pn ++
-                      " in " ++ showComponentName componentName ++ " component")
+           then logChange (Change Normal (unwords ["added the", cnameStr, "component's"
+                                                  , depKind, "on"]) "" (display dep))
+           else fail (unwords [ "Cannot add new", depKind, "on", display'' pn
+                              , "in", cnameStr, "component"])
 
     forM_ changed $ \(pkgn, (verA, verB)) -> do
-        changesOk ("the " ++ showComponentName componentName ++
-                   " component's dependency on " ++ display pkgn)
+        changesOk (unwords ["the", cnameStr, "component's", depKind, "on", display'' pkgn])
                    display verA verB
   where
     (removed, changed, added) = computeCanonDepChange ds1 ds2
 
-    additionWhitelist :: [PackageName]
+    cnameStr = showComponentName componentName
+
+    depKind = case s of
+      PackageDependency   -> "library dependency"
+      BuildToolDependency -> "tool dependency"
+
     additionWhitelist
         | s == PackageDependency =
     -- Special case: there are some pretty weird broken packages out there, see
@@ -392,7 +397,7 @@ computeCanonDepChange depsA depsB
 checkSetupBuildInfo :: Check (Maybe SetupBuildInfo)
 checkSetupBuildInfo Nothing  Nothing = return ()
 checkSetupBuildInfo (Just _) Nothing =
-    fail "Cannot remove a custom-setup section"
+    fail "Cannot remove a 'custom-setup' section"
 
 checkSetupBuildInfo Nothing (Just (SetupBuildInfo setupDependsA _internalA)) =
     logChange $ Change Normal
@@ -402,11 +407,11 @@ checkSetupBuildInfo Nothing (Just (SetupBuildInfo setupDependsA _internalA)) =
 checkSetupBuildInfo (Just (SetupBuildInfo setupDependsA _internalA))
                     (Just (SetupBuildInfo setupDependsB _internalB)) = do
     forM_ removed $ \dep ->
-      logChange $ Change Normal ("'setup-depends' dependencies") (display dep) ""
+      logChange $ Change Normal ("removed 'custom-setup' dependency on") (display dep) ""
     forM_ added $ \dep ->
-      logChange $ Change Normal ("'setup-depends' dependencies") "" (display dep)
+      logChange $ Change Normal ("added 'custom-setup' dependency on") "" (display dep)
     forM_ changed $ \(pkgn, (verA, verB)) ->
-        changesOk ("the 'setup-depends' dependency on " ++ display pkgn)
+        changesOk ("the 'custom-setup' dependency on " ++ display'' pkgn)
                   display verA verB
   where
     (removed, changed, added) =
@@ -487,6 +492,11 @@ changesOkSet what render old new = do
     added   = new Set.\\ old
     removed = old Set.\\ new
     renderSet = intercalate ", " . map render . Set.toList
+
+
+-- | Single-quote-wrapping 'display'
+display'' :: Text a => a -> String
+display'' x = "'" ++ display x ++ "'"
 
 checkSame :: Eq a => String -> Check a
 checkSame msg x y | x == y    = return ()
