@@ -20,6 +20,7 @@ module Distribution.Server.Util.CabalRevisions
 import Distribution.Package
 import Distribution.Text (display)
 import Distribution.Version
+import Distribution.Compiler (CompilerFlavor)
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Parse
          (parsePackageDescription, sourceRepoFieldDescrs)
@@ -30,16 +31,19 @@ import Distribution.ParseUtils (FieldDescr(..))
 import Distribution.Text (Text(..))
 import Distribution.Simple.LocalBuildInfo (ComponentName(..) ,showComponentName)
 import Text.PrettyPrint as Doc
-         (nest, empty, isEmpty, (<+>), colon, (<>), text, vcat, ($+$), Doc)
+         (nest, empty, isEmpty, (<+>), colon, (<>), text, vcat, ($+$), Doc, hsep, punctuate)
 
 import Data.List
+import qualified Data.Semigroup as S
 import qualified Data.Char as Char
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Except  (ExceptT, runExceptT, throwError)
 import Control.Monad.Writer (MonadWriter(..), Writer, runWriter)
+import Data.Foldable (foldMap)
 
 import qualified Data.ByteString.Lazy.Char8 as BS
 
@@ -58,15 +62,40 @@ newtype CheckM a = CheckM { unCheckM :: ExceptT String (Writer [Change]) a }
 runCheck :: CheckM () -> Either String [Change]
 runCheck c = case runWriter . runExceptT . unCheckM $ c of
                (Left err, _      ) -> Left err
-               (Right (), changes) -> Right changes
+               (Right (), changes)
+                 | foldMap changeSeverity changes /= Trivial -> Right changes
+                 | otherwise ->
+                   Left "Only trivial changes, don't bother making this revision."
+
+changeSeverity :: Change -> Severity
+changeSeverity (Change s _ _ _) = s
 
 instance Monad CheckM where
   return         = Control.Applicative.pure
   CheckM m >>= f = CheckM (m >>= unCheckM . f)
   fail           = CheckM . throwError
 
-data Change = Change String String String -- what, from, to
+-- | If we have only 'Trivial' changes, then there is no point to make
+-- a revision. In other words for changes to be accepted, there should
+-- be at least one 'Normal' change.
+data Severity
+    = Normal
+    | Trivial
+  deriving (Eq, Ord, Show, Enum, Bounded)
+
+instance S.Semigroup Severity where
+    Normal  <> _ = Normal
+    Trivial <> x = x
+
+-- | "Max" monoid.
+instance S.Monoid Severity where
+    mempty = Trivial
+    mappend = (S.<>)
+
+data Change = Change Severity String String String -- severity, what, from, to
   deriving Show
+
+
 
 logChange :: Change -> CheckM ()
 logChange change = CheckM (tell [change])
@@ -204,8 +233,7 @@ checkPackageDescriptions
   changesOk "author"     id authorA authorB
   checkSame "The stability field is unused, don't bother changing it."
             stabilityA stabilityB
-  checkSame "The tested-with field is unused, don't bother changing it."
-            testedWithA testedWithB
+  changesOk' Trivial "tested-with" (show . ppTestedWith) testedWithA testedWithB
   changesOk "homepage" id homepageA homepageB
   checkSame "The package-url field is unused, don't bother changing it."
             pkgUrlA pkgUrlB
@@ -274,7 +302,7 @@ checkCondTree checkElem (componentName, condNodeA)
   where
     checkCondNode (CondNode dataA constraintsA componentsA)
                   (CondNode dataB constraintsB componentsB) = do
-      checkDependencies componentName PackageDependency constraintsA constraintsB
+      checkDependencies componentName LibDependency constraintsA constraintsB
       checkList "Cannot add or remove 'if' conditionals"
                 checkComponent componentsA componentsB
       checkElem componentName dataA dataB
@@ -288,32 +316,40 @@ checkCondTree checkElem (componentName, condNodeA)
                  checkCondNode thenPartA thenPartB
 
 data DependencyType
-    = PackageDependency     -- ^ build-depends
+    = LibDependency         -- ^ build-depends
     | BuildToolDependency   -- ^ build-tools
+    | PkgConfigDependency   -- ^ pkgconfig-depends
   deriving (Eq)
 
 checkDependencies :: ComponentName -> DependencyType -> Check [Dependency]
 checkDependencies componentName s ds1 ds2 = do
     forM_ removed $ \(Dependency pn _) -> do
-        fail ("Cannot remove existing dependency on " ++ display pn ++
-              " in " ++ showComponentName componentName ++ " component")
+        fail (unwords [ "Cannot remove existing", depKind, "on", display'' pn
+                      , "in", cnameStr, " component"])
 
     forM_ added $ \(dep@(Dependency pn _)) ->
         if pn `elem` additionWhitelist
-           then logChange (Change ("added dependency on") (display dep) "")
-           else fail ("Cannot add new dependency on " ++ display pn ++
-                      " in " ++ showComponentName componentName ++ " component")
+           then logChange (Change Normal (unwords ["added the", cnameStr, "component's"
+                                                  , depKind, "on"]) "" (display dep))
+           else fail (unwords [ "Cannot add new", depKind, "on", display'' pn
+                              , "in", cnameStr, "component"])
 
     forM_ changed $ \(pkgn, (verA, verB)) -> do
-        changesOk ("the " ++ showComponentName componentName ++
-                   " component's dependency on " ++ display pkgn)
+        changesOk (unwords ["the", cnameStr, "component's", depKind, "on", display'' pkgn])
                    display verA verB
   where
     (removed, changed, added) = computeCanonDepChange ds1 ds2
 
+    cnameStr = showComponentName componentName
+
+    depKind = case s of
+      LibDependency       -> "library dependency"
+      BuildToolDependency -> "tool dependency"
+      PkgConfigDependency -> "pkg-config dependency"
+
     additionWhitelist :: [PackageName]
-    additionWhitelist
-        | s == PackageDependency =
+    additionWhitelist = case s of
+        LibDependency ->
     -- Special case: there are some pretty weird broken packages out there, see
     --   https://github.com/haskell/hackage-server/issues/303
     -- which need us to add a new dep on `base`
@@ -338,8 +374,21 @@ checkDependencies componentName s ds1 ds2 = do
     --
             , PackageName "network-uri-flag"
             ]
-    -- No whitelist for build-tools
-        | otherwise = []
+
+        BuildToolDependency ->
+    -- list of trusted tools cabal supports w/o explicit build-tools
+    -- c.f. Distribution.Simple.BuildToolDepends.desugarBuildTool
+    -- and 'knownSuffixHandlers' in "Distribution.Client.Init.Heuristics"
+            [ PackageName "alex"
+            , PackageName "c2hs"
+            , PackageName "cpphs"
+            , PackageName "greencard"
+            , PackageName "happy"
+            , PackageName "hsc2hs"
+            ]
+
+    -- No whitelist for pkg-config
+        PkgConfigDependency -> []
 
 -- The result tuple represents the 3 canonicalised dependency
 -- (removed deps (old ranges), retained deps (old & new ranges), added deps (new ranges))
@@ -364,20 +413,21 @@ computeCanonDepChange depsA depsB
 checkSetupBuildInfo :: Check (Maybe SetupBuildInfo)
 checkSetupBuildInfo Nothing  Nothing = return ()
 checkSetupBuildInfo (Just _) Nothing =
-    fail "Cannot remove a custom-setup section"
+    fail "Cannot remove a 'custom-setup' section"
 
 checkSetupBuildInfo Nothing (Just (SetupBuildInfo setupDependsA _internalA)) =
-    logChange $ Change ("added a 'custom-setup' section with 'setup-depends'")
-                       (intercalate ", " (map display setupDependsA)) ""
+    logChange $ Change Normal
+                       ("added a 'custom-setup' section with 'setup-depends'")
+                       "[implicit]" (intercalate ", " (map display setupDependsA))
 
 checkSetupBuildInfo (Just (SetupBuildInfo setupDependsA _internalA))
                     (Just (SetupBuildInfo setupDependsB _internalB)) = do
     forM_ removed $ \dep ->
-      logChange $ Change ("'setup-depends' dependencies") (display dep) ""
+      logChange $ Change Normal ("removed 'custom-setup' dependency on") (display dep) ""
     forM_ added $ \dep ->
-      logChange $ Change ("'setup-depends' dependencies") "" (display dep)
+      logChange $ Change Normal ("added 'custom-setup' dependency on") "" (display dep)
     forM_ changed $ \(pkgn, (verA, verB)) ->
-        changesOk ("the 'setup-depends' dependency on " ++ display pkgn)
+        changesOk ("the 'custom-setup' dependency on " ++ display'' pkgn)
                   display verA verB
   where
     (removed, changed, added) =
@@ -419,31 +469,51 @@ checkBenchmark componentName
 
 checkBuildInfo :: ComponentName -> Check BuildInfo
 checkBuildInfo componentName biA biB = do
-    changesOkList changesOk
-              ("'other-extensions' in " ++ showComponentName componentName ++ " component")
+    changesOkSet ("'other-extensions' in " ++ showComponentName componentName ++ " component")
               display
-              (otherExtensions biA) (otherExtensions biB)
+              (Set.fromList $ otherExtensions biA) (Set.fromList $ otherExtensions biB)
 
     checkDependencies componentName BuildToolDependency (buildTools biA) (buildTools biB)
+    checkDependencies componentName PkgConfigDependency (pkgconfigDepends biA) (pkgconfigDepends biB)
 
     checkSame "Cannot change build information \
               \(just the dependency version constraints)"
-              (biA { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [], buildTools = [] })
-              (biB { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [], buildTools = [] })
+              (biA { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [], buildTools = [], pkgconfigDepends = [] })
+              (biB { targetBuildDepends = [], targetBuildRenaming = Map.empty, otherExtensions = [], buildTools = [], pkgconfigDepends = [] })
+
+changesOk' :: Eq a => Severity -> String -> (a -> String) -> Check a
+changesOk' rel what render a b
+  | a == b    = return ()
+  | otherwise = logChange (Change rel what (render a) (render b))
 
 changesOk :: Eq a => String -> (a -> String) -> Check a
-changesOk what render a b
-  | a == b    = return ()
-  | otherwise = logChange (Change what (render a) (render b))
+changesOk = changesOk' Normal
 
 changesOkList :: (String -> (a -> String) -> Check a)
               -> String -> (a -> String) -> Check [a]
 changesOkList changesOkElem what render = go
   where
     go []     []     = return ()
-    go (a:_)  []     = logChange (Change ("removed " ++ what) (render a) "")
-    go []     (b:_)  = logChange (Change ("added "   ++ what) "" (render b))
+    go (a:_)  []     = logChange (Change Normal ("removed " ++ what) (render a) "")
+    go []     (b:_)  = logChange (Change Normal ("added "   ++ what) "" (render b))
     go (a:as) (b:bs) = changesOkElem what render a b >> go as bs
+
+changesOkSet :: Ord a => String -> (a -> String) -> Check (Set.Set a)
+changesOkSet what render old new = do
+    unless (Set.null removed) $
+        logChange (Change Normal ("removed " ++ what) (renderSet removed) "")
+    unless (Set.null added) $
+        logChange (Change Normal ("added " ++ what) "" (renderSet added))
+    return ()
+  where
+    added   = new Set.\\ old
+    removed = old Set.\\ new
+    renderSet = intercalate ", " . map render . Set.toList
+
+
+-- | Single-quote-wrapping 'display'
+display'' :: Text a => a -> String
+display'' x = "'" ++ display x ++ "'"
 
 checkSame :: Eq a => String -> Check a
 checkSame msg x y | x == y    = return ()
@@ -467,6 +537,11 @@ checkMaybe :: String -> Check a -> Check (Maybe a)
 checkMaybe _   _     Nothing  Nothing  = return ()
 checkMaybe _   check (Just x) (Just y) = check x y
 checkMaybe msg _     _        _        = fail msg
+
+ppTestedWith :: [(CompilerFlavor, VersionRange)] -> Doc
+ppTestedWith = hsep . punctuate colon . map (uncurry ppPair)
+  where
+    ppPair compiler vr = text (display compiler) <+> text (display vr)
 
 --TODO: export from Cabal
 ppSourceRepo :: SourceRepo -> Doc

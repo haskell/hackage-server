@@ -14,7 +14,7 @@ $hackagePageHeader()$
 
 <h3>Authentication Tokens</h3>
 <p>
-  You can register API authentication token to use them to for example have services like continouos integration upload packages on your behalf without providing them your username and/or password.
+  You can register API authentication token to use them to for example have services like continuous integration upload packages on your behalf without providing them your username and/or password.
 </p>
 
 <p>

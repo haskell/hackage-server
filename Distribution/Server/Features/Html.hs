@@ -646,6 +646,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
                 [ templateVal "number" revision
                 , templateVal "user" (display uname)
                 , templateVal "time" (formatTime defaultTimeLocale "%c" utime)
+                , templateVal "posixtime" (formatTime defaultTimeLocale "%s" utime)
                 , templateVal "changes" changes
                 ]
 

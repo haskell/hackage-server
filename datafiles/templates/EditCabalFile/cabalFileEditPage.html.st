@@ -34,9 +34,9 @@ $endif$
 $if(first(changes))$
 <h2>Changes</h2>
 <ul>
-$changes:{change|<li><p>Changed $change.what$
-                 from <pre>$change.from$</pre>
-                 to <pre>$change.to$</pre></li>}$
+  $changes:{change|<li><p>$change.what$
+                         $if(change.from)$ $if(change.to)$from$endif$ <pre>$change.from$</pre>$endif$
+                         $if(change.to)$ $if(change.from)$to$endif$ <pre>$change.to$</pre>$endif$</p></li>}$
 </ul>
 $elseif(publish)$
 <h2>Errors</h2>
@@ -53,10 +53,11 @@ $endif$
 either to restrict or relax them. The goal in editing the constraints should
 always be to make them reflect reality.
 <ul>
-<li><p>If the package fails to build against certain versions of a dependency
+<li><p>If the package is incompatible with or fails to build against certain versions of a dependency
 then constrain the version.
-<li><p>If the package builds against <em>and work correctly</em> with a newer
+<li><p>If the package builds against <em>and works correctly (i.e. is compatible)</em> with a newer
 version of a dependency then it is ok to relax the constraint
+<li><p>See also the Hackage Trustee's <a href="https://github.com/haskell-infra/hackage-trustees/blob/master/cookbook.md#best-practice-for-managing-meta-data">recommendations for managing meta-data</a></li>
 <ul>
 
 </div>

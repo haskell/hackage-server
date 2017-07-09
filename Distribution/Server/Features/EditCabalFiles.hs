@@ -21,6 +21,7 @@ import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.Server.Util.CabalRevisions
          (Change(..), diffCabalRevisions, insertRevisionField)
 import Text.StringTemplate (ToSElem(..))
+import Text.StringTemplate.Classes (SElem(SM))
 
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.Map as Map
@@ -145,7 +146,15 @@ diffCabalRevisionsByteString oldRevision newRevision =
 
 -- orphan
 instance ToSElem Change where
-  toSElem (Change change from to) =
-    toSElem (Map.fromList [("what", change)
-                          ,("from", from)
-                          ,("to", to)])
+  toSElem (Change severity what0 from to) = SM . Map.fromList $
+        [ ("what",     toSElem what)
+        , ("severity", toSElem (show severity))
+        ] ++
+        [ ("from",     toSElem from)   | not (null from) ] ++
+        [ ("to",       toSElem to)     | not (null to) ]
+    where
+      -- TODO/FIXME: stringly hack
+      what = case what0 of
+        ('a':'d':'d':'e':'d':_)         -> 'A' : tail what0
+        ('r':'e':'m':'o':'v':'e':'d':_) -> 'R' : tail what0
+        _                               -> "Changed " ++ what0

@@ -356,7 +356,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
                      ++ "In extraordinary circumstances, contact the administrators."
         normVerExists = "A version of the package has already been uploaded that differs only in "
                      ++ "trailing zeros.\n\nAs a matter of policy, to avoid confusion, we no "
-                     ++ "longer not allow uploading different package versions that differ only "
+                     ++ "longer allow uploading different package versions that differ only "
                      ++ "in trailing zeros. For example if version 1.2.0 has been uploaded then "
                      ++ "version 1.2 cannot subsequently be upload. "
                      ++ "If this is a major problem please contact the administrators."
