@@ -1,5 +1,5 @@
-{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, FlexibleContexts, CPP,
-             TypeFamilies, TemplateHaskell #-}
+{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, FlexibleContexts, BangPatterns,
+             TypeFamilies #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -18,10 +18,11 @@ module Distribution.Server.Framework.Instances (
 import Distribution.Text
 import Distribution.Server.Framework.MemSize
 
-import Distribution.Package  (PackageIdentifier(..), PackageName(..))
+import Distribution.Package  (PackageIdentifier(..), PackageName)
 import Distribution.Compiler (CompilerFlavor(..), CompilerId(..))
 import Distribution.System   (OS(..), Arch(..))
-import Distribution.PackageDescription (FlagName(..))
+import Distribution.Types.GenericPackageDescription (FlagName, mkFlagName, unFlagName)
+import Distribution.Types.PackageName
 import Distribution.Version
 
 import Data.Time (Day(..), DiffTime, UTCTime(..))
@@ -41,27 +42,48 @@ import Data.List (stripPrefix)
 
 import qualified Text.PrettyPrint as PP (text)
 import Distribution.Compat.ReadP (readS_to_P)
-#if !(MIN_VERSION_bytestring(0,10,0))
-import qualified Data.ByteString as SBS
-import qualified Data.ByteString.Lazy as LBS
-#endif
-
-
-deriveSafeCopy 2 'extension ''PackageName
-deriveSafeCopy 2 'extension ''PackageIdentifier
 
 -- These types are not defined in this package, so we cannot easily control
 -- changing these instances when the types change. So it's not safe to derive
 -- them (except for the really stable ones).
 
+-- deriveSafeCopy 2 'extension ''PackageName
+instance SafeCopy PackageName where
+    version   = 2
+    errorTypeName _ = "PackageName"
+    kind      = extension
+    putCopy v = contain $ safePut (unPackageName v)
+    getCopy   = contain $ mkPackageName <$> safeGet
+
+-- deriveSafeCopy 2 'extension ''PackageIdentifier
+instance SafeCopy PackageIdentifier where
+    version = 2
+    errorTypeName _ = "PackageIdentifier"
+    kind = extension
+
+    putCopy (PackageIdentifier pn v) = contain $ do
+        put_pn <- getSafePut
+        put_v  <- getSafePut
+        put_pn (pn :: PackageName)
+        put_v  (v  :: Version)
+
+    getCopy   = contain $ do
+        get_pn <- getSafeGet
+        get_v  <- getSafeGet
+        !pn <- get_pn
+        !v  <- get_v
+        return (PackageIdentifier pn v)
+
 instance SafeCopy Version where
     version = 2
+    errorTypeName _ = "Version"
     kind    = extension
-    putCopy (Version ns _) = contain $ safePut ns
-    getCopy = contain $ (\ns -> Version ns []) <$> safeGet
+    putCopy v = contain $ safePut (versionNumbers v)
+    getCopy = contain $ mkVersion <$> safeGet
 
 instance SafeCopy VersionRange where
     version = 2
+    errorTypeName _ = "VersionRange"
     kind    = extension
     putCopy = contain . foldVersionRange'
                           (putWord8 0)
@@ -71,6 +93,7 @@ instance SafeCopy VersionRange where
                           (\v     -> putWord8 4 >> safePut v)
                           (\v     -> putWord8 5 >> safePut v)
                           (\v _   -> putWord8 6 >> safePut v)
+                          (\v _   -> putWord8 10 >> safePut v) -- since Cabal-2.0
                           (\r1 r2 -> putWord8 7 >> r1 >> r2)
                           (\r1 r2 -> putWord8 8 >> r1 >> r2)
                           (\r     -> putWord8 9 >> r)
@@ -89,9 +112,12 @@ instance SafeCopy VersionRange where
             7 -> unionVersionRanges     <$> getVR <*> getVR
             8 -> intersectVersionRanges <$> getVR <*> getVR
             9 -> VersionRangeParens     <$> getVR
+            10 -> majorBoundVersion     <$> safeGet  -- since Cabal-2.0
             _ -> fail "VersionRange.getCopy: bad tag"
 
 instance SafeCopy OS where
+    errorTypeName _ = "OS"
+
     putCopy (OtherOS s) = contain $ putWord8 0 >> safePut s
     putCopy Linux       = contain $ putWord8 1
     putCopy Windows     = contain $ putWord8 2
@@ -133,6 +159,8 @@ instance SafeCopy OS where
         _  -> fail "SafeCopy OS getCopy: unexpected tag"
 
 instance SafeCopy  Arch where
+    errorTypeName _ = "Arch"
+
     putCopy (OtherArch s) = contain $ putWord8 0 >> safePut s
     putCopy I386          = contain $ putWord8 1
     putCopy X86_64        = contain $ putWord8 2
@@ -174,6 +202,8 @@ instance SafeCopy  Arch where
         _  -> fail "SafeCopy Arch getCopy: unexpected tag"
 
 instance SafeCopy CompilerFlavor where
+    errorTypeName _ = "CompilerFlavor"
+
     putCopy (OtherCompiler s) = contain $ putWord8 0 >> safePut s
     putCopy GHC               = contain $ putWord8 1
     putCopy NHC               = contain $ putWord8 2
@@ -205,9 +235,30 @@ instance SafeCopy CompilerFlavor where
         _  -> fail "SafeCopy CompilerFlavor getCopy: unexpected tag"
 
 
-deriveSafeCopy 0 'base ''CompilerId
-deriveSafeCopy 0 'base ''FlagName
+-- deriveSafeCopy 0 'base ''CompilerId
+instance SafeCopy CompilerId where
+    errorTypeName _ = "CompilerId"
 
+    putCopy (CompilerId cf v) = contain $ do
+        put_cf <- getSafePut
+        put_v  <- getSafePut
+        put_cf (cf :: CompilerFlavor)
+        put_v  (v  :: Version)
+
+    getCopy   = contain $ do
+        get_cf <- getSafeGet
+        get_v  <- getSafeGet
+        !cf <- get_cf
+        !v  <- get_v
+        return (CompilerId cf v)
+
+-- deriveSafeCopy 0 'base ''FlagName
+instance SafeCopy FlagName where
+    version = 0
+    errorTypeName _ = "FlagName"
+    kind = base
+    putCopy v = contain $ safePut (unFlagName v)
+    getCopy = contain $ mkFlagName <$> safeGet
 
 instance FromReqURI PackageIdentifier where
   fromReqURI = simpleParse
@@ -218,32 +269,12 @@ instance FromReqURI PackageName where
 instance FromReqURI Version where
   fromReqURI = simpleParse
 
-
--- rough versions of RNF for these
-#if !(MIN_VERSION_bytestring(0,10,0))
-instance NFData LBS.ByteString where
-    rnf bs = LBS.length bs `seq` ()
-
-instance NFData SBS.ByteString where
-    rnf bs = bs `seq` ()
-#endif
-
 instance NFData Response where
     rnf res@(Response{}) = rnf (rsBody res) `seq` rnf (rsHeaders res)
     rnf _ = ()
 
 instance NFData HeaderPair where
     rnf (HeaderPair a b) = rnf a `seq` rnf b
-
-#if !(MIN_VERSION_deepseq(1,3,0))
-instance NFData Version where
-    rnf (Version branch tags) = rnf branch `seq` rnf tags
-#endif
-
-#if !(MIN_VERSION_time(1,4,0))
-instance NFData Day where
-    rnf (ModifiedJulianDay a) = rnf a
-#endif
 
 instance MemSize Response where
     memSize (Response a b c d e) = memSize5 a b c d e
@@ -271,12 +302,10 @@ instance Text UTCTime where
 --
 
 instance Arbitrary PackageName where
-  arbitrary = PackageName <$> vectorOf 4 (choose ('a', 'z'))
+  arbitrary = mkPackageName <$> vectorOf 4 (choose ('a', 'z'))
 
-#if !(MIN_VERSION_QuickCheck(2,9,0))
 instance Arbitrary Version where
-  arbitrary = Version <$> listOf1 (choose (1, 15)) <*> pure []
-#endif
+  arbitrary = mkVersion <$> listOf1 (choose (1, 15))
 
 instance Arbitrary PackageIdentifier where
   arbitrary = PackageIdentifier <$> arbitrary <*> arbitrary
@@ -302,7 +331,7 @@ instance Arbitrary OS where
                     , pure HPUX, pure IRIX, pure HaLVM, pure IOS ]
 
 instance Arbitrary FlagName where
-  arbitrary = FlagName <$> vectorOf 4 (choose ('a', 'z'))
+  arbitrary = mkFlagName <$> vectorOf 4 (choose ('a', 'z'))
 
 -- Below instances copied from
 -- <http://hackage.haskell.org/package/quickcheck-instances-0.2.0/docs/src/Test-QuickCheck-Instances.html>
@@ -313,11 +342,7 @@ instance Arbitrary Day where
 
 instance Arbitrary DiffTime where
     arbitrary = arbitrarySizedFractional
-#if MIN_VERSION_time(1,3,0)
     shrink    = shrinkRealFrac
-#else
-    shrink    = (fromRational <$>) . shrink . toRational
-#endif
 
 instance Arbitrary UTCTime where
     arbitrary =
@@ -335,7 +360,9 @@ instance Arbitrary UTCTime where
 newtype PackageIdentifier_v0 = PackageIdentifier_v0 PackageIdentifier
     deriving (Eq, Ord)
 
-instance SafeCopy PackageIdentifier_v0
+instance SafeCopy PackageIdentifier_v0 where
+    errorTypeName _ = "PackageIdentifier_v0"
+
 instance Serialize PackageIdentifier_v0 where
     put (PackageIdentifier_v0 pkgid) = Serialize.put (show pkgid)
     get = PackageIdentifier_v0 . read <$> Serialize.get
@@ -344,10 +371,12 @@ instance Migrate PackageIdentifier where
     type MigrateFrom PackageIdentifier = PackageIdentifier_v0
     migrate (PackageIdentifier_v0 pkgid) = pkgid
 
+----
 
 newtype PackageName_v0 = PackageName_v0 PackageName
 
 instance SafeCopy PackageName_v0 where
+    errorTypeName _ = "PackageName_v0"
     putCopy (PackageName_v0 nm) = contain $ textPut_v0 nm
     getCopy = contain $ PackageName_v0 <$> textGet_v0
 
@@ -355,10 +384,12 @@ instance Migrate PackageName where
     type MigrateFrom PackageName = PackageName_v0
     migrate (PackageName_v0 pn) = pn
 
+----
 
 newtype Version_v0 = Version_v0 Version
 
 instance SafeCopy Version_v0 where
+    errorTypeName _ = "Version_v0"
     putCopy (Version_v0 v) = contain $ textPut_v0 v
     getCopy = contain $ Version_v0 <$> textGet_v0
 
@@ -366,10 +397,12 @@ instance Migrate Version where
     type MigrateFrom Version = Version_v0
     migrate (Version_v0 v) = v
 
+----
 
 newtype VersionRange_v0 = VersionRange_v0 VersionRange
 
 instance SafeCopy VersionRange_v0 where
+    errorTypeName _ = "VersionRange_v0"
     putCopy (VersionRange_v0 v) = contain $ textPut_v0 v
     getCopy = contain $ VersionRange_v0 <$> textGet_v0
 

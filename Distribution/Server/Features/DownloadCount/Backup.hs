@@ -10,7 +10,7 @@ import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Features.DownloadCount.State
 import Distribution.Server.Util.CountingMap
 import Distribution.Text (display, simpleParse)
-import Distribution.Version
+import Data.Version
 import Text.CSV (CSV)
 
 onDiskBackup :: OnDiskStats -> [BackupEntry]

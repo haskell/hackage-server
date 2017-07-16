@@ -21,7 +21,6 @@ import Distribution.Package
 
 import Data.List (intercalate)
 import Text.CSV (parseCSV)
-import Data.Version (showVersion)
 
 -- TODO:
 -- 1. write an HTML view for this module, and delete the text
@@ -252,7 +251,7 @@ lookCSVFile func = do
 
 packageListToCSV :: [(PackageName, DistroPackageInfo)] -> CSVFile
 packageListToCSV entries
-    = CSVFile $ map (\(pn,DistroPackageInfo version url) -> [display pn, showVersion version, url]) entries
+    = CSVFile $ map (\(pn,DistroPackageInfo version url) -> [display pn, display version, url]) entries
 
 csvToPackageList :: CSVFile -> Either String [(PackageName, DistroPackageInfo)]
 csvToPackageList (CSVFile records)

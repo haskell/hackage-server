@@ -256,7 +256,7 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
 
     versionList = commaList $ map versionedLink earlierVersions
       ++ (case pversion of
-            Version [] [] -> []
+            v | v == nullVersion -> []
             _ -> [strong ! (maybe [] (status . snd) mThisVersion) << display pversion]
         )
       ++ map versionedLink laterVersions

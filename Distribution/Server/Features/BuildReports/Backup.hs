@@ -64,10 +64,11 @@ insertLog buildReps ((pkgId, reportId), buildLog) =
     Nothing -> fail $ "Build log #" ++ display reportId ++ " exists for " ++ display pkgId ++ " but report itself does not"
 
 checkPackageVersion :: String -> PackageIdentifier -> Restore ()
-checkPackageVersion pkgStr pkgId =
-  case packageVersion pkgId of
-    Version [] [] -> fail $ "Build report package id " ++ show pkgStr ++ " must specify a version"
-    _             -> return ()
+checkPackageVersion pkgStr pkgId
+  | packageVersion pkgId == nullVersion
+  = fail $ "Build report package id " ++ show pkgStr ++ " must specify a version"
+  | otherwise
+  = return ()
 
 importReport :: PackageId -> String -> ByteString -> BuildReports -> PartialLogs -> Restore (BuildReports, PartialLogs)
 importReport pkgId repIdStr contents buildReps partialLogs = do

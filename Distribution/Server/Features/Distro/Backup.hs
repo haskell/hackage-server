@@ -18,9 +18,9 @@ import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
 
 import Distribution.Text
-import Data.Version
 import Text.CSV (CSV, Record)
 
+import Data.Version
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.List (foldl')
@@ -117,7 +117,7 @@ distroToCSV distro distInfo
          (distrosCSVKey:) $
          flip map stats . uncurry $
            \name (DistroPackageInfo version url) ->
-               [display name, showVersion version, url]
+               [display name, display version, url]
   where
     distrosCSVKey = ["package", "version", "url"]
     distrosCSVVer = Version [0,1] ["unstable"]
