@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, FlexibleContexts, CPP,
+{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, FlexibleContexts,
              TypeFamilies #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -41,10 +41,6 @@ import Data.List (stripPrefix)
 
 import qualified Text.PrettyPrint as PP (text)
 import Distribution.Compat.ReadP (readS_to_P)
-#if !(MIN_VERSION_bytestring(0,10,0))
-import qualified Data.ByteString as SBS
-import qualified Data.ByteString.Lazy as LBS
-#endif
 
 -- These types are not defined in this package, so we cannot easily control
 -- changing these instances when the types change. So it's not safe to derive
@@ -258,32 +254,12 @@ instance FromReqURI PackageName where
 instance FromReqURI Version where
   fromReqURI = simpleParse
 
-
--- rough versions of RNF for these
-#if !(MIN_VERSION_bytestring(0,10,0))
-instance NFData LBS.ByteString where
-    rnf bs = LBS.length bs `seq` ()
-
-instance NFData SBS.ByteString where
-    rnf bs = bs `seq` ()
-#endif
-
 instance NFData Response where
     rnf res@(Response{}) = rnf (rsBody res) `seq` rnf (rsHeaders res)
     rnf _ = ()
 
 instance NFData HeaderPair where
     rnf (HeaderPair a b) = rnf a `seq` rnf b
-
-#if !(MIN_VERSION_deepseq(1,3,0))
-instance NFData Version where
-    rnf (Version branch tags) = rnf branch `seq` rnf tags
-#endif
-
-#if !(MIN_VERSION_time(1,4,0))
-instance NFData Day where
-    rnf (ModifiedJulianDay a) = rnf a
-#endif
 
 instance MemSize Response where
     memSize (Response a b c d e) = memSize5 a b c d e
@@ -312,11 +288,6 @@ instance Text UTCTime where
 
 instance Arbitrary PackageName where
   arbitrary = PackageName <$> vectorOf 4 (choose ('a', 'z'))
-
-#if !(MIN_VERSION_QuickCheck(2,9,0))
-instance Arbitrary Version where
-  arbitrary = Version <$> listOf1 (choose (1, 15)) <*> pure []
-#endif
 
 instance Arbitrary PackageIdentifier where
   arbitrary = PackageIdentifier <$> arbitrary <*> arbitrary
@@ -353,11 +324,7 @@ instance Arbitrary Day where
 
 instance Arbitrary DiffTime where
     arbitrary = arbitrarySizedFractional
-#if MIN_VERSION_time(1,3,0)
     shrink    = shrinkRealFrac
-#else
-    shrink    = (fromRational <$>) . shrink . toRational
-#endif
 
 instance Arbitrary UTCTime where
     arbitrary =
