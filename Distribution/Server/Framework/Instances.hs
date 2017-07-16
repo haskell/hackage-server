@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, FlexibleContexts,
+{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, FlexibleContexts, BangPatterns,
              TypeFamilies #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -70,7 +70,9 @@ instance SafeCopy PackageIdentifier where
     getCopy   = contain $ do
         get_pn <- getSafeGet
         get_v  <- getSafeGet
-        PackageIdentifier <$> get_pn <*> get_v
+        !pn <- get_pn
+        !v  <- get_v
+        return (PackageIdentifier pn v)
 
 instance SafeCopy Version where
     version = 2
@@ -246,7 +248,9 @@ instance SafeCopy CompilerId where
     getCopy   = contain $ do
         get_cf <- getSafeGet
         get_v  <- getSafeGet
-        CompilerId <$> get_cf <*> get_v
+        !cf <- get_cf
+        !v  <- get_v
+        return (CompilerId cf v)
 
 -- deriveSafeCopy 0 'base ''FlagName
 instance SafeCopy FlagName where
