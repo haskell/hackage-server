@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, StandaloneDeriving, FlexibleContexts, CPP,
-             TypeFamilies, TemplateHaskell #-}
+             TypeFamilies #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -46,13 +46,34 @@ import qualified Data.ByteString as SBS
 import qualified Data.ByteString.Lazy as LBS
 #endif
 
-
-deriveSafeCopy 2 'extension ''PackageName
-deriveSafeCopy 2 'extension ''PackageIdentifier
-
 -- These types are not defined in this package, so we cannot easily control
 -- changing these instances when the types change. So it's not safe to derive
 -- them (except for the really stable ones).
+
+-- deriveSafeCopy 2 'extension ''PackageName
+instance SafeCopy PackageName where
+    version = 2
+    errorTypeName _ = "PackageName"
+    kind = extension
+    putCopy (PackageName n) = contain $ safePut n
+    getCopy = contain $ PackageName <$> safeGet
+
+-- deriveSafeCopy 2 'extension ''PackageIdentifier
+instance SafeCopy PackageIdentifier where
+    version = 2
+    errorTypeName _ = "PackageIdentifier"
+    kind = extension
+
+    putCopy (PackageIdentifier pn v) = contain $ do
+        put_pn <- getSafePut
+        put_v  <- getSafePut
+        put_pn (pn :: PackageName)
+        put_v  (v  :: Version)
+
+    getCopy   = contain $ do
+        get_pn <- getSafeGet
+        get_v  <- getSafeGet
+        PackageIdentifier <$> get_pn <*> get_v
 
 instance SafeCopy Version where
     version = 2
@@ -205,9 +226,28 @@ instance SafeCopy CompilerFlavor where
         _  -> fail "SafeCopy CompilerFlavor getCopy: unexpected tag"
 
 
-deriveSafeCopy 0 'base ''CompilerId
-deriveSafeCopy 0 'base ''FlagName
+-- deriveSafeCopy 0 'base ''CompilerId
+instance SafeCopy CompilerId where
+    errorTypeName _ = "CompilerId"
 
+    putCopy (CompilerId cf v) = contain $ do
+        put_cf <- getSafePut
+        put_v  <- getSafePut
+        put_cf (cf :: CompilerFlavor)
+        put_v  (v  :: Version)
+
+    getCopy   = contain $ do
+        get_cf <- getSafeGet
+        get_v  <- getSafeGet
+        CompilerId <$> get_cf <*> get_v
+
+-- deriveSafeCopy 0 'base ''FlagName
+instance SafeCopy FlagName where
+    version = 0
+    errorTypeName _ = "FlagName"
+    kind = base
+    putCopy (FlagName n) = contain $ safePut n
+    getCopy = contain $ FlagName <$> safeGet
 
 instance FromReqURI PackageIdentifier where
   fromReqURI = simpleParse
