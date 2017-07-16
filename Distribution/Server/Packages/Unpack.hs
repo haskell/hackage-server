@@ -23,7 +23,9 @@ import Distribution.Package
          ( PackageIdentifier, packageVersion, packageName, PackageName )
 import Distribution.PackageDescription
          ( GenericPackageDescription(..), PackageDescription(..)
-         , exposedModules )
+         , allBuildInfo, allLibraries
+         , exposedModules, mixins, signatures
+         )
 import Distribution.PackageDescription.Parse
          ( parsePackageDescription )
 import Distribution.PackageDescription.Configuration
@@ -327,6 +329,18 @@ extraChecks genPkgDesc pkgId tarIndex = do
   unless (null badTopLevel) $
           warn $ "Exposed modules use unallocated top-level names: " ++
                           unwords badTopLevel
+
+  -- Check for experimental Backpack features
+  let usesBackpackInc  = any (not . null . mixins) (allBuildInfo pkgDesc)
+      usesBackpackSig  = any (not . null . signatures) (allLibraries pkgDesc)
+
+  when (usesBackpackInc || usesBackpackSig) $
+    throwError $ "Packages using experimental Backpack features "
+              ++ "(i.e. mixins or signatures) are not yet allowed on Hackage. "
+              ++ "Please use http://next.hackage.haskell.org:8080/ if you "
+              ++ "want to help testing Backpack in the meantime."
+
+  return ()
 
 -- Monad for uploading packages:
 --      WriterT for warning messages
