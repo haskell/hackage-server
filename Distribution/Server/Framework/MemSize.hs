@@ -27,10 +27,11 @@ import Data.Ix
 import qualified Data.Array.Unboxed as A
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as V.U
+import qualified Data.Version as Ver
 
-import Distribution.Package  (PackageIdentifier(..), PackageName(..))
-import Distribution.PackageDescription (FlagName(..))
-import Distribution.Version  (Version(..), VersionRange, foldVersionRange')
+import Distribution.Package  (PackageIdentifier(..), PackageName, unPackageName)
+import Distribution.PackageDescription (FlagName, unFlagName)
+import Distribution.Version  (Version, VersionRange, foldVersionRange')
 import Distribution.System   (Arch(..), OS(..))
 import Distribution.Compiler (CompilerFlavor(..), CompilerId(..))
 
@@ -185,10 +186,15 @@ memSizeUVector sz a = 5 + (V.U.length a * sz) `div` wordSize
 ----
 
 instance MemSize PackageName where
-    memSize (PackageName n) = memSize n
+    -- TODO: this will overestimate string text size
+    memSize = memSize . unPackageName
+
+instance MemSize Ver.Version where
+    memSize (Ver.Version a b) = memSize2 a b
 
 instance MemSize Version where
-    memSize (Version a b) = memSize2 a b
+    -- TODO: will underestimate size when constructor is PV1
+    memSize _ = 2
 
 instance MemSize VersionRange where
     memSize =
@@ -199,6 +205,7 @@ instance MemSize VersionRange where
                         (\v -> 7 + 2 * memSize v) -- >= v
                         (\v -> 7 + 2 * memSize v) -- <= v
                         (\v _v' -> memSize1 v)    -- == v.*
+                        (\v _v' -> memSize1 v)    -- ^>= v.*
                         memSize2                  -- _ || _
                         memSize2                  -- _ && _
                         memSize1                  -- (_)
@@ -213,7 +220,7 @@ instance MemSize OS where
     memSize _ = memSize0
 
 instance MemSize FlagName where
-    memSize (FlagName n) = memSize n
+    memSize = memSize . unFlagName
 
 instance MemSize CompilerFlavor where
     memSize _ = memSize0

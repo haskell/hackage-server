@@ -1,0 +1,4 @@
+[submodule "vendor/cabal"]
+	path = vendor/cabal
+	url = ../cabal
+	branch = 2.0

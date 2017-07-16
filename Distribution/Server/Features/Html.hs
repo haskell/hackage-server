@@ -1318,7 +1318,7 @@ mkHtmlPreferred HtmlUtilities{..}
         , h4 << "Versions affected"
         , paragraph << "Orange versions are normal versions. Green are those out of any preferred version ranges. Gray are deprecated."
         , paragraph << (snd $ Pages.renderVersion
-                                  (PackageIdentifier pkgname $ Version [] [])
+                                  (PackageIdentifier pkgname $ nullVersion)
                                   (classifyVersions prefInfo $ map packageVersion pkgs) Nothing)
         ]
 

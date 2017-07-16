@@ -52,7 +52,7 @@ pkgSearchConfig =
       extractDocumentTerms  = extractTokens . fst,
       transformQueryTerm    = normaliseQueryToken,
       documentFeatureValue  = getFeatureValue,
-      makeKey               = PackageName . unpack
+      makeKey               = mkPackageName . unpack
   }
   where
     extractTokens :: PackageDescription -> PkgDocField -> [Text]

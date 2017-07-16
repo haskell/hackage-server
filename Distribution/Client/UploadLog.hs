@@ -25,7 +25,7 @@ import Distribution.Package
          ( PackageId, PackageName, packageName, PackageIdentifier(..))
 import Distribution.Text
          ( Text(..), simpleParse )
-import Distribution.ParseUtils ( parsePackageNameQ )
+import Distribution.ParseUtils ( parseMaybeQuoted )
 import qualified Distribution.Compat.ReadP as Parse
 import qualified Text.PrettyPrint          as Disp
 import Text.PrettyPrint
@@ -58,7 +58,7 @@ instance Text Entry where
     Parse.skipSpaces
     user <- parse
     Parse.skipSpaces
-    pkg  <- parsePackageNameQ
+    pkg  <- parseMaybeQuoted parse
     Parse.skipSpaces
     ver  <- parse
     let pkgid = PackageIdentifier pkg ver

@@ -24,7 +24,7 @@ import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 
 import Distribution.Text
 import Distribution.Package
-import Distribution.Version (Version(..))
+import Distribution.Version (nullVersion)
 
 import Control.Arrow (second)
 import Data.ByteString.Lazy.Char8 (unpack) -- Build reports are ASCII
@@ -150,13 +150,13 @@ buildReportsFeature name
     packageReports :: DynamicPath -> ([(BuildReportId, BuildReport)] -> ServerPartE Response) -> ServerPartE Response
     packageReports dpath continue = do
       pkgid <- packageInPath dpath
-      case pkgVersion pkgid of
-        Version [] [] -> do
+      if pkgVersion pkgid == nullVersion
+        then do
           -- Redirect to the latest version
           pkginfo <- lookupPackageId pkgid
           seeOther (reportsListUri reportsResource "" (pkgInfoId pkginfo)) $
             toResponse ()
-        _ -> do
+        else do
           guardValidPackageId pkgid
           queryPackageReports pkgid >>= continue
 

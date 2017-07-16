@@ -307,7 +307,7 @@ library lib-server
 
   -- Except for GHC-bundled libraries (see above), it's more easier/managable from
   -- a maintainance POV to support only single major-version-ranges
-  build-depends: Cabal                 ^>= 1.24
+  build-depends: Cabal                 ^>= 2.0
                , HStringTemplate       ^>= 0.8
                , HTTP                  ^>= 4000.3.6
                , QuickCheck            ^>= 2.9
@@ -346,6 +346,7 @@ library lib-server
                , semigroups            ^>= 0.18.3
                , split                 ^>= 0.2
                , stm                   ^>= 2.4
+               , tagged                ^>= 0.8.5
                , tar                   ^>= 0.5
                , text                  ^>= 1.2.2
                , time-locale-compat    ^>= 0.1.0.1
