@@ -18,10 +18,11 @@ module Distribution.Server.Framework.Instances (
 import Distribution.Text
 import Distribution.Server.Framework.MemSize
 
-import Distribution.Package  (PackageIdentifier(..), PackageName(..))
+import Distribution.Package  (PackageIdentifier(..), PackageName)
 import Distribution.Compiler (CompilerFlavor(..), CompilerId(..))
 import Distribution.System   (OS(..), Arch(..))
-import Distribution.PackageDescription (FlagName(..))
+import Distribution.Types.GenericPackageDescription (FlagName, mkFlagName, unFlagName)
+import Distribution.Types.PackageName
 import Distribution.Version
 
 import Data.Time (Day(..), DiffTime, UTCTime(..))
@@ -48,11 +49,11 @@ import Distribution.Compat.ReadP (readS_to_P)
 
 -- deriveSafeCopy 2 'extension ''PackageName
 instance SafeCopy PackageName where
-    version = 2
+    version   = 2
     errorTypeName _ = "PackageName"
-    kind = extension
-    putCopy (PackageName n) = contain $ safePut n
-    getCopy = contain $ PackageName <$> safeGet
+    kind      = extension
+    putCopy v = contain $ safePut (unPackageName v)
+    getCopy   = contain $ mkPackageName <$> safeGet
 
 -- deriveSafeCopy 2 'extension ''PackageIdentifier
 instance SafeCopy PackageIdentifier where
@@ -73,12 +74,14 @@ instance SafeCopy PackageIdentifier where
 
 instance SafeCopy Version where
     version = 2
+    errorTypeName _ = "Version"
     kind    = extension
-    putCopy (Version ns _) = contain $ safePut ns
-    getCopy = contain $ (\ns -> Version ns []) <$> safeGet
+    putCopy v = contain $ safePut (versionNumbers v)
+    getCopy = contain $ mkVersion <$> safeGet
 
 instance SafeCopy VersionRange where
     version = 2
+    errorTypeName _ = "VersionRange"
     kind    = extension
     putCopy = contain . foldVersionRange'
                           (putWord8 0)
@@ -88,6 +91,7 @@ instance SafeCopy VersionRange where
                           (\v     -> putWord8 4 >> safePut v)
                           (\v     -> putWord8 5 >> safePut v)
                           (\v _   -> putWord8 6 >> safePut v)
+                          (\v _   -> putWord8 10 >> safePut v) -- since Cabal-2.0
                           (\r1 r2 -> putWord8 7 >> r1 >> r2)
                           (\r1 r2 -> putWord8 8 >> r1 >> r2)
                           (\r     -> putWord8 9 >> r)
@@ -106,9 +110,12 @@ instance SafeCopy VersionRange where
             7 -> unionVersionRanges     <$> getVR <*> getVR
             8 -> intersectVersionRanges <$> getVR <*> getVR
             9 -> VersionRangeParens     <$> getVR
+            10 -> majorBoundVersion     <$> safeGet  -- since Cabal-2.0
             _ -> fail "VersionRange.getCopy: bad tag"
 
 instance SafeCopy OS where
+    errorTypeName _ = "OS"
+
     putCopy (OtherOS s) = contain $ putWord8 0 >> safePut s
     putCopy Linux       = contain $ putWord8 1
     putCopy Windows     = contain $ putWord8 2
@@ -150,6 +157,8 @@ instance SafeCopy OS where
         _  -> fail "SafeCopy OS getCopy: unexpected tag"
 
 instance SafeCopy  Arch where
+    errorTypeName _ = "Arch"
+
     putCopy (OtherArch s) = contain $ putWord8 0 >> safePut s
     putCopy I386          = contain $ putWord8 1
     putCopy X86_64        = contain $ putWord8 2
@@ -191,6 +200,8 @@ instance SafeCopy  Arch where
         _  -> fail "SafeCopy Arch getCopy: unexpected tag"
 
 instance SafeCopy CompilerFlavor where
+    errorTypeName _ = "CompilerFlavor"
+
     putCopy (OtherCompiler s) = contain $ putWord8 0 >> safePut s
     putCopy GHC               = contain $ putWord8 1
     putCopy NHC               = contain $ putWord8 2
@@ -242,8 +253,8 @@ instance SafeCopy FlagName where
     version = 0
     errorTypeName _ = "FlagName"
     kind = base
-    putCopy (FlagName n) = contain $ safePut n
-    getCopy = contain $ FlagName <$> safeGet
+    putCopy v = contain $ safePut (unFlagName v)
+    getCopy = contain $ mkFlagName <$> safeGet
 
 instance FromReqURI PackageIdentifier where
   fromReqURI = simpleParse
@@ -287,7 +298,10 @@ instance Text UTCTime where
 --
 
 instance Arbitrary PackageName where
-  arbitrary = PackageName <$> vectorOf 4 (choose ('a', 'z'))
+  arbitrary = mkPackageName <$> vectorOf 4 (choose ('a', 'z'))
+
+instance Arbitrary Version where
+  arbitrary = mkVersion <$> listOf1 (choose (1, 15))
 
 instance Arbitrary PackageIdentifier where
   arbitrary = PackageIdentifier <$> arbitrary <*> arbitrary
@@ -313,7 +327,7 @@ instance Arbitrary OS where
                     , pure HPUX, pure IRIX, pure HaLVM, pure IOS ]
 
 instance Arbitrary FlagName where
-  arbitrary = FlagName <$> vectorOf 4 (choose ('a', 'z'))
+  arbitrary = mkFlagName <$> vectorOf 4 (choose ('a', 'z'))
 
 -- Below instances copied from
 -- <http://hackage.haskell.org/package/quickcheck-instances-0.2.0/docs/src/Test-QuickCheck-Instances.html>
@@ -342,7 +356,9 @@ instance Arbitrary UTCTime where
 newtype PackageIdentifier_v0 = PackageIdentifier_v0 PackageIdentifier
     deriving (Eq, Ord)
 
-instance SafeCopy PackageIdentifier_v0
+instance SafeCopy PackageIdentifier_v0 where
+    errorTypeName _ = "PackageIdentifier_v0"
+
 instance Serialize PackageIdentifier_v0 where
     put (PackageIdentifier_v0 pkgid) = Serialize.put (show pkgid)
     get = PackageIdentifier_v0 . read <$> Serialize.get
@@ -351,10 +367,12 @@ instance Migrate PackageIdentifier where
     type MigrateFrom PackageIdentifier = PackageIdentifier_v0
     migrate (PackageIdentifier_v0 pkgid) = pkgid
 
+----
 
 newtype PackageName_v0 = PackageName_v0 PackageName
 
 instance SafeCopy PackageName_v0 where
+    errorTypeName _ = "PackageName_v0"
     putCopy (PackageName_v0 nm) = contain $ textPut_v0 nm
     getCopy = contain $ PackageName_v0 <$> textGet_v0
 
@@ -362,10 +380,12 @@ instance Migrate PackageName where
     type MigrateFrom PackageName = PackageName_v0
     migrate (PackageName_v0 pn) = pn
 
+----
 
 newtype Version_v0 = Version_v0 Version
 
 instance SafeCopy Version_v0 where
+    errorTypeName _ = "Version_v0"
     putCopy (Version_v0 v) = contain $ textPut_v0 v
     getCopy = contain $ Version_v0 <$> textGet_v0
 
@@ -373,10 +393,12 @@ instance Migrate Version where
     type MigrateFrom Version = Version_v0
     migrate (Version_v0 v) = v
 
+----
 
 newtype VersionRange_v0 = VersionRange_v0 VersionRange
 
 instance SafeCopy VersionRange_v0 where
+    errorTypeName _ = "VersionRange_v0"
     putCopy (VersionRange_v0 v) = contain $ textPut_v0 v
     getCopy = contain $ VersionRange_v0 <$> textGet_v0
 
