@@ -339,6 +339,11 @@ uploadFeature ServerEnv{serverBlobStore = store}
           _ | packageExists state pkg && not (uid `Group.member` pkgGroup)
            -> uploadError (notMaintainer pkg)
 
+            -- minor hack: here we exploit the side-effect of package
+            -- candidates giving rise to a maintainers group;
+            | not (packageExists state pkg) && not (uid `Group.member` pkgGroup)
+           -> uploadError noCandidateInit
+
             | packageIdExists state pkg
            -> uploadError versionExists
 
@@ -367,6 +372,10 @@ uploadFeature ServerEnv{serverBlobStore = store}
                      ++ "package, then ask an existing maintainer to add you to the group. If "
                      ++ "this is a package name clash, please pick another name or talk to the "
                      ++ "maintainers of the existing package."
+        noCandidateInit = "The very first release of a new package must be uploaded as a "
+                     ++ "package candidate before it can be published to the primary package "
+                     ++ "index.\n\nThis is a safeguard against unintended uploads of packages, "
+                     ++ "as deleting accidentally published packages is not supported."
 
     -- This function generically extracts a package, useful for uploading, checking,
     -- and anything else in the standard user-upload pipeline.
