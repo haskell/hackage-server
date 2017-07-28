@@ -16,7 +16,7 @@ import qualified Codec.Archive.Tar.Entry as Tar
 import qualified Codec.Archive.Tar.Check as Tar
 
 import Distribution.Version
-         ( nullVersion )
+         ( nullVersion, mkVersion )
 import Distribution.Types.PackageName
          ( mkPackageName, unPackageName )
 import Distribution.Package
@@ -24,7 +24,7 @@ import Distribution.Package
 import Distribution.PackageDescription
          ( GenericPackageDescription(..), PackageDescription(..)
          , allBuildInfo, allLibraries
-         , exposedModules, mixins, signatures
+         , exposedModules, mixins, signatures, specVersion
          )
 import Distribution.PackageDescription.Parse
          ( parsePackageDescription )
@@ -41,6 +41,7 @@ import Distribution.ModuleName
          ( components )
 import Distribution.Server.Util.Parse
          ( unpackUTF8 )
+import Distribution.Server.Util.ParseSpecVer
 import Distribution.License
          ( License(..) )
 import qualified Distribution.Compat.ReadP as Parse
@@ -205,6 +206,13 @@ basicChecks pkgid tarIndex = do
     ParseFailed err -> throwError $ showError (locatedErrorMsg err)
     ParseOk warnings pkgDesc ->
       return (pkgDesc, map (showPWarning cabalFileName) warnings)
+
+  -- make sure the parseSpecVer heuristic agrees with the full parser
+  let specVer' = parseSpecVerLazy cabalEntry
+      specVer  = specVersion $ packageDescription pkgDesc
+
+  when (specVer' < mkVersion [1] || specVer /= specVer') $
+    throwError "The 'cabal-version' field could not be properly parsed."
 
   -- Check that the name and version in Cabal file match
   when (packageName pkgDesc /= packageName pkgid) $

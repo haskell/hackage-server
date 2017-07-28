@@ -1,13 +1,11 @@
 packages: .
 -- tests: True
 
-packages: ./vendor/cabal/Cabal
-
--- avoid `setup`-components picking up the local unreleased Cabal-2.0
-constraints: setup.Cabal < 2
-
--- temporary hack to workaround https://github.com/haskell/cabal/issues/4606
-constraints: directory >= 1.2.2
+-- packages: ./vendor/cabal/Cabal
+--
+-- avoid `setup`-components picking up the local unreleased Cabal-2.x
+-- in future we'll have a way to constraint to local/non-local
+-- constraints: setup.Cabal < 2.0.0.3
 
 -- package hackage-server
 --   flags: +build-hackage-import

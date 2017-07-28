@@ -192,6 +192,7 @@ library lib-server
     Distribution.Server.Util.ReadDigest
     Distribution.Server.Util.Nonce
     Distribution.Server.Util.Merge
+    Distribution.Server.Util.ParseSpecVer
 
     Distribution.Server.Features
     Distribution.Server.Features.Core

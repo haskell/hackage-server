@@ -1120,7 +1120,7 @@ mkHtmlCandidates HtmlUtilities{..}
                     , toHtml ": "
                     , toHtml $ intersperse (toHtml ", ") $ flip map pkgs $ \pkg ->
                          anchor ! [href $ corePackageIdUri candidatesCore "" (packageId pkg)] << display (packageVersion pkg)
-                    , toHtml $ ". " ++ description desc
+                    , toHtml $ ". " ++ synopsis desc
                     ]
 
     servePackageCandidates :: Resource -> DynamicPath -> ServerPartE Response
