@@ -349,13 +349,28 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     processCandidate isRight state uid res = do
         let pkg = packageId (uploadDesc res)
         if not (isRight pkg)
-          then uploadFailed "Name of package or package version does not match"
+          then uploadFailed [MText "Name of package or package version does not match"]
           else do
             pkgGroup <- Group.queryUserGroup (maintainersGroup (packageName pkg))
-            if packageExists state pkg && not (uid `Group.member` pkgGroup)
-              then uploadFailed "Not authorized to upload a candidate for this package"
+            if (not (Group.null pkgGroup) || packageExists state pkg)
+                && not (uid `Group.member` pkgGroup)
+              then uploadFailed (notMaintainer pkg)
               else return Nothing
-      where uploadFailed = return . Just . ErrorResponse 403 [] "Upload failed" . return . MText
+      where
+        -- TODO: try to share more code with "Upload" module
+        uploadFailed = return . Just . ErrorResponse 403 [] "Upload failed"
+
+        notMaintainer pkg = [ MText $
+                        "You are not authorised to upload candidates of this package. The "
+                     ++ "package '" ++ display (packageName pkg) ++ "' exists already and you "
+                     ++ "are not a member of the maintainer group for this package.\n\n"
+                     ++ "If you believe you should be a member of the "
+                     , MLink "maintainer group for this package"
+                            ("/package/" ++ display (packageName pkg) ++ "/maintainers")
+                     , MText $  ", then ask an existing maintainer to add you to the group. If "
+                     ++ "this is a package name clash, please pick another name or talk to the "
+                     ++ "maintainers of the existing package."
+                     ]
 
     publishCandidate :: DynamicPath -> Bool -> ServerPartE UploadResult
     publishCandidate dpath doDelete = do
