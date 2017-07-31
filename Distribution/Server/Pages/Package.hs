@@ -24,8 +24,7 @@ module Distribution.Server.Pages.Package
 import Distribution.Server.Features.PreferredVersions
 
 import Distribution.Server.Pages.Template (hackagePageWith)
-import Distribution.Server.Pages.Package.HaddockParse (parseHaddockParagraphs)
-import Distribution.Server.Pages.Package.HaddockLex  (tokenise)
+import qualified Distribution.Server.Pages.Package.HaddockParse as Haddock
 import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Packages.ModuleForest
 import Distribution.Server.Packages.Render
@@ -53,6 +52,8 @@ import Network.URI              (isRelativeReference)
 
 import qualified Cheapskate      as Markdown (markdown, Options(..), Inline(Link), walk)
 import qualified Cheapskate.Html as Markdown (renderDoc)
+
+import qualified Documentation.Haddock.Markup as Haddock
 
 import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
 import qualified Data.Text                as T
@@ -146,9 +147,9 @@ descriptionSection PackageRender{..} =
 renderHaddock :: String -> [Html]
 renderHaddock []   = []
 renderHaddock desc =
-  case tokenise desc >>= parseHaddockParagraphs of
+  case Haddock.parse desc of
       Nothing  -> [paragraph << p | p <- paragraphs desc]
-      Just doc -> [markup htmlMarkup doc]
+      Just doc -> [Haddock.markup htmlMarkup doc]
 
 readmeSection :: PackageRender -> Maybe BS.ByteString -> [Html]
 readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)

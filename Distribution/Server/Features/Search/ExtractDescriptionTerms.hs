@@ -15,10 +15,10 @@ import qualified NLP.Snowball as NLP
 import Control.Monad ((>=>))
 import Data.Maybe
 
-import Distribution.Server.Pages.Package.HaddockHtml  as Haddock (markup)
-import Distribution.Server.Pages.Package.HaddockTypes as Haddock
-import qualified Distribution.Server.Pages.Package.HaddockParse as Haddock (parseHaddockParagraphs)
-import qualified Distribution.Server.Pages.Package.HaddockLex   as Haddock (tokenise)
+import qualified Documentation.Haddock.Markup as Haddock
+import Documentation.Haddock.Types
+
+import qualified Distribution.Server.Pages.Package.HaddockParse as Haddock (parse)
 
 
 extractSynopsisTerms :: Set Text -> String -> [Text]
@@ -57,18 +57,21 @@ extractDescriptionTerms stopWords =
         [] --TODO: something here
         (  filter (not . ignoreTok)
          . NLP.tokenize
-         . concat . markup termsMarkup)
-    . (Haddock.tokenise >=> Haddock.parseHaddockParagraphs)
+         . concat . Haddock.markup termsMarkup)
+    . Haddock.parse
 
-termsMarkup :: DocMarkup String [String]
+termsMarkup :: DocMarkupH () String [String]
 termsMarkup = Markup {
   markupEmpty         = [],
   markupString        = \s -> [s],
   markupParagraph     = id,
   markupAppend        = (++),
   markupIdentifier    = \s -> [s],
+  markupIdentifierUnchecked = const [], -- TODO
   markupModule        = const [], -- i.e. filter these out
+  markupWarning       = id,
   markupEmphasis      = id,
+  markupBold          = id,
   markupMonospaced    = \s -> if length s > 1 then [] else s,
   markupUnorderedList = concat,
   markupOrderedList   = concat,
@@ -76,8 +79,13 @@ termsMarkup = Markup {
   markupCodeBlock     = const [],
   markupHyperlink     = \(Hyperlink _url mLabel) -> maybeToList mLabel,
                         --TODO: extract main part of hostname
+  markupAName         = const [],
   markupPic           = const [],
-  markupAName         = const []
+  markupMathInline    = const [],
+  markupMathDisplay   = const [],
+  markupProperty      = const [],
+  markupExample       = const [],
+  markupHeader        = \(Header _lvl title) -> title
   }
 
 {-
