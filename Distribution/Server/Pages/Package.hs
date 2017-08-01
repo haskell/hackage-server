@@ -19,19 +19,21 @@ module Distribution.Server.Pages.Package
   , renderHaddock
   , maintainerSection
   , downloadSection
+  , moduleToDocUrl
   ) where
 
 import Distribution.Server.Features.PreferredVersions
 
 import Distribution.Server.Pages.Template (hackagePageWith)
-import Distribution.Server.Pages.Package.HaddockParse (parseHaddockParagraphs)
-import Distribution.Server.Pages.Package.HaddockLex  (tokenise)
+import qualified Distribution.Server.Pages.Package.HaddockParse as Haddock
 import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Packages.ModuleForest
 import Distribution.Server.Packages.Render
 import Distribution.Server.Users.Types (userStatus, userName, isActiveAccount)
 import Data.TarIndex (TarIndex)
 
+import qualified Distribution.ModuleName as Module
+import Distribution.ModuleName (ModuleName)
 import Distribution.Package
 import Distribution.PackageDescription as P
 import Distribution.Simple.Utils ( cabalVersion )
@@ -53,6 +55,8 @@ import Network.URI              (isRelativeReference)
 
 import qualified Cheapskate      as Markdown (markdown, Options(..), Inline(Link), walk)
 import qualified Cheapskate.Html as Markdown (renderDoc)
+
+import qualified Documentation.Haddock.Markup as Haddock
 
 import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
 import qualified Data.Text                as T
@@ -87,9 +91,9 @@ packagePage render headLinks top sections
              candidateBanner,
              renderHeads,
              top,
-             pkgBody render sections,
+             pkgBody render sections docURL,
              moduleSection render mdocIndex docURL,
-             renderPackageFlags render,
+             renderPackageFlags render docURL,
              downloadSection render,
              maintainerSection pkgid isCandidate,
              readmeSection render mreadMe,
@@ -125,14 +129,16 @@ packagePage render headLinks top sections
         toHtml [ h2 << title, content ]
 
 -- | Body of the package page
-pkgBody :: PackageRender -> [(String, Html)] -> [Html]
-pkgBody render sections =
-    descriptionSection render
+pkgBody :: PackageRender -> [(String, Html)] -> URL -> [Html]
+pkgBody render sections docURL =
+    descriptionSection render docURL
  ++ propertySection sections
 
-descriptionSection :: PackageRender -> [Html]
-descriptionSection PackageRender{..} =
-        renderHaddock (description rendOther)
+descriptionSection :: PackageRender -> URL -> [Html]
+descriptionSection PackageRender{..} docURL =
+        [thediv ! [identifier "description"] <<
+           renderHaddock (moduleToDocUrl PackageRender{..} docURL)
+                         (description rendOther)]
      ++ readmeLink
   where
     readmeLink = case rendReadme of
@@ -143,12 +149,18 @@ descriptionSection PackageRender{..} =
                 ]
       _      -> []
 
-renderHaddock :: String -> [Html]
-renderHaddock []   = []
-renderHaddock desc =
-  case tokenise desc >>= parseHaddockParagraphs of
+-- | Resolve 'ModuleName' to 'URL' if module is exposed by package
+moduleToDocUrl :: PackageRender -> URL -> ModuleName -> Maybe URL
+moduleToDocUrl _ docURL modName = Just url
+  where -- TODO: only return 'Just' links when .html target exists
+    url = docURL </> (intercalate "-" (Module.components modName) ++ ".html")
+
+renderHaddock :: (ModuleName -> Maybe URL) -> String -> [Html]
+renderHaddock _ "" = []
+renderHaddock modResolv desc =
+  case Haddock.parse desc of
       Nothing  -> [paragraph << p | p <- paragraphs desc]
-      Just doc -> [markup htmlMarkup doc]
+      Just doc -> [Haddock.markup (htmlMarkup modResolv) doc]
 
 readmeSection :: PackageRender -> Maybe BS.ByteString -> [Html]
 readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
@@ -237,8 +249,8 @@ maintainerSection pkgid isCandidate =
 
 -- | Render a table of the package's flags and along side it a tip
 -- indicating how to enable/disable flags with Cabal.
-renderPackageFlags :: PackageRender -> [Html]
-renderPackageFlags render =
+renderPackageFlags :: PackageRender -> URL -> [Html]
+renderPackageFlags render docURL =
   case rendFlags render of
     [] -> mempty
     flags ->
@@ -265,7 +277,7 @@ renderPackageFlags render =
                         ,th << "Type"]
         flagRow flag =
           tr << [td ! [theclass "flag-name"]   << code (unFlagName (flagName flag))
-                ,td ! [theclass "flag-desc"]   << flagDescription flag
+                ,td ! [theclass "flag-desc"]   << renderHaddock (moduleToDocUrl render docURL) (flagDescription flag)
                 ,td ! [theclass (if flagDefault flag then "flag-enabled" else "flag-disabled")] <<
                  if flagDefault flag then "Enabled" else "Disabled"
                 ,td ! [theclass (if flagManual flag then "flag-manual" else "flag-automatic")] <<

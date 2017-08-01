@@ -25,7 +25,7 @@ license:      BSD3
 license-file: LICENSE
 
 build-type: Simple
-cabal-version: >=2.0
+cabal-version: 2.0
 tested-with: GHC==8.0.2, GHC==7.10.3, GHC==7.8.4, GHC==7.6.3
 
 data-dir: datafiles
@@ -163,9 +163,7 @@ library lib-server
     Distribution.Server.Pages.Package
     Distribution.Server.Pages.PackageFromTemplate
     Distribution.Server.Pages.Package.HaddockHtml
-    Distribution.Server.Pages.Package.HaddockLex
     Distribution.Server.Pages.Package.HaddockParse
-    Distribution.Server.Pages.Package.HaddockTypes
     Distribution.Server.Pages.Recent
     Distribution.Server.Pages.AdminLog
     -- [reverse index disabled] Distribution.Server.Pages.Reverse
@@ -331,6 +329,7 @@ library lib-server
                , friendly-time         ^>= 0.4
                , hackage-security      ^>= 0.5.2
                , hackage-security-HTTP ^>= 0.1.1
+               , haddock-library       ^>= 1.4.5
                , happstack-server      ^>= 7.4
                , hashable              ^>= 1.2
                , hslogger              ^>= 1.2
@@ -360,10 +359,6 @@ library lib-server
   if ! flag(minimal)
     build-depends: snowball            ^>= 1.0
                  , tokenize            ^>= 0.3
-
-  build-tools:
-    alex       >= 2.2  && < 3.2,
-    happy      >= 1.17 && < 1.20
 
   if !os(darwin)
     extra-libraries: crypt

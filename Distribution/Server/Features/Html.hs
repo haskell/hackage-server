@@ -587,7 +587,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
       withPackagePreferred pkgname $ \pkg _ -> do
         cacheControlWithoutETag [Public, maxAgeMinutes 30]
         render <- liftIO $ packageRender pkg
-        return $ toResponse $ dependenciesPage False render
+        return $ toResponse $ dependenciesPage False render "docs"
 
     serveMaintainPage :: DynamicPath -> ServerPartE Response
     serveMaintainPage dpath = do
@@ -1081,7 +1081,7 @@ mkHtmlCandidates HtmlUtilities{..}
       candId <- packageInPath dpath
       candRender <- liftIO . candidateRender =<< lookupCandidateId candId
       let render = candPackageRender candRender
-      return $ toResponse $ dependenciesPage True render
+      return $ toResponse $ dependenciesPage True render "docs"
 
     servePublishForm :: DynamicPath -> ServerPartE Response
     servePublishForm dpath = do
@@ -1158,11 +1158,11 @@ mkHtmlCandidates HtmlUtilities{..}
                   [form ! [theclass "box", XHtml.method "post", action $ deleteUri candidatesResource "" pkgid]
                       << input ! [thetype "submit", value "Delete package candidate"]]
 
-dependenciesPage :: Bool -> PackageRender -> Resource.XHtml
-dependenciesPage isCandidate render =
+dependenciesPage :: Bool -> PackageRender -> URL -> Resource.XHtml
+dependenciesPage isCandidate render docURL =
     Resource.XHtml $ hackagePage (pkg ++ ": dependencies") $
       [h2 << heading, Pages.renderDetailedDependencies render]
-       ++ Pages.renderPackageFlags render
+       ++ Pages.renderPackageFlags render docURL
   where
     pkg = display $ rendPkgId render
     heading = "Dependencies for " +++ anchor ! [href link] << pkg

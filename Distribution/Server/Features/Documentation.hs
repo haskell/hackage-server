@@ -330,8 +330,12 @@ documentationFeature name
           case mdocs of
             Nothing ->
               errNotFoundH "Not Found"
-                [MText $ "There is no documentation for " ++ display pkgid
-                  ++ ". See " ++ canonicalLink ++ " for the latest version."]
+                [ MText "There is no documentation for "
+                , MLink (display pkgid) ("/package/" ++ display pkgid)
+                , MText ". See "
+                , MLink canonicalLink canonicalLink
+                , MText " for the latest version."
+                ]
               where
                 -- Essentially errNotFound, but overloaded to specify a header.
                 -- (Needed since errNotFound throws away result of setHeaderM)

@@ -118,7 +118,7 @@ packagePageTemplate render
       [ templateVal "hasFlags"
           (if rendFlags render == [] then False else True)
       , templateVal "flagsSection"
-          (Old.renderPackageFlags render)
+          (Old.renderPackageFlags render docURL)
       ]
       where
         showDist (dname, info) = toHtml (display dname ++ ":") +++
@@ -142,7 +142,8 @@ packagePageTemplate render
       [ templateVal "hasDescription"
           (if (description $ rendOther render) == [] then False else True)
       , templateVal "description"
-          (Old.renderHaddock (description $ rendOther render))
+          (Old.renderHaddock (Old.moduleToDocUrl render docURL)
+                             (description $ rendOther render))
       ] ++
 
       [ templateVal "hasReadme"

@@ -16,6 +16,7 @@ import           Distribution.Text
 import           Distribution.Version
 
 import qualified Data.HashMap.Strict   as Map
+import           Data.Monoid
 import           Data.Word
 import           Foreign.C
 import           Foreign.Ptr
