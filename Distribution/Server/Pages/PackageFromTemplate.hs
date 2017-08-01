@@ -118,7 +118,7 @@ packagePageTemplate render
       [ templateVal "hasFlags"
           (if rendFlags render == [] then False else True)
       , templateVal "flagsSection"
-          (Old.renderPackageFlags render)
+          (Old.renderPackageFlags render docURL)
       ]
       where
         showDist (dname, info) = toHtml (display dname ++ ":") +++

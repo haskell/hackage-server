@@ -606,6 +606,10 @@ small.info { color: grey; }
   color: #888;
 }
 
+td.flag-desc p {
+  margin: 0 0 0 0;
+}
+
 p.tip {
   font-size: 85%;
 }

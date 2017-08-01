@@ -93,7 +93,7 @@ packagePage render headLinks top sections
              top,
              pkgBody render sections docURL,
              moduleSection render mdocIndex docURL,
-             renderPackageFlags render,
+             renderPackageFlags render docURL,
              downloadSection render,
              maintainerSection pkgid isCandidate,
              readmeSection render mreadMe,
@@ -249,8 +249,8 @@ maintainerSection pkgid isCandidate =
 
 -- | Render a table of the package's flags and along side it a tip
 -- indicating how to enable/disable flags with Cabal.
-renderPackageFlags :: PackageRender -> [Html]
-renderPackageFlags render =
+renderPackageFlags :: PackageRender -> URL -> [Html]
+renderPackageFlags render docURL =
   case rendFlags render of
     [] -> mempty
     flags ->
@@ -277,7 +277,7 @@ renderPackageFlags render =
                         ,th << "Type"]
         flagRow flag =
           tr << [td ! [theclass "flag-name"]   << code (unFlagName (flagName flag))
-                ,td ! [theclass "flag-desc"]   << flagDescription flag
+                ,td ! [theclass "flag-desc"]   << renderHaddock (moduleToDocUrl render docURL) (flagDescription flag)
                 ,td ! [theclass (if flagDefault flag then "flag-enabled" else "flag-disabled")] <<
                  if flagDefault flag then "Enabled" else "Disabled"
                 ,td ! [theclass (if flagManual flag then "flag-manual" else "flag-automatic")] <<
