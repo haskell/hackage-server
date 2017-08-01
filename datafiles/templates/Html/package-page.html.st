@@ -28,9 +28,11 @@
     </div>
     $endif$
 
+    <div id="description">
     $if(package.optional.hasDescription)$
     $package.optional.description$
     $endif$
+    </div>
 
     $if(package.optional.hasReadme)$
     <hr>

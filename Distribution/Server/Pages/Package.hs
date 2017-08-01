@@ -136,8 +136,9 @@ pkgBody render sections docURL =
 
 descriptionSection :: PackageRender -> URL -> [Html]
 descriptionSection PackageRender{..} docURL =
-        renderHaddock (moduleToDocUrl PackageRender{..} docURL)
-                      (description rendOther)
+        [thediv ! [identifier "description"] <<
+           renderHaddock (moduleToDocUrl PackageRender{..} docURL)
+                         (description rendOther)]
      ++ readmeLink
   where
     readmeLink = case rendReadme of
