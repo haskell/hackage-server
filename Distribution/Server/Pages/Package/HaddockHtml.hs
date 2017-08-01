@@ -5,20 +5,20 @@ import Control.Applicative
 import Data.Maybe               (fromMaybe)
 import Text.XHtml.Strict        hiding (p)
 import Network.URI              (escapeURIString, isUnreserved)
-
+import Distribution.ModuleName
+import Distribution.Text        (simpleParse)
 import Documentation.Haddock.Types
 
-
 -- C.f. haddock-api's "Haddock.Backends.Xhtml.DocMarkup"
-htmlMarkup :: DocMarkupH mod String Html
-htmlMarkup = Markup {
+htmlMarkup :: (ModuleName -> Maybe URL) -> DocMarkupH mod String Html
+htmlMarkup modResolv = Markup {
   markupEmpty         = noHtml,
   markupString        = toHtml,
   markupParagraph     = paragraph,
   markupAppend        = (+++),
   markupIdentifier    = thecode . toHtml,
   markupIdentifierUnchecked = const (thecode $ toHtml "FIXME"), -- should never happen
-  markupModule        = thecode . toHtml,
+  markupModule        = mkModLink,
   markupWarning       = thediv ! [theclass "warning"],
   markupEmphasis      = emphasize,
   markupBold          = strong,
@@ -51,6 +51,13 @@ htmlMarkup = Markup {
         htmlExample = htmlPrompt +++ htmlExpression +++ toHtml (unlines result)
         htmlPrompt = (thecode . toHtml $ ">>> ") ! [theclass "prompt"]
         htmlExpression = (strong . thecode . toHtml $ expression ++ "\n") ! [theclass "userinput"]
+
+    mkModLink :: String -> Html
+    mkModLink s = fromMaybe (thecode . toHtml $ s) $ do
+        modname <- simpleParse s
+        modUrl  <- modResolv modname
+        let lnk = anchor ! [href modUrl] << s
+        pure (thespan ! [theclass "module"] << lnk)
 
 namedAnchor :: String -> Html -> Html
 namedAnchor n = anchor ! [name (escapeStr n)]

@@ -142,7 +142,8 @@ packagePageTemplate render
       [ templateVal "hasDescription"
           (if (description $ rendOther render) == [] then False else True)
       , templateVal "description"
-          (Old.renderHaddock (description $ rendOther render))
+          (Old.renderHaddock (Old.moduleToDocUrl render docURL)
+                             (description $ rendOther render))
       ] ++
 
       [ templateVal "hasReadme"

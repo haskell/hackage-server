@@ -19,6 +19,7 @@ module Distribution.Server.Pages.Package
   , renderHaddock
   , maintainerSection
   , downloadSection
+  , moduleToDocUrl
   ) where
 
 import Distribution.Server.Features.PreferredVersions
@@ -31,6 +32,8 @@ import Distribution.Server.Packages.Render
 import Distribution.Server.Users.Types (userStatus, userName, isActiveAccount)
 import Data.TarIndex (TarIndex)
 
+import qualified Distribution.ModuleName as Module
+import Distribution.ModuleName (ModuleName)
 import Distribution.Package
 import Distribution.PackageDescription as P
 import Distribution.Simple.Utils ( cabalVersion )
@@ -88,7 +91,7 @@ packagePage render headLinks top sections
              candidateBanner,
              renderHeads,
              top,
-             pkgBody render sections,
+             pkgBody render sections docURL,
              moduleSection render mdocIndex docURL,
              renderPackageFlags render,
              downloadSection render,
@@ -126,14 +129,15 @@ packagePage render headLinks top sections
         toHtml [ h2 << title, content ]
 
 -- | Body of the package page
-pkgBody :: PackageRender -> [(String, Html)] -> [Html]
-pkgBody render sections =
-    descriptionSection render
+pkgBody :: PackageRender -> [(String, Html)] -> URL -> [Html]
+pkgBody render sections docURL =
+    descriptionSection render docURL
  ++ propertySection sections
 
-descriptionSection :: PackageRender -> [Html]
-descriptionSection PackageRender{..} =
-        renderHaddock (description rendOther)
+descriptionSection :: PackageRender -> URL -> [Html]
+descriptionSection PackageRender{..} docURL =
+        renderHaddock (moduleToDocUrl PackageRender{..} docURL)
+                      (description rendOther)
      ++ readmeLink
   where
     readmeLink = case rendReadme of
@@ -144,12 +148,18 @@ descriptionSection PackageRender{..} =
                 ]
       _      -> []
 
-renderHaddock :: String -> [Html]
-renderHaddock []   = []
-renderHaddock desc =
+-- | Resolve 'ModuleName' to 'URL' if module is exposed by package
+moduleToDocUrl :: PackageRender -> URL -> ModuleName -> Maybe URL
+moduleToDocUrl _ docURL modName = Just url
+  where -- TODO: only return 'Just' links when .html target exists
+    url = docURL </> (intercalate "-" (Module.components modName) ++ ".html")
+
+renderHaddock :: (ModuleName -> Maybe URL) -> String -> [Html]
+renderHaddock _ "" = []
+renderHaddock modResolv desc =
   case Haddock.parse desc of
       Nothing  -> [paragraph << p | p <- paragraphs desc]
-      Just doc -> [Haddock.markup htmlMarkup doc]
+      Just doc -> [Haddock.markup (htmlMarkup modResolv) doc]
 
 readmeSection :: PackageRender -> Maybe BS.ByteString -> [Html]
 readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
