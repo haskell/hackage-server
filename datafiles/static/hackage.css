@@ -56,11 +56,12 @@ body {
 	*font:x-small; /* for IE in quirks mode */
 }
 
-h1 { font-size: 146.5%; /* 19pt */ }
-h2 { font-size: 131%;   /* 17pt */ }
-h3 { font-size: 116%;   /* 15pt */ }
-h4 { font-size: 100%;   /* 13pt */ }
-h5 { font-size: 100%;   /* 13pt */ }
+h1 { font-size: 153.9%; /* 20px */ }
+h2 { font-size: 131%;   /* 17px */ }
+h3 { font-size: 116%;   /* 15px */ }
+h4 { font-size: 100%;   /* 13px */ }
+h5 { font-size: 100%;   /* 13px */ }
+h6 { font-size: 100%;   /* 13px */ }
 
 select, input, button, textarea {
 	font:99% sans-serif;
