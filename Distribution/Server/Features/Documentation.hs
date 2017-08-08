@@ -29,6 +29,7 @@ import Distribution.Version (nullVersion)
 
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Map as Map
+import Data.Foldable (for_)
 import Data.Function (fix)
 
 import qualified Data.Aeson as Aeson
@@ -377,7 +378,7 @@ checkDocTarball pkgid =
 checkJsonDocIndex :: BSL.ByteString -> Either String ()
 checkJsonDocIndex jsDocIndex
   | Just (Aeson.Array entries) <- Aeson.decode jsDocIndex
-  = forM_ entries $ \entry -> do
+  = for_ entries $ \entry -> do
       case entry of
         Aeson.Object obj
           | Just (Aeson.String displayHtml) <- HashMap.lookup "display_html" obj
