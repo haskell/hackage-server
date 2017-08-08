@@ -1,5 +1,6 @@
 {-# LANGUAGE RankNTypes, FlexibleContexts,
-             NamedFieldPuns, RecordWildCards, PatternGuards #-}
+             NamedFieldPuns, OverloadedStrings,
+             RecordWildCards, PatternGuards #-}
 module Distribution.Server.Features.Documentation (
     DocumentationFeature(..),
     DocumentationResource(..),
@@ -30,7 +31,11 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Map as Map
 import Data.Function (fix)
 
+import qualified Data.Aeson as Aeson
+import qualified Data.HashMap.Strict as HashMap
 import Data.Aeson (toJSON)
+import qualified Text.HTML.TagSoup       as TagSoup
+import qualified Text.HTML.TagSoup.Match as TagSoup
 
 import Data.Time.Clock (NominalDiffTime, diffUTCTime, getCurrentTime)
 import System.Directory (getModificationTime)
@@ -316,7 +321,7 @@ documentationFeature name
 
       case pkgVersion pkgid == nullVersion of
         -- if no version is given we want to redirect to the latest version
-        True -> tempRedirect latestPkgPath (toResponse "")
+        True -> tempRedirect latestPkgPath (toResponse BSL.empty)
           where
             latest = packageId pkginfo
             dpath' = [ if var == "package"
@@ -352,13 +357,56 @@ documentationFeature name
 checkDocTarball :: PackageId -> BSL.ByteString -> Either String ()
 checkDocTarball pkgid =
      checkEntries
-   . fmapErr (either id show) . Tar.checkTarbomb (display pkgid ++ "-docs")
+   . fmapErr (either id show) . Tar.checkTarbomb pkgDocsDir
    . fmapErr (either id show) . Tar.checkSecurity
    . fmapErr (either id show) . Tar.checkPortability
    . fmapErr show             . Tar.read
   where
+    pkgDocsDir = display pkgid ++ "-docs"
+
     fmapErr f    = Tar.foldEntries Tar.Next Tar.Done (Tar.Fail . f)
-    checkEntries = Tar.foldEntries (\_ remainder -> remainder) (Right ()) Left
+    checkEntries = Tar.foldEntries checkEntry (Right ()) Left
+
+    checkEntry entry remainder
+      | Tar.entryPath entry == pkgDocsDir </> "doc-index.json"
+      , Tar.NormalFile content _ <- Tar.entryContent entry
+      = checkJsonDocIndex content
+      | otherwise
+      = remainder
+
+checkJsonDocIndex :: BSL.ByteString -> Either String ()
+checkJsonDocIndex jsDocIndex
+  | Just (Aeson.Array entries) <- Aeson.decode jsDocIndex
+  = forM_ entries $ \entry -> do
+      case entry of
+        Aeson.Object obj
+          | Just (Aeson.String displayHtml) <- HashMap.lookup "display_html" obj
+          -> checkDisplayHtml displayHtml
+        _ -> Left "Expected display_html property"
+  | otherwise
+  = Left "Expected an array element"
+  where
+    checkDisplayHtml displayHtml =
+      checkTags (TagSoup.parseTagsOptions TagSoup.parseOptionsFast displayHtml)
+
+    checkTags [] = Right ()
+    checkTags (t:tx)
+      | TagSoup.tagOpen hasValidTag hasValidAttrs t
+        || TagSoup.tagClose hasValidTag t
+        || TagSoup.tagText (const True) t
+      = checkTags tx
+      | otherwise
+      = Left "Disallowed element found"
+
+    hasValidTag t   = t `elem` whitelistedTags
+    hasValidAttrs _ = True
+
+    whitelistedTags =
+      [ "a"
+      , "span"
+      , "ul"
+      , "li"
+      ]
 
 {------------------------------------------------------------------------------
   Auxiliary

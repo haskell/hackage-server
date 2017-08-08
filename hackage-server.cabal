@@ -347,6 +347,7 @@ library lib-server
                , split                 ^>= 0.2
                , stm                   ^>= 2.4
                , tagged                ^>= 0.8.5
+               , tagsoup               ^>= 0.14
                , tar                   ^>= 0.5
                , text                  ^>= 1.2.2
                , time-locale-compat    ^>= 0.1.0.1
