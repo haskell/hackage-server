@@ -379,14 +379,17 @@ checkJsonDocIndex :: BSL.ByteString -> Either String ()
 checkJsonDocIndex jsDocIndex
   | Just (Aeson.Array entries) <- Aeson.decode jsDocIndex
   = for_ entries $ \entry -> do
-      case entry of
-        Aeson.Object obj
-          | Just (Aeson.String displayHtml) <- HashMap.lookup "display_html" obj
-          -> checkDisplayHtml displayHtml
-        _ -> Left "Expected display_html property"
+      case extractDisplayHtml entry of
+        Just displayHtml -> checkDisplayHtml displayHtml
+        _                -> Left "Expected display_html property"
   | otherwise
   = Left "Expected an array element"
   where
+    extractDisplayHtml (Aeson.Object o) = do
+      Aeson.String displayHtml <- HashMap.lookup "display_html" o
+      return displayHtml
+    extractDisplayHtml _ = Nothing
+
     checkDisplayHtml displayHtml =
       checkTags (TagSoup.parseTagsOptions TagSoup.parseOptionsFast displayHtml)
 
