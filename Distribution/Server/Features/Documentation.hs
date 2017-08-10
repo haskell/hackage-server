@@ -370,8 +370,9 @@ checkDocTarball pkgid =
 
     checkEntry entry remainder
       | Tar.entryPath entry == pkgDocsDir </> "doc-index.json"
-      , Tar.NormalFile content _ <- Tar.entryContent entry
-      = checkJsonDocIndex content
+      = case Tar.entryContent entry of
+          Tar.NormalFile content _ -> checkJsonDocIndex content
+          _                        -> Left "doc-index.json not a file"
       | otherwise
       = remainder
 
