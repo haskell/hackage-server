@@ -305,7 +305,7 @@ ul.links li form input {
 	border:0px;
   padding:1px;
 	width: 8em;
-	background: rgb(235,235,235); /* url('/static/search.png') no-repeat 3px 4px; */
+	background: #ebebeb; /* url('/static/search.png') no-repeat 3px 4px; */
 }
 
 ul.links li form button {
