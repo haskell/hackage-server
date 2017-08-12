@@ -587,7 +587,7 @@ ul.links li form button:hover {
   float: right;
 }
 
-strong.warning { color: red; }
+strong.warning { color: #f44336; }
 
 small.info { color: #888; }
 
