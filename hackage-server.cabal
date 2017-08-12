@@ -46,6 +46,7 @@ data-files:
   static/*.ico
   static/*.min.js
   static/*.png
+  static/icons/*.svg
 
   static/datatables/jquery.dataTables.min.css
   static/datatables/jquery.dataTables.min.js

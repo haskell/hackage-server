@@ -213,7 +213,7 @@ pre {
 }
 
 #page-header .caption {
-  background: url(hslogo-16.png) no-repeat 0em;
+  background: url(icons/ic_haskell_grayscale_32.svg) no-repeat 0em;
   color: white;
   margin: 0 2em;
   font-weight: normal;
