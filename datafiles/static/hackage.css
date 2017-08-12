@@ -711,7 +711,7 @@ ul.directory-list {
 /* Preferred and deprecated versions */
 
 .deprecated {
-    color:#999999 !important;
+    color:#919191 !important;
 }
 
 .unpreferred {
