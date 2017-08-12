@@ -45,6 +45,7 @@ data-files:
   static/*.css
   static/*.ico
   static/*.png
+  static/icons/*.svg
 
   TUF/README.md
   TUF/mirrors.json
