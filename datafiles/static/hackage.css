@@ -589,7 +589,7 @@ ul.links li form button:hover {
 
 strong.warning { color: red; }
 
-small.info { color: grey; }
+small.info { color: #808080; }
 
 /* @end */
 
