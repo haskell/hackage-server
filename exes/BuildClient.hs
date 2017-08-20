@@ -200,7 +200,7 @@ readConfig opts = do
          -- Shouldn't happen: We check that this
          -- returns Right when we create the
          -- config file. See [Note: Show/Read URI].
-           Left theError -> die theError
+           Left theError -> dieNoVerbosity theError
            Right (uri : auxUris) ->
                return $ BuildConfig {
                             bc_srcURI   = uri,
@@ -210,7 +210,7 @@ readConfig opts = do
                         }
            Right _ -> error "The impossible happened"
       _ ->
-         die "Can't parse config file (maybe re-run \"hackage-build init\")"
+         dieNoVerbosity "Can't parse config file (maybe re-run \"hackage-build init\")"
 
 configFile :: BuildOpts -> FilePath
 configFile opts = bo_stateDir opts </> "hackage-build-config"
@@ -544,7 +544,7 @@ buildOnce opts pkgs = keepGoing $ do
     updatePackageIndex = do
       update_ec <- cabal opts "update" [] Nothing
       unless (update_ec == ExitSuccess) $
-          die "Could not 'cabal update' from specified server"
+          dieNoVerbosity "Could not 'cabal update' from specified server"
 
 -- | Builds a little memoised function that can tell us whether a
 -- particular package failed to build its documentation, a function to mark a
@@ -575,7 +575,7 @@ mkPackageFailed opts = do
                    | otherwise                  = (pkg_id, 1)
                  parseLine other = error $ "failed to parse failed list line: "++show other
         case validatePackageIds pkgids of
-            Left theError -> die theError
+            Left theError -> dieNoVerbosity theError
             Right pkgs -> return (M.fromList $ zip pkgs attempts)
 
     writeFailedCache :: FilePath -> M.Map PackageId Int -> IO ()
@@ -606,7 +606,7 @@ buildPackage verbosity opts config docInfo = do
                      Nothing Nothing Nothing Nothing Nothing
     init_ec <- waitForProcess ph
     unless (init_ec == ExitSuccess) $
-        die $ "Could not initialise the package db " ++ packageDb
+        dieNoVerbosity $ "Could not initialise the package db " ++ packageDb
 
     -- The documentation is installed within the stateDir because we
     -- set a prefix while installing

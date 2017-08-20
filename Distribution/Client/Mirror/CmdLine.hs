@@ -91,10 +91,10 @@ validateOpts args = do
       (configFile:pkgstrs) -> do
         mCfg <- readMirrorConfig configFile
         case mCfg of
-          Left theError -> die theError
+          Left theError -> dieNoVerbosity theError
           Right config -> case (mpkgs, minterval) of
-            (Left theError, _) -> die theError
-            (_, Left theError) -> die theError
+            (Left theError, _) -> dieNoVerbosity theError
+            (_, Left theError) -> dieNoVerbosity theError
             (Right pkgs, Right interval) ->
               return (flagVerbosity flags, MirrorOpts {
                    mirrorConfig = config,
@@ -110,7 +110,7 @@ validateOpts args = do
             mpkgs     = validatePackageIds pkgstrs
             minterval = validateInterval (flagInterval flags)
 
-      _ -> die $ "Expected path to a config file.\n"
+      _ -> dieNoVerbosity $ "Expected path to a config file.\n"
               ++ "See hackage-mirror --help for details and an example."
 
   where
@@ -136,7 +136,7 @@ validateOpts args = do
                ++ "The post-mirror-hook is optional.\n"
                ++ "\n"
                ++ "Options:"
-    printErrors errs = die $ concat errs ++ "Try --help."
+    printErrors errs = dieNoVerbosity $ concat errs ++ "Try --help."
 
     accum flags = foldr (flip (.)) id flags
 
