@@ -22,7 +22,7 @@ import qualified Distribution.Server.Packages.Unpack as Upload
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Util.Parse (unpackUTF8)
 
-import Distribution.PackageDescription.Parse (parsePackageDescription)
+import Distribution.PackageDescription.Parse (parseGenericPackageDescription)
 import Distribution.ParseUtils (ParseResult(..), locatedErrorMsg, showPWarning)
 
 import Data.Time.Clock (getCurrentTime)
@@ -237,7 +237,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
         fileContent <- expectTextPlain
         time <- liftIO getCurrentTime
         let uploadData = (time, uid)
-        case parsePackageDescription . unpackUTF8 $ fileContent of
+        case parseGenericPackageDescription . unpackUTF8 $ fileContent of
             ParseFailed err -> badRequest (toResponse $ show (locatedErrorMsg err))
             ParseOk _ pkg | pkgid /= packageId pkg ->
                 errBadRequest "Wrong package Id"

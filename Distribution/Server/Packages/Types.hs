@@ -32,7 +32,7 @@ import Distribution.Package
 import Distribution.PackageDescription
          ( GenericPackageDescription(..))
 import Distribution.PackageDescription.Parse
-         ( parsePackageDescription, ParseResult(..) )
+         ( parseGenericPackageDescription, ParseResult(..) )
 
 import Data.Serialize (Serialize)
 import Data.ByteString.Lazy (ByteString)
@@ -209,7 +209,7 @@ pkgLatestTarball pkginfo =
 -- | The information held in a parsed .cabal file (used by cabal-install)
 pkgDesc :: PkgInfo -> GenericPackageDescription
 pkgDesc pkgInfo =
-    case parsePackageDescription $ cabalFileString $ fst $ pkgLatestRevision pkgInfo of
+    case parseGenericPackageDescription $ cabalFileString $ fst $ pkgLatestRevision pkgInfo of
       -- We only make PkgInfos with parsable pkgDatas, so if it
       -- doesn't parse then something has gone wrong.
       ParseFailed e -> error ("Internal error: " ++ show e)

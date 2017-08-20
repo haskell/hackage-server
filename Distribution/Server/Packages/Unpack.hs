@@ -29,7 +29,7 @@ import Distribution.PackageDescription
          , exposedModules, mixins, signatures, specVersion
          )
 import Distribution.PackageDescription.Parse
-         ( parsePackageDescription )
+         ( parseGenericPackageDescription )
 import Distribution.PackageDescription.Configuration
          ( flattenPackageDescription )
 import Distribution.PackageDescription.Check
@@ -111,7 +111,7 @@ unpackPackageRaw tarGzFile contents =
     noTime = UTCTime (fromGregorian 1970 1 1) 0
 
 data TaggedPackageId = TaggedPackageId {
-        taggedPkgName    :: PackageName,
+        _taggedPkgName   :: PackageName,
         taggedPkgVersion :: Data.Version.Version
     }
 
@@ -199,7 +199,7 @@ basicChecks pkgid tarIndex = do
 
   -- Parse the Cabal file
   let cabalFileContent = unpackUTF8 cabalEntry
-  (pkgDesc, warnings) <- case parsePackageDescription cabalFileContent of
+  (pkgDesc, warnings) <- case parseGenericPackageDescription cabalFileContent of
     ParseFailed err -> throwError $ showError (locatedErrorMsg err)
     ParseOk warnings pkgDesc ->
       return (pkgDesc, map (showPWarning cabalFileName) warnings)

@@ -20,7 +20,7 @@ import Distribution.Server.Prelude
 import Distribution.Text
 import Distribution.Server.Framework.MemSize
 
-import Distribution.Package  (PackageIdentifier(..), PackageName)
+import Distribution.Package  (PackageIdentifier(..))
 import Distribution.Compiler (CompilerFlavor(..), CompilerId(..))
 import Distribution.System   (OS(..), Arch(..))
 import Distribution.Types.GenericPackageDescription (FlagName, mkFlagName, unFlagName)
