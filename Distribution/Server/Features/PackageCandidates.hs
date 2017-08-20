@@ -37,7 +37,6 @@ import Distribution.Server.Pages.Template (hackagePage)
 import Distribution.Text
 import Distribution.Package
 import Distribution.Version
-import Distribution.Types.Dependency
 
 import qualified Cheapskate      as Markdown (markdown, Options(..))
 import qualified Cheapskate.Html as Markdown (renderDoc)
@@ -51,7 +50,6 @@ import qualified Text.XHtml.Strict as XHtml
 import           Text.XHtml.Strict ((<<), (!))
 import System.FilePath.Posix (takeExtension)
 
-import Data.Version
 import Data.Function (fix)
 import Data.List (find)
 import Data.Time.Clock (getCurrentTime)

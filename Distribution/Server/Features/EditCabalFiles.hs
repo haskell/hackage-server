@@ -27,7 +27,6 @@ import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.Server.Util.ParseSpecVer
 import Distribution.Server.Util.CabalRevisions
          (Change(..), diffCabalRevisions, insertRevisionField)
-import Text.StringTemplate (ToSElem(..))
 import Text.StringTemplate.Classes (SElem(SM))
 
 import Data.ByteString.Lazy (ByteString)

@@ -31,6 +31,8 @@ module Distribution.Server.Framework.BlobStorage (
     find,
   ) where
 
+import Distribution.Server.Prelude
+
 import Distribution.Server.Features.Security.MD5
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Framework.Instances ()
@@ -39,12 +41,9 @@ import Distribution.Server.Util.ReadDigest
 
 import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Lazy as BSL
-import Data.Typeable (Typeable)
 import Data.Serialize
 import System.FilePath ((</>))
 import Control.Exception (handle, throwIO, evaluate, bracket)
-import Control.Monad
-import Control.Applicative
 import Data.SafeCopy
 import System.Directory
 import System.IO

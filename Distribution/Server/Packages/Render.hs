@@ -15,7 +15,7 @@ module Distribution.Server.Packages.Render (
 
 import Data.Maybe (catMaybes, isJust, maybeToList)
 import Control.Monad (guard)
-import Control.Arrow (second, (&&&), (***))
+import Control.Arrow ((&&&), (***))
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
 import qualified Data.Vector as Vec
@@ -31,7 +31,6 @@ import Distribution.Package
 import Distribution.Text
 import Distribution.Version
 import Distribution.ModuleName as ModuleName
-import Distribution.Types.Dependency
 import Distribution.Types.CondTree
 import Distribution.Types.UnqualComponentName
 

@@ -31,6 +31,7 @@ import Network.HTTP
 import Network.Browser
 import Network.URI (URI(..), URIAuth(..), parseURI)
 
+import Distribution.Server.Prelude
 import Distribution.Client.UploadLog as UploadLog (read, Entry(..))
 import Distribution.Client.Index as PackageIndex (read)
 import Distribution.Server.Users.Types (UserId(..), UserName(UserName))
@@ -43,8 +44,6 @@ import Distribution.Text
 
 import Data.Version
 import Data.List
-import Data.Maybe
-import Control.Applicative
 import Control.Exception
 import Data.Time
 import Data.Time.Clock.POSIX

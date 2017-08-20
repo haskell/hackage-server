@@ -15,6 +15,8 @@
 -----------------------------------------------------------------------------
 module Distribution.Server.Packages.Types where
 
+import Distribution.Server.Prelude
+
 import Distribution.Server.Users.Types (UserId(..))
 import Distribution.Server.Framework.BlobStorage (BlobId, BlobId_v0, BlobStorage)
 import Distribution.Server.Framework.Instances (PackageIdentifier_v0)
@@ -32,12 +34,10 @@ import Distribution.PackageDescription
 import Distribution.PackageDescription.Parse
          ( parsePackageDescription, ParseResult(..) )
 
-import Control.Applicative
 import Data.Serialize (Serialize)
 import Data.ByteString.Lazy (ByteString)
 import Data.Time.Clock (UTCTime(..))
 import Data.Time.Calendar (Day(..))
-import Data.Typeable (Typeable)
 import Data.List (sortBy)
 import Data.Ord (comparing)
 import Data.SafeCopy

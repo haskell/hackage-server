@@ -22,7 +22,7 @@ import Data.Maybe
 import Data.Ord (Down(..))
 import Data.IORef
 import Data.Time
-import Control.Applicative ((<$>), (<*>))
+import Control.Applicative as App
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans
@@ -280,7 +280,7 @@ infoStats verbosity mDetailedStats pkgIdsHaveDocs = do
       ]
 
     case mDetailedStats of
-      Nothing        -> return ()
+      Nothing        -> App.pure ()
       Just statsFile -> do
         writeFile statsFile $ printTable (["Package", "Version", "Has docs?"] : formattedStats)
         notice verbosity $ "Detailed statistics written to " ++ statsFile

@@ -7,6 +7,9 @@ module Distribution.Client.UserAddressesDb (
     parseFile
   ) where
 
+import Prelude ()
+import Distribution.Server.Prelude
+
 import Distribution.Server.Users.Types (UserName(..))
 import Data.List
 import Data.ByteString (ByteString)
@@ -16,7 +19,6 @@ import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
 import qualified Data.Text.Encoding.Error as T
 import qualified Data.Text.Read           as T
-import Data.Functor
 import Data.Char (chr)
 import Data.Time (UTCTime, parseTime, zonedTimeToUTC)
 import Data.Time.Locale.Compat (defaultTimeLocale)

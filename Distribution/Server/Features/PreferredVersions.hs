@@ -27,7 +27,6 @@ import Distribution.Server.Packages.Types
 import Distribution.Package
 import Distribution.Version
 import Distribution.Text
-import Distribution.Types.Dependency
 
 import Data.Function (fix)
 import Data.List (intercalate, find)

@@ -40,6 +40,8 @@ module Distribution.Server.Framework.BackupRestore (
     abstractRestoreBackup
   ) where
 
+import Distribution.Server.Prelude
+
 import qualified Distribution.Server.Framework.BlobStorage as Blob
 import Distribution.Server.Framework.BlobStorage (BlobStores(..), BlobId)
 import Distribution.Server.Util.ReadDigest
@@ -49,10 +51,8 @@ import Distribution.Server.Features.Security.SHA256
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
 import Distribution.Server.Util.GZip (decompressNamed)
-import Control.Applicative
 import Control.Monad.State
 import Control.Monad.Except
-import Control.Monad.Writer
 import Data.Time (UTCTime)
 import qualified Data.Time as Time
 import Data.Time.Locale.Compat (defaultTimeLocale)

@@ -10,6 +10,9 @@ module Distribution.Server.Framework.CacheControl (
     maxAgeSeconds, maxAgeMinutes, maxAgeHours, maxAgeDays, maxAgeMonths,
   ) where
 
+import Prelude ()
+import Distribution.Server.Prelude
+
 import Happstack.Server.Types
 import Happstack.Server.Monads
 
@@ -17,8 +20,6 @@ import Data.List
 import qualified Data.ByteString.Char8 as BS8
 import Data.Hashable
 import Numeric
-import Data.Word
-
 
 data CacheControl = MaxAge Int | Public | Private | NoCache | NoTransform
 

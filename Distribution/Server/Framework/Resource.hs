@@ -37,17 +37,16 @@ module Distribution.Server.Framework.Resource (
     ServerErrorResponse,
   ) where
 
+import Distribution.Server.Prelude
+
 import Happstack.Server
 import Distribution.Server.Framework.HappstackUtils (remainingPathString, uriEscape)
 import Distribution.Server.Util.ContentType (parseContentAccept)
 import Distribution.Server.Framework.Error
 
 import Data.List (isSuffixOf)
-import Data.Monoid
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Control.Monad
-import Data.Maybe
 import Data.Function (on)
 import Data.List (intercalate, unionBy, findIndices, find)
 import qualified Text.ParserCombinators.Parsec as Parse

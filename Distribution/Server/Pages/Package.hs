@@ -38,7 +38,6 @@ import Distribution.Package
 import Distribution.PackageDescription as P
 import Distribution.Simple.Utils ( cabalVersion )
 import Distribution.Version
-import Distribution.Types.Dependency
 import Distribution.Types.CondTree
 import Distribution.Text        (display)
 import Text.XHtml.Strict hiding (p, name, title, content)

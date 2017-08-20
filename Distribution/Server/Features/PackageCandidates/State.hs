@@ -2,6 +2,8 @@
 
 module Distribution.Server.Features.PackageCandidates.State where
 
+import Distribution.Server.Prelude
+
 import Distribution.Server.Features.PackageCandidates.Types
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Packages.Types
@@ -11,10 +13,8 @@ import Distribution.Package
 
 import Data.Acid     (Query, Update, makeAcidic)
 import Data.SafeCopy (Migrate(..), deriveSafeCopy, base, extension)
-import Data.Typeable
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
-import Data.Monoid
 
 
 ---------------------------------- Index of candidate tarballs and metadata

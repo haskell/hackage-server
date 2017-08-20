@@ -122,6 +122,8 @@ library lib-server
   exposed-modules:
     Distribution.Server
 
+    Distribution.Server.Prelude
+
     Distribution.Server.Framework
     Distribution.Server.Framework.Auth
     Distribution.Server.Framework.AuthTypes
