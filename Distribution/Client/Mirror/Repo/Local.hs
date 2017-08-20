@@ -55,11 +55,11 @@ uploadPackage :: FilePath
               -> PkgIndexInfo
               -> FilePath
               -> MirrorSession ()
-uploadPackage targetRepoPath pkginfo locTgz = liftIO $ do
+uploadPackage targetRepoPath' pkginfo locTgz = liftIO $ do
     createDirectoryIfMissing True pkgDir
     copyFile locTgz pkgFile
   where
-    pkgDir  = targetRepoPath </> "package"
+    pkgDir  = targetRepoPath' </> "package"
     pkgFile = pkgDir   </> display pkgid <.> "tar.gz"
 
     PkgIndexInfo pkgid _ _ _ = pkginfo
