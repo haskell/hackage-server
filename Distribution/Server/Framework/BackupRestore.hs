@@ -164,7 +164,7 @@ parseRead label str = case readConsume reads str of
 
 parseUTCTime :: (Monad m, MonadError String m) => String -> String -> m UTCTime
 parseUTCTime label str =
-    case Time.parseTime defaultTimeLocale timeFormatSpec str of
+    case parseTimeMaybe timeFormatSpec str of
       Nothing -> throwError $ "Unable to parse UTC timestamp " ++ label ++ ": " ++ str
       Just x  -> return x
 

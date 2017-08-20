@@ -5,21 +5,18 @@ module Distribution.Client.ParseApacheLogs
   ) where
 
 -- TODO: We assume the Apache log files are ASCII, not Unicode.
+import Distribution.Server.Prelude
 
 import Distribution.Package (PackageName)
 import Distribution.Version (Version)
 import Distribution.Text    (display, simpleParse)
 
-import Control.Monad ((>=>))
 import Data.List (intercalate)
-import Data.Maybe (catMaybes)
-import Data.Attoparsec.Char8 (Parser)
+import Data.Attoparsec.ByteString.Char8 (Parser)
 import Data.Map (Map)
 import Data.Time.Calendar (Day)
-import Data.Time.Format (parseTime)
-import Data.Time.Locale.Compat (defaultTimeLocale)
 import qualified Data.ByteString.Char8      as SBS
-import qualified Data.Attoparsec.Char8      as Att
+import qualified Data.Attoparsec.ByteString.Char8 as Att
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import qualified Data.Map                   as Map
 
@@ -94,7 +91,7 @@ parseGET :: (SBS.ByteString, SBS.ByteString, SBS.ByteString) -> Maybe (PackageNa
 parseGET (pkgNameStr, pkgVersionStr, dayStr) = do
   name    <- simpleParse . SBS.unpack $ pkgNameStr
   version <- simpleParse . SBS.unpack $ pkgVersionStr
-  day     <- parseTime defaultTimeLocale "%d/%b/%Y:%T %z" . SBS.unpack $ dayStr
+  day     <- parseTimeMaybe "%d/%b/%Y:%T %z" . SBS.unpack $ dayStr
   return (name, version, day)
 
 methodGET, packagesDir, archiveDir, targzExt :: SBS.ByteString
