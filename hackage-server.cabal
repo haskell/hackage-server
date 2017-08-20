@@ -369,8 +369,11 @@ library lib-server
   other-extensions: TemplateHaskell
 
 executable hackage-server
-  main-is: Main.hs
   hs-source-dirs: exes
+  main-is: Main.hs
+
+  other-modules: Paths_hackage_server
+  autogen-modules: Paths_hackage_server
 
   build-depends: lib-server
                  -- version constraints inherited from lib-server
@@ -391,6 +394,9 @@ executable hackage-server
 executable hackage-mirror
   hs-source-dirs: exes
   main-is: MirrorClient.hs
+
+  other-modules: Paths_hackage_server
+  autogen-modules: Paths_hackage_server
 
   build-depends:  lib-server
 
@@ -417,6 +423,9 @@ executable hackage-mirror
 executable hackage-build
   hs-source-dirs: exes
   main-is: BuildClient.hs
+
+  other-modules: Paths_hackage_server
+  autogen-modules: Paths_hackage_server
 
   build-depends: lib-server
                  -- version constraints inherited from lib-server
@@ -487,6 +496,11 @@ Test-Suite HighLevelTest
       HttpUtils
       Package
       Util
+      Paths_hackage_server
+
+    autogen-modules:
+      Paths_hackage_server
+
     hs-source-dirs: tests
 
     -- This tells cabal that this test depends on the executable
