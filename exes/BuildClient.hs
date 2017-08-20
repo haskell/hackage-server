@@ -444,7 +444,7 @@ buildOnce opts pkgs = keepGoing $ do
 
         pkgIdsHaveDocs <- getDocumentationStats verbosity config has_failed
         infoStats verbosity Nothing pkgIdsHaveDocs
-        threadDelay (10^7)
+        threadDelay (10^(7::Int))
 
         let orderBuilds :: BuildOrder -> [DocInfo] -> [DocInfo]
             orderBuilds LatestVersionFirst =
