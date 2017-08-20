@@ -6,6 +6,7 @@
     $package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$
   </title>
   <link rel="canonical" href="$baseurl$/package/$package.name$" />
+  <script src="/static/jquery.min.js"></script>
 </head>
 
 <body>
@@ -151,8 +152,18 @@
         </tr>
 
         <tr>
-          <th>Votes</th>
-          <td>$votesSection$</td>
+          <th>Rating</th>
+          <td>$score$ ($votes$ ratings)
+          $if(userRating)$
+            <input type="hidden" id="userRating" value="$userRating$">
+          $endif$
+              [<a href="" class="clear-rating">clear rating</a>]
+            <ul class="star-rating">
+              <li class="star" id="1">&lambda;</li>
+              <li class="star" id="2">&lambda;</li>
+              <li class="star" id="3">&lambda;</li>
+            </ul>
+          </td>
         </tr>
         <tr>
           <th>Status</th>
@@ -197,6 +208,7 @@
 
   </div> <!-- /content -->
 
+  $packagePageAssets()$
   $footer()$
 
 </body>

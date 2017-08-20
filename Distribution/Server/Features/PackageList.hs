@@ -10,6 +10,7 @@ import Distribution.Server.Framework
 
 import Distribution.Server.Features.Core
 -- [reverse index disabled] import Distribution.Server.Features.ReverseDependencies
+import Distribution.Server.Features.Votes
 import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.PreferredVersions
@@ -89,6 +90,7 @@ initListFeature :: ServerEnv
                 -> IO (CoreFeature
                     -- [reverse index disabled] -> ReverseFeature
                     -> DownloadFeature
+                    -> VotesFeature
                     -> TagsFeature
                     -> VersionsFeature
                     -> IO ListFeature)
@@ -99,17 +101,19 @@ initListFeature _env = do
     return $ \core@CoreFeature{..}
               -- [reverse index disabled] revs
               download
+              votesf@VotesFeature{..}
               tagsf@TagsFeature{..}
               versions@VersionsFeature{..} -> do
 
       let (feature, modifyItem, updateDesc) =
-            listFeature core download tagsf versions
+            listFeature core download votesf tagsf versions
                         itemCache itemUpdate
 
       registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, _) ->
         updateDesc (packageName pkgid)
 
       {- [reverse index disabled]
+              votesf@VotesFeature{..}
       registerHook (reverseUpdateHook revs) $ \mrev -> do
           let pkgs = Map.keys mrev
           forM_ pkgs $ \pkgname -> do
@@ -131,6 +135,7 @@ initListFeature _env = do
 
 listFeature :: CoreFeature
             -> DownloadFeature
+            -> VotesFeature
             -> TagsFeature
             -> VersionsFeature
             -> MemState (Map PackageName PackageItem)
@@ -140,7 +145,10 @@ listFeature :: CoreFeature
                 PackageName -> IO ())
 
 listFeature CoreFeature{..}
-            DownloadFeature{..} TagsFeature{..} VersionsFeature{..}
+            DownloadFeature{..}
+            VotesFeature{..}
+            TagsFeature{..}
+            VersionsFeature{..}
             itemCache itemUpdate
   = (ListFeature{..}, modifyItem, updateDesc)
   where

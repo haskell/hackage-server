@@ -61,8 +61,11 @@ data UserFeature = UserFeature {
     guardAuthorised_   :: [PrivilegeCondition] -> ServerPartE (),
     -- | Require any of a set of privileges, giving the id of the current user.
     guardAuthorised    :: [PrivilegeCondition] -> ServerPartE UserId,
+    guardAuthorised'    :: [PrivilegeCondition] -> ServerPartE Bool,
     -- | Require being logged in, giving the id of the current user.
     guardAuthenticated :: ServerPartE UserId,
+    -- | Gets the authentication if it exists.
+    checkAuthenticated :: ServerPartE (Maybe (UserId, UserInfo)),
     -- | A hook to override the default authentication error in particular
     -- circumstances.
     authFailHook       :: Hook Auth.AuthError (Maybe ErrorResponse),
@@ -389,6 +392,13 @@ userFeature templates usersState adminsState
         Auth.guardPriviledged users uid privconds
         return uid
 
+    guardAuthorised' :: [PrivilegeCondition] -> ServerPartE Bool
+    guardAuthorised' privconds = do
+        users <- queryGetUserDb
+        uid   <- guardAuthenticatedWithErrHook users
+        valid <- Auth.checkPriviledged users uid privconds
+        return valid
+
     -- Simply check if the user is authenticated as some user, without any
     -- check that they have any particular priveledges. Only useful as a
     -- building block.
@@ -412,6 +422,11 @@ userFeature templates usersState adminsState
           overrideResponse <- msum <$> runHook authFailHook err
           throwError (fromMaybe defaultResponse overrideResponse)
 
+    -- Check if there is an authenticated userid, and return info, if so.
+    checkAuthenticated :: ServerPartE (Maybe (UserId, UserInfo))
+    checkAuthenticated = do
+        users <- queryGetUserDb
+        either (const Nothing) Just `fmap` Auth.checkAuthenticated Auth.hackageRealm users
 
     -- | Resources representing the collection of known users.
     --

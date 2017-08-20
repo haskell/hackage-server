@@ -15,47 +15,70 @@ import Distribution.Server.Users.State ()
 import Data.Typeable
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.List
 import Data.Maybe (fromMaybe)
-
+import Control.Arrow ((&&&))
 import Data.Acid     (Query, Update, makeAcidic)
-import Data.SafeCopy (base, deriveSafeCopy)
+import Data.SafeCopy (base, extension, deriveSafeCopy, Migrate(..))
 
 import qualified Control.Monad.State as State
 import Control.Monad.Reader.Class (ask)
 
+type Score = Int
 
-newtype VotesState = VotesState { votesMap :: Map PackageName UserIdSet }
+newtype VotesState_v0 = VotesState_v0 { votesMap :: Map PackageName UserIdSet }
+
+newtype VotesState = VotesState (Map PackageName (Map UserId Score))
   deriving (Show, Eq, Typeable, MemSize)
 
-$(deriveSafeCopy 0 'base ''VotesState)
+-- SafeCopy instances
+deriveSafeCopy 1 'extension ''VotesState
+
+deriveSafeCopy 0 'base      ''VotesState_v0
+
+instance Migrate VotesState where
+    type MigrateFrom VotesState = VotesState_v0
+
+    migrate (VotesState_v0 m) = VotesState (Map.map go m)
+      where
+        go :: UserIdSet -> Map UserId Score
+        go = Map.fromList . map (\x->(x,3)) . UserIdSet.toList
+
+--
 
 initialVotesState :: VotesState
 initialVotesState = VotesState Map.empty
 
 -- helper function
-userVotedForPackage :: PackageName -> UserId -> Map PackageName UserIdSet -> Bool
+userVotedForPackage :: PackageName -> UserId -> Map PackageName (Map UserId Score) -> Bool
 userVotedForPackage pkgname uid votes =
     case Map.lookup pkgname votes of
       Nothing     -> False
-      Just uidset -> UserIdSet.member uid uidset
+      Just m -> case Map.lookup uid m of
+                  Nothing -> False
+                  Just _ -> True
+
+-- Using La Placian rule of succession to calculate scoring
+votesScore :: Map UserId Score -> Float
+votesScore m =
+    let grouping = map (head &&& length) . group . sort . Map.elems $ m
+        score =  fromIntegral (sum $ map (uncurry (*)) grouping) / fromIntegral (4 + foldr (\(_,b) -> (+b) ) 0 grouping)
+    in score*10
 
 -- All the acid state transactions
 
-addVote :: PackageName -> UserId -> Update VotesState Bool
-addVote pkgname uid = do
+addVote :: PackageName -> UserId -> Score -> Update VotesState Float
+addVote pkgname uid score = do
     VotesState votes <- State.get
-    if userVotedForPackage pkgname uid votes
-      then return False
-      else do let votes' = Map.alter insert pkgname votes
-                  insert = Just . UserIdSet.insert uid . fromMaybe UserIdSet.empty
-              State.put $! VotesState votes'
-              return True
+    let votes' = Map.insertWith Map.union pkgname (Map.singleton uid score) votes
+    State.put $! VotesState votes'
+    return $ votesScore $ fromMaybe Map.empty $ Map.lookup pkgname votes'
 
 removeVote :: PackageName -> UserId -> Update VotesState Bool
 removeVote pkgname uid = do
     VotesState votes <- State.get
     if userVotedForPackage pkgname uid votes
-       then do let votes' = Map.adjust (UserIdSet.delete uid) pkgname votes
+       then do let votes' = Map.adjust (Map.delete uid) pkgname votes
                State.put $! VotesState votes'
                return True
        else return False
@@ -65,14 +88,26 @@ getPackageVoteCount pkgname = do
     VotesState votes <- ask
     case Map.lookup pkgname votes of
       Nothing     -> return 0
-      Just uidset -> return $! UserIdSet.size uidset
+      Just m      -> return $! Map.size m
+
+getPackageVoteScore :: PackageName -> Query VotesState Float
+getPackageVoteScore pkgname = do
+    VotesState votes <- ask
+    case Map.lookup pkgname votes of
+      Nothing     -> return 0
+      Just m      -> return $! votesScore m
 
 getPackageUserVoted :: PackageName -> UserId -> Query VotesState Bool
 getPackageUserVoted pkgname uid = do
     VotesState votes <- ask
     return $! userVotedForPackage pkgname uid votes
 
-getAllPackageVoteSets :: Query VotesState (Map PackageName UserIdSet)
+getPackageUserVote :: PackageName -> UserId -> Query VotesState (Maybe Score)
+getPackageUserVote pkgname uid = do
+    VotesState votes <- ask
+    return $! Map.lookup uid =<< Map.lookup pkgname votes
+
+getAllPackageVoteSets :: Query VotesState (Map PackageName (Map UserId Score))
 getAllPackageVoteSets = do
     VotesState votes <- ask
     return votes
@@ -91,7 +126,9 @@ makeAcidic
   [ 'addVote
   , 'removeVote
   , 'getPackageVoteCount
+  , 'getPackageVoteScore
   , 'getPackageUserVoted
+  , 'getPackageUserVote
   , 'getAllPackageVoteSets
   , 'getVotesState
   , 'replaceVotesState

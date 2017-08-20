@@ -463,7 +463,7 @@ mkHtmlCore :: ServerEnv
            -> HtmlCore
 mkHtmlCore ServerEnv{serverBaseURI}
            utilities@HtmlUtilities{..}
-           UserFeature{queryGetUserDb}
+           UserFeature{queryGetUserDb, checkAuthenticated}
            CoreFeature{coreResource}
            VersionsFeature{ versionsResource
                           , queryGetDeprecatedFor
@@ -544,7 +544,10 @@ mkHtmlCore ServerEnv{serverBaseURI}
         distributions <- queryPackageStatus pkgname
         totalDown     <- cmFind pkgname `liftM` totalPackageDownloads
         recentDown    <- cmFind pkgname `liftM` recentPackageDownloads
-        pkgVotesHtml  <- renderVotesHtml pkgname
+        pkgVotes      <- pkgNumVotes pkgname
+        pkgScore      <- fmap (/2) $ pkgNumScore pkgname
+        auth          <- checkAuthenticated
+        userRating    <- case auth of Just (uid,_) -> pkgUserVote pkgname uid; _ -> return Nothing
         mdoctarblob   <- queryDocumentation realpkg
         tags          <- queryTagsForPackage pkgname
         deprs         <- queryGetDeprecatedFor pkgname
@@ -571,7 +574,9 @@ mkHtmlCore ServerEnv{serverBaseURI}
               (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl)
           , "totalDownloads"    $= totalDown
           , "recentDownloads"   $= recentDown
-          , "votesSection"      $= pkgVotesHtml
+          , "votes"             $= pkgVotes
+          , "userRating"        $= userRating
+          , "score"             $= pkgScore
           , "buildStatus"       $= buildStatus
           ] ++
           -- Items not related to IO (mostly pure functions)
