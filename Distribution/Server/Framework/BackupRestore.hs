@@ -56,7 +56,7 @@ import Control.Monad.Except
 import Data.Time (UTCTime)
 import qualified Data.Time as Time
 import Data.Time.Locale.Compat (defaultTimeLocale)
-import Data.Typeable (Typeable, typeOf)
+import Data.Typeable (typeOf)
 
 import Distribution.Server.Util.Merge
 import Distribution.Server.Util.Parse (unpackUTF8)

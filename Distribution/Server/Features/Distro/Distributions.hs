@@ -25,6 +25,7 @@ module Distribution.Server.Features.Distro.Distributions
     ) where
 
 import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map.Strict
 import qualified Data.Set as Set
 
 import Distribution.Server.Features.Distro.Types
@@ -124,7 +125,7 @@ addPackage :: DistroName -> PackageName -> DistroPackageInfo
            -> DistroVersions -> DistroVersions
 addPackage distro package info dv@DistroVersions{..}
     = dv
-      { packageDistroMap = Map.insertWith'
+      { packageDistroMap = Map.Strict.insertWith
                       (const $ Map.insert distro info)
                       package
                       (Map.singleton distro info)

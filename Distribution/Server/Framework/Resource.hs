@@ -580,7 +580,7 @@ reinsert key newTree branchMap = Map.insertWith combine key newTree branchMap
 combine :: Monoid a => ServerTree a -> ServerTree a -> ServerTree a
 combine (ServerTree newResponse newForest) (ServerTree oldResponse oldForest) =
     -- replace old resource with new resource, combine old and new responses
-    ServerTree (mappend newResponse oldResponse) (Map.foldWithKey reinsert oldForest newForest)
+    ServerTree (mappend newResponse oldResponse) (Map.foldrWithKey reinsert oldForest newForest)
 
 addServerNode :: Monoid a => BranchPath -> a -> ServerTree a -> ServerTree a
 addServerNode trunk response tree = treeFold trunk (ServerTree (Just response) Map.empty) tree

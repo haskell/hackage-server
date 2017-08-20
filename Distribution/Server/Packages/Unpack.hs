@@ -134,6 +134,8 @@ tarPackageChecks lax now tarGzFile contents = do
   unless (ext == ".tar.gz") $
     throwError $ tarGzFile ++ " is not a gzipped tar file, it must have the .tar.gz extension"
 
+  let versionTags (Data.Version.Version _ ts) = ts
+
   pkgid <- case (simpleParse pkgidStr, simpleParse pkgidStr) of
     (Just pkgid, Just tagged_pkgid)
       | (== nullVersion) . packageVersion $ pkgid
@@ -145,10 +147,9 @@ tarPackageChecks lax now tarGzFile contents = do
 
       -- NB: we have to use 'TaggedPackageId' here, because the 'PackageId'
       -- parser will drop tags.
-      | not . null . Data.Version.versionTags . taggedPkgVersion $ tagged_pkgid
+      | not . null . versionTags . taggedPkgVersion $ tagged_pkgid
       -> throwError $ "Hackage no longer accepts packages with version tags: "
-                   ++ intercalate ", " (Data.Version.versionTags
-                                            (taggedPkgVersion tagged_pkgid))
+                   ++ intercalate ", " (versionTags (taggedPkgVersion tagged_pkgid))
 
     _ -> throwError $ "Invalid package id " ++ quote pkgidStr
                    ++ ". The tarball must use the name of the package."
