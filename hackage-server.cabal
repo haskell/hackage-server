@@ -44,6 +44,7 @@ data-files:
 
   static/*.css
   static/*.ico
+  static/*.min.js
   static/*.png
 
   TUF/README.md
