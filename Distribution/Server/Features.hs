@@ -257,6 +257,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          coreFeature
                          -- [reverse index disabled] reverseFeature
                          downloadFeature
+                         votesFeature
                          tagsFeature
                          versionsFeature
 
