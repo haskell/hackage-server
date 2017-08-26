@@ -333,7 +333,6 @@ library lib-server
                , cryptohash-sha256     ^>= 0.11.100
                , csv                   ^>= 0.1
                , ed25519               ^>= 0.0.5
-               , friendly-time         ^>= 0.4
                , hackage-security      ^>= 0.5.2
                , hackage-security-HTTP ^>= 0.1.1
                , haddock-library       ^>= 1.4.5

@@ -44,6 +44,7 @@ search of package descriptions:
 
 <p>There are a few other package indices:</p>
 <ul>
+<li><a href="/packages/browse">Browsable package index</a></li>
 <li><a href="/packages/tags">All tags</a></li>
 <li><a href="/packages/names">All packages by name</a>, with tags</li>
 <li><a href="/packages/reverse">All packages with reverse dependencies</a></li>

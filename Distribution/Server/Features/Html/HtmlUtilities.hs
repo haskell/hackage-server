@@ -14,23 +14,41 @@ import Data.Set (Set)
 import Distribution.Server.Features.PackageList
 import Distribution.Server.Pages.Util (packageType)
 import Distribution.Package
+import Distribution.Server.Features.Users
 
 data HtmlUtilities = HtmlUtilities {
     packageLink :: PackageId -> Html
   , packageNameLink :: PackageName -> Html
   , renderItem :: PackageItem -> Html
+  , makeRow :: PackageItem -> Html
   , renderTags :: Set Tag -> [Html]
   }
 
-htmlUtilities :: CoreFeature -> TagsFeature -> HtmlUtilities
+htmlUtilities :: CoreFeature -> TagsFeature -> UserFeature -> HtmlUtilities
 htmlUtilities CoreFeature{coreResource}
-              TagsFeature{tagsResource} = HtmlUtilities{..}
+              TagsFeature{tagsResource} UserFeature{userResource} = HtmlUtilities{..}
   where
     packageLink :: PackageId -> Html
     packageLink pkgid = anchor ! [href $ corePackageIdUri cores "" pkgid] << display pkgid
 
     packageNameLink :: PackageName -> Html
     packageNameLink pkgname = anchor ! [href $ corePackageNameUri cores "" pkgname] << display pkgname
+
+    makeRow :: PackageItem -> Html
+    makeRow item = tr << [ td $ itemNameHtml
+                         , td $ toHtml $ show $ itemDownloads item
+                         , td $ toHtml $ show $ itemVotes item / 2
+                         , td $ toHtml $ "" -- FIXME/TODO: show $ itemRevDepsCount item
+                         , td $ toHtml $ itemDesc item
+                         , td $ " (" +++ renderTags (itemTags item) +++ ")"
+                         , td $ "" +++ intersperse (toHtml ", ") (map renderUser (itemMaintainer item))
+                         ]
+        where
+            renderUser user = anchor ! [href $ userPageUri userResource "" user] << display user
+            itemNameHtml = packageNameLink (itemName item) +++
+                               case itemDeprecated item of
+                                       Just pkgs -> " (deprecated in favor of " +++ intersperse (toHtml ", ") (map packageNameLink pkgs) +++ ")"
+                                       Nothing -> toHtml ""
 
     renderItem :: PackageItem -> Html
     renderItem item = li ! classes <<
