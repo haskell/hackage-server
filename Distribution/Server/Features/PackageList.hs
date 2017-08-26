@@ -58,6 +58,8 @@ data PackageItem = PackageItem {
     itemDesc :: !String,
     -- Whether the item is in the Haskell Platform
   --itemPlatform :: Bool,
+    -- Voting score for the package
+    itemVotes :: !Float,
     -- The total number of downloads. (For sorting, not displaying.)
     -- Updated periodically.
     itemDownloads :: !Int,
@@ -77,13 +79,13 @@ data PackageItem = PackageItem {
 }
 
 instance MemSize PackageItem where
-    memSize (PackageItem a b c d e f g h i) = memSize9 a b c d e f g h i
+    memSize (PackageItem a b c d e f g h i j) = memSize10 a b c d e f g h i j
 
 
 emptyPackageItem :: PackageName -> PackageItem
 emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" 0
                                    -- [reverse index disabled] 0
-                                   False 0 0 0
+                                   0 False 0 0 0
 
 
 initListFeature :: ServerEnv
@@ -121,6 +123,12 @@ initListFeature _env = do
               modifyItem pkgname (updateReverseItem revCount)
           runHook' itemUpdate $ Set.fromDistinctAscList pkgs
       -}
+
+      registerHook votesUpdated $ \(pkgname, _) -> do
+          votes <- pkgNumScore pkgname
+          modifyItem pkgname (updateVoteItem votes)
+          runHook_ itemUpdate (Set.singleton pkgname)
+
       registerHook tagsUpdated $ \(pkgs, _) -> do
           forM_ (Set.toList pkgs) $ \pkgname -> do
               tags <- queryTagsForPackage pkgname
@@ -209,12 +217,14 @@ listFeature CoreFeature{..}
         -- [reverse index disabled] revCount <- query . GetReverseCount $ pkgname
         tags  <- queryTagsForPackage pkgname
         downs <- recentPackageDownloads
+        votes <- pkgNumScore pkgname
         deprs <- queryGetDeprecatedFor pkgname
         return $ (,) pkgname $ (updateDescriptionItem (pkgDesc pkg) $ emptyPackageItem pkgname) {
             itemTags       = tags
           , itemDeprecated = deprs
           , itemDownloads  = cmFind pkgname downs
             -- [reverse index disabled] , itemRevDepsCount = directReverseCount revCount
+          , itemVotes      = votes
           }
 
     ------------------------------
@@ -252,6 +262,12 @@ updateTagItem :: Set Tag -> PackageItem -> PackageItem
 updateTagItem tags item =
     item {
         itemTags = tags
+    }
+
+updateVoteItem :: Float -> PackageItem -> PackageItem
+updateVoteItem score item =
+    item {
+        itemVotes = score
     }
 
 updateDeprecation :: Maybe [PackageName] -> PackageItem -> PackageItem
