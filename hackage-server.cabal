@@ -47,6 +47,10 @@ data-files:
   static/*.min.js
   static/*.png
 
+  static/datatables/jquery.dataTables.min.css
+  static/datatables/jquery.dataTables.min.js
+  static/images/*.png
+
   TUF/README.md
   TUF/mirrors.json
   TUF/root.json
