@@ -146,6 +146,13 @@
         </tr>
         $endif$
 
+        $if(hasexecs)$
+        <tr>
+          <th>Executables</th>
+          <td>$executables$</td>
+        </tr>
+        $endif$
+
         <tr>
           <th>Downloads</th>
           <td>$totalDownloads$ total ($recentDownloads$ in the last 30 days)</td>

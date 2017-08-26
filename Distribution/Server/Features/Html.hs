@@ -539,6 +539,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
         let realpkg = rendPkgId render
             pkgname = packageName realpkg
             docURL  = packageDocsContentUri docs realpkg
+            execs   = rendExecNames render
 
         prefInfo      <- queryGetPreferredInfo pkgname
         distributions <- queryPackageStatus pkgname
@@ -573,6 +574,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
           , "versions"          $= (PagesNew.renderVersion realpkg
               (classifyVersions prefInfo $ map packageVersion pkgs) infoUrl)
           , "totalDownloads"    $= totalDown
+          , "hasexecs"          $= not (null execs)
           , "recentDownloads"   $= recentDown
           , "votes"             $= pkgVotes
           , "userRating"        $= userRating
