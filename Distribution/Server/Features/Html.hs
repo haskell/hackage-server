@@ -70,15 +70,12 @@ import Data.Array (Array, listArray)
 import qualified Data.Array as Array
 import qualified Data.Ix    as Ix
 import Data.Time.Format (formatTime)
-import Data.Time.Clock (getCurrentTime)
-import qualified Data.Time.Format.Human as HumanTime
 import Data.Time.Locale.Compat (defaultTimeLocale)
 import qualified Data.ByteString.Lazy as BS (ByteString)
 
 import Text.XHtml.Strict
 import qualified Text.XHtml.Strict as XHtml
 import Text.XHtml.Table (simpleTable)
-import Network.URI (escapeURIString, isUnreserved)
 
 
 -- TODO: move more of the below to Distribution.Server.Pages.*, it's getting
@@ -129,6 +126,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    , "distro-monitor.html"
                    , "revisions.html"
                    , "package-page.html"
+                   , "table-interface.html"
                    ]
 
 
@@ -158,7 +156,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                             tarIndexCache
                             reportsCore
                             usersdetails
-                            (htmlUtilities core tags)
+                            (htmlUtilities core tags user)
                             mainCache namesCache
                             templates
 
@@ -268,6 +266,8 @@ htmlFeature env@ServerEnv{..}
                                       cachePackagesPage
                                       cacheNamesPage
                                       templates
+                                      list
+                                      names
     htmlUsers      = mkHtmlUsers      user usersdetails
     htmlUploads    = mkHtmlUploads    utilities upload
     htmlDocUploads = mkHtmlDocUploads utilities core docsCore templates
@@ -277,8 +277,8 @@ htmlFeature env@ServerEnv{..}
                                       docsCandidates tarIndexCache
                                       candidates templates
     htmlPreferred  = mkHtmlPreferred  utilities core versions
-    htmlTags       = mkHtmlTags       utilities core list tags
-    htmlSearch     = mkHtmlSearch     utilities core list names
+    htmlTags       = mkHtmlTags       utilities core list tags templates
+    htmlSearch     = mkHtmlSearch     utilities core list names templates
 
     htmlResources = concat [
         htmlCoreResources       htmlCore
@@ -460,11 +460,13 @@ mkHtmlCore :: ServerEnv
            -> AsyncCache Response
            -> AsyncCache Response
            -> Templates
+           -> ListFeature
+           -> SearchFeature
            -> HtmlCore
 mkHtmlCore ServerEnv{serverBaseURI}
            utilities@HtmlUtilities{..}
            UserFeature{queryGetUserDb, checkAuthenticated}
-           CoreFeature{coreResource}
+           CoreFeature{coreResource, queryGetPackageIndex}
            VersionsFeature{ versionsResource
                           , queryGetDeprecatedFor
                           , queryGetPreferredInfo
@@ -484,6 +486,8 @@ mkHtmlCore ServerEnv{serverBaseURI}
            cachePackagesPage
            cacheNamesPage
            templates
+           ListFeature{makeItemList}
+           SearchFeature{..}
   = HtmlCore{..}
   where
     cores@CoreResource{packageInPath, lookupPackageName, lookupPackageId} = coreResource
@@ -510,6 +514,10 @@ mkHtmlCore ServerEnv{serverBaseURI}
       -}
       , (resourceAt "/packages/names" ) {
             resourceGet = [("html", const $ readAsyncCache cacheNamesPage)]
+          }
+      , (resourceAt "/packages/browse" ) {
+            resourceDesc = [(GET, "Show browsable list of all packages")]
+          , resourceGet  = [("html", serveBrowsePage)]
           }
       , (extendResource $ corePackagesPage cores) {
             resourceDesc = [(GET, "Show package index")]
@@ -607,6 +615,21 @@ mkHtmlCore ServerEnv{serverBaseURI}
         [ "pkgname"  $= pkgname
         , "versions" $= map packageId pkgs
         ]
+
+    serveBrowsePage :: DynamicPath -> ServerPartE Response
+    serveBrowsePage _ = do
+      pkgIndex <- queryGetPackageIndex
+      let packageNames = Pages.toPackageNames pkgIndex
+      pkgDetails <- liftIO $ makeItemList packageNames
+      let rowList = map makeRow pkgDetails
+          tabledata = "" +++ rowList +++ ""
+      cacheControl [Public, maxAgeHours 1]
+                   (etagFromHash (PackageIndex.indexSize pkgIndex))
+      template <- getTemplate templates "table-interface.html"
+      return $ toResponse $ template
+        [ "heading"   $= "All packages"
+        , "content"   $= "A browsable index of all the packages"
+        , "tabledata" $= tabledata ]
 
     serveDistroMonitorPage :: DynamicPath -> ServerPartE Response
     serveDistroMonitorPage dpath = do
@@ -1446,6 +1469,7 @@ mkHtmlTags :: HtmlUtilities
            -> CoreFeature
            -> ListFeature
            -> TagsFeature
+           -> Templates
            -> HtmlTags
 mkHtmlTags HtmlUtilities{..}
            CoreFeature{ coreResource = CoreResource{
@@ -1454,7 +1478,9 @@ mkHtmlTags HtmlUtilities{..}
                         }
                       }
            ListFeature{makeItemList}
-           TagsFeature{..} = HtmlTags{..}
+           TagsFeature{..}
+           templates
+           = HtmlTags{..}
   where
     tags = tagsResource
 
@@ -1500,17 +1526,21 @@ mkHtmlTags HtmlUtilities{..}
             pkgs = Set.toList pkgnames
         items <- liftIO $ makeItemList pkgs
         let (mtag, histogram) = Map.updateLookupWithKey (\_ _ -> Nothing) tg $ tagHistogram items
+            rowList = map makeRow items
             -- make a 'related tags' section, so exclude this tag from the histogram
             count = fromMaybe 0 mtag
-        return $ toResponse $ Resource.XHtml $ hackagePage tagd $
-          [ h2 << tagd
-          , case items of
+        template <- getTemplate templates "table-interface.html"
+        return $ toResponse $ template
+          [ "heading"   $= tagd
+          , "content"   $=  case items of
                 [] -> toHtml "No packages have this tag."
                 _  -> toHtml
                   [ paragraph << [if count==1 then "1 package has" else show count ++ " packages have", " this tag."]
                   , paragraph ! [theclass "toc"] << [toHtml "Related tags: ", toHtml $ showHistogram histogram]
-                  , ulist ! [theclass "packages"] << map renderItem items ]
+                  ]
+          , "tabledata" $= rowList
           ]
+
      where
       showHistogram hist = (++takeHtml) . intersperse (toHtml ", ") $
             map histogramEntry $ take takeAmount sortHist
@@ -1554,11 +1584,13 @@ mkHtmlSearch :: HtmlUtilities
              -> CoreFeature
              -> ListFeature
              -> SearchFeature
+             -> Templates
              -> HtmlSearch
 mkHtmlSearch HtmlUtilities{..}
              CoreFeature{..}
              ListFeature{makeItemList}
-             SearchFeature{..} =
+             SearchFeature{..}
+             templates =
     HtmlSearch{..}
   where
     htmlSearchResources = [
@@ -1569,11 +1601,9 @@ mkHtmlSearch HtmlUtilities{..}
 
     servePackageFind :: DynamicPath -> ServerPartE Response
     servePackageFind _ = do
-        (mtermsStr, offset, limit, mexplain) <-
-          queryString $ (,,,) <$> optional (look "terms")
-                              <*> mplus (lookRead "offset") (pure 0)
-                              <*> mplus (lookRead "limit") (pure 100)
-                              <*> optional (look "explain")
+        (mtermsStr,  mexplain) <-
+          queryString $ (,) <$> optional (look "terms")
+                            <*> optional (look "explain")
         let explain = isJust mexplain
         case mtermsStr of
           Just termsStr | explain
@@ -1587,18 +1617,23 @@ mkHtmlSearch HtmlUtilities{..}
                 , toHtml $ explainResults results
                 ]
 
-          Just termsStr | terms <- words termsStr, not (null terms) -> do
-            pkgIndex <- liftIO $ queryGetPackageIndex
-            currentTime <- liftIO $ getCurrentTime
-            pkgnames <- searchPackages terms
-            let (pageResults, moreResults) = splitAt limit (drop offset pkgnames)
-            pkgDetails <- liftIO $ makeItemList pageResults
-            return $ toResponse $ Resource.XHtml $
-              hackagePage "Package search" $
-                [ toHtml $ searchForm termsStr False
-                , toHtml $ resultsArea pkgIndex currentTime pkgDetails offset limit moreResults termsStr
-                , alternativeSearchTerms termsStr
-                ]
+          Just termsStr | terms <- words termsStr -> do
+            -- pkgIndex <- liftIO $ queryGetPackageIndex
+            -- currentTime <- liftIO $ getCurrentTime
+            pkgnames <- if null terms
+                        then fmap Pages.toPackageNames queryGetPackageIndex
+                        else searchPackages terms
+            -- let (pageResults, moreResults) = splitAt limit (drop offset pkgnames)
+            pkgDetails <- liftIO $ makeItemList pkgnames
+
+            let rowList = map makeRow pkgDetails
+                tabledata = "" +++ rowList
+            template <- getTemplate templates "table-interface.html"
+            return $ toResponse $ template
+              [ "heading"   $= toHtml (searchForm termsStr False)
+              , "content"   $= "A browsable index of all the packages"
+              , "tabledata" $= tabledata
+              , "footer"    $= alternativeSearchTerms termsStr]
 
           _ ->
             return $ toResponse $ Resource.XHtml $
@@ -1607,55 +1642,6 @@ mkHtmlSearch HtmlUtilities{..}
                 , alternativeSearch
                 ]
       where
-        resultsArea pkgIndex currentTime pkgDetails offset limit moreResults termsStr =
-            [ h2 << "Results"
-            , if offset == 0
-                then noHtml
-                else paragraph << ("(" ++ show (fst range + 1) ++ " to "
-                                       ++ show (snd range) ++ ")")
-            , case pkgDetails of
-                [] | offset == 0 -> toHtml "None"
-                   | otherwise   -> toHtml "No more results"
-                _ -> toHtml
-                      [ ulist ! [theclass "searchresults"]
-                             << map renderSearchResult pkgDetails
-                      , if null moreResults
-                          then noHtml
-                          else anchor ! [href moreResultsLink]
-                                     << "More results..."
-                      ]
-            ]
-          where
-            renderSearchResult :: PackageItem -> Html
-            renderSearchResult item = li ! classes <<
-              [ packageNameLink pkgname
-              , toHtml $ " " ++ ptype
-              , br
-              , toHtml (itemDesc item)
-              , br
-              , small ! [ theclass "info" ] <<
-                [ toHtml (renderTags (itemTags item))
-                , " Last uploaded " +++ humanTime ]
-              ]
-              where
-                pkgname   = itemName item
-                timestamp = maximum
-                          $ map pkgOriginalUploadTime
-                          $ PackageIndex.lookupPackageName pkgIndex pkgname
-                -- takes current time as argument so it can say how many $X ago something was
-                humanTime = HumanTime.humanReadableTime' currentTime timestamp
-                ptype = packageType (itemHasLibrary item) (itemNumExecutables item)
-                                    (itemNumTests item) (itemNumBenchmarks item)
-                classes = case classList of [] -> []; _ -> [theclass $ unwords classList]
-                classList = (case itemDeprecated item of Nothing -> []; _ -> ["deprecated"])
-
-            range = (offset, offset + length pkgDetails)
-            moreResultsLink =
-                "/packages/search?"
-             ++ "terms="   ++ escapeURIString isUnreserved termsStr
-             ++ "&offset=" ++ show (offset + limit)
-             ++ "&limit="  ++ show limit
-
         searchForm termsStr explain =
           [ h2 << "Package search"
           , form ! [XHtml.method "GET", action "/packages/search"] <<
