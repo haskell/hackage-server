@@ -260,6 +260,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          votesFeature
                          tagsFeature
                          versionsFeature
+                         usersFeature
+                         uploadFeature
 
     searchFeature   <- mkSearchFeature
                          coreFeature
