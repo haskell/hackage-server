@@ -333,7 +333,7 @@ library lib-server
                , hackage-security      ^>= 0.5.2
                , hackage-security-HTTP ^>= 0.1.1
                , haddock-library       ^>= 1.4.5
-               , happstack-server      ^>= 7.4
+               , happstack-server      ^>= 7.5
                , hashable              ^>= 1.2
                , hslogger              ^>= 1.2
                , lifted-base           ^>= 0.2.1
