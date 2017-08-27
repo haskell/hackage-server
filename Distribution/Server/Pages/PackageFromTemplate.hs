@@ -363,8 +363,7 @@ latestVersion (PackageIdentifier pname _ ) allVersions =
     versionLink v = anchor ! [href $ packageURL $ PackageIdentifier pname v] << display v
 
 readmeSection :: PackageRender -> Maybe BS.ByteString -> [Html]
-readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
-                            , rendPkgId  = pkgid }
+readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename) }
               (Just content) =
     [ thediv ! [theclass "embedded-author-content"]
             << if supposedToBeMarkdown filename
