@@ -207,8 +207,9 @@
     </div>
 
     $if(package.optional.hasReadme)$
+    <hr />
     <div id="readme-container">
-      <h2 id="readme">Readme for $package.name$</h2>
+      <h2 id="readme">Readme for $package.name$-$package.version$</h2>
       $package.optional.readme$
     </div>
     $endif$

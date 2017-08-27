@@ -165,7 +165,8 @@ readmeSection :: PackageRender -> Maybe BS.ByteString -> [Html]
 readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
                             , rendPkgId  = pkgid }
               (Just content) =
-    [ h2 ! [identifier "readme"] << ("Readme for " ++ name)
+    [ hr
+    , h2 ! [identifier "readme"] << ("Readme for " ++ name)
     , thediv ! [theclass "embedded-author-content"]
             << if supposedToBeMarkdown filename
                  then renderMarkdown (T.pack name) content
