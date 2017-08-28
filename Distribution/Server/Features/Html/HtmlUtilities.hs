@@ -1,4 +1,4 @@
-{-# LANGUAGE RecursiveDo, FlexibleContexts, RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE FlexibleContexts, RankNTypes, NamedFieldPuns, RecordWildCards #-}
 module Distribution.Server.Features.Html.HtmlUtilities (
   HtmlUtilities(..),
   htmlUtilities
@@ -9,7 +9,7 @@ import qualified Data.Set as Set
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Core
 import Distribution.Text (display)
-import Data.List (intersperse)
+import Data.List (intersperse, intercalate)
 import Data.Set (Set)
 import Distribution.Server.Features.PackageList
 import Distribution.Server.Pages.Util (packageType)
@@ -22,6 +22,7 @@ data HtmlUtilities = HtmlUtilities {
   , renderItem :: PackageItem -> Html
   , makeRow :: PackageItem -> Html
   , renderTags :: Set Tag -> [Html]
+  , renderReviewTags :: Set Tag -> (Set Tag, Set Tag) -> PackageName -> [Html]
   }
 
 htmlUtilities :: CoreFeature -> TagsFeature -> UserFeature -> HtmlUtilities
@@ -67,5 +68,24 @@ htmlUtilities CoreFeature{coreResource}
     renderTags tags = intersperse (toHtml ", ")
         (map (\tg -> anchor ! [href $ tagUri tagsResource "" tg] << display tg)
           $ Set.toList tags)
+
+    -- The page displayed at /package/:package/tags
+    renderReviewTags :: Set Tag -> (Set Tag, Set Tag) -> PackageName -> [Html]
+    renderReviewTags currTags revTags pkgname=
+        let toStr = intercalate ", " . map display . Set.toList
+            tagsStr = toStr currTags
+            addns = toStr $ fst revTags
+            delns = toStr $ snd revTags
+            disp = thediv ! [theclass "box"] << [ paragraph << [bold $ toHtml "Current Tags: ", toHtml tagsStr, br]
+                                                , paragraph << [bold $ toHtml "Additions to be reviewed: ", toHtml $ if (addns /= "") then addns else "None", br]
+                                                , paragraph << [bold $ toHtml "Deletions to be reviewed: ", toHtml $ if (delns /= "") then delns else "None", br]
+                                                ]
+        in
+            [ big $ bold $ toHtml $ display pkgname
+            , disp
+            , anchor ![href "tags/edit" ] << "Propose a tag?", toHtml " or "
+            , toHtml "return to ", packageNameLink pkgname, br
+            ]
+
 
     cores = coreResource

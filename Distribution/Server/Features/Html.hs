@@ -127,6 +127,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    , "revisions.html"
                    , "package-page.html"
                    , "table-interface.html"
+                   , "tag-edit.html"
                    ]
 
 
@@ -277,7 +278,7 @@ htmlFeature env@ServerEnv{..}
                                       docsCandidates tarIndexCache
                                       candidates templates
     htmlPreferred  = mkHtmlPreferred  utilities core versions
-    htmlTags       = mkHtmlTags       utilities core list tags templates
+    htmlTags       = mkHtmlTags       utilities core upload user list tags templates
     htmlSearch     = mkHtmlSearch     utilities core list names templates
 
     htmlResources = concat [
@@ -1467,6 +1468,8 @@ data HtmlTags = HtmlTags {
 
 mkHtmlTags :: HtmlUtilities
            -> CoreFeature
+           -> UploadFeature
+           -> UserFeature
            -> ListFeature
            -> TagsFeature
            -> Templates
@@ -1474,9 +1477,11 @@ mkHtmlTags :: HtmlUtilities
 mkHtmlTags HtmlUtilities{..}
            CoreFeature{ coreResource = CoreResource{
                           packageInPath
-                        , lookupPackageName
+                        , guardValidPackageName
                         }
                       }
+           UploadFeature{ maintainersGroup, trusteesGroup }
+           UserFeature{ guardAuthorised', guardAuthorised_ }
            ListFeature{makeItemList}
            TagsFeature{..}
            templates
@@ -1496,7 +1501,13 @@ mkHtmlTags HtmlUtilities{..}
             resourceGet = [("html", serveTagListing)]
           }
       , (extendResource $ packageTagsListing tags) {
-            resourcePut = [("html", putPackageTags)], resourceGet = []
+            resourcePut = [("html", putPackageTags)], resourceGet = [("html", showPackageTags)]
+          }
+      , (extendResource $ tagAliasEdit tags) {
+            resourcePut = [("html", putAliasEdit)]
+          }
+      , (extendResource $ tagAliasEditForm tags) {
+            resourceGet = [("html", serveAliasForm)]
           }
       , tagEdit -- (extendResource $ packageTagsEdit tags) { resourceGet = [("html", serveTagsForm)] }
       ]
@@ -1519,8 +1530,37 @@ mkHtmlTags HtmlUtilities{..}
               ]
             tagItem tg = anchor ! [href $ tagUri tags "" tg] << display tg
 
+    putAliasEdit :: DynamicPath -> ServerPartE Response
+    putAliasEdit dpath = do
+        tagname <- tagInPath dpath
+        targetTag <- optional $ look "tags"
+        mergeTags targetTag (Tag tagname)
+        return $ toResponse $ Resource.XHtml $ hackagePage "Merged Tag"
+            [ h2 << "Merged tag"
+            , toHtml "Return to "
+            , anchor ! [href "/packages/tags"] << "tag listings"
+            ]
+
+    serveAliasForm :: DynamicPath -> ServerPartE Response
+    serveAliasForm dpath = do
+        tagname <- tagInPath dpath
+        guardAuthorised_ [InGroup trusteesGroup]
+
+        let aliasForm = [ thediv ! [theclass "box"] <<
+                            [h2 << ("Merge Tag " ++ tagname)
+                            , form ! [XHtml.method "post", action ("/packages/tag/" ++ tagname ++ "/alias")] <<
+                                [ hidden "_method" "PUT"
+                                , input ! [value "", name "tags", identifier "tags"]
+                                , toHtml " (Tag to merge with) ", br
+                                , input ! [thetype "submit", value "Merge"]
+                                ]
+                            ]
+                        ]
+        return $ toResponse $ Resource.XHtml $ hackagePage ("Merge Tag " ++ tagname) aliasForm
+
     serveTagListing :: DynamicPath -> ServerPartE Response
-    serveTagListing dpath =
+    serveTagListing dpath = do
+      tagname <- tagInPath dpath
       withTagPath dpath $ \tg pkgnames -> do
         let tagd = "Packages tagged " ++ display tg
             pkgs = Set.toList pkgnames
@@ -1536,6 +1576,8 @@ mkHtmlTags HtmlUtilities{..}
                 [] -> toHtml "No packages have this tag."
                 _  -> toHtml
                   [ paragraph << [if count==1 then "1 package has" else show count ++ " packages have", " this tag."]
+                  , anchor ! [href $  tagname ++ "/alias/edit"] << "[Merge tag]"
+                  , toHtml " (trustees only)"
                   , paragraph ! [theclass "toc"] << [toHtml "Related tags: ", toHtml $ showHistogram histogram]
                   ]
           , "tabledata" $= rowList
@@ -1553,24 +1595,55 @@ mkHtmlTags HtmlUtilities{..}
     putPackageTags :: DynamicPath -> ServerPartE Response
     putPackageTags dpath = do
       pkgname <- packageInPath dpath
-      _       <- lookupPackageName pkgname -- TODO: necessary?
-      putTags pkgname
-      return $ toResponse $ Resource.XHtml $ hackagePage "Set tags"
-          [toHtml "Put tags for ", packageNameLink pkgname]
+      guardValidPackageName pkgname
+      addns <- optional $ look "addns"
+      delns <- optional $ look "delns"
+      raddns <- optional $ look "raddns"
+      rdelns <- optional $ look "rdelns"
+
+      putTags addns delns raddns rdelns pkgname
+      currTags <- queryTagsForPackage pkgname
+      revTags <- queryReviewTagsForPackage pkgname
+      let disp = renderReviewTags currTags revTags pkgname
+      return $ toResponse $ Resource.XHtml $ hackagePage "Package Tags" disp
+
+    showPackageTags :: DynamicPath -> ServerPartE Response
+    showPackageTags dpath = do
+      pkgname <- packageInPath dpath
+      currTags <- queryTagsForPackage pkgname
+      revTags <- queryReviewTagsForPackage pkgname
+      let disp = renderReviewTags currTags revTags pkgname
+      return $ toResponse $ Resource.XHtml $ hackagePage "Package Tags" disp
 
     -- serve form for editing, to be received by putTags
     serveTagsForm :: DynamicPath -> ServerPartE Response
     serveTagsForm dpath = do
       pkgname <- packageInPath dpath
       currTags <- queryTagsForPackage pkgname
-      let tagsStr = concat . intersperse ", " . map display . Set.toList $ currTags
-      return $ toResponse $ Resource.XHtml $ hackagePage "Edit package tags"
-        [paragraph << [toHtml "Set tags for ", packageNameLink pkgname],
-         form ! [theclass "box", XHtml.method "post", action $ packageTagsUri tags "" pkgname] <<
-          [ hidden "_method" "PUT"
-          , dlist . ddef . toHtml $ makeInput [thetype "text", value tagsStr] "tags" "Set tags to "
-          , paragraph << input ! [thetype "submit", value "Set tags"]
-          ]]
+      revTags <- queryReviewTagsForPackage pkgname
+      template <- getTemplate templates "tag-edit.html"
+      let toStr = intercalate ", " . map display . Set.toList
+          tagsStr = toStr currTags
+          addns = toStr $ fst  revTags
+          delns = toStr $ snd  revTags
+      trustainer <- guardAuthorised' [InGroup (maintainersGroup pkgname), InGroup trusteesGroup]
+      user <- guardAuthorised' [AnyKnownUser]
+      if trustainer || user
+        then return $ toResponse . template $
+          [ "pkgname"           $= display pkgname
+          , "addns"             $= addns
+          , "tags"              $= tagsStr
+          , "delns"             $= delns
+          , "istrustee"         $= trustainer
+          , "isuser"            $= not trustainer
+          ]
+        else return $ toResponse $ Resource.XHtml $ hackagePage "Error" [h2 << "Authorization Error"
+                                                                            , paragraph << "You need to be logged in to propose tags"]
+
+-- | Find a TagName inside a path.
+tagInPath :: forall m a. (MonadPlus m, FromReqURI a) => DynamicPath -> m a
+tagInPath dpath = maybe mzero return (lookup "tag" dpath >>= fromReqURI)
+
 
 {-------------------------------------------------------------------------------
   Search
