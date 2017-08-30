@@ -25,7 +25,7 @@ newtype JsonVersion = JV Version
 instance FromJSON JsonVersion where
   parseJSON = withText "Version" $ \s ->
     case simpleParse (Text.unpack s) of
-      Just version -> pure (JV version)
+      Just version -> return (JV version)
       Nothing      -> mzero
 
 data DocMeta = DocMeta {
