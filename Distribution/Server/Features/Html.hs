@@ -48,6 +48,7 @@ import qualified Distribution.Server.Pages.Group as Pages
 -- [reverse index disabled] import qualified Distribution.Server.Pages.Reverse as Pages
 import qualified Distribution.Server.Pages.Index as Pages
 import Distribution.Server.Util.CountingMap (cmFind, cmToList)
+import Distribution.Server.Util.DocMeta (loadTarDocMeta)
 import Distribution.Server.Util.ServeTarball (loadTarEntry)
 import Distribution.Simple.Utils ( cabalVersion )
 
@@ -567,6 +568,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
           documentationFeature reportsFeature realpkg
         mdocIndex     <- maybe (return Nothing)
           (liftM Just . liftIO . cachedTarIndex) mdoctarblob
+        mdocMeta      <- loadTarDocMeta mdocIndex pkgid
 
         let infoUrl = fmap (\_ -> preferredPackageUri versions "" pkgname) $
               sumRange prefInfo
@@ -592,7 +594,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
           ] ++
           -- Items not related to IO (mostly pure functions)
           PagesNew.packagePageTemplate render
-            mdocIndex mreadme
+            mdocIndex mdocMeta mreadme
             docURL distributions
             deprs
             utilities
