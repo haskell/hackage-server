@@ -5,6 +5,7 @@ module Distribution.Server.Features.Html (
   ) where
 
 import Distribution.Server.Framework
+import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Framework.Templating
 
@@ -48,6 +49,7 @@ import qualified Distribution.Server.Pages.Group as Pages
 -- [reverse index disabled] import qualified Distribution.Server.Pages.Reverse as Pages
 import qualified Distribution.Server.Pages.Index as Pages
 import Distribution.Server.Util.CountingMap (cmFind, cmToList)
+import Distribution.Server.Util.DocMeta (loadTarDocMeta)
 import Distribution.Server.Util.ServeTarball (loadTarEntry)
 import Distribution.Simple.Utils ( cabalVersion )
 
@@ -464,7 +466,7 @@ mkHtmlCore :: ServerEnv
            -> ListFeature
            -> SearchFeature
            -> HtmlCore
-mkHtmlCore ServerEnv{serverBaseURI}
+mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            utilities@HtmlUtilities{..}
            UserFeature{queryGetUserDb, checkAuthenticated}
            CoreFeature{coreResource, queryGetPackageIndex}
@@ -568,6 +570,19 @@ mkHtmlCore ServerEnv{serverBaseURI}
         mdocIndex     <- maybe (return Nothing)
           (liftM Just . liftIO . cachedTarIndex) mdoctarblob
 
+        let
+          loadDocMeta
+            | Just doctarblob <- mdoctarblob
+            , Just docIndex   <- mdocIndex
+            = loadTarDocMeta
+                (BlobStorage.filepath serverBlobStore doctarblob)
+                docIndex
+                pkgid
+            | otherwise
+            = return Nothing
+
+        mdocMeta <- loadDocMeta
+
         let infoUrl = fmap (\_ -> preferredPackageUri versions "" pkgname) $
               sumRange prefInfo
 
@@ -592,7 +607,7 @@ mkHtmlCore ServerEnv{serverBaseURI}
           ] ++
           -- Items not related to IO (mostly pure functions)
           PagesNew.packagePageTemplate render
-            mdocIndex mreadme
+            mdocIndex mdocMeta mreadme
             docURL distributions
             deprs
             utilities
