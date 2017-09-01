@@ -5,6 +5,7 @@ module Distribution.Server.Features.Html (
   ) where
 
 import Distribution.Server.Framework
+import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Framework.Templating
 
@@ -465,7 +466,7 @@ mkHtmlCore :: ServerEnv
            -> ListFeature
            -> SearchFeature
            -> HtmlCore
-mkHtmlCore ServerEnv{serverBaseURI}
+mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            utilities@HtmlUtilities{..}
            UserFeature{queryGetUserDb, checkAuthenticated}
            CoreFeature{coreResource, queryGetPackageIndex}
@@ -568,7 +569,19 @@ mkHtmlCore ServerEnv{serverBaseURI}
           documentationFeature reportsFeature realpkg
         mdocIndex     <- maybe (return Nothing)
           (liftM Just . liftIO . cachedTarIndex) mdoctarblob
-        mdocMeta      <- loadTarDocMeta mdocIndex pkgid
+
+        let
+          loadDocMeta
+            | Just doctarblob <- mdoctarblob
+            , Just docIndex   <- mdocIndex
+            = loadTarDocMeta
+                (BlobStorage.filepath serverBlobStore doctarblob)
+                docIndex
+                pkgid
+            | otherwise
+            = return Nothing
+
+        mdocMeta <- loadDocMeta
 
         let infoUrl = fmap (\_ -> preferredPackageUri versions "" pkgname) $
               sumRange prefInfo

@@ -37,11 +37,11 @@ instance FromJSON DocMeta where
     JV haddockVersion <- o .: "haddock_version"
     return DocMeta { docMetaHaddockVersion = haddockVersion }
 
-loadTarDocMeta :: MonadIO m => Maybe TarIndex -> PackageId -> m (Maybe DocMeta)
-loadTarDocMeta (Just docIndex) pkgid =
+loadTarDocMeta :: MonadIO m => FilePath -> TarIndex -> PackageId -> m (Maybe DocMeta)
+loadTarDocMeta tarball docIndex pkgid =
   case TarIndex.lookup docIndex docMetaPath of
     Just (TarIndex.TarFileEntry docMetaEntryOff) -> do
-      docMetaEntryContent <- liftIO (loadTarEntry docMetaPath docMetaEntryOff)
+      docMetaEntryContent <- liftIO (loadTarEntry tarball docMetaEntryOff)
       case docMetaEntryContent of
         Right (_, docMetaContent) ->
           return (parseDocMeta docMetaContent)
@@ -49,8 +49,6 @@ loadTarDocMeta (Just docIndex) pkgid =
     _ -> return Nothing
   where
     docMetaPath = packageDocMetaTarPath pkgid
-loadTarDocMeta _ _ = return Nothing
-
 
 parseDocMeta :: Data.ByteString.Lazy.ByteString -> Maybe DocMeta
 parseDocMeta = decode
