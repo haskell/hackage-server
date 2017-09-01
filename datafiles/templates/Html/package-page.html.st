@@ -224,7 +224,7 @@
   <script src="$doc.baseUrl$/preact.js" type="text/javascript"></script>
   <script src="$doc.baseUrl$/fuse.js" type="text/javascript"></script>
   <script src="$doc.baseUrl$/index.js" type="text/javascript"></script>
-  <script type="text/javascript"> quickNav.init("$doc.baseUrl$"); </script>
+  <script type="text/javascript"> quickNav.init("$doc.baseUrl$", function() {}); </script>
   $endif$
 </body>
 </html>
