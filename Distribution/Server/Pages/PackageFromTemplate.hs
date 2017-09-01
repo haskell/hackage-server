@@ -90,7 +90,7 @@ packagePageTemplate render
   ] ++
 
   -- Miscellaneous things that could still stand to be refactored a bit.
-  [ "moduleList"        $= Old.moduleSection render mdocIndex docURL
+  [ "moduleList"        $= Old.moduleSection render mdocIndex docURL hasQuickNavV1
   , "executables"       $= (commaList . map toHtml $ rendExecNames render)
   , "downloadSection"   $= Old.downloadSection render
   , "stability"         $= renderStability desc

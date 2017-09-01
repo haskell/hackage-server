@@ -91,7 +91,7 @@ packagePage render headLinks top sections
              renderHeads,
              top,
              pkgBody render sections docURL,
-             moduleSection render mdocIndex docURL,
+             moduleSection render mdocIndex docURL False,
              renderPackageFlags render docURL,
              downloadSection render,
              maintainerSection pkgid isCandidate,
@@ -284,8 +284,8 @@ renderPackageFlags render docURL =
                  if flagManual flag then "Manual" else "Automatic"]
         code = (thespan ! [theclass "code"] <<)
 
-moduleSection :: PackageRender -> Maybe TarIndex -> URL -> [Html]
-moduleSection render mdocIndex docURL =
+moduleSection :: PackageRender -> Maybe TarIndex -> URL -> Bool -> [Html]
+moduleSection render mdocIndex docURL quickNav =
     maybeToList $ fmap msect (rendModules render mdocIndex)
   where msect ModSigIndex{ modIndex = m, sigIndex = s } = toHtml $
             (if not (null s)
@@ -301,7 +301,10 @@ moduleSection render mdocIndex docURL =
           | isJust mdocIndex =
             let docIndexURL = docURL </> "doc-index.html"
             in  paragraph ! [thestyle "font-size: small"]
-                  << ("[" +++ anchor ! [href docIndexURL] << "Index" +++ "]")
+                  << ("[" +++ anchor ! [href docIndexURL] << "Index" +++ "]" +++
+                      (if quickNav
+                       then " [" +++ anchor ! [identifier "quickjump-trigger", href "#"] << "Quick Jump" +++ "]"
+                       else mempty))
           | otherwise = mempty
 
 propertySection :: [(String, Html)] -> [Html]

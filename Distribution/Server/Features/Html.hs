@@ -577,7 +577,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
             = loadTarDocMeta
                 (BlobStorage.filepath serverBlobStore doctarblob)
                 docIndex
-                pkgid
+                realpkg
             | otherwise
             = return Nothing
 

@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
+  $if(doc.hasQuickNavV1)$
+  <link href="$doc.baseUrl$/ocean.css" rel="stylesheet" type="text/css" title="Ocean" />
+  $endif$
   $hackageCssTheme()$
   <title>
     $package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$
@@ -225,7 +228,7 @@
   <script src="$doc.baseUrl$/preact.js" type="text/javascript"></script>
   <script src="$doc.baseUrl$/fuse.js" type="text/javascript"></script>
   <script src="$doc.baseUrl$/index.js" type="text/javascript"></script>
-  <script type="text/javascript"> quickNav.init("$doc.baseUrl$", function() {}); </script>
+  <script type="text/javascript"> quickNav.init("$doc.baseUrl$", function(toggle) {var t = document.getElementById('quickjump-trigger');if (t) {t.onclick = function(e) { e.preventDefault(); toggle(); };}}); </script>
   $endif$
 </body>
 </html>
