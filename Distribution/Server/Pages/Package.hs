@@ -1,5 +1,5 @@
 -- Body of the HTML page for a package
-{-# LANGUAGE PatternGuards, RecordWildCards #-}
+{-# LANGUAGE PatternGuards, RecordWildCards, ViewPatterns #-}
 module Distribution.Server.Pages.Package
   ( packagePage
   , renderPackageFlags
@@ -19,23 +19,26 @@ module Distribution.Server.Pages.Package
   , renderHaddock
   , maintainerSection
   , downloadSection
+  , moduleToDocUrl
   ) where
 
 import Distribution.Server.Features.PreferredVersions
 
 import Distribution.Server.Pages.Template (hackagePageWith)
-import Distribution.Server.Pages.Package.HaddockParse (parseHaddockParagraphs)
-import Distribution.Server.Pages.Package.HaddockLex  (tokenise)
+import qualified Distribution.Server.Pages.Package.HaddockParse as Haddock
 import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Packages.ModuleForest
 import Distribution.Server.Packages.Render
 import Distribution.Server.Users.Types (userStatus, userName, isActiveAccount)
 import Data.TarIndex (TarIndex)
 
+import qualified Distribution.ModuleName as Module
+import Distribution.ModuleName (ModuleName)
 import Distribution.Package
 import Distribution.PackageDescription as P
 import Distribution.Simple.Utils ( cabalVersion )
 import Distribution.Version
+import Distribution.Types.CondTree
 import Distribution.Text        (display)
 import Text.XHtml.Strict hiding (p, name, title, content)
 
@@ -51,6 +54,8 @@ import Network.URI              (isRelativeReference)
 
 import qualified Cheapskate      as Markdown (markdown, Options(..), Inline(Link), walk)
 import qualified Cheapskate.Html as Markdown (renderDoc)
+
+import qualified Documentation.Haddock.Markup as Haddock
 
 import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
 import qualified Data.Text                as T
@@ -85,9 +90,9 @@ packagePage render headLinks top sections
              candidateBanner,
              renderHeads,
              top,
-             pkgBody render sections,
-             moduleSection render mdocIndex docURL,
-             renderPackageFlags render,
+             pkgBody render sections docURL,
+             moduleSection render mdocIndex docURL False,
+             renderPackageFlags render docURL,
              downloadSection render,
              maintainerSection pkgid isCandidate,
              readmeSection render mreadMe,
@@ -123,14 +128,16 @@ packagePage render headLinks top sections
         toHtml [ h2 << title, content ]
 
 -- | Body of the package page
-pkgBody :: PackageRender -> [(String, Html)] -> [Html]
-pkgBody render sections =
-    descriptionSection render
+pkgBody :: PackageRender -> [(String, Html)] -> URL -> [Html]
+pkgBody render sections docURL =
+    descriptionSection render docURL
  ++ propertySection sections
 
-descriptionSection :: PackageRender -> [Html]
-descriptionSection PackageRender{..} =
-        renderHaddock (description rendOther)
+descriptionSection :: PackageRender -> URL -> [Html]
+descriptionSection PackageRender{..} docURL =
+        [thediv ! [identifier "description"] <<
+           renderHaddock (moduleToDocUrl PackageRender{..} docURL)
+                         (description rendOther)]
      ++ readmeLink
   where
     readmeLink = case rendReadme of
@@ -141,18 +148,25 @@ descriptionSection PackageRender{..} =
                 ]
       _      -> []
 
-renderHaddock :: String -> [Html]
-renderHaddock []   = []
-renderHaddock desc =
-  case tokenise desc >>= parseHaddockParagraphs of
+-- | Resolve 'ModuleName' to 'URL' if module is exposed by package
+moduleToDocUrl :: PackageRender -> URL -> ModuleName -> Maybe URL
+moduleToDocUrl _ docURL modName = Just url
+  where -- TODO: only return 'Just' links when .html target exists
+    url = docURL </> (intercalate "-" (Module.components modName) ++ ".html")
+
+renderHaddock :: (ModuleName -> Maybe URL) -> String -> [Html]
+renderHaddock _ "" = []
+renderHaddock modResolv desc =
+  case Haddock.parse desc of
       Nothing  -> [paragraph << p | p <- paragraphs desc]
-      Just doc -> [markup htmlMarkup doc]
+      Just doc -> [Haddock.markup (htmlMarkup modResolv) doc]
 
 readmeSection :: PackageRender -> Maybe BS.ByteString -> [Html]
 readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
                             , rendPkgId  = pkgid }
               (Just content) =
-    [ h2 ! [identifier "readme"] << ("Readme for " ++ name)
+    [ hr
+    , h2 ! [identifier "readme"] << ("Readme for " ++ name)
     , thediv ! [theclass "embedded-author-content"]
             << if supposedToBeMarkdown filename
                  then renderMarkdown (T.pack name) content
@@ -235,8 +249,8 @@ maintainerSection pkgid isCandidate =
 
 -- | Render a table of the package's flags and along side it a tip
 -- indicating how to enable/disable flags with Cabal.
-renderPackageFlags :: PackageRender -> [Html]
-renderPackageFlags render =
+renderPackageFlags :: PackageRender -> URL -> [Html]
+renderPackageFlags render docURL =
   case rendFlags render of
     [] -> mempty
     flags ->
@@ -262,27 +276,35 @@ renderPackageFlags render =
                         ,th << "Default"
                         ,th << "Type"]
         flagRow flag =
-          tr << [td ! [theclass "flag-name"]   << code (case flagName flag of FlagName name -> name)
-                ,td ! [theclass "flag-desc"]   << flagDescription flag
+          tr << [td ! [theclass "flag-name"]   << code (unFlagName (flagName flag))
+                ,td ! [theclass "flag-desc"]   << renderHaddock (moduleToDocUrl render docURL) (flagDescription flag)
                 ,td ! [theclass (if flagDefault flag then "flag-enabled" else "flag-disabled")] <<
                  if flagDefault flag then "Enabled" else "Disabled"
                 ,td ! [theclass (if flagManual flag then "flag-manual" else "flag-automatic")] <<
                  if flagManual flag then "Manual" else "Automatic"]
         code = (thespan ! [theclass "code"] <<)
 
-moduleSection :: PackageRender -> Maybe TarIndex -> URL -> [Html]
-moduleSection render mdocIndex docURL =
+moduleSection :: PackageRender -> Maybe TarIndex -> URL -> Bool -> [Html]
+moduleSection render mdocIndex docURL quickNav =
     maybeToList $ fmap msect (rendModules render mdocIndex)
-  where msect libModuleForrest = toHtml
-            [ h2 << "Modules"
-            , renderModuleForest docURL libModuleForrest
-            , renderDocIndexLink
-            ]
+  where msect ModSigIndex{ modIndex = m, sigIndex = s } = toHtml $
+            (if not (null s)
+                then [ h2 << "Signatures"
+                     , renderModuleForest docURL s ]
+                else []) ++
+            (if not (null m)
+                then [ h2 << "Modules"
+                     , renderModuleForest docURL m ]
+                else []) ++
+            [renderDocIndexLink]
         renderDocIndexLink
           | isJust mdocIndex =
             let docIndexURL = docURL </> "doc-index.html"
             in  paragraph ! [thestyle "font-size: small"]
-                  << ("[" +++ anchor ! [href docIndexURL] << "Index" +++ "]")
+                  << ("[" +++ anchor ! [href docIndexURL] << "Index" +++ "]" +++
+                      (if quickNav
+                       then " [" +++ anchor ! [identifier "quickjump-trigger", href "#"] << "Quick Jump" +++ "]"
+                       else mempty))
           | otherwise = mempty
 
 propertySection :: [(String, Html)] -> [Html]
@@ -311,7 +333,7 @@ showDependencies :: [Dependency] -> Html
 showDependencies deps = commaList (map showDependency deps)
 
 showDependency ::  Dependency -> Html
-showDependency (Dependency (PackageName pname) vs) = showPkg +++ vsHtml
+showDependency (Dependency (unPackageName -> pname) vs) = showPkg +++ vsHtml
   where vsHtml = if vs == anyVersion then noHtml
                                      else toHtml (" (" ++ display vs ++ ")")
         -- mb_vers links to latest version in range. This is a bit computationally
@@ -320,7 +342,7 @@ showDependency (Dependency (PackageName pname) vs) = showPkg +++ vsHtml
                     PackageIndex.lookupPackageName vmap (PackageName pname)-}
         -- nonetheless, we should ensure that the package exists /before/
         -- passing along the PackageRender, which is not the case here
-        showPkg = anchor ! [href . packageURL $ PackageIdentifier (PackageName pname) (Version [] [])] << pname
+        showPkg = anchor ! [href . packageURL $ PackageIdentifier (mkPackageName pname) nullVersion] << pname
 
 renderDetailedDependencies :: PackageRender -> Html
 renderDetailedDependencies pkgRender =
@@ -347,9 +369,9 @@ renderDetailedDependencies pkgRender =
     list :: [Html] -> Html
     list items = thediv ! [identifier "detailed-dependencies"] << unordList items
 
-    renderComponent :: (Condition ConfVar, DependencyTree, Maybe DependencyTree)
+    renderComponent :: (CondBranch ConfVar [Dependency] IsBuildable)
                     -> Maybe Html
-    renderComponent (condition, then', else')
+    renderComponent (CondBranch condition then' else')
         | Just thenHtml <- render then' =
                            Just $ strong << "if "
                              +++ renderCond condition
@@ -384,7 +406,7 @@ renderDetailedDependencies pkgRender =
 
             displayConfVar (OS os) = "os(" ++ display os ++ ")"
             displayConfVar (Arch arch) = "arch(" ++ display arch ++ ")"
-            displayConfVar (Flag (FlagName f)) = "flag(" ++ f ++ ")"
+            displayConfVar (Flag fn) = "flag(" ++ unFlagName fn ++ ")"
             displayConfVar (Impl compilerFlavor versionRange) =
                 "impl(" ++ display compilerFlavor ++ ver ++ ")"
               where
@@ -401,7 +423,7 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
             later -> (Nothing, later)
         versionList = commaList $ map versionedLink earlierVersions
                                ++ (case pversion of
-                                      Version [] [] -> []
+                                      v | v == nullVersion -> []
                                       _ -> [strong ! (maybe [] (status . snd) mThisVersion) << display pversion]
                                   )
                                ++ map versionedLink laterVersions

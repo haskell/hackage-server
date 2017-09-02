@@ -6,8 +6,8 @@ module Distribution.Client.Mirror.Config (
   ) where
 
 -- stdlib
-import Control.Applicative hiding ((<|>))
-import Control.Monad
+import Distribution.Server.Prelude
+
 import Data.Char (isSpace)
 import Network.URI (URI)
 import Text.Parsec
@@ -97,7 +97,7 @@ parseURI = aux =<< parseArg
 
 -- | Parse generic argument: either string without spaces or quoted string
 parseArg :: Parser String
-parseArg = lexeme (quoted <|> noSpaces)
+parseArg = lexeme (quoted Text.Parsec.<|> noSpaces)
   where
     noSpaces, quoted :: Parser String
     noSpaces = many1 (satisfy (not . isSpace))

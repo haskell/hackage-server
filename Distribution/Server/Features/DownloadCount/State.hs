@@ -4,7 +4,6 @@
 module Distribution.Server.Features.DownloadCount.State where
 
 import Data.Time.Calendar (Day(..))
-import Data.Version (Version)
 import Data.Typeable (Typeable)
 import Data.Foldable (forM_)
 import Control.Arrow (first)
@@ -31,6 +30,7 @@ import Data.SafeCopy (base, deriveSafeCopy, safeGet, safePut)
 import Data.Serialize.Get (runGetLazy)
 import Data.Serialize.Put (runPutLazy)
 
+import Distribution.Version (Version)
 import Distribution.Package (
     PackageId
   , PackageName

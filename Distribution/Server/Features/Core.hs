@@ -49,7 +49,7 @@ import qualified Distribution.Server.Packages.PackageIndex          as PackageIn
 -- Cabal
 import Distribution.Text (display)
 import Distribution.Package
-import Distribution.Version (Version(..))
+import Distribution.Version (nullVersion)
 
 -- | The core feature, responsible for the main package index and all access
 -- and modifications of it.
@@ -457,11 +457,11 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           -- * the package name and tarball name must be the same
           -- * the tarball must specify a version
           -- * the package must either have no version or the same version as the tarball
-          guard $ name == name' && version' /= Version [] [] && (version == version' || version == Version [] [])
+          guard $ name == name' && version' /= nullVersion && (version == version' || version == nullVersion)
           return pkgid
 
     guardValidPackageId pkgid = do
-      guard (pkgVersion pkgid /= Version [] [])
+      guard (pkgVersion pkgid /= nullVersion)
       void $ lookupPackageId pkgid
 
     guardValidPackageName pkgname =
@@ -603,7 +603,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
         pkgs -> return pkgs
 
     lookupPackageId :: PackageId -> ServerPartE PkgInfo
-    lookupPackageId (PackageIdentifier name (Version [] [])) = do
+    lookupPackageId (PackageIdentifier name v) | nullVersion == v = do
       pkgs <- lookupPackageName name
       -- pkgs is sorted by version number and non-empty
       return (last pkgs)
@@ -660,7 +660,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     servePackageTarball :: DynamicPath -> ServerPartE Response
     servePackageTarball dpath = do
       pkgid <- packageTarballInPath dpath
-      guard (pkgVersion pkgid /= Version [] [])
+      guard (pkgVersion pkgid /= nullVersion)
       pkg <- lookupPackageId pkgid
       case pkgLatestTarball pkg of
         Nothing -> errNotFound "Tarball not found"

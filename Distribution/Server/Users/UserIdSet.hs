@@ -6,6 +6,7 @@ module Distribution.Server.Users.UserIdSet (
     delete,
     member,
     size,
+    null,
     toList,
     fromList,
     unions,
@@ -23,6 +24,7 @@ import Control.DeepSeq
 import Control.Applicative ((<$>))
 import Data.Aeson (ToJSON)
 
+import Prelude hiding (null)
 
 -- | A simple set of 'UserId's. Used to implement user groups, but can be used
 -- anywhere a set of users identified by 'UserId' is needed.
@@ -44,6 +46,9 @@ member (UserId uid) (UserIdSet uidset) = IntSet.member uid uidset
 
 size :: UserIdSet -> Int
 size (UserIdSet uidset) = IntSet.size uidset
+
+null :: UserIdSet -> Bool
+null (UserIdSet uidset) = IntSet.null uidset
 
 toList :: UserIdSet -> [UserId]
 toList (UserIdSet uidset) = map UserId (IntSet.toList uidset)

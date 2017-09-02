@@ -18,6 +18,9 @@ module Distribution.Client.UploadLog (
     collectMaintainerInfo,
   ) where
 
+import Prelude ()
+import Distribution.Server.Prelude hiding (read)
+
 import Distribution.Server.Users.Types
          ( UserName )
 
@@ -25,7 +28,7 @@ import Distribution.Package
          ( PackageId, PackageName, packageName, PackageIdentifier(..))
 import Distribution.Text
          ( Text(..), simpleParse )
-import Distribution.ParseUtils ( parsePackageNameQ )
+import Distribution.ParseUtils ( parseMaybeQuoted )
 import qualified Distribution.Compat.ReadP as Parse
 import qualified Text.PrettyPrint          as Disp
 import Text.PrettyPrint
@@ -38,13 +41,11 @@ import Data.Time.Clock
 import Data.Time.LocalTime
          ( zonedTimeToUTC )
 import Data.Time.Format
-         ( readsTime, formatTime )
+         ( formatTime )
 import Data.Time.Locale.Compat
          ( defaultTimeLocale )
 import Data.List
          ( sortBy, groupBy, nub )
-
-import Prelude hiding (read)
 
 data Entry = Entry UTCTime UserName PackageIdentifier
   deriving (Eq, Ord, Show)
@@ -54,11 +55,11 @@ instance Text Entry where
         Disp.text (formatTime defaultTimeLocale "%c" time)
     <+> disp user <+> disp pkgid
   parse = do
-    time <- Parse.readS_to_P (readsTime defaultTimeLocale "%c")
+    time <- readPTime' "%c"
     Parse.skipSpaces
     user <- parse
     Parse.skipSpaces
-    pkg  <- parsePackageNameQ
+    pkg  <- parseMaybeQuoted parse
     Parse.skipSpaces
     ver  <- parse
     let pkgid = PackageIdentifier pkg ver

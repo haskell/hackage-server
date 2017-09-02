@@ -10,9 +10,9 @@ module Distribution.Server.Features.Security.SHA256 (
   ) where
 
 -- stdlibs
-import           Control.Applicative
+import           Distribution.Server.Prelude
+
 import           Control.DeepSeq
-import           Control.Monad
 import qualified Data.ByteString                       as BS
 import qualified Data.ByteString.Base16                as B16
 import           Data.SafeCopy
@@ -24,7 +24,6 @@ import qualified Data.Binary                           as Bin
 import qualified Data.Binary.Put                       as Bin
 import qualified Data.ByteString.Char8                 as BS.Char8
 import qualified Data.ByteString.Lazy                  as BS.Lazy
-import           Data.Word
 
 -- cryptohash
 import qualified Crypto.Hash.SHA256                    as SHA256

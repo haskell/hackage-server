@@ -8,7 +8,7 @@ language: c
 sudo: false
 
 git:
-  submodules: false  # whether to recursively clone submodules
+  submodules: true  # whether to recursively clone submodules
 
 cache:
   directories:
@@ -50,12 +50,16 @@ matrix:
     - compiler: "ghc-8.0.2"
     # env: TEST=--disable-tests BENCH=--disable-benchmarks
       addons: {apt: {packages: [ghc-ppa-tools,cabal-install-head,ghc-8.0.2], sources: [hvr-ghc]}}
+    - compiler: "ghc-8.2.1"
+    # env: TEST=--disable-tests BENCH=--disable-benchmarks
+      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-head,ghc-8.2.1], sources: [hvr-ghc]}}
 
 before_install:
  - HC=${CC}
  - unset CC
  - PATH=/opt/ghc/bin:/opt/ghc-ppa-tools/bin:$PATH
- - PKGNAME='hackage-server'
+ - PKGNAME="hackage-server"
+ - TARGET=":pkg:$PKGNAME"
 
 install:
  - cabal --version
@@ -64,12 +68,10 @@ install:
  - TEST=${TEST---enable-tests}
  - travis_retry cabal update -v
  - sed -i 's/^jobs:/-- jobs:/' ${HOME}/.cabal/config
- - rm -fv cabal.project.local
- - "echo 'packages: .' > cabal.project"
  - if [ -e "cabal.project.local-${HC}" ]; then cp -v "cabal.project.local-${HC}" cabal.project.local; fi
  - rm -f cabal.project.freeze
- - cabal new-build -w ${HC} ${TEST} ${BENCH} --dep -j2 all
- - cabal new-build -w ${HC} --disable-tests --disable-benchmarks --dep -j2 all
+ - cabal new-build -w ${HC} ${TEST} ${BENCH} --dep -j2 ${TARGET}
+ - cabal new-build -w ${HC} --disable-tests --disable-benchmarks --dep -j2 ${TARGET}
 
 # Here starts the actual work to be performed for the package under test;
 # any command which exits with a non-zero exit code causes the build to fail.
@@ -85,14 +87,16 @@ script:
 ## from here on, CWD is inside the extracted source-tarball
  - rm -fv cabal.project.local
  - "echo 'packages: .' > cabal.project"
+ - if [ -e "../../cabal.project" ]; then cp -v "../../cabal.project" cabal.project; fi
+ - ln -vs ../../vendor
  - if [ -e "../../cabal.project.local-${HC}" ]; then cp -v "../../cabal.project.local-${HC}" cabal.project.local; fi
  - rm -f cabal.project.freeze
  # this builds all libraries and executables (without tests/benchmarks)
  - cabal new-build -w ${HC} --disable-tests --disable-benchmarks all
  # this builds all libraries and executables (including tests/benchmarks)
  # - rm -rf ./dist-newstyle
- - cabal new-build -w ${HC} ${TEST} ${BENCH} all
+ - cabal new-build -w ${HC} ${TEST} ${BENCH} ${TARGET}
 
- - cabal new-test -w ${HC} -j1 all
+ - cabal new-test -w ${HC} -j1 ${TARGET}
 
 # EOF

@@ -36,6 +36,7 @@ import Distribution.Server.Pages.Template (hackagePage)
 
 import Distribution.Text
 import Distribution.Package
+import Distribution.Version
 
 import qualified Cheapskate      as Markdown (markdown, Options(..))
 import qualified Cheapskate.Html as Markdown (renderDoc)
@@ -49,7 +50,6 @@ import qualified Text.XHtml.Strict as XHtml
 import           Text.XHtml.Strict ((<<), (!))
 import System.FilePath.Posix (takeExtension)
 
-import Data.Version
 import Data.Function (fix)
 import Data.List (find)
 import Data.Time.Clock (getCurrentTime)
@@ -279,7 +279,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     putPackageCandidate :: DynamicPath -> ServerPartE Response
     putPackageCandidate dpath = do
       pkgid <- packageInPath dpath
-      guard (packageVersion pkgid /= Version [] [])
+      guard (packageVersion pkgid /= nullVersion)
       pkgInfo <- uploadCandidate (==pkgid)
       seeOther (corePackageIdUri candidatesCoreResource "" $ packageId pkgInfo) (toResponse ())
 
@@ -294,7 +294,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     serveCandidateTarball :: DynamicPath -> ServerPartE Response
     serveCandidateTarball dpath = do
       pkgid <- packageTarballInPath dpath
-      guard (pkgVersion pkgid /= Version [] [])
+      guard (pkgVersion pkgid /= nullVersion)
       pkg   <- lookupCandidateId pkgid
       case pkgLatestTarball (candPkgInfo pkg) of
         Nothing -> errNotFound "Tarball not found"
@@ -347,13 +347,28 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     processCandidate isRight state uid res = do
         let pkg = packageId (uploadDesc res)
         if not (isRight pkg)
-          then uploadFailed "Name of package or package version does not match"
+          then uploadFailed [MText "Name of package or package version does not match"]
           else do
             pkgGroup <- Group.queryUserGroup (maintainersGroup (packageName pkg))
-            if packageExists state pkg && not (uid `Group.member` pkgGroup)
-              then uploadFailed "Not authorized to upload a candidate for this package"
+            if (not (Group.null pkgGroup) || packageExists state pkg)
+                && not (uid `Group.member` pkgGroup)
+              then uploadFailed (notMaintainer pkg)
               else return Nothing
-      where uploadFailed = return . Just . ErrorResponse 403 [] "Upload failed" . return . MText
+      where
+        -- TODO: try to share more code with "Upload" module
+        uploadFailed = return . Just . ErrorResponse 403 [] "Upload failed"
+
+        notMaintainer pkg = [ MText $
+                        "You are not authorised to upload candidates of this package. The "
+                     ++ "package '" ++ display (packageName pkg) ++ "' exists already and you "
+                     ++ "are not a member of the maintainer group for this package.\n\n"
+                     ++ "If you believe you should be a member of the "
+                     , MLink "maintainer group for this package"
+                            ("/package/" ++ display (packageName pkg) ++ "/maintainers")
+                     , MText $  ", then ask an existing maintainer to add you to the group. If "
+                     ++ "this is a package name clash, please pick another name or talk to the "
+                     ++ "maintainers of the existing package."
+                     ]
 
     publishCandidate :: DynamicPath -> Bool -> ServerPartE UploadResult
     publishCandidate dpath doDelete = do
@@ -434,7 +449,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     -- (If we change that, we should move the 'guard' to 'guardValidPackageId')
     lookupCandidateId :: PackageId -> ServerPartE CandPkgInfo
     lookupCandidateId pkgid = do
-      guard (pkgVersion pkgid /= Version [] [])
+      guard (pkgVersion pkgid /= nullVersion)
       state <- queryState candidatesState GetCandidatePackages
       case PackageIndex.lookupPackageId (candidateList state) pkgid of
         Just pkg -> return pkg

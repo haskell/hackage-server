@@ -1,11 +1,17 @@
-build-cache
-mirror-cache
-state
-dist
-dist-newstyle
+# hackage-server
+build-cache/
+mirror-cache/
+state/
+backups/
+# cabal
+.ghc.environment.*
+dist/
+dist-newstyle/
+.cabal-sandbox/
+cabal.sandbox.config
+cabal.project.local
+# editor
 tags
 *.swp
-.cabal-sandbox
-.stack-work
-cabal.sandbox.config
 TAGS
+*~

@@ -8,6 +8,7 @@ module Distribution.Server.Pages.PackageFromTemplate
 import Distribution.Server.Framework.Templating
 import Distribution.Server.Features.PreferredVersions
 
+import Distribution.Server.Util.DocMeta
 import Distribution.Server.Packages.Render
 import Distribution.Server.Users.Types (userStatus, userName, isActiveAccount)
 import Data.TarIndex (TarIndex)
@@ -73,22 +74,23 @@ import Distribution.Server.Features.Html.HtmlUtilities
 --    package's upload time, the last time it was updated, and the number of
 --    votes it has.
 packagePageTemplate :: PackageRender
-            -> Maybe TarIndex -> Maybe BS.ByteString
+            -> Maybe TarIndex -> Maybe DocMeta -> Maybe BS.ByteString
             -> URL -> [(DistroName, DistroPackageInfo)]
             -> Maybe [PackageName]
             -> HtmlUtilities
             -> [TemplateAttr]
 packagePageTemplate render
-            mdocIndex mreadme
+            mdocIndex mdocMeta mreadme
             docURL distributions
             deprs utilities =
   -- The main two namespaces
   [ "package"           $= packageFieldsTemplate
   , "hackage"           $= hackageFieldsTemplate
+  , "doc"               $= docFieldsTemplate
   ] ++
 
   -- Miscellaneous things that could still stand to be refactored a bit.
-  [ "moduleList"        $= Old.moduleSection render mdocIndex docURL
+  [ "moduleList"        $= Old.moduleSection render mdocIndex docURL hasQuickNavV1
   , "executables"       $= (commaList . map toHtml $ rendExecNames render)
   , "downloadSection"   $= Old.downloadSection render
   , "stability"         $= renderStability desc
@@ -118,7 +120,7 @@ packagePageTemplate render
       [ templateVal "hasFlags"
           (if rendFlags render == [] then False else True)
       , templateVal "flagsSection"
-          (Old.renderPackageFlags render)
+          (Old.renderPackageFlags render docURL)
       ]
       where
         showDist (dname, info) = toHtml (display dname ++ ":") +++
@@ -136,13 +138,19 @@ packagePageTemplate render
       , templateVal "optional"      optionalPackageInfoTemplate
       ]
 
+    docFieldsTemplate = templateDict $
+      [ templateVal "hasQuickNavV1" hasQuickNavV1
+      , templateVal "baseUrl" docURL
+      ]
+
     -- Fields that may be empty, along with booleans to see if they're present.
     -- Access via "$package.optional.varname$"
     optionalPackageInfoTemplate = templateDict $
       [ templateVal "hasDescription"
           (if (description $ rendOther render) == [] then False else True)
       , templateVal "description"
-          (Old.renderHaddock (description $ rendOther render))
+          (Old.renderHaddock (Old.moduleToDocUrl render docURL)
+                             (description $ rendOther render))
       ] ++
 
       [ templateVal "hasReadme"
@@ -242,6 +250,14 @@ packagePageTemplate render
                 map (packageNameLink utilities) $ fors
       Nothing -> noHtml
 
+    hasQuickNavGen :: Maybe DocMeta -> Version -> Bool
+    hasQuickNavGen (Just docMeta) expected =
+      docMetaHaddockVersion docMeta == expected
+    hasQuickNavGen _ _ = False
+
+    hasQuickNavV1 :: Bool
+    hasQuickNavV1 = hasQuickNavGen mdocMeta (mkVersion [2, 18, 2])
+
 -- #ToDo: Pick out several interesting versions to display, with a link to
 -- display all versions.
 renderVersion :: PackageId -> [(Version, VersionStatus)] -> Maybe String -> Html
@@ -256,7 +272,7 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
 
     versionList = commaList $ map versionedLink earlierVersions
       ++ (case pversion of
-            Version [] [] -> []
+            v | v == nullVersion -> []
             _ -> [strong ! (maybe [] (status . snd) mThisVersion) << display pversion]
         )
       ++ map versionedLink laterVersions
@@ -362,11 +378,9 @@ latestVersion (PackageIdentifier pname _ ) allVersions =
     versionLink v = anchor ! [href $ packageURL $ PackageIdentifier pname v] << display v
 
 readmeSection :: PackageRender -> Maybe BS.ByteString -> [Html]
-readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
-                            , rendPkgId  = pkgid }
+readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename) }
               (Just content) =
-    [ h2 ! [identifier "readme"] << ("Readme for " ++ display pkgid)
-    , thediv ! [theclass "embedded-author-content"]
+    [ thediv ! [theclass "embedded-author-content"]
             << if supposedToBeMarkdown filename
                  then renderMarkdown content
                  else pre << unpackUtf8 content

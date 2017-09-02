@@ -1,11 +1,16 @@
 <!DOCTYPE html>
 <html>
 <head>
+  $if(doc.hasQuickNavV1)$
+  <link href="$doc.baseUrl$/ocean.css" rel="stylesheet" type="text/css" title="Ocean" />
+  $endif$
   $hackageCssTheme()$
   <title>
     $package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$
   </title>
   <link rel="canonical" href="$baseurl$/package/$package.name$" />
+  <script src="/static/jquery.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript"></script>
 </head>
 
 <body>
@@ -18,7 +23,8 @@
 
     <h1>The $package.name$ package</h1>
     <div style="font-size: small">
-      [<a href="/packages/tags">Tags</a>:$tags$]
+      [ <a href="/packages/tags">Tags: </a>$tags$ ]
+      [ <a href="/package/$package.name$/tags/edit">Propose Tags </a> ]
     </div>
 
     $if(isDeprecated)$
@@ -28,9 +34,11 @@
     </div>
     $endif$
 
+    <div id="description">
     $if(package.optional.hasDescription)$
     $package.optional.description$
     $endif$
+    </div>
 
     $if(package.optional.hasReadme)$
     <hr>
@@ -143,14 +151,31 @@
         </tr>
         $endif$
 
+        $if(hasexecs)$
+        <tr>
+          <th>Executables</th>
+          <td>$executables$</td>
+        </tr>
+        $endif$
+
         <tr>
           <th>Downloads</th>
           <td>$totalDownloads$ total ($recentDownloads$ in the last 30 days)</td>
         </tr>
 
         <tr>
-          <th>Votes</th>
-          <td>$votesSection$</td>
+          <th>Rating</th>
+          <td>$score$ ($votes$ ratings)
+          $if(userRating)$
+            <input type="hidden" id="userRating" value="$userRating$">
+          $endif$
+              [<a href="" class="clear-rating">clear rating</a>]
+            <ul class="star-rating">
+              <li class="star" id="1">&lambda;</li>
+              <li class="star" id="2">&lambda;</li>
+              <li class="star" id="3">&lambda;</li>
+            </ul>
+          </td>
         </tr>
         <tr>
           <th>Status</th>
@@ -187,15 +212,23 @@
     </div>
 
     $if(package.optional.hasReadme)$
+    <hr />
     <div id="readme-container">
-      <h2 id="readme">Readme for $package.name$</h2>
+      <h2 id="readme">Readme for $package.name$-$package.version$</h2>
       $package.optional.readme$
     </div>
     $endif$
 
   </div> <!-- /content -->
 
+  $packagePageAssets()$
   $footer()$
 
+  $if(doc.hasQuickNavV1)$
+  <script src="$doc.baseUrl$/preact.js" type="text/javascript"></script>
+  <script src="$doc.baseUrl$/fuse.js" type="text/javascript"></script>
+  <script src="$doc.baseUrl$/index.js" type="text/javascript"></script>
+  <script type="text/javascript"> quickNav.init("$doc.baseUrl$", function(toggle) {var t = document.getElementById('quickjump-trigger');if (t) {t.onclick = function(e) { e.preventDefault(); toggle(); };}}); </script>
+  $endif$
 </body>
 </html>
