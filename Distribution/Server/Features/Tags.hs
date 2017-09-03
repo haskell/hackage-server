@@ -325,13 +325,15 @@ constructImmutableTags genDesc =
         !l = license desc
         !hl = hasLibs desc
         !he = hasExes desc
-        !ht = hasTests desc
-        !hb = hasBenchmarks desc
+-- These tags are too noisy and don't provide a good signal anymore
+--        !ht = hasTests desc
+--        !hb = hasBenchmarks desc
     in licenseToTag l
     ++ (if hl then [Tag "library"] else [])
     ++ (if he then [Tag "program"] else [])
-    ++ (if ht then [Tag "test"] else [])
-    ++ (if hb then [Tag "benchmark"] else [])
+-- These tags are too noisy and don't provide a good signal anymore
+--    ++ (if ht then [Tag "test"] else [])
+--    ++ (if hb then [Tag "benchmark"] else [])
     ++ constructCategoryTags desc
   where
     licenseToTag :: License -> [Tag]
