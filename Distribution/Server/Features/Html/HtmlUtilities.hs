@@ -38,8 +38,7 @@ htmlUtilities CoreFeature{coreResource}
     makeRow :: PackageItem -> Html
     makeRow item = tr << [ td $ itemNameHtml
                          , td $ toHtml $ show $ itemDownloads item
-                         , td $ toHtml $ show $ itemVotes item / 2
-                         , td $ toHtml $ "" -- FIXME/TODO: show $ itemRevDepsCount item
+                         , td $ toHtml $ show $ itemVotes item
                          , td $ toHtml $ itemDesc item
                          , td $ " (" +++ renderTags (itemTags item) +++ ")"
                          , td $ "" +++ intersperse (toHtml ", ") (map renderUser (itemMaintainer item))
@@ -48,6 +47,7 @@ htmlUtilities CoreFeature{coreResource}
             renderUser user = anchor ! [href $ userPageUri userResource "" user] << display user
             itemNameHtml = packageNameLink (itemName item) +++
                                case itemDeprecated item of
+                                       Just []   -> toHtml " (deprecated)"
                                        Just pkgs -> " (deprecated in favor of " +++ intersperse (toHtml ", ") (map packageNameLink pkgs) +++ ")"
                                        Nothing -> toHtml ""
 

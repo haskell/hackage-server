@@ -21,7 +21,6 @@
                         <th><div style="width:100px">Name</div></th>
                         <th><div style="width:40px">DLs</div></th>
                         <th><div style="width:50px">Rating</div></th>
-                        <th><div style="width:50px">Rev Deps</div></th>
                         <th><div style="width:160px">Description</div></th>
                         <th><div style="width:140px">Tags</div></th>
                         <th><div style="width:100px">Maintainer</div></th>
