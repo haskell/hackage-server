@@ -215,6 +215,7 @@
     <hr />
     <div id="readme-container">
       <h2 id="readme">Readme for $package.name$-$package.version$</h2>
+      [<a href="#description">back to package description</a>]
       $package.optional.readme$
     </div>
     $endif$

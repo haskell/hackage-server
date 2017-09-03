@@ -167,6 +167,9 @@ readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
               (Just content) =
     [ hr
     , h2 ! [identifier "readme"] << ("Readme for " ++ name)
+    , toHtml "["
+    , anchor ! [href "#description"] << "back to package description"
+    , toHtml "]"
     , thediv ! [theclass "embedded-author-content"]
             << if supposedToBeMarkdown filename
                  then renderMarkdown (T.pack name) content
