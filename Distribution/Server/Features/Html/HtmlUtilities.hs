@@ -47,6 +47,7 @@ htmlUtilities CoreFeature{coreResource}
             renderUser user = anchor ! [href $ userPageUri userResource "" user] << display user
             itemNameHtml = packageNameLink (itemName item) +++
                                case itemDeprecated item of
+                                       Just []   -> toHtml " (deprecated)"
                                        Just pkgs -> " (deprecated in favor of " +++ intersperse (toHtml ", ") (map packageNameLink pkgs) +++ ")"
                                        Nothing -> toHtml ""
 
