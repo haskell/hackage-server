@@ -206,7 +206,7 @@ pre {
   background: rgb(41,56,69);
   border-top: 5px solid rgb(78,98,114);
   color: #ddd;
-  padding: 0.2em 0.2em 0.5em;
+  padding: 0.2em;
   position: relative;
   text-align: left;
   font-size: 125%;
@@ -306,12 +306,14 @@ ul.links li form {
 ul.links li form input {
 	border:0px;
   padding:1px;
+  margin: 0px;
 	width: 8em;
 	background: rgb(235,235,235); /* url('/static/search.png') no-repeat 3px 4px; */
 }
 
 ul.links li form button {
   border:0px;
+  margin: 0px;
   cursor:pointer;
   color: white;
   background: rgb(41,56,69);
