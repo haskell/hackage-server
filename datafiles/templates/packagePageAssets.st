@@ -53,6 +53,7 @@
   .star-rating li {
     float: left;
     margin: 0 1% 0 1%;
+    cursor: pointer;
   }
 
   .clear-rating {
