@@ -39,7 +39,6 @@ htmlUtilities CoreFeature{coreResource}
     makeRow item = tr << [ td $ itemNameHtml
                          , td $ toHtml $ show $ itemDownloads item
                          , td $ toHtml $ show $ itemVotes item / 2
-                         , td $ toHtml $ "" -- FIXME/TODO: show $ itemRevDepsCount item
                          , td $ toHtml $ itemDesc item
                          , td $ " (" +++ renderTags (itemTags item) +++ ")"
                          , td $ "" +++ intersperse (toHtml ", ") (map renderUser (itemMaintainer item))
