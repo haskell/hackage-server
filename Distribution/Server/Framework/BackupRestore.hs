@@ -40,6 +40,8 @@ module Distribution.Server.Framework.BackupRestore (
     abstractRestoreBackup
   ) where
 
+import Distribution.Server.Prelude
+
 import qualified Distribution.Server.Framework.BlobStorage as Blob
 import Distribution.Server.Framework.BlobStorage (BlobStores(..), BlobId)
 import Distribution.Server.Util.ReadDigest
@@ -49,14 +51,12 @@ import Distribution.Server.Features.Security.SHA256
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
 import Distribution.Server.Util.GZip (decompressNamed)
-import Control.Applicative
 import Control.Monad.State
 import Control.Monad.Except
-import Control.Monad.Writer
 import Data.Time (UTCTime)
 import qualified Data.Time as Time
 import Data.Time.Locale.Compat (defaultTimeLocale)
-import Data.Typeable (Typeable, typeOf)
+import Data.Typeable (typeOf)
 
 import Distribution.Server.Util.Merge
 import Distribution.Server.Util.Parse (unpackUTF8)
@@ -164,7 +164,7 @@ parseRead label str = case readConsume reads str of
 
 parseUTCTime :: (Monad m, MonadError String m) => String -> String -> m UTCTime
 parseUTCTime label str =
-    case Time.parseTime defaultTimeLocale timeFormatSpec str of
+    case parseTimeMaybe timeFormatSpec str of
       Nothing -> throwError $ "Unable to parse UTC timestamp " ++ label ++ ": " ++ str
       Just x  -> return x
 

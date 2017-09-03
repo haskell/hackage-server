@@ -22,14 +22,14 @@ module Distribution.Server.Framework.Feature
   , BlobStorage
   ) where
 
+import Distribution.Server.Prelude
+
 import Distribution.Server.Framework.BackupDump (BackupType (..))
 import Distribution.Server.Framework.BackupRestore (RestoreBackup(..), AbstractRestoreBackup(..), BackupEntry, abstractRestoreBackup)
 import Distribution.Server.Framework.Resource      (Resource, ServerErrorResponse)
 import Distribution.Server.Framework.BlobStorage   (BlobStorage)
 import Distribution.Server.Framework.MemSize
 
-import Data.Monoid
-import Control.Monad (liftM, liftM2)
 import Control.Monad.Trans (MonadIO)
 import Data.Acid
 import Data.Acid.Advanced

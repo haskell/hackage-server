@@ -7,6 +7,9 @@ module Distribution.Client.UserAddressesDb (
     parseFile
   ) where
 
+import Prelude ()
+import Distribution.Server.Prelude
+
 import Distribution.Server.Users.Types (UserName(..))
 import Data.List
 import Data.ByteString (ByteString)
@@ -16,10 +19,8 @@ import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
 import qualified Data.Text.Encoding.Error as T
 import qualified Data.Text.Read           as T
-import Data.Functor
 import Data.Char (chr)
-import Data.Time (UTCTime, parseTime, zonedTimeToUTC)
-import Data.Time.Locale.Compat (defaultTimeLocale)
+import Data.Time (UTCTime, zonedTimeToUTC)
 
 type UserAddressesDb = [UserEntry]
 type UserEntry    = (UserName, UserRealName, UserAddress, UTCTime, UserName)
@@ -66,8 +67,7 @@ parseLine line
           [a,b,c,d, BS.intercalate (BS.singleton ':') [t1,t2,t3] ]
         fixTimeBreakage fs = fs
 
-    readTime = fmap zonedTimeToUTC
-             . parseTime defaultTimeLocale "%c"
+    readTime = fmap zonedTimeToUTC . parseTimeMaybe "%c"
 
 -- Unfortunately the file uses mixed encoding, mostly UTF8
 -- but some Latin1 and some Html escape sequences

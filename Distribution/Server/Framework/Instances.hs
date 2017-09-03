@@ -15,10 +15,12 @@ module Distribution.Server.Framework.Instances (
     compatAesonOptionsDropPrefix,
   ) where
 
+import Distribution.Server.Prelude
+
 import Distribution.Text
 import Distribution.Server.Framework.MemSize
 
-import Distribution.Package  (PackageIdentifier(..), PackageName)
+import Distribution.Package  (PackageIdentifier(..))
 import Distribution.Compiler (CompilerFlavor(..), CompilerId(..))
 import Distribution.System   (OS(..), Arch(..))
 import Distribution.Types.GenericPackageDescription (FlagName, mkFlagName, unFlagName)
@@ -26,7 +28,6 @@ import Distribution.Types.PackageName
 import Distribution.Version
 
 import Data.Time (Day(..), DiffTime, UTCTime(..))
-import Control.Applicative
 import Control.DeepSeq
 
 import Data.Serialize as Serialize
@@ -37,7 +38,6 @@ import Data.Aeson.Types as Aeson
 
 import Happstack.Server
 
-import Data.Maybe (fromJust)
 import Data.List (stripPrefix)
 
 import qualified Text.PrettyPrint as PP (text)

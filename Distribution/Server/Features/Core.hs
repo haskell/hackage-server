@@ -49,7 +49,7 @@ import qualified Distribution.Server.Packages.PackageIndex          as PackageIn
 -- Cabal
 import Distribution.Text (display)
 import Distribution.Package
-import Distribution.Version (Version, nullVersion)
+import Distribution.Version (nullVersion)
 
 -- | The core feature, responsible for the main package index and all access
 -- and modifications of it.

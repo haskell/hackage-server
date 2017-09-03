@@ -11,6 +11,8 @@ module Distribution.Server.Packages.Unpack (
     unpackPackageRaw,
   ) where
 
+import Distribution.Server.Prelude
+
 import qualified Codec.Archive.Tar       as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
 import qualified Codec.Archive.Tar.Check as Tar
@@ -27,7 +29,7 @@ import Distribution.PackageDescription
          , exposedModules, mixins, signatures, specVersion
          )
 import Distribution.PackageDescription.Parse
-         ( parsePackageDescription )
+         ( parseGenericPackageDescription )
 import Distribution.PackageDescription.Configuration
          ( flattenPackageDescription )
 import Distribution.PackageDescription.Check
@@ -46,9 +48,6 @@ import Distribution.License
          ( License(..) )
 import qualified Distribution.Compat.ReadP as Parse
 
-import Control.Applicative
-import Control.Monad
-         ( unless, when )
 import Control.Monad.Except
          ( ExceptT, runExceptT, MonadError, throwError )
 import Control.Monad.Identity
@@ -63,8 +62,6 @@ import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Char8
 import Data.List
          ( nub, (\\), partition, intercalate, isPrefixOf )
-import Data.Maybe
-         ( isJust )
 import qualified Data.Map.Strict as Map
          ( fromList, lookup )
 import Data.Time
@@ -114,7 +111,7 @@ unpackPackageRaw tarGzFile contents =
     noTime = UTCTime (fromGregorian 1970 1 1) 0
 
 data TaggedPackageId = TaggedPackageId {
-        taggedPkgName    :: PackageName,
+        _taggedPkgName   :: PackageName,
         taggedPkgVersion :: Data.Version.Version
     }
 
@@ -137,6 +134,8 @@ tarPackageChecks lax now tarGzFile contents = do
   unless (ext == ".tar.gz") $
     throwError $ tarGzFile ++ " is not a gzipped tar file, it must have the .tar.gz extension"
 
+  let versionTags (Data.Version.Version _ ts) = ts
+
   pkgid <- case (simpleParse pkgidStr, simpleParse pkgidStr) of
     (Just pkgid, Just tagged_pkgid)
       | (== nullVersion) . packageVersion $ pkgid
@@ -148,10 +147,9 @@ tarPackageChecks lax now tarGzFile contents = do
 
       -- NB: we have to use 'TaggedPackageId' here, because the 'PackageId'
       -- parser will drop tags.
-      | not . null . Data.Version.versionTags . taggedPkgVersion $ tagged_pkgid
+      | not . null . versionTags . taggedPkgVersion $ tagged_pkgid
       -> throwError $ "Hackage no longer accepts packages with version tags: "
-                   ++ intercalate ", " (Data.Version.versionTags
-                                            (taggedPkgVersion tagged_pkgid))
+                   ++ intercalate ", " (versionTags (taggedPkgVersion tagged_pkgid))
 
     _ -> throwError $ "Invalid package id " ++ quote pkgidStr
                    ++ ". The tarball must use the name of the package."
@@ -202,7 +200,7 @@ basicChecks pkgid tarIndex = do
 
   -- Parse the Cabal file
   let cabalFileContent = unpackUTF8 cabalEntry
-  (pkgDesc, warnings) <- case parsePackageDescription cabalFileContent of
+  (pkgDesc, warnings) <- case parseGenericPackageDescription cabalFileContent of
     ParseFailed err -> throwError $ showError (locatedErrorMsg err)
     ParseOk warnings pkgDesc ->
       return (pkgDesc, map (showPWarning cabalFileName) warnings)

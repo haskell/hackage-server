@@ -21,7 +21,6 @@ import qualified Codec.Archive.Tar.Entry as Tar
          ( Entry(..), entryPath )
 
 import Distribution.Package
-import Distribution.Version
 import Distribution.Text
          ( simpleParse )
 

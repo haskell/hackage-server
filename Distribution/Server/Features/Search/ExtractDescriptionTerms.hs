@@ -5,6 +5,8 @@ module Distribution.Server.Features.Search.ExtractDescriptionTerms (
     extractDescriptionTerms
   ) where
 
+import Distribution.Server.Prelude
+
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Set (Set)
@@ -12,8 +14,6 @@ import qualified Data.Set as Set
 import Data.Char
 import qualified NLP.Tokenize as NLP
 import qualified NLP.Snowball as NLP
-import Control.Monad ((>=>))
-import Data.Maybe
 
 import qualified Documentation.Haddock.Markup as Haddock
 import Documentation.Haddock.Types

@@ -38,7 +38,6 @@ import Distribution.Package
 import Distribution.PackageDescription as P
 import Distribution.Simple.Utils ( cabalVersion )
 import Distribution.Version
-import Distribution.Types.Dependency
 import Distribution.Types.CondTree
 import Distribution.Text        (display)
 import Text.XHtml.Strict hiding (p, name, title, content)
@@ -92,7 +91,7 @@ packagePage render headLinks top sections
              renderHeads,
              top,
              pkgBody render sections docURL,
-             moduleSection render mdocIndex docURL,
+             moduleSection render mdocIndex docURL False,
              renderPackageFlags render docURL,
              downloadSection render,
              maintainerSection pkgid isCandidate,
@@ -166,7 +165,11 @@ readmeSection :: PackageRender -> Maybe BS.ByteString -> [Html]
 readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
                             , rendPkgId  = pkgid }
               (Just content) =
-    [ h2 ! [identifier "readme"] << ("Readme for " ++ name)
+    [ hr
+    , h2 ! [identifier "readme"] << ("Readme for " ++ name)
+    , toHtml "["
+    , anchor ! [href "#description"] << "back to package description"
+    , toHtml "]"
     , thediv ! [theclass "embedded-author-content"]
             << if supposedToBeMarkdown filename
                  then renderMarkdown (T.pack name) content
@@ -284,8 +287,8 @@ renderPackageFlags render docURL =
                  if flagManual flag then "Manual" else "Automatic"]
         code = (thespan ! [theclass "code"] <<)
 
-moduleSection :: PackageRender -> Maybe TarIndex -> URL -> [Html]
-moduleSection render mdocIndex docURL =
+moduleSection :: PackageRender -> Maybe TarIndex -> URL -> Bool -> [Html]
+moduleSection render mdocIndex docURL quickNav =
     maybeToList $ fmap msect (rendModules render mdocIndex)
   where msect ModSigIndex{ modIndex = m, sigIndex = s } = toHtml $
             (if not (null s)
@@ -301,7 +304,10 @@ moduleSection render mdocIndex docURL =
           | isJust mdocIndex =
             let docIndexURL = docURL </> "doc-index.html"
             in  paragraph ! [thestyle "font-size: small"]
-                  << ("[" +++ anchor ! [href docIndexURL] << "Index" +++ "]")
+                  << ("[" +++ anchor ! [href docIndexURL] << "Index" +++ "]" +++
+                      (if quickNav
+                       then " [" +++ anchor ! [identifier "quickjump-trigger", href "#"] << "Quick Jump" +++ "]"
+                       else mempty))
           | otherwise = mempty
 
 propertySection :: [(String, Html)] -> [Html]

@@ -53,7 +53,8 @@ module Distribution.Client.Mirror.Session (
   ) where
 
 -- stdlib
-import Control.Applicative
+import Distribution.Server.Prelude
+
 import Control.Exception
 import Control.Monad.Cont
 import Control.Monad.Except
@@ -63,7 +64,7 @@ import Data.ByteString.Lazy (ByteString)
 import Data.IORef
 import Data.List (isPrefixOf)
 import Data.Set (Set)
-import Data.Typeable (Typeable, cast)
+import Data.Typeable (cast)
 import Network.Browser
 import Network.HTTP
 import Network.URI (URI)

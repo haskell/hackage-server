@@ -62,7 +62,7 @@ import Data.Typeable
 
 import Distribution.Types.PackageName
 import Distribution.Package
-         ( PackageName, PackageIdentifier(..)
+         ( PackageIdentifier(..)
          , Package(..), packageName, packageVersion )
 import Distribution.Types.Dependency
 import Distribution.Version ( withinRange )

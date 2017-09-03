@@ -18,6 +18,7 @@ import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Framework.BlobStorage (BlobId)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Util.ServeTarball as ServerTarball
+import qualified Distribution.Server.Util.DocMeta as DocMeta
 import Data.TarIndex (TarIndex)
 import qualified Codec.Archive.Tar       as Tar
 import qualified Codec.Archive.Tar.Check as Tar
@@ -358,7 +359,25 @@ checkDocTarball pkgid =
    . fmapErr show             . Tar.read
   where
     fmapErr f    = Tar.foldEntries Tar.Next Tar.Done (Tar.Fail . f)
-    checkEntries = Tar.foldEntries (\_ remainder -> remainder) (Right ()) Left
+    checkEntries = Tar.foldEntries checkEntry (Right ()) Left
+
+    checkEntry entry remainder
+      | Tar.entryPath entry == docMetaPath = checkDocMeta entry remainder
+      | otherwise                          = remainder
+
+    checkDocMeta entry remainder =
+      case Tar.entryContent entry of
+        Tar.NormalFile content size
+          | size <= maxDocMetaFileSize ->
+              case DocMeta.parseDocMeta content of
+                Just _ -> remainder
+                Nothing -> Left "meta.json is invalid"
+          | otherwise -> Left "meta.json too large"
+        _ -> Left "meta.json not a file"
+
+    maxDocMetaFileSize = 16 * 1024 -- 16KiB
+    docMetaPath = DocMeta.packageDocMetaTarPath pkgid
+
 
 {------------------------------------------------------------------------------
   Auxiliary

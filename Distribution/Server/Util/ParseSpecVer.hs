@@ -6,18 +6,15 @@ module Distribution.Server.Util.ParseSpecVer
   , parseSpecVerLazy
   ) where
 
-import           Control.Applicative
-import           Control.Monad
+import           Distribution.Server.Prelude
+
 import qualified Data.ByteString       as BS
 import qualified Data.ByteString.Char8 as BC8
 import qualified Data.ByteString.Lazy  as BSL
-import           Data.Maybe
 import           Distribution.Text
 import           Distribution.Version
 
 import qualified Data.HashMap.Strict   as Map
-import           Data.Monoid
-import           Data.Word
 import           Foreign.C
 import           Foreign.Ptr
 import           System.IO.Unsafe

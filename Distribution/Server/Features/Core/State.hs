@@ -21,6 +21,8 @@ module Distribution.Server.Features.Core.State (
   , UpdatePackageInfo(..)
   ) where
 
+import Distribution.Server.Prelude
+
 import Distribution.Package
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
@@ -32,10 +34,8 @@ import Distribution.Server.Framework.MemSize
 
 import Data.Acid     (Query, Update, makeAcidic)
 import Data.SafeCopy (Migrate(..), base, extension, deriveSafeCopy)
-import Data.Typeable
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
-import Data.Monoid
 import Data.Time (UTCTime)
 import qualified Data.Vector as Vec
 import qualified Data.Sequence as Seq

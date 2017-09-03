@@ -31,6 +31,7 @@ import Network.HTTP
 import Network.Browser
 import Network.URI (URI(..), URIAuth(..), parseURI)
 
+import Distribution.Server.Prelude
 import Distribution.Client.UploadLog as UploadLog (read, Entry(..))
 import Distribution.Client.Index as PackageIndex (read)
 import Distribution.Server.Users.Types (UserId(..), UserName(UserName))
@@ -43,8 +44,6 @@ import Distribution.Text
 
 import Data.Version
 import Data.List
-import Data.Maybe
-import Control.Applicative
 import Control.Exception
 import Data.Time
 import Data.Time.Clock.POSIX
@@ -123,14 +122,14 @@ downloadOldIndex uri cacheDir = do
         case PackageIndex.read (\pkgid _ -> pkgid) (const True) (GZip.decompressNamed indexFile content) of
           Right pkgs     -> return pkgs
           Left  theError ->
-              die $ "Error parsing index at " ++ show uri ++ ": " ++ theError
+              dieNoVerbosity $ "Error parsing index at " ++ show uri ++ ": " ++ theError
 
       theLog <- withFile logFile ReadMode $ \hnd -> do
         content <- hGetContents hnd
         case UploadLog.read content of
           Right theLog   -> return theLog
           Left  theError ->
-              die $ "Error parsing log at " ++ show uri ++ ": " ++ theError
+              dieNoVerbosity $ "Error parsing log at " ++ show uri ++ ": " ++ theError
 
       return (mergeLogInfo pkgids theLog)
 
@@ -238,7 +237,7 @@ httpSession :: Verbosity -> String -> Version -> HttpSession a -> IO a
 httpSession verbosity agent version action =
     browse $ do
       setUserAgent (agent ++ "/" ++ display version)
-      setErrHandler die
+      setErrHandler dieNoVerbosity
       setOutHandler (debug verbosity)
       setAllowBasicAuth True
       setCheckForProxy True

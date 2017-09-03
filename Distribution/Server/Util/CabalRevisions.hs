@@ -39,7 +39,7 @@ import Distribution.ParseUtils
          ( ParseResult(..), locatedErrorMsg, showPWarning )
 import Distribution.ParseUtils (FieldDescr(..))
 import Distribution.Text (Text(..))
-import Distribution.Simple.LocalBuildInfo (ComponentName(..) ,showComponentName)
+import Distribution.Simple.LocalBuildInfo (showComponentName)
 import Text.PrettyPrint as Doc
          (nest, empty, isEmpty, (<+>), colon, (<>), text, vcat, ($+$), Doc, hsep, punctuate)
 

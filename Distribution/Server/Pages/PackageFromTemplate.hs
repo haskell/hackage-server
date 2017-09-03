@@ -8,6 +8,7 @@ module Distribution.Server.Pages.PackageFromTemplate
 import Distribution.Server.Framework.Templating
 import Distribution.Server.Features.PreferredVersions
 
+import Distribution.Server.Util.DocMeta
 import Distribution.Server.Packages.Render
 import Distribution.Server.Users.Types (userStatus, userName, isActiveAccount)
 import Data.TarIndex (TarIndex)
@@ -73,22 +74,23 @@ import Distribution.Server.Features.Html.HtmlUtilities
 --    package's upload time, the last time it was updated, and the number of
 --    votes it has.
 packagePageTemplate :: PackageRender
-            -> Maybe TarIndex -> Maybe BS.ByteString
+            -> Maybe TarIndex -> Maybe DocMeta -> Maybe BS.ByteString
             -> URL -> [(DistroName, DistroPackageInfo)]
             -> Maybe [PackageName]
             -> HtmlUtilities
             -> [TemplateAttr]
 packagePageTemplate render
-            mdocIndex mreadme
+            mdocIndex mdocMeta mreadme
             docURL distributions
             deprs utilities =
   -- The main two namespaces
   [ "package"           $= packageFieldsTemplate
   , "hackage"           $= hackageFieldsTemplate
+  , "doc"               $= docFieldsTemplate
   ] ++
 
   -- Miscellaneous things that could still stand to be refactored a bit.
-  [ "moduleList"        $= Old.moduleSection render mdocIndex docURL
+  [ "moduleList"        $= Old.moduleSection render mdocIndex docURL hasQuickNavV1
   , "executables"       $= (commaList . map toHtml $ rendExecNames render)
   , "downloadSection"   $= Old.downloadSection render
   , "stability"         $= renderStability desc
@@ -134,6 +136,11 @@ packagePageTemplate render
       , templateVal "maintainer"    (Old.maintainField $ rendMaintainer render)
       , templateVal "buildDepends"  (snd (Old.renderDependencies render))
       , templateVal "optional"      optionalPackageInfoTemplate
+      ]
+
+    docFieldsTemplate = templateDict $
+      [ templateVal "hasQuickNavV1" hasQuickNavV1
+      , templateVal "baseUrl" docURL
       ]
 
     -- Fields that may be empty, along with booleans to see if they're present.
@@ -242,6 +249,14 @@ packagePageTemplate render
                 intersperse (toHtml ", ") .
                 map (packageNameLink utilities) $ fors
       Nothing -> noHtml
+
+    hasQuickNavGen :: Maybe DocMeta -> Version -> Bool
+    hasQuickNavGen (Just docMeta) expected =
+      docMetaHaddockVersion docMeta == expected
+    hasQuickNavGen _ _ = False
+
+    hasQuickNavV1 :: Bool
+    hasQuickNavV1 = hasQuickNavGen mdocMeta (mkVersion [2, 18, 2])
 
 -- #ToDo: Pick out several interesting versions to display, with a link to
 -- display all versions.
@@ -363,11 +378,9 @@ latestVersion (PackageIdentifier pname _ ) allVersions =
     versionLink v = anchor ! [href $ packageURL $ PackageIdentifier pname v] << display v
 
 readmeSection :: PackageRender -> Maybe BS.ByteString -> [Html]
-readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
-                            , rendPkgId  = pkgid }
+readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename) }
               (Just content) =
-    [ h2 ! [identifier "readme"] << ("Readme for " ++ display pkgid)
-    , thediv ! [theclass "embedded-author-content"]
+    [ thediv ! [theclass "embedded-author-content"]
             << if supposedToBeMarkdown filename
                  then renderMarkdown content
                  else pre << unpackUtf8 content

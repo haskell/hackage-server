@@ -26,18 +26,20 @@ $hackagePageHeader()$
 <li>A description of what it does</li>
 <li>Licence information</li>
 <li>Author information</li>
-<li>A downloadable gzipped tarball</li>
-<li>A list of modules in the package</li>
+<li>A declarative specification of library & tool dependencies</li>
+<li>A list of executables and/or library modules provided by the package</li>
 <li>Haddock documentation (if available) with source links</li>
+<li>A downloadable gzipped tarball</li>
 </ul>
 <p>Guidelines for Hackage Packages:</p>
 <ul>
 <li>All packages should follow the <a href="https://pvp.haskell.org/">Package Versioning Policy (PVP)</a>.</li>
-<li><em>Packages cannot be deleted</em>, so you should consider uploading new versions packages as a <a href="/packages/candidates/upload">package candidate</a> and testing before publishing it to the main index.</li>
+<li><strong>Packages cannot be deleted</strong>, so you should consider uploading new versions packages as a <a href="/packages/candidates/upload">package candidate</a> and testing before publishing it to the main index.</li>
 <li>Please consult the <a href="/upload">documentation for uploading packages</a> for more in-depth information about Hackage's policies.</li>
 </ul>
 <p>In addition to the main package list page, there are a few other package indices:</p>
 <ul>
+<li><a href="/packages/browse">Browsable package index</a></li>
 <li><a href="/packages/tags">All tags</a></li>
 <li><a href="/packages/names">All packages by name</a>, with tags</li>
 <!-- <li><a href="/packages/reverse">All packages with reverse dependencies</a></li> -->

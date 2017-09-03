@@ -37,17 +37,16 @@ module Distribution.Server.Framework.Resource (
     ServerErrorResponse,
   ) where
 
+import Distribution.Server.Prelude
+
 import Happstack.Server
 import Distribution.Server.Framework.HappstackUtils (remainingPathString, uriEscape)
 import Distribution.Server.Util.ContentType (parseContentAccept)
 import Distribution.Server.Framework.Error
 
 import Data.List (isSuffixOf)
-import Data.Monoid
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Control.Monad
-import Data.Maybe
 import Data.Function (on)
 import Data.List (intercalate, unionBy, findIndices, find)
 import qualified Text.ParserCombinators.Parsec as Parse
@@ -581,7 +580,7 @@ reinsert key newTree branchMap = Map.insertWith combine key newTree branchMap
 combine :: Monoid a => ServerTree a -> ServerTree a -> ServerTree a
 combine (ServerTree newResponse newForest) (ServerTree oldResponse oldForest) =
     -- replace old resource with new resource, combine old and new responses
-    ServerTree (mappend newResponse oldResponse) (Map.foldWithKey reinsert oldForest newForest)
+    ServerTree (mappend newResponse oldResponse) (Map.foldrWithKey reinsert oldForest newForest)
 
 addServerNode :: Monoid a => BranchPath -> a -> ServerTree a -> ServerTree a
 addServerNode trunk response tree = treeFold trunk (ServerTree (Just response) Map.empty) tree

@@ -13,16 +13,16 @@ $hackagePageHeader()$
 
 <div style="font-size: large; text-align: center;"><a href="/packages/upload">Upload and publish a package permanently</a></div>
 
-<p>Uploading a package puts it in the <a href="/packages/">main package index</a>
-so that anyone can download it and view information about it. <em>You can only
-upload a package version once and this cannot be undone</em>, so try to get it right the first time!
+<p>Uploading a package puts it in the <a href="/packages/browse">main package index</a>
+so that anyone can download it and view information about it. <strong>You can only
+upload a package version once and this cannot be undone</strong>, so try to get it right the first time!
 To reduce the risk of mistakes it's recommended to use the <a href="#candidates">package candidates feature</a> described below.
 </p>
 
 <p>Because each package added to the main package index has a cost of
-operation and maintenance associated to it, your package should
-strive to provide value for the community by <em>being intended to be
-useful to others</em>, which entails giving your package a meaningful
+operation and maintenance associated to it, <strong>your package should
+strive to provide value for the community by being intended to be
+useful to others</strong>, which entails giving your package a meaningful
 synopsis/description as well as ensuring your package is installable
 by helping with providing accurate meta-data.
 </p>
@@ -104,7 +104,7 @@ yourself or to mark it as unsupported.
 </p>
 
 
-<h3 id="candidates">Package Candidates (Tech Preview)</h3>
+<h3 id="candidates">Package Candidates</h3>
 
 <p><a href="/packages/candidates">Package <em>candidates</em></a> are a way 
 to preview the package page, view any warnings or possible errors you might

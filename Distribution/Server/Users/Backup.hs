@@ -20,7 +20,6 @@ import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Text (display)
 import Data.Version
-import Data.Monoid
 import Text.CSV (CSV, Record)
 import qualified Data.Map as M
 import qualified Data.Text as T
