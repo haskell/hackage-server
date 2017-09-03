@@ -557,7 +557,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         totalDown     <- cmFind pkgname `liftM` totalPackageDownloads
         recentDown    <- cmFind pkgname `liftM` recentPackageDownloads
         pkgVotes      <- pkgNumVotes pkgname
-        pkgScore      <- fmap (/2) $ pkgNumScore pkgname
+        pkgScore      <- pkgNumScore pkgname
         auth          <- checkAuthenticated
         userRating    <- case auth of Just (uid,_) -> pkgUserVote pkgname uid; _ -> return Nothing
         mdoctarblob   <- queryDocumentation realpkg

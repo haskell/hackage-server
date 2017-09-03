@@ -38,7 +38,7 @@ htmlUtilities CoreFeature{coreResource}
     makeRow :: PackageItem -> Html
     makeRow item = tr << [ td $ itemNameHtml
                          , td $ toHtml $ show $ itemDownloads item
-                         , td $ toHtml $ show $ itemVotes item / 2
+                         , td $ toHtml $ show $ itemVotes item
                          , td $ toHtml $ itemDesc item
                          , td $ " (" +++ renderTags (itemTags item) +++ ")"
                          , td $ "" +++ intersperse (toHtml ", ") (map renderUser (itemMaintainer item))
