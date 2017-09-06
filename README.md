@@ -26,7 +26,7 @@ You'll need to do the following to get hackage-server's dependency `text-icu` to
 ### Fedora/CentOS
     sudo dnf install unzip libicu-devel
 
-## Setting up security infrastructure
+## Setting up security infrastructure
 
 Out of the box the server comes with some example keys and TUF metadata. The
 example keys are in `example-keys/`; these keys were used to create
