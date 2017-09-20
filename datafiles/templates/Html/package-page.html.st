@@ -168,8 +168,8 @@
           <td>$score$ ($votes$ ratings)
           $if(userRating)$
             <input type="hidden" id="userRating" value="$userRating$">
+            [<a href="" class="clear-rating">clear rating</a>]
           $endif$
-              [<a href="" class="clear-rating">clear rating</a>]
             <ul class="star-rating">
               <li class="star" id="1">&lambda;</li>
               <li class="star" id="2">&lambda;</li>
