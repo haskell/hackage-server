@@ -141,7 +141,7 @@ ul.links {
 
 ul.links li {
   display: inline;
-  border-left: 1px solid #d5d5d5;
+  border-left: 1px solid #ddd;
   white-space: nowrap;
   padding: 0;
 }
@@ -308,7 +308,7 @@ ul.links li form input {
   padding:1px;
   margin: 0px;
 	width: 8em;
-	background: rgb(235,235,235); /* url('/static/search.png') no-repeat 3px 4px; */
+	background: #f0f0f0; /* url('/static/search.png') no-repeat 3px 4px; */
 }
 
 ul.links li form button {
@@ -591,9 +591,9 @@ ul.links li form button:hover {
   float: right;
 }
 
-strong.warning { color: red; }
+strong.warning { color: #f44336; }
 
-small.info { color: grey; }
+small.info { color: #888; }
 
 /* @end */
 
@@ -716,7 +716,7 @@ ul.directory-list {
 /* Preferred and deprecated versions */
 
 .deprecated {
-    color:#999999 !important;
+    color:#919191 !important;
 }
 
 .unpreferred {
