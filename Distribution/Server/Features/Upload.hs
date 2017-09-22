@@ -33,7 +33,7 @@ import Data.ByteString.Lazy (ByteString)
 
 import Distribution.Package
 import Distribution.PackageDescription (GenericPackageDescription)
-import Distribution.Version (Version(..))
+import Distribution.Version (Version, alterVersion)
 import Distribution.Text (display)
 import qualified Distribution.Server.Util.GZip as GZip
 
@@ -339,6 +339,9 @@ uploadFeature ServerEnv{serverBlobStore = store}
           _ | packageExists state pkg && not (uid `Group.member` pkgGroup)
            -> uploadError (notMaintainer pkg)
 
+            | not (Group.null pkgGroup) && not (uid `Group.member` pkgGroup)
+           -> uploadError (notMaintainer pkg)
+
             | packageIdExists state pkg
            -> uploadError versionExists
 
@@ -348,25 +351,33 @@ uploadFeature ServerEnv{serverBlobStore = store}
             | otherwise
            -> return Nothing
       where
-        uploadError = return . Just . ErrorResponse 403 [] "Upload failed" . return . MText
-        versionExists = "This version of the package has already been uploaded.\n\nAs a matter of "
+        uploadError = return . Just . ErrorResponse 403 [] "Upload failed"
+        versionExists = [ MText $
+                        "This version of the package has already been uploaded.\n\nAs a matter of "
                      ++ "policy we do not allow package tarballs to be changed after a release "
                      ++ "(so we can guarantee stable md5sums etc). The usual recommendation is "
                      ++ "to upload a new version, and if necessary blacklist the existing one. "
                      ++ "In extraordinary circumstances, contact the administrators."
-        normVerExists = "A version of the package has already been uploaded that differs only in "
+                     ]
+        normVerExists = [ MText $
+                        "A version of the package has already been uploaded that differs only in "
                      ++ "trailing zeros.\n\nAs a matter of policy, to avoid confusion, we no "
-                     ++ "longer not allow uploading different package versions that differ only "
+                     ++ "longer allow uploading different package versions that differ only "
                      ++ "in trailing zeros. For example if version 1.2.0 has been uploaded then "
                      ++ "version 1.2 cannot subsequently be upload. "
                      ++ "If this is a major problem please contact the administrators."
-        notMaintainer pkg = "You are not authorised to upload new versions of this package. The "
+                     ]
+        notMaintainer pkg = [ MText $
+                        "You are not authorised to upload new versions of this package. The "
                      ++ "package '" ++ display (packageName pkg) ++ "' exists already and you "
                      ++ "are not a member of the maintainer group for this package.\n\n"
-                     ++ "If you believe you should be a member of the maintainer group for this "
-                     ++ "package, then ask an existing maintainer to add you to the group. If "
+                     ++ "If you believe you should be a member of the "
+                     , MLink "maintainer group for this package"
+                            ("/package/" ++ display (packageName pkg) ++ "/maintainers")
+                     , MText $  ", then ask an existing maintainer to add you to the group. If "
                      ++ "this is a package name clash, please pick another name or talk to the "
                      ++ "maintainers of the existing package."
+                     ]
 
     -- This function generically extracts a package, useful for uploading, checking,
     -- and anything else in the standard user-upload pipeline.
@@ -426,7 +437,7 @@ packageIdExistsModuloNormalisedVersion pkgs pkg =
       PackageIdentifier name ver -> PackageIdentifier name (normaliseVersion ver)
 
     normaliseVersion :: Version -> Version
-    normaliseVersion (Version vs _) = Version (n vs) []
+    normaliseVersion = alterVersion n
       where
         n vs' = case dropWhileEnd (== 0) vs' of
             []   -> [0]

@@ -79,7 +79,7 @@ uploadPackage :: URI
               -> FilePath
               -> FilePath
               -> MirrorSession ()
-uploadPackage targetRepoURI doMirrorUploaders pkginfo locCab locTgz = do
+uploadPackage targetRepoURI' doMirrorUploaders pkginfo locCab locTgz = do
     cab <- liftIO $ BS.readFile locCab
     tgz <- liftIO $ BS.readFile locTgz
 
@@ -108,7 +108,7 @@ uploadPackage targetRepoURI doMirrorUploaders pkginfo locCab locTgz = do
       -- we fail to set the upload time/uploader
   where
     PkgIndexInfo pkgid mtime muname _muid = pkginfo
-    baseURI = targetRepoURI <//> "package" </> display pkgid
+    baseURI = targetRepoURI' <//> "package" </> display pkgid
     cabURI  = baseURI <//> display (packageName pkgid) <.> "cabal"
     tgzURI  = baseURI <//> display pkgid               <.> "tar.gz"
 
@@ -121,9 +121,9 @@ uploadPackage targetRepoURI doMirrorUploaders pkginfo locCab locTgz = do
       requestPUT (baseURI <//> "uploader") "text/plain" (packUTF8 nameStr)
 
 finalizeLocalMirror :: FilePath -> FilePath -> MirrorSession ()
-finalizeLocalMirror sourceCache targetRepoPath = liftIO $ do
+finalizeLocalMirror sourceCache targetRepoPath' = liftIO $ do
     copyFile (sourceCachedIndexPath sourceCache)
-             (targetIndexPath targetRepoPath)
+             (targetIndexPath targetRepoPath')
 
 cacheTargetIndex :: FilePath -> FilePath -> MirrorSession ()
 cacheTargetIndex sourceCache targetCache = liftIO $
@@ -138,7 +138,7 @@ remoteIndexPath :: URI -> URI
 remoteIndexPath uri = uri <//> "packages/index.tar.gz"
 
 targetIndexPath :: FilePath -> FilePath
-targetIndexPath targetRepoPath = targetRepoPath </> "00-index.tar.gz"
+targetIndexPath targetRepoPath' = targetRepoPath' </> "00-index.tar.gz"
 
 sourceCachedIndexPath :: FilePath -> FilePath
 sourceCachedIndexPath cacheDir = cacheDir </> "00-index.tar.gz"

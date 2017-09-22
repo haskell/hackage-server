@@ -12,7 +12,7 @@ import Distribution.Package
 import Distribution.Text
          ( display, simpleParse )
 
-import Data.Version ( Version (..) )
+import Distribution.Version ( Version, nullVersion )
 
 import qualified System.FilePath.Posix as Posix (joinPath, splitExtension)
 
@@ -104,7 +104,7 @@ instance FromReqURI VersionOrLatest where
     fromReqURI str = V <$> fromReqURI str
 
 volToVersion :: VersionOrLatest -> Version
-volToVersion Latest = Version [] []
+volToVersion Latest = nullVersion
 volToVersion (V v)  = v
 
 serveArchiveTree :: ServerPartE Response

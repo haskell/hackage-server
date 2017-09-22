@@ -11,7 +11,7 @@
       </form>
     </li>
 
-    <li><a href="/packages/">Browse</a></li>
+    <li><a href="/packages/browse">Browse</a></li>
 
     <li><a href="/packages/recent">What's new</a></li>
 
@@ -23,7 +23,6 @@
 
 $if(title)$
 $title$
-</div>
 $else$
 <a class="caption" href="/">Hackage :: [Package]</a>
 $endif$

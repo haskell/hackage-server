@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 module Distribution.Client.Mirror.State (
     MirrorState(..)
   , MirrorEnv(..)
@@ -59,14 +60,14 @@ mirrorInit verbosity opts = do
         dstCacheDir = stateDir opts </> dstName
 
     when (srcCacheDir == dstCacheDir) $
-      die "source and destination cache files clash"
+      dieNoVerbosity "source and destination cache files clash"
 
     when (continuous opts == Just 0) $
       warn verbosity "A sync interval of zero is a seriously bad idea!"
 
     when (isCentralHackage (mirrorSource (mirrorConfig opts))
        && maybe False (<5) (continuous opts)) $
-       die $ "Please don't hit the central hackage.haskell.org "
+       dieNoVerbosity $ "Please don't hit the central hackage.haskell.org "
           ++ "more frequently than every 5 minutes."
 
     createDirectoryIfMissing False (stateDir opts)

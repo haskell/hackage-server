@@ -13,7 +13,8 @@ module Distribution.Server.Features.Security.MD5 (
   ) where
 
 -- stdlibs
-import           Control.Applicative
+import           Distribution.Server.Prelude
+
 import           Control.DeepSeq
 import qualified Data.Binary                           as Bin
 import qualified Data.Binary.Put                       as Bin
@@ -26,7 +27,6 @@ import qualified Data.ByteString.Char8                 as BS.Char8
 import qualified Data.ByteString.Lazy                  as BS.Lazy
 import           Data.SafeCopy
 import qualified Data.Serialize                        as Ser
-import           Data.Word
 
 -- cryptohash
 import qualified Crypto.Hash.MD5                       as MD5

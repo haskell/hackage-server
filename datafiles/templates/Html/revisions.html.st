@@ -30,9 +30,9 @@ stored separately.
       <td valign="top"><a href="/user/$revision.user$">$revision.user$</td>
       <td>
         <ul>
-        $revision.changes:{change|<li><p>Changed $change.what$
-                         from <pre>$change.from$</pre>
-                         to <pre>$change.to$</pre></li>}$
+        $revision.changes:{change|<li><p>$change.what$
+                         $if(change.from)$ $if(change.to)$from$endif$ <pre>$change.from$</pre>$endif$
+                         $if(change.to)$ $if(change.from)$to$endif$ <pre>$change.to$</pre>$endif$</p></li>}$
         </ul>
       </td>
     </tr>

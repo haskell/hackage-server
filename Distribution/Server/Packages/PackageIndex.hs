@@ -60,10 +60,11 @@ import Data.Maybe (fromMaybe)
 import Data.SafeCopy
 import Data.Typeable
 
+import Distribution.Types.PackageName
 import Distribution.Package
-         ( PackageName(..), PackageIdentifier(..)
-         , Package(..), packageName, packageVersion
-         , Dependency(Dependency) )
+         ( PackageIdentifier(..)
+         , Package(..), packageName, packageVersion )
+import Distribution.Types.Dependency
 import Distribution.Version ( withinRange )
 import Distribution.Simple.Utils (lowercase, comparing)
 
@@ -313,11 +314,12 @@ lookupDependency index (Dependency name versionRange) =
 --
 searchByName :: Package pkg => PackageIndex pkg -> String -> SearchResult [pkg]
 searchByName (PackageIndex m) name =
-  case [ pkgs | pkgs@(PackageName name',_) <- Map.toList m
+  case [ pkgs | pkgs@(pn,_) <- Map.toList m
+              , let name' = unPackageName pn
               , lowercase name' == lname ] of
     []              -> None
     [(_,pkgs)]      -> Unambiguous pkgs
-    pkgss           -> case find ((PackageName name==) . fst) pkgss of
+    pkgss           -> case find ((mkPackageName name==) . fst) pkgss of
       Just (_,pkgs) -> Unambiguous pkgs
       Nothing       -> Ambiguous (map snd pkgss)
   where lname = lowercase name
@@ -331,7 +333,8 @@ data SearchResult a = None | Unambiguous a | Ambiguous [a] deriving (Show)
 searchByNameSubstring :: Package pkg => PackageIndex pkg -> String -> [pkg]
 searchByNameSubstring (PackageIndex m) searchterm =
   [ pkg
-  | (PackageName name, pkgs) <- Map.toList m
+  | (pn, pkgs) <- Map.toList m
+  , let name = unPackageName pn
   , lsearchterm `isInfixOf` lowercase name
   , pkg <- pkgs ]
   where lsearchterm = lowercase searchterm

@@ -8,33 +8,43 @@ import Network.URI (URI(..), parseRelativeReference, relativeTo)
 import Distribution.Client
 import Distribution.Client.Cron (cron, rethrowSignalsAsExceptions,
                                  Signal(..), ReceivedSignal(..))
+import qualified Distribution.Client.Index as Index
 
 import Distribution.Package
 import Distribution.Text
+import qualified Text.PrettyPrint          as Disp
 import Distribution.Verbosity
 import Distribution.Simple.Utils hiding (intercalate)
-import Distribution.Version (Version(..))
+import Distribution.Version (Version, nullVersion)
 
 import Data.List
 import Data.Maybe
+import Data.Ord (Down(..))
 import Data.IORef
 import Data.Time
+import Control.Applicative as App
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans
 import qualified Data.ByteString.Lazy as BS
-import qualified Data.Set as S
+import qualified Data.Map as M
 
 import qualified Codec.Compression.GZip  as GZip
 import qualified Codec.Archive.Tar       as Tar
+import qualified Codec.Archive.Tar.Entry as Tar
 
 import System.Environment
 import System.Exit(exitFailure, ExitCode(..))
 import System.FilePath
-import System.Directory
+import System.Directory (canonicalizePath, createDirectoryIfMissing,
+                         doesFileExist, doesDirectoryExist, getDirectoryContents,
+                         renameFile, removeFile, getAppUserDataDirectory,
+                         createDirectory, removeDirectoryRecursive,
+                         createDirectoryIfMissing)
 import System.Console.GetOpt
 import System.Process
 import System.IO
+import Control.Concurrent
 
 import Paths_hackage_server (version)
 
@@ -55,7 +65,10 @@ data BuildOpts = BuildOpts {
                      bo_dryRun     :: Bool,
                      bo_prune      :: Bool,
                      bo_username   :: Maybe String,
-                     bo_password   :: Maybe String
+                     bo_password   :: Maybe String,
+                     bo_buildAttempts :: Int,
+                     -- ^ how many times to attempt to rebuild a failing package
+                     bo_buildOrder :: BuildOrder
                  }
 
 data BuildConfig = BuildConfig {
@@ -64,6 +77,12 @@ data BuildConfig = BuildConfig {
                        bc_username :: String,
                        bc_password :: String
                    }
+
+data BuildOrder = LatestVersionFirst
+                  -- ^ First build all of the latest versions of each package
+                  -- Then go back and build all the older versions
+                | MostRecentlyUploadedFirst
+                  -- ^ Build in order of upload date.
 
 srcName :: URI -> String
 srcName uri = fromMaybe (show uri) (uriHostName uri)
@@ -134,6 +153,29 @@ initialise opts uri auxUris
   where
     readMissingOpt prompt = maybe (putStrLn prompt >> getLine) return
 
+-- | Parse the @00-index.cache@ file of the available package repositories.
+parseRepositoryIndices :: Verbosity -> IO (M.Map PackageIdentifier Tar.EpochTime)
+parseRepositoryIndices verbosity = do
+    cabalDir <- getAppUserDataDirectory "cabal/packages"
+    cacheDirs <- listDirectory cabalDir
+    indexFiles <- filterM doesFileExist $ map (\dir -> cabalDir </> dir </> "00-index.tar") cacheDirs
+    M.unions <$> mapM readIndex indexFiles
+  where
+    readIndex fname = do
+        bs <- BS.readFile fname
+        let mkPkg pkg entry = (pkg, Tar.entryTime entry)
+        case Index.read mkPkg (".cabal" `isSuffixOf`) bs of
+          Left msg -> do warn verbosity $ "failed to read package index "++show fname++": "++msg
+                         return M.empty
+          Right pkgs -> return $ M.fromList pkgs
+
+    -- stolen from directory-1.2.5
+    listDirectory :: FilePath -> IO [FilePath]
+    listDirectory path =
+      (filter f) <$> (getDirectoryContents path)
+      where f filename = filename /= "." && filename /= ".."
+
+
 writeConfig :: BuildOpts -> BuildConfig -> IO ()
 writeConfig opts BuildConfig {
                    bc_srcURI   = uri,
@@ -158,7 +200,7 @@ readConfig opts = do
          -- Shouldn't happen: We check that this
          -- returns Right when we create the
          -- config file. See [Note: Show/Read URI].
-           Left theError -> die theError
+           Left theError -> dieNoVerbosity theError
            Right (uri : auxUris) ->
                return $ BuildConfig {
                             bc_srcURI   = uri,
@@ -168,7 +210,7 @@ readConfig opts = do
                         }
            Right _ -> error "The impossible happened"
       _ ->
-         die "Can't parse config file (maybe re-run \"hackage-build init\")"
+         dieNoVerbosity "Can't parse config file (maybe re-run \"hackage-build init\")"
 
 configFile :: BuildOpts -> FilePath
 configFile opts = bo_stateDir opts </> "hackage-build-config"
@@ -238,7 +280,7 @@ infoStats verbosity mDetailedStats pkgIdsHaveDocs = do
       ]
 
     case mDetailedStats of
-      Nothing        -> return ()
+      Nothing        -> App.pure ()
       Just statsFile -> do
         writeFile statsFile $ printTable (["Package", "Version", "Has docs?"] : formattedStats)
         notice verbosity $ "Detailed statistics written to " ++ statsFile
@@ -394,22 +436,38 @@ buildOnce opts pkgs = keepGoing $ do
 
     flip finally persist_failed $ do
         updatePackageIndex
+        -- Due to caching sometimes the package repository state may lag behind the
+        -- documentation index. Consequently, we make sure that the packages we are
+        -- going to build actually appear in the repository before building. See
+        -- #543.
+        repoIndex <- parseRepositoryIndices verbosity
+
         pkgIdsHaveDocs <- getDocumentationStats verbosity config has_failed
         infoStats verbosity Nothing pkgIdsHaveDocs
+        threadDelay (10^(7::Int))
 
-        -- First build all of the latest versions of each package
-        -- Then go back and build all the older versions
-        -- NOTE: assumes all these lists are non-empty
-        let latestFirst :: [[DocInfo]] -> [DocInfo]
-            latestFirst ids = map head ids ++ concatMap tail ids
+        let orderBuilds :: BuildOrder -> [DocInfo] -> [DocInfo]
+            orderBuilds LatestVersionFirst =
+                  latestFirst
+                . map (sortBy (flip (comparing docInfoPackageVersion)))
+                . groupBy (equating  docInfoPackageName)
+                . sortBy  (comparing docInfoPackageName)
+              where
+                -- NOTE: assumes all these lists are non-empty
+                latestFirst :: [[DocInfo]] -> [DocInfo]
+                latestFirst ids = map head ids ++ concatMap tail ids
+
+            orderBuilds MostRecentlyUploadedFirst =
+                  map snd
+                . sortBy (comparing fst)
+                . mapMaybe (\pkg -> fmap (\uploadTime -> (Down uploadTime, pkg)) (M.lookup (docInfoPackage pkg) repoIndex))
+
 
         -- Find those files *not* marked as having documentation in our cache
         let toBuild :: [DocInfo]
             toBuild = filter shouldBuild
-                    . latestFirst
-                    . map (sortBy (flip (comparing docInfoPackageVersion)))
-                    . groupBy (equating  docInfoPackageName)
-                    . sortBy  (comparing docInfoPackageName)
+                    . filter (flip M.member repoIndex . docInfoPackage)
+                    . orderBuilds (bo_buildOrder opts)
                     $ pkgIdsHaveDocs
 
         notice verbosity $ show (length toBuild) ++ " package(s) to build"
@@ -450,13 +508,15 @@ buildOnce opts pkgs = keepGoing $ do
     shouldBuild :: DocInfo -> Bool
     shouldBuild docInfo =
         case docInfoHasDocs docInfo of
-          DocsNotBuilt -> null pkgs || any (isSelectedPackage pkgid) pkgs
-          _            -> False
+          DocsNotBuilt -> null pkgs || is_selected
+          _            -> is_selected -- rebuild package if the user explicitly requested it
       where
+        is_selected = any (isSelectedPackage pkgid) pkgs
         pkgid = docInfoPackage docInfo
 
     -- do versionless matching if no version was given
-    isSelectedPackage pkgid pkgid'@(PackageIdentifier _ (Version [] _)) =
+    isSelectedPackage pkgid pkgid'@(PackageIdentifier _ v)
+        | nullVersion == v =
         packageName pkgid == packageName pkgid'
     isSelectedPackage pkgid pkgid' =
         pkgid == pkgid'
@@ -484,11 +544,12 @@ buildOnce opts pkgs = keepGoing $ do
     updatePackageIndex = do
       update_ec <- cabal opts "update" [] Nothing
       unless (update_ec == ExitSuccess) $
-          die "Could not 'cabal update' from specified server"
+          dieNoVerbosity "Could not 'cabal update' from specified server"
 
-
--- Builds a little memoised function that can tell us whether a
--- particular package failed to build its documentation
+-- | Builds a little memoised function that can tell us whether a
+-- particular package failed to build its documentation, a function to mark a
+-- package as having failed, and a function to write the final failed list back
+-- to disk.
 mkPackageFailed :: BuildOpts
                 -> IO (PackageId -> IO Bool, PackageId -> IO (), IO ())
 mkPackageFailed opts = do
@@ -496,22 +557,33 @@ mkPackageFailed opts = do
     cache_var   <- newIORef init_failed
 
     let mark_as_failed pkg_id = atomicModifyIORef cache_var $ \already_failed ->
-                                  (S.insert pkg_id already_failed, ())
-        has_failed     pkg_id = liftM (pkg_id `S.member`) $ readIORef cache_var
+                                  (M.insertWith (+) pkg_id 1 already_failed, ())
+        has_failed     pkg_id = f <$> readIORef cache_var
+          where f cache = M.findWithDefault 0 pkg_id cache > bo_buildAttempts opts
         persist               = readIORef cache_var >>= writeFailedCache (bo_stateDir opts)
 
     return (has_failed, mark_as_failed, persist)
   where
-    readFailedCache :: FilePath -> IO (S.Set PackageId)
+    readFailedCache :: FilePath -> IO (M.Map PackageId Int)
     readFailedCache cache_dir = do
         pkgstrs <- handleDoesNotExist [] $ liftM lines $ readFile (cache_dir </> "failed")
-        case validatePackageIds pkgstrs of
-            Left theError -> die theError
-            Right pkgs -> return (S.fromList pkgs)
+        let (pkgids, attempts) = unzip $ map (parseLine . words) pkgstrs
+               where
+                 parseLine [pkg_id] = (pkg_id, 1)
+                 parseLine [pkg_id, attempts']
+                   | [(n,_)] <- reads attempts' = (pkg_id, n)
+                   | otherwise                  = (pkg_id, 1)
+                 parseLine other = error $ "failed to parse failed list line: "++show other
+        case validatePackageIds pkgids of
+            Left theError -> dieNoVerbosity theError
+            Right pkgs -> return (M.fromList $ zip pkgs attempts)
 
-    writeFailedCache :: FilePath -> S.Set PackageId -> IO ()
+    writeFailedCache :: FilePath -> M.Map PackageId Int -> IO ()
     writeFailedCache cache_dir pkgs =
-      writeFile (cache_dir </> "failed") $ unlines $ map display $ S.toList pkgs
+      writeUTF8File (cache_dir </> "failed")
+      $ unlines
+      $ map (\(pkgid,n) -> show $ disp pkgid Disp.<+> disp n)
+      $ M.assocs pkgs
 
 
 -- | Build documentation and return @(Just tgz)@ for the built tgz file
@@ -534,7 +606,7 @@ buildPackage verbosity opts config docInfo = do
                      Nothing Nothing Nothing Nothing Nothing
     init_ec <- waitForProcess ph
     unless (init_ec == ExitSuccess) $
-        die $ "Could not initialise the package db " ++ packageDb
+        dieNoVerbosity $ "Could not initialise the package db " ++ packageDb
 
     -- The documentation is installed within the stateDir because we
     -- set a prefix while installing
@@ -564,7 +636,7 @@ buildPackage verbosity opts config docInfo = do
              -- Always build the package, even when it's been built
              -- before. This lets us regenerate documentation when
              -- dependencies are updated.
-             "--reinstall",
+             "--reinstall", "--force-reinstalls",
              -- We know where this documentation will
              -- eventually be hosted, bake that in.
              -- The wiki claims we shouldn't include the
@@ -778,7 +850,9 @@ data BuildFlags = BuildFlags {
     flagInterval   :: Maybe String,
     flagPrune      :: Bool,
     flagUsername   :: Maybe String,
-    flagPassword   :: Maybe String
+    flagPassword   :: Maybe String,
+    flagBuildAttempts :: Maybe Int,
+    flagBuildOrder :: Maybe BuildOrder
 }
 
 emptyBuildFlags :: BuildFlags
@@ -795,6 +869,8 @@ emptyBuildFlags = BuildFlags {
   , flagPrune      = False
   , flagUsername   = Nothing
   , flagPassword   = Nothing
+  , flagBuildAttempts = Nothing
+  , flagBuildOrder = Nothing
   }
 
 buildFlagDescrs :: [OptDescr (BuildFlags -> BuildFlags)]
@@ -848,6 +924,20 @@ buildFlagDescrs =
   , Option [] ["init-password"]
       (ReqArg (\passwd opts -> opts { flagPassword = Just passwd }) "PASSWORD")
       "The password of the Hackage user to run the build as (used with init)"
+
+  , Option [] ["build-attempts"]
+      (ReqArg (\attempts opts -> case reads attempts of
+                                 [(attempts', "")] -> opts { flagBuildAttempts = Just attempts' }
+                                 _ -> error "Can't parse attempt count") "ATTEMPTS")
+      "How many times to attempt to build a package before giving up"
+
+  , Option [] ["build-order"]
+     (ReqArg (\order opts -> let set o = opts { flagBuildOrder = Just o }
+                             in case order of
+                                "latest-version-first" -> set LatestVersionFirst
+                                "recent-uploads-first" -> set MostRecentlyUploadedFirst
+                                _                      -> error "Can't parse build order") "ORDER")
+     "What order should packages be built in? (latest-version-first or recent-uploads-first)"
   ]
 
 validateOpts :: [String] -> IO (Mode, BuildOpts)
@@ -869,7 +959,9 @@ validateOpts args = do
                    bo_dryRun     = flagDryRun flags,
                    bo_prune      = flagPrune flags,
                    bo_username   = flagUsername flags,
-                   bo_password   = flagPassword flags
+                   bo_password   = flagPassword flags,
+                   bo_buildAttempts = fromMaybe 3 $ flagBuildAttempts flags,
+                   bo_buildOrder = fromMaybe LatestVersionFirst $ flagBuildOrder flags
                }
 
         mode = case args' of

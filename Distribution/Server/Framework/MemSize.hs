@@ -2,9 +2,9 @@
 module Distribution.Server.Framework.MemSize (
   MemSize(..),
   memSizeMb, memSizeKb,
-  memSize0, memSize1, memSize2, memSize3, memSize4,
-  memSize5, memSize6, memSize7, memSize8, memSize9, memSize10,
-  memSizeUArray, memSizeUVector
+  memSize0, memSize1, memSize2, memSize3, memSize4, memSize5,
+  memSize6, memSize7, memSize8, memSize9, memSize10, memSize11,
+  memSize12, memSize13, memSizeUArray, memSizeUVector
   ) where
 
 import Data.Word
@@ -27,10 +27,11 @@ import Data.Ix
 import qualified Data.Array.Unboxed as A
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as V.U
+import qualified Data.Version as Ver
 
-import Distribution.Package  (PackageIdentifier(..), PackageName(..))
-import Distribution.PackageDescription (FlagName(..))
-import Distribution.Version  (Version(..), VersionRange, foldVersionRange')
+import Distribution.Package  (PackageIdentifier(..), PackageName, unPackageName)
+import Distribution.PackageDescription (FlagName, unFlagName)
+import Distribution.Version  (Version, VersionRange, foldVersionRange')
 import Distribution.System   (Arch(..), OS(..))
 import Distribution.Compiler (CompilerFlavor(..), CompilerId(..))
 
@@ -60,6 +61,9 @@ memSize7 :: (MemSize a6, MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize
 memSize8 :: (MemSize a7, MemSize a6, MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> a3 -> a4 -> a5 -> a6 -> a7 -> Int
 memSize9 :: (MemSize a8, MemSize a7, MemSize a6, MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> a3 -> a4 -> a5 -> a6 -> a7 -> a8 -> Int
 memSize10 :: (MemSize a9, MemSize a8, MemSize a7, MemSize a6, MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> a3 -> a4 -> a5 -> a6 -> a7 -> a8 -> a9 -> Int
+memSize11 :: (MemSize a10, MemSize a9, MemSize a8, MemSize a7, MemSize a6, MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> a3 -> a4 -> a5 -> a6 -> a7 -> a8 -> a9 -> a10 -> Int
+memSize12 :: (MemSize a11, MemSize a10, MemSize a9, MemSize a8, MemSize a7, MemSize a6, MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> a3 -> a4 -> a5 -> a6 -> a7 -> a8 -> a9 -> a10 -> a11 ->Int
+memSize13 :: (MemSize a12, MemSize a11, MemSize a10, MemSize a9, MemSize a8, MemSize a7, MemSize a6, MemSize a5, MemSize a4, MemSize a3, MemSize a2, MemSize a1, MemSize a) => a -> a1 -> a2 -> a3 -> a4 -> a5 -> a6 -> a7 -> a8 -> a9 -> a10 -> a11 -> a12 ->Int
 
 
 memSize0             = 0
@@ -89,6 +93,23 @@ memSize10 a b c d e
                           + memSize d + memSize e + memSize f
                           + memSize g + memSize h + memSize i
                           + memSize j
+memSize11 a b c d e
+          f g h i j k= 12 + memSize a + memSize b + memSize c
+                          + memSize d + memSize e + memSize f
+                          + memSize g + memSize h + memSize i
+                          + memSize j + memSize k
+memSize12 a b c d e f g
+          h i j k l  = 13 + memSize a + memSize b + memSize c
+                          + memSize d + memSize e + memSize f
+                          + memSize g + memSize h + memSize i
+                          + memSize j + memSize k + memSize l
+memSize13 a b c d e f g
+          h i j k l m= 14 + memSize a + memSize b + memSize c
+                          + memSize d + memSize e + memSize f
+                          + memSize g + memSize h + memSize i
+                          + memSize j + memSize k + memSize l
+                          + memSize m
+
 
 instance MemSize (a -> b) where
   memSize _ = 0
@@ -185,10 +206,15 @@ memSizeUVector sz a = 5 + (V.U.length a * sz) `div` wordSize
 ----
 
 instance MemSize PackageName where
-    memSize (PackageName n) = memSize n
+    -- TODO: this will overestimate string text size
+    memSize = memSize . unPackageName
+
+instance MemSize Ver.Version where
+    memSize (Ver.Version a b) = memSize2 a b
 
 instance MemSize Version where
-    memSize (Version a b) = memSize2 a b
+    -- TODO: will underestimate size when constructor is PV1
+    memSize _ = 2
 
 instance MemSize VersionRange where
     memSize =
@@ -199,6 +225,7 @@ instance MemSize VersionRange where
                         (\v -> 7 + 2 * memSize v) -- >= v
                         (\v -> 7 + 2 * memSize v) -- <= v
                         (\v _v' -> memSize1 v)    -- == v.*
+                        (\v _v' -> memSize1 v)    -- ^>= v.*
                         memSize2                  -- _ || _
                         memSize2                  -- _ && _
                         memSize1                  -- (_)
@@ -213,7 +240,7 @@ instance MemSize OS where
     memSize _ = memSize0
 
 instance MemSize FlagName where
-    memSize (FlagName n) = memSize n
+    memSize = memSize . unFlagName
 
 instance MemSize CompilerFlavor where
     memSize _ = memSize0

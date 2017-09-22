@@ -7,6 +7,7 @@ module Distribution.Server.Packages.Render (
   , DependencyTree
   , IsBuildable (..)
   , doPackageRender
+  , ModSigIndex(..)
 
     -- * Utils
   , categorySplit,
@@ -14,7 +15,7 @@ module Distribution.Server.Packages.Render (
 
 import Data.Maybe (catMaybes, isJust, maybeToList)
 import Control.Monad (guard)
-import Control.Arrow (second, (&&&))
+import Control.Arrow ((&&&), (***))
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
 import qualified Data.Vector as Vec
@@ -30,6 +31,8 @@ import Distribution.Package
 import Distribution.Text
 import Distribution.Version
 import Distribution.ModuleName as ModuleName
+import Distribution.Types.CondTree
+import Distribution.Types.UnqualComponentName
 
 -- hackage-server
 import Distribution.Server.Framework.CacheControl (ETag)
@@ -39,6 +42,11 @@ import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Types
 import qualified Data.TarIndex as TarIndex
 import Data.TarIndex (TarIndex, TarEntryOffset)
+
+data ModSigIndex = ModSigIndex {
+        modIndex :: ModuleForest,
+        sigIndex :: ModuleForest
+    }
 
 -- This should provide the caller enough information to encode the package information
 -- in its particular format (text, html, json) with minimal effort on its part.
@@ -54,7 +62,11 @@ data PackageRender = PackageRender {
     rendMaintainer   :: Maybe String,
     rendCategory     :: [String],
     rendRepoHeads    :: [(RepoType, String, SourceRepo)],
-    rendModules      :: Maybe TarIndex -> Maybe ModuleForest,
+    -- | The optional 'TarIndex' is of the documentation tarball; we use this
+    -- to test if a module actually has a corresponding documentation HTML
+    -- file we can link to.  If no 'TarIndex' is provided, it is assumed
+    -- all links are dead.
+    rendModules      :: Maybe TarIndex -> Maybe ModSigIndex,
     rendHasTarball   :: Bool,
     rendChangeLog    :: Maybe (FilePath, ETag, TarEntryOffset, FilePath),
     rendReadme       :: Maybe (FilePath, ETag, TarEntryOffset, FilePath),
@@ -73,9 +85,10 @@ doPackageRender :: Users.Users -> PkgInfo -> PackageRender
 doPackageRender users info = PackageRender
     { rendPkgId        = pkgInfoId info
     , rendDepends      = flatDependencies genDesc
-    , rendExecNames    = map exeName (executables flatDesc)
+    , rendExecNames    = map (unUnqualComponentName . exeName) (executables flatDesc)
     , rendLibraryDeps  = depTree libBuildInfo `fmap` condLibrary genDesc
-    , rendExecutableDeps = second (depTree buildInfo) `map` condExecutables genDesc
+    , rendExecutableDeps = (unUnqualComponentName *** depTree buildInfo)
+                                `map` condExecutables genDesc
     , rendLicenseName  = display (license desc) -- maybe make this a bit more human-readable
     , rendLicenseFiles = licenseFiles desc
     , rendMaintainer   = case maintainer desc of
@@ -87,11 +100,7 @@ doPackageRender users info = PackageRender
                            []  -> []
                            str -> categorySplit str
     , rendRepoHeads    = catMaybes (map rendRepo $ sourceRepos desc)
-    , rendModules      = \docindex ->
-                             fmap (moduleForest
-                           . map (\m -> (m, moduleHasDocs docindex m))
-                           . exposedModules)
-                          (library flatDesc)
+    , rendModules      = renderModules
     , rendHasTarball   = not . Vec.null $ pkgTarballRevisions info
     , rendChangeLog    = Nothing -- populated later
     , rendReadme       = Nothing -- populated later
@@ -120,7 +129,18 @@ doPackageRender users info = PackageRender
         isBuildable ctData = if buildable $ getBuildInfo ctData
                                then Buildable
                                else NotBuildable
-    
+
+    renderModules docindex
+      | Just lib <- library flatDesc
+      = let mod_ix = mkForest $ exposedModules lib
+                           -- Assumes that there is an HTML per reexport
+                           ++ map moduleReexportName (reexportedModules lib)
+            sig_ix = mkForest $ signatures lib
+            mkForest = moduleForest . map (\m -> (m, moduleHasDocs docindex m))
+        in Just (ModSigIndex { modIndex = mod_ix, sigIndex = sig_ix })
+      | otherwise
+      = Nothing
+
     moduleHasDocs :: Maybe TarIndex -> ModuleName -> Bool
     moduleHasDocs Nothing       = const False
     moduleHasDocs (Just doctar) = isJust . TarIndex.lookup doctar
@@ -149,8 +169,9 @@ data IsBuildable = Buildable
 
 categorySplit :: String -> [String]
 categorySplit xs | all isSpace xs = []
-categorySplit xs = map (dropWhile isSpace) $ splitOn ',' xs
+categorySplit xs = if last res == "" then init res else res
   where
+    res = map (dropWhile isSpace) $ splitOn ',' xs
     splitOn x ys = front : case back of
                            [] -> []
                            (_:ys') -> splitOn x ys'
@@ -186,7 +207,7 @@ flatDependencies pkg =
         Map.unionsWith intersectVersions $
           toMap ds : map fromComponent comps
       where
-        fromComponent (cond, then_part, else_part) =
+        fromComponent (CondBranch cond then_part else_part) =
             let thenDeps = condTreeDeps then_part
                 elseDeps = maybe Map.empty condTreeDeps else_part
             in case evalCondition manualFlags cond of

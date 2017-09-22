@@ -18,13 +18,14 @@ import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 import Distribution.Server.Framework.BlobStorage (BlobId)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Util.ServeTarball as ServerTarball
+import qualified Distribution.Server.Util.DocMeta as DocMeta
 import Data.TarIndex (TarIndex)
 import qualified Codec.Archive.Tar       as Tar
 import qualified Codec.Archive.Tar.Check as Tar
 
 import Distribution.Text
 import Distribution.Package
-import Distribution.Version (Version(..))
+import Distribution.Version (nullVersion)
 
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Map as Map
@@ -314,9 +315,9 @@ documentationFeature name
       -- See https://support.google.com/webmasters/answer/139066?hl=en#6
       setHeaderM "Link" canonicalHeader
 
-      case pkgVersion pkgid of
+      case pkgVersion pkgid == nullVersion of
         -- if no version is given we want to redirect to the latest version
-        Version [] _ -> tempRedirect latestPkgPath (toResponse "")
+        True -> tempRedirect latestPkgPath (toResponse "")
           where
             latest = packageId pkginfo
             dpath' = [ if var == "package"
@@ -325,13 +326,17 @@ documentationFeature name
                      | e@(var, _) <- dpath ]
             latestPkgPath = (renderResource' self dpath')
 
-        _             -> do
+        False -> do
           mdocs <- queryState documentationState $ LookupDocumentation pkgid
           case mdocs of
             Nothing ->
               errNotFoundH "Not Found"
-                [MText $ "There is no documentation for " ++ display pkgid
-                  ++ ". See " ++ canonicalLink ++ " for the latest version."]
+                [ MText "There is no documentation for "
+                , MLink (display pkgid) ("/package/" ++ display pkgid)
+                , MText ". See "
+                , MLink canonicalLink canonicalLink
+                , MText " for the latest version."
+                ]
               where
                 -- Essentially errNotFound, but overloaded to specify a header.
                 -- (Needed since errNotFound throws away result of setHeaderM)
@@ -354,7 +359,25 @@ checkDocTarball pkgid =
    . fmapErr show             . Tar.read
   where
     fmapErr f    = Tar.foldEntries Tar.Next Tar.Done (Tar.Fail . f)
-    checkEntries = Tar.foldEntries (\_ remainder -> remainder) (Right ()) Left
+    checkEntries = Tar.foldEntries checkEntry (Right ()) Left
+
+    checkEntry entry remainder
+      | Tar.entryPath entry == docMetaPath = checkDocMeta entry remainder
+      | otherwise                          = remainder
+
+    checkDocMeta entry remainder =
+      case Tar.entryContent entry of
+        Tar.NormalFile content size
+          | size <= maxDocMetaFileSize ->
+              case DocMeta.parseDocMeta content of
+                Just _ -> remainder
+                Nothing -> Left "meta.json is invalid"
+          | otherwise -> Left "meta.json too large"
+        _ -> Left "meta.json not a file"
+
+    maxDocMetaFileSize = 16 * 1024 -- 16KiB
+    docMetaPath = DocMeta.packageDocMetaTarPath pkgid
+
 
 {------------------------------------------------------------------------------
   Auxiliary

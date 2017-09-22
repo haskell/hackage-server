@@ -8,18 +8,21 @@ import Network.Browser hiding (err)
 import Network.URI
          ( URI(..), URIAuth(..), parseURI, escapeURIString, isUnescapedInURI )
 
+import qualified Codec.Archive.Tar.Entry as Tar (Entry(..), EntryContent(..))
+
 import qualified Distribution.Client.HtPasswdDb as HtPasswdDb
 import qualified Distribution.Client.UserAddressesDb as UserAddressesDb
 import qualified Distribution.Client.UploadLog  as UploadLog
 import qualified Distribution.Client.TagsFile   as TagsFile
 import qualified Distribution.Client.DistroMap  as DistroMap
-import qualified Distribution.Client.PkgIndex   as PkgIndex
+import qualified Distribution.Client.Index as PackageIndex (read)
+
 
 import Distribution.Server.Users.Types (UserName(..))
 import Distribution.Server.Util.Parse (packUTF8, unpackUTF8)
 
 import Distribution.Package
-         ( PackageId, PackageName, packageName, packageVersion )
+         ( PackageId, PackageName, packageName, packageVersion, PackageIdentifier )
 import Distribution.Version
          ( Version, versionTags )
 import Distribution.Text
@@ -38,7 +41,7 @@ import qualified Distribution.Server.Util.GZip as GZip
 
 import System.Environment
          ( getArgs, getProgName )
-import System.Locale
+import Data.Time.Locale.Compat
          ( defaultTimeLocale )
 import System.Exit
          ( exitWith, ExitCode(..) )
@@ -245,7 +248,7 @@ importAccounts jobs htpasswdFile makeUploader baseURI = do
             =<< readFile htpasswdFile
 
   concForM_ jobs htpasswdDb $ \tasks ->
-    httpSession "hackage-import" version $ do
+    httpSession "hackage-import" Paths.version $ do
       setAuthorityFromURI baseURI
       tasks $ \(username, mPasswdhash) ->
         putUserAccount baseURI username mPasswdhash makeUploader
@@ -401,7 +404,7 @@ importIndex :: Int -> FilePath -> URI -> IO ()
 importIndex jobs indexFile baseURI = do
     info $ "Reading index file " ++ indexFile
     pkgs  <- either fail return
-           . PkgIndex.readPkgIndex
+           . readPkgIndex
          =<< LBS.readFile indexFile
 
     pkgs' <- evaluate (sortBy (comparing fst) pkgs)
@@ -1021,3 +1024,31 @@ object = Object . HashMap.fromList
 
 string :: String -> Value
 string = String . Text.pack
+
+-- originally provded by "Distribution.Client.PkgIndex" which got removed
+-- in 4b2770aa9597ece12ec5e35b742161a30120276b
+
+readPkgIndex :: ByteString -> Either String [(PackageIdentifier, ByteString)]
+readPkgIndex = fmap extractCabalFiles
+             . PackageIndex.read (,)
+             . GZip.decompressNamed "<<package index>>"
+  where
+    extractCabalFiles entries =
+      [ (pkgid, cabalFile)
+      | (pkgid, Tar.Entry {
+                          Tar.entryContent = Tar.NormalFile cabalFile _
+                }) <- entries ]
+
+
+-- legacy/compat function
+-- TODO: get rid
+makeCommand name shortDesc longDesc defaultInitFlags options =
+    CommandUI {
+      commandName         = name,
+      commandSynopsis     = shortDesc,
+      commandUsage        = usageAlternatives name ["[FLAGS]"],
+      commandDescription  = longDesc,
+      commandNotes        = Nothing,
+      commandDefaultFlags = defaultInitFlags,
+      commandOptions      = options
+    }

@@ -15,6 +15,8 @@
 -----------------------------------------------------------------------------
 module Distribution.Server.Packages.Types where
 
+import Distribution.Server.Prelude
+
 import Distribution.Server.Users.Types (UserId(..))
 import Distribution.Server.Framework.BlobStorage (BlobId, BlobId_v0, BlobStorage)
 import Distribution.Server.Framework.Instances (PackageIdentifier_v0)
@@ -30,14 +32,12 @@ import Distribution.Package
 import Distribution.PackageDescription
          ( GenericPackageDescription(..))
 import Distribution.PackageDescription.Parse
-         ( parsePackageDescription, ParseResult(..) )
+         ( parseGenericPackageDescription, ParseResult(..) )
 
-import Control.Applicative
 import Data.Serialize (Serialize)
 import Data.ByteString.Lazy (ByteString)
 import Data.Time.Clock (UTCTime(..))
 import Data.Time.Calendar (Day(..))
-import Data.Typeable (Typeable)
 import Data.List (sortBy)
 import Data.Ord (comparing)
 import Data.SafeCopy
@@ -209,7 +209,7 @@ pkgLatestTarball pkginfo =
 -- | The information held in a parsed .cabal file (used by cabal-install)
 pkgDesc :: PkgInfo -> GenericPackageDescription
 pkgDesc pkgInfo =
-    case parsePackageDescription $ cabalFileString $ fst $ pkgLatestRevision pkgInfo of
+    case parseGenericPackageDescription $ cabalFileString $ fst $ pkgLatestRevision pkgInfo of
       -- We only make PkgInfos with parsable pkgDatas, so if it
       -- doesn't parse then something has gone wrong.
       ParseFailed e -> error ("Internal error: " ++ show e)

@@ -26,14 +26,16 @@ $hackagePageHeader()$
 <li>A description of what it does</li>
 <li>Licence information</li>
 <li>Author information</li>
-<li>A downloadable gzipped tarball</li>
-<li>A list of modules in the package</li>
+<li>A declarative specification of library & tool dependencies</li>
+<li>A list of executables and/or library modules provided by the package</li>
 <li>Haddock documentation (if available) with source links</li>
+<li>A downloadable gzipped tarball</li>
 </ul>
 <p>Guidelines for Hackage Packages:</p>
 <ul>
-<li>All packages should follow the <a href="http://pvp.haskell.org/">Package Versioning Policy (PVP)</a>.</li>
-<li>Packages cannot be deleted, so you should consider uploading new versions packages as a <a href="http://hackage.haskell.org/packages/candidates/upload">package candidate</a> and testing before publishing it to the main index.</li>
+<li>All packages should follow the <a href="https://pvp.haskell.org/">Package Versioning Policy (PVP)</a>.</li>
+<li><strong>Packages cannot be deleted</strong>, so you should consider uploading new versions packages as a <a href="/packages/candidates/upload">package candidate</a> and testing before publishing it to the main index.</li>
+<li>Please consult the <a href="/upload">documentation for uploading packages</a> for more in-depth information about Hackage's policies.</li>
 </ul>
 <p>In addition to the main package list page, there are a few other package indices:</p>
 <ul>

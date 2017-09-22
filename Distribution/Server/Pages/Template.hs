@@ -29,6 +29,8 @@ hackagePageWith headExtra docTitle docSubtitle docContent bodyExtra =
                 , thelink ! [ rel "stylesheet"
                             , href stylesheetURL
                             , thetype "text/css"] << noHtml
+                , meta ! [ name "viewport"
+                         , content "width=device-width, initial-scale=1"]
                 -- if Search is enabled
                 , thelink ! [ rel "search", href "/packages/opensearch.xml"
                             , thetype "application/opensearchdescription+xml"
@@ -58,7 +60,7 @@ stylesheetURL = "/static/hackage.css"
 
 -- URL of the package list
 pkgListURL :: URL
-pkgListURL = "/packages/"
+pkgListURL = "/packages/browse"
 
 -- URL of the upload form
 introductionURL :: URL

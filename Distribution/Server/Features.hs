@@ -241,6 +241,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
     tagsFeature     <- mkTagsFeature
                          coreFeature
                          uploadFeature
+                         usersFeature
 
     versionsFeature <- mkVersionsFeature
                          coreFeature
@@ -257,8 +258,11 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          coreFeature
                          -- [reverse index disabled] reverseFeature
                          downloadFeature
+                         votesFeature
                          tagsFeature
                          versionsFeature
+                         usersFeature
+                         uploadFeature
 
     searchFeature   <- mkSearchFeature
                          coreFeature
