@@ -162,7 +162,9 @@ target "mirror"
 
   post-mirror-hook: "shell command to execute"
 ```
-Recognized types are hackage2, secure and local. The target server name was displayed when you ran. Note, the target must _not_ have a trailing slash, or confusion will tend to occur.
+Recognized types are hackage2, secure and local. The target server name was displayed when you ran.
+
+Note, the target must _not_ have a trailing slash, or confusion will tend to occur. Additionally, if you have ipv6 setup on the machine, you may need to replace `localhost` with `127.0.0.1`.
 
 Also note that you should mirror _from_ hackage2 or secure typically and mirror _to_ hackage2. Only mirroring from secure will include dependency revision information.
 
