@@ -13,7 +13,7 @@ $hackagePageHeader()$
 
 <h2>Upload documentation</h2>
 <p>Hackage usually builds package documentation automatically. However, if you wish, you may also build and upload the HTML yourself.</p>
-<p>For more information, see this <a href="https://github.com/haskell/hackage-server/issues/56">bug report</a>.</p>
+<p>For more information, see the Notes section of the <a href="/upload">Upload page</a>.</p>
 <form class="box" method="post" action="/package/$pkgid$/docs" enctype="multipart/form-data">
   <input type="file" name="_file" />
   <input type="hidden" name="_method" value="PUT" />
