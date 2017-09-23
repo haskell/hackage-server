@@ -86,7 +86,7 @@ packagePageTemplate render
   ] ++
 
   -- Miscellaneous things that could still stand to be refactored a bit.
-  [ "moduleList"        $= Old.moduleSection render mdocIndex docURL hasQuickNavV1
+  [ "moduleList"        $= Old.moduleSection render mdocIndex docURL hasQuickNav
   , "executables"       $= (commaList . map toHtml $ rendExecNames render)
   , "downloadSection"   $= Old.downloadSection render
   , "stability"         $= renderStability desc
@@ -135,7 +135,8 @@ packagePageTemplate render
       ]
 
     docFieldsTemplate = templateDict $
-      [ templateVal "hasQuickNavV1" hasQuickNavV1
+      [ templateVal "hasQuickNavV0" hasQuickNavV0
+      , templateVal "hasQuickNavV1" hasQuickNavV1
       , templateVal "baseUrl" docURL
       ]
 
@@ -246,13 +247,30 @@ packagePageTemplate render
                 map (packageNameLink utilities) $ fors
       Nothing -> noHtml
 
-    hasQuickNavGen :: Maybe DocMeta -> Version -> Bool
-    hasQuickNavGen (Just docMeta) expected =
-      docMetaHaddockVersion docMeta == expected
-    hasQuickNavGen _ _ = False
+    -- starting with haddock 2.19.1 QuickJump is versioned
+    -- explicitly.
+    hasQuickNavVersion :: Int -> Bool
+    hasQuickNavVersion expected
+      | Just docMeta <- mdocMeta
+      , Just quickjumpVersion <- docMetaQuickJumpVersion docMeta
+      = quickjumpVersion == expected
+      | otherwise
+      = False
+
+    -- the initial prototype didn't have a separate versioning
+    -- scheme for the QuickJump feature.
+    hasQuickNavV0 :: Bool
+    hasQuickNavV0
+      | Just docMeta <- mdocMeta
+      , Nothing      <- docMetaQuickJumpVersion docMeta
+      = docMetaHaddockVersion docMeta == mkVersion [2, 18, 2]
+      | otherwise = False
 
     hasQuickNavV1 :: Bool
-    hasQuickNavV1 = hasQuickNavGen mdocMeta (mkVersion [2, 18, 2])
+    hasQuickNavV1 = hasQuickNavVersion 1
+
+    hasQuickNav :: Bool
+    hasQuickNav = hasQuickNavV0 || hasQuickNavV1
 
 -- #ToDo: Pick out several interesting versions to display, with a link to
 -- display all versions.
