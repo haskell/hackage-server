@@ -20,6 +20,7 @@ module Distribution.Server.Pages.Package
   , maintainerSection
   , downloadSection
   , moduleToDocUrl
+  , renderMarkdown
   ) where
 
 import Distribution.Server.Features.PreferredVersions
