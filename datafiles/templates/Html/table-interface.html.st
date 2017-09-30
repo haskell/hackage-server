@@ -43,7 +43,7 @@
 
                 \$.extend( jQuery.fn.dataTableExt.oSort, {
                    "package-pre": function ( a ) {
-                        return [a.search(/deprecated/),a];
+                        return [a.search(/deprecated/),a.toLowerCase()];
                     },
                     "package-asc": function (a, b) {
                         return ((a < b) ? -1 : ((a > b) ? 1 : 0));

@@ -58,7 +58,8 @@ import Distribution.Version
 import Distribution.Text (display)
 import Distribution.PackageDescription
 
-import Data.List (intercalate, intersperse, insert, sortBy)
+import Data.Char (toLower)
+import Data.List (intercalate, intersperse, insert, sortBy, sortOn)
 import Data.Function (on)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -635,7 +636,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
     serveBrowsePage :: DynamicPath -> ServerPartE Response
     serveBrowsePage _ = do
       pkgIndex <- queryGetPackageIndex
-      let packageNames = Pages.toPackageNames pkgIndex
+      let packageNames = sortOn (map toLower . unPackageName) $ Pages.toPackageNames pkgIndex
       pkgDetails <- liftIO $ makeItemList packageNames
       let rowList = map makeRow pkgDetails
           tabledata = "" +++ rowList +++ ""
@@ -1709,7 +1710,7 @@ mkHtmlSearch HtmlUtilities{..}
             -- pkgIndex <- liftIO $ queryGetPackageIndex
             -- currentTime <- liftIO $ getCurrentTime
             pkgnames <- if null terms
-                        then fmap Pages.toPackageNames queryGetPackageIndex
+                        then fmap (sortOn (map toLower . unPackageName) . Pages.toPackageNames) queryGetPackageIndex
                         else searchPackages terms
             -- let (pageResults, moreResults) = splitAt limit (drop offset pkgnames)
             pkgDetails <- liftIO $ makeItemList pkgnames
