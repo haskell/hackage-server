@@ -41,6 +41,7 @@ import Distribution.Version
 import Distribution.Types.CondTree
 import Distribution.Text        (display)
 import Text.XHtml.Strict hiding (p, name, title, content)
+import qualified Text.XHtml.Strict
 
 import Data.Monoid              (Monoid(..), (<>))
 import Data.Maybe               (fromMaybe, maybeToList, isJust, mapMaybe)
@@ -218,8 +219,14 @@ downloadSection :: PackageRender -> [Html]
 downloadSection PackageRender{..} =
     [ h2 << "Downloads"
     , ulist << map (li <<) downloadItems
+    , metadataNote
     ]
   where
+    metadataNote = if isJust rendUpdateInfo
+           then Text.XHtml.Strict.p << toHtml "Note: This package has metadata revisions in the cabal description newer than included in the tarball. To unpack the package including the revisions, use 'cabal get'."
+           else noHtml
+    inPkg = if isJust rendUpdateInfo then " (revised from the package)"
+                                     else " (included in the package)"
     downloadItems =
       [ if rendHasTarball
           then [ anchor ! [href downloadURL] << tarGzFileName
@@ -230,8 +237,8 @@ downloadSection PackageRender{..} =
                ]
           else [ toHtml << "Package tarball not uploaded" ]
       , [ anchor ! [href cabalURL] << "Package description"
-        , toHtml $ if rendHasTarball then " (included in the package)" else ""
-        ]
+        , toHtml $ if rendHasTarball then inPkg else ""
+       ]
       ]
 
     downloadURL   = rendPkgUri </> display rendPkgId <.> "tar.gz"
