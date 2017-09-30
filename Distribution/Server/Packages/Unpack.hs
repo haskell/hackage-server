@@ -325,17 +325,6 @@ extraChecks genPkgDesc pkgId tarIndex = do
               ++ "field in their .cabal file. This is only used for "
               ++ "post-release revisions."
 
-  -- Check reasonableness of names of exposed modules
-  let topLevel = case library pkgDesc of
-                 Nothing -> []
-                 Just l ->
-                     nub $ map head $ filter (not . null) $ map components $ exposedModules l
-      badTopLevel = topLevel \\ allocatedTopLevelNodes
-
-  unless (null badTopLevel) $
-          warn $ "Exposed modules use unallocated top-level names: " ++
-                          unwords badTopLevel
-
   -- Check for experimental Backpack features
   let usesBackpackInc  = any (not . null . mixins) (allBuildInfo pkgDesc)
       usesBackpackSig  = any (not . null . signatures) (allLibraries pkgDesc)
@@ -359,13 +348,6 @@ warn msg = tell [msg]
 
 runUploadMonad :: UploadMonad a -> Either String (a, [String])
 runUploadMonad (UploadMonad m) = runIdentity . runExceptT . runWriterT $ m
-
--- | Registered top-level nodes in the class hierarchy.
-allocatedTopLevelNodes :: [String]
-allocatedTopLevelNodes = [
-        "Algebra", "Codec", "Control", "Data", "Database", "Debug",
-        "Distribution", "DotNet", "Foreign", "Graphics", "Language",
-        "Network", "Numeric", "Prelude", "Sound", "System", "Test", "Text"]
 
 selectEntries :: forall err a.
                  (err -> String)
