@@ -56,13 +56,15 @@ pkgSearchConfig =
   }
   where
     extractTokens :: PackageDescription -> PkgDocField -> [Text]
-    extractTokens pkg NameField        = extractPackageNameTerms           (display $ packageName pkg)
-    extractTokens pkg SynopsisField    = extractSynopsisTerms    stopWords (synopsis    pkg)
-    extractTokens pkg DescriptionField = extractDescriptionTerms stopWords (description pkg)
+    extractTokens pkg NameField        = concatMap (extraStems computerStems) $
+                                         extractPackageNameTerms           (display $ packageName pkg)
+    extractTokens pkg SynopsisField    = extractSynopsisTerms    computerStems stopWords (synopsis    pkg)
+    extractTokens pkg DescriptionField = extractDescriptionTerms computerStems stopWords (description pkg)
 
     normaliseQueryToken :: Text -> PkgDocField -> Text
     normaliseQueryToken tok =
       let tokFold = T.toCaseFold tok
+          -- we don't need to use extraStems here because the index is inflated by it already.
           tokStem = stem English tokFold
        in \field -> case field of
                       NameField        -> tokFold
@@ -113,6 +115,10 @@ stopWords =
      "within","their","this","but","are","get","one","all","you","so","only",
      "now","how","where","when","up","has","been","about","them","then","see",
      "no","do","than","should","out","off","much","if","i","have","also"]
+
+-- Extra stems that tend to occur with software packages
+computerStems :: [Text]
+computerStems = map T.pack ["ql","db","ml","gl"]
 
 
 {-
