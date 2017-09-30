@@ -11,7 +11,8 @@ $hackagePageHeader()$
 <div id="content">
 <h2>Uploading packages</h2>
 
-<div style="font-size: large; text-align: center;"><a href="/packages/upload">Upload and publish a package permanently</a></div>
+<div style="font-size: large; text-align: center;">Upload and publish
+  a package permanently: <a href="/packages/upload">Upload</a></div>
 
 <p>Uploading a package puts it in the <a href="/packages/browse">main package index</a>
 so that anyone can download it and view information about it. <strong>You can only
@@ -106,7 +107,7 @@ yourself or to mark it as unsupported.
 
 <h3 id="candidates">Package Candidates</h3>
 
-<p><a href="/packages/candidates">Package <em>candidates</em></a> are a way 
+<p><a href="/packages/candidates">Package <em>candidates</em></a> are a way
 to preview the package page, view any warnings or possible errors you might
 encounter, and let others install it before publishing it to the main index.
 (Note: you can view these warnings with 'cabal check'.) You can have multiple
