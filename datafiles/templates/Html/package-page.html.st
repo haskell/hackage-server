@@ -164,17 +164,23 @@
         </tr>
 
         <tr>
-          <th>Rating</th>
-          <td>$score$ ($votes$ ratings)
+          <th> Rating</th>
+	  <td>$score$ ($votes$ ratings)
+	  <span style="font-size: small">[estimated by <a href="https://en.wikipedia.org/wiki/Rule_of_succession">rule of succession</a>]</span></td>
+	</tr>
+
+	<tr>
+	  <th>Your Rating</th>
+	  <td>
+            <ul class="star-rating">
+              <li class="star uncool" id="1">&lambda;</li>
+              <li class="star uncool" id="2">&lambda;</li>
+              <li class="star uncool" id="3">&lambda;</li>
+	    </ul>
           $if(userRating)$
             <input type="hidden" id="userRating" value="$userRating$">
             [<a href="" class="clear-rating">clear rating</a>]
           $endif$
-            <ul class="star-rating">
-              <li class="star" id="1">&lambda;</li>
-              <li class="star" id="2">&lambda;</li>
-              <li class="star" id="3">&lambda;</li>
-            </ul>
           </td>
         </tr>
         <tr>
