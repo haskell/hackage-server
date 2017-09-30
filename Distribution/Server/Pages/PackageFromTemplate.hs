@@ -27,10 +27,6 @@ import Data.Time.Locale.Compat  (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
 import System.FilePath.Posix    (takeExtension)
 
-import qualified Cheapskate      as Markdown (markdown, Options(..))
-import qualified Cheapskate.Html as Markdown (renderDoc)
-
-import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
 import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
 import qualified Data.Text.Encoding.Error as T
@@ -386,27 +382,14 @@ latestVersion (PackageIdentifier pname _ ) allVersions =
     versionLink v = anchor ! [href $ packageURL $ PackageIdentifier pname v] << display v
 
 readmeSection :: PackageRender -> Maybe BS.ByteString -> [Html]
-readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename) }
+readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename), rendPkgId  = pkgid }
               (Just content) =
     [ thediv ! [theclass "embedded-author-content"]
             << if supposedToBeMarkdown filename
-                 then renderMarkdown content
+                 then Old.renderMarkdown (T.pack $ display pkgid) content
                  else pre << unpackUtf8 content
     ]
 readmeSection _ _ = []
-
-renderMarkdown :: BS.ByteString -> Html
-renderMarkdown = primHtml . Blaze.renderHtml
-               . Markdown.renderDoc . Markdown.markdown opts
-               . T.decodeUtf8With T.lenientDecode . BS.toStrict
-  where
-    opts =
-      Markdown.Options
-        { Markdown.sanitize           = True
-        , Markdown.allowRawHtml       = False
-        , Markdown.preserveHardBreaks = False
-        , Markdown.debug              = False
-        }
 
 supposedToBeMarkdown :: FilePath -> Bool
 supposedToBeMarkdown fname = takeExtension fname `elem` [".md", ".markdown"]
