@@ -79,8 +79,8 @@ defaultSearchRankParameters =
       paramFieldWeights,
       paramFeatureWeights,
       paramFeatureFunctions,
-      paramResultsetSoftLimit = 200,
-      paramResultsetHardLimit = 400
+      paramResultsetSoftLimit = 400,
+      paramResultsetHardLimit = 800
     }
   where
     paramK1 :: Float
@@ -146,7 +146,7 @@ main = do
     print ("search engine invariant", invariant searchengine)
 
 --    print [ avgFieldLength ctx s | s <- [minBound..maxBound] ]
-    
+
 --    print $ take 100 $ sortBy (flip compare) $ map Set.size $ Map.elems (termMap searchindex)
 --    T.putStr $ T.unlines $ Map.keys (termMap searchindex)
 --    let SearchEngine{searchIndex=SearchIndex{termMap, termIdMap, docKeyMap, docIdMap}} = searchengine
@@ -154,7 +154,7 @@ main = do
 
     let loop = do
           putStr "search term> "
-          hFlush stdout 
+          hFlush stdout
           t <- getLine
           unless (null t) $ do
             let terms = stems English
