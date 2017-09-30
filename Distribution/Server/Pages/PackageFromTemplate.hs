@@ -22,7 +22,7 @@ import Text.XHtml.Strict hiding (p, name, title, content)
 
 import Data.Maybe               (maybeToList)
 import Data.List                (intersperse)
-import System.FilePath.Posix    ((</>), takeFileName)
+import System.FilePath.Posix    ((</>), takeFileName, dropTrailingPathSeparator)
 import Data.Time.Locale.Compat  (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
 import System.FilePath.Posix    (takeExtension)
@@ -364,6 +364,14 @@ sourceRepositoryToHtml sr
                       case repoSubdir sr of
                           Just sd -> toHtml ("(" ++ sd ++ ")")
                           Nothing   -> noHtml]
+      Just (OtherRepoType "fs")
+        | Just url <-
+           repoLocation sr ->
+                     concatHtml [toHtml "fossil clone ",
+                      anchor ! [href url] << toHtml url,
+                      toHtml " ",
+                      toHtml (takeFileName (dropTrailingPathSeparator url) ++ ".fossil")
+                      ]
       _ ->
           -- We don't know how to show this SourceRepo.
           -- This is a kludge so that we at least show all the info.
