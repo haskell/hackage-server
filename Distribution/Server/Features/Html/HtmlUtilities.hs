@@ -11,6 +11,8 @@ import Distribution.Server.Features.Core
 import Distribution.Text (display)
 import Data.List (intersperse, intercalate)
 import Data.Set (Set)
+import Data.Time.Locale.Compat  (defaultTimeLocale)
+import Data.Time.Format         (formatTime)
 import Distribution.Server.Features.PackageList
 import Distribution.Server.Pages.Util (packageType)
 import Distribution.Package
@@ -41,6 +43,7 @@ htmlUtilities CoreFeature{coreResource}
                          , td $ toHtml $ show $ itemVotes item
                          , td $ toHtml $ itemDesc item
                          , td $ " (" +++ renderTags (itemTags item) +++ ")"
+                         , td $ toHtml $ formatTime defaultTimeLocale "%F" (itemLastUpload item)
                          , td $ "" +++ intersperse (toHtml ", ") (map renderUser (itemMaintainer item))
                          ]
         where

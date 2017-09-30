@@ -36,6 +36,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Time.Clock (UTCTime(..))
 
 
 data ListFeature = ListFeature {
@@ -81,18 +82,20 @@ data PackageItem = PackageItem {
     -- How many test suites (>=0) this package has.
     itemNumTests :: !Int,
     -- How many benchmarks (>=0) this package has.
-    itemNumBenchmarks :: !Int
+    itemNumBenchmarks :: !Int,
+    -- Last upload date
+    itemLastUpload :: !UTCTime
     -- Hotness: a more heuristic way to sort packages. presently non-existent.
   --itemHotness :: Int
 }
 
 instance MemSize PackageItem where
-    memSize (PackageItem a b c d e f g h i j k) = memSize11 a b c d e f g h i j k
+    memSize (PackageItem a b c d e f g h i j k l) = memSize12 a b c d e f g h i j k l
 
 
 emptyPackageItem :: PackageName -> PackageItem
 emptyPackageItem pkg = PackageItem pkg Set.empty Nothing "" []
-                                   0 0 False 0 0 0
+                                   0 0 False 0 0 0 (UTCTime (toEnum 0) 0)
 
 
 initListFeature :: ServerEnv
@@ -253,6 +256,7 @@ listFeature CoreFeature{..}
           , itemDownloads  = cmFind pkgname downs
             -- [reverse index disabled] , itemRevDepsCount = directReverseCount revCount
           , itemVotes      = votes
+          , itemLastUpload = fst (pkgOriginalUploadInfo pkg)
           }
 
     ------------------------------
