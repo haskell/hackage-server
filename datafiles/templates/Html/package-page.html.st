@@ -165,7 +165,7 @@
 
         <tr>
           <th> Rating</th>
-	  <td>$score$ ($votes$ ratings)
+	  <td>$score$ (votes: $votes$)
 	  <span style="font-size: small">[estimated by <a href="https://en.wikipedia.org/wiki/Rule_of_succession">rule of succession</a>]</span></td>
 	</tr>
 
