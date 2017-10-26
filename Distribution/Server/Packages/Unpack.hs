@@ -395,7 +395,7 @@ tarballChecks :: Bool -> UTCTime -> FilePath
 tarballChecks lax now expectedDir =
     (if not lax then checkFutureTimes now else id)
   . checkTarbomb expectedDir
-  . checkUselessPermissions
+  . (if not lax then checkUselessPermissions else id)
   . (if lax then ignoreShortTrailer
             else fmapTarError (either id PortabilityError)
                . Tar.checkPortability)
