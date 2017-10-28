@@ -4,6 +4,9 @@ module Distribution.Server.Features.Html (
     initHtmlFeature
   ) where
 
+import Prelude ()
+import Distribution.Server.Prelude
+
 import Distribution.Server.Framework
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
@@ -59,16 +62,13 @@ import Distribution.Text (display)
 import Distribution.PackageDescription
 
 import Data.Char (toLower)
-import Data.List (intercalate, intersperse, insert, sortBy, sortOn)
+import Data.List (intercalate, intersperse, insert)
 import Data.Function (on)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Vector as Vec
-import Data.Maybe (fromMaybe, isJust)
-import Data.Monoid ((<>))
 import qualified Data.Text as T
 import Data.Traversable (traverse)
-import Control.Applicative (optional)
 import Data.Array (Array, listArray)
 import qualified Data.Array as Array
 import qualified Data.Ix    as Ix

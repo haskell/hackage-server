@@ -13,14 +13,14 @@ module Distribution.Server.Packages.Render (
   , categorySplit,
   ) where
 
-import Data.Maybe (catMaybes, isJust, maybeToList)
-import Control.Monad (guard)
+import Prelude ()
+import Distribution.Server.Prelude hiding (All)
+
 import Control.Arrow ((&&&), (***))
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
 import qualified Data.Vector as Vec
-import Data.Ord (comparing)
-import Data.List (sortBy, intercalate)
+import Data.List (intercalate)
 import Data.Time.Clock (UTCTime)
 import System.FilePath.Posix ((</>), (<.>))
 
@@ -287,8 +287,3 @@ evalCondition flags cond =
                          (_, Just False) -> Just False
                          (Just True, Just True) -> Just True
                          _ -> Nothing
-
--- Same as @sortBy (comparing f)@, but without recomputing @f@.
-sortOn :: Ord b => (a -> b) -> [a] -> [a]
-sortOn f xs = map snd (sortBy (comparing fst) [(f x, x) | x <- xs])
-
