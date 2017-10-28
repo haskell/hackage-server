@@ -602,6 +602,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           , "hasexecs"          $= not (null execs)
           , "recentDownloads"   $= recentDown
           , "votes"             $= pkgVotes
+          , "hasVotes"          $= pkgVotes > 0
           , "userRating"        $= userRating
           , "score"             $= pkgScore
           , "buildStatus"       $= buildStatus

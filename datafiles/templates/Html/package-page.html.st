@@ -165,7 +165,7 @@
 
         <tr>
           <th> Rating</th>
-	  <td>$score$ (votes: $votes$)
+	  <td>$if(hasVotes)$$score$ (votes: $votes$)$else$(no votes yet)$endif$
 	  <span style="font-size: small">[estimated by <a href="https://en.wikipedia.org/wiki/Rule_of_succession">rule of succession</a>]</span></td>
 	</tr>
 
