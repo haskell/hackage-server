@@ -2,7 +2,8 @@
 
 module Distribution.Server.Features.Search.ExtractDescriptionTerms (
     extractSynopsisTerms,
-    extractDescriptionTerms
+    extractDescriptionTerms,
+    extraStems
   ) where
 
 import Distribution.Server.Prelude
@@ -20,10 +21,13 @@ import Documentation.Haddock.Types
 
 import qualified Distribution.Server.Pages.Package.HaddockParse as Haddock (parse)
 
+extraStems :: [Text] -> Text -> [Text]
+extraStems ss x = x : mapMaybe (x `T.stripSuffix`) ss
 
-extractSynopsisTerms :: Set Text -> String -> [Text]
-extractSynopsisTerms stopWords =
-      NLP.stems NLP.English
+extractSynopsisTerms :: [Text] -> Set Text -> String -> [Text]
+extractSynopsisTerms ss stopWords =
+      concatMap (extraStems ss) --note this adds extra possible stems, it doesn't delete any given one.
+    . NLP.stems NLP.English
     . filter (`Set.notMember` stopWords)
     . map (T.toCaseFold . T.pack)
     . concatMap splitTok
@@ -31,7 +35,7 @@ extractSynopsisTerms stopWords =
     . NLP.tokenize
 
 
-ignoreTok :: String -> Bool  
+ignoreTok :: String -> Bool
 ignoreTok = all isPunctuation
 
 splitTok :: String -> [String]
@@ -48,9 +52,10 @@ splitTok tok =
         (leading, [])         -> leading : []
 
 
-extractDescriptionTerms :: Set Text -> String -> [Text]
-extractDescriptionTerms stopWords =
-      NLP.stems NLP.English
+extractDescriptionTerms :: [Text] -> Set Text -> String -> [Text]
+extractDescriptionTerms ss stopWords =
+      concatMap (extraStems ss)
+    . NLP.stems NLP.English
     . filter (`Set.notMember` stopWords)
     . map (T.toCaseFold . T.pack)
     . maybe
@@ -98,7 +103,7 @@ main = do
     let mostFreq :: [String]
         pkgs     :: [PackageDescription]
         (mostFreq, pkgs) = read pkgsFile
-    
+
     stopWordsFile <- T.readFile "stopwords.txt"
 --    wordsFile <- T.readFile "/usr/share/dict/words"
 --    let ws = Set.fromList (map T.toLower $ T.lines wordsFile)
@@ -114,7 +119,7 @@ main = do
     sequence_
       [ putStrLn $ display (packageName pkg) ++ ": "
                 ++ --intercalate ", "
-                   (description pkg) ++ "\n" 
+                   (description pkg) ++ "\n"
                 ++ intercalate ", "
                    (map T.unpack $ extractDescriptionTerms stopWords (description pkg)) ++ "\n"
       | pkg <- pkgs
