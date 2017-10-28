@@ -326,7 +326,7 @@ impl server = logExceptions $
 
     logExceptions :: ServerPart Response -> ServerPart Response
     logExceptions act = Lifted.catch act $ \e -> do
-                          liftIO . lognotice verbosity $ "WARNING: Received exception: " ++ show e
+                          lognotice verbosity $ "WARNING: Received exception: " ++ show e
                           Lifted.throwIO (e :: SomeException)
 
     verbosity = serverVerbosity (serverEnv server)

@@ -22,6 +22,7 @@ import           Data.Semigroup      as X
 import           Data.Typeable       as X (Typeable)
 import           Data.Word           as X
 import           Prelude             as X
+import           Control.Monad.IO.Class as X (MonadIO(liftIO))
 
 #if MIN_VERSION_base(4,8,0)
 import           Data.List (sortOn)
