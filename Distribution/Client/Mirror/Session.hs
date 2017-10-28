@@ -56,7 +56,6 @@ module Distribution.Client.Mirror.Session (
 import Distribution.Server.Prelude
 
 import Control.Exception
-import Control.Monad.Cont
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State

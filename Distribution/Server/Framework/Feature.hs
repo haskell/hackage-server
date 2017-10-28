@@ -30,7 +30,6 @@ import Distribution.Server.Framework.Resource      (Resource, ServerErrorRespons
 import Distribution.Server.Framework.BlobStorage   (BlobStorage)
 import Distribution.Server.Framework.MemSize
 
-import Control.Monad.Trans (MonadIO)
 import Data.Acid
 import Data.Acid.Advanced
 

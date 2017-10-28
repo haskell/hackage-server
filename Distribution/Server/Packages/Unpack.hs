@@ -26,7 +26,7 @@ import Distribution.Package
 import Distribution.PackageDescription
          ( GenericPackageDescription(..), PackageDescription(..)
          , allBuildInfo, allLibraries
-         , exposedModules, mixins, signatures, specVersion
+         , mixins, signatures, specVersion
          )
 import Distribution.PackageDescription.Parse
          ( parseGenericPackageDescription )
@@ -39,8 +39,6 @@ import Distribution.ParseUtils
          ( ParseResult(..), locatedErrorMsg, showPWarning )
 import Distribution.Text
          ( Text(..), display, simpleParse )
-import Distribution.ModuleName
-         ( components )
 import Distribution.Server.Util.Parse
          ( unpackUTF8 )
 import Distribution.Server.Util.ParseSpecVer
@@ -61,7 +59,7 @@ import Data.ByteString.Lazy
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Char8
 import Data.List
-         ( nub, (\\), partition, intercalate, isPrefixOf )
+         ( nub, partition, intercalate, isPrefixOf )
 import qualified Data.Map.Strict as Map
          ( fromList, lookup )
 import Data.Time

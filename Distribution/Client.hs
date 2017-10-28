@@ -53,7 +53,6 @@ import qualified Distribution.Server.Util.GZip as GZip
 import qualified Codec.Archive.Tar             as Tar
 import qualified Codec.Archive.Tar.Entry       as Tar
 
-import Control.Monad.Trans
 import System.IO
 import System.IO.Error
 import System.FilePath
