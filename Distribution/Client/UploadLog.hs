@@ -34,7 +34,7 @@ import qualified Text.PrettyPrint          as Disp
 import Text.PrettyPrint
          ( (<+>) )
 import Distribution.Simple.Utils
-         ( comparing, equating )
+         ( equating )
 
 import Data.Time.Clock
          ( UTCTime )
@@ -45,7 +45,7 @@ import Data.Time.Format
 import Data.Time.Locale.Compat
          ( defaultTimeLocale )
 import Data.List
-         ( sortBy, groupBy, nub )
+         ( groupBy, nub )
 
 data Entry = Entry UTCTime UserName PackageIdentifier
   deriving (Eq, Ord, Show)

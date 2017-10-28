@@ -38,8 +38,6 @@ import Data.Serialize (Serialize)
 import Data.ByteString.Lazy (ByteString)
 import Data.Time.Clock (UTCTime(..))
 import Data.Time.Calendar (Day(..))
-import Data.List (sortBy)
-import Data.Ord (comparing)
 import Data.SafeCopy
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Serialize       as Serialize

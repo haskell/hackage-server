@@ -4,6 +4,9 @@ module Distribution.Server.Features.Html (
     initHtmlFeature
   ) where
 
+import Prelude ()
+import Distribution.Server.Prelude
+
 import Distribution.Server.Framework
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
@@ -58,16 +61,14 @@ import Distribution.Version
 import Distribution.Text (display)
 import Distribution.PackageDescription
 
-import Data.List (intercalate, intersperse, insert, sortBy)
+import Data.Char (toLower)
+import Data.List (intercalate, intersperse, insert)
 import Data.Function (on)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Vector as Vec
-import Data.Maybe (fromMaybe, isJust)
-import Data.Monoid ((<>))
 import qualified Data.Text as T
 import Data.Traversable (traverse)
-import Control.Applicative (optional)
 import Data.Array (Array, listArray)
 import qualified Data.Array as Array
 import qualified Data.Ix    as Ix
@@ -635,7 +636,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
     serveBrowsePage :: DynamicPath -> ServerPartE Response
     serveBrowsePage _ = do
       pkgIndex <- queryGetPackageIndex
-      let packageNames = Pages.toPackageNames pkgIndex
+      let packageNames = sortOn (map toLower . unPackageName) $ Pages.toPackageNames pkgIndex
       pkgDetails <- liftIO $ makeItemList packageNames
       let rowList = map makeRow pkgDetails
           tabledata = "" +++ rowList +++ ""
@@ -1709,7 +1710,7 @@ mkHtmlSearch HtmlUtilities{..}
             -- pkgIndex <- liftIO $ queryGetPackageIndex
             -- currentTime <- liftIO $ getCurrentTime
             pkgnames <- if null terms
-                        then fmap Pages.toPackageNames queryGetPackageIndex
+                        then fmap (sortOn (map toLower . unPackageName) . Pages.toPackageNames) queryGetPackageIndex
                         else searchPackages terms
             -- let (pageResults, moreResults) = splitAt limit (drop offset pkgnames)
             pkgDetails <- liftIO $ makeItemList pkgnames
