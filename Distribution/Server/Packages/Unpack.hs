@@ -28,8 +28,6 @@ import Distribution.PackageDescription
          , allBuildInfo, allLibraries
          , mixins, signatures, specVersion
          )
-import Distribution.PackageDescription.Parse
-         ( parseGenericPackageDescription )
 import Distribution.PackageDescription.Configuration
          ( flattenPackageDescription )
 import Distribution.PackageDescription.Check
@@ -39,8 +37,6 @@ import Distribution.ParseUtils
          ( ParseResult(..), locatedErrorMsg, showPWarning )
 import Distribution.Text
          ( Text(..), display, simpleParse )
-import Distribution.Server.Util.Parse
-         ( unpackUTF8 )
 import Distribution.Server.Util.ParseSpecVer
 import Distribution.License
          ( License(..) )
@@ -197,18 +193,20 @@ basicChecks pkgid tarIndex = do
               ++ "save the package's cabal file as UTF8 without the BOM."
 
   -- Parse the Cabal file
-  let cabalFileContent = unpackUTF8 cabalEntry
-  (pkgDesc, warnings) <- case parseGenericPackageDescription cabalFileContent of
-    ParseFailed err -> throwError $ showError (locatedErrorMsg err)
-    ParseOk warnings pkgDesc ->
-      return (pkgDesc, map (showPWarning cabalFileName) warnings)
+  (specVerOk,pkgDesc, warnings) <- case parseGenericPackageDescriptionChecked cabalEntry of
+    (_,ParseFailed err) -> throwError $ showError (locatedErrorMsg err)
+    (specVerOk',ParseOk warnings pkgDesc) ->
+      return (specVerOk',pkgDesc, map (showPWarning cabalFileName) warnings)
 
   -- make sure the parseSpecVer heuristic agrees with the full parser
-  let specVer' = parseSpecVerLazy cabalEntry
-      specVer  = specVersion $ packageDescription pkgDesc
+  let specVer = specVersion $ packageDescription pkgDesc
 
-  when (specVer' < mkVersion [1] || specVer /= specVer') $
+  when (not specVerOk || specVer < mkVersion [1]) $
     throwError "The 'cabal-version' field could not be properly parsed."
+
+  -- Don't allowing uploading new pre-1.2 .cabal files as the parser is likely too lax
+  when (specVer < mkVersion [1,2]) $
+    throwError "'cabal-version' must be at least 1.2"
 
   -- Check that the name and version in Cabal file match
   when (packageName pkgDesc /= packageName pkgid) $

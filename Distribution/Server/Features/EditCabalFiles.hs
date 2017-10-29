@@ -19,10 +19,6 @@ import Distribution.Package
 import Distribution.Text (display)
 import Distribution.ParseUtils
          ( ParseResult(..), locatedErrorMsg )
-import Distribution.PackageDescription
-         ( GenericPackageDescription(..), specVersion )
-import Distribution.PackageDescription.Parse
-         ( parseGenericPackageDescription )
 import Distribution.Server.Util.Parse (unpackUTF8)
 import Distribution.Server.Util.ParseSpecVer
 import Distribution.Server.Util.CabalRevisions
@@ -148,25 +144,18 @@ editCabalFilesFeature _env templates
 -- stripped.
 diffCabalRevisionsByteString :: ByteString -> ByteString -> Either String [Change]
 diffCabalRevisionsByteString oldRevision newRevision =
-    maybe (diffCabalRevisions (unpackUTF8 oldRevision) newRevision')
+    maybe (diffCabalRevisions (unpackUTF8 oldRevision) (unpackUTF8 newRevision))
           Left
           parseSpecVerCheck
   where
-    newRevision' = unpackUTF8 newRevision
-
     -- HACK-Alert
     --
     -- make sure the parseSpecVer heuristic agrees with the full parser.
     -- Note that diffCabalRevisions parses the newRevision a second time.
-    parseSpecVerCheck = case parseGenericPackageDescription newRevision' of
-       ParseFailed err -> Just $ showError (locatedErrorMsg err)
-       ParseOk _warnings pd
-         | specVersion (packageDescription pd) /= specVer'
-            -> Just "The 'cabal-version' field could not be properly parsed"
-         | otherwise -> Nothing
-      where
-        specVer' = parseSpecVerLazy newRevision
-
+    parseSpecVerCheck = case parseGenericPackageDescriptionChecked newRevision of
+       (_,ParseFailed err) -> Just $ showError (locatedErrorMsg err)
+       (True, ParseOk {})  -> Nothing
+       (False,ParseOk {})  -> Just "The 'cabal-version' field could not be properly parsed"
 
     showError (Nothing, msg) = msg
     showError (Just n, msg) = "line " ++ show n ++ ": " ++ msg
