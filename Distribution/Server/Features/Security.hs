@@ -50,23 +50,26 @@ initSecurityFeature env = do
        -- which will override any previous one.
        --
        -- TODO: We cannot deal with deletes (they are a problem elsewhere too)
-       registerHook (preIndexUpdateHook coreFeature) $ \chg -> return $
-         case chg of
-           PackageChangeAdd      pkg -> indexEntriesFor pkg
-           PackageChangeInfo s _ new -> case s of
-             PackageUpdatedTarball    -> indexEntriesFor new
-             -- .cabal file is not recorded in the TUF metadata
-             -- (until we have author signing anyway)
-             PackageUpdatedCabalFile  -> []
-             -- the uploader is not included in the TUF metadata
-             PackageUpdatedUploader   -> []
-             -- upload time is not included in the TUF metadata
-             -- (it is recorded in the MetadataEntry because we use it for
-             -- the tarball construction, but it doesn't affect the contents
-             -- of the TUF metadata)
-             PackageUpdatedUploadTime -> []
-           PackageChangeDelete _     -> []
-           PackageChangeIndexExtra{} -> []
+       registerHook (preIndexUpdateHook coreFeature) $ \chg -> do
+         let (ents,msg) = case chg of
+                      PackageChangeAdd      pkg -> (indexEntriesFor pkg,"PackageChangeAdd")
+                      PackageChangeInfo s _ new -> case s of
+                        PackageUpdatedTarball    -> (indexEntriesFor new,"PackageChangeInfo:PackageUpdatedTarball")
+                        -- .cabal file is not recorded in the TUF metadata
+                        -- (until we have author signing anyway)
+                        PackageUpdatedCabalFile  -> ([],"PackageChangeInfo:PackageUpdatedCabalFile")
+                        -- the uploader is not included in the TUF metadata
+                        PackageUpdatedUploader   -> ([],"PackageChangeInfo:PackageUpdatedUploader")
+                        -- upload time is not included in the TUF metadata
+                        -- (it is recorded in the MetadataEntry because we use it for
+                        -- the tarball construction, but it doesn't affect the contents
+                        -- of the TUF metadata)
+                        PackageUpdatedUploadTime -> ([],"PackageChangeInfo:PackageUpdatedUploadTime")
+                      PackageChangeDelete _     -> ([],"PackageChangeDelete")
+                      PackageChangeIndexExtra{} -> ([],"PackageChangeIndexExtra")
+
+         loginfo maxBound (mconcat ["TUF preIndexUpdateHook invoked (", msg, ", n = ", show (length ents), ")"])
+         return ents
 
        return $ securityFeature env securityState
   where

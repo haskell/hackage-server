@@ -484,7 +484,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     updateAddPackage :: MonadIO m => PackageId
                      -> CabalFileText -> UploadInfo
                      -> Maybe PkgTarball -> m Bool
-    updateAddPackage pkgid cabalFile uploadinfo@(_, uid) mtarball = do
+    updateAddPackage pkgid cabalFile uploadinfo@(_, uid) mtarball = logTiming maxBound ("updateAddPackage " ++ display pkgid) $ do
       usersdb <- queryGetUserDb
       let Just userInfo = lookupUserId uid usersdb
       mpkginfo <- updateState packagesState $
@@ -494,6 +494,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           uploadinfo
           (userName userInfo)
           mtarball
+      loginfo maxBound ("updateState(AddPackage2," ++ display pkgid ++ ") -> " ++ maybe "Nothing" (const "Just _") mpkginfo)
       case mpkginfo of
         Nothing -> return False
         Just pkginfo -> do
@@ -501,7 +502,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           return True
 
     updateDeletePackage :: MonadIO m => PackageId -> m Bool
-    updateDeletePackage pkgid = do
+    updateDeletePackage pkgid = logTiming maxBound ("updateDeletePackage " ++ display pkgid) $ do
       mpkginfo <- updateState packagesState (DeletePackage pkgid)
       case mpkginfo of
         Nothing -> return False
@@ -510,7 +511,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           return True
 
     updateAddPackageRevision :: MonadIO m => PackageId -> CabalFileText -> UploadInfo -> m ()
-    updateAddPackageRevision pkgid cabalfile uploadinfo@(_, uid) = do
+    updateAddPackageRevision pkgid cabalfile uploadinfo@(_, uid) = logTiming maxBound ("updateAddPackageRevision " ++ display pkgid) $ do
       usersdb <- queryGetUserDb
       let Just userInfo = lookupUserId uid usersdb
       (moldpkginfo, newpkginfo) <- updateState packagesState $
@@ -519,6 +520,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           cabalfile
           uploadinfo
           (userName userInfo)
+      loginfo maxBound ("updateState(AddPackageRevision2," ++ display pkgid ++ ") -> " ++ maybe "Nothing" (const "Just _") moldpkginfo)
       case moldpkginfo of
         Nothing ->
           runHook_ packageChangeHook  (PackageChangeAdd newpkginfo)
@@ -526,7 +528,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           runHook_ packageChangeHook  (PackageChangeInfo PackageUpdatedCabalFile oldpkginfo newpkginfo)
 
     updateAddPackageTarball :: MonadIO m => PackageId -> PkgTarball -> UploadInfo -> m Bool
-    updateAddPackageTarball pkgid tarball uploadinfo = do
+    updateAddPackageTarball pkgid tarball uploadinfo = logTiming maxBound ("updateAddPackageTarball " ++ display pkgid) $ do
       mpkginfo <- updateState packagesState (AddPackageTarball pkgid tarball uploadinfo)
       case mpkginfo of
         Nothing -> return False
@@ -551,7 +553,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           return True
 
     updateArchiveIndexEntry :: MonadIO m => FilePath -> ByteString -> UTCTime -> m ()
-    updateArchiveIndexEntry entryName entryData entryTime = do
+    updateArchiveIndexEntry entryName entryData entryTime = logTiming maxBound ("updateArchiveIndexEntry " ++ show entryName) $ do
       updateState packagesState $
         AddOtherIndexEntry $ ExtraEntry entryName entryData entryTime
       runHook_ packageChangeHook (PackageChangeIndexExtra entryName entryData entryTime)
