@@ -135,8 +135,7 @@ packagePageTemplate render
       ]
 
     docFieldsTemplate = templateDict $
-      [ templateVal "hasQuickNavV0" hasQuickNavV0
-      , templateVal "hasQuickNavV1" hasQuickNavV1
+      [ templateVal "hasQuickNavV1" hasQuickNavV1
       , templateVal "baseUrl" docURL
       ]
 
@@ -247,8 +246,6 @@ packagePageTemplate render
                 map (packageNameLink utilities) $ fors
       Nothing -> noHtml
 
-    -- starting with haddock 2.19.1 QuickJump is versioned
-    -- explicitly.
     hasQuickNavVersion :: Int -> Bool
     hasQuickNavVersion expected
       | Just docMeta <- mdocMeta
@@ -257,20 +254,11 @@ packagePageTemplate render
       | otherwise
       = False
 
-    -- the initial prototype didn't have a separate versioning
-    -- scheme for the QuickJump feature.
-    hasQuickNavV0 :: Bool
-    hasQuickNavV0
-      | Just docMeta <- mdocMeta
-      , Nothing      <- docMetaQuickJumpVersion docMeta
-      = docMetaHaddockVersion docMeta == mkVersion [2, 18, 2]
-      | otherwise = False
-
     hasQuickNavV1 :: Bool
     hasQuickNavV1 = hasQuickNavVersion 1
 
     hasQuickNav :: Bool
-    hasQuickNav = hasQuickNavV0 || hasQuickNavV1
+    hasQuickNav = hasQuickNavV1
 
 -- #ToDo: Pick out several interesting versions to display, with a link to
 -- display all versions.
