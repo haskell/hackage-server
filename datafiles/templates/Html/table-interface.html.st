@@ -22,7 +22,8 @@
                         <th><div style="width:40px">DLs</div></th>
                         <th><div style="width:50px">Rating</div></th>
                         <th><div style="width:160px">Description</div></th>
-                        <th><div style="width:140px">Tags</div></th>
+			<th><div style="width:140px">Tags</div></th>
+			<th><div style="width:80px">Last U/L</th>
                         <th><div style="width:100px">Maintainer</div></th>
                     </tr>
                 </thead>
@@ -43,7 +44,7 @@
 
                 \$.extend( jQuery.fn.dataTableExt.oSort, {
                    "package-pre": function ( a ) {
-                        return [a.search(/deprecated/),a];
+                        return [a.search(/deprecated/),a.toLowerCase()];
                     },
                     "package-asc": function (a, b) {
                         return ((a < b) ? -1 : ((a > b) ? 1 : 0));

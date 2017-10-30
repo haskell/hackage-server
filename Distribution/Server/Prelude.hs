@@ -9,16 +9,24 @@ module Distribution.Server.Prelude
     ( module X
     , parseTimeMaybe
     , readPTime'
+    , sortOn
     ) where
 
 import           Control.Applicative as X
 import           Control.Monad       as X
 import           Data.Int            as X
+import           Data.List           as X (sortBy)
 import           Data.Maybe          as X
+import           Data.Ord            as X (comparing)
 import           Data.Semigroup      as X
 import           Data.Typeable       as X (Typeable)
 import           Data.Word           as X
 import           Prelude             as X
+import           Control.Monad.IO.Class as X (MonadIO(liftIO))
+
+#if MIN_VERSION_base(4,8,0)
+import           Data.List (sortOn)
+#endif
 
 -- TODO: move somewhere else
 import Data.Time.Locale.Compat (defaultTimeLocale)
@@ -42,4 +50,10 @@ readPTime' :: ParseTime t => String -> ReadP.ReadP r t
 readPTime' fmt = ReadP.readS_to_P (readSTime True defaultTimeLocale fmt)
 #else
 readPTime' fmt = ReadP.readS_to_P (readsTime defaultTimeLocale fmt)
+#endif
+
+#if !MIN_VERSION_base(4,8,0)
+-- | See "Data.List" starting with @base-4.8.0.0@
+sortOn :: Ord b => (a -> b) -> [a] -> [a]
+sortOn f = map snd . sortBy (comparing fst) . map (\x -> let y = f x in y `seq` (y, x))
 #endif

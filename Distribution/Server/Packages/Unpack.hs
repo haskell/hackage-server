@@ -26,10 +26,8 @@ import Distribution.Package
 import Distribution.PackageDescription
          ( GenericPackageDescription(..), PackageDescription(..)
          , allBuildInfo, allLibraries
-         , exposedModules, mixins, signatures, specVersion
+         , mixins, signatures, specVersion
          )
-import Distribution.PackageDescription.Parse
-         ( parseGenericPackageDescription )
 import Distribution.PackageDescription.Configuration
          ( flattenPackageDescription )
 import Distribution.PackageDescription.Check
@@ -39,10 +37,6 @@ import Distribution.ParseUtils
          ( ParseResult(..), locatedErrorMsg, showPWarning )
 import Distribution.Text
          ( Text(..), display, simpleParse )
-import Distribution.ModuleName
-         ( components )
-import Distribution.Server.Util.Parse
-         ( unpackUTF8 )
 import Distribution.Server.Util.ParseSpecVer
 import Distribution.License
          ( License(..) )
@@ -61,7 +55,7 @@ import Data.ByteString.Lazy
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Char8
 import Data.List
-         ( nub, (\\), partition, intercalate, isPrefixOf )
+         ( nub, partition, intercalate, isPrefixOf )
 import qualified Data.Map.Strict as Map
          ( fromList, lookup )
 import Data.Time
@@ -199,18 +193,20 @@ basicChecks pkgid tarIndex = do
               ++ "save the package's cabal file as UTF8 without the BOM."
 
   -- Parse the Cabal file
-  let cabalFileContent = unpackUTF8 cabalEntry
-  (pkgDesc, warnings) <- case parseGenericPackageDescription cabalFileContent of
-    ParseFailed err -> throwError $ showError (locatedErrorMsg err)
-    ParseOk warnings pkgDesc ->
-      return (pkgDesc, map (showPWarning cabalFileName) warnings)
+  (specVerOk,pkgDesc, warnings) <- case parseGenericPackageDescriptionChecked cabalEntry of
+    (_,ParseFailed err) -> throwError $ showError (locatedErrorMsg err)
+    (specVerOk',ParseOk warnings pkgDesc) ->
+      return (specVerOk',pkgDesc, map (showPWarning cabalFileName) warnings)
 
   -- make sure the parseSpecVer heuristic agrees with the full parser
-  let specVer' = parseSpecVerLazy cabalEntry
-      specVer  = specVersion $ packageDescription pkgDesc
+  let specVer = specVersion $ packageDescription pkgDesc
 
-  when (specVer' < mkVersion [1] || specVer /= specVer') $
+  when (not specVerOk || specVer < mkVersion [1]) $
     throwError "The 'cabal-version' field could not be properly parsed."
+
+  -- Don't allowing uploading new pre-1.2 .cabal files as the parser is likely too lax
+  when (specVer < mkVersion [1,2]) $
+    throwError "'cabal-version' must be at least 1.2"
 
   -- Check that the name and version in Cabal file match
   when (packageName pkgDesc /= packageName pkgid) $
@@ -325,17 +321,6 @@ extraChecks genPkgDesc pkgId tarIndex = do
               ++ "field in their .cabal file. This is only used for "
               ++ "post-release revisions."
 
-  -- Check reasonableness of names of exposed modules
-  let topLevel = case library pkgDesc of
-                 Nothing -> []
-                 Just l ->
-                     nub $ map head $ filter (not . null) $ map components $ exposedModules l
-      badTopLevel = topLevel \\ allocatedTopLevelNodes
-
-  unless (null badTopLevel) $
-          warn $ "Exposed modules use unallocated top-level names: " ++
-                          unwords badTopLevel
-
   -- Check for experimental Backpack features
   let usesBackpackInc  = any (not . null . mixins) (allBuildInfo pkgDesc)
       usesBackpackSig  = any (not . null . signatures) (allLibraries pkgDesc)
@@ -359,13 +344,6 @@ warn msg = tell [msg]
 
 runUploadMonad :: UploadMonad a -> Either String (a, [String])
 runUploadMonad (UploadMonad m) = runIdentity . runExceptT . runWriterT $ m
-
--- | Registered top-level nodes in the class hierarchy.
-allocatedTopLevelNodes :: [String]
-allocatedTopLevelNodes = [
-        "Algebra", "Codec", "Control", "Data", "Database", "Debug",
-        "Distribution", "DotNet", "Foreign", "Graphics", "Language",
-        "Network", "Numeric", "Prelude", "Sound", "System", "Test", "Text"]
 
 selectEntries :: forall err a.
                  (err -> String)
@@ -395,7 +373,7 @@ tarballChecks :: Bool -> UTCTime -> FilePath
 tarballChecks lax now expectedDir =
     (if not lax then checkFutureTimes now else id)
   . checkTarbomb expectedDir
-  . checkUselessPermissions
+  . (if not lax then checkUselessPermissions else id)
   . (if lax then ignoreShortTrailer
             else fmapTarError (either id PortabilityError)
                . Tar.checkPortability)

@@ -37,10 +37,20 @@
 
   .cool {
     color: gold;
+    text-shadow:
+    -1px -1px 0 #000,
+    1px -1px 0 #000,
+    -1px 1px 0 #000,
+    1px 1px 0 #000;
   }
 
   .uncool {
-    color: black;
+    color: white;
+    text-shadow:
+    -1px -1px 0 #000,
+    1px -1px 0 #000,
+    -1px 1px 0 #000,
+    1px 1px 0 #000;
   }
 
   .star-rating {
@@ -133,7 +143,8 @@
 <script>
   var votesUrl = '/package/$package.name$/votes';
   var star = {
-    "selected": false
+    "id"       : undefined,
+    "selected" : false
   };
   \$('.star').mouseenter(function() {
     if (star.selected === false) {
@@ -175,9 +186,11 @@
   });
   \$(function() {
        var userRating = parseInt(\$("#userRating").val(),10);
-       if(userRating > 0) {fill_stars(userRating,"in")}
-       star.selected = true;
-       star.id=userRating
+       if(userRating > 0) {
+         fill_stars(userRating,"in")
+         star.selected = true;
+         star.id       = userRating;
+       }
   });
   var fill_stars = function(num, direction) {
     if (direction === "in")

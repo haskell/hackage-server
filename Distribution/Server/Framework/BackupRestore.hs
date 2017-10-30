@@ -63,13 +63,11 @@ import Distribution.Server.Util.Parse (unpackUTF8)
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS (readFile)
 import qualified Data.Map as Map
-import Data.Ord (comparing)
 import System.FilePath ((</>), takeDirectory, splitDirectories)
 import System.Directory (doesFileExist, doesDirectoryExist)
 import Text.CSV hiding (csv)
 import Distribution.Text
 import Data.Map (Map)
-import Data.List (sortBy)
 import Data.Version (Version)
 import qualified Data.Version as Version
 import Text.ParserCombinators.ReadP (readP_to_S)

@@ -38,7 +38,6 @@ import qualified Data.Text as T
 import Distribution.Text (display, simpleParse)
 
 import Happstack.Server.Cookie (addCookie, mkCookie, CookieLife(Session))
-import Happstack.Server.RqData (lookCookieValue)
 
 -- | A feature to allow manipulation of the database of users.
 --

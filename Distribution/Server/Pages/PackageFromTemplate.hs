@@ -22,15 +22,11 @@ import Text.XHtml.Strict hiding (p, name, title, content)
 
 import Data.Maybe               (maybeToList)
 import Data.List                (intersperse)
-import System.FilePath.Posix    ((</>), takeFileName)
+import System.FilePath.Posix    ((</>), takeFileName, dropTrailingPathSeparator)
 import Data.Time.Locale.Compat  (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
 import System.FilePath.Posix    (takeExtension)
 
-import qualified Cheapskate      as Markdown (markdown, Options(..))
-import qualified Cheapskate.Html as Markdown (renderDoc)
-
-import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
 import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
 import qualified Data.Text.Encoding.Error as T
@@ -364,6 +360,14 @@ sourceRepositoryToHtml sr
                       case repoSubdir sr of
                           Just sd -> toHtml ("(" ++ sd ++ ")")
                           Nothing   -> noHtml]
+      Just (OtherRepoType "fs")
+        | Just url <-
+           repoLocation sr ->
+                     concatHtml [toHtml "fossil clone ",
+                      anchor ! [href url] << toHtml url,
+                      toHtml " ",
+                      toHtml (takeFileName (dropTrailingPathSeparator url) ++ ".fossil")
+                      ]
       _ ->
           -- We don't know how to show this SourceRepo.
           -- This is a kludge so that we at least show all the info.
@@ -378,27 +382,14 @@ latestVersion (PackageIdentifier pname _ ) allVersions =
     versionLink v = anchor ! [href $ packageURL $ PackageIdentifier pname v] << display v
 
 readmeSection :: PackageRender -> Maybe BS.ByteString -> [Html]
-readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename) }
+readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename), rendPkgId  = pkgid }
               (Just content) =
     [ thediv ! [theclass "embedded-author-content"]
             << if supposedToBeMarkdown filename
-                 then renderMarkdown content
+                 then Old.renderMarkdown (T.pack $ display pkgid) content
                  else pre << unpackUtf8 content
     ]
 readmeSection _ _ = []
-
-renderMarkdown :: BS.ByteString -> Html
-renderMarkdown = primHtml . Blaze.renderHtml
-               . Markdown.renderDoc . Markdown.markdown opts
-               . T.decodeUtf8With T.lenientDecode . BS.toStrict
-  where
-    opts =
-      Markdown.Options
-        { Markdown.sanitize           = True
-        , Markdown.allowRawHtml       = False
-        , Markdown.preserveHardBreaks = False
-        , Markdown.debug              = False
-        }
 
 supposedToBeMarkdown :: FilePath -> Bool
 supposedToBeMarkdown fname = takeExtension fname `elem` [".md", ".markdown"]

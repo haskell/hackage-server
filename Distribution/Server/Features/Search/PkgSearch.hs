@@ -56,13 +56,15 @@ pkgSearchConfig =
   }
   where
     extractTokens :: PackageDescription -> PkgDocField -> [Text]
-    extractTokens pkg NameField        = extractPackageNameTerms           (display $ packageName pkg)
-    extractTokens pkg SynopsisField    = extractSynopsisTerms    stopWords (synopsis    pkg)
-    extractTokens pkg DescriptionField = extractDescriptionTerms stopWords (description pkg)
+    extractTokens pkg NameField        = concatMap (extraStems computerStems) $
+                                         extractPackageNameTerms           (display $ packageName pkg)
+    extractTokens pkg SynopsisField    = extractSynopsisTerms    computerStems stopWords (synopsis    pkg)
+    extractTokens pkg DescriptionField = extractDescriptionTerms computerStems stopWords (description pkg)
 
     normaliseQueryToken :: Text -> PkgDocField -> Text
     normaliseQueryToken tok =
       let tokFold = T.toCaseFold tok
+          -- we don't need to use extraStems here because the index is inflated by it already.
           tokStem = stem English tokFold
        in \field -> case field of
                       NameField        -> tokFold
@@ -79,8 +81,8 @@ defaultSearchRankParameters =
       paramFieldWeights,
       paramFeatureWeights,
       paramFeatureFunctions,
-      paramResultsetSoftLimit = 200,
-      paramResultsetHardLimit = 400
+      paramResultsetSoftLimit = 400,
+      paramResultsetHardLimit = 800
     }
   where
     paramK1 :: Float
@@ -114,6 +116,10 @@ stopWords =
      "now","how","where","when","up","has","been","about","them","then","see",
      "no","do","than","should","out","off","much","if","i","have","also"]
 
+-- Extra stems that tend to occur with software packages
+computerStems :: [Text]
+computerStems = map T.pack ["ql","db","ml","gl"]
+
 
 {-
 -------------------
@@ -146,7 +152,7 @@ main = do
     print ("search engine invariant", invariant searchengine)
 
 --    print [ avgFieldLength ctx s | s <- [minBound..maxBound] ]
-    
+
 --    print $ take 100 $ sortBy (flip compare) $ map Set.size $ Map.elems (termMap searchindex)
 --    T.putStr $ T.unlines $ Map.keys (termMap searchindex)
 --    let SearchEngine{searchIndex=SearchIndex{termMap, termIdMap, docKeyMap, docIdMap}} = searchengine
@@ -154,7 +160,7 @@ main = do
 
     let loop = do
           putStr "search term> "
-          hFlush stdout 
+          hFlush stdout
           t <- getLine
           unless (null t) $ do
             let terms = stems English

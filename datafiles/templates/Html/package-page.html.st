@@ -11,6 +11,7 @@
   <link rel="canonical" href="$baseurl$/package/$package.name$" />
   <script src="/static/jquery.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript"></script>
+  <base href="$baseurl$/package/$package.name$-$package.version$/" />
 </head>
 
 <body>
@@ -164,17 +165,23 @@
         </tr>
 
         <tr>
-          <th>Rating</th>
-          <td>$score$ ($votes$ ratings)
+          <th> Rating</th>
+	  <td>$if(hasVotes)$$score$ (votes: $votes$)$else$(no votes yet)$endif$
+	  <span style="font-size: small">[estimated by <a href="https://en.wikipedia.org/wiki/Rule_of_succession">rule of succession</a>]</span></td>
+	</tr>
+
+	<tr>
+	  <th>Your Rating</th>
+	  <td>
+            <ul class="star-rating">
+              <li class="star uncool" id="1">&lambda;</li>
+              <li class="star uncool" id="2">&lambda;</li>
+              <li class="star uncool" id="3">&lambda;</li>
+	    </ul>
           $if(userRating)$
             <input type="hidden" id="userRating" value="$userRating$">
+            [<a href="" class="clear-rating">clear rating</a>]
           $endif$
-              [<a href="" class="clear-rating">clear rating</a>]
-            <ul class="star-rating">
-              <li class="star" id="1">&lambda;</li>
-              <li class="star" id="2">&lambda;</li>
-              <li class="star" id="3">&lambda;</li>
-            </ul>
           </td>
         </tr>
         <tr>
@@ -204,7 +211,7 @@
       <p>For package maintainers and hackage trustees</p>
       <ul>
         <li>
-          <a href="$package.name$/maintain">
+          <a href="$baseurl$/package/$package.name$/maintain">
             edit package information
           </a>
         </li>

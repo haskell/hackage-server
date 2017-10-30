@@ -12,7 +12,7 @@ $hackagePageHeader()$
 <h2>Uploading packages</h2>
 
 <div style="font-size: large; text-align: center;">Upload and publish
-  a package permanently: <a href="/packages/upload">Upload</a></div>
+  a package <strong>permanently</strong>: <a href="/packages/upload">Upload</a></div>
 
 <p>Uploading a package puts it in the <a href="/packages/browse">main package index</a>
 so that anyone can download it and view information about it. <strong>You can only

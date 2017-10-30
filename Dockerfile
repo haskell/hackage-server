@@ -1,15 +1,43 @@
-FROM haskell:7.10.2
+# Usage:
+#
+# Build the container
+# $ docker build . -t siddhu/hackage-server
+#
+# Shell into the container
+# $ docker run -it -p 8080:8080 siddhu/hackage-server /bin/bash
+#
+# Run the server
+# Docker> # hackage-server run --static-dir=datafiles
+#
 
-# dependencies
-RUN apt-get update && apt-get install -yy unzip libicu-dev postfix
+FROM ubuntu
+
+RUN apt-get update
+
+# Install apt-add-repository
+RUN apt-get install -y software-properties-common
+
+# Use Herbert's PPA on Ubuntu for getting GHC and cabal-install
+RUN apt-add-repository ppa:hvr/ghc
+
+RUN apt-get update
+
+# Dependencies
+RUN apt-get install -yy unzip libicu-dev postfix
+RUN apt-get install -y ghc-8.2.1 cabal-install-2.0
+ENV PATH /opt/ghc/bin:$PATH
 RUN cabal update
+
+# Required Header files
+RUN apt-get install -y zlib1g-dev libssl-dev
 
 # haskell dependencies
 RUN mkdir /build
 WORKDIR /build
 ADD ./hackage-server.cabal ./hackage-server.cabal
 RUN cabal sandbox init
-RUN cabal install --only-dependencies --enable-tests -j
+# TODO: Switch to Nix-style cabal new-install
+RUN cabal install --only-dependencies --enable-tests -j --force-reinstalls
 ENV PATH /build/.cabal-sandbox/bin:$PATH
 
 # needed for creating TUF keys
@@ -41,5 +69,5 @@ RUN mkdir /runtime
 RUN cp -r /build/datafiles /runtime/datafiles
 WORKDIR /runtime
 RUN hackage-server init --static-dir=datafiles
-CMD hackage-server run --static-dir=datafiles
+CMD hackage-server run  --static-dir=datafiles
 EXPOSE 8080
