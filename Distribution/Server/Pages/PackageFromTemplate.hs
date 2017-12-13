@@ -86,7 +86,7 @@ packagePageTemplate render
   ] ++
 
   -- Miscellaneous things that could still stand to be refactored a bit.
-  [ "moduleList"        $= Old.moduleSection render mdocIndex docURL hasQuickNavV1
+  [ "moduleList"        $= Old.moduleSection render mdocIndex docURL hasQuickNav
   , "executables"       $= (commaList . map toHtml $ rendExecNames render)
   , "downloadSection"   $= Old.downloadSection render
   , "stability"         $= renderStability desc
@@ -246,13 +246,19 @@ packagePageTemplate render
                 map (packageNameLink utilities) $ fors
       Nothing -> noHtml
 
-    hasQuickNavGen :: Maybe DocMeta -> Version -> Bool
-    hasQuickNavGen (Just docMeta) expected =
-      docMetaHaddockVersion docMeta == expected
-    hasQuickNavGen _ _ = False
+    hasQuickNavVersion :: Int -> Bool
+    hasQuickNavVersion expected
+      | Just docMeta <- mdocMeta
+      , Just quickjumpVersion <- docMetaQuickJumpVersion docMeta
+      = quickjumpVersion == expected
+      | otherwise
+      = False
 
     hasQuickNavV1 :: Bool
-    hasQuickNavV1 = hasQuickNavGen mdocMeta (mkVersion [2, 18, 2])
+    hasQuickNavV1 = hasQuickNavVersion 1
+
+    hasQuickNav :: Bool
+    hasQuickNav = hasQuickNavV1
 
 -- #ToDo: Pick out several interesting versions to display, with a link to
 -- display all versions.

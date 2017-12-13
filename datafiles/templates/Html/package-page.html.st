@@ -2,7 +2,7 @@
 <html>
 <head>
   $if(doc.hasQuickNavV1)$
-  <link href="$doc.baseUrl$/ocean.css" rel="stylesheet" type="text/css" title="Ocean" />
+  <link href="$doc.baseUrl$/quick-jump.css" rel="stylesheet" type="text/css" title="QuickJump" />
   $endif$
   $hackageCssTheme()$
   <title>
@@ -233,9 +233,7 @@
   $footer()$
 
   $if(doc.hasQuickNavV1)$
-  <script src="$doc.baseUrl$/preact.js" type="text/javascript"></script>
-  <script src="$doc.baseUrl$/fuse.js" type="text/javascript"></script>
-  <script src="$doc.baseUrl$/index.js" type="text/javascript"></script>
+  <script src="$doc.baseUrl$/quick-jump.min.js" type="text/javascript"></script>
   <script type="text/javascript"> quickNav.init("$doc.baseUrl$", function(toggle) {var t = document.getElementById('quickjump-trigger');if (t) {t.onclick = function(e) { e.preventDefault(); toggle(); };}}); </script>
   $endif$
 </body>
