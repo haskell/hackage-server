@@ -334,8 +334,16 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
                         }
 
       registerHookJust packageChangeHook isPackageIndexChange $ \packageChange -> do
-        additionalEntries <- concat <$> runHook preIndexUpdateHook packageChange
-        forM_ additionalEntries $ updateState packagesState . AddOtherIndexEntry
+        -- NOTE: Adding a package adds the additional entries _atomically_ with a package
+        -- This makes sure we never get a successful upload with no attendant package.json file.
+        -- In all other cases, entries are allowed to be added nonatomically with the main index change.
+        -- We may wish to refactor in the future, but as of this comment, the preIndexUpdateHook is effectively a
+        -- no-op in all other significant cases.
+        case packageChange of
+             PackageChangeAdd _ -> return ()
+             _ -> do
+                     additionalEntries <- concat <$> runHook preIndexUpdateHook packageChange
+                     forM_ additionalEntries $ updateState packagesState . AddOtherIndexEntry
         prodAsyncCache indexTar "package change"
 
       return feature
@@ -487,19 +495,22 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     updateAddPackage pkgid cabalFile uploadinfo@(_, uid) mtarball = logTiming maxBound ("updateAddPackage " ++ display pkgid) $ do
       usersdb <- queryGetUserDb
       let Just userInfo = lookupUserId uid usersdb
-      mpkginfo <- updateState packagesState $
-        AddPackage2
-          pkgid
-          cabalFile
+
+      let pkginfo = mkPackageInfo pkgid cabalFile uploadinfo mtarball
+      additionalEntries <- concat <$> runHook preIndexUpdateHook  (PackageChangeAdd pkginfo)
+
+      successFlag <- updateState packagesState $
+        AddPackage3
+          pkginfo
           uploadinfo
           (userName userInfo)
-          mtarball
-      loginfo maxBound ("updateState(AddPackage2," ++ display pkgid ++ ") -> " ++ maybe "Nothing" (const "Just _") mpkginfo)
-      case mpkginfo of
-        Nothing -> return False
-        Just pkginfo -> do
-          runHook_ packageChangeHook (PackageChangeAdd pkginfo)
-          return True
+          additionalEntries
+
+      loginfo maxBound ("updateState(AddPackage2," ++ display pkgid ++ ") -> " ++ show successFlag)
+      if successFlag
+        then runHook_ packageChangeHook (PackageChangeAdd pkginfo)
+        else return ()
+      return successFlag
 
     updateDeletePackage :: MonadIO m => PackageId -> m Bool
     updateDeletePackage pkgid = logTiming maxBound ("updateDeletePackage " ++ display pkgid) $ do
@@ -530,6 +541,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     updateAddPackageTarball :: MonadIO m => PackageId -> PkgTarball -> UploadInfo -> m Bool
     updateAddPackageTarball pkgid tarball uploadinfo = logTiming maxBound ("updateAddPackageTarball " ++ display pkgid) $ do
       mpkginfo <- updateState packagesState (AddPackageTarball pkgid tarball uploadinfo)
+
       case mpkginfo of
         Nothing -> return False
         Just (oldpkginfo, newpkginfo) -> do
