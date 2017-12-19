@@ -506,7 +506,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           (userName userInfo)
           additionalEntries
 
-      loginfo maxBound ("updateState(AddPackage2," ++ display pkgid ++ ") -> " ++ show successFlag)
+      loginfo maxBound ("updateState(AddPackage3," ++ display pkgid ++ ") -> " ++ show successFlag)
       if successFlag
         then runHook_ packageChangeHook (PackageChangeAdd pkginfo)
         else return ()
