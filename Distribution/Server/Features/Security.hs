@@ -50,6 +50,14 @@ initSecurityFeature env = do
        -- which will override any previous one.
        --
        -- TODO: We cannot deal with deletes (they are a problem elsewhere too)
+       --
+       -- NOTE: this hook is in general _not atomic_ with the package index update related to it.
+       -- It is atomic _only_ in the PackageChangeAdd case. As most other significant cases are no-ops
+       -- at the moment for adding index entries, this should be ok. (The exception is updated tarball
+       -- but this is only used for the mirror client).
+       --
+       -- If in the future more stuff is registered here, we may need to change code elsewhere
+       -- to ensure that it is added atomically as well...
        registerHook (preIndexUpdateHook coreFeature) $ \chg -> do
          let (ents,msg) = case chg of
                       PackageChangeAdd      pkg -> (indexEntriesFor pkg,"PackageChangeAdd")
@@ -245,4 +253,3 @@ getTUFFile :: Sec.Path Sec.Absolute -> IO TUFFile
 getTUFFile file =
     Sec.withFile file Sec.ReadMode $ \h ->
       evaluate . mkTUFFile =<< BS.Lazy.hGetContents h
-
