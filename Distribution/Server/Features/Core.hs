@@ -1,4 +1,7 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, RecursiveDo #-}
+{-# LANGUAGE NamedFieldPuns  #-}
+{-# LANGUAGE RankNTypes      #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecursiveDo     #-}
 module Distribution.Server.Features.Core (
     CoreFeature(..),
     CoreResource(..),
@@ -18,38 +21,40 @@ module Distribution.Server.Features.Core (
   ) where
 
 -- stdlib
-import Data.Aeson (Value(..))
-import Data.ByteString.Lazy (ByteString)
-import Data.Maybe (isNothing)
-import Data.Time.Clock (UTCTime, getCurrentTime)
-import Data.Time.Format (formatTime)
-import Data.Time.Locale.Compat (defaultTimeLocale)
-import qualified Codec.Compression.GZip as GZip
-import qualified Data.Foldable          as Foldable
-import qualified Data.HashMap.Strict    as HashMap
-import qualified Data.Text              as Text
-import qualified Data.Vector            as Vec
+import qualified Codec.Compression.GZip                             as GZip
+import           Data.Aeson                                         (Value (..))
+import           Data.ByteString.Lazy                               (ByteString)
+import qualified Data.Foldable                                      as Foldable
+import qualified Data.HashMap.Strict                                as HashMap
+import           Data.Maybe                                         (isNothing)
+import qualified Data.Text                                          as Text
+import           Data.Time.Clock                                    (UTCTime, getCurrentTime)
+import           Data.Time.Format                                   (formatTime)
+import           Data.Time.Locale.Compat                            (defaultTimeLocale)
+import qualified Data.Vector                                        as Vec
 
 -- hackage
-import Distribution.Server.Features.Core.Backup
-import Distribution.Server.Features.Core.State
-import Distribution.Server.Features.Security.Migration
-import Distribution.Server.Features.Users
-import Distribution.Server.Framework
-import Distribution.Server.Packages.Index (TarIndexEntry(..))
-import Distribution.Server.Packages.PackageIndex (PackageIndex)
-import Distribution.Server.Packages.Types
-import Distribution.Server.Users.Types (UserId, userName)
-import Distribution.Server.Users.Users (userIdToName, lookupUserId)
+import           Distribution.Server.Features.Core.Backup
+import           Distribution.Server.Features.Core.State
+import           Distribution.Server.Features.Security.Migration
+import           Distribution.Server.Features.Users
+import           Distribution.Server.Framework
 import qualified Distribution.Server.Framework.BlobStorage          as BlobStorage
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
+import           Distribution.Server.Packages.Index                 (TarIndexEntry (..))
 import qualified Distribution.Server.Packages.Index                 as Packages.Index
+import           Distribution.Server.Packages.PackageIndex          (PackageIndex)
 import qualified Distribution.Server.Packages.PackageIndex          as PackageIndex
+import           Distribution.Server.Packages.Types
+import           Distribution.Server.Users.Types                    (UserId,
+                                                                     userName)
+import           Distribution.Server.Users.Users                    (lookupUserId,
+                                                                     userIdToName)
 
 -- Cabal
-import Distribution.Text (display)
-import Distribution.Package
-import Distribution.Version (nullVersion)
+import           Distribution.Package
+import           Distribution.Text                                  (display)
+import           Distribution.Version                               (nullVersion)
 
 -- | The core feature, responsible for the main package index and all access
 -- and modifications of it.
@@ -497,7 +502,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
       let Just userInfo = lookupUserId uid usersdb
 
       let pkginfo = mkPackageInfo pkgid cabalFile uploadinfo mtarball
-      additionalEntries <- concat <$> runHook preIndexUpdateHook  (PackageChangeAdd pkginfo)
+      additionalEntries <- concat `liftM` runHook preIndexUpdateHook  (PackageChangeAdd pkginfo)
 
       successFlag <- updateState packagesState $
         AddPackage3
