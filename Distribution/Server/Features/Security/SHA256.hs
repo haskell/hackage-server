@@ -13,6 +13,7 @@ module Distribution.Server.Features.Security.SHA256 (
 import           Distribution.Server.Prelude
 
 import           Control.DeepSeq
+import           Data.Aeson                            (ToJSON (toJSON))
 import qualified Data.ByteString                       as BS
 import qualified Data.ByteString.Base16                as B16
 import           Data.SafeCopy
@@ -24,6 +25,7 @@ import qualified Data.Binary                           as Bin
 import qualified Data.Binary.Put                       as Bin
 import qualified Data.ByteString.Char8                 as BS.Char8
 import qualified Data.ByteString.Lazy                  as BS.Lazy
+import qualified Data.Text.Encoding                    as T
 
 -- cryptohash
 import qualified Crypto.Hash.SHA256                    as SHA256
@@ -62,6 +64,11 @@ getSHA256NoPfx = SHA256Digest <$> getWord64be
 -- string without surrounding quotation marks
 instance Show SHA256Digest where
   show = BS.Char8.unpack . B16.encode . sha256DigestBytes
+
+-- | Encodes SHA256 hash as lower-case base-16 JSON string; i.e. as 64
+-- hex-digits.
+instance ToJSON SHA256Digest where
+  toJSON = toJSON . T.decodeLatin1 . B16.encode . sha256DigestBytes
 
 instance ReadDigest SHA256Digest where
   -- NOTE: This differs in an important way from the 'Serialize' instance:
