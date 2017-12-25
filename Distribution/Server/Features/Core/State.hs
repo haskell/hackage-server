@@ -4,12 +4,13 @@ module Distribution.Server.Features.Core.State (
     -- * DB state
     PackagesState(..)
   , initialPackagesState
+  , mkPackageInfo
     -- * DB transactions
     --
-    -- NOTE: Explictly not exported: legacy transactions 'AddPackage' and
-    -- 'AddPackageRevision' (see 'AddPackage2' and 'AddPackageRevision2').
+    -- NOTE: Explictly not exported: legacy transactions 'AddPackage'(2) and
+    -- 'AddPackageRevision' (see 'AddPackage3' and 'AddPackageRevision2').
   , AddOtherIndexEntry(..)
-  , AddPackage2(..)
+  , AddPackage3(..)
   , AddPackageRevision2(..)
   , AddPackageTarball(..)
   , DeletePackage(..)
@@ -87,17 +88,38 @@ addPackage :: PackageId -> CabalFileText -> UploadInfo
 addPackage pkgid cabalfile uploadinfo mtarball =
     addPackage2 pkgid cabalfile uploadinfo (UserName "") mtarball
 
--- current transaction (adds username)
+-- v1  transaction (adds username)
 addPackage2 :: PackageId -> CabalFileText -> UploadInfo -> UserName
             -> Maybe PkgTarball
             -> Update PackagesState (Maybe PkgInfo)
 addPackage2 pkgid cabalfile uploadinfo@(timestamp, _uid) username mtarball = do
-
     PackagesState pkgindex updatelog <- State.get
     case PackageIndex.lookupPackageId pkgindex pkgid of
       Just _  -> return Nothing
       Nothing -> do
-        let !pkginfo = PkgInfo {
+        let !pkginfo = mkPackageInfo pkgid cabalfile uploadinfo mtarball
+            pkgindex'   = PackageIndex.insert pkginfo pkgindex
+            !pkgentry   = CabalFileEntry pkgid 0 timestamp username
+            updatelog'  = fmap (Seq.|> pkgentry) updatelog
+        State.put $! PackagesState pkgindex' updatelog'
+        return (Just pkginfo)
+
+-- current transaction (takes tar index entries as well)
+addPackage3 :: PkgInfo -> UploadInfo -> UserName -> [TarIndexEntry] -> Update PackagesState Bool
+addPackage3 !pkginfo (timestamp,_uid) username entries = do
+    PackagesState pkgindex updatelog <- State.get
+    case PackageIndex.lookupPackageId pkgindex (pkgInfoId pkginfo) of
+      Just _  -> return False
+      Nothing -> do
+        let pkgindex'   = PackageIndex.insert pkginfo pkgindex
+            !pkgentry   = CabalFileEntry (pkgInfoId pkginfo) 0 timestamp username
+            updatelog'  = fmap (\ul -> foldr (\e s -> s Seq.|> e) ul (pkgentry:entries)) updatelog
+        State.put $! PackagesState pkgindex' updatelog'
+        return True
+
+mkPackageInfo :: PackageIdentifier -> CabalFileText -> UploadInfo -> Maybe PkgTarball -> PkgInfo
+mkPackageInfo pkgid cabalfile uploadinfo mtarball =
+            PkgInfo {
               pkgInfoId            = pkgid,
               pkgMetadataRevisions = Vec.singleton (cabalfile, uploadinfo),
               pkgTarballRevisions  = case mtarball of
@@ -105,11 +127,6 @@ addPackage2 pkgid cabalfile uploadinfo@(timestamp, _uid) username mtarball = do
                                        Just tarball -> Vec.singleton
                                                          (tarball, uploadinfo)
             }
-            pkgindex'   = PackageIndex.insert pkginfo pkgindex
-            !pkgentry   = CabalFileEntry pkgid 0 timestamp username
-            updatelog'  = fmap (Seq.|> pkgentry) updatelog
-        State.put $! PackagesState pkgindex' updatelog'
-        return (Just pkginfo)
 
 deletePackage :: PackageId -> Update PackagesState (Maybe PkgInfo)
 deletePackage pkgid = do
@@ -273,6 +290,7 @@ makeAcidic ''PackagesState ['getPackagesState
                            ,'replacePackagesState
                            ,'addPackage
                            ,'addPackage2
+                           ,'addPackage3
                            ,'deletePackage
                            ,'addPackageRevision
                            ,'addPackageRevision2
