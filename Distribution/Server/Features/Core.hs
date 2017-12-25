@@ -26,7 +26,7 @@ import           Data.Aeson                                         (Value (..))
 import           Data.ByteString.Lazy                               (ByteString)
 import qualified Data.Foldable                                      as Foldable
 import qualified Data.HashMap.Strict                                as HashMap
-import           Data.Maybe                                         (isNothing)
+import           Data.Either                                        (isLeft)
 import qualified Data.Text                                          as Text
 import           Data.Time.Clock                                    (UTCTime, getCurrentTime)
 import           Data.Time.Format                                   (formatTime)
@@ -283,7 +283,7 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
       --   rather than BlobId; that is, we additionally record the length and
       --   SHA256 hash for all blobs.
       --
-      -- Additionally, we now need `targets.json` files for all versions of all
+      -- Additionally, we now need `package.json` files for all versions of all
       -- packages. For new packages we add these when the package is uploaded,
       -- but for previously uploaded packages we need to add them.
       --
@@ -293,7 +293,7 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
       -- we can use the check for the existence of the update log to see if we
       -- need any other kind of migration.
 
-      migrateUpdateLog <- (isNothing . packageUpdateLog) <$>
+      migrateUpdateLog <- (isLeft . packageUpdateLog) <$>
                              queryState packagesState GetPackagesState
       when migrateUpdateLog $ do
         -- Migrate PackagesState (introduce package update log)
@@ -581,7 +581,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     getIndexTarball = do
       users <- queryGetUserDb  -- note, changes here don't automatically propagate
       time  <- getCurrentTime
-      PackagesState index (Just updateSeq) <- queryState packagesState GetPackagesState
+      PackagesState index (Right updateSeq) <- queryState packagesState GetPackagesState
       let updateLog     = Foldable.toList updateSeq
           legacyTarball = Packages.Index.writeLegacy
                             users

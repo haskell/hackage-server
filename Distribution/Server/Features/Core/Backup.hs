@@ -55,7 +55,8 @@ updatePackages accum@(PartialIndex packageMap updatelog) = RestoreBackup {
       return (updatePackages accum')
   , restoreFinalize = do
       results <- mapM partialToFullPkg (Map.toList packageMap)
-      return $ PackagesState (PackageIndex.fromList results) updatelog
+      return $ PackagesState (PackageIndex.fromList results)
+                             (maybe (Left mempty) Right updatelog)
   }
 
 data PartialIndex = PartialIndex !(Map PackageId PartialPkg)
@@ -295,7 +296,8 @@ forceLast = BS.fromChunks . forceLastBlock . BS.toChunks
 indexToAllVersions :: PackagesState -> [BackupEntry]
 indexToAllVersions st =
     let pkgList = PackageIndex.allPackages . packageIndex $ st
-    in maybe id (\l x -> packageUpdateLogToExport l : x) (packageUpdateLog st) $
+    in maybe id (\l x -> packageUpdateLogToExport l : x)
+             (either (const Nothing) Just $ packageUpdateLog st) $
        concatMap infoToAllEntries pkgList
 
 ---------- Converting PkgInfo to entries
@@ -392,11 +394,12 @@ packageUpdateLogToCSV updlog =
     [showVersion versionCSVVer] : map entryToCSV (Foldable.toList updlog)
   where
     versionCSVVer = Version [0,1] []
-    entryToCSV (CabalFileEntry pkgid revno time username) =
+    entryToCSV (CabalFileEntry pkgid revno time uid username) =
       [ "cabal"
       , display pkgid
       , show revno
       , formatUTCTime time
+      , display uid
       , display username
       ]
     -- TODO: Currently ExtraEntry is used only for preferred-versions, so this
@@ -419,13 +422,14 @@ importTarIndexEntries :: CSV -> Restore (Seq TarIndexEntry)
 importTarIndexEntries = fmap Seq.fromList . mapM fromRecord . drop 1
   where
     fromRecord :: Record -> Restore TarIndexEntry
-    fromRecord ["cabal", strPkgid, strRevno, strTime, username] = do
+    fromRecord ["cabal", strPkgid, strRevno, strTime, strUid, username] = do
        pkgid    <- parseText    "pkgid"     strPkgid
        revno    <- parseRead    "revno"     strRevno
        utcTime  <- parseUTCTime "time"      strTime
+       uid      <- parseText    "uid"       strUid
        -- We don't use parseText for the username because this would throw
        -- an error if the username is empty
-       return $ CabalFileEntry pkgid revno utcTime (UserName username)
+       return $ CabalFileEntry pkgid revno utcTime uid (UserName username)
 
     fromRecord ["extra", extrapath, strTime, extracontent] = do
        utcTime <- parseUTCTime "time" strTime
