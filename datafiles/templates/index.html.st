@@ -16,7 +16,7 @@ $hackagePageHeader()$
    to download and install packages (or people get the packages via their distro).</p>
 <p>This web interface to Hackage lets you:</p>
 <ul>
-<li><a href="/packages">Browse</a> the packages (sorted by category)</li>
+<li><a href="/packages/browse">Browse the package index</a></li>   
 <li><a href="/packages/search">Search</a> for packages by keyword (in the name or description)</li>
 <li>See what packages have been <a href="/packages/recent">uploaded recently</a></li>
 <li><a href="/upload">Upload</a> your own packages to Hackage (note that you'll need an <a href="/accounts">account</a>)</li>
@@ -39,7 +39,7 @@ $hackagePageHeader()$
 </ul>
 <p>In addition to the main package list page, there are a few other package indices:</p>
 <ul>
-<li><a href="/packages/browse">Browsable package index</a></li>
+<li><a href="/packages">All packages</a>, sorted by category</li>
 <li><a href="/packages/tags">All tags</a></li>
 <li><a href="/packages/names">All packages by name</a>, with tags</li>
 <!-- <li><a href="/packages/reverse">All packages with reverse dependencies</a></li> -->
