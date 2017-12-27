@@ -215,7 +215,7 @@ packagePageTemplate render
         renderUploadInfo utime uinfo +++ " to " +++
         anchor ! [href revisionsURL] << ("revision " +++ show revisionNo)
       where
-        revisionsURL = display (rendPkgId render) </> "revisions/"
+        revisionsURL = rendPkgUri render </> "revisions/"
 
     renderUploadInfo :: UTCTime -> Maybe UserInfo-> Html
     renderUploadInfo utime uinfo =
