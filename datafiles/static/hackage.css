@@ -121,6 +121,7 @@ pre, code, kbd, samp, .src {
   font-weight: bold;
   color: rgb(142, 80, 132);
   margin: 2em 0 1em 0;
+  line-height: 1.25em;
 }
 
 h1:first-of-type {
@@ -143,14 +144,6 @@ p + ul {
 
 ul + p {
   margin-top: 2em;
-}
-
-ul.links {
-  list-style: none;
-  text-align: left;
-  float: right;
-  display: inline-table;
-  margin: 0 2em 0 2em;
 }
 
 ul.links li {
@@ -211,14 +204,57 @@ pre {
 
 /* @end */
 
+
+/* @group responsive */
+
+@media only screen and (min-width: 950px) {
+  #page-header {
+    text-align: left;
+    text-align: left;
+  }
+
+  #page-header ul.links {
+    list-style: none;
+    text-align: left;
+    float: right;
+    display: inline-table;
+    margin: 3px 2em 0 2em;
+  }
+
+  #content {
+    width: 55vw;
+  }
+}
+
+@media only screen and (max-width: 950px) {
+  #page-header {
+    text-align: center;
+  }
+
+  #page-header ul.links {
+    float: none;
+    display: block;
+    text-align: center;
+    margin: 14px 0 0px 0;
+    font-size: 13px;
+  }
+
+  #content {
+    width: 75vw;
+  }
+}
+
+
+/* @end */
+
 /* @group Page Structure */
 
 #content {
   margin: 0 auto;
   padding: 0;
-  width: 55vw;
   padding-bottom: 3em;
 }
+
 
 #page-header {
   background: rgb(94, 81, 132);
@@ -226,7 +262,6 @@ pre {
   color: #ddd;
   padding: 0.6em 0 0.2em 0;
   position: relative;
-  text-align: left;
   font-size: 1.2em;
   margin: 0 auto;
 }
