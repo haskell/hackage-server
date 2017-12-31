@@ -158,7 +158,7 @@ parseRepositoryIndices :: Verbosity -> IO (M.Map PackageIdentifier Tar.EpochTime
 parseRepositoryIndices verbosity = do
     cabalDir <- getAppUserDataDirectory "cabal/packages"
     cacheDirs <- listDirectory cabalDir
-    indexFiles <- filterM doesFileExist $ map (\dir -> cabalDir </> dir </> "00-index.tar") cacheDirs
+    indexFiles <- filterM doesFileExist $ map (\dir -> cabalDir </> dir </> "01-index.tar") cacheDirs
     M.unions <$> mapM readIndex indexFiles
   where
     readIndex fname = do

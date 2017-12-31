@@ -1,4 +1,7 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, RecursiveDo #-}
+{-# LANGUAGE NamedFieldPuns  #-}
+{-# LANGUAGE RankNTypes      #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecursiveDo     #-}
 module Distribution.Server.Features.Core (
     CoreFeature(..),
     CoreResource(..),
@@ -18,38 +21,40 @@ module Distribution.Server.Features.Core (
   ) where
 
 -- stdlib
-import Data.Aeson (Value(..))
-import Data.ByteString.Lazy (ByteString)
-import Data.Maybe (isNothing)
-import Data.Time.Clock (UTCTime, getCurrentTime)
-import Data.Time.Format (formatTime)
-import Data.Time.Locale.Compat (defaultTimeLocale)
-import qualified Codec.Compression.GZip as GZip
-import qualified Data.Foldable          as Foldable
-import qualified Data.HashMap.Strict    as HashMap
-import qualified Data.Text              as Text
-import qualified Data.Vector            as Vec
+import qualified Codec.Compression.GZip                             as GZip
+import           Data.Aeson                                         (Value (..))
+import           Data.ByteString.Lazy                               (ByteString)
+import qualified Data.Foldable                                      as Foldable
+import qualified Data.HashMap.Strict                                as HashMap
+import           Data.Either                                        (isLeft)
+import qualified Data.Text                                          as Text
+import           Data.Time.Clock                                    (UTCTime, getCurrentTime)
+import           Data.Time.Format                                   (formatTime)
+import           Data.Time.Locale.Compat                            (defaultTimeLocale)
+import qualified Data.Vector                                        as Vec
 
 -- hackage
-import Distribution.Server.Features.Core.Backup
-import Distribution.Server.Features.Core.State
-import Distribution.Server.Features.Security.Migration
-import Distribution.Server.Features.Users
-import Distribution.Server.Framework
-import Distribution.Server.Packages.Index (TarIndexEntry(..))
-import Distribution.Server.Packages.PackageIndex (PackageIndex)
-import Distribution.Server.Packages.Types
-import Distribution.Server.Users.Types (UserId, userName)
-import Distribution.Server.Users.Users (userIdToName, lookupUserId)
+import           Distribution.Server.Features.Core.Backup
+import           Distribution.Server.Features.Core.State
+import           Distribution.Server.Features.Security.Migration
+import           Distribution.Server.Features.Users
+import           Distribution.Server.Framework
 import qualified Distribution.Server.Framework.BlobStorage          as BlobStorage
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
+import           Distribution.Server.Packages.Index                 (TarIndexEntry (..))
 import qualified Distribution.Server.Packages.Index                 as Packages.Index
+import           Distribution.Server.Packages.PackageIndex          (PackageIndex)
 import qualified Distribution.Server.Packages.PackageIndex          as PackageIndex
+import           Distribution.Server.Packages.Types
+import           Distribution.Server.Users.Types                    (UserId,
+                                                                     userName)
+import           Distribution.Server.Users.Users                    (lookupUserId,
+                                                                     userIdToName)
 
 -- Cabal
-import Distribution.Text (display)
-import Distribution.Package
-import Distribution.Version (nullVersion)
+import           Distribution.Package
+import           Distribution.Text                                  (display)
+import           Distribution.Version                               (nullVersion)
 
 -- | The core feature, responsible for the main package index and all access
 -- and modifications of it.
@@ -278,7 +283,7 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
       --   rather than BlobId; that is, we additionally record the length and
       --   SHA256 hash for all blobs.
       --
-      -- Additionally, we now need `targets.json` files for all versions of all
+      -- Additionally, we now need `package.json` files for all versions of all
       -- packages. For new packages we add these when the package is uploaded,
       -- but for previously uploaded packages we need to add them.
       --
@@ -288,7 +293,7 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
       -- we can use the check for the existence of the update log to see if we
       -- need any other kind of migration.
 
-      migrateUpdateLog <- (isNothing . packageUpdateLog) <$>
+      migrateUpdateLog <- (isLeft . packageUpdateLog) <$>
                              queryState packagesState GetPackagesState
       when migrateUpdateLog $ do
         -- Migrate PackagesState (introduce package update log)
@@ -334,8 +339,16 @@ initCoreFeature env@ServerEnv{serverStateDir, serverCacheDelay,
                         }
 
       registerHookJust packageChangeHook isPackageIndexChange $ \packageChange -> do
-        additionalEntries <- concat <$> runHook preIndexUpdateHook packageChange
-        forM_ additionalEntries $ updateState packagesState . AddOtherIndexEntry
+        -- NOTE: Adding a package adds the additional entries _atomically_ with a package
+        -- This makes sure we never get a successful upload with no attendant package.json file.
+        -- In all other cases, entries are allowed to be added nonatomically with the main index change.
+        -- We may wish to refactor in the future, but as of this comment, the preIndexUpdateHook is effectively a
+        -- no-op in all other significant cases.
+        case packageChange of
+             PackageChangeAdd _ -> return ()
+             _ -> do
+                     additionalEntries <- concat <$> runHook preIndexUpdateHook packageChange
+                     forM_ additionalEntries $ updateState packagesState . AddOtherIndexEntry
         prodAsyncCache indexTar "package change"
 
       return feature
@@ -487,19 +500,22 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     updateAddPackage pkgid cabalFile uploadinfo@(_, uid) mtarball = logTiming maxBound ("updateAddPackage " ++ display pkgid) $ do
       usersdb <- queryGetUserDb
       let Just userInfo = lookupUserId uid usersdb
-      mpkginfo <- updateState packagesState $
-        AddPackage2
-          pkgid
-          cabalFile
+
+      let pkginfo = mkPackageInfo pkgid cabalFile uploadinfo mtarball
+      additionalEntries <- concat `liftM` runHook preIndexUpdateHook  (PackageChangeAdd pkginfo)
+
+      successFlag <- updateState packagesState $
+        AddPackage3
+          pkginfo
           uploadinfo
           (userName userInfo)
-          mtarball
-      loginfo maxBound ("updateState(AddPackage2," ++ display pkgid ++ ") -> " ++ maybe "Nothing" (const "Just _") mpkginfo)
-      case mpkginfo of
-        Nothing -> return False
-        Just pkginfo -> do
-          runHook_ packageChangeHook (PackageChangeAdd pkginfo)
-          return True
+          additionalEntries
+
+      loginfo maxBound ("updateState(AddPackage3," ++ display pkgid ++ ") -> " ++ show successFlag)
+      if successFlag
+        then runHook_ packageChangeHook (PackageChangeAdd pkginfo)
+        else return ()
+      return successFlag
 
     updateDeletePackage :: MonadIO m => PackageId -> m Bool
     updateDeletePackage pkgid = logTiming maxBound ("updateDeletePackage " ++ display pkgid) $ do
@@ -530,6 +546,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     updateAddPackageTarball :: MonadIO m => PackageId -> PkgTarball -> UploadInfo -> m Bool
     updateAddPackageTarball pkgid tarball uploadinfo = logTiming maxBound ("updateAddPackageTarball " ++ display pkgid) $ do
       mpkginfo <- updateState packagesState (AddPackageTarball pkgid tarball uploadinfo)
+
       case mpkginfo of
         Nothing -> return False
         Just (oldpkginfo, newpkginfo) -> do
@@ -564,7 +581,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     getIndexTarball = do
       users <- queryGetUserDb  -- note, changes here don't automatically propagate
       time  <- getCurrentTime
-      PackagesState index (Just updateSeq) <- queryState packagesState GetPackagesState
+      PackagesState index (Right updateSeq) <- queryState packagesState GetPackagesState
       let updateLog     = Foldable.toList updateSeq
           legacyTarball = Packages.Index.writeLegacy
                             users

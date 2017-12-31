@@ -24,6 +24,7 @@ import Distribution.Server.Packages.Render
 import Distribution.Server.Packages.ChangeLog
 import Distribution.Server.Packages.Readme
 import qualified Distribution.Server.Users.Types as Users
+import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Users.Group as Group
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
@@ -49,6 +50,7 @@ import qualified Data.ByteString.Char8 as C8
 import qualified Text.XHtml.Strict as XHtml
 import           Text.XHtml.Strict ((<<), (!))
 import System.FilePath.Posix (takeExtension)
+import Data.Aeson (Value (..), object, toJSON, (.=))
 
 import Data.Function (fix)
 import Data.List (find)
@@ -194,7 +196,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
             , corePackageTarball
             ] ++
           map ($ candidatesResource) [
-              publishPage
+              packageCandidatesPage
+            , publishPage
             , candidateContents
             , candidateChangeLog
             ]
@@ -207,7 +210,9 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     candidatesCoreResource = fix $ \r -> CoreResource {
 -- TODO: There is significant overlap between this definition and the one in Core
         corePackagesPage = (resourceAt "/packages/candidates/.:format") {
-            resourcePost = [("txt", \_ -> postCandidatePlain)]
+            resourceDesc = [(GET, "List all available package candidates")]
+          , resourceGet  = [("json", serveCandidatesJson)]
+          , resourcePost = [("txt", \_ -> postCandidatePlain)]
           }
       , corePackagePage = resourceAt "/package/:package/candidate.:format"
       , coreCabalFile = (resourceAt "/package/:package/candidate/:cabal.cabal") {
@@ -237,7 +242,10 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       }
 
     candidatesResource = fix $ \r -> PackageCandidatesResource {
-        packageCandidatesPage = resourceAt "/package/:package/candidates/.:format"
+        packageCandidatesPage = (resourceAt "/package/:package/candidates/.:format") {
+            resourceDesc = [(GET, "List available candidates for a single package")]
+          , resourceGet  = [("json", servePackageCandidatesJson)]
+          }
       , publishPage = resourceAt "/package/:package/candidate/publish.:format"
       , deletePage = resourceAt "/package/:package/candidate/delete.:format"
       , candidateContents = (resourceAt "/package/:package/candidate/src/..") {
@@ -256,6 +264,48 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       , candidateChangeLogUri = \pkgid ->
           renderResource (candidateChangeLog candidatesResource) [display pkgid, display (packageName pkgid)]
       }
+
+    -- GET /package/:package/candidates/
+    servePackageCandidatesJson :: DynamicPath -> ServerPartE Response
+    servePackageCandidatesJson dpath = do
+        pkgname <- packageInPath dpath
+        pkgs <- lookupCandidateName pkgname
+
+        users  <- queryGetUserDb
+        let lupUserName uid = (uid, fmap Users.userName (Users.lookupUserId uid users))
+
+        let pvs = [ object [ T.pack "version"  .= (T.pack . display . packageVersion . candInfoId) p
+                           , T.pack "sha256"   .= (blobInfoHashSHA256 . pkgTarballGz . fst) tarball
+                           , T.pack "time"     .= (fst . snd) tarball
+                           , T.pack "uploader" .= (lupUserName . snd . snd) tarball
+                           ]
+                  | p <- pkgs
+                  , let tarball = Vec.last . pkgTarballRevisions . candPkgInfo $ p
+                  ]
+
+        return . toResponse . toJSON $ pvs
+
+    -- GET /packages/candidates/
+    serveCandidatesJson :: DynamicPath -> ServerPartE Response
+    serveCandidatesJson _ = do
+        cands <- queryGetCandidateIndex
+
+        let pkgss :: [[CandPkgInfo]]
+            pkgss = PackageIndex.allPackagesByName cands
+
+        return . toResponse $ toJSON (map cpiToJSON pkgss)
+      where
+        cpiToJSON :: [CandPkgInfo] -> Value
+        cpiToJSON [] = Null -- should never happen
+        cpiToJSON pkgs = object [ T.pack "name" .= pn, T.pack "candidates" .= pvs ]
+          where
+            pn = T.pack . display . pkgName . candInfoId . head $ pkgs
+            pvs = [ object [ T.pack "version" .= (T.pack . display . packageVersion . candInfoId) p
+                           , T.pack "sha256"  .= (blobInfoHashSHA256 . pkgTarballGz . fst) tarball
+                           ]
+                  | p <- pkgs
+                  , let tarball = Vec.last . pkgTarballRevisions . candPkgInfo $ p
+                  ]
 
     postCandidate :: ServerPartE Response
     postCandidate = do
