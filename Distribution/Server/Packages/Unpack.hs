@@ -25,9 +25,7 @@ import Distribution.Package
          ( PackageIdentifier, packageVersion, packageName, PackageName )
 import Distribution.PackageDescription
          ( GenericPackageDescription(..), PackageDescription(..)
-         , allBuildInfo, allLibraries
-         , mixins, signatures, specVersion, licenseRaw
-         )
+         , licenseRaw, specVersion )
 import Distribution.PackageDescription.Configuration
          ( flattenPackageDescription )
 import Distribution.PackageDescription.Check
@@ -340,18 +338,6 @@ extraChecks genPkgDesc pkgId tarIndex = do
     throwError $ "Newly uploaded packages must not specify the 'x-revision' "
               ++ "field in their .cabal file. This is only used for "
               ++ "post-release revisions."
-
-  -- Check for experimental Backpack features
-  let usesBackpackInc  = any (not . null . mixins) (allBuildInfo pkgDesc)
-      usesBackpackSig  = any (not . null . signatures) (allLibraries pkgDesc)
-
-  when (usesBackpackInc || usesBackpackSig) $
-    throwError $ "Packages using experimental Backpack features "
-              ++ "(i.e. mixins or signatures) are not yet allowed on Hackage. "
-              ++ "Please use http://next.hackage.haskell.org:8080/ if you "
-              ++ "want to help testing Backpack in the meantime."
-
-  return ()
 
 -- Monad for uploading packages:
 --      WriterT for warning messages
