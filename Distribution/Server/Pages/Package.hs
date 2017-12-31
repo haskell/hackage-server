@@ -224,10 +224,13 @@ downloadSection PackageRender{..} =
     ]
   where
     metadataNote = if isJust rendUpdateInfo
-           then Text.XHtml.Strict.p << toHtml "Note: This package has metadata revisions in the cabal description newer than included in the tarball. To unpack the package including the revisions, use 'cabal get'."
+           then Text.XHtml.Strict.p <<
+                [ toHtml "Note: This package has "
+                , anchor ! [href revsURL] << "metadata revisions"
+                , toHtml " in the cabal description newer than included in the tarball. To unpack the package including the revisions, use 'cabal get'."
+                ]
            else noHtml
-    inPkg = if isJust rendUpdateInfo then " (revised from the package)"
-                                     else " (included in the package)"
+
     downloadItems =
       [ if rendHasTarball
           then [ anchor ! [href downloadURL] << tarGzFileName
@@ -237,11 +240,22 @@ downloadSection PackageRender{..} =
                , toHtml << " (Cabal source package)"
                ]
           else [ toHtml << "Package tarball not uploaded" ]
-      , [ anchor ! [href cabalURL] << "Package description"
-        , toHtml $ if rendHasTarball then inPkg else ""
-       ]
+      , case (rendHasTarball,rendUpdateInfo) of
+          (False,_) ->
+            [ anchor ! [href cabalURL] << "Package description" ]
+          (True,Nothing) ->
+            [ anchor ! [href cabalURL] << "Package description"
+            , toHtml " (as included in the package)"
+            ]
+          (True,Just _) ->
+            [ anchor ! [href cabalURL] << "Package description"
+            , toHtml " ("
+            , anchor ! [href revsURL] << "revised"
+            , toHtml " from the package)"
+            ]
       ]
 
+    revsURL       = rendPkgUri </> "revisions/"
     downloadURL   = rendPkgUri </> display rendPkgId <.> "tar.gz"
     cabalURL      = rendPkgUri </> display (packageName rendPkgId) <.> "cabal"
     srcURL        = rendPkgUri </> "src/"
