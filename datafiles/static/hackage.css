@@ -51,7 +51,7 @@ a[href]:hover { text-decoration:underline; }
  */
 
 body {
-	font: 300 14px/1.85 "Merriweather Sans", sans-serif;
+	font: 400 15px/1.85 'Open Sans', sans-serif;
 	*font-size:small; /* for IE */
 	*font:x-small; /* for IE in quirks mode */
 }
@@ -218,7 +218,7 @@ pre {
     text-align: left;
     float: right;
     display: inline-table;
-    margin: 3px 2em 0 2em;
+    margin: 2px 2em 0 2em;
   }
 
   #content {
