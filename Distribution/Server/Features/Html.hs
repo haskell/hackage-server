@@ -75,6 +75,7 @@ import qualified Data.Ix    as Ix
 import Data.Time.Format (formatTime)
 import Data.Time.Locale.Compat (defaultTimeLocale)
 import qualified Data.ByteString.Lazy as BS (ByteString)
+import qualified Network.URI as URI
 
 import Text.XHtml.Strict
 import qualified Text.XHtml.Strict as XHtml
@@ -593,7 +594,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
 
         return $ toResponse . template $
           -- IO-related items
-          [ "baseurl"           $= show (serverBaseURI)
+          [ "baseurl"           $= show (serverBaseURI { URI.uriScheme = "" })
           , "cabalVersion"      $= display cabalVersion
           , "tags"              $= (renderTags tags)
           , "versions"          $= (PagesNew.renderVersion realpkg
