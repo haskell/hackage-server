@@ -11,7 +11,7 @@ html {
 
 body {
   background: #fefefe;
-  color: rgba(69, 59, 97, 0.95);
+  color: #241F33;
   text-align: left;
   min-height: 100%;
   position: relative;
@@ -37,8 +37,8 @@ dd {
 }
 
 a { text-decoration: none; }
-a[href]:link { color: rgb(196,69,29); }
-a[href]:visited { color: rgb(171,105,84); }
+a[href]:link {color: #9C5791;}
+a[href]:visited {color: #5E3558;}
 a[href]:hover { text-decoration:underline; }
 
 /* @end */
@@ -51,7 +51,7 @@ a[href]:hover { text-decoration:underline; }
  */
 
 body {
-	font: 400 15px/1.85 'Open Sans', sans-serif;
+	font: 400 16px/1.75 'Open Sans', sans-serif;
 	*font-size:small; /* for IE */
 	*font:x-small; /* for IE in quirks mode */
 }
@@ -236,7 +236,7 @@ pre {
     display: block;
     text-align: center;
     margin: 14px 0 0px 0;
-    font-size: 13px;
+    font-size: 15px;
   }
 
   #content {
