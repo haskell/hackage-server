@@ -128,6 +128,11 @@ initListFeature _env = do
       registerHookJust packageChangeHook isPackageChangeAny $ \(pkgid, _) ->
         updateDesc (packageName pkgid)
 
+      registerHookJust packageChangeHook isPackageAdd $ \pkg -> do
+        let pkgname = packageName . packageId $ pkg
+        modifyItem pkgname (\x -> x {itemLastUpload = fst (pkgOriginalUploadInfo pkg)})
+        runHook_ itemUpdate (Set.singleton pkgname)
+
       registerHook groupChangedHook $ \(gd,_,_,_,_) ->
          case fmap (mkPackageName . fst) (groupEntity gd) of
               Just pkgname -> do
@@ -157,6 +162,7 @@ initListFeature _env = do
               tags <- queryTagsForPackage pkgname
               modifyItem pkgname (updateTagItem tags)
           runHook_ itemUpdate pkgs
+
       registerHook deprecatedHook $ \(pkgname, mpkgs) -> do
           modifyItem pkgname (updateDeprecation mpkgs)
           runHook_ itemUpdate (Set.singleton pkgname)
@@ -216,6 +222,7 @@ listFeature CoreFeature{..}
                 case pkgs of
                     [] -> return () --this shouldn't happen
                     _  -> modifyMemState itemCache . uncurry Map.insert =<< constructItem (last pkgs)
+
     updateDesc pkgname = do
         index <- queryGetPackageIndex
         let pkgs = PackageIndex.lookupPackageName index pkgname
