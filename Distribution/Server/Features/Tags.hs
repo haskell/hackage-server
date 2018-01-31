@@ -104,8 +104,9 @@ initTagsFeature ServerEnv{serverStateDir} = do
           Nothing      -> return ()
           Just pkginfo -> do
             let pkgname = packageName pkgid
-                tags = constructImmutableTags . pkgDesc $ pkginfo
-            aliases <- mapM (queryState tagAlias . GetTagAlias) tags
+                itags = constructImmutableTags . pkgDesc $ pkginfo
+            curtags <- queryState tagsState $ TagsForPackage pkgname
+            aliases <- mapM (queryState tagAlias . GetTagAlias) (itags ++ Set.toList curtags)
             let newtags = Set.fromList aliases
             updateState tagsState . SetPackageTags pkgname $ newtags
             runHook_ updateTag (Set.singleton pkgname, newtags)
