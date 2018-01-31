@@ -374,6 +374,18 @@ sourceRepositoryToHtml sr
                       toHtml " ",
                       toHtml (takeFileName (dropTrailingPathSeparator url) ++ ".fossil")
                       ]
+      Just (OtherRepoType "pijul")
+        | (Just url, Nothing, Nothing) <-
+           (repoLocation sr, repoModule sr, repoTag sr) ->
+                     concatHtml [toHtml "pijul clone ",
+                      anchor ! [href url] << toHtml url,
+                      case repoBranch sr of
+                          Just branch -> toHtml (" --from-branch " ++ branch)
+                          Nothing     -> noHtml,
+                      case repoSubdir sr of
+                          Just sd -> toHtml ("(" ++ sd ++ ")")
+                          Nothing   -> noHtml
+                     ]
       _ ->
           -- We don't know how to show this SourceRepo.
           -- This is a kludge so that we at least show all the info.
