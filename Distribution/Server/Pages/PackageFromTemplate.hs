@@ -20,7 +20,7 @@ import Distribution.Version
 import Distribution.Text        (display)
 import Text.XHtml.Strict hiding (p, name, title, content)
 
-import Data.Maybe               (maybeToList)
+import Data.Maybe               (maybeToList, fromMaybe)
 import Data.List                (intersperse)
 import System.FilePath.Posix    ((</>), takeFileName, dropTrailingPathSeparator)
 import Data.Time.Locale.Compat  (defaultTimeLocale)
@@ -377,7 +377,15 @@ sourceRepositoryToHtml sr
       _ ->
           -- We don't know how to show this SourceRepo.
           -- This is a kludge so that we at least show all the info.
-          toHtml (show sr)
+           let url = fromMaybe "" $ repoLocation sr
+               showRepoType (OtherRepoType rt) = rt
+               showRepoType x = show x
+           in  concatHtml $ [anchor ! [href url] << toHtml url]
+                           ++ fmap (\r -> toHtml $ ", repo type " ++ showRepoType r) (maybeToList $ repoType sr)
+                           ++ fmap (\x -> toHtml $ ", module " ++ x) (maybeToList $ repoModule sr)
+                           ++ fmap (\x -> toHtml $ ", branch " ++ x) (maybeToList $ repoBranch sr)
+                           ++ fmap (\x -> toHtml $ ", tag "    ++ x) (maybeToList $ repoTag sr)
+                           ++ fmap (\x -> toHtml $ ", subdir " ++ x) (maybeToList $ repoSubdir sr)
 
 -- | Handle how version links are displayed.
 
