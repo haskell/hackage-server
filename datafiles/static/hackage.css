@@ -749,6 +749,15 @@ table.fancy td, table.fancy th {
   padding: 0.25em 0.5em;
 }
 
+table {
+  line-height: 1.5em;
+}
+
+table.dataTable.compact.fancy tbody th,
+table.dataTable.compact.fancy tbody td {
+  padding: 6px 10px;
+}
+
 ul.searchresults li {
   margin-bottom: 1em;
 }
