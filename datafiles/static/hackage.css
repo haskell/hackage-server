@@ -770,12 +770,16 @@ ul.directory-list {
   text-decoration: underline;
 }
 
-/* Preferred and deprecated versions */
+/* Package versions */
 
-.deprecated {
-    color:#919191 !important;
+.versions a.normal[href]:link {
+    color: #61B01E;
 }
 
-.unpreferred {
-    color:#308014 !important;
+.versions a.unpreferred[href]:link {
+    color: #FACC1F;
+}
+
+.versions a.deprecated[href]:link {
+    color: #E80C43;
 }
