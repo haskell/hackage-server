@@ -11,7 +11,7 @@ html {
 
 body {
   background: #fefefe;
-  color: #241F33;
+  color: #221D30;
   text-align: left;
   min-height: 100%;
   position: relative;
@@ -185,7 +185,7 @@ p.caption.expander {
 pre {
   padding: 17px;
   margin: 1em 0 2em 0;
-  background-color: rgba(0, 0, 0, .025);
+  background-color: rgba(0, 0, 0, .033);
   overflow: auto;
   border-bottom: 0.25em solid white;
   /* white border adds some space below the box to compensate
@@ -207,9 +207,8 @@ pre {
 
 /* @group responsive */
 
-@media only screen and (min-width: 950px) {
+@media only screen and (min-width: 1280px) {
   #page-header {
-    text-align: left;
     text-align: left;
   }
 
@@ -223,10 +222,11 @@ pre {
 
   #content {
     width: 55vw;
+    max-width: 1200px;
   }
 }
 
-@media only screen and (max-width: 950px) {
+@media only screen and (max-width: 1280px) {
   #page-header {
     text-align: center;
   }
@@ -241,6 +241,12 @@ pre {
 
   #content {
     width: 75vw;
+  }
+}
+
+@media only screen and (max-width: 950px) {
+  #content {
+    width: 88vw;
   }
 }
 
