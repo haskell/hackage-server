@@ -222,7 +222,8 @@ pre {
 
   #content {
     width: 55vw;
-    max-width: 1200px;
+    max-width: 1450px;
+    min-width: 830px;
   }
 }
 
