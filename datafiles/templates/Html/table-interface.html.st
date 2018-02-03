@@ -13,7 +13,7 @@
         $hackagePageHeader()$
 
         <div id="content">
-            <h2>$heading$</h2>
+            <h1>$heading$</h1>
             $content$
             <table id="table" style="width:650" class="fancy row-border order-column compact">
                 <thead>

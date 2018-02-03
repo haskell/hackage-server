@@ -17,8 +17,16 @@ body {
   position: relative;
 }
 
+table, ul {
+	line-height: 1.35rem;
+}
+
+ul li + li {
+	margin-top: 0.4rem;
+}
+
 p {
-  margin: 0.8em 0;
+  margin-top: 1.1rem;
 }
 
 ul, ol {
@@ -51,7 +59,7 @@ a[href]:hover { text-decoration:underline; }
  */
 
 body {
-	font: 400 16px/1.75 'Open Sans', sans-serif;
+	font: 400 16px/1.6 'Open Sans', sans-serif;
 	*font-size:small; /* for IE */
 	*font:x-small; /* for IE in quirks mode */
 }
@@ -119,13 +127,12 @@ pre, code, kbd, samp, .src {
 
 .caption, h1, h2, h3, h4, h5, h6 {
   font-weight: bold;
-  color: rgb(142, 80, 132);
-  margin: 2em 0 1em 0;
+  color: #5E5184;
+  margin: 1.8em 0 0.95em 0;
   line-height: 1.25em;
 }
 
 h1:first-of-type {
-    color: rgb(94, 81, 132);
     font-size: 2em;
 }
 
@@ -139,7 +146,7 @@ h1 + h2, h2 + h3, h3 + h4, h4 + h5, h5 + h6 {
 }
 
 p + ul {
-  margin-top: 1em;
+  margin-top: 0.75em;
 }
 
 ul + p {
@@ -164,21 +171,21 @@ ul.links li a, ul.links li form {
 .show { display: inherit; }
 .clear { clear: both; }
 
-.collapser {
-  background-image: url(minus.gif);
-  background-repeat: no-repeat;
+.collapser:before, .expander:before {
+  font-size: 0.9em;
+  color: #5E5184;
+  display: inline-block;
+  padding-right: 7px;
 }
-.expander {
-  background-image: url(plus.gif);
-  background-repeat: no-repeat;
+
+.collapser:before {
+  content: '-'
 }
-p.caption.collapser,
-p.caption.expander {
-  background-position: 0 0.4em;
+.expander:before {
+  content: "+";
 }
+
 .collapser, .expander {
-  padding-left: 14px;
-  margin-left: -14px;
   cursor: pointer;
 }
 
@@ -277,9 +284,10 @@ pre {
   background: url(icons/ic_haskell_grayscale_32.svg) no-repeat 0em;
   color: white;
   margin: 0 2em;
-  font-weight: normal;
+  font-weight: bold;
   font-style: normal;
   padding-left: 2.2em;
+  font-size: 1.05rem;
 }
 
 #page-header a:link, #page-header a:visited { color: white; }
@@ -433,14 +441,6 @@ ul.links li form button {
   margin: 0;
   font-size: 1px;
   padding: 0;
-}
-
-#synopsis p.caption.collapser {
-  background: url(synopsis.png) no-repeat -64px -8px;
-}
-
-#synopsis p.caption.expander {
-  background: url(synopsis.png) no-repeat 0px -8px;
 }
 
 #synopsis ul {
@@ -715,10 +715,6 @@ table.simpletable th, table.simpletable td {
   padding: 0.2em 1em;
 }
 
-table.properties td, table.properties th {
-  padding: 1px 0.25em;
-}
-
 table.properties td:first-child, table.properties th:first-child {
   padding-left: 0;
 }
@@ -746,12 +742,14 @@ table.fancy th {
   background: #f0f0f0;
 }
 
-table.fancy td, table.fancy th {
+table.fancy td, table.properties td,
+table.fancy th, table.properties th {
   padding: 0.25em 0.5em;
 }
 
-table {
-  line-height: 1.5em;
+table.properties tr th:first-child {
+  text-align: right;
+  padding-right: 12px;
 }
 
 table.dataTable.compact.fancy tbody th,
