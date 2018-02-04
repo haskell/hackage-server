@@ -1,6 +1,10 @@
 packages: .
 -- tests: True
 
+-- https://github.com/basvandijk/rss/issues/7
+constraints: rss < 3000.2.0.6 || > 3000.2.0.6
+allow-newer: rss-3000.2.0.5:time
+
 -- packages: ./vendor/cabal/Cabal
 --
 -- avoid `setup`-components picking up the local unreleased Cabal-2.x
