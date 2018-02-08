@@ -15,6 +15,12 @@ body {
   text-align: left;
   min-height: 100%;
   position: relative;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-feature-settings: "kern" 1;
+  -moz-font-feature-settings: "kern" 1;
+  -o-font-feature-settings: "kern" 1;
+  font-feature-settings: "kern" 1;
+  font-kerning: normal;
 }
 
 table, ul {
@@ -89,6 +95,10 @@ pre, code, kbd, samp, .src {
 	line-height: 1.54em;
 }
 
+#page-header .links {
+  font-size: 1rem;
+}
+
 .links, .link {
   font-size: 85%; /* 11pt */
 }
@@ -114,10 +124,6 @@ pre, code, kbd, samp, .src {
     border-left: 6px solid #2196F3;
     padding: 0.01em 16px;
     margin-bottom: 8px;
-}
-
-#table-of-contents, #synopsis  {
-  /* font-size: 85%; /* 11pt */
 }
 
 
@@ -225,6 +231,13 @@ pre + pre {
     float: right;
     display: inline-table;
     margin: 0.35em 2em 0 2em;
+  }
+
+  #table-of-contents {
+    position: fixed;
+    left: 10px;
+    max-width: 10vw;
+    top: 10.2em;
   }
 
   #content {
@@ -391,18 +404,15 @@ ul.links li form button {
 /* @group Front Matter */
 
 #table-of-contents {
-  float: right;
-  clear: right;
-  background: #faf9dc;
-  border: 1px solid #d8d7ad;
-  padding: 0.5em 1em;
-  max-width: 20em;
-  margin: 0.5em 0 1em 1em;
+  background:  #f7f7f7;
+  padding: 1em;
+  margin: 1em 0 2em 0;
 }
 
 #table-of-contents .caption {
   text-align: left;
   margin: 0;
+  font-size: 1.08rem;
 }
 
 #table-of-contents ul {
