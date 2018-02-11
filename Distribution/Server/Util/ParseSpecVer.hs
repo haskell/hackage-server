@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns      #-}
+{-# LANGUAGE CPP               #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Distribution.Server.Util.ParseSpecVer
@@ -19,13 +20,19 @@ import qualified Data.ByteString.Lazy.Char8 as BC8L
 import           Distribution.Text
 import           Distribution.ParseUtils ( ParseResult(..) )
 import           Distribution.Version
-import           Distribution.PackageDescription.Parse ( parseGenericPackageDescription )
-import           Distribution.Server.Util.Parse ( unpackUTF8 )
 import qualified Data.HashMap.Strict   as Map
 import           Foreign.C
 import           Foreign.Ptr
 import           System.IO.Unsafe
 import Distribution.PackageDescription ( GenericPackageDescription(..), specVersion )
+
+#if defined(MIN_VERSION_cabal_parsers)
+import           Cabal.Parser (compatParseGenericPackageDescription)
+#else
+import           Distribution.PackageDescription.Parse ( parseGenericPackageDescription )
+import           Distribution.Server.Util.Parse ( unpackUTF8 )
+#endif
+
 -- | Heuristic @cabal-version:@-field parser
 --
 -- This parser is intended to be very fast and assumes a sane & valid .cabal file
@@ -316,7 +323,7 @@ scanSpecVersionLazy bs = do
 --
 -- 'True' is returned in the first element if sanity checks passes.
 parseGenericPackageDescriptionChecked :: BSL.ByteString -> (Bool,ParseResult GenericPackageDescription)
-parseGenericPackageDescriptionChecked bs = case parseGenericPackageDescription (unpackUTF8 bs) of
+parseGenericPackageDescriptionChecked bs = case parseGenericPackageDescription' bs of
    pe@(ParseFailed {}) -> (False,pe)
    pok@(ParseOk _ gpd) -> (isOk (specVersion (packageDescription gpd)),pok)
  where
@@ -325,3 +332,9 @@ parseGenericPackageDescriptionChecked bs = case parseGenericPackageDescription (
      | v /= parseSpecVerLazy bs           = False
      | Just v' <- scanSpecVersionLazy bs  = v == v'
      | otherwise                          = v < mkVersion [2,1]
+
+#if defined(MIN_VERSION_cabal_parsers)
+   parseGenericPackageDescription' bs' = compatParseGenericPackageDescription (BSL.toStrict bs')
+#else
+   parseGenericPackageDescription' bs' = parseGenericPackageDescription (unpackUTF8 bs')
+#endif
