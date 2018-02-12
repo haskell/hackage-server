@@ -88,6 +88,10 @@ flag test-create-user
   default: False
   manual: True
 
+flag cabal-parsers
+  description: Enable experimental @cabal-parsers@ checks
+  manual: True
+  default: False
 
 library lib-server
   -- TODO: move this into a 'library lib-client';
@@ -367,6 +371,9 @@ library lib-server
   if ! flag(minimal)
     build-depends: snowball            ^>= 1.0
                  , tokenize            ^>= 0.3
+
+  if flag(cabal-parsers)
+    build-depends: cabal-parsers ^>= 0
 
   if !os(darwin)
     extra-libraries: crypt

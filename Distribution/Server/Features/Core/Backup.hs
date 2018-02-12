@@ -56,7 +56,7 @@ updatePackages accum@(PartialIndex packageMap updatelog) = RestoreBackup {
   , restoreFinalize = do
       results <- mapM partialToFullPkg (Map.toList packageMap)
       return $ PackagesState (PackageIndex.fromList results)
-                             (maybe (Left mempty) Right updatelog)
+                             (maybe (Left []) Right updatelog)
   }
 
 data PartialIndex = PartialIndex !(Map PackageId PartialPkg)

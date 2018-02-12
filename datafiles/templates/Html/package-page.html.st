@@ -64,7 +64,7 @@
 
         $if(package.optional.hasChangelog)$
         <tr>
-          <th>Change log</th>
+          <th>Change&nbsp;log</th>
           <td>$package.optional.changelog$</td>
         </tr>
         $endif$
@@ -123,7 +123,7 @@
 
         $if(package.optional.hasBugTracker)$
         <tr>
-          <th>Bug tracker</th>
+          <th>Bug&nbsp;tracker</th>
           <td>
             <a href="$package.optional.bugTracker$">
               $package.optional.bugTracker$
@@ -134,7 +134,7 @@
 
         $if(package.optional.hasSourceRepository)$
         <tr>
-          <th>Source repository</th>
+          <th>Source&nbsp;repo</th>
           <td>$package.optional.sourceRepository$</td>
         </tr>
         $endif$
@@ -177,7 +177,7 @@
 	</tr>
 
 	<tr>
-	  <th>Your Rating</th>
+	  <th>Your&nbsp;Rating</th>
 	  <td>
             <ul class="star-rating">
               <li class="star uncool" id="1">&lambda;</li>
