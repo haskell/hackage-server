@@ -18,7 +18,7 @@ allow-newer: rss-3000.2.0.5:time
 -- Set this to the bound to the last known released lib:Cabal version
 -- and make sure the local Git version is above the limit
 --
--- constraints: setup.Cabal <= 2.0.1.0
+-- constraints: setup.Cabal <= 2.0.1.1
 
 package hackage-server
 -- Optional features
