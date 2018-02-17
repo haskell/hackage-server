@@ -64,10 +64,10 @@ a[href]:hover { text-decoration:underline; }
       http://yui.yahooapis.com/3.1.1/build/cssfonts/fonts.css
  */
 
-body {
-	font: 400 16px/1.6 'Open Sans', sans-serif;
-	*font-size:small; /* for IE */
-	*font:x-small; /* for IE in quirks mode */
+body, button {
+  font: 400 15px/1.5 'Open Sans', sans-serif;
+  *font-size:small; /* for IE */
+  *font:x-small; /* for IE in quirks mode */
 }
 
 h1 { font-size: 153.9%; /* 20px */ }
@@ -78,9 +78,9 @@ h5 { font-size: 100%;   /* 13px */ }
 h6 { font-size: 100%;   /* 13px */ }
 
 select, input, button, textarea {
-	font:99% sans-serif;
-    margin: 0.5em;
-    padding: 0.1em;
+  font-size: 1rem;
+  margin: 0.5em;
+  padding: 0.1em;
 }
 
 table {
@@ -90,13 +90,7 @@ table {
 }
 
 pre, code, kbd, samp, .src {
-	font-family:monospace;
-	*font-size:108%;
-	line-height: 1.54em;
-}
-
-#page-header .links {
-  font-size: 1rem;
+	font-family: monospace;
 }
 
 .links, .link {
@@ -196,18 +190,22 @@ ul.links li a, ul.links li form {
 }
 
 pre {
-  padding: 1rem;
-  margin: 0px;
-  background-color: rgba(0, 0, 0, .033);
+  padding: 0.5rem 1rem;
+  margin: 1em 0;
+  background-color: #f7f7f7;
   overflow: auto;
 }
 
+pre + p {
+  margin-top: 1em;
+}
+
 pre + pre {
-  margin-top: 0.4em;
+  margin-top: 0.5em;
 }
 
 .src {
-  background: #f0f0f0;
+  background: #f4f4f4;
   padding: 0.2em 0.5em;
 }
 
@@ -230,7 +228,7 @@ pre + pre {
     text-align: left;
     float: right;
     display: inline-table;
-    margin: 0.35em 2em 0 2em;
+    margin: 2px 2em 0 2em;
   }
 
   #table-of-contents {
@@ -241,9 +239,8 @@ pre + pre {
   }
 
   #content {
-    width: 55vw;
+    width: 60vw;
     max-width: 1450px;
-    min-width: 830px;
   }
 }
 
@@ -257,7 +254,6 @@ pre + pre {
     display: block;
     text-align: center;
     margin: 14px 0 0px 0;
-    font-size: 15px;
   }
 
   #content {
@@ -294,7 +290,7 @@ pre + pre {
 }
 
 #page-header .caption {
-  background: url(icons/ic_haskell_grayscale_32.svg) no-repeat 0em;
+  background: url(https://hackage.haskell.org/static/icons/ic_haskell_grayscale_32.svg) no-repeat 0em;
   color: white;
   margin: 0 2em;
   font-weight: bold;
@@ -317,7 +313,7 @@ table.info {
   border: 1px solid #ddd;
   color: rgb(78,98,114);
   background-color: #fff;
-  max-width: 40%;
+  max-width: 60%;
   border-spacing: 0;
   position: relative;
   top: -0.78em;
@@ -374,7 +370,7 @@ div#style-menu-holder {
   position: absolute;
   width: 100%;
   height: 3em;
-  margin-top: 3em;
+  margin-top: 6em;
 }
 
 /* @end */
@@ -406,7 +402,8 @@ ul.links li form button {
 #table-of-contents {
   background:  #f7f7f7;
   padding: 1em;
-  margin: 1em 0 2em 0;
+  margin: 0;
+  margin-top: 1em;
 }
 
 #table-of-contents .caption {
@@ -475,7 +472,9 @@ ul.links li form button {
 /* @end */
 
 /* @group Main Content */
-
+#interface div.top + div.top {
+  margin-top: 3em;
+}
 #interface div.top { margin: 2em 0; }
 #interface h1 + div.top,
 #interface h2 + div.top,
@@ -484,12 +483,16 @@ ul.links li form button {
 #interface h5 + div.top {
  	margin-top: 1em;
 }
-#interface p.src .link {
+
+#interface .src .link {
   float: right;
-  color: #919191;
-  border-left: 1px solid #919191;
-  background: #f0f0f0;
-  padding: 0 0.5em 0.2em;
+  color: #888;
+  padding: 0 7px;
+  -moz-user-select: none;
+  font-weight: bold;
+  line-height: 30px;
+}
+#interface .src .selflink {
   margin: 0 -0.5em 0 0.5em;
 }
 
@@ -535,8 +538,25 @@ ul.links li form button {
   margin: 0;
 }
 
+
+.subs .subs .caption {
+  margin-top: 16px !important;
+  margin-bottom: 0px !important;
+}
+
+.subs .subs .caption + .src {
+  margin: 0px;
+  margin-top: 8px;
+}
+
+.subs .subs .src + .src {
+  margin-top: 8px;
+}
+
 .top p.src {
-  border-top: 1px solid #ccc;
+  border-bottom: 3px solid #e5e5e5;
+  line-height: 2rem;
+  margin-bottom: 1em;
 }
 
 .subs, .doc {
