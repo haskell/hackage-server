@@ -51,8 +51,8 @@ dd {
 }
 
 a { text-decoration: none; }
-a[href]:link {color: #9C5791;}
-a[href]:visited {color: #5E3558;}
+a[href]:link {color: #4C2A47;}
+a[href]:visited {color: #9C5791;}
 a[href]:hover { text-decoration:underline; }
 
 /* @end */
