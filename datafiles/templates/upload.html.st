@@ -38,7 +38,7 @@ See the notes at the bottom of the page.
 
 <h3>Package versioning and curation</h3>
 
-<p>By default, uploaded packages are <I>curated</I> which means that both maintainers and hackage trustees may revise their metadata (particularly involving version bouds) to guide build tools in producing install-plans. (For more information on revisions, see the <A HREF="https://github.com/haskell-infra/hackage-trustees/blob/master/revisions-information.md">FAQ</A>). 
+<p>By default, uploaded packages are <I>curated</I> which means that both maintainers and hackage trustees may revise their metadata (particularly involving version bounds) to guide build tools in producing install-plans. (For more information on revisions, see the <A HREF="https://github.com/haskell-infra/hackage-trustees/blob/master/revisions-information.md">FAQ</A>). 
   
 <p>In order to ensure the integrity and well-functioning of the Hackage/Cabal ecosystem, all curated packages <abbr title="[RFC2119] The word 'should' is intended to denote that there may exist valid reasons in particular circumstances to ignore a particular item, but the full implications MUST be understood and carefully weighed before choosing a different course">should</abbr> follow Haskell's <a href="https://pvp.haskell.org/">Package Versioning Policy (PVP)</a>.</p>
 
