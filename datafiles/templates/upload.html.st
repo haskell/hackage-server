@@ -14,7 +14,7 @@ $hackagePageHeader()$
 <div style="font-size: large; text-align: center;">Upload and publish
   a package <strong>permanently</strong>: <a href="/packages/upload">Upload</a></div>
 
-<p>Uploading a package puts it in the <a href="/packages/browse">main package index</a>
+<p>Uploading a package puts it in the <a href="/packages/browse">package index</a>
 so that anyone can download it and view information about it. <strong>You can only
 upload a package version once and this cannot be undone</strong>, so try to get it right the first time!
 To reduce the risk of mistakes it's recommended to use the <a href="#candidates">package candidates feature</a> described below.
@@ -28,13 +28,6 @@ synopsis/description as well as ensuring your package is installable
 by helping with providing accurate meta-data.
 </p>
 
-<p>In the course of the curation process, the
-<a href="/packages/trustees">Hackage Trustees</a> need to be
-able to contact you, to inform you about and help you resolve issues with
-your package (including its meta-data) which affect the Hackage
-ecosystem.
-</p>
-
 <p>Packages must be in the form produced by Cabal's
 <a href="http://www.haskell.org/cabal/users-guide/installing-packages.html#setup-sdist">sdist</a> command:
 a gzipped tar file <em>package</em>-<em>version</em><tt>.tar.gz</tt>
@@ -43,12 +36,26 @@ of that name and version, including <em>package</em><tt>.cabal</tt>.
 See the notes at the bottom of the page.
 </p>
 
-<h3>Package versioning</h3>
+<h3>Package versioning and curation</h3>
 
-<p>In order to ensure the integrity and well-functioning of the Hackage/Cabal ecosystem, all packages  <abbr title="[RFC2119] The word 'should' is intended to denote that there may exist valid reasons in particular circumstances to ignore a particular item, but the full implications MUST be understood and carefully weighed before choosing a different course">should</abbr> follow Haskell's <a href="https://pvp.haskell.org/">Package Versioning Policy (PVP)</a>.</p>
+<p>By default, uploaded packages are <I>curated</I> which means that both maintainers and hackage trustees may revise their metadata (particularly involving version bouds) to guide build tools in producing install-plans. (For more information on revisions, see the <A HREF="https://github.com/haskell-infra/hackage-trustees/blob/master/revisions-information.md">FAQ). 
+  
+<p>In order to ensure the integrity and well-functioning of the Hackage/Cabal ecosystem, all curated packages <abbr title="[RFC2119] The word 'should' is intended to denote that there may exist valid reasons in particular circumstances to ignore a particular item, but the full implications MUST be understood and carefully weighed before choosing a different course">should</abbr> follow Haskell's <a href="https://pvp.haskell.org/">Package Versioning Policy (PVP)</a>.</p>
 
 <p>In particular, be aware that although the <a href="https://pvp.haskell.org/">PVP</a> and <a href="http://semver.org/">SemVer</a> are based on the same concepts they differ significantly in structure and consequently are <em>not compatible</em> with each other. Please consult the <a href="https://pvp.haskell.org/faq/#semver">PVP/SemVer FAQ section</a> for more details about the differences and related issues.</p>
 
+<p>In the course of the curation process, the
+<a href="/packages/trustees">Hackage Trustees</a> need to be
+able to contact package maintainers, to inform them about and help to resolve issues with
+their packages (including its meta-data) which affect the Hackage
+ecosystem.</p>
+   
+<p>Package uploaders may choose to exclude individual package  uploads from curation, by setting the <tt>x-curation:</tt> field of the package's cabal file to <tt>uncurated</tt>. Packages which are uncurated have no expectations on them regarding versioning policy.  Trustees or maintainers may <I>adopt</I> uncurated packages into the curated layer through metadata revisions. Metadata revisions must not set the value of the <tt>x-curation</tt> field to any variant of <tt>uncurated</tt>.</p>
+    
+<p>Two varients of the <tt>uncurated</tt> property are supported. First, <tt>uncurated-no-trustee-contact</tt>, which indicates that maintainers do not wish to be contacted by trustees regarding any metadata issues with the package. (Contact may still occur over issues that are not related to curation, such as licensing, etc.). Second, <tt>uncurated-seeking-adoption</tt>, which indicates that maintainers  would like their package to be adopted in the uncurated layer, but currently some issue prevents this, which they would like assistance with.</p>
+
+<p>In the future, metadata regarding curation will be made available in the UI of Hackage, and different derived indexes will be provided for the uncurated and curated layers of packages.</p>  
+ 
 <h3>Open source licenses</h3>
 
 <p>The code and other material you upload and distribute via this site must be
