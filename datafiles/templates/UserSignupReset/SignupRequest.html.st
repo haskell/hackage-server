@@ -48,15 +48,18 @@ such people choose a name (and username) that looks at home among a collection
 of real names; we will be unwilling to add Kittenlover97 to the package
 uploader group.
 
+<p class="registration-email">
+After your account is created, you cannot upload until you
+<b>contact the hackage admins</b> at admin@hackage.haskell.org and
+<b>send an email</b> requesting to be added to the uploader group.
+(This measure is unfortunately necessary to prevent spam accounts).
+</p>
+
 <p><input type="submit" value="Request account">
 
 <p>You will be sent an email containing a link to a page where you
 can set your password and activate your account.
 
-<p>After your account is created, you cannot upload until you
-<b>contact the hackage admins</b> at admin@hackage.haskell.org and
-<b>send an email</b> requesting to be added to the uploader group.
-(This measure is unfortunately necessary to prevent spam accounts).</p>
 </form>
 
 <h3>Open source licenses</h3>
