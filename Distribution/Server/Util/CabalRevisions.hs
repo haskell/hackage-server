@@ -31,25 +31,26 @@ import Distribution.Package
 import Distribution.Text (display)
 import Distribution.Version
 import Distribution.Compiler (CompilerFlavor)
+import Distribution.FieldGrammar (prettyFieldGrammar)
 import Distribution.PackageDescription
-import Distribution.PackageDescription.Parse
-         (parseGenericPackageDescription, sourceRepoFieldDescrs)
+import Distribution.PackageDescription.Parsec (parseGenericPackageDescription, runParseResult)
+import Distribution.PackageDescription.FieldGrammar (sourceRepoFieldGrammar)
 import Distribution.PackageDescription.Check
-import Distribution.ParseUtils
-         ( ParseResult(..), locatedErrorMsg, showPWarning )
-import Distribution.ParseUtils (FieldDescr(..))
+import Distribution.Parsec.Common (showPWarning, showPError, PWarning (..))
 import Distribution.Text (Text(..))
 import Distribution.Simple.LocalBuildInfo (showComponentName)
 import Text.PrettyPrint as Doc
-         (nest, empty, isEmpty, (<+>), colon, (<>), text, vcat, ($+$), Doc, hsep, punctuate)
+         (nest, (<+>), colon, text, ($+$), Doc, hsep, punctuate)
 
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Except  (ExceptT, runExceptT, throwError)
 import Control.Monad.Writer (MonadWriter(..), Writer, runWriter)
+import Data.Foldable (for_)
 import Data.List
 import Data.ByteString.Lazy (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as BS
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy.Char8 as LBS8
 import qualified Data.Char as Char
 import qualified Data.Semigroup as S
 import qualified Data.Set as Set
@@ -62,7 +63,7 @@ import Data.Proxy (Proxy(Proxy))
 -- This takes an original and a revised @.cabal@ decoded as Unicode
 -- 'String' and performs validations. Returns either a validation
 -- error or a list of detected changes.
-diffCabalRevisions :: String -> String -> Either String [Change]
+diffCabalRevisions :: BS.ByteString -> BS.ByteString -> Either String [Change]
 diffCabalRevisions oldVersion newRevision = runCheck $
     checkCabalFileRevision oldVersion newRevision
 
@@ -112,7 +113,7 @@ logChange change = CheckM (tell [change])
 
 type Check a = a -> a -> CheckM ()
 
-checkCabalFileRevision :: Check String
+checkCabalFileRevision :: Check BS.ByteString
 checkCabalFileRevision old new = do
     (pkg,  warns)  <- parseCabalFile old
     (pkg', warns') <- parseCabalFile new
@@ -126,15 +127,24 @@ checkCabalFileRevision old new = do
 
   where
     parseCabalFile fileContent =
-      case parseGenericPackageDescription fileContent of
-        ParseFailed      err -> fail (formatErrorMsg (locatedErrorMsg err))
-        ParseOk warnings pkg -> return (pkg, warnings)
+      case runParseResult $ parseGenericPackageDescription fileContent of
+        (warnings,  Right pkg) -> return (pkg, warnings)
+        (_warnings, Left (_mver, errs)) -> do
+            for_ errs $ \err -> fail (showPError "-" err)
+            fail "no better error"
 
-    formatErrorMsg (Nothing, msg) = msg
-    formatErrorMsg (Just n,  msg) = "Line " ++ show n ++ ": " ++ msg
+    -- new PWarning isn't Eq
+    differenceBy :: (a -> a -> Bool) -> [a] -> [a] -> [a]
+    differenceBy eq = foldl (flip $ deleteBy eq)
 
+    -- things can move, pos can change
+    eqPWarning :: PWarning -> PWarning -> Bool
+    eqPWarning (PWarning t _pos s) (PWarning t' _pos' s') = 
+        t == t' && s == s'
+
+    checkParserWarnings :: FilePath -> Check [PWarning]
     checkParserWarnings filename warns warns' =
-      case warns' \\ warns of
+      case differenceBy eqPWarning warns' warns of
         []       -> return ()
         newwarns -> fail $ "New parse warning: "
                         ++ unlines (map (showPWarning filename) newwarns)
@@ -227,28 +237,78 @@ checkFlag flagOld flagNew = do
 checkPackageDescriptions :: Check PackageDescription
 checkPackageDescriptions
   pdA@(PackageDescription
-     packageIdA licenseA licenseFileA
-     copyrightA maintainerA authorA stabilityA testedWithA homepageA
-     pkgUrlA bugReportsA sourceReposA synopsisA descriptionA
-     categoryA customFieldsA _buildDependsA _specVersionRawA buildTypeA
-     customSetupA _libraryA _subLibrariesA _executablesA _foreignLibsA
-     _testSuitesA _benchmarksA
-     dataFilesA dataDirA extraSrcFilesA extraTmpFilesA extraDocFilesA)
+     { specVersionRaw  = _specVersionRawA
+     , package         = packageIdA
+     , licenseRaw      = licenseRawA
+     , licenseFiles    = licenseFilesA
+     , copyright       = copyrightA
+     , maintainer      = maintainerA
+     , author          = authorA
+     , stability       = stabilityA
+     , testedWith      = testedWithA
+     , homepage        = homepageA
+     , pkgUrl          = pkgUrlA
+     , bugReports      = bugReportsA
+     , sourceRepos     = sourceReposA
+     , synopsis        = synopsisA
+     , description     = descriptionA
+     , category        = categoryA
+     , customFieldsPD  = customFieldsPDA
+     , buildDepends    = _buildDependsA
+     , buildTypeRaw    = buildTypeRawA
+     , setupBuildInfo  = setupBuildInfoA
+     , library         = _libraryA
+     , subLibraries    = _subLibrariesA
+     , executables     = _executablesA
+     , foreignLibs     = _foreignLibsA
+     , testSuites      = _testSuitesA
+     , benchmarks      = _benchmarksA
+     , dataFiles       = dataFilesA
+     , dataDir         = dataDirA
+     , extraSrcFiles   = extraSrcFilesA
+     , extraTmpFiles   = extraTmpFilesA
+     , extraDocFiles   = extraDocFilesA
+     })
   pdB@(PackageDescription
-     packageIdB licenseB licenseFileB
-     copyrightB maintainerB authorB stabilityB testedWithB homepageB
-     pkgUrlB bugReportsB sourceReposB synopsisB descriptionB
-     categoryB customFieldsB _buildDependsB _specVersionRawB buildTypeB
-     customSetupB _libraryB _subLibrariesB _executablesB _foreignLibsB
-     _testSuitesB _benchmarksB
-     dataFilesB dataDirB extraSrcFilesB extraTmpFilesB extraDocFilesB)
+     { specVersionRaw  = _specVersionRawB
+     , package         = packageIdB
+     , licenseRaw      = licenseRawB
+     , licenseFiles    = licenseFilesB
+     , copyright       = copyrightB
+     , maintainer      = maintainerB
+     , author          = authorB
+     , stability       = stabilityB
+     , testedWith      = testedWithB
+     , homepage        = homepageB
+     , pkgUrl          = pkgUrlB
+     , bugReports      = bugReportsB
+     , sourceRepos     = sourceReposB
+     , synopsis        = synopsisB
+     , description     = descriptionB
+     , category        = categoryB
+     , customFieldsPD  = customFieldsPDB
+     , buildDepends    = _buildDependsB
+     , buildTypeRaw    = buildTypeRawB
+     , setupBuildInfo  = setupBuildInfoB
+     , library         = _libraryB
+     , subLibraries    = _subLibrariesB
+     , executables     = _executablesB
+     , foreignLibs     = _foreignLibsB
+     , testSuites      = _testSuitesB
+     , benchmarks      = _benchmarksB
+     , dataFiles       = dataFilesB
+     , dataDir         = dataDirB
+     , extraSrcFiles   = extraSrcFilesB
+     , extraTmpFiles   = extraTmpFilesB
+     , extraDocFiles   = extraDocFilesB
+     })
   = do
   checkSame "Don't be silly! You can't change the package name!"
             (packageName packageIdA) (packageName packageIdB)
   checkSame "You can't change the package version!"
             (packageVersion packageIdA) (packageVersion packageIdB)
   checkSame "Cannot change the license"
-            (licenseA, licenseFileA) (licenseB, licenseFileB)
+            (licenseRawA, licenseFilesA) (licenseRawB, licenseFilesB)
   changesOk "copyright"  id copyrightA copyrightB
   changesOk "maintainer" id maintainerA maintainerB
   changesOk "author"     id authorA authorB
@@ -265,7 +325,7 @@ checkPackageDescriptions
   changesOk "description" id descriptionA descriptionB
   changesOk "category"    id categoryA categoryB
   checkSame "Cannot change the build-type"
-            buildTypeA buildTypeB
+            buildTypeRawA buildTypeRawB
   checkSame "Cannot change the data files"
             (dataFilesA, dataDirA) (dataFilesB, dataDirB)
   checkSame "Changing extra-tmp-files is a bit pointless at this stage"
@@ -276,13 +336,13 @@ checkPackageDescriptions
             extraDocFilesA extraDocFilesB
 
   checkSame "Cannot change custom/extension fields"
-            (filter (\(f,_) -> f /= "x-revision") customFieldsA)
-            (filter (\(f,_) -> f /= "x-revision") customFieldsB)
+            (filter (\(f,_) -> f /= "x-revision") customFieldsPDA)
+            (filter (\(f,_) -> f /= "x-revision") customFieldsPDB)
 
   checkSpecVersionRaw pdA pdB
-  checkSetupBuildInfo customSetupA customSetupB
+  checkSetupBuildInfo setupBuildInfoA setupBuildInfoB
 
-  checkRevision customFieldsA customFieldsB
+  checkRevision customFieldsPDA customFieldsPDB
 
 checkSpecVersionRaw :: Check PackageDescription
 checkSpecVersionRaw pdA pdB
@@ -626,53 +686,41 @@ ppTestedWith = hsep . punctuate colon . map (uncurry ppPair)
 
 --TODO: export from Cabal
 ppSourceRepo :: SourceRepo -> Doc
-ppSourceRepo repo =
-    emptyLine $ text "source-repository" <+> disp (repoKind repo) $+$
-        (nest 4 (ppFields sourceRepoFieldDescrs' repo))
+ppSourceRepo repo = emptyLine $
+    text "source-repository" <+> disp (repoKind repo)
+    $+$
+    nest 4 (prettyFieldGrammar (sourceRepoFieldGrammar (repoKind repo)) repo)
   where
-    sourceRepoFieldDescrs' =
-      filter (\fd -> fieldName fd /= "kind") sourceRepoFieldDescrs
-
     emptyLine :: Doc -> Doc
     emptyLine d = text " " $+$ d
-
-    ppFields :: [FieldDescr a] -> a -> Doc
-    ppFields fields x =
-        vcat [ ppField name (getter x)
-             | FieldDescr name getter _ <- fields]
-
-    ppField :: String -> Doc -> Doc
-    ppField name fielddoc | isEmpty fielddoc = Doc.empty
-                          | otherwise        = text name <> colon <+> fielddoc
-
 
 -- TODO: Verify that we don't need to worry about UTF8
 -- | Insert or update \"x-revision:\" field
 insertRevisionField :: Int -> ByteString -> ByteString
 insertRevisionField rev
-    | rev == 1  = BS.unlines . insertAfterVersion . BS.lines
-    | otherwise = BS.unlines . replaceRevision    . BS.lines
+    | rev == 1  = LBS8.unlines . insertAfterVersion . LBS8.lines
+    | otherwise = LBS8.unlines . replaceRevision    . LBS8.lines
   where
     replaceRevision [] = []
     replaceRevision (ln:lns)
-      | isField (BS.pack "x-revision") ln
-      = BS.pack ("x-revision: " ++ show rev) : lns
+      | isField (LBS8.pack "x-revision") ln
+      = LBS8.pack ("x-revision: " ++ show rev) : lns
 
       | otherwise
       = ln : replaceRevision lns
 
     insertAfterVersion [] = []
     insertAfterVersion (ln:lns)
-      | isField (BS.pack "version") ln
-      = ln : BS.pack ("x-revision: " ++ show rev) : lns
+      | isField (LBS8.pack "version") ln
+      = ln : LBS8.pack ("x-revision: " ++ show rev) : lns
 
       | otherwise
       = ln : insertAfterVersion lns
 
     isField nm ln
-      | BS.isPrefixOf nm (BS.map Char.toLower ln)
-      , let (_, t) = BS.span (\c -> c == ' ' || c == '\t')
-                             (BS.drop (BS.length nm) ln)
-      , Just (':',_) <- BS.uncons t
+      | LBS8.isPrefixOf nm (LBS8.map Char.toLower ln)
+      , let (_, t) = LBS8.span (\c -> c == ' ' || c == '\t')
+                             (LBS8.drop (LBS8.length nm) ln)
+      , Just (':',_) <- LBS8.uncons t
                   = True
       | otherwise = False
