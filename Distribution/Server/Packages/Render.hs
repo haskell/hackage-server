@@ -198,7 +198,7 @@ flatDependencies pkg =
         fromPair (pkgname, Versions _ ver) =
             Dependency pkgname $ fromVersionIntervals ver
 
-    manualFlags :: FlagAssignment
+    manualFlags :: [(FlagName,Bool)] -- FlagAssignment
     manualFlags = map assignment . filter flagManual $ genPackageFlags pkg
         where assignment = flagName &&& flagDefault
 
@@ -273,7 +273,7 @@ combineDepsBy f =
 
 -- | Evaluate a 'Condition' with a partial 'FlagAssignment', returning
 -- | 'Nothing' if the result depends on additional variables.
-evalCondition :: FlagAssignment -> Condition ConfVar -> Maybe Bool
+evalCondition :: [(FlagName,Bool)] -> Condition ConfVar -> Maybe Bool
 evalCondition flags cond =
     let eval = evalCondition flags
     in case cond of
