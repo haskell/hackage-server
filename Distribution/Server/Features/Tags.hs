@@ -27,7 +27,6 @@ import Distribution.Text
 import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
-import Distribution.License
 
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -323,13 +322,13 @@ constructCategoryTags = map (tagify . map toLower) . fillMe . categorySplit . ca
 constructImmutableTags :: GenericPackageDescription -> [Tag]
 constructImmutableTags genDesc =
     let desc = flattenPackageDescription genDesc
-        !l = license desc
+--        !l = license desc
         !hl = hasLibs desc
         !he = hasExes desc
 -- These tags are too noisy and don't provide a good signal anymore
 --        !ht = hasTests desc
 --        !hb = hasBenchmarks desc
-    in licenseToTag l
+    in [] -- licenseToTag l
     ++ (if hl then [Tag "library"] else [])
     ++ (if he then [Tag "program"] else [])
 -- These tags are too noisy and don't provide a good signal anymore
@@ -337,6 +336,8 @@ constructImmutableTags genDesc =
 --    ++ (if hb then [Tag "benchmark"] else [])
     ++ constructCategoryTags desc
   where
+{- temporarily disabled until we figure out whether mapping SPDX to tags is desirable
+
     licenseToTag :: License -> [Tag]
     licenseToTag l = case l of
         GPL  _ -> [Tag "gpl"]
@@ -351,3 +352,5 @@ constructImmutableTags genDesc =
         PublicDomain -> [Tag "public-domain"]
         AllRightsReserved -> [Tag "all-rights-reserved"]
         _ -> []
+
+-}

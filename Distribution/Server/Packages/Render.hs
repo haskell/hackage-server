@@ -29,6 +29,7 @@ import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
 import Distribution.Package
 import Distribution.Text
+import Distribution.Pretty (prettyShow)
 import Distribution.Version
 import Distribution.ModuleName as ModuleName
 import Distribution.Types.CondTree
@@ -89,7 +90,7 @@ doPackageRender users info = PackageRender
     , rendLibraryDeps  = depTree libBuildInfo `fmap` condLibrary genDesc
     , rendExecutableDeps = (unUnqualComponentName *** depTree buildInfo)
                                 `map` condExecutables genDesc
-    , rendLicenseName  = display (license desc) -- maybe make this a bit more human-readable
+    , rendLicenseName  = prettyShow (license desc) -- maybe make this a bit more human-readable
     , rendLicenseFiles = licenseFiles desc
     , rendMaintainer   = case maintainer desc of
                            "None" -> Nothing

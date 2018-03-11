@@ -33,8 +33,8 @@ import Distribution.PackageDescription.Configuration
 import Distribution.PackageDescription.Check
          ( PackageCheck(..), checkPackage, CheckPackageContentOps(..)
          , checkPackageContent )
-import Distribution.ParseUtils
-         ( ParseResult(..), locatedErrorMsg, showPWarning )
+import Distribution.Parsec.Common
+         ( showPError, showPWarning )
 import Distribution.Text
          ( Text(..), display, simpleParse )
 import Distribution.Server.Util.ParseSpecVer
@@ -53,7 +53,6 @@ import Data.Bits
 import Data.ByteString.Lazy
          ( ByteString )
 import qualified Data.ByteString.Lazy as LBS
-import qualified Data.ByteString.Lazy.Char8
 import Data.List
          ( nub, partition, intercalate, isPrefixOf )
 import qualified Data.Map.Strict as Map
@@ -194,8 +193,11 @@ basicChecks pkgid tarIndex = do
 
   -- Parse the Cabal file
   (specVerOk,pkgDesc, warnings) <- case parseGenericPackageDescriptionChecked cabalEntry of
-    (_,ParseFailed err) -> throwError $ showError (locatedErrorMsg err)
-    (specVerOk',ParseOk warnings pkgDesc) ->
+    (_, _, Left (_, err:_)) -> -- TODO: show all errors
+      throwError $ showPError cabalFileName err
+    (_, _, Left (_, [])) ->
+      throwError $ cabalFileName ++ ": parsing failed"
+    (specVerOk', warnings, Right pkgDesc) ->
       return (specVerOk',pkgDesc, map (showPWarning cabalFileName) warnings)
 
   -- make sure the parseSpecVer heuristic agrees with the full parser
@@ -207,6 +209,18 @@ basicChecks pkgid tarIndex = do
   -- Don't allowing uploading new pre-1.2 .cabal files as the parser is likely too lax
   when (specVer < mkVersion [1,2]) $
     throwError "'cabal-version' must be at least 1.2"
+
+  -- Reject not well-defined cabal spec versions on upload; TODO:
+  -- factor out these version checks into a function
+  when (specVer >= mkVersion [1,25] && specVer < mkVersion [2]) $
+    throwError "'cabal-version' in unassigned >=1.25 && <2 range; use 'cabal-version: 2.0' instead"
+
+  when (specVer >= mkVersion [2,1] && specVer < mkVersion [2,2]) $
+    throwError "'cabal-version' refers to unassigned 2.1.* range; use 'cabal-version: 2.2' instead"
+
+  -- Safeguard; should already be caught by parser
+  unless (specVer < mkVersion [2,3]) $
+    throwError "'cabal-version' must be lower than 2.3"
 
   -- Check that the name and version in Cabal file match
   when (packageName pkgDesc /= packageName pkgid) $
@@ -221,9 +235,6 @@ basicChecks pkgid tarIndex = do
   return (pkgDesc, warnings, cabalEntry)
 
   where
-    showError (Nothing, msg) = msg
-    showError (Just n, msg) = "line " ++ show n ++ ": " ++ msg
-
     -- these names are reserved for the time being, as they have
     -- special meaning in cabal's UI
     reservedPkgNames = map mkPackageName ["all","any","none","setup","lib","exe","test"]
@@ -285,10 +296,11 @@ tarOps pkgId tarIndex = CheckPackageContentOps {
                   , System.FilePath.Posix.takeDirectory fp == dir
                   , let fileName = System.FilePath.Posix.takeFileName fp
                   , fileName /= "" ])
+
+    fileContents :: FilePath -> UploadMonad ByteString
     fileContents path =
       case Map.lookup path fileMap of
-        Just (NormalFile contents) ->
-          return (Data.ByteString.Lazy.Char8.unpack contents)
+        Just (NormalFile contents) -> return contents
         Just (Link fp) -> fileContents fp
         _ -> throwError ("getFileContents: file does not exist: " ++ path)
 
@@ -311,9 +323,11 @@ extraChecks genPkgDesc pkgId tarIndex = do
   mapM_ (warn . explanation) warnings
 
   -- Proprietary License check (only active in central-server branch)
-  when (not allowAllRightsReserved && license pkgDesc == AllRightsReserved) $
+  unless (allowAllRightsReserved || isAcceptableLicense pkgDesc) $
     throwError $ "This server does not accept packages with 'license' "
-              ++ "field set to AllRightsReserved."
+              ++ "field set to e.g. AllRightsReserved. See "
+              ++ "https://hackage.haskell.org/upload for more information "
+              ++ "about accepted licenses."
 
   -- Check for an existing x-revision
   when (isJust (lookup "x-revision" (customFieldsPD pkgDesc))) $
@@ -489,3 +503,7 @@ quote s = "'" ++ s ++ "'"
 -- | Whether a UTF8 BOM is at the beginning of the input
 startsWithBOM :: ByteString -> Bool
 startsWithBOM bs = LBS.take 3 bs == LBS.pack [0xEF, 0xBB, 0xBF]
+
+-- TODO
+isAcceptableLicense :: PackageDescription -> Bool
+isAcceptableLicense _ = False
