@@ -26,7 +26,7 @@ import Distribution.Package
 import Distribution.PackageDescription
          ( GenericPackageDescription(..), PackageDescription(..)
          , allBuildInfo, allLibraries
-         , mixins, signatures, specVersion
+         , mixins, signatures, specVersion, license
          )
 import Distribution.PackageDescription.Configuration
          ( flattenPackageDescription )
@@ -38,8 +38,7 @@ import Distribution.Parsec.Common
 import Distribution.Text
          ( Text(..), display, simpleParse )
 import Distribution.Server.Util.ParseSpecVer
-import Distribution.License
-         ( License(..) )
+import qualified Distribution.SPDX as SPDX
 import qualified Distribution.Compat.ReadP as Parse
 
 import Control.Monad.Except
@@ -504,6 +503,30 @@ quote s = "'" ++ s ++ "'"
 startsWithBOM :: ByteString -> Bool
 startsWithBOM bs = LBS.take 3 bs == LBS.pack [0xEF, 0xBB, 0xBF]
 
--- TODO
+-- | Licence acceptance predicate (only used on central-server)
+--
+-- * NONE is rejected
+--
+-- * "or later" syntax (+ postfix) is rejected
+--
+-- * "WITH exc" exceptions are rejected
+--
+-- * There should be a way to interpert license as (conjunction of)
+--   OSI-accepted licenses or CC0
+--
 isAcceptableLicense :: PackageDescription -> Bool
-isAcceptableLicense _ = False
+isAcceptableLicense = go . license
+  where
+    go :: SPDX.License -> Bool
+    go SPDX.NONE = False
+    go (SPDX.License expr) = goExpr expr
+      where
+        goExpr (SPDX.EAnd a b)            = goExpr a && goExpr b
+        goExpr (SPDX.EOr a b)             = goExpr a || goExpr b
+        goExpr (SPDX.ELicense _ (Just _)) = False -- Don't allow exceptions
+        goExpr (SPDX.ELicense s Nothing)  = goSimple s
+
+        goSimple (SPDX.ELicenseRef _)      = False -- don't allow referenced licenses
+        goSimple (SPDX.ELicenseIdPlus _)   = False -- don't allow + licenses (use GPL-3.0-or-later e.g.)
+        goSimple (SPDX.ELicenseId SPDX.CC0_1_0) = True -- CC0 isn't OSI approved, but we allow it as "PublicDomain", this is eg. PublicDomain in http://hackage.haskell.org/package/string-qq-0.0.2/src/LICENSE
+        goSimple (SPDX.ELicenseId lid)     = SPDX.licenseIsOsiApproved lid -- allow only OSI approved licenses.
