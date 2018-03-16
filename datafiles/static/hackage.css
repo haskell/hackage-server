@@ -28,15 +28,16 @@ table, ul {
 }
 
 ul li + li {
-	margin-top: 0.4rem;
+	margin-top: 0.2rem;
 }
 
 p {
-  margin-top: 1.1rem;
+    margin-top: 0.6rem;
+    margin-bottom: 0.6rem;
 }
 
 ul, ol {
-  margin: 0.8em 0 0.8em 2em;
+  margin: 0.8rem 0 0.8rem 2em;
 }
 
 dl {
@@ -51,8 +52,8 @@ dd {
 }
 
 a { text-decoration: none; }
-a[href]:link {color: #4C2A47;}
-a[href]:visited {color: #9C5791;}
+a[href]:link {color: #9E358F;}
+a[href]:visited {color: #805A75;}
 a[href]:hover { text-decoration:underline; }
 
 /* @end */
@@ -128,8 +129,8 @@ pre, code, kbd, samp, .src {
 .caption, h1, h2, h3, h4, h5, h6 {
   font-weight: bold;
   color: #5E5184;
-  margin: 1.8em 0 0.95em 0;
-  line-height: 1.25em;
+  margin: 1rem 0 0.95rem 0;
+  line-height: 1.25rem;
 }
 
 h1:first-of-type {
@@ -150,7 +151,7 @@ p + ul {
 }
 
 ul + p {
-  margin-top: 2em;
+  margin-top: 1.5em;
 }
 
 ul.links li {
@@ -220,7 +221,11 @@ pre + pre {
 
 @media only screen and (min-width: 1280px) {
   #page-header {
-    text-align: left;
+      text-align: left;
+      overflow: visible;
+      white-space: nowrap;
+      display: inline-table;
+      width: 100%;
   }
 
   #page-header ul.links {
@@ -239,7 +244,7 @@ pre + pre {
   }
 
   #content {
-    width: 60vw;
+    width: 70vw;
     max-width: 1450px;
   }
 }
@@ -784,7 +789,8 @@ table.properties tr th:first-child {
 
 table.dataTable.compact.fancy tbody th,
 table.dataTable.compact.fancy tbody td {
-  padding: 6px 10px;
+    padding: 6px 10px;
+    line-height: normal;
 }
 
 ul.searchresults li {

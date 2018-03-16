@@ -15,13 +15,13 @@
         <div id="content">
             <h1>$heading$</h1>
             $content$
-            <table id="table" style="width:650" class="fancy row-border order-column compact">
+            <table id="table" style="min-width:650px;width:100%" class="fancy row-border order-column compact">
                 <thead>
                     <tr>
                         <th><div style="width:100px">Name</div></th>
                         <th><div style="width:50px"><span title="(30 days)">DLs</span></div></th>
                         <th><div style="width:50px"><span title="(0-3)">Rating</span></div></th>
-                        <th><div style="width:160px">Description</div></th>
+                        <th><div style="min-width:160px">Description</div></th>
 			<th><div style="width:140px">Tags</div></th>
 			<th><div style="width:80px">Last U/L</th>
                         <th><div style="width:100px">Maintainer</div></th>
