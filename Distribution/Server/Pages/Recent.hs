@@ -82,7 +82,7 @@ makeRevisionRow users pkginfo =
   XHtml.tr <<
     [XHtml.td ! [XHtml.align "right"] <<
             [XHtml.toHtml (showTime time), nbsp, nbsp],
-     XHtml.td ! [XHtml.align "left"] << [XHtml.toHtml ("#" ++ show (pkgNumRevisions pkginfo - 1)), nbsp, nbsp],
+     XHtml.td ! [XHtml.align "left"] << [XHtml.toHtml ("-r" ++ show (pkgNumRevisions pkginfo - 1)), nbsp, nbsp],
      XHtml.td ! [XHtml.align "left"] << display user,
      XHtml.td ! [XHtml.align "left"] <<
                   [nbsp, nbsp, XHtml.anchor !

@@ -29,6 +29,7 @@ import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
 import Distribution.Package
 import Distribution.Text
+import Distribution.Pretty (prettyShow)
 import Distribution.Version
 import Distribution.ModuleName as ModuleName
 import Distribution.Types.CondTree
@@ -89,7 +90,7 @@ doPackageRender users info = PackageRender
     , rendLibraryDeps  = depTree libBuildInfo `fmap` condLibrary genDesc
     , rendExecutableDeps = (unUnqualComponentName *** depTree buildInfo)
                                 `map` condExecutables genDesc
-    , rendLicenseName  = display (license desc) -- maybe make this a bit more human-readable
+    , rendLicenseName  = prettyShow (license desc) -- maybe make this a bit more human-readable
     , rendLicenseFiles = licenseFiles desc
     , rendMaintainer   = case maintainer desc of
                            "None" -> Nothing
@@ -198,7 +199,7 @@ flatDependencies pkg =
         fromPair (pkgname, Versions _ ver) =
             Dependency pkgname $ fromVersionIntervals ver
 
-    manualFlags :: FlagAssignment
+    manualFlags :: [(FlagName,Bool)] -- FlagAssignment
     manualFlags = map assignment . filter flagManual $ genPackageFlags pkg
         where assignment = flagName &&& flagDefault
 
@@ -273,7 +274,7 @@ combineDepsBy f =
 
 -- | Evaluate a 'Condition' with a partial 'FlagAssignment', returning
 -- | 'Nothing' if the result depends on additional variables.
-evalCondition :: FlagAssignment -> Condition ConfVar -> Maybe Bool
+evalCondition :: [(FlagName,Bool)] -> Condition ConfVar -> Maybe Bool
 evalCondition flags cond =
     let eval = evalCondition flags
     in case cond of
