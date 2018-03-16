@@ -91,7 +91,7 @@
 
         $if(hackage.hasUpdateTime)$
         <tr>
-          <th>Revisions</th>
+          <th>Revised</th>
           <td>$hackage.updateTime$</td>
         </tr>
         $endif$
