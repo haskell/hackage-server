@@ -43,6 +43,8 @@ See the notes at the bottom of the page.
 <p>In order to ensure the integrity and well-functioning of the Hackage/Cabal ecosystem, all curated packages <abbr title="[RFC2119] The word 'should' is intended to denote that there may exist valid reasons in particular circumstances to ignore a particular item, but the full implications MUST be understood and carefully weighed before choosing a different course">should</abbr> follow Haskell's <a href="https://pvp.haskell.org/">Package Versioning Policy (PVP)</a>.</p>
 
 <p>In particular, be aware that although the <a href="https://pvp.haskell.org/">PVP</a> and <a href="http://semver.org/">SemVer</a> are based on the same concepts they differ significantly in structure and consequently are <em>not compatible</em> with each other. Please consult the <a href="https://pvp.haskell.org/faq/#semver">PVP/SemVer FAQ section</a> for more details about the differences and related issues.</p>
+  
+<p>Further, the PVP provides stronger guarantees if it is followed not only by an individual package, but also by that package's transitive dependencies. Packages which are curated should aim to depend only on other curated packages.</p>
 
 <p>In the course of the curation process, the
 <a href="/packages/trustees">Hackage Trustees</a> need to be
