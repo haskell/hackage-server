@@ -21,7 +21,6 @@
     </a>})$
 
   <div id="content">
-
     <h1>The $package.name$ package</h1>
     <div style="font-size: small">
       [ <a href="/packages/tags">Tags: </a>$tags$ ]
@@ -35,19 +34,10 @@
     </div>
     $endif$
 
-    <div id="description">
-    $if(package.optional.hasDescription)$
-    $package.optional.description$
-    $endif$
-    </div>
 
-    $if(package.optional.hasReadme)$
-    <hr>
-    [<a href="#readme">Skip to Readme</a>]
-    $endif$
 
     <div id="properties">
-    <h2>Properties</h2>
+<!--    <h2>Properties</h2> -->
     <table class="properties">
       <tbody>
 
@@ -192,6 +182,17 @@
     </table>
     </div> <!-- /properties -->
 
+    <div id="description">
+    $if(package.optional.hasDescription)$
+    $package.optional.description$
+    $endif$
+    $if(package.optional.hasReadme)$
+    <hr>
+    [<a href="#readme">Skip to Readme</a>]
+    $endif$
+    </div>
+
+
     <div id="modules">
       $moduleList$
     </div>
@@ -226,10 +227,10 @@
       $package.optional.readme$
     </div>
     $endif$
-
   </div> <!-- /content -->
 
   $packagePageAssets()$
+  <div style="clear:both"></div>
   $footer()$
 
   $if(doc.hasQuickNavV1)$
