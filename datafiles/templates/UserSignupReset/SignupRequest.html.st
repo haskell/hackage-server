@@ -15,6 +15,8 @@ $hackagePageHeader()$
 In particular you need an account to be able to upload or help maintain packages.
 
 <p>Using the form below you can register an account.
+The FirstnameLastname format of usernames is encouraged but not required.
+Organizational, rather than individual, accounts are also permitted.
 
 <form action="/users/register-request" method="post" enctype="multipart/form-data">
 
