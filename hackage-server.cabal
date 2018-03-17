@@ -68,6 +68,10 @@ extra-source-files:
   tests/unpack-checks/missing-configure-0.1.0.0/Main.hs
   tests/unpack-checks/missing-configure-0.1.0.0/Setup.hs
   tests/unpack-checks/missing-configure-0.1.0.0/missing-configure.cabal
+  tests/unpack-checks/bad-specver-package-0/LICENSE
+  tests/unpack-checks/bad-specver-package-0/Main.hs
+  tests/unpack-checks/bad-specver-package-0/Setup.hs
+  tests/unpack-checks/bad-specver-package-0/bad-specver-package.cabal
 
 source-repository head
   type: git
@@ -319,7 +323,7 @@ library lib-server
 
   -- Except for GHC-bundled libraries (see above), it's more easier/managable from
   -- a maintainance POV to support only single major-version-ranges
-  build-depends: Cabal                 ^>= 2.0
+  build-depends: Cabal                 ^>= 2.2
                , HStringTemplate       ^>= 0.8
                , HTTP                  ^>= 4000.3.6
                , QuickCheck            ^>= 2.9

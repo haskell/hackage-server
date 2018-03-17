@@ -21,9 +21,9 @@
     </a>})$
 
   <div id="content">
-    <h1>The $package.name$ package</h1>
+    <h1>$package.name$</h1>
     <div style="font-size: small">
-      [ <a href="/packages/tags">Tags: </a>$tags$ ]
+      [ $tags$ ]
       [ <a href="/package/$package.name$/tags/edit">Propose Tags </a> ]
     </div>
 
@@ -79,6 +79,13 @@
           <td>$package.maintainer$</td>
         </tr>
 
+        $if(hackage.hasUpdateTime)$
+        <tr>
+          <th>Revised</th>
+          <td>$hackage.updateTime$</td>
+        </tr>
+        $endif$
+
         <!-- Obsolete/deprecated 'Stability' field hidden
              c.f. http://stackoverflow.com/questions/3841218/conventions-for-stability-field-of-cabal-packages
         <tr>
@@ -128,12 +135,6 @@
           <td>$hackage.uploadTime$</td>
         </tr>
 
-        $if(hackage.hasUpdateTime)$
-        <tr>
-          <th>Updated</th>
-          <td>$hackage.updateTime$</td>
-        </tr>
-        $endif$
 
         $if(hackage.hasDistributions)$
         <tr>
