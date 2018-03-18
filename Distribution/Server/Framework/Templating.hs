@@ -25,10 +25,12 @@ module Distribution.Server.Framework.Templating (
     templateDict,
     templateVal,
     templateEnumDesriptor,
+    templateUnescaped,
     ToSElem(..),
   ) where
 
 import Text.StringTemplate
+import Text.StringTemplate.Base
 import Text.StringTemplate.Classes
 import Happstack.Server (ToMessage(..), toResponseBS)
 
@@ -79,6 +81,10 @@ infix 0 $=
 ($=) :: ToSElem a => String -> a -> TemplateAttr
 ($=) k v = TemplateAttr (setAttribute k v)
 
+templateUnescaped :: String -> LBS.ByteString -> TemplateAttr
+templateUnescaped s x = TemplateAttr $ \st -> st {senv = envIns (SBLE (Builder.fromLazyByteString x)) (senv st)}
+   where envIns v e = e {smp = Map.insert s v (smp e)}
+
 newtype TemplateVal = TemplateVal (forall b. Stringable b => SElem b)
 
 instance ToSElem TemplateVal where
@@ -102,6 +108,7 @@ templateEnumDesriptor tostr xs x =
         , templateVal "asjson"   (JSON.encode x')
         ]
     | (i, x') <- zip [0::Int ..] xs ]
+
 
 instance ToSElem XHtml.Html where
     -- The use of SBLE here is to prevent the html being escaped
