@@ -43,7 +43,7 @@
 
         <tr>
           <th>Versions</th>
-          <td class="word-wrap">$versions$</td>
+          <td>$versions$</td>
         </tr>
 
         $if(package.optional.hasChangelog)$
@@ -66,23 +66,23 @@
         $if(package.optional.hasCopyright)$
         <tr>
           <th>Copyright</th>
-          <td class="word-wrap">$package.optional.copyright$</td>
+          <td>$package.optional.copyright$</td>
         </tr>
         $endif$
 
         <tr>
           <th>Author</th>
-          <td class="word-wrap">$package.author$</td>
+          <td>$package.author$</td>
         </tr>
         <tr>
           <th>Maintainer</th>
-          <td class="word-wrap">$package.maintainer$</td>
+          <td>$package.maintainer$</td>
         </tr>
 
         $if(hackage.hasUpdateTime)$
         <tr>
           <th>Revised</th>
-          <td class="word-wrap">$hackage.updateTime$</td>
+          <td>$hackage.updateTime$</td>
         </tr>
         $endif$
 
@@ -97,7 +97,7 @@
         $if(package.optional.hasCategories)$
         <tr>
           <th>Category</th>
-          <td class="word-wrap">$package.optional.category$</td>
+          <td>$package.optional.category$</td>
         </tr>
         $endif$
 
@@ -132,38 +132,38 @@
 
         <tr>
           <th>Uploaded</th>
-          <td class="word-wrap">$hackage.uploadTime$</td>
+          <td>$hackage.uploadTime$</td>
         </tr>
 
 
         $if(hackage.hasDistributions)$
         <tr>
           <th>Distributions</th>
-          <td class="word-wrap">$hackage.distributions$</td>
+          <td>$hackage.distributions$</td>
         </tr>
         $endif$
 
         $if(hasexecs)$
         <tr>
           <th>Executables</th>
-          <td class="word-wrap">$executables$</td>
+          <td>$executables$</td>
         </tr>
         $endif$
 
         <tr>
           <th>Downloads</th>
-          <td class="word-wrap">$totalDownloads$ total ($recentDownloads$ in the last 30 days)</td>
+          <td>$totalDownloads$ total ($recentDownloads$ in the last 30 days)</td>
         </tr>
 
         <tr>
           <th> Rating</th>
-	  <td class="word-wrap">$if(hasVotes)$$score$ (votes: $votes$)$else$(no votes yet)$endif$
+	  <td>$if(hasVotes)$$score$ (votes: $votes$)$else$(no votes yet)$endif$
 	  <span style="font-size: small">[estimated by <a href="https://en.wikipedia.org/wiki/Rule_of_succession">rule of succession</a>]</span></td>
 	</tr>
 
 	<tr>
 	  <th>Your&nbsp;Rating</th>
-	  <td class="word-wrap">
+	  <td>
             <ul class="star-rating">
               <li class="star uncool" id="1">&lambda;</li>
               <li class="star uncool" id="2">&lambda;</li>
@@ -177,7 +177,7 @@
         </tr>
         <tr>
           <th>Status</th>
-          <td class="word-wrap">$buildStatus$</td>
+          <td>$buildStatus$</td>
         </tr>
       </tbody>
     </table>

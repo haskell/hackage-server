@@ -221,7 +221,8 @@ pre + pre {
 div #properties {
     float:right;
     min-width:350px;
-    width:15%;
+    background: #fefefe;
+    width:25vw;
     margin-left:12px;
 }
 
