@@ -190,11 +190,11 @@ runPackageTests = do
        validateETagHandling "/packages/index.tar.gz"
     do info "Getting testpackage info"
        xs <- validate NoAuth "/package/testpackage"
-       unless ("The testpackage package" `isInfixOf` xs) $
+       unless ("<h1>testpackage</h1>" `isInfixOf` xs) $
            die ("Bad package info: " ++ show xs)
     do info "Getting testpackage-1.0.0.0 info"
        xs <- validate NoAuth "/package/testpackage-1.0.0.0"
-       unless ("The testpackage package" `isInfixOf` xs) $
+       unless ("<h1>testpackage</h1>" `isInfixOf` xs) $
            die ("Bad package info: " ++ show xs)
     do info "Getting testpackage Cabal file"
        cabalFile <- getUrl NoAuth "/package/testpackage-1.0.0.0/testpackage.cabal"

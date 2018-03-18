@@ -24,8 +24,8 @@ import Distribution.Server.Features.Security.SHA256
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Distribution.Package
-import Distribution.PackageDescription.Parse (parseGenericPackageDescription)
-import Distribution.ParseUtils (ParseResult(..), locatedErrorMsg)
+import Distribution.PackageDescription.Parsec (parseGenericPackageDescription, runParseResult)
+import Distribution.Parsec.Common (showPError)
 import Distribution.Text
 import Data.Version (Version(..), showVersion)
 import Text.CSV
@@ -194,9 +194,12 @@ partialToFullPkg (pkgId, PartialPkg{..}) = do
       fail $ "No cabal files found for " ++ display pkgId
 
     let (latestCabalFile, _) = last cabalRevisions
-    case parseGenericPackageDescription (cabalFileString latestCabalFile) of
-      ParseFailed err -> fail $ show (locatedErrorMsg err)
-      ParseOk _ _     -> return ()
+        filename = display pkgId ++ ".cabal"
+
+    case runParseResult $ parseGenericPackageDescription $
+         BS.toStrict $ cabalFileByteString latestCabalFile of
+      (_, Left (_, errs)) -> fail $ unlines (map (showPError filename) errs)
+      (_, Right _)        -> return ()
 
     return PkgInfo {
       pkgInfoId            = pkgId,

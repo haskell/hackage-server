@@ -27,7 +27,8 @@ import Distribution.Text
 import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
-import Distribution.License
+import Distribution.License (License(..), licenseFromSPDX)
+import qualified Distribution.SPDX as SPDX
 
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -337,17 +338,18 @@ constructImmutableTags genDesc =
 --    ++ (if hb then [Tag "benchmark"] else [])
     ++ constructCategoryTags desc
   where
-    licenseToTag :: License -> [Tag]
-    licenseToTag l = case l of
-        GPL  _ -> [Tag "gpl"]
-        AGPL _ -> [Tag "agpl"]
-        LGPL _ -> [Tag "lgpl"]
-        BSD2 -> [Tag "bsd2"]
-        BSD3 -> [Tag "bsd3"]
-        BSD4 -> [Tag "bsd4"]
-        MIT  -> [Tag "mit"]
-        MPL _ -> [Tag "mpl"]
-        Apache _ -> [Tag "apache"]
-        PublicDomain -> [Tag "public-domain"]
+    licenseToTag :: SPDX.License -> [Tag]
+    licenseToTag l = case licenseFromSPDX l of
+        GPL  _            -> [Tag "gpl"]
+        AGPL _            -> [Tag "agpl"]
+        LGPL _            -> [Tag "lgpl"]
+        BSD2              -> [Tag "bsd2"]
+        BSD3              -> [Tag "bsd3"]
+        BSD4              -> [Tag "bsd4"]
+        MIT               -> [Tag "mit"]
+        MPL _             -> [Tag "mpl"]
+        Apache _          -> [Tag "apache"]
+        PublicDomain      -> [Tag "public-domain"]
         AllRightsReserved -> [Tag "all-rights-reserved"]
-        _ -> []
+        _                 -> []
+

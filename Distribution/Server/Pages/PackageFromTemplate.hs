@@ -212,14 +212,15 @@ packagePageTemplate render
 
     renderUpdateInfo :: Int -> UTCTime -> Maybe UserInfo -> Html
     renderUpdateInfo revisionNo utime uinfo =
-        renderUploadInfo utime uinfo +++ " to " +++
-        anchor ! [href revisionsURL] << ("revision " +++ show revisionNo)
+        anchor ! [href revisionsURL] << ("Revision " +++ show revisionNo)
+        +++ " made " +++
+        renderUploadInfo utime uinfo
       where
         revisionsURL = rendPkgUri render </> "revisions/"
 
     renderUploadInfo :: UTCTime -> Maybe UserInfo-> Html
     renderUploadInfo utime uinfo =
-        formatTime defaultTimeLocale "%c" utime +++ " by " +++ user
+        "by " +++ user +++ " at " +++ formatTime defaultTimeLocale "%c" utime
       where
         uname   = maybe "Unknown" (display . userName) uinfo
         uactive = maybe False (isActiveAccount . userStatus) uinfo

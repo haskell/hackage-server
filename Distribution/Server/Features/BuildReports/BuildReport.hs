@@ -34,10 +34,6 @@ import Distribution.Package
          ( PackageIdentifier(..) )
 import Distribution.Types.GenericPackageDescription
          ( FlagName, mkFlagName, unFlagName )
-import Distribution.PackageDescription
-         ( FlagAssignment )
---import Distribution.Version
---         ( Version )
 import Distribution.System
          ( OS, Arch )
 import Distribution.Compiler
@@ -109,7 +105,10 @@ data BuildReport
     client          :: PackageIdentifier,
 
     -- | Which configurations flags we used
-    flagAssignment  :: FlagAssignment,
+    flagAssignment  :: [(FlagName,Bool)],
+    -- TODO: this is the pre-Cabal-2.2 'FlagAssignment' type;
+    --       consider changing this to the new opaque 'FlagAssignment' type at some point
+    --       (which will have implications for the safecopy serialisation)
 
     -- | Which dependent packages we were using exactly
     dependencies    :: [PackageIdentifier],
@@ -434,7 +433,7 @@ data BuildReport_v1 = BuildReport_v1 {
     v1_arch            :: Arch,
     v1_compiler        :: CompilerId,
     v1_client          :: PackageIdentifier,
-    v1_flagAssignment  :: FlagAssignment,
+    v1_flagAssignment  :: [(FlagName,Bool)],
     v1_dependencies    :: [PackageIdentifier],
     v1_installOutcome  :: InstallOutcome_v0,
     v1_docsOutcome     :: Outcome,
