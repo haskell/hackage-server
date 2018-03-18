@@ -21,7 +21,7 @@
 </head>
 
 <body>
-  $hackagePageHeader(title={<a class="caption" href="$baseurl$/">Hackage :: [Package]</a>})$
+  $hackagePageHeader()$
 
   <div id="content">
     <h1><a href="$baseurl$/package/$package.name$">$package.name$</a>$if(package.optional.hasSynopsis)$: <small>$package.optional.synopsis$</small>$endif$</h1>

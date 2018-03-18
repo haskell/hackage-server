@@ -40,8 +40,8 @@ hackagePageWith headExtra docTitle docSubtitle docContent bodyExtra =
                 ]
     docBody   = [ thediv  ! [identifier "page-header"] << docHeader
                 , thediv  ! [identifier "content"] << docContent ]
-    docHeader = [ docSubtitle
-                , navigationBar
+    docHeader = [ navigationBar
+                , docSubtitle
                 ]
     googleFontURL = "https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700"
 
