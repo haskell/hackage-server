@@ -43,13 +43,13 @@
 
         <tr>
           <th>Versions</th>
-          <td>$versions$</td>
+          <td class="word-wrap">$versions$</td>
         </tr>
 
         $if(package.optional.hasChangelog)$
         <tr>
           <th>Change&nbsp;log</th>
-          <td>$package.optional.changelog$</td>
+          <td class="word-wrap">$package.optional.changelog$</td>
         </tr>
         $endif$
 
@@ -66,23 +66,23 @@
         $if(package.optional.hasCopyright)$
         <tr>
           <th>Copyright</th>
-          <td>$package.optional.copyright$</td>
+          <td class="word-wrap">$package.optional.copyright$</td>
         </tr>
         $endif$
 
         <tr>
           <th>Author</th>
-          <td>$package.author$</td>
+          <td class="word-wrap">$package.author$</td>
         </tr>
         <tr>
           <th>Maintainer</th>
-          <td>$package.maintainer$</td>
+          <td class="word-wrap">$package.maintainer$</td>
         </tr>
 
         $if(hackage.hasUpdateTime)$
         <tr>
           <th>Revised</th>
-          <td>$hackage.updateTime$</td>
+          <td class="word-wrap">$hackage.updateTime$</td>
         </tr>
         $endif$
 
@@ -97,14 +97,14 @@
         $if(package.optional.hasCategories)$
         <tr>
           <th>Category</th>
-          <td>$package.optional.category$</td>
+          <td class="word-wrap">$package.optional.category$</td>
         </tr>
         $endif$
 
         $if(package.optional.hasHomePage)$
         <tr>
           <th>Home page</th>
-          <td>
+          <td class="word-wrap">
             <a href=$package.optional.homepage$>
               $package.optional.homepage$
             </a>
@@ -115,7 +115,7 @@
         $if(package.optional.hasBugTracker)$
         <tr>
           <th>Bug&nbsp;tracker</th>
-          <td>
+          <td class="word-wrap">
             <a href="$package.optional.bugTracker$">
               $package.optional.bugTracker$
             </a>
@@ -126,44 +126,44 @@
         $if(package.optional.hasSourceRepository)$
         <tr>
           <th>Source&nbsp;repo</th>
-          <td>$package.optional.sourceRepository$</td>
+          <td class="word-wrap">$package.optional.sourceRepository$</td>
         </tr>
         $endif$
 
         <tr>
           <th>Uploaded</th>
-          <td>$hackage.uploadTime$</td>
+          <td class="word-wrap">$hackage.uploadTime$</td>
         </tr>
 
 
         $if(hackage.hasDistributions)$
         <tr>
           <th>Distributions</th>
-          <td>$hackage.distributions$</td>
+          <td class="word-wrap">$hackage.distributions$</td>
         </tr>
         $endif$
 
         $if(hasexecs)$
         <tr>
           <th>Executables</th>
-          <td>$executables$</td>
+          <td class="word-wrap">$executables$</td>
         </tr>
         $endif$
 
         <tr>
           <th>Downloads</th>
-          <td>$totalDownloads$ total ($recentDownloads$ in the last 30 days)</td>
+          <td class="word-wrap">$totalDownloads$ total ($recentDownloads$ in the last 30 days)</td>
         </tr>
 
         <tr>
           <th> Rating</th>
-	  <td>$if(hasVotes)$$score$ (votes: $votes$)$else$(no votes yet)$endif$
+	  <td class="word-wrap">$if(hasVotes)$$score$ (votes: $votes$)$else$(no votes yet)$endif$
 	  <span style="font-size: small">[estimated by <a href="https://en.wikipedia.org/wiki/Rule_of_succession">rule of succession</a>]</span></td>
 	</tr>
 
 	<tr>
 	  <th>Your&nbsp;Rating</th>
-	  <td>
+	  <td class="word-wrap">
             <ul class="star-rating">
               <li class="star uncool" id="1">&lambda;</li>
               <li class="star uncool" id="2">&lambda;</li>
@@ -177,7 +177,7 @@
         </tr>
         <tr>
           <th>Status</th>
-          <td>$buildStatus$</td>
+          <td class="word-wrap">$buildStatus$</td>
         </tr>
       </tbody>
     </table>

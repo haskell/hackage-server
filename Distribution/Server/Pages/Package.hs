@@ -360,14 +360,21 @@ showDependencies deps = commaList (map showDependency deps)
 showDependency ::  Dependency -> Html
 showDependency (Dependency (unPackageName -> pname) vs) = showPkg +++ vsHtml
   where vsHtml = if vs == anyVersion then noHtml
-                                     else toHtml (" (" ++ display vs ++ ")")
+                                     else nonbreakingHtml (" (" ++ display vs ++ ")")
         -- mb_vers links to latest version in range. This is a bit computationally
         -- expensive, not cache-friendly, and perhaps unexpected in some cases
         {-mb_vers = maybeLast $ filter (`withinRange` vs) $ map packageVersion $
                     PackageIndex.lookupPackageName vmap (PackageName pname)-}
         -- nonetheless, we should ensure that the package exists /before/
         -- passing along the PackageRender, which is not the case here
-        showPkg = anchor ! [href . packageURL $ PackageIdentifier (mkPackageName pname) nullVersion] << pname
+        showPkg = anchor ! [href . packageURL $ PackageIdentifier (mkPackageName pname) nullVersion] << nonbreakingHtml pname
+
+nonbreakingHtml :: String -> Html
+nonbreakingHtml = primHtml . concatMap htmlizeChar2 . stringToHtmlString
+   where
+      htmlizeChar2 ' ' = "&nbsp;"
+      htmlizeChar2 '-' = "&#8209;"
+      htmlizeChar2 c   = [c]
 
 renderDetailedDependencies :: PackageRender -> Html
 renderDetailedDependencies pkgRender =
