@@ -25,7 +25,7 @@ module Distribution.Server.Pages.Package
 
 import Distribution.Server.Features.PreferredVersions
 
-import Distribution.Server.Pages.Template (hackagePageWith)
+import Distribution.Server.Pages.Template (hackagePageWithHead)
 import qualified Distribution.Server.Pages.Package.HaddockParse as Haddock
 import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Packages.ModuleForest
@@ -37,7 +37,6 @@ import qualified Distribution.ModuleName as Module
 import Distribution.ModuleName (ModuleName)
 import Distribution.Package
 import Distribution.PackageDescription as P
-import Distribution.Simple.Utils ( cabalVersion )
 import Distribution.Version
 import Distribution.Types.CondTree
 import Distribution.Text        (display)
@@ -72,7 +71,7 @@ packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)]
 packagePage render headLinks top sections
             bottom mdocIndex mreadMe
             docURL isCandidate =
-    hackagePageWith [canonical] docTitle docSubtitle docBody [docFooter]
+    hackagePageWithHead [canonical] docTitle docBody
   where
     pkgid   = rendPkgId render
     pkgName = display $ packageName pkgid
@@ -85,7 +84,6 @@ packagePage render headLinks top sections
             ++ case synopsis (rendOther render) of
                  ""    -> ""
                  short -> ": " ++ short
-    docSubtitle = anchor ! [theclass "caption"] << "Hackage :: [Package]"
 
     docBody = bodyTitle
           : concat [
@@ -122,14 +120,6 @@ packagePage render headLinks top sections
         [] -> []
         items -> [thediv ! [thestyle "font-size: small"] <<
             (map (\item -> "[" +++ item +++ "] ") items)]
-
-    docFooter = thediv ! [identifier "footer"]
-                  << paragraph
-                       << [ toHtml "Produced by "
-                          , anchor ! [href "/"] << "hackage"
-                          , toHtml " and "
-                          , anchor ! [href cabalHomeURL] << "Cabal"
-                          , toHtml (" " ++ display cabalVersion) ]
 
     pair (title, content) =
         toHtml [ h2 << title, content ]
@@ -676,7 +666,3 @@ packageURL pkgId = "/package" </> display pkgId
 
 --cabalLogoURL :: URL
 --cabalLogoURL = "/built-with-cabal.png"
-
--- global URLs
-cabalHomeURL :: URL
-cabalHomeURL = "http://haskell.org/cabal/"
