@@ -15,13 +15,10 @@
 </head>
 
 <body>
-  $hackagePageHeader(title={
-    <a class="caption" href="$baseurl$/package/$package.name$">
-    $package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$
-    </a>})$
+  $hackagePageHeader(title={<a class="caption" href="$baseurl$/">Hackage :: [Package]</a>})$
 
   <div id="content">
-    <h1>$package.name$</h1>
+    <h1><a href="$baseurl$/package/$package.name$">$package.name$</a>$if(package.optional.hasSynopsis)$: <small>$package.optional.synopsis$</small>$endif$</h1>
     <div style="font-size: small">
       [ $tags$ ]
       [ <a href="/package/$package.name$/tags/edit">Propose Tags </a> ]

@@ -135,6 +135,7 @@ pre, code, kbd, samp, .src {
 
 h1:first-of-type {
     font-size: 2em;
+    line-height: 1.75rem;
 }
 
 

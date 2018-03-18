@@ -85,9 +85,9 @@ packagePage render headLinks top sections
             ++ case synopsis (rendOther render) of
                  ""    -> ""
                  short -> ": " ++ short
-    docSubtitle = anchor ! [href pkgUrl] << docTitle
+    docSubtitle = anchor ! [theclass "caption"] << "Hackage :: [Package]"
 
-    docBody = h1 << bodyTitle
+    docBody = bodyTitle
           : concat [
              candidateBanner,
              renderHeads,
@@ -100,7 +100,12 @@ packagePage render headLinks top sections
              readmeSection render mreadMe,
              map pair bottom
            ]
-    bodyTitle = "The " ++ pkgName ++ " package"
+
+    bodyTitle = case synopsis (rendOther render) of
+      ""    -> h1 << pkgName
+      short -> h1 << [ toHtml (pkgName ++ ": ")
+                     , small (toHtml short)
+                     ]
 
     candidateBanner
       | isCandidate = [ thediv ! [theclass "candidate-info"]
