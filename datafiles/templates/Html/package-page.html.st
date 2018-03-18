@@ -15,14 +15,10 @@
 </head>
 
 <body>
-  $hackagePageHeader(title={
-    <a class="caption" href="$baseurl$/package/$package.name$">
-    $package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$
-    </a>})$
+  $hackagePageHeader(title={<a class="caption" href="$baseurl$/">Hackage :: [Package]</a>})$
 
   <div id="content">
-
-    <h1>$package.name$</h1>
+    <h1><a href="$baseurl$/package/$package.name$">$package.name$</a>$if(package.optional.hasSynopsis)$: <small>$package.optional.synopsis$</small>$endif$</h1>
     <div style="font-size: small">
       [ $tags$ ]
       [ <a href="/package/$package.name$/tags/edit">Propose Tags </a> ]
@@ -35,19 +31,10 @@
     </div>
     $endif$
 
-    <div id="description">
-    $if(package.optional.hasDescription)$
-    $package.optional.description$
-    $endif$
-    </div>
 
-    $if(package.optional.hasReadme)$
-    <hr>
-    [<a href="#readme">Skip to Readme</a>]
-    $endif$
 
     <div id="properties">
-    <h2>Properties</h2>
+<!--    <h2>Properties</h2> -->
     <table class="properties">
       <tbody>
 
@@ -59,7 +46,7 @@
         $if(package.optional.hasChangelog)$
         <tr>
           <th>Change&nbsp;log</th>
-          <td>$package.optional.changelog$</td>
+          <td class="word-wrap">$package.optional.changelog$</td>
         </tr>
         $endif$
 
@@ -114,7 +101,7 @@
         $if(package.optional.hasHomePage)$
         <tr>
           <th>Home page</th>
-          <td>
+          <td class="word-wrap">
             <a href=$package.optional.homepage$>
               $package.optional.homepage$
             </a>
@@ -125,7 +112,7 @@
         $if(package.optional.hasBugTracker)$
         <tr>
           <th>Bug&nbsp;tracker</th>
-          <td>
+          <td class="word-wrap">
             <a href="$package.optional.bugTracker$">
               $package.optional.bugTracker$
             </a>
@@ -136,7 +123,7 @@
         $if(package.optional.hasSourceRepository)$
         <tr>
           <th>Source&nbsp;repo</th>
-          <td>$package.optional.sourceRepository$</td>
+          <td class="word-wrap">$package.optional.sourceRepository$</td>
         </tr>
         $endif$
 
@@ -193,6 +180,17 @@
     </table>
     </div> <!-- /properties -->
 
+    <div id="description">
+    $if(package.optional.hasDescription)$
+    $package.optional.description$
+    $endif$
+    $if(package.optional.hasReadme)$
+    <hr>
+    [<a href="#readme">Skip to Readme</a>]
+    $endif$
+    </div>
+
+
     <div id="modules">
       $moduleList$
     </div>
@@ -227,10 +225,10 @@
       $package.optional.readme$
     </div>
     $endif$
-
   </div> <!-- /content -->
 
   $packagePageAssets()$
+  <div style="clear:both"></div>
   $footer()$
 
   $if(doc.hasQuickNavV1)$

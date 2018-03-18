@@ -73,6 +73,7 @@
 </style>
 
 <script>
+  // Modals
   var modal = (function() {
     var
       method = {},
@@ -141,6 +142,7 @@
 </script>
 
 <script>
+  // Voting
   var votesUrl = '/package/$package.name$/votes';
   var star = {
     "id"       : undefined,
@@ -200,5 +202,19 @@
       for (i = 0; i <= parseInt(num); i++)
         \$("#" + i).removeClass('cool').addClass('uncool');
   }
+</script>
 
+ <script>
+    // Responsive layout change
+    \$(function()  {
+          var onResize = function() {
+              if(jQuery(window).width()<=950) {
+                 jQuery("#properties").insertAfter(jQuery("#description"));
+              } else {
+                  jQuery("#properties").insertBefore(jQuery("#description"));
+             }
+            }
+            \$(window).resize(onResize);
+            onResize();
+     });
 </script>
