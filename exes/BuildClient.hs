@@ -486,7 +486,11 @@ buildOnce opts pkgs = keepGoing $ do
               (mTgz, mRpt, logfile) <- buildPackage verbosity opts config docInfo
               let installOk = fmap ("install-outcome: InstallOk" `isInfixOf`) mRpt == Just True
               case mTgz of
-                Nothing -> when (not installOk) $ mark_as_failed (docInfoPackage docInfo)
+                Nothing -> do
+                     mark_as_failed (docInfoPackage docInfo)
+                     -- When it installed ok, but there's no docs, that means it is exe only.
+                     -- This marks it "really failed" in such a case to stop retries.
+                     when installOk . replicateM_ 4 $ mark_as_failed (docInfoPackage docInfo)
                 Just _  -> return ()
               case mRpt of
                 Just _  | bo_dryRun opts -> return ()
