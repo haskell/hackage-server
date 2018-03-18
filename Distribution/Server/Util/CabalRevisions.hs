@@ -336,13 +336,14 @@ checkPackageDescriptions
             extraDocFilesA extraDocFilesB
 
   checkSame "Cannot change custom/extension fields"
-            (filter (\(f,_) -> f /= "x-revision") customFieldsPDA)
-            (filter (\(f,_) -> f /= "x-revision") customFieldsPDB)
+            (filter (\(f,_) -> not (f `elem` ["x-revision","x-curation"])) customFieldsPDA)
+            (filter (\(f,_) -> not (f `elem` ["x-revision","x-curation"])) customFieldsPDB)
 
   checkSpecVersionRaw pdA pdB
   checkSetupBuildInfo setupBuildInfoA setupBuildInfoB
 
   checkRevision customFieldsPDA customFieldsPDB
+  checkCuration customFieldsPDA customFieldsPDB
 
 checkSpecVersionRaw :: Check PackageDescription
 checkSpecVersionRaw pdA pdB
@@ -375,6 +376,15 @@ checkRevision customFieldsA customFieldsB =
       case lookup "x-revision" customFields of
         Just s  | [(n,"")] <- reads s -> n :: Int
         _                             -> 0
+
+checkCuration :: Check [(String, String)]
+checkCuration customFieldsA customFieldsB =
+    checkNotPresent "Revised metadata must not contain an x-curation field as revisions necessarily imply curation, and revising an uncurated package adopts it into the curated layer." oldCuration newCuration
+  where
+    oldCuration = lookup "x-curation" customFieldsA
+    newCuration = lookup "x-curation" customFieldsB
+
+
 
 checkCondTree :: (ComponentName -> Check a) -> Check (ComponentName, CondTree ConfVar [Dependency] a)
 checkCondTree checkElem (componentName, condNodeA)
@@ -673,6 +683,10 @@ checkListAssoc msg checkElem ((kx,x):xs) ((ky,y):ys)
                                   >> checkListAssoc msg checkElem xs ys
                        | otherwise = fail msg
 checkListAssoc msg _         _  _  = fail msg
+
+checkNotPresent :: String -> Check (Maybe String)
+checkNotPresent msg _ (Just _) = fail msg
+checkNotPresent _ _ Nothing = return ()
 
 checkMaybe :: String -> Check a -> Check (Maybe a)
 checkMaybe _   _     Nothing  Nothing  = return ()
