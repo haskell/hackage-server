@@ -85,9 +85,9 @@ packagePage render headLinks top sections
             ++ case synopsis (rendOther render) of
                  ""    -> ""
                  short -> ": " ++ short
-    docSubtitle = anchor ! [href pkgUrl] << docTitle
+    docSubtitle = anchor ! [theclass "caption"] << "Hackage :: [Package]"
 
-    docBody = h1 << bodyTitle
+    docBody = bodyTitle
           : concat [
              candidateBanner,
              renderHeads,
@@ -100,7 +100,12 @@ packagePage render headLinks top sections
              readmeSection render mreadMe,
              map pair bottom
            ]
-    bodyTitle = "The " ++ pkgName ++ " package"
+
+    bodyTitle = case synopsis (rendOther render) of
+      ""    -> h1 << pkgName
+      short -> h1 << [ toHtml (pkgName ++ ": ")
+                     , small (toHtml short)
+                     ]
 
     candidateBanner
       | isCandidate = [ thediv ! [theclass "candidate-info"]
@@ -360,14 +365,21 @@ showDependencies deps = commaList (map showDependency deps)
 showDependency ::  Dependency -> Html
 showDependency (Dependency (unPackageName -> pname) vs) = showPkg +++ vsHtml
   where vsHtml = if vs == anyVersion then noHtml
-                                     else toHtml (" (" ++ display vs ++ ")")
+                                     else nonbreakingHtml (" (" ++ display vs ++ ")")
         -- mb_vers links to latest version in range. This is a bit computationally
         -- expensive, not cache-friendly, and perhaps unexpected in some cases
         {-mb_vers = maybeLast $ filter (`withinRange` vs) $ map packageVersion $
                     PackageIndex.lookupPackageName vmap (PackageName pname)-}
         -- nonetheless, we should ensure that the package exists /before/
         -- passing along the PackageRender, which is not the case here
-        showPkg = anchor ! [href . packageURL $ PackageIdentifier (mkPackageName pname) nullVersion] << pname
+        showPkg = anchor ! [href . packageURL $ PackageIdentifier (mkPackageName pname) nullVersion] << nonbreakingHtml pname
+
+nonbreakingHtml :: String -> Html
+nonbreakingHtml = primHtml . concatMap htmlizeChar2 . stringToHtmlString
+   where
+      htmlizeChar2 ' ' = "&nbsp;"
+      htmlizeChar2 '-' = "&#8209;"
+      htmlizeChar2 c   = [c]
 
 renderDetailedDependencies :: PackageRender -> Html
 renderDetailedDependencies pkgRender =
@@ -454,7 +466,7 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
                                ++ map versionedLink laterVersions
         versionedLink (v, s) = anchor ! (status s ++ [href $ packageURL $ PackageIdentifier pname v]) << display v
         status st = case st of
-            NormalVersion -> []
+            NormalVersion -> [theclass "normal"]
             DeprecatedVersion  -> [theclass "deprecated"]
             UnpreferredVersion -> [theclass "unpreferred"]
         infoHtml = case info of Nothing -> noHtml; Just str -> " (" +++ (anchor ! [href str] << "info") +++ ")"

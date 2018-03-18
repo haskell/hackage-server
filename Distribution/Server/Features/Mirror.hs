@@ -24,9 +24,10 @@ import qualified Distribution.Server.Packages.Unpack as Upload
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Util.Parse (unpackUTF8)
 
-import Distribution.PackageDescription.Parse (parseGenericPackageDescription)
-import Distribution.ParseUtils (ParseResult(..), locatedErrorMsg, showPWarning)
+import Distribution.PackageDescription.Parsec (parseGenericPackageDescription, runParseResult)
+import Distribution.Parsec.Common (showPError, showPWarning)
 
+import qualified Data.ByteString.Lazy as BS.L
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (formatTime)
 import Data.Time.Locale.Compat (defaultTimeLocale)
@@ -239,14 +240,16 @@ mirrorFeature ServerEnv{serverBlobStore = store}
         fileContent <- expectTextPlain
         time <- liftIO getCurrentTime
         let uploadData = (time, uid)
-        case parseGenericPackageDescription . unpackUTF8 $ fileContent of
-            ParseFailed err -> badRequest (toResponse $ show (locatedErrorMsg err))
-            ParseOk _ pkg | pkgid /= packageId pkg ->
+            filename = display pkgid <.> "cabal"
+
+        case runParseResult $ parseGenericPackageDescription $ BS.L.toStrict $ fileContent of
+            (_, Left (_, err:_)) -> badRequest (toResponse $ showPError filename err)
+            (_, Left (_, []))    -> badRequest (toResponse "failed to parse")
+            (_, Right pkg) | pkgid /= packageId pkg ->
                 errBadRequest "Wrong package Id"
                   [MText $ "Expected " ++ display pkgid
                         ++ " but found " ++ display (packageId pkg)]
-            ParseOk warnings pkg -> do
+            (warnings, Right pkg) -> do
                 updateAddPackageRevision (packageId pkg)
                                          (CabalFileText fileContent) uploadData
-                let filename = display pkgid <.> "cabal"
                 return . toResponse $ unlines $ map (showPWarning filename) warnings

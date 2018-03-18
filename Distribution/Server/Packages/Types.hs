@@ -31,8 +31,8 @@ import Distribution.Package
          ( PackageIdentifier(..), Package(..) )
 import Distribution.PackageDescription
          ( GenericPackageDescription(..))
-import Distribution.PackageDescription.Parse
-         ( parseGenericPackageDescription, ParseResult(..) )
+import Distribution.PackageDescription.Parsec
+         ( parseGenericPackageDescription, runParseResult )
 
 import Data.Serialize (Serialize)
 import Data.ByteString.Lazy (ByteString)
@@ -207,11 +207,13 @@ pkgLatestTarball pkginfo =
 -- | The information held in a parsed .cabal file (used by cabal-install)
 pkgDesc :: PkgInfo -> GenericPackageDescription
 pkgDesc pkgInfo =
-    case parseGenericPackageDescription $ cabalFileString $ fst $ pkgLatestRevision pkgInfo of
+    case runParseResult $ parseGenericPackageDescription $
+         BS.L.toStrict $ cabalFileByteString $ fst $
+         pkgLatestRevision pkgInfo of
       -- We only make PkgInfos with parsable pkgDatas, so if it
       -- doesn't parse then something has gone wrong.
-      ParseFailed e -> error ("Internal error: " ++ show e)
-      ParseOk _ x   -> x
+      (_, Left (_,es)) -> error ("Internal error: " ++ show es)
+      (_, Right x)     -> x
 
 blobInfoFromBS :: BlobId -> ByteString -> BlobInfo
 blobInfoFromBS blobId bs = BlobInfo {

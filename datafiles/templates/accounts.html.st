@@ -27,6 +27,12 @@ maintainer group.</p>
 
 <h2>Reset password</h2>
 
+<h2>Account Management</h2>
+You can modify various settings for your account, including changing
+  the email address and password, as well as creating authentication
+  tokens, at the <a href="/users/account-management">account
+  management page</a>.
+
 <p>If you forget your password you can <a href="/users/password-reset">reset it</a>
 so long as you know your user login name and the email address you
 originally registered with. The system will send you an email with a
