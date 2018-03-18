@@ -35,19 +35,8 @@
     </div>
     $endif$
 
-    <div id="description">
-    $if(package.optional.hasDescription)$
-    $package.optional.description$
-    $endif$
-    </div>
-
-    $if(package.optional.hasReadme)$
-    <hr>
-    [<a href="#readme">Skip to Readme</a>]
-    $endif$
-
     <div id="properties">
-    <h2>Properties</h2>
+<!--    <h2>Properties</h2> -->
     <table class="properties">
       <tbody>
 
@@ -192,6 +181,18 @@
       </tbody>
     </table>
     </div> <!-- /properties -->
+
+
+    <div id="description">
+    $if(package.optional.hasDescription)$
+    $package.optional.description$
+    $endif$
+    </div>
+
+    $if(package.optional.hasReadme)$
+    <hr>
+    [<a href="#readme">Skip to Readme</a>]
+    $endif$
 
     <div id="modules">
       $moduleList$

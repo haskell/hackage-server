@@ -579,7 +579,7 @@ ul.links li form button:hover {
 }
 
 #module-list li {
-  clear: right;
+/*  clear: right; */
 }
 
 #module-list span.collapser,
@@ -655,6 +655,13 @@ p.tip {
 
 table.simpletable th, table.simpletable td {
   padding: 0.2em 1em;
+}
+
+div #properties {
+    float:right;
+    min-width:200px;
+    width:20%;
+    margin-left:12px;
 }
 
 table.properties td, table.properties th {
