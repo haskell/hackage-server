@@ -1,4 +1,5 @@
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Main (main) where
 
 import Network.HTTP hiding (password)
@@ -379,7 +380,7 @@ docInfoTarGzURI config docInfo = docInfoBaseURI config docInfo <//> display (doc
 docInfoReports :: BuildConfig -> DocInfo -> URI
 docInfoReports config docInfo = docInfoBaseURI config docInfo <//> "reports/"
 
-getDocumentationStats :: Verbosity 
+getDocumentationStats :: Verbosity
                       -> BuildConfig
                       -> (PackageId -> IO Bool)
                       -> IO [DocInfo]
@@ -483,8 +484,9 @@ buildOnce opts pkgs = keepGoing $ do
             go [] = return ()
             go (docInfo : toBuild') = do
               (mTgz, mRpt, logfile) <- buildPackage verbosity opts config docInfo
+              let installOk = fmap ("install-outcome: InstallOk" `isInfixOf`) mRpt == Just True
               case mTgz of
-                Nothing -> mark_as_failed (docInfoPackage docInfo)
+                Nothing -> when (not installOk) $ mark_as_failed (docInfoPackage docInfo)
                 Just _  -> return ()
               case mRpt of
                 Just _  | bo_dryRun opts -> return ()
@@ -695,8 +697,9 @@ buildPackage verbosity opts config docInfo = do
     docs <- if docs_generated
               then do
                 when (bo_prune opts) (pruneHaddockFiles doc_dir_pkg)
-                BS.writeFile resultDocsTarball =<< tarGzDirectory doc_dir_pkg
-                return (Just resultDocsTarball)
+                try (tarGzDirectory doc_dir_pkg) >>= either
+                  (\(e :: SomeException) -> print e >> return Nothing)
+                  (\x -> BS.writeFile resultDocsTarball x >> return (Just resultDocsTarball))
               else return Nothing
 
     notice verbosity $ unlines
@@ -737,7 +740,7 @@ pruneHaddockFiles dir = do
     hackJsUtils
   where
     unwantedFile file
-      | "frames.html" == file             = True 
+      | "frames.html" == file             = True
       | "mini_" `isPrefixOf` file         = True
         -- The .haddock file is haddock-version specific
         -- so it is not useful to make available for download
@@ -998,4 +1001,3 @@ validateOpts args = do
   where
 
     accum flags = foldr (flip (.)) id flags
-
