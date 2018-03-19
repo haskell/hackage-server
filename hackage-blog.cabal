@@ -1,0 +1,10 @@
+cabal-version:      2.2
+name:               hackage-blog
+version:            0
+
+executable site
+  main-is:          site.hs
+  build-depends:    base == 4.*
+                  , hakyll ^>= 4.12
+  ghc-options:      -threaded
+  default-language: Haskell2010

@@ -1,0 +1,6 @@
+/_site/
+/_cache/
+/dist/
+/dist-newstyle/
+.ghc.environment.*
+*~
