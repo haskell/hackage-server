@@ -34,7 +34,6 @@
 
 
     <div id="properties">
-<!--    <h2>Properties</h2> -->
     <table class="properties">
       <tbody>
 
