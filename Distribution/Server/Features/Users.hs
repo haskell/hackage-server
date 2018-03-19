@@ -161,6 +161,8 @@ data UserResource = UserResource {
     adminResource :: GroupResource,
     -- | Manage a user
     manageUserResource :: Resource,
+    -- | Redirect users to their management page
+    redirectUserResource :: Resource,
 
     -- | URI for `userList` given a format.
     userListUri :: String -> String,
@@ -293,6 +295,7 @@ userFeature templates usersState adminsState
             , passwordResource
             , enabledResource
             , manageUserResource
+            , redirectUserResource
             ]
           ++ [
               groupResource adminResource
@@ -331,6 +334,13 @@ userFeature templates usersState adminsState
                       ]
               , resourceGet  = [ ("", serveUserManagementGet) ]
               , resourcePost = [ ("", serveUserManagementPost) ]
+              }
+      , redirectUserResource =
+              (resourceAt "/users/account-management.:format")
+              { resourceDesc =
+                      [ (GET, "user's personal account management page")
+                      ]
+              , resourceGet  = [ ("", const (redirectUserManagement r)) ]
               }
       , passwordResource = resourceAt "/user/:username/password.:format"
                            --TODO: PUT
@@ -551,6 +561,12 @@ userFeature templates usersState adminsState
           errBadRequest "User deleted"
             [MText "Cannot disable account, it has already been deleted"]
 
+    redirectUserManagement :: UserResource -> ServerPartE Response
+    redirectUserManagement r = do
+      uid <- guardAuthenticated
+      uinfo <- lookupUserInfo uid
+      tempRedirect (manageUserUri r "" (userName uinfo)) (toResponse ())
+
     serveUserManagementGet :: DynamicPath -> ServerPartE Response
     serveUserManagementGet dpath = do
       (uid, uinfo)  <- lookupUserNameFull =<< userNameInPath dpath
@@ -560,7 +576,7 @@ userFeature templates usersState adminsState
       ok $ toResponse $
         template
           [ "username" $= display (userName uinfo)
-          , "tokens"   $= 
+          , "tokens"   $=
               [ templateDict
                   [ templateVal "hash" (display authtok)
                   , templateVal "description" desc

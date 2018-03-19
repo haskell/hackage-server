@@ -58,7 +58,9 @@ cabalPackageCheckTests :: HUnit.Test
 cabalPackageCheckTests =
   TestList
     [ TestLabel "Missing ./configure script" missingConfigureScriptTest
-    , TestLabel "Missing directories in tar file" missingDirsInTarFileTest]
+    , TestLabel "Missing directories in tar file" missingDirsInTarFileTest
+    , TestLabel "Bad spec-version" badSpecVer
+    ]
 
 missingConfigureScriptTest :: HUnit.Test
 missingConfigureScriptTest =
@@ -71,6 +73,18 @@ missingConfigureScriptTest =
          HUnit.assertBool
            ("Error found, but not about missing ./configure: " ++ err)
            ("The 'build-type' is 'Configure'" `isInfixOf` err)
+
+badSpecVer :: HUnit.Test
+badSpecVer =
+  TestCase $
+  do tar <- tarGzFile "bad-specver-package-0"
+     now <- getCurrentTime
+     case unpackPackage now "bad-specver-package-0.tar.gz" tar of
+       Right _ -> HUnit.assertFailure "expected error"
+       Left err ->
+         HUnit.assertBool
+           ("Error found, but not about invalid spec version: " ++ err)
+           ("'cabal-version' in unassigned >=1.25 && <2 range" `isInfixOf` err)
 
 -- | Some tar files in hackage are missing directory entries.
 -- Ensure that they can be verified even without the directory entries.

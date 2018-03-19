@@ -1,11 +1,27 @@
 packages: .
 -- tests: True
 
--- packages: ./vendor/cabal/Cabal
---
--- avoid `setup`-components picking up the local unreleased Cabal-2.x
--- in future we'll have a way to constraint to local/non-local
--- constraints: setup.Cabal < 2.0.0.3
+-- https://github.com/basvandijk/rss/issues/7
+constraints: rss < 3000.2.0.6 || > 3000.2.0.6
+allow-newer: rss-3000.2.0.5:time
 
--- package hackage-server
+-- for optional/additional compatibility checks
+-- optional-packages: ./vendor/cabal-parsers
+
+-- sometimes we need unreleased fixes
+-- optional-packages: ./vendor/cabal/Cabal
+
+-- HACK: avoid `setup`-components picking up the local unreleased
+-- Cabal-2.x in future we'll have a way to constraint to
+-- local/non-local
+--
+-- Set this to the bound to the last known released lib:Cabal version
+-- and make sure the local Git version is above the limit
+--
+-- constraints: setup.Cabal <= 2.0.1.1
+
+package hackage-server
+-- Optional features
+--
 --   flags: +build-hackage-import
+--   flags: +cabal-parsers

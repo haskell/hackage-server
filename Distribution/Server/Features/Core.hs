@@ -26,7 +26,6 @@ import           Data.Aeson                                         (Value (..))
 import           Data.ByteString.Lazy                               (ByteString)
 import qualified Data.Foldable                                      as Foldable
 import qualified Data.HashMap.Strict                                as HashMap
-import           Data.Either                                        (isLeft)
 import qualified Data.Text                                          as Text
 import           Data.Time.Clock                                    (UTCTime, getCurrentTime)
 import           Data.Time.Format                                   (formatTime)
@@ -34,6 +33,8 @@ import           Data.Time.Locale.Compat                            (defaultTime
 import qualified Data.Vector                                        as Vec
 
 -- hackage
+import           Distribution.Server.Prelude
+
 import           Distribution.Server.Features.Core.Backup
 import           Distribution.Server.Features.Core.State
 import           Distribution.Server.Features.Security.Migration

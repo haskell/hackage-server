@@ -82,7 +82,7 @@ makeRevisionRow users pkginfo =
   XHtml.tr <<
     [XHtml.td ! [XHtml.align "right"] <<
             [XHtml.toHtml (showTime time), nbsp, nbsp],
-     XHtml.td ! [XHtml.align "left"] << [XHtml.toHtml ("#" ++ show (pkgNumRevisions pkginfo - 1)), nbsp, nbsp],
+     XHtml.td ! [XHtml.align "left"] << [XHtml.toHtml ("-r" ++ show (pkgNumRevisions pkginfo - 1)), nbsp, nbsp],
      XHtml.td ! [XHtml.align "left"] << display user,
      XHtml.td ! [XHtml.align "left"] <<
                   [nbsp, nbsp, XHtml.anchor !
@@ -176,17 +176,19 @@ revisionItem :: Users -> URI -> PkgInfo -> [RSS.ItemElem]
 revisionItem users hostURI pkgInfo =
   [ RSS.Title title
   , RSS.Link uri
-  , RSS.Guid True (uriToString id uri "")
+  , RSS.Guid True (uriToString id guid "")
   , RSS.PubDate time
   , RSS.Description desc
   ]
   where
     uri   = hostURI { uriPath = packageURL pkgId  ++ "/revisions"}
+    guid  = hostURI { uriPath = packageURL pkgId  ++ "/revision/" ++ show revision }
     title = display (packageName pkgId) ++ " " ++ display (packageVersion pkgId)
-    body  = "Revision #" ++ show (pkgNumRevisions pkgInfo - 1)
+    body  = "Revision #" ++ show revision
     desc  = "<i>Revised by " ++ display user ++ ", " ++ showTime time ++ ".</i>"
          ++ if null body then "" else "<p>" ++ body
     user = Users.userIdToName users userId
+    revision = pkgNumRevisions pkgInfo - 1
 
     (time, userId) = pkgLatestUploadInfo pkgInfo
     pkgId = pkgInfoId pkgInfo

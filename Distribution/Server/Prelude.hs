@@ -10,6 +10,7 @@ module Distribution.Server.Prelude
     , parseTimeMaybe
     , readPTime'
     , sortOn
+    , isLeft
     ) where
 
 import           Control.Applicative as X
@@ -26,6 +27,10 @@ import           Control.Monad.IO.Class as X (MonadIO(liftIO))
 
 #if MIN_VERSION_base(4,8,0)
 import           Data.List (sortOn)
+#endif
+
+#if MIN_VERSION_base(4,7,0)
+import           Data.Either (isLeft)
 #endif
 
 -- TODO: move somewhere else
@@ -57,3 +62,11 @@ readPTime' fmt = ReadP.readS_to_P (readsTime defaultTimeLocale fmt)
 sortOn :: Ord b => (a -> b) -> [a] -> [a]
 sortOn f = map snd . sortBy (comparing fst) . map (\x -> let y = f x in y `seq` (y, x))
 #endif
+
+#if !MIN_VERSION_base(4,7,0)
+-- | See "Data.Either" starting with @base-4.7.0.0@
+isLeft :: Either a b -> Bool
+isLeft (Left  _) = True
+isLeft (Right _) = False
+#endif
+

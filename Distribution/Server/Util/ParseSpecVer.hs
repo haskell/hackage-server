@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns      #-}
+{-# LANGUAGE CPP               #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Distribution.Server.Util.ParseSpecVer
@@ -17,15 +18,21 @@ import qualified Data.ByteString.Char8 as BC8
 import qualified Data.ByteString.Lazy  as BSL
 import qualified Data.ByteString.Lazy.Char8 as BC8L
 import           Distribution.Text
-import           Distribution.ParseUtils ( ParseResult(..) )
+import           Distribution.Pretty ( prettyShow )
+import           Distribution.Parsec.Common ( PWarning, PError )
 import           Distribution.Version
-import           Distribution.PackageDescription.Parse ( parseGenericPackageDescription )
-import           Distribution.Server.Util.Parse ( unpackUTF8 )
 import qualified Data.HashMap.Strict   as Map
 import           Foreign.C
 import           Foreign.Ptr
 import           System.IO.Unsafe
 import Distribution.PackageDescription ( GenericPackageDescription(..), specVersion )
+
+#if defined(MIN_VERSION_cabal_parsers)
+import           Cabal.Parser (compatParseGenericPackageDescription)
+#else
+import           Distribution.PackageDescription.Parsec ( runParseResult, parseGenericPackageDescription )
+#endif
+
 -- | Heuristic @cabal-version:@-field parser
 --
 -- This parser is intended to be very fast and assumes a sane & valid .cabal file
@@ -102,11 +109,11 @@ findCabVers buf0 = mapMaybe go ixs
 
 -- | Lookup-table mapping "x.y.z" strings to 'Version'
 verDictV :: Map.HashMap ByteString Version
-verDictV = Map.fromList [ (BC8.pack (showVersion v), v) | v <- knownVers ]
+verDictV = Map.fromList [ (BC8.pack (prettyShow v), v) | v <- knownVers ]
 
 -- | Lookup-table mapping ">=x.y.z" strings to 'Version'
 verDictRg :: Map.HashMap ByteString Version
-verDictRg = Map.fromList [ (">=" `mappend` BC8.pack (showVersion v), v) | v <- knownVers ]
+verDictRg = Map.fromList [ (">=" `mappend` BC8.pack (prettyShow v), v) | v <- knownVers ]
 
 -- | List of cabal-version values contained in Hackage's package index as of 2017-07
 knownVers :: [Version]
@@ -315,13 +322,19 @@ scanSpecVersionLazy bs = do
 -- * Starting with cabal-version:2.2 'scanSpecVersionLazy' must succeed
 --
 -- 'True' is returned in the first element if sanity checks passes.
-parseGenericPackageDescriptionChecked :: BSL.ByteString -> (Bool,ParseResult GenericPackageDescription)
-parseGenericPackageDescriptionChecked bs = case parseGenericPackageDescription (unpackUTF8 bs) of
-   pe@(ParseFailed {}) -> (False,pe)
-   pok@(ParseOk _ gpd) -> (isOk (specVersion (packageDescription gpd)),pok)
+parseGenericPackageDescriptionChecked :: BSL.ByteString -> (Bool,[PWarning], Either (Maybe Version, [PError]) GenericPackageDescription)
+parseGenericPackageDescriptionChecked bs = case parseGenericPackageDescription' bs of
+   (warns, pe@(Left _)) -> (False, warns, pe)
+   (warns, Right gpd)   -> (isOk (specVersion (packageDescription gpd)),warns, Right gpd)
  where
    isOk :: Version -> Bool
    isOk v
      | v /= parseSpecVerLazy bs           = False
      | Just v' <- scanSpecVersionLazy bs  = v == v'
-     | otherwise                          = v < mkVersion [2,1]
+     | otherwise                          = v < mkVersion [2,3]
+
+#if defined(MIN_VERSION_cabal_parsers)
+   parseGenericPackageDescription' bs' = compatParseGenericPackageDescription (BSL.toStrict bs')
+#else
+   parseGenericPackageDescription' bs' = runParseResult (parseGenericPackageDescription (BSL.toStrict bs'))
+#endif

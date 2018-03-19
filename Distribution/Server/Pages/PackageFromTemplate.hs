@@ -20,7 +20,7 @@ import Distribution.Version
 import Distribution.Text        (display)
 import Text.XHtml.Strict hiding (p, name, title, content)
 
-import Data.Maybe               (maybeToList)
+import Data.Maybe               (maybeToList, fromMaybe)
 import Data.List                (intersperse)
 import System.FilePath.Posix    ((</>), takeFileName, dropTrailingPathSeparator)
 import Data.Time.Locale.Compat  (defaultTimeLocale)
@@ -212,14 +212,15 @@ packagePageTemplate render
 
     renderUpdateInfo :: Int -> UTCTime -> Maybe UserInfo -> Html
     renderUpdateInfo revisionNo utime uinfo =
-        renderUploadInfo utime uinfo +++ " to " +++
-        anchor ! [href revisionsURL] << ("revision " +++ show revisionNo)
+        anchor ! [href revisionsURL] << ("Revision " +++ show revisionNo)
+        +++ " made " +++
+        renderUploadInfo utime uinfo
       where
         revisionsURL = rendPkgUri render </> "revisions/"
 
     renderUploadInfo :: UTCTime -> Maybe UserInfo-> Html
     renderUploadInfo utime uinfo =
-        formatTime defaultTimeLocale "%c" utime +++ " by " +++ user
+        "by " +++ user +++ " at " +++ formatTime defaultTimeLocale "%c" utime
       where
         uname   = maybe "Unknown" (display . userName) uinfo
         uactive = maybe False (isActiveAccount . userStatus) uinfo
@@ -374,10 +375,30 @@ sourceRepositoryToHtml sr
                       toHtml " ",
                       toHtml (takeFileName (dropTrailingPathSeparator url) ++ ".fossil")
                       ]
+      Just (OtherRepoType "pijul")
+        | (Just url, Nothing, Nothing) <-
+           (repoLocation sr, repoModule sr, repoTag sr) ->
+                     concatHtml [toHtml "pijul clone ",
+                      anchor ! [href url] << toHtml url,
+                      case repoBranch sr of
+                          Just branch -> toHtml (" --from-branch " ++ branch)
+                          Nothing     -> noHtml,
+                      case repoSubdir sr of
+                          Just sd -> toHtml ("(" ++ sd ++ ")")
+                          Nothing   -> noHtml
+                     ]
       _ ->
           -- We don't know how to show this SourceRepo.
           -- This is a kludge so that we at least show all the info.
-          toHtml (show sr)
+           let url = fromMaybe "" $ repoLocation sr
+               showRepoType (OtherRepoType rt) = rt
+               showRepoType x = show x
+           in  concatHtml $ [anchor ! [href url] << toHtml url]
+                           ++ fmap (\r -> toHtml $ ", repo type " ++ showRepoType r) (maybeToList $ repoType sr)
+                           ++ fmap (\x -> toHtml $ ", module " ++ x) (maybeToList $ repoModule sr)
+                           ++ fmap (\x -> toHtml $ ", branch " ++ x) (maybeToList $ repoBranch sr)
+                           ++ fmap (\x -> toHtml $ ", tag "    ++ x) (maybeToList $ repoTag sr)
+                           ++ fmap (\x -> toHtml $ ", subdir " ++ x) (maybeToList $ repoSubdir sr)
 
 -- | Handle how version links are displayed.
 

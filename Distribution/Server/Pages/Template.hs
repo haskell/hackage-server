@@ -17,7 +17,7 @@ hackagePageWithHead :: [Html] -> String -> [Html] -> Html
 hackagePageWithHead headExtra docTitle docContent =
     hackagePageWith headExtra docTitle docSubtitle docContent bodyExtra
   where
-    docSubtitle = anchor ! [href introductionURL] << "Hackage :: [Package]"
+    docSubtitle = anchor ! [href introductionURL, theclass "caption"] << "Hackage :: [Package]"
     bodyExtra   = []
 
 hackagePageWith :: [Html] -> String -> Html -> [Html] -> [Html] -> Html
@@ -26,6 +26,8 @@ hackagePageWith headExtra docTitle docSubtitle docContent bodyExtra =
            , body   << (docBody ++ bodyExtra) ]
   where
     docHead   = [ thetitle << (docTitle ++ " | Hackage")
+                , thelink ! [ rel "stylesheet"
+                            , href googleFontURL] << noHtml
                 , thelink ! [ rel "stylesheet"
                             , href stylesheetURL
                             , thetype "text/css"] << noHtml
@@ -36,10 +38,12 @@ hackagePageWith headExtra docTitle docSubtitle docContent bodyExtra =
                             , thetype "application/opensearchdescription+xml"
                             , title "Hackage" ] << noHtml
                 ]
-    docBody   = [ thediv ! [identifier "page-header"] << docHeader
-                , thediv ! [identifier "content"] << docContent ]
+    docBody   = [ thediv  ! [identifier "page-header"] << docHeader
+                , thediv  ! [identifier "content"] << docContent ]
     docHeader = [ navigationBar
-                , paragraph ! [theclass "caption"] << docSubtitle ]
+                , docSubtitle
+                ]
+    googleFontURL = "https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700"
 
 navigationBar :: Html
 navigationBar =

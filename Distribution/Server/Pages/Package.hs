@@ -25,7 +25,7 @@ module Distribution.Server.Pages.Package
 
 import Distribution.Server.Features.PreferredVersions
 
-import Distribution.Server.Pages.Template (hackagePageWith)
+import Distribution.Server.Pages.Template (hackagePageWithHead)
 import qualified Distribution.Server.Pages.Package.HaddockParse as Haddock
 import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Packages.ModuleForest
@@ -37,7 +37,6 @@ import qualified Distribution.ModuleName as Module
 import Distribution.ModuleName (ModuleName)
 import Distribution.Package
 import Distribution.PackageDescription as P
-import Distribution.Simple.Utils ( cabalVersion )
 import Distribution.Version
 import Distribution.Types.CondTree
 import Distribution.Text        (display)
@@ -72,7 +71,7 @@ packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)]
 packagePage render headLinks top sections
             bottom mdocIndex mreadMe
             docURL isCandidate =
-    hackagePageWith [canonical] docTitle docSubtitle docBody [docFooter]
+    hackagePageWithHead [canonical] docTitle docBody
   where
     pkgid   = rendPkgId render
     pkgName = display $ packageName pkgid
@@ -85,9 +84,8 @@ packagePage render headLinks top sections
             ++ case synopsis (rendOther render) of
                  ""    -> ""
                  short -> ": " ++ short
-    docSubtitle = anchor ! [href pkgUrl] << docTitle
 
-    docBody = h1 << bodyTitle
+    docBody = bodyTitle
           : concat [
              candidateBanner,
              renderHeads,
@@ -100,7 +98,12 @@ packagePage render headLinks top sections
              readmeSection render mreadMe,
              map pair bottom
            ]
-    bodyTitle = "The " ++ pkgName ++ " package"
+
+    bodyTitle = case synopsis (rendOther render) of
+      ""    -> h1 << pkgName
+      short -> h1 << [ toHtml (pkgName ++ ": ")
+                     , small (toHtml short)
+                     ]
 
     candidateBanner
       | isCandidate = [ thediv ! [theclass "candidate-info"]
@@ -117,14 +120,6 @@ packagePage render headLinks top sections
         [] -> []
         items -> [thediv ! [thestyle "font-size: small"] <<
             (map (\item -> "[" +++ item +++ "] ") items)]
-
-    docFooter = thediv ! [identifier "footer"]
-                  << paragraph
-                       << [ toHtml "Produced by "
-                          , anchor ! [href "/"] << "hackage"
-                          , toHtml " and "
-                          , anchor ! [href cabalHomeURL] << "Cabal"
-                          , toHtml (" " ++ display cabalVersion) ]
 
     pair (title, content) =
         toHtml [ h2 << title, content ]
@@ -360,14 +355,21 @@ showDependencies deps = commaList (map showDependency deps)
 showDependency ::  Dependency -> Html
 showDependency (Dependency (unPackageName -> pname) vs) = showPkg +++ vsHtml
   where vsHtml = if vs == anyVersion then noHtml
-                                     else toHtml (" (" ++ display vs ++ ")")
+                                     else nonbreakingHtml (" (" ++ display vs ++ ")")
         -- mb_vers links to latest version in range. This is a bit computationally
         -- expensive, not cache-friendly, and perhaps unexpected in some cases
         {-mb_vers = maybeLast $ filter (`withinRange` vs) $ map packageVersion $
                     PackageIndex.lookupPackageName vmap (PackageName pname)-}
         -- nonetheless, we should ensure that the package exists /before/
         -- passing along the PackageRender, which is not the case here
-        showPkg = anchor ! [href . packageURL $ PackageIdentifier (mkPackageName pname) nullVersion] << pname
+        showPkg = anchor ! [href . packageURL $ PackageIdentifier (mkPackageName pname) nullVersion] << nonbreakingHtml pname
+
+nonbreakingHtml :: String -> Html
+nonbreakingHtml = primHtml . concatMap htmlizeChar2 . stringToHtmlString
+   where
+      htmlizeChar2 ' ' = "&nbsp;"
+      htmlizeChar2 '-' = "&#8209;"
+      htmlizeChar2 c   = [c]
 
 renderDetailedDependencies :: PackageRender -> Html
 renderDetailedDependencies pkgRender =
@@ -454,7 +456,7 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
                                ++ map versionedLink laterVersions
         versionedLink (v, s) = anchor ! (status s ++ [href $ packageURL $ PackageIdentifier pname v]) << display v
         status st = case st of
-            NormalVersion -> []
+            NormalVersion -> [theclass "normal"]
             DeprecatedVersion  -> [theclass "deprecated"]
             UnpreferredVersion -> [theclass "unpreferred"]
         infoHtml = case info of Nothing -> noHtml; Just str -> " (" +++ (anchor ! [href str] << "info") +++ ")"
@@ -664,7 +666,3 @@ packageURL pkgId = "/package" </> display pkgId
 
 --cabalLogoURL :: URL
 --cabalLogoURL = "/built-with-cabal.png"
-
--- global URLs
-cabalHomeURL :: URL
-cabalHomeURL = "http://haskell.org/cabal/"

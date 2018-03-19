@@ -74,7 +74,8 @@ import qualified Data.Array as Array
 import qualified Data.Ix    as Ix
 import Data.Time.Format (formatTime)
 import Data.Time.Locale.Compat (defaultTimeLocale)
-import qualified Data.ByteString.Lazy as BS (ByteString)
+import qualified Data.ByteString.Lazy.Char8 as BS (ByteString, pack)
+import qualified Network.URI as URI
 
 import Text.XHtml.Strict
 import qualified Text.XHtml.Strict as XHtml
@@ -148,7 +149,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
               reportsCore
               usersdetails -> do
       -- do rec, tie the knot
-      rec let (feature, packageIndex, packagesPage) =
+      rec let (feature, packageIndex, packagesPage, browseTable) =
                 htmlFeature env user core
                             packages upload
                             candidates versions
@@ -161,7 +162,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                             reportsCore
                             usersdetails
                             (htmlUtilities core tags user)
-                            mainCache namesCache
+                            mainCache namesCache browseCache
                             templates
 
           -- Index page caches
@@ -179,13 +180,21 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                             asyncCacheUpdateDelay  = serverCacheDelay,
                             asyncCacheLogVerbosity = verbosity
                           }
+          browseCache <- newAsyncCacheNF browseTable
+                          defaultAsyncCachePolicy {
+                            asyncCacheName = "browse packages",
+                            asyncCacheUpdateDelay  = serverCacheDelay,
+                            asyncCacheLogVerbosity = verbosity
+                          }
 
       registerHook itemUpdate $ \_ -> do
         prodAsyncCache mainCache  "item update"
         prodAsyncCache namesCache "item update"
+        prodAsyncCache browseCache "item update"
       registerHook packageChangeHook $ \_ -> do
         prodAsyncCache mainCache  "package change"
         prodAsyncCache namesCache "package change"
+        prodAsyncCache browseCache "package change"
 
       return feature
 
@@ -211,8 +220,9 @@ htmlFeature :: ServerEnv
             -> HtmlUtilities
             -> AsyncCache Response
             -> AsyncCache Response
+            -> AsyncCache BS.ByteString
             -> Templates
-            -> (HtmlFeature, IO Response, IO Response)
+            -> (HtmlFeature, IO Response, IO Response, IO BS.ByteString)
 
 htmlFeature env@ServerEnv{..}
             user
@@ -222,7 +232,7 @@ htmlFeature env@ServerEnv{..}
             -- [reverse index disabled] ReverseFeature{..}
             tags download
             rank
-            list@ListFeature{getAllLists}
+            list@ListFeature{getAllLists, makeItemList}
             names
             mirror distros
             docsCore docsCandidates
@@ -230,9 +240,9 @@ htmlFeature env@ServerEnv{..}
             reportsCore
             usersdetails
             utilities@HtmlUtilities{..}
-            cachePackagesPage cacheNamesPage
+            cachePackagesPage cacheNamesPage cacheBrowseTable
             templates
-  = (HtmlFeature{..}, packageIndex, packagesPage)
+  = (HtmlFeature{..}, packageIndex, packagesPage, browseTable)
   where
     htmlFeatureInterface = (emptyHackageFeature "html") {
         featureResources = htmlResources
@@ -245,6 +255,10 @@ htmlFeature env@ServerEnv{..}
          , CacheComponent {
              cacheDesc       = "packages page by name",
              getCacheMemSize = memSize <$> readAsyncCache cacheNamesPage
+           }
+         , CacheComponent {
+             cacheDesc       = "package browse page",
+             getCacheMemSize = memSize <$> readAsyncCache cacheBrowseTable
            }
          ]
       , featurePostInit = syncAsyncCache cachePackagesPage
@@ -269,8 +283,8 @@ htmlFeature env@ServerEnv{..}
                                       htmlPreferred
                                       cachePackagesPage
                                       cacheNamesPage
+                                      cacheBrowseTable
                                       templates
-                                      list
                                       names
     htmlUsers      = mkHtmlUsers      user usersdetails
     htmlUploads    = mkHtmlUploads    utilities upload
@@ -282,7 +296,7 @@ htmlFeature env@ServerEnv{..}
                                       candidates templates
     htmlPreferred  = mkHtmlPreferred  utilities core versions
     htmlTags       = mkHtmlTags       utilities core upload user list tags templates
-    htmlSearch     = mkHtmlSearch     utilities core list names templates
+    htmlSearch     = mkHtmlSearch     utilities core list names cacheBrowseTable templates
 
     htmlResources = concat [
         htmlCoreResources       htmlCore
@@ -417,6 +431,14 @@ htmlFeature env@ServerEnv{..}
                 ]
         return htmlpage
 
+    browseTable :: IO BS.ByteString
+    browseTable = do
+      pkgIndex <- queryGetPackageIndex
+      let packageNames = sortOn (map toLower . unPackageName) $ Pages.toPackageNames pkgIndex
+      pkgDetails <- makeItemList packageNames
+      let rowList = map makeRow pkgDetails
+          tabledata = "" +++ rowList +++ ""
+      return . BS.pack . showHtmlFragment $ tabledata
 
     {-
     -- Currently unused, mainly because not all web browsers use eager authentication-sending
@@ -463,14 +485,14 @@ mkHtmlCore :: ServerEnv
            -> HtmlPreferred
            -> AsyncCache Response
            -> AsyncCache Response
+           -> AsyncCache BS.ByteString
            -> Templates
-           -> ListFeature
            -> SearchFeature
            -> HtmlCore
 mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            utilities@HtmlUtilities{..}
            UserFeature{queryGetUserDb, checkAuthenticated}
-           CoreFeature{coreResource, queryGetPackageIndex}
+           CoreFeature{coreResource}
            VersionsFeature{ versionsResource
                           , queryGetDeprecatedFor
                           , queryGetPreferredInfo
@@ -489,8 +511,8 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            HtmlPreferred{..}
            cachePackagesPage
            cacheNamesPage
+           cacheBrowseTable
            templates
-           ListFeature{makeItemList}
            SearchFeature{..}
   = HtmlCore{..}
   where
@@ -536,6 +558,15 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
             resourceGet  = [("html", serveCabalRevisionsPage)]
           }
       ]
+
+    serveBrowsePage :: DynamicPath -> ServerPartE Response
+    serveBrowsePage _dpath = do
+      template <- getTemplate templates "table-interface.html"
+      tabledata <- readAsyncCache cacheBrowseTable
+      return $ toResponse $ template
+          [ "heading"   $= "All packages"
+          , templateUnescaped "tabledata" tabledata]
+
 
     -- Currently the main package page is thrown together by querying a bunch
     -- of features about their attributes for the given package. It'll need
@@ -593,7 +624,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
 
         return $ toResponse . template $
           -- IO-related items
-          [ "baseurl"           $= show (serverBaseURI)
+          [ "baseurl"           $= show (serverBaseURI { URI.uriScheme = "" })
           , "cabalVersion"      $= display cabalVersion
           , "tags"              $= (renderTags tags)
           , "versions"          $= (PagesNew.renderVersion realpkg
@@ -633,21 +664,6 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         [ "pkgname"  $= pkgname
         , "versions" $= map packageId pkgs
         ]
-
-    serveBrowsePage :: DynamicPath -> ServerPartE Response
-    serveBrowsePage _ = do
-      pkgIndex <- queryGetPackageIndex
-      let packageNames = sortOn (map toLower . unPackageName) $ Pages.toPackageNames pkgIndex
-      pkgDetails <- liftIO $ makeItemList packageNames
-      let rowList = map makeRow pkgDetails
-          tabledata = "" +++ rowList +++ ""
-      cacheControl [Public, maxAgeHours 1]
-                   (etagFromHash (PackageIndex.indexSize pkgIndex))
-      template <- getTemplate templates "table-interface.html"
-      return $ toResponse $ template
-        [ "heading"   $= "All packages"
-        , "content"   $= "A browsable index of all the packages"
-        , "tabledata" $= tabledata ]
 
     serveDistroMonitorPage :: DynamicPath -> ServerPartE Response
     serveDistroMonitorPage dpath = do
@@ -1364,10 +1380,10 @@ mkHtmlPreferred HtmlUtilities{..}
                   , intercalate ", " (map display deprs)]
         , toHtml "The version range given to this package, therefore, is " +++ strong (toHtml $ rendSumRange pref)
         , h4 << "Versions affected"
-        , paragraph << "Orange versions are normal versions. Green are those out of any preferred version ranges. Gray are deprecated."
-        , paragraph << (snd $ Pages.renderVersion
-                                  (PackageIdentifier pkgname $ nullVersion)
-                                  (classifyVersions prefInfo $ map packageVersion pkgs) Nothing)
+        , paragraph << "Green versions are normal versions. Yellow are those out of any preferred version ranges. Red are deprecated."
+        , paragraph ! [theclass "versions"] << snd (Pages.renderVersion
+                              (PackageIdentifier pkgname nullVersion)
+                              (classifyVersions prefInfo $ map packageVersion pkgs) Nothing)
         ]
 
     servePutPreferred :: DynamicPath -> ServerPartE Response
@@ -1674,12 +1690,14 @@ mkHtmlSearch :: HtmlUtilities
              -> CoreFeature
              -> ListFeature
              -> SearchFeature
+             -> AsyncCache BS.ByteString
              -> Templates
              -> HtmlSearch
 mkHtmlSearch HtmlUtilities{..}
              CoreFeature{..}
              ListFeature{makeItemList}
              SearchFeature{..}
+             cacheBrowseTable
              templates =
     HtmlSearch{..}
   where
@@ -1708,21 +1726,17 @@ mkHtmlSearch HtmlUtilities{..}
                 ]
 
           Just termsStr | terms <- words termsStr -> do
-            -- pkgIndex <- liftIO $ queryGetPackageIndex
-            -- currentTime <- liftIO $ getCurrentTime
-            pkgnames <- if null terms
-                        then fmap (sortOn (map toLower . unPackageName) . Pages.toPackageNames) queryGetPackageIndex
-                        else searchPackages terms
-            -- let (pageResults, moreResults) = splitAt limit (drop offset pkgnames)
-            pkgDetails <- liftIO $ makeItemList pkgnames
-
-            let rowList = map makeRow pkgDetails
-                tabledata = "" +++ rowList
+            tabledata <- if null terms
+                         then readAsyncCache cacheBrowseTable
+                         else do
+                           names <- searchPackages terms
+                           pkgDetails <- liftIO $ makeItemList names
+                           let rowList = map makeRow pkgDetails
+                           return . BS.pack . showHtmlFragment $ "" +++ rowList
             template <- getTemplate templates "table-interface.html"
             return $ toResponse $ template
               [ "heading"   $= toHtml (searchForm termsStr False)
-              , "content"   $= "A browsable index of all the packages"
-              , "tabledata" $= tabledata
+              , templateUnescaped "tabledata" tabledata
               , "footer"    $= alternativeSearchTerms termsStr]
 
           _ ->
