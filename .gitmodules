@@ -1,7 +1,7 @@
 [submodule "vendor/cabal"]
 	path = vendor/cabal
 	url = https://github.com/haskell/cabal.git
-	branch = 2.0
+	branch = 2.2
 
 [submodule "vendor/cabal-parsers"]
 	path = vendor/cabal-parsers
