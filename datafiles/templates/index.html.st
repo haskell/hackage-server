@@ -33,7 +33,7 @@ $hackagePageHeader()$
 </ul>
 <p>Guidelines for Hackage Packages:</p>
 <ul>
-<li><strong>Packages cannot be deleted</strong>, so you should consider uploading new package versions as <a href="/packages/candidates/upload">package candidates</a> and testing before publishing it to the main index.</li>
+<li><strong>Packages cannot be deleted</strong>, so you should consider uploading new package versions as <a href="/packages/candidates/upload">package candidates</a> and testing before publishing to the main index.</li>
 <li>All <a href="/upload#versioning_and_curation">curated</a> packages <abbr title="[RFC2119] The word 'should' is intended to denote that there may exist valid reasons in particular circumstances to ignore a particular item, but the full implications MUST be understood and carefully weighed before choosing a different course">should</abbr> follow the <a href="https://pvp.haskell.org/">Package Versioning Policy (PVP)</a>.</li>
 <li>Packages uploads may opt-out of curation through use of the <tt>x-curation</tt> field
 <li>Please consult the <a href="/upload">documentation for uploading packages</a> for more in-depth information about Hackage's policies, including the usage of the <tt>x-curation</tt> field.</li>
