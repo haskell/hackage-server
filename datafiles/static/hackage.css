@@ -224,7 +224,8 @@ div #properties {
     min-width:350px;
     background: #fefefe;
     width:25vw;
-    margin-left:12px;
+    margin-left:15px;
+    margin-bottom:15px;
 }
 
 div #description img {
@@ -245,7 +246,7 @@ table.properties td, table.properties th {
 }
 
 .word-wrap {
-        /* Warning: Needed for oldIE support, but words are broken up letter-by-letter */
+     /* Warning: Needed for oldIE support, but words are broken up letter-by-letter */
     -ms-word-break: break-all;
     word-break: break-all;
     /* Non standard for webkit */
@@ -254,7 +255,6 @@ table.properties td, table.properties th {
     -moz-hyphens: auto;
     -ms-hyphens: auto;
     hyphens: auto;
-
 }
 /* @end */
 
@@ -725,6 +725,17 @@ ul.links li form button {
 #module-list ul {
   list-style: none;
   margin: 0 0 0 2em;
+
+     /* Warning: Needed for oldIE support, but words are broken up letter-by-letter */
+    -ms-word-break: break-all;
+    word-break: break-all;
+    /* Non standard for webkit */
+    word-break: break-word;
+    -webkit-hyphens: auto;
+    -moz-hyphens: auto;
+    -ms-hyphens: auto;
+    hyphens: auto;
+
 }
 
 #detailed-dependencies ul {
@@ -865,14 +876,14 @@ ul.directory-list {
 
 /* Package versions */
 
+a.unpreferred[href]:link {
+    color: #ECBA13;
+}
+
+a.deprecated[href]:link {
+    color: #D00B3C;
+}
+
 .versions a.normal[href]:link {
     color: #61B01E;
-}
-
-.versions a.unpreferred[href]:link {
-    color: #FACC1F;
-}
-
-.versions a.deprecated[href]:link {
-    color: #E80C43;
 }
