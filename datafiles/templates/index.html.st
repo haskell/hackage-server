@@ -44,6 +44,12 @@ $hackagePageHeader()$
 
 <p>Guidelines for Hackage Packages:</p>
 <ul>
+<li>Hackage accepts uploads
+  of <a href="https://cabal.readthedocs.io/en/latest/intro.html#what-s-in-a-package">Cabal
+    packages</a></li>
+<li>Packages must be in the standard compressed tarball form produced by Cabal's
+<a href="http://www.haskell.org/cabal/users-guide/installing-packages.html#setup-sdist">sdist</a>
+command.</li>
 <li>All packages <abbr title="[RFC2119] The word 'should' is intended to denote that there may exist valid reasons in particular circumstances to ignore a particular item, but the full implications MUST be understood and carefully weighed before choosing a different course">should</abbr> follow the <a href="https://pvp.haskell.org/">Package Versioning Policy (PVP)</a>.</li>
 <li><strong>Packages cannot be deleted</strong>, so you should consider uploading new versions packages as a <a href="/packages/candidates/upload">package candidate</a> and testing before publishing it to the main index.</li>
 <li>Please consult the <a href="/upload">documentation for uploading packages</a> for more in-depth information about Hackage's policies.</li>
