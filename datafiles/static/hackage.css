@@ -879,11 +879,20 @@ ul.directory-list {
 a.unpreferred[href]:link {
     color: #ECBA13;
 }
+a.unpreferred[href]:visited {
+    color: #ECBA13;
+}
 
 a.deprecated[href]:link {
     color: #D00B3C;
 }
+a.deprecated[href]:visited {
+    color: #D00B3C;
+}
 
 .versions a.normal[href]:link {
+    color: #61B01E;
+}
+.versions a.normal[href]:visited {
     color: #61B01E;
 }
