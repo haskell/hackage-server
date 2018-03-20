@@ -319,7 +319,7 @@ moduleSection render mdocIndex docURL quickNav =
                 else [])
         renderDocIndexLink
           | isJust mdocIndex =
-            let docIndexURL = docURL </> "doc-index-All.html"
+            let docIndexURL = docURL </> "doc-index.html"
             in  paragraph ! [thestyle "font-size: small"]
                   << ("[" +++ anchor ! [href docIndexURL] << "Index" +++ "]" +++
                       (if quickNav
