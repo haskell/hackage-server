@@ -17,6 +17,10 @@ import Data.Set (Set)
 import qualified Data.IntSet as IntSet
 import Data.IntSet (IntSet)
 import Data.Sequence (Seq)
+import qualified Data.Bimap as Bimap
+import Data.Bimap (Bimap)
+import qualified Data.Graph as Gr
+import Data.Graph (Graph)
 import qualified Data.Foldable as Foldable
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
@@ -202,6 +206,11 @@ instance MemSize e => MemSize (V.Vector e) where
 memSizeUVector :: V.U.Unbox e => Int -> V.U.Vector e -> Int
 memSizeUVector sz a = 5 + (V.U.length a * sz) `div` wordSize
 
+instance (MemSize a, MemSize b) => MemSize (Bimap a b) where
+  memSize m = sum [ 6 + memSize k + memSize v | (k,v) <- Bimap.toList m ]
+
+instance MemSize Graph where
+  memSize m = sum [ 6 + memSize v | v <- Gr.edges m ]
 
 ----
 

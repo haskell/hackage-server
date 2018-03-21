@@ -46,6 +46,7 @@ data VersionsFeature = VersionsFeature {
 
     queryGetPreferredInfo :: forall m. MonadIO m => PackageName -> m PreferredInfo,
     queryGetDeprecatedFor :: forall m. MonadIO m => PackageName -> m (Maybe [PackageName]),
+    queryGetPreferredVersions :: forall m. MonadIO m => m PreferredVersions,
 
     versionsResource :: VersionsResource,
     deprecatedHook :: Hook (PackageName, Maybe [PackageName]) (),
@@ -150,6 +151,10 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
 
     queryGetDeprecatedFor :: MonadIO m => PackageName -> m (Maybe [PackageName])
     queryGetDeprecatedFor name = queryState preferredState (GetDeprecatedFor name)
+
+    queryGetPreferredVersions :: MonadIO m => m PreferredVersions
+    queryGetPreferredVersions = queryState preferredState GetPreferredVersions
+
 
     updateDeprecatedTags = do
       pkgs <- deprecatedMap <$> queryState preferredState GetPreferredVersions
