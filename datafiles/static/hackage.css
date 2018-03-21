@@ -220,9 +220,7 @@ pre + pre {
 /* @group properties */
 
 div #properties {
-    float:right;
     min-width:350px;
-    background: #fefefe;
     width:25vw;
     margin-left:15px;
     margin-bottom:15px;
@@ -302,11 +300,16 @@ table.properties td, table.properties th {
     display: inline-table;
     margin: 2px 1em 0 2em;
   }
+
+  #content {
+    flex-direction: row;
+  }
 }
 
 @media only screen and (max-width: 950px) {
   #content {
     width: 88vw;
+    flex-direction: column;
   }
 
   #page-header {
@@ -342,6 +345,7 @@ table.properties td, table.properties th {
   margin: 0 auto;
   padding: 0;
   padding-bottom: 1em;
+  display: flex
 }
 
 
