@@ -30,7 +30,7 @@ conforming to the <q>`cabal-version: 2.2`</q> cabal format version.
 Noteworthy new features enabled by <q>`cabal-version: 2.2`</q> are:
 
  - [<q>`common`</q> Stanzas](http://cabal.readthedocs.io/en/latest/developing-packages.html?highlight=elif#common-stanzas) for reducing duplication in package specifications.
- - [New <q>`build-type:`</q> defaulting](http://cabal.readthedocs.io/en/latest/developing-packages.html?highlight=elif#pkg-field-build-type) which infers `build-type:` for `Simple`/`Custom` automatically.
+ - [New <q>`build-type:`</q> defaulting](http://cabal.readthedocs.io/en/latest/developing-packages.html?highlight=elif#pkg-field-build-type) which infers <q>`build-type:`</q> for <q>`Simple`</q>/<q>`Custom`</q> automatically.
  - [New <q>`elif`</q> keyword](http://cabal.readthedocs.io/en/latest/developing-packages.html?highlight=elif#conditional-blocks).
  - The <q>`license:`</q> field now supports [SPDX license identifiers](https://spdx.org/licenses/).
  
