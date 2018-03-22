@@ -248,15 +248,14 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          uploadFeature
                          tagsFeature
 
-    {- [reverse index disabled]
     reverseFeature  <- mkReverseFeature
                          coreFeature
                          versionsFeature
-                         -}
+
 
     listFeature     <- mkListFeature
                          coreFeature
-                         -- [reverse index disabled] reverseFeature
+                         reverseFeature
                          downloadFeature
                          votesFeature
                          tagsFeature
@@ -277,7 +276,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          uploadFeature
                          candidatesFeature
                          versionsFeature
-                         -- [reverse index disabled] reverseFeature
+                         reverseFeature
                          tagsFeature
                          downloadFeature
                          votesFeature

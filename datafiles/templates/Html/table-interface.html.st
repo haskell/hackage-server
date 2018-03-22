@@ -21,6 +21,7 @@
                         <th><div style="width:100px">Name</div></th>
                         <th><div style="width:50px"><span title="(30 days)">DLs</span></div></th>
                         <th><div style="width:50px"><span title="(0-3)">Rating</span></div></th>
+                        <th><div style="width:50px">Rev Deps</div></th>
                         <th><div style="min-width:160px">Description</div></th>
 			<th><div style="width:140px">Tags</div></th>
 			<th><div style="width:80px">Last U/L</th>
