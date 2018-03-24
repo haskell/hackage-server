@@ -1,14 +1,8 @@
 <div id="page-header">
 
-$if(title)$
-  $title$
-$else$
   <a class="caption" href="/">Hackage :: [Package]</a>
-$endif$
 
 <ul class="links" id="page-menu">
-
-    <li><a href="/">Home</a></li>
 
     <li>
       <form action="/packages/search" method="get" class="search">
