@@ -11,9 +11,9 @@ html {
 
 body {
   background: #fefefe;
-  color: #221D30;
+  color: #333;
   text-align: left;
-  min-height: 100%;
+  min-height: 100vh;
   position: relative;
   -webkit-text-size-adjust: 100%;
   -webkit-font-feature-settings: "kern" 1;
@@ -28,16 +28,15 @@ table, ul {
 }
 
 ul li + li {
-	margin-top: 0.2rem;
+	margin-top: 0.4rem;
 }
 
 p {
-    margin-top: 0.6rem;
-    margin-bottom: 0.6rem;
+  margin-top: 0.7rem;
 }
 
 ul, ol {
-  margin: 0.8rem 0 0.8rem 2em;
+  margin: 0.8em 0 0.8em 2em;
 }
 
 dl {
@@ -66,7 +65,7 @@ a[href]:hover { text-decoration:underline; }
  */
 
 body, button {
-  font: 400 15px/1.5 'Open Sans', sans-serif;
+  font: 400 17px/1.37 'PT Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, sans-serif;
   *font-size:small; /* for IE */
   *font:x-small; /* for IE in quirks mode */
 }
@@ -129,22 +128,17 @@ pre, code, kbd, samp, .src {
 .caption, h1, h2, h3, h4, h5, h6 {
   font-weight: bold;
   color: #5E5184;
-  margin: 1rem 0 0.95rem 0;
-  line-height: 1.25rem;
+  margin: 1.5em 0 0.87em 0;
+  line-height: 1.05em;
 }
 
-h1:first-of-type {
+h1 {
     font-size: 2em;
-    line-height: 1em;
 }
 
 
-* + h1, * + h2, * + h3, * + h4, * + h5, * + h6 {
-  margin-top: 2em;
-}
-
-h1 + h2, h2 + h3, h3 + h4, h4 + h5, h5 + h6 {
-  margin-top: inherit;
+#content > h1, * + h1, * + h2, * + h3, * + h4, * + h5, * + h6 {
+  margin-top: 1.68em;
 }
 
 p + ul {
@@ -260,8 +254,19 @@ table.properties td, table.properties th {
 
 /* @group responsive */
 
-@media only screen and (min-width: 1280px) {
+@media only screen and (min-width: 1920px) {
+  #content {
+    width: 50vw;
+  }
+}
 
+@media only screen and (min-width: 1280px) and (max-width: 1919px) {
+  #content {
+    width: 60vw;
+  }
+}
+
+@media only screen and (min-width: 1280px) {
   #table-of-contents {
     position: fixed;
     left: 10px;
@@ -270,12 +275,11 @@ table.properties td, table.properties th {
   }
 
   #content {
-    width: 70vw;
     max-width: 1450px;
   }
 }
 
-@media only screen and (max-width: 1280px) {
+@media only screen and (max-width: 1279px) {
 
   div #description img {
     max-width:45%;
@@ -289,35 +293,45 @@ table.properties td, table.properties th {
 @media only screen and (min-width: 950px) {
   #page-header {
       text-align: left;
-      overflow: visible;
       white-space: nowrap;
-      display: inline-table;
-      width: 100%;
+      height: 40px;
+      padding: 4px 1.5em 0px 1.5em;
+
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+  }
+
+  #page-header .caption + ul.links {
+    margin-left: 1em;
   }
 
   #page-header ul.links {
     list-style: none;
-    text-align: left;
-    float: right;
     display: inline-table;
-    margin: 2px 1em 0 2em;
+    margin-top: 0px;
+    margin-bottom: 0px;
   }
 }
 
-@media only screen and (max-width: 950px) {
+@media only screen and (max-width: 949px) {
   #content {
     width: 88vw;
   }
 
   #page-header {
     text-align: center;
+    padding: 6px 1em 3px 1em;
   }
 
   #page-header ul.links {
-    float: none;
     display: block;
     text-align: center;
-    margin: 14px 0 0px 0;
+    margin: 0;
+  }
+
+  #page-header .caption + ul.links {
+    padding-top: 6px;
   }
 
 
@@ -341,15 +355,14 @@ table.properties td, table.properties th {
 #content {
   margin: 0 auto;
   padding: 0;
-  padding-bottom: 1em;
+  padding-bottom: 3em;
 }
 
 
 #page-header {
   background: #5E5184;
-  border-bottom: 0.35em solid rgba(69, 59, 97, 0.5);
+  border-bottom: 5px solid rgba(69, 59, 97, 0.5);
   color: #ddd;
-  padding: 0.6em 0 0.3em 0;
   position: relative;
   font-size: 1.2em;
   margin: 0 auto;
@@ -358,10 +371,14 @@ table.properties td, table.properties th {
 #page-header .caption {
   background: url(https://hackage.haskell.org/static/icons/ic_haskell_grayscale_32.svg) no-repeat 0em;
   color: white;
-  margin: 0 1em 0 2em;
+  margin: 0;
   font-weight: bold;
   font-style: normal;
   padding-left: 2.2em;
+  font-size: 1.1rem;
+}
+
+#page-header ul.links, #page-header ul.links button {
   font-size: 1rem;
 }
 
@@ -451,6 +468,9 @@ ul.links li form input {
   padding:1px;
   margin: 0px;
 	width: 8em;
+  border-radius: 3px;
+  background-color: rgba(255,255,255, 0.2);
+  color: #fff;
 }
 
 ul.links li form button {
