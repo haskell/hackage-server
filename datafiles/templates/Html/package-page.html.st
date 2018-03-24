@@ -56,23 +56,23 @@
 
         <tr>
           <th>License</th>
-          <td>$package.license$</td>
+          <td class="word-wrap">$package.license$</td>
         </tr>
 
         $if(package.optional.hasCopyright)$
         <tr>
           <th>Copyright</th>
-          <td>$package.optional.copyright$</td>
+          <td class="word-wrap">$package.optional.copyright$</td>
         </tr>
         $endif$
 
         <tr>
           <th>Author</th>
-          <td>$package.author$</td>
+          <td class="word-wrap">$package.author$</td>
         </tr>
         <tr>
           <th>Maintainer</th>
-          <td>$package.maintainer$</td>
+          <td class="word-wrap">$package.maintainer$</td>
         </tr>
 
         $if(hackage.hasUpdateTime)$
