@@ -150,7 +150,7 @@ ul + p {
 }
 
 ul.links li {
-  display: inline;
+  display: inline-block;
   white-space: nowrap;
   padding: 0;
 }
@@ -321,17 +321,35 @@ table.properties td, table.properties th {
 
   #page-header {
     text-align: center;
-    padding: 6px 1em 3px 1em;
+    padding: 6px 0px 4px 1em;
+    overflow: hidden;
   }
 
   #page-header ul.links {
     display: block;
     text-align: center;
     margin: 0;
+
+    /* Hide scrollbar but allow scrolling menu links horizontally */
+    white-space: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    margin-bottom: -17px;
+    height: 50px;
+  }
+
+  #page-header ul.links::-webkit-scrollbar {display:none;}
+
+  #page-header ul.links li:last-of-type {
+    /*
+    The last link of the menu should offer the same distance to the right
+    as the #page-header enforces at the left.
+    */
+    padding-right: 1em;
   }
 
   #page-header .caption + ul.links {
-    padding-top: 6px;
+    padding-top: 9px;
   }
 
 
@@ -461,7 +479,7 @@ div#style-menu-holder {
 /* @search box */
 
 ul.links li form {
-  display: inline;
+  display: inline-block;
 }
 ul.links li form input {
 	border:0px;
