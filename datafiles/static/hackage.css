@@ -213,14 +213,33 @@ pre + pre {
 
 /* @group properties */
 
-div #properties {
-    float:right;
-    min-width:350px;
-    background: #fefefe;
-    width:25vw;
-    margin-left:15px;
-    margin-bottom:15px;
+#properties table.properties {
+  table-layout: fixed;
+  width: 100%;
+  margin: 7px 0;
 }
+
+div#properties thead,
+div#properties tbody,
+div#properties tr,
+div#properties td,
+div#properties th {
+  display: block;
+}
+
+div#properties tr + tr {
+  padding-top: 0.33rem;
+}
+
+div#properties tr {
+  padding-bottom: 3px;
+}
+
+div#properties td {
+  padding-top: 0px;
+}
+
+
 
 div #description img {
     max-width:55%;
@@ -312,6 +331,14 @@ table.properties td, table.properties th {
     margin-top: 0px;
     margin-bottom: 0px;
   }
+
+  div #properties {
+      float:right;
+      background: #fefefe;
+      width: 30%;
+      margin-left: 2em;
+      margin-bottom: 2em;
+  }
 }
 
 @media only screen and (max-width: 949px) {
@@ -352,11 +379,9 @@ table.properties td, table.properties th {
     padding-top: 9px;
   }
 
-
   div #properties {
-      float:none;
-      width:75vw;
-      margin-left:0;
+      width: 100%;
+      margin: 1.3em 0;
   }
 
   div #description img {
@@ -879,11 +904,6 @@ table.fancy th {
 table.fancy td, table.properties td,
 table.fancy th, table.properties th {
   padding: 0.25em 0.5em;
-}
-
-table.properties tr th:first-child {
-  text-align: right;
-  padding-right: 12px;
 }
 
 table.dataTable.compact.fancy tbody th,
