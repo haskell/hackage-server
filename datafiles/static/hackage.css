@@ -28,7 +28,7 @@ table, ul {
 }
 
 ul li + li {
-	margin-top: 0.4rem;
+	margin-top: 0.2rem;
 }
 
 p {
@@ -219,24 +219,30 @@ pre + pre {
   margin: 7px 0;
 }
 
-div#properties thead,
-div#properties tbody,
-div#properties tr,
-div#properties td,
-div#properties th {
+div#properties table.properties thead,
+div#properties table.properties tbody,
+div#properties table.properties tr,
+div#properties table.properties td,
+div#properties table.properties th {
   display: block;
 }
 
-div#properties tr + tr {
+div#properties table.properties tr + tr {
   padding-top: 0.33rem;
+  clear: both;
 }
 
-div#properties tr {
+div#properties table.properties tr {
   padding-bottom: 3px;
 }
 
-div#properties td {
+div#properties table.properties td {
   padding-top: 0px;
+}
+
+div#properties table.properties .star-rating {
+  overflow: hidden;
+  padding: 2px 0;
 }
 
 
@@ -348,7 +354,7 @@ table.properties td, table.properties th {
 
   #page-header {
     text-align: center;
-    padding: 6px 0px 4px 1em;
+    padding: 6px 0 4px 0;
     overflow: hidden;
   }
 
@@ -365,7 +371,13 @@ table.properties td, table.properties th {
     height: 50px;
   }
 
-  #page-header ul.links::-webkit-scrollbar {display:none;}
+  #page-header ul.links::-webkit-scrollbar {
+    display: none;
+  }
+
+  #page-header ul.links li:first-of-type {
+    padding-left: 1em;
+  }
 
   #page-header ul.links li:last-of-type {
     /*
@@ -423,6 +435,10 @@ table.properties td, table.properties th {
 
 #page-header ul.links, #page-header ul.links button {
   font-size: 1rem;
+}
+
+#page-header ul.links li + li {
+  margin-top: 0px;
 }
 
 #page-header a:link, #page-header a:visited { color: white; }
@@ -788,7 +804,7 @@ ul.links li form button {
 
 #module-list ul {
   list-style: none;
-  margin: 0 0 0 2em;
+  margin: 0 0 0 20px;
 
      /* Warning: Needed for oldIE support, but words are broken up letter-by-letter */
     -ms-word-break: break-all;
@@ -799,16 +815,21 @@ ul.links li form button {
     -moz-hyphens: auto;
     -ms-hyphens: auto;
     hyphens: auto;
+}
 
+/* Disable identation for the top level modules */
+#modules #module-list > ul.modules {
+  margin-left: 0px;
+}
+
+#modules #module-list ul.modules > li > i {
+  padding-bottom: 0.33rem;
+  display: block;
 }
 
 #detailed-dependencies ul {
   list-style: none;
   margin: 0 0 0 2em;
-}
-
-#module-list li {
-/*  clear: right; */
 }
 
 #module-list span.collapser,
