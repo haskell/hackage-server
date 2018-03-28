@@ -31,6 +31,14 @@ ul li + li {
 	margin-top: 0.2rem;
 }
 
+ul + p {
+  margin-top: 0.93em;
+}
+
+p + ul {
+  margin-top: 0.5em;
+}
+
 p {
   margin-top: 0.7rem;
 }
@@ -65,7 +73,7 @@ a[href]:hover { text-decoration:underline; }
  */
 
 body, button {
-  font: 400 17px/1.37 'PT Sans',
+  font: 400 17px/1.43 'PT Sans',
     /* Fallback Font Stack */
     -apple-system,
 	  BlinkMacSystemFont,
@@ -137,25 +145,17 @@ pre, code, kbd, samp, .src {
 .caption, h1, h2, h3, h4, h5, h6 {
   font-weight: bold;
   color: #5E5184;
-  margin: 1.5em 0 0.87em 0;
+  margin: 1.33em 0 0.7em 0;
   line-height: 1.05em;
 }
 
 h1 {
-    font-size: 2em;
+  font-size: 2em;
 }
 
-
-#content > h1, * + h1, * + h2, * + h3, * + h4, * + h5, * + h6 {
-  margin-top: 1.68em;
-}
-
-p + ul {
-  margin-top: 0.75em;
-}
-
-ul + p {
-  margin-top: 1.5em;
+#content h1:first-of-type {
+  margin-top: 1.6em;
+  margin-bottom: 0.75em;
 }
 
 ul.links li {
@@ -226,6 +226,7 @@ pre + pre {
   table-layout: fixed;
   width: 100%;
   margin: 7px 0;
+  line-height: 1.2em;
 }
 
 div#properties table.properties thead,
@@ -236,9 +237,8 @@ div#properties table.properties th {
   display: block;
 }
 
-div#properties table.properties tr + tr {
-  padding-top: 0.33rem;
-  clear: both;
+div#properties table.properties td {
+  font-size: 1rem;
 }
 
 div#properties table.properties tr {
@@ -290,7 +290,7 @@ table.properties td, table.properties th {
 
 @media only screen and (min-width: 1920px) {
   #content {
-    width: 55vw;
+    width: 60vw;
   }
 }
 
@@ -350,7 +350,7 @@ table.properties td, table.properties th {
   div #properties {
       float:right;
       background: #fefefe;
-      width: 30%;
+      width: 40%;
       margin-left: 2em;
       margin-bottom: 2em;
   }
@@ -891,11 +891,6 @@ p.tip {
   border: 1px solid #d8d7ad;
   padding: 0.5em 1em;
   margin: 0.5em 0 1em 1em;
-/*
-  padding: 0.25em;
-  margin: 0.8em 0;
-  border-bottom: 0.25em solid white;
-*/
 }
 
 .embedded-author-content img {
@@ -933,7 +928,7 @@ table.fancy th {
 
 table.fancy td, table.properties td,
 table.fancy th, table.properties th {
-  padding: 0.25em 0.5em;
+  padding: 0.15em 0.45em;
 }
 
 table.dataTable.compact.fancy tbody th,
