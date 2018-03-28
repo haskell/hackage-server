@@ -65,8 +65,17 @@ a[href]:hover { text-decoration:underline; }
  */
 
 body, button {
-  font: 400 17px/1.37 'PT Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, sans-serif;
-  *font-size:small; /* for IE */
+  font: 400 17px/1.37 'PT Sans',
+    /* Fallback Font Stack */
+    -apple-system,
+	  BlinkMacSystemFont,
+    'Segoe UI',
+	  Roboto,
+	  Oxygen-Sans,
+	  Cantarell,
+	  'Helvetica Neue',
+    sans-serif;
+  *font-size: medium; /* for IE */
   *font:x-small; /* for IE in quirks mode */
 }
 
