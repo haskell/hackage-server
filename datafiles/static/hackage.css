@@ -290,13 +290,13 @@ table.properties td, table.properties th {
 
 @media only screen and (min-width: 1920px) {
   #content {
-    width: 50vw;
+    width: 55vw;
   }
 }
 
 @media only screen and (min-width: 1280px) and (max-width: 1919px) {
   #content {
-    width: 60vw;
+    width: 65vw;
   }
 }
 
