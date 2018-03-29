@@ -16,11 +16,11 @@ body {
   min-height: 100vh;
   position: relative;
   -webkit-text-size-adjust: 100%;
-  -webkit-font-feature-settings: "kern" 1;
-  -moz-font-feature-settings: "kern" 1;
-  -o-font-feature-settings: "kern" 1;
-  font-feature-settings: "kern" 1;
-  font-kerning: normal;
+  -webkit-font-feature-settings: "kern" 1, "liga" 0;
+  -moz-font-feature-settings: "kern" 1, "liga" 0;
+  -o-font-feature-settings: "kern" 1, "liga" 0;
+  font-feature-settings: "kern" 1, "liga" 0;
+  letter-spacing: 0.0015rem;
 }
 
 table, ul {
