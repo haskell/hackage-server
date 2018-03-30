@@ -43,7 +43,7 @@ hackagePageWith headExtra docTitle docSubtitle docContent bodyExtra =
     docHeader = [ navigationBar
                 , docSubtitle
                 ]
-    googleFontURL = "https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700"
+    googleFontURL = "https://fonts.googleapis.com/css?family=PT+Sans:400,400i,700"
 
 navigationBar :: Html
 navigationBar =
