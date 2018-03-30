@@ -32,6 +32,7 @@ import Distribution.Server.Packages.ModuleForest
 import Distribution.Server.Packages.Render
 import Distribution.Server.Users.Types (userStatus, userName, isActiveAccount)
 import Data.TarIndex (TarIndex)
+import qualified Data.TarIndex as Tar
 
 import qualified Distribution.ModuleName as Module
 import Distribution.ModuleName (ModuleName)
@@ -313,19 +314,20 @@ moduleSection render mdocIndex docURL quickNav =
                      , renderModuleForest docURL s ]
                 else []) ++
             (if not (null m)
-                then [ h2 << "Modules"
-                     , renderModuleForest docURL m ]
-                else []) ++
-            [renderDocIndexLink]
-        renderDocIndexLink
-          | isJust mdocIndex =
-            let docIndexURL = docURL </> "doc-index.html"
+                then [ h2 << "Modules"] ++
+                     [renderDocIndexLink] ++
+                     [renderModuleForest docURL m ]
+                else [])
+        renderDocIndexLink = case mdocIndex of
+          Just tindex ->
+            let docIndexURL | isJust (Tar.lookup tindex "doc-index-All.html") = docURL </> "doc-index-All.html"
+                            | otherwise = docURL </> "doc-index.html"
             in  paragraph ! [thestyle "font-size: small"]
                   << ("[" +++ anchor ! [href docIndexURL] << "Index" +++ "]" +++
                       (if quickNav
                        then " [" +++ anchor ! [identifier "quickjump-trigger", href "#"] << "Quick Jump" +++ "]"
                        else mempty))
-          | otherwise = mempty
+          Nothing -> mempty
 
 propertySection :: [(String, Html)] -> [Html]
 propertySection sections =
