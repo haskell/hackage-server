@@ -260,6 +260,21 @@ div #description img {
     max-width:55%;
 }
 
+div #description table {
+  border: 1px solid #ddd;
+  border-collapse: collapse;
+}
+
+div #description table tr td {
+    border: 1px solid #ddd;
+    padding: 0.15em 0.45em;
+}
+
+div #description table th {
+  padding: 0.15em 0.45em;
+  background: #f0f0f0;
+}
+
 table.properties td:first-child, table.properties th:first-child {
   padding-left: 0;
 }
