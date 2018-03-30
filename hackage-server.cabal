@@ -197,7 +197,7 @@ library lib-server
     Distribution.Server.Util.Histogram
     Distribution.Server.Util.CountingMap
     Distribution.Server.Util.CabalRevisions
-    Distribution.Server.Util.DocMeta              
+    Distribution.Server.Util.DocMeta
     Distribution.Server.Util.Parse
     Distribution.Server.Util.ServeTarball
     -- [unused] Distribution.Server.Util.TarIndex
@@ -345,7 +345,7 @@ library lib-server
                , ed25519               ^>= 0.0.5
                , hackage-security      ^>= 0.5.2
                , hackage-security-HTTP ^>= 0.1.1
-               , haddock-library       ^>= 1.4.5
+               , haddock-library       ^>= 1.5
                , happstack-server      ^>= 7.5
                , hashable              ^>= 1.2
                , hslogger              ^>= 1.2

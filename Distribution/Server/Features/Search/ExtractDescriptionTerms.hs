@@ -15,6 +15,7 @@ import qualified Data.Set as Set
 import Data.Char
 import qualified NLP.Tokenize as NLP
 import qualified NLP.Snowball as NLP
+import qualified Data.Foldable as F
 
 import qualified Documentation.Haddock.Markup as Haddock
 import Documentation.Haddock.Types
@@ -82,6 +83,7 @@ termsMarkup = Markup {
   markupOrderedList   = concat,
   markupDefList       = concatMap (\(d,t) -> d ++ t),
   markupCodeBlock     = const [],
+  markupTable         = concat . F.toList,
   markupHyperlink     = \(Hyperlink _url mLabel) -> maybeToList mLabel,
                         --TODO: extract main part of hostname
   markupAName         = const [],
