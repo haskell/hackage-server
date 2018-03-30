@@ -887,8 +887,7 @@ p.tip {
 }
 
 .embedded-author-content {
-  background: #faf9dc;
-  border: 1px solid #d8d7ad;
+  border-left: 1px solid #d8d7ad;
   padding: 0.5em 1em;
   margin: 0.5em 0 1em 1em;
 }
