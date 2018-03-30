@@ -38,6 +38,7 @@ import Distribution.Text
 import Distribution.Server.Util.ParseSpecVer
 import qualified Distribution.SPDX as SPDX
 import qualified Distribution.Compat.ReadP as Parse
+import qualified Distribution.License as OldLicense
 
 import Control.Monad.Except
          ( ExceptT, runExceptT, MonadError, throwError )
@@ -320,9 +321,9 @@ extraChecks genPkgDesc pkgId tarIndex = do
   mapM_ (warn . explanation) warnings
 
   -- Proprietary License check (only active in central-server branch)
-  unless (allowAllRightsReserved || isAcceptableLicense pkgDesc) $
-    throwError $ "This server does not accept packages with 'license' "
-              ++ "field set to e.g. AllRightsReserved. See "
+  unless (allowAllRightsReserved || isAcceptableLicense pkgDesc || isOldAcceptableLicense pkgDesc) $
+    throwError $ "This server does not accept packages with the given 'license' "
+              ++ "choice. See "
               ++ "https://hackage.haskell.org/upload for more information "
               ++ "about accepted licenses."
 
@@ -516,3 +517,12 @@ isAcceptableLicense = go . license
         goSimple (SPDX.ELicenseIdPlus _)   = False -- don't allow + licenses (use GPL-3.0-or-later e.g.)
         goSimple (SPDX.ELicenseId SPDX.CC0_1_0) = True -- CC0 isn't OSI approved, but we allow it as "PublicDomain", this is eg. PublicDomain in http://hackage.haskell.org/package/string-qq-0.0.2/src/LICENSE
         goSimple (SPDX.ELicenseId lid)     = SPDX.licenseIsOsiApproved lid -- allow only OSI approved licenses.
+
+-- | Extra license predicate
+-- We also allow earlier than 2.2 cabal files to have a cc0 license, since we no longer accept PublicDomain and don't want
+-- to force 2.2 on anyone who wants a comparable license.
+isOldAcceptableLicense :: PackageDescription -> Bool
+isOldAcceptableLicense = go . licenseRaw
+  where
+    go (Right (OldLicense.UnknownLicense "CC0-1.0")) = True
+    go _ = False
