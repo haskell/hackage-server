@@ -25,9 +25,7 @@ import Distribution.Package
          ( PackageIdentifier, packageVersion, packageName, PackageName )
 import Distribution.PackageDescription
          ( GenericPackageDescription(..), PackageDescription(..)
-         , allBuildInfo, allLibraries
-         , mixins, signatures, specVersion, license
-         )
+         , license, specVersion )
 import Distribution.PackageDescription.Configuration
          ( flattenPackageDescription )
 import Distribution.PackageDescription.Check
@@ -40,6 +38,7 @@ import Distribution.Text
 import Distribution.Server.Util.ParseSpecVer
 import qualified Distribution.SPDX as SPDX
 import qualified Distribution.Compat.ReadP as Parse
+import qualified Distribution.License as OldLicense
 
 import Control.Monad.Except
          ( ExceptT, runExceptT, MonadError, throwError )
@@ -75,7 +74,7 @@ import Text.Printf
 
 -- Whether to allow upload of "all rights reserved" packages
 allowAllRightsReserved :: Bool
-allowAllRightsReserved = True
+allowAllRightsReserved = False
 
 -- | Upload or check a tarball containing a Cabal package.
 -- Returns either an fatal error or a package description and a list
@@ -322,9 +321,9 @@ extraChecks genPkgDesc pkgId tarIndex = do
   mapM_ (warn . explanation) warnings
 
   -- Proprietary License check (only active in central-server branch)
-  unless (allowAllRightsReserved || isAcceptableLicense pkgDesc) $
-    throwError $ "This server does not accept packages with 'license' "
-              ++ "field set to e.g. AllRightsReserved. See "
+  unless (allowAllRightsReserved || isAcceptableLicense pkgDesc || isOldAcceptableLicense pkgDesc) $
+    throwError $ "This server does not accept packages with the given 'license' "
+              ++ "choice. See "
               ++ "https://hackage.haskell.org/upload for more information "
               ++ "about accepted licenses."
 
@@ -333,18 +332,6 @@ extraChecks genPkgDesc pkgId tarIndex = do
     throwError $ "Newly uploaded packages must not specify the 'x-revision' "
               ++ "field in their .cabal file. This is only used for "
               ++ "post-release revisions."
-
-  -- Check for experimental Backpack features
-  let usesBackpackInc  = any (not . null . mixins) (allBuildInfo pkgDesc)
-      usesBackpackSig  = any (not . null . signatures) (allLibraries pkgDesc)
-
-  when (usesBackpackInc || usesBackpackSig) $
-    throwError $ "Packages using experimental Backpack features "
-              ++ "(i.e. mixins or signatures) are not yet allowed on Hackage. "
-              ++ "Please use http://next.hackage.haskell.org:8080/ if you "
-              ++ "want to help testing Backpack in the meantime."
-
-  return ()
 
 -- Monad for uploading packages:
 --      WriterT for warning messages
@@ -530,3 +517,12 @@ isAcceptableLicense = go . license
         goSimple (SPDX.ELicenseIdPlus _)   = False -- don't allow + licenses (use GPL-3.0-or-later e.g.)
         goSimple (SPDX.ELicenseId SPDX.CC0_1_0) = True -- CC0 isn't OSI approved, but we allow it as "PublicDomain", this is eg. PublicDomain in http://hackage.haskell.org/package/string-qq-0.0.2/src/LICENSE
         goSimple (SPDX.ELicenseId lid)     = SPDX.licenseIsOsiApproved lid -- allow only OSI approved licenses.
+
+-- | Extra license predicate
+-- We also allow earlier than 2.2 cabal files to have a cc0 license, since we no longer accept PublicDomain and don't want
+-- to force 2.2 on anyone who wants a comparable license.
+isOldAcceptableLicense :: PackageDescription -> Bool
+isOldAcceptableLicense = go . licenseRaw
+  where
+    go (Right (OldLicense.UnknownLicense "CC0-1.0")) = True
+    go _ = False

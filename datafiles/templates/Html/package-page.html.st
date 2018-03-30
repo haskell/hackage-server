@@ -8,6 +8,12 @@
   <title>
     $package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$
   </title>
+  <meta name="twitter:card" content="summary" />
+  <meta property="og:url" content="$baseurl$/package/$package.name$" />
+  <meta property="og:title" content="$package.name$: $package.optional.synopsis$" />
+  <meta property="og:description" content="Install via `cabal&nbsp;install&nbsp;$package.name$`. $if(hasVotes)$
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#10; [rating:$score$/3(n=$votes$)]$endif$" />
+  <meta property="og:site_name" content="Hackage" />
   <link rel="canonical" href="$baseurl$/package/$package.name$" />
   <script src="/static/jquery.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript"></script>
@@ -182,7 +188,7 @@
         </tr>
         <tr>
           <th>Status</th>
-          <td>$buildStatus$</td>
+	  <td>$buildStatus$<br/><a href="https://matrix.hackage.haskell.org/package/$package.name$">Hackage Matrix CI</a></td>
         </tr>
       </tbody>
     </table>

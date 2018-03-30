@@ -42,7 +42,7 @@ import Data.Maybe
 --
 recentPage :: Users -> [PkgInfo] -> Html
 recentPage users pkgs =
-  let log_rows = map (makeRow users) (take 20 pkgs)
+  let log_rows = map (makeRow users) (take 25 pkgs)
       docBody = [XHtml.h2 << "Recent additions",
                  XHtml.table ! [XHtml.align "center"] << log_rows,
                  XHtml.anchor ! [XHtml.href recentRevisionsURL] << XHtml.toHtml "Recent revisions"]
@@ -84,17 +84,18 @@ makeRevisionRow users pkginfo =
   XHtml.tr <<
     [XHtml.td ! [XHtml.align "right"] <<
             [XHtml.toHtml (showTime time), nbsp, nbsp],
-     XHtml.td ! [XHtml.align "left"] << [XHtml.toHtml ("-r" ++ show (pkgNumRevisions pkginfo - 1)), nbsp, nbsp],
      XHtml.td ! [XHtml.align "left"] << display user,
      XHtml.td ! [XHtml.align "left"] <<
                   [nbsp, nbsp, XHtml.anchor !
-                           [XHtml.href (packageURL pkgid ++ "/revisions")] << display pkgid]]
+                           [XHtml.href (packageURL pkgid ++ "/revisions")] << revlabel]]
   where
     nbsp = XHtml.primHtmlChar "nbsp"
     user = Users.userIdToName users userId
 
     (time, userId) = pkgLatestUploadInfo pkginfo
     pkgid = pkgInfoId pkginfo
+    revno = "-r" ++ show (pkgNumRevisions pkginfo - 1)
+    revlabel = [XHtml.toHtml (display pkgid), XHtml.toHtml revno]
 
 showTime :: UTCTime -> String
 showTime = formatTime defaultTimeLocale "%c"

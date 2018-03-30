@@ -14,7 +14,10 @@ $hackagePageHeader()$
 <p>Package maintainers and Hackage trustees are allowed to edit certain bits
 of package metadata after a release, without uploading a new tarball.
 Note that the tarball itself is never changed, just the metadata that is
-stored separately.
+stored separately. For more information about metadata revisions, please
+refer to the
+<a href="https://github.com/haskell-infra/hackage-trustees/blob/master/revisions-information.md">Hackage Metadata Revisions FAQ</a>.
+</p>
 
 <table class="fancy" style="width: 100%">
   <tr>
@@ -25,7 +28,7 @@ stored separately.
   </tr>
   $revisions:{revision|
     <tr>
-      <td valign="top"><a href="/package/$pkgid$/revision/$revision.number$.cabal">#$revision.number$</a></td>
+      <td valign="top"><a href="/package/$pkgid$/revision/$revision.number$.cabal">-r$revision.number$</a></td>
       <td valign="top">$revision.time$</td>
       <td valign="top"><a href="/user/$revision.user$">$revision.user$</td>
       <td>
