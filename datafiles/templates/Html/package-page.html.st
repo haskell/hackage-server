@@ -37,6 +37,15 @@
     </div>
     $endif$
 
+    <div id="description">
+    $if(package.optional.hasDescription)$
+    $package.optional.description$
+    $endif$
+    $if(package.optional.hasReadme)$
+    <hr>
+    [<a href="#readme">Skip to Readme</a>]
+    $endif$
+    </div>
 
 
     <div id="properties">
@@ -62,23 +71,23 @@
 
         <tr>
           <th>License</th>
-          <td>$package.license$</td>
+          <td class="word-wrap">$package.license$</td>
         </tr>
 
         $if(package.optional.hasCopyright)$
         <tr>
           <th>Copyright</th>
-          <td>$package.optional.copyright$</td>
+          <td class="word-wrap">$package.optional.copyright$</td>
         </tr>
         $endif$
 
         <tr>
           <th>Author</th>
-          <td>$package.author$</td>
+          <td class="word-wrap">$package.author$</td>
         </tr>
         <tr>
           <th>Maintainer</th>
-          <td>$package.maintainer$</td>
+          <td class="word-wrap">$package.maintainer$</td>
         </tr>
 
         $if(hackage.hasUpdateTime)$
@@ -184,17 +193,6 @@
       </tbody>
     </table>
     </div> <!-- /properties -->
-
-    <div id="description">
-    $if(package.optional.hasDescription)$
-    $package.optional.description$
-    $endif$
-    $if(package.optional.hasReadme)$
-    <hr>
-    [<a href="#readme">Skip to Readme</a>]
-    $endif$
-    </div>
-
 
     <div id="modules">
       $moduleList$

@@ -35,6 +35,8 @@ import Data.Time.Format
          ( formatTime )
 import Data.Time.Locale.Compat
          ( defaultTimeLocale )
+import Data.Maybe
+         ( listToMaybe)
 
 -- | Takes a list of package info, in reverse order by timestamp.
 --
@@ -120,35 +122,36 @@ recentFeed users hostURI now pkgs = RSS
   "Recent additions"
   (hostURI { uriPath = recentAdditionsURL})
   desc
-  (channel now)
+  (channel updated)
   (map (releaseItem users hostURI) pkgList)
   where
     desc = "The 20 most recent additions to Hackage (or last 48 hours worth, whichever is greater), the Haskell package database."
     twoDaysAgo = addUTCTime (negate $ 60 * 60 * 48) now
     pkgListTwoDays = takeWhile (\p -> pkgLatestUploadTime p > twoDaysAgo) pkgs
     pkgList = if (length pkgListTwoDays > 20) then pkgListTwoDays else take 20 pkgs
-
+    updated = maybe now (fst . pkgOriginalUploadInfo) (listToMaybe pkgList)
 
 recentRevisionsFeed :: Users -> URI -> UTCTime -> [PkgInfo] -> RSS
 recentRevisionsFeed users hostURI now pkgs = RSS
   "Recent revisions"
   (hostURI { uriPath = recentRevisionsURL})
   desc
-  (channel now)
+  (channel updated)
   (map (revisionItem users hostURI) pkgList)
   where
     desc = "The 40 most recent revisions to cabal metadata in Hackage (or last 48 hours worth, whichever is greater), the Haskell package database."
     twoDaysAgo = addUTCTime (negate $ 60 * 60 * 48) now
     pkgListTwoDays = takeWhile (\p -> pkgLatestUploadTime p > twoDaysAgo) pkgs
     pkgList = if (length pkgListTwoDays > 40) then pkgListTwoDays else take 40 pkgs
+    updated = maybe now (fst . pkgOriginalUploadInfo) (listToMaybe pkgList)
 
 channel :: UTCTime -> [RSS.ChannelElem]
-channel now =
+channel updated =
   [ RSS.Language "en"
   , RSS.ManagingEditor email
   , RSS.WebMaster email
-  , RSS.ChannelPubDate now
-  , RSS.LastBuildDate   now
+  , RSS.ChannelPubDate updated
+  , RSS.LastBuildDate updated
   , RSS.Generator "rss-feed"
   ]
   where
