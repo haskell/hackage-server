@@ -31,6 +31,9 @@ hackagePageWith headExtra docTitle docSubtitle docContent bodyExtra =
                 , thelink ! [ rel "stylesheet"
                             , href stylesheetURL
                             , thetype "text/css"] << noHtml
+                , thelink ! [ rel "icon"
+                            , href faviconURL
+                            , thetype "image/png"] << noHtml
                 , meta ! [ name "viewport"
                          , content "width=device-width, initial-scale=1"]
                 -- if Search is enabled
@@ -43,7 +46,6 @@ hackagePageWith headExtra docTitle docSubtitle docContent bodyExtra =
     docHeader = [ docSubtitle
                 , navigationBar
                 ]
-    googleFontURL = "https://fonts.googleapis.com/css?family=PT+Sans:400,400i,700"
 
 navigationBar :: Html
 navigationBar =
@@ -59,8 +61,15 @@ navigationBar =
           , anchor ! [href accountsURL] << "User accounts"
           ]
 
+
+googleFontURL :: URL
+googleFontURL = "https://fonts.googleapis.com/css?family=PT+Sans:400,400i,700"
+
 stylesheetURL :: URL
 stylesheetURL = "/static/hackage.css"
+
+faviconURL :: URL
+faviconURL = "/static/favion.png"
 
 -- URL of the package list
 pkgListURL :: URL
