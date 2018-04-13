@@ -69,7 +69,7 @@ stylesheetURL :: URL
 stylesheetURL = "/static/hackage.css"
 
 faviconURL :: URL
-faviconURL = "/static/favion.png"
+faviconURL = "/static/favicon.png"
 
 -- URL of the package list
 pkgListURL :: URL
