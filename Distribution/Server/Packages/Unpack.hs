@@ -25,7 +25,7 @@ import Distribution.Package
          ( PackageIdentifier, packageVersion, packageName, PackageName )
 import Distribution.PackageDescription
          ( GenericPackageDescription(..), PackageDescription(..)
-         , license, specVersion )
+         , licenseRaw, specVersion )
 import Distribution.PackageDescription.Configuration
          ( flattenPackageDescription )
 import Distribution.PackageDescription.Check
@@ -37,6 +37,7 @@ import Distribution.Text
          ( Text(..), display, simpleParse )
 import Distribution.Server.Util.ParseSpecVer
 import qualified Distribution.SPDX as SPDX
+import qualified Distribution.License as License
 import qualified Distribution.Compat.ReadP as Parse
 
 import Control.Monad.Except
@@ -501,11 +502,12 @@ startsWithBOM bs = LBS.take 3 bs == LBS.pack [0xEF, 0xBB, 0xBF]
 --   OSI-accepted licenses or CC0
 --
 isAcceptableLicense :: PackageDescription -> Bool
-isAcceptableLicense = go . license
+isAcceptableLicense = either goSpdx goLegacy . licenseRaw
   where
-    go :: SPDX.License -> Bool
-    go SPDX.NONE = False
-    go (SPDX.License expr) = goExpr expr
+    -- `cabal-version: 2.2` and later
+    goSpdx :: SPDX.License -> Bool
+    goSpdx SPDX.NONE = False
+    goSpdx (SPDX.License expr) = goExpr expr
       where
         goExpr (SPDX.EAnd a b)            = goExpr a && goExpr b
         goExpr (SPDX.EOr a b)             = goExpr a || goExpr b
@@ -516,3 +518,7 @@ isAcceptableLicense = go . license
         goSimple (SPDX.ELicenseIdPlus _)   = False -- don't allow + licenses (use GPL-3.0-or-later e.g.)
         goSimple (SPDX.ELicenseId SPDX.CC0_1_0) = True -- CC0 isn't OSI approved, but we allow it as "PublicDomain", this is eg. PublicDomain in http://hackage.haskell.org/package/string-qq-0.0.2/src/LICENSE
         goSimple (SPDX.ELicenseId lid)     = SPDX.licenseIsOsiApproved lid -- allow only OSI approved licenses.
+
+    -- pre `cabal-version: 2.2`
+    goLegacy License.AllRightsReserved = False
+    goLegacy _                         = True
