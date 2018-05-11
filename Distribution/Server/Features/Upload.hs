@@ -264,8 +264,8 @@ uploadFeature ServerEnv{serverBlobStore = store}
         queryUserGroup        = queryState  uploadersState   GetUploadersList,
         addUserToGroup        = updateState uploadersState . AddHackageUploader,
         removeUserFromGroup   = updateState uploadersState . RemoveHackageUploader,
-        groupsAllowedToAdd    = [adminGroup],
-        groupsAllowedToDelete = [adminGroup]
+        groupsAllowedToAdd    = [adminGroup, trusteesGroup],
+        groupsAllowedToDelete = [adminGroup, trusteesGroup]
     }
 
     maintainersGroupDescription :: PackageName -> UserGroup
@@ -308,7 +308,6 @@ uploadFeature ServerEnv{serverBlobStore = store}
     -- This is the upload function. It returns a generic result for multiple formats.
     uploadPackage :: ServerPartE UploadResult
     uploadPackage = do
-        guardAuthorised_ [InGroup uploadersGroup]
         pkgIndex <- queryGetPackageIndex
         (uid, uresult, tarball) <- extractPackage $ \uid info ->
                                      processUpload pkgIndex uid info
@@ -335,8 +334,12 @@ uploadFeature ServerEnv{serverBlobStore = store}
     processUpload state uid res = do
         let pkg = packageId (uploadDesc res)
         pkgGroup <- queryUserGroup (maintainersGroup (packageName pkg))
+        ugroup <- queryUserGroup uploadersGroup
         case () of
-          _ | packageExists state pkg && not (uid `Group.member` pkgGroup)
+          _ | not (uid `Group.member` ugroup)
+           -> uploadError notUploadersGroup
+
+            | packageExists state pkg && not (uid `Group.member` pkgGroup)
            -> uploadError (notMaintainer pkg)
 
             | not (Group.null pkgGroup) && not (uid `Group.member` pkgGroup)
@@ -377,6 +380,10 @@ uploadFeature ServerEnv{serverBlobStore = store}
                      , MText $  ", then ask an existing maintainer to add you to the group. If "
                      ++ "this is a package name clash, please pick another name or talk to the "
                      ++ "maintainers of the existing package."
+                     ]
+        notUploadersGroup = [ MText $
+                        "You are not an authorized package uploader. Please contact the server "
+                     ++ "trustees to request to be added to the Uploaders group."
                      ]
 
     -- This function generically extracts a package, useful for uploading, checking,
@@ -442,4 +449,3 @@ packageIdExistsModuloNormalisedVersion pkgs pkg =
         n vs' = case dropWhileEnd (== 0) vs' of
             []   -> [0]
             vs'' -> vs''
-
