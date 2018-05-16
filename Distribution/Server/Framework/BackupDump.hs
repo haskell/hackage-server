@@ -28,7 +28,7 @@ import qualified Codec.Archive.Tar.Entry as Tar
 
 import Control.Exception as Exception
 import Control.Concurrent.MVar
-import Control.Concurrent.Async as Async
+import qualified Control.Concurrent.Async as Async
 
 import Control.Monad (liftM, forM, unless)
 import System.FilePath
