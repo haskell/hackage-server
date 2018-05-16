@@ -98,7 +98,7 @@ defaultServerConfig = do
                     },
     confListenOn  = ListenOn {
                         loPortNum = 8080,
-                        loIP = "0.0.0.0"
+                        loIP = "127.0.0.1"
                     },
     confStateDir  = "state",
     confStaticDir = dataDir,
