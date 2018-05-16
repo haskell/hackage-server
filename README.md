@@ -90,7 +90,7 @@ If you want to run the server directly from the build tree, run
 
 By default the server runs on port `8080` with the following settings:
 
-    URL:      http://localhost:8080/
+    URL:      http://0.0.0.0:8080/
     username: admin
     password: admin
 
