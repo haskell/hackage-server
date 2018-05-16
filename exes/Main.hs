@@ -248,7 +248,7 @@ runCommand =
           flagRunPort (\v flags -> flags { flagRunPort = v })
           (reqArgFlag "PORT")
       , option [] ["ip"]
-          "IPv4 address to listen on (default 0.0.0.0)"
+          "IPv4 address to listen on (default 127.0.0.1)"
           flagRunIP (\v flags -> flags { flagRunIP = v })
           (reqArgFlag "IP")
       , option [] ["base-uri"]
