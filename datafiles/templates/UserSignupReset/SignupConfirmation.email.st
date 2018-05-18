@@ -8,7 +8,7 @@ this link:
 
 After your account is created, you cannot upload until you
 contact the hackage admins at admin@hackage.haskell.org and
-send an email requesting to be added to the uploader group.
+send an email (including your login username) requesting to be added to the uploader group.
 (This measure is unfortunately necessary to prevent spam accounts).
 
 If you were not expecting this email, our apologies,
