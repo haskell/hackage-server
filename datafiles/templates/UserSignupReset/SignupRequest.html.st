@@ -53,7 +53,7 @@ uploader group.
 <p class="registration-email">
 After your account is created, you cannot upload until you
 <b>contact the hackage admins</b> at admin@hackage.haskell.org and
-<b>send an email</b> requesting to be added to the uploader group.
+<b>send an email</b> (including your login username) requesting to be added to the uploader group.
 (This measure is unfortunately necessary to prevent spam accounts).
 </p>
 
