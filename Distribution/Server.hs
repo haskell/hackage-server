@@ -93,7 +93,7 @@ defaultServerConfig = do
   return ServerConfig {
     confVerbosity = Verbosity.normal,
     confHostUri   = nullURI {
-                      uriScheme    = "http:",
+                      uriScheme    = "https:",
                       uriAuthority = Just (URIAuth "" hostName (':' : show portnum))
                     },
     confListenOn  = ListenOn {
