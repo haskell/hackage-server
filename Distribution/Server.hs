@@ -103,7 +103,7 @@ defaultServerConfig = do
     confStateDir  = "state",
     confStaticDir = dataDir,
     confTmpDir    = "state" </> "tmp",
-    confCacheDelay= 0,
+    confCacheDelay= 60,
     confLiveTemplates = False
   }
 
