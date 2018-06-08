@@ -353,7 +353,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
            -> case (packageExists state pkg, PackageIndex.searchByName state (unPackageName . pkgName $ pkg)) of
                 (False,PackageIndex.Unambiguous (mp:_)) -> do
                       group <- (queryUserGroup . maintainersGroup . packageName) mp
-                      if uid `Group.member` group
+                      if not $ uid `Group.member` group
                          then uploadError (caseClash [mp])
                          else return Nothing
 
@@ -394,9 +394,9 @@ uploadFeature ServerEnv{serverBlobStore = store}
                      ++ "maintainers of the existing package."
                      ]
         caseClash pkgs = [MText $
-                         "Package(s) with the same name as this package, modulo case already exist:"
-                      ++ intercalate ", " (map (display . packageName) pkgs) ++ "."
-                      ++ "You may only upload new packages which case-clash with existing packages"
+                         "Package(s) with the same name as this package, modulo case, already exist:"
+                      ++ intercalate ", " (map (display . packageName) pkgs) ++ ". "
+                      ++ "You may only upload new packages which case-clash with existing packages "
                       ++ "if you are a maintainer of one of the existing packages. Please pick another name."]
 
     -- This function generically extracts a package, useful for uploading, checking,
