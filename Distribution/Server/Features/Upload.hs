@@ -323,7 +323,10 @@ uploadFeature ServerEnv{serverBlobStore = store}
              -- make package maintainers group for new package
             let existedBefore = packageExists pkgIndex pkgid
             when (not existedBefore) $
-                liftIO $ addUserToGroup (maintainersGroup (packageName pkgid)) uid
+                let group = maintainersGroup (packageName pkgid)
+                liftIO $ addUserToGroup group uid
+                runHook_ groupChangedHook (groupDesc group, True,uid,uid,"initial upload")
+
             return uresult
           -- this is already checked in processUpload, and race conditions are highly unlikely but imaginable
           else errForbidden "Upload failed" [MText "Package already exists."]
@@ -442,4 +445,3 @@ packageIdExistsModuloNormalisedVersion pkgs pkg =
         n vs' = case dropWhileEnd (== 0) vs' of
             []   -> [0]
             vs'' -> vs''
-

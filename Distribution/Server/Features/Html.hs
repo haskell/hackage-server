@@ -195,6 +195,8 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
         prodAsyncCache mainCache  "package change"
         prodAsyncCache namesCache "package change"
         prodAsyncCache browseCache "package change"
+      registerHook groupChangedHook $ \_ -> do
+        prodAsyncCache browseCache "package change"
 
       return feature
 
