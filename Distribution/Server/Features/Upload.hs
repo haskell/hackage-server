@@ -322,7 +322,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
           then do
              -- make package maintainers group for new package
             let existedBefore = packageExists pkgIndex pkgid
-            when (not existedBefore) $
+            when (not existedBefore) $ do
                 let group = maintainersGroup (packageName pkgid)
                 liftIO $ addUserToGroup group uid
                 runHook_ groupChangedHook (groupDesc group, True,uid,uid,"initial upload")
