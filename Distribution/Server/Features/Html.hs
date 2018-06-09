@@ -135,7 +135,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    ]
 
 
-    return $ \user core@CoreFeature{packageChangeHook}
+    return $ \user@UserFeature{groupChangedHook} core@CoreFeature{packageChangeHook}
               packages upload
               candidates versions
               -- [reverse index disabled] reverse
