@@ -135,7 +135,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    ]
 
 
-    return $ \user core@CoreFeature{packageChangeHook}
+    return $ \user@UserFeature{groupChangedHook} core@CoreFeature{packageChangeHook}
               packages upload
               candidates versions
               -- [reverse index disabled] reverse
@@ -194,6 +194,8 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
       registerHook packageChangeHook $ \_ -> do
         prodAsyncCache mainCache  "package change"
         prodAsyncCache namesCache "package change"
+        prodAsyncCache browseCache "package change"
+      registerHook groupChangedHook $ \_ -> do
         prodAsyncCache browseCache "package change"
 
       return feature
