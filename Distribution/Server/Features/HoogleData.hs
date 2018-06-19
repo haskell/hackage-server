@@ -41,7 +41,7 @@ import System.IO.Unsafe (unsafeInterleaveIO)
 import System.Directory
 import System.FilePath
 import Control.Concurrent.MVar
-import Control.Concurrent.Async
+import Control.Concurrent.Async (async, wait)
 import Control.Exception
 import qualified System.IO.Error as IOError
 

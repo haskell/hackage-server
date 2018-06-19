@@ -329,7 +329,7 @@ library lib-server
                , QuickCheck            ^>= 2.9
                , acid-state            ^>= 0.14
                , aeson                 ^>= 1.1
-               , async                 ^>= 2.1
+               , async                 ^>= 2.2.1
                , attoparsec            ^>= 0.13
                , base16-bytestring     ^>= 0.1
                , base64-bytestring     ^>= 1.0

@@ -26,7 +26,7 @@ import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Data.Maybe (fromMaybe)
-import Data.List (dropWhileEnd)
+import Data.List (dropWhileEnd, intercalate)
 import Data.Time.Clock (getCurrentTime)
 import Data.Function (fix)
 import Data.ByteString.Lazy (ByteString)
@@ -352,7 +352,22 @@ uploadFeature ServerEnv{serverBlobStore = store}
            -> uploadError normVerExists
 
             | otherwise
-           -> return Nothing
+              -- check for new packages that case-clash with existing ones
+           -> case (packageExists state pkg, PackageIndex.searchByName state (unPackageName . pkgName $ pkg)) of
+                (False,PackageIndex.Unambiguous (mp:_)) -> do
+                      group <- (queryUserGroup . maintainersGroup . packageName) mp
+                      if not $ uid `Group.member` group
+                         then uploadError (caseClash [mp])
+                         else return Nothing
+
+                (False,PackageIndex.Ambiguous mps) -> do
+                      let matchingPackages = concat . map (take 1) $ mps
+                      groups <- mapM (queryUserGroup . maintainersGroup . packageName) matchingPackages
+                      if not . any (uid `Group.member`) $ groups
+                         then uploadError (caseClash matchingPackages)
+                         else return Nothing
+
+                _ -> return Nothing
       where
         uploadError = return . Just . ErrorResponse 403 [] "Upload failed"
         versionExists = [ MText $
@@ -385,6 +400,11 @@ uploadFeature ServerEnv{serverBlobStore = store}
                         "You are not an authorized package uploader. Please contact the server "
                      ++ "trustees to request to be added to the Uploaders group."
                      ]
+        caseClash pkgs = [MText $
+                         "Package(s) with the same name as this package, modulo case, already exist:"
+                      ++ intercalate ", " (map (display . packageName) pkgs) ++ ". "
+                      ++ "You may only upload new packages which case-clash with existing packages "
+                      ++ "if you are a maintainer of one of the existing packages. Please pick another name."]
 
     -- This function generically extracts a package, useful for uploading, checking,
     -- and anything else in the standard user-upload pipeline.
