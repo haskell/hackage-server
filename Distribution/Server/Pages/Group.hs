@@ -39,8 +39,8 @@ groupBody users baseUri (addUri, removeUri) desc =
           , toHtml "]"
           ]
       ]
-  , listGroup users (if removeUri then Just baseUri else Nothing)
   , if addUri then concatHtml $ addUser baseUri else noHtml
+  , listGroup users (if removeUri then Just baseUri else Nothing)
   ]
 
 addUser :: String -> [Html]
