@@ -1,4 +1,4 @@
-{-# LANGUAGE RecursiveDo, FlexibleContexts, RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE RecursiveDo, FlexibleContexts, RankNTypes, NamedFieldPuns, RecordWildCards, LambdaCase #-}
 module Distribution.Server.Features.Html (
     HtmlFeature(..),
     initHtmlFeature
@@ -1152,10 +1152,11 @@ mkHtmlCandidates HtmlUtilities{..}
     servePublishForm :: DynamicPath -> ServerPartE Response
     servePublishForm dpath = do
       candidate <- packageInPath dpath >>= lookupCandidateId
-      guardAuthorisedAsMaintainer (packageName candidate)
+      uid <- guardAuthorisedAsMaintainer (packageName candidate)
+
       let pkgid = packageId candidate
       packages <- queryGetPackageIndex
-      case checkPublish packages candidate of
+      checkPublish uid packages candidate >>= \case
           Just err -> throwError err
           Nothing  -> do
               return $ toResponse $ Resource.XHtml $ hackagePage "Publishing candidates"

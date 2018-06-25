@@ -26,7 +26,7 @@ import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Data.Maybe (fromMaybe)
-import Data.List (dropWhileEnd, intercalate)
+import Data.List (dropWhileEnd, intersperse)
 import Data.Time.Clock (getCurrentTime)
 import Data.Function (fix)
 import Data.ByteString.Lazy (ByteString)
@@ -59,7 +59,7 @@ data UploadFeature = UploadFeature {
     maintainersGroup   :: PackageName -> UserGroup,
 
     -- | Requiring being logged in as the maintainer of a package.
-    guardAuthorisedAsMaintainer          :: PackageName -> ServerPartE (),
+    guardAuthorisedAsMaintainer          :: PackageName -> ServerPartE Users.UserId,
     -- | Requiring being logged in as the maintainer of a package or a trustee.
     guardAuthorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE (),
 
@@ -294,9 +294,9 @@ uploadFeature ServerEnv{serverBlobStore = store}
     uploaderDescription :: GroupDescription
     uploaderDescription = nullDescription { groupTitle = "Package uploaders", groupPrologue = "Package uploaders are allowed to upload packages. Note that if a package already exists then you also need to be in the maintainer group for that package." }
 
-    guardAuthorisedAsMaintainer :: PackageName -> ServerPartE ()
+    guardAuthorisedAsMaintainer :: PackageName -> ServerPartE Users.UserId
     guardAuthorisedAsMaintainer pkgname =
-      guardAuthorised_ [InGroup (maintainersGroup pkgname)]
+      guardAuthorised [InGroup (maintainersGroup pkgname)]
 
     guardAuthorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE ()
     guardAuthorisedAsMaintainerOrTrustee pkgname =
@@ -404,9 +404,12 @@ uploadFeature ServerEnv{serverBlobStore = store}
                      ++ "trustees to request to be added to the Uploaders group."
                      ]
         caseClash pkgs = [MText $
-                         "Package(s) with the same name as this package, modulo case, already exist:"
-                      ++ intercalate ", " (map (display . packageName) pkgs) ++ ". "
-                      ++ "You may only upload new packages which case-clash with existing packages "
+                         "Package(s) with the same name as this package, modulo case, already exist: "
+                         ]
+                      ++ intersperse (MText ", ") [ MLink pn ("/package/" ++ pn)
+                                                  | pn <- map (display . packageName) pkgs ]
+                      ++ [MText $
+                         ".\n\nYou may only upload new packages which case-clash with existing packages "
                       ++ "if you are a maintainer of one of the existing packages. Please pick another name."]
 
     -- This function generically extracts a package, useful for uploading, checking,
