@@ -53,6 +53,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS8
 import qualified Data.Char as Char
 import qualified Data.Semigroup as S
+import qualified Data.Monoid as M
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 import Data.Foldable (foldMap)
@@ -99,7 +100,7 @@ instance S.Semigroup Severity where
     Trivial <> x = x
 
 -- | "Max" monoid.
-instance S.Monoid Severity where
+instance M.Monoid Severity where
     mempty = Trivial
     mappend = (S.<>)
 
