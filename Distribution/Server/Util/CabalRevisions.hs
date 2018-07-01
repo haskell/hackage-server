@@ -53,6 +53,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS8
 import qualified Data.Char as Char
 import qualified Data.Semigroup as S
+import qualified Data.Monoid as M
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 import Data.Foldable (foldMap)
@@ -99,7 +100,7 @@ instance S.Semigroup Severity where
     Trivial <> x = x
 
 -- | "Max" monoid.
-instance S.Monoid Severity where
+instance M.Monoid Severity where
     mempty = Trivial
     mappend = (S.<>)
 
@@ -608,9 +609,14 @@ checkBenchmark componentName
 
 checkBuildInfo :: ComponentName -> Check BuildInfo
 checkBuildInfo componentName biA biB = do
+    -- @other-extension@
     changesOkSet ("'other-extensions' in " ++ showComponentName componentName ++ " component")
               display
               (Set.fromList $ otherExtensions biA) (Set.fromList $ otherExtensions biB)
+
+    -- @buildable@
+    changesOk ("'buildable' in " ++ showComponentName componentName ++ " component") display
+              (buildable biA) (buildable biB)
 
     -- @build-tool-depends@
     checkDependencies componentName
@@ -629,8 +635,8 @@ checkBuildInfo componentName biA biB = do
 
     checkSame "Cannot change build information \
               \(just the dependency version constraints)"
-              (biA { targetBuildDepends = [], otherExtensions = [], buildTools = [], buildToolDepends = [], pkgconfigDepends = [] })
-              (biB { targetBuildDepends = [], otherExtensions = [], buildTools = [], buildToolDepends = [], pkgconfigDepends = [] })
+              (biA { targetBuildDepends = [], otherExtensions = [], buildTools = [], buildToolDepends = [], pkgconfigDepends = [], buildable = True })
+              (biB { targetBuildDepends = [], otherExtensions = [], buildTools = [], buildToolDepends = [], pkgconfigDepends = [], buildable = True })
 
 changesOk' :: Eq a => Severity -> String -> (a -> String) -> Check a
 changesOk' rel what render a b
