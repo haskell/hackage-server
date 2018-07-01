@@ -609,9 +609,14 @@ checkBenchmark componentName
 
 checkBuildInfo :: ComponentName -> Check BuildInfo
 checkBuildInfo componentName biA biB = do
+    -- @other-extension@
     changesOkSet ("'other-extensions' in " ++ showComponentName componentName ++ " component")
               display
               (Set.fromList $ otherExtensions biA) (Set.fromList $ otherExtensions biB)
+
+    -- @buildable@
+    changesOk ("'buildable' in " ++ showComponentName componentName ++ " component") display
+              (buildable biA) (buildable biB)
 
     -- @build-tool-depends@
     checkDependencies componentName
@@ -630,8 +635,8 @@ checkBuildInfo componentName biA biB = do
 
     checkSame "Cannot change build information \
               \(just the dependency version constraints)"
-              (biA { targetBuildDepends = [], otherExtensions = [], buildTools = [], buildToolDepends = [], pkgconfigDepends = [] })
-              (biB { targetBuildDepends = [], otherExtensions = [], buildTools = [], buildToolDepends = [], pkgconfigDepends = [] })
+              (biA { targetBuildDepends = [], otherExtensions = [], buildTools = [], buildToolDepends = [], pkgconfigDepends = [], buildable = True })
+              (biB { targetBuildDepends = [], otherExtensions = [], buildTools = [], buildToolDepends = [], pkgconfigDepends = [], buildable = True })
 
 changesOk' :: Eq a => Severity -> String -> (a -> String) -> Check a
 changesOk' rel what render a b
