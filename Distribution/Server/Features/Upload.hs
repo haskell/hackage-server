@@ -308,6 +308,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
     -- This is the upload function. It returns a generic result for multiple formats.
     uploadPackage :: ServerPartE UploadResult
     uploadPackage = do
+        guardAuthorised_ [AnyKnownUser]
         pkgIndex <- queryGetPackageIndex
         (uid, uresult, tarball) <- extractPackage $ \uid info ->
                                      processUpload pkgIndex uid info
