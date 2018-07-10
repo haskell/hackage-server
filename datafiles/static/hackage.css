@@ -211,7 +211,7 @@ pre + pre {
 
 blockquote {
   border-left: 3px solid #c7a5d3;
-  background: #eee4f1;
+  background-color: #eee4f1;
   margin: 0.5em;
   padding: 0.0005em 0.3em 0.5em 0.5em;
 }
