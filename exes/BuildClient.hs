@@ -654,13 +654,16 @@ buildPackage verbosity opts config docInfo = do
              -- Link "Contents" to the package page:
              "--haddock-contents-location=" ++ pkg_url,
              -- Link to colourised source code:
-             "--haddock-hyperlink-source",
+             -- "--haddock-hyperlink-source",            old highlighter (disabled)
+             "--haddock-option=--hyperlinked-source", -- new highlighter
              "--prefix=" ++ installDirectory opts,
              "--build-summary=" ++ installDirectory opts </> "reports" </> "$pkgid.report",
              "--report-planning-failure",
              -- We want both html documentation and hoogle database generated
              "--haddock-html",
              "--haddock-hoogle",
+             -- Generate the quickjump.json index files
+             "--haddock-option=--quickjump",
              -- For candidates we need to use the full URL, because
              -- otherwise cabal-install will not find the package.
              -- For regular packages however we need to use just the
