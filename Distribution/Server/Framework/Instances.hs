@@ -178,6 +178,7 @@ instance SafeCopy  Arch where
     putCopy M68k          = contain $ putWord8 14
     putCopy Vax           = contain $ putWord8 15
     putCopy JavaScript    = contain $ putWord8 16
+    putCopy AArch64       = contain $ putWord8 17
 
     getCopy = contain $ do
       tag <- getWord8
@@ -199,6 +200,7 @@ instance SafeCopy  Arch where
         14 -> return M68k
         15 -> return Vax
         16 -> return JavaScript
+        17 -> return AArch64
         _  -> fail "SafeCopy Arch getCopy: unexpected tag"
 
 instance SafeCopy CompilerFlavor where
@@ -216,6 +218,7 @@ instance SafeCopy CompilerFlavor where
     putCopy UHC               = contain $ putWord8 9
     putCopy (HaskellSuite s)  = contain $ putWord8 10 >> safePut s
     putCopy GHCJS             = contain $ putWord8 11
+    putCopy Eta               = contain $ putWord8 12
 
     getCopy = contain $ do
       tag <- getWord8
@@ -232,6 +235,7 @@ instance SafeCopy CompilerFlavor where
         9  -> return UHC
         10 -> return HaskellSuite <*> safeGet
         11 -> return GHCJS
+        12 -> return Eta
         _  -> fail "SafeCopy CompilerFlavor getCopy: unexpected tag"
 
 

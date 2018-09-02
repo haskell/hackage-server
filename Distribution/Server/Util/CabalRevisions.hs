@@ -255,7 +255,6 @@ checkPackageDescriptions
      , description     = descriptionA
      , category        = categoryA
      , customFieldsPD  = customFieldsPDA
-     , buildDepends    = _buildDependsA
      , buildTypeRaw    = buildTypeRawA
      , setupBuildInfo  = setupBuildInfoA
      , library         = _libraryA
@@ -288,7 +287,6 @@ checkPackageDescriptions
      , description     = descriptionB
      , category        = categoryB
      , customFieldsPD  = customFieldsPDB
-     , buildDepends    = _buildDependsB
      , buildTypeRaw    = buildTypeRawB
      , setupBuildInfo  = setupBuildInfoB
      , library         = _libraryB
