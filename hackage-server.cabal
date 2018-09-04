@@ -27,7 +27,7 @@ copyright:    2008-2015 Duncan Coutts,
 license:      BSD-3-Clause
 license-file: LICENSE
 
-tested-with: GHC==8.2.1, GHC==8.0.2, GHC==7.10.3, GHC==7.8.4, GHC==7.6.3
+tested-with: GHC==8.2.2, GHC==8.0.2, GHC==7.10.3, GHC==7.8.4, GHC==7.6.3
 
 data-dir: datafiles
 data-files:
@@ -84,6 +84,8 @@ flag cabal-parsers
   manual: True
   default: False
 
+----------------------------------------------------------------------------
+
 common defaults
   default-language: Haskell2010
 
@@ -125,6 +127,9 @@ common defaults
 
   if impl(ghc >= 8.2)
     ghc-options: -Werror=incomplete-patterns
+
+  other-extensions: CPP, TemplateHaskell
+
 
 library lib-server
   import: defaults
@@ -337,45 +342,48 @@ library lib-server
 
   -- Except for GHC-bundled libraries (see above), it's more easier/managable from
   -- a maintainance POV to support only single major-version-ranges
-  build-depends: HStringTemplate       ^>= 0.8
-               , HTTP                  ^>= 4000.3.6
-               , QuickCheck            ^>= 2.9
-               , acid-state            ^>= 0.14
-               , async                 ^>= 2.2.1
-               , attoparsec            ^>= 0.13
-               , base16-bytestring     ^>= 0.1
-               , base64-bytestring     ^>= 1.0
-                 --NOTE: blaze-builder-0.4 is now a compat package that uses bytestring-0.10 builder
-               , blaze-builder         ^>= 0.4
-               , blaze-html            ^>= 0.9
-               , cereal                ^>= 0.5
-               , cheapskate            ^>= 0.1
-               , cryptohash-md5        ^>= 0.11.100
-               , cryptohash-sha256     ^>= 0.11.100
-               , csv                   ^>= 0.1
-               , ed25519               ^>= 0.0.5
-               , hackage-security      ^>= 0.5.2
-               , hackage-security-HTTP ^>= 0.1.1
-               , haddock-library       ^>= 1.5
-               , happstack-server      ^>= 7.5
-               , hashable              ^>= 1.2
-               , hslogger              ^>= 1.2
-               , lifted-base           ^>= 0.2.1
-               , mime-mail             ^>= 0.4
-               , random                ^>= 1.1
-               , rss                   ^>= 3000.2.0.3
-               , safecopy              ^>= 0.9.1
-               , semigroups            ^>= 0.18.3
-               , split                 ^>= 0.2
-               , stm                   ^>= 2.4
-               , tagged                ^>= 0.8.5
-               , time-locale-compat    ^>= 0.1.0.1
-               , xhtml                 ^>= 3000.2
-               , xmlgen                ^>= 0.6
+  --
+  -- NB: see also build-depends in `common defaults`!
+  build-depends:
+    , HStringTemplate       ^>= 0.8
+    , HTTP                  ^>= 4000.3.6
+    , QuickCheck            ^>= 2.9
+    , acid-state            ^>= 0.14
+    , async                 ^>= 2.2.1
+    , attoparsec            ^>= 0.13
+    , base16-bytestring     ^>= 0.1
+    , base64-bytestring     ^>= 1.0
+      --NOTE: blaze-builder-0.4 is now a compat package that uses bytestring-0.10 builder
+    , blaze-builder         ^>= 0.4
+    , blaze-html            ^>= 0.9
+    , cereal                ^>= 0.5
+    , cheapskate            ^>= 0.1
+    , cryptohash-md5        ^>= 0.11.100
+    , cryptohash-sha256     ^>= 0.11.100
+    , csv                   ^>= 0.1
+    , ed25519               ^>= 0.0.5
+    , hackage-security      ^>= 0.5.2
+    , hackage-security-HTTP ^>= 0.1.1
+    , haddock-library       ^>= 1.5
+    , happstack-server      ^>= 7.5
+    , hashable              ^>= 1.2
+    , hslogger              ^>= 1.2
+    , lifted-base           ^>= 0.2.1
+    , mime-mail             ^>= 0.4
+    , random                ^>= 1.1
+    , rss                   ^>= 3000.2.0.3
+    , safecopy              ^>= 0.9.1
+    , semigroups            ^>= 0.18.3
+    , split                 ^>= 0.2
+    , stm                   ^>= 2.4
+    , tagged                ^>= 0.8.5
+    , time-locale-compat    ^>= 0.1.0.1
+    , xhtml                 ^>= 3000.2
+    , xmlgen                ^>= 0.6
 
-  if ! flag(minimal)
-    build-depends: snowball            ^>= 1.0
-                 , tokenize            ^>= 0.3
+  if !flag(minimal)
+    build-depends: snowball ^>= 1.0
+                 , tokenize ^>= 0.3
 
   if flag(cabal-parsers)
     build-depends: cabal-parsers ^>= 0
@@ -383,47 +391,44 @@ library lib-server
   if !os(darwin)
     extra-libraries: crypt
 
-  other-extensions: TemplateHaskell
+----------------------------------------------------------------------------
+
+common exe-defaults
+  import: defaults
+
+  build-depends: lib-server
+  hs-source-dirs: exes
+  ghc-options: -threaded -rtsopts
+
+  other-modules:   Paths_hackage_server
+  autogen-modules: Paths_hackage_server
+
 
 executable hackage-server
-  import: defaults
-  hs-source-dirs: exes
+  import: exe-defaults
+
   main-is: Main.hs
 
-  other-modules: Paths_hackage_server
-  autogen-modules: Paths_hackage_server
-
-  build-depends: lib-server
-                 -- version constraints inherited from lib-server
-
-  ghc-options: -rtsopts -with-rtsopts=-I0
+  ghc-options: -with-rtsopts=-I00
 
 executable hackage-mirror
-  import: defaults
-  hs-source-dirs: exes
+  import: exe-defaults
+
   main-is: MirrorClient.hs
 
-  other-modules: Paths_hackage_server
-  autogen-modules: Paths_hackage_server
-
-  build-depends: lib-server
-                 -- version constraints inherited from lib-server
-                , HTTP
-                , hackage-security
-
-  other-extensions:   CPP
+  build-depends:
+    -- version constraints inherited from lib-server
+    , HTTP
+    , hackage-security
 
 executable hackage-build
-  import: defaults
-  hs-source-dirs: exes
+  import: exe-defaults
+
   main-is: BuildClient.hs
 
-  other-modules: Paths_hackage_server
-  autogen-modules: Paths_hackage_server
-
-  build-depends: lib-server
-                 -- version constraints inherited from lib-server
-               , HTTP
+  build-depends:
+    -- version constraints inherited from lib-server
+    , HTTP
 
   -- Runtime dependency only;
   -- TODO: we have no proper support for this kind of dependencies in cabal
@@ -431,112 +436,114 @@ executable hackage-build
   --
   -- build-tool-depends: hscolour:hscolour >= 1.8
 
-  -- the -threaded option is necessary for correct handling
+  -- ghc-options: -threaded option is necessary for correct handling
   -- of CTRL-C (not sure why :( )
-  ghc-options: -threaded
 
 executable hackage-import
-  import: defaults
+  import: exe-defaults
   -- TODO/FIXME: the code has bitrotten
   buildable: False
 
-  hs-source-dirs: exes
   main-is: ImportClient.hs
 
+  build-depends:
+      -- version constraints inherited from lib-server
+    , HTTP
+    , async
+    , csv
+    , time-locale-compat
+
+----------------------------------------------------------------------------
+
+common test-defaults
+  import: defaults
+
   build-depends: lib-server
-                 -- version constraints inherited from lib-server
-               , HTTP
-               , async
-               , csv
-               , time-locale-compat
+  hs-source-dirs: tests
+  ghc-options: -threaded -rtsopts -fno-warn-orphans
 
-Test-Suite HighLevelTest
-    import:         defaults
-    type:           exitcode-stdio-1.0
-    main-is:        HighLevelTest.hs
-    other-modules:
-      HackageClientUtils
-      Run
-      MailUtils
-      HttpUtils
-      Package
-      Util
-      Paths_hackage_server
+  other-modules:   Paths_hackage_server
+  autogen-modules: Paths_hackage_server
 
-    autogen-modules:
-      Paths_hackage_server
 
-    hs-source-dirs: tests
+test-suite HighLevelTest
+  import:         test-defaults
 
-    -- This tells cabal that this test depends on the executable
-    -- component 'hackage-server' from this very same package, as well
-    -- as adding the build-folder where the `hackage-server`
-    -- executable can be found in front of $PATH
-    build-tools: hackage-server
+  type:           exitcode-stdio-1.0
+  main-is:        HighLevelTest.hs
+  other-modules:
+    HackageClientUtils
+    Run
+    MailUtils
+    HttpUtils
+    Package
+    Util
 
-    -- NOTE: lib-server is not a real dependency; it's only used to inherit version constraints
-    build-depends: lib-server
-                   -- version constraints inherited from lib-server
-                 , HTTP
-                 , base64-bytestring
-                 , random
-                   -- component-specific dependencies
-                 , xml             ^>= 1.3.14
-                 , io-streams      ^>= 1.5.0.1
-                 , http-io-streams ^>= 0.1.0.0
+  -- This tells cabal that this test depends on the executable
+  -- component 'hackage-server' from this very same package, as well
+  -- as adding the build-folder where the `hackage-server`
+  -- executable can be found in front of $PATH
+  build-tools: hackage-server
 
-    ghc-options:    -threaded
+  -- NOTE: lib-server is not a real dependency; it's only used to inherit version constraints
+  build-depends:
+    -- version constraints inherited from lib-server
+    , HTTP
+    , base64-bytestring
+    , random
+      -- component-specific dependencies
+    , xml             ^>= 1.3.14
+    , io-streams      ^>= 1.5.0.1
+    , http-io-streams ^>= 0.1.0.0
 
-Test-Suite CreateUserTest
-    import:         defaults
-    if ! flag(test-create-user)
-      buildable: False
-    type:           exitcode-stdio-1.0
-    main-is:        CreateUserTest.hs
-    hs-source-dirs: tests
-    ghc-options:    -threaded
+test-suite CreateUserTest
+  import:         test-defaults
 
-    -- see note in 'Test-Suite HighLevelTest'
-    build-tools: hackage-server
+  if ! flag(test-create-user)
+    buildable: False
+  type:           exitcode-stdio-1.0
+  main-is:        CreateUserTest.hs
 
-    -- NOTE: lib-server is not a real dependency; it's only used to inherit version constraints
-    build-depends: lib-server
-                   -- version constraints inherited from lib-server
-                 , HTTP
-                 , base64-bytestring
-                 , random
-                   -- component-specific dependencies
-                 , xml ^>= 1.3.14
+  -- see note in 'Test-Suite HighLevelTest'
+  build-tools: hackage-server
 
-Test-Suite PackageTests
-    import:         defaults
-    type:           exitcode-stdio-1.0
-    main-is:        PackageTestMain.hs
-    other-modules:  Distribution.Server.Packages.UnpackTest
-    hs-source-dirs: tests
-    ghc-options:    -threaded -fno-warn-orphans
+  -- NOTE: lib-server is not a real dependency; it's only used to inherit version constraints
+  build-depends:
+    -- version constraints inherited from lib-server
+    , HTTP
+    , base64-bytestring
+    , random
+      -- component-specific dependencies
+    , xml ^>= 1.3.14
 
-    build-depends: lib-server
-                   -- version constraints inherited from lib-server
-                   -- component-specific dependencies
-                 , test-framework        ^>= 0.8
-                 , test-framework-hunit  ^>= 0.3
-                 , HUnit                 ^>= 1.6
+test-suite PackageTests
+  import:         test-defaults
 
-Test-Suite HashTests
-    import:         defaults
-    type:           exitcode-stdio-1.0
-    main-is:        HashTestMain.hs
-    hs-source-dirs: tests
-    ghc-options:    -threaded -fno-warn-orphans
+  type:           exitcode-stdio-1.0
+  main-is:        PackageTestMain.hs
+  other-modules:  Distribution.Server.Packages.UnpackTest
 
-    build-depends: lib-server
-                   -- version constraints inherited from lib-server
-                 , base16-bytestring
-                 , cereal
-                 , cryptohash-md5
-                 , cryptohash-sha256
-                 , safecopy
-                   -- component-specific dependencies
-                 , tasty       ^>= 0.11
-                 , tasty-hunit ^>= 0.9.2
+  build-depends:
+    -- version constraints inherited from lib-server
+    -- component-specific dependencies
+    , test-framework        ^>= 0.8
+    , test-framework-hunit  ^>= 0.3
+    , HUnit                 ^>= 1.6
+
+test-suite HashTests
+  import:         test-defaults
+
+  type:           exitcode-stdio-1.0
+  main-is:        HashTestMain.hs
+
+  build-depends:
+    -- version constraints inherited from lib-server
+    , base16-bytestring
+    , cereal
+    , cryptohash-md5
+    , cryptohash-sha256
+    , safecopy
+      -- component-specific dependencies
+    , tasty       ^>= 0.11
+    , tasty-hunit ^>= 0.9.2
+
