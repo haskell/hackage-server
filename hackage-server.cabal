@@ -364,7 +364,7 @@ library lib-server
     , ed25519               ^>= 0.0.5
     , hackage-security      ^>= 0.5.2
     , hackage-security-HTTP ^>= 0.1.1
-    , haddock-library       ^>= 1.5
+    , haddock-library       ^>= 1.7.0
     , happstack-server      ^>= 7.5
     , hashable              ^>= 1.2
     , hslogger              ^>= 1.2
@@ -375,7 +375,7 @@ library lib-server
     , safecopy              ^>= 0.9.1
     , semigroups            ^>= 0.18.3
     , split                 ^>= 0.2
-    , stm                   ^>= 2.4
+    , stm                   ^>= 2.5.0
     , tagged                ^>= 0.8.5
     , time-locale-compat    ^>= 0.1.0.1
     , xhtml                 ^>= 3000.2
