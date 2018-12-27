@@ -188,7 +188,7 @@
         </tr>
         <tr>
           <th>Status</th>
-	  <td>$buildStatus$<br/><a href="https://matrix.hackage.haskell.org/package/$package.name$">Hackage Matrix CI</a></td>
+	  <td><a href="https://matrix.hackage.haskell.org/package/$package.name$"><img src="https://matrix.hackage.haskell.org/api/v2/packages/$package.name$/badge" alt="Hackage Matrix CI" style="max-width:100%;" /></a><br/>$buildStatus$</td>
         </tr>
       </tbody>
     </table>
