@@ -11,7 +11,7 @@ $hackagePageHeader()$
 <div id="content">
 <h2>Create an account</h2>
 
-<p>Fill in the <a href="/users/register-request">registation form</a> to get
+<p>Fill in the <a href="/users/register-request">registration form</a> to get
 a new user account for yourself.</p>
 
 <p>Once you have your account you can upload packages with <em>new</em> names,
