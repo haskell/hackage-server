@@ -7,6 +7,10 @@
 language: c
 sudo: false
 
+branches:
+  except:
+  - central-server
+
 git:
   submodules: true  # whether to recursively clone submodules
 
