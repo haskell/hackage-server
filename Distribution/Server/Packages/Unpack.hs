@@ -207,6 +207,7 @@ basicChecks pkgid tarIndex = do
     throwError "The 'cabal-version' field could not be properly parsed."
 
   -- Don't allowing uploading new pre-1.2 .cabal files as the parser is likely too lax
+  -- TODO: slowly phase out ancient cabal spec versions below 1.10
   when (specVer < mkVersion [1,2]) $
     throwError "'cabal-version' must be at least 1.2"
 
@@ -215,12 +216,17 @@ basicChecks pkgid tarIndex = do
   when (specVer >= mkVersion [1,25] && specVer < mkVersion [2]) $
     throwError "'cabal-version' in unassigned >=1.25 && <2 range; use 'cabal-version: 2.0' instead"
 
-  when (specVer >= mkVersion [2,1] && specVer < mkVersion [2,2]) $
-    throwError "'cabal-version' refers to unassigned 2.1.* range; use 'cabal-version: 2.2' instead"
-
   -- Safeguard; should already be caught by parser
-  unless (specVer < mkVersion [2,3]) $
-    throwError "'cabal-version' must be lower than 2.3"
+  unless (specVer < mkVersion [2,5]) $
+    throwError "'cabal-version' must be lower than 2.5"
+
+  -- Check whether a known spec version had been used
+  -- TODO: move this into lib:Cabal
+  let knownSpecVersions = map mkVersion [ [1,18], [1,20], [1,22], [1,24], [2,0], [2,2], [2,4] ]
+  when (specVer >= mkVersion [1,18] && (specVer `notElem` knownSpecVersions)) $
+    throwError ("'cabal-version' refers to an unreleased/unknown cabal specification version "
+                ++ display specVer ++ "; for a list of valid specification versions please consult "
+                ++ "https://www.haskell.org/cabal/users-guide/file-format-changelog.html")
 
   -- Check that the name and version in Cabal file match
   when (packageName pkgDesc /= packageName pkgid) $

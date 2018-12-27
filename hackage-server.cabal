@@ -110,7 +110,7 @@ common defaults
   -- other dependencies shared by most components
   build-depends:
     , aeson                 ^>= 1.1
-    , Cabal                 ^>= 2.4.0.0
+    , Cabal                 ^>= 2.4.1.0
     , containers            ^>= 0.5.0
       -- we use Control.Monad.Except, introduced in mtl-2.2.1
     , mtl                   ^>= 2.2.1
@@ -483,7 +483,7 @@ test-suite HighLevelTest
   -- component 'hackage-server' from this very same package, as well
   -- as adding the build-folder where the `hackage-server`
   -- executable can be found in front of $PATH
-  build-tools: hackage-server
+  build-tool-depends: hackage-server:hackage-server
 
   -- NOTE: lib-server is not a real dependency; it's only used to inherit version constraints
   build-depends:
@@ -505,7 +505,7 @@ test-suite CreateUserTest
   main-is:        CreateUserTest.hs
 
   -- see note in 'Test-Suite HighLevelTest'
-  build-tools: hackage-server
+  build-tool-depends: hackage-server:hackage-server
 
   -- NOTE: lib-server is not a real dependency; it's only used to inherit version constraints
   build-depends:
