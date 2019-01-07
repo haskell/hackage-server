@@ -103,7 +103,8 @@ packagePage render headLinks top sections
     bodyTitle = case synopsis (rendOther render) of
       ""    -> h1 << pkgName
       short -> h1 << [ toHtml (pkgName ++ ": ")
-                     , small (toHtml short)
+                     , small << renderHaddock (moduleToDocUrl render docURL)
+                                              short
                      ]
 
     candidateBanner
