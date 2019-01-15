@@ -8,7 +8,7 @@
   <title>
     $package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$
   </title>
-  <link rel="canonical" href="$baseurl$/package/$package.name$" />
+  <link rel="canonical" href="$sbaseurl$/package/$package.name$" />
   <script src="/static/jquery.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript"></script>
   <base href="$baseurl$/package/$package.name$-$package.version$/" />
