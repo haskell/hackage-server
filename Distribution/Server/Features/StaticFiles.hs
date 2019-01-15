@@ -9,6 +9,7 @@ import Distribution.Server.Framework.Templating
 import Text.XHtml.Strict (Html, toHtml, anchor, (<<), (!), href, paragraph)
 
 import Data.List hiding (find)
+import qualified Network.URI as URI
 import System.FilePath
 import System.Directory (getDirectoryContents)
 
@@ -37,7 +38,7 @@ find p dirPath = do
   return (filter p contents)
 
 staticFilesFeature :: ServerEnv -> Templates -> [FilePath] -> HackageFeature
-staticFilesFeature ServerEnv{serverStaticDir, serverTemplatesMode}
+staticFilesFeature ServerEnv{serverStaticDir, serverTemplatesMode, serverBaseURI}
                    templates staticFiles =
   (emptyHackageFeature "static-files") {
     featureResources =
@@ -101,7 +102,9 @@ staticFilesFeature ServerEnv{serverStaticDir, serverTemplatesMode}
         Nothing       -> mzero
         Just template -> do
           cacheControlWithoutETag staticResourceCacheControls
-          ok $ toResponse $ template []
+          ok $ toResponse $ template [
+            "sbaseurl" $= show (serverBaseURI { URI.uriScheme = "https:" })
+            ]
 
     textErrorPage (ErrorResponse errCode hdrs errTitle message) = do
         template <- getTemplate templates "hackageErrorPage.txt"
