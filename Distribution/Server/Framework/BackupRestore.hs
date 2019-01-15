@@ -117,7 +117,10 @@ instance Monoid AbstractRestoreBackup where
       abstractRestoreEntry = \_ _ -> return . Right $ mempty
     , abstractRestoreFinalize = \_ -> return . Right $ return ()
     }
-  mappend (AbstractRestoreBackup run fin) (AbstractRestoreBackup run' fin') = AbstractRestoreBackup {
+  mappend = (<>)
+
+instance Semigroup AbstractRestoreBackup where
+  (AbstractRestoreBackup run fin) <> (AbstractRestoreBackup run' fin') = AbstractRestoreBackup {
       abstractRestoreEntry = \store entry -> do
          res <- run store entry
          case res of

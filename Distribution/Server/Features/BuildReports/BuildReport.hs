@@ -52,9 +52,9 @@ import Distribution.Server.Framework.MemSize
 
 import qualified Distribution.Compat.ReadP as Parse
 import qualified Text.PrettyPrint.HughesPJ as Disp
-         ( Doc, char, text )
+         ( Doc, char, text, (<>) )
 import Text.PrettyPrint.HughesPJ
-         ( (<+>), (<>), render )
+         ( (<+>), render )
 import Data.Serialize as Serialize
          ( Serialize(..) )
 import Data.SafeCopy
@@ -272,8 +272,8 @@ sortedFieldDescrs :: [FieldDescr BuildReport]
 sortedFieldDescrs = sortBy (comparing fieldName) fieldDescrs
 
 dispFlag :: (FlagName, Bool) -> Disp.Doc
-dispFlag (fn, True)  =                  Disp.text (unFlagName fn)
-dispFlag (fn, False) = Disp.char '-' <> Disp.text (unFlagName fn)
+dispFlag (fn, True)  =                       Disp.text (unFlagName fn)
+dispFlag (fn, False) = Disp.char '-' Disp.<> Disp.text (unFlagName fn)
 
 parseFlag :: Parse.ReadP r (FlagName, Bool)
 parseFlag = do

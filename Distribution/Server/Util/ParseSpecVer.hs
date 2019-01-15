@@ -113,7 +113,7 @@ verDictV = Map.fromList [ (BC8.pack (prettyShow v), v) | v <- knownVers ]
 
 -- | Lookup-table mapping ">=x.y.z" strings to 'Version'
 verDictRg :: Map.HashMap ByteString Version
-verDictRg = Map.fromList [ (">=" `mappend` BC8.pack (prettyShow v), v) | v <- knownVers ]
+verDictRg = Map.fromList [ (">=" <> BC8.pack (prettyShow v), v) | v <- knownVers ]
 
 -- | List of cabal-version values contained in Hackage's package index as of 2017-07
 knownVers :: [Version]

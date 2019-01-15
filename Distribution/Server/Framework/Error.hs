@@ -78,8 +78,11 @@ data ErrorResponse = ErrorResponse {
 -- seems that's rather tricky with the way Happstack is set up.
 instance Monoid ErrorResponse where
   mempty = ErrorResponse 500 [] "Internal server error" []
-  GenericErrorResponse `mappend` b = b
-  a                    `mappend` _ = a
+  mappend = (<>)
+
+instance Semigroup ErrorResponse where
+  GenericErrorResponse <> b = b
+  a                    <> _ = a
 
 instance ToMessage ErrorResponse where
   toResponse (ErrorResponse code hdrs title detail) =

@@ -89,8 +89,11 @@ data Resource = Resource {
 -- favors first
 instance Monoid Resource where
     mempty = Resource [] [] [] [] [] noFormat NoSlash []
-    mappend (Resource bpath rget rput rpost rdelete rformat rend desc)
-            (Resource bpath' rget' rput' rpost' rdelete' rformat' rend' desc') =
+    mappend = (<>)
+
+instance Semigroup Resource where
+    (Resource bpath rget rput rpost rdelete rformat rend desc) <>
+      (Resource bpath' rget' rput' rpost' rdelete' rformat' rend' desc') =
         Resource (simpleCombine bpath bpath') (ccombine rget rget') (ccombine rput rput')
                    (ccombine rpost rpost') (ccombine rdelete rdelete')
                    (simpleCombine rformat rformat') (simpleCombine rend rend') (desc ++ desc')
