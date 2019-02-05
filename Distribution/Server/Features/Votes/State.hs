@@ -58,7 +58,7 @@ userVotedForPackage pkgname uid votes =
                   Nothing -> False
                   Just _ -> True
 
--- Using Laplace's rule of succession to calculate scoring
+-- Using a Bayesian average (m=1.5, C=2) to calculate scoring
 votesScore :: Map UserId Score -> Float
 votesScore m =
      let grouping = map (head &&& length) . group . sort . Map.elems $ m
