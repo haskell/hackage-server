@@ -213,14 +213,27 @@ runPackageTests = do
                die "Bad index contents"
     do info "Getting package index with etag"
        validateETagHandling "/packages/index.tar.gz"
+
     do info "Getting testpackage info"
-       xs <- validate NoAuth "/package/testpackage"
+       xs <- validate NoAuth "/package/testpackage.html"
        unless (">testpackage</a>: <small>test package testpackage</small></h1>" `isInfixOf` xs) $
-           die ("Bad package info: " ++ show xs)
+           die ("Bad package info for unversioned HTML /package/testpackage.html endpoint: " ++ show xs)
+
     do info "Getting testpackage-1.0.0.0 info"
        xs <- validate NoAuth "/package/testpackage-1.0.0.0"
        unless (">testpackage</a>: <small>test package testpackage</small></h1>" `isInfixOf` xs) $
-           die ("Bad package info: " ++ show xs)
+           die ("Bad package info for versioned HTML /package/testpackage-1.0.0.0 endpoint: " ++ show xs)
+
+    do info "Getting testpackage-1.0.0.0 info (JSON)"
+       xs <- validate NoAuth "/package/testpackage-1.0.0.0.json"
+       unless ("\"synopsis\":\"test package testpackage\"" `isInfixOf` xs) $
+           die ("Bad package info for versioned JSON endpoint, expected the synopsis field to contain \"test package testpackage\": " ++ show xs)
+
+    do info "Getting testpackage version info (JSON)"
+       xs <- validate NoAuth "/package/testpackage.json"
+       unless ("\"1.0.0.0\":\"normal\"" `isInfixOf` xs) $
+           die ("Bad package version info: " ++ show xs)
+
     do info "Getting testpackage Cabal file"
        cabalFile <- getUrl NoAuth "/package/testpackage-1.0.0.0/testpackage.cabal"
        unless (cabalFile == testpackageCabalFile) $
