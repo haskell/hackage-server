@@ -288,6 +288,8 @@ library lib-server
       Distribution.Server.Features.PackageCandidates.Types
       Distribution.Server.Features.PackageCandidates.State
       Distribution.Server.Features.PackageCandidates.Backup
+      Distribution.Server.Features.PackageInfoJSON
+      Distribution.Server.Features.PackageInfoJSON.State
       Distribution.Server.Features.PackageList
       Distribution.Server.Features.Distro
       Distribution.Server.Features.Distro.Distributions

@@ -221,6 +221,8 @@ data CoreResource = CoreResource {
     coreCabalFile       :: Resource,
     -- | A tarball for a package version.
     corePackageTarball  :: Resource,
+    -- | A Cabal file metatada revision.
+    coreCabalFileRev    :: Resource,
 
     -- Rendering resources.
     -- | URI for `corePackagesPage`, given a format (blank for none).
