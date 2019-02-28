@@ -12,7 +12,7 @@ $hackagePageHeader()$
 <h2>New auth token for $username$</h2>
 <p>
   A new token was successfully generated. Please keep it in a safe place and do
-  not loose it. You can revoke it from the user management page.
+  not lose it. You can revoke it from the user management page.
 </p>
 
 <h3>Auth token: $token$</h3>
