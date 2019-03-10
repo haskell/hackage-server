@@ -526,9 +526,9 @@ test-suite PackageTests
   build-depends:
     -- version constraints inherited from lib-server
     -- component-specific dependencies
-    , test-framework        ^>= 0.8
-    , test-framework-hunit  ^>= 0.3
-    , HUnit                 ^>= 1.6
+    , tasty        ^>= 1.2.1
+    , tasty-hunit  ^>= 0.10
+    , HUnit        ^>= 1.6
 
 test-suite HashTests
   import:         test-defaults
@@ -544,6 +544,6 @@ test-suite HashTests
     , cryptohash-sha256
     , safecopy
       -- component-specific dependencies
-    , tasty       ^>= 0.12
-    , tasty-hunit ^>= 0.9.2
+    , tasty       ^>= 1.2.1
+    , tasty-hunit ^>= 0.10
 
