@@ -483,6 +483,9 @@ test-suite HighLevelTest
   -- component 'hackage-server' from this very same package, as well
   -- as adding the build-folder where the `hackage-server`
   -- executable can be found in front of $PATH
+  --
+  -- TODO: hackage-server isn't build-tool, it's run-tool!
+  -- so if this works, it's accidental!
   build-tool-depends: hackage-server:hackage-server
 
   -- NOTE: lib-server is not a real dependency; it's only used to inherit version constraints
