@@ -212,15 +212,14 @@ hoogleDataFeature docsUpdatedState hoogleBundleUpdateJob
             -- miss a few entries from the tarball 'til next time its updated.
             oldEntries <- case mhOldTar of
               Nothing      -> return []
-              Just hOldTar -> 
+              Just hOldTar -> do
+                contents <- BS.hGetContents hOldTar
                 return . Tar.foldEntries (:) [] (const [])
                        . Tar.read
                        . BS.fromChunks
-                       . Zlib.foldDecompressStream (:) [] (\_ _ -> [])
-                       . Zlib.decompressWithErrors
-                           Zlib.gzipFormat
-                           Zlib.defaultDecompressParams
-                     =<< BS.hGetContents hOldTar
+                       . Zlib.foldDecompressStreamWithInput (:) (\_ -> []) (\_ -> [])
+                         (Zlib.decompressST Zlib.gzipFormat Zlib.defaultDecompressParams)
+                       $ contents
 
             -- Write out the cached ones
             sequence_
