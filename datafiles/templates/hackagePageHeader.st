@@ -7,7 +7,7 @@
     <li>
       <form action="/packages/search" method="get" class="search">
         <button type="submit">Search&nbsp;</button>
-        <input type="text" name="terms" autofocus />
+        <input type="text" name="terms" />
       </form>
     </li>
 
