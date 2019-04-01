@@ -121,7 +121,7 @@ common defaults
     , text                  ^>= 1.2.2
     , unordered-containers  ^>= 0.2.3.0
     , vector                ^>= 0.12
-    , zlib                  ^>= 0.5.3
+    , zlib                  ^>= 0.6.2
 
   ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fno-warn-deprecated-flags -funbox-strict-fields
 

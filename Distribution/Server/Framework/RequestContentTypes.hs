@@ -31,9 +31,11 @@ module Distribution.Server.Framework.RequestContentTypes (
 import Happstack.Server
 import Distribution.Server.Framework.HappstackUtils
 import Distribution.Server.Framework.Error
-import qualified Data.ByteString.Char8 as BS (ByteString, unpack) -- Used for content-type headers only
-import qualified Data.ByteString.Lazy as LBS (ByteString)
+import qualified Data.ByteString.Char8 as BS (ByteString, empty, unpack) -- Used for content-type headers only
+import qualified Data.ByteString.Lazy as LBS (ByteString, empty)
+import qualified Data.ByteString.Lazy.Internal as LBS (ByteString (..))
 import qualified Codec.Compression.Zlib.Internal as GZip
+import Control.Monad.IO.Class (liftIO)
 import qualified Data.Aeson as Aeson
 
 -- | Expect the request body to have the given mime type (exact match),
@@ -67,12 +69,25 @@ expectContentType expected = do
         [MText $ "The only content-encodings supported are gzip, or none at all."]
 
 gzipDecompress :: LBS.ByteString -> ServerPartE LBS.ByteString
-gzipDecompress content =
-    case GZip.decompressWithErrors
-           GZip.gzipFormat GZip.defaultDecompressParams content of
-      GZip.StreamError errkind _ -> errDecompress errkind
-      stream                     -> return (GZip.fromDecompressStream stream)
+gzipDecompress content = go content decompressor
   where
+    decompressor :: GZip.DecompressStream IO
+    decompressor = GZip.decompressIO GZip.gzipFormat GZip.defaultDecompressParams
+
+    go :: LBS.ByteString -> GZip.DecompressStream IO -> ServerPartE LBS.ByteString
+    go cs (GZip.DecompressOutputAvailable bs k) = do
+        stream <- liftIO k
+        LBS.Chunk bs `fmap` go cs stream
+    go _  (GZip.DecompressStreamEnd      _bs)   = return LBS.empty
+    go _  (GZip.DecompressStreamError err)      = errDecompress err
+    go cs (GZip.DecompressInputRequired      k) = do
+        let ~(c, cs') = uncons cs
+        liftIO (k c) >>= go cs'
+
+    uncons :: LBS.ByteString -> (BS.ByteString, LBS.ByteString)
+    uncons LBS.Empty        = (BS.empty, LBS.Empty)
+    uncons (LBS.Chunk c cs) = (c, cs)
+
     errDecompress GZip.TruncatedInput =
       errBadRequest "Truncated data upload"
         [MText $ "The uploaded data (gzip-compressed) is truncated. Check "
