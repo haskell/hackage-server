@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE DeriveDataTypeable  #-}
 {-# LANGUAGE DeriveGeneric       #-}
 {-# LANGUAGE LambdaCase          #-}
@@ -16,7 +17,7 @@ import qualified Data.Aeson           as Aeson
 import           Data.Aeson           ((.=), (.:))
 import           Data.Acid            (Query, Update, makeAcidic)
 import qualified Data.HashMap.Strict  as HashMap
-import qualified Data.Map             as Map
+import qualified Data.Map.Strict      as Map
 import           Data.Monoid          (Sum(..))
 import qualified Data.Text            as T
 import qualified Data.Text.Encoding   as T
@@ -45,13 +46,13 @@ import           Distribution.Server.Framework.MemSize          (MemSize,
 -- | Basic information about a package. These values are
 --   used in the `/package/:packagename` JSON endpoint
 data PackageBasicDescription = PackageBasicDescription
-  { pbd_license           :: License
-  , pbd_copyright         :: T.Text
-  , pbd_synopsis          :: T.Text
-  , pbd_description       :: T.Text
-  , pbd_author            :: T.Text
-  , pbd_homepage          :: T.Text
-  , pbd_metadata_revision :: Int
+  { pbd_license           :: !License
+  , pbd_copyright         :: !T.Text
+  , pbd_synopsis          :: !T.Text
+  , pbd_description       :: !T.Text
+  , pbd_author            :: !T.Text
+  , pbd_homepage          :: !T.Text
+  , pbd_metadata_revision :: !Int
   } deriving (Eq, Show, Generic)
 
 instance SafeCopy PackageBasicDescription where
