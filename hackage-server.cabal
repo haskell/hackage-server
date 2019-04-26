@@ -31,13 +31,19 @@ tested-with: GHC ==8.4.4 || ==8.2.2 || ==8.0.2 || ==7.10.3 || ==7.8.4 || ==7.6.3
 
 data-dir: datafiles
 data-files:
-  templates/**/*.st
+  templates/AdminFrontend/*.st
+  templates/EditCabalFile/*.st
+  templates/Html/*.st
+  templates/LegacyPasswds/*.st
+  templates/Search/*.st
+  templates/UserSignupReset/*.st
+  templates/Users/*.st
 
-  static/**/*.css
-  static/**/*.js
-  static/**/*.svg
-  static/**/*.png
-  static/**/*.ico
+  static/datatables/*.css
+  static/datatables/*.js
+  static/icons/*.svg
+  static/images/*.png
+  static/*.ico
 
   TUF/README.md
   TUF/mirrors.json
