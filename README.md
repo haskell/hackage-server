@@ -69,7 +69,7 @@ you can find these as the file names of the files created in
 `signed.roles.root.keyids`). An example `cabal` client configuration might look
 something like
 
-    remote-repo my-private-hackage
+    repository my-private-hackage
       url: http://example.com:8080/
       secure: True
       root-keys: 865cc6ce84231ccc990885b1addc92646b7377dd8bb920bdfe3be4d20c707796
