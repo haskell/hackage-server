@@ -183,8 +183,29 @@ instance MemSize BS.ByteString where
                in 5 + w + signum t
 
 instance MemSize BSS.ShortByteString where
-  memSize s = let (w,t) = divMod (BSS.length s) wordSize
-               in 1 + w + signum t
+  memSize s
+    -- We have
+    --
+    -- > data ShortByteString = SBS ByteArray#
+    --
+    -- so @SBS ByteArray#@ requires:
+    --
+    -- - 1 word for the 'SBS' object header
+    -- - 1 word for the pointer to the byte array object
+    -- - 1 word for the byte array object header
+    -- - 1 word for the size of the byte array payload in bytes
+    -- - the heap words required for the byte array payload
+    --
+    -- ┌───┬───┐
+    -- │SBS│ ◉ │
+    -- └───┴─╂─┘
+    --       ▼
+    --      ┌───┬───┬───┬─┈   ┈─┬───┐
+    --      │BA#│ sz│   │       │   │   2 + n Words
+    --      └───┴───┴───┴─┈   ┈─┴───┘
+    --
+    = let (w,t) = divMod (BSS.length s) wordSize
+      in 4 + w + signum t
 
 instance MemSize LBS.ByteString where
   memSize s = sum [ 1 + memSize c | c <- LBS.toChunks s ]
