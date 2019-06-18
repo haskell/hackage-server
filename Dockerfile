@@ -26,7 +26,7 @@ RUN apt-get update
 RUN DEBIAN_FRONTEND=noninteractive apt-get install -yy unzip libicu-dev postfix
 RUN apt-get install -y ghc-8.2.2 cabal-install-2.4
 ENV PATH /opt/ghc/bin:$PATH
-RUN cabal update
+RUN cabal v2-update
 
 # Required Header files
 RUN apt-get install -y zlib1g-dev libssl-dev
@@ -35,13 +35,11 @@ RUN apt-get install -y zlib1g-dev libssl-dev
 RUN mkdir /build
 WORKDIR /build
 ADD ./hackage-server.cabal ./hackage-server.cabal
-RUN cabal sandbox init
-# TODO: Switch to Nix-style cabal new-install
-RUN cabal install --only-dependencies --enable-tests -j --force-reinstalls
-ENV PATH /build/.cabal-sandbox/bin:$PATH
+RUN cabal v2-install -j --force-reinstalls
+ENV PATH /root/.cabal/bin:$PATH
 
 # needed for creating TUF keys
-RUN cabal install hackage-repo-tool
+RUN cabal v2-install hackage-repo-tool
 
 # add code
 # note: this must come after installing the dependencies, such that
@@ -56,13 +54,13 @@ RUN hackage-repo-tool create-root --keys keys -o datafiles/TUF/root.json
 RUN hackage-repo-tool create-mirrors --keys keys -o datafiles/TUF/mirrors.json
 
 # build & test & install hackage
-RUN cabal configure -f-build-hackage-mirror --enable-tests
-RUN cabal build
+RUN cabal v2-configure -f-build-hackage-mirror --enable-tests
+RUN cabal v2-build
 # tests currently don't pass: the hackage-security work introduced some
 # backup/restore errors (though they look harmless)
 # see https://github.com/haskell/hackage-server/issues/425
 #RUN cabal test
-RUN cabal copy && cabal register
+RUN cabal v2-install all
 
 # setup server runtime environment
 RUN mkdir /runtime
