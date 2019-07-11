@@ -13,56 +13,32 @@
 FROM ubuntu
 
 RUN apt-get update
-
-# Install apt-add-repository
 RUN apt-get install -y software-properties-common
-
-# Use Herbert's PPA on Ubuntu for getting GHC and cabal-install
 RUN apt-add-repository ppa:hvr/ghc
-
 RUN apt-get update
-
-# Dependencies
 RUN DEBIAN_FRONTEND=noninteractive apt-get install -y unzip libicu-dev postfix
 RUN DEBIAN_FRONTEND=noninteractive apt-get install -y ghc-8.2.2 cabal-install-2.4
 ENV PATH /opt/ghc/bin:$PATH
-RUN cabal v1-update
-
-# Required Header files
+RUN cabal v2-update
 RUN apt-get install -y zlib1g-dev libssl-dev
-
-# haskell dependencies
 RUN mkdir /build
 WORKDIR /build
-ADD ./hackage-server.cabal ./hackage-server.cabal
-RUN cabal v1-sandbox init
-# TODO: Switch to Nix-style cabal new-install
-RUN cabal v1-install --only-dependencies --enable-tests -j --force-reinstalls
-ENV PATH /build/.cabal-sandbox/bin:$PATH
-
-# needed for creating TUF keys
-RUN cabal v1-install hackage-repo-tool
-
-# add code
-# note: this must come after installing the dependencies, such that
-# we don't need to rebuilt the dependencies every time the code changes
-ADD . /build
-
-# generate keys (needed for tests)
+ADD hackage-server.cabal cabal.project ./
+RUN cabal v2-build --only-dependencies --enable-tests -j
+RUN cabal v2-install hackage-repo-tool
+ENV PATH /root/.cabal/bin:$PATH
+ADD . ./
 RUN hackage-repo-tool create-keys --keys keys
 RUN cp keys/timestamp/*.private datafiles/TUF/timestamp.private
 RUN cp keys/snapshot/*.private datafiles/TUF/snapshot.private
 RUN hackage-repo-tool create-root --keys keys -o datafiles/TUF/root.json
 RUN hackage-repo-tool create-mirrors --keys keys -o datafiles/TUF/mirrors.json
-
-# build & test & install hackage
-RUN cabal v1-configure -f-build-hackage-mirror --enable-tests
-RUN cabal v1-build
+RUN cabal v2-build
 # tests currently don't pass: the hackage-security work introduced some
 # backup/restore errors (though they look harmless)
 # see https://github.com/haskell/hackage-server/issues/425
-# RUN cabal v1-test
-RUN cabal v1-copy && cabal v1-register
+#RUN cabal v2-test
+RUN cabal v2-install -j .
 
 # setup server runtime environment
 RUN mkdir /runtime
