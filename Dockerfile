@@ -23,8 +23,8 @@ RUN apt-add-repository ppa:hvr/ghc
 RUN apt-get update
 
 # Dependencies
-RUN apt-get install -yy unzip libicu-dev postfix
-RUN apt-get install -y ghc-8.2.1 cabal-install-2.0
+RUN DEBIAN_FRONTEND=noninteractive apt-get install -y unzip libicu-dev postfix
+RUN DEBIAN_FRONTEND=noninteractive apt-get install -y ghc-8.2.1 cabal-install-2.0
 ENV PATH /opt/ghc/bin:$PATH
 RUN cabal update
 
