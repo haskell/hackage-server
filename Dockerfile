@@ -10,17 +10,17 @@
 # Docker> # hackage-server run --static-dir=datafiles
 #
 
-FROM ubuntu
+FROM ubuntu:18.04
 
 RUN apt-get update
 RUN apt-get install -y software-properties-common
+RUN DEBIAN_FRONTEND=noninteractive apt-get install -y unzip libicu-dev postfix zlib1g-dev libssl-dev
+
 RUN apt-add-repository ppa:hvr/ghc
 RUN apt-get update
-RUN DEBIAN_FRONTEND=noninteractive apt-get install -y unzip libicu-dev postfix
-RUN DEBIAN_FRONTEND=noninteractive apt-get install -y ghc-8.2.2 cabal-install-2.4
+RUN DEBIAN_FRONTEND=noninteractive apt-get install -y ghc-8.2.2 cabal-install-3.0
 ENV PATH /opt/ghc/bin:$PATH
 RUN cabal v2-update
-RUN apt-get install -y zlib1g-dev libssl-dev
 RUN mkdir /build
 WORKDIR /build
 ADD hackage-server.cabal cabal.project ./
@@ -38,7 +38,7 @@ RUN cabal v2-build
 # backup/restore errors (though they look harmless)
 # see https://github.com/haskell/hackage-server/issues/425
 #RUN cabal v2-test
-RUN cabal v2-install -j .
+RUN cabal v2-install all
 
 # setup server runtime environment
 RUN mkdir /runtime
