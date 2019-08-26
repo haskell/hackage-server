@@ -98,7 +98,7 @@ at <a href="mailto:admin@hackage.haskell.org">admin@hackage.haskell.org</a></p>
    While the volunteer effort got us the “first 90%” of the way there (including adding a number of new features) there was still the “last 90%” to do to get it production ready.
    IHG members funded the effort to get Hackage 2 up to feature parity and get it ready for the switchover.</p>
 
-<p>Having accomplished many of its goals, Industrial Haskell Group is no longer operational, and instead several companies sponsor Haskell.Org directly now.</p>
+<p>Having accomplished many of its goals, Industrial Haskell Group is no longer operational, and instead several companies sponsor Haskell.org directly now.</p>
 
 <h2 id="support-from-the-smartest-cdn">The fastest Content Distribution Network</h2>
 
