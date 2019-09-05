@@ -661,6 +661,8 @@ buildPackage verbosity opts config docInfo = do
              -- We want both html documentation and hoogle database generated
              "--haddock-html",
              "--haddock-hoogle",
+             -- Generate the quickjump index files
+             "--haddock-option=--quickjump",
              -- For candidates we need to use the full URL, because
              -- otherwise cabal-install will not find the package.
              -- For regular packages however we need to use just the

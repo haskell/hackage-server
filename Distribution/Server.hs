@@ -93,17 +93,17 @@ defaultServerConfig = do
   return ServerConfig {
     confVerbosity = Verbosity.normal,
     confHostUri   = nullURI {
-                      uriScheme    = "http:",
+                      uriScheme    = "https:",
                       uriAuthority = Just (URIAuth "" hostName (':' : show portnum))
                     },
     confListenOn  = ListenOn {
                         loPortNum = 8080,
-                        loIP = "0.0.0.0"
+                        loIP = "127.0.0.1"
                     },
     confStateDir  = "state",
     confStaticDir = dataDir,
     confTmpDir    = "state" </> "tmp",
-    confCacheDelay= 0,
+    confCacheDelay= 60,
     confLiveTemplates = False
   }
 

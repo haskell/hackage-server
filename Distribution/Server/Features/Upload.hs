@@ -26,7 +26,7 @@ import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Data.Maybe (fromMaybe)
-import Data.List (dropWhileEnd)
+import Data.List (dropWhileEnd, intersperse)
 import Data.Time.Clock (getCurrentTime)
 import Data.Function (fix)
 import Data.ByteString.Lazy (ByteString)
@@ -59,7 +59,7 @@ data UploadFeature = UploadFeature {
     maintainersGroup   :: PackageName -> UserGroup,
 
     -- | Requiring being logged in as the maintainer of a package.
-    guardAuthorisedAsMaintainer          :: PackageName -> ServerPartE (),
+    guardAuthorisedAsMaintainer          :: PackageName -> ServerPartE Users.UserId,
     -- | Requiring being logged in as the maintainer of a package or a trustee.
     guardAuthorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE (),
 
@@ -264,8 +264,8 @@ uploadFeature ServerEnv{serverBlobStore = store}
         queryUserGroup        = queryState  uploadersState   GetUploadersList,
         addUserToGroup        = updateState uploadersState . AddHackageUploader,
         removeUserFromGroup   = updateState uploadersState . RemoveHackageUploader,
-        groupsAllowedToAdd    = [adminGroup],
-        groupsAllowedToDelete = [adminGroup]
+        groupsAllowedToAdd    = [adminGroup, trusteesGroup],
+        groupsAllowedToDelete = [adminGroup, trusteesGroup]
     }
 
     maintainersGroupDescription :: PackageName -> UserGroup
@@ -294,9 +294,9 @@ uploadFeature ServerEnv{serverBlobStore = store}
     uploaderDescription :: GroupDescription
     uploaderDescription = nullDescription { groupTitle = "Package uploaders", groupPrologue = "Package uploaders are allowed to upload packages. Note that if a package already exists then you also need to be in the maintainer group for that package." }
 
-    guardAuthorisedAsMaintainer :: PackageName -> ServerPartE ()
+    guardAuthorisedAsMaintainer :: PackageName -> ServerPartE Users.UserId
     guardAuthorisedAsMaintainer pkgname =
-      guardAuthorised_ [InGroup (maintainersGroup pkgname)]
+      guardAuthorised [InGroup (maintainersGroup pkgname)]
 
     guardAuthorisedAsMaintainerOrTrustee :: PackageName -> ServerPartE ()
     guardAuthorisedAsMaintainerOrTrustee pkgname =
@@ -308,7 +308,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
     -- This is the upload function. It returns a generic result for multiple formats.
     uploadPackage :: ServerPartE UploadResult
     uploadPackage = do
-        guardAuthorised_ [InGroup uploadersGroup]
+        guardAuthorised_ [AnyKnownUser]
         pkgIndex <- queryGetPackageIndex
         (uid, uresult, tarball) <- extractPackage $ \uid info ->
                                      processUpload pkgIndex uid info
@@ -322,8 +322,11 @@ uploadFeature ServerEnv{serverBlobStore = store}
           then do
              -- make package maintainers group for new package
             let existedBefore = packageExists pkgIndex pkgid
-            when (not existedBefore) $
-                liftIO $ addUserToGroup (maintainersGroup (packageName pkgid)) uid
+            when (not existedBefore) $ do
+                let group = maintainersGroup (packageName pkgid)
+                liftIO $ addUserToGroup group uid
+                runHook_ groupChangedHook (groupDesc group, True,uid,uid,"initial upload")
+
             return uresult
           -- this is already checked in processUpload, and race conditions are highly unlikely but imaginable
           else errForbidden "Upload failed" [MText "Package already exists."]
@@ -335,8 +338,12 @@ uploadFeature ServerEnv{serverBlobStore = store}
     processUpload state uid res = do
         let pkg = packageId (uploadDesc res)
         pkgGroup <- queryUserGroup (maintainersGroup (packageName pkg))
+        ugroup <- queryUserGroup uploadersGroup
         case () of
-          _ | packageExists state pkg && not (uid `Group.member` pkgGroup)
+          _ | not (uid `Group.member` ugroup)
+           -> uploadError notUploadersGroup
+
+            | packageExists state pkg && not (uid `Group.member` pkgGroup)
            -> uploadError (notMaintainer pkg)
 
             | not (Group.null pkgGroup) && not (uid `Group.member` pkgGroup)
@@ -349,7 +356,22 @@ uploadFeature ServerEnv{serverBlobStore = store}
            -> uploadError normVerExists
 
             | otherwise
-           -> return Nothing
+              -- check for new packages that case-clash with existing ones
+           -> case (packageExists state pkg, PackageIndex.searchByName state (unPackageName . pkgName $ pkg)) of
+                (False,PackageIndex.Unambiguous (mp:_)) -> do
+                      group <- (queryUserGroup . maintainersGroup . packageName) mp
+                      if not $ uid `Group.member` group
+                         then uploadError (caseClash [mp])
+                         else return Nothing
+
+                (False,PackageIndex.Ambiguous mps) -> do
+                      let matchingPackages = concat . map (take 1) $ mps
+                      groups <- mapM (queryUserGroup . maintainersGroup . packageName) matchingPackages
+                      if not . any (uid `Group.member`) $ groups
+                         then uploadError (caseClash matchingPackages)
+                         else return Nothing
+
+                _ -> return Nothing
       where
         uploadError = return . Just . ErrorResponse 403 [] "Upload failed"
         versionExists = [ MText $
@@ -378,6 +400,18 @@ uploadFeature ServerEnv{serverBlobStore = store}
                      ++ "this is a package name clash, please pick another name or talk to the "
                      ++ "maintainers of the existing package."
                      ]
+        notUploadersGroup = [ MText $
+                        "You are not an authorized package uploader. Please contact the server "
+                     ++ "trustees at trustees@hackage.haskell.org to request to be added to the Uploaders group."
+                     ]
+        caseClash pkgs = [MText $
+                         "Package(s) with the same name as this package, modulo case, already exist: "
+                         ]
+                      ++ intersperse (MText ", ") [ MLink pn ("/package/" ++ pn)
+                                                  | pn <- map (display . packageName) pkgs ]
+                      ++ [MText $
+                         ".\n\nYou may only upload new packages which case-clash with existing packages "
+                      ++ "if you are a maintainer of one of the existing packages. Please pick another name."]
 
     -- This function generically extracts a package, useful for uploading, checking,
     -- and anything else in the standard user-upload pipeline.
@@ -442,4 +476,3 @@ packageIdExistsModuloNormalisedVersion pkgs pkg =
         n vs' = case dropWhileEnd (== 0) vs' of
             []   -> [0]
             vs'' -> vs''
-

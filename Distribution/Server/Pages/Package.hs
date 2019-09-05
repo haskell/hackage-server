@@ -32,6 +32,7 @@ import Distribution.Server.Packages.ModuleForest
 import Distribution.Server.Packages.Render
 import Distribution.Server.Users.Types (userStatus, userName, isActiveAccount)
 import Data.TarIndex (TarIndex)
+import qualified Data.TarIndex as Tar
 
 import qualified Distribution.ModuleName as Module
 import Distribution.ModuleName (ModuleName)
@@ -313,19 +314,20 @@ moduleSection render mdocIndex docURL quickNav =
                      , renderModuleForest docURL s ]
                 else []) ++
             (if not (null m)
-                then [ h2 << "Modules"
-                     , renderModuleForest docURL m ]
-                else []) ++
-            [renderDocIndexLink]
-        renderDocIndexLink
-          | isJust mdocIndex =
-            let docIndexURL = docURL </> "doc-index.html"
+                then [ h2 << "Modules"] ++
+                     [renderDocIndexLink] ++
+                     [renderModuleForest docURL m ]
+                else [])
+        renderDocIndexLink = case mdocIndex of
+          Just tindex ->
+            let docIndexURL | isJust (Tar.lookup tindex "doc-index-All.html") = docURL </> "doc-index-All.html"
+                            | otherwise = docURL </> "doc-index.html"
             in  paragraph ! [thestyle "font-size: small"]
                   << ("[" +++ anchor ! [href docIndexURL] << "Index" +++ "]" +++
                       (if quickNav
                        then " [" +++ anchor ! [identifier "quickjump-trigger", href "#"] << "Quick Jump" +++ "]"
                        else mempty))
-          | otherwise = mempty
+          Nothing -> mempty
 
 propertySection :: [(String, Html)] -> [Html]
 propertySection sections =
@@ -353,23 +355,19 @@ showDependencies :: [Dependency] -> Html
 showDependencies deps = commaList (map showDependency deps)
 
 showDependency ::  Dependency -> Html
-showDependency (Dependency (unPackageName -> pname) vs) = showPkg +++ vsHtml
+showDependency (Dependency (unPackageName -> pname) vs) = nonbreakingSpan << (showPkg +++ vsHtml)
   where vsHtml = if vs == anyVersion then noHtml
-                                     else nonbreakingHtml (" (" ++ display vs ++ ")")
+                                     else toHtml (" (" ++ display vs ++ ")")
         -- mb_vers links to latest version in range. This is a bit computationally
         -- expensive, not cache-friendly, and perhaps unexpected in some cases
         {-mb_vers = maybeLast $ filter (`withinRange` vs) $ map packageVersion $
                     PackageIndex.lookupPackageName vmap (PackageName pname)-}
         -- nonetheless, we should ensure that the package exists /before/
         -- passing along the PackageRender, which is not the case here
-        showPkg = anchor ! [href . packageURL $ PackageIdentifier (mkPackageName pname) nullVersion] << nonbreakingHtml pname
+        showPkg = anchor ! [href . packageURL $ PackageIdentifier (mkPackageName pname) nullVersion] << pname
 
-nonbreakingHtml :: String -> Html
-nonbreakingHtml = primHtml . concatMap htmlizeChar2 . stringToHtmlString
-   where
-      htmlizeChar2 ' ' = "&nbsp;"
-      htmlizeChar2 '-' = "&#8209;"
-      htmlizeChar2 c   = [c]
+nonbreakingSpan :: Html -> Html
+nonbreakingSpan str = thespan ! [thestyle "white-space: nowrap"] << str
 
 renderDetailedDependencies :: PackageRender -> Html
 renderDetailedDependencies pkgRender =

@@ -50,13 +50,9 @@ staticFilesFeature ServerEnv{serverStaticDir, serverTemplatesMode}
 --            resourceGet  = [("", \_ -> serveStaticTemplates)]
 --          }
       , (resourceAt "/static/..") {
-            resourceGet  = [("", \_ -> serveStaticDirFiles)]
+            resourceGet  = [("", const serveStaticDirFiles)]
           }
-      ] ++
-      [ (resourceAt ("/" ++ filename)) {
-            resourceGet  = [("", \_ -> serveStaticToplevelFile mimetype filename)]
-          }
-      | (filename, mimetype) <- toplevelFiles ]
+      ]
         ++
       [ (resourceAt ("/" ++ dropExtension name)) {
             resourceGet  = [("", \_ -> serveStaticTemplate name)]
@@ -136,7 +132,6 @@ staticFilesFeature ServerEnv{serverStaticDir, serverTemplatesMode}
     htmlErrorPage GenericErrorResponse =
       htmlErrorPage internalServerErrorResponse
 
-    toplevelFiles     = [("favicon.ico", "image/x-icon")]
     toplevelTemplates = map dropExtension staticFiles
 
 addHeaders :: Headers -> [(String, String)] -> Headers

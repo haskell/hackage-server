@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE RankNTypes, NamedFieldPuns, RecordWildCards, LambdaCase #-}
 module Distribution.Server.Features.PackageCandidates (
     PackageCandidatesFeature(..),
     PackageCandidatesResource(..),
@@ -53,7 +53,7 @@ import System.FilePath.Posix (takeExtension)
 import Data.Aeson (Value (..), object, toJSON, (.=))
 
 import Data.Function (fix)
-import Data.List (find)
+import Data.List (find, intersperse)
 import Data.Time.Clock (getCurrentTime)
 import qualified Data.Vector as Vec
 
@@ -72,7 +72,7 @@ data PackageCandidatesFeature = PackageCandidatesFeature {
     doDeleteCandidate     :: DynamicPath -> ServerPartE Response,
     uploadCandidate       :: (PackageId -> Bool) -> ServerPartE CandPkgInfo,
     publishCandidate      :: DynamicPath -> Bool -> ServerPartE UploadResult,
-    checkPublish          :: PackageIndex PkgInfo -> CandPkgInfo -> Maybe ErrorResponse,
+    checkPublish          :: forall m. MonadIO m => Users.UserId -> PackageIndex PkgInfo -> CandPkgInfo -> m (Maybe ErrorResponse),
     candidateRender       :: CandPkgInfo -> IO CandidateRender,
 
     lookupCandidateName :: PackageName -> ServerPartE [CandPkgInfo],
@@ -425,9 +425,9 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       packages <- queryGetPackageIndex
       candidate <- packageInPath dpath >>= lookupCandidateId
       -- check authorization to upload - must already be a maintainer
-      uid <- guardAuthorised [InGroup (maintainersGroup (packageName candidate))]
+      uid <- guardAuthorisedAsMaintainer (packageName candidate)
       -- check if package or later already exists
-      case checkPublish packages candidate of
+      checkPublish uid packages candidate >>= \case
         Just failed -> throwError failed
         Nothing -> do
           -- run filters
@@ -454,13 +454,47 @@ candidatesFeature ServerEnv{serverBlobStore = store}
 
 
     -- | Helper function for publishCandidate that ensures it's safe to insert into the main index.
-    checkPublish :: PackageIndex PkgInfo -> CandPkgInfo -> Maybe ErrorResponse
-    checkPublish packages candidate = do
-        let pkgs = PackageIndex.lookupPackageName packages (packageName candidate)
-            candVersion = packageVersion candidate
-        case find ((== candVersion) . packageVersion) pkgs of
-            Just {} -> Just $ ErrorResponse 403 [] "Publish failed" [MText "Package name and version already exist in the database"]
-            Nothing  -> Nothing
+    --
+    -- TODO: share code w/ 'Distribution.Server.Features.Upload.processUpload'
+    checkPublish :: forall m. MonadIO m => Users.UserId -> PackageIndex PkgInfo -> CandPkgInfo -> m (Maybe ErrorResponse)
+    checkPublish uid packages candidate
+      | Just _ <- find ((== candVersion) . packageVersion) pkgs
+        = return $ Just $ ErrorResponse 403 [] "Publish failed" [MText "Package name and version already exist in the database"]
+
+      | packageExists packages candidate = return Nothing
+
+        -- check for case-clashes with already published packages
+      | otherwise = case PackageIndex.searchByName packages (unPackageName candName) of
+          PackageIndex.Unambiguous (mp:_) -> do
+            group <- liftIO $ (Group.queryUserGroup . maintainersGroup . packageName) mp
+            if not $ uid `Group.member` group
+              then return $ Just $ ErrorResponse 403 [] "Publish failed" (caseClash [mp])
+              else return Nothing
+
+          PackageIndex.Unambiguous [] -> return Nothing -- can this ever occur?
+
+          PackageIndex.Ambiguous mps -> do
+            let matchingPackages = concat . map (take 1) $ mps
+            groups <- mapM (liftIO . Group.queryUserGroup . maintainersGroup . packageName) matchingPackages
+            if not . any (uid `Group.member`) $ groups
+              then return $ Just $ ErrorResponse 403 [] "Publish failed" (caseClash matchingPackages)
+              else return Nothing
+
+          -- no case-neighbors
+          PackageIndex.None -> return Nothing
+      where
+        pkgs = PackageIndex.lookupPackageName packages candName
+        candVersion = packageVersion candidate
+        candName    = packageName candidate
+
+        caseClash pkgs' = [MText $
+                         "Package(s) with the same name as this package, modulo case, already exist: "
+                         ]
+                      ++ intersperse (MText ", ") [ MLink pn ("/package/" ++ pn)
+                                                  | pn <- map (display . packageName) pkgs' ]
+                      ++ [MText $
+                         ".\n\nYou may only upload new packages which case-clash with existing packages "
+                      ++ "if you are a maintainer of one of the existing packages. Please pick another name."]
 
     ------------------------------------------------------------------------------
 

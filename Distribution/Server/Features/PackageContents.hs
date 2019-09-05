@@ -199,7 +199,7 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
           errNotFound "Could not serve package contents" [MText err]
         Right (fp, etag, index) ->
           serveTarball (display (packageId pkg) ++ " source tarball")
-                       ["index.html"] (display (packageId pkg)) fp index
+                       [] (display (packageId pkg)) fp index
                        [Public, maxAgeDays 30] etag
 
 renderMarkdown :: BS.ByteString -> XHtml.Html

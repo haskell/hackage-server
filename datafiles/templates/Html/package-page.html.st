@@ -37,6 +37,15 @@
     </div>
     $endif$
 
+    <div id="description">
+    $if(package.optional.hasDescription)$
+    $package.optional.description$
+    $endif$
+    $if(package.optional.hasReadme)$
+    <hr>
+    [<a href="#readme">Skip to Readme</a>]
+    $endif$
+    </div>
 
 
     <div id="properties">
@@ -62,23 +71,23 @@
 
         <tr>
           <th>License</th>
-          <td>$package.license$</td>
+          <td class="word-wrap">$package.license$</td>
         </tr>
 
         $if(package.optional.hasCopyright)$
         <tr>
           <th>Copyright</th>
-          <td>$package.optional.copyright$</td>
+          <td class="word-wrap">$package.optional.copyright$</td>
         </tr>
         $endif$
 
         <tr>
           <th>Author</th>
-          <td>$package.author$</td>
+          <td class="word-wrap">$package.author$</td>
         </tr>
         <tr>
           <th>Maintainer</th>
-          <td>$package.maintainer$</td>
+          <td class="word-wrap">$package.maintainer$</td>
         </tr>
 
         $if(hackage.hasUpdateTime)$
@@ -179,22 +188,11 @@
         </tr>
         <tr>
           <th>Status</th>
-	  <td>$buildStatus$<br/><a href="https://matrix.hackage.haskell.org/package/$package.name$">Hackage Matrix CI</a></td>
+	  <td><a href="https://matrix.hackage.haskell.org/package/$package.name$"><img src="https://matrix.hackage.haskell.org/api/v2/packages/$package.name$/badge" alt="Hackage Matrix CI" style="max-width:100%;" /></a><br/>$buildStatus$</td>
         </tr>
       </tbody>
     </table>
     </div> <!-- /properties -->
-
-    <div id="description">
-    $if(package.optional.hasDescription)$
-    $package.optional.description$
-    $endif$
-    $if(package.optional.hasReadme)$
-    <hr>
-    [<a href="#readme">Skip to Readme</a>]
-    $endif$
-    </div>
-
 
     <div id="modules">
       $moduleList$

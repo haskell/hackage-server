@@ -1,4 +1,4 @@
-{-# LANGUAGE RecursiveDo, FlexibleContexts, RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE RecursiveDo, FlexibleContexts, RankNTypes, NamedFieldPuns, RecordWildCards, LambdaCase #-}
 module Distribution.Server.Features.Html (
     HtmlFeature(..),
     initHtmlFeature
@@ -135,7 +135,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    ]
 
 
-    return $ \user core@CoreFeature{packageChangeHook}
+    return $ \user@UserFeature{groupChangedHook} core@CoreFeature{packageChangeHook}
               packages upload
               candidates versions
               -- [reverse index disabled] reverse
@@ -194,6 +194,8 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
       registerHook packageChangeHook $ \_ -> do
         prodAsyncCache mainCache  "package change"
         prodAsyncCache namesCache "package change"
+        prodAsyncCache browseCache "package change"
+      registerHook groupChangedHook $ \_ -> do
         prodAsyncCache browseCache "package change"
 
       return feature
@@ -1150,10 +1152,11 @@ mkHtmlCandidates HtmlUtilities{..}
     servePublishForm :: DynamicPath -> ServerPartE Response
     servePublishForm dpath = do
       candidate <- packageInPath dpath >>= lookupCandidateId
-      guardAuthorisedAsMaintainer (packageName candidate)
+      uid <- guardAuthorisedAsMaintainer (packageName candidate)
+
       let pkgid = packageId candidate
       packages <- queryGetPackageIndex
-      case checkPublish packages candidate of
+      checkPublish uid packages candidate >>= \case
           Just err -> throwError err
           Nothing  -> do
               return $ toResponse $ Resource.XHtml $ hackagePage "Publishing candidates"

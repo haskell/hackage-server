@@ -15,6 +15,8 @@ import qualified Data.Set as Set
 import Data.Char
 import qualified NLP.Tokenize as NLP
 import qualified NLP.Snowball as NLP
+import qualified Data.Foldable as F
+import Data.List (intercalate)
 
 import qualified Documentation.Haddock.Markup as Haddock
 import Documentation.Haddock.Types
@@ -22,7 +24,7 @@ import Documentation.Haddock.Types
 import qualified Distribution.Server.Pages.Package.HaddockParse as Haddock (parse)
 
 extraStems :: [Text] -> Text -> [Text]
-extraStems ss x = x : mapMaybe (x `T.stripSuffix`) ss
+extraStems ss x = x : mapMaybe (`T.stripSuffix` x) ss
 
 extractSynopsisTerms :: [Text] -> Set Text -> String -> [Text]
 extractSynopsisTerms ss stopWords =
@@ -62,7 +64,7 @@ extractDescriptionTerms ss stopWords =
         [] --TODO: something here
         (  filter (not . ignoreTok)
          . NLP.tokenize
-         . concat . Haddock.markup termsMarkup)
+         . intercalate " " . Haddock.markup termsMarkup)
     . Haddock.parse
 
 termsMarkup :: DocMarkupH () String [String]
@@ -82,6 +84,7 @@ termsMarkup = Markup {
   markupOrderedList   = concat,
   markupDefList       = concatMap (\(d,t) -> d ++ t),
   markupCodeBlock     = const [],
+  markupTable         = concat . F.toList,
   markupHyperlink     = \(Hyperlink _url mLabel) -> maybeToList mLabel,
                         --TODO: extract main part of hostname
   markupAName         = const [],

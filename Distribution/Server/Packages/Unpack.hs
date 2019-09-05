@@ -25,7 +25,7 @@ import Distribution.Package
          ( PackageIdentifier, packageVersion, packageName, PackageName )
 import Distribution.PackageDescription
          ( GenericPackageDescription(..), PackageDescription(..)
-         , license, specVersion )
+         , licenseRaw, specVersion )
 import Distribution.PackageDescription.Configuration
          ( flattenPackageDescription )
 import Distribution.PackageDescription.Check
@@ -37,6 +37,7 @@ import Distribution.Text
          ( Text(..), display, simpleParse )
 import Distribution.Server.Util.ParseSpecVer
 import qualified Distribution.SPDX as SPDX
+import qualified Distribution.License as License
 import qualified Distribution.Compat.ReadP as Parse
 
 import Control.Monad.Except
@@ -204,6 +205,7 @@ basicChecks pkgid tarIndex = do
     throwError "The 'cabal-version' field could not be properly parsed."
 
   -- Don't allowing uploading new pre-1.2 .cabal files as the parser is likely too lax
+  -- TODO: slowly phase out ancient cabal spec versions below 1.10
   when (specVer < mkVersion [1,2]) $
     throwError "'cabal-version' must be at least 1.2"
 
@@ -212,12 +214,17 @@ basicChecks pkgid tarIndex = do
   when (specVer >= mkVersion [1,25] && specVer < mkVersion [2]) $
     throwError "'cabal-version' in unassigned >=1.25 && <2 range; use 'cabal-version: 2.0' instead"
 
-  when (specVer >= mkVersion [2,1] && specVer < mkVersion [2,2]) $
-    throwError "'cabal-version' refers to unassigned 2.1.* range; use 'cabal-version: 2.2' instead"
-
   -- Safeguard; should already be caught by parser
-  unless (specVer < mkVersion [2,3]) $
-    throwError "'cabal-version' must be lower than 2.3"
+  unless (specVer < mkVersion [2,5]) $
+    throwError "'cabal-version' must be lower than 2.5"
+
+  -- Check whether a known spec version had been used
+  -- TODO: move this into lib:Cabal
+  let knownSpecVersions = map mkVersion [ [1,18], [1,20], [1,22], [1,24], [2,0], [2,2], [2,4] ]
+  when (specVer >= mkVersion [1,18] && (specVer `notElem` knownSpecVersions)) $
+    throwError ("'cabal-version' refers to an unreleased/unknown cabal specification version "
+                ++ display specVer ++ "; for a list of valid specification versions please consult "
+                ++ "https://www.haskell.org/cabal/users-guide/file-format-changelog.html")
 
   -- Check that the name and version in Cabal file match
   when (packageName pkgDesc /= packageName pkgid) $
@@ -501,11 +508,12 @@ startsWithBOM bs = LBS.take 3 bs == LBS.pack [0xEF, 0xBB, 0xBF]
 --   OSI-accepted licenses or CC0
 --
 isAcceptableLicense :: PackageDescription -> Bool
-isAcceptableLicense = go . license
+isAcceptableLicense = either goSpdx goLegacy . licenseRaw
   where
-    go :: SPDX.License -> Bool
-    go SPDX.NONE = False
-    go (SPDX.License expr) = goExpr expr
+    -- `cabal-version: 2.2` and later
+    goSpdx :: SPDX.License -> Bool
+    goSpdx SPDX.NONE = False
+    goSpdx (SPDX.License expr) = goExpr expr
       where
         goExpr (SPDX.EAnd a b)            = goExpr a && goExpr b
         goExpr (SPDX.EOr a b)             = goExpr a || goExpr b
@@ -516,3 +524,7 @@ isAcceptableLicense = go . license
         goSimple (SPDX.ELicenseIdPlus _)   = False -- don't allow + licenses (use GPL-3.0-or-later e.g.)
         goSimple (SPDX.ELicenseId SPDX.CC0_1_0) = True -- CC0 isn't OSI approved, but we allow it as "PublicDomain", this is eg. PublicDomain in http://hackage.haskell.org/package/string-qq-0.0.2/src/LICENSE
         goSimple (SPDX.ELicenseId lid)     = SPDX.licenseIsOsiApproved lid -- allow only OSI approved licenses.
+
+    -- pre `cabal-version: 2.2`
+    goLegacy License.AllRightsReserved = False
+    goLegacy _                         = True
