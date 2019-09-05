@@ -16,11 +16,11 @@ $hackagePageHeader()$
    growing.  You can <a href="/upload">publish</a> libraries and
    programs or download and install packages with tools
    like <a href="/package/cabal-install">cabal-install</a> (or via
-  your distro's package manager).</p>
+   your distro's package manager).</p>
 
 <h2>Package Downloads</h2>
 <ul>
-<li><a href="/packages/browse">Browse packages</a> </li>
+<li><a href="/packages/browse">Browse packages</a></li>
 <li><a href="/packages/search">Search packages</a></li>
 <li><a href="/packages/recent">Recent uploads</a></li>
 </ul>
