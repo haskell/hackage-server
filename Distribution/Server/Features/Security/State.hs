@@ -311,7 +311,7 @@ updateSecurityState maxAge newUpdate = do
                tufUpdateInfoTar     = tarFileInfo,
                tufUpdateTime        = timestampTime
              }
-        _ -> error "getTufUpdate: unexpted state"
+        _ -> error "getTufUpdate: unexpected state"
 
     setTufUpdate TUFUpdate {
                    tufUpdateInfoRoot    = rootFileInfo,
