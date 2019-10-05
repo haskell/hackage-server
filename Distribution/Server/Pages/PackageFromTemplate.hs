@@ -19,6 +19,7 @@ import Distribution.PackageDescription as P
 import Distribution.Version
 import Distribution.Text        (display)
 import Text.XHtml.Strict hiding (p, name, title, content)
+import qualified Text.XHtml.Strict as XHtml
 
 import Data.Maybe               (maybeToList, fromMaybe)
 import Data.List                (intersperse)
@@ -218,14 +219,16 @@ packagePageTemplate render
       where
         revisionsURL = rendPkgUri render </> "revisions/"
 
-    renderUploadInfo :: UTCTime -> Maybe UserInfo-> Html
+    renderUploadInfo :: UTCTime -> Maybe UserInfo -> Html
     renderUploadInfo utime uinfo =
-        "by " +++ user +++ " at " +++ formatTime defaultTimeLocale "%c" utime
+        "by " +++ user +++ " at " +++ timeHtml
       where
         uname   = maybe "Unknown" (display . userName) uinfo
         uactive = maybe False (isActiveAccount . userStatus) uinfo
         user  | uactive   = anchor ! [href $ "/user/" ++ uname] << uname
               | otherwise = toHtml uname
+        timeHtml = XHtml.thespan ! [XHtml.title $ formatTime defaultTimeLocale "%c" utime ]
+            << [toHtml (formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" utime) ]
 
     renderChangelog :: PackageRender -> Html
     renderChangelog r = case rendChangeLog r of

@@ -940,7 +940,7 @@ formatErrorResponse (ErrorResponse uri (a,b,c) reason mBody) =
 --
 
 showUTCTime :: UTCTime -> String
-showUTCTime = formatTime defaultTimeLocale "%c"
+showUTCTime = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S%EZ"
 
 -- option utility
 reqArgFlag :: ArgPlaceHolder -> SFlags -> LFlags -> Description
