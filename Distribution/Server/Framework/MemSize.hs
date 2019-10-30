@@ -31,7 +31,7 @@ import qualified Data.Version as Ver
 
 import Distribution.Package  (PackageIdentifier(..), PackageName, unPackageName)
 import Distribution.PackageDescription (FlagName, unFlagName)
-import Distribution.Version  (Version, VersionRange, foldVersionRange')
+import Distribution.Version  (Version, VersionRange, cataVersionRange, VersionRangeF(..))
 import Distribution.System   (Arch(..), OS(..))
 import Distribution.Compiler (CompilerFlavor(..), CompilerId(..))
 
@@ -238,18 +238,19 @@ instance MemSize Version where
     memSize _ = 2
 
 instance MemSize VersionRange where
-    memSize =
-      foldVersionRange' memSize0                  -- any
-                        memSize1                  -- == v
-                        memSize1                  -- > v
-                        memSize1                  -- < v
-                        (\v -> 7 + 2 * memSize v) -- >= v
-                        (\v -> 7 + 2 * memSize v) -- <= v
-                        (\v _v' -> memSize1 v)    -- == v.*
-                        (\v _v' -> memSize1 v)    -- ^>= v.*
-                        memSize2                  -- _ || _
-                        memSize2                  -- _ && _
-                        memSize1                  -- (_)
+    memSize = cataVersionRange f
+      where
+        f AnyVersionF                   = memSize0
+        f (ThisVersionF v)              = memSize1 v
+        f (LaterVersionF v)             = memSize1 v
+        f (OrLaterVersionF v)           = memSize1 v
+        f (EarlierVersionF v)           = memSize1 v
+        f (OrEarlierVersionF v)         = memSize1 v
+        f (WildcardVersionF v)          = memSize1 v
+        f (MajorBoundVersionF v)        = memSize1 v
+        f (UnionVersionRangesF u v)     = memSize2 u v
+        f (IntersectVersionRangesF u v) = memSize2 u v
+        f (VersionRangeParensF v)       = memSize1 v
 
 instance MemSize PackageIdentifier where
     memSize (PackageIdentifier a b) = memSize2 a b
