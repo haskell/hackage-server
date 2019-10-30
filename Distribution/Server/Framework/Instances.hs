@@ -26,6 +26,8 @@ import Distribution.System   (OS(..), Arch(..))
 import Distribution.Types.GenericPackageDescription (FlagName, mkFlagName, unFlagName)
 import Distribution.Types.PackageName
 import Distribution.Version
+import Distribution.Pretty (Pretty(pretty), prettyShow)
+import Distribution.Parsec.Class (Parsec(..), simpleParsec)
 
 import Data.Time (Day(..), DiffTime, UTCTime(..))
 import Control.DeepSeq
@@ -302,6 +304,12 @@ instance Text UTCTime where
   disp  = PP.text . show
   parse = readS_to_P (reads :: ReadS UTCTime)
 
+instance Pretty Day where
+  pretty = PP.text . show
+
+instance Pretty UTCTime where
+  pretty  = PP.text . show
+
 -------------------
 -- Arbitrary instances
 --
@@ -416,11 +424,11 @@ instance Migrate VersionRange where
     migrate (VersionRange_v0 v) = v
 
 
-textGet_v0 :: Text a => Serialize.Get a
-textGet_v0 = (fromJust . simpleParse) <$> Serialize.get
+textGet_v0 :: Parsec a => Serialize.Get a
+textGet_v0 = (fromJust . simpleParsec) <$> Serialize.get
 
-textPut_v0 :: Text a => a -> Serialize.Put
-textPut_v0 = Serialize.put . display
+textPut_v0 :: Pretty a => a -> Serialize.Put
+textPut_v0 = Serialize.put . prettyShow
 
 ---------------------------------------------------------------------
 
