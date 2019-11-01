@@ -22,6 +22,9 @@ import qualified Data.Text.Encoding as T
 import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString.Base16 as BS16
 import qualified Crypto.Hash.SHA256 as SHA256
+import Distribution.Pretty (Pretty(..))
+import Distribution.Parsec.Class (Parsec(..))
+import qualified Distribution.Compat.CharParsing as P
 
 import Control.Applicative ((<$>))
 import Data.SafeCopy
@@ -72,6 +75,7 @@ parseAuthToken t
 renderAuthToken :: AuthToken -> T.Text
 renderAuthToken (AuthToken bss) = T.decodeUtf8 $ BS16.encode $ BSS.fromShort bss
 
+-- TODO: remove this instance for Cabal 3.0
 instance Text AuthToken where
     disp tok = Disp.text . T.unpack . renderAuthToken $ tok
     parse =
@@ -79,6 +83,16 @@ instance Text AuthToken where
         case parseAuthToken (T.pack x) of
           Left err -> fail err
           Right ok -> return ok
+
+instance Parsec AuthToken where
+    parsec =
+        P.munch1 Char.isHexDigit >>= \x ->
+        case parseAuthToken (T.pack x) of
+          Left err -> fail err
+          Right ok -> return ok
+
+instance Pretty AuthToken where
+    pretty = Disp.text . T.unpack . renderAuthToken
 
 instance SafeCopy AuthToken where
     putCopy (AuthToken bs) = contain $ safePut (BSS.fromShort bs)

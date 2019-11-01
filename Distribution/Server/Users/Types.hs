@@ -14,10 +14,17 @@ import Distribution.Text
          ( Text(..) )
 import qualified Distribution.Server.Util.Parse as Parse
 import qualified Distribution.Compat.ReadP as Parse
+import Distribution.Pretty (Pretty(..))
+import Distribution.Parsec.Class (Parsec(..))
+import qualified Distribution.Parsec.Class as P
+import qualified Distribution.Compat.Parsing as P
+import qualified Distribution.Compat.CharParsing as P
+
 import qualified Text.PrettyPrint          as Disp
 import qualified Data.Char as Char
 import qualified Data.Text as T
 import qualified Data.Map as M
+import qualified Data.List as L
 
 import Control.Applicative ((<$>))
 import Data.Aeson (ToJSON, FromJSON)
@@ -27,7 +34,7 @@ import Data.Hashable
 
 
 newtype UserId = UserId Int
-  deriving (Eq, Ord, Read, Show, Typeable, MemSize, ToJSON, FromJSON)
+  deriving (Eq, Ord, Read, Show, Typeable, MemSize, ToJSON, FromJSON, Pretty)
 
 newtype UserName  = UserName String
   deriving (Eq, Ord, Read, Show, Typeable, MemSize, ToJSON, FromJSON, Hashable)
@@ -62,13 +69,36 @@ instance MemSize UserStatus where
 instance MemSize UserAuth where
     memSize (UserAuth a) = memSize1 a
 
+-- TODO: remove this instance for Cabal 3.0
 instance Text UserId where
     disp (UserId uid) = Disp.int uid
     parse = UserId <$> Parse.int
 
+instance Parsec UserId where
+  -- parse a non-negative integer. No redundant leading zeros allowed.
+  -- (this is effectively a relabeled versionDigitParser)
+  parsec = (P.some d >>= (fmap UserId . toNumber)) P.<?> "UserId (natural number without redunant leading zeroes)"
+    where
+      toNumber :: P.CabalParsing m => [Int] -> m Int
+      toNumber [0]   = return 0
+      toNumber (0:_) = P.unexpected "UserId with redundant leading zero"
+      -- TODO: Add sanity check this doesn't overflow
+      toNumber xs    = return $ L.foldl' (\a b -> a * 10 + b) 0 xs
+
+      d :: P.CharParsing m => m Int
+      d = f <$> P.satisfyRange '0' '9'
+      f c = Char.ord c - Char.ord '0'
+
+-- TODO: remove this instance for Cabal 3.0
 instance Text UserName where
     disp (UserName name) = Disp.text name
     parse = UserName <$> Parse.munch1 isValidUserNameChar
+
+instance Pretty UserName where
+  pretty (UserName name) = Disp.text name
+
+instance Parsec UserName where
+  parsec = UserName <$> P.munch1 isValidUserNameChar
 
 isValidUserNameChar :: Char -> Bool
 isValidUserNameChar c = (c < '\127' && Char.isAlphaNum c) || (c == '_')
