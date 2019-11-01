@@ -75,10 +75,10 @@ staticFilesFeature ServerEnv{serverStaticDir, serverTemplatesMode}
       cacheControlWithoutETag staticResourceCacheControls
       serveDirectory DisableBrowsing [] serverStaticDir
 
-    serveStaticToplevelFile :: String -> FilePath -> ServerPartE Response
-    serveStaticToplevelFile mimetype filename = do
-      cacheControlWithoutETag staticResourceCacheControls
-      serveFile (asContentType mimetype) (serverStaticDir </> filename)
+--    serveStaticToplevelFile :: String -> FilePath -> ServerPartE Response
+--    serveStaticToplevelFile mimetype filename = do
+--      cacheControlWithoutETag staticResourceCacheControls
+--      serveFile (asContentType mimetype) (serverStaticDir </> filename)
 
     serveStaticTemplate :: String -> ServerPartE Response
     serveStaticTemplate = serveTemplate
