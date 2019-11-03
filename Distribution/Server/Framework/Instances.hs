@@ -28,9 +28,12 @@ import Distribution.Types.PackageName
 import Distribution.Version
 import Distribution.Pretty (Pretty(pretty), prettyShow)
 import Distribution.Parsec.Class (Parsec(..), simpleParsec)
+import qualified Distribution.Compat.CharParsing as P
 
-import Data.Time (Day(..), DiffTime, UTCTime(..))
+import Data.Time (Day(..), DiffTime, UTCTime(..), fromGregorianValid)
 import Control.DeepSeq
+import qualified Data.Char as Char
+import Text.Read (readMaybe)
 
 import Data.Serialize as Serialize
 import Data.SafeCopy hiding (Version)
@@ -307,9 +310,54 @@ instance Text UTCTime where
 instance Pretty Day where
   pretty = PP.text . show
 
+instance Parsec Day where
+  parsec = do
+    -- imitate grammar of Read instance of 'Day' (i.e. "%Y-%m-%d")
+    yyyy <- P.integral
+    P.char '-'
+    mm <- replicateM 2 P.digit
+    P.char '-'
+    dd <- replicateM 2 P.digit
+    case fromGregorianValid yyyy (read mm) (read dd) of
+      Nothing -> fail "invalid Day"
+      Just day -> return day
+
 instance Pretty UTCTime where
   pretty  = PP.text . show
 
+
+instance Parsec UTCTime where
+  parsec = do
+      -- "%Y-%m-%d %H:%M:%S%Q%Z"
+      yyyy <- P.munch1 Char.isDigit
+      P.char '-'
+      mm <- digit2
+      P.char '-'
+      dd <- digit2
+
+      P.skipSpaces1
+
+      h <- digit2
+      P.char ':'
+      m <- digit2
+      P.char ':'
+      s <- digit2
+
+      mq <- optional (liftM2 (:) (P.char '.') (P.munch Char.isDigit))
+
+      P.spaces
+
+      -- TODO: more accurate timezone grammar
+      mtz <- optional (liftM2 (:) (P.satisfy (\c -> Char.isAsciiLower c || Char.isAsciiUpper c || c == '+' || c == '-'))
+                                  (P.munch (\c -> Char.isAsciiLower c || Char.isAsciiUpper c || Char.isDigit c)))
+
+      let tstr = concat [ yyyy, "-", mm, "-", dd, " ", h, ":", m, ":", s, maybe "" id mq, maybe "" (' ':) mtz ]
+
+      case readMaybe tstr of
+        Nothing -> fail "invalid UTCTime"
+        Just t  -> return t
+    where
+      digit2 = replicateM 2 P.digit
 -------------------
 -- Arbitrary instances
 --

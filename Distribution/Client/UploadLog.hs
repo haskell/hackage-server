@@ -28,6 +28,10 @@ import Distribution.Package
          ( PackageId, PackageName, packageName, PackageIdentifier(..))
 import Distribution.Text
          ( Text(..), simpleParse )
+import Distribution.Pretty (Pretty(..))
+-- import Distribution.Parsec.Class (Parsec(..))
+-- import qualified Distribution.Parsec.Class as P
+-- import qualified Distribution.Compat.CharParsing as P
 import Distribution.ParseUtils ( parseMaybeQuoted )
 import qualified Distribution.Compat.ReadP as Parse
 import qualified Text.PrettyPrint          as Disp
@@ -50,6 +54,7 @@ import Data.List
 data Entry = Entry UTCTime UserName PackageIdentifier
   deriving (Eq, Ord, Show)
 
+-- TODO: remove this instance for Cabal 3.0
 instance Text Entry where
   disp (Entry time user pkgid) =
         Disp.text (formatTime defaultTimeLocale "%c" time)
@@ -64,6 +69,28 @@ instance Text Entry where
     ver  <- parse
     let pkgid = PackageIdentifier pkg ver
     return (Entry (zonedTimeToUTC time) user pkgid)
+
+instance Pretty Entry where
+  pretty (Entry time user pkgid) =
+        Disp.text (formatTime defaultTimeLocale "%c" time)
+    <+> pretty user <+> pretty pkgid
+
+{- TODO
+
+instance Parsec Entry where
+  parse = do
+    -- parseDateTimeFmt parses "%a %b %e %H:%M:%S %Z %Y",
+    time <- parseDateTimeFmt
+    P.skipSpaces1
+    user <- parsec
+    P.skipSpaces1
+    pkg  <- parseMaybeQuoted parse
+    P.skipSpaces
+    ver  <- parsec
+    let pkgid = PackageIdentifier pkg ver
+    return (Entry (zonedTimeToUTC time) user pkgid)
+
+-}
 
 -- | Returns a list of log entries, however some packages have been uploaded
 -- more than once, so each entry is paired with any older entries for the same
