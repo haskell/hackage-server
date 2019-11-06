@@ -13,10 +13,15 @@ uses the [icu4c](http://icu-project.org/apiref/icu4c/) library to build.
 
 You'll need to do the following to get hackage-server's dependency `text-icu` to build:
 
-### Mac OS X
+### macOS
 
     brew install icu4c
-    brew link icu4c --force
+
+Then create a `cabal.project.local` with
+
+    package text-icu
+      extra-include-dirs: /usr/local/opt/icu4c/include
+      extra-lib-dirs: /usr/local/opt/icu4c/lib
 
 ### Ubuntu/Debian
 
