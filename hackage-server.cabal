@@ -110,7 +110,7 @@ common defaults
   -- other dependencies shared by most components
   build-depends:
     , aeson                 ^>= 1.1
-    , Cabal                 ^>= 2.4.1.0
+    , Cabal                 ^>= 3.0.0.0
     , containers            ^>= 0.5.0
       -- we use Control.Monad.Except, introduced in mtl-2.2.1
     , mtl                   ^>= 2.2.1
