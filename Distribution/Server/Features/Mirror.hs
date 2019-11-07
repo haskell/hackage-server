@@ -25,7 +25,7 @@ import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Util.Parse (unpackUTF8)
 
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescription, runParseResult)
-import Distribution.Parsec.Common (showPError, showPWarning)
+import Distribution.Parsec (showPError, showPWarning)
 
 import qualified Data.ByteString.Lazy as BS.L
 import Data.Time.Clock (getCurrentTime)

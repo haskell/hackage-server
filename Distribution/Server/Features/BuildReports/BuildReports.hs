@@ -24,7 +24,7 @@ import Distribution.Server.Features.BuildReports.BuildReport
 import Distribution.Package (PackageId)
 import Distribution.Text (Text(..), display)
 import Distribution.Pretty (Pretty(..))
-import Distribution.Parsec.Class (Parsec(..))
+import Distribution.Parsec (Parsec(..))
 import qualified Distribution.Parsec.Class as P
 import qualified Distribution.Compat.Parsing as P
 import qualified Distribution.Compat.CharParsing as P

@@ -23,11 +23,11 @@ import Control.Applicative ((<$>))
 
 import Distribution.Text (Text(..))
 import Distribution.Pretty (Pretty(..))
-import Distribution.Parsec.Class (Parsec(..))
+import Distribution.Parsec (Parsec(..))
 import qualified Distribution.Compat.CharParsing as P
 
-import qualified Distribution.Compat.ReadP as Parse
-import qualified Text.PrettyPrint          as Disp
+import qualified Text.ParserCombinators.ReadP as Parse
+import qualified Text.PrettyPrint             as Disp
 import qualified Data.Char as Char
 
 import Data.SafeCopy (base, deriveSafeCopy)

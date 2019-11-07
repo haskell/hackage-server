@@ -13,9 +13,9 @@ import Distribution.Server.Users.AuthToken
 import Distribution.Text
          ( Text(..) )
 import qualified Distribution.Server.Util.Parse as Parse
-import qualified Distribution.Compat.ReadP as Parse
+import qualified Text.ParserCombinators.ReadP as Parse
 import Distribution.Pretty (Pretty(..))
-import Distribution.Parsec.Class (Parsec(..))
+import Distribution.Parsec (Parsec(..))
 import qualified Distribution.Parsec.Class as P
 import qualified Distribution.Compat.Parsing as P
 import qualified Distribution.Compat.CharParsing as P

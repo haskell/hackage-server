@@ -19,7 +19,7 @@ import qualified Data.ByteString.Lazy  as BSL
 import qualified Data.ByteString.Lazy.Char8 as BC8L
 import           Distribution.Text
 import           Distribution.Pretty ( prettyShow )
-import           Distribution.Parsec.Common ( PWarning, PError )
+import           Distribution.Parsec ( PWarning, PError )
 import           Distribution.Version
 import qualified Data.HashMap.Strict   as Map
 import           Foreign.C

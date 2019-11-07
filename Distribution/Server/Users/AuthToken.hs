@@ -14,8 +14,8 @@ import Distribution.Server.Util.Nonce
 
 import Distribution.Text
          ( Text(..) )
-import qualified Distribution.Compat.ReadP as Parse
-import qualified Text.PrettyPrint          as Disp
+import qualified Text.ParserCombinators.ReadP as Parse
+import qualified Text.PrettyPrint             as Disp
 import qualified Data.Char as Char
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -23,7 +23,7 @@ import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString.Base16 as BS16
 import qualified Crypto.Hash.SHA256 as SHA256
 import Distribution.Pretty (Pretty(..))
-import Distribution.Parsec.Class (Parsec(..))
+import Distribution.Parsec (Parsec(..))
 import qualified Distribution.Compat.CharParsing as P
 
 import Control.Applicative ((<$>))

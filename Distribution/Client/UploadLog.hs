@@ -29,12 +29,12 @@ import Distribution.Package
 import Distribution.Text
          ( Text(..), simpleParse )
 import Distribution.Pretty (Pretty(..))
-import Distribution.Parsec.Class (Parsec(..))
+import Distribution.Parsec (Parsec(..))
 import qualified Distribution.Parsec.Class as P
 import qualified Distribution.Compat.CharParsing as P
 import Distribution.ParseUtils ( parseMaybeQuoted )
-import qualified Distribution.Compat.ReadP as Parse
-import qualified Text.PrettyPrint          as Disp
+import qualified Text.ParserCombinators.ReadP as Parse
+import qualified Text.PrettyPrint             as Disp
 import Text.PrettyPrint
          ( (<+>) )
 import Distribution.Simple.Utils
@@ -54,22 +54,6 @@ import qualified Data.Char as Char
 
 data Entry = Entry UTCTime UserName PackageIdentifier
   deriving (Eq, Ord, Show)
-
--- TODO: remove this instance for Cabal 3.0
-instance Text Entry where
-  disp (Entry time user pkgid) =
-        Disp.text (formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S%EZ" time)
-    <+> disp user <+> disp pkgid
-  parse = do
-    time <- readPTime' "%c"
-    Parse.skipSpaces
-    user <- parse
-    Parse.skipSpaces
-    pkg  <- parseMaybeQuoted parse
-    Parse.skipSpaces
-    ver  <- parse
-    let pkgid = PackageIdentifier pkg ver
-    return (Entry (zonedTimeToUTC time) user pkgid)
 
 instance Pretty Entry where
   pretty (Entry time user pkgid) =

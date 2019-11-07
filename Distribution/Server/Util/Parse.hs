@@ -3,7 +3,7 @@ module Distribution.Server.Util.Parse (
     int, unpackUTF8, packUTF8
   ) where
 
-import qualified Distribution.Compat.ReadP as Parse
+import qualified Text.ParserCombinators.ReadP as Parse
 
 import qualified Data.Char as Char
 import Data.ByteString.Lazy (ByteString)

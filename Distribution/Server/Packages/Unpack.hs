@@ -31,18 +31,18 @@ import Distribution.PackageDescription.Configuration
 import Distribution.PackageDescription.Check
          ( PackageCheck(..), checkPackage, CheckPackageContentOps(..)
          , checkPackageContent )
-import Distribution.Parsec.Common
+import Distribution.Parsec
          ( showPError, showPWarning )
 import Distribution.Text
          ( Text(..), display, simpleParse )
 import Distribution.Pretty (Pretty(..))
--- import Distribution.Parsec.Class (Parsec(..))
+-- import Distribution.Parsec (Parsec(..))
 -- import qualified Distribution.Parsec.Class as P
 -- import qualified Distribution.Compat.CharParsing as P
 import Distribution.Server.Util.ParseSpecVer
 import qualified Distribution.SPDX as SPDX
 import qualified Distribution.License as License
-import qualified Distribution.Compat.ReadP as Parse
+import qualified Text.ParserCombinators.ReadP as Parse
 
 import Control.Monad.Except
          ( ExceptT, runExceptT, MonadError, throwError )

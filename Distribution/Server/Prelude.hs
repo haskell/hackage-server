@@ -35,8 +35,7 @@ import           Data.Either (isLeft)
 
 -- TODO: move somewhere else
 import Data.Time.Locale.Compat (defaultTimeLocale)
--- import Text.ParserCombinators.ReadP (ReadP)
-import Distribution.Compat.ReadP as ReadP
+import Text.ParserCombinators.ReadP as ReadP
 #if MIN_VERSION_time(1,5,0)
 import Data.Time.Format (ParseTime, parseTimeM, readSTime)
 #else
@@ -50,7 +49,7 @@ parseTimeMaybe = parseTimeM True defaultTimeLocale
 parseTimeMaybe = parseTime defaultTimeLocale
 #endif
 
-readPTime' :: ParseTime t => String -> ReadP.ReadP r t
+readPTime' :: ParseTime t => String -> ReadP.ReadP t
 #if MIN_VERSION_time(1,5,0)
 readPTime' fmt = ReadP.readS_to_P (readSTime True defaultTimeLocale fmt)
 #else
