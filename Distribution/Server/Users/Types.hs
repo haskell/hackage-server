@@ -10,13 +10,9 @@ import Distribution.Server.Framework.AuthTypes
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Users.AuthToken
 
-import Distribution.Text
-         ( Text(..) )
-import qualified Distribution.Server.Util.Parse as Parse
-import qualified Text.ParserCombinators.ReadP as Parse
 import Distribution.Pretty (Pretty(..))
 import Distribution.Parsec (Parsec(..))
-import qualified Distribution.Parsec.Class as P
+import qualified Distribution.Parsec as P
 import qualified Distribution.Compat.Parsing as P
 import qualified Distribution.Compat.CharParsing as P
 
@@ -69,11 +65,6 @@ instance MemSize UserStatus where
 instance MemSize UserAuth where
     memSize (UserAuth a) = memSize1 a
 
--- TODO: remove this instance for Cabal 3.0
-instance Text UserId where
-    disp (UserId uid) = Disp.int uid
-    parse = UserId <$> Parse.int
-
 instance Parsec UserId where
   -- parse a non-negative integer. No redundant leading zeros allowed.
   -- (this is effectively a relabeled versionDigitParser)
@@ -88,11 +79,6 @@ instance Parsec UserId where
       d :: P.CharParsing m => m Int
       d = f <$> P.satisfyRange '0' '9'
       f c = Char.ord c - Char.ord '0'
-
--- TODO: remove this instance for Cabal 3.0
-instance Text UserName where
-    disp (UserName name) = Disp.text name
-    parse = UserName <$> Parse.munch1 isValidUserNameChar
 
 instance Pretty UserName where
   pretty (UserName name) = Disp.text name

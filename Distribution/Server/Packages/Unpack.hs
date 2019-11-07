@@ -34,10 +34,10 @@ import Distribution.PackageDescription.Check
 import Distribution.Parsec
          ( showPError, showPWarning )
 import Distribution.Text
-         ( Text(..), display, simpleParse )
+         ( display, simpleParse )
 import Distribution.Pretty (Pretty(..))
 -- import Distribution.Parsec (Parsec(..))
--- import qualified Distribution.Parsec.Class as P
+-- import qualified Distribution.Parsec as P
 -- import qualified Distribution.Compat.CharParsing as P
 import Distribution.Server.Util.ParseSpecVer
 import qualified Distribution.SPDX as SPDX
@@ -112,17 +112,6 @@ data TaggedPackageId = TaggedPackageId {
         _taggedPkgName   :: PackageName,
         taggedPkgVersion :: Data.Version.Version
     }
-
--- TODO: remove this instance for Cabal 3.0
-instance Text TaggedPackageId where
-    disp (TaggedPackageId n v)
-        | v == Data.Version.Version [] [] = disp n
-        | otherwise = disp n Disp.<> Disp.char '-' Disp.<> disp v
-
-    parse = do
-        n <- parse
-        v <- (Parse.char '-' >> parse) Parse.<++ return (Data.Version.Version [] [])
-        return (TaggedPackageId n v)
 
 instance Pretty TaggedPackageId where
     pretty (TaggedPackageId n v)

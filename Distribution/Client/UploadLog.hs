@@ -27,14 +27,12 @@ import Distribution.Server.Users.Types
 import Distribution.Package
          ( PackageId, PackageName, packageName, PackageIdentifier(..))
 import Distribution.Text
-         ( Text(..), simpleParse )
+         ( simpleParse )
 import Distribution.Pretty (Pretty(..))
 import Distribution.Parsec (Parsec(..))
-import qualified Distribution.Parsec.Class as P
+import qualified Distribution.Parsec as P
 import qualified Distribution.Compat.CharParsing as P
-import Distribution.ParseUtils ( parseMaybeQuoted )
-import qualified Text.ParserCombinators.ReadP as Parse
-import qualified Text.PrettyPrint             as Disp
+import qualified Text.PrettyPrint as Disp
 import Text.PrettyPrint
          ( (<+>) )
 import Distribution.Simple.Utils

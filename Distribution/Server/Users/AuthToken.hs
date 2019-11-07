@@ -12,10 +12,7 @@ where
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Util.Nonce
 
-import Distribution.Text
-         ( Text(..) )
-import qualified Text.ParserCombinators.ReadP as Parse
-import qualified Text.PrettyPrint             as Disp
+import qualified Text.PrettyPrint as Disp
 import qualified Data.Char as Char
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -74,15 +71,6 @@ parseAuthToken t
 
 renderAuthToken :: AuthToken -> T.Text
 renderAuthToken (AuthToken bss) = T.decodeUtf8 $ BS16.encode $ BSS.fromShort bss
-
--- TODO: remove this instance for Cabal 3.0
-instance Text AuthToken where
-    disp tok = Disp.text . T.unpack . renderAuthToken $ tok
-    parse =
-        Parse.munch1 Char.isHexDigit >>= \x ->
-        case parseAuthToken (T.pack x) of
-          Left err -> fail err
-          Right ok -> return ok
 
 instance Parsec AuthToken where
     parsec =

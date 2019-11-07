@@ -21,13 +21,11 @@ import Distribution.Package
 
 import Control.Applicative ((<$>))
 
-import Distribution.Text (Text(..))
 import Distribution.Pretty (Pretty(..))
 import Distribution.Parsec (Parsec(..))
 import qualified Distribution.Compat.CharParsing as P
 
-import qualified Text.ParserCombinators.ReadP as Parse
-import qualified Text.PrettyPrint             as Disp
+import qualified Text.PrettyPrint as Disp
 import qualified Data.Char as Char
 
 import Data.SafeCopy (base, deriveSafeCopy)
@@ -37,11 +35,6 @@ import Data.Typeable
 -- | Distribution names may contain letters, numbers and punctuation.
 newtype DistroName = DistroName String
  deriving (Eq, Ord, Read, Show, Typeable, MemSize)
-
--- TODO: remove this instance for Cabal 3.0
-instance Text DistroName where
-  disp (DistroName name) = Disp.text name
-  parse = DistroName <$> Parse.munch1 (\c -> Char.isAlphaNum c || c `elem` "-_()[]{}=$,;")
 
 instance Pretty DistroName where
   pretty (DistroName name) = Disp.text name

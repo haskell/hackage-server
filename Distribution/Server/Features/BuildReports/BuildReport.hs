@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, RecordWildCards,
-             TemplateHaskell, TypeFamilies #-}
+             TemplateHaskell, TypeFamilies, FlexibleInstances, MultiParamTypeClasses,
+             OverloadedStrings #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distribution.Client.Reporting
@@ -30,28 +31,35 @@ module Distribution.Server.Features.BuildReports.BuildReport (
     BuildReport_v0,
   ) where
 
+import Distribution.Compat.Newtype
+import Distribution.Compat.Lens (Lens')
 import Distribution.Package
          ( PackageIdentifier(..) )
 import Distribution.Types.GenericPackageDescription
-         ( FlagName, mkFlagName, unFlagName )
+         ( FlagName, unFlagName )
 import Distribution.System
          ( OS, Arch )
 import Distribution.Compiler
          ( CompilerId )
-import qualified Distribution.Text as Text
-         ( display )
-import Distribution.Pretty (Pretty(..))
-import Distribution.Parsec (Parsec(..))
-import qualified Distribution.Compat.CharParsing as P
-import Distribution.Simple.Utils
-         ( comparing )
-import Distribution.Server.Util.Merge
+import Distribution.CabalSpecVersion
+         ( CabalSpecVersion(CabalSpecV2_4) )
+import qualified Distribution.Pretty as Pretty
+import qualified Text.PrettyPrint as Pretty
+import Distribution.Parsec.Newtypes
+import qualified Distribution.Parsec as Parsec
+import qualified Distribution.Compat.CharParsing as Parsec
+import Distribution.FieldGrammar
+         ( FieldGrammar, parseFieldGrammar, prettyFieldGrammar, partitionFields
+         , uniqueField, uniqueFieldAla, booleanFieldDef, monoidalFieldAla )
+import Distribution.Fields.Parser
+         ( readFields )
+import Distribution.Fields.Pretty
+         ( showFields )
+import Distribution.Fields.ParseResult
+         (ParseResult, parseFatalFailure, runParseResult )
 import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.MemSize
 
-import qualified Text.ParserCombinators.ReadP as Parse
-import qualified Text.PrettyPrint.HughesPJ as Disp
-         ( Doc, char, text, (<>) )
 import Text.PrettyPrint.HughesPJ
          ( (<+>), render )
 import Data.Serialize as Serialize
@@ -64,10 +72,8 @@ import Text.StringTemplate ()
 import Text.StringTemplate.Classes
          ( SElem(..), ToSElem(..) )
 
-import Data.Foldable
-         ( foldMap )
 import Data.List
-         ( unfoldr, sortBy )
+         ( unfoldr )
 import Data.Char as Char
          ( isAlpha, isAlphaNum )
 import qualified Data.ByteString.Char8 as BS
@@ -80,54 +86,91 @@ import Control.Applicative
 import Control.Monad
 
 import Prelude hiding (show, read)
+import qualified Prelude
 
 
 data BuildReport
    = BuildReport {
     -- | The package this build report is about
-    package         :: PackageIdentifier,
+    _package         :: PackageIdentifier,
 
     -- | The time at which the report was uploaded
-    time            :: Maybe UTCTime,
+    _time            :: Maybe UTCTime,
 
     -- | Whether the client was generating documentation for upload
-    docBuilder      :: Bool,
+    _docBuilder      :: Bool,
 
     -- | The OS and Arch the package was built on
-    os              :: OS,
-    arch            :: Arch,
+    _os              :: OS,
+    _arch            :: Arch,
 
     -- | The Haskell compiler (and hopefully version) used
-    compiler        :: CompilerId,
+    _compiler        :: CompilerId,
 
     -- | The uploading client, ie cabal-install-x.y.z
-    client          :: PackageIdentifier,
+    _client          :: PackageIdentifier,
 
     -- | Which configurations flags we used
-    flagAssignment  :: [(FlagName,Bool)],
+    _flagAssignment  :: [(FlagName,Bool)],
     -- TODO: this is the pre-Cabal-2.2 'FlagAssignment' type;
     --       consider changing this to the new opaque 'FlagAssignment' type at some point
     --       (which will have implications for the safecopy serialisation)
 
     -- | Which dependent packages we were using exactly
-    dependencies    :: [PackageIdentifier],
+    _dependencies    :: [PackageIdentifier],
 
     -- | Did installing work ok?
-    installOutcome  :: InstallOutcome,
+    _installOutcome  :: InstallOutcome,
 
     --   Which version of the Cabal library was used to compile the Setup.hs
---    cabalVersion    :: Version,
+--    _cabalVersion    :: Version,
 
     --   Which build tools we were using (with versions)
---    tools      :: [PackageIdentifier],
+--    _tools      :: [PackageIdentifier],
 
     -- | Configure outcome, did configure work ok?
-    docsOutcome     :: Outcome,
+    _docsOutcome     :: Outcome,
 
     -- | Configure outcome, did configure work ok?
-    testsOutcome    :: Outcome
+    _testsOutcome    :: Outcome
   }
   deriving (Eq, Typeable, Show)
+
+package :: Lens' BuildReport PackageIdentifier
+package f s = fmap (\x -> s { _package = x }) (f (_package s))
+
+time :: Lens' BuildReport (Maybe UTCTime)
+time f s = fmap (\x -> s { _time = x }) (f (_time s))
+
+docBuilder :: Lens' BuildReport Bool
+docBuilder f s = fmap (\x -> s { _docBuilder = x }) (f (_docBuilder s))
+
+os :: Lens' BuildReport OS
+os f s = fmap (\x -> s { _os = x }) (f (_os s))
+
+arch :: Lens' BuildReport Arch
+arch f s = fmap (\x -> s { _arch = x }) (f (_arch s))
+
+compiler :: Lens' BuildReport CompilerId
+compiler f s = fmap (\x -> s { _compiler = x }) (f (_compiler s))
+
+client :: Lens' BuildReport PackageIdentifier
+client f s = fmap (\x -> s { _client = x }) (f (_client s))
+
+flagAssignment :: Lens' BuildReport [(FlagName,Bool)]
+flagAssignment f s = fmap (\x -> s { _flagAssignment = x }) (f (_flagAssignment s))
+
+dependencies :: Lens' BuildReport [PackageIdentifier]
+dependencies f s = fmap (\x -> s { _dependencies = x }) (f (_dependencies s))
+
+installOutcome :: Lens' BuildReport InstallOutcome
+installOutcome f s = fmap (\x -> s { _installOutcome = x }) (f (_installOutcome s))
+
+docsOutcome :: Lens' BuildReport Outcome
+docsOutcome f s = fmap (\x -> s { _docsOutcome = x }) (f (_docsOutcome s))
+
+testsOutcome :: Lens' BuildReport Outcome
+testsOutcome f s = fmap (\x -> s { _testsOutcome = x }) (f (_testsOutcome s))
 
 data InstallOutcome
    = PlanningFailed
@@ -143,162 +186,99 @@ data InstallOutcome
 
 data Outcome = NotTried | Failed | Ok deriving (Eq, Ord, Show)
 
--- ------------------------------------------------------------
--- * External format
--- ------------------------------------------------------------
-
-initialBuildReport :: BuildReport
-initialBuildReport = BuildReport {
-    package         = requiredField "package",
-    time            = Nothing,
-    docBuilder      = False,
-    os              = requiredField "os",
-    arch            = requiredField "arch",
-    compiler        = requiredField "compiler",
-    client          = requiredField "client",
-    flagAssignment  = [],
-    dependencies    = [],
-    installOutcome  = requiredField "install-outcome",
---    cabalVersion  = Nothing,
---    tools         = [],
-    docsOutcome     = NotTried,
-    testsOutcome    = NotTried
-  }
-  where
-    requiredField fname = error ("required field: " ++ fname)
-
-requiredFields :: [String]
-requiredFields
-    = ["package", "os", "arch", "compiler", "client", "install-outcome"]
-
 -- -----------------------------------------------------------------------------
 -- Timestamps
 
 -- | If the 'time' field is empty, fill it in with the current time.
 affixTimestamp :: BuildReport -> IO BuildReport
-affixTimestamp report = case time report of
-    Nothing -> (\v -> report { time = Just v }) <$> getCurrentTime
+affixTimestamp report = case _time report of
+    Nothing -> (\v -> report { _time = Just v }) <$> getCurrentTime
     Just _ -> return report
 
 -- -----------------------------------------------------------------------------
 -- Parsing
 
-read :: String -> BuildReport
+read :: BS.ByteString -> BuildReport
 read s = case parse s of
   Left  err -> error $ "error parsing build report: " ++ err
   Right rpt -> rpt
 
-parse :: String -> Either String BuildReport
-parse s = case parseFields s of
-  ParseFailed perror -> Left msg where (_, msg) = locatedErrorMsg perror
-  ParseOk   _ report -> Right report
+parse :: BS.ByteString -> Either String BuildReport
+parse s = case snd $ runParseResult $ parseFields s of
+  Left (_, perrors) -> Left $ unlines [ err | Parsec.PError _ err <- perrors ]
+  Right report -> Right report
 
-parseFields :: String -> ParseResult BuildReport
+parseFields :: BS.ByteString -> ParseResult BuildReport
 parseFields input = do
-  fields <- mapM extractField =<< readFields input
-  let merged = mergeBy (\desc (_,name,_) -> compare (fieldName desc) name)
-                       sortedFieldDescrs
-                       (sortBy (comparing (\(_,name,_) -> name)) fields)
-  foldM checkMerged initialBuildReport merged
+  fields <- either (parseFatalFailure Parsec.zeroPos . Prelude.show) pure $ readFields input
+  case partitionFields fields of
+    (fields', [])  -> parseFieldGrammar CabalSpecV2_4 fields' fieldDescrs
+    _otherwise -> fail "found sections in BuildReport"
 
-  where
-    extractField :: Field -> ParseResult (Int, String, String)
-    extractField (F line name value)  = return (line, name, value)
-    extractField (Section line _ _ _) = syntaxError line "Unrecognized stanza"
-    extractField (IfBlock line _ _ _) = syntaxError line "Unrecognized stanza"
-
-    checkMerged report merged = case merged of
-      InBoth fieldDescr (line, _name, value) ->
-        fieldSet fieldDescr line value report
-      OnlyInRight (line, name, _) ->
-        syntaxError line ("Unrecognized field " ++ name)
-      OnlyInLeft  fieldDescr
-        | fieldName fieldDescr `elem` requiredFields ->
-            fail ("Missing field " ++ fieldName fieldDescr)
-        | otherwise -> return report
-
-parseList :: String -> [BuildReport]
+parseList :: BS.ByteString -> [BuildReport]
 parseList str =
   [ report | Right report <- map parse (split str) ]
 
   where
-    split :: String -> [String]
-    split = filter (not . null) . unfoldr chunk . lines
+    split :: BS.ByteString -> [BS.ByteString]
+    split = filter (not . BS.null) . unfoldr chunk . BS.lines
     chunk [] = Nothing
-    chunk ls = case break null ls of
-                 (r, rs) -> Just (unlines r, dropWhile null rs)
+    chunk ls = case break BS.null ls of
+                 (r, rs) -> Just (BS.unlines r, dropWhile BS.null rs)
 
 -- -----------------------------------------------------------------------------
 -- Pretty-printing
 
 show :: BuildReport -> String
-show = showFields fieldDescrs
+show = showFields (const []) . prettyFieldGrammar CabalSpecV2_4 fieldDescrs
 
 -- -----------------------------------------------------------------------------
 -- Description of the fields, for parsing/printing
 
-fieldDescrs :: [FieldDescr BuildReport]
+newtype Time = Time (Maybe UTCTime)
+
+instance Newtype (Maybe UTCTime) Time
+instance Pretty.Pretty Time -- TODO
+instance Parsec.Parsec Time -- TODO
+
+fieldDescrs :: (Applicative (g BuildReport), FieldGrammar g) => g BuildReport BuildReport
 fieldDescrs =
- [ simpleField "package"         Text.disp      Text.parse
-                                 package        (\v r -> r { package = v })
- , simpleField "time"            dispTime       parseTime
-                                 time           (\v r -> r { time = v })
- , boolField   "doc-builder"     docBuilder     (\v r -> r { docBuilder = v })
- , simpleField "os"              Text.disp      Text.parse
-                                 os             (\v r -> r { os = v })
- , simpleField "arch"            Text.disp      Text.parse
-                                 arch           (\v r -> r { arch = v })
- , simpleField "compiler"        Text.disp      Text.parse
-                                 compiler       (\v r -> r { compiler = v })
- , simpleField "client"          Text.disp      Text.parse
-                                 client         (\v r -> r { client = v })
- , listField   "flags"           dispFlag       parseFlag
-                                 flagAssignment (\v r -> r { flagAssignment = v })
- , listField   "dependencies"    Text.disp      Text.parse
-                                 dependencies   (\v r -> r { dependencies = v })
- , simpleField "install-outcome" Text.disp      Text.parse
-                                 installOutcome (\v r -> r { installOutcome = v })
- , simpleField "docs-outcome"    Text.disp      Text.parse
-                                 docsOutcome    (\v r -> r { docsOutcome = v })
- , simpleField "tests-outcome"   Text.disp      Text.parse
-                                 testsOutcome   (\v r -> r { testsOutcome = v })
- ]
-  where
-    dispTime = foldMap Text.disp
-    parseTime = (Just <$> Text.parse) Parse.<++ pure Nothing
+  BuildReport
+    <$> uniqueField       "package"            package
+    <*> uniqueFieldAla    "time"      (pack' Time)     time
+    <*> booleanFieldDef   "doc-builder"        docBuilder  False
+    <*> uniqueField       "os"                 os
+    <*> uniqueField       "arch"               arch
+    <*> uniqueField       "compiler"           compiler
+    <*> uniqueField       "client"             client
+    <*> undefined --monoidalFieldAla  "flags"              (alaList CommaFSep) flagAssignment TODO
+    <*> monoidalFieldAla  "dependencies"       (alaList VCat)   dependencies
+    <*> uniqueField       "install-outcome"    installOutcome
+    <*> uniqueField       "docs-outcome"       docsOutcome
+    <*> uniqueField       "tests-outcome"      testsOutcome
 
-sortedFieldDescrs :: [FieldDescr BuildReport]
-sortedFieldDescrs = sortBy (comparing fieldName) fieldDescrs
+dispFlag :: (FlagName, Bool) -> Pretty.Doc
+dispFlag (fn, True)  =                           Pretty.text (unFlagName fn)
+dispFlag (fn, False) = Pretty.char '-' Pretty.<> Pretty.text (unFlagName fn)
 
-dispFlag :: (FlagName, Bool) -> Disp.Doc
-dispFlag (fn, True)  =                       Disp.text (unFlagName fn)
-dispFlag (fn, False) = Disp.char '-' Disp.<> Disp.text (unFlagName fn)
+instance Pretty.Pretty InstallOutcome where
+  pretty PlanningFailed  = Pretty.text "PlanningFailed"
+  pretty (DependencyFailed pkgid) = Pretty.text "DependencyFailed" <+> Pretty.pretty pkgid
+  pretty DownloadFailed  = Pretty.text "DownloadFailed"
+  pretty UnpackFailed    = Pretty.text "UnpackFailed"
+  pretty SetupFailed     = Pretty.text "SetupFailed"
+  pretty ConfigureFailed = Pretty.text "ConfigureFailed"
+  pretty BuildFailed     = Pretty.text "BuildFailed"
+  pretty InstallFailed   = Pretty.text "InstallFailed"
+  pretty InstallOk       = Pretty.text "InstallOk"
 
-parseFlag :: Parse.ReadP r (FlagName, Bool)
-parseFlag = do
-  name <- Parse.munch1 (\c -> Char.isAlphaNum c || c == '_' || c == '-')
-  case name of
-    ('-':flag) -> return (mkFlagName flag, False)
-    flag       -> return (mkFlagName flag, True)
-
-instance Pretty InstallOutcome where
-  pretty PlanningFailed  = Disp.text "PlanningFailed"
-  pretty (DependencyFailed pkgid) = Disp.text "DependencyFailed" <+> pretty pkgid
-  pretty DownloadFailed  = Disp.text "DownloadFailed"
-  pretty UnpackFailed    = Disp.text "UnpackFailed"
-  pretty SetupFailed     = Disp.text "SetupFailed"
-  pretty ConfigureFailed = Disp.text "ConfigureFailed"
-  pretty BuildFailed     = Disp.text "BuildFailed"
-  pretty InstallFailed   = Disp.text "InstallFailed"
-  pretty InstallOk       = Disp.text "InstallOk"
-
-instance Parsec InstallOutcome where
+instance Parsec.Parsec InstallOutcome where
   parsec = do
-    name <- P.munch1 Char.isAlphaNum
+    name <- Parsec.munch1 Char.isAlphaNum
     case name of
       "PlanningFailed"   -> return PlanningFailed
-      "DependencyFailed" -> do P.spaces
-                               pkgid <- parsec
+      "DependencyFailed" -> do Parsec.spaces
+                               pkgid <- Parsec.parsec
                                return (DependencyFailed pkgid)
       "DownloadFailed"   -> return DownloadFailed
       "UnpackFailed"     -> return UnpackFailed
@@ -309,14 +289,14 @@ instance Parsec InstallOutcome where
       "InstallOk"        -> return InstallOk
       _                  -> fail "unknown InstallOutcome"
 
-instance Pretty Outcome where
-  pretty NotTried = Disp.text "NotTried"
-  pretty Failed   = Disp.text "Failed"
-  pretty Ok       = Disp.text "Ok"
+instance Pretty.Pretty Outcome where
+  pretty NotTried = Pretty.text "NotTried"
+  pretty Failed   = Pretty.text "Failed"
+  pretty Ok       = Pretty.text "Ok"
 
-instance Parsec Outcome where
+instance Parsec.Parsec Outcome where
   parsec = do
-    name <- P.munch1 Char.isAlpha
+    name <- Parsec.munch1 Char.isAlpha
     case name of
       "NotTried" -> return NotTried
       "Failed"   -> return Failed
@@ -339,21 +319,21 @@ instance MemSize Outcome where
 
 instance ToSElem BuildReport where
     toSElem BuildReport{..} = SM . Map.fromList $
-        [ ("package", display package)
-        , ("time", toSElem time)
-        , ("docBuilder", toSElem docBuilder)
-        , ("os", display os)
-        , ("arch", display arch)
-        , ("compiler", display compiler)
-        , ("client", display client)
-        , ("flagAssignment", toSElem $ map (render . dispFlag) flagAssignment)
-        , ("dependencies", toSElem $ map Text.display dependencies)
-        , ("installOutcome", display installOutcome)
-        , ("docsOutcome", display docsOutcome)
-        , ("testsOutcome", display testsOutcome)
+        [ ("package", display _package)
+        , ("time", toSElem _time)
+        , ("docBuilder", toSElem _docBuilder)
+        , ("os", display _os)
+        , ("arch", display _arch)
+        , ("compiler", display _compiler)
+        , ("client", display _client)
+        , ("flagAssignment", toSElem $ map (render . dispFlag) _flagAssignment)
+        , ("dependencies", toSElem $ map Pretty.prettyShow _dependencies)
+        , ("installOutcome", display _installOutcome)
+        , ("docsOutcome", display _docsOutcome)
+        , ("testsOutcome", display _testsOutcome)
         ]
       where
-        display value = toSElem (Text.display value)
+        display value = toSElem (Pretty.prettyShow value)
 
 -------------------
 -- Arbitrary instances
@@ -403,19 +383,19 @@ newtype BuildReport_v0 = BuildReport_v0 BuildReport
 instance SafeCopy  BuildReport_v0
 instance Serialize BuildReport_v0 where
     put (BuildReport_v0 br) = Serialize.put . BS.pack . show $ br
-    get = (BuildReport_v0 . read . BS.unpack) `fmap` Serialize.get
+    get = (BuildReport_v0 . read) `fmap` Serialize.get
 
 instance Migrate BuildReport_v1 where
     type MigrateFrom BuildReport_v1 = BuildReport_v0
     migrate (BuildReport_v0 BuildReport{..}) = BuildReport_v1 {
-        v1_package = package
-      , v1_os = os
-      , v1_arch = arch
-      , v1_compiler = compiler
-      , v1_client = client
-      , v1_flagAssignment = flagAssignment
-      , v1_dependencies = dependencies
-      , v1_installOutcome = case installOutcome of
+        v1_package = _package
+      , v1_os = _os
+      , v1_arch = _arch
+      , v1_compiler = _compiler
+      , v1_client = _client
+      , v1_flagAssignment = _flagAssignment
+      , v1_dependencies = _dependencies
+      , v1_installOutcome = case _installOutcome of
           PlanningFailed         -> error "impossible rev migration"
           DependencyFailed pkgid -> V0_DependencyFailed pkgid
           DownloadFailed         -> V0_DownloadFailed
@@ -425,8 +405,8 @@ instance Migrate BuildReport_v1 where
           BuildFailed            -> V0_BuildFailed
           InstallFailed          -> V0_InstallFailed
           InstallOk              -> V0_InstallOk
-      , v1_docsOutcome = docsOutcome
-      , v1_testsOutcome = testsOutcome
+      , v1_docsOutcome = _docsOutcome
+      , v1_testsOutcome = _testsOutcome
       }
 
 data BuildReport_v1 = BuildReport_v1 {
@@ -458,18 +438,18 @@ deriveSafeCopy 2 'extension ''BuildReport_v1
 instance Migrate BuildReport where
     type MigrateFrom BuildReport = BuildReport_v1
     migrate BuildReport_v1{..} = BuildReport {
-        package = v1_package
-      , time = Nothing
-      , docBuilder = True  -- Most old reports come from the doc builder anyway
-      , os = v1_os
-      , arch = v1_arch
-      , compiler = v1_compiler
-      , client = v1_client
-      , flagAssignment = v1_flagAssignment
-      , dependencies = v1_dependencies
-      , installOutcome = migrate v1_installOutcome
-      , docsOutcome = v1_docsOutcome
-      , testsOutcome = v1_testsOutcome
+        _package = v1_package
+      , _time = Nothing
+      , _docBuilder = True  -- Most old reports come from the doc builder anyway
+      , _os = v1_os
+      , _arch = v1_arch
+      , _compiler = v1_compiler
+      , _client = v1_client
+      , _flagAssignment = v1_flagAssignment
+      , _dependencies = v1_dependencies
+      , _installOutcome = migrate v1_installOutcome
+      , _docsOutcome = v1_docsOutcome
+      , _testsOutcome = v1_testsOutcome
       }
 
 instance Migrate InstallOutcome where
