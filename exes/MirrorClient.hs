@@ -5,6 +5,7 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.Trans
 import Data.List
+import Data.Version
 import Network.Browser
 import System.Directory
 import System.Environment
@@ -149,7 +150,7 @@ mirrorOnce verbosity opts
                               fromErrorState st')) $
       runMirrorSession verbosity keepGoing (toErrorState st) $ do
         browserAction $ do
-          setUserAgent  ("hackage-mirror/" ++ display version)
+          setUserAgent  ("hackage-mirror/" ++ showVersion version)
           setErrHandler (warn  verbosity)
           setOutHandler (debug verbosity)
           setAllowBasicAuth True
