@@ -132,20 +132,14 @@ tarPackageChecks lax now tarGzFile contents = do
 
   let versionTags (Data.Version.Version _ ts) = ts
 
-  pkgid <- case (simpleParse pkgidStr, simpleParse pkgidStr) of
-    (Just pkgid, Just tagged_pkgid)
+  pkgid <- case simpleParse pkgidStr of
+    Just pkgid
       | (== nullVersion) . packageVersion $ pkgid
       -> throwError $ "Invalid package id " ++ quote pkgidStr
                    ++ ". It must include the package version number, and not just "
                    ++ "the package name, e.g. 'foo-1.0'."
 
       | display pkgid == pkgidStr -> return (pkgid :: PackageIdentifier)
-
-      -- NB: we have to use 'TaggedPackageId' here, because the 'PackageId'
-      -- parser will drop tags.
-      | not . null . versionTags . taggedPkgVersion $ tagged_pkgid
-      -> throwError $ "Hackage no longer accepts packages with version tags: "
-                   ++ intercalate ", " (versionTags (taggedPkgVersion tagged_pkgid))
 
     _ -> throwError $ "Invalid package id " ++ quote pkgidStr
                    ++ ". The tarball must use the name of the package."
