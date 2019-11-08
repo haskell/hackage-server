@@ -192,7 +192,7 @@ categorySplit xs = if last res == "" then init res else res
 --
 flatDependencies :: GenericPackageDescription -> [Dependency]
 flatDependencies pkg =
-      sortOn (\(Dependency pkgname _) -> map toLower (display pkgname)) pkgDeps
+      sortOn (\(Dependency pkgname _ _) -> map toLower (display pkgname)) pkgDeps
   where
     pkgDeps :: [Dependency]
     pkgDeps = fromMap $ Map.filterWithKey notSubLib $ Map.unionsWith intersectVersions $
@@ -202,7 +202,7 @@ flatDependencies pkg =
       where
         fromMap = map fromPair . Map.toList
         fromPair (pkgname, Versions _ ver) =
-            Dependency pkgname $ fromVersionIntervals ver
+            Dependency pkgname (fromVersionIntervals ver) Set.empty -- XXX: ok?
 
         notSubLib pn _ = packageNameToUnqualComponentName pn `Set.notMember` sublibs
         sublibs = Set.fromList $ map fst (condSubLibraries pkg)
@@ -225,7 +225,7 @@ flatDependencies pkg =
                  Nothing -> unionPackageVersions thenDeps elseDeps
 
         toMap = Map.fromListWith intersectVersions . map toPair
-        toPair (Dependency pkgname ver) =
+        toPair (Dependency pkgname ver _) =
             (pkgname, Versions All $ toVersionIntervals ver)
 
 -- Note that 'unionPackageVersions Map.empty' is not identity.
@@ -270,15 +270,15 @@ intersectVersions (Versions All v1) (Versions All v2) =
     Versions All $ intersectVersionIntervals v1 v2
 
 sortDeps :: [Dependency] -> [Dependency]
-sortDeps = sortOn $ \(Dependency pkgname _) -> map toLower (display pkgname)
+sortDeps = sortOn $ \(Dependency pkgname _ _) -> map toLower (display pkgname)
 
 combineDepsBy :: (VersionIntervals -> VersionIntervals -> VersionIntervals)
               -> [Dependency] -> [Dependency]
 combineDepsBy f =
-    map (\(pkgname, ver) -> Dependency pkgname (fromVersionIntervals ver))
+    map (\(pkgname, ver) -> Dependency pkgname (fromVersionIntervals ver) Set.empty) -- XXX: ok?
   . Map.toList
   . Map.fromListWith f
-  . map (\(Dependency pkgname ver) -> (pkgname, toVersionIntervals ver))
+  . map (\(Dependency pkgname ver _) -> (pkgname, toVersionIntervals ver))
 
 -- | Evaluate a 'Condition' with a partial 'FlagAssignment', returning
 -- | 'Nothing' if the result depends on additional variables.

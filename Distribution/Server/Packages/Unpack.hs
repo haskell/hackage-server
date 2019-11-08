@@ -105,22 +105,6 @@ unpackPackageRaw tarGzFile contents =
   where
     noTime = UTCTime (fromGregorian 1970 1 1) 0
 
--- | Denotes a PackageId with extra version tags
---
--- See also 893de51faf7802db007eedba7d1471da95863c3b which introduced 'TaggedPackageId'
-data TaggedPackageId = TaggedPackageId {
-        _taggedPkgName   :: PackageName,
-        taggedPkgVersion :: Data.Version.Version
-    }
-
-instance Pretty TaggedPackageId where
-    pretty (TaggedPackageId n v)
-        | v == Data.Version.Version [] [] = pretty n
-        | otherwise = pretty n Disp.<> Disp.char '-' Disp.<> Disp.text (Data.Version.showVersion v)
-
--- TODO: 'instance Parsec TaggedPackageId'
--- see also 893de51faf7802db007eedba7d1471da95863c3b which introduced 'TaggedPackageId' for why this is tricky
-
 tarPackageChecks :: Bool -> UTCTime -> FilePath -> ByteString
                  -> UploadMonad (PackageIdentifier, TarIndex)
 tarPackageChecks lax now tarGzFile contents = do

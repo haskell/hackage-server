@@ -7,9 +7,10 @@ module Distribution.Server.Features.PreferredVersions.Backup
 import Distribution.Server.Framework.BackupRestore
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Features.PreferredVersions.State
-import Data.Version (Version(..))
-import Distribution.Text (Text, display, simpleParse)
+import Data.Version (Version(..), showVersion)
+import Distribution.Text (display, simpleParse)
 import Distribution.Package (PackageName)
+import Distribution.Parsec (Parsec(..))
 import Distribution.Version (VersionRange)
 import qualified Data.Map as Map
 import Control.Applicative ((<$>))
@@ -67,7 +68,7 @@ importDeprecatedCSV st pkg [ _version
   return st { deprecatedMap = Map.insert pkg deprecatedFor (deprecatedMap st) }
 importDeprecatedCSV _ _ _ = fail "Failed to read deprecated.csv"
 
-match :: Text a => String -> Record -> Maybe [a]
+match :: Parsec a => String -> Record -> Maybe [a]
 match header (header' : xs) = guard (header == header') >> mapM simpleParse xs
 match _ _ = Nothing
 
@@ -94,7 +95,7 @@ backupPreferredVersions (PreferredVersions preferredMap deprecatedMap _) =
 backupPreferredInfo :: (PackageName, PreferredInfo) -> BackupEntry
 backupPreferredInfo (name, PreferredInfo {..}) =
     csvToBackup (pkgPath name "preferred.csv") $ [
-        [display versionCSV]
+        [showVersion versionCSV]
       , "preferredRanges" : map display preferredRanges
       , "deprecatedVersions" : map display deprecatedVersions
       ] ++ case sumRange of
@@ -106,7 +107,7 @@ backupPreferredInfo (name, PreferredInfo {..}) =
 backupDeprecated :: (PackageName, [PackageName]) -> BackupEntry
 backupDeprecated (name, deprecatedFor) =
     csvToBackup (pkgPath name "deprecated.csv") [
-        [display versionCSV]
+        [showVersion versionCSV]
       , "deprecatedFor" : map display deprecatedFor
       ]
   where

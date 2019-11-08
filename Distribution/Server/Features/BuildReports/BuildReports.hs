@@ -42,8 +42,6 @@ import Control.Applicative ((<$>))
 import qualified Data.List as L
 import qualified Data.Char as Char
 
-import qualified Distribution.Server.Util.Parse as Parse
-import qualified Text.PrettyPrint          as Disp
 import Text.StringTemplate (ToSElem(..))
 
 
