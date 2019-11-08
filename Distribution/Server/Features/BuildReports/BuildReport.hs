@@ -92,85 +92,85 @@ import qualified Prelude
 data BuildReport
    = BuildReport {
     -- | The package this build report is about
-    _package         :: PackageIdentifier,
+    package         :: PackageIdentifier,
 
     -- | The time at which the report was uploaded
-    _time            :: Maybe UTCTime,
+    time            :: Maybe UTCTime,
 
     -- | Whether the client was generating documentation for upload
-    _docBuilder      :: Bool,
+    docBuilder      :: Bool,
 
     -- | The OS and Arch the package was built on
-    _os              :: OS,
-    _arch            :: Arch,
+    os              :: OS,
+    arch            :: Arch,
 
     -- | The Haskell compiler (and hopefully version) used
-    _compiler        :: CompilerId,
+    compiler        :: CompilerId,
 
     -- | The uploading client, ie cabal-install-x.y.z
-    _client          :: PackageIdentifier,
+    client          :: PackageIdentifier,
 
     -- | Which configurations flags we used
-    _flagAssignment  :: [(FlagName,Bool)],
+    flagAssignment  :: [(FlagName,Bool)],
     -- TODO: this is the pre-Cabal-2.2 'FlagAssignment' type;
     --       consider changing this to the new opaque 'FlagAssignment' type at some point
     --       (which will have implications for the safecopy serialisation)
 
     -- | Which dependent packages we were using exactly
-    _dependencies    :: [PackageIdentifier],
+    dependencies    :: [PackageIdentifier],
 
     -- | Did installing work ok?
-    _installOutcome  :: InstallOutcome,
+    installOutcome  :: InstallOutcome,
 
     --   Which version of the Cabal library was used to compile the Setup.hs
---    _cabalVersion    :: Version,
+--   cabalVersion    :: Version,
 
     --   Which build tools we were using (with versions)
---    _tools      :: [PackageIdentifier],
+--   tools      :: [PackageIdentifier],
 
     -- | Configure outcome, did configure work ok?
-    _docsOutcome     :: Outcome,
+    docsOutcome     :: Outcome,
 
     -- | Configure outcome, did configure work ok?
-    _testsOutcome    :: Outcome
+    testsOutcome    :: Outcome
   }
   deriving (Eq, Typeable, Show)
 
-package :: Lens' BuildReport PackageIdentifier
-package f s = fmap (\x -> s { _package = x }) (f (_package s))
+packageL :: Lens' BuildReport PackageIdentifier
+packageL f s = fmap (\x -> s { package = x }) (f (package s))
 
-time :: Lens' BuildReport (Maybe UTCTime)
-time f s = fmap (\x -> s { _time = x }) (f (_time s))
+timeL :: Lens' BuildReport (Maybe UTCTime)
+timeL f s = fmap (\x -> s { time = x }) (f (time s))
 
-docBuilder :: Lens' BuildReport Bool
-docBuilder f s = fmap (\x -> s { _docBuilder = x }) (f (_docBuilder s))
+docBuilderL :: Lens' BuildReport Bool
+docBuilderL f s = fmap (\x -> s { docBuilder = x }) (f (docBuilder s))
 
-os :: Lens' BuildReport OS
-os f s = fmap (\x -> s { _os = x }) (f (_os s))
+osL :: Lens' BuildReport OS
+osL f s = fmap (\x -> s { os = x }) (f (os s))
 
-arch :: Lens' BuildReport Arch
-arch f s = fmap (\x -> s { _arch = x }) (f (_arch s))
+archL :: Lens' BuildReport Arch
+archL f s = fmap (\x -> s { arch = x }) (f (arch s))
 
-compiler :: Lens' BuildReport CompilerId
-compiler f s = fmap (\x -> s { _compiler = x }) (f (_compiler s))
+compilerL :: Lens' BuildReport CompilerId
+compilerL f s = fmap (\x -> s { compiler = x }) (f (compiler s))
 
-client :: Lens' BuildReport PackageIdentifier
-client f s = fmap (\x -> s { _client = x }) (f (_client s))
+clientL :: Lens' BuildReport PackageIdentifier
+clientL f s = fmap (\x -> s { client = x }) (f (client s))
 
-flagAssignment :: Lens' BuildReport [(FlagName,Bool)]
-flagAssignment f s = fmap (\x -> s { _flagAssignment = x }) (f (_flagAssignment s))
+flagAssignmentL :: Lens' BuildReport [(FlagName,Bool)]
+flagAssignmentL f s = fmap (\x -> s { flagAssignment = x }) (f (flagAssignment s))
 
-dependencies :: Lens' BuildReport [PackageIdentifier]
-dependencies f s = fmap (\x -> s { _dependencies = x }) (f (_dependencies s))
+dependenciesL :: Lens' BuildReport [PackageIdentifier]
+dependenciesL f s = fmap (\x -> s { dependencies = x }) (f (dependencies s))
 
-installOutcome :: Lens' BuildReport InstallOutcome
-installOutcome f s = fmap (\x -> s { _installOutcome = x }) (f (_installOutcome s))
+installOutcomeL :: Lens' BuildReport InstallOutcome
+installOutcomeL f s = fmap (\x -> s { installOutcome = x }) (f (installOutcome s))
 
-docsOutcome :: Lens' BuildReport Outcome
-docsOutcome f s = fmap (\x -> s { _docsOutcome = x }) (f (_docsOutcome s))
+docsOutcomeL :: Lens' BuildReport Outcome
+docsOutcomeL f s = fmap (\x -> s { docsOutcome = x }) (f (docsOutcome s))
 
-testsOutcome :: Lens' BuildReport Outcome
-testsOutcome f s = fmap (\x -> s { _testsOutcome = x }) (f (_testsOutcome s))
+testsOutcomeL :: Lens' BuildReport Outcome
+testsOutcomeL f s = fmap (\x -> s { testsOutcome = x }) (f (testsOutcome s))
 
 data InstallOutcome
    = PlanningFailed
@@ -191,8 +191,8 @@ data Outcome = NotTried | Failed | Ok deriving (Eq, Ord, Show)
 
 -- | If the 'time' field is empty, fill it in with the current time.
 affixTimestamp :: BuildReport -> IO BuildReport
-affixTimestamp report = case _time report of
-    Nothing -> (\v -> report { _time = Just v }) <$> getCurrentTime
+affixTimestamp report = case time report of
+    Nothing -> (\v -> report { time = Just v }) <$> getCurrentTime
     Just _ -> return report
 
 -- -----------------------------------------------------------------------------
@@ -244,18 +244,18 @@ instance Parsec.Parsec Time -- TODO
 fieldDescrs :: (Applicative (g BuildReport), FieldGrammar g) => g BuildReport BuildReport
 fieldDescrs =
   BuildReport
-    <$> uniqueField       "package"            package
-    <*> uniqueFieldAla    "time"      (pack' Time)     time
-    <*> booleanFieldDef   "doc-builder"        docBuilder  False
-    <*> uniqueField       "os"                 os
-    <*> uniqueField       "arch"               arch
-    <*> uniqueField       "compiler"           compiler
-    <*> uniqueField       "client"             client
-    <*> undefined --monoidalFieldAla  "flags"              (alaList CommaFSep) flagAssignment TODO
-    <*> monoidalFieldAla  "dependencies"       (alaList VCat)   dependencies
-    <*> uniqueField       "install-outcome"    installOutcome
-    <*> uniqueField       "docs-outcome"       docsOutcome
-    <*> uniqueField       "tests-outcome"      testsOutcome
+    <$> uniqueField       "package"            packageL
+    <*> uniqueFieldAla    "time"      (pack' Time)     timeL
+    <*> booleanFieldDef   "doc-builder"        docBuilderL  False
+    <*> uniqueField       "os"                 osL
+    <*> uniqueField       "arch"               archL
+    <*> uniqueField       "compiler"           compilerL
+    <*> uniqueField       "client"             clientL
+    <*> undefined --monoidalFieldAla  "flags"              (alaList CommaFSep) flagAssignmentL TODO
+    <*> monoidalFieldAla  "dependencies"       (alaList VCat)   dependenciesL
+    <*> uniqueField       "install-outcome"    installOutcomeL
+    <*> uniqueField       "docs-outcome"       docsOutcomeL
+    <*> uniqueField       "tests-outcome"      testsOutcomeL
 
 dispFlag :: (FlagName, Bool) -> Pretty.Doc
 dispFlag (fn, True)  =                           Pretty.text (unFlagName fn)
@@ -319,18 +319,18 @@ instance MemSize Outcome where
 
 instance ToSElem BuildReport where
     toSElem BuildReport{..} = SM . Map.fromList $
-        [ ("package", display _package)
-        , ("time", toSElem _time)
-        , ("docBuilder", toSElem _docBuilder)
-        , ("os", display _os)
-        , ("arch", display _arch)
-        , ("compiler", display _compiler)
-        , ("client", display _client)
-        , ("flagAssignment", toSElem $ map (render . dispFlag) _flagAssignment)
-        , ("dependencies", toSElem $ map Pretty.prettyShow _dependencies)
-        , ("installOutcome", display _installOutcome)
-        , ("docsOutcome", display _docsOutcome)
-        , ("testsOutcome", display _testsOutcome)
+        [ ("package", display package)
+        , ("time", toSElem time)
+        , ("docBuilder", toSElem docBuilder)
+        , ("os", display os)
+        , ("arch", display arch)
+        , ("compiler", display compiler)
+        , ("client", display client)
+        , ("flagAssignment", toSElem $ map (render . dispFlag) flagAssignment)
+        , ("dependencies", toSElem $ map Pretty.prettyShow dependencies)
+        , ("installOutcome", display installOutcome)
+        , ("docsOutcome", display docsOutcome)
+        , ("testsOutcome", display testsOutcome)
         ]
       where
         display value = toSElem (Pretty.prettyShow value)
@@ -388,14 +388,14 @@ instance Serialize BuildReport_v0 where
 instance Migrate BuildReport_v1 where
     type MigrateFrom BuildReport_v1 = BuildReport_v0
     migrate (BuildReport_v0 BuildReport{..}) = BuildReport_v1 {
-        v1_package = _package
-      , v1_os = _os
-      , v1_arch = _arch
-      , v1_compiler = _compiler
-      , v1_client = _client
-      , v1_flagAssignment = _flagAssignment
-      , v1_dependencies = _dependencies
-      , v1_installOutcome = case _installOutcome of
+        v1_package = package
+      , v1_os = os
+      , v1_arch = arch
+      , v1_compiler = compiler
+      , v1_client = client
+      , v1_flagAssignment = flagAssignment
+      , v1_dependencies = dependencies
+      , v1_installOutcome = case installOutcome of
           PlanningFailed         -> error "impossible rev migration"
           DependencyFailed pkgid -> V0_DependencyFailed pkgid
           DownloadFailed         -> V0_DownloadFailed
@@ -405,8 +405,8 @@ instance Migrate BuildReport_v1 where
           BuildFailed            -> V0_BuildFailed
           InstallFailed          -> V0_InstallFailed
           InstallOk              -> V0_InstallOk
-      , v1_docsOutcome = _docsOutcome
-      , v1_testsOutcome = _testsOutcome
+      , v1_docsOutcome = docsOutcome
+      , v1_testsOutcome = testsOutcome
       }
 
 data BuildReport_v1 = BuildReport_v1 {
@@ -438,18 +438,18 @@ deriveSafeCopy 2 'extension ''BuildReport_v1
 instance Migrate BuildReport where
     type MigrateFrom BuildReport = BuildReport_v1
     migrate BuildReport_v1{..} = BuildReport {
-        _package = v1_package
-      , _time = Nothing
-      , _docBuilder = True  -- Most old reports come from the doc builder anyway
-      , _os = v1_os
-      , _arch = v1_arch
-      , _compiler = v1_compiler
-      , _client = v1_client
-      , _flagAssignment = v1_flagAssignment
-      , _dependencies = v1_dependencies
-      , _installOutcome = migrate v1_installOutcome
-      , _docsOutcome = v1_docsOutcome
-      , _testsOutcome = v1_testsOutcome
+        package = v1_package
+      , time = Nothing
+      , docBuilder = True  -- Most old reports come from the doc builder anyway
+      , os = v1_os
+      , arch = v1_arch
+      , compiler = v1_compiler
+      , client = v1_client
+      , flagAssignment = v1_flagAssignment
+      , dependencies = v1_dependencies
+      , installOutcome = migrate v1_installOutcome
+      , docsOutcome = v1_docsOutcome
+      , testsOutcome = v1_testsOutcome
       }
 
 instance Migrate InstallOutcome where
