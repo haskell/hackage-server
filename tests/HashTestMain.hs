@@ -38,7 +38,7 @@ hex2bs s = BL.fromChunks [fst $ B16.decode (BC8.pack s)]
 hex2bsPfx :: String -> BL.ByteString
 hex2bsPfx s = BL.fromChunks [sizePfx, fst $ B16.decode (BC8.pack s)]
   where
-    sizePfx = case bitSize (0::Int) of
+    sizePfx = case finiteBitSize (0::Int) of
         64 -> "\NUL\NUL\NUL\NUL\NUL\NUL\NUL "
         32 -> "\NUL\NUL\NUL "
         _ -> undefined
