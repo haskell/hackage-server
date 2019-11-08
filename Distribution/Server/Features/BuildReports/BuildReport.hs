@@ -44,10 +44,14 @@ import Distribution.Compiler
 import Distribution.CabalSpecVersion
          ( CabalSpecVersion(CabalSpecV2_4) )
 import qualified Distribution.Pretty as Pretty
-import qualified Text.PrettyPrint as Pretty
+import Distribution.Pretty
+         ( Pretty(..) )
+import qualified Text.PrettyPrint as Disp
 import Distribution.Parsec.Newtypes
-import qualified Distribution.Parsec as Parsec
-import qualified Distribution.Compat.CharParsing as Parsec
+import Distribution.Parsec
+         ( Parsec(..), PError(..) )
+import qualified Distribution.Parsec as P
+import qualified Distribution.Compat.CharParsing as P
 import Distribution.FieldGrammar
          ( FieldGrammar, parseFieldGrammar, prettyFieldGrammar, partitionFields
          , uniqueField, uniqueFieldAla, booleanFieldDef, monoidalFieldAla )
@@ -123,10 +127,10 @@ data BuildReport
     installOutcome  :: InstallOutcome,
 
     --   Which version of the Cabal library was used to compile the Setup.hs
---   cabalVersion    :: Version,
+--    cabalVersion    :: Version,
 
     --   Which build tools we were using (with versions)
---   tools      :: [PackageIdentifier],
+--    tools      :: [PackageIdentifier],
 
     -- | Configure outcome, did configure work ok?
     docsOutcome     :: Outcome,
@@ -205,12 +209,12 @@ read s = case parse s of
 
 parse :: BS.ByteString -> Either String BuildReport
 parse s = case snd $ runParseResult $ parseFields s of
-  Left (_, perrors) -> Left $ unlines [ err | Parsec.PError _ err <- perrors ]
+  Left (_, perrors) -> Left $ unlines [ err | PError _ err <- perrors ]
   Right report -> Right report
 
 parseFields :: BS.ByteString -> ParseResult BuildReport
 parseFields input = do
-  fields <- either (parseFatalFailure Parsec.zeroPos . Prelude.show) pure $ readFields input
+  fields <- either (parseFatalFailure P.zeroPos . Prelude.show) pure $ readFields input
   case partitionFields fields of
     (fields', [])  -> parseFieldGrammar CabalSpecV2_4 fields' fieldDescrs
     _otherwise -> fail "found sections in BuildReport"
@@ -238,8 +242,8 @@ show = showFields (const []) . prettyFieldGrammar CabalSpecV2_4 fieldDescrs
 newtype Time = Time (Maybe UTCTime)
 
 instance Newtype (Maybe UTCTime) Time
-instance Pretty.Pretty Time -- TODO
-instance Parsec.Parsec Time -- TODO
+instance Pretty Time -- TODO
+instance Parsec Time -- TODO
 
 fieldDescrs :: (Applicative (g BuildReport), FieldGrammar g) => g BuildReport BuildReport
 fieldDescrs =
@@ -257,28 +261,28 @@ fieldDescrs =
     <*> uniqueField       "docs-outcome"       docsOutcomeL
     <*> uniqueField       "tests-outcome"      testsOutcomeL
 
-dispFlag :: (FlagName, Bool) -> Pretty.Doc
-dispFlag (fn, True)  =                           Pretty.text (unFlagName fn)
-dispFlag (fn, False) = Pretty.char '-' Pretty.<> Pretty.text (unFlagName fn)
+dispFlag :: (FlagName, Bool) -> Disp.Doc
+dispFlag (fn, True)  =                       Disp.text (unFlagName fn)
+dispFlag (fn, False) = Disp.char '-' Disp.<> Disp.text (unFlagName fn)
 
-instance Pretty.Pretty InstallOutcome where
-  pretty PlanningFailed  = Pretty.text "PlanningFailed"
-  pretty (DependencyFailed pkgid) = Pretty.text "DependencyFailed" <+> Pretty.pretty pkgid
-  pretty DownloadFailed  = Pretty.text "DownloadFailed"
-  pretty UnpackFailed    = Pretty.text "UnpackFailed"
-  pretty SetupFailed     = Pretty.text "SetupFailed"
-  pretty ConfigureFailed = Pretty.text "ConfigureFailed"
-  pretty BuildFailed     = Pretty.text "BuildFailed"
-  pretty InstallFailed   = Pretty.text "InstallFailed"
-  pretty InstallOk       = Pretty.text "InstallOk"
+instance Pretty InstallOutcome where
+  pretty PlanningFailed  = Disp.text "PlanningFailed"
+  pretty (DependencyFailed pkgid) = Disp.text "DependencyFailed" <+> Pretty.pretty pkgid
+  pretty DownloadFailed  = Disp.text "DownloadFailed"
+  pretty UnpackFailed    = Disp.text "UnpackFailed"
+  pretty SetupFailed     = Disp.text "SetupFailed"
+  pretty ConfigureFailed = Disp.text "ConfigureFailed"
+  pretty BuildFailed     = Disp.text "BuildFailed"
+  pretty InstallFailed   = Disp.text "InstallFailed"
+  pretty InstallOk       = Disp.text "InstallOk"
 
-instance Parsec.Parsec InstallOutcome where
+instance Parsec InstallOutcome where
   parsec = do
-    name <- Parsec.munch1 Char.isAlphaNum
+    name <- P.munch1 Char.isAlphaNum
     case name of
       "PlanningFailed"   -> return PlanningFailed
-      "DependencyFailed" -> do Parsec.spaces
-                               pkgid <- Parsec.parsec
+      "DependencyFailed" -> do P.spaces
+                               pkgid <- P.parsec
                                return (DependencyFailed pkgid)
       "DownloadFailed"   -> return DownloadFailed
       "UnpackFailed"     -> return UnpackFailed
@@ -289,14 +293,14 @@ instance Parsec.Parsec InstallOutcome where
       "InstallOk"        -> return InstallOk
       _                  -> fail "unknown InstallOutcome"
 
-instance Pretty.Pretty Outcome where
-  pretty NotTried = Pretty.text "NotTried"
-  pretty Failed   = Pretty.text "Failed"
-  pretty Ok       = Pretty.text "Ok"
+instance Pretty Outcome where
+  pretty NotTried = Disp.text "NotTried"
+  pretty Failed   = Disp.text "Failed"
+  pretty Ok       = Disp.text "Ok"
 
-instance Parsec.Parsec Outcome where
+instance Parsec Outcome where
   parsec = do
-    name <- Parsec.munch1 Char.isAlpha
+    name <- P.munch1 Char.isAlpha
     case name of
       "NotTried" -> return NotTried
       "Failed"   -> return Failed
