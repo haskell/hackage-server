@@ -26,6 +26,7 @@ import           Foreign.C
 import           Foreign.Ptr
 import           System.IO.Unsafe
 import Distribution.PackageDescription ( GenericPackageDescription(..), specVersion )
+import Distribution.PackageDescription.Parsec ( scanSpecVersion )
 
 #if defined(MIN_VERSION_cabal_parsers)
 import           Cabal.Parser (compatParseGenericPackageDescription)
@@ -265,48 +266,6 @@ strCaseStrAll s1 s2
             let !ofs = m `minusPtr` hay0
             go (m `plusPtr` needleSz) (ofs:acc)
 
-
--- | Quickly scan new-style spec-version
---
--- A new-style spec-version declaration begins the .cabal file and
--- follow the following case-insensitive grammar (expressed in
--- RFC5234 ABNF):
---
--- newstyle-spec-version-decl = "cabal-version" *WS ":" *WS newstyle-pec-version *WS
---
--- spec-version               = NUM "." NUM [ "." NUM ]
---
--- NUM    = DIGIT0 / DIGITP 1*DIGIT0
--- DIGIT0 = %x30-39
--- DIGITP = %x31-39
--- WS = %20
---
--- TODO: move into lib:Cabal
-scanSpecVersion :: ByteString -> Maybe Version
-scanSpecVersion bs = do
-    fstline':_ <- pure (BC8.lines bs)
-
-    -- parse <newstyle-spec-version-decl>
-    -- normalise: remove all whitespace, convert to lower-case
-    let fstline = BS.map toLowerW8 $ BS.filter (/= 0x20) $ fstline'
-    ["cabal-version",vers] <- pure (BC8.split ':' fstline)
-
-    -- parse <spec-version>
-    --
-    -- This is currently more tolerant regarding leading 0 digits.
-    --
-    ver <- simpleParse (BC8.unpack vers)
-    guard $ case versionNumbers ver of
-              [_,_]   -> True
-              [_,_,_] -> True
-              _       -> False
-
-    pure ver
-  where
-    -- | Translate ['A'..'Z'] to ['a'..'z']
-    toLowerW8 :: Word8 -> Word8
-    toLowerW8 w | 0x40 < w && w < 0x5b = w+0x20
-                | otherwise            = w
 
 -- | Lazy 'BSL.ByteString' version of 'scanSpecVersion'
 scanSpecVersionLazy :: BSL.ByteString -> Maybe Version
