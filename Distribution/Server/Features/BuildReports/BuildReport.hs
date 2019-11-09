@@ -43,13 +43,12 @@ import Distribution.Compiler
          ( CompilerId )
 import Distribution.CabalSpecVersion
          ( CabalSpecVersion(CabalSpecV2_4) )
-import qualified Distribution.Pretty as Pretty
 import Distribution.Pretty
-         ( Pretty(..) )
+         ( Pretty(..), pretty, prettyShow )
 import qualified Text.PrettyPrint as Disp
 import Distribution.Parsec.Newtypes
 import Distribution.Parsec
-         ( Parsec(..), PError(..) )
+         ( Parsec(..), PError(..), parsec )
 import qualified Distribution.Parsec as P
 import qualified Distribution.Compat.CharParsing as P
 import Distribution.FieldGrammar
@@ -267,7 +266,7 @@ dispFlag (fn, False) = Disp.char '-' Disp.<> Disp.text (unFlagName fn)
 
 instance Pretty InstallOutcome where
   pretty PlanningFailed  = Disp.text "PlanningFailed"
-  pretty (DependencyFailed pkgid) = Disp.text "DependencyFailed" <+> Pretty.pretty pkgid
+  pretty (DependencyFailed pkgid) = Disp.text "DependencyFailed" <+> pretty pkgid
   pretty DownloadFailed  = Disp.text "DownloadFailed"
   pretty UnpackFailed    = Disp.text "UnpackFailed"
   pretty SetupFailed     = Disp.text "SetupFailed"
@@ -282,7 +281,7 @@ instance Parsec InstallOutcome where
     case name of
       "PlanningFailed"   -> return PlanningFailed
       "DependencyFailed" -> do P.spaces
-                               pkgid <- P.parsec
+                               pkgid <- parsec
                                return (DependencyFailed pkgid)
       "DownloadFailed"   -> return DownloadFailed
       "UnpackFailed"     -> return UnpackFailed
@@ -331,13 +330,13 @@ instance ToSElem BuildReport where
         , ("compiler", display compiler)
         , ("client", display client)
         , ("flagAssignment", toSElem $ map (render . dispFlag) flagAssignment)
-        , ("dependencies", toSElem $ map Pretty.prettyShow dependencies)
+        , ("dependencies", toSElem $ map prettyShow dependencies)
         , ("installOutcome", display installOutcome)
         , ("docsOutcome", display docsOutcome)
         , ("testsOutcome", display testsOutcome)
         ]
       where
-        display value = toSElem (Pretty.prettyShow value)
+        display value = toSElem (prettyShow value)
 
 -------------------
 -- Arbitrary instances
