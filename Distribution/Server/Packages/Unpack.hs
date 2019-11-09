@@ -17,8 +17,10 @@ import qualified Codec.Archive.Tar       as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
 import qualified Codec.Archive.Tar.Check as Tar
 
+import Distribution.CabalSpecVersion
+         ( CabalSpecVersion(..), cabalSpecFromVersionDigits )
 import Distribution.Version
-         ( Version, nullVersion, mkVersion )
+         ( Version, nullVersion, mkVersion, versionNumbers )
 import Distribution.Types.PackageName
          ( mkPackageName, unPackageName )
 import Distribution.Package
@@ -215,9 +217,9 @@ specVersionChecks specVerOk specVer = do
     throwError "'cabal-version' must be lower than 2.5"
 
   -- Check whether a known spec version had been used
-  -- TODO: move this into lib:Cabal
-  let knownSpecVersions = map mkVersion [ [1,18], [1,20], [1,22], [1,24], [2,0], [2,2], [2,4] ]
-  when (specVer >= mkVersion [1,18] && (specVer `notElem` knownSpecVersions)) $
+  let knownSpecVersions = [CabalSpecV1_18 ..]
+  let cabalSpecVersion = cabalSpecFromVersionDigits . versionNumbers $ specVer
+  when (specVer >= mkVersion [1,18] && (cabalSpecVersion `notElem` knownSpecVersions)) $
     throwError ("'cabal-version' refers to an unreleased/unknown cabal specification version "
                 ++ display specVer ++ "; for a list of valid specification versions please consult "
                 ++ "https://www.haskell.org/cabal/users-guide/file-format-changelog.html")
