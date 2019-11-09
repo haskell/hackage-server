@@ -22,7 +22,7 @@ import Distribution.Version
 import Distribution.Types.PackageName
          ( mkPackageName, unPackageName )
 import Distribution.Package
-         ( PackageIdentifier, packageVersion, packageName, PackageName )
+         ( PackageIdentifier, packageVersion, packageName )
 import Distribution.PackageDescription
          ( GenericPackageDescription(..), PackageDescription(..)
          , licenseRaw, specVersion )
@@ -35,14 +35,12 @@ import Distribution.Parsec
          ( showPError, showPWarning )
 import Distribution.Text
          ( display, simpleParse )
-import Distribution.Pretty (Pretty(..))
 -- import Distribution.Parsec (Parsec(..))
 -- import qualified Distribution.Parsec as P
 -- import qualified Distribution.Compat.CharParsing as P
 import Distribution.Server.Util.ParseSpecVer
 import qualified Distribution.SPDX as SPDX
 import qualified Distribution.License as License
-import qualified Text.ParserCombinators.ReadP as Parse
 
 import Control.Monad.Except
          ( ExceptT, runExceptT, MonadError, throwError )
@@ -56,14 +54,13 @@ import Data.ByteString.Lazy
          ( ByteString )
 import qualified Data.ByteString.Lazy as LBS
 import Data.List
-         ( nub, partition, intercalate, isPrefixOf )
+         ( nub, partition, isPrefixOf )
 import qualified Data.Map.Strict as Map
          ( fromList, lookup )
 import Data.Time
          ( UTCTime(..), fromGregorian, addUTCTime )
 import Data.Time.Clock.POSIX
          ( posixSecondsToUTCTime )
-import qualified Data.Version
 import qualified Distribution.Server.Util.GZip as GZip
 import System.FilePath
          ( (</>), (<.>), splitDirectories, splitExtension, normalise )
@@ -72,7 +69,6 @@ import qualified System.FilePath.Windows
 import qualified System.FilePath.Posix
          ( takeFileName, takeDirectory, addTrailingPathSeparator
          , dropTrailingPathSeparator )
-import qualified Text.PrettyPrint as Disp
 import Text.Printf
          ( printf )
 
@@ -113,8 +109,6 @@ tarPackageChecks lax now tarGzFile contents = do
               (base,   tar) = splitExtension tarFile
   unless (ext == ".tar.gz") $
     throwError $ tarGzFile ++ " is not a gzipped tar file, it must have the .tar.gz extension"
-
-  let versionTags (Data.Version.Version _ ts) = ts
 
   pkgid <- case simpleParse pkgidStr of
     Just pkgid
