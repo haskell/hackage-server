@@ -208,7 +208,7 @@ getDocTermIds SearchIndex{docIdMap} docid =
 -- Procedure for adding a new doc...
 -- (key, field -> [Term])
 -- alloc docid for key
--- add term occurences for docid (include rev map for termid)
+-- add term occurrences for docid (include rev map for termid)
 -- construct indexdoc now that we have all the term -> termid entries
 -- insert indexdoc
 
@@ -252,7 +252,7 @@ insertDoc key userDocTerms userDocFeats si@SearchIndex{docKeyMap}
         addTerms      = newTerms `Set.difference` oldTerms
 
      -- Note: adding the doc relies on all the terms being in the termMap
-     -- already, so we first add all the term occurences for the docid.
+     -- already, so we first add all the term occurrences for the docid.
      in checkInvariant
       . insertDocIdToDocEntry docid key userDocTerms' userDocFeats
       . insertTermToDocIdEntries (Set.toList addTerms) docid
@@ -266,7 +266,7 @@ insertDoc key userDocTerms userDocFeats si@SearchIndex{docKeyMap}
         addTerms      = docTermSet userDocTerms'
 
      -- Note: adding the doc relies on all the terms being in the termMap
-     -- already, so we first add all the term occurences for the docid.
+     -- already, so we first add all the term occurrences for the docid.
      in checkInvariant
       . insertDocIdToDocEntry docid key userDocTerms' userDocFeats
       . insertDocKeyToIdEntry key docid

@@ -69,7 +69,7 @@ import Distribution.Simple.Utils (lowercase)
 
 -- | The collection of information about packages from one or more 'PackageDB's.
 --
--- It can be searched effeciently by package name and version.
+-- It can be searched efficiently by package name and version.
 --
 newtype PackageIndex pkg = PackageIndex
   -- A mapping from package names to a non-empty list of  versions of that
