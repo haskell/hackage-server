@@ -340,8 +340,8 @@ library lib-server
     other-modules:
       Distribution.Server.Features.Crash
 
-  -- Except for GHC-bundled libraries (see above), it's more easier/managable from
-  -- a maintainance POV to support only single major-version-ranges
+  -- Except for GHC-bundled libraries (see above), it's more easier/manageable from
+  -- a maintenance POV to support only single major-version-ranges
   --
   -- NB: see also build-depends in `common defaults`!
   build-depends:

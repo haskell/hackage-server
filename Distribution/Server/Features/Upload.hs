@@ -331,7 +331,7 @@ uploadFeature ServerEnv{serverBlobStore = store}
           -- this is already checked in processUpload, and race conditions are highly unlikely but imaginable
           else errForbidden "Upload failed" [MText "Package already exists."]
 
-    -- This is a processing funtion for extractPackage that checks upload-specific requirements.
+    -- This is a processing function for extractPackage that checks upload-specific requirements.
     -- Does authentication, though not with requirePackageAuth, because it has to be IO.
     -- Some other checks can be added, e.g. if a package with a later version exists
     processUpload :: PackageIndex PkgInfo -> Users.UserId -> UploadResult -> IO (Maybe ErrorResponse)
