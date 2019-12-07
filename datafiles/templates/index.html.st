@@ -68,7 +68,7 @@ command.</li>
 <h2 id="reporting-problems">Reporting problems</h2>
 
 <p>For issues with accounts or permissions please contact the administrators by email
-at <a href="mailto:admin@hackage.haskell.org">admin@hackage.haskell.org</a></p>
+at <a href="mailto:hackage-admin@haskell.org">hackage-admin@haskell.org</a></p>
 
 <p>Bugs with the site code or server/hosting issues should be reported
   in the <a href="https://github.com/haskell/hackage-server/issues">issue tracker</a>.</p>

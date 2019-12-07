@@ -9,6 +9,7 @@
     $package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$
   </title>
   <meta name="twitter:card" content="summary" />
+  <meta name="twitter:site" content="@hackage" />
   <meta property="og:url" content="$baseurl$/package/$package.name$" />
   <meta property="og:title" content="$package.name$: $package.optional.synopsis$" />
   <meta property="og:description" content="Install via `cabal&nbsp;install&nbsp;$package.name$`. $if(hasVotes)$
@@ -53,7 +54,7 @@
       <tbody>
 
         <tr>
-          <th>Versions</th>
+          <th>Versions<span style="font-weight:normal;"> [<a href="https://pvp.haskell.org/faq">faq</a>]</span></th>
           <td>$versions$</td>
         </tr>
 
