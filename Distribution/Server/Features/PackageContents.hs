@@ -145,15 +145,17 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
                   =<< liftIO (loadTarEntry tarfile offset)
           cacheControl [Public, maxAgeDays 30] etag
           return $ toResponse $ Resource.XHtml $
-            let title = "Changelog for " ++ display (packageId pkg) in
-            hackagePage title
-              [ XHtml.h2 << title
-              , XHtml.thediv ! [XHtml.theclass "embedded-author-content"]
-                            << if supposedToBeMarkdown filename
-                                 then renderMarkdown contents
-                                 else XHtml.thediv ! [XHtml.theclass "preformatted"]
-                                                  << unpackUtf8 contents
-              ]
+            let title  = "Changelog for " ++ display pkgId
+                title2 = "Changelog for " XHtml.+++ (XHtml.anchor ! [XHtml.href (packageURL pkgId)] << display pkgId)
+                pkgId  = packageId pkg
+            in hackagePage title
+                 [ XHtml.h2 << title2
+                 , XHtml.thediv ! [XHtml.theclass "embedded-author-content"]
+                               << if supposedToBeMarkdown filename
+                                    then renderMarkdown contents
+                                    else XHtml.thediv ! [XHtml.theclass "preformatted"]
+                                                     << unpackUtf8 contents
+                 ]
 
     serveReadmeText :: DynamicPath -> ServerPartE Response
     serveReadmeText dpath = do
@@ -225,3 +227,8 @@ unpackUtf8 :: BS.ByteString -> String
 unpackUtf8 = T.unpack
            . T.decodeUtf8With T.lenientDecode
            . BS.toStrict
+
+-- TODO: this helper is defined in at least two other places; consolidate
+-- | URL describing a package.
+packageURL :: PackageIdentifier -> XHtml.URL
+packageURL pkgId = "/package" </> display pkgId
