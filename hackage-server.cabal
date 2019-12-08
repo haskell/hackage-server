@@ -367,7 +367,7 @@ library lib-server
     , haddock-library       ^>= 1.7.0
     , happstack-server      ^>= 7.5
     , hashable              ^>= 1.2
-    , hslogger              ^>= 1.2
+    , hslogger              ^>= 1.3.1
     , lifted-base           ^>= 0.2.1
     , mime-mail             ^>= 0.4
     , random                ^>= 1.1
