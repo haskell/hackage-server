@@ -3,6 +3,7 @@
 <head>
 $hackageCssTheme()$
 <title>Introduction | Hackage</title>
+<link rel="canonical" href="$sbaseurl$" />
 </head>
 
 <body>

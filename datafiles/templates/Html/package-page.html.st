@@ -15,7 +15,7 @@
   <meta property="og:description" content="Install via `cabal&nbsp;install&nbsp;$package.name$`. $if(hasVotes)$
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#10; [rating:$score$/3(n=$votes$)]$endif$" />
   <meta property="og:site_name" content="Hackage" />
-  <link rel="canonical" href="$baseurl$/package/$package.name$" />
+  <link rel="canonical" href="$sbaseurl$/package/$package.name$" />
   <script src="/static/jquery.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript"></script>
   <base href="$baseurl$/package/$package.name$-$package.version$/" />
