@@ -371,7 +371,7 @@ library lib-server
     , lifted-base           ^>= 0.2.1
     , mime-mail             ^>= 0.4
     , random                ^>= 1.1
-    , rss                   ^>= 3000.2.0.3
+    , rss                   ^>= 3000.2.0.7
     , safecopy              ^>= 0.9.1
     , semigroups            ^>= 0.18.3
     , split                 ^>= 0.2
