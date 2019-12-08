@@ -164,9 +164,10 @@ set -e
 dir=\$(mktemp -d dist-docs.XXXXXX)
 trap 'rm -r "\$dir"' EXIT
 
-cabal haddock --builddir="\$dir" --for-hackage --haddock-option=--hyperlinked-source
-# Starting with cabal 2.0, `--publish` is needed for uploading to non-candidate releases
-cabal upload -d \$dir/*-docs.tar.gz
+# assumes cabal 2.4 or later
+cabal v2-haddock --builddir="\$dir" --haddock-for-hackage --enable-doc
+
+cabal upload -d --publish \$dir/*-docs.tar.gz
 </pre>
   </li>
 
