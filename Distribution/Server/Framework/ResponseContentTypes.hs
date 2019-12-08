@@ -165,7 +165,7 @@ instance ToMessage OpenSearchXml where
     toMessage (OpenSearchXml bs) = bs
 
 instance ToMessage Aeson.Value where
-    toContentType _ = "application/json; charset=utf-8"
+    toContentType _ = "application/json"
     toMessage val = Aeson.encode val
 
 data CabalFile = CabalFile !BS.Lazy.ByteString !UTCTime
