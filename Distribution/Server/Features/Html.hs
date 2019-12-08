@@ -627,6 +627,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         return $ toResponse . template $
           -- IO-related items
           [ "baseurl"           $= show (serverBaseURI { URI.uriScheme = "" })
+          , "sbaseurl"          $= show (serverBaseURI { URI.uriScheme = "https:" })
           , "cabalVersion"      $= display cabalVersion
           , "tags"              $= (renderTags tags)
           , "versions"          $= (PagesNew.renderVersion realpkg
