@@ -40,6 +40,9 @@ import Distribution.Compiler
          ( CompilerId )
 import qualified Distribution.Text as Text
          ( Text(disp, parse), display )
+import Distribution.Pretty (Pretty(..))
+import Distribution.Parsec.Class (Parsec(..))
+import qualified Distribution.Compat.CharParsing as P
 import Distribution.ParseUtils
          ( FieldDescr(..), ParseResult(..), Field(..)
          , simpleField, boolField, listField, readFields
@@ -52,9 +55,9 @@ import Distribution.Server.Framework.MemSize
 
 import qualified Distribution.Compat.ReadP as Parse
 import qualified Text.PrettyPrint.HughesPJ as Disp
-         ( Doc, char, text )
+         ( Doc, char, text, (<>) )
 import Text.PrettyPrint.HughesPJ
-         ( (<+>), (<>), render )
+         ( (<+>), render )
 import Data.Serialize as Serialize
          ( Serialize(..) )
 import Data.SafeCopy
@@ -272,8 +275,8 @@ sortedFieldDescrs :: [FieldDescr BuildReport]
 sortedFieldDescrs = sortBy (comparing fieldName) fieldDescrs
 
 dispFlag :: (FlagName, Bool) -> Disp.Doc
-dispFlag (fn, True)  =                  Disp.text (unFlagName fn)
-dispFlag (fn, False) = Disp.char '-' <> Disp.text (unFlagName fn)
+dispFlag (fn, True)  =                       Disp.text (unFlagName fn)
+dispFlag (fn, False) = Disp.char '-' Disp.<> Disp.text (unFlagName fn)
 
 parseFlag :: Parse.ReadP r (FlagName, Bool)
 parseFlag = do
@@ -282,6 +285,7 @@ parseFlag = do
     ('-':flag) -> return (mkFlagName flag, False)
     flag       -> return (mkFlagName flag, True)
 
+-- TODO: remove this instance for Cabal 3.0
 instance Text.Text InstallOutcome where
   disp PlanningFailed  = Disp.text "PlanningFailed"
   disp (DependencyFailed pkgid) = Disp.text "DependencyFailed" <+> Text.disp pkgid
@@ -309,6 +313,35 @@ instance Text.Text InstallOutcome where
       "InstallOk"        -> return InstallOk
       _                  -> Parse.pfail
 
+instance Pretty InstallOutcome where
+  pretty PlanningFailed  = Disp.text "PlanningFailed"
+  pretty (DependencyFailed pkgid) = Disp.text "DependencyFailed" <+> pretty pkgid
+  pretty DownloadFailed  = Disp.text "DownloadFailed"
+  pretty UnpackFailed    = Disp.text "UnpackFailed"
+  pretty SetupFailed     = Disp.text "SetupFailed"
+  pretty ConfigureFailed = Disp.text "ConfigureFailed"
+  pretty BuildFailed     = Disp.text "BuildFailed"
+  pretty InstallFailed   = Disp.text "InstallFailed"
+  pretty InstallOk       = Disp.text "InstallOk"
+
+instance Parsec InstallOutcome where
+  parsec = do
+    name <- P.munch1 Char.isAlphaNum
+    case name of
+      "PlanningFailed"   -> return PlanningFailed
+      "DependencyFailed" -> do P.spaces
+                               pkgid <- parsec
+                               return (DependencyFailed pkgid)
+      "DownloadFailed"   -> return DownloadFailed
+      "UnpackFailed"     -> return UnpackFailed
+      "SetupFailed"      -> return SetupFailed
+      "ConfigureFailed"  -> return ConfigureFailed
+      "BuildFailed"      -> return BuildFailed
+      "InstallFailed"    -> return InstallFailed
+      "InstallOk"        -> return InstallOk
+      _                  -> fail "unknown InstallOutcome"
+
+-- TODO: remove this instance for Cabal 3.0
 instance Text.Text Outcome where
   disp NotTried = Disp.text "NotTried"
   disp Failed   = Disp.text "Failed"
@@ -320,6 +353,20 @@ instance Text.Text Outcome where
       "Failed"   -> return Failed
       "Ok"       -> return Ok
       _          -> Parse.pfail
+
+instance Pretty Outcome where
+  pretty NotTried = Disp.text "NotTried"
+  pretty Failed   = Disp.text "Failed"
+  pretty Ok       = Disp.text "Ok"
+
+instance Parsec Outcome where
+  parsec = do
+    name <- P.munch1 Char.isAlpha
+    case name of
+      "NotTried" -> return NotTried
+      "Failed"   -> return Failed
+      "Ok"       -> return Ok
+      _          -> fail "unknown Outcome"
 
 instance MemSize BuildReport where
     memSize (BuildReport a b c d e f g h i j k l) = memSize10 a b c d e f g h i j + memSize k + memSize l

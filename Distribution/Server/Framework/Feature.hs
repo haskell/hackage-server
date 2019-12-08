@@ -185,16 +185,19 @@ instance Monoid AbstractStateComponent where
     , abstractStateNewEmpty   = \_stateDir -> return (mempty, return [])
     , abstractStateSize       = return 0
     }
-  a `mappend` b = AbstractStateComponent {
+  mappend = (<>)
+
+instance Semigroup AbstractStateComponent where
+  a <> b = AbstractStateComponent {
       abstractStateDesc       = abstractStateDesc a ++ "\n" ++ abstractStateDesc b
     , abstractStateCheckpoint = abstractStateCheckpoint a >> abstractStateCheckpoint b
     , abstractStateClose      = abstractStateClose a >> abstractStateClose b
     , abstractStateBackup     = \t -> liftM2 (++) (abstractStateBackup a t) (abstractStateBackup b t)
-    , abstractStateRestore    = abstractStateRestore a `mappend` abstractStateRestore b
+    , abstractStateRestore    = abstractStateRestore a <> abstractStateRestore b
     , abstractStateNewEmpty   = \stateDir -> do
                                  (a', cmpA) <- abstractStateNewEmpty a stateDir
                                  (b', cmpB) <- abstractStateNewEmpty b stateDir
-                                 return (a' `mappend` b', liftM2 (++) cmpA cmpB)
+                                 return (a' <> b', liftM2 (++) cmpA cmpB)
     , abstractStateSize       = liftM2 (+) (abstractStateSize a)
                                            (abstractStateSize b)
     }

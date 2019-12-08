@@ -12,6 +12,9 @@ module Distribution.Server.Users.UserIdSet (
     unions,
   ) where
 
+import Distribution.Server.Prelude hiding (null, empty)
+import Prelude ()
+
 import Distribution.Server.Users.Types
 import Distribution.Server.Framework.MemSize
 
@@ -24,13 +27,12 @@ import Control.DeepSeq
 import Control.Applicative ((<$>))
 import Data.Aeson (ToJSON)
 
-import Prelude hiding (null)
 
 -- | A simple set of 'UserId's. Used to implement user groups, but can be used
 -- anywhere a set of users identified by 'UserId' is needed.
 --
 newtype UserIdSet = UserIdSet IntSet.IntSet
-  deriving (Eq, Monoid, Typeable, Show, NFData, MemSize, ToJSON)
+  deriving (Eq, Semigroup, Monoid, Typeable, Show, NFData, MemSize, ToJSON)
 
 empty :: UserIdSet
 empty = UserIdSet IntSet.empty

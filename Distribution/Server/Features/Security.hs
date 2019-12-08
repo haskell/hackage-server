@@ -150,8 +150,8 @@ securityFeature env securityState =
           let tufFile = file sfiles
               eTag    = ETag $ show (tufFileHashMD5 tufFile)
           -- Higher max-age values result in higher cache hit ratios, but also
-          -- in higher likelyhood of cache incoherence problems (and of course in
-          -- higher likelyhood of caches beind out of date with updates to the
+          -- in higher likelihood of cache incoherence problems (and of course in
+          -- higher likelihood of caches beind out of date with updates to the
           -- central server).
           cacheControl [Public, NoTransform, maxAgeMinutes 1] eTag
           enableRange

@@ -102,7 +102,7 @@ uploadPackage targetRepoURI' doMirrorUploaders pkginfo locCab locTgz = do
         liftIO $ removeFile locTgz
 
       -- TODO: think about in what situations we delete the file
-      -- and if we should actually cache it if we don't sucessfully upload.
+      -- and if we should actually cache it if we don't successfully upload.
 
       -- TODO: perhaps we shouldn't report failure for the whole package if
       -- we fail to set the upload time/uploader

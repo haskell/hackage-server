@@ -267,13 +267,15 @@ updateSecurityState maxAge newUpdate = do
     when (needUpdate oldUpdate newUpdate) $ do
       setTufUpdate newUpdate
       updateSnapshotAndTimestamp (tufUpdateTime newUpdate)
-    SecurityState {
-      securityStateFiles  = Just SecurityStateFiles {
-                              securitySnapshot  = snapshot,
-                              securityTimestamp = timestamp
-                            }
-    } <- State.get
-    return (timestamp, snapshot)
+    st <- State.get
+    case st of
+      SecurityState {
+        securityStateFiles  = Just SecurityStateFiles {
+                                securitySnapshot  = snapshot,
+                                securityTimestamp = timestamp
+                              }
+      } -> return (timestamp, snapshot)
+      _ -> error "updateSecurityState: unexpected state"
   where
     needUpdate :: Maybe TUFUpdate -> TUFUpdate -> Bool
     needUpdate Nothing    _   = True
@@ -292,22 +294,24 @@ updateSecurityState maxAge newUpdate = do
     -- Both require that the securityStateFiles is Just, which is set up by
     -- the migration.
     getTufUpdate = do
-      SecurityState {
-        securityTimestampTime = timestampTime,
-        securityStateFiles    = Just SecurityStateFiles {
-          securityRoot        = root,
-          securityMirrors     = mirrors
-        },
-        securityTarGzFileInfo = tarGzFileInfo,
-        securityTarFileInfo   = tarFileInfo
-      } <- State.get
-      return $ Just TUFUpdate {
-        tufUpdateInfoRoot    = fauxFileInfo root,
-        tufUpdateInfoMirrors = fauxFileInfo mirrors,
-        tufUpdateInfoTarGz   = tarGzFileInfo,
-        tufUpdateInfoTar     = tarFileInfo,
-        tufUpdateTime        = timestampTime
-      }
+      st <- State.get
+      case st of
+        SecurityState {
+          securityTimestampTime = timestampTime,
+          securityStateFiles    = Just SecurityStateFiles {
+            securityRoot        = root,
+            securityMirrors     = mirrors
+          },
+          securityTarGzFileInfo = tarGzFileInfo,
+          securityTarFileInfo   = tarFileInfo
+        } -> return $ Just TUFUpdate {
+               tufUpdateInfoRoot    = fauxFileInfo root,
+               tufUpdateInfoMirrors = fauxFileInfo mirrors,
+               tufUpdateInfoTarGz   = tarGzFileInfo,
+               tufUpdateInfoTar     = tarFileInfo,
+               tufUpdateTime        = timestampTime
+             }
+        _ -> error "getTufUpdate: unexpected state"
 
     setTufUpdate TUFUpdate {
                    tufUpdateInfoRoot    = rootFileInfo,
@@ -316,7 +320,10 @@ updateSecurityState maxAge newUpdate = do
                    tufUpdateInfoTar     = tarFileInfo,
                    tufUpdateTime        = timestampTime
                  } = do
-      st@SecurityState{ securityStateFiles = Just files } <- State.get
+      st <- State.get
+      let files = case st of
+                    SecurityState{ securityStateFiles = Just files' } -> files'
+                    _                                                 -> error "setTufUpdate: unexpected state"
       State.put st {
         securityStateFiles =
           Just files {
@@ -453,4 +460,3 @@ instance Migrate SecurityState where
     -- In this case (which can only happen with an empty server)
     -- we just use the new style initial state
     initialSecurityState
-

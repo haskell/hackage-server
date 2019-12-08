@@ -11,9 +11,6 @@ packages: .
 -----------------------------------------------------------------------------
 -- Anti-constraints
 
--- https://github.com/basvandijk/rss/issues/7
-constraints: rss (< 3000.2.0.6 || > 3000.2.0.6)
-
 -- make sure we don't accidentally pick up blacklisted packages
 constraints: foundation -none, cryptonite -none, cryptohash -none
 

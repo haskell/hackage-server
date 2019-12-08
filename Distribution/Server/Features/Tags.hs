@@ -58,7 +58,7 @@ data TagsFeature = TagsFeature {
     -- tag for their own use (a calculated, rather than freely
     -- assignable, tag). It is a subset of the main mapping.
     --
-    -- This feature itself defines a few such tags: libary, executable,
+    -- This feature itself defines a few such tags: library, executable,
     -- and license tags, as well as package categories on
     -- initial import.
     setCalculatedTag :: Tag -> Set PackageName -> IO (),

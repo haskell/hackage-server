@@ -36,7 +36,7 @@ import           Distribution.PackageDescription.Parsec ( runParseResult, parseG
 -- | Heuristic @cabal-version:@-field parser
 --
 -- This parser is intended to be very fast and assumes a sane & valid .cabal file
--- (i.e. one which can be parsed succesfully by 'parseGenericPackageDescription')
+-- (i.e. one which can be parsed successfully by 'parseGenericPackageDescription')
 --
 -- Hackage shall only accept packages and files for which
 -- 'parseGenericPackageDescription' and 'parseSpecVer' agree on the
@@ -62,7 +62,7 @@ findCabVer raw = msum [ decodeVer y | (_,_,y) <- findCabVers raw ]
 
 -- | Return list of @cabal-version@ candidates as 3-tuples of
 -- (prefix,indentation-level,value-words) in reverse order of
--- occurence.
+-- occurrence.
 --
 -- A necessary condition for a @cabal-version@ field to be valid is
 -- that it matches the following regexp case-insensitively:
@@ -73,7 +73,7 @@ findCabVer raw = msum [ decodeVer y | (_,_,y) <- findCabVers raw ]
 -- by 0 or more whitespace, and between the @cabal-version@ and the
 -- @:@ token may only exist whitespace.
 --
--- NB: Later occurences of @cabal-version@ override earlier ones. In
+-- NB: Later occurrences of @cabal-version@ override earlier ones. In
 --     future @cabal-versions@ it will be disallowed.
 findCabVers :: ByteString -> [(ByteString,Int,[ByteString])]
 findCabVers buf0 = mapMaybe go ixs
@@ -113,7 +113,7 @@ verDictV = Map.fromList [ (BC8.pack (prettyShow v), v) | v <- knownVers ]
 
 -- | Lookup-table mapping ">=x.y.z" strings to 'Version'
 verDictRg :: Map.HashMap ByteString Version
-verDictRg = Map.fromList [ (">=" `mappend` BC8.pack (prettyShow v), v) | v <- knownVers ]
+verDictRg = Map.fromList [ (">=" <> BC8.pack (prettyShow v), v) | v <- knownVers ]
 
 -- | List of cabal-version values contained in Hackage's package index as of 2017-07
 knownVers :: [Version]
@@ -242,7 +242,7 @@ decodeVerFallback v0 = simpleParse v <|> parseSpecVR
 foreign import ccall unsafe "string.h strcasestr" c_strcasestr :: Ptr CChar -> Ptr CChar -> IO (Ptr CChar)
 
 -- | Find indices (in reverse order) of all non-overlapping
--- case-insensitive occurences of s2 in s1
+-- case-insensitive occurrences of s2 in s1
 {-# NOINLINE strCaseStrAll  #-}
 strCaseStrAll :: ByteString -> ByteString -> [Int]
 strCaseStrAll s1 s2

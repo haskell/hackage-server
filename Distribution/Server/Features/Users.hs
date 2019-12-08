@@ -411,7 +411,7 @@ userFeature templates usersState adminsState
         return valid
 
     -- Simply check if the user is authenticated as some user, without any
-    -- check that they have any particular priveledges. Only useful as a
+    -- check that they have any particular privileges. Only useful as a
     -- building block.
     guardAuthenticated :: ServerPartE UserId
     guardAuthenticated = do

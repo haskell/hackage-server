@@ -166,7 +166,7 @@ checkPriviledged _ _ (AnyKnownUser:_) = return True
 
 -- | The idea here is if you're using https by putting the hackage-server
 -- behind a reverse proxy then you can get the proxy to set this header
--- so that we can know if the request is comming in by https or plain http.
+-- so that we can know if the request is coming in by https or plain http.
 --
 -- We only reject insecure connections in setups where the proxy passes
 -- "Forwarded: proto=http" or "X-Forwarded-Proto: http" for the non-secure

@@ -89,8 +89,11 @@ data Resource = Resource {
 -- favors first
 instance Monoid Resource where
     mempty = Resource [] [] [] [] [] noFormat NoSlash []
-    mappend (Resource bpath rget rput rpost rdelete rformat rend desc)
-            (Resource bpath' rget' rput' rpost' rdelete' rformat' rend' desc') =
+    mappend = (<>)
+
+instance Semigroup Resource where
+    (Resource bpath rget rput rpost rdelete rformat rend desc) <>
+      (Resource bpath' rget' rput' rpost' rdelete' rformat' rend' desc') =
         Resource (simpleCombine bpath bpath') (ccombine rget rget') (ccombine rput rput')
                    (ccombine rpost rpost') (ccombine rdelete rdelete')
                    (simpleCombine rformat rformat') (simpleCombine rend rend') (desc ++ desc')
@@ -198,7 +201,7 @@ extendResourcePath arg resource =
 
 -- Allows the formation of a URI from a URI specification (BranchPath).
 -- URIs may obey additional constraints and have special rules (e.g., formats).
--- To accomodate these, insteaduse renderResource to get a URI.
+-- To accommodate these, insteaduse renderResource to get a URI.
 --
 -- ".." is a special argument that fills in a TrailingBranch. Make sure it's
 -- properly escaped (see Happstack.Server.SURI)
@@ -266,7 +269,7 @@ renderResource resource list = case renderListURI (normalizeResourceLocation res
     (str, format:_) -> renderResourceFormat resource (Just format) str
     (str, []) -> renderResourceFormat resource Nothing str
 
--- in some cases, DynamicBranches are used to accomodate formats for StaticBranches.
+-- in some cases, DynamicBranches are used to accommodate formats for StaticBranches.
 -- this returns them to their pre-format state so renderGenURI can handle them
 normalizeResourceLocation :: Resource -> BranchPath
 normalizeResourceLocation resource = case (resourceFormat resource, resourceLocation resource) of

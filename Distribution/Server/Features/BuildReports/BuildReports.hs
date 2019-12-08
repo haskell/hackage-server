@@ -23,6 +23,11 @@ import Distribution.Server.Features.BuildReports.BuildReport
 
 import Distribution.Package (PackageId)
 import Distribution.Text (Text(..), display)
+import Distribution.Pretty (Pretty(..))
+import Distribution.Parsec.Class (Parsec(..))
+import qualified Distribution.Parsec.Class as P
+import qualified Distribution.Compat.Parsing as P
+import qualified Distribution.Compat.CharParsing as P
 
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Framework.Instances
@@ -34,6 +39,8 @@ import Data.Serialize (Serialize)
 import Data.SafeCopy
 import Data.Typeable (Typeable)
 import Control.Applicative ((<$>))
+import qualified Data.List as L
+import qualified Data.Char as Char
 
 import qualified Distribution.Server.Util.Parse as Parse
 import qualified Text.PrettyPrint          as Disp
@@ -41,14 +48,31 @@ import Text.StringTemplate (ToSElem(..))
 
 
 newtype BuildReportId = BuildReportId Int
-  deriving (Eq, Ord, Typeable, Show, MemSize)
+  deriving (Eq, Ord, Typeable, Show, MemSize, Pretty)
 
 incrementReportId :: BuildReportId -> BuildReportId
 incrementReportId (BuildReportId n) = BuildReportId (n+1)
 
+-- TODO: remove this instance for Cabal 3.0
 instance Text BuildReportId where
   disp (BuildReportId n) = Disp.int n
   parse = BuildReportId <$> Parse.int
+
+-- TODO: factor out common code
+instance Parsec BuildReportId where
+  -- parse a non-negative integer. No redundant leading zeros allowed.
+  -- (this is effectively a relabeled versionDigitParser)
+  parsec = (P.some d >>= (fmap BuildReportId . toNumber)) P.<?> "BuildReportId (natural number without redunant leading zeroes)"
+    where
+      toNumber :: P.CabalParsing m => [Int] -> m Int
+      toNumber [0]   = return 0
+      toNumber (0:_) = P.unexpected "BuildReportId with redundant leading zero"
+      -- TODO: Add sanity check this doesn't overflow
+      toNumber xs    = return $ L.foldl' (\a b -> a * 10 + b) 0 xs
+
+      d :: P.CharParsing m => m Int
+      d = f <$> P.satisfyRange '0' '9'
+      f c = Char.ord c - Char.ord '0'
 
 newtype BuildLog = BuildLog BlobStorage.BlobId
   deriving (Eq, Typeable, Show, MemSize)

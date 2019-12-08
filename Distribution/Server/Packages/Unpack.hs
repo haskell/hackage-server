@@ -35,6 +35,10 @@ import Distribution.Parsec.Common
          ( showPError, showPWarning )
 import Distribution.Text
          ( Text(..), display, simpleParse )
+import Distribution.Pretty (Pretty(..))
+-- import Distribution.Parsec.Class (Parsec(..))
+-- import qualified Distribution.Parsec.Class as P
+-- import qualified Distribution.Compat.CharParsing as P
 import Distribution.Server.Util.ParseSpecVer
 import qualified Distribution.SPDX as SPDX
 import qualified Distribution.License as License
@@ -101,11 +105,15 @@ unpackPackageRaw tarGzFile contents =
   where
     noTime = UTCTime (fromGregorian 1970 1 1) 0
 
+-- | Denotes a PackageId with extra version tags
+--
+-- See also 893de51faf7802db007eedba7d1471da95863c3b which introduced 'TaggedPackageId'
 data TaggedPackageId = TaggedPackageId {
         _taggedPkgName   :: PackageName,
         taggedPkgVersion :: Data.Version.Version
     }
 
+-- TODO: remove this instance for Cabal 3.0
 instance Text TaggedPackageId where
     disp (TaggedPackageId n v)
         | v == Data.Version.Version [] [] = disp n
@@ -115,6 +123,14 @@ instance Text TaggedPackageId where
         n <- parse
         v <- (Parse.char '-' >> parse) Parse.<++ return (Data.Version.Version [] [])
         return (TaggedPackageId n v)
+
+instance Pretty TaggedPackageId where
+    pretty (TaggedPackageId n v)
+        | v == Data.Version.Version [] [] = pretty n
+        | otherwise = pretty n Disp.<> Disp.char '-' Disp.<> Disp.text (Data.Version.showVersion v)
+
+-- TODO: 'instance Parsec TaggedPackageId'
+-- see also 893de51faf7802db007eedba7d1471da95863c3b which introduced 'TaggedPackageId' for why this is tricky
 
 tarPackageChecks :: Bool -> UTCTime -> FilePath -> ByteString
                  -> UploadMonad (PackageIdentifier, TarIndex)

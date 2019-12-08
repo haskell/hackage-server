@@ -8,6 +8,9 @@ import Distribution.Server.Framework.MemSize
 import qualified Distribution.ParseUtils   as Parse
 import qualified Distribution.Compat.ReadP as Parse
 import Distribution.Text
+import qualified Distribution.Compat.CharParsing as P
+import Distribution.Parsec.Class (Parsec(..), parsecCommaList)
+import Distribution.Pretty (Pretty(..))
 import Distribution.Package
 import qualified Text.PrettyPrint as Disp
 
@@ -27,13 +30,22 @@ import Control.Monad.Reader (ask, asks)
 import Control.DeepSeq
 
 newtype TagList = TagList [Tag] deriving (Show, Typeable)
+
+-- TODO: remove this instance for Cabal 3.0
 instance Text TagList where
     disp (TagList tags) = Disp.hsep . Disp.punctuate Disp.comma $ map disp tags
     parse = fmap TagList $ Parse.skipSpaces >> Parse.parseCommaList parse
 
+instance Pretty TagList where
+    pretty (TagList tags) = Disp.hsep . Disp.punctuate Disp.comma $ map pretty tags
+instance Parsec TagList where
+    parsec = fmap TagList $ P.spaces >> parsecCommaList parsec
+
 -- A tag is a string describing a package; presently the preferred word-separation
 -- character is the dash.
 newtype Tag = Tag String deriving (Show, Typeable, Ord, Eq, NFData, MemSize)
+
+-- TODO: remove this instance for Cabal 3.0
 instance Text Tag where
     disp (Tag tag) = Disp.text tag
     parse = do
@@ -43,6 +55,19 @@ instance Text Tag where
             t <- liftM2 (:) (Parse.satisfy tagInitialChar)
                $ Parse.munch1 tagLaterChar
             Parse.skipSpaces
+            return t
+        return $ Tag strs
+
+instance Pretty Tag where
+    pretty (Tag tag) = Disp.text tag
+instance Parsec Tag where
+    parsec = do
+        -- adding 'many1 $ do' here would allow multiword tags.
+        -- spaces aren't very aesthetic in URIs, though.
+        strs <- do
+            t <- liftM2 (:) (P.satisfy tagInitialChar)
+               $ P.munch1 tagLaterChar
+            P.spaces
             return t
         return $ Tag strs
 
