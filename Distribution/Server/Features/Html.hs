@@ -711,7 +711,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            in templateDict
                 [ templateVal "number" revision
                 , templateVal "user" (display uname)
-                , templateVal "time" (formatTime defaultTimeLocale "%c" utime)
+                , templateVal "time" (formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S%EZ" utime)
                 , templateVal "posixtime" (formatTime defaultTimeLocale "%s" utime)
                 , templateVal "changes" changes
                 ]

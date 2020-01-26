@@ -220,7 +220,7 @@ packagePageTemplate render
 
     renderUploadInfo :: UTCTime -> Maybe UserInfo-> Html
     renderUploadInfo utime uinfo =
-        "by " +++ user +++ " at " +++ formatTime defaultTimeLocale "%c" utime
+        "by " +++ user +++ " at " +++ formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S%EZ" utime
       where
         uname   = maybe "Unknown" (display . userName) uinfo
         uactive = maybe False (isActiveAccount . userStatus) uinfo

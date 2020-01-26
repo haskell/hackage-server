@@ -52,7 +52,7 @@ data Entry = Entry UTCTime UserName PackageIdentifier
 
 instance Text Entry where
   disp (Entry time user pkgid) =
-        Disp.text (formatTime defaultTimeLocale "%c" time)
+        Disp.text (formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S%EZ" time)
     <+> disp user <+> disp pkgid
   parse = do
     time <- readPTime' "%c"

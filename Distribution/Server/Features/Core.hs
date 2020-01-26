@@ -713,7 +713,7 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
             Object $ HashMap.fromList
               [ (Text.pack "number", Number (fromIntegral rev))
               , (Text.pack "user", String (Text.pack (display uname)))
-              , (Text.pack "time", String (Text.pack (formatTime defaultTimeLocale "%c" utime)))
+              , (Text.pack "time", String (Text.pack (formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S%EZ" utime)))
               ]
           revisionsJson = Array $ Vec.imap revisionToObj revisions
       return (toResponse revisionsJson)

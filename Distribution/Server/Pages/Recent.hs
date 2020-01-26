@@ -97,7 +97,7 @@ makeRevisionRow users pkginfo =
     pkgid = pkgInfoId pkginfo
 
 showTime :: UTCTime -> String
-showTime = formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S %Z"
+showTime = formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S%EZ"
 
 -- | URL describing a package.
 packageURL :: PackageIdentifier -> URL
