@@ -19,6 +19,7 @@ import Distribution.Server.Prelude hiding (All)
 import Control.Arrow ((&&&), (***))
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Data.Vector as Vec
 import Data.List (intercalate)
 import Data.Time.Clock (UTCTime)
@@ -191,13 +192,17 @@ flatDependencies pkg =
       sortOn (\(Dependency pkgname _) -> map toLower (display pkgname)) pkgDeps
   where
     pkgDeps :: [Dependency]
-    pkgDeps = fromMap $ Map.unionsWith intersectVersions $
+    pkgDeps = fromMap $ Map.filterWithKey notSubLib $ Map.unionsWith intersectVersions $
                   map condTreeDeps (maybeToList $ condLibrary pkg)
+               ++ map (condTreeDeps . snd) (condSubLibraries pkg)
                ++ map (condTreeDeps . snd) (condExecutables pkg)
       where
         fromMap = map fromPair . Map.toList
         fromPair (pkgname, Versions _ ver) =
             Dependency pkgname $ fromVersionIntervals ver
+
+        notSubLib pn _ = packageNameToUnqualComponentName pn `Set.notMember` sublibs
+        sublibs = Set.fromList $ map fst (condSubLibraries pkg)
 
     manualFlags :: [(FlagName,Bool)] -- FlagAssignment
     manualFlags = map assignment . filter flagManual $ genPackageFlags pkg
