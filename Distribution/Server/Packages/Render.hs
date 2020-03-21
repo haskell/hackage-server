@@ -58,6 +58,7 @@ data PackageRender = PackageRender {
     rendDepends      :: [Dependency],
     rendExecNames    :: [String],
     rendLibraryDeps  :: Maybe DependencyTree,
+    rendSublibraryDeps :: [(String, DependencyTree)],
     rendExecutableDeps :: [(String, DependencyTree)],
     rendLicenseName  :: String,
     rendLicenseFiles :: [FilePath],
@@ -91,6 +92,8 @@ doPackageRender users info = PackageRender
     , rendLibraryDeps  = depTree libBuildInfo `fmap` condLibrary genDesc
     , rendExecutableDeps = (unUnqualComponentName *** depTree buildInfo)
                                 `map` condExecutables genDesc
+    , rendSublibraryDeps = (unUnqualComponentName *** depTree libBuildInfo)
+                                `map` condSubLibraries genDesc
     , rendLicenseName  = prettyShow (license desc) -- maybe make this a bit more human-readable
     , rendLicenseFiles = licenseFiles desc
     , rendMaintainer   = case maintainer desc of

@@ -374,7 +374,9 @@ renderDetailedDependencies pkgRender =
     tabulate $ map (second (fromMaybe noDeps . render)) targets
   where
     targets :: [(String, DependencyTree)]
-    targets = maybeToList library ++ rendExecutableDeps pkgRender
+    targets = maybeToList library
+        ++ rendSublibraryDeps pkgRender
+        ++ rendExecutableDeps pkgRender
       where
         library = (\lib -> ("library", lib)) `fmap` rendLibraryDeps pkgRender
 
