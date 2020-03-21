@@ -86,7 +86,11 @@ something like
 
 If you want to run the server directly from the build tree, run
 
-    dist/build/hackage-server/hackage-server run --static-dir=datafiles/
+    cabal v2-run -- hackage-server init
+
+once to initialise the state. After that you can run the server with
+
+    cabal v2-run -- hackage-server run --static-dir=datafiles/ --base-uri=http://127.0.0.1:8080
 
 By default the server runs on port `8080` with the following settings:
 
@@ -95,6 +99,9 @@ By default the server runs on port `8080` with the following settings:
     password: admin
 
 To specify something different, see `hackage-server init --help` for details.
+
+The http://127.0.0.1:8080/packages/uploaders/edit is usel to add users
+(e.g. `admin`) to *Uploaders* group.
 
 The server can be stopped by using `Control-C`.
 
