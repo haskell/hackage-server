@@ -24,6 +24,7 @@ module Distribution.Server.Framework.Templating (
     TemplateVal,
     templateDict,
     templateVal,
+    utcTimeTemplateVal,
     templateEnumDesriptor,
     templateUnescaped,
     ToSElem(..),
@@ -60,6 +61,10 @@ import Data.Maybe (isJust)
 import Data.IORef
 import System.FilePath ((<.>), takeExtension)
 import qualified Data.Map as Map
+
+import Data.Time (UTCTime)
+import Data.Time.Format (formatTime)
+import Data.Time.Locale.Compat (defaultTimeLocale)
 
 
 type RawTemplate = StringTemplate Builder
@@ -119,6 +124,18 @@ instance ToSElem PackageName       where toSElem = toSElem . display
 instance ToSElem Version           where toSElem = toSElem . display
 instance ToSElem PackageIdentifier where toSElem = toSElem . display
 
+-- | Format 'UTCTime' value as HTML.
+utcTimeTemplateVal :: String -> UTCTime -> (String, TemplateVal)
+utcTimeTemplateVal k utime = (k, TemplateVal (SBLE (stFromString utcSpanEl)))
+  where
+    utcSpanEl :: String
+    utcSpanEl = concat
+        [ "<span title=\""
+        , formatTime defaultTimeLocale "%c" utime
+        , "\">"
+        , formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" utime
+        , "</span>"
+        ]
 
 data Templates = TemplatesNormalMode !(IORef RawTemplateGroup)
                                      [FilePath] [String]

@@ -26,7 +26,7 @@ stored separately.
   $revisions:{revision|
     <tr>
       <td valign="top"><a href="/package/$pkgid$/revision/$revision.number$.cabal">#$revision.number$</a></td>
-      <td valign="top" title="$revision.time$">$revision.iso8601$</td>
+      <td valign="top">$revision.htmltime$</td>
       <td valign="top"><a href="/user/$revision.user$">$revision.user$</td>
       <td valign="top">$revision.sha256$</th>
     </tr>
