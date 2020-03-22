@@ -58,7 +58,7 @@ data Entry = Entry UTCTime UserName PackageIdentifier
 -- TODO: remove this instance for Cabal 3.0
 instance Text Entry where
   disp (Entry time user pkgid) =
-        Disp.text (formatTime defaultTimeLocale "%c" time)
+        Disp.text (formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S%EZ" time)
     <+> disp user <+> disp pkgid
   parse = do
     time <- readPTime' "%c"

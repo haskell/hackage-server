@@ -73,8 +73,6 @@ import Data.Traversable (traverse)
 import Data.Array (Array, listArray)
 import qualified Data.Array as Array
 import qualified Data.Ix    as Ix
-import Data.Time.Format (formatTime)
-import Data.Time.Locale.Compat (defaultTimeLocale)
 import qualified Data.ByteString.Lazy.Char8 as BS (ByteString, pack)
 import qualified Network.URI as URI
 
@@ -725,9 +723,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
                 [ templateVal "number" revision
                 , templateVal "sha256" (show sha256hash)
                 , templateVal "user" (display uname)
-                , templateVal "time" (formatTime defaultTimeLocale "%c" utime)
-                , templateVal "posixtime" (formatTime defaultTimeLocale "%s" utime)
-                , templateVal "iso8601" (formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" utime)
+                , utcTimeTemplateVal "htmltime" utime
                 , templateVal "changes" changes
                 ]
 

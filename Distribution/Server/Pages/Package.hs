@@ -503,7 +503,7 @@ renderFields render = [
   where
     desc = rendOther render
     renderUploadInfo utime uinfo =
-        formatTime defaultTimeLocale "%c" utime +++ " by " +++ user
+        formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S%EZ" utime +++ " by " +++ user
       where
         uname   = maybe "Unknown" (display . userName) uinfo
         uactive = maybe False (isActiveAccount . userStatus) uinfo
