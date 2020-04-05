@@ -293,7 +293,7 @@ lookupPackageForId index pkgid =
 -- satisfying the version range constraint.
 --
 lookupDependency :: Package pkg => PackageIndex pkg -> Dependency -> [pkg]
-lookupDependency index (Dependency name versionRange) =
+lookupDependency index (Dependency name versionRange _) =
   [ pkg | pkg <- lookup index name
         , packageName pkg == name
         , packageVersion pkg `withinRange` versionRange ]

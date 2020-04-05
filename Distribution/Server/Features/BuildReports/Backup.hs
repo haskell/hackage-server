@@ -14,7 +14,7 @@ import qualified Distribution.Server.Features.BuildReports.BuildReports as Repor
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Framework.BackupRestore
-import Distribution.Server.Util.Parse (unpackUTF8, packUTF8)
+import Distribution.Server.Util.Parse (packUTF8)
 
 import Distribution.Package
 import Distribution.Text (display, simpleParse)
@@ -24,7 +24,7 @@ import Control.Monad (foldM)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import System.FilePath (splitExtension)
-import Data.ByteString.Lazy (ByteString)
+import Data.ByteString.Lazy (ByteString, toStrict)
 
 dumpBackup  :: BuildReports -> [BackupEntry]
 dumpBackup = buildReportsToExport
@@ -73,7 +73,7 @@ checkPackageVersion pkgStr pkgId
 importReport :: PackageId -> String -> ByteString -> BuildReports -> PartialLogs -> Restore (BuildReports, PartialLogs)
 importReport pkgId repIdStr contents buildReps partialLogs = do
   reportId <- parseText "report id" repIdStr
-  report   <- either fail return $ Report.parse (unpackUTF8 contents)
+  report   <- either fail return $ Report.parse (toStrict contents)
   let (mlog, partialLogs') = Map.updateLookupWithKey (\_ _ -> Nothing) (pkgId, reportId) partialLogs
       buildReps' = Reports.unsafeSetReport pkgId reportId (report, mlog) buildReps --doesn't check for duplicates
   return (buildReps', partialLogs')

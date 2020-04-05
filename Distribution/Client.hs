@@ -235,7 +235,7 @@ type HttpSession a = BrowserAction (HandleStream ByteString) a
 httpSession :: Verbosity -> String -> Version -> HttpSession a -> IO a
 httpSession verbosity agent version action =
     browse $ do
-      setUserAgent (agent ++ "/" ++ display version)
+      setUserAgent (agent ++ "/" ++ showVersion version)
       setErrHandler dieNoVerbosity
       setOutHandler (debug verbosity)
       setAllowBasicAuth True

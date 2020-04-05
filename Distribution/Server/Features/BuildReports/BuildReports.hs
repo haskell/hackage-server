@@ -22,10 +22,10 @@ import Distribution.Server.Features.BuildReports.BuildReport
          (BuildReport(..), BuildReport_v0)
 
 import Distribution.Package (PackageId)
-import Distribution.Text (Text(..), display)
+import Distribution.Text (display)
 import Distribution.Pretty (Pretty(..))
-import Distribution.Parsec.Class (Parsec(..))
-import qualified Distribution.Parsec.Class as P
+import Distribution.Parsec (Parsec(..))
+import qualified Distribution.Parsec as P
 import qualified Distribution.Compat.Parsing as P
 import qualified Distribution.Compat.CharParsing as P
 
@@ -42,8 +42,6 @@ import Control.Applicative ((<$>))
 import qualified Data.List as L
 import qualified Data.Char as Char
 
-import qualified Distribution.Server.Util.Parse as Parse
-import qualified Text.PrettyPrint          as Disp
 import Text.StringTemplate (ToSElem(..))
 
 
@@ -52,11 +50,6 @@ newtype BuildReportId = BuildReportId Int
 
 incrementReportId :: BuildReportId -> BuildReportId
 incrementReportId (BuildReportId n) = BuildReportId (n+1)
-
--- TODO: remove this instance for Cabal 3.0
-instance Text BuildReportId where
-  disp (BuildReportId n) = Disp.int n
-  parse = BuildReportId <$> Parse.int
 
 -- TODO: factor out common code
 instance Parsec BuildReportId where

@@ -3,7 +3,7 @@ module Distribution.Server.Util.Parse (
     int, unpackUTF8, packUTF8
   ) where
 
-import qualified Distribution.Compat.ReadP as Parse
+import qualified Text.ParserCombinators.ReadP as Parse
 
 import qualified Data.Char as Char
 import Data.ByteString.Lazy (ByteString)
@@ -13,7 +13,7 @@ import qualified Data.Text.Encoding.Error as Text
 
 -- | Parse a positive integer. No leading @0@'s allowed.
 --
-int :: Parse.ReadP r Int
+int :: Parse.ReadP Int
 int = do
   first <- Parse.satisfy Char.isDigit
   if first == '0'

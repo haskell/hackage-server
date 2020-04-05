@@ -18,11 +18,11 @@ import qualified Codec.Archive.Tar.Entry as Tar
 import qualified Codec.Archive.Tar.Check as Tar
 
 import Distribution.Version
-         ( nullVersion, mkVersion )
+         ( Version, nullVersion, mkVersion )
 import Distribution.Types.PackageName
          ( mkPackageName, unPackageName )
 import Distribution.Package
-         ( PackageIdentifier, packageVersion, packageName, PackageName )
+         ( PackageIdentifier, packageVersion, packageName )
 import Distribution.PackageDescription
          ( GenericPackageDescription(..), PackageDescription(..)
          , licenseRaw, specVersion )
@@ -31,18 +31,16 @@ import Distribution.PackageDescription.Configuration
 import Distribution.PackageDescription.Check
          ( PackageCheck(..), checkPackage, CheckPackageContentOps(..)
          , checkPackageContent )
-import Distribution.Parsec.Common
+import Distribution.Parsec
          ( showPError, showPWarning )
 import Distribution.Text
-         ( Text(..), display, simpleParse )
-import Distribution.Pretty (Pretty(..))
--- import Distribution.Parsec.Class (Parsec(..))
--- import qualified Distribution.Parsec.Class as P
+         ( display, simpleParse )
+-- import Distribution.Parsec (Parsec(..))
+-- import qualified Distribution.Parsec as P
 -- import qualified Distribution.Compat.CharParsing as P
 import Distribution.Server.Util.ParseSpecVer
 import qualified Distribution.SPDX as SPDX
 import qualified Distribution.License as License
-import qualified Distribution.Compat.ReadP as Parse
 
 import Control.Monad.Except
          ( ExceptT, runExceptT, MonadError, throwError )
@@ -56,14 +54,13 @@ import Data.ByteString.Lazy
          ( ByteString )
 import qualified Data.ByteString.Lazy as LBS
 import Data.List
-         ( nub, partition, intercalate, isPrefixOf )
+         ( nub, partition, isPrefixOf )
 import qualified Data.Map.Strict as Map
          ( fromList, lookup )
 import Data.Time
          ( UTCTime(..), fromGregorian, addUTCTime )
 import Data.Time.Clock.POSIX
          ( posixSecondsToUTCTime )
-import qualified Data.Version
 import qualified Distribution.Server.Util.GZip as GZip
 import System.FilePath
          ( (</>), (<.>), splitDirectories, splitExtension, normalise )
@@ -72,7 +69,6 @@ import qualified System.FilePath.Windows
 import qualified System.FilePath.Posix
          ( takeFileName, takeDirectory, addTrailingPathSeparator
          , dropTrailingPathSeparator )
-import qualified Text.PrettyPrint as Disp
 import Text.Printf
          ( printf )
 
@@ -105,33 +101,6 @@ unpackPackageRaw tarGzFile contents =
   where
     noTime = UTCTime (fromGregorian 1970 1 1) 0
 
--- | Denotes a PackageId with extra version tags
---
--- See also 893de51faf7802db007eedba7d1471da95863c3b which introduced 'TaggedPackageId'
-data TaggedPackageId = TaggedPackageId {
-        _taggedPkgName   :: PackageName,
-        taggedPkgVersion :: Data.Version.Version
-    }
-
--- TODO: remove this instance for Cabal 3.0
-instance Text TaggedPackageId where
-    disp (TaggedPackageId n v)
-        | v == Data.Version.Version [] [] = disp n
-        | otherwise = disp n Disp.<> Disp.char '-' Disp.<> disp v
-
-    parse = do
-        n <- parse
-        v <- (Parse.char '-' >> parse) Parse.<++ return (Data.Version.Version [] [])
-        return (TaggedPackageId n v)
-
-instance Pretty TaggedPackageId where
-    pretty (TaggedPackageId n v)
-        | v == Data.Version.Version [] [] = pretty n
-        | otherwise = pretty n Disp.<> Disp.char '-' Disp.<> Disp.text (Data.Version.showVersion v)
-
--- TODO: 'instance Parsec TaggedPackageId'
--- see also 893de51faf7802db007eedba7d1471da95863c3b which introduced 'TaggedPackageId' for why this is tricky
-
 tarPackageChecks :: Bool -> UTCTime -> FilePath -> ByteString
                  -> UploadMonad (PackageIdentifier, TarIndex)
 tarPackageChecks lax now tarGzFile contents = do
@@ -141,22 +110,14 @@ tarPackageChecks lax now tarGzFile contents = do
   unless (ext == ".tar.gz") $
     throwError $ tarGzFile ++ " is not a gzipped tar file, it must have the .tar.gz extension"
 
-  let versionTags (Data.Version.Version _ ts) = ts
-
-  pkgid <- case (simpleParse pkgidStr, simpleParse pkgidStr) of
-    (Just pkgid, Just tagged_pkgid)
+  pkgid <- case simpleParse pkgidStr of
+    Just pkgid
       | (== nullVersion) . packageVersion $ pkgid
       -> throwError $ "Invalid package id " ++ quote pkgidStr
                    ++ ". It must include the package version number, and not just "
                    ++ "the package name, e.g. 'foo-1.0'."
 
       | display pkgid == pkgidStr -> return (pkgid :: PackageIdentifier)
-
-      -- NB: we have to use 'TaggedPackageId' here, because the 'PackageId'
-      -- parser will drop tags.
-      | not . null . versionTags . taggedPkgVersion $ tagged_pkgid
-      -> throwError $ "Hackage no longer accepts packages with version tags: "
-                   ++ intercalate ", " (versionTags (taggedPkgVersion tagged_pkgid))
 
     _ -> throwError $ "Invalid package id " ++ quote pkgidStr
                    ++ ". The tarball must use the name of the package."
@@ -216,31 +177,7 @@ basicChecks pkgid tarIndex = do
 
   -- make sure the parseSpecVer heuristic agrees with the full parser
   let specVer = specVersion $ packageDescription pkgDesc
-
-  when (not specVerOk || specVer < mkVersion [1]) $
-    throwError "The 'cabal-version' field could not be properly parsed."
-
-  -- Don't allowing uploading new pre-1.2 .cabal files as the parser is likely too lax
-  -- TODO: slowly phase out ancient cabal spec versions below 1.10
-  when (specVer < mkVersion [1,2]) $
-    throwError "'cabal-version' must be at least 1.2"
-
-  -- Reject not well-defined cabal spec versions on upload; TODO:
-  -- factor out these version checks into a function
-  when (specVer >= mkVersion [1,25] && specVer < mkVersion [2]) $
-    throwError "'cabal-version' in unassigned >=1.25 && <2 range; use 'cabal-version: 2.0' instead"
-
-  -- Safeguard; should already be caught by parser
-  unless (specVer < mkVersion [2,5]) $
-    throwError "'cabal-version' must be lower than 2.5"
-
-  -- Check whether a known spec version had been used
-  -- TODO: move this into lib:Cabal
-  let knownSpecVersions = map mkVersion [ [1,18], [1,20], [1,22], [1,24], [2,0], [2,2], [2,4] ]
-  when (specVer >= mkVersion [1,18] && (specVer `notElem` knownSpecVersions)) $
-    throwError ("'cabal-version' refers to an unreleased/unknown cabal specification version "
-                ++ display specVer ++ "; for a list of valid specification versions please consult "
-                ++ "https://www.haskell.org/cabal/users-guide/file-format-changelog.html")
+  specVersionChecks specVerOk specVer
 
   -- Check that the name and version in Cabal file match
   when (packageName pkgDesc /= packageName pkgid) $
@@ -258,6 +195,32 @@ basicChecks pkgid tarIndex = do
     -- these names are reserved for the time being, as they have
     -- special meaning in cabal's UI
     reservedPkgNames = map mkPackageName ["all","any","none","setup","lib","exe","test"]
+
+specVersionChecks :: MonadError String m => Bool -> Version -> m ()
+specVersionChecks specVerOk specVer = do
+  when (not specVerOk || specVer < mkVersion [1]) $
+    throwError "The 'cabal-version' field could not be properly parsed."
+
+  -- Don't allowing uploading new pre-1.2 .cabal files as the parser is likely too lax
+  -- TODO: slowly phase out ancient cabal spec versions below 1.10
+  when (specVer < mkVersion [1,2]) $
+    throwError "'cabal-version' must be at least 1.2"
+
+  -- Reject not well-defined cabal spec versions on upload
+  when (specVer >= mkVersion [1,25] && specVer < mkVersion [2]) $
+    throwError "'cabal-version' in unassigned >=1.25 && <2 range; use 'cabal-version: 2.0' instead"
+
+  -- Safeguard; should already be caught by parser
+  unless (specVer < mkVersion [2,5]) $
+    throwError "'cabal-version' must be lower than 2.5"
+
+  -- Check whether a known spec version had been used
+  -- TODO: move this into lib:Cabal
+  let knownSpecVersions = map mkVersion [ [1,18], [1,20], [1,22], [1,24], [2,0], [2,2], [2,4] ]
+  when (specVer >= mkVersion [1,18] && (specVer `notElem` knownSpecVersions)) $
+    throwError ("'cabal-version' refers to an unreleased/unknown cabal specification version "
+                ++ display specVer ++ "; for a list of valid specification versions please consult "
+                ++ "https://www.haskell.org/cabal/users-guide/file-format-changelog.html")
 
 -- | The issue is that browsers can upload the file name using either unix
 -- or windows convention, so we need to take the basename using either

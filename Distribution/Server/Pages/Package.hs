@@ -355,7 +355,7 @@ showDependencies :: [Dependency] -> Html
 showDependencies deps = commaList (map showDependency deps)
 
 showDependency ::  Dependency -> Html
-showDependency (Dependency (unPackageName -> pname) vs) = nonbreakingSpan << (showPkg +++ vsHtml)
+showDependency (Dependency (unPackageName -> pname) vs _) = nonbreakingSpan << (showPkg +++ vsHtml)
   where vsHtml = if vs == anyVersion then noHtml
                                      else toHtml (" (" ++ display vs ++ ")")
         -- mb_vers links to latest version in range. This is a bit computationally
