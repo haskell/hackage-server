@@ -1,4 +1,4 @@
-cabal-version: 2.4
+cabal-version: 3.0
 name:         hackage-server
 version:      0.5.1
 
@@ -27,7 +27,7 @@ copyright:    2008-2015 Duncan Coutts,
 license:      BSD-3-Clause
 license-file: LICENSE
 
-tested-with: GHC ==8.6.5 || ==8.4.4 || ==8.2.2 || ==8.0.2 || ==7.10.3 || ==7.8.4 || ==7.6.3
+tested-with: GHC == { 8.6.5, 8.4.4, 8.2.2, 8.0.2, 7.10.3, 7.8.4, 7.6.3 }
 
 data-dir: datafiles
 data-files:
