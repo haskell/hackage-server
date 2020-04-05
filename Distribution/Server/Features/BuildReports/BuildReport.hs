@@ -36,7 +36,7 @@ import Distribution.Compat.Lens (Lens')
 import Distribution.Package
          ( PackageIdentifier(..) )
 import Distribution.Types.GenericPackageDescription
-         ( FlagName, unFlagName )
+         ( FlagName, unFlagName, mkFlagName )
 import Distribution.System
          ( OS, Arch )
 import Distribution.Compiler
@@ -64,7 +64,7 @@ import Distribution.Server.Framework.Instances ()
 import Distribution.Server.Framework.MemSize
 
 import Text.PrettyPrint.HughesPJ
-         ( (<+>), render )
+         ( (<+>) )
 import Data.Serialize as Serialize
          ( Serialize(..) )
 import Data.SafeCopy
@@ -160,8 +160,12 @@ compilerL f s = fmap (\x -> s { compiler = x }) (f (compiler s))
 clientL :: Lens' BuildReport PackageIdentifier
 clientL f s = fmap (\x -> s { client = x }) (f (client s))
 
-flagAssignmentL :: Lens' BuildReport [(FlagName,Bool)]
-flagAssignmentL f s = fmap (\x -> s { flagAssignment = x }) (f (flagAssignment s))
+-- flagAssignmentL :: Lens' BuildReport [(FlagName,Bool)]
+-- flagAssignmentL f s = fmap (\x -> s { flagAssignment = x }) (f (flagAssignment s))
+
+flagAssignmentL' :: Lens' BuildReport [FlagAss1]
+flagAssignmentL' f s = fmap (\x -> s { flagAssignment = map unpack x })
+                            (f (map pack (flagAssignment s)))
 
 dependenciesL :: Lens' BuildReport [PackageIdentifier]
 dependenciesL f s = fmap (\x -> s { dependencies = x }) (f (dependencies s))
@@ -238,31 +242,55 @@ show = showFields (const []) . prettyFieldGrammar CabalSpecV2_4 fieldDescrs
 -- -----------------------------------------------------------------------------
 -- Description of the fields, for parsing/printing
 
-newtype Time = Time (Maybe UTCTime)
-
-instance Newtype (Maybe UTCTime) Time
-instance Pretty Time -- TODO
-instance Parsec Time -- TODO
-
 fieldDescrs :: (Applicative (g BuildReport), FieldGrammar g) => g BuildReport BuildReport
 fieldDescrs =
   BuildReport
     <$> uniqueField       "package"            packageL
-    <*> uniqueFieldAla    "time"      (pack' Time)     timeL
-    <*> booleanFieldDef   "doc-builder"        docBuilderL  False
+    <*> uniqueFieldAla    "time"               (pack' Time) timeL
+    <*> booleanFieldDef   "doc-builder"        docBuilderL False
     <*> uniqueField       "os"                 osL
     <*> uniqueField       "arch"               archL
     <*> uniqueField       "compiler"           compilerL
     <*> uniqueField       "client"             clientL
-    <*> undefined --monoidalFieldAla  "flags"              (alaList CommaFSep) flagAssignmentL TODO
-    <*> monoidalFieldAla  "dependencies"       (alaList VCat)   dependenciesL
+    <*> (map unpack <$>
+        monoidalFieldAla  "flags"              (alaList CommaFSep) flagAssignmentL')
+    <*> monoidalFieldAla  "dependencies"       (alaList VCat) dependenciesL
     <*> uniqueField       "install-outcome"    installOutcomeL
     <*> uniqueField       "docs-outcome"       docsOutcomeL
     <*> uniqueField       "tests-outcome"      testsOutcomeL
 
-dispFlag :: (FlagName, Bool) -> Disp.Doc
-dispFlag (fn, True)  =                       Disp.text (unFlagName fn)
-dispFlag (fn, False) = Disp.char '-' Disp.<> Disp.text (unFlagName fn)
+-- local instances for (FlagName,Bool)
+
+newtype FlagAss1 = FlagAss1 (FlagName,Bool)
+
+instance Newtype (FlagName,Bool) FlagAss1
+
+instance Parsec FlagAss1 where
+  parsec = do
+    -- this is subtly different from Cabal's 'FlagName' parser
+    name <- P.munch1 (\c -> Char.isAlphaNum c || c == '_' || c == '-')
+    case name of
+      ('-':flag) -> return $ FlagAss1 (mkFlagName flag, False)
+      flag       -> return $ FlagAss1 (mkFlagName flag, True)
+
+instance Pretty FlagAss1 where
+  pretty (FlagAss1 (fn, True))  = Disp.text (unFlagName fn)
+  pretty (FlagAss1 (fn, False)) = Disp.char '-' Disp.<> Disp.text (unFlagName fn)
+
+-- local instances for (Maybe UTCTime)
+
+newtype Time = Time (Maybe UTCTime)
+
+instance Newtype (Maybe UTCTime) Time
+
+instance Pretty Time where
+  pretty (Time Nothing)  = mempty
+  pretty (Time (Just t)) = pretty t -- see Distribution.Server.Framework.Instances
+
+instance Parsec Time where
+  parsec = Time <$> optional parsec
+
+--
 
 instance Pretty InstallOutcome where
   pretty PlanningFailed  = Disp.text "PlanningFailed"
@@ -329,7 +357,7 @@ instance ToSElem BuildReport where
         , ("arch", display arch)
         , ("compiler", display compiler)
         , ("client", display client)
-        , ("flagAssignment", toSElem $ map (render . dispFlag) flagAssignment)
+        , ("flagAssignment", toSElem $ map (prettyShow . FlagAss1) flagAssignment)
         , ("dependencies", toSElem $ map prettyShow dependencies)
         , ("installOutcome", display installOutcome)
         , ("docsOutcome", display docsOutcome)

@@ -126,7 +126,7 @@ common defaults
   ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fno-warn-deprecated-flags -funbox-strict-fields
 
   if impl(ghc >= 8.2)
-    ghc-options: -Werror=incomplete-patterns
+    ghc-options: -Werror=incomplete-patterns -Werror=missing-methods
 
   other-extensions: CPP, TemplateHaskell
 
