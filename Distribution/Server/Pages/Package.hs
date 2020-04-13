@@ -62,7 +62,7 @@ import qualified Documentation.Haddock.Markup as Haddock
 import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
 import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
-import qualified Data.Text.Encoding.Error as T
+import qualified Data.Text.Encoding.Error as T (lenientDecode)
 import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
 
 packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)]
@@ -185,7 +185,10 @@ updateRelativeLinks _ x = x
 renderMarkdown :: T.Text -> BS.ByteString -> Html
 renderMarkdown name = primHtml . Blaze.renderHtml
                . Markdown.renderDoc . Markdown.walk (updateRelativeLinks name)
-               . Markdown.markdown opts . T.decodeUtf8With T.lenientDecode
+               . Markdown.markdown opts
+                 -- workaround for https://github.com/jgm/cheapskate/issues/25
+               . T.replace (T.pack "\r\n") (T.pack "\n")
+               . T.decodeUtf8With T.lenientDecode
                . BS.toStrict
   where
     opts =
