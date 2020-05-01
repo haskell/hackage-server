@@ -62,7 +62,7 @@ import qualified Documentation.Haddock.Markup as Haddock
 import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
 import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
-import qualified Data.Text.Encoding.Error as T
+import qualified Data.Text.Encoding.Error as T (lenientDecode)
 import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
 
 packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)]
@@ -185,7 +185,10 @@ updateRelativeLinks _ x = x
 renderMarkdown :: T.Text -> BS.ByteString -> Html
 renderMarkdown name = primHtml . Blaze.renderHtml
                . Markdown.renderDoc . Markdown.walk (updateRelativeLinks name)
-               . Markdown.markdown opts . T.decodeUtf8With T.lenientDecode
+               . Markdown.markdown opts
+                 -- workaround for https://github.com/jgm/cheapskate/issues/25
+               . T.replace (T.pack "\r\n") (T.pack "\n")
+               . T.decodeUtf8With T.lenientDecode
                . BS.toStrict
   where
     opts =
@@ -355,7 +358,7 @@ showDependencies :: [Dependency] -> Html
 showDependencies deps = commaList (map showDependency deps)
 
 showDependency ::  Dependency -> Html
-showDependency (Dependency (unPackageName -> pname) vs) = nonbreakingSpan << (showPkg +++ vsHtml)
+showDependency (Dependency (unPackageName -> pname) vs _) = nonbreakingSpan << (showPkg +++ vsHtml)
   where vsHtml = if vs == anyVersion then noHtml
                                      else toHtml (" (" ++ display vs ++ ")")
         -- mb_vers links to latest version in range. This is a bit computationally
@@ -374,7 +377,9 @@ renderDetailedDependencies pkgRender =
     tabulate $ map (second (fromMaybe noDeps . render)) targets
   where
     targets :: [(String, DependencyTree)]
-    targets = maybeToList library ++ rendExecutableDeps pkgRender
+    targets = maybeToList library
+        ++ rendSublibraryDeps pkgRender
+        ++ rendExecutableDeps pkgRender
       where
         library = (\lib -> ("library", lib)) `fmap` rendLibraryDeps pkgRender
 
@@ -501,7 +506,7 @@ renderFields render = [
   where
     desc = rendOther render
     renderUploadInfo utime uinfo =
-        formatTime defaultTimeLocale "%c" utime +++ " by " +++ user
+        formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S%EZ" utime +++ " by " +++ user
       where
         uname   = maybe "Unknown" (display . userName) uinfo
         uactive = maybe False (isActiveAccount . userStatus) uinfo

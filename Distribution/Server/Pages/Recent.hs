@@ -67,7 +67,7 @@ makeRow :: Users -> PkgInfo -> Html
 makeRow users pkginfo =
   XHtml.tr <<
     [XHtml.td ! [XHtml.align "right"] <<
-            [XHtml.toHtml (showTime time), nbsp, nbsp],
+            [showTimeHtml time, nbsp, nbsp],
      XHtml.td ! [XHtml.align "left"] << display user,
      XHtml.td ! [XHtml.align "left"] <<
             [nbsp, nbsp, XHtml.anchor !
@@ -83,7 +83,7 @@ makeRevisionRow :: Users -> PkgInfo -> Html
 makeRevisionRow users pkginfo =
   XHtml.tr <<
     [XHtml.td ! [XHtml.align "right"] <<
-            [XHtml.toHtml (showTime time), nbsp, nbsp],
+            [showTimeHtml time, nbsp, nbsp],
      XHtml.td ! [XHtml.align "left"] << display user,
      XHtml.td ! [XHtml.align "left"] <<
                   [nbsp, nbsp, XHtml.anchor !
@@ -98,7 +98,11 @@ makeRevisionRow users pkginfo =
     revlabel = [XHtml.toHtml (display pkgid), XHtml.toHtml revno]
 
 showTime :: UTCTime -> String
-showTime = formatTime defaultTimeLocale "%c"
+showTime = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S%EZ"
+
+showTimeHtml :: UTCTime -> Html
+showTimeHtml t = XHtml.thespan ! [XHtml.title $ formatTime defaultTimeLocale "%c" t ]
+    << [ XHtml.toHtml (showTime t) ]
 
 -- | URL describing a package.
 packageURL :: PackageIdentifier -> URL

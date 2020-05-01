@@ -1,4 +1,4 @@
-cabal-version: 2.4
+cabal-version: 3.0
 name:         hackage-server
 version:      0.5.1
 
@@ -27,7 +27,7 @@ copyright:    2008-2015 Duncan Coutts,
 license:      BSD-3-Clause
 license-file: LICENSE
 
-tested-with: GHC ==8.6.5 || ==8.4.4 || ==8.2.2 || ==8.0.2 || ==7.10.3 || ==7.8.4 || ==7.6.3
+tested-with: GHC == { 8.6.5, 8.4.4, 8.2.2, 8.0.2, 7.10.3, 7.8.4, 7.6.3 }
 
 data-dir: datafiles
 data-files:
@@ -110,8 +110,9 @@ common defaults
   -- other dependencies shared by most components
   build-depends:
     , aeson                 ^>= 1.1
-    , Cabal                 ^>= 2.4.1.0
+    , Cabal                 ^>= 3.0.2.0
     , containers            ^>= 0.5.0
+    , fail                  ^>= 4.9.0
       -- we use Control.Monad.Except, introduced in mtl-2.2.1
     , mtl                   ^>= 2.2.1
     , network               ^>= 2.6
@@ -126,7 +127,7 @@ common defaults
   ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fno-warn-deprecated-flags -funbox-strict-fields
 
   if impl(ghc >= 8.2)
-    ghc-options: -Werror=incomplete-patterns
+    ghc-options: -Werror=incomplete-patterns -Werror=missing-methods
 
   other-extensions: CPP, TemplateHaskell
 

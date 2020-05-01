@@ -34,6 +34,7 @@ import Distribution.Server.Features.TarIndexCache
 import Distribution.Server.Features.UserDetails
 import Distribution.Server.Features.EditCabalFiles
 import Distribution.Server.Features.Html.HtmlUtilities
+import Distribution.Server.Features.Security.SHA256
 
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Group as Group
@@ -72,8 +73,6 @@ import Data.Traversable (traverse)
 import Data.Array (Array, listArray)
 import qualified Data.Array as Array
 import qualified Data.Ix    as Ix
-import Data.Time.Format (formatTime)
-import Data.Time.Locale.Compat (defaultTimeLocale)
 import qualified Data.ByteString.Lazy.Char8 as BS (ByteString, pack)
 import qualified Network.URI as URI
 
@@ -687,12 +686,22 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           pkgname      = packageName pkginfo
           revisions    = reverse $ Vec.toList (pkgMetadataRevisions pkginfo)
           numRevisions = pkgNumRevisions pkginfo
-          revchanges   = [ case diffCabalRevisionsByteString
-                                  (cabalFileByteString old)
-                                  (cabalFileByteString new)
-                           of Left _err     -> []
-                              Right changes -> changes
-                         | ((new, _), (old, _)) <- zip revisions (tail revisions) ]
+
+          revchanges   :: [(SHA256Digest, [Change])]
+          revchanges   = start revisions where
+            start []          = []
+            start (curr:rest) = go curr rest
+
+            go curr [] = [(sha256 (cabalFileByteString (fst curr)), [])]
+            go curr (prev:rest) =
+                ( sha256 (cabalFileByteString (fst curr))
+                , changes curr prev )
+                : go prev rest
+
+            changes curr prev = either (const []) id $
+              diffCabalRevisionsByteString
+                (cabalFileByteString (fst prev))
+                (cabalFileByteString (fst curr))
 
       cacheControl [NoCache] (etagFromHash numRevisions)
       template <- getTemplate templates "revisions.html"
@@ -702,18 +711,19 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         , "revisions" $= zipWith3 (revisionToTemplate users)
                                   (map snd revisions)
                                   [numRevisions-1, numRevisions-2..]
-                                  (revchanges ++ [[]])
+                                  revchanges
         ]
       where
-        revisionToTemplate :: Users.Users -> UploadInfo -> Int -> [Change]
+        revisionToTemplate :: Users.Users -> UploadInfo -> Int
+                           -> (SHA256Digest, [Change])
                            -> TemplateVal
-        revisionToTemplate users (utime, uid) revision changes =
+        revisionToTemplate users (utime, uid) revision (sha256hash, changes) =
           let uname = Users.userIdToName users uid
            in templateDict
                 [ templateVal "number" revision
+                , templateVal "sha256" (show sha256hash)
                 , templateVal "user" (display uname)
-                , templateVal "time" (formatTime defaultTimeLocale "%c" utime)
-                , templateVal "posixtime" (formatTime defaultTimeLocale "%s" utime)
+                , utcTimeTemplateVal "htmltime" utime
                 , templateVal "changes" changes
                 ]
 

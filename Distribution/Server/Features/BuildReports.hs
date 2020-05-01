@@ -27,7 +27,7 @@ import Distribution.Package
 import Distribution.Version (nullVersion)
 
 import Control.Arrow (second)
-import Data.ByteString.Lazy.Char8 (unpack) -- Build reports are ASCII
+import Data.ByteString.Lazy (toStrict)
 
 
 -- TODO:
@@ -205,7 +205,7 @@ buildReportsFeature name
       guardValidPackageId pkgid
       guardAuthorised_ [AnyKnownUser] -- allow any logged-in user
       reportbody <- expectTextPlain
-      case BuildReport.parse $ unpack reportbody of
+      case BuildReport.parse $ toStrict reportbody of
           Left err -> errBadRequest "Error submitting report" [MText err]
           Right report -> do
               when (BuildReport.docBuilder report) $

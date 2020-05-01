@@ -25,7 +25,7 @@ import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Util.Parse (unpackUTF8)
 
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescription, runParseResult)
-import Distribution.Parsec.Common (showPError, showPWarning)
+import Distribution.Parsec (showPError, showPWarning)
 
 import qualified Data.ByteString.Lazy as BS.L
 import Data.Time.Clock (getCurrentTime)
@@ -215,7 +215,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
     uploadTimeGet :: DynamicPath -> ServerPartE Response
     uploadTimeGet dpath = do
       pkg <- packageInPath dpath >>= lookupPackageId
-      return $ toResponse $ formatTime defaultTimeLocale "%c"
+      return $ toResponse $ formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S%EZ"
                                        (pkgLatestUploadTime pkg)
 
     -- curl -H 'Content-Type: text/plain' -u admin:admin -X PUT -d "Tue Oct 18 20:54:28 UTC 2010" http://localhost:8080/package/edit-distance-0.2.1/upload-time

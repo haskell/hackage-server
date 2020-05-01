@@ -22,7 +22,7 @@ onDiskRestore = importOne "ondisk.csv" cmFromCSV
 inMemBackup :: InMemStats -> [BackupEntry]
 inMemBackup (InMemStats day inMemStats) =
   [csvToBackup ["inmem.csv"] $
-      [display versionCSV]
+      [showVersion versionCSV]
     : [display day]
     : cmToCSV inMemStats
   ]

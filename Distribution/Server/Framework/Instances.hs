@@ -3,7 +3,7 @@
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
--- | 'Typeable', 'Binary', 'Serialize', 'Text', and 'NFData' instances for various
+-- | 'Typeable', 'Binary', 'Serialize', and 'NFData' instances for various
 -- types from Cabal, and other standard libraries.
 --
 -- Major version changes may break this module.
@@ -27,7 +27,7 @@ import Distribution.Types.GenericPackageDescription (FlagName, mkFlagName, unFla
 import Distribution.Types.PackageName
 import Distribution.Version
 import Distribution.Pretty (Pretty(pretty), prettyShow)
-import Distribution.Parsec.Class (Parsec(..), simpleParsec)
+import Distribution.Parsec (Parsec(..), simpleParsec)
 import qualified Distribution.Compat.CharParsing as P
 
 import Data.Time (Day(..), DiffTime, UTCTime(..), fromGregorianValid)
@@ -46,7 +46,6 @@ import Happstack.Server
 import Data.List (stripPrefix)
 
 import qualified Text.PrettyPrint as PP (text)
-import Distribution.Compat.ReadP (readS_to_P)
 
 -- These types are not defined in this package, so we cannot easily control
 -- changing these instances when the types change. So it's not safe to derive
@@ -117,7 +116,7 @@ instance SafeCopy VersionRange where
             6 -> withinVersion    <$> safeGet
             7 -> unionVersionRanges     <$> getVR <*> getVR
             8 -> intersectVersionRanges <$> getVR <*> getVR
-            9 -> VersionRangeParens     <$> getVR
+            9 -> stripParensVersionRange <$> getVR -- XXX: correct?
             10 -> majorBoundVersion     <$> safeGet  -- since Cabal-2.0
             _ -> fail "VersionRange.getCopy: bad tag"
 
@@ -298,14 +297,6 @@ instance MemSize RsFlags where
 
 instance MemSize Length where
     memSize _ = memSize0
-
-instance Text Day where
-  disp  = PP.text . show
-  parse = readS_to_P (reads :: ReadS Day)
-
-instance Text UTCTime where
-  disp  = PP.text . show
-  parse = readS_to_P (reads :: ReadS UTCTime)
 
 instance Pretty Day where
   pretty = PP.text . show

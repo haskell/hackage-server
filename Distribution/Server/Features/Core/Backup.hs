@@ -25,7 +25,7 @@ import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 
 import Distribution.Package
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescription, runParseResult)
-import Distribution.Parsec.Common (showPError)
+import Distribution.Parsec (showPError)
 import Distribution.Text
 import Data.Version (Version(..), showVersion)
 import Text.CSV

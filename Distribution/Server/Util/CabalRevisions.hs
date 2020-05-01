@@ -1,5 +1,8 @@
+{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
 
@@ -20,27 +23,29 @@ module Distribution.Server.Util.CabalRevisions
     ) where
 
 -- NB: This module avoids to import any hackage-server modules
+import Distribution.CabalSpecVersion (cabalSpecLatest)
 import Distribution.Types.Dependency
 import Distribution.Types.ExeDependency
 import Distribution.Types.PkgconfigDependency
+import Distribution.Types.PkgconfigVersionRange
 import Distribution.Types.LegacyExeDependency
 import Distribution.Types.UnqualComponentName
 import Distribution.Types.CondTree
 import Distribution.Types.ForeignLib
 import Distribution.Package
-import Distribution.Text (display)
+import Distribution.Pretty (Pretty (..), prettyShow)
 import Distribution.Version
 import Distribution.Compiler (CompilerFlavor)
 import Distribution.FieldGrammar (prettyFieldGrammar)
+import Distribution.Fields.Pretty (PrettyField (..), showFields)
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescription, runParseResult)
 import Distribution.PackageDescription.FieldGrammar (sourceRepoFieldGrammar)
 import Distribution.PackageDescription.Check
-import Distribution.Parsec.Common (showPWarning, showPError, PWarning (..))
-import Distribution.Text (Text(..))
+import Distribution.Parsec (showPWarning, showPError, PWarning (..))
 import Distribution.Simple.LocalBuildInfo (showComponentName)
 import Text.PrettyPrint as Doc
-         (nest, (<+>), colon, text, ($+$), Doc, hsep, punctuate)
+         ((<+>), colon, text, Doc, hsep, punctuate)
 
 import Control.Applicative
 import Control.Monad
@@ -56,8 +61,9 @@ import qualified Data.Semigroup as S
 import qualified Data.Monoid as M
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
-import Data.Foldable (foldMap)
 import Data.Proxy (Proxy(Proxy))
+
+import qualified Control.Monad.Fail as Fail
 
 -- | Entry point to cabal revision validator
 --
@@ -85,6 +91,12 @@ changeSeverity (Change s _ _ _) = s
 instance Monad CheckM where
   return         = Control.Applicative.pure
   CheckM m >>= f = CheckM (m >>= unCheckM . f)
+
+#if !MIN_VERSION_base(4,13,0)
+  fail = Fail.fail
+#endif
+
+instance Fail.MonadFail CheckM where
   fail           = CheckM . throwError
 
 -- | If we have only 'Trivial' changes, then there is no point to make
@@ -120,7 +132,7 @@ checkCabalFileRevision old new = do
     (pkg', warns') <- parseCabalFile new
 
     let pkgid    = packageId pkg
-        filename = display pkgid ++ ".cabal"
+        filename = prettyShow pkgid ++ ".cabal"
 
     checkGenericPackageDescription pkg pkg'
     checkParserWarnings filename warns warns'
@@ -168,13 +180,13 @@ checkGenericPackageDescription
 
     checkMaybe "Cannot add or remove library sections"
       (checkCondTree checkLibrary)
-      (withComponentName' CLibName <$> libsA)
-      (withComponentName' CLibName <$> libsB)
+      (withComponentName' (CLibName LMainLibName) <$> libsA)
+      (withComponentName' (CLibName LMainLibName) <$> libsB)
 
     checkListAssoc "Cannot add or remove sub-library sections"
       (checkCondTree checkLibrary)
-      (withComponentName CSubLibName <$> sublibsA)
-      (withComponentName CSubLibName <$> sublibsB)
+      (withComponentName (CLibName . LSubLibName) <$> sublibsA)
+      (withComponentName (CLibName . LSubLibName) <$> sublibsB)
 
     checkListAssoc "Cannot add or remove foreign-library sections"
       (checkCondTree checkForeignLib)
@@ -229,7 +241,7 @@ checkFlag flagOld flagNew = do
               (\b -> if b then "manual" else "automatic")
               (flagManual flagOld) (flagManual flagNew)
 
-    changesOk ("default of flag '" ++ fname ++ "'") display
+    changesOk ("default of flag '" ++ fname ++ "'") prettyShow
               (flagDefault flagOld) (flagDefault flagNew)
 
     changesOk ("description of flag '" ++ fname ++ "'") id
@@ -318,7 +330,7 @@ checkPackageDescriptions
   checkSame "The package-url field is unused, don't bother changing it."
             pkgUrlA pkgUrlB
   changesOk "bug-reports" id bugReportsA bugReportsB
-  changesOkList changesOk "source-repository" (show . ppSourceRepo)
+  changesOkList changesOk "source-repository" (showFields (const []) . (:[]) . ppSourceRepo)
             sourceReposA sourceReposB
   changesOk "synopsis"    id synopsisA synopsisB
   changesOk "description" id descriptionA descriptionB
@@ -348,7 +360,7 @@ checkSpecVersionRaw :: Check PackageDescription
 checkSpecVersionRaw pdA pdB
   | specVersionA `withinRange` range110To120
   , specVersionB `withinRange` range110To120
-  = changesOk "cabal-version" display specVersionA specVersionB
+  = changesOk "cabal-version" prettyShow specVersionA specVersionB
 
   | otherwise
   = checkSame "Cannot change the Cabal spec version"
@@ -405,7 +417,7 @@ checkCondTree checkElem (componentName, condNodeA)
       checkMaybe "Cannot add or remove the 'else' part in conditionals"
                  checkCondNode thenPartA thenPartB
 
-checkDependencies :: forall d. (Text d, IsDependency d) => ComponentName -> Check [d]
+checkDependencies :: forall d vr. (Pretty d, IsDependency vr d) => ComponentName -> Check [d]
 checkDependencies componentName ds1 ds2 = do
     forM_ removed $ \dep -> do
         fail (unwords [ "Cannot remove existing", depKind, "on"
@@ -414,7 +426,7 @@ checkDependencies componentName ds1 ds2 = do
     forM_ added $ \dep ->
         if depInAddWhitelist dep
            then logChange (Change Normal (unwords ["added the", cnameStr, "component's"
-                                                  , depKind, "on"]) "" (display dep))
+                                                  , depKind, "on"]) "" (prettyShow dep))
            else fail (unwords [ "Cannot add new", depKind, "on"
                               , depKeyShow dproxy (depKey dep)
                               , "in", cnameStr, "component"])
@@ -422,7 +434,7 @@ checkDependencies componentName ds1 ds2 = do
     forM_ changed $ \(depk, (verA, verB)) -> do
         changesOk (unwords ["the", cnameStr, "component's", depKind, "on"
                            , depKeyShow dproxy depk])
-                   display verA verB
+                   prettyShow verA verB
   where
     (removed, changed, added) = computeCanonDepChange ds1 ds2
 
@@ -433,28 +445,30 @@ checkDependencies componentName ds1 ds2 = do
 
     depKind = depTypeName dproxy ++ " dependency"
 
-class (Ord (DepKey d)) => IsDependency d where
+class (Ord (DepKey d), Pretty vr, Eq vr) => IsDependency vr d | d -> vr where
     type DepKey d
 
     depTypeName    :: Proxy d -> String
     depKey         :: d -> DepKey d
     depKeyShow     :: Proxy d -> DepKey d -> String
-    depVerRg       :: d -> VersionRange
-    reconstructDep :: DepKey d -> VersionRange -> d
+    depVerRg       :: d -> vr 
+    reconstructDep :: DepKey d -> vr -> d
 
     depInAddWhitelist :: d -> Bool
     depInAddWhitelist _ = False
 
-instance IsDependency Dependency where
+    intersectVr :: Proxy d -> vr -> vr -> vr
+
+instance IsDependency VersionRange Dependency where
     type DepKey Dependency = PackageName
 
     depTypeName Proxy             = "library"
-    depKey (Dependency pkgname _) = pkgname
-    depKeyShow Proxy              = display''
-    depVerRg (Dependency _ vr)    = vr
-    reconstructDep                = Dependency
+    depKey (Dependency pkgname _ _) = pkgname
+    depKeyShow Proxy              = prettyShow''
+    depVerRg (Dependency _ vr _)  = vr
+    reconstructDep                = \n vr -> Dependency n vr Set.empty
 
-    depInAddWhitelist (Dependency pn _) = pn `elem`
+    depInAddWhitelist (Dependency pn _ _) = pn `elem`
     -- Special case: there are some pretty weird broken packages out there, see
     --   https://github.com/haskell/hackage-server/issues/303
     -- which need us to add a new dep on `base`
@@ -473,17 +487,21 @@ instance IsDependency Dependency where
             , mkPackageName "base-orphans"
             ]
 
+    intersectVr _ = intersectVersionRanges
 
-instance IsDependency ExeDependency where
+
+instance IsDependency VersionRange ExeDependency where
     type DepKey ExeDependency = (PackageName,UnqualComponentName)
 
     depTypeName Proxy                   = "tool"
     depKey (ExeDependency pkgname cn _) = (pkgname,cn)
-    depKeyShow Proxy (pkgname,cn)       = concat ["'", display pkgname, ":", display cn, "'"]
+    depKeyShow Proxy (pkgname,cn)       = concat ["'", prettyShow pkgname, ":", prettyShow cn, "'"]
     depVerRg (ExeDependency _ _ vr)     = vr
     reconstructDep (pkgname,cn)         = ExeDependency pkgname cn
 
-instance IsDependency LegacyExeDependency where
+    intersectVr _ = intersectVersionRanges
+
+instance IsDependency VersionRange LegacyExeDependency where
     type DepKey LegacyExeDependency = String
 
     depTypeName Proxy                      = "legacy-tool"
@@ -491,6 +509,8 @@ instance IsDependency LegacyExeDependency where
     depKeyShow Proxy tname                 = "'" ++ tname ++ "'"
     depVerRg (LegacyExeDependency _ vr)    = vr
     reconstructDep                         = LegacyExeDependency
+
+    intersectVr _ = intersectVersionRanges
 
     depInAddWhitelist (LegacyExeDependency pn _) = pn `elem`
     -- list of trusted tools cabal supports w/o explicit build-tools
@@ -504,20 +524,22 @@ instance IsDependency LegacyExeDependency where
             , "hsc2hs"
             ]
 
-instance IsDependency PkgconfigDependency where
+instance IsDependency PkgconfigVersionRange PkgconfigDependency where
     type DepKey PkgconfigDependency = PkgconfigName
 
     depTypeName Proxy                      = "pkg-config"
     depKey (PkgconfigDependency pkgname _) = pkgname
-    depKeyShow Proxy                       = display''
+    depKeyShow Proxy                       = prettyShow''
     depVerRg (PkgconfigDependency _ vr)    = vr
     reconstructDep                         = PkgconfigDependency
+
+    intersectVr _ = PcIntersectVersionRanges
 
 
 -- The result tuple represents the 3 canonicalised dependency
 -- (removed deps (old ranges), retained deps (old & new ranges), added deps (new ranges))
 -- or expressed as set-operations: (A \ B, (A ∩ B), B \ A)
-computeCanonDepChange :: IsDependency d => [d] -> [d] -> ([d],[(DepKey d,(VersionRange,VersionRange))],[d])
+computeCanonDepChange :: forall vr d. IsDependency vr d => [d] -> [d] -> ([d],[(DepKey d,(vr,vr))],[d])
 computeCanonDepChange depsA depsB
     = ( mapToDeps (a `Map.difference` b)
       , Map.toList $ Map.intersectionWith (,) a b
@@ -528,7 +550,7 @@ computeCanonDepChange depsA depsB
     b = depsToMapWithCanonVerRange depsB
 
     depsToMapWithCanonVerRange
-        = Map.fromListWith (flip intersectVersionRanges) .
+        = Map.fromListWith (flip $ intersectVr (Proxy :: Proxy d)) .
           map (\d -> (depKey d, depVerRg d))
 
     mapToDeps
@@ -543,17 +565,17 @@ checkSetupBuildInfo (Just _) Nothing =
 checkSetupBuildInfo Nothing (Just (SetupBuildInfo setupDependsA _internalA)) =
     logChange $ Change Normal
                        ("added a 'custom-setup' section with 'setup-depends'")
-                       "[implicit]" (intercalate ", " (map display setupDependsA))
+                       "[implicit]" (intercalate ", " (map prettyShow setupDependsA))
 
 checkSetupBuildInfo (Just (SetupBuildInfo setupDependsA _internalA))
                     (Just (SetupBuildInfo setupDependsB _internalB)) = do
     forM_ removed $ \dep ->
-      logChange $ Change Normal ("removed 'custom-setup' dependency on") (display dep) ""
+      logChange $ Change Normal ("removed 'custom-setup' dependency on") (prettyShow dep) ""
     forM_ added $ \dep ->
-      logChange $ Change Normal ("added 'custom-setup' dependency on") "" (display dep)
+      logChange $ Change Normal ("added 'custom-setup' dependency on") "" (prettyShow dep)
     forM_ changed $ \(pkgn, (verA, verB)) ->
-        changesOk ("the 'custom-setup' dependency on " ++ display'' pkgn)
-                  display verA verB
+        changesOk ("the 'custom-setup' dependency on " ++ prettyShow'' pkgn)
+                  prettyShow verA verB
   where
     (removed, changed, added) =
       computeCanonDepChange setupDependsA setupDependsB
@@ -561,14 +583,15 @@ checkSetupBuildInfo (Just (SetupBuildInfo setupDependsA _internalA))
 checkLibrary :: ComponentName -> Check Library
 checkLibrary componentName
              (Library modulesA reexportedA requiredSigsA exposedSigsA
-                      exposedA buildInfoA)
+                      exposedA visibilityA buildInfoA)
              (Library modulesB reexportedB requiredSigsB exposedSigsB
-                      exposedB buildInfoB) = do
+                      exposedB visibilityB buildInfoB) = do
   checkSame "Cannot change the exposed modules" modulesA modulesB
   checkSame "Cannot change the re-exported modules" reexportedA reexportedB
   checkSame "Cannot change the required signatures" requiredSigsA requiredSigsB
   checkSame "Cannot change the exposed signatures"  exposedSigsA  exposedSigsB
   checkSame "Cannot change the package exposed status" exposedA exposedB
+  checkSame "Cannot change the package visibility" visibilityA visibilityB
   checkBuildInfo componentName buildInfoA buildInfoB
 
 checkForeignLib :: ComponentName -> Check ForeignLib
@@ -609,11 +632,11 @@ checkBuildInfo :: ComponentName -> Check BuildInfo
 checkBuildInfo componentName biA biB = do
     -- @other-extension@
     changesOkSet ("'other-extensions' in " ++ showComponentName componentName ++ " component")
-              display
+              prettyShow
               (Set.fromList $ otherExtensions biA) (Set.fromList $ otherExtensions biB)
 
     -- @buildable@
-    changesOk ("'buildable' in " ++ showComponentName componentName ++ " component") display
+    changesOk ("'buildable' in " ++ showComponentName componentName ++ " component") prettyShow
               (buildable biA) (buildable biB)
 
     -- @build-tool-depends@
@@ -631,8 +654,7 @@ checkBuildInfo componentName biA biB = do
         (pkgconfigDepends biA)
         (pkgconfigDepends biB)
 
-    checkSame "Cannot change build information \
-              \(just the dependency version constraints)"
+    checkSame "Cannot change build information (just the dependency version constraints)"
               (biA { targetBuildDepends = [], otherExtensions = [], buildTools = [], buildToolDepends = [], pkgconfigDepends = [], buildable = True })
               (biB { targetBuildDepends = [], otherExtensions = [], buildTools = [], buildToolDepends = [], pkgconfigDepends = [], buildable = True })
 
@@ -666,9 +688,9 @@ changesOkSet what render old new = do
     renderSet = intercalate ", " . map render . Set.toList
 
 
--- | Single-quote-wrapping 'display'
-display'' :: Text a => a -> String
-display'' x = "'" ++ display x ++ "'"
+-- | Single-quote-wrapping 'prettyShow'
+prettyShow'' :: Pretty a => a -> String
+prettyShow'' x = "'" ++ prettyShow x ++ "'"
 
 checkSame :: Eq a => String -> Check a
 checkSame msg x y | x == y    = return ()
@@ -700,17 +722,13 @@ checkMaybe msg _     _        _        = fail msg
 ppTestedWith :: [(CompilerFlavor, VersionRange)] -> Doc
 ppTestedWith = hsep . punctuate colon . map (uncurry ppPair)
   where
-    ppPair compiler vr = text (display compiler) <+> text (display vr)
+    ppPair compiler vr = text (prettyShow compiler) <+> text (prettyShow vr)
 
---TODO: export from Cabal
-ppSourceRepo :: SourceRepo -> Doc
-ppSourceRepo repo = emptyLine $
-    text "source-repository" <+> disp (repoKind repo)
-    $+$
-    nest 4 (prettyFieldGrammar (sourceRepoFieldGrammar (repoKind repo)) repo)
+ppSourceRepo :: SourceRepo -> PrettyField ()
+ppSourceRepo repo = PrettySection () "source-repository" [pretty kind] $
+    prettyFieldGrammar cabalSpecLatest (sourceRepoFieldGrammar kind) repo
   where
-    emptyLine :: Doc -> Doc
-    emptyLine d = text " " $+$ d
+    kind = repoKind repo
 
 -- TODO: Verify that we don't need to worry about UTF8
 -- | Insert or update \"x-revision:\" field

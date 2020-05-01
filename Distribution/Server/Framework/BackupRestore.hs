@@ -58,6 +58,7 @@ import qualified Data.Time as Time
 import Data.Time.Locale.Compat (defaultTimeLocale)
 import Data.Typeable (typeOf)
 
+import Distribution.Parsec (Parsec(..))
 import Distribution.Server.Util.Merge
 import Distribution.Server.Util.Parse (unpackUTF8)
 import Data.ByteString.Lazy (ByteString)
@@ -176,7 +177,7 @@ timeFormatSpec :: String
 timeFormatSpec = "%Y-%m-%d %H:%M:%S%Q %z"
 
 -- Parse a string, throw an error if it's bad
-parseText :: forall a m. (Text a, Monad m, Typeable a) => String -> String -> m a
+parseText :: forall a m. (Parsec a, Monad m, Typeable a) => String -> String -> m a
 parseText label text = case simpleParse text of
     Nothing -> fail $ "Unable to 'simpleParse' " ++ label ++ " "
                    ++ show text
