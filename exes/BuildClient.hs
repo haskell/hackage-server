@@ -14,6 +14,7 @@ import qualified Distribution.Client.Index as Index
 import Distribution.Package
 import Distribution.Text
 import qualified Text.PrettyPrint          as Disp
+import Distribution.Pretty (prettyShow)
 import Distribution.Verbosity
 import Distribution.Simple.Utils hiding (intercalate)
 import Distribution.Version (Version, nullVersion)
@@ -588,7 +589,7 @@ mkPackageFailed opts = do
     writeFailedCache cache_dir pkgs =
       writeUTF8File (cache_dir </> "failed")
       $ unlines
-      $ map (\(pkgid,n) -> show $ (Disp.text $ show pkgid) Disp.<+> Disp.int n)
+      $ map (\(pkgid,n) -> show $ (Disp.text $ prettyShow pkgid) Disp.<+> Disp.int n)
       $ M.assocs pkgs
 
 
