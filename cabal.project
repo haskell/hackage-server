@@ -20,18 +20,18 @@ constraints: foundation -none, cryptonite -none, cryptohash -none
 -- sometimes we need unreleased fixes
 --
 -- HACK: avoid `setup`-components picking up the local unreleased
--- Cabal-2.x in future we'll have a way to constraint to
+-- Cabal snapshot in future we'll have a way to constraint to
 -- local/non-local
 --
 -- Set this to the bound to the last known released lib:Cabal version
 -- and make sure the local Git version is above the limit
 
-constraints: setup.Cabal < 2.4.2.99
+constraints: setup.Cabal (< 3.0.2.99 || > 3.0.2.99)
 
 source-repository-package
   type: git
   location: https://github.com/hvr/cabal.git
-  tag: 5d74dcdccb383c756d81740b8ca23548e27c3c56
+  tag: 53ab5eb8be63fe6209abb6744f99d34fbabcdcba
   subdir: Cabal
 
 ----------------------------------------------------------------------------
@@ -45,7 +45,7 @@ source-repository-package
 source-repository-package
   type: git
   location: https://github.com/hvr/cabal-parsers.git
-  tag: 893d128f7680bedafb472c4bd45b12a87ade9166
+  tag: d625e7a1a43f1c4017d0919d5197904d4f9e63f7
 
 
 package hackage-server
