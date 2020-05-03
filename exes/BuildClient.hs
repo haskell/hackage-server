@@ -390,6 +390,7 @@ getDocumentationStats verbosity config didFail = do
     httpSession verbosity "hackage-build" version $ do
       mPackages   <- liftM eitherDecode `liftM` requestGET' packagesUri
       mCandidates <- liftM eitherDecode `liftM` requestGET' candidatesUri
+      let filterValid xs = filter (isJust . (simpleParse :: String -> Maybe PackageId) . fst) xs
 
       case (mPackages, mCandidates) of
         -- Download failure
@@ -400,8 +401,8 @@ getDocumentationStats verbosity config didFail = do
         (_, Just (Left e)) -> fail $ "Could not decode " ++ show candidatesUri ++ ": " ++ e
         -- Success
         (Just (Right packages), Just (Right candidates)) -> do
-          packages'   <- liftIO $ mapM checkFailed packages
-          candidates' <- liftIO $ mapM checkFailed candidates
+          packages'   <- liftIO $ mapM checkFailed (filterValid packages)
+          candidates' <- liftIO $ mapM checkFailed (filterValid candidates)
           return $ map (setIsCandidate False) packages'
                 ++ map (setIsCandidate True)  candidates'
   where
@@ -480,6 +481,9 @@ buildOnce opts pkgs = keepGoing $ do
         -- we don't want to keep continually trying to build a failing
         -- package!
         startTime <- getCurrentTime
+        
+        -- TODO add real time
+        let rewriteReport f = appendFile f "\ntime:"
 
         let go :: [DocInfo] -> IO ()
             go [] = return ()
@@ -493,6 +497,7 @@ buildOnce opts pkgs = keepGoing $ do
                      -- This marks it "really failed" in such a case to stop retries.
                      when installOk . replicateM_ 4 $ mark_as_failed (docInfoPackage docInfo)
                 Just _  -> return ()
+              traverse rewriteReport mRpt
               case mRpt of
                 Just _  | bo_dryRun opts -> return ()
                 Just report -> uploadResults verbosity config docInfo
@@ -687,7 +692,7 @@ buildPackage verbosity opts config docInfo = do
 
     -- We ignore the result of calling @cabal install@ because
     -- @cabal install@ succeeds even if the documentation fails to build.
-    void $ cabal opts "install" pkg_flags (Just buildLogHnd)
+    void $ cabal opts "v1-install" pkg_flags (Just buildLogHnd)
 
     -- Grab the report for the package we want. Stash it for safe keeping.
     report <- handleDoesNotExist Nothing $ do
