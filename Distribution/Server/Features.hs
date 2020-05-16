@@ -46,6 +46,7 @@ import Distribution.Server.Features.AdminLog            (initAdminLogFeature)
 import Distribution.Server.Features.HoogleData          (initHoogleDataFeature)
 import Distribution.Server.Features.Votes               (initVotesFeature)
 import Distribution.Server.Features.Sitemap             (initSitemapFeature)
+import Distribution.Server.Features.PackageFeed         (initPackageFeedFeature)
 #endif
 import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
 
@@ -149,6 +150,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                                initAdminLogFeature env
     mkSitemapFeature        <- logStartup "sitemap" $
                                initSitemapFeature env
+    mkPackageFeedFeature    <- logStartup "package feed" $
+                               initPackageFeedFeature env
 #endif
 
     loginfo verbosity "Initialising features, part 2"
@@ -315,6 +318,11 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                         documentationCoreFeature
                         tagsFeature
 
+    packageFeedFeature <- mkPackageFeedFeature
+                            coreFeature
+                            usersFeature
+                            tarIndexCacheFeature
+
 #endif
 
     -- The order of initialization above should be the same as
@@ -354,6 +362,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface votesFeature
          , getFeatureInterface adminLogFeature
          , getFeatureInterface siteMapFeature
+         , getFeatureInterface packageFeedFeature
 #endif
          , staticFilesFeature
          , serverIntrospectFeature allFeatures

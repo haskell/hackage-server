@@ -47,7 +47,7 @@
       <tbody>
 
         <tr>
-          <th>Versions</th>
+          <th>Versions <span style="font-weight:normal;font-size: small;">[<a href="/package/$package.name$.rss">RSS</a>]</span></th>
           <td>$versions$</td>
         </tr>
 
