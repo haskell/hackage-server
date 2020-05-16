@@ -34,7 +34,7 @@ import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
 import qualified Text.RSS as RSS
 import Text.RSS ( RSS(RSS) )
 import qualified Text.XHtml.Strict as XHtml
-import Text.XHtml.Strict ((<<))
+import Text.XHtml.Strict ((<<), (+++), (!))
 
 newtype PackageFeedFeature = PackageFeedFeature {
   packageFeedFeatureInterface :: HackageFeature
@@ -124,24 +124,23 @@ feedItems users hostURI (pkgInfo, chlog) =
   , RSS.Link uri
   , RSS.Guid True (uriToString id uri "")
   , RSS.PubDate time
-  , RSS.Description desc
+  , RSS.Description (XHtml.showHtmlFragment desc)
   , RSS.Author uploader
   ]
   where title = pkgName ++ " (" ++ synopsis pd ++ ")"
         uri = hostURI { uriPath = "/package/" ++ pkgName }
-        desc =
-          "<dl>" ++
-          d "Homepage" ("<a href=\"" ++ homepage pd ++ "\">" ++ homepage pd ++ "</a>") ++
-          d "Author" (author pd) ++
-          d "Uploaded" ("by " ++ uploader ++ " at " ++ timestr) ++
-          d "Maintainer" (maintainer pd) ++
-          "</dl><hr />" ++ show chlog
+        desc = XHtml.dlist << XHtml.concatHtml
+          [ d "Homepage"   $ XHtml.anchor ! [XHtml.href (homepage pd)] << homepage pd
+          , d "Author"     $ author pd
+          , d "Uploaded"   $ "by " ++ uploader ++ " at " ++ timestr
+          , d "Maintainer" $ maintainer pd
+          ] +++ XHtml.hr +++ chlog
         pkgName = display (pkgInfoId pkgInfo)
         (time, uploaderId) = pkgOriginalUploadInfo pkgInfo
         timestr = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S%EZ" time
         uploader = display $ Users.userIdToName users uploaderId
         pd = packageDescription (pkgDesc pkgInfo)
-        d dt dd = "<dt>" ++ dt ++ "</dt><dd>" ++ dd ++ "</dd>"
+        d dt dd = XHtml.dterm (XHtml.toHtml dt) +++ XHtml.ddef (XHtml.toHtml dd)
 
 renderMarkdown :: BS.ByteString -> XHtml.Html
 renderMarkdown = XHtml.primHtml . Blaze.renderHtml
