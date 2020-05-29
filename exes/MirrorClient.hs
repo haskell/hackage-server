@@ -137,7 +137,10 @@ mirrorOnce verbosity opts
 
               mirrorPackages verbosity opts sourceRepo targetRepo pkgsToMirror'
               finalizeMirror   sourceRepo targetRepo
-              cacheTargetIndex sourceRepo targetRepo
+
+              case length (selectedPkgs opts) of
+                0 ->  cacheTargetIndex sourceRepo targetRepo
+                _ ->  return ()
 
               case mirrorPostHook (mirrorConfig opts) of
                 Nothing       -> return ()
