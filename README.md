@@ -18,6 +18,14 @@ You'll need to do the following to get hackage-server's dependency `text-icu` to
     brew install icu4c
     brew link icu4c --force
 
+Besides that, you might also need to include these in the `cabal.project.local` you created:
+
+```
+package text-icu
+  extra-include-dirs: /usr/local/opt/icu4c/include
+  extra-lib-dirs: /usr/local/opt/icu4c/lib
+```
+
 ### Ubuntu/Debian
 
     sudo apt-get update
