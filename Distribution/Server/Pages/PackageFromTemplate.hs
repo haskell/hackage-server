@@ -313,6 +313,7 @@ candidatePageTemplate render mdocIndex mreadme
       , templateVal "maintainer"    (Old.maintainField $ rendMaintainer render)
       , templateVal "buildDepends"  (snd (Old.renderDependencies render))
       , templateVal "optional"      optionalPackageInfoTemplate
+      , templateVal "candidateBanner" candidateBanner
       ]
 
     docFieldsTemplate = templateDict $
@@ -381,6 +382,17 @@ candidatePageTemplate render mdocIndex mreadme
     pkgName = display $ packageName pkgid
 
     desc = rendOther render
+
+    candidateBanner
+      | isCandidate = [ thediv ! [theclass "candidate-info"]
+                        << [ paragraph << [ strong (toHtml "This is a package candidate release!")
+                                          , toHtml " Here you can preview how this package release will appear once published to the main package index (which can be accomplished via the 'maintain' link below)."
+                                          , toHtml " Please note that once a package has been published to the main package index it cannot be undone!"
+                                          , toHtml " Please consult the "
+                                          , anchor ! [href "/upload"] << "package uploading documentation"
+                                          , toHtml " for more information."
+                                          ] ] ]
+      | otherwise = []
 
     renderCopyright :: Html
     renderCopyright = toHtml $ case text of

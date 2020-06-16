@@ -1,17 +1,16 @@
-<!DOCTYPE html>
-<html>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-  $if(doc.hasQuickNavV1)$
-  <link href="$doc.baseUrl$/quick-jump.css" rel="stylesheet" type="text/css" title="QuickJump" />
-  $endif$
   $hackageCssTheme()$
   <title>
     $package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$
   </title>
-  <link rel="canonical" href="/package/$package.name$" />
-  <script src="/static/jquery.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript"></script>
-  <base href="/package/$package.name$-$package.version$/" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=PT+Sans:400,400i,700"/>
+  <link rel="stylesheet" href="/static/hackage.css" type="text/css"/>
+  <link rel="icon" href="/static/favicon.png" type="image/png"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="search" href="/packages/opensearch.xml" type="application/opensearchdescription+xml" title="Hackage"/>
+  <link rel="canonical" href="/package/$package.name$"/>
 </head>
 
 <body>
@@ -19,15 +18,13 @@
   <div id="content">
     <h1><a href="/package/$package.name$">$package.name$</a>$if(package.optional.hasSynopsis)$: <small>$package.optional.synopsis$</small>$endif$</h1>
 
-    <div class="candidate-info">
-      $maintainHtml$
-    </div>
+    $package.candidateBanner$
     <div style="font-size: small">
       [<a href="/package/$package.name$/candidate/maintain">maintain</a>] 
     </div>
-    <div class="candidate-warn">
-      $warningBox$
-    </div>
+    <!-- <div class="candidate-warn"> -->
+    $warningBox$
+    <!-- </div> -->
 
     <div id="description">
     $if(package.optional.hasDescription)$
@@ -40,19 +37,17 @@
     </div>
 
 
-    <div id="properties">
+    <h2>Properties</h2>
     <table class="properties">
-      <tbody>
-
         <tr>
-          <th>Versions <span style="font-weight:normal;font-size: small;">[<a href="/package/$package.name$.rss">RSS</a>]</span></th>
+          <th>Versions</th>
           <td>$versions$</td>
         </tr>
 
         $if(package.optional.hasChangelog)$
         <tr>
           <th>Change&nbsp;log</th>
-          <td class="word-wrap">$package.optional.changelog$</td>
+          <td>$package.optional.changelog$</td>
         </tr>
         $endif$
 
@@ -63,39 +58,31 @@
 
         <tr>
           <th>License</th>
-          <td class="word-wrap">$package.license$</td>
+          <td>$package.license$</td>
         </tr>
 
         $if(package.optional.hasCopyright)$
         <tr>
           <th>Copyright</th>
-          <td class="word-wrap">$package.optional.copyright$</td>
+          <td>$package.optional.copyright$</td>
         </tr>
         $endif$
 
         <tr>
           <th>Author</th>
-          <td class="word-wrap">$package.author$</td>
+          <td>$package.author$</td>
         </tr>
         <tr>
           <th>Maintainer</th>
-          <td class="word-wrap">$package.maintainer$</td>
+          <td>$package.maintainer$</td>
         </tr>
 
-        $if(hackage.hasUpdateTime)$
+        <!-- $if(hackage.hasUpdateTime)$
         <tr>
           <th>Revised</th>
           <td>$hackage.updateTime$</td>
         </tr>
-        $endif$
-
-        <!-- Obsolete/deprecated 'Stability' field hidden
-             c.f. http://stackoverflow.com/questions/3841218/conventions-for-stability-field-of-cabal-packages
-        <tr>
-          <th>Stability</th>
-          <td>$stability$</td>
-        </tr>
-        -->
+        $endif$ -->
 
         $if(package.optional.hasCategories)$
         <tr>
@@ -107,7 +94,7 @@
         $if(package.optional.hasHomePage)$
         <tr>
           <th>Home page</th>
-          <td class="word-wrap">
+          <td>
             <a href=$package.optional.homepage$>
               $package.optional.homepage$
             </a>
@@ -118,7 +105,7 @@
         $if(package.optional.hasBugTracker)$
         <tr>
           <th>Bug&nbsp;tracker</th>
-          <td class="word-wrap">
+          <td>
             <a href="$package.optional.bugTracker$">
               $package.optional.bugTracker$
             </a>
@@ -129,7 +116,7 @@
         $if(package.optional.hasSourceRepository)$
         <tr>
           <th>Source&nbsp;repo</th>
-          <td class="word-wrap">$package.optional.sourceRepository$</td>
+          <td>$package.optional.sourceRepository$</td>
         </tr>
         $endif$
 
@@ -137,22 +124,22 @@
           <th>Uploaded</th>
           <td>$hackage.uploadTime$</td>
         </tr>
-
-    <div id="modules">
-      $moduleList$
-    </div>
+    </table>
+    <!-- <div id="modules"> -->
+    $moduleList$
+    <!-- </div> -->
 
     $if(hackage.hasFlags)$
-    <div id="flags">
-      $hackage.flagsSection$
-    </div>
+    <!-- <div id="flags"> -->
+    $hackage.flagsSection$
+    <!-- </div> -->
     $endif$
 
-    <div id="downloads">
-      $downloadSection$
-    </div>
+    <!-- <div id="downloads"> -->
+    $downloadSection$
+    <!-- </div> -->
 
-    <div id="maintainer-corner">
+    <!-- <div id="maintainer-corner"> -->
       <h4>Maintainer's Corner</h4>
       <p>For package maintainers and hackage trustees</p>
       <ul>
@@ -162,21 +149,20 @@
           </a>
         </li>
       </ul>
-    </div>
+    <!-- </div> -->
 
     $if(package.optional.hasReadme)$
-    <hr />
-    <div id="readme-container">
-      <h2 id="readme">Readme for $package.name$-$package.version$</h2>
-      [<a href="#description">back to package description</a>]
-      $package.optional.readme$
-    </div>
+    <hr/>
+    <!-- <div id="readme-container"> -->
+    <h2 id="readme">Readme for $package.name$-$package.version$</h2>
+    [<a href="#description">back to package description</a>]
+    $package.optional.readme$
+    <!-- </div> -->
     $endif$
-  </div> <!-- /content -->
 
-  $packagePageAssets()$
+  <!-- $packagePageAssets()$
   <div style="clear:both"></div>
-  $footer()$
+  $footer()$ -->
 
   <!-- $if(doc.hasQuickNavV1)$
   <script src="$doc.baseUrl$/quick-jump.min.js" type="text/javascript"></script>

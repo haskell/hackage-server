@@ -131,6 +131,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    , "package-page.html"
                    , "table-interface.html"
                    , "tag-edit.html"
+                   , "candidate-page.html"
                    ]
 
 
@@ -1008,7 +1009,7 @@ mkHtmlCandidates :: HtmlUtilities
                  -> PackageCandidatesFeature
                  -> Templates
                  -> HtmlCandidates
-mkHtmlCandidates HtmlUtilities{..}
+mkHtmlCandidates utilities@HtmlUtilities{..}
                  CoreFeature{ coreResource = CoreResource{packageInPath}
                             , queryGetPackageIndex
                             }
@@ -1123,6 +1124,7 @@ mkHtmlCandidates HtmlUtilities{..}
     serveCandidatePage :: Resource -> DynamicPath -> ServerPartE Response
     serveCandidatePage maintain dpath = do
       cand <- packageInPath dpath >>= lookupCandidateId
+      template <- getTemplate templates "candidate-page.html"
       candRender <- liftIO $ candidateRender cand
       let PackageIdentifier pkgname version = packageId cand
           render = candPackageRender candRender
@@ -1130,11 +1132,11 @@ mkHtmlCandidates HtmlUtilities{..}
                      . flip PackageIndex.lookupPackageName pkgname
                    <$> queryGetPackageIndex
       prefInfo <- queryGetPreferredInfo pkgname
-      let sectionHtml = [ Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing
-                        , Pages.renderChangelog render
-                        , Pages.renderDependencies render
-                        ] ++ Pages.renderFields render
-          maintainHtml = anchor ! [href $ renderResource maintain [display $ packageId cand]] << "maintain"
+      -- let sectionHtml = [ Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing
+      --                   , Pages.renderChangelog render
+      --                   , Pages.renderDependencies render
+      --                   ] ++ Pages.renderFields render
+      let maintainHtml = anchor ! [href $ renderResource maintain [display $ packageId cand]] << "maintain"
       -- bottom sections, currently documentation and readme
       mdoctarblob <- queryDocumentation (packageId cand)
       mdocIndex   <- maybe (return Nothing)
@@ -1149,9 +1151,18 @@ mkHtmlCandidates HtmlUtilities{..}
               [] -> []
               warn -> [thediv ! [theclass "candidate-warn"] << [paragraph << strong (toHtml "Warnings:"), unordList warn]]
 
-      return $ toResponse $ Resource.XHtml $
-          Pages.packagePage render [maintainHtml] warningBox sectionHtml
-                            [] mdocIndex mreadme docURL True
+      -- return $ toResponse $ Resource.XHtml $
+      --     Pages.packagePage render [maintainHtml] warningBox sectionHtml
+      --                       [] mdocIndex mreadme docURL True
+      -- generate template attribute for template
+      return $ toResponse . template $
+        [ "versions"          $= (PagesNew.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing)
+        , "maintainHtml"      $= maintainHtml
+        , "warningBox"        $= warningBox
+        ] ++
+        PagesNew.candidatePageTemplate render
+            mdocIndex mreadme
+            docURL True
 
     serveDependenciesPage :: DynamicPath -> ServerPartE Response
     serveDependenciesPage dpath = do
