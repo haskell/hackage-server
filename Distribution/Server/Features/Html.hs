@@ -132,6 +132,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    , "table-interface.html"
                    , "tag-edit.html"
                    , "candidate-page.html"
+                   , "candidate-index.html"
                    ]
 
 
@@ -1009,7 +1010,7 @@ mkHtmlCandidates :: HtmlUtilities
                  -> PackageCandidatesFeature
                  -> Templates
                  -> HtmlCandidates
-mkHtmlCandidates utilities@HtmlUtilities{..}
+mkHtmlCandidates HtmlUtilities{..}
                  CoreFeature{ coreResource = CoreResource{packageInPath}
                             , queryGetPackageIndex
                             }
@@ -1187,18 +1188,30 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
 
     serveCandidatesPage :: DynamicPath -> ServerPartE Response
     serveCandidatesPage _ = do
-        cands <- queryGetCandidateIndex
-        return $ toResponse $ Resource.XHtml $ hackagePage "Package candidates"
-          [ h2 << "Package candidates"
-          , paragraph <<
+      template <- getTemplate templates "candidate-index.html"
+      cands <- queryGetCandidateIndex
+        -- return $ toResponse $ Resource.XHtml $ hackagePage "Package candidates"
+        --   [ h2 << "Package candidates"
+        --   , paragraph <<
+        --       [ toHtml "Here follow all the candidate package versions on Hackage. "
+        --       , thespan ! [thestyle "color: gray"] <<
+        --           [ toHtml "["
+        --           , anchor ! [href "/packages/candidates/upload"] << "upload"
+        --           , toHtml "]" ]
+        --       ]
+        --   , unordList $ map showCands $ PackageIndex.allPackagesByName cands
+        --   ]
+      return $ toResponse . template $
+        ["heading" $= "Package candidates"
+        ,"content" $= (paragraph <<
               [ toHtml "Here follow all the candidate package versions on Hackage. "
               , thespan ! [thestyle "color: gray"] <<
                   [ toHtml "["
                   , anchor ! [href "/packages/candidates/upload"] << "upload"
                   , toHtml "]" ]
-              ]
-          , unordList $ map showCands $ PackageIndex.allPackagesByName cands
-          ]
+              ])
+        ,"list"    $= (unordList $ map showCands $ PackageIndex.allPackagesByName cands)
+        ]
         -- note: each of the lists here should be non-empty, according to PackageIndex
       where showCands pkgs =
                 -- TODO: Duncan changed this to packageSynopsis but without an
