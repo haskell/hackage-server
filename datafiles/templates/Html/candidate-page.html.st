@@ -16,7 +16,7 @@
 <body>
   $hackagePageHeader()$
   <div id="content">
-    <h1><a href="/package/$package.name$">$package.name$</a>$if(package.optional.hasSynopsis)$: <small>$package.optional.synopsis$</small>$endif$</h1>
+    <h1>$package.name$$if(package.optional.hasSynopsis)$: <small>$package.optional.synopsis$</small>$endif$</h1>
 
     $package.candidateBanner$
     <div style="font-size: small">
@@ -43,13 +43,16 @@
           <th>Versions</th>
           <td>$versions$</td>
         </tr>
-
-        $if(package.optional.hasChangelog)$
+         
         <tr>
+          $if(package.optional.hasChangelog)$
           <th>Change&nbsp;log</th>
           <td>$package.optional.changelog$</td>
+          $else$
+          <th>Change log</th>
+          <td><strong class="warning">None available</strong></td>
+          $endif$
         </tr>
-        $endif$
 
         <tr>
           <th>Dependencies</th>
