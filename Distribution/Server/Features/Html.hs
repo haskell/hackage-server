@@ -1121,7 +1121,6 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
         ]
     {-some useful URIs here: candidateUri check "" pkgid, packageCandidatesUri check "" pkgid, publishUri check "" pkgid-}
 
-    -- TODO: convert to template-based generation like 'servePackagePage' does
     serveCandidatePage :: Resource -> DynamicPath -> ServerPartE Response
     serveCandidatePage maintain dpath = do
       cand <- packageInPath dpath >>= lookupCandidateId
@@ -1202,9 +1201,6 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
                 ]
           _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ corePackageIdUri candidatesCore "" $ packageId pkg] << display (packageVersion pkg) ]
 
-    -- TODO: make publishCandidate a member of the PackageCandidates feature, just like
-    -- putDeprecated and putPreferred are for the Versions feature.
-    -- (Done)
     servePostPublish :: DynamicPath -> ServerPartE Response
     servePostPublish dpath = do
         uresult <- publishCandidate dpath True
