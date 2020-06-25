@@ -60,7 +60,6 @@ import Distribution.Simple.Utils ( cabalVersion )
 import Distribution.Package
 import Distribution.Version
 import Distribution.Text (display)
-import Distribution.PackageDescription
 
 import Data.Char (toLower)
 import Data.List (intercalate, intersperse, insert)
@@ -131,6 +130,8 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    , "package-page.html"
                    , "table-interface.html"
                    , "tag-edit.html"
+                   , "candidate-page.html"
+                   , "candidate-index.html"
                    ]
 
 
@@ -646,6 +647,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
             docURL distributions
             deprs
             utilities
+            False
 
     serveDependenciesPage :: DynamicPath -> ServerPartE Response
     serveDependenciesPage dpath = do
@@ -1008,7 +1010,7 @@ mkHtmlCandidates :: HtmlUtilities
                  -> PackageCandidatesFeature
                  -> Templates
                  -> HtmlCandidates
-mkHtmlCandidates HtmlUtilities{..}
+mkHtmlCandidates utilities@HtmlUtilities{..}
                  CoreFeature{ coreResource = CoreResource{packageInPath}
                             , queryGetPackageIndex
                             }
@@ -1123,6 +1125,7 @@ mkHtmlCandidates HtmlUtilities{..}
     serveCandidatePage :: Resource -> DynamicPath -> ServerPartE Response
     serveCandidatePage maintain dpath = do
       cand <- packageInPath dpath >>= lookupCandidateId
+      template <- getTemplate templates "candidate-page.html"
       candRender <- liftIO $ candidateRender cand
       let PackageIdentifier pkgname version = packageId cand
           render = candPackageRender candRender
@@ -1130,11 +1133,7 @@ mkHtmlCandidates HtmlUtilities{..}
                      . flip PackageIndex.lookupPackageName pkgname
                    <$> queryGetPackageIndex
       prefInfo <- queryGetPreferredInfo pkgname
-      let sectionHtml = [ Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing
-                        , Pages.renderChangelog render
-                        , Pages.renderDependencies render
-                        ] ++ Pages.renderFields render
-          maintainHtml = anchor ! [href $ renderResource maintain [display $ packageId cand]] << "maintain"
+      let maintainHtml = anchor ! [href $ renderResource maintain [display $ packageId cand]] << "maintain"
       -- bottom sections, currently documentation and readme
       mdoctarblob <- queryDocumentation (packageId cand)
       mdocIndex   <- maybe (return Nothing)
@@ -1149,9 +1148,16 @@ mkHtmlCandidates HtmlUtilities{..}
               [] -> []
               warn -> [thediv ! [theclass "candidate-warn"] << [paragraph << strong (toHtml "Warnings:"), unordList warn]]
 
-      return $ toResponse $ Resource.XHtml $
-          Pages.packagePage render [maintainHtml] warningBox sectionHtml
-                            [] mdocIndex mreadme docURL True
+      return $ toResponse . template $
+        [ "versions"          $= (PagesNew.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing)
+        , "maintainHtml"      $= maintainHtml
+        , "warningBox"        $= warningBox
+        ] ++
+        PagesNew.packagePageTemplate render
+            mdocIndex Nothing mreadme
+            docURL [] Nothing
+            utilities
+            True
 
     serveDependenciesPage :: DynamicPath -> ServerPartE Response
     serveDependenciesPage dpath = do
@@ -1176,30 +1182,10 @@ mkHtmlCandidates HtmlUtilities{..}
 
     serveCandidatesPage :: DynamicPath -> ServerPartE Response
     serveCandidatesPage _ = do
-        cands <- queryGetCandidateIndex
-        return $ toResponse $ Resource.XHtml $ hackagePage "Package candidates"
-          [ h2 << "Package candidates"
-          , paragraph <<
-              [ toHtml "Here follow all the candidate package versions on Hackage. "
-              , thespan ! [thestyle "color: gray"] <<
-                  [ toHtml "["
-                  , anchor ! [href "/packages/candidates/upload"] << "upload"
-                  , toHtml "]" ]
-              ]
-          , unordList $ map showCands $ PackageIndex.allPackagesByName cands
-          ]
-        -- note: each of the lists here should be non-empty, according to PackageIndex
-      where showCands pkgs =
-                -- TODO: Duncan changed this to packageSynopsis but without an
-                -- accomponaying definition of packageSynposis. Changed back for now.
-                let desc = packageDescription . pkgDesc . candPkgInfo $ last pkgs
-                    pkgname = packageName desc
-                in  [ anchor ! [href $ packageCandidatesUri candidates "" pkgname ] << display pkgname
-                    , toHtml ": "
-                    , toHtml $ intersperse (toHtml ", ") $ flip map pkgs $ \pkg ->
-                         anchor ! [href $ corePackageIdUri candidatesCore "" (packageId pkg)] << display (packageVersion pkg)
-                    , toHtml $ ". " ++ synopsis desc
-                    ]
+      template <- getTemplate templates "candidate-index.html"
+      cands <- queryGetCandidateIndex
+      return $ toResponse . template $
+        PagesNew.candidatesPageTemplate cands candidates candidatesCore
 
     servePackageCandidates :: Resource -> DynamicPath -> ServerPartE Response
     servePackageCandidates candPkgUp dpath = do
@@ -1218,9 +1204,10 @@ mkHtmlCandidates HtmlUtilities{..}
 
     -- TODO: make publishCandidate a member of the PackageCandidates feature, just like
     -- putDeprecated and putPreferred are for the Versions feature.
+    -- (Done)
     servePostPublish :: DynamicPath -> ServerPartE Response
     servePostPublish dpath = do
-        uresult <- publishCandidate dpath False
+        uresult <- publishCandidate dpath True
         return $ toResponse $ Resource.XHtml $ hackagePage "Publish successful" $
           [ paragraph << [toHtml "Successfully published ", packageLink (packageId $ uploadDesc uresult), toHtml "!"]
           ] ++ case uploadWarnings uresult of
