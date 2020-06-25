@@ -60,7 +60,6 @@ import Distribution.Simple.Utils ( cabalVersion )
 import Distribution.Package
 import Distribution.Version
 import Distribution.Text (display)
-import Distribution.PackageDescription
 
 import Data.Char (toLower)
 import Data.List (intercalate, intersperse, insert)
