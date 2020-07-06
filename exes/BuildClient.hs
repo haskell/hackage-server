@@ -482,27 +482,10 @@ buildOnce opts pkgs = keepGoing $ do
         -- package!
         startTime <- getCurrentTime
         
-        -- TODO add real time
-        let rewriteReport f = appendFile f "\ntime:"
-
         let go :: [DocInfo] -> IO ()
             go [] = return ()
             go (docInfo : toBuild') = do
-              (mTgz, mRpt, logfile) <- buildPackage verbosity opts config docInfo
-              let installOk = fmap ("install-outcome: InstallOk" `isInfixOf`) mRpt == Just True
-              case mTgz of
-                Nothing -> do
-                     mark_as_failed (docInfoPackage docInfo)
-                     -- When it installed ok, but there's no docs, that means it is exe only.
-                     -- This marks it "really failed" in such a case to stop retries.
-                     when installOk . replicateM_ 4 $ mark_as_failed (docInfoPackage docInfo)
-                Just _  -> return ()
-              traverse rewriteReport mRpt
-              case mRpt of
-                Just _  | bo_dryRun opts -> return ()
-                Just report -> uploadResults verbosity config docInfo
-                                              mTgz report logfile
-                _           -> return ()
+              processPkg verbosity opts config docInfo mark_as_failed
 
               -- We don't check the runtime until we've actually tried
               -- to build a doc, so as to ensure we make progress.
@@ -558,6 +541,38 @@ buildOnce opts pkgs = keepGoing $ do
       unless (update_ec == ExitSuccess) $
           dieNoVerbosity "Could not 'cabal update' from specified server"
 
+-- Takes a single doc, process it and uploads result
+processPkg :: Verbosity -> BuildOpts -> BuildConfig
+             -> DocInfo -> (PackageId -> IO ()) -> IO ()
+processPkg verbosity opts config docInfo mark_as_failed = do
+    prepareTempBuildDir
+    (mTgz, mRpt, logfile) <- buildPackage verbosity opts config docInfo
+    let installOk = fmap ("install-outcome: InstallOk" `isInfixOf`) mRpt == Just True
+    case mTgz of
+      Nothing -> do
+            mark_as_failed (docInfoPackage docInfo)
+            -- When it installed ok, but there's no docs, that means it is exe only.
+            -- This marks it "really failed" in such a case to stop retries.
+            when installOk . replicateM_ 4 $ mark_as_failed (docInfoPackage docInfo)
+      Just _  -> return ()
+    traverse rewriteReport mRpt
+    case mRpt of
+      Just _  | bo_dryRun opts -> return ()
+      Just report -> uploadResults verbosity config docInfo
+                                    mTgz report logfile
+      _           -> return ()
+  where
+    -- TODO add real time
+    rewriteReport f = appendFile f "\ntime:"
+
+    prepareTempBuildDir :: IO ()
+    prepareTempBuildDir = do
+      handleDoesNotExist () $
+        removeDirectoryRecursive $ installDirectory opts
+      createDirectory $ installDirectory opts
+
+    
+
 -- | Builds a little memoised function that can tell us whether a
 -- particular package failed to build its documentation, a function to mark a
 -- package as having failed, and a function to write the final failed list back
@@ -606,9 +621,7 @@ buildPackage :: Verbosity -> BuildOpts -> BuildConfig
 buildPackage verbosity opts config docInfo = do
     let pkgid = docInfoPackage docInfo
     notice verbosity ("Building " ++ display pkgid)
-    handleDoesNotExist () $
-        removeDirectoryRecursive $ installDirectory opts
-    createDirectory $ installDirectory opts
+    
 
     -- Create the local package db
     let packageDb = installDirectory opts </> "packages.db"
