@@ -546,8 +546,19 @@ processPkg :: Verbosity -> BuildOpts -> BuildConfig
              -> DocInfo -> (PackageId -> IO ()) -> IO ()
 processPkg verbosity opts config docInfo mark_as_failed = do
     prepareTempBuildDir
-    (mTgz, mRpt, logfile) <- buildPackage verbosity opts config docInfo
-    let installOk = fmap ("install-outcome: InstallOk" `isInfixOf`) mRpt == Just True
+    (mTgz, mRpt, logfile)         <- buildPackage verbosity opts config docInfo
+    testOutcome <- testPackage verbosity opts docInfo
+    
+    -- Modify test-outcome and rewrite report file. 
+    buildReport <- case mRpt of
+          Nothing   -> return Nothing
+          Just loc  -> do
+            rpt <- readFile loc
+            return (Just rpt)
+    let buildReport' = fmap (unlines.setTestOutcome testOutcome) $ fmap lines buildReport
+        installOk = fmap ("install-outcome: InstallOk" `isInfixOf`) buildReport' == Just True
+    rewriteRpt mRpt buildReport'
+    
     case mTgz of
       Nothing -> do
             mark_as_failed (docInfoPackage docInfo)
@@ -566,12 +577,26 @@ processPkg verbosity opts config docInfo mark_as_failed = do
     rewriteReport f = appendFile f "\ntime:"
 
     prepareTempBuildDir :: IO ()
-    prepareTempBuildDir = do
+    prepareTempBuildDir = do 
       handleDoesNotExist () $
         removeDirectoryRecursive $ installDirectory opts
       createDirectory $ installDirectory opts
-
+      notice verbosity $ "Writing cabal.project for " ++ display (docInfoPackage docInfo)
+      let projectFile = installDirectory opts </> "cabal.project"
+      writeFile projectFile $ "packages: " ++ show (docInfoTarGzURI config docInfo)
     
+    setTestOutcome :: String -> [String] -> [String]
+    setTestOutcome _ []                  = []
+    setTestOutcome a (xs:xt) 
+      | "tests-outcome: " `isPrefixOf` xs = ("tests-outcome: " ++ a) : xt
+      | otherwise                         = xs : setTestOutcome a xt
+
+    rewriteRpt:: (Maybe FilePath) -> (Maybe String) -> IO ()
+    rewriteRpt (Just loc) (Just cnt) = do
+      writeFile (loc <.> "temp") cnt
+      renameFile (loc <.> "temp") loc
+    rewriteRpt _ _ = do return ()
+
 
 -- | Builds a little memoised function that can tell us whether a
 -- particular package failed to build its documentation, a function to mark a
@@ -611,6 +636,39 @@ mkPackageFailed opts = do
       $ unlines
       $ map (\(pkgid,n) -> show $ (Disp.text $ prettyShow pkgid) Disp.<+> Disp.int n)
       $ M.assocs pkgs
+
+
+testPackage :: Verbosity -> BuildOpts -> DocInfo -> IO (String)
+testPackage verbosity opts docInfo = do
+  let pkgid = docInfoPackage docInfo
+  notice verbosity ("Testing " ++ display pkgid)
+
+  let testLogFile = (installDirectory opts) </> display pkgid <.> "test"
+  let testReportFile = (resultsDirectory opts) </> display pkgid <.> "test"
+  let pkg_flags = 
+        ["all", 
+         "--enable-coverage",
+         "--test-log=" ++ testReportFile,
+         "--test-show-details=never",
+         "--disable-optimization"]
+  buildLogHnd <- openFile testLogFile WriteMode
+  
+  void $ cabal opts "v2-test" pkg_flags (Just buildLogHnd)
+  testLog <- readFile testLogFile
+
+  let pkg = display $ pkgName (docInfoPackage docInfo)
+      testSuite = "Test suite test-"++pkg
+
+  testOutcome <- case (testSuite ++ ": PASS") `isInfixOf` testLog of
+        True  -> return "Ok"
+        False -> case (testSuite ++ ": FAIL") `isInfixOf` testLog of
+            True  -> return "Failed"
+            False -> return "NotTried"
+  notice verbosity $ unlines
+      [ "Test results for " ++ display pkgid ++ ":"
+      , testReportFile
+      ]
+  return testOutcome
 
 
 -- | Build documentation and return @(Just tgz)@ for the built tgz file
@@ -749,8 +807,8 @@ cabal opts cmd args moutput = do
                  : verbosityArgs
                 ++ args
     info verbosity $ unwords ("cabal":all_args)
-    ph <- runProcess "cabal" all_args Nothing
-                     Nothing Nothing moutput moutput
+    ph <- runProcess "cabal" all_args (Just $ installDirectory opts)
+                        Nothing Nothing moutput moutput
     waitForProcess ph
 
 pruneHaddockFiles :: FilePath -> IO ()
