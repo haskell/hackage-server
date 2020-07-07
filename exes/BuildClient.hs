@@ -541,7 +541,7 @@ buildOnce opts pkgs = keepGoing $ do
       unless (update_ec == ExitSuccess) $
           dieNoVerbosity "Could not 'cabal update' from specified server"
 
--- Takes a single doc, process it and uploads result
+-- Takes a single Package, process it and uploads result
 processPkg :: Verbosity -> BuildOpts -> BuildConfig
              -> DocInfo -> (PackageId -> IO ()) -> IO ()
 processPkg verbosity opts config docInfo mark_as_failed = do
@@ -669,24 +669,23 @@ coveragePackage verbosity loc opts docInfo = do
 testPackage :: Verbosity -> BuildOpts -> DocInfo -> IO (String, Maybe FilePath)
 testPackage verbosity opts docInfo = do
   let pkgid = docInfoPackage docInfo
-  notice verbosity ("Testing " ++ display pkgid)
-
-  let testLogFile = (installDirectory opts) </> display pkgid <.> "test"
-  let testReportFile = (resultsDirectory opts) </> display pkgid <.> "test"
-  let pkg_flags = 
+      testLogFile = (installDirectory opts) </> display pkgid <.> "test"
+      testReportFile = (installDirectory opts) </> "reports" </> display pkgid <.> "test"
+      testResultFile = (resultsDirectory opts) </> display pkgid <.> "test"
+      pkg_flags = 
         ["all", 
          "--enable-coverage",
          "--test-log=" ++ testReportFile,
          "--test-show-details=never",
          "--disable-optimization"]
+  notice verbosity ("Testing " ++ display pkgid)
+
   buildLogHnd <- openFile testLogFile WriteMode
   
   void $ cabal opts "v2-test" pkg_flags (Just buildLogHnd)
   testLog <- readFile testLogFile
 
-  let pkg = display $ pkgName (docInfoPackage docInfo)
-      testSuite = "Test suite test-"++pkg
-      covgInd = elemIndex "Package coverage report written to" $ lines testLog
+  let covgInd = elemIndex "Package coverage report written to" $ lines testLog
       hpcLoc = fmap (\x -> (lines testLog)!!(x+1)) covgInd
 
   testOutcome <- case ("Test suite" `isInfixOf` testLog) && (": PASS" `isInfixOf` testLog) of
@@ -694,13 +693,11 @@ testPackage verbosity opts docInfo = do
         False -> case ("Test suite" `isInfixOf` testLog) && (": FAIL" `isInfixOf` testLog) of
             True  -> return "Failed"
             False -> return "NotTried"
-  testReport <- case testOutcome of
-    "NotTried" -> return Nothing
-    _ -> return (Just testReportFile)
+  renameFile testLogFile testResultFile
 
   notice verbosity $ unlines
       [ "Test results for " ++ display pkgid ++ ":"
-      , fromMaybe "None" testReport
+      , testResultFile
       ]
   return (testOutcome, hpcLoc)
 
