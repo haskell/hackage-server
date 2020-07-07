@@ -546,9 +546,16 @@ processPkg :: Verbosity -> BuildOpts -> BuildConfig
              -> DocInfo -> (PackageId -> IO ()) -> IO ()
 processPkg verbosity opts config docInfo mark_as_failed = do
     prepareTempBuildDir
-    (mTgz, mRpt, logfile)         <- buildPackage verbosity opts config docInfo
-    testOutcome <- testPackage verbosity opts docInfo
-    
+    (mTgz, mRpt, logfile)   <- buildPackage verbosity opts config docInfo
+    (testOutcome, hpcLoc)   <- testPackage verbosity opts docInfo
+
+    -- Get Coverage Report
+    coverage <- case hpcLoc of
+        Nothing -> return Nothing
+        Just loc -> do
+          q <- coveragePackage verbosity loc opts docInfo
+          return (Just q)
+
     -- Modify test-outcome and rewrite report file. 
     buildReport <- case mRpt of
           Nothing   -> return Nothing
@@ -637,8 +644,29 @@ mkPackageFailed opts = do
       $ map (\(pkgid,n) -> show $ (Disp.text $ prettyShow pkgid) Disp.<+> Disp.int n)
       $ M.assocs pkgs
 
+coveragePackage :: Verbosity -> FilePath -> BuildOpts -> DocInfo -> IO (FilePath)
+coveragePackage verbosity loc opts docInfo = do
+  let pkgid = docInfoPackage docInfo
+      dir = takeDirectory loc
+      mixLoc = dir </> ".." </> ".." </> "mix" </> display pkgid
+      tixLoc = dir </> ".." </> ".." </> "tix" </> display pkgid </> display pkgid <.> "tix"
+      all_args = ["report", tixLoc, "--hpcdir=" ++ mixLoc]
+      coverageFile = (resultsDirectory opts) </> display pkgid <.> "coverage"
+  notice verbosity ("Running code-coverage " ++ display pkgid)
 
-testPackage :: Verbosity -> BuildOpts -> DocInfo -> IO (String)
+  buildCovg <- openFile coverageFile WriteMode
+  
+  ph <- runProcess "hpc" all_args Nothing
+                        Nothing Nothing (Just buildCovg) (Just buildCovg)
+  waitForProcess ph
+  notice verbosity $ unlines
+      [ "Code coverage results for " ++ display pkgid ++ ":"
+      , coverageFile
+      ]
+  return coverageFile
+
+
+testPackage :: Verbosity -> BuildOpts -> DocInfo -> IO (String, Maybe FilePath)
 testPackage verbosity opts docInfo = do
   let pkgid = docInfoPackage docInfo
   notice verbosity ("Testing " ++ display pkgid)
@@ -658,17 +686,23 @@ testPackage verbosity opts docInfo = do
 
   let pkg = display $ pkgName (docInfoPackage docInfo)
       testSuite = "Test suite test-"++pkg
+      covgInd = elemIndex "Package coverage report written to" $ lines testLog
+      hpcLoc = fmap (\x -> (lines testLog)!!(x+1)) covgInd
 
-  testOutcome <- case (testSuite ++ ": PASS") `isInfixOf` testLog of
+  testOutcome <- case ("Test suite" `isInfixOf` testLog) && (": PASS" `isInfixOf` testLog) of
         True  -> return "Ok"
-        False -> case (testSuite ++ ": FAIL") `isInfixOf` testLog of
+        False -> case ("Test suite" `isInfixOf` testLog) && (": FAIL" `isInfixOf` testLog) of
             True  -> return "Failed"
             False -> return "NotTried"
+  testReport <- case testOutcome of
+    "NotTried" -> return Nothing
+    _ -> return (Just testReportFile)
+
   notice verbosity $ unlines
       [ "Test results for " ++ display pkgid ++ ":"
-      , testReportFile
+      , fromMaybe "None" testReport
       ]
-  return testOutcome
+  return (testOutcome, hpcLoc)
 
 
 -- | Build documentation and return @(Just tgz)@ for the built tgz file
