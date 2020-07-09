@@ -29,6 +29,7 @@ module Distribution.Server.Features.BuildReports.BuildReport (
     affixTimestamp,
 
     BuildReport_v0,
+    BuildFiles(..)
   ) where
 
 import Distribution.Compat.Newtype
@@ -75,6 +76,8 @@ import Text.StringTemplate ()
 import Text.StringTemplate.Classes
          ( SElem(..), ToSElem(..) )
 
+import Data.String (fromString)
+import Data.Aeson
 import Data.List
          ( unfoldr )
 import Data.Char as Char
@@ -494,3 +497,19 @@ instance Migrate InstallOutcome where
         V0_BuildFailed -> BuildFailed
         V0_InstallFailed -> InstallFailed
         V0_InstallOk -> InstallOk
+
+data BuildFiles = BuildFiles {
+  reportContent :: String, 
+  logContent :: Maybe String
+} deriving Show
+
+instance Data.Aeson.FromJSON BuildFiles where
+  parseJSON = withObject "buildFiles" $ \o ->
+    BuildFiles 
+      <$> o .: fromString "report"
+      <*> o .:? fromString "log"
+
+instance Data.Aeson.ToJSON BuildFiles where
+  toJSON p = object [
+    "report" .= reportContent p,
+    "log"  .= logContent  p ]

@@ -28,6 +28,7 @@ import Distribution.Version (nullVersion)
 
 import Control.Arrow (second)
 import Data.ByteString.Lazy (toStrict)
+import Data.String (fromString)
 
 
 -- TODO:
@@ -120,9 +121,11 @@ buildReportsFeature name
           { reportsList = (extendResourcePath "/reports/.:format" corePackagePage) {
                 resourceDesc = [ (GET, "List available build reports")
                                , (POST, "Upload a new build report")
+                               , (PUT, "Upload all build files")
                                ]
               , resourceGet  = [ ("txt", textPackageReports) ]
               , resourcePost = [ ("",    submitBuildReport) ]
+              , resourcePut  = [ ("json",putAllReports) ]
               }
           , reportsPage = (extendResourcePath "/reports/:id.:format" corePackagePage) {
                 resourceDesc   = [ (GET, "Get a specific build report")
@@ -268,6 +271,34 @@ buildReportsFeature name
       guardAuthorised_ [InGroup trusteesGroup]
       void $ updateState reportsState $ SetBuildLog pkgid reportId Nothing
       noContent (toResponse ())
+
+    putAllReports :: DynamicPath -> ServerPartE Response
+    putAllReports dpath = do
+      pkgid <- packageInPath dpath
+      guardValidPackageId pkgid
+      guardAuthorised_ [AnyKnownUser] -- allow any logged-in user
+      buildFiles <- expectAesonContent::ServerPartE BuildReport.BuildFiles
+      let reportBody = BuildReport.reportContent buildFiles
+          logBody = BuildReport.logContent buildFiles
+      -- Upload BuildReport
+      case BuildReport.parse $ toStrict $ fromString reportBody of
+          Left err -> errBadRequest "Error submitting report" [MText err]
+          Right report -> do
+              when (BuildReport.docBuilder report) $
+                  -- Check that the submitter can actually upload docs
+                  guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
+              report' <- liftIO $ BuildReport.affixTimestamp report
+              reportId <- updateState reportsState $ AddReport pkgid (report', Nothing)
+      
+              -- Upload BuildLog if exists
+              case logBody of
+                Nothing -> return ()
+                Just blogbody -> do
+                  buildLog <- liftIO $ BlobStorage.add store $ fromString blogbody
+                  void $ updateState reportsState $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
+              
+              -- redirect to new reports page
+              seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 
     ---------------------------------------------------------------------------
 
