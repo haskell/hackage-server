@@ -6,7 +6,7 @@ $hackageCssTheme()$
 </head>
 
 <body>
-$hackagePageHeader()$
+$hackagePageHeader(deauthAdmin="1")$
 
 <div id="content">
 <h1>Admin front-end</h1>

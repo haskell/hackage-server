@@ -885,6 +885,7 @@ mkHtmlUploads HtmlUtilities{..} UploadFeature{..} = HtmlUploads{..}
                 [ input ! [thetype "file", name "package"]
                 , input ! [thetype "submit", value "Upload package"]
                 ]
+          , paragraph << [toHtml "If you want to deauthenticate first, ", anchor ! [href "/packages/deauth"] << "click here", toHtml "."]
           ]
 
     serveUploadResult :: DynamicPath -> ServerPartE Response
