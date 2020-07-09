@@ -547,24 +547,17 @@ processPkg :: Verbosity -> BuildOpts -> BuildConfig
 processPkg verbosity opts config docInfo mark_as_failed = do
     prepareTempBuildDir
     (mTgz, mRpt, logfile)   <- buildPackage verbosity opts config docInfo
-    (testOutcome, hpcLoc)   <- testPackage verbosity opts docInfo
-
-    -- Get Coverage Report
-    coverage <- case hpcLoc of
-        Nothing -> return Nothing
-        Just loc -> do
-          q <- coveragePackage verbosity loc opts docInfo
-          return (Just q)
-
+    buildReport             <- mapM readFile mRpt
+    let installOk = fmap ("install-outcome: InstallOk" `isInfixOf`) buildReport == Just True
+    
+    -- Run Tests if installOk, Run coverage is Tests runs
+    (testOutcome, hpcLoc)   <- case installOk of
+      True  -> testPackage verbosity opts docInfo
+      False -> return (Nothing, Nothing)
+    coverage <- mapM (coveragePackage verbosity opts docInfo) hpcLoc
+    
     -- Modify test-outcome and rewrite report file. 
-    buildReport <- case mRpt of
-          Nothing   -> return Nothing
-          Just loc  -> do
-            rpt <- readFile loc
-            return (Just rpt)
-    let buildReport' = fmap (unlines.setTestOutcome testOutcome) $ fmap lines buildReport
-        installOk = fmap ("install-outcome: InstallOk" `isInfixOf`) buildReport' == Just True
-    rewriteRpt mRpt buildReport'
+    mapM (setTestStatus mRpt buildReport) testOutcome
     
     case mTgz of
       Nothing -> do
@@ -573,16 +566,12 @@ processPkg verbosity opts config docInfo mark_as_failed = do
             -- This marks it "really failed" in such a case to stop retries.
             when installOk . replicateM_ 4 $ mark_as_failed (docInfoPackage docInfo)
       Just _  -> return ()
-    traverse rewriteReport mRpt
     case mRpt of
       Just _  | bo_dryRun opts -> return ()
       Just report -> uploadResults verbosity config docInfo
                                     mTgz report logfile
       _           -> return ()
   where
-    -- TODO add real time
-    rewriteReport f = appendFile f "\ntime:"
-
     prepareTempBuildDir :: IO ()
     prepareTempBuildDir = do 
       handleDoesNotExist () $
@@ -598,12 +587,16 @@ processPkg verbosity opts config docInfo mark_as_failed = do
       | "tests-outcome: " `isPrefixOf` xs = ("tests-outcome: " ++ a) : xt
       | otherwise                         = xs : setTestOutcome a xt
 
-    rewriteRpt:: (Maybe FilePath) -> (Maybe String) -> IO ()
+    rewriteRpt:: Maybe FilePath -> Maybe String -> IO ()
     rewriteRpt (Just loc) (Just cnt) = do
       writeFile (loc <.> "temp") cnt
       renameFile (loc <.> "temp") loc
     rewriteRpt _ _ = do return ()
 
+    setTestStatus :: Maybe FilePath -> Maybe String -> String -> IO ()
+    setTestStatus mRpt buildReport testOutcome = do
+        let buildReport' = fmap (unlines.setTestOutcome testOutcome) $ fmap lines buildReport
+        rewriteRpt mRpt buildReport'
 
 -- | Builds a little memoised function that can tell us whether a
 -- particular package failed to build its documentation, a function to mark a
@@ -644,16 +637,14 @@ mkPackageFailed opts = do
       $ map (\(pkgid,n) -> show $ (Disp.text $ prettyShow pkgid) Disp.<+> Disp.int n)
       $ M.assocs pkgs
 
-coveragePackage :: Verbosity -> FilePath -> BuildOpts -> DocInfo -> IO (FilePath)
-coveragePackage verbosity loc opts docInfo = do
+coveragePackage :: Verbosity -> BuildOpts -> DocInfo -> FilePath -> IO (FilePath)
+coveragePackage verbosity opts docInfo loc = do
   let pkgid = docInfoPackage docInfo
       dir = takeDirectory loc
       mixLoc = dir </> ".." </> ".." </> "mix" </> display pkgid
       tixLoc = dir </> ".." </> ".." </> "tix" </> display pkgid </> display pkgid <.> "tix"
       all_args = ["report", tixLoc, "--hpcdir=" ++ mixLoc]
       coverageFile = (resultsDirectory opts) </> display pkgid <.> "coverage"
-  notice verbosity ("Running code-coverage " ++ display pkgid)
-
   buildCovg <- openFile coverageFile WriteMode
   
   ph <- runProcess "hpc" all_args Nothing
@@ -666,7 +657,7 @@ coveragePackage verbosity loc opts docInfo = do
   return coverageFile
 
 
-testPackage :: Verbosity -> BuildOpts -> DocInfo -> IO (String, Maybe FilePath)
+testPackage :: Verbosity -> BuildOpts -> DocInfo -> IO (Maybe String, Maybe FilePath)
 testPackage verbosity opts docInfo = do
   let pkgid = docInfoPackage docInfo
       testLogFile = (installDirectory opts) </> display pkgid <.> "test"
@@ -689,10 +680,10 @@ testPackage verbosity opts docInfo = do
       hpcLoc = fmap (\x -> (lines testLog)!!(x+1)) covgInd
 
   testOutcome <- case ("Test suite" `isInfixOf` testLog) && (": PASS" `isInfixOf` testLog) of
-        True  -> return "Ok"
+        True  -> return (Just "Ok")
         False -> case ("Test suite" `isInfixOf` testLog) && (": FAIL" `isInfixOf` testLog) of
-            True  -> return "Failed"
-            False -> return "NotTried"
+            True  -> return (Just "Failed")
+            False -> return Nothing
   renameFile testLogFile testResultFile
 
   notice verbosity $ unlines
@@ -801,7 +792,9 @@ buildPackage verbosity opts config docInfo = do
                 renameFile (installDirectory opts </> "reports"
                                 </> display pkgid <.> "report")
                            resultReportFile
-                appendFile resultReportFile "\ndoc-builder: True"
+                appendFile resultReportFile "doc-builder: True\n"
+                -- TODO add real time
+                appendFile resultReportFile "time:\n"
                 return (Just resultReportFile)
 
     docs_generated <- fmap and $ sequence [
