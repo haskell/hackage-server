@@ -4,12 +4,12 @@ module Main (main) where
 
 import Network.HTTP hiding (password)
 import Network.Browser
-import Network.URI (URI(..), parseRelativeReference, relativeTo)
-
+import Network.URI (URI(..))
 import Distribution.Client
 import Distribution.Client.Cron (cron, rethrowSignalsAsExceptions,
                                  Signal(..), ReceivedSignal(..))
 import qualified Distribution.Client.Index as Index
+import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
 
 import Distribution.Package
 import Distribution.Text
@@ -28,8 +28,8 @@ import Control.Applicative as App
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans
-import qualified Data.ByteString.Lazy as BS
-import qualified Data.Map as M
+import qualified Data.ByteString.Lazy       as BS
+import qualified Data.Map                   as M
 
 import qualified Codec.Compression.GZip  as GZip
 import qualified Codec.Archive.Tar       as Tar
@@ -51,7 +51,7 @@ import Control.Concurrent
 import Paths_hackage_server (version)
 
 
-import Data.Aeson (eitherDecode)
+import Data.Aeson (eitherDecode, encode)
 
 data Mode = Help [String]
           | Init URI [URI]
@@ -900,55 +900,33 @@ uploadResults verbosity config docInfo
         Just docsTarballFile ->
           putDocsTarball config docInfo docsTarballFile
 
-      buildId <- postBuildReport config docInfo buildReportFile
-      putBuildLog buildId buildLogFile
+      putBuildFiles config docInfo buildReportFile buildLogFile
 
 putDocsTarball :: BuildConfig -> DocInfo -> FilePath -> HttpSession ()
 putDocsTarball config docInfo docsTarballFile =
     requestPUTFile (docInfoDocsURI config docInfo)
       "application/x-tar" (Just "gzip") docsTarballFile
-
-type BuildReportId = URI
-
-postBuildReport :: BuildConfig -> DocInfo -> FilePath -> HttpSession BuildReportId
-postBuildReport config docInfo reportFile = do
-    let uri = docInfoReports config docInfo
-    body <- liftIO $ BS.readFile reportFile
+      
+putBuildFiles :: BuildConfig -> DocInfo -> FilePath -> FilePath -> HttpSession ()
+putBuildFiles config docInfo reportFile buildLogFile = do
+    reportContent <- liftIO $ readFile reportFile
+    logContent    <- liftIO $ readFile buildLogFile
+    let uri   = docInfoReports config docInfo
+        body  = encode $ BuildReport.BuildFiles reportContent (Just logContent)
     setAllowRedirects False
     (_, response) <- request Request {
       rqURI     = uri,
-      rqMethod  = POST,
-      rqHeaders = [Header HdrContentType   ("text/plain"),
-                   Header HdrContentLength (show (BS.length body)),
-                   Header HdrAccept        ("text/plain")],
+      rqMethod  = PUT,
+      rqHeaders = [Header HdrContentType   ("application/json"),
+                   Header HdrContentLength (show (BS.length body))],
       rqBody    = body
     }
     case rspCode response of
       --TODO: fix server to not do give 303, 201 is more appropriate
-      (3,0,3) | [Just buildId] <- [ do rel <- parseRelativeReference location
-                                       return $ relativeTo rel uri
-                                  | Header HdrLocation location <- rspHeaders response ]
-                -> return buildId
-      _         -> do checkStatus uri response
-                      fail "Unexpected response from server."
+      (3,0,3) -> return ()
+      _       -> do checkStatus uri response
+                    fail "Unexpected response from server."
 
-putBuildLog :: BuildReportId -> FilePath -> HttpSession ()
-putBuildLog reportId buildLogFile = do
-    body <- liftIO $ BS.readFile buildLogFile
-    let uri = reportId <//> "log"
-    setAllowRedirects False
-    (_, response) <- request Request {
-        rqURI     = uri,
-        rqMethod  = PUT,
-        rqHeaders = [Header HdrContentType   ("text/plain"),
-                     Header HdrContentLength (show (BS.length body)),
-                     Header HdrAccept        ("text/plain")],
-        rqBody    = body
-      }
-    case rspCode response of
-      --TODO: fix server to not to give 303, 201 is more appropriate
-      (3,0,3)   -> return ()
-      _         -> checkStatus uri response
 
 
 -------------------------
