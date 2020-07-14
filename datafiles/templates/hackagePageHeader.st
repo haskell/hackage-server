@@ -18,6 +18,13 @@
     <li><a href="/upload">Upload</a></li>
 
     <li><a href="/accounts">User accounts</a></li>
+    $if(deauthPack)$
+      <li><a title="If authenticated" href="/packages/deauth">Logout</a></li>
+    $elseif(deauthAdmin)$
+      <li><a title="If authenticated" href="/admin/deauth">Logout</a></li>
+    $elseif(deauthUser)$
+      <li><a title="If authenticated" href="./deauth">Logout</a></li>
+    $endif$
 
 </ul>
 
