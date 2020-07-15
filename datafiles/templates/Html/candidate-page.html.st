@@ -20,11 +20,10 @@
 
     $package.candidateBanner$
     <div style="font-size: small">
-      [<a href="/package/$package.name$/candidate/maintain">maintain</a>] 
+      [$maintainHtml$]
     </div>
-    <!-- <div class="candidate-warn"> -->
+    
     $warningBox$
-    <!-- </div> -->
 
     <div id="description">
     $if(package.optional.hasDescription)$

@@ -1150,7 +1150,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
 
       return $ toResponse . template $
         [ "versions"          $= (PagesNew.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing)
-        , "maintainHtml"      $= maintainHtml
+        , "maintainHtml"      $= [maintainHtml]
         , "warningBox"        $= warningBox
         ] ++
         PagesNew.packagePageTemplate render
