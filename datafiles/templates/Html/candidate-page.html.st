@@ -79,13 +79,6 @@
           <td>$package.maintainer$</td>
         </tr>
 
-        <!-- $if(hackage.hasUpdateTime)$
-        <tr>
-          <th>Revised</th>
-          <td>$hackage.updateTime$</td>
-        </tr>
-        $endif$ -->
-
         $if(package.optional.hasCategories)$
         <tr>
           <th>Category</th>
@@ -127,48 +120,30 @@
           <td>$hackage.uploadTime$</td>
         </tr>
     </table>
-    <!-- <div id="modules"> -->
     $moduleList$
-    <!-- </div> -->
 
     $if(hackage.hasFlags)$
-    <!-- <div id="flags"> -->
     $hackage.flagsSection$
-    <!-- </div> -->
     $endif$
 
-    <!-- <div id="downloads"> -->
     $downloadSection$
-    <!-- </div> -->
 
-    <!-- <div id="maintainer-corner"> -->
-      <h4>Maintainer's Corner</h4>
-      <p>For package maintainers and hackage trustees</p>
-      <ul>
-        <li>
-          <a href="candidate/maintain">
-            edit package information
-          </a>
-        </li>
-      </ul>
-    <!-- </div> -->
+    <h4>Maintainer's Corner</h4>
+    <p>For package maintainers and hackage trustees</p>
+    <ul>
+      <li>
+        <a href="candidate/maintain">
+          edit package information
+        </a>
+      </li>
+    </ul>
 
     $if(package.optional.hasReadme)$
     <hr/>
-    <!-- <div id="readme-container"> -->
     <h2 id="readme">Readme for $package.name$-$package.version$</h2>
     [<a href="#description">back to package description</a>]
     $package.optional.readme$
-    <!-- </div> -->
     $endif$
 
-  <!-- $packagePageAssets()$
-  <div style="clear:both"></div>
-  $footer()$ -->
-
-  <!-- $if(doc.hasQuickNavV1)$
-  <script src="$doc.baseUrl$/quick-jump.min.js" type="text/javascript"></script>
-  <script type="text/javascript"> quickNav.init("$doc.baseUrl$", function(toggle) {var t = document.getElementById('quickjump-trigger');if (t) {t.onclick = function(e) { e.preventDefault(); toggle(); };}}); </script>
-  $endif$ -->
 </body>
 </html>
