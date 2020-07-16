@@ -288,16 +288,11 @@ buildReportsFeature name
               when (BuildReport.docBuilder report) $
                   -- Check that the submitter can actually upload docs
                   guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
-              report' <- liftIO $ BuildReport.affixTimestamp report
-              reportId <- updateState reportsState $ AddReport pkgid (report', Nothing)
-      
-              -- Upload BuildLog if exists
-              case logBody of
-                Nothing -> return ()
-                Just blogbody -> do
-                  buildLog <- liftIO $ BlobStorage.add store $ fromString blogbody
-                  void $ updateState reportsState $ SetBuildLog pkgid reportId (Just $ BuildLog buildLog)
-              
+              report'   <- liftIO $ BuildReport.affixTimestamp report
+              logBlob   <- liftIO $ traverse (\x -> BlobStorage.add store $ fromString x) logBody
+              covgBlob  <- liftIO $ traverse (\x -> BlobStorage.add store $ fromString x) covgBody
+              reportId  <- updateState reportsState $ 
+                                  AddRptLogCovg pkgid (report', (fmap BuildLog logBlob), (fmap BuildCovg covgBlob))
               -- redirect to new reports page
               seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 

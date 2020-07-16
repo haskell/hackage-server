@@ -8,6 +8,7 @@ module Distribution.Server.Features.BuildReports.BuildReports (
     PkgBuildReports(..),
     BuildLog(..),
     BuildCovg(..),
+    addRptLogCovg,
     emptyReports,
     emptyPkgReports,
     addReport,
@@ -144,6 +145,14 @@ setBuildLog pkgid reportId buildLog buildReports = case Map.lookup pkgid (report
         Nothing -> Nothing
         Just (rlog, _, covg) -> let pkgReports' = pkgReports { reports = Map.insert reportId (rlog, buildLog, covg) (reports pkgReports) }
                          in Just $ buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
+
+addRptLogCovg :: PackageId -> (BuildReport, Maybe BuildLog, Maybe BuildCovg ) -> BuildReports -> (BuildReports, BuildReportId)
+addRptLogCovg pkgid report buildReports =
+    let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
+        reportId    = nextReportId pkgReports
+        pkgReports' = PkgBuildReports { reports = Map.insert reportId report (reports pkgReports)
+                                      , nextReportId = incrementReportId reportId }
+    in (buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }, reportId)
 
 -- addPkg::`
 -------------------

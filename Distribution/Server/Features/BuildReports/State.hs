@@ -4,7 +4,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Features.BuildReports.State where
 
-import Distribution.Server.Features.BuildReports.BuildReports (BuildReportId, BuildLog, BuildReport, BuildReports)
+import Distribution.Server.Features.BuildReports.BuildReports (BuildReportId, BuildLog, BuildReport, BuildReports,BuildCovg)
 import qualified Distribution.Server.Features.BuildReports.BuildReports as BuildReports
 
 import Distribution.Package
@@ -50,6 +50,13 @@ getBuildReports = ask
 replaceBuildReports :: BuildReports -> Update BuildReports ()
 replaceBuildReports = State.put
 
+addRptLogCovg :: PackageId -> (BuildReport, Maybe BuildLog, Maybe BuildCovg ) -> Update BuildReports BuildReportId
+addRptLogCovg pkgid report = do
+    buildReports <- State.get
+    let (reports, reportId) = BuildReports.addRptLogCovg pkgid report buildReports
+    State.put reports
+    return reportId
+
 makeAcidic ''BuildReports ['addReport
                           ,'setBuildLog
                           ,'deleteReport
@@ -57,5 +64,6 @@ makeAcidic ''BuildReports ['addReport
                           ,'lookupPackageReports
                           ,'getBuildReports
                           ,'replaceBuildReports
+                          ,'addRptLogCovg
                           ]
 
