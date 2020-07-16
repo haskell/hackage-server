@@ -500,7 +500,8 @@ instance Migrate InstallOutcome where
 
 data BuildFiles = BuildFiles {
   reportContent :: String, 
-  logContent :: Maybe String
+  logContent :: Maybe String,
+  coverageContent :: Maybe String
 } deriving Show
 
 instance Data.Aeson.FromJSON BuildFiles where
@@ -508,8 +509,10 @@ instance Data.Aeson.FromJSON BuildFiles where
     BuildFiles 
       <$> o .: fromString "report"
       <*> o .:? fromString "log"
+      <*> o .:? fromString "coverage"
 
 instance Data.Aeson.ToJSON BuildFiles where
   toJSON p = object [
-    "report" .= reportContent p,
-    "log"  .= logContent  p ]
+    "report"    .= reportContent p,
+    "log"       .= logContent  p,
+    "coverage"  .= coverageContent  p ]

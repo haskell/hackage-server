@@ -15,7 +15,7 @@ import Distribution.Server.Features.BuildReports.Backup
 import Distribution.Server.Features.BuildReports.State
 import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
 import Distribution.Server.Features.BuildReports.BuildReport (BuildReport(..))
-import Distribution.Server.Features.BuildReports.BuildReports (BuildReports, BuildReportId(..), BuildLog(..))
+import Distribution.Server.Features.BuildReports.BuildReports (BuildReports, BuildReportId(..), BuildCovg(..), BuildLog(..))
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
 
 import Distribution.Server.Packages.Types
@@ -280,6 +280,7 @@ buildReportsFeature name
       buildFiles <- expectAesonContent::ServerPartE BuildReport.BuildFiles
       let reportBody = BuildReport.reportContent buildFiles
           logBody = BuildReport.logContent buildFiles
+          covgBody = BuildReport.coverageContent buildFiles
       -- Upload BuildReport
       case BuildReport.parse $ toStrict $ fromString reportBody of
           Left err -> errBadRequest "Error submitting report" [MText err]
