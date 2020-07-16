@@ -57,6 +57,9 @@ addRptLogCovg pkgid report = do
     State.put reports
     return reportId
 
+lookupReportCovg :: PackageId -> BuildReportId -> Query BuildReports (Maybe (BuildReport, Maybe BuildLog, Maybe BuildCovg))
+lookupReportCovg pkgid reportId = asks (BuildReports.lookupReportCovg pkgid reportId)
+
 makeAcidic ''BuildReports ['addReport
                           ,'setBuildLog
                           ,'deleteReport
@@ -65,5 +68,6 @@ makeAcidic ''BuildReports ['addReport
                           ,'getBuildReports
                           ,'replaceBuildReports
                           ,'addRptLogCovg
+                          ,'lookupReportCovg
                           ]
 

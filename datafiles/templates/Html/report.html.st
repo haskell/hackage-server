@@ -74,6 +74,14 @@ $hackagePageHeader()$
   </tr>
 </table>
 
+<h3>Code Coverage</h3>
+
+$if(covg)$
+  <pre>$covg$</pre>
+$else$
+  <p>No Code Coverage was submitted for this report.</p>
+$endif$
+
 <h3>Build log</h3>
 
 $if(log)$

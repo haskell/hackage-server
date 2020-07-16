@@ -5,7 +5,7 @@ module Distribution.Server.Features.BuildReports (
     initBuildReportsFeature
   ) where
 
-import Distribution.Server.Framework hiding (BuildLog)
+import Distribution.Server.Framework hiding (BuildLog, BuildCovg)
 
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.Upload
@@ -38,10 +38,11 @@ data ReportsFeature = ReportsFeature {
     reportsFeatureInterface :: HackageFeature,
 
     packageReports :: DynamicPath -> ([(BuildReportId, BuildReport)] -> ServerPartE Response) -> ServerPartE Response,
-    packageReport  :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog),
+    packageReport  :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog, Maybe BuildCovg),
 
     queryPackageReports :: forall m. MonadIO m => PackageId -> m [(BuildReportId, BuildReport)],
     queryBuildLog       :: forall m. MonadIO m => BuildLog  -> m Resource.BuildLog,
+    queryBuildCovg       :: forall m. MonadIO m => BuildCovg  -> m Resource.BuildCovg,
 
     reportsResource :: ReportsResource
 }
@@ -163,15 +164,15 @@ buildReportsFeature name
           guardValidPackageId pkgid
           queryPackageReports pkgid >>= continue
 
-    packageReport :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog)
+    packageReport :: DynamicPath -> ServerPartE (BuildReportId, BuildReport, Maybe BuildLog, Maybe BuildCovg)
     packageReport dpath = do
       pkgid <- packageInPath dpath
       guardValidPackageId pkgid
       reportId <- reportIdInPath dpath
-      mreport  <- queryState reportsState $ LookupReport pkgid reportId
+      mreport  <- queryState reportsState $ LookupReportCovg pkgid reportId
       case mreport of
         Nothing -> errNotFound "Report not found" [MText "Build report does not exist"]
-        Just (report, mlog) -> return (reportId, report, mlog)
+        Just (report, mlog, covg) -> return (reportId, report, mlog, covg)
 
     queryPackageReports :: MonadIO m => PackageId -> m [(BuildReportId, BuildReport)]
     queryPackageReports pkgid = do
@@ -183,18 +184,23 @@ buildReportsFeature name
         file <- liftIO $ BlobStorage.fetch store blobId
         return $ Resource.BuildLog file
 
+    queryBuildCovg :: MonadIO m => BuildCovg -> m Resource.BuildCovg
+    queryBuildCovg (BuildCovg blobId) = do
+        file <- liftIO $ BlobStorage.fetch store blobId
+        return $ Resource.BuildCovg file
+
     ---------------------------------------------------------------------------
 
     textPackageReports dpath = packageReports dpath $ return . toResponse . show
 
     textPackageReport dpath = do
-      (_, report, _) <- packageReport dpath
+      (_, report, _, _) <- packageReport dpath
       return . toResponse $ BuildReport.show report
 
     -- result: not-found error or text file
     serveBuildLog :: DynamicPath -> ServerPartE Response
     serveBuildLog dpath = do
-      (repid, _, mlog) <- packageReport dpath
+      (repid, _, mlog, _) <- packageReport dpath
       case mlog of
         Nothing -> errNotFound "Log not found" [MText $ "Build log for report " ++ display repid ++ " not found"]
         Just logId -> do

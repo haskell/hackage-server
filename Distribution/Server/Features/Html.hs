@@ -980,8 +980,9 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
 
     servePackageReport :: DynamicPath -> ServerPartE Response
     servePackageReport dpath = do
-        (repid, report, mlog) <- packageReport dpath
+        (repid, report, mlog, covg) <- packageReport dpath
         mlog' <- traverse queryBuildLog mlog
+        covg'  <- traverse queryBuildCovg covg
         pkgid <- packageInPath dpath
         cacheControlWithoutETag [Public, maxAgeDays 30]
         template <- getTemplate templates "report.html"
@@ -989,6 +990,7 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
           [ "pkgid" $= (pkgid :: PackageIdentifier)
           , "report" $= (repid, report)
           , "log" $= toMessage <$> mlog'
+          , "covg" $= toMessage <$> covg'
           ]
 
 {-------------------------------------------------------------------------------
