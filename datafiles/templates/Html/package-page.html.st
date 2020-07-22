@@ -51,6 +51,11 @@
           <td>$versions$</td>
         </tr>
 
+        <tr>
+          <th>Candidates</th>
+          <td>$candidates$</td>
+        </tr>
+
         $if(package.optional.hasChangelog)$
         <tr>
           <th>Change&nbsp;log</th>

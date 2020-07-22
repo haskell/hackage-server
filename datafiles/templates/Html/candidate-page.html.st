@@ -21,6 +21,7 @@
     $package.candidateBanner$
     <div style="font-size: small">
       [$maintainHtml$]
+      [<a href="candidate/publish">Publish</a>]
     </div>
     
     $warningBox$

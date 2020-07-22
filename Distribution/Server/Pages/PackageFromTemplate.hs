@@ -4,6 +4,7 @@ module Distribution.Server.Pages.PackageFromTemplate
   , candidatesPageTemplate
   , renderVersion
   , latestVersion
+  , commaList
   ) where
 
 import Distribution.Server.Framework.Templating

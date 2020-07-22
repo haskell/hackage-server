@@ -43,6 +43,8 @@ import Distribution.Server.Packages.Render
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Users.Group (UserGroup(..))
+-- import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..))
+-- import Distribution.Types.PackageName (mkPackageName)
 -- [reverse index disabled] import Distribution.Server.Packages.Reverse
 
 import qualified Distribution.Server.Pages.Package as Pages
@@ -288,6 +290,7 @@ htmlFeature env@ServerEnv{..}
                                       cacheBrowseTable
                                       templates
                                       names
+                                      candidates
     htmlUsers      = mkHtmlUsers      user usersdetails
     htmlUploads    = mkHtmlUploads    utilities upload
     htmlDocUploads = mkHtmlDocUploads utilities core docsCore templates
@@ -490,6 +493,7 @@ mkHtmlCore :: ServerEnv
            -> AsyncCache BS.ByteString
            -> Templates
            -> SearchFeature
+           -> PackageCandidatesFeature
            -> HtmlCore
 mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            utilities@HtmlUtilities{..}
@@ -516,8 +520,11 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            cacheBrowseTable
            templates
            SearchFeature{..}
+           PackageCandidatesFeature{..}
   = HtmlCore{..}
   where
+    -- candidatesRes     = candidatesResource
+    candidatesCore = candidatesCoreResource
     cores@CoreResource{packageInPath, lookupPackageName, lookupPackageId} = coreResource
     versions = versionsResource
     docs     = documentationResource
@@ -598,6 +605,8 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         tags          <- queryTagsForPackage pkgname
         deprs         <- queryGetDeprecatedFor pkgname
         mreadme       <- makeReadme render
+        candidates    <- lookupCandidateName pkgname
+
 
         buildStatus   <- renderBuildStatus
           documentationFeature reportsFeature realpkg
@@ -640,6 +649,9 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           , "userRating"        $= userRating
           , "score"             $= pkgScore
           , "buildStatus"       $= buildStatus
+          , "candidates"        $= case candidates of
+                                    [] -> [ toHtml "No Candidates"]
+                                    _  -> [ PagesNew.commaList $ flip map candidates $ \cand -> anchor ! [href $ corePackageIdUri candidatesCore "" $ packageId cand] << display (packageVersion cand) ]
           ] ++
           -- Items not related to IO (mostly pure functions)
           PagesNew.packagePageTemplate render
@@ -746,10 +758,14 @@ data HtmlUsers = HtmlUsers {
     htmlUsersResources :: [Resource]
   }
 
+-- mkHtmlUsers :: UserFeature -> UserDetailsFeature -> PackageCandidatesFeature -> CoreFeature{coreResource} -> HtmlUsers
 mkHtmlUsers :: UserFeature -> UserDetailsFeature -> HtmlUsers
 mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
   where
     users = userResource
+    -- candidatesCore = candidatesCoreResource
+    -- CoreResource{packageInPath, lookupPackageName, lookupPackageId} = coreResource
+
 
     htmlUsersResources = [
         -- list of users with user links; if admin, a link to add user page
