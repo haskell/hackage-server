@@ -44,6 +44,7 @@ import Data.Typeable (Typeable)
 import Control.Applicative ((<$>))
 import qualified Data.List as L
 import qualified Data.Char as Char
+import qualified Text.PrettyPrint as Disp
 
 import Text.StringTemplate (ToSElem(..))
 
@@ -76,6 +77,17 @@ newtype BuildLog = BuildLog BlobStorage.BlobId
 newtype BuildCovg = BuildCovg BlobStorage.BlobId
   deriving (Eq, Typeable, Show, MemSize)
 
+data FailStatus = NoFail | Failed Int
+  deriving (Eq, Ord, Typeable, Show)
+
+instance MemSize FailStatus where
+    memSize (Failed a) = memSize1 a
+    memSize _        = memSize0
+
+instance Pretty FailStatus where
+  pretty (Failed a)  = Disp.text "Failed " Disp.<+> pretty a
+  pretty NoFail    = Disp.text "NoFail"
+
 data PkgBuildReports = PkgBuildReports {
     -- for each report, other useful information: Maybe UserId, UTCTime
     -- perhaps deserving its own data structure (SubmittedReport?)
@@ -83,7 +95,8 @@ data PkgBuildReports = PkgBuildReports {
     -- also, use IntMap instead of Map BuildReportId?
     reports      :: !(Map BuildReportId (BuildReport, Maybe BuildLog, Maybe BuildCovg )),
     -- one more than the maximum report id used
-    nextReportId :: !BuildReportId
+    nextReportId :: !BuildReportId,
+    failStatus :: !FailStatus
 } deriving (Eq, Typeable, Show)
 
 data BuildReports = BuildReports {
@@ -93,7 +106,8 @@ data BuildReports = BuildReports {
 emptyPkgReports :: PkgBuildReports
 emptyPkgReports = PkgBuildReports {
     reports = Map.empty,
-    nextReportId = BuildReportId 1
+    nextReportId = BuildReportId 1,
+    failStatus = Failed 0
 }
 
 emptyReports :: BuildReports
@@ -121,14 +135,16 @@ addReport pkgid (brpt,blog) buildReports =
     let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
         reportId    = nextReportId pkgReports
         pkgReports' = PkgBuildReports { reports = Map.insert reportId (brpt,blog,Nothing) (reports pkgReports)
-                                      , nextReportId = incrementReportId reportId }
+                                      , nextReportId = incrementReportId reportId 
+                                      , failStatus = failStatus pkgReports }
     in (buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }, reportId)
 
 unsafeSetReport :: PackageId -> BuildReportId -> (BuildReport, Maybe BuildLog) -> BuildReports -> BuildReports
 unsafeSetReport pkgid reportId (brpt,blog) buildReports =
     let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
         pkgReports' = PkgBuildReports { reports = Map.insert reportId (brpt,blog,Nothing) (reports pkgReports)
-                                      , nextReportId = max (incrementReportId reportId) (nextReportId pkgReports) }
+                                      , nextReportId = max (incrementReportId reportId) (nextReportId pkgReports) 
+                                      , failStatus = failStatus pkgReports }
     in buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
 
 deleteReport :: PackageId -> BuildReportId -> BuildReports -> Maybe BuildReports
@@ -152,7 +168,8 @@ addRptLogCovg pkgid report buildReports =
     let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
         reportId    = nextReportId pkgReports
         pkgReports' = PkgBuildReports { reports = Map.insert reportId report (reports pkgReports)
-                                      , nextReportId = incrementReportId reportId }
+                                      , nextReportId = incrementReportId reportId
+                                      , failStatus = failStatus pkgReports }
     in (buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }, reportId)
 
 lookupReportCovg :: PackageId -> BuildReportId -> BuildReports -> Maybe (BuildReport, Maybe BuildLog, Maybe BuildCovg )
@@ -174,6 +191,7 @@ deriveSafeCopy 2 'extension ''BuildReportId
 deriveSafeCopy 2 'extension ''BuildLog
 deriveSafeCopy 3 'extension ''BuildReports
 deriveSafeCopy 1 'base ''BuildCovg
+deriveSafeCopy 1 'base ''FailStatus
 
 -- note: if the set of report ids is [1, 2, 3], then nextReportId = 4
 -- after calling deleteReport for 3, the set is [1, 2] and nextReportId is still 4.
@@ -182,19 +200,19 @@ deriveSafeCopy 1 'base ''BuildCovg
 instance SafeCopy PkgBuildReports where
     version = 3
     kind    = extension
-    putCopy (PkgBuildReports x _) = contain $ safePut x
+    putCopy (PkgBuildReports x _ y) = contain $ safePut (x,y)
     getCopy = contain $ mkReports <$> safeGet
       where
-        mkReports rs = PkgBuildReports rs
+        mkReports (rs,f) = PkgBuildReports rs
                          (if Map.null rs
                             then BuildReportId 1
                             else incrementReportId (fst $ Map.findMax rs))
-
+                          f
 instance MemSize BuildReports where
     memSize (BuildReports a) = memSize1 a
 
 instance MemSize PkgBuildReports where
-    memSize (PkgBuildReports a b) = memSize2 a b
+    memSize (PkgBuildReports a b c) = memSize3 a b c
 
 -------------------
 -- Old V2 SafeCopy versions 
@@ -223,7 +241,7 @@ instance MemSize PkgBuildReports_v2 where
 instance Migrate PkgBuildReports where
      type MigrateFrom PkgBuildReports = PkgBuildReports_v2
      migrate (PkgBuildReports_v2 m n) =
-         PkgBuildReports (migrateMap m) n
+         PkgBuildReports (migrateMap m) n NoFail
        where
          migrateMap :: Map BuildReportId (BuildReport, Maybe BuildLog)
                     -> Map BuildReportId (BuildReport, Maybe BuildLog, Maybe BuildCovg)
