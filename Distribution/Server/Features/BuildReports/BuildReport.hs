@@ -499,20 +499,23 @@ instance Migrate InstallOutcome where
         V0_InstallOk -> InstallOk
 
 data BuildFiles = BuildFiles {
-  reportContent :: String, 
+  reportContent :: Maybe String, 
   logContent :: Maybe String,
-  coverageContent :: Maybe String
+  coverageContent :: Maybe String,
+  buildFail :: Bool
 } deriving Show
 
 instance Data.Aeson.FromJSON BuildFiles where
   parseJSON = withObject "buildFiles" $ \o ->
     BuildFiles 
-      <$> o .: fromString "report"
+      <$> o .:? fromString "report"
       <*> o .:? fromString "log"
       <*> o .:? fromString "coverage"
+      <*> o .: fromString "buildFail"
 
 instance Data.Aeson.ToJSON BuildFiles where
   toJSON p = object [
     "report"    .= reportContent p,
     "log"       .= logContent  p,
-    "coverage"  .= coverageContent  p ]
+    "coverage"  .= coverageContent  p,
+    "buildFail" .= buildFail  p ]

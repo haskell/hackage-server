@@ -566,11 +566,10 @@ processPkg verbosity opts config docInfo mark_as_failed = do
             -- This marks it "really failed" in such a case to stop retries.
             when installOk . replicateM_ 4 $ mark_as_failed (docInfoPackage docInfo)
       Just _  -> return ()
-    case mRpt of
-      Just _  | bo_dryRun opts -> return ()
-      Just report -> uploadResults verbosity config docInfo
-                                    mTgz report logfile coverageFile
-      _           -> return ()
+    case bo_dryRun opts of
+      True -> return ()
+      False -> uploadResults verbosity config docInfo
+                                    mTgz mRpt logfile coverageFile installOk
   where
     prepareTempBuildDir :: IO ()
     prepareTempBuildDir = do 
@@ -881,9 +880,9 @@ tarGzDirectory dir = do
   where (containing_dir, nested_dir) = splitFileName dir
 
 uploadResults :: Verbosity -> BuildConfig -> DocInfo -> Maybe FilePath 
-                    -> FilePath -> FilePath -> Maybe FilePath -> IO ()
+                    -> Maybe FilePath -> FilePath -> Maybe FilePath -> Bool -> IO ()
 uploadResults verbosity config docInfo
-              mdocsTarballFile buildReportFile buildLogFile coverageFile =
+              mdocsTarballFile buildReportFile buildLogFile coverageFile installOk =
     httpSession verbosity "hackage-build" version $ do
       -- Make sure we authenticate to Hackage
       setAuthorityGen (provideAuthInfo (bc_srcURI config)
@@ -893,21 +892,21 @@ uploadResults verbosity config docInfo
         Just docsTarballFile ->
           putDocsTarball config docInfo docsTarballFile
 
-      putBuildFiles config docInfo buildReportFile buildLogFile coverageFile
+      putBuildFiles config docInfo buildReportFile buildLogFile coverageFile installOk
 
 putDocsTarball :: BuildConfig -> DocInfo -> FilePath -> HttpSession ()
 putDocsTarball config docInfo docsTarballFile =
     requestPUTFile (docInfoDocsURI config docInfo)
       "application/x-tar" (Just "gzip") docsTarballFile
       
-putBuildFiles :: BuildConfig -> DocInfo -> FilePath 
-                    -> FilePath -> Maybe FilePath -> HttpSession ()
-putBuildFiles config docInfo reportFile buildLogFile coverageFile = do
-    reportContent   <- liftIO $ readFile reportFile
+putBuildFiles :: BuildConfig -> DocInfo -> Maybe FilePath 
+                    -> FilePath -> Maybe FilePath -> Bool -> HttpSession ()
+putBuildFiles config docInfo reportFile buildLogFile coverageFile installOk = do
+    reportContent   <- liftIO $ traverse readFile reportFile
     logContent      <- liftIO $ readFile buildLogFile
     coverageContent <- liftIO $ traverse readFile coverageFile
     let uri   = docInfoReports config docInfo
-        body  = encode $ BuildReport.BuildFiles reportContent (Just logContent) coverageContent
+        body  = encode $ BuildReport.BuildFiles reportContent (Just logContent) coverageContent (not installOk)
     setAllowRedirects False
     (_, response) <- request Request {
       rqURI     = uri,

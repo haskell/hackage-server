@@ -60,6 +60,12 @@ addRptLogCovg pkgid report = do
 lookupReportCovg :: PackageId -> BuildReportId -> Query BuildReports (Maybe (BuildReport, Maybe BuildLog, Maybe BuildCovg))
 lookupReportCovg pkgid reportId = asks (BuildReports.lookupReportCovg pkgid reportId)
 
+setFailStatus :: PackageId -> Bool -> Update BuildReports ()
+setFailStatus pkgid status = do
+    buildReports <- State.get
+    let reports = BuildReports.setFailStatus pkgid status buildReports
+    State.put reports
+
 makeAcidic ''BuildReports ['addReport
                           ,'setBuildLog
                           ,'deleteReport
@@ -69,5 +75,6 @@ makeAcidic ''BuildReports ['addReport
                           ,'replaceBuildReports
                           ,'addRptLogCovg
                           ,'lookupReportCovg
+                          ,'setFailStatus
                           ]
 

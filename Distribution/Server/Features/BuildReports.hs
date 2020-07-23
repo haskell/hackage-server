@@ -29,6 +29,7 @@ import Distribution.Version (nullVersion)
 import Control.Arrow (second)
 import Data.ByteString.Lazy (toStrict)
 import Data.String (fromString)
+import Data.Maybe
 
 
 -- TODO:
@@ -188,7 +189,7 @@ buildReportsFeature name
     queryBuildCovg (BuildCovg blobId) = do
         file <- liftIO $ BlobStorage.fetch store blobId
         return $ Resource.BuildCovg file
-
+    
     ---------------------------------------------------------------------------
 
     textPackageReports dpath = packageReports dpath $ return . toResponse . show
@@ -284,11 +285,15 @@ buildReportsFeature name
       guardValidPackageId pkgid
       guardAuthorised_ [AnyKnownUser] -- allow any logged-in user
       buildFiles <- expectAesonContent::ServerPartE BuildReport.BuildFiles
-      let reportBody = BuildReport.reportContent buildFiles
-          logBody = BuildReport.logContent buildFiles
-          covgBody = BuildReport.coverageContent buildFiles
+      let reportBody  = BuildReport.reportContent buildFiles
+          logBody     = BuildReport.logContent buildFiles
+          covgBody    = BuildReport.coverageContent buildFiles
+          failStatus  = BuildReport.buildFail buildFiles
+      
+      updateState reportsState $ SetFailStatus pkgid failStatus
+        
       -- Upload BuildReport
-      case BuildReport.parse $ toStrict $ fromString reportBody of
+      case BuildReport.parse $ toStrict $ fromString $ fromMaybe "" reportBody of
           Left err -> errBadRequest "Error submitting report" [MText err]
           Right report -> do
               when (BuildReport.docBuilder report) $

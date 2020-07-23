@@ -17,7 +17,8 @@ module Distribution.Server.Features.BuildReports.BuildReports (
     setBuildLog,
     lookupReport,
     lookupPackageReports,
-    unsafeSetReport
+    unsafeSetReport,
+    setFailStatus
   ) where
 
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
@@ -174,6 +175,19 @@ addRptLogCovg pkgid report buildReports =
 
 lookupReportCovg :: PackageId -> BuildReportId -> BuildReports -> Maybe (BuildReport, Maybe BuildLog, Maybe BuildCovg )
 lookupReportCovg pkgid reportId buildReports = Map.lookup reportId . reports =<< Map.lookup pkgid (reportsIndex buildReports)
+
+setFailStatus :: PackageId -> Bool -> BuildReports -> BuildReports
+setFailStatus pkgid fStatus buildReports = 
+    let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
+        pkgReports' = PkgBuildReports { reports = (reports pkgReports)
+                                      , nextReportId = (nextReportId pkgReports)
+                                      , failStatus = (getfst fStatus (failStatus pkgReports)) }
+    in buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
+    where
+      getfst nfst cfst = do
+        case cfst of
+          (Failed n) | nfst -> Failed (n+1)
+          _ -> NoFail
 
 -- addPkg::`
 -------------------
