@@ -8,6 +8,7 @@ module Distribution.Server.Features.BuildReports.BuildReports (
     PkgBuildReports(..),
     BuildLog(..),
     BuildCovg(..),
+    BuildStatus(..),
     addRptLogCovg,
     lookupReportCovg,
     emptyReports,
@@ -23,12 +24,13 @@ module Distribution.Server.Features.BuildReports.BuildReports (
 
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Features.BuildReports.BuildReport
-         (BuildReport(..), BuildReport_v0)
+         (BuildReport(..), BuildReport_v0,BuildStatus(..))
 
 import Distribution.Package (PackageId)
 import Distribution.Text (display)
 import Distribution.Pretty (Pretty(..))
 import Distribution.Parsec (Parsec(..))
+import Distribution.Compiler ( CompilerId(..) )
 import qualified Distribution.Parsec as P
 import qualified Distribution.Compat.Parsing as P
 import qualified Distribution.Compat.CharParsing as P
@@ -42,10 +44,11 @@ import qualified Data.Serialize as Serialize
 import Data.Serialize (Serialize)
 import Data.SafeCopy
 import Data.Typeable (Typeable)
+import Data.Time ( UTCTime )
 import Control.Applicative ((<$>))
 import qualified Data.List as L
 import qualified Data.Char as Char
-import qualified Text.PrettyPrint as Disp
+import Distribution.Version ( Version )
 
 import Text.StringTemplate (ToSElem(..))
 
@@ -78,17 +81,6 @@ newtype BuildLog = BuildLog BlobStorage.BlobId
 newtype BuildCovg = BuildCovg BlobStorage.BlobId
   deriving (Eq, Typeable, Show, MemSize)
 
-data FailStatus = NoFail | Failed Int
-  deriving (Eq, Ord, Typeable, Show)
-
-instance MemSize FailStatus where
-    memSize (Failed a) = memSize1 a
-    memSize _        = memSize0
-
-instance Pretty FailStatus where
-  pretty (Failed a)  = Disp.text "Failed " Disp.<+> pretty a
-  pretty NoFail    = Disp.text "NoFail"
-
 data PkgBuildReports = PkgBuildReports {
     -- for each report, other useful information: Maybe UserId, UTCTime
     -- perhaps deserving its own data structure (SubmittedReport?)
@@ -97,7 +89,7 @@ data PkgBuildReports = PkgBuildReports {
     reports      :: !(Map BuildReportId (BuildReport, Maybe BuildLog, Maybe BuildCovg )),
     -- one more than the maximum report id used
     nextReportId :: !BuildReportId,
-    failStatus :: !FailStatus
+    buildStatus :: !BuildStatus
 } deriving (Eq, Typeable, Show)
 
 data BuildReports = BuildReports {
@@ -108,7 +100,7 @@ emptyPkgReports :: PkgBuildReports
 emptyPkgReports = PkgBuildReports {
     reports = Map.empty,
     nextReportId = BuildReportId 1,
-    failStatus = Failed 0
+    buildStatus = BuildFailCnt 0
 }
 
 emptyReports :: BuildReports
@@ -137,7 +129,7 @@ addReport pkgid (brpt,blog) buildReports =
         reportId    = nextReportId pkgReports
         pkgReports' = PkgBuildReports { reports = Map.insert reportId (brpt,blog,Nothing) (reports pkgReports)
                                       , nextReportId = incrementReportId reportId 
-                                      , failStatus = failStatus pkgReports }
+                                      , buildStatus = buildStatus pkgReports }
     in (buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }, reportId)
 
 unsafeSetReport :: PackageId -> BuildReportId -> (BuildReport, Maybe BuildLog) -> BuildReports -> BuildReports
@@ -145,7 +137,7 @@ unsafeSetReport pkgid reportId (brpt,blog) buildReports =
     let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
         pkgReports' = PkgBuildReports { reports = Map.insert reportId (brpt,blog,Nothing) (reports pkgReports)
                                       , nextReportId = max (incrementReportId reportId) (nextReportId pkgReports) 
-                                      , failStatus = failStatus pkgReports }
+                                      , buildStatus = buildStatus pkgReports }
     in buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
 
 deleteReport :: PackageId -> BuildReportId -> BuildReports -> Maybe BuildReports
@@ -170,7 +162,7 @@ addRptLogCovg pkgid report buildReports =
         reportId    = nextReportId pkgReports
         pkgReports' = PkgBuildReports { reports = Map.insert reportId report (reports pkgReports)
                                       , nextReportId = incrementReportId reportId
-                                      , failStatus = failStatus pkgReports }
+                                      , buildStatus = buildStatus pkgReports }
     in (buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }, reportId)
 
 lookupReportCovg :: PackageId -> BuildReportId -> BuildReports -> Maybe (BuildReport, Maybe BuildLog, Maybe BuildCovg )
@@ -181,13 +173,14 @@ setFailStatus pkgid fStatus buildReports =
     let pkgReports  = Map.findWithDefault emptyPkgReports pkgid (reportsIndex buildReports)
         pkgReports' = PkgBuildReports { reports = (reports pkgReports)
                                       , nextReportId = (nextReportId pkgReports)
-                                      , failStatus = (getfst fStatus (failStatus pkgReports)) }
+                                      , buildStatus = (getfst fStatus (buildStatus pkgReports)) }
     in buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
     where
       getfst nfst cfst = do
         case cfst of
-          (Failed n) | nfst -> Failed (n+1)
-          _ -> NoFail
+          (BuildFailCnt n) | nfst -> BuildFailCnt (n+1)
+          _ -> BuildOK
+
 
 -- addPkg::`
 -------------------
@@ -205,7 +198,6 @@ deriveSafeCopy 2 'extension ''BuildReportId
 deriveSafeCopy 2 'extension ''BuildLog
 deriveSafeCopy 3 'extension ''BuildReports
 deriveSafeCopy 1 'base ''BuildCovg
-deriveSafeCopy 1 'base ''FailStatus
 
 -- note: if the set of report ids is [1, 2, 3], then nextReportId = 4
 -- after calling deleteReport for 3, the set is [1, 2] and nextReportId is still 4.
@@ -255,7 +247,7 @@ instance MemSize PkgBuildReports_v2 where
 instance Migrate PkgBuildReports where
      type MigrateFrom PkgBuildReports = PkgBuildReports_v2
      migrate (PkgBuildReports_v2 m n) =
-         PkgBuildReports (migrateMap m) n NoFail
+         PkgBuildReports (migrateMap m) n BuildOK
        where
          migrateMap :: Map BuildReportId (BuildReport, Maybe BuildLog)
                     -> Map BuildReportId (BuildReport, Maybe BuildLog, Maybe BuildCovg)

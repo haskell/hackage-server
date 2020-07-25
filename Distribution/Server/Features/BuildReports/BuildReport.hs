@@ -29,7 +29,9 @@ module Distribution.Server.Features.BuildReports.BuildReport (
     affixTimestamp,
 
     BuildReport_v0,
-    BuildFiles(..)
+    BuildFiles(..),
+    PkgDetails(..),
+    BuildStatus(..)
   ) where
 
 import Distribution.Compat.Newtype
@@ -92,6 +94,10 @@ import Control.Applicative
 import Control.Monad
 
 import Prelude hiding (show, read)
+import Distribution.Version ( Version )
+import Data.Maybe
+import Data.Scientific
+import qualified Distribution.Text as DT
 import qualified Prelude
 
 
@@ -394,6 +400,21 @@ instance Arbitrary InstallOutcome where
 instance Arbitrary Outcome where
   arbitrary = elements [ NotTried, Failed, Ok ]
 
+data BuildStatus = BuildOK | BuildFailCnt Int
+  deriving (Eq, Ord, Typeable, Show)
+instance ToJSON BuildStatus where
+  toJSON (BuildFailCnt a) = toJSON a
+  toJSON BuildOK          = toJSON ((-1)::Int)
+instance FromJSON BuildStatus where
+  parseJSON (Number (-1)) = return BuildOK
+  parseJSON (Number a)    = return (BuildFailCnt (fromJust (toBoundedInteger a)))
+  parseJSON _             = error "Unable to parse BuildStatus"
+instance MemSize BuildStatus where
+    memSize (BuildFailCnt a) = memSize1 a
+    memSize _        = memSize0
+instance Pretty BuildStatus where
+  pretty (BuildFailCnt a)  = Disp.text "BuildFailCnt " Disp.<+> pretty a
+  pretty BuildOK    = Disp.text "BuildOK"
 
 -------------------
 -- SafeCopy instances
@@ -402,6 +423,7 @@ instance Arbitrary Outcome where
 deriveSafeCopy 0 'base      ''Outcome
 deriveSafeCopy 1 'extension ''InstallOutcome
 deriveSafeCopy 3 'extension ''BuildReport
+deriveSafeCopy 1 'base      ''BuildStatus
 
 
 -------------------
@@ -519,3 +541,38 @@ instance Data.Aeson.ToJSON BuildFiles where
     "log"       .= logContent  p,
     "coverage"  .= coverageContent  p,
     "buildFail" .= buildFail  p ]
+
+data PkgDetails = PkgDetails {
+    pkid        :: PackageIdentifier,
+    docs        :: Bool,
+    failCnt     :: Maybe BuildStatus,
+    buildTime   :: Maybe UTCTime,
+    compid      :: Maybe Version
+} deriving(Show)
+
+instance Data.Aeson.ToJSON PkgDetails where
+  toJSON p = object [
+    "pkgid"      .= (DT.display $ pkid p::String),
+    "docs"       .= docs p,
+    "failCnt"    .= failCnt  p,
+    "buildTime"  .= buildTime  p,
+    "compid"     .= (k $ compid p) ]
+    where
+      k (Just a) = Just $ DT.display a
+      k Nothing = Nothing
+
+instance Data.Aeson.FromJSON PkgDetails where
+  parseJSON = withObject "pkgDetails" $ \o ->
+    PkgDetails 
+      <$> fmap parsePkg (o .: (fromString "pkgid"))
+      <*> o .: fromString "docs"
+      <*> o .:? fromString "failCnt"
+      <*> o .:? fromString "buildTime"
+      <*> fmap parseVersion (o .:? (fromString "compid"))
+    where
+      parseVersion :: Maybe String -> Maybe Version
+      parseVersion Nothing = Nothing
+      parseVersion (Just k) = P.simpleParsec k
+
+      parsePkg :: String -> PackageIdentifier
+      parsePkg k = fromJust (P.simpleParsec k)
