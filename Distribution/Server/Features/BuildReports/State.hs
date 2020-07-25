@@ -4,14 +4,17 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Distribution.Server.Features.BuildReports.State where
 
-import Distribution.Server.Features.BuildReports.BuildReports (BuildReportId, BuildLog, BuildReport, BuildReports,BuildCovg)
+import Distribution.Server.Features.BuildReports.BuildReports 
+                (BuildReportId, BuildLog, BuildReport, BuildReports,BuildCovg, BuildStatus)
 import qualified Distribution.Server.Features.BuildReports.BuildReports as BuildReports
 
 import Distribution.Package
+import Distribution.Version (Version)
 
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import Data.Acid     (Query, Update, makeAcidic)
+import Data.Time     ( UTCTime )
 
 initialBuildReports :: BuildReports
 initialBuildReports = BuildReports.emptyReports
@@ -55,7 +58,7 @@ addRptLogCovg pkgid report = do
     buildReports <- State.get
     let (reports, reportId) = BuildReports.addRptLogCovg pkgid report buildReports
     State.put reports
-    return reportId
+    return reportId 
 
 lookupReportCovg :: PackageId -> BuildReportId -> Query BuildReports (Maybe (BuildReport, Maybe BuildLog, Maybe BuildCovg))
 lookupReportCovg pkgid reportId = asks (BuildReports.lookupReportCovg pkgid reportId)
@@ -65,6 +68,9 @@ setFailStatus pkgid status = do
     buildReports <- State.get
     let reports = BuildReports.setFailStatus pkgid status buildReports
     State.put reports
+
+buildDetails :: PackageId -> Query BuildReports (Maybe (BuildStatus, Maybe UTCTime, Maybe Version))
+buildDetails pkgid = asks (BuildReports.buildDetails pkgid)
 
 makeAcidic ''BuildReports ['addReport
                           ,'setBuildLog
@@ -76,5 +82,6 @@ makeAcidic ''BuildReports ['addReport
                           ,'addRptLogCovg
                           ,'lookupReportCovg
                           ,'setFailStatus
+                          ,'buildDetails
                           ]
 

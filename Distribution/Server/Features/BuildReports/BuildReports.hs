@@ -19,7 +19,8 @@ module Distribution.Server.Features.BuildReports.BuildReports (
     lookupReport,
     lookupPackageReports,
     unsafeSetReport,
-    setFailStatus
+    setFailStatus,
+    buildDetails
   ) where
 
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
@@ -181,6 +182,19 @@ setFailStatus pkgid fStatus buildReports =
           (BuildFailCnt n) | nfst -> BuildFailCnt (n+1)
           _ -> BuildOK
 
+buildDetails :: PackageId -> BuildReports -> Maybe (BuildStatus, Maybe UTCTime, Maybe Distribution.Version.Version)
+buildDetails pkgid buildReports = do
+  rp <- Map.lookup pkgid (reportsIndex buildReports)
+  let rs = reports rp 
+      a  = if Map.null rs
+        then BuildReportId (-1)
+        else fst $ Map.findMax rs
+  (tm, comp) <- case Map.lookup a rs of
+        Nothing         -> return (Nothing, Nothing)
+        Just (brp,_,_)  -> do
+          let (CompilerId _ vrsn) = compiler brp
+          return (time brp, Just vrsn)
+  return (buildStatus rp, tm, comp)
 
 -- addPkg::`
 -------------------

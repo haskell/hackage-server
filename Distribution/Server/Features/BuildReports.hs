@@ -43,7 +43,8 @@ data ReportsFeature = ReportsFeature {
 
     queryPackageReports :: forall m. MonadIO m => PackageId -> m [(BuildReportId, BuildReport)],
     queryBuildLog       :: forall m. MonadIO m => BuildLog  -> m Resource.BuildLog,
-    queryBuildCovg       :: forall m. MonadIO m => BuildCovg  -> m Resource.BuildCovg,
+    queryBuildCovg      :: forall m. MonadIO m => BuildCovg  -> m Resource.BuildCovg,
+    pkgReportDetails    :: forall m. MonadIO m => (PackageIdentifier, Bool) -> m BuildReport.PkgDetails,
 
     reportsResource :: ReportsResource
 }
@@ -190,6 +191,14 @@ buildReportsFeature name
         file <- liftIO $ BlobStorage.fetch store blobId
         return $ Resource.BuildCovg file
     
+    pkgReportDetails :: MonadIO m => (PackageIdentifier, Bool) -> m BuildReport.PkgDetails--(PackageIdentifier, Bool, Maybe (BuildStatus, Maybe UTCTime, Maybe Version))
+    pkgReportDetails (pkgid, docs) = do
+      det <- queryState reportsState $ BuildDetails pkgid
+      (failCnt, time, ghcId) <- case det of
+        Nothing -> return (Nothing,Nothing,Nothing)
+        Just (k,l,g) -> return (Just k,l,g)
+      return  (BuildReport.PkgDetails pkgid docs failCnt time ghcId)
+
     ---------------------------------------------------------------------------
 
     textPackageReports dpath = packageReports dpath $ return . toResponse . show
