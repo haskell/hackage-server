@@ -12,6 +12,7 @@ import Distribution.Server.Features.Documentation.State
 import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.TarIndexCache
+import Distribution.Server.Features.BuildReports
 
 import Distribution.Server.Framework.BackupRestore
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
@@ -74,6 +75,7 @@ initDocumentationFeature :: String
                              -> IO [PackageIdentifier]
                              -> UploadFeature
                              -> TarIndexCacheFeature
+                             -> ReportsFeature
                              -> IO DocumentationFeature)
 initDocumentationFeature name
                          env@ServerEnv{serverStateDir} = do
@@ -83,9 +85,9 @@ initDocumentationFeature name
     -- Hooks
     documentationChangeHook <- newHook
 
-    return $ \core getPackages upload tarIndexCache -> do
+    return $ \core getPackages upload tarIndexCache reportsCore -> do
       let feature = documentationFeature name env
-                                         core getPackages upload tarIndexCache
+                                         core getPackages upload tarIndexCache reportsCore
                                          documentationState
                                          documentationChangeHook
       return feature
@@ -129,6 +131,7 @@ documentationFeature :: String
                      -> IO [PackageIdentifier]
                      -> UploadFeature
                      -> TarIndexCacheFeature
+                     -> ReportsFeature
                      -> StateComponent AcidState Documentation
                      -> Hook PackageId ()
                      -> DocumentationFeature
@@ -144,6 +147,7 @@ documentationFeature name
                      getPackages
                      UploadFeature{..}
                      TarIndexCacheFeature{cachedTarIndex}
+                     ReportsFeature{..}
                      documentationState
                      documentationChangeHook
   = DocumentationFeature{..}
@@ -192,15 +196,12 @@ documentationFeature name
       , packageDocsWholeUri = \format pkgid ->
           renderResource (packageDocsWhole r) [display pkgid, format]
       }
-
+      
     serveDocumentationStats :: DynamicPath -> ServerPartE Response
     serveDocumentationStats _dpath = do
         pkgs <- mapParaM queryHasDocumentation =<< liftIO getPackages
-        return . toResponse . toJSON . map aux $ pkgs
-      where
-        aux :: (PackageIdentifier, Bool) -> (String, Bool)
-        aux (pkgId, hasDocs) = (display pkgId, hasDocs)
-
+        pkgs' <- mapM pkgReportDetails pkgs
+        return . toResponse . toJSON $ pkgs'
     serveDocumentationTar :: DynamicPath -> ServerPartE Response
     serveDocumentationTar dpath =
       withDocumentation (packageDocsWhole documentationResource)
