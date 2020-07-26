@@ -20,6 +20,7 @@ import Distribution.Server.Framework.BlobStorage (BlobId)
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import qualified Distribution.Server.Util.ServeTarball as ServerTarball
 import qualified Distribution.Server.Util.DocMeta as DocMeta
+import Distribution.Server.Features.BuildReports.BuildReport (PkgDetails(..), BuildStatus(..))
 import Data.TarIndex (TarIndex)
 import qualified Codec.Archive.Tar       as Tar
 import qualified Codec.Archive.Tar.Check as Tar
@@ -33,10 +34,10 @@ import qualified Data.Map as Map
 import Data.Function (fix)
 
 import Data.Aeson (toJSON)
-
+import Data.Maybe
 import Data.Time.Clock (NominalDiffTime, diffUTCTime, getCurrentTime)
 import System.Directory (getModificationTime)
-
+import Control.Applicative
 -- TODO:
 -- 1. Write an HTML view for organizing uploads
 -- 2. Have cabal generate a standard doc tarball, and serve that here
@@ -199,9 +200,28 @@ documentationFeature name
       
     serveDocumentationStats :: DynamicPath -> ServerPartE Response
     serveDocumentationStats _dpath = do
+        hasDoc <- optional (look "doc")
+        failCnt <- optional (look "fail")
         pkgs <- mapParaM queryHasDocumentation =<< liftIO getPackages
-        pkgs' <- mapM pkgReportDetails pkgs
-        return . toResponse . toJSON $ pkgs'
+        let filtPgs = filtDoc (fromMaybe "all" hasDoc) pkgs
+        pkgs' <- mapM pkgReportDetails filtPgs
+        let filtFail = filter (filt (read (fromMaybe "-1" failCnt) ::Int)) pkgs'
+        return . toResponse . toJSON $ filtFail
+      where
+        filt:: Int -> PkgDetails -> Bool
+        filt (-1) _ = True
+        filt _ (PkgDetails _ _ (Just BuildOK) _ _) = False
+        filt i (PkgDetails _ _ (Just (BuildFailCnt x)) _ _) = i>x
+        filt _ _ = True
+
+        filtDoc :: String -> [(PackageIdentifier, Bool)] -> [(PackageIdentifier, Bool)]
+        filtDoc k pkgs | ((k /= "true") && (k/="false")) = pkgs
+        filtDoc k ((_, f):xs)
+                | (k == "true") && not f= filtDoc k xs
+                | (k == "false") && f= filtDoc k xs
+        filtDoc k (xs:ys) = xs : (filtDoc k ys)
+        filtDoc _  []= []
+
     serveDocumentationTar :: DynamicPath -> ServerPartE Response
     serveDocumentationTar dpath =
       withDocumentation (packageDocsWhole documentationResource)
