@@ -70,6 +70,7 @@ data PackageCandidatesFeature = PackageCandidatesFeature {
     postPackageCandidate  :: DynamicPath -> ServerPartE Response,
     putPackageCandidate   :: DynamicPath -> ServerPartE Response,
     doDeleteCandidate     :: DynamicPath -> ServerPartE Response,
+    doDeleteCandidates    :: DynamicPath -> ServerPartE Response,
     uploadCandidate       :: (PackageId -> Bool) -> ServerPartE CandPkgInfo,
     publishCandidate      :: DynamicPath -> Bool -> ServerPartE UploadResult,
     checkPublish          :: forall m. MonadIO m => Users.UserId -> PackageIndex PkgInfo -> CandPkgInfo -> m (Maybe ErrorResponse),
@@ -339,6 +340,13 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       candidate <- packageInPath dpath >>= lookupCandidateId
       guardAuthorisedAsMaintainer (packageName candidate)
       void $ updateState candidatesState $ DeleteCandidate (packageId candidate)
+      seeOther (packageCandidatesUri candidatesResource "" $ packageName candidate) $ toResponse ()
+
+    doDeleteCandidates :: DynamicPath -> ServerPartE Response
+    doDeleteCandidates dpath = do
+      candidate <- packageInPath dpath >>= lookupCandidateId
+      guardAuthorisedAsMaintainer (packageName candidate)
+      void $ updateState candidatesState $ DeleteCandidates (packageName candidate)
       seeOther (packageCandidatesUri candidatesResource "" $ packageName candidate) $ toResponse ()
 
     serveCandidateTarball :: DynamicPath -> ServerPartE Response

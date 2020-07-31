@@ -17,6 +17,7 @@ import Distribution.Server.Features.Upload
 import Distribution.Server.Features.BuildReports
 import Distribution.Server.Features.BuildReports.Render
 import Distribution.Server.Features.PackageCandidates
+-- import Distribution.Server.Features.PackageCandidates.State
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.Votes
@@ -1105,6 +1106,13 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
          , resourceGet  = [ ("html", serveDeleteForm) ]
          , resourcePost = [ ("html", doDeleteCandidate) ]
          }
+        -- form for deleting candidates
+      , (resourceAt "/package/:package/candidates/delete") {
+            resourceDesc = [ (GET, "Show package candidates delete form")
+                           , (POST, "Delete package candidates") ]
+          , resourceGet  = [ ("html", serveCandidatesDeleteForm) ]
+          , resourcePost = [ ("html", doDeleteCandidates) ]
+          }
       ]
 
     serveCandidateUploadForm :: DynamicPath -> ServerPartE Response
@@ -1207,6 +1215,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
     servePackageCandidates candPkgUp dpath = do
       pkgname <- packageInPath dpath
       pkgs <- lookupCandidateName pkgname
+      let delUri = "/package/"++(display pkgname)++"/candidates/delete"
       return $ toResponse $ Resource.XHtml $ hackagePage "Package candidates" $
         [ h3 << ("Candidates for " ++ display pkgname) ] ++
         case pkgs of
@@ -1216,7 +1225,8 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
                 , anchor ! [href $ "/packages/candidates/upload"] << "another"
                 , toHtml " package?"
                 ]
-          _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ corePackageIdUri candidatesCore "" $ packageId pkg] << display (packageVersion pkg) ]
+          _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ corePackageIdUri candidatesCore "" $ packageId pkg] << display (packageVersion pkg) 
+                , anchor ! [href $ delUri]<< "Delete All Candidates"]
 
     servePostPublish :: DynamicPath -> ServerPartE Response
     servePostPublish dpath = do
@@ -1235,6 +1245,15 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
       return $ toResponse $ Resource.XHtml $ hackagePage "Deleting candidates"
                   [form ! [theclass "box", XHtml.method "post", action $ deleteUri candidatesResource "" pkgid]
                       << input ! [thetype "submit", value "Delete package candidate"]]
+
+    serveCandidatesDeleteForm :: DynamicPath -> ServerPartE Response
+    serveCandidatesDeleteForm dpath = do
+      pkgid <- packageInPath dpath
+      guardAuthorisedAsMaintainer (packageName pkgid)
+      -- let pkgname = packageName pkgid
+      return $ toResponse $ Resource.XHtml $ hackagePage "Deleting package candidates"
+                  [form ! [theclass "box", XHtml.method "post", action $ deleteUri candidatesResource "" pkgid]
+                      << input ! [thetype "submit", value "Delete package candidates"]]
 
 dependenciesPage :: Bool -> PackageRender -> URL -> Resource.XHtml
 dependenciesPage isCandidate render docURL =

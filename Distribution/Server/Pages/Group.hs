@@ -22,8 +22,11 @@ renderGroupName :: GroupDescription -> Maybe String -> Html
 renderGroupName desc murl =
     maybeUrl (groupTitle desc) murl
       +++
-    maybe noHtml (\(for, mfor) -> " for " +++ maybeUrl for mfor) (groupEntity desc)
+    maybe noHtml (\(for, mfor) -> " for " +++ maybeUrl for mfor ) (groupEntity desc)
+      +++
+    maybe noHtml (\(_, mfor) -> " : " +++ candUrl "No Candidates" mfor ) (groupEntity desc)
   where maybeUrl text = maybe (toHtml text) (\url -> anchor ! [href url] << text)
+        candUrl text = maybe (toHtml text) (\url -> anchor ! [href $ url ++ "/candidates"] << "candidates")
 
 -- renderGroupNameWithCands :: GroupDescription -> Maybe String -> [CandPkgInfo] -> CoreResource -> Html
 -- renderGroupNameWithCands desc murl pkgs candidates =
