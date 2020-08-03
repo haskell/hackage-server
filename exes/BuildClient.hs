@@ -13,16 +13,13 @@ import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildR
 
 import Distribution.Package
 import Distribution.Text
-import qualified Text.PrettyPrint          as Disp
-import Distribution.Pretty (prettyShow)
 import Distribution.Verbosity
 import Distribution.Simple.Utils hiding (intercalate)
-import Distribution.Version (Version, nullVersion)
+import Distribution.Version (Version)
 
 import Data.List
 import Data.Maybe
 import Data.Ord (Down(..))
-import Data.IORef
 import Data.Time
 import Control.Applicative as App
 import Control.Exception
@@ -245,9 +242,7 @@ stats opts = do
 
     notice verbosity "Initialising"
 
-    (didFail, _, _)  <- mkPackageFailed opts
-
-    pkgIdsHaveDocs <- getDocumentationStats verbosity config didFail
+    pkgIdsHaveDocs <- getDocumentationStats verbosity opts config []
     infoStats verbosity (Just statsFile) pkgIdsHaveDocs
   where
     statsFile = bo_stateDir opts </> "stats"
@@ -382,15 +377,16 @@ docInfoReports :: BuildConfig -> DocInfo -> URI
 docInfoReports config docInfo = docInfoBaseURI config docInfo <//> "reports/"
 
 getDocumentationStats :: Verbosity
+                      -> BuildOpts
                       -> BuildConfig
-                      -> (PackageId -> IO Bool)
+                      -> [PackageId]
                       -> IO [DocInfo]
-getDocumentationStats verbosity config didFail = do
+getDocumentationStats verbosity opts config pkgs = do
+    putStrLn $ getQry pkgs
     notice verbosity "Downloading documentation index"
     httpSession verbosity "hackage-build" version $ do
       mPackages   <- liftM eitherDecode `liftM` requestGET' packagesUri
       mCandidates <- liftM eitherDecode `liftM` requestGET' candidatesUri
-      let filterValid xs = filter (isJust . (simpleParse :: String -> Maybe PackageId) . fst) xs
 
       case (mPackages, mCandidates) of
         -- Download failure
@@ -401,23 +397,26 @@ getDocumentationStats verbosity config didFail = do
         (_, Just (Left e)) -> fail $ "Could not decode " ++ show candidatesUri ++ ": " ++ e
         -- Success
         (Just (Right packages), Just (Right candidates)) -> do
-          packages'   <- liftIO $ mapM checkFailed (filterValid packages)
-          candidates' <- liftIO $ mapM checkFailed (filterValid candidates)
+          packages'   <- liftIO $ mapM checkFailed packages
+          candidates' <- liftIO $ mapM checkFailed candidates
           return $ map (setIsCandidate False) packages'
                 ++ map (setIsCandidate True)  candidates'
   where
-    packagesUri   = bc_srcURI config <//> "packages" </> "docs.json"
+    getQry [] = ""
+    getQry [pkg] = display pkg
+    getQry (x:y) = (display x) ++ "," ++ getQry y
+
+    packagesUri   = bc_srcURI config <//> "packages" </> "docs.json?doc=false&fail="++ (show $ bo_buildAttempts opts)
     candidatesUri = bc_srcURI config <//> "packages" </> "candidates" </> "docs.json"
 
-    checkFailed :: (String, Bool) -> IO (PackageIdentifier, HasDocs)
-    checkFailed (pkgId, docsBuilt) = do
-      let pkgId' = fromJust (simpleParse pkgId)
-      if docsBuilt
-        then return (pkgId', HasDocs)
-        else do failed <- didFail pkgId'
-                if failed then return (pkgId', DocsFailed)
-                          else return (pkgId', DocsNotBuilt)
-
+    checkFailed :: BuildReport.PkgDetails -> IO (PackageIdentifier, HasDocs)
+    checkFailed pkgDetails = do
+      let pkgId = BuildReport.pkid pkgDetails
+      case (BuildReport.docs pkgDetails, BuildReport.failCnt pkgDetails) of
+        (True , _)                        -> return (pkgId, HasDocs)
+        (False, Just BuildReport.BuildOK) -> return (pkgId, DocsFailed)
+        (False, _)                        -> return (pkgId, DocsNotBuilt)
+        
     setIsCandidate :: Bool -> (PackageIdentifier, HasDocs) -> DocInfo
     setIsCandidate isCandidate (pId, hasDocs) = DocInfo {
         docInfoPackage     = pId
@@ -435,86 +434,67 @@ buildOnce opts pkgs = keepGoing $ do
     config <- readConfig opts
 
     notice verbosity "Initialising"
-    (has_failed, mark_as_failed, persist_failed) <- mkPackageFailed opts
 
-    flip finally persist_failed $ do
-        updatePackageIndex
-        -- Due to caching sometimes the package repository state may lag behind the
-        -- documentation index. Consequently, we make sure that the packages we are
-        -- going to build actually appear in the repository before building. See
-        -- #543.
-        repoIndex <- parseRepositoryIndices verbosity
+    updatePackageIndex
+    -- Due to caching sometimes the package repository state may lag behind the
+    -- documentation index. Consequently, we make sure that the packages we are
+    -- going to build actually appear in the repository before building. See
+    -- #543.
+    repoIndex <- parseRepositoryIndices verbosity
 
-        pkgIdsHaveDocs <- getDocumentationStats verbosity config has_failed
-        infoStats verbosity Nothing pkgIdsHaveDocs
-        threadDelay (10^(7::Int))
+    pkgIdsHaveDocs <- getDocumentationStats verbosity opts config pkgs
+    infoStats verbosity Nothing pkgIdsHaveDocs
+    threadDelay (10^(7::Int))
 
-        let orderBuilds :: BuildOrder -> [DocInfo] -> [DocInfo]
-            orderBuilds LatestVersionFirst =
-                  latestFirst
-                . map (sortBy (flip (comparing docInfoPackageVersion)))
-                . groupBy (equating  docInfoPackageName)
-                . sortBy  (comparing docInfoPackageName)
-              where
-                -- NOTE: assumes all these lists are non-empty
-                latestFirst :: [[DocInfo]] -> [DocInfo]
-                latestFirst ids = map head ids ++ concatMap tail ids
+    let orderBuilds :: BuildOrder -> [DocInfo] -> [DocInfo]
+        orderBuilds LatestVersionFirst =
+              latestFirst
+            . map (sortBy (flip (comparing docInfoPackageVersion)))
+            . groupBy (equating  docInfoPackageName)
+            . sortBy  (comparing docInfoPackageName)
+          where
+            -- NOTE: assumes all these lists are non-empty
+            latestFirst :: [[DocInfo]] -> [DocInfo]
+            latestFirst ids = map head ids ++ concatMap tail ids
 
-            orderBuilds MostRecentlyUploadedFirst =
-                  map snd
-                . sortBy (comparing fst)
-                . mapMaybe (\pkg -> fmap (\uploadTime -> (Down uploadTime, pkg)) (M.lookup (docInfoPackage pkg) repoIndex))
+        orderBuilds MostRecentlyUploadedFirst =
+              map snd
+            . sortBy (comparing fst)
+            . mapMaybe (\pkg -> fmap (\uploadTime -> (Down uploadTime, pkg)) (M.lookup (docInfoPackage pkg) repoIndex))
 
 
-        -- Find those files *not* marked as having documentation in our cache
-        let toBuild :: [DocInfo]
-            toBuild = filter shouldBuild
-                    . filter (flip M.member repoIndex . docInfoPackage)
-                    . orderBuilds (bo_buildOrder opts)
-                    $ pkgIdsHaveDocs
+    let toBuild :: [DocInfo]
+        toBuild = filter (flip M.member repoIndex . docInfoPackage)
+                . orderBuilds (bo_buildOrder opts)
+                $ pkgIdsHaveDocs
 
-        notice verbosity $ show (length toBuild) ++ " package(s) to build"
+    notice verbosity $ show (length toBuild) ++ " package(s) to build"
+    
+    -- Try to build each of them, uploading the documentation and
+    -- build reports along the way. We mark each package as having
+    -- documentation in the cache even if the build fails because
+    -- we don't want to keep continually trying to build a failing
+    -- package!
+    startTime <- getCurrentTime
+    
+    let go :: [DocInfo] -> IO ()
+        go [] = return ()
+        go (docInfo : toBuild') = do
+          processPkg verbosity opts config docInfo
 
-        -- Try to build each of them, uploading the documentation and
-        -- build reports along the way. We mark each package as having
-        -- documentation in the cache even if the build fails because
-        -- we don't want to keep continually trying to build a failing
-        -- package!
-        startTime <- getCurrentTime
-        
-        let go :: [DocInfo] -> IO ()
-            go [] = return ()
-            go (docInfo : toBuild') = do
-              processPkg verbosity opts config docInfo mark_as_failed
+          -- We don't check the runtime until we've actually tried
+          -- to build a doc, so as to ensure we make progress.
+          outOfTime <- case bo_runTime opts of
+              Nothing -> return False
+              Just d  -> do
+                currentTime <- getCurrentTime
+                return $ (currentTime `diffUTCTime` startTime) > d
 
-              -- We don't check the runtime until we've actually tried
-              -- to build a doc, so as to ensure we make progress.
-              outOfTime <- case bo_runTime opts of
-                  Nothing -> return False
-                  Just d  -> do
-                    currentTime <- getCurrentTime
-                    return $ (currentTime `diffUTCTime` startTime) > d
+          if outOfTime then return ()
+                        else go toBuild'
 
-              if outOfTime then return ()
-                           else go toBuild'
-
-        go toBuild
+    go toBuild
   where
-    shouldBuild :: DocInfo -> Bool
-    shouldBuild docInfo =
-        case docInfoHasDocs docInfo of
-          DocsNotBuilt -> null pkgs || is_selected
-          _            -> is_selected -- rebuild package if the user explicitly requested it
-      where
-        is_selected = any (isSelectedPackage pkgid) pkgs
-        pkgid = docInfoPackage docInfo
-
-    -- do versionless matching if no version was given
-    isSelectedPackage pkgid pkgid'@(PackageIdentifier _ v)
-        | nullVersion == v =
-        packageName pkgid == packageName pkgid'
-    isSelectedPackage pkgid pkgid' =
-        pkgid == pkgid'
 
     keepGoing :: IO () -> IO ()
     keepGoing act
@@ -543,8 +523,8 @@ buildOnce opts pkgs = keepGoing $ do
 
 -- Takes a single Package, process it and uploads result
 processPkg :: Verbosity -> BuildOpts -> BuildConfig
-             -> DocInfo -> (PackageId -> IO ()) -> IO ()
-processPkg verbosity opts config docInfo mark_as_failed = do
+             -> DocInfo -> IO ()
+processPkg verbosity opts config docInfo = do
     prepareTempBuildDir
     (mTgz, mRpt, logfile)   <- buildPackage verbosity opts config docInfo
     buildReport             <- mapM readFile mRpt
@@ -559,13 +539,6 @@ processPkg verbosity opts config docInfo mark_as_failed = do
     -- Modify test-outcome and rewrite report file. 
     mapM (setTestStatus mRpt buildReport) testOutcome
     
-    case mTgz of
-      Nothing -> do
-            mark_as_failed (docInfoPackage docInfo)
-            -- When it installed ok, but there's no docs, that means it is exe only.
-            -- This marks it "really failed" in such a case to stop retries.
-            when installOk . replicateM_ 4 $ mark_as_failed (docInfoPackage docInfo)
-      Just _  -> return ()
     case bo_dryRun opts of
       True -> return ()
       False -> uploadResults verbosity config docInfo
@@ -596,45 +569,6 @@ processPkg verbosity opts config docInfo mark_as_failed = do
     setTestStatus mRpt buildReport testOutcome = do
         let buildReport' = fmap (unlines.setTestOutcome testOutcome) $ fmap lines buildReport
         rewriteRpt mRpt buildReport'
-
--- | Builds a little memoised function that can tell us whether a
--- particular package failed to build its documentation, a function to mark a
--- package as having failed, and a function to write the final failed list back
--- to disk.
-mkPackageFailed :: BuildOpts
-                -> IO (PackageId -> IO Bool, PackageId -> IO (), IO ())
-mkPackageFailed opts = do
-    init_failed <- readFailedCache (bo_stateDir opts)
-    cache_var   <- newIORef init_failed
-
-    let mark_as_failed pkg_id = atomicModifyIORef cache_var $ \already_failed ->
-                                  (M.insertWith (+) pkg_id 1 already_failed, ())
-        has_failed     pkg_id = f <$> readIORef cache_var
-          where f cache = M.findWithDefault 0 pkg_id cache > bo_buildAttempts opts
-        persist               = readIORef cache_var >>= writeFailedCache (bo_stateDir opts)
-
-    return (has_failed, mark_as_failed, persist)
-  where
-    readFailedCache :: FilePath -> IO (M.Map PackageId Int)
-    readFailedCache cache_dir = do
-        pkgstrs <- handleDoesNotExist [] $ liftM lines $ readFile (cache_dir </> "failed")
-        let (pkgids, attempts) = unzip $ map (parseLine . words) pkgstrs
-               where
-                 parseLine [pkg_id] = (pkg_id, 1)
-                 parseLine [pkg_id, attempts']
-                   | [(n,_)] <- reads attempts' = (pkg_id, n)
-                   | otherwise                  = (pkg_id, 1)
-                 parseLine other = error $ "failed to parse failed list line: "++show other
-        case validatePackageIds pkgids of
-            Left theError -> dieNoVerbosity theError
-            Right pkgs -> return (M.fromList $ zip pkgs attempts)
-
-    writeFailedCache :: FilePath -> M.Map PackageId Int -> IO ()
-    writeFailedCache cache_dir pkgs =
-      writeUTF8File (cache_dir </> "failed")
-      $ unlines
-      $ map (\(pkgid,n) -> show $ (Disp.text $ prettyShow pkgid) Disp.<+> Disp.int n)
-      $ M.assocs pkgs
 
 coveragePackage :: Verbosity -> BuildOpts -> DocInfo -> FilePath -> IO (FilePath)
 coveragePackage verbosity opts docInfo loc = do
