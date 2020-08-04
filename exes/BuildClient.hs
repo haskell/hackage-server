@@ -382,19 +382,18 @@ getDocumentationStats :: Verbosity
                       -> [PackageId]
                       -> IO [DocInfo]
 getDocumentationStats verbosity opts config pkgs = do
-    putStrLn $ getQry pkgs
     notice verbosity "Downloading documentation index"
     httpSession verbosity "hackage-build" version $ do
-      mPackages   <- liftM eitherDecode `liftM` requestGET' packagesUri
-      mCandidates <- liftM eitherDecode `liftM` requestGET' candidatesUri
+      mPackages   <- liftM eitherDecode `liftM` requestGET' (packagesUri   pkgs)
+      mCandidates <- liftM eitherDecode `liftM` requestGET' (candidatesUri pkgs)
 
       case (mPackages, mCandidates) of
         -- Download failure
-        (Nothing, _) -> fail $ "Could not download " ++ show packagesUri
-        (_, Nothing) -> fail $ "Could not download " ++ show candidatesUri
+        (Nothing, _) -> fail $ "Could not download " ++ show (packagesUri   pkgs)
+        (_, Nothing) -> fail $ "Could not download " ++ show (candidatesUri pkgs)
         -- Decoding failure
-        (Just (Left e), _) -> fail $ "Could not decode " ++ show packagesUri   ++ ": " ++ e
-        (_, Just (Left e)) -> fail $ "Could not decode " ++ show candidatesUri ++ ": " ++ e
+        (Just (Left e), _) -> fail $ "Could not decode " ++ show (packagesUri   pkgs) ++ ": " ++ e
+        (_, Just (Left e)) -> fail $ "Could not decode " ++ show (candidatesUri pkgs) ++ ": " ++ e
         -- Success
         (Just (Right packages), Just (Right candidates)) -> do
           packages'   <- liftIO $ mapM checkFailed packages
@@ -406,9 +405,12 @@ getDocumentationStats verbosity opts config pkgs = do
     getQry [pkg] = display pkg
     getQry (x:y) = (display x) ++ "," ++ getQry y
 
-    packagesUri   = bc_srcURI config <//> "packages" </> "docs.json?doc=false&fail="++ (show $ bo_buildAttempts opts)
-    candidatesUri = bc_srcURI config <//> "packages" </> "candidates" </> "docs.json"
-
+    packagesUri []    = bc_srcURI config <//> "packages" </> "docs.json?doc=false&fail=" ++ (show $ bo_buildAttempts opts)
+    packagesUri pkgs' = bc_srcURI config <//> "packages" </> "docs.json?pkgs=" ++ (getQry pkgs')
+    
+    candidatesUri []    = bc_srcURI config <//> "packages" </> "candidates" </> "docs.json?doc=false&fail=" ++ (show $ bo_buildAttempts opts)
+    candidatesUri pkgs' = bc_srcURI config <//> "packages" </> "candidates" </> "docs.json?pkgs=" ++ (getQry pkgs')
+    
     checkFailed :: BuildReport.PkgDetails -> IO (PackageIdentifier, HasDocs)
     checkFailed pkgDetails = do
       let pkgId = BuildReport.pkid pkgDetails

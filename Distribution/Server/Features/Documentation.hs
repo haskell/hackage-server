@@ -28,7 +28,9 @@ import qualified Codec.Archive.Tar.Check as Tar
 import Distribution.Text
 import Distribution.Package
 import Distribution.Version (nullVersion)
+import qualified Distribution.Parsec as P
 
+import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Map as Map
 import Data.Function (fix)
@@ -200,27 +202,45 @@ documentationFeature name
       
     serveDocumentationStats :: DynamicPath -> ServerPartE Response
     serveDocumentationStats _dpath = do
-        hasDoc <- optional (look "doc")
-        failCnt <- optional (look "fail")
-        pkgs <- mapParaM queryHasDocumentation =<< liftIO getPackages
-        let filtPgs = filtDoc (fromMaybe "all" hasDoc) pkgs
-        pkgs' <- mapM pkgReportDetails filtPgs
-        let filtFail = filter (filt (read (fromMaybe "-1" failCnt) ::Int)) pkgs'
-        return . toResponse . toJSON $ filtFail
+        hasDoc        <- optional (look "doc")
+        failCnt'      <- optional (look "fail")
+        selectedPkgs' <- optional (look "pkgs")
+        pkgs          <- mapParaM queryHasDocumentation =<< liftIO getPackages
+        
+        let selectedPkgs  = parsePkgs (fromMaybe "" selectedPkgs')
+            filtSelected  = filterSelect selectedPkgs pkgs
+            filteredPkgs  = filterDoc (fromMaybe "all" hasDoc) filtSelected
+            failCnt       = read (fromMaybe "-1" failCnt') ::Int
+        pkgs' <- mapM pkgReportDetails filteredPkgs
+        return . toResponse . toJSON $ filter (filt failCnt) pkgs'
       where
+        parsePkgs :: String -> [PackageIdentifier]
+        parsePkgs pkgsStr = map fromJust $ filter isJust $ map (P.simpleParsec . C.unpack) $ C.split ',' (C.pack pkgsStr)
+
+        filterSelect :: [PackageIdentifier] -> [(PackageIdentifier,Bool)] -> [(PackageIdentifier,Bool)]
+        filterSelect [] pkgs = pkgs
+        filterSelect selectedPkgs pkgs = filter (\(x,_) -> any (isSelectedPackage x) selectedPkgs) pkgs
+        
+        -- do versionless matching if no version was given
+        isSelectedPackage pkgid pkgid'@(PackageIdentifier _ v)
+            | nullVersion == v =
+            packageName pkgid == packageName pkgid'
+        isSelectedPackage pkgid pkgid' =
+            pkgid == pkgid'
+
         filt:: Int -> PkgDetails -> Bool
         filt (-1) _ = True
         filt _ (PkgDetails _ _ (Just BuildOK) _ _) = False
         filt i (PkgDetails _ _ (Just (BuildFailCnt x)) _ _) = i>x
         filt _ _ = True
 
-        filtDoc :: String -> [(PackageIdentifier, Bool)] -> [(PackageIdentifier, Bool)]
-        filtDoc k pkgs | ((k /= "true") && (k/="false")) = pkgs
-        filtDoc k ((_, f):xs)
-                | (k == "true") && not f= filtDoc k xs
-                | (k == "false") && f= filtDoc k xs
-        filtDoc k (xs:ys) = xs : (filtDoc k ys)
-        filtDoc _  []= []
+        filterDoc :: String -> [(PackageIdentifier, Bool)] -> [(PackageIdentifier, Bool)]
+        filterDoc k pkgs | ((k /= "true") && (k/="false")) = pkgs
+        filterDoc k ((_, f):xs)
+                | (k == "true") && not f= filterDoc k xs
+                | (k == "false") && f= filterDoc k xs
+        filterDoc k (xs:ys) = xs : (filterDoc k ys)
+        filterDoc _  []= []
 
     serveDocumentationTar :: DynamicPath -> ServerPartE Response
     serveDocumentationTar dpath =
