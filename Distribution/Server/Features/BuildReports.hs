@@ -57,6 +57,7 @@ data ReportsResource = ReportsResource {
     reportsList :: Resource,
     reportsPage :: Resource,
     reportsLog  :: Resource,
+    reportsReset:: Resource,
     reportsListUri :: String -> PackageId -> String,
     reportsPageUri :: String -> PackageId -> BuildReportId -> String,
     reportsLogUri  :: PackageId -> BuildReportId -> String
@@ -116,19 +117,27 @@ buildReportsFeature name
               reportsList
             , reportsPage
             , reportsLog
+            , reportsReset
             ]
       , featureState = [abstractAcidStateComponent reportsState]
       }
 
     reportsResource = ReportsResource
           { reportsList = (extendResourcePath "/reports/.:format" corePackagePage) {
-                resourceDesc = [ (GET, "List available build reports")
-                               , (POST, "Upload a new build report")
-                               , (PUT, "Upload all build files")
-                               ]
-              , resourceGet  = [ ("txt", textPackageReports) ]
-              , resourcePost = [ ("",    submitBuildReport) ]
-              , resourcePut  = [ ("json",putAllReports) ]
+                resourceDesc  = [ (GET, "List available build reports")
+                                , (POST, "Upload a new build report")
+                                , (PUT, "Upload all build files")
+                                , (PATCH, "Reset fail count and trigger rebuild")
+                                ]
+              , resourceGet   = [ ("txt",   textPackageReports) ]
+              , resourcePost  = [ ("",      submitBuildReport) ]
+              , resourcePut   = [ ("json",    putAllReports) ]
+              }
+            
+          , reportsReset = (extendResourcePath "/reports/reset/" corePackagePage) {
+                resourceDesc   = [ (POST, "Reset fail count and trigger rebuild")
+                                 ]
+              , resourcePost  = [ ("", resetBuildFails) ]
               }
           , reportsPage = (extendResourcePath "/reports/:id.:format" corePackagePage) {
                 resourceDesc   = [ (GET, "Get a specific build report")
@@ -287,6 +296,17 @@ buildReportsFeature name
       guardAuthorised_ [InGroup trusteesGroup]
       void $ updateState reportsState $ SetBuildLog pkgid reportId Nothing
       noContent (toResponse ())
+
+    resetBuildFails :: DynamicPath -> ServerPartE Response
+    resetBuildFails dpath = do
+      pkgid <- packageInPath dpath
+      guardValidPackageId pkgid
+      guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
+      success <- updateState reportsState $ ResetFailCount pkgid
+      if success
+          then seeOther (reportsListUri reportsResource "" pkgid) $ toResponse ()
+          else errNotFound "Report not found" [MText "Build report does not exist"]
+
 
     putAllReports :: DynamicPath -> ServerPartE Response
     putAllReports dpath = do

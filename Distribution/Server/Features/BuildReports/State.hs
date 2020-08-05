@@ -72,6 +72,13 @@ setFailStatus pkgid status = do
 buildDetails :: PackageId -> Query BuildReports (Maybe (BuildStatus, Maybe UTCTime, Maybe Version))
 buildDetails pkgid = asks (BuildReports.buildDetails pkgid)
 
+resetFailCount :: PackageId -> Update BuildReports (Bool)
+resetFailCount pkgid = do
+    buildReports <- State.get
+    case BuildReports.resetFailCount pkgid buildReports of
+        Nothing       -> return False
+        Just reports  -> State.put reports >> return True
+
 makeAcidic ''BuildReports ['addReport
                           ,'setBuildLog
                           ,'deleteReport
@@ -83,5 +90,6 @@ makeAcidic ''BuildReports ['addReport
                           ,'lookupReportCovg
                           ,'setFailStatus
                           ,'buildDetails
+                          ,'resetFailCount
                           ]
 

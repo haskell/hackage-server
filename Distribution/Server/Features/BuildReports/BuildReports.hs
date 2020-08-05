@@ -20,7 +20,8 @@ module Distribution.Server.Features.BuildReports.BuildReports (
     lookupPackageReports,
     unsafeSetReport,
     setFailStatus,
-    buildDetails
+    buildDetails,
+    resetFailCount
   ) where
 
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
@@ -196,6 +197,15 @@ buildDetails pkgid buildReports = do
           return (time brp, Just vrsn)
   return (buildStatus rp, tm, comp)
 
+resetFailCount :: PackageId -> BuildReports -> Maybe BuildReports
+resetFailCount pkgid buildReports = case Map.lookup pkgid (reportsIndex buildReports) of
+    Nothing -> Nothing
+    Just pkgReports -> do
+      let pkgReports' = PkgBuildReports { reports = (reports pkgReports)
+                                      , nextReportId = (nextReportId pkgReports)
+                                      , buildStatus = BuildFailCnt 0 }
+      return buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
+      
 -- addPkg::`
 -------------------
 -- HStringTemplate instances
