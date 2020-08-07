@@ -10,7 +10,7 @@ $hackagePageHeader()$
 
 <div id="content">
 <h2>Build reports for <a href="/package/$pkgid$">$pkgid$</a></h2>
-
+<h5>Status: $status$</h5>
 $if(first(reports))$
 <table class="fancy" style="width: 100%">
   <tr>

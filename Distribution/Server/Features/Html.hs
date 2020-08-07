@@ -35,6 +35,7 @@ import Distribution.Server.Features.UserDetails
 import Distribution.Server.Features.EditCabalFiles
 import Distribution.Server.Features.Html.HtmlUtilities
 import Distribution.Server.Features.Security.SHA256
+import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
 
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Group as Group
@@ -973,9 +974,16 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
         pkgid <- packageInPath dpath
         cacheControl [Public, maxAgeMinutes 30] (etagFromHash (length reports))
         template <- getTemplate templates "reports.html"
+        details <- pkgReportDetails (pkgid,True)
+        let status = case BuildReport.failCnt details of
+              Nothing -> "Not yet tried."
+              Just BuildReport.BuildOK -> "Built successfully."
+              Just (BuildReport.BuildFailCnt 1) -> "1 consecutive failure."
+              Just (BuildReport.BuildFailCnt c) -> show(c) ++ " consecutive failures."
         return $ toResponse $ template
-          [ "pkgid" $= (pkgid :: PackageIdentifier)
+          [ "pkgid"   $= (pkgid :: PackageIdentifier)
           , "reports" $= reports
+          , "status"  $= status
           ]
 
     servePackageReport :: DynamicPath -> ServerPartE Response

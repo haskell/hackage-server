@@ -135,9 +135,9 @@ buildReportsFeature name
               }
             
           , reportsReset = (extendResourcePath "/reports/reset/" corePackagePage) {
-                resourceDesc   = [ (POST, "Reset fail count and trigger rebuild")
+                resourceDesc  = [ (GET, "Reset fail count and trigger rebuild")
                                  ]
-              , resourcePost  = [ ("", resetBuildFails) ]
+              , resourceGet   = [ ("", resetBuildFails) ]
               }
           , reportsPage = (extendResourcePath "/reports/:id.:format" corePackagePage) {
                 resourceDesc   = [ (GET, "Get a specific build report")
