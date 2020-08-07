@@ -1107,7 +1107,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
          , resourcePost = [ ("html", doDeleteCandidate) ]
          }
         -- form for deleting candidates
-      , (resourceAt "/package/:package/candidates/delete") {
+      , (extendResource $ deleteCandidatesPage candidates) {
             resourceDesc = [ (GET, "Show package candidates delete form")
                            , (POST, "Delete package candidates") ]
           , resourceGet  = [ ("html", serveCandidatesDeleteForm) ]
@@ -1248,12 +1248,12 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
 
     serveCandidatesDeleteForm :: DynamicPath -> ServerPartE Response
     serveCandidatesDeleteForm dpath = do
-      pkgid <- packageInPath dpath
-      guardAuthorisedAsMaintainer (packageName pkgid)
+      pkgname <- packageInPath dpath
+      guardAuthorisedAsMaintainer pkgname
       -- let pkgname = packageName pkgid
       return $ toResponse $ Resource.XHtml $ hackagePage "Deleting package candidates"
-                  [form ! [theclass "box", XHtml.method "post", action $ deleteUri candidatesResource "" pkgid]
-                      << input ! [thetype "submit", value "Delete package candidates"]]
+                  [form ! [theclass "box", XHtml.method "post", action $ deleteCandidatesUri candidatesResource "" pkgname]
+                      << input ! [thetype "submit", value "Delete All Candidates For This Package"]]
 
 dependenciesPage :: Bool -> PackageRender -> URL -> Resource.XHtml
 dependenciesPage isCandidate render docURL =
