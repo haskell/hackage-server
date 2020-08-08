@@ -9,7 +9,7 @@ import Distribution.Client
 import Distribution.Client.Cron (cron, rethrowSignalsAsExceptions,
                                  Signal(..), ReceivedSignal(..))
 import qualified Distribution.Client.Index as Index
-import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
+import qualified Distribution.Server.Features.BuildReports.BuildReport as BR
 
 import Distribution.Package
 import Distribution.Text
@@ -242,7 +242,7 @@ stats opts = do
 
     notice verbosity "Initialising"
 
-    pkgIdsHaveDocs <- getDocumentationStats verbosity opts config []
+    pkgIdsHaveDocs <- getDocumentationStats verbosity opts config Nothing
     infoStats verbosity (Just statsFile) pkgIdsHaveDocs
   where
     statsFile = bo_stateDir opts </> "stats"
@@ -379,7 +379,7 @@ docInfoReports config docInfo = docInfoBaseURI config docInfo <//> "reports/"
 getDocumentationStats :: Verbosity
                       -> BuildOpts
                       -> BuildConfig
-                      -> [PackageId]
+                      -> Maybe [PackageId]
                       -> IO [DocInfo]
 getDocumentationStats verbosity opts config pkgs = do
     notice verbosity "Downloading documentation index"
@@ -405,18 +405,22 @@ getDocumentationStats verbosity opts config pkgs = do
     getQry [pkg] = display pkg
     getQry (x:y) = (display x) ++ "," ++ getQry y
 
-    packagesUri []    = bc_srcURI config <//> "packages" </> "docs.json?doc=false&fail=" ++ (show $ bo_buildAttempts opts)
-    packagesUri pkgs' = bc_srcURI config <//> "packages" </> "docs.json?pkgs=" ++ (getQry pkgs')
+    packagesUri Nothing       = bc_srcURI config <//> "packages" </> "docs.json"
+    packagesUri (Just [])     = bc_srcURI config <//> "packages" </> "docs.json?doc=false&fail=" ++ (show $ bo_buildAttempts opts)
+    packagesUri (Just pkgs')  = bc_srcURI config <//> "packages" </> "docs.json?pkgs=" ++ (getQry pkgs')
     
-    candidatesUri []    = bc_srcURI config <//> "packages" </> "candidates" </> "docs.json?doc=false&fail=" ++ (show $ bo_buildAttempts opts)
-    candidatesUri pkgs' = bc_srcURI config <//> "packages" </> "candidates" </> "docs.json?pkgs=" ++ (getQry pkgs')
+    candidatesUri Nothing       = bc_srcURI config <//> "packages" </> "candidates" </> "docs.json"
+    candidatesUri (Just [])     = bc_srcURI config <//> "packages" </> "candidates" </> "docs.json?doc=false&fail=" ++ (show $ bo_buildAttempts opts)
+    candidatesUri (Just pkgs')  = bc_srcURI config <//> "packages" </> "candidates" </> "docs.json?pkgs=" ++ (getQry pkgs')
     
-    checkFailed :: BuildReport.PkgDetails -> IO (PackageIdentifier, HasDocs)
+    checkFailed :: BR.PkgDetails -> IO (PackageIdentifier, HasDocs)
     checkFailed pkgDetails = do
-      let pkgId = BuildReport.pkid pkgDetails
-      case (BuildReport.docs pkgDetails, BuildReport.failCnt pkgDetails) of
+      let pkgId = BR.pkid pkgDetails
+      case (BR.docs pkgDetails, BR.failCnt pkgDetails) of
         (True , _)                        -> return (pkgId, HasDocs)
-        (False, Just BuildReport.BuildOK) -> return (pkgId, DocsFailed)
+        (False, Just BR.BuildOK) -> return (pkgId, DocsFailed)
+        (False, Just (BR.BuildFailCnt a))
+            | a >= bo_buildAttempts opts  -> return (pkgId, DocsFailed)
         (False, _)                        -> return (pkgId, DocsNotBuilt)
         
     setIsCandidate :: Bool -> (PackageIdentifier, HasDocs) -> DocInfo
@@ -444,7 +448,7 @@ buildOnce opts pkgs = keepGoing $ do
     -- #543.
     repoIndex <- parseRepositoryIndices verbosity
 
-    pkgIdsHaveDocs <- getDocumentationStats verbosity opts config pkgs
+    pkgIdsHaveDocs <- getDocumentationStats verbosity opts config (Just pkgs)
     infoStats verbosity Nothing pkgIdsHaveDocs
     threadDelay (10^(7::Int))
 
@@ -842,7 +846,7 @@ putBuildFiles config docInfo reportFile buildLogFile coverageFile installOk = do
     logContent      <- liftIO $ readFile buildLogFile
     coverageContent <- liftIO $ traverse readFile coverageFile
     let uri   = docInfoReports config docInfo
-        body  = encode $ BuildReport.BuildFiles reportContent (Just logContent) coverageContent (not installOk)
+        body  = encode $ BR.BuildFiles reportContent (Just logContent) coverageContent (not installOk)
     setAllowRedirects False
     (_, response) <- request Request {
       rqURI     = uri,

@@ -547,7 +547,7 @@ data PkgDetails = PkgDetails {
     docs        :: Bool,
     failCnt     :: Maybe BuildStatus,
     buildTime   :: Maybe UTCTime,
-    compid      :: Maybe Version
+    ghcId      :: Maybe Version
 } deriving(Show)
 
 instance Data.Aeson.ToJSON PkgDetails where
@@ -556,7 +556,7 @@ instance Data.Aeson.ToJSON PkgDetails where
     "docs"       .= docs p,
     "failCnt"    .= failCnt  p,
     "buildTime"  .= buildTime  p,
-    "compid"     .= (k $ compid p) ]
+    "ghcId"     .= (k $ ghcId p) ]
     where
       k (Just a) = Just $ DT.display a
       k Nothing = Nothing
