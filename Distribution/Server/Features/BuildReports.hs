@@ -43,7 +43,6 @@ data ReportsFeature = ReportsFeature {
 
     queryPackageReports :: forall m. MonadIO m => PackageId -> m [(BuildReportId, BuildReport)],
     queryBuildLog       :: forall m. MonadIO m => BuildLog  -> m Resource.BuildLog,
-    queryBuildCovg      :: forall m. MonadIO m => BuildCovg  -> m Resource.BuildCovg,
     pkgReportDetails    :: forall m. MonadIO m => (PackageIdentifier, Bool) -> m BuildReport.PkgDetails,
 
     reportsResource :: ReportsResource
@@ -195,10 +194,6 @@ buildReportsFeature name
         file <- liftIO $ BlobStorage.fetch store blobId
         return $ Resource.BuildLog file
 
-    queryBuildCovg :: MonadIO m => BuildCovg -> m Resource.BuildCovg
-    queryBuildCovg (BuildCovg blobId) = do
-        file <- liftIO $ BlobStorage.fetch store blobId
-        return $ Resource.BuildCovg file
     
     pkgReportDetails :: MonadIO m => (PackageIdentifier, Bool) -> m BuildReport.PkgDetails--(PackageIdentifier, Bool, Maybe (BuildStatus, Maybe UTCTime, Maybe Version))
     pkgReportDetails (pkgid, docs) = do
@@ -330,9 +325,8 @@ buildReportsFeature name
                   guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
               report'   <- liftIO $ BuildReport.affixTimestamp report
               logBlob   <- liftIO $ traverse (\x -> BlobStorage.add store $ fromString x) logBody
-              covgBlob  <- liftIO $ traverse (\x -> BlobStorage.add store $ fromString x) covgBody
               reportId  <- updateState reportsState $ 
-                                  AddRptLogCovg pkgid (report', (fmap BuildLog logBlob), (fmap BuildCovg covgBlob))
+                                  AddRptLogCovg pkgid (report', (fmap BuildLog logBlob), (fmap BuildReport.parseCovg covgBody))
               -- redirect to new reports page
               seeOther (reportsPageUri reportsResource "" pkgid reportId) $ toResponse ()
 

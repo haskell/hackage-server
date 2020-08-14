@@ -35,7 +35,7 @@ import Distribution.Server.Features.UserDetails
 import Distribution.Server.Features.EditCabalFiles
 import Distribution.Server.Features.Html.HtmlUtilities
 import Distribution.Server.Features.Security.SHA256
-import qualified Distribution.Server.Features.BuildReports.BuildReport as BuildReport
+import qualified Distribution.Server.Features.BuildReports.BuildReport as BR
 
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Group as Group
@@ -975,11 +975,11 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
         cacheControl [Public, maxAgeMinutes 30] (etagFromHash (length reports))
         template <- getTemplate templates "reports.html"
         details <- pkgReportDetails (pkgid,True)
-        let status = case BuildReport.failCnt details of
+        let status = case BR.failCnt details of
               Nothing -> "Not yet tried."
-              Just BuildReport.BuildOK -> "Built successfully."
-              Just (BuildReport.BuildFailCnt 1) -> "1 consecutive failure."
-              Just (BuildReport.BuildFailCnt c) -> show(c) ++ " consecutive failures."
+              Just BR.BuildOK -> "Built successfully."
+              Just (BR.BuildFailCnt 1) -> "1 consecutive failure."
+              Just (BR.BuildFailCnt c) -> show(c) ++ " consecutive failures."
         return $ toResponse $ template
           [ "pkgid"   $= (pkgid :: PackageIdentifier)
           , "reports" $= reports
@@ -990,7 +990,7 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
     servePackageReport dpath = do
         (repid, report, mlog, covg) <- packageReport dpath
         mlog' <- traverse queryBuildLog mlog
-        covg'  <- traverse queryBuildCovg covg
+        let covg' = fmap getCvgDet covg
         pkgid <- packageInPath dpath
         cacheControlWithoutETag [Public, maxAgeDays 30]
         template <- getTemplate templates "report.html"
@@ -998,8 +998,22 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
           [ "pkgid" $= (pkgid :: PackageIdentifier)
           , "report" $= (repid, report)
           , "log" $= toMessage <$> mlog'
-          , "covg" $= toMessage <$> covg'
+          , "covg" $= covg'
           ]
+      where
+        getCvgDet c = (
+            det $ BR.expressions c,
+            det $ BR.guards $ BR.boolean c,
+            det $ BR.ifConditions $ BR.boolean c,
+            det $ BR.qualifiers $ BR.boolean c,
+            det $ BR.alternatives c,
+            det $ BR.localDeclarations c,
+            det $ BR.topLevel c
+          )
+
+        det::(Int,Int)->(Int,Int,Int)
+        det (_,0) = (100,0,0)
+        det (a,b) = ((a * 100) `div` b ,a,b)
 
 {-------------------------------------------------------------------------------
   Candidates

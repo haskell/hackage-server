@@ -77,7 +77,15 @@ $hackagePageHeader()$
 <h3>Code Coverage</h3>
 
 $if(covg)$
-  <pre>$covg$</pre>
+  <table class="fancy">
+    <tr><th colspan="2">expressions</th><td>$covg.0.0$% ($covg.0.1$/$covg.0.2$)</td></tr>
+    <tr><th colspan="1" rowspan="3">boolean</th><th>guards</th><td>$covg.1.0$% ($covg.1.1$/$covg.1.2$)    </td></tr>
+    <tr><th>conditions</th><td> $covg.2.0$% ($covg.2.1$/$covg.2.2$) </td></tr>
+    <tr><th>qualifiers</th><td>$covg.3.0$% ($covg.3.1$/$covg.3.2$)</td></tr>
+    <tr><th colspan="2">alternatives</th><td>$covg.4.0$% ($covg.4.1$/$covg.4.2$)</td></tr>
+    <tr><th colspan="2">local declarations</th><td>$covg.5.0$% ($covg.5.1$/$covg.5.2$)</td></tr>
+    <tr><th colspan="2">top-level declarations</th><td>$covg.6.0$% ($covg.6.1$/$covg.6.2$)</td></tr>
+  </table>
 $else$
   <p>No Code Coverage was submitted for this report.</p>
 $endif$

@@ -26,7 +26,7 @@ module Distribution.Server.Features.BuildReports.BuildReports (
 
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Features.BuildReports.BuildReport
-         (BuildReport(..), BuildReport_v0,BuildStatus(..))
+         (BuildReport(..), BuildReport_v0,BuildStatus(..), BuildCovg(..))
 
 import Distribution.Package (PackageId)
 import Distribution.Text (display)
@@ -80,8 +80,6 @@ instance Parsec BuildReportId where
 newtype BuildLog = BuildLog BlobStorage.BlobId
   deriving (Eq, Typeable, Show, MemSize)
 
-newtype BuildCovg = BuildCovg BlobStorage.BlobId
-  deriving (Eq, Typeable, Show, MemSize)
 
 data PkgBuildReports = PkgBuildReports {
     -- for each report, other useful information: Maybe UserId, UTCTime
@@ -221,7 +219,6 @@ instance ToSElem BuildReportId where
 deriveSafeCopy 2 'extension ''BuildReportId
 deriveSafeCopy 2 'extension ''BuildLog
 deriveSafeCopy 3 'extension ''BuildReports
-deriveSafeCopy 1 'base ''BuildCovg
 
 -- note: if the set of report ids is [1, 2, 3], then nextReportId = 4
 -- after calling deleteReport for 3, the set is [1, 2] and nextReportId is still 4.
