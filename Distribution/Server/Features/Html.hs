@@ -598,12 +598,13 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         tags          <- queryTagsForPackage pkgname
         deprs         <- queryGetDeprecatedFor pkgname
         mreadme       <- makeReadme render
-
+        hasDocs       <- queryHasDocumentation documentationFeature realpkg
+        rptStats      <- queryLastReportStats reportsFeature realpkg
         buildStatus   <- renderBuildStatus
           documentationFeature reportsFeature realpkg
         mdocIndex     <- maybe (return Nothing)
           (liftM Just . liftIO . cachedTarIndex) mdoctarblob
-
+        let (install, test, covg) = getBadgeStats rptStats
         let
           loadDocMeta
             | Just doctarblob <- mdoctarblob
@@ -640,6 +641,10 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           , "userRating"        $= userRating
           , "score"             $= pkgScore
           , "buildStatus"       $= buildStatus
+          , "hasDocs"           $= hasDocs
+          , "install"           $= install
+          , "test"              $= test
+          , "covg"              $= covg
           ] ++
           -- Items not related to IO (mostly pure functions)
           PagesNew.packagePageTemplate render
@@ -647,6 +652,37 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
             docURL distributions
             deprs
             utilities
+      where
+        getBadgeStats (rpt, cvg) = (getInstall (fmap BR.installOutcome rpt), getTest (fmap BR.testsOutcome rpt), getAvgCovg cvg)
+        
+        getInstall Nothing                        = (False, "", "")
+        getInstall (Just BR.InstallOk)            = (True, "success", "InstallOk")
+        getInstall (Just (BR.DependencyFailed _)) = (True, "critical", "DependencyFailed")
+        getInstall (Just k)                       = (True, "critical", show k)
+
+        getTest (Just BR.Ok)      = (True, "success", "Passed")
+        getTest (Just BR.Failed)  = (True, "critical", "Failed")
+        getTest _                 = (False, "False", "")
+        
+        getAvgCovg :: Maybe BR.BuildCovg -> (Bool, String, Int)
+        getAvgCovg Nothing = (False, "", 100)
+        getAvgCovg (Just c) = do
+              let l = [
+                        BR.expressions c
+                      , BR.guards (BR.boolean c)
+                      , BR.ifConditions (BR.boolean c)
+                      , BR.qualifiers (BR.boolean c)
+                      , BR.alternatives c
+                      , BR.localDeclarations c
+                      , BR.topLevel c
+                      ]
+                  (used,total) = foldl (\(a,b) (x, y) -> (a+x, b+y)) (0,0) l
+                  per = (used*100) `div` total
+              if per > 66 
+                then (True, "brightgreen", per)
+                else if per > 33 
+                  then (True, "yellowgreen", per)
+                  else (True, "red", per)
 
     serveDependenciesPage :: DynamicPath -> ServerPartE Response
     serveDependenciesPage dpath = do

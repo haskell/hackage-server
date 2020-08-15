@@ -20,8 +20,9 @@ module Distribution.Server.Features.BuildReports.BuildReports (
     lookupPackageReports,
     unsafeSetReport,
     setFailStatus,
-    buildDetails,
-    resetFailCount
+    resetFailCount,
+    lookupLatestReport,
+    lookupFailCount
   ) where
 
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
@@ -32,7 +33,6 @@ import Distribution.Package (PackageId)
 import Distribution.Text (display)
 import Distribution.Pretty (Pretty(..))
 import Distribution.Parsec (Parsec(..))
-import Distribution.Compiler ( CompilerId(..) )
 import qualified Distribution.Parsec as P
 import qualified Distribution.Compat.Parsing as P
 import qualified Distribution.Compat.CharParsing as P
@@ -46,11 +46,9 @@ import qualified Data.Serialize as Serialize
 import Data.Serialize (Serialize)
 import Data.SafeCopy
 import Data.Typeable (Typeable)
-import Data.Time ( UTCTime )
 import Control.Applicative ((<$>))
 import qualified Data.List as L
 import qualified Data.Char as Char
-import Distribution.Version ( Version )
 
 import Text.StringTemplate (ToSElem(..))
 
@@ -181,19 +179,6 @@ setFailStatus pkgid fStatus buildReports =
           (BuildFailCnt n) | nfst -> BuildFailCnt (n+1)
           _ -> BuildOK
 
-buildDetails :: PackageId -> BuildReports -> Maybe (BuildStatus, Maybe UTCTime, Maybe Distribution.Version.Version)
-buildDetails pkgid buildReports = do
-  rp <- Map.lookup pkgid (reportsIndex buildReports)
-  let rs = reports rp 
-      a  = if Map.null rs
-        then BuildReportId (-1)
-        else fst $ Map.findMax rs
-  (tm, comp) <- case Map.lookup a rs of
-        Nothing         -> return (Nothing, Nothing)
-        Just (brp,_,_)  -> do
-          let (CompilerId _ vrsn) = compiler brp
-          return (time brp, Just vrsn)
-  return (buildStatus rp, tm, comp)
 
 resetFailCount :: PackageId -> BuildReports -> Maybe BuildReports
 resetFailCount pkgid buildReports = case Map.lookup pkgid (reportsIndex buildReports) of
@@ -203,7 +188,21 @@ resetFailCount pkgid buildReports = case Map.lookup pkgid (reportsIndex buildRep
                                       , nextReportId = (nextReportId pkgReports)
                                       , buildStatus = BuildFailCnt 0 }
       return buildReports { reportsIndex = Map.insert pkgid pkgReports' (reportsIndex buildReports) }
-      
+
+lookupFailCount :: PackageId -> BuildReports -> Maybe BuildStatus
+lookupFailCount pkgid buildReports = do
+  rp <- Map.lookup pkgid (reportsIndex buildReports)
+  return $ buildStatus rp
+
+lookupLatestReport :: PackageId -> BuildReports -> Maybe (BuildReport, Maybe BuildLog, Maybe BuildCovg)
+lookupLatestReport pkgid buildReports = do
+  rp <- Map.lookup pkgid (reportsIndex buildReports)
+  let rs = reports rp 
+  a  <- if Map.null rs
+          then Nothing
+          else Just $ fst $ Map.findMax rs
+  Map.lookup a rs
+
 -- addPkg::`
 -------------------
 -- HStringTemplate instances

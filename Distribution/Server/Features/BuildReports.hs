@@ -30,6 +30,7 @@ import Control.Arrow (second)
 import Data.ByteString.Lazy (toStrict)
 import Data.String (fromString)
 import Data.Maybe
+import Distribution.Compiler ( CompilerId(..) )
 
 
 -- TODO:
@@ -44,7 +45,7 @@ data ReportsFeature = ReportsFeature {
     queryPackageReports :: forall m. MonadIO m => PackageId -> m [(BuildReportId, BuildReport)],
     queryBuildLog       :: forall m. MonadIO m => BuildLog  -> m Resource.BuildLog,
     pkgReportDetails    :: forall m. MonadIO m => (PackageIdentifier, Bool) -> m BuildReport.PkgDetails,
-
+    queryLastReportStats:: forall m. MonadIO m => PackageIdentifier -> m (Maybe BuildReport, Maybe BuildCovg),
     reportsResource :: ReportsResource
 }
 
@@ -197,11 +198,22 @@ buildReportsFeature name
     
     pkgReportDetails :: MonadIO m => (PackageIdentifier, Bool) -> m BuildReport.PkgDetails--(PackageIdentifier, Bool, Maybe (BuildStatus, Maybe UTCTime, Maybe Version))
     pkgReportDetails (pkgid, docs) = do
-      det <- queryState reportsState $ BuildDetails pkgid
-      (failCnt, time, ghcId) <- case det of
-        Nothing -> return (Nothing,Nothing,Nothing)
-        Just (k,l,g) -> return (Just k,l,g)
+      failCnt   <- queryState reportsState $ LookupFailCount pkgid
+      latestRpt <- queryState reportsState $ LookupLatestReport pkgid
+      (time, ghcId) <- case latestRpt of
+        Nothing -> return (Nothing,Nothing)
+        Just (brp, _, _) -> do
+          let (CompilerId _ vrsn) = compiler brp
+          return (time brp, Just vrsn)
       return  (BuildReport.PkgDetails pkgid docs failCnt time ghcId)
+    
+    queryLastReportStats :: MonadIO m => PackageIdentifier -> m (Maybe BuildReport, Maybe BuildCovg)
+    queryLastReportStats pkgid = do
+      rpt <- queryState reportsState $ LookupLatestReport pkgid
+      case rpt of
+        Nothing -> return (Nothing, Nothing)
+        Just (a,_,b) -> return (Just a, b)
+
 
     ---------------------------------------------------------------------------
 

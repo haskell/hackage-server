@@ -188,6 +188,13 @@
     </table>
     </div> <!-- /properties -->
 
+    <div id="badges" style="margin-top: 20px;">
+        $if(install.0)$<img src="https://img.shields.io/static/v1?label=Build&message=$install.2$&color=$install.1$" />$endif$
+        $if(test.0)$<img src="https://img.shields.io/static/v1?label=Tests&message=$test.2$&color=$test.1$" />$endif$
+        $if(covg.0)$<img src="https://img.shields.io/static/v1?label=Coverage&message=$covg.2$%&color=$covg.1$" />$endif$
+        <img src="https://img.shields.io/static/v1?label=Documentation&message=$if(hasDocs)$Available$else$Unavailable$endif$&color=$if(hasDocs)$success$else$critical$endif$" />
+    </div>
+
     <div id="modules">
       $moduleList$
     </div>

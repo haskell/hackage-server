@@ -353,6 +353,7 @@ library lib-server
     , acid-state            ^>= 0.14
     , async                 ^>= 2.2.1
     , attoparsec            ^>= 0.13
+    , parser-combinators    ^>= 1.2.1
     , base16-bytestring     ^>= 0.1
     , base64-bytestring     ^>= 1.0
       --NOTE: blaze-builder-0.4 is now a compat package that uses bytestring-0.10 builder

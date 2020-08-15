@@ -9,12 +9,10 @@ import Distribution.Server.Features.BuildReports.BuildReports
 import qualified Distribution.Server.Features.BuildReports.BuildReports as BuildReports
 
 import Distribution.Package
-import Distribution.Version (Version)
 
 import Control.Monad.Reader
 import qualified Control.Monad.State as State
 import Data.Acid     (Query, Update, makeAcidic)
-import Data.Time     ( UTCTime )
 
 initialBuildReports :: BuildReports
 initialBuildReports = BuildReports.emptyReports
@@ -69,15 +67,18 @@ setFailStatus pkgid status = do
     let reports = BuildReports.setFailStatus pkgid status buildReports
     State.put reports
 
-buildDetails :: PackageId -> Query BuildReports (Maybe (BuildStatus, Maybe UTCTime, Maybe Version))
-buildDetails pkgid = asks (BuildReports.buildDetails pkgid)
-
 resetFailCount :: PackageId -> Update BuildReports (Bool)
 resetFailCount pkgid = do
     buildReports <- State.get
     case BuildReports.resetFailCount pkgid buildReports of
         Nothing       -> return False
         Just reports  -> State.put reports >> return True
+
+lookupFailCount :: PackageId -> Query BuildReports (Maybe BuildStatus)
+lookupFailCount pkgid = asks (BuildReports.lookupFailCount pkgid)
+
+lookupLatestReport :: PackageId -> Query BuildReports (Maybe (BuildReport, Maybe BuildLog, Maybe BuildCovg))
+lookupLatestReport pkgid = asks (BuildReports.lookupLatestReport pkgid)
 
 makeAcidic ''BuildReports ['addReport
                           ,'setBuildLog
@@ -89,7 +90,8 @@ makeAcidic ''BuildReports ['addReport
                           ,'addRptLogCovg
                           ,'lookupReportCovg
                           ,'setFailStatus
-                          ,'buildDetails
                           ,'resetFailCount
+                          ,'lookupFailCount
+                          ,'lookupLatestReport
                           ]
 
