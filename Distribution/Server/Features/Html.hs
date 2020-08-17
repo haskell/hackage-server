@@ -870,7 +870,7 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
           [toHtml "Changed password for ", anchor ! [href $ userPageUri users "" uname] << display uname]
 
 {-------------------------------------------------------------------------------
-  Uploads
+  Uploads(For new package lifecycle, this might need to be removed)
 -------------------------------------------------------------------------------}
 
 data HtmlUploads = HtmlUploads {
