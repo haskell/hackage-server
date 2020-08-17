@@ -102,8 +102,7 @@ import Data.Maybe
 import Data.Scientific
 import qualified Distribution.Text as DT
 import qualified Prelude
-import Control.Monad.Combinators (skipManyTill)
-import Data.Attoparsec.Text (Parser, anyChar, char, decimal, parseOnly)
+import Data.Attoparsec.Text (Parser, char, decimal, parseOnly, takeTill)
 import qualified Data.Text as T
 
 
@@ -294,10 +293,11 @@ getUsage bs = do
     Right a -> a
 
 intPair :: Parser (Int, Int)
-intPair = skipManyTill anyChar $ do
-  n <- char '(' *> decimal
+intPair = do
+  n <- takeTill ('('==) *> char '(' *> decimal
   m <- char '/' *> decimal <* char ')'
   pure (n, m)
+
 -- -----------------------------------------------------------------------------
 -- Pretty-printing
 
