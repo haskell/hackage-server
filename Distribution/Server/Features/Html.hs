@@ -936,7 +936,14 @@ mkHtmlDocUploads HtmlUtilities{..} CoreFeature{coreResource} DocumentationFeatur
             resourcePut    = [ ("html", serveUploadDocumentation) ]
           , resourceDelete = [ ("html", serveDeleteDocumentation) ]
           }
+      , (extendResource $ candDocsWhole documentationResource) {
+            resourcePut    = [ ("html", servecandUploadDocumentation) ]
+          , resourceDelete = [ ("html", servecandDeleteDocumentation) ]
+          }
       , (resourceAt "/package/:package/maintain/docs") {
+            resourceGet = [("html", serveDocUploadForm)]
+          }
+      , (resourceAt "/package/:package/candidate/maintain/docs"){
             resourceGet = [("html", serveDocUploadForm)]
           }
       ]
@@ -952,7 +959,23 @@ mkHtmlDocUploads HtmlUtilities{..} CoreFeature{coreResource} DocumentationFeatur
     serveDeleteDocumentation :: DynamicPath -> ServerPartE Response
     serveDeleteDocumentation dpath = do
         pkgid <- packageInPath dpath
-        deleteDocumentation dpath >> ignoreFilters  -- Override 204 No Content
+        deleteDocumentation dpath >> ignoreFilters -- Override 204 No Content
+        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation deleted" $
+          [ paragraph << [toHtml "Successfully deleted documentation for ", packageLink pkgid, toHtml "!"]
+          ]
+
+    servecandUploadDocumentation :: DynamicPath -> ServerPartE Response
+    servecandUploadDocumentation dpath = do
+        pkgid <- packageInPath dpath
+        uploadcandDocumentation dpath >> ignoreFilters  -- Override 204 No Content
+        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation uploaded" $
+          [ paragraph << [toHtml "Successfully uploaded documentation for ", packageLink pkgid, toHtml "!"]
+          ]
+
+    servecandDeleteDocumentation :: DynamicPath -> ServerPartE Response
+    servecandDeleteDocumentation dpath = do
+        pkgid <- packageInPath dpath
+        deletecandDocumentation dpath >> ignoreFilters -- Override 204 No Content
         return $ toResponse $ Resource.XHtml $ hackagePage "Documentation deleted" $
           [ paragraph << [toHtml "Successfully deleted documentation for ", packageLink pkgid, toHtml "!"]
           ]
@@ -1137,12 +1160,14 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
 
     serveCandidateMaintain :: DynamicPath -> ServerPartE Response
     serveCandidateMaintain dpath = do
+      pkgid <- packageInPath dpath
       candidate <- packageInPath dpath >>= lookupCandidateId
       guardAuthorisedAsMaintainer (packageName candidate)
       template <- getTemplate templates "maintain-candidate.html"
       return $ toResponse $ template
         [ "pkgname"    $= packageName candidate
         , "pkgversion" $= packageVersion candidate
+        , "pkgid"   $= (pkgid :: PackageIdentifier)
         ]
     {-some useful URIs here: candidateUri check "" pkgid, packageCandidatesUri check "" pkgid, publishUri check "" pkgid-}
 
