@@ -524,7 +524,6 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            PackageCandidatesFeature{..}
   = HtmlCore{..}
   where
-    -- candidatesRes     = candidatesResource
     candidatesCore = candidatesCoreResource
     cores@CoreResource{packageInPath, lookupPackageName, lookupPackageId} = coreResource
     versions = versionsResource
@@ -759,13 +758,10 @@ data HtmlUsers = HtmlUsers {
     htmlUsersResources :: [Resource]
   }
 
--- mkHtmlUsers :: UserFeature -> UserDetailsFeature -> PackageCandidatesFeature -> CoreFeature{coreResource} -> HtmlUsers
 mkHtmlUsers :: UserFeature -> UserDetailsFeature -> HtmlUsers
 mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
   where
     users = userResource
-    -- candidatesCore = candidatesCoreResource
-    -- CoreResource{packageInPath, lookupPackageName, lookupPackageId} = coreResource
 
 
     htmlUsersResources = [
@@ -936,14 +932,7 @@ mkHtmlDocUploads HtmlUtilities{..} CoreFeature{coreResource} DocumentationFeatur
             resourcePut    = [ ("html", serveUploadDocumentation) ]
           , resourceDelete = [ ("html", serveDeleteDocumentation) ]
           }
-      , (extendResource $ candDocsWhole documentationResource) {
-            resourcePut    = [ ("html", servecandUploadDocumentation) ]
-          , resourceDelete = [ ("html", servecandDeleteDocumentation) ]
-          }
       , (resourceAt "/package/:package/maintain/docs") {
-            resourceGet = [("html", serveDocUploadForm)]
-          }
-      , (resourceAt "/package/:package/candidate/maintain/docs"){
             resourceGet = [("html", serveDocUploadForm)]
           }
       ]
@@ -964,28 +953,13 @@ mkHtmlDocUploads HtmlUtilities{..} CoreFeature{coreResource} DocumentationFeatur
           [ paragraph << [toHtml "Successfully deleted documentation for ", packageLink pkgid, toHtml "!"]
           ]
 
-    servecandUploadDocumentation :: DynamicPath -> ServerPartE Response
-    servecandUploadDocumentation dpath = do
-        pkgid <- packageInPath dpath
-        uploadcandDocumentation dpath >> ignoreFilters  -- Override 204 No Content
-        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation uploaded" $
-          [ paragraph << [toHtml "Successfully uploaded documentation for ", packageLink pkgid, toHtml "!"]
-          ]
-
-    servecandDeleteDocumentation :: DynamicPath -> ServerPartE Response
-    servecandDeleteDocumentation dpath = do
-        pkgid <- packageInPath dpath
-        deletecandDocumentation dpath >> ignoreFilters -- Override 204 No Content
-        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation deleted" $
-          [ paragraph << [toHtml "Successfully deleted documentation for ", packageLink pkgid, toHtml "!"]
-          ]
-
     serveDocUploadForm :: DynamicPath -> ServerPartE Response
     serveDocUploadForm dpath = do
         pkgid <- packageInPath dpath
         template <- getTemplate templates "maintain-docs.html"
         return $ toResponse $ template
-          [ "pkgid" $= (pkgid :: PackageIdentifier)
+          [ "pkgid"     $= (pkgid :: PackageIdentifier)
+          , "actionUrl" $= ""
           ]
 
 {-------------------------------------------------------------------------------
@@ -1057,7 +1031,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
                             }
                  VersionsFeature{ queryGetPreferredInfo }
                  UploadFeature{ guardAuthorisedAsMaintainer }
-                 DocumentationFeature{documentationResource, queryDocumentation}
+                 DocumentationFeature{documentationResource, queryDocumentation,..}
                  TarIndexCacheFeature{cachedTarIndex}
                  PackageCandidatesFeature{..}
                  templates = HtmlCandidates{..}
@@ -1071,6 +1045,9 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
                           }
     candMaintainForm  = (resourceAt "/package/:package/candidate/maintain") {
                             resourceGet = [("html", serveCandidateMaintain)]
+                          }
+    candDocUploadForm = (resourceAt "/package/:package/candidate/maintain/docs"){
+                            resourceGet = [("html", serveCandDocUploadForm)]
                           }
 
     htmlCandidatesResources = [
@@ -1114,6 +1091,8 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
       , pkgCandUploadForm
         -- maintenance for candidate packages
       , candMaintainForm
+        -- form for uploading documentation for a candidate
+      , candDocUploadForm
         -- form for publishing package
       , (extendResource $ publishPage candidates) {
            resourceDesc = [ (GET, "Show candidate publish form")
@@ -1135,6 +1114,10 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
                            , (POST, "Delete package candidates") ]
           , resourceGet  = [ ("html", serveCandidatesDeleteForm) ]
           , resourcePost = [ ("html", doDeleteCandidates) ]
+          }
+      , (extendResource $ packageDocsWhole docs) {
+            resourcePut    = [ ("html", serveCandUploadDocumentation) ]
+          , resourceDelete = [ ("html", serveCandDeleteDocumentation) ]
           }
       ]
 
@@ -1170,6 +1153,15 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
         , "pkgid"   $= (pkgid :: PackageIdentifier)
         ]
     {-some useful URIs here: candidateUri check "" pkgid, packageCandidatesUri check "" pkgid, publishUri check "" pkgid-}
+
+    serveCandDocUploadForm :: DynamicPath -> ServerPartE Response
+    serveCandDocUploadForm dpath = do
+        pkgid <- packageInPath dpath
+        template <- getTemplate templates "maintain-docs.html"
+        return $ toResponse $ template
+          [ "pkgid" $= (pkgid :: PackageIdentifier)
+          , "actionUrl" $= "candidate/"
+          ]
 
     serveCandidatePage :: Resource -> DynamicPath -> ServerPartE Response
     serveCandidatePage maintain dpath = do
@@ -1279,6 +1271,22 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
       return $ toResponse $ Resource.XHtml $ hackagePage "Deleting package candidates"
                   [form ! [theclass "box", XHtml.method "post", action $ deleteCandidatesUri candidatesResource "" pkgname]
                       << input ! [thetype "submit", value "Delete All Candidates For This Package"]]
+
+    serveCandUploadDocumentation :: DynamicPath -> ServerPartE Response
+    serveCandUploadDocumentation dpath = do
+        pkgid <- packageInPath dpath
+        uploadDocumentation dpath >> ignoreFilters  -- Override 204 No Content
+        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation uploaded" $
+          [ paragraph << [toHtml "Successfully uploaded documentation for ", packageLink pkgid, toHtml "!"]
+          ]
+
+    serveCandDeleteDocumentation :: DynamicPath -> ServerPartE Response
+    serveCandDeleteDocumentation dpath = do
+        pkgid <- packageInPath dpath
+        deleteDocumentation dpath >> ignoreFilters -- Override 204 No Content
+        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation deleted" $
+          [ paragraph << [toHtml "Successfully deleted documentation for ", packageLink pkgid, toHtml "!"]
+          ]
 
 dependenciesPage :: Bool -> PackageRender -> URL -> Resource.XHtml
 dependenciesPage isCandidate render docURL =
