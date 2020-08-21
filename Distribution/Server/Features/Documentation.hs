@@ -13,6 +13,7 @@ import Distribution.Server.Features.Upload
 import Distribution.Server.Features.Core
 import Distribution.Server.Features.TarIndexCache
 import Distribution.Server.Features.BuildReports
+import Distribution.Version ( Version )
 
 import Distribution.Server.Framework.BackupRestore
 import qualified Distribution.Server.Framework.ResponseContentTypes as Resource
@@ -205,42 +206,53 @@ documentationFeature name
         hasDoc        <- optional (look "doc")
         failCnt'      <- optional (look "fail")
         selectedPkgs' <- optional (look "pkgs")
+        ghcid         <- optional (look "ghcid")
         pkgs          <- mapParaM queryHasDocumentation =<< liftIO getPackages
         
-        let selectedPkgs  = parsePkgs (fromMaybe "" selectedPkgs')
-            filtSelected  = filterSelect selectedPkgs pkgs
-            filteredPkgs  = filterDoc (fromMaybe "all" hasDoc) filtSelected
-            failCnt       = read (fromMaybe "-1" failCnt') ::Int
-        pkgs' <- mapM pkgReportDetails filteredPkgs
-        return . toResponse . toJSON $ filter (filt failCnt) pkgs'
+        pkgs' <- mapM pkgReportDetails 
+                  $ filter (matchDoc hasDoc) 
+                  $ filter (isSelected $ parsePkgs $ fromMaybe "" selectedPkgs') pkgs
+
+        return . toResponse . toJSON 
+                    $ filter (isGHCok $ parseVersion' ghcid)  
+                    $ filter (isfailCntOk $ fmap read failCnt') pkgs'
       where
+        parseVersion' :: Maybe String -> Maybe Version
+        parseVersion' Nothing = Nothing
+        parseVersion' (Just k) = P.simpleParsec k
+
         parsePkgs :: String -> [PackageIdentifier]
         parsePkgs pkgsStr = map fromJust $ filter isJust $ map (P.simpleParsec . C.unpack) $ C.split ',' (C.pack pkgsStr)
 
-        filterSelect :: [PackageIdentifier] -> [(PackageIdentifier,Bool)] -> [(PackageIdentifier,Bool)]
-        filterSelect [] pkgs = pkgs
-        filterSelect selectedPkgs pkgs = filter (\(x,_) -> any (isSelectedPackage x) selectedPkgs) pkgs
-        
-        -- do versionless matching if no version was given
         isSelectedPackage pkgid pkgid'@(PackageIdentifier _ v)
             | nullVersion == v =
             packageName pkgid == packageName pkgid'
         isSelectedPackage pkgid pkgid' =
             pkgid == pkgid'
 
-        filt:: Int -> PkgDetails -> Bool
-        filt (-1) _ = True
-        filt _ (PkgDetails _ _ (Just BuildOK) _ _) = False
-        filt i (PkgDetails _ _ (Just (BuildFailCnt x)) _ _) = i>x
-        filt _ _ = True
+        isSelected :: [PackageIdentifier] -> (PackageIdentifier,Bool) -> Bool
+        isSelected [] _                   = True
+        isSelected selectedPkgs (pkg, _)  = any (isSelectedPackage pkg) selectedPkgs
 
-        filterDoc :: String -> [(PackageIdentifier, Bool)] -> [(PackageIdentifier, Bool)]
-        filterDoc k pkgs | ((k /= "true") && (k/="false")) = pkgs
-        filterDoc k ((_, f):xs)
-                | (k == "true") && not f= filterDoc k xs
-                | (k == "false") && f= filterDoc k xs
-        filterDoc k (xs:ys) = xs : (filterDoc k ys)
-        filterDoc _  []= []
+        matchDoc :: Maybe String -> (PackageIdentifier, Bool) -> Bool
+        matchDoc (Just "true")  (_, False)  = False
+        matchDoc (Just "false") (_, True)   = False
+        matchDoc _ _                        = True
+
+        isfailCntOk:: Maybe Int -> PkgDetails -> Bool
+        isfailCntOk Nothing   _   = True
+        isfailCntOk (Just i) pkg  = case failCnt pkg of
+                                        Nothing -> True
+                                        (Just BuildOK) -> False
+                                        (Just (BuildFailCnt x)) -> i>x
+
+        isGHCok :: Maybe Version -> PkgDetails -> Bool
+        isGHCok Nothing _ = True
+        isGHCok (Just ver) pkg = case ghcId pkg of
+                              Nothing   -> True
+                              Just ver' -> ver' < ver
+
+               
 
     serveDocumentationTar :: DynamicPath -> ServerPartE Response
     serveDocumentationTar dpath =
