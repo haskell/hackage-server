@@ -17,7 +17,6 @@ import Distribution.Server.Features.Upload
 import Distribution.Server.Features.BuildReports
 import Distribution.Server.Features.BuildReports.Render
 import Distribution.Server.Features.PackageCandidates
--- import Distribution.Server.Features.PackageCandidates.State
 import Distribution.Server.Features.Users
 import Distribution.Server.Features.DownloadCount
 import Distribution.Server.Features.Votes
@@ -44,9 +43,6 @@ import Distribution.Server.Packages.Render
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Users.Group (UserGroup(..))
--- import Distribution.Server.Users.Group (UserGroup(..), GroupDescription(..))
--- import Distribution.Types.PackageName (mkPackageName)
--- [reverse index disabled] import Distribution.Server.Packages.Reverse
 
 import qualified Distribution.Server.Pages.Package as Pages
 import qualified Distribution.Server.Pages.PackageFromTemplate as PagesNew
@@ -164,7 +160,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                             tarIndexCache
                             reportsCore
                             usersdetails
-                            (htmlUtilities core tags user)
+                            (htmlUtilities core candidates tags user)
                             mainCache namesCache browseCache
                             templates
 
@@ -1218,7 +1214,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
           Just err -> throwError err
           Nothing  -> do
               return $ toResponse $ Resource.XHtml $ hackagePage "Publishing candidates"
-                  [form ! [theclass "box", XHtml.method "post", action $ publishUri candidatesResource "" pkgid]
+                  [form ! [theclass "box", XHtml.method "post", action $ publishUri candidates "" pkgid]
                       << input ! [thetype "submit", value "Publish package"]]
 
     serveCandidatesPage :: DynamicPath -> ServerPartE Response
@@ -1260,7 +1256,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
       guardAuthorisedAsMaintainer (packageName candidate)
       let pkgid = packageId candidate
       return $ toResponse $ Resource.XHtml $ hackagePage "Deleting candidates"
-                  [form ! [theclass "box", XHtml.method "post", action $ deleteUri candidatesResource "" pkgid]
+                  [form ! [theclass "box", XHtml.method "post", action $ deleteUri candidates "" pkgid]
                       << input ! [thetype "submit", value "Delete package candidate"]]
 
     serveCandidatesDeleteForm :: DynamicPath -> ServerPartE Response
@@ -1269,7 +1265,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
       guardAuthorisedAsMaintainer pkgname
       -- let pkgname = packageName pkgid
       return $ toResponse $ Resource.XHtml $ hackagePage "Deleting package candidates"
-                  [form ! [theclass "box", XHtml.method "post", action $ deleteCandidatesUri candidatesResource "" pkgname]
+                  [form ! [theclass "box", XHtml.method "post", action $ deleteCandidatesUri candidates "" pkgname]
                       << input ! [thetype "submit", value "Delete All Candidates For This Package"]]
 
     serveCandUploadDocumentation :: DynamicPath -> ServerPartE Response
@@ -1277,7 +1273,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
         pkgid <- packageInPath dpath
         uploadDocumentation dpath >> ignoreFilters  -- Override 204 No Content
         return $ toResponse $ Resource.XHtml $ hackagePage "Documentation uploaded" $
-          [ paragraph << [toHtml "Successfully uploaded documentation for ", packageLink pkgid, toHtml "!"]
+          [ paragraph << [toHtml "Successfully uploaded documentation for ", candidateLink pkgid, toHtml "!"]
           ]
 
     serveCandDeleteDocumentation :: DynamicPath -> ServerPartE Response
@@ -1285,7 +1281,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
         pkgid <- packageInPath dpath
         deleteDocumentation dpath >> ignoreFilters -- Override 204 No Content
         return $ toResponse $ Resource.XHtml $ hackagePage "Documentation deleted" $
-          [ paragraph << [toHtml "Successfully deleted documentation for ", packageLink pkgid, toHtml "!"]
+          [ paragraph << [toHtml "Successfully deleted documentation for ", candidateLink pkgid, toHtml "!"]
           ]
 
 dependenciesPage :: Bool -> PackageRender -> URL -> Resource.XHtml

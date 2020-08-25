@@ -8,6 +8,7 @@ import Text.XHtml.Strict
 import qualified Data.Set as Set
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Core
+import Distribution.Server.Features.PackageCandidates
 import Distribution.Text (display)
 import Data.List (intersperse, intercalate)
 import Data.Set (Set)
@@ -20,6 +21,7 @@ import Distribution.Server.Features.Users
 
 data HtmlUtilities = HtmlUtilities {
     packageLink :: PackageId -> Html
+  , candidateLink :: PackageId -> Html
   , packageNameLink :: PackageName -> Html
   , renderItem :: PackageItem -> Html
   , makeRow :: PackageItem -> Html
@@ -27,12 +29,16 @@ data HtmlUtilities = HtmlUtilities {
   , renderReviewTags :: Set Tag -> (Set Tag, Set Tag) -> PackageName -> [Html]
   }
 
-htmlUtilities :: CoreFeature -> TagsFeature -> UserFeature -> HtmlUtilities
+htmlUtilities :: CoreFeature -> PackageCandidatesFeature -> TagsFeature -> UserFeature -> HtmlUtilities
 htmlUtilities CoreFeature{coreResource}
+              PackageCandidatesFeature{candidatesCoreResource}
               TagsFeature{tagsResource} UserFeature{userResource} = HtmlUtilities{..}
   where
     packageLink :: PackageId -> Html
     packageLink pkgid = anchor ! [href $ corePackageIdUri cores "" pkgid] << display pkgid
+
+    candidateLink :: PackageId -> Html
+    candidateLink pkgid = anchor ! [href $ corePackageIdUri candidatesCoreResource "" pkgid] << display pkgid
 
     packageNameLink :: PackageName -> Html
     packageNameLink pkgname = anchor ! [href $ corePackageNameUri cores "" pkgname] << display pkgname

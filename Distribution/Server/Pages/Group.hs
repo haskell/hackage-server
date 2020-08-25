@@ -8,15 +8,11 @@ module Distribution.Server.Pages.Group (
 import Text.XHtml.Strict
 import System.FilePath.Posix ((</>))
 import Distribution.Server.Pages.Template (hackagePage)
--- import Distribution.Server.Features.Core
--- import Distribution.Server.Features.PackageCandidates
--- import Distribution.Package
 import qualified Distribution.Server.Users.Types as Users
 import Distribution.Server.Users.Group (GroupDescription(..))
 import qualified Distribution.Server.Users.Group as Group
 import Distribution.Text
 import Data.Maybe
--- import Data.List (intersperse)
 
 renderGroupName :: GroupDescription -> Maybe String -> Html
 renderGroupName desc murl =
@@ -27,20 +23,6 @@ renderGroupName desc murl =
     maybe noHtml (\(_, mfor) -> " : " +++ candUrl "No Candidates" mfor ) (groupEntity desc)
   where maybeUrl text = maybe (toHtml text) (\url -> anchor ! [href url] << text)
         candUrl text = maybe (toHtml text) (\url -> anchor ! [href $ url ++ "/candidates"] << "candidates")
-
--- renderGroupNameWithCands :: GroupDescription -> Maybe String -> [CandPkgInfo] -> CoreResource -> Html
--- renderGroupNameWithCands desc murl pkgs candidates =
---     maybeUrl (groupTitle desc) murl
---       +++
---     maybe noHtml (\(for, mfor) -> " for " +++ maybeUrl for mfor) (groupEntity desc)
---       +++
---     maybeCandidates pkgs
---   where 
---     maybeUrl text = maybe (toHtml text) (\url -> anchor ! [href url] << text)
---     maybeCandidates candpkgs = 
---         case candpkgs of
---           [] -> noHtml
---           _  -> " : " +++ (toHtml $ intersperse (toHtml ", ")  $ flip map candpkgs $ \pkg -> anchor ! [href $ corePackageIdUri candidates "" $ packageId pkg] << display (packageVersion pkg))
 
 -- Primitive access control: the URI to post a new user request to, or the the URI/user/<username> to DELETE
 -- if neither adding or removing is enabled, a link to a URI/edit page is provided

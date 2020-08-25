@@ -49,8 +49,6 @@ data DocumentationFeature = DocumentationFeature {
     uploadDocumentation :: DynamicPath -> ServerPartE Response,
     deleteDocumentation :: DynamicPath -> ServerPartE Response,
 
-    -- uploadcandDocumentation :: DynamicPath -> ServerPartE Response,
-    -- deletecandDocumentation :: DynamicPath -> ServerPartE Response,
 
     documentationResource :: DocumentationResource,
 
@@ -66,11 +64,9 @@ data DocumentationResource = DocumentationResource {
     packageDocsContent :: Resource,
     packageDocsWhole   :: Resource,
     packageDocsStats   :: Resource,
-    -- candDocsWhole      :: Resource,
 
     packageDocsContentUri :: PackageId -> String,
     packageDocsWholeUri   :: String -> PackageId -> String
-    -- candDocsWholeUri      :: String -> PackageId -> String
 }
 
 initDocumentationFeature :: String
@@ -160,7 +156,6 @@ documentationFeature name
               packageDocsContent
             , packageDocsWhole
             , packageDocsStats
-            -- , candDocsWhole
             ]
       , featureState = [abstractAcidStateComponent documentationState]
       }
@@ -189,15 +184,6 @@ documentationFeature name
           , resourcePut    = [ ("tar", uploadDocumentation) ]
           , resourceDelete = [ ("", deleteDocumentation) ]
           }
-      -- , candDocsWhole = (extendResourcePath "/docs.:format" corePackagePage) {
-      --       resourceDesc = [ (GET, "Download Candidate documentation")
-      --                      , (PUT, "Upload Candidate documentation")
-      --                      , (DELETE, "Delete Candidate documentation")
-      --                      ]
-      --     , resourceGet    = [ ("tar", servecandDocumentationTar) ]
-      --     , resourcePut    = [ ("tar", uploadcandDocumentation) ]
-      --     , resourceDelete = [ ("", deletecandDocumentation) ]
-      --     }
       , packageDocsStats = (extendResourcePath "/docs.:format" corePackagesPage) {
             resourceDesc   = [ (GET, "Get information about which packages have documentation") ]
           , resourceGet    = [ ("json", serveDocumentationStats) ]
@@ -206,8 +192,6 @@ documentationFeature name
           renderResource (packageDocsContent r) [display pkgid]
       , packageDocsWholeUri = \format pkgid ->
           renderResource (packageDocsWhole r) [display pkgid, format]
-      -- , candDocsWholeUri = \format pkgid ->
-      --     renderResource (candDocsWhole r) [display pkgid, format]
       }
 
     serveDocumentationStats :: DynamicPath -> ServerPartE Response
@@ -228,17 +212,6 @@ documentationFeature name
                      (BlobStorage.blobETag blobid)
         file <- liftIO $ BlobStorage.fetch store blobid
         return $ toResponse $ Resource.DocTarball file blobid
-
-    -- servecandDocumentationTar :: DynamicPath -> ServerPartE Response
-    -- servecandDocumentationTar dpath =
-    --   withDocumentation (packageDocsWhole documentationResource)
-    --                     dpath $ \_ blobid _ -> do
-    --     age <- liftIO . getFileAge $ BlobStorage.filepath store blobid
-    --     let maxAge = documentationCacheTime age
-    --     cacheControl [Public, maxAge]
-    --                  (BlobStorage.blobETag blobid)
-    --     file <- liftIO $ BlobStorage.fetch store blobid
-    --     return $ toResponse $ Resource.DocTarball file blobid
 
 
     -- return: not-found error or tarball
@@ -287,25 +260,6 @@ documentationFeature name
           runHook_ documentationChangeHook pkgid
           noContent (toResponse ())
 
-    -- uploadcandDocumentation :: DynamicPath -> ServerPartE Response
-    -- uploadcandDocumentation dpath = do
-    --   pkgid <- packageInPath dpath
-    --   guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
-    --   -- The order of operations:
-    --   -- * Insert new documentation into blob store
-    --   -- * Generate the new index
-    --   -- * Drop the index for the old tar-file
-    --   -- * Link the new documentation to the package
-    --   fileContents <- expectUncompressedTarball
-    --   mres <- liftIO $ BlobStorage.addWith store fileContents
-    --                      (\content -> return (checkDocTarball pkgid content))
-    --   case mres of
-    --     Left  err -> errBadRequest "Invalid documentation tarball" [MText err]
-    --     Right ((), blobid) -> do
-    --       updateState documentationState $ InsertDocumentation pkgid blobid
-    --       runHook_ documentationChangeHook pkgid
-    --       noContent (toResponse ())
-
    {-
      To upload documentation using curl:
 
@@ -338,15 +292,6 @@ documentationFeature name
       updateState documentationState $ RemoveDocumentation pkgid
       runHook_ documentationChangeHook pkgid
       noContent (toResponse ())
-
-    -- deletecandDocumentation :: DynamicPath -> ServerPartE Response
-    -- deletecandDocumentation dpath = do
-    --   pkgid <- packageInPath dpath
-    --   -- guardValidPackageId pkgid
-    --   guardAuthorisedAsMaintainerOrTrustee (packageName pkgid)
-    --   updateState documentationState $ RemoveDocumentation pkgid
-    --   runHook_ documentationChangeHook pkgid
-    --   noContent (toResponse ())
 
     withDocumentation :: Resource -> DynamicPath
                       -> (PackageId -> BlobId -> TarIndex -> ServerPartE Response)
