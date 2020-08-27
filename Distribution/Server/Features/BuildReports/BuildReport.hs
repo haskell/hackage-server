@@ -626,7 +626,7 @@ instance Data.Aeson.FromJSON PkgDetails where
       <*> o .: fromString "docs"
       <*> o .:? fromString "failCnt"
       <*> o .:? fromString "buildTime"
-      <*> fmap parseVersion (o .:? (fromString "compid"))
+      <*> fmap parseVersion (o .:? (fromString "ghcId"))
     where
       parseVersion :: Maybe String -> Maybe Version
       parseVersion Nothing = Nothing

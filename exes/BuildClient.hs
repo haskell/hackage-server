@@ -67,6 +67,7 @@ data BuildOpts = BuildOpts {
                      bo_password   :: Maybe String,
                      bo_buildAttempts :: Int,
                      -- ^ how many times to attempt to rebuild a failing package
+                     bo_buildOlderGHC :: Bool,
                      bo_buildOrder :: BuildOrder
                  }
 
@@ -384,16 +385,19 @@ getDocumentationStats :: Verbosity
 getDocumentationStats verbosity opts config pkgs = do
     notice verbosity "Downloading documentation index"
     httpSession verbosity "hackage-build" version $ do
-      mPackages   <- liftM eitherDecode `liftM` requestGET' (packagesUri   pkgs)
-      mCandidates <- liftM eitherDecode `liftM` requestGET' (candidatesUri pkgs)
-
+      curGhcVersion <- liftIO $ case (bo_buildOlderGHC opts) of 
+                                  True -> getGHCversion
+                                  False -> return Nothing
+      mPackages   <- liftM eitherDecode `liftM` requestGET' (packagesUri False curGhcVersion)
+      mCandidates <- liftM eitherDecode `liftM` requestGET' (packagesUri True curGhcVersion)
+      liftIO $ putStrLn $ show curGhcVersion
       case (mPackages, mCandidates) of
         -- Download failure
-        (Nothing, _) -> fail $ "Could not download " ++ show (packagesUri   pkgs)
-        (_, Nothing) -> fail $ "Could not download " ++ show (candidatesUri pkgs)
+        (Nothing, _) -> fail $ "Could not download " ++ show (packagesUri False curGhcVersion)
+        (_, Nothing) -> fail $ "Could not download " ++ show (packagesUri True curGhcVersion)
         -- Decoding failure
-        (Just (Left e), _) -> fail $ "Could not decode " ++ show (packagesUri   pkgs) ++ ": " ++ e
-        (_, Just (Left e)) -> fail $ "Could not decode " ++ show (candidatesUri pkgs) ++ ": " ++ e
+        (Just (Left e), _) -> fail $ "Could not decode " ++ show (packagesUri False curGhcVersion) ++ ": " ++ e
+        (_, Just (Left e)) -> fail $ "Could not decode " ++ show (packagesUri True curGhcVersion) ++ ": " ++ e
         -- Success
         (Just (Right packages), Just (Right candidates)) -> do
           packages'   <- liftIO $ mapM checkFailed packages
@@ -401,18 +405,38 @@ getDocumentationStats verbosity opts config pkgs = do
           return $ map (setIsCandidate False) packages'
                 ++ map (setIsCandidate True)  candidates'
   where
+    -- curGhcVersion = "f"
+    getGHCversion :: IO (Maybe String)
+    getGHCversion = do
+      let dirloc = (bo_stateDir opts) </> "ghc" <.> "log"
+      moutput <- openFile dirloc ReadWriteMode
+      ph <- runProcess "ghc" ["--info"] Nothing
+                    Nothing Nothing (Just moutput) Nothing
+      waitForProcess ph
+      hClose moutput
+      handler <- openFile dirloc ReadWriteMode
+      contents <- hGetContents handler
+      let res     = read contents :: [(String, String)]
+          version' = fmap (\(_,b) -> b) $ find (\(a,_)-> a=="Project version") res
+      return $ version'
+    
+    getQry :: [PackageIdentifier] -> String
     getQry [] = ""
     getQry [pkg] = display pkg
     getQry (x:y) = (display x) ++ "," ++ getQry y
 
-    packagesUri Nothing       = bc_srcURI config <//> "packages" </> "docs.json"
-    packagesUri (Just [])     = bc_srcURI config <//> "packages" </> "docs.json?doc=false&fail=" ++ (show $ bo_buildAttempts opts)
-    packagesUri (Just pkgs')  = bc_srcURI config <//> "packages" </> "docs.json?pkgs=" ++ (getQry pkgs')
-    
-    candidatesUri Nothing       = bc_srcURI config <//> "packages" </> "candidates" </> "docs.json"
-    candidatesUri (Just [])     = bc_srcURI config <//> "packages" </> "candidates" </> "docs.json?doc=false&fail=" ++ (show $ bo_buildAttempts opts)
-    candidatesUri (Just pkgs')  = bc_srcURI config <//> "packages" </> "candidates" </> "docs.json?pkgs=" ++ (getQry pkgs')
-    
+    packagesUri :: Bool -> Maybe String -> URI
+    packagesUri isCandidate curGhcVersion= do 
+      addEnd pkgs curGhcVersion $ addCandi isCandidate getURI
+      where
+        getURI = bc_srcURI config <//> "packages"
+        addCandi True  uri  = uri <//> "candidates"
+        addCandi False uri  = uri
+        addEnd _            (Just a) uri = uri <//> "docs.json" ++ "?ghcid=" ++ a
+        addEnd (Just [])    Nothing  uri = uri <//> "docs.json" ++ "?doc=false&fail=" ++ (show $ bo_buildAttempts opts)
+        addEnd (Just pkgs') Nothing  uri = uri <//> "docs.json" ++ "?pkgs=" ++ (getQry pkgs')
+        addEnd Nothing      Nothing  uri = uri <//> "docs.json"
+
     checkFailed :: BR.PkgDetails -> IO (PackageIdentifier, HasDocs)
     checkFailed pkgDetails = do
       let pkgId = BR.pkid pkgDetails
@@ -438,7 +462,6 @@ getDocumentationStats verbosity opts config pkgs = do
 buildOnce :: BuildOpts -> [PackageId] -> IO ()
 buildOnce opts pkgs = keepGoing $ do
     config <- readConfig opts
-
     notice verbosity "Initialising"
 
     updatePackageIndex
@@ -881,6 +904,7 @@ data BuildFlags = BuildFlags {
     flagUsername   :: Maybe String,
     flagPassword   :: Maybe String,
     flagBuildAttempts :: Maybe Int,
+    flagBuildOlderGHC :: Bool,
     flagBuildOrder :: Maybe BuildOrder
 }
 
@@ -899,6 +923,7 @@ emptyBuildFlags = BuildFlags {
   , flagUsername   = Nothing
   , flagPassword   = Nothing
   , flagBuildAttempts = Nothing
+  , flagBuildOlderGHC = False
   , flagBuildOrder = Nothing
   }
 
@@ -967,6 +992,10 @@ buildFlagDescrs =
                                 "recent-uploads-first" -> set MostRecentlyUploadedFirst
                                 _                      -> error "Can't parse build order") "ORDER")
      "What order should packages be built in? (latest-version-first or recent-uploads-first)"
+  
+  , Option [] ["build-older-ghc"]
+      (NoArg (\opts -> opts { flagBuildOlderGHC = True }))
+      "Build packages that were previously built with an older version of GHC"
   ]
 
 validateOpts :: [String] -> IO (Mode, BuildOpts)
@@ -990,6 +1019,7 @@ validateOpts args = do
                    bo_username   = flagUsername flags,
                    bo_password   = flagPassword flags,
                    bo_buildAttempts = fromMaybe 3 $ flagBuildAttempts flags,
+                   bo_buildOlderGHC = flagBuildOlderGHC flags,
                    bo_buildOrder = fromMaybe LatestVersionFirst $ flagBuildOrder flags
                }
 
