@@ -51,11 +51,6 @@
           <td>$versions$</td>
         </tr>
 
-        <tr>
-          <th>Candidates</th>
-          <td>$candidates$</td>
-        </tr>
-
         $if(package.optional.hasChangelog)$
         <tr>
           <th>Change&nbsp;log</th>
@@ -215,6 +210,12 @@
           <a href="$baseurl$/package/$package.name$/maintain">
             edit package information
           </a>
+        </li>
+      </ul>
+      <p>Candidates</p>
+      <ul>
+        <li>
+          $candidates$
         </li>
       </ul>
     </div>
