@@ -538,7 +538,8 @@ userSignupFeature ServerEnv{serverBaseURI, serverCron}
         uid <- updateAddUser username userauth
            >>= either errNameClash return
         updateUserDetails uid acctDetails
-        liftIO $ addUserToGroup uploadersGroup uid
+        -- Temporarily disabled to prevent spam -- GB 2/22/2018
+        -- liftIO $ addUserToGroup uploadersGroup uid
         seeOther (userPageUri userResource "" username) (toResponse ())
       where
         lookPasswd = body $ (,) <$> look "password"

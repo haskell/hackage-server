@@ -74,7 +74,7 @@ import Text.Printf
 
 -- Whether to allow upload of "all rights reserved" packages
 allowAllRightsReserved :: Bool
-allowAllRightsReserved = True
+allowAllRightsReserved = False
 
 -- | Upload or check a tarball containing a Cabal package.
 -- Returns either an fatal error or a package description and a list
@@ -201,22 +201,21 @@ specVersionChecks specVerOk specVer = do
   when (not specVerOk || specVer < mkVersion [1]) $
     throwError "The 'cabal-version' field could not be properly parsed."
 
-  -- Don't allowing uploading new pre-1.2 .cabal files as the parser is likely too lax
-  -- TODO: slowly phase out ancient cabal spec versions below 1.10
-  when (specVer < mkVersion [1,2]) $
-    throwError "'cabal-version' must be at least 1.2"
+  -- Don't allowing uploading new pre-1.10 .cabal files as the parser
+  -- is likely too lax and thus we don't have proper validation in place
+  --
+  -- TODO: slowly phase out older spec-versions over time
+  when (specVer < mkVersion [1,10]) $
+    throwError "'cabal-version' must be at least 1.10"
 
-  -- Reject not well-defined cabal spec versions on upload
+  -- Reject not well-defined cabal spec versions on upload; this
+  -- should be redundant due to the subsequent check below
   when (specVer >= mkVersion [1,25] && specVer < mkVersion [2]) $
     throwError "'cabal-version' in unassigned >=1.25 && <2 range; use 'cabal-version: 2.0' instead"
 
-  -- Safeguard; should already be caught by parser
-  unless (specVer < mkVersion [2,5]) $
-    throwError "'cabal-version' must be lower than 2.5"
-
   -- Check whether a known spec version had been used
   -- TODO: move this into lib:Cabal
-  let knownSpecVersions = map mkVersion [ [1,18], [1,20], [1,22], [1,24], [2,0], [2,2], [2,4] ]
+  let knownSpecVersions = map mkVersion [ [1,18], [1,20], [1,22], [1,24], [2,0], [2,2], [2,4], [3,0] ]
   when (specVer >= mkVersion [1,18] && (specVer `notElem` knownSpecVersions)) $
     throwError ("'cabal-version' refers to an unreleased/unknown cabal specification version "
                 ++ display specVer ++ "; for a list of valid specification versions please consult "
