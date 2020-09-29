@@ -70,6 +70,7 @@ data PackageCandidatesFeature = PackageCandidatesFeature {
     postPackageCandidate  :: DynamicPath -> ServerPartE Response,
     putPackageCandidate   :: DynamicPath -> ServerPartE Response,
     doDeleteCandidate     :: DynamicPath -> ServerPartE Response,
+    doDeleteCandidates    :: DynamicPath -> ServerPartE Response,
     uploadCandidate       :: (PackageId -> Bool) -> ServerPartE CandPkgInfo,
     publishCandidate      :: DynamicPath -> Bool -> ServerPartE UploadResult,
     checkPublish          :: forall m. MonadIO m => Users.UserId -> PackageIndex PkgInfo -> CandPkgInfo -> m (Maybe ErrorResponse),
@@ -110,9 +111,11 @@ data PackageCandidatesResource = PackageCandidatesResource {
     packageCandidatesPage :: Resource,
     publishPage           :: Resource,
     deletePage            :: Resource,
+    deleteCandidatesPage  :: Resource,
     packageCandidatesUri  :: String -> PackageName -> String,
     publishUri            :: String -> PackageId -> String,
     deleteUri             :: String -> PackageId -> String,
+    deleteCandidatesUri   :: String -> PackageName -> String,
 
     -- TODO: Why don't the following entries have a corresponding entry
     -- in CoreResource?
@@ -248,6 +251,7 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           }
       , publishPage = resourceAt "/package/:package/candidate/publish.:format"
       , deletePage = resourceAt "/package/:package/candidate/delete.:format"
+      , deleteCandidatesPage = resourceAt "/package/:package/candidates/delete.:format"
       , candidateContents = (resourceAt "/package/:package/candidate/src/..") {
             resourceGet = [("", serveContents)]
           }
@@ -261,6 +265,8 @@ candidatesFeature ServerEnv{serverBlobStore = store}
           renderResource (publishPage r) [display pkgid, format]
       , deleteUri = \format pkgid ->
           renderResource (deletePage r) [display pkgid, format]
+      , deleteCandidatesUri = \format pkgname ->
+          renderResource (deleteCandidatesPage r) [display pkgname, format]
       , candidateChangeLogUri = \pkgid ->
           renderResource (candidateChangeLog candidatesResource) [display pkgid, display (packageName pkgid)]
       }
@@ -340,6 +346,13 @@ candidatesFeature ServerEnv{serverBlobStore = store}
       guardAuthorisedAsMaintainer (packageName candidate)
       void $ updateState candidatesState $ DeleteCandidate (packageId candidate)
       seeOther (packageCandidatesUri candidatesResource "" $ packageName candidate) $ toResponse ()
+
+    doDeleteCandidates :: DynamicPath -> ServerPartE Response
+    doDeleteCandidates dpath = do
+      pkgname <- packageInPath dpath
+      guardAuthorisedAsMaintainer pkgname
+      void $ updateState candidatesState $ DeleteCandidates pkgname
+      seeOther (packageCandidatesUri candidatesResource "" $ pkgname) $ toResponse ()
 
     serveCandidateTarball :: DynamicPath -> ServerPartE Response
     serveCandidateTarball dpath = do

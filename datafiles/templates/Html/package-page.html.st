@@ -54,7 +54,7 @@
       <tbody>
 
         <tr>
-          <th>Versions<span style="font-weight:normal;"> [<a href="https://pvp.haskell.org/faq">faq</a>]</span></th>
+          <th>Versions <span style="font-weight:normal;font-size: small;">[<a href="/package/$package.name$.rss">RSS</a>]  [<a href="https://pvp.haskell.org/faq">faq</a>]</span></th>
           <td>$versions$</td>
         </tr>
 
@@ -217,6 +217,12 @@
           <a href="$baseurl$/package/$package.name$/maintain">
             edit package information
           </a>
+        </li>
+      </ul>
+      <p>Candidates</p>
+      <ul>
+        <li>
+          $candidates$
         </li>
       </ul>
     </div>

@@ -49,6 +49,7 @@ data DocumentationFeature = DocumentationFeature {
     uploadDocumentation :: DynamicPath -> ServerPartE Response,
     deleteDocumentation :: DynamicPath -> ServerPartE Response,
 
+
     documentationResource :: DocumentationResource,
 
     -- | Notification of documentation changes

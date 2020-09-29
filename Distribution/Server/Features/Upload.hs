@@ -46,6 +46,7 @@ data UploadFeature = UploadFeature {
     uploadResource     :: UploadResource,
     -- | The main upload routine. This uses extractPackage on a multipart
     -- request to get contextual information.
+    -- For new pacakges lifecycle, this should be removed
     uploadPackage      :: ServerPartE UploadResult,
 
     --TODO: consider moving the trustee and/or per-package maintainer groups

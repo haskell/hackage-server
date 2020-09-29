@@ -289,6 +289,7 @@ library lib-server
       Distribution.Server.Features.PackageCandidates.Types
       Distribution.Server.Features.PackageCandidates.State
       Distribution.Server.Features.PackageCandidates.Backup
+      Distribution.Server.Features.PackageFeed
       Distribution.Server.Features.PackageList
       Distribution.Server.Features.Distro
       Distribution.Server.Features.Distro.Distributions

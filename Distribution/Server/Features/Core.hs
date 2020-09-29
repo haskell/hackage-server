@@ -399,6 +399,9 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
           , coreCabalFile
           , coreCabalFileRevs
           , coreCabalFileRev
+          , coreUserDeauth
+          , coreAdminDeauth
+          , corePackUserDeauth
           ]
       , featureState    = [abstractAcidStateComponent packagesState]
       , featureCaches   = [
@@ -448,6 +451,19 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
     coreCabalFileRev = (resourceAt "/package/:package/revision/:revision.:format") {
         resourceDesc = [(GET, "Get package .cabal file revision")]
       , resourceGet  = [("cabal", serveCabalFileRevision)]
+      }
+
+    coreUserDeauth = (resourceAt "/packages/deauth") {
+        resourceDesc = [(GET,  "Deauth Package user")]
+      , resourceGet  = [("", deauth)]
+      }
+    coreAdminDeauth = (resourceAt "/admin/deauth") {
+        resourceDesc = [(GET,  "Deauth Admin")]
+      , resourceGet  = [("", deauth)]
+      }
+    corePackUserDeauth = (resourceAt "/user/:user/deauth") {
+        resourceDesc = [(GET,  "Deauth User")]
+      , resourceGet  = [("", deauth)]
       }
     indexPackageUri = \format ->
       renderResource corePackagesPage [format]
@@ -729,6 +745,14 @@ coreFeature ServerEnv{serverBlobStore = store} UserFeature{..}
             cabalfile = Resource.CabalFile (cabalFileByteString fileRev) utime
         Nothing -> errNotFound "Package revision not found"
                      [MText "Cannot parse revision, or revision out of range."]
+    
+    
+    deauth :: DynamicPath -> ServerPartE Response
+    deauth _ = do
+      return $ (toResponse ("<script>window.location='/'</script>"::String)) { 
+          rsCode = 401 
+        , rsHeaders   = mkHeaders ([("Content-Type",  "text/html")])
+      }
 
 packageExists, packageIdExists :: (Package pkg, Package pkg') => PackageIndex pkg -> pkg' -> Bool
 -- | Whether a package exists in the given package index.

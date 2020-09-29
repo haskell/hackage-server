@@ -253,7 +253,7 @@ fieldDescrs =
     <*> uniqueField       "compiler"           compilerL
     <*> uniqueField       "client"             clientL
     <*> (map unpack <$>
-        monoidalFieldAla  "flags"              (alaList CommaFSep) flagAssignmentL')
+        monoidalFieldAla  "flags"              (alaList FSep) flagAssignmentL')
     <*> monoidalFieldAla  "dependencies"       (alaList VCat) dependenciesL
     <*> uniqueField       "install-outcome"    installOutcomeL
     <*> uniqueField       "docs-outcome"       docsOutcomeL
