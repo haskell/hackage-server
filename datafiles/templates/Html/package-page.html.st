@@ -212,6 +212,12 @@
           </a>
         </li>
       </ul>
+      <p>Candidates</p>
+      <ul>
+        <li>
+          $candidates$
+        </li>
+      </ul>
     </div>
 
     $if(package.optional.hasReadme)$
