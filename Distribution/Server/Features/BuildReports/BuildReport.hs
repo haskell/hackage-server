@@ -274,7 +274,7 @@ parseCovg s = do
   -- buildC
 
 parseLines :: [String] -> BuildCovg -> BuildCovg
-parseLines (x:y) (BuildCovg a (BooleanCovg b c d) e f g) 
+parseLines (x:y) (BuildCovg a (BooleanCovg b c d) e f g)
     | isInfixOf "expressions used"  x = parseLines y (BuildCovg (getUsage x) (BooleanCovg b c d) e f g)
     | isInfixOf "guards"            x = parseLines y (BuildCovg a (BooleanCovg (getUsage x) c d) e f g)
     | isInfixOf "conditions"        x = parseLines y (BuildCovg a (BooleanCovg b (getUsage x) d) e f g)
@@ -318,7 +318,7 @@ fieldDescrs =
     <*> uniqueField       "compiler"           compilerL
     <*> uniqueField       "client"             clientL
     <*> (map unpack <$>
-        monoidalFieldAla  "flags"              (alaList CommaFSep) flagAssignmentL')
+        monoidalFieldAla  "flags"              (alaList VCat) flagAssignmentL')
     <*> monoidalFieldAla  "dependencies"       (alaList VCat) dependenciesL
     <*> uniqueField       "install-outcome"    installOutcomeL
     <*> uniqueField       "docs-outcome"       docsOutcomeL
@@ -579,7 +579,7 @@ instance Migrate InstallOutcome where
         V0_InstallOk -> InstallOk
 
 data BuildFiles = BuildFiles {
-  reportContent :: Maybe String, 
+  reportContent :: Maybe String,
   logContent :: Maybe String,
   coverageContent :: Maybe String,
   buildFail :: Bool
@@ -587,7 +587,7 @@ data BuildFiles = BuildFiles {
 
 instance Data.Aeson.FromJSON BuildFiles where
   parseJSON = withObject "buildFiles" $ \o ->
-    BuildFiles 
+    BuildFiles
       <$> o .:? fromString "report"
       <*> o .:? fromString "log"
       <*> o .:? fromString "coverage"
@@ -621,7 +621,7 @@ instance Data.Aeson.ToJSON PkgDetails where
 
 instance Data.Aeson.FromJSON PkgDetails where
   parseJSON = withObject "pkgDetails" $ \o ->
-    PkgDetails 
+    PkgDetails
       <$> fmap parsePkg (o .: (fromString "pkgid"))
       <*> o .: fromString "docs"
       <*> o .:? fromString "failCnt"

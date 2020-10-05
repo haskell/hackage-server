@@ -385,7 +385,7 @@ getDocumentationStats :: Verbosity
 getDocumentationStats verbosity opts config pkgs = do
     notice verbosity "Downloading documentation index"
     httpSession verbosity "hackage-build" version $ do
-      curGhcVersion <- liftIO $ case (bo_buildOlderGHC opts) of 
+      curGhcVersion <- liftIO $ case (bo_buildOlderGHC opts) of
                                   True -> getGHCversion
                                   False -> return Nothing
       mPackages   <- liftM eitherDecode `liftM` requestGET' (packagesUri False curGhcVersion)
@@ -419,14 +419,14 @@ getDocumentationStats verbosity opts config pkgs = do
       let res     = read contents :: [(String, String)]
           version' = fmap (\(_,b) -> b) $ find (\(a,_)-> a=="Project version") res
       return $ version'
-    
+
     getQry :: [PackageIdentifier] -> String
     getQry [] = ""
     getQry [pkg] = display pkg
     getQry (x:y) = (display x) ++ "," ++ getQry y
 
     packagesUri :: Bool -> Maybe String -> URI
-    packagesUri isCandidate curGhcVersion= do 
+    packagesUri isCandidate curGhcVersion= do
       addEnd pkgs curGhcVersion $ addCandi isCandidate getURI
       where
         getURI = bc_srcURI config <//> "packages"
@@ -446,7 +446,7 @@ getDocumentationStats verbosity opts config pkgs = do
         (False, Just (BR.BuildFailCnt a))
             | a >= bo_buildAttempts opts  -> return (pkgId, DocsFailed)
         (False, _)                        -> return (pkgId, DocsNotBuilt)
-        
+
     setIsCandidate :: Bool -> (PackageIdentifier, HasDocs) -> DocInfo
     setIsCandidate isCandidate (pId, hasDocs) = DocInfo {
         docInfoPackage     = pId
@@ -498,14 +498,14 @@ buildOnce opts pkgs = keepGoing $ do
                 $ pkgIdsHaveDocs
 
     notice verbosity $ show (length toBuild) ++ " package(s) to build"
-    
+
     -- Try to build each of them, uploading the documentation and
     -- build reports along the way. We mark each package as having
     -- documentation in the cache even if the build fails because
     -- we don't want to keep continually trying to build a failing
     -- package!
     startTime <- getCurrentTime
-    
+
     let go :: [DocInfo] -> IO ()
         go [] = return ()
         go (docInfo : toBuild') = do
@@ -558,33 +558,34 @@ processPkg verbosity opts config docInfo = do
     (mTgz, mRpt, logfile)   <- buildPackage verbosity opts config docInfo
     buildReport             <- mapM readFile mRpt
     let installOk = fmap ("install-outcome: InstallOk" `isInfixOf`) buildReport == Just True
-    
+
     -- Run Tests if installOk, Run coverage is Tests runs
     (testOutcome, hpcLoc)   <- case installOk of
       True  -> testPackage verbosity opts docInfo
       False -> return (Nothing, Nothing)
     coverageFile <- mapM (coveragePackage verbosity opts docInfo) hpcLoc
-    
-    -- Modify test-outcome and rewrite report file. 
+
+    -- Modify test-outcome and rewrite report file.
     mapM (setTestStatus mRpt buildReport) testOutcome
-    
+
     case bo_dryRun opts of
       True -> return ()
       False -> uploadResults verbosity config docInfo
                                     mTgz mRpt logfile coverageFile installOk
   where
     prepareTempBuildDir :: IO ()
-    prepareTempBuildDir = do 
+    prepareTempBuildDir = do
       handleDoesNotExist () $
         removeDirectoryRecursive $ installDirectory opts
       createDirectory $ installDirectory opts
+      createDirectoryIfMissing True $ resultsDirectory opts
       notice verbosity $ "Writing cabal.project for " ++ display (docInfoPackage docInfo)
       let projectFile = installDirectory opts </> "cabal.project"
       writeFile projectFile $ "packages: " ++ show (docInfoTarGzURI config docInfo)
-    
+
     setTestOutcome :: String -> [String] -> [String]
     setTestOutcome _ []                  = []
-    setTestOutcome a (xs:xt) 
+    setTestOutcome a (xs:xt)
       | "tests-outcome: " `isPrefixOf` xs = ("tests-outcome: " ++ a) : xt
       | otherwise                         = xs : setTestOutcome a xt
 
@@ -608,7 +609,7 @@ coveragePackage verbosity opts docInfo loc = do
       all_args = ["report", tixLoc, "--hpcdir=" ++ mixLoc]
       coverageFile = (resultsDirectory opts) </> display pkgid <.> "coverage"
   buildCovg <- openFile coverageFile WriteMode
-  
+
   ph <- runProcess "hpc" all_args Nothing
                         Nothing Nothing (Just buildCovg) (Just buildCovg)
   waitForProcess ph
@@ -625,8 +626,8 @@ testPackage verbosity opts docInfo = do
       testLogFile = (installDirectory opts) </> display pkgid <.> "test"
       testReportFile = (installDirectory opts) </> "reports" </> display pkgid <.> "test"
       testResultFile = (resultsDirectory opts) </> display pkgid <.> "test"
-      pkg_flags = 
-        ["all", 
+      pkg_flags =
+        ["all",
          "--enable-coverage",
          "--test-log=" ++ testReportFile,
          "--test-show-details=never",
@@ -634,7 +635,7 @@ testPackage verbosity opts docInfo = do
   notice verbosity ("Testing " ++ display pkgid)
 
   buildLogHnd <- openFile testLogFile WriteMode
-  
+
   void $ cabal opts "v2-test" pkg_flags (Just buildLogHnd)
   testLog <- readFile testLogFile
 
@@ -663,7 +664,7 @@ buildPackage :: Verbosity -> BuildOpts -> BuildConfig
 buildPackage verbosity opts config docInfo = do
     let pkgid = docInfoPackage docInfo
     notice verbosity ("Building " ++ display pkgid)
-    
+
 
     -- Create the local package db
     let packageDb = installDirectory opts </> "packages.db"
@@ -842,7 +843,7 @@ tarGzDirectory dir = do
     BS.length res `seq` return res
   where (containing_dir, nested_dir) = splitFileName dir
 
-uploadResults :: Verbosity -> BuildConfig -> DocInfo -> Maybe FilePath 
+uploadResults :: Verbosity -> BuildConfig -> DocInfo -> Maybe FilePath
                     -> Maybe FilePath -> FilePath -> Maybe FilePath -> Bool -> IO ()
 uploadResults verbosity config docInfo
               mdocsTarballFile buildReportFile buildLogFile coverageFile installOk =
@@ -861,8 +862,8 @@ putDocsTarball :: BuildConfig -> DocInfo -> FilePath -> HttpSession ()
 putDocsTarball config docInfo docsTarballFile =
     requestPUTFile (docInfoDocsURI config docInfo)
       "application/x-tar" (Just "gzip") docsTarballFile
-      
-putBuildFiles :: BuildConfig -> DocInfo -> Maybe FilePath 
+
+putBuildFiles :: BuildConfig -> DocInfo -> Maybe FilePath
                     -> FilePath -> Maybe FilePath -> Bool -> HttpSession ()
 putBuildFiles config docInfo reportFile buildLogFile coverageFile installOk = do
     reportContent   <- liftIO $ traverse readFile reportFile
@@ -992,7 +993,7 @@ buildFlagDescrs =
                                 "recent-uploads-first" -> set MostRecentlyUploadedFirst
                                 _                      -> error "Can't parse build order") "ORDER")
      "What order should packages be built in? (latest-version-first or recent-uploads-first)"
-  
+
   , Option [] ["build-older-ghc"]
       (NoArg (\opts -> opts { flagBuildOlderGHC = True }))
       "Build packages that were previously built with an older version of GHC"
