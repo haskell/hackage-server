@@ -1,15 +1,22 @@
 {-# LANGUAGE PatternGuards, RecordWildCards #-}
 module Distribution.Server.Pages.PackageFromTemplate
   ( packagePageTemplate
+  , candidatesPageTemplate
   , renderVersion
   , latestVersion
+  , commaList
   ) where
 
 import Distribution.Server.Framework.Templating
 import Distribution.Server.Features.PreferredVersions
+import Distribution.Server.Features.Core
 
 import Distribution.Server.Util.DocMeta
 import Distribution.Server.Packages.Render
+import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
+import Distribution.Server.Packages.PackageIndex (PackageIndex)
+import Distribution.Server.Packages.Types
+import Distribution.Server.Features.PackageCandidates
 import Distribution.Server.Users.Types (userStatus, userName, isActiveAccount)
 import Data.TarIndex (TarIndex)
 import Distribution.Server.Features.Distro.Types
@@ -75,53 +82,80 @@ packagePageTemplate :: PackageRender
             -> URL -> [(DistroName, DistroPackageInfo)]
             -> Maybe [PackageName]
             -> HtmlUtilities
+            -> Bool
             -> [TemplateAttr]
 packagePageTemplate render
             mdocIndex mdocMeta mreadme
             docURL distributions
-            deprs utilities =
-  -- The main two namespaces
-  [ "package"           $= packageFieldsTemplate
-  , "hackage"           $= hackageFieldsTemplate
-  , "doc"               $= docFieldsTemplate
-  ] ++
-
-  -- Miscellaneous things that could still stand to be refactored a bit.
-  [ "moduleList"        $= Old.moduleSection render mdocIndex docURL hasQuickNav
-  , "executables"       $= (commaList . map toHtml $ rendExecNames render)
-  , "downloadSection"   $= Old.downloadSection render
-  , "stability"         $= renderStability desc
-  , "isDeprecated"      $= (if deprs == Nothing then False else True)
-  , "deprecatedMsg"     $= (deprHtml deprs)
-  ]
+            deprs utilities isCandidate =
+  if isCandidate
+    then
+    -- The main two namespaces
+    [ "package"           $= packageFieldsTemplate
+    , "hackage"           $= hackageFieldsTemplate
+    , "doc"               $= docFieldsTemplate
+    ] ++
+    -- Miscellaneous things that could still stand to be refactored a bit.
+    [ "moduleList"        $= Old.moduleSection render mdocIndex docURL False
+    , "downloadSection"   $= Old.downloadSection render
+    ]
+    else
+    -- The main two namespaces
+    [ "package"           $= packageFieldsTemplate
+    , "hackage"           $= hackageFieldsTemplate
+    , "doc"               $= docFieldsTemplate
+    ] ++
+    -- Miscellaneous things that could still stand to be refactored a bit.
+    [ "moduleList"        $= Old.moduleSection render mdocIndex docURL hasQuickNav
+    , "executables"       $= (commaList . map toHtml $ rendExecNames render)
+    , "downloadSection"   $= Old.downloadSection render
+    , "stability"         $= renderStability desc
+    , "isDeprecated"      $= (if deprs == Nothing then False else True)
+    , "deprecatedMsg"     $= (deprHtml deprs)
+    ]
   where
     -- Access via "$hackage.varName$"
-    hackageFieldsTemplate = templateDict $
-      [ templateVal "uploadTime"
-          (uncurry renderUploadInfo $ rendUploadInfo render)
-      ] ++
+    hackageFieldsTemplate = 
+      if isCandidate
+        then templateDict $
+        [ templateVal "uploadTime"
+            (uncurry renderUploadInfo $ rendUploadInfo render)
+        ] ++
+        [ templateVal "hasUpdateTime"
+            (case rendUpdateInfo render of Nothing -> False; _ -> True)
+        , templateVal "updateTime" [ renderUpdateInfo revisionNo utime uinfo
+            | (revisionNo, utime, uinfo) <- maybeToList (rendUpdateInfo render) ]
+        ] ++
+        [ templateVal "hasFlags"
+            (if rendFlags render == [] then False else True)
+        , templateVal "flagsSection"
+            (Old.renderPackageFlags render docURL)
+        ]
+        else templateDict $ 
+        [ templateVal "uploadTime"
+            (uncurry renderUploadInfo $ rendUploadInfo render)
+        ] ++
 
-      [ templateVal "hasUpdateTime"
-          (case rendUpdateInfo render of Nothing -> False; _ -> True)
-      , templateVal "updateTime" [ renderUpdateInfo revisionNo utime uinfo
-          | (revisionNo, utime, uinfo) <- maybeToList (rendUpdateInfo render) ]
-      ] ++
-
-      [ templateVal "hasDistributions"
-          True
-          {-(if distributions == [] then False else True)-}
-      , templateVal "distributions"
-          (concatHtml . intersperse (toHtml ", ") $ map showDist distributions)
-      ] ++
-
-      [ templateVal "hasFlags"
-          (if rendFlags render == [] then False else True)
-      , templateVal "flagsSection"
-          (Old.renderPackageFlags render docURL)
-      ]
-      where
-        showDist (dname, info) = toHtml (display dname ++ ":") +++
+        [ templateVal "hasUpdateTime"
+            (case rendUpdateInfo render of Nothing -> False; _ -> True)
+        , templateVal "updateTime" [ renderUpdateInfo revisionNo utime uinfo
+            | (revisionNo, utime, uinfo) <- maybeToList (rendUpdateInfo render) ]
+        ] ++        
+        [ templateVal "hasDistributions"
+            True
+            {-(if distributions == [] then False else True)-}
+        , templateVal "distributions"
+            (concatHtml . intersperse (toHtml ", ") $ map showDist distributions)
+        ] ++
+        [ templateVal "hasFlags"
+            (if rendFlags render == [] then False else True)
+        , templateVal "flagsSection"
+            (Old.renderPackageFlags render docURL)
+        ]
+        where
+          showDist (dname, info) = toHtml (display dname ++ ":") +++
             anchor ! [href $ distroUrl info] << toHtml (display $ distroVersion info)
+
 
     -- Fields from the .cabal file.
     -- Access via "$package.varName$"
@@ -133,12 +167,15 @@ packagePageTemplate render
       , templateVal "maintainer"    (Old.maintainField $ rendMaintainer render)
       , templateVal "buildDepends"  (snd (Old.renderDependencies render))
       , templateVal "optional"      optionalPackageInfoTemplate
+      , templateVal "candidateBanner" candidateBanner
       ]
 
-    docFieldsTemplate = templateDict $
-      [ templateVal "hasQuickNavV1" hasQuickNavV1
-      , templateVal "baseUrl" docURL
-      ]
+    docFieldsTemplate =
+      if isCandidate
+        then templateDict $ [ templateVal "baseUrl" docURL ]
+        else templateDict $ [ templateVal "hasQuickNavV1" hasQuickNavV1
+        , templateVal "baseUrl" docURL
+        ]
 
     -- Fields that may be empty, along with booleans to see if they're present.
     -- Access via "$package.optional.varname$"
@@ -205,6 +242,17 @@ packagePageTemplate render
 
     desc = rendOther render
 
+    candidateBanner
+      | isCandidate = [ thediv ! [theclass "candidate-info"]
+                        << [ paragraph << [ strong (toHtml "This is a package candidate release!")
+                                          , toHtml " Here you can preview how this package release will appear once published to the main package index (which can be accomplished via the 'maintain' link below)."
+                                          , toHtml " Please note that once a package has been published to the main package index it cannot be undone!"
+                                          , toHtml " Please consult the "
+                                          , anchor ! [href "/upload"] << "package uploading documentation"
+                                          , toHtml " for more information."
+                                          ] ] ]
+      | otherwise = []
+
     renderCopyright :: Html
     renderCopyright = toHtml $ case text of
       "" -> "None provided"
@@ -263,6 +311,33 @@ packagePageTemplate render
 
     hasQuickNav :: Bool
     hasQuickNav = hasQuickNavV1
+
+candidatesPageTemplate :: (PackageIndex CandPkgInfo) -> PackageCandidatesResource -> CoreResource -> [TemplateAttr]
+candidatesPageTemplate cands candidates candidatesCore=
+  ["heading" $= "Package candidates"
+  ,"content" $= (paragraph <<
+    [ toHtml "Here follow all the candidate package versions on Hackage. "
+      , thespan ! [thestyle "color: gray"] <<
+          [ toHtml "["
+          , anchor ! [href "/packages/candidates/upload"] << "upload"
+          , toHtml "]" ]
+      ])
+  ,"list"   $= (unordList $ map showCands $ PackageIndex.allPackagesByName cands)
+  ]
+  where showCands pkgs =
+                -- TODO: Duncan changed this to packageSynopsis but without an
+                -- accomponaying definition of packageSynposis. Changed back for now.
+                let desc = packageDescription . pkgDesc . candPkgInfo $ last pkgs
+                    pkgname = packageName desc
+                    -- candidates     = candidatesResource
+                    -- candidatesCore = candidatesCoreResource
+                in  [ anchor ! [href $ packageCandidatesUri candidates "" pkgname ] << display pkgname
+                    , toHtml ": "
+                    , toHtml $ intersperse (toHtml ", ") $ flip map pkgs $ \pkg ->
+                         anchor ! [href $ corePackageIdUri candidatesCore "" (packageId pkg)] << display (packageVersion pkg)
+                    , toHtml $ ". " ++ synopsis desc
+                    ]
+
 
 -- #ToDo: Pick out several interesting versions to display, with a link to
 -- display all versions.

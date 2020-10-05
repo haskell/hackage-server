@@ -19,6 +19,9 @@ edit the maintainer group.
   <dd>Discard this candidate (does not affect published packages).
   </dd>
 
+<dt>Manage documentation <span style="font-weight: normal">for <a href="/package/$pkgid$/candidate/maintain/docs">$pkgid$</a></span></dt>
+  <dd>Upload or delete Haddock documentation for this package.</dd>
+
 <dt><a href="publish">Publish candidate</a></dt>
   <dd>Publish this candidate to make it visible in the main package database.
   </dd>

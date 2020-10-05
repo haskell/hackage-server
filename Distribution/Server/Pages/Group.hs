@@ -2,6 +2,7 @@
 module Distribution.Server.Pages.Group (
     groupPage,
     renderGroupName
+    -- renderGroupNameWithCands
   ) where
 
 import Text.XHtml.Strict
@@ -17,8 +18,11 @@ renderGroupName :: GroupDescription -> Maybe String -> Html
 renderGroupName desc murl =
     maybeUrl (groupTitle desc) murl
       +++
-    maybe noHtml (\(for, mfor) -> " for " +++ maybeUrl for mfor) (groupEntity desc)
+    maybe noHtml (\(for, mfor) -> " for " +++ maybeUrl for mfor ) (groupEntity desc)
+      +++
+    maybe noHtml (\(_, mfor) -> " : " +++ candUrl "No Candidates" mfor ) (groupEntity desc)
   where maybeUrl text = maybe (toHtml text) (\url -> anchor ! [href url] << text)
+        candUrl text = maybe (toHtml text) (\url -> anchor ! [href $ url ++ "/candidates"] << "candidates")
 
 -- Primitive access control: the URI to post a new user request to, or the the URI/user/<username> to DELETE
 -- if neither adding or removing is enabled, a link to a URI/edit page is provided
