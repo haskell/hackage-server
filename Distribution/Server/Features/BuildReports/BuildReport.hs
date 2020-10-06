@@ -27,8 +27,14 @@ module Distribution.Server.Features.BuildReports.BuildReport (
     showList,
 
     affixTimestamp,
+    parseCovg,
 
     BuildReport_v0,
+    BuildFiles(..),
+    PkgDetails(..),
+    BuildStatus(..),
+    BuildCovg(..),
+    BooleanCovg(..),
   ) where
 
 import Distribution.Compat.Newtype
@@ -75,8 +81,10 @@ import Text.StringTemplate ()
 import Text.StringTemplate.Classes
          ( SElem(..), ToSElem(..) )
 
+import Data.String (fromString)
+import Data.Aeson
 import Data.List
-         ( unfoldr )
+         ( unfoldr, isInfixOf )
 import Data.Char as Char
          ( isAlpha, isAlphaNum )
 import qualified Data.ByteString.Char8 as BS
@@ -89,7 +97,13 @@ import Control.Applicative
 import Control.Monad
 
 import Prelude hiding (show, read)
+import Distribution.Version ( Version )
+import Data.Maybe
+import Data.Scientific
+import qualified Distribution.Text as DT
 import qualified Prelude
+import Data.Attoparsec.Text (Parser, char, decimal, parseOnly, takeTill)
+import qualified Data.Text as T
 
 
 data BuildReport
@@ -232,6 +246,57 @@ parseList str =
     chunk [] = Nothing
     chunk ls = case break BS.null ls of
                  (r, rs) -> Just (BS.unlines r, dropWhile BS.null rs)
+
+data BooleanCovg = BooleanCovg {
+  guards        :: (Int,Int),
+  ifConditions  :: (Int,Int),
+  qualifiers    :: (Int,Int)
+} deriving (Eq, Typeable, Show)
+
+data BuildCovg = BuildCovg {
+  expressions       :: (Int,Int),
+  boolean           :: BooleanCovg,
+  alternatives      :: (Int,Int),
+  localDeclarations :: (Int,Int),
+  topLevel          :: (Int,Int)
+} deriving (Eq, Typeable, Show)
+
+instance MemSize BuildCovg where
+    memSize (BuildCovg a (BooleanCovg b c d) e f g) = memSize7 a b c d e f g
+
+-- -----------------------------------------------------------------------------
+-- Parse Coverage Report
+parseCovg :: String -> BuildCovg
+parseCovg s = do
+  let ln = lines (s++"\n\n")
+  let buildC = BuildCovg (0,0) (BooleanCovg (0,0) (0,0) (0,0)) (0,0) (0,0) (0,0)
+  parseLines ln buildC
+  -- buildC
+
+parseLines :: [String] -> BuildCovg -> BuildCovg
+parseLines (x:y) (BuildCovg a (BooleanCovg b c d) e f g)
+    | isInfixOf "expressions used"  x = parseLines y (BuildCovg (getUsage x) (BooleanCovg b c d) e f g)
+    | isInfixOf "guards"            x = parseLines y (BuildCovg a (BooleanCovg (getUsage x) c d) e f g)
+    | isInfixOf "conditions"        x = parseLines y (BuildCovg a (BooleanCovg b (getUsage x) d) e f g)
+    | isInfixOf "qualifiers"        x = parseLines y (BuildCovg a (BooleanCovg b c (getUsage x)) e f g)
+    | isInfixOf "alternatives used"           x = parseLines y (BuildCovg a (BooleanCovg b c d) (getUsage x) f g)
+    | isInfixOf "local declarations used"     x = parseLines y (BuildCovg a (BooleanCovg b c d) e (getUsage x) g)
+    | isInfixOf "top-level declarations used" x = parseLines y (BuildCovg a (BooleanCovg b c d) e f (getUsage x))
+parseLines (_:y) buildc = parseLines y buildc
+parseLines _ buildc = buildc
+
+getUsage :: String -> (Int,Int)
+getUsage bs = do
+  let parsed = parseOnly intPair $ T.pack bs
+  case parsed of
+    Left _ -> (0,0)
+    Right a -> a
+
+intPair :: Parser (Int, Int)
+intPair = do
+  n <- takeTill ('('==) *> char '(' *> decimal
+  m <- char '/' *> decimal <* char ')'
+  pure (n, m)
 
 -- -----------------------------------------------------------------------------
 -- Pretty-printing
@@ -391,6 +456,21 @@ instance Arbitrary InstallOutcome where
 instance Arbitrary Outcome where
   arbitrary = elements [ NotTried, Failed, Ok ]
 
+data BuildStatus = BuildOK | BuildFailCnt Int
+  deriving (Eq, Ord, Typeable, Show)
+instance ToJSON BuildStatus where
+  toJSON (BuildFailCnt a) = toJSON a
+  toJSON BuildOK          = toJSON ((-1)::Int)
+instance FromJSON BuildStatus where
+  parseJSON (Number (-1)) = return BuildOK
+  parseJSON (Number a)    = return (BuildFailCnt (fromJust (toBoundedInteger a)))
+  parseJSON _             = error "Unable to parse BuildStatus"
+instance MemSize BuildStatus where
+    memSize (BuildFailCnt a) = memSize1 a
+    memSize _        = memSize0
+instance Pretty BuildStatus where
+  pretty (BuildFailCnt a)  = Disp.text "BuildFailCnt " Disp.<+> pretty a
+  pretty BuildOK    = Disp.text "BuildOK"
 
 -------------------
 -- SafeCopy instances
@@ -399,6 +479,9 @@ instance Arbitrary Outcome where
 deriveSafeCopy 0 'base      ''Outcome
 deriveSafeCopy 1 'extension ''InstallOutcome
 deriveSafeCopy 3 'extension ''BuildReport
+deriveSafeCopy 1 'base      ''BuildStatus
+deriveSafeCopy 1 'base      ''BooleanCovg
+deriveSafeCopy 1 'base      ''BuildCovg
 
 
 -------------------
@@ -494,3 +577,60 @@ instance Migrate InstallOutcome where
         V0_BuildFailed -> BuildFailed
         V0_InstallFailed -> InstallFailed
         V0_InstallOk -> InstallOk
+
+data BuildFiles = BuildFiles {
+  reportContent :: Maybe String,
+  logContent :: Maybe String,
+  coverageContent :: Maybe String,
+  buildFail :: Bool
+} deriving Show
+
+instance Data.Aeson.FromJSON BuildFiles where
+  parseJSON = withObject "buildFiles" $ \o ->
+    BuildFiles
+      <$> o .:? fromString "report"
+      <*> o .:? fromString "log"
+      <*> o .:? fromString "coverage"
+      <*> o .: fromString "buildFail"
+
+instance Data.Aeson.ToJSON BuildFiles where
+  toJSON p = object [
+    "report"    .= reportContent p,
+    "log"       .= logContent  p,
+    "coverage"  .= coverageContent  p,
+    "buildFail" .= buildFail  p ]
+
+data PkgDetails = PkgDetails {
+    pkid        :: PackageIdentifier,
+    docs        :: Bool,
+    failCnt     :: Maybe BuildStatus,
+    buildTime   :: Maybe UTCTime,
+    ghcId      :: Maybe Version
+} deriving(Show)
+
+instance Data.Aeson.ToJSON PkgDetails where
+  toJSON p = object [
+    "pkgid"      .= (DT.display $ pkid p::String),
+    "docs"       .= docs p,
+    "failCnt"    .= failCnt  p,
+    "buildTime"  .= buildTime  p,
+    "ghcId"     .= (k $ ghcId p) ]
+    where
+      k (Just a) = Just $ DT.display a
+      k Nothing = Nothing
+
+instance Data.Aeson.FromJSON PkgDetails where
+  parseJSON = withObject "pkgDetails" $ \o ->
+    PkgDetails
+      <$> fmap parsePkg (o .: (fromString "pkgid"))
+      <*> o .: fromString "docs"
+      <*> o .:? fromString "failCnt"
+      <*> o .:? fromString "buildTime"
+      <*> fmap parseVersion (o .:? (fromString "ghcId"))
+    where
+      parseVersion :: Maybe String -> Maybe Version
+      parseVersion Nothing = Nothing
+      parseVersion (Just k) = P.simpleParsec k
+
+      parsePkg :: String -> PackageIdentifier
+      parsePkg k = fromJust (P.simpleParsec k)

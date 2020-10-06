@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -24,7 +25,7 @@ $hackagePageHeader()$
 <h2>Delete documentation</h2>
 <form class="box" method="post" action="/package/$pkgid$/$actionUrl$docs" enctype="multipart/form-data">
   <input type="hidden" name="_method" value="DELETE" />
-  <input type="submit" value="Delete documentation and trigger rebuild" />
+  <input type="submit" value="Delete documentation" />
 </form>
 
 </div>

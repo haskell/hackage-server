@@ -226,12 +226,14 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          (map packageId . allPackages <$> queryGetPackageIndex coreFeature)
                          uploadFeature
                          tarIndexCacheFeature
+                         reportsCoreFeature
 
     documentationCandidatesFeature <- mkDocumentationCandidatesFeature
                          (candidatesCoreResource candidatesFeature)
                          (map packageId . allPackages <$> queryGetCandidateIndex candidatesFeature)
                          uploadFeature
                          tarIndexCacheFeature
+                         reportsCandidatesFeature
 
     downloadFeature <- mkDownloadFeature
                          coreFeature

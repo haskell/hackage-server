@@ -106,7 +106,7 @@ common defaults
     , time                   >= 1.4   && < 1.9
     , transformers           >= 0.3   && < 0.6
     , unix                   >= 2.6   && < 2.8
-
+    , scientific
   -- other dependencies shared by most components
   build-depends:
     , aeson                 ^>= 1.1

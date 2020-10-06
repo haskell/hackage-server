@@ -46,5 +46,10 @@ package after its been released.
   <p>$versions:{pkgid|<a href="/package/$pkgid$/$pkgname$.cabal/edit">$pkgid$</a>}; separator=", "$</p>
   </dd>
 
+<dt>Trigger rebuild</dt>
+  <dd>Reset the fail count and trigger rebuild. Choose this option only if you believe our build process didn't go right for some reason. Reseting fail count won't trigger rebuild if your package has documentation.
+  <p>$versions:{pkgid|<a href="/package/$pkgid$/reports/reset" onclick="return confirm('Are you sure you want to trigger rebuild?')" >$pkgid$</a>}; separator=", "$</p>
+  </dd>
+
 </div>
 </body></html>
