@@ -182,6 +182,12 @@ instance ToMessage BuildLog where
     toContentType _ = "text/plain"
     toMessage (BuildLog bs) = bs
 
+newtype BuildCovg = BuildCovg BS.Lazy.ByteString
+
+instance ToMessage BuildCovg where
+    toContentType _ = "text/plain"
+    toMessage (BuildCovg bs) = bs
+
 instance ToMessage RSS where
     toContentType _ = "application/rss+xml"
     toMessage = packUTF8 . RSS.showXML . RSS.rssToXML

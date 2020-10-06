@@ -35,6 +35,7 @@ import Distribution.Server.Features.UserDetails
 import Distribution.Server.Features.EditCabalFiles
 import Distribution.Server.Features.Html.HtmlUtilities
 import Distribution.Server.Features.Security.SHA256
+import qualified Distribution.Server.Features.BuildReports.BuildReport as BR
 
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Group as Group
@@ -601,14 +602,14 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         tags          <- queryTagsForPackage pkgname
         deprs         <- queryGetDeprecatedFor pkgname
         mreadme       <- makeReadme render
+        hasDocs       <- queryHasDocumentation documentationFeature realpkg
+        rptStats      <- queryLastReportStats reportsFeature realpkg
         candidates    <- lookupCandidateName pkgname
-
-
         buildStatus   <- renderBuildStatus
           documentationFeature reportsFeature realpkg
         mdocIndex     <- maybe (return Nothing)
           (liftM Just . liftIO . cachedTarIndex) mdoctarblob
-
+        let (install, test, covg) = getBadgeStats rptStats
         let
           loadDocMeta
             | Just doctarblob <- mdoctarblob
@@ -645,6 +646,10 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           , "userRating"        $= userRating
           , "score"             $= pkgScore
           , "buildStatus"       $= buildStatus
+          , "hasDocs"           $= hasDocs
+          , "install"           $= install
+          , "test"              $= test
+          , "covg"              $= covg
           , "candidates"        $= case candidates of
                                     [] -> [ toHtml "No Candidates"]
                                     _  -> [ PagesNew.commaList $ flip map candidates $ \cand -> anchor ! [href $ corePackageIdUri candidatesCore "" $ packageId cand] << display (packageVersion cand) ]
@@ -656,6 +661,37 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
             deprs
             utilities
             False
+      where
+        getBadgeStats (rpt, cvg) = (getInstall (fmap BR.installOutcome rpt), getTest (fmap BR.testsOutcome rpt), getAvgCovg cvg)
+
+        getInstall Nothing                        = (False, "", "")
+        getInstall (Just BR.InstallOk)            = (True, "success", "InstallOk")
+        getInstall (Just (BR.DependencyFailed _)) = (True, "critical", "DependencyFailed")
+        getInstall (Just k)                       = (True, "critical", show k)
+
+        getTest (Just BR.Ok)      = (True, "success", "Passed")
+        getTest (Just BR.Failed)  = (True, "critical", "Failed")
+        getTest _                 = (False, "False", "")
+
+        getAvgCovg :: Maybe BR.BuildCovg -> (Bool, String, Int)
+        getAvgCovg Nothing = (False, "", 100)
+        getAvgCovg (Just c) = do
+              let l = [
+                        BR.expressions c
+                      , BR.guards (BR.boolean c)
+                      , BR.ifConditions (BR.boolean c)
+                      , BR.qualifiers (BR.boolean c)
+                      , BR.alternatives c
+                      , BR.localDeclarations c
+                      , BR.topLevel c
+                      ]
+                  (used,total) = foldl (\(a,b) (x, y) -> (a+x, b+y)) (0,0) l
+                  per = (used*100) `div` total
+              if per > 66
+                then (True, "brightgreen", per)
+                else if per > 33
+                  then (True, "yellowgreen", per)
+                  else (True, "red", per)
 
     serveDependenciesPage :: DynamicPath -> ServerPartE Response
     serveDependenciesPage dpath = do
@@ -986,15 +1022,23 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
         pkgid <- packageInPath dpath
         cacheControl [Public, maxAgeMinutes 30] (etagFromHash (length reports))
         template <- getTemplate templates "reports.html"
+        details <- pkgReportDetails (pkgid,True)
+        let status = case BR.failCnt details of
+              Nothing -> "Not yet tried."
+              Just BR.BuildOK -> "Built successfully."
+              Just (BR.BuildFailCnt 1) -> "1 consecutive failure."
+              Just (BR.BuildFailCnt c) -> show(c) ++ " consecutive failures."
         return $ toResponse $ template
-          [ "pkgid" $= (pkgid :: PackageIdentifier)
+          [ "pkgid"   $= (pkgid :: PackageIdentifier)
           , "reports" $= reports
+          , "status"  $= status
           ]
 
     servePackageReport :: DynamicPath -> ServerPartE Response
     servePackageReport dpath = do
-        (repid, report, mlog) <- packageReport dpath
+        (repid, report, mlog, covg) <- packageReport dpath
         mlog' <- traverse queryBuildLog mlog
+        let covg' = fmap getCvgDet covg
         pkgid <- packageInPath dpath
         cacheControlWithoutETag [Public, maxAgeDays 30]
         template <- getTemplate templates "report.html"
@@ -1002,7 +1046,22 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
           [ "pkgid" $= (pkgid :: PackageIdentifier)
           , "report" $= (repid, report)
           , "log" $= toMessage <$> mlog'
+          , "covg" $= covg'
           ]
+      where
+        getCvgDet c = (
+            det $ BR.expressions c,
+            det $ BR.guards $ BR.boolean c,
+            det $ BR.ifConditions $ BR.boolean c,
+            det $ BR.qualifiers $ BR.boolean c,
+            det $ BR.alternatives c,
+            det $ BR.localDeclarations c,
+            det $ BR.topLevel c
+          )
+
+        det::(Int,Int)->(Int,Int,Int)
+        det (_,0) = (100,0,0)
+        det (a,b) = ((a * 100) `div` b ,a,b)
 
 {-------------------------------------------------------------------------------
   Candidates
@@ -1238,7 +1297,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
                 , anchor ! [href $ "/packages/candidates/upload"] << "another"
                 , toHtml " package?"
                 ]
-          _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ corePackageIdUri candidatesCore "" $ packageId pkg] << display (packageVersion pkg) 
+          _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ corePackageIdUri candidatesCore "" $ packageId pkg] << display (packageVersion pkg)
                 , anchor ! [href $ delUri]<< "Delete All Candidates"]
 
     servePostPublish :: DynamicPath -> ServerPartE Response
