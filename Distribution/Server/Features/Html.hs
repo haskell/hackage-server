@@ -660,9 +660,10 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
             docURL distributions
             deprs
             utilities
+            False
       where
         getBadgeStats (rpt, cvg) = (getInstall (fmap BR.installOutcome rpt), getTest (fmap BR.testsOutcome rpt), getAvgCovg cvg)
-        
+
         getInstall Nothing                        = (False, "", "")
         getInstall (Just BR.InstallOk)            = (True, "success", "InstallOk")
         getInstall (Just (BR.DependencyFailed _)) = (True, "critical", "DependencyFailed")
@@ -671,7 +672,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         getTest (Just BR.Ok)      = (True, "success", "Passed")
         getTest (Just BR.Failed)  = (True, "critical", "Failed")
         getTest _                 = (False, "False", "")
-        
+
         getAvgCovg :: Maybe BR.BuildCovg -> (Bool, String, Int)
         getAvgCovg Nothing = (False, "", 100)
         getAvgCovg (Just c) = do
@@ -686,12 +687,11 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
                       ]
                   (used,total) = foldl (\(a,b) (x, y) -> (a+x, b+y)) (0,0) l
                   per = (used*100) `div` total
-              if per > 66 
+              if per > 66
                 then (True, "brightgreen", per)
-                else if per > 33 
+                else if per > 33
                   then (True, "yellowgreen", per)
                   else (True, "red", per)
-            False
 
     serveDependenciesPage :: DynamicPath -> ServerPartE Response
     serveDependenciesPage dpath = do
@@ -1297,7 +1297,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
                 , anchor ! [href $ "/packages/candidates/upload"] << "another"
                 , toHtml " package?"
                 ]
-          _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ corePackageIdUri candidatesCore "" $ packageId pkg] << display (packageVersion pkg) 
+          _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ corePackageIdUri candidatesCore "" $ packageId pkg] << display (packageVersion pkg)
                 , anchor ! [href $ delUri]<< "Delete All Candidates"]
 
     servePostPublish :: DynamicPath -> ServerPartE Response
