@@ -290,7 +290,7 @@ renderPackageFlags render docURL =
           ,thespan << " to disable that flag. "
           ,anchor ! [href tipLink] << "More info"
           ]
-        tipLink = "http://www.haskell.org/cabal/users-guide/installing-packages.html#controlling-flag-assignments"
+        tipLink = "https://cabal.readthedocs.io/en/latest/setup-commands.html#controlling-flag-assignments"
         flagsTable flags =
           table ! [theclass "flags-table"] <<
           [thead << flagsHeadings
