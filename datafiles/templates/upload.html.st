@@ -47,7 +47,7 @@ and password.)
 </p>
 
 <p>Packages must be in the form produced by Cabal's
-<a href="http://www.haskell.org/cabal/users-guide/installing-packages.html#setup-sdist">sdist</a> command:
+<a href="https://cabal.readthedocs.io/en/latest/cabal-commands.html#cabal-v2-sdist">sdist</a> command:
 a gzipped tar file <em>package</em>-<em>version</em><code>.tar.gz</code>
 comprising a directory <em>package</em>-<em>version</em> containing a package
 of that name and version, including <em>package</em><code>.cabal</code>.
