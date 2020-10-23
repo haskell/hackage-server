@@ -11,15 +11,13 @@ import Distribution.Server.Packages.Types
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users)
 import Distribution.Server.Util.ServeTarball (loadTarEntry)
+import Distribution.Server.Util.Markdown (renderMarkdown, supposedToBeMarkdown)
 
 import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.Text
 
-import qualified Cheapskate as Markdown (markdown, Options(..))
-import qualified Cheapskate.Html as Markdown (renderDoc)
 import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
-import qualified Data.ByteString.Char8 as C8
 import Data.List (sortOn)
 import Data.Maybe (listToMaybe)
 import Data.Ord (Down(..))
@@ -29,8 +27,6 @@ import qualified Data.Text.Encoding.Error as T
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format
 import Network.URI( URI(..), uriToString )
-import System.FilePath.Posix (takeExtension)
-import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
 import qualified Text.RSS as RSS
 import Text.RSS ( RSS(RSS) )
 import qualified Text.XHtml.Strict as XHtml
@@ -73,7 +69,7 @@ packageFeedFeature ServerEnv{..}
       , featureCaches = []
       , featurePostInit = pure ()
     }
-                                                                       
+
     packageFeedResource :: Resource
     packageFeedResource = (resourceAt "/package/:package.rss") {
       resourceDesc = [(GET, "Package feed")]
@@ -97,7 +93,7 @@ packageFeedFeature ServerEnv{..}
             Left _ -> return (pkg, XHtml.primHtml "(No changelog found.)")
             Right (_, content) ->
               if supposedToBeMarkdown filename
-                then return (pkg, renderMarkdown content)
+                then return (pkg, renderMarkdown filename content)
                 else return (pkg, XHtml.pre << unpackUtf8 content)
 
 renderPackageFeed :: Users -> URI -> UTCTime -> PackageName -> [(PkgInfo, XHtml.Html)] -> RSS
@@ -142,24 +138,6 @@ feedItems users hostURI (pkgInfo, chlog) =
         pd = packageDescription (pkgDesc pkgInfo)
         d dt dd = XHtml.dterm (XHtml.toHtml dt) +++ XHtml.ddef (XHtml.toHtml dd)
 
-renderMarkdown :: BS.ByteString -> XHtml.Html
-renderMarkdown = XHtml.primHtml . Blaze.renderHtml
-               . Markdown.renderDoc . Markdown.markdown opts
-               . T.decodeUtf8With T.lenientDecode . convertNewLine . BS.toStrict
-  where
-    opts =
-      Markdown.Options
-        { Markdown.sanitize           = True
-        , Markdown.allowRawHtml       = False
-        , Markdown.preserveHardBreaks = False
-        , Markdown.debug              = False
-        }
-
-convertNewLine :: C8.ByteString -> C8.ByteString
-convertNewLine = C8.filter (/= '\r')
-
-supposedToBeMarkdown :: FilePath -> Bool
-supposedToBeMarkdown fname = takeExtension fname `elem` [".md", ".markdown"]
 
 unpackUtf8 :: BS.ByteString -> String
 unpackUtf8 = T.unpack

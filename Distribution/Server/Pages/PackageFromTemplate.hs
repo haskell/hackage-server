@@ -18,6 +18,7 @@ import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import Distribution.Server.Packages.Types
 import Distribution.Server.Features.PackageCandidates
 import Distribution.Server.Users.Types (userStatus, userName, isActiveAccount)
+import Distribution.Server.Util.Markdown (renderMarkdown, supposedToBeMarkdown)
 import Data.TarIndex (TarIndex)
 import Distribution.Server.Features.Distro.Types
 
@@ -33,7 +34,6 @@ import Data.List                (intersperse)
 import System.FilePath.Posix    ((</>), takeFileName, dropTrailingPathSeparator)
 import Data.Time.Locale.Compat  (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
-import System.FilePath.Posix    (takeExtension)
 
 import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
@@ -115,7 +115,7 @@ packagePageTemplate render
     ]
   where
     -- Access via "$hackage.varName$"
-    hackageFieldsTemplate = 
+    hackageFieldsTemplate =
       if isCandidate
         then templateDict $
         [ templateVal "uploadTime"
@@ -131,7 +131,7 @@ packagePageTemplate render
         , templateVal "flagsSection"
             (Old.renderPackageFlags render docURL)
         ]
-        else templateDict $ 
+        else templateDict $
         [ templateVal "uploadTime"
             (uncurry renderUploadInfo $ rendUploadInfo render)
         ] ++
@@ -140,7 +140,7 @@ packagePageTemplate render
             (case rendUpdateInfo render of Nothing -> False; _ -> True)
         , templateVal "updateTime" [ renderUpdateInfo revisionNo utime uinfo
             | (revisionNo, utime, uinfo) <- maybeToList (rendUpdateInfo render) ]
-        ] ++        
+        ] ++
         [ templateVal "hasDistributions"
             True
             {-(if distributions == [] then False else True)-}
@@ -491,13 +491,11 @@ readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename), rendPkg
               (Just content) =
     [ thediv ! [theclass "embedded-author-content"]
             << if supposedToBeMarkdown filename
-                 then Old.renderMarkdown (T.pack $ display pkgid) content
+                 then renderMarkdown (display pkgid) content
                  else pre << unpackUtf8 content
     ]
 readmeSection _ _ = []
 
-supposedToBeMarkdown :: FilePath -> Bool
-supposedToBeMarkdown fname = takeExtension fname `elem` [".md", ".markdown"]
 
 unpackUtf8 :: BS.ByteString -> String
 unpackUtf8 = T.unpack

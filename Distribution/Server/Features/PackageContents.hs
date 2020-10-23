@@ -17,22 +17,18 @@ import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.Render
 import Distribution.Server.Features.Users
 import Distribution.Server.Util.ServeTarball
+import Distribution.Server.Util.Markdown (renderMarkdown, supposedToBeMarkdown)
 import Distribution.Server.Pages.Template (hackagePage)
 
 import Distribution.Text
 import Distribution.Package
 
-import qualified Cheapskate      as Markdown (markdown, Options(..))
-import qualified Cheapskate.Html as Markdown (renderDoc)
-import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
 import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
 import qualified Data.Text.Encoding.Error as T
 import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
-import qualified Data.ByteString.Char8 as C8
 import qualified Text.XHtml.Strict as XHtml
 import           Text.XHtml.Strict ((<<), (!))
-import System.FilePath.Posix (takeExtension)
 
 
 data PackageContentsFeature = PackageContentsFeature {
@@ -152,7 +148,7 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
                  [ XHtml.h2 << title2
                  , XHtml.thediv ! [XHtml.theclass "embedded-author-content"]
                                << if supposedToBeMarkdown filename
-                                    then renderMarkdown contents
+                                    then renderMarkdown filename contents
                                     else XHtml.thediv ! [XHtml.theclass "preformatted"]
                                                      << unpackUtf8 contents
                  ]
@@ -186,7 +182,7 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
               [ XHtml.h2 << title
               , XHtml.thediv ! [XHtml.theclass "embedded-author-content"]
                             << if supposedToBeMarkdown filename
-                                 then renderMarkdown contents
+                                 then renderMarkdown filename contents
                                  else XHtml.thediv ! [XHtml.theclass "preformatted"]
                                                   << unpackUtf8 contents
               ]
@@ -203,25 +199,6 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
           serveTarball (display (packageId pkg) ++ " source tarball")
                        [] (display (packageId pkg)) fp index
                        [Public, maxAgeDays 30] etag
-
-renderMarkdown :: BS.ByteString -> XHtml.Html
-renderMarkdown = XHtml.primHtml . Blaze.renderHtml
-               . Markdown.renderDoc . Markdown.markdown opts
-               . T.decodeUtf8With T.lenientDecode . convertNewLine . BS.toStrict
-  where
-    opts =
-      Markdown.Options
-        { Markdown.sanitize           = True
-        , Markdown.allowRawHtml       = False
-        , Markdown.preserveHardBreaks = False
-        , Markdown.debug              = False
-        }
-
-convertNewLine :: C8.ByteString -> C8.ByteString
-convertNewLine = C8.filter (/= '\r')
-
-supposedToBeMarkdown :: FilePath -> Bool
-supposedToBeMarkdown fname = takeExtension fname `elem` [".md", ".markdown"]
 
 unpackUtf8 :: BS.ByteString -> String
 unpackUtf8 = T.unpack
