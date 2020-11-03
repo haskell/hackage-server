@@ -28,6 +28,7 @@ import Distribution.PackageDescription.Parsec (parseGenericPackageDescription, r
 import Distribution.Parsec (showPError, showPWarning)
 
 import qualified Data.ByteString.Lazy as BS.L
+import qualified Data.List.NonEmpty as NE
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (formatTime)
 import Data.Time.Locale.Compat (defaultTimeLocale)
@@ -243,8 +244,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
             filename = display pkgid <.> "cabal"
 
         case runParseResult $ parseGenericPackageDescription $ BS.L.toStrict $ fileContent of
-            (_, Left (_, err:_)) -> badRequest (toResponse $ showPError filename err)
-            (_, Left (_, []))    -> badRequest (toResponse "failed to parse")
+            (_, Left (_, err NE.:| _)) -> badRequest (toResponse $ showPError filename err)
             (_, Right pkg) | pkgid /= packageId pkg ->
                 errBadRequest "Wrong package Id"
                   [MText $ "Expected " ++ display pkgid
