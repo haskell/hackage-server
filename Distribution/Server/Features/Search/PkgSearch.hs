@@ -21,6 +21,7 @@ import NLP.Snowball
 
 import Distribution.Package
 import Distribution.PackageDescription
+import Distribution.Utils.ShortText
 import Distribution.Text (display)
 import Data.Text (unpack)
 
@@ -58,8 +59,8 @@ pkgSearchConfig =
     extractTokens :: PackageDescription -> PkgDocField -> [Text]
     extractTokens pkg NameField        = concatMap (extraStems computerStems) $
                                          extractPackageNameTerms           (display $ packageName pkg)
-    extractTokens pkg SynopsisField    = extractSynopsisTerms    computerStems stopWords (synopsis    pkg)
-    extractTokens pkg DescriptionField = extractDescriptionTerms computerStems stopWords (description pkg)
+    extractTokens pkg SynopsisField    = extractSynopsisTerms    computerStems stopWords (fromShortText $ synopsis    pkg)
+    extractTokens pkg DescriptionField = extractDescriptionTerms computerStems stopWords (fromShortText $ description pkg)
 
     normaliseQueryToken :: Text -> PkgDocField -> Text
     normaliseQueryToken tok =

@@ -41,7 +41,7 @@ import Distribution.Compat.Newtype
 import Distribution.Compat.Lens (Lens')
 import Distribution.Package
          ( PackageIdentifier(..) )
-import Distribution.Types.GenericPackageDescription
+import Distribution.Types.Flag
          ( FlagName, unFlagName, mkFlagName )
 import Distribution.System
          ( OS, Arch )
@@ -85,6 +85,7 @@ import Data.String (fromString)
 import Data.Aeson
 import Data.List
          ( unfoldr, isInfixOf )
+import Data.List.NonEmpty (toList)
 import Data.Char as Char
          ( isAlpha, isAlphaNum )
 import qualified Data.ByteString.Char8 as BS
@@ -226,7 +227,7 @@ read s = case parse s of
 
 parse :: BS.ByteString -> Either String BuildReport
 parse s = case snd $ runParseResult $ parseFields s of
-  Left (_, perrors) -> Left $ unlines [ err | PError _ err <- perrors ]
+  Left (_, perrors) -> Left $ unlines [ err | PError _ err <- toList perrors ]
   Right report -> Right report
 
 parseFields :: BS.ByteString -> ParseResult BuildReport

@@ -22,6 +22,7 @@ import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.Render (categorySplit)
+import Distribution.Utils.ShortText (fromShortText)
 
 import Distribution.Text
 import Distribution.Package
@@ -315,7 +316,7 @@ constructImmutableTagIndex = foldl' addToTags emptyPackageTags . PackageIndex.al
 
 -- These are constructed when a package is uploaded/on startup
 constructCategoryTags :: PackageDescription -> [Tag]
-constructCategoryTags = map (tagify . map toLower) . fillMe . categorySplit . category
+constructCategoryTags = map (tagify . map toLower) . fillMe . categorySplit . fromShortText . category
   where
     fillMe [] = ["unclassified"]
     fillMe xs = xs
@@ -352,4 +353,3 @@ constructImmutableTags genDesc =
         PublicDomain      -> [Tag "public-domain"]
         AllRightsReserved -> [Tag "all-rights-reserved"]
         _                 -> []
-
