@@ -1881,20 +1881,14 @@ mkHtmlSearch HtmlUtilities{..}
         alternativeSearch =
           paragraph <<
             [ toHtml "Alternatively, if you are looking for a particular function then try "
-            , anchor ! [href hayooBaseLink] << "Hayoo"
-            , toHtml " or "
             , anchor ! [href hoogleBaseLink] << "Hoogle"
             ]
         alternativeSearchTerms termsStr =
           paragraph <<
             [ toHtml "Alternatively, if you are looking for a particular function then try "
-            , anchor ! [href (hayooLink termsStr)] << "Hayoo"
-            , toHtml " or "
             , anchor ! [href (hoogleLink termsStr)] << "Hoogle"
             ]
-        hayooBaseLink  = "http://holumbus.fh-wedel.de/hayoo/hayoo.html"
         hoogleBaseLink = "http://www.haskell.org/hoogle/"
-        hayooLink termsStr  = "http://hayoo.fh-wedel.de/?query=" <> termsStr
         hoogleLink termsStr = "http://www.haskell.org/hoogle/?hoogle=" <> termsStr
 
         explainResults :: (Maybe PackageName, [(Search.Explanation PkgDocField PkgDocFeatures T.Text, PackageName)]) -> [Html]
