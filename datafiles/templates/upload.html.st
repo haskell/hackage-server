@@ -39,6 +39,15 @@ the <code>Maintainer</code> field as above either to commit to supporting the fo
 yourself or to mark it as unsupported.
 </p>
 
+<h3>Group Accounts</h3>
+
+<p>Occasionally organizations want to have a group / organizational account
+for a package that is maintained by a group of people.  The recommended
+approach for these cases is to only do package uploads from individual
+accounts and use the group account only for managing the maintainer list for
+the package.
+</p>
+
 <h3>Upload forms</h3>
 <p>Some last formalities: to upload a package, you'll need a Hackage
 <a href="accounts">username</a> and password. (Alternatively, there's a
