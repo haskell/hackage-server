@@ -266,7 +266,10 @@ foreign import ccall "fsync" c_fsync :: CInt -> IO CInt
 
 newtype BlobId_v0 = BlobId_v0 MD5Digest deriving Serialize
 
-instance SafeCopy BlobId_v0
+instance SafeCopy BlobId_v0 where
+    getCopy = contain get
+    putCopy = contain . put
+
 instance Migrate BlobId where
     type MigrateFrom BlobId = BlobId_v0
     migrate (BlobId_v0 digest) = BlobId digest

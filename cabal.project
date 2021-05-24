@@ -8,6 +8,9 @@
 
 packages: .
 
+
+allow-newer: rss:time, rss:base
+
 -----------------------------------------------------------------------------
 -- Anti-constraints
 

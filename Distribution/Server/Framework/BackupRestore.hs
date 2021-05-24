@@ -145,7 +145,7 @@ instance Semigroup AbstractRestoreBackup where
 concatM :: (Monad m) => [a -> m a] -> (a -> m a)
 concatM fs = foldr (>=>) return fs
 
-importCSV :: Monad m => FilePath -> ByteString -> m CSV
+importCSV :: (Monad m, MonadFail m) => FilePath -> ByteString -> m CSV
 importCSV filename inp = case parseCSV filename (unpackUTF8 inp) of
     Left err  -> fail (show err)
     Right csv -> return (chopLastRecord csv)
@@ -157,14 +157,14 @@ importCSV filename inp = case parseCSV filename (unpackUTF8 inp) of
     chopLastRecord ([""]:[]) = []
     chopLastRecord (x:xs) = x : chopLastRecord xs
 
-parseRead :: forall a m. (Read a, Monad m, Typeable a) => String -> String -> m a
+parseRead :: forall a m. (Read a, Monad m, MonadFail m, Typeable a) => String -> String -> m a
 parseRead label str = case readConsume reads str of
     [value] -> return value
     _       -> fail $ "Unable to 'read' " ++ label ++ " "
                    ++ show str
                    ++ " as type " ++ show (typeOf (undefined :: a))
 
-parseUTCTime :: (Monad m, MonadError String m) => String -> String -> m UTCTime
+parseUTCTime :: (Monad m, MonadFail m, MonadError String m) => String -> String -> m UTCTime
 parseUTCTime label str =
     case parseTimeMaybe timeFormatSpec str of
       Nothing -> throwError $ "Unable to parse UTC timestamp " ++ label ++ ": " ++ str
@@ -177,29 +177,29 @@ timeFormatSpec :: String
 timeFormatSpec = "%Y-%m-%d %H:%M:%S%Q %z"
 
 -- Parse a string, throw an error if it's bad
-parseText :: forall a m. (Parsec a, Monad m, Typeable a) => String -> String -> m a
+parseText :: forall a m. (Parsec a, Monad m, MonadFail m, Typeable a) => String -> String -> m a
 parseText label text = case simpleParse text of
     Nothing -> fail $ "Unable to 'simpleParse' " ++ label ++ " "
                    ++ show text
                    ++ " as type " ++ show (typeOf (undefined :: a))
     Just a -> return a
 
-parseVersion :: Monad m => String -> String -> m Version
+parseVersion :: (Monad m, MonadFail m) => String -> String -> m Version
 parseVersion label str = case readConsume (readP_to_S Version.parseVersion) str of
     [value] -> return value
     _       -> fail $ "Unable to parse " ++ label ++ " " ++ show str
 
-parseBlobId :: Monad m => String -> String -> m BlobId
+parseBlobId :: (Monad m, MonadFail m) => String -> String -> m BlobId
 parseBlobId label str = case Blob.readBlobId str of
     Right blobId -> return blobId
     Left  err    -> fail $ "Unable to parse " ++ label ++ show str ++ ": " ++ err
 
-parseSHA :: Monad m => String -> String -> m SHA256Digest
+parseSHA :: (Monad m, MonadFail m) => String -> String -> m SHA256Digest
 parseSHA label str = case readDigest str of
     Right digest -> return digest
     Left  err    -> fail $ "Unable to parse " ++ label ++ show str ++ ": " ++ err
 
-parseMD5 :: Monad m => String -> String -> m MD5Digest
+parseMD5 :: (Monad m, MonadFail m) => String -> String -> m MD5Digest
 parseMD5 label str = case readDigest str of
     Right digest -> return digest
     Left  err    -> fail $ "Unable to parse " ++ label ++ show str ++ ": " ++ err
@@ -252,12 +252,14 @@ data Restore a = RestoreDone a
 
 instance Monad Restore where
   return = RestoreDone
-  fail   = RestoreFail
   RestoreDone x         >>= g = g x
   RestoreFail err       >>= _ = RestoreFail err
   RestoreAddBlob  bs  f >>= g = RestoreAddBlob  bs  $ \bid -> f bid >>= g
   RestoreGetBlob  bid f >>= g = RestoreGetBlob  bid $ \bs  -> f bs  >>= g
   RestoreFindBlob bid f >>= g = RestoreFindBlob bid $ \b   -> f b   >>= g
+
+instance MonadFail Restore where
+    fail   = RestoreFail
 
 instance MonadError [Char] Restore where
   throwError = RestoreFail

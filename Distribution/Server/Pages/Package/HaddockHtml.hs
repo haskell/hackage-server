@@ -27,7 +27,7 @@ htmlMarkup modResolv = Markup {
   markupOrderedList   = ordList,
   markupDefList       = defList,
   markupCodeBlock     = pre,
-  markupHyperlink     = \(Hyperlink url mLabel) -> anchor ! [href url] << fromMaybe url mLabel,
+  markupHyperlink     = \(Hyperlink url mLabel) -> anchor ! [href url] << fromMaybe url (fmap showHtml mLabel),
   markupAName         = \aname -> namedAnchor aname << toHtml "",
   markupPic           = \(Picture uri mtitle) -> image ! ([src uri] ++ fromMaybe [] (return . title <$> mtitle)),
   markupMathInline    = \mathjax -> toHtml ("\\(" ++ mathjax ++ "\\)"),
@@ -53,8 +53,8 @@ htmlMarkup modResolv = Markup {
         htmlPrompt = (thecode . toHtml $ ">>> ") ! [theclass "prompt"]
         htmlExpression = (strong . thecode . toHtml $ expression ++ "\n") ! [theclass "userinput"]
 
-    mkModLink :: String -> Html
-    mkModLink s = fromMaybe (thecode . toHtml $ s) $ do
+    mkModLink :: ModLink Html -> Html
+    mkModLink (ModLink s _lbl) = fromMaybe (thecode . toHtml $ s) $ do
         modname <- simpleParse s
         modUrl  <- modResolv modname
         let lnk = anchor ! [href modUrl] << s

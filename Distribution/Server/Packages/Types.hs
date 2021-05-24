@@ -247,7 +247,10 @@ instance Serialize UserId_v0 where
   put (UserId_v0 x) = Serialize.put x
   get = UserId_v0 <$> Serialize.get
 
-instance SafeCopy PkgTarball_v0
+instance SafeCopy PkgTarball_v0 where
+    getCopy = contain Serialize.get
+    putCopy = contain . Serialize.put
+
 instance Serialize PkgTarball_v0 where
     put (PkgTarball_v0 a b) = Serialize.put a >> Serialize.put b
     get = PkgTarball_v0 <$> Serialize.get <*> Serialize.get
@@ -257,7 +260,10 @@ deriveSafeCopy 3 'extension ''PkgTarball
 
 deriveSafeCopy 1 'base ''BlobInfo
 
-instance SafeCopy  PkgInfo_v0
+instance SafeCopy  PkgInfo_v0 where
+    getCopy = contain Serialize.get
+    putCopy = contain . Serialize.put
+
 instance Serialize PkgInfo_v0 where
     put (PkgInfo_v0 a (CabalFileText b) c d e) =
          Serialize.put a

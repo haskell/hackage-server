@@ -85,7 +85,7 @@ termsMarkup = Markup {
   markupDefList       = concatMap (\(d,t) -> d ++ t),
   markupCodeBlock     = const [],
   markupTable         = concat . F.toList,
-  markupHyperlink     = \(Hyperlink _url mLabel) -> maybeToList mLabel,
+  markupHyperlink     = \(Hyperlink _url mLabel) -> fromMaybe [] mLabel,
                         --TODO: extract main part of hostname
   markupAName         = const [],
   markupPic           = const [],

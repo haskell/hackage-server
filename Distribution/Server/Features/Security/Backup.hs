@@ -215,7 +215,7 @@ import_v1 = mapM_ fromRecord
     fromRecord otherRecord =
       fail $ "Unexpected record: " ++ show otherRecord
 
-    fromInfoRecord :: Monad m => Record -> m FileInfo
+    fromInfoRecord :: (Monad m, MonadFail m) => Record -> m FileInfo
     fromInfoRecord [strFileLength, strSHA256] = do
       fileInfoLength <- parseRead "file length" strFileLength
       fileInfoSHA256 <- parseSHA "file SHA256" strSHA256

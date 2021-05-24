@@ -73,6 +73,8 @@ instance MemSize MD5Digest where
     memSize _ = 3
 
 instance SafeCopy MD5Digest where
+    getCopy = contain Ser.get
+    putCopy = contain . Ser.put
     -- use default Serialize instance
 
 instance Ser.Serialize MD5Digest where
