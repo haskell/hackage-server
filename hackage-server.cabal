@@ -110,7 +110,7 @@ common defaults
   -- other dependencies shared by most components
   build-depends:
     , aeson                 ^>= 1.1
-    , Cabal                 ^>= 3.0.2.0
+    , Cabal                 ^>= 3.2.1.0
     , containers            ^>= 0.5.0
     , fail                  ^>= 4.9.0
       -- we use Control.Monad.Except, introduced in mtl-2.2.1
@@ -364,7 +364,7 @@ library lib-server
     , cryptohash-sha256     ^>= 0.11.100
     , csv                   ^>= 0.1
     , ed25519               ^>= 0.0.5
-    , hackage-security      ^>= 0.5.2
+    , hackage-security      ^>= 0.6
     , hackage-security-HTTP ^>= 0.1.1
     , haddock-library       ^>= 1.7.0
     , happstack-server      ^>= 7.5
@@ -551,4 +551,3 @@ test-suite HashTests
       -- component-specific dependencies
     , tasty       ^>= 1.2.1
     , tasty-hunit ^>= 0.10
-

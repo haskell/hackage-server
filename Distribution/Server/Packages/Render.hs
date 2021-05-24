@@ -42,6 +42,7 @@ import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.ModuleForest
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Types
+import Distribution.Utils.ShortText (fromShortText)
 import qualified Data.TarIndex as TarIndex
 import Data.TarIndex (TarIndex, TarEntryOffset)
 
@@ -96,12 +97,12 @@ doPackageRender users info = PackageRender
                                 `map` condSubLibraries genDesc
     , rendLicenseName  = prettyShow (license desc) -- maybe make this a bit more human-readable
     , rendLicenseFiles = licenseFiles desc
-    , rendMaintainer   = case maintainer desc of
+    , rendMaintainer   = case fromShortText $ maintainer desc of
                            "None" -> Nothing
                            "none" -> Nothing
                            ""     -> Nothing
                            person -> Just person
-    , rendCategory     = case category desc of
+    , rendCategory     = case fromShortText $ category desc of
                            []  -> []
                            str -> categorySplit str
     , rendRepoHeads    = catMaybes (map rendRepo $ sourceRepos desc)

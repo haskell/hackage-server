@@ -44,6 +44,7 @@ import Distribution.PackageDescription.FieldGrammar (sourceRepoFieldGrammar)
 import Distribution.PackageDescription.Check
 import Distribution.Parsec (showPWarning, showPError, PWarning (..))
 import Distribution.Simple.LocalBuildInfo (showComponentName)
+import Distribution.Utils.ShortText
 import Text.PrettyPrint as Doc
          ((<+>), colon, text, Doc, hsep, punctuate)
 
@@ -152,7 +153,7 @@ checkCabalFileRevision old new = do
 
     -- things can move, pos can change
     eqPWarning :: PWarning -> PWarning -> Bool
-    eqPWarning (PWarning t _pos s) (PWarning t' _pos' s') = 
+    eqPWarning (PWarning t _pos s) (PWarning t' _pos' s') =
         t == t' && s == s'
 
     checkParserWarnings :: FilePath -> Check [PWarning]
@@ -320,21 +321,21 @@ checkPackageDescriptions
             (packageVersion packageIdA) (packageVersion packageIdB)
   checkSame "Cannot change the license"
             (licenseRawA, licenseFilesA) (licenseRawB, licenseFilesB)
-  changesOk "copyright"  id copyrightA copyrightB
-  changesOk "maintainer" id maintainerA maintainerB
-  changesOk "author"     id authorA authorB
+  changesOk "copyright"  fromShortText copyrightA copyrightB
+  changesOk "maintainer" fromShortText maintainerA maintainerB
+  changesOk "author"     fromShortText authorA authorB
   checkSame "The stability field is unused, don't bother changing it."
             stabilityA stabilityB
   changesOk' Trivial "tested-with" (show . ppTestedWith) testedWithA testedWithB
-  changesOk "homepage" id homepageA homepageB
+  changesOk "homepage" fromShortText homepageA homepageB
   checkSame "The package-url field is unused, don't bother changing it."
             pkgUrlA pkgUrlB
-  changesOk "bug-reports" id bugReportsA bugReportsB
+  changesOk "bug-reports" fromShortText bugReportsA bugReportsB
   changesOkList changesOk "source-repository" (showFields (const []) . (:[]) . ppSourceRepo)
             sourceReposA sourceReposB
-  changesOk "synopsis"    id synopsisA synopsisB
-  changesOk "description" id descriptionA descriptionB
-  changesOk "category"    id categoryA categoryB
+  changesOk "synopsis"    fromShortText synopsisA synopsisB
+  changesOk "description" fromShortText descriptionA descriptionB
+  changesOk "category"    fromShortText categoryA categoryB
   checkSame "Cannot change the build-type"
             buildTypeRawA buildTypeRawB
   checkSame "Cannot change the data files"
@@ -451,7 +452,7 @@ class (Ord (DepKey d), Pretty vr, Eq vr) => IsDependency vr d | d -> vr where
     depTypeName    :: Proxy d -> String
     depKey         :: d -> DepKey d
     depKeyShow     :: Proxy d -> DepKey d -> String
-    depVerRg       :: d -> vr 
+    depVerRg       :: d -> vr
     reconstructDep :: DepKey d -> vr -> d
 
     depInAddWhitelist :: d -> Bool

@@ -17,6 +17,7 @@ import qualified Data.ByteString       as BS
 import qualified Data.ByteString.Char8 as BC8
 import qualified Data.ByteString.Lazy  as BSL
 import qualified Data.ByteString.Lazy.Char8 as BC8L
+import           Data.List.NonEmpty  ( toList)
 import           Distribution.Text
 import           Distribution.Pretty ( prettyShow )
 import           Distribution.Parsec ( PWarning, PError )
@@ -283,7 +284,7 @@ scanSpecVersionLazy bs = do
 -- 'True' is returned in the first element if sanity checks passes.
 parseGenericPackageDescriptionChecked :: BSL.ByteString -> (Bool,[PWarning], Either (Maybe Version, [PError]) GenericPackageDescription)
 parseGenericPackageDescriptionChecked bs = case parseGenericPackageDescription' bs of
-   (warns, pe@(Left _)) -> (False, warns, pe)
+   (warns, Left pe) -> (False, warns, Left $ fmap toList pe)
    (warns, Right gpd)   -> (isOk (specVersion (packageDescription gpd)),warns, Right gpd)
  where
    isOk :: Version -> Bool

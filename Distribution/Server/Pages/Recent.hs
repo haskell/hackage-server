@@ -20,6 +20,7 @@ import Distribution.PackageDescription
          , PackageDescription(synopsis)  )
 import Distribution.Text
          ( display )
+import Distribution.Utils.ShortText (fromShortText)
 
 import qualified Text.XHtml.Strict as XHtml
 import Text.XHtml
@@ -172,7 +173,7 @@ releaseItem users hostURI pkgInfo =
   where
     uri   = hostURI { uriPath = packageURL pkgId }
     title = display (packageName pkgId) ++ " " ++ display (packageVersion pkgId)
-    body  = synopsis (packageDescription (pkgDesc pkgInfo))
+    body  = fromShortText $ synopsis (packageDescription (pkgDesc pkgInfo))
     desc  = "<i>Added by " ++ display user ++ ", " ++ showTime time ++ ".</i>"
          ++ if null body then "" else "<p>" ++ body
     user = Users.userIdToName users userId

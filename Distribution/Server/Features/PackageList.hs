@@ -29,6 +29,7 @@ import Distribution.Server.Users.Types
 import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
+import Distribution.Utils.ShortText (fromShortText)
 
 import Control.Concurrent
 import Data.Maybe (catMaybes)
@@ -287,7 +288,7 @@ updateDescriptionItem :: GenericPackageDescription -> PackageItem -> PackageItem
 updateDescriptionItem genDesc item =
     let desc = flattenPackageDescription genDesc
     in item {
-        itemDesc = synopsis desc,
+        itemDesc = fromShortText $ synopsis desc,
         -- This checks if the library is buildable. However, since
         -- desc is flattened, we might miss some flags. Perhaps use the
         -- CondTree instead.
