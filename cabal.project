@@ -8,6 +8,9 @@
 
 packages: .
 
+
+allow-newer: rss:time, rss:base
+
 -----------------------------------------------------------------------------
 -- Anti-constraints
 
@@ -47,6 +50,10 @@ constraints: foundation -none, cryptonite -none, cryptohash -none
 --   location: https://github.com/hvr/cabal-parsers.git
 --   tag: 893d128f7680bedafb472c4bd45b12a87ade9166
 
+source-repository-package
+  type: git
+  location: https://github.com/gbaz/happstack-server.git
+  tag: c81a8ec6c5d14be295b1e21a8d3beacf985c55cb
 
 package hackage-server
 --   tests: True

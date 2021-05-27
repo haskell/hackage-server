@@ -28,8 +28,11 @@ import qualified Hackage.Security.Util.Pretty as Sec
   SafeCopy instances
 -------------------------------------------------------------------------------}
 
+
 instance SafeCopy (Some Sec.Key) where
-  -- use default Serialize instance
+    getCopy = contain get
+    putCopy = contain . put
+     -- use default Serialize instance
 
 instance Serialize (Some Sec.Key) where
   put = put . Sec.renderJSON_NoLayout
@@ -41,6 +44,8 @@ instance Serialize (Some Sec.Key) where
                   Right key -> return key
 
 instance SafeCopy Sec.FileVersion where
+    getCopy = contain get
+    putCopy = contain . put
   -- use default Serialize instance
 
 instance Serialize Sec.FileVersion where
@@ -50,6 +55,8 @@ instance Serialize Sec.FileVersion where
 -- Before hackage-security moved to Int64, it was using Int, so in order to
 -- keep the Serialize instance the same, that's what we translate to here.
 instance SafeCopy Int54 where
+    getCopy = contain get
+    putCopy = contain . put
   -- use default Serialize instance
 
 instance Serialize Int54 where

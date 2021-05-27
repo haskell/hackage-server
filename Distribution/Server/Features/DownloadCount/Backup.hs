@@ -32,7 +32,7 @@ inMemBackup (InMemStats day inMemStats) =
 inMemRestore :: RestoreBackup InMemStats
 inMemRestore = importOne "inmem.csv" importInMemStats
 
-importInMemStats :: Monad m => CSV -> m InMemStats
+importInMemStats :: (Monad m, MonadFail m) => CSV -> m InMemStats
 importInMemStats (_version : [dayStr] : inMemStatsCSV) = do
   day <- case simpleParse dayStr of
            Just day -> return day

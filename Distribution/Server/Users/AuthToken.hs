@@ -56,7 +56,7 @@ generateOriginalToken = OriginalToken <$> newRandomNonce 32
 parseOriginalToken :: T.Text -> Either String OriginalToken
 parseOriginalToken t = OriginalToken <$> parseNonce (T.unpack t)
 
-parseAuthTokenM :: Monad m => T.Text -> m AuthToken
+parseAuthTokenM :: (Monad m, MonadFail m) => T.Text -> m AuthToken
 parseAuthTokenM t =
     case parseAuthToken t of
       Left err -> fail err
