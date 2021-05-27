@@ -39,7 +39,7 @@ parseNonce t
     | not (all Char.isHexDigit t) = Left "only hex digits are allowed in tokens"
     | otherwise = Right (Nonce $ fst $ Base16.decode $ BS.pack t)
 
-parseNonceM :: Monad m => String -> m Nonce
+parseNonceM :: (Monad m, MonadFail m) => String -> m Nonce
 parseNonceM = either fail return . parseNonce
 
 

@@ -54,7 +54,7 @@ class CountingMap k a | a -> k where
   cmToList :: a -> [(k, Int)]
 
   cmToCSV        :: a -> CSV
-  cmInsertRecord :: Monad m => Record -> a -> m (a, Int)
+  cmInsertRecord :: (Monad m, MonadFail m) => Record -> a -> m (a, Int)
 
 instance (Ord k, Typeable k, Parsec k, Pretty k) => CountingMap k (SimpleCountingMap k) where
   cmEmpty = SCM (NCM 0 Map.empty)
@@ -114,7 +114,7 @@ instance (Typeable k, Parsec k, Pretty k, Ord k, Eq l, CountingMap l a) => Count
   cmInsertRecord [] _ =
     fail "cmInsertRecord: Invalid record"
 
-cmFromCSV :: (Monad m, CountingMap k a) => CSV -> m a
+cmFromCSV :: (Monad m, MonadFail m, CountingMap k a) => CSV -> m a
 cmFromCSV = go cmEmpty
   where
     go acc []     = return acc

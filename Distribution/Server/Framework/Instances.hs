@@ -414,6 +414,10 @@ newtype PackageIdentifier_v0 = PackageIdentifier_v0 PackageIdentifier
 
 instance SafeCopy PackageIdentifier_v0 where
     errorTypeName _ = "PackageIdentifier_v0"
+    getCopy = contain get
+    putCopy = contain . put
+     -- use default Serialize instance
+
 
 instance Serialize PackageIdentifier_v0 where
     put (PackageIdentifier_v0 pkgid) = Serialize.put (show pkgid)
