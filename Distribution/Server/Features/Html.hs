@@ -686,7 +686,8 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
                       , BR.topLevel c
                       ]
                   (used,total) = foldl (\(a,b) (x, y) -> (a+x, b+y)) (0,0) l
-                  per = (used*100) `div` total
+                  per | total <= 0 = 100
+                      | otherwise = (used*100) `div` total
               if per > 66
                 then (True, "brightgreen", per)
                 else if per > 33
