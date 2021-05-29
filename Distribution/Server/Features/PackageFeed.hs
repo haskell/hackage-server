@@ -139,7 +139,7 @@ feedItems users hostURI (pkgInfo, chlog) =
           ] +++ XHtml.hr +++ chlog
         pkgName = display (pkgInfoId pkgInfo)
         (time, uploaderId) = pkgOriginalUploadInfo pkgInfo
-        timestr = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S%EZ" time
+        timestr = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" time
         uploader = display $ Users.userIdToName users uploaderId
         pd = packageDescription (pkgDesc pkgInfo)
         d dt dd = XHtml.dterm (XHtml.toHtml dt) +++ XHtml.ddef (XHtml.toHtml dd)
