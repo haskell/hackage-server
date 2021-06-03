@@ -66,8 +66,7 @@ parseAuthToken :: T.Text -> Either String AuthToken
 parseAuthToken t
     | T.length t /= 64 = Left "auth token must be 64 charaters long"
     | not (T.all Char.isHexDigit t) = Left "only hex digits are allowed in tokens"
-    | otherwise =
-          Right $ AuthToken $ BSS.toShort $ fst $ BS16.decode $ T.encodeUtf8 t
+    | otherwise = AuthToken . BSS.toShort <$> BS16.decode (T.encodeUtf8 t)
 
 renderAuthToken :: AuthToken -> T.Text
 renderAuthToken (AuthToken bss) = T.decodeUtf8 $ BS16.encode $ BSS.fromShort bss

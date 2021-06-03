@@ -27,7 +27,7 @@ copyright:    2008-2015 Duncan Coutts,
 license:      BSD-3-Clause
 license-file: LICENSE
 
-tested-with: GHC == { 8.6.5, 8.4.4, 8.2.2, 8.0.2, 7.10.3, 7.8.4, 7.6.3 }
+tested-with: GHC == { 8.10.4 }
 
 data-dir: datafiles
 data-files:
@@ -89,39 +89,39 @@ flag cabal-parsers
 common defaults
   default-language: Haskell2010
 
-  -- version ranges of pre-installed packages for GHC 7.6 through GHC 8.0
+  -- version ranges of pre-installed packages for GHC
   --
   -- when possible, the CI jobs use `installed`-constraints on these;
   -- see `cabal.project.local-ghc-${VERSION}` files
   build-depends:
-    , array                  >= 0.4   && < 0.6
-    , base                   >= 4.6   && < 4.15
-    , binary                 >= 0.5   && < 0.9
+    , array                  >= 0.5   && < 0.6
+    , base                   >= 4.13  && < 4.16
+    , binary                 >= 0.8   && < 0.9
     , bytestring             >= 0.10  && < 0.11
-    , deepseq                >= 1.3   && < 1.5
-    , directory              >= 1.2   && < 1.4
-    , filepath               >= 1.3   && < 1.5
-    , pretty                 >= 1.0   && < 1.2
-    , process                >= 1.1   && < 1.7
-    , time                   >= 1.4   && < 1.12
-    , transformers           >= 0.3   && < 0.6
-    , unix                   >= 2.6   && < 2.8
+    , containers            ^>= 0.6.0
+    , deepseq                >= 1.4   && < 1.5
+    , directory              >= 1.3   && < 1.4
+    , filepath               >= 1.4   && < 1.5
+    , mtl                   ^>= 2.2.1
+    , pretty                 >= 1.1   && < 1.2
+    , process                >= 1.6   && < 1.7
+    , text                  ^>= 1.2.2
+    , time                   >= 1.9   && < 1.12
+    , transformers           >= 0.5   && < 0.6
+    , unix                   >= 2.7   && < 2.8
     , scientific
   -- other dependencies shared by most components
   build-depends:
-    , aeson                 > 1.1 && < 1.6
+    , aeson                 ^>= 1.5
     , Cabal                 ^>= 3.2.1.0
-    , containers            ^>= 0.5.0
     , fail                  ^>= 4.9.0
       -- we use Control.Monad.Except, introduced in mtl-2.2.1
-    , mtl                   ^>= 2.2.1
-    , network               > 2.6 && < 3.2
+    , network               >=  3 && < 3.2
     , network-bsd           ^>= 2.8
     , network-uri           ^>= 2.6
     , parsec                ^>= 3.1.13
     , tar                   ^>= 0.5
-    , text                  ^>= 1.2.2
-    , unordered-containers  ^>= 0.2.3.0
+    , unordered-containers  ^>= 0.2.10
     , vector                ^>= 0.12
     , zlib                  ^>= 0.6.2
 
@@ -350,11 +350,13 @@ library lib-server
   build-depends:
     , HStringTemplate       ^>= 0.8
     , HTTP                  ^>= 4000.3.6
-    , QuickCheck            > 2.9 && < 2.15
-    , acid-state            > 0.14 && < 0.17
+    , QuickCheck            ^>= 2.14
+    , acid-state            ^>= 0.16
     , async                 ^>= 2.2.1
+    -- requires bumping http-io-streams
     , attoparsec            ^>= 0.13
-    , base16-bytestring     ^>= 0.1
+    , base16-bytestring     ^>= 1.0
+    -- requires bumping http-io-streams
     , base64-bytestring     ^>= 1.1
       --NOTE: blaze-builder-0.4 is now a compat package that uses bytestring-0.10 builder
     , blaze-builder         ^>= 0.4
@@ -369,14 +371,14 @@ library lib-server
     , hackage-security-HTTP ^>= 0.1.1
     , haddock-library       > 1.7 && < 2
     , happstack-server      ^>= 7.7.1
-    , hashable              ^>= 1.2 || ^>= 1.3
+    , hashable              ^>= 1.3
     , hslogger              ^>= 1.3.1
     , lifted-base           ^>= 0.2.1
-    , mime-mail             ^>= 0.4
-    , random                ^>= 1.1
+    , mime-mail             ^>= 0.5
+    , random                ^>= 1.2
     , rss                   ^>= 3000.2.0.7
-    , safecopy              ^>= 0.9.1 || ^>= 0.10
-    , semigroups            ^>= 0.18.3
+    , safecopy              ^>= 0.10
+    , semigroups            ^>= 0.19
     , split                 ^>= 0.2
     , stm                   ^>= 2.5.0
     , tagged                ^>= 0.8.5
@@ -532,7 +534,7 @@ test-suite PackageTests
   build-depends:
     -- version constraints inherited from lib-server
     -- component-specific dependencies
-    , tasty        ^>= 1.2.1
+    , tasty        ^>= 1.4
     , tasty-hunit  ^>= 0.10
     , HUnit        ^>= 1.6
 
@@ -550,5 +552,5 @@ test-suite HashTests
     , cryptohash-sha256
     , safecopy
       -- component-specific dependencies
-    , tasty       ^>= 1.2.1
+    , tasty       ^>= 1.4
     , tasty-hunit ^>= 0.10

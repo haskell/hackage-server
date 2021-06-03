@@ -75,10 +75,8 @@ instance ReadDigest SHA256Digest where
   -- the base16-encoded digest doesn't have a length prefix
   readDigest str =
       case B16.decode (BS.Char8.pack str) of
-          (d,rest) | BS.null rest
-                   , BS.length d == 32 -> Right $! sha256digestFromBS d
-                   | otherwise         -> Left $ "Could not decode SHA256 " ++
-                                                 show str
+          Right d | BS.length d == 32 -> Right $! sha256digestFromBS d
+          _  -> Left $ "Could not decode SHA256 " ++ show str
 
 -- | Compute SHA256 digest
 sha256 :: BS.Lazy.ByteString -> SHA256Digest
