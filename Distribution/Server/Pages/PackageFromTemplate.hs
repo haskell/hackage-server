@@ -26,10 +26,12 @@ import Distribution.Package
 import Distribution.PackageDescription as P
 import Distribution.Version
 import Distribution.Text        (display)
+import Distribution.Utils.ShortText (fromShortText)
+import qualified Distribution.Utils.ShortText as Short
 import Text.XHtml.Strict hiding (p, name, title, content)
 import qualified Text.XHtml.Strict as XHtml
 
-import Data.Maybe               (maybeToList, fromMaybe)
+import Data.Maybe               (maybeToList, fromMaybe, isJust)
 import Data.List                (intersperse)
 import System.FilePath.Posix    ((</>), takeFileName, dropTrailingPathSeparator)
 import Data.Time.Locale.Compat  (defaultTimeLocale)
@@ -181,56 +183,56 @@ packagePageTemplate render
     -- Access via "$package.optional.varname$"
     optionalPackageInfoTemplate = templateDict $
       [ templateVal "hasDescription"
-          (if (description $ rendOther render) == [] then False else True)
+          (not . Short.null . description $ rendOther render)
       , templateVal "description"
           (Old.renderHaddock (Old.moduleToDocUrl render docURL)
-                             (description $ rendOther render))
+                             (fromShortText . description $ rendOther render))
       ] ++
 
       [ templateVal "hasReadme"
-          (if rendReadme render == Nothing then False else True)
+          (isJust $ rendReadme render)
       , templateVal "readme"
           (readmeSection render mreadme)
       ] ++
 
       [ templateVal "hasChangelog"
-          (if rendChangeLog render == Nothing then False else True)
+          (isJust $ rendChangeLog render)
       , templateVal "changelog"
           (renderChangelog render)
       ] ++
 
       [ templateVal "hasCopyright"
-          (if P.copyright desc == "" then False else True)
+          (not . Short.null $ P.copyright desc)
       , templateVal "copyright"
           renderCopyright
       ] ++
 
       [ templateVal "hasCategories"
-          (if rendCategory render == [] then False else True)
+          (not . null $ rendCategory render)
       , templateVal "category"
           (commaList . map Old.categoryField $ rendCategory render)
       ] ++
 
       [ templateVal "hasHomePage"
-          (if (homepage desc  == []) then False else True)
+          (not . Short.null $ homepage desc)
       , templateVal "homepage"
           (homepage desc)
       ] ++
 
       [ templateVal "hasBugTracker"
-          (if bugReports desc == [] then False else True)
+          (not . Short.null $ bugReports desc)
       , templateVal "bugTracker"
           (bugReports desc)
       ] ++
 
       [ templateVal "hasSourceRepository"
-          (if sourceRepos desc == [] then False else True)
+          (not . null $ sourceRepos desc)
       , templateVal "sourceRepository"
           (vList $ map sourceRepositoryToHtml (sourceRepos desc))
       ] ++
 
       [ templateVal "hasSynopsis"
-          (if synopsis (rendOther render) == "" then False else True)
+          (not . Short.null $ synopsis (rendOther render))
       , templateVal "synopsis"
           (synopsis (rendOther render))
       ]
@@ -254,10 +256,9 @@ packagePageTemplate render
       | otherwise = []
 
     renderCopyright :: Html
-    renderCopyright = toHtml $ case text of
+    renderCopyright = toHtml $ case fromShortText $ P.copyright desc of
       "" -> "None provided"
-      _ -> text
-      where text = P.copyright desc
+      x -> x
 
     renderUpdateInfo :: Int -> UTCTime -> Maybe UserInfo -> Html
     renderUpdateInfo revisionNo utime uinfo =
@@ -284,10 +285,9 @@ packagePageTemplate render
       Just (_,_,_,fname) -> anchor ! [href (rendPkgUri r </> "changelog")] << takeFileName fname
 
     renderStability :: PackageDescription -> Html
-    renderStability d = case actualStability of
-      "" -> toHtml "Unknown"
-      _  -> toHtml actualStability
-      where actualStability = stability d
+    renderStability d = toHtml $ case fromShortText (stability d) of
+      "" -> "Unknown"
+      x  -> x
 
     deprHtml :: Maybe [PackageName] -> Html
     deprHtml ds = case ds of
@@ -335,7 +335,7 @@ candidatesPageTemplate cands candidates candidatesCore=
                     , toHtml ": "
                     , toHtml $ intersperse (toHtml ", ") $ flip map pkgs $ \pkg ->
                          anchor ! [href $ corePackageIdUri candidatesCore "" (packageId pkg)] << display (packageVersion pkg)
-                    , toHtml $ ". " ++ synopsis desc
+                    , toHtml $ ". " ++ fromShortText (synopsis desc)
                     ]
 
 
@@ -511,3 +511,7 @@ vList = concatHtml . intersperse br
 -- | URL describing a package.
 packageURL :: PackageIdentifier -> URL
 packageURL pkgId = "/package" </> display pkgId
+
+---
+instance ToSElem Short.ShortText where
+  toSElem = toSElem . fromShortText

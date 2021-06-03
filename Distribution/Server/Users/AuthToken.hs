@@ -56,7 +56,7 @@ generateOriginalToken = OriginalToken <$> newRandomNonce 32
 parseOriginalToken :: T.Text -> Either String OriginalToken
 parseOriginalToken t = OriginalToken <$> parseNonce (T.unpack t)
 
-parseAuthTokenM :: Monad m => T.Text -> m AuthToken
+parseAuthTokenM :: (Monad m, MonadFail m) => T.Text -> m AuthToken
 parseAuthTokenM t =
     case parseAuthToken t of
       Left err -> fail err
@@ -66,8 +66,7 @@ parseAuthToken :: T.Text -> Either String AuthToken
 parseAuthToken t
     | T.length t /= 64 = Left "auth token must be 64 charaters long"
     | not (T.all Char.isHexDigit t) = Left "only hex digits are allowed in tokens"
-    | otherwise =
-          Right $ AuthToken $ BSS.toShort $ fst $ BS16.decode $ T.encodeUtf8 t
+    | otherwise = AuthToken . BSS.toShort <$> BS16.decode (T.encodeUtf8 t)
 
 renderAuthToken :: AuthToken -> T.Text
 renderAuthToken (AuthToken bss) = T.decodeUtf8 $ BS16.encode $ BSS.fromShort bss

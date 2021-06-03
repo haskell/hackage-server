@@ -12,10 +12,12 @@ import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Users (Users)
 import Distribution.Server.Util.ServeTarball (loadTarEntry)
 import Distribution.Server.Util.Markdown (renderMarkdown, supposedToBeMarkdown)
+import Distribution.Server.Pages.Package () -- for ShortText html instance, for now.
 
 import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.Text
+import Distribution.Utils.ShortText (fromShortText)
 
 import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
 import Data.List (sortOn)
@@ -123,10 +125,10 @@ feedItems users hostURI (pkgInfo, chlog) =
   , RSS.Description (XHtml.showHtmlFragment desc)
   , RSS.Author uploader
   ]
-  where title = pkgName ++ " (" ++ synopsis pd ++ ")"
+  where title = pkgName ++ " (" ++ fromShortText (synopsis pd) ++ ")"
         uri = hostURI { uriPath = "/package/" ++ pkgName }
         desc = XHtml.dlist << XHtml.concatHtml
-          [ d "Homepage"   $ XHtml.anchor ! [XHtml.href (homepage pd)] << homepage pd
+          [ d "Homepage"   $ XHtml.anchor ! [XHtml.href (fromShortText $ homepage pd)] << homepage pd
           , d "Author"     $ author pd
           , d "Uploaded"   $ "by " ++ uploader ++ " at " ++ timestr
           , d "Maintainer" $ maintainer pd

@@ -38,6 +38,7 @@ import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import qualified Data.Foldable as Foldable
 import Data.List
+import Data.List.NonEmpty (toList)
 import Data.Ord (comparing)
 import Control.Monad.State
 import qualified Distribution.Server.Util.GZip as GZip
@@ -198,7 +199,7 @@ partialToFullPkg (pkgId, PartialPkg{..}) = do
 
     case runParseResult $ parseGenericPackageDescription $
          BS.toStrict $ cabalFileByteString latestCabalFile of
-      (_, Left (_, errs)) -> fail $ unlines (map (showPError filename) errs)
+      (_, Left (_, errs)) -> fail $ unlines (map (showPError filename) $ toList errs)
       (_, Right _)        -> return ()
 
     return PkgInfo {

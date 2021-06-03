@@ -23,7 +23,7 @@ import Distribution.Server.Framework.MemSize
 import Distribution.Package  (PackageIdentifier(..))
 import Distribution.Compiler (CompilerFlavor(..), CompilerId(..))
 import Distribution.System   (OS(..), Arch(..))
-import Distribution.Types.GenericPackageDescription (FlagName, mkFlagName, unFlagName)
+import Distribution.Types.Flag (FlagName, mkFlagName, unFlagName)
 import Distribution.Types.PackageName
 import Distribution.Version
 import Distribution.Pretty (Pretty(pretty), prettyShow)
@@ -414,6 +414,10 @@ newtype PackageIdentifier_v0 = PackageIdentifier_v0 PackageIdentifier
 
 instance SafeCopy PackageIdentifier_v0 where
     errorTypeName _ = "PackageIdentifier_v0"
+    getCopy = contain get
+    putCopy = contain . put
+     -- use default Serialize instance
+
 
 instance Serialize PackageIdentifier_v0 where
     put (PackageIdentifier_v0 pkgid) = Serialize.put (show pkgid)

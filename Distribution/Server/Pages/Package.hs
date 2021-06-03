@@ -41,6 +41,7 @@ import Distribution.PackageDescription as P
 import Distribution.Version
 import Distribution.Types.CondTree
 import Distribution.Text        (display)
+import Distribution.Utils.ShortText (fromShortText, ShortText)
 import Text.XHtml.Strict hiding (p, name, title, content)
 import qualified Text.XHtml.Strict
 
@@ -59,6 +60,9 @@ import qualified Data.Text.Encoding       as T
 import qualified Data.Text.Encoding.Error as T (lenientDecode)
 import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
 
+instance HTML ShortText where
+   toHtml = toHtml . fromShortText
+
 packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)]
             -> [(String, Html)] -> Maybe TarIndex -> Maybe BS.ByteString
             -> URL -> Bool
@@ -76,7 +80,7 @@ packagePage render headLinks top sections
     canonical = thelink ! [ rel "canonical"
                           , href pkgUrl ] << noHtml
     docTitle = pkgName
-            ++ case synopsis (rendOther render) of
+            ++ case fromShortText $ synopsis (rendOther render) of
                  ""    -> ""
                  short -> ": " ++ short
 
@@ -94,7 +98,7 @@ packagePage render headLinks top sections
              map pair bottom
            ]
 
-    bodyTitle = case synopsis (rendOther render) of
+    bodyTitle = case fromShortText $ synopsis (rendOther render) of
       ""    -> h1 << pkgName
       short -> h1 << [ toHtml (pkgName ++ ": ")
                      , small (toHtml short)
@@ -129,7 +133,7 @@ descriptionSection :: PackageRender -> URL -> [Html]
 descriptionSection PackageRender{..} docURL =
         [thediv ! [identifier "description"] <<
            renderHaddock (moduleToDocUrl PackageRender{..} docURL)
-                         (description rendOther)]
+                         (fromShortText $ description rendOther)]
      ++ readmeLink
   where
     readmeLink = case rendReadme of
@@ -464,8 +468,8 @@ renderFields render = [
         ("Maintainer",  maintainField $ rendMaintainer render),
 --        ("Stability",   toHtml $ stability desc),
         ("Category",    commaList . map categoryField $ rendCategory render),
-        ("Home page",   linkField $ homepage desc),
-        ("Bug tracker", linkField $ bugReports desc),
+        ("Home page",   linkField . fromShortText $ homepage desc),
+        ("Bug tracker", linkField . fromShortText $ bugReports desc),
         ("Source repository", vList $ map sourceRepositoryField $ sourceRepos desc),
         ("Executables", commaList . map toHtml $ rendExecNames render),
         ("Uploaded", uncurry renderUploadInfo (rendUploadInfo render))

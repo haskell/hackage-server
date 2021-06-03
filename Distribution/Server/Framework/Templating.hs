@@ -165,7 +165,7 @@ reloadTemplates (TemplatesNormalMode templateGroupRef
 
 reloadTemplates (TemplatesDesignMode _ _) = return ()
 
-getTemplate :: MonadIO m => Templates -> String -> m ([TemplateAttr] -> Template)
+getTemplate :: (MonadIO m, MonadFail m) => Templates -> String -> m ([TemplateAttr] -> Template)
 getTemplate templates@(TemplatesNormalMode _ _ expectedTemplates) name = do
     when (name `notElem` expectedTemplates) $ failMissingTemplate name
     tryGetTemplate templates name >>= maybe (failMissingTemplate name) return
@@ -174,7 +174,7 @@ getTemplate templates@(TemplatesDesignMode _ expectedTemplates) name = do
     when (name `notElem` expectedTemplates) $ failMissingTemplate name
     tryGetTemplate templates name >>= maybe (failMissingTemplate name) return
 
-tryGetTemplate :: MonadIO m => Templates -> String -> m (Maybe ([TemplateAttr] -> Template))
+tryGetTemplate :: (MonadIO m, MonadFail m) => Templates -> String -> m (Maybe ([TemplateAttr] -> Template))
 tryGetTemplate (TemplatesNormalMode templateGroupRef _ _) name = do
     templateGroup <- liftIO $ readIORef templateGroupRef
     let tkind     = templateKindFromExt name
@@ -222,7 +222,7 @@ templateContentType OtherTemplate = "text/plain"
 applyTemplateAttrs :: RawTemplate -> [TemplateAttr] -> RawTemplate
 applyTemplateAttrs = foldl' (\t' (TemplateAttr a) -> a t')
 
-failMissingTemplate :: Monad m => String -> m a
+failMissingTemplate :: (Monad m, MonadFail m) => String -> m a
 failMissingTemplate name =
   fail $ "getTemplate: request for unexpected template " ++ name
       ++ ". So we can do load-time checking, all templates used "
@@ -235,7 +235,7 @@ loadTemplateGroup templateDirs = do
 --                 `catchJust` IOError
     return (foldr1 (flip addSuperGroup) templateGroup)
 
-checkTemplates :: Monad m => RawTemplateGroup -> [FilePath] -> [String] -> m ()
+checkTemplates :: (Monad m, MonadFail m) => RawTemplateGroup -> [FilePath] -> [String] -> m ()
 checkTemplates templateGroup templateDirs expectedTemplates = do
     let checks    = [ (t, fmap checkTemplate
                                (getStringTemplate t templateGroup))

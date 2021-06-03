@@ -41,7 +41,7 @@ import Distribution.Compat.Newtype
 import Distribution.Compat.Lens (Lens')
 import Distribution.Package
          ( PackageIdentifier(..) )
-import Distribution.Types.GenericPackageDescription
+import Distribution.Types.Flag
          ( FlagName, unFlagName, mkFlagName )
 import Distribution.System
          ( OS, Arch )
@@ -74,7 +74,7 @@ import Text.PrettyPrint.HughesPJ
 import Data.Serialize as Serialize
          ( Serialize(..) )
 import Data.SafeCopy
-         ( SafeCopy(..), deriveSafeCopy, extension, base, Migrate(..) )
+         ( SafeCopy(..), deriveSafeCopy, extension, base, Migrate(..), contain )
 import Test.QuickCheck
          ( Arbitrary(..), elements, oneof )
 import Text.StringTemplate ()
@@ -85,6 +85,7 @@ import Data.String (fromString)
 import Data.Aeson
 import Data.List
          ( unfoldr, isInfixOf )
+import Data.List.NonEmpty (toList)
 import Data.Char as Char
          ( isAlpha, isAlphaNum )
 import qualified Data.ByteString.Char8 as BS
@@ -226,7 +227,7 @@ read s = case parse s of
 
 parse :: BS.ByteString -> Either String BuildReport
 parse s = case snd $ runParseResult $ parseFields s of
-  Left (_, perrors) -> Left $ unlines [ err | PError _ err <- perrors ]
+  Left (_, perrors) -> Left $ unlines [ err | PError _ err <- toList perrors ]
   Right report -> Right report
 
 parseFields :: BS.ByteString -> ParseResult BuildReport
@@ -234,7 +235,7 @@ parseFields input = do
   fields <- either (parseFatalFailure P.zeroPos . Prelude.show) pure $ readFields input
   case partitionFields fields of
     (fields', [])  -> parseFieldGrammar CabalSpecV2_4 fields' fieldDescrs
-    _otherwise -> fail "found sections in BuildReport"
+    _otherwise -> parseFatalFailure P.zeroPos "found sections in BuildReport" -- TODO
 
 parseList :: BS.ByteString -> [BuildReport]
 parseList str =
@@ -494,7 +495,11 @@ deriveSafeCopy 1 'base      ''BuildCovg
 -- compatible that we can get away with it for now.
 newtype BuildReport_v0 = BuildReport_v0 BuildReport
 
-instance SafeCopy  BuildReport_v0
+instance SafeCopy BuildReport_v0 where
+    getCopy = contain get
+    putCopy = contain . put
+     -- use default Serialize instance
+
 instance Serialize BuildReport_v0 where
     put (BuildReport_v0 br) = Serialize.put . BS.pack . show $ br
     get = (BuildReport_v0 . read) `fmap` Serialize.get

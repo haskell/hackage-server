@@ -22,12 +22,14 @@ import Distribution.Server.Pages.Template (hackagePage)
 
 import Distribution.Text
 import Distribution.Package
+import Distribution.PackageDescription
 
 import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
 import qualified Data.Text.Encoding.Error as T
 import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
 import qualified Text.XHtml.Strict as XHtml
+import qualified Distribution.Utils.ShortText as ST
 import           Text.XHtml.Strict ((<<), (!))
 
 
@@ -130,20 +132,28 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
 
     serveChangeLogHtml :: DynamicPath -> ServerPartE Response
     serveChangeLogHtml dpath = do
-      pkg     <- packageInPath dpath >>= lookupPackageId
-      mReadme <- liftIO $ findToplevelFile pkg isChangeLogFile
-      case mReadme of
-        Left err ->
-          errNotFound "Changelog not found" [MText err]
+      pkg        <- packageInPath dpath >>= lookupPackageId
+      mChangeLog <- liftIO $ findToplevelFile pkg isChangeLogFile
+      let pkgId   = packageId pkg
+      let url     = packageURL pkgId
+      let pkgName = display pkgId
+      case mChangeLog of
+        Left _ -> do
+          let message = [MText "Package ", MLink pkgName url, MText " has no changelog file in source distribution. "]
+          let home = homepage $ packageDescription $ pkgDesc pkg
+          if ST.null home then 
+            errNotFound "Changelog not found" message
+          else 
+            let homeUrl = ST.fromShortText home in
+            errNotFound "Changelog not found" (message ++ [MText "You may find one at the package home page: ", MLink homeUrl homeUrl])
         Right (tarfile, etag, offset, filename) -> do
           contents <- either (\err -> errInternalError [MText err])
                              (return . snd)
                   =<< liftIO (loadTarEntry tarfile offset)
           cacheControl [Public, maxAgeDays 30] etag
           return $ toResponse $ Resource.XHtml $
-            let title  = "Changelog for " ++ display pkgId
-                title2 = "Changelog for " XHtml.+++ (XHtml.anchor ! [XHtml.href (packageURL pkgId)] << display pkgId)
-                pkgId  = packageId pkg
+            let title  = "Changelog for " ++ pkgName
+                title2 = "Changelog for " XHtml.+++ (XHtml.anchor ! [XHtml.href url] << pkgName)
             in hackagePage title
                  [ XHtml.h2 << title2
                  , XHtml.thediv ! [XHtml.theclass "embedded-author-content"]
