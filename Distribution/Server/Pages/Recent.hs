@@ -99,7 +99,7 @@ makeRevisionRow users pkginfo =
     revlabel = [XHtml.toHtml (display pkgid), XHtml.toHtml revno]
 
 showTime :: UTCTime -> String
-showTime = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S%EZ"
+showTime = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ"
 
 showTimeHtml :: UTCTime -> Html
 showTimeHtml t = XHtml.thespan ! [XHtml.title $ formatTime defaultTimeLocale "%c" t ]
