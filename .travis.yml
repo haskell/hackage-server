@@ -71,7 +71,6 @@ install:
   - rm -f cabal.project
   - touch cabal.project
   - "printf 'packages: \".\"\\n' >> cabal.project"
-  - "echo 'constraints: rss (< 3000.2.0.6 || > 3000.2.0.6)' >> cabal.project"
   - "echo 'constraints: foundation -none' >> cabal.project"
   - "echo 'constraints: cryptonite -none' >> cabal.project"
   - "echo 'constraints: cryptohash -none' >> cabal.project"
@@ -101,7 +100,6 @@ script:
   - rm -f cabal.project
   - touch cabal.project
   - "printf 'packages: \"hackage-server-*/*.cabal\"\\n' >> cabal.project"
-  - "echo 'constraints: rss (< 3000.2.0.6 || > 3000.2.0.6)' >> cabal.project"
   - "echo 'constraints: foundation -none' >> cabal.project"
   - "echo 'constraints: cryptonite -none' >> cabal.project"
   - "echo 'constraints: cryptohash -none' >> cabal.project"
