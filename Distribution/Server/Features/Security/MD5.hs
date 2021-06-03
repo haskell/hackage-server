@@ -60,10 +60,8 @@ instance Show MD5Digest where
 instance ReadDigest MD5Digest where
   readDigest str =
       case B16.decode (BS.Char8.pack str) of
-          (d,rest) | BS.null rest
-                   , BS.length d == 16 -> Right $! md5digestFromBS d
-                   | otherwise         -> Left $ "Could not decode MD5 " ++
-                                                 show str
+          Right d | BS.length d == 16 -> Right $! md5digestFromBS d
+          _ -> Left $ "Could not decode MD5 " ++ show str
 
 -- | Compute MD5 digest
 md5 :: BS.Lazy.ByteString -> MD5Digest
