@@ -17,6 +17,7 @@ import Distribution.Verbosity
 import Distribution.Simple.Utils hiding (intercalate)
 import Distribution.Version (Version)
 
+import Data.Either
 import Data.List
 import Data.Maybe
 import Data.Ord (Down(..))
@@ -48,7 +49,8 @@ import Control.Concurrent
 import Paths_hackage_server (version)
 
 
-import Data.Aeson (eitherDecode, encode)
+import Data.Aeson (eitherDecode, encode, parseJSON)
+import Data.Aeson.Types (parseEither)
 
 data Mode = Help [String]
           | Init URI [URI]
@@ -377,6 +379,9 @@ docInfoTarGzURI config docInfo = docInfoBaseURI config docInfo <//> display (doc
 docInfoReports :: BuildConfig -> DocInfo -> URI
 docInfoReports config docInfo = docInfoBaseURI config docInfo <//> "reports/"
 
+parseJsonStats :: BS.ByteString -> ([String],[BR.PkgDetails])
+parseJsonStats = either (\x -> ([x],[])) (partitionEithers . map (parseEither parseJSON)) . eitherDecode
+
 getDocumentationStats :: Verbosity
                       -> BuildOpts
                       -> BuildConfig
@@ -388,18 +393,17 @@ getDocumentationStats verbosity opts config pkgs = do
       curGhcVersion <- liftIO $ case (bo_buildOlderGHC opts) of
                                   True -> getGHCversion
                                   False -> return Nothing
-      mPackages   <- liftM eitherDecode `liftM` requestGET' (packagesUri False curGhcVersion)
-      mCandidates <- liftM eitherDecode `liftM` requestGET' (packagesUri True curGhcVersion)
+      mPackages   <- fmap parseJsonStats <$> requestGET' (packagesUri False curGhcVersion)
+      mCandidates <- fmap parseJsonStats <$> requestGET' (packagesUri True curGhcVersion)
       liftIO $ putStrLn $ show curGhcVersion
       case (mPackages, mCandidates) of
         -- Download failure
         (Nothing, _) -> fail $ "Could not download " ++ show (packagesUri False curGhcVersion)
         (_, Nothing) -> fail $ "Could not download " ++ show (packagesUri True curGhcVersion)
-        -- Decoding failure
-        (Just (Left e), _) -> fail $ "Could not decode " ++ show (packagesUri False curGhcVersion) ++ ": " ++ e
-        (_, Just (Left e)) -> fail $ "Could not decode " ++ show (packagesUri True curGhcVersion) ++ ": " ++ e
         -- Success
-        (Just (Right packages), Just (Right candidates)) -> do
+        (Just (perrs, packages), Just (cerrs, candidates)) -> do
+          liftIO . when (not . null $ perrs) . putStrLn $ "failed package json parses: " ++ show perrs
+          liftIO . when (not . null $ cerrs) . putStrLn $ "failed candidate json parses: " ++ show cerrs
           packages'   <- liftIO $ mapM checkFailed packages
           candidates' <- liftIO $ mapM checkFailed candidates
           return $ map (setIsCandidate False) packages'
