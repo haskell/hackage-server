@@ -20,7 +20,6 @@ module Distribution.Server.Pages.Package
   , maintainerSection
   , downloadSection
   , moduleToDocUrl
-  , renderMarkdown
   ) where
 
 import Distribution.Server.Features.PreferredVersions
@@ -31,6 +30,7 @@ import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Packages.ModuleForest
 import Distribution.Server.Packages.Render
 import Distribution.Server.Users.Types (userStatus, userName, isActiveAccount)
+import Distribution.Server.Util.Markdown (renderMarkdownRel, supposedToBeMarkdown)
 import Data.TarIndex (TarIndex)
 import qualified Data.TarIndex as Tar
 
@@ -52,15 +52,9 @@ import Control.Arrow            (second)
 import System.FilePath.Posix    ((</>), (<.>), takeFileName)
 import Data.Time.Locale.Compat  (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
-import System.FilePath.Posix    (takeExtension)
-import Network.URI              (isRelativeReference)
-
-import qualified Cheapskate      as Markdown (markdown, Options(..), Inline(Link), walk)
-import qualified Cheapskate.Html as Markdown (renderDoc)
 
 import qualified Documentation.Haddock.Markup as Haddock
 
-import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
 import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
 import qualified Data.Text.Encoding.Error as T (lenientDecode)
@@ -174,37 +168,12 @@ readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
     , toHtml "]"
     , thediv ! [theclass "embedded-author-content"]
             << if supposedToBeMarkdown filename
-                 then renderMarkdown (T.pack name) content
+                 then renderMarkdownRel name content
                  else pre << unpackUtf8 content
     ] where
       name = display pkgid
 readmeSection _ _ = []
 
-updateRelativeLinks :: T.Text -> Markdown.Inline -> Markdown.Inline
-updateRelativeLinks name (Markdown.Link inls url title) =
-  Markdown.Link inls url' title
-  where url' = if isRelativeReference $ T.unpack url then name <> T.pack "/src" <> url else url
-updateRelativeLinks _ x = x
-
-renderMarkdown :: T.Text -> BS.ByteString -> Html
-renderMarkdown name = primHtml . Blaze.renderHtml
-               . Markdown.renderDoc . Markdown.walk (updateRelativeLinks name)
-               . Markdown.markdown opts
-                 -- workaround for https://github.com/jgm/cheapskate/issues/25
-               . T.replace (T.pack "\r\n") (T.pack "\n")
-               . T.decodeUtf8With T.lenientDecode
-               . BS.toStrict
-  where
-    opts =
-      Markdown.Options
-        { Markdown.sanitize           = True
-        , Markdown.allowRawHtml       = False
-        , Markdown.preserveHardBreaks = False
-        , Markdown.debug              = False
-        }
-
-supposedToBeMarkdown :: FilePath -> Bool
-supposedToBeMarkdown fname = takeExtension fname `elem` [".md", ".markdown"]
 
 unpackUtf8 :: BS.ByteString -> String
 unpackUtf8 = T.unpack

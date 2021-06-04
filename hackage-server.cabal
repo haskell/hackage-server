@@ -246,6 +246,7 @@ library lib-server
     Distribution.Server.Util.Nonce
     Distribution.Server.Util.Merge
     Distribution.Server.Util.ParseSpecVer
+    Distribution.Server.Util.Markdown
 
     Distribution.Server.Features
     Distribution.Server.Features.Core
@@ -362,7 +363,8 @@ library lib-server
     , blaze-builder         ^>= 0.4
     , blaze-html            ^>= 0.9
     , cereal                ^>= 0.5
-    , cheapskate            ^>= 0.1
+    , commonmark	    ^>= 0.1
+    , commonmark-extensions ^>= 0.2
     , cryptohash-md5        ^>= 0.11.100
     , cryptohash-sha256     ^>= 0.11.100
     , csv                   ^>= 0.1
@@ -385,6 +387,7 @@ library lib-server
     , time-locale-compat    ^>= 0.1.0.1
     , xhtml                 ^>= 3000.2
     , xmlgen                ^>= 0.6
+    , xss-sanitize          ^>= 0.3.6
 
   if !flag(minimal)
     build-depends: snowball ^>= 1.0

@@ -36,6 +36,7 @@ hackagePageWith headExtra docTitle docSubtitle docContent bodyExtra =
                             , thetype "image/png"] << noHtml
                 , meta ! [ name "viewport"
                          , content "width=device-width, initial-scale=1"]
+                , (script noHtml) ! [ src "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js", thetype "text/javascript"]
                 -- if Search is enabled
                 , thelink ! [ rel "search", href "/packages/opensearch.xml"
                             , thetype "application/opensearchdescription+xml"
