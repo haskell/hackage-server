@@ -1086,7 +1086,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
                             , queryGetPackageIndex
                             }
                  VersionsFeature{ queryGetPreferredInfo }
-                 UploadFeature{ guardAuthorisedAsMaintainer }
+                 UploadFeature{ guardAuthorisedAsMaintainer, guardAuthorisedAsMaintainerOrTrustee }
                  DocumentationFeature{documentationResource, queryDocumentation,..}
                  TarIndexCacheFeature{cachedTarIndex}
                  PackageCandidatesFeature{..}
@@ -1201,7 +1201,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
     serveCandidateMaintain dpath = do
       pkgid <- packageInPath dpath
       candidate <- packageInPath dpath >>= lookupCandidateId
-      guardAuthorisedAsMaintainer (packageName candidate)
+      guardAuthorisedAsMaintainerOrTrustee (packageName candidate)
       template <- getTemplate templates "maintain-candidate.html"
       return $ toResponse $ template
         [ "pkgname"    $= packageName candidate
@@ -1313,7 +1313,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
     serveDeleteForm :: DynamicPath -> ServerPartE Response
     serveDeleteForm dpath = do
       candidate <- packageInPath dpath >>= lookupCandidateId
-      guardAuthorisedAsMaintainer (packageName candidate)
+      guardAuthorisedAsMaintainerOrTrustee (packageName candidate)
       let pkgid = packageId candidate
       return $ toResponse $ Resource.XHtml $ hackagePage "Deleting candidates"
                   [form ! [theclass "box", XHtml.method "post", action $ deleteUri candidates "" pkgid]
@@ -1322,7 +1322,7 @@ mkHtmlCandidates utilities@HtmlUtilities{..}
     serveCandidatesDeleteForm :: DynamicPath -> ServerPartE Response
     serveCandidatesDeleteForm dpath = do
       pkgname <- packageInPath dpath
-      guardAuthorisedAsMaintainer pkgname
+      guardAuthorisedAsMaintainerOrTrustee pkgname
       -- let pkgname = packageName pkgid
       return $ toResponse $ Resource.XHtml $ hackagePage "Deleting package candidates"
                   [form ! [theclass "box", XHtml.method "post", action $ deleteCandidatesUri candidates "" pkgname]

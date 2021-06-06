@@ -215,6 +215,18 @@ pkgDesc pkgInfo =
       (_, Left (_,es)) -> error ("Internal error: " ++ show es)
       (_, Right x)     -> x
 
+-- | The information held in a parsed .cabal file, with nicer failure
+pkgDescMaybe :: PkgInfo -> Maybe GenericPackageDescription
+pkgDescMaybe pkgInfo =
+    case runParseResult $ parseGenericPackageDescription $
+         BS.L.toStrict $ cabalFileByteString $ fst $
+         pkgLatestRevision pkgInfo of
+      -- We only make PkgInfos with parsable pkgDatas, so if it
+      -- doesn't parse then something has gone wrong.
+      (_, Left (_, _es)) -> Nothing
+      (_, Right x)     -> Just x
+
+
 blobInfoFromBS :: BlobId -> ByteString -> BlobInfo
 blobInfoFromBS blobId bs = BlobInfo {
       blobInfoId         = blobId

@@ -324,11 +324,12 @@ candidatesPageTemplate cands candidates candidatesCore=
       ])
   ,"list"   $= (unordList $ map showCands $ PackageIndex.allPackagesByName cands)
   ]
-  where showCands pkgs =
+  where showCands pkgs = case packageDescription <$> pkgDescMaybe (candPkgInfo $ last pkgs) of
+          Nothing -> []
+          Just desc ->
                 -- TODO: Duncan changed this to packageSynopsis but without an
                 -- accomponaying definition of packageSynposis. Changed back for now.
-                let desc = packageDescription . pkgDesc . candPkgInfo $ last pkgs
-                    pkgname = packageName desc
+                let pkgname = packageName desc
                     -- candidates     = candidatesResource
                     -- candidatesCore = candidatesCoreResource
                 in  [ anchor ! [href $ packageCandidatesUri candidates "" pkgname ] << display pkgname
