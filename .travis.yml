@@ -42,27 +42,13 @@ before_cache:
 
 matrix:
   include:
+    - compiler: "ghc-8.10.4"
+      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-3.2,ghc-8.10.4], sources: [hvr-ghc]}}
     - compiler: "ghc-8.8.3"
       addons: {apt: {packages: [ghc-ppa-tools,cabal-install-3.2,ghc-8.8.3], sources: [hvr-ghc]}}
-    - compiler: "ghc-8.6.5"
-      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-3.2,ghc-8.6.5], sources: [hvr-ghc]}}
-    - compiler: "ghc-8.4.4"
-      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-3.2,ghc-8.4.4], sources: [hvr-ghc]}}
-    - compiler: "ghc-8.2.2"
-      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-3.2,ghc-8.2.2], sources: [hvr-ghc]}}
-    - compiler: "ghc-8.0.2"
-      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-3.2,ghc-8.0.2], sources: [hvr-ghc]}}
-    - compiler: "ghc-7.10.3"
-      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-3.2,ghc-7.10.3], sources: [hvr-ghc]}}
-    - compiler: "ghc-7.8.4"
-      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-3.2,ghc-7.8.4], sources: [hvr-ghc]}}
-    - compiler: "ghc-7.6.3"
-      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-3.2,ghc-7.6.3], sources: [hvr-ghc]}}
 
   allow_failures:
     - compiler: "ghc-8.8.3"
-    - compiler: "ghc-7.8.4"
-    - compiler: "ghc-7.6.3"
 
 before_install:
   - HC=/opt/ghc/bin/${CC}
@@ -74,6 +60,7 @@ before_install:
   - ROOTDIR=$(pwd)
   - HCNUMVER=$(( $(${HC} --numeric-version|sed -E 's/([0-9]+)\.([0-9]+)\.([0-9]+).*/\1 * 10000 + \2 * 100 + \3/') ))
   - echo $HCNUMVER
+  - sudo apt-get -y install libbrotli-dev
 
 install:
   - ${CABAL} --version
@@ -88,7 +75,6 @@ install:
   - rm -f cabal.project
   - touch cabal.project
   - "printf 'packages: \".\"\\n' >> cabal.project"
-  - "echo 'constraints: rss (< 3000.2.0.6 || > 3000.2.0.6)' >> cabal.project"
   - "echo 'constraints: foundation -none' >> cabal.project"
   - "echo 'constraints: cryptonite -none' >> cabal.project"
   - "echo 'constraints: cryptohash -none' >> cabal.project"
@@ -118,7 +104,6 @@ script:
   - rm -f cabal.project
   - touch cabal.project
   - "printf 'packages: \"hackage-server-*/*.cabal\"\\n' >> cabal.project"
-  - "echo 'constraints: rss (< 3000.2.0.6 || > 3000.2.0.6)' >> cabal.project"
   - "echo 'constraints: foundation -none' >> cabal.project"
   - "echo 'constraints: cryptonite -none' >> cabal.project"
   - "echo 'constraints: cryptohash -none' >> cabal.project"

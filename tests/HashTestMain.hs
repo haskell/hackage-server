@@ -32,11 +32,11 @@ data1MiB' :: BL.ByteString
 data1MiB' = BL.fromChunks [mconcat (BL.toChunks data1MiB)]
 
 hex2bs :: String -> BL.ByteString
-hex2bs s = BL.fromChunks [fst $ B16.decode (BC8.pack s)]
+hex2bs s = BL.fromChunks [either error id $ B16.decode (BC8.pack s)]
 
 -- Unfortunately, our SHA256Digest Put instance uses a redundant size-prefix
 hex2bsPfx :: String -> BL.ByteString
-hex2bsPfx s = BL.fromChunks [sizePfx, fst $ B16.decode (BC8.pack s)]
+hex2bsPfx s = BL.fromChunks [sizePfx, either error id $ B16.decode (BC8.pack s)]
   where
     sizePfx = case finiteBitSize (0::Int) of
         64 -> "\NUL\NUL\NUL\NUL\NUL\NUL\NUL "

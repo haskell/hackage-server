@@ -37,7 +37,7 @@ renderNonce (Nonce nonce) = BS.unpack (Base16.encode nonce)
 parseNonce :: String -> Either String Nonce
 parseNonce t
     | not (all Char.isHexDigit t) = Left "only hex digits are allowed in tokens"
-    | otherwise = Right (Nonce $ fst $ Base16.decode $ BS.pack t)
+    | otherwise = Nonce <$> Base16.decode (BS.pack t)
 
 parseNonceM :: (Monad m, MonadFail m) => String -> m Nonce
 parseNonceM = either fail return . parseNonce
@@ -50,7 +50,7 @@ newtype Nonce_v0 = Nonce_v0 ByteString
 
 instance Migrate Nonce where
     type MigrateFrom Nonce = Nonce_v0
-    migrate (Nonce_v0 x) = Nonce $ fst $ Base16.decode x
+    migrate (Nonce_v0 x) = either (const $ Nonce x) Nonce $ Base16.decode x
 
 $(deriveSafeCopy 0 'base ''Nonce_v0)
 $(deriveSafeCopy 1 'extension ''Nonce)

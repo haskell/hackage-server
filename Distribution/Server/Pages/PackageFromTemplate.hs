@@ -18,6 +18,7 @@ import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import Distribution.Server.Packages.Types
 import Distribution.Server.Features.PackageCandidates
 import Distribution.Server.Users.Types (userStatus, userName, isActiveAccount)
+import Distribution.Server.Util.Markdown (renderMarkdown, supposedToBeMarkdown)
 import Data.TarIndex (TarIndex)
 import Distribution.Server.Features.Distro.Types
 
@@ -35,7 +36,6 @@ import Data.List                (intersperse)
 import System.FilePath.Posix    ((</>), takeFileName, dropTrailingPathSeparator)
 import Data.Time.Locale.Compat  (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
-import System.FilePath.Posix    (takeExtension)
 
 import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
@@ -324,11 +324,12 @@ candidatesPageTemplate cands candidates candidatesCore=
       ])
   ,"list"   $= (unordList $ map showCands $ PackageIndex.allPackagesByName cands)
   ]
-  where showCands pkgs =
+  where showCands pkgs = case packageDescription <$> pkgDescMaybe (candPkgInfo $ last pkgs) of
+          Nothing -> []
+          Just desc ->
                 -- TODO: Duncan changed this to packageSynopsis but without an
                 -- accomponaying definition of packageSynposis. Changed back for now.
-                let desc = packageDescription . pkgDesc . candPkgInfo $ last pkgs
-                    pkgname = packageName desc
+                let pkgname = packageName desc
                     -- candidates     = candidatesResource
                     -- candidatesCore = candidatesCoreResource
                 in  [ anchor ! [href $ packageCandidatesUri candidates "" pkgname ] << display pkgname
@@ -491,13 +492,11 @@ readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename), rendPkg
               (Just content) =
     [ thediv ! [theclass "embedded-author-content"]
             << if supposedToBeMarkdown filename
-                 then Old.renderMarkdown (T.pack $ display pkgid) content
+                 then renderMarkdown (display pkgid) content
                  else pre << unpackUtf8 content
     ]
 readmeSection _ _ = []
 
-supposedToBeMarkdown :: FilePath -> Bool
-supposedToBeMarkdown fname = takeExtension fname `elem` [".md", ".markdown"]
 
 unpackUtf8 :: BS.ByteString -> String
 unpackUtf8 = T.unpack

@@ -627,7 +627,7 @@ instance Data.Aeson.ToJSON PkgDetails where
 instance Data.Aeson.FromJSON PkgDetails where
   parseJSON = withObject "pkgDetails" $ \o ->
     PkgDetails
-      <$> fmap parsePkg (o .: (fromString "pkgid"))
+      <$> ((\k -> maybe (fail $ "failed to parse "<>k) pure $ P.simpleParsec k) =<< (o .: (fromString "pkgid")))
       <*> o .: fromString "docs"
       <*> o .:? fromString "failCnt"
       <*> o .:? fromString "buildTime"
@@ -636,6 +636,3 @@ instance Data.Aeson.FromJSON PkgDetails where
       parseVersion :: Maybe String -> Maybe Version
       parseVersion Nothing = Nothing
       parseVersion (Just k) = P.simpleParsec k
-
-      parsePkg :: String -> PackageIdentifier
-      parsePkg k = fromJust (P.simpleParsec k)
