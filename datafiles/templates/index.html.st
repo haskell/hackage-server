@@ -49,7 +49,7 @@ $hackagePageHeader()$
   of <a href="https://cabal.readthedocs.io/en/latest/intro.html#what-s-in-a-package">Cabal
     packages</a></li>
 <li>Packages must be in the standard compressed tarball form produced by Cabal's
-<a href="http://www.haskell.org/cabal/users-guide/installing-packages.html#setup-sdist">sdist</a>
+<a href="https://cabal.readthedocs.io/en/3.4/cabal-commands.html#cabal-v2-sdist">sdist</a>
 command.</li>
 <li><strong>Packages cannot be deleted</strong>, so you should consider uploading new package versions as <a href="/packages/candidates/upload">package candidates</a> and testing before publishing to the main index.</li>
 <li>All <a href="/upload#versioning_and_curation">curated</a> packages <abbr title="[RFC2119] The word 'should' is intended to denote that there may exist valid reasons in particular circumstances to ignore a particular item, but the full implications MUST be understood and carefully weighed before choosing a different course">should</abbr> follow the <a href="https://pvp.haskell.org/">Package Versioning Policy (PVP)</a>.</li>
