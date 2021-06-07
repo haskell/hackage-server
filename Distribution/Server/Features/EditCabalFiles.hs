@@ -17,19 +17,14 @@ import Distribution.Server.Features.Upload
 
 import Distribution.Package
 import Distribution.Text (display)
-import Distribution.ParseUtils
-         ( ParseResult(..), locatedErrorMsg )
-import Distribution.PackageDescription
-         ( GenericPackageDescription(..), specVersion )
-import Distribution.PackageDescription.Parse
-         ( parseGenericPackageDescription )
-import Distribution.Server.Util.Parse (unpackUTF8)
+import Distribution.Parsec ( showPError )
 import Distribution.Server.Util.ParseSpecVer
 import Distribution.Server.Util.CabalRevisions
          (Change(..), diffCabalRevisions, insertRevisionField)
 import Text.StringTemplate.Classes (SElem(SM))
 
 import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Map as Map
 import Data.Time (getCurrentTime)
 
@@ -148,29 +143,19 @@ editCabalFilesFeature _env templates
 -- stripped.
 diffCabalRevisionsByteString :: ByteString -> ByteString -> Either String [Change]
 diffCabalRevisionsByteString oldRevision newRevision =
-    maybe (diffCabalRevisions (unpackUTF8 oldRevision) newRevision')
+    maybe (diffCabalRevisions (BS.L.toStrict oldRevision) (BS.L.toStrict newRevision))
           Left
           parseSpecVerCheck
   where
-    newRevision' = unpackUTF8 newRevision
-
     -- HACK-Alert
     --
     -- make sure the parseSpecVer heuristic agrees with the full parser.
     -- Note that diffCabalRevisions parses the newRevision a second time.
-    parseSpecVerCheck = case parseGenericPackageDescription newRevision' of
-       ParseFailed err -> Just $ showError (locatedErrorMsg err)
-       ParseOk _warnings pd
-         | specVersion (packageDescription pd) /= specVer'
-            -> Just "The 'cabal-version' field could not be properly parsed"
-         | otherwise -> Nothing
-      where
-        specVer' = parseSpecVerLazy newRevision
-
-
-    showError (Nothing, msg) = msg
-    showError (Just n, msg) = "line " ++ show n ++ ": " ++ msg
-
+    parseSpecVerCheck = case parseGenericPackageDescriptionChecked newRevision of
+       (True, _, Right _)      -> Nothing -- parsing successful
+       (_, _, Left (_, err:_)) -> Just $ showPError "" err -- TODO: show all errors
+       (_, _, Left (_, []))    -> Just "Parsing failed"
+       (False, _, Right _)     -> Just "The 'cabal-version' field could not be properly parsed"
 
 -- orphan
 instance ToSElem Change where

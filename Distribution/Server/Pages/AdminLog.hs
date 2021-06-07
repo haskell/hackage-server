@@ -36,6 +36,6 @@ adminLogPage users entries = hackagePage "adminstrator actions log" docBody
               group,
               reason]
         nbsp = XHtml.primHtmlChar "nbsp"
-        showTime = formatTime defaultTimeLocale "%c"
+        showTime = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ"
         header = XHtml.tr << map (XHtml.th <<) ["Time ","User ","Action ","Target ","Group ","Reason "]
         fmtCell x = XHtml.td ! [XHtml.align "left"] << [XHtml.toHtml x, nbsp, nbsp]

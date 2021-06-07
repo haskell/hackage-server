@@ -38,7 +38,6 @@ import qualified Data.Text as T
 import Distribution.Text (display, simpleParse)
 
 import Happstack.Server.Cookie (addCookie, mkCookie, CookieLife(Session))
-import Happstack.Server.RqData (lookCookieValue)
 
 -- | A feature to allow manipulation of the database of users.
 --
@@ -162,6 +161,8 @@ data UserResource = UserResource {
     adminResource :: GroupResource,
     -- | Manage a user
     manageUserResource :: Resource,
+    -- | Redirect users to their management page
+    redirectUserResource :: Resource,
 
     -- | URI for `userList` given a format.
     userListUri :: String -> String,
@@ -294,6 +295,7 @@ userFeature templates usersState adminsState
             , passwordResource
             , enabledResource
             , manageUserResource
+            , redirectUserResource
             ]
           ++ [
               groupResource adminResource
@@ -332,6 +334,13 @@ userFeature templates usersState adminsState
                       ]
               , resourceGet  = [ ("", serveUserManagementGet) ]
               , resourcePost = [ ("", serveUserManagementPost) ]
+              }
+      , redirectUserResource =
+              (resourceAt "/users/account-management.:format")
+              { resourceDesc =
+                      [ (GET, "user's personal account management page")
+                      ]
+              , resourceGet  = [ ("", const (redirectUserManagement r)) ]
               }
       , passwordResource = resourceAt "/user/:username/password.:format"
                            --TODO: PUT
@@ -402,7 +411,7 @@ userFeature templates usersState adminsState
         return valid
 
     -- Simply check if the user is authenticated as some user, without any
-    -- check that they have any particular priveledges. Only useful as a
+    -- check that they have any particular privileges. Only useful as a
     -- building block.
     guardAuthenticated :: ServerPartE UserId
     guardAuthenticated = do
@@ -552,6 +561,12 @@ userFeature templates usersState adminsState
           errBadRequest "User deleted"
             [MText "Cannot disable account, it has already been deleted"]
 
+    redirectUserManagement :: UserResource -> ServerPartE Response
+    redirectUserManagement r = do
+      uid <- guardAuthenticated
+      uinfo <- lookupUserInfo uid
+      tempRedirect (manageUserUri r "" (userName uinfo)) (toResponse ())
+
     serveUserManagementGet :: DynamicPath -> ServerPartE Response
     serveUserManagementGet dpath = do
       (uid, uinfo)  <- lookupUserNameFull =<< userNameInPath dpath
@@ -561,7 +576,7 @@ userFeature templates usersState adminsState
       ok $ toResponse $
         template
           [ "username" $= display (userName uinfo)
-          , "tokens"   $= 
+          , "tokens"   $=
               [ templateDict
                   [ templateVal "hash" (display authtok)
                   , templateVal "description" desc

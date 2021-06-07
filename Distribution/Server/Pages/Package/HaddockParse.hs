@@ -5,4 +5,4 @@ import Documentation.Haddock.Parser
 
 -- supposedly never fails
 parse :: String -> Maybe (DocH mod String)
-parse = Just . toRegular . _doc . parseParas
+parse = Just . toRegular . _doc . parseParas Nothing

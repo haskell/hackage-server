@@ -3,7 +3,7 @@
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
--- | 'Typeable', 'Binary', 'Serialize', 'Text', and 'NFData' instances for various
+-- | 'Typeable', 'Binary', 'Serialize', and 'NFData' instances for various
 -- types from Cabal, and other standard libraries.
 --
 -- Major version changes may break this module.
@@ -23,12 +23,17 @@ import Distribution.Server.Framework.MemSize
 import Distribution.Package  (PackageIdentifier(..))
 import Distribution.Compiler (CompilerFlavor(..), CompilerId(..))
 import Distribution.System   (OS(..), Arch(..))
-import Distribution.Types.GenericPackageDescription (FlagName, mkFlagName, unFlagName)
+import Distribution.Types.Flag (FlagName, mkFlagName, unFlagName)
 import Distribution.Types.PackageName
 import Distribution.Version
+import Distribution.Pretty (Pretty(pretty), prettyShow)
+import Distribution.Parsec (Parsec(..), simpleParsec)
+import qualified Distribution.Compat.CharParsing as P
 
-import Data.Time (Day(..), DiffTime, UTCTime(..))
+import Data.Time (Day(..), DiffTime, UTCTime(..), fromGregorianValid)
 import Control.DeepSeq
+import qualified Data.Char as Char
+import Text.Read (readMaybe)
 
 import Data.Serialize as Serialize
 import Data.SafeCopy hiding (Version)
@@ -41,7 +46,6 @@ import Happstack.Server
 import Data.List (stripPrefix)
 
 import qualified Text.PrettyPrint as PP (text)
-import Distribution.Compat.ReadP (readS_to_P)
 
 -- These types are not defined in this package, so we cannot easily control
 -- changing these instances when the types change. So it's not safe to derive
@@ -85,18 +89,19 @@ instance SafeCopy VersionRange where
     version = 2
     errorTypeName _ = "VersionRange"
     kind    = extension
-    putCopy = contain . foldVersionRange'
-                          (putWord8 0)
-                          (\v     -> putWord8 1 >> safePut v)
-                          (\v     -> putWord8 2 >> safePut v)
-                          (\v     -> putWord8 3 >> safePut v)
-                          (\v     -> putWord8 4 >> safePut v)
-                          (\v     -> putWord8 5 >> safePut v)
-                          (\v _   -> putWord8 6 >> safePut v)
-                          (\v _   -> putWord8 10 >> safePut v) -- since Cabal-2.0
-                          (\r1 r2 -> putWord8 7 >> r1 >> r2)
-                          (\r1 r2 -> putWord8 8 >> r1 >> r2)
-                          (\r     -> putWord8 9 >> r)
+    putCopy = contain . cataVersionRange f
+      where
+        f AnyVersionF = putWord8 0
+        f (ThisVersionF v) = putWord8 1 >> safePut v
+        f (LaterVersionF v) = putWord8 2 >> safePut v
+        f (EarlierVersionF v) = putWord8 3 >> safePut v
+        f (OrLaterVersionF v) = putWord8 4 >> safePut v
+        f (OrEarlierVersionF v) = putWord8 5 >> safePut v
+        f (WildcardVersionF v) = putWord8 6 >> safePut v
+        f (MajorBoundVersionF v) = putWord8 10 >> safePut v -- since Cabal-2.0
+        f (UnionVersionRangesF u v) = putWord8 7 >> u >> v
+        f (IntersectVersionRangesF u v) = putWord8 8 >> u >> v
+        f (VersionRangeParensF v) = putWord8 9 >> v
     getCopy = contain getVR
       where
         getVR = do
@@ -111,7 +116,7 @@ instance SafeCopy VersionRange where
             6 -> withinVersion    <$> safeGet
             7 -> unionVersionRanges     <$> getVR <*> getVR
             8 -> intersectVersionRanges <$> getVR <*> getVR
-            9 -> VersionRangeParens     <$> getVR
+            9 -> stripParensVersionRange <$> getVR -- XXX: correct?
             10 -> majorBoundVersion     <$> safeGet  -- since Cabal-2.0
             _ -> fail "VersionRange.getCopy: bad tag"
 
@@ -178,6 +183,7 @@ instance SafeCopy  Arch where
     putCopy M68k          = contain $ putWord8 14
     putCopy Vax           = contain $ putWord8 15
     putCopy JavaScript    = contain $ putWord8 16
+    putCopy AArch64       = contain $ putWord8 17
 
     getCopy = contain $ do
       tag <- getWord8
@@ -199,6 +205,7 @@ instance SafeCopy  Arch where
         14 -> return M68k
         15 -> return Vax
         16 -> return JavaScript
+        17 -> return AArch64
         _  -> fail "SafeCopy Arch getCopy: unexpected tag"
 
 instance SafeCopy CompilerFlavor where
@@ -216,6 +223,7 @@ instance SafeCopy CompilerFlavor where
     putCopy UHC               = contain $ putWord8 9
     putCopy (HaskellSuite s)  = contain $ putWord8 10 >> safePut s
     putCopy GHCJS             = contain $ putWord8 11
+    putCopy Eta               = contain $ putWord8 12
 
     getCopy = contain $ do
       tag <- getWord8
@@ -232,6 +240,7 @@ instance SafeCopy CompilerFlavor where
         9  -> return UHC
         10 -> return HaskellSuite <*> safeGet
         11 -> return GHCJS
+        12 -> return Eta
         _  -> fail "SafeCopy CompilerFlavor getCopy: unexpected tag"
 
 
@@ -289,14 +298,57 @@ instance MemSize RsFlags where
 instance MemSize Length where
     memSize _ = memSize0
 
-instance Text Day where
-  disp  = PP.text . show
-  parse = readS_to_P (reads :: ReadS Day)
+instance Pretty Day where
+  pretty = PP.text . show
 
-instance Text UTCTime where
-  disp  = PP.text . show
-  parse = readS_to_P (reads :: ReadS UTCTime)
+instance Parsec Day where
+  parsec = do
+    -- imitate grammar of Read instance of 'Day' (i.e. "%Y-%m-%d")
+    yyyy <- P.integral
+    P.char '-'
+    mm <- replicateM 2 P.digit
+    P.char '-'
+    dd <- replicateM 2 P.digit
+    case fromGregorianValid yyyy (read mm) (read dd) of
+      Nothing -> fail "invalid Day"
+      Just day -> return day
 
+instance Pretty UTCTime where
+  pretty  = PP.text . show
+
+
+instance Parsec UTCTime where
+  parsec = do
+      -- "%Y-%m-%d %H:%M:%S%Q%Z"
+      yyyy <- P.munch1 Char.isDigit
+      P.char '-'
+      mm <- digit2
+      P.char '-'
+      dd <- digit2
+
+      P.skipSpaces1
+
+      h <- digit2
+      P.char ':'
+      m <- digit2
+      P.char ':'
+      s <- digit2
+
+      mq <- optional (liftM2 (:) (P.char '.') (P.munch Char.isDigit))
+
+      P.spaces
+
+      -- TODO: more accurate timezone grammar
+      mtz <- optional (liftM2 (:) (P.satisfy (\c -> Char.isAsciiLower c || Char.isAsciiUpper c || c == '+' || c == '-'))
+                                  (P.munch (\c -> Char.isAsciiLower c || Char.isAsciiUpper c || Char.isDigit c)))
+
+      let tstr = concat [ yyyy, "-", mm, "-", dd, " ", h, ":", m, ":", s, maybe "" id mq, maybe "" (' ':) mtz ]
+
+      case readMaybe tstr of
+        Nothing -> fail "invalid UTCTime"
+        Just t  -> return t
+    where
+      digit2 = replicateM 2 P.digit
 -------------------
 -- Arbitrary instances
 --
@@ -362,6 +414,10 @@ newtype PackageIdentifier_v0 = PackageIdentifier_v0 PackageIdentifier
 
 instance SafeCopy PackageIdentifier_v0 where
     errorTypeName _ = "PackageIdentifier_v0"
+    getCopy = contain get
+    putCopy = contain . put
+     -- use default Serialize instance
+
 
 instance Serialize PackageIdentifier_v0 where
     put (PackageIdentifier_v0 pkgid) = Serialize.put (show pkgid)
@@ -411,11 +467,11 @@ instance Migrate VersionRange where
     migrate (VersionRange_v0 v) = v
 
 
-textGet_v0 :: Text a => Serialize.Get a
-textGet_v0 = (fromJust . simpleParse) <$> Serialize.get
+textGet_v0 :: Parsec a => Serialize.Get a
+textGet_v0 = (fromJust . simpleParsec) <$> Serialize.get
 
-textPut_v0 :: Text a => a -> Serialize.Put
-textPut_v0 = Serialize.put . display
+textPut_v0 :: Pretty a => a -> Serialize.Put
+textPut_v0 = Serialize.put . prettyShow
 
 ---------------------------------------------------------------------
 

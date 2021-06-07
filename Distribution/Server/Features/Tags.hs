@@ -22,12 +22,14 @@ import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Packages.PackageIndex (PackageIndex)
 import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.Render (categorySplit)
+import Distribution.Utils.ShortText (fromShortText)
 
 import Distribution.Text
 import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
-import Distribution.License
+import Distribution.License (License(..), licenseFromSPDX)
+import qualified Distribution.SPDX as SPDX
 
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -57,7 +59,7 @@ data TagsFeature = TagsFeature {
     -- tag for their own use (a calculated, rather than freely
     -- assignable, tag). It is a subset of the main mapping.
     --
-    -- This feature itself defines a few such tags: libary, executable,
+    -- This feature itself defines a few such tags: library, executable,
     -- and license tags, as well as package categories on
     -- initial import.
     setCalculatedTag :: Tag -> Set PackageName -> IO (),
@@ -104,8 +106,9 @@ initTagsFeature ServerEnv{serverStateDir} = do
           Nothing      -> return ()
           Just pkginfo -> do
             let pkgname = packageName pkgid
-                tags = constructImmutableTags . pkgDesc $ pkginfo
-            aliases <- mapM (queryState tagAlias . GetTagAlias) tags
+                itags = constructImmutableTags . pkgDesc $ pkginfo
+            curtags <- queryState tagsState $ TagsForPackage pkgname
+            aliases <- mapM (queryState tagAlias . GetTagAlias) (itags ++ Set.toList curtags)
             let newtags = Set.fromList aliases
             updateState tagsState . SetPackageTags pkgname $ newtags
             runHook_ updateTag (Set.singleton pkgname, newtags)
@@ -313,7 +316,7 @@ constructImmutableTagIndex = foldl' addToTags emptyPackageTags . PackageIndex.al
 
 -- These are constructed when a package is uploaded/on startup
 constructCategoryTags :: PackageDescription -> [Tag]
-constructCategoryTags = map (tagify . map toLower) . fillMe . categorySplit . category
+constructCategoryTags = map (tagify . map toLower) . fillMe . categorySplit . fromShortText . category
   where
     fillMe [] = ["unclassified"]
     fillMe xs = xs
@@ -325,26 +328,28 @@ constructImmutableTags genDesc =
         !l = license desc
         !hl = hasLibs desc
         !he = hasExes desc
-        !ht = hasTests desc
-        !hb = hasBenchmarks desc
+-- These tags are too noisy and don't provide a good signal anymore
+--        !ht = hasTests desc
+--        !hb = hasBenchmarks desc
     in licenseToTag l
     ++ (if hl then [Tag "library"] else [])
     ++ (if he then [Tag "program"] else [])
-    ++ (if ht then [Tag "test"] else [])
-    ++ (if hb then [Tag "benchmark"] else [])
+-- These tags are too noisy and don't provide a good signal anymore
+--    ++ (if ht then [Tag "test"] else [])
+--    ++ (if hb then [Tag "benchmark"] else [])
     ++ constructCategoryTags desc
   where
-    licenseToTag :: License -> [Tag]
-    licenseToTag l = case l of
-        GPL  _ -> [Tag "gpl"]
-        AGPL _ -> [Tag "agpl"]
-        LGPL _ -> [Tag "lgpl"]
-        BSD2 -> [Tag "bsd2"]
-        BSD3 -> [Tag "bsd3"]
-        BSD4 -> [Tag "bsd4"]
-        MIT  -> [Tag "mit"]
-        MPL _ -> [Tag "mpl"]
-        Apache _ -> [Tag "apache"]
-        PublicDomain -> [Tag "public-domain"]
+    licenseToTag :: SPDX.License -> [Tag]
+    licenseToTag l = case licenseFromSPDX l of
+        GPL  _            -> [Tag "gpl"]
+        AGPL _            -> [Tag "agpl"]
+        LGPL _            -> [Tag "lgpl"]
+        BSD2              -> [Tag "bsd2"]
+        BSD3              -> [Tag "bsd3"]
+        BSD4              -> [Tag "bsd4"]
+        MIT               -> [Tag "mit"]
+        MPL _             -> [Tag "mpl"]
+        Apache _          -> [Tag "apache"]
+        PublicDomain      -> [Tag "public-domain"]
         AllRightsReserved -> [Tag "all-rights-reserved"]
-        _ -> []
+        _                 -> []

@@ -13,14 +13,15 @@ module Distribution.Server.Packages.Render (
   , categorySplit,
   ) where
 
-import Data.Maybe (catMaybes, isJust, maybeToList)
-import Control.Monad (guard)
+import Prelude ()
+import Distribution.Server.Prelude hiding (All)
+
 import Control.Arrow ((&&&), (***))
 import Data.Char (toLower, isSpace)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Data.Vector as Vec
-import Data.Ord (comparing)
-import Data.List (sortBy, intercalate)
+import Data.List (intercalate)
 import Data.Time.Clock (UTCTime)
 import System.FilePath.Posix ((</>), (<.>))
 
@@ -29,6 +30,7 @@ import Distribution.PackageDescription
 import Distribution.PackageDescription.Configuration
 import Distribution.Package
 import Distribution.Text
+import Distribution.Pretty (prettyShow)
 import Distribution.Version
 import Distribution.ModuleName as ModuleName
 import Distribution.Types.CondTree
@@ -40,6 +42,7 @@ import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.ModuleForest
 import qualified Distribution.Server.Users.Users as Users
 import Distribution.Server.Users.Types
+import Distribution.Utils.ShortText (fromShortText)
 import qualified Data.TarIndex as TarIndex
 import Data.TarIndex (TarIndex, TarEntryOffset)
 
@@ -56,6 +59,7 @@ data PackageRender = PackageRender {
     rendDepends      :: [Dependency],
     rendExecNames    :: [String],
     rendLibraryDeps  :: Maybe DependencyTree,
+    rendSublibraryDeps :: [(String, DependencyTree)],
     rendExecutableDeps :: [(String, DependencyTree)],
     rendLicenseName  :: String,
     rendLicenseFiles :: [FilePath],
@@ -89,14 +93,16 @@ doPackageRender users info = PackageRender
     , rendLibraryDeps  = depTree libBuildInfo `fmap` condLibrary genDesc
     , rendExecutableDeps = (unUnqualComponentName *** depTree buildInfo)
                                 `map` condExecutables genDesc
-    , rendLicenseName  = display (license desc) -- maybe make this a bit more human-readable
+    , rendSublibraryDeps = (unUnqualComponentName *** depTree libBuildInfo)
+                                `map` condSubLibraries genDesc
+    , rendLicenseName  = prettyShow (license desc) -- maybe make this a bit more human-readable
     , rendLicenseFiles = licenseFiles desc
-    , rendMaintainer   = case maintainer desc of
+    , rendMaintainer   = case fromShortText $ maintainer desc of
                            "None" -> Nothing
                            "none" -> Nothing
                            ""     -> Nothing
                            person -> Just person
-    , rendCategory     = case category desc of
+    , rendCategory     = case fromShortText $ category desc of
                            []  -> []
                            str -> categorySplit str
     , rendRepoHeads    = catMaybes (map rendRepo $ sourceRepos desc)
@@ -187,18 +193,22 @@ categorySplit xs = if last res == "" then init res else res
 --
 flatDependencies :: GenericPackageDescription -> [Dependency]
 flatDependencies pkg =
-      sortOn (\(Dependency pkgname _) -> map toLower (display pkgname)) pkgDeps
+      sortOn (\(Dependency pkgname _ _) -> map toLower (display pkgname)) pkgDeps
   where
     pkgDeps :: [Dependency]
-    pkgDeps = fromMap $ Map.unionsWith intersectVersions $
+    pkgDeps = fromMap $ Map.filterWithKey notSubLib $ Map.unionsWith intersectVersions $
                   map condTreeDeps (maybeToList $ condLibrary pkg)
+               ++ map (condTreeDeps . snd) (condSubLibraries pkg)
                ++ map (condTreeDeps . snd) (condExecutables pkg)
       where
         fromMap = map fromPair . Map.toList
         fromPair (pkgname, Versions _ ver) =
-            Dependency pkgname $ fromVersionIntervals ver
+            Dependency pkgname (fromVersionIntervals ver) Set.empty -- XXX: ok?
 
-    manualFlags :: FlagAssignment
+        notSubLib pn _ = packageNameToUnqualComponentName pn `Set.notMember` sublibs
+        sublibs = Set.fromList $ map fst (condSubLibraries pkg)
+
+    manualFlags :: [(FlagName,Bool)] -- FlagAssignment
     manualFlags = map assignment . filter flagManual $ genPackageFlags pkg
         where assignment = flagName &&& flagDefault
 
@@ -216,7 +226,7 @@ flatDependencies pkg =
                  Nothing -> unionPackageVersions thenDeps elseDeps
 
         toMap = Map.fromListWith intersectVersions . map toPair
-        toPair (Dependency pkgname ver) =
+        toPair (Dependency pkgname ver _) =
             (pkgname, Versions All $ toVersionIntervals ver)
 
 -- Note that 'unionPackageVersions Map.empty' is not identity.
@@ -261,19 +271,19 @@ intersectVersions (Versions All v1) (Versions All v2) =
     Versions All $ intersectVersionIntervals v1 v2
 
 sortDeps :: [Dependency] -> [Dependency]
-sortDeps = sortOn $ \(Dependency pkgname _) -> map toLower (display pkgname)
+sortDeps = sortOn $ \(Dependency pkgname _ _) -> map toLower (display pkgname)
 
 combineDepsBy :: (VersionIntervals -> VersionIntervals -> VersionIntervals)
               -> [Dependency] -> [Dependency]
 combineDepsBy f =
-    map (\(pkgname, ver) -> Dependency pkgname (fromVersionIntervals ver))
+    map (\(pkgname, ver) -> Dependency pkgname (fromVersionIntervals ver) Set.empty) -- XXX: ok?
   . Map.toList
   . Map.fromListWith f
-  . map (\(Dependency pkgname ver) -> (pkgname, toVersionIntervals ver))
+  . map (\(Dependency pkgname ver _) -> (pkgname, toVersionIntervals ver))
 
 -- | Evaluate a 'Condition' with a partial 'FlagAssignment', returning
 -- | 'Nothing' if the result depends on additional variables.
-evalCondition :: FlagAssignment -> Condition ConfVar -> Maybe Bool
+evalCondition :: [(FlagName,Bool)] -> Condition ConfVar -> Maybe Bool
 evalCondition flags cond =
     let eval = evalCondition flags
     in case cond of
@@ -287,8 +297,3 @@ evalCondition flags cond =
                          (_, Just False) -> Just False
                          (Just True, Just True) -> Just True
                          _ -> Nothing
-
--- Same as @sortBy (comparing f)@, but without recomputing @f@.
-sortOn :: Ord b => (a -> b) -> [a] -> [a]
-sortOn f xs = map snd (sortBy (comparing fst) [(f x, x) | x <- xs])
-

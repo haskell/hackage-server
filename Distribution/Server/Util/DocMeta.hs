@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 module Distribution.Server.Util.DocMeta (
     DocMeta(..)
+  , QuickJumpVersion
   , loadTarDocMeta
   , parseDocMeta
   , packageDocMetaTarPath
@@ -28,14 +30,18 @@ instance FromJSON JsonVersion where
       Just version -> return (JV version)
       Nothing      -> mzero
 
+type QuickJumpVersion = Int
+
 data DocMeta = DocMeta {
-  docMetaHaddockVersion :: !Version
+  docMetaHaddockVersion   :: !Version,
+  docMetaQuickJumpVersion :: !(Maybe QuickJumpVersion)
 }
 
 instance FromJSON DocMeta where
   parseJSON = withObject "DocMeta" $ \o -> do
-    JV haddockVersion <- o .: "haddock_version"
-    return DocMeta { docMetaHaddockVersion = haddockVersion }
+    JV docMetaHaddockVersion <- o .:  "haddock_version"
+    docMetaQuickJumpVersion  <- o .:? "quickjump_version"
+    return DocMeta{..}
 
 loadTarDocMeta :: MonadIO m => FilePath -> TarIndex -> PackageId -> m (Maybe DocMeta)
 loadTarDocMeta tarball docIndex pkgid =

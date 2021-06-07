@@ -27,14 +27,15 @@ htmlMarkup modResolv = Markup {
   markupOrderedList   = ordList,
   markupDefList       = defList,
   markupCodeBlock     = pre,
-  markupHyperlink     = \(Hyperlink url mLabel) -> anchor ! [href url] << fromMaybe url mLabel,
+  markupHyperlink     = \(Hyperlink url mLabel) -> anchor ! [href url] << fromMaybe url (fmap showHtmlFragment mLabel),
   markupAName         = \aname -> namedAnchor aname << toHtml "",
   markupPic           = \(Picture uri mtitle) -> image ! ([src uri] ++ fromMaybe [] (return . title <$> mtitle)),
   markupMathInline    = \mathjax -> toHtml ("\\(" ++ mathjax ++ "\\)"),
   markupMathDisplay   = \mathjax -> toHtml ("\\[" ++ mathjax ++ "\\]"),
   markupProperty      = pre . toHtml,
   markupExample       = examplesToHtml,
-  markupHeader        = \(Header l t) -> makeHeader l t
+  markupHeader        = \(Header l t) -> makeHeader l t,
+  markupTable         = \(Table h r) -> makeTable h r
   }
   where
     makeHeader :: Int -> Html -> Html
@@ -52,12 +53,30 @@ htmlMarkup modResolv = Markup {
         htmlPrompt = (thecode . toHtml $ ">>> ") ! [theclass "prompt"]
         htmlExpression = (strong . thecode . toHtml $ expression ++ "\n") ! [theclass "userinput"]
 
-    mkModLink :: String -> Html
-    mkModLink s = fromMaybe (thecode . toHtml $ s) $ do
+    mkModLink :: ModLink Html -> Html
+    mkModLink (ModLink s _lbl) = fromMaybe (thecode . toHtml $ s) $ do
         modname <- simpleParse s
         modUrl  <- modResolv modname
         let lnk = anchor ! [href modUrl] << s
         pure (thespan ! [theclass "module"] << lnk)
+
+    makeTable :: [TableRow Html] -> [TableRow Html] -> Html
+    makeTable hs bs = table (concatHtml (hs' ++ bs'))
+      where
+        hs' | null hs   = []
+            | otherwise = [thead (concatHtml (map (makeTableRow th) hs))]
+
+        bs' = [tbody (concatHtml (map (makeTableRow td) bs))]
+
+    makeTableRow :: (Html -> Html) -> TableRow Html -> Html
+    makeTableRow thr (TableRow cs) = tr (concatHtml (map (makeTableCell thr) cs))
+
+    makeTableCell :: (Html -> Html) -> TableCell Html -> Html
+    makeTableCell thr (TableCell i j c) = thr c ! (i' ++ j')
+      where
+        i' = if i == 1 then [] else [ colspan i ]
+        j' = if j == 1 then [] else [ rowspan j ]
+
 
 namedAnchor :: String -> Html -> Html
 namedAnchor n = anchor ! [name (escapeStr n)]

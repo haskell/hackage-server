@@ -17,22 +17,20 @@ import Distribution.Server.Packages.Types
 import Distribution.Server.Packages.Render
 import Distribution.Server.Features.Users
 import Distribution.Server.Util.ServeTarball
+import Distribution.Server.Util.Markdown (renderMarkdown, supposedToBeMarkdown)
 import Distribution.Server.Pages.Template (hackagePage)
 
 import Distribution.Text
 import Distribution.Package
+import Distribution.PackageDescription
 
-import qualified Cheapskate      as Markdown (markdown, Options(..))
-import qualified Cheapskate.Html as Markdown (renderDoc)
-import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
 import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
 import qualified Data.Text.Encoding.Error as T
 import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
-import qualified Data.ByteString.Char8 as C8
 import qualified Text.XHtml.Strict as XHtml
+import qualified Distribution.Utils.ShortText as ST
 import           Text.XHtml.Strict ((<<), (!))
-import System.FilePath.Posix (takeExtension)
 
 
 data PackageContentsFeature = PackageContentsFeature {
@@ -134,26 +132,36 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
 
     serveChangeLogHtml :: DynamicPath -> ServerPartE Response
     serveChangeLogHtml dpath = do
-      pkg     <- packageInPath dpath >>= lookupPackageId
-      mReadme <- liftIO $ findToplevelFile pkg isChangeLogFile
-      case mReadme of
-        Left err ->
-          errNotFound "Changelog not found" [MText err]
+      pkg        <- packageInPath dpath >>= lookupPackageId
+      mChangeLog <- liftIO $ findToplevelFile pkg isChangeLogFile
+      let pkgId   = packageId pkg
+      let url     = packageURL pkgId
+      let pkgName = display pkgId
+      case mChangeLog of
+        Left _ -> do
+          let message = [MText "Package ", MLink pkgName url, MText " has no changelog file in source distribution. "]
+          let home = homepage $ packageDescription $ pkgDesc pkg
+          if ST.null home then 
+            errNotFound "Changelog not found" message
+          else 
+            let homeUrl = ST.fromShortText home in
+            errNotFound "Changelog not found" (message ++ [MText "You may find one at the package home page: ", MLink homeUrl homeUrl])
         Right (tarfile, etag, offset, filename) -> do
           contents <- either (\err -> errInternalError [MText err])
                              (return . snd)
                   =<< liftIO (loadTarEntry tarfile offset)
           cacheControl [Public, maxAgeDays 30] etag
           return $ toResponse $ Resource.XHtml $
-            let title = "Changelog for " ++ display (packageId pkg) in
-            hackagePage title
-              [ XHtml.h2 << title
-              , XHtml.thediv ! [XHtml.theclass "embedded-author-content"]
-                            << if supposedToBeMarkdown filename
-                                 then renderMarkdown contents
-                                 else XHtml.thediv ! [XHtml.theclass "preformatted"]
-                                                  << unpackUtf8 contents
-              ]
+            let title  = "Changelog for " ++ pkgName
+                title2 = "Changelog for " XHtml.+++ (XHtml.anchor ! [XHtml.href url] << pkgName)
+            in hackagePage title
+                 [ XHtml.h2 << title2
+                 , XHtml.thediv ! [XHtml.theclass "embedded-author-content"]
+                               << if supposedToBeMarkdown filename
+                                    then renderMarkdown filename contents
+                                    else XHtml.thediv ! [XHtml.theclass "preformatted"]
+                                                     << unpackUtf8 contents
+                 ]
 
     serveReadmeText :: DynamicPath -> ServerPartE Response
     serveReadmeText dpath = do
@@ -184,7 +192,7 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
               [ XHtml.h2 << title
               , XHtml.thediv ! [XHtml.theclass "embedded-author-content"]
                             << if supposedToBeMarkdown filename
-                                 then renderMarkdown contents
+                                 then renderMarkdown filename contents
                                  else XHtml.thediv ! [XHtml.theclass "preformatted"]
                                                   << unpackUtf8 contents
               ]
@@ -199,29 +207,15 @@ packageContentsFeature CoreFeature{ coreResource = CoreResource{
           errNotFound "Could not serve package contents" [MText err]
         Right (fp, etag, index) ->
           serveTarball (display (packageId pkg) ++ " source tarball")
-                       ["index.html"] (display (packageId pkg)) fp index
+                       [] (display (packageId pkg)) fp index
                        [Public, maxAgeDays 30] etag
-
-renderMarkdown :: BS.ByteString -> XHtml.Html
-renderMarkdown = XHtml.primHtml . Blaze.renderHtml
-               . Markdown.renderDoc . Markdown.markdown opts
-               . T.decodeUtf8With T.lenientDecode . convertNewLine . BS.toStrict
-  where
-    opts =
-      Markdown.Options
-        { Markdown.sanitize           = True
-        , Markdown.allowRawHtml       = False
-        , Markdown.preserveHardBreaks = False
-        , Markdown.debug              = False
-        }
-
-convertNewLine :: C8.ByteString -> C8.ByteString
-convertNewLine = C8.filter (/= '\r')
-
-supposedToBeMarkdown :: FilePath -> Bool
-supposedToBeMarkdown fname = takeExtension fname `elem` [".md", ".markdown"]
 
 unpackUtf8 :: BS.ByteString -> String
 unpackUtf8 = T.unpack
            . T.decodeUtf8With T.lenientDecode
            . BS.toStrict
+
+-- TODO: this helper is defined in at least two other places; consolidate
+-- | URL describing a package.
+packageURL :: PackageIdentifier -> XHtml.URL
+packageURL pkgId = "/package" </> display pkgId

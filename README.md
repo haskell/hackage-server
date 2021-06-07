@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/haskell/hackage-server.png?branch=master)](https://travis-ci.org/haskell/hackage-server)
 
-This is the `hackage-server` code. This is what powers <http://hackage.haskell.org>, and many other private hackage instances.
+This is the `hackage-server` code. This is what powers <http://hackage.haskell.org>, and many other private hackage instances. The `master` branch is suitable for general usage. Specific policy and documentation for the central hackage instance exists in the `central-server` branch.
 
 ## Installing ICU
 
@@ -18,6 +18,14 @@ You'll need to do the following to get hackage-server's dependency `text-icu` to
     brew install icu4c
     brew link icu4c --force
 
+Besides that, you might also need to include these in the `cabal.project.local` you created:
+
+```
+package text-icu
+  extra-include-dirs: /usr/local/opt/icu4c/include
+  extra-lib-dirs: /usr/local/opt/icu4c/lib
+```
+
 ### Ubuntu/Debian
 
     sudo apt-get update
@@ -26,7 +34,7 @@ You'll need to do the following to get hackage-server's dependency `text-icu` to
 ### Fedora/CentOS
     sudo dnf install unzip libicu-devel
 
-## Setting up security infrastructure
+## Setting up security infrastructure
 
 Out of the box the server comes with some example keys and TUF metadata. The
 example keys are in `example-keys/`; these keys were used to create
@@ -86,7 +94,11 @@ something like
 
 If you want to run the server directly from the build tree, run
 
-    dist/build/hackage-server/hackage-server run --static-dir=datafiles/
+    cabal v2-run -- hackage-server init
+
+once to initialise the state. After that you can run the server with
+
+    cabal v2-run -- hackage-server run --static-dir=datafiles/ --base-uri=http://127.0.0.1:8080
 
 By default the server runs on port `8080` with the following settings:
 
@@ -95,6 +107,9 @@ By default the server runs on port `8080` with the following settings:
     password: admin
 
 To specify something different, see `hackage-server init --help` for details.
+
+The http://127.0.0.1:8080/packages/uploaders/edit is usel to add users
+(e.g. `admin`) to *Uploaders* group.
 
 The server can be stopped by using `Control-C`.
 
@@ -162,7 +177,9 @@ target "mirror"
 
   post-mirror-hook: "shell command to execute"
 ```
-Recognized types are hackage2, secure and local. The target server name was displayed when you ran. Note, the target must _not_ have a trailing slash, or confusion will tend to occur.
+Recognized types are hackage2, secure and local. The target server name was displayed when you ran.
+
+Note, the target must _not_ have a trailing slash, or confusion will tend to occur. Additionally, if you have ipv6 setup on the machine, you may need to replace `localhost` with `127.0.0.1`.
 
 Also note that you should mirror _from_ hackage2 or secure typically and mirror _to_ hackage2. Only mirroring from secure will include dependency revision information.
 

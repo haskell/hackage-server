@@ -940,7 +940,7 @@ formatErrorResponse (ErrorResponse uri (a,b,c) reason mBody) =
 --
 
 showUTCTime :: UTCTime -> String
-showUTCTime = formatTime defaultTimeLocale "%c"
+showUTCTime = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ"
 
 -- option utility
 reqArgFlag :: ArgPlaceHolder -> SFlags -> LFlags -> Description
@@ -1025,7 +1025,7 @@ object = Object . HashMap.fromList
 string :: String -> Value
 string = String . Text.pack
 
--- originally provded by "Distribution.Client.PkgIndex" which got removed
+-- originally provided by "Distribution.Client.PkgIndex" which got removed
 -- in 4b2770aa9597ece12ec5e35b742161a30120276b
 
 readPkgIndex :: ByteString -> Either String [(PackageIdentifier, ByteString)]

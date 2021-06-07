@@ -1,28 +1,44 @@
 {-# LANGUAGE BangPatterns      #-}
+{-# LANGUAGE CPP               #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Distribution.Server.Util.ParseSpecVer
   ( parseSpecVer
   , parseSpecVerLazy
+  , scanSpecVersion
+  , scanSpecVersionLazy
+  , parseGenericPackageDescriptionChecked
   ) where
 
 import           Distribution.Server.Prelude
 
+import           Data.ByteString       (ByteString)
 import qualified Data.ByteString       as BS
 import qualified Data.ByteString.Char8 as BC8
 import qualified Data.ByteString.Lazy  as BSL
+import qualified Data.ByteString.Lazy.Char8 as BC8L
+import           Data.List.NonEmpty  ( toList)
 import           Distribution.Text
+import           Distribution.Pretty ( prettyShow )
+import           Distribution.Parsec ( PWarning, PError )
 import           Distribution.Version
-
 import qualified Data.HashMap.Strict   as Map
 import           Foreign.C
 import           Foreign.Ptr
 import           System.IO.Unsafe
+import Distribution.PackageDescription ( GenericPackageDescription(..), specVersion )
+import Distribution.PackageDescription.Parsec ( scanSpecVersion )
+
+#if defined(MIN_VERSION_cabal_parsers)
+import           Cabal.Parser (compatParseGenericPackageDescription)
+#else
+import           Distribution.PackageDescription.Parsec ( runParseResult, parseGenericPackageDescription )
+#endif
 
 -- | Heuristic @cabal-version:@-field parser
 --
 -- This parser is intended to be very fast and assumes a sane & valid .cabal file
--- (i.e. one which can be parsed succesfully by 'parseGenericPackageDescription')
+-- (i.e. one which can be parsed successfully by 'parseGenericPackageDescription')
 --
 -- Hackage shall only accept packages and files for which
 -- 'parseGenericPackageDescription' and 'parseSpecVer' agree on the
@@ -30,7 +46,7 @@ import           System.IO.Unsafe
 -- @.cabal@ files are accepted which support the heuristic parsing.
 --
 -- If no valid version field can be found, @mkVersion [0]@ is returned.
-parseSpecVer :: BS.ByteString -> Version
+parseSpecVer :: ByteString -> Version
 parseSpecVer = maybe (mkVersion [0]) id . findCabVer
 
 parseSpecVerLazy :: BSL.ByteString -> Version
@@ -39,16 +55,16 @@ parseSpecVerLazy = parseSpecVer . BSL.toStrict
 isWS :: Word8 -> Bool
 isWS = (`elem` [0x20,0x09])
 
-eatWS :: BS.ByteString -> BS.ByteString
+eatWS :: ByteString -> ByteString
 eatWS = BS.dropWhile isWS
 
 -- | Try to heuristically locate & parse a 'cabal-version' field
-findCabVer :: BS.ByteString -> Maybe Version
+findCabVer :: ByteString -> Maybe Version
 findCabVer raw = msum [ decodeVer y | (_,_,y) <- findCabVers raw ]
 
 -- | Return list of @cabal-version@ candidates as 3-tuples of
 -- (prefix,indentation-level,value-words) in reverse order of
--- occurence.
+-- occurrence.
 --
 -- A necessary condition for a @cabal-version@ field to be valid is
 -- that it matches the following regexp case-insensitively:
@@ -59,9 +75,9 @@ findCabVer raw = msum [ decodeVer y | (_,_,y) <- findCabVers raw ]
 -- by 0 or more whitespace, and between the @cabal-version@ and the
 -- @:@ token may only exist whitespace.
 --
--- NB: Later occurences of @cabal-version@ override earlier ones. In
+-- NB: Later occurrences of @cabal-version@ override earlier ones. In
 --     future @cabal-versions@ it will be disallowed.
-findCabVers :: BS.ByteString -> [(BS.ByteString,Int,[BS.ByteString])]
+findCabVers :: ByteString -> [(ByteString,Int,[ByteString])]
 findCabVers buf0 = mapMaybe go ixs
   where
     go i
@@ -85,7 +101,7 @@ findCabVers buf0 = mapMaybe go ixs
                      map getInd l'
 
     -- split off indentation for single line
-    getInd :: BS.ByteString -> (Int,BS.ByteString)
+    getInd :: ByteString -> (Int,ByteString)
     getInd x = case BS.span isWS x of (i,r) -> (BS.length i,r)
 
     isNonComment = not . BS.isPrefixOf "--"
@@ -94,12 +110,12 @@ findCabVers buf0 = mapMaybe go ixs
     ixs = strCaseStrAll buf0 "cabal-version"
 
 -- | Lookup-table mapping "x.y.z" strings to 'Version'
-verDictV :: Map.HashMap BS.ByteString Version
-verDictV = Map.fromList [ (BC8.pack (showVersion v), v) | v <- knownVers ]
+verDictV :: Map.HashMap ByteString Version
+verDictV = Map.fromList [ (BC8.pack (prettyShow v), v) | v <- knownVers ]
 
 -- | Lookup-table mapping ">=x.y.z" strings to 'Version'
-verDictRg :: Map.HashMap BS.ByteString Version
-verDictRg = Map.fromList [ (">=" `mappend` BC8.pack (showVersion v), v) | v <- knownVers ]
+verDictRg :: Map.HashMap ByteString Version
+verDictRg = Map.fromList [ (">=" <> BC8.pack (prettyShow v), v) | v <- knownVers ]
 
 -- | List of cabal-version values contained in Hackage's package index as of 2017-07
 knownVers :: [Version]
@@ -204,7 +220,7 @@ knownVers = map mkVersion
     ]
 
 -- | Fast decoder
-decodeVer :: [BS.ByteString] -> Maybe Version
+decodeVer :: [ByteString] -> Maybe Version
 decodeVer ws = case ws of
   [">=",v] -> Map.lookup v verDictV      -- most common case
   [v]      -> Map.lookup v verDictRg <|> -- most common case
@@ -213,7 +229,7 @@ decodeVer ws = case ws of
   _        -> decodeVerFallback (mconcat ws)
 
 -- | Fallback parser for when lookup-table based parsing fails
-decodeVerFallback :: BS.ByteString -> Maybe Version
+decodeVerFallback :: ByteString -> Maybe Version
 decodeVerFallback v0 = simpleParse v <|> parseSpecVR
   where
     parseSpecVR = do
@@ -228,9 +244,9 @@ decodeVerFallback v0 = simpleParse v <|> parseSpecVR
 foreign import ccall unsafe "string.h strcasestr" c_strcasestr :: Ptr CChar -> Ptr CChar -> IO (Ptr CChar)
 
 -- | Find indices (in reverse order) of all non-overlapping
--- case-insensitive occurences of s2 in s1
+-- case-insensitive occurrences of s2 in s1
 {-# NOINLINE strCaseStrAll  #-}
-strCaseStrAll :: BS.ByteString -> BS.ByteString -> [Int]
+strCaseStrAll :: ByteString -> ByteString -> [Int]
 strCaseStrAll s1 s2
     | BS.null s1 || BS.null s2 = []
     | BS.elem 0 s1 || BS.elem 0 s2 = undefined
@@ -250,3 +266,35 @@ strCaseStrAll s1 s2
           else do
             let !ofs = m `minusPtr` hay0
             go (m `plusPtr` needleSz) (ofs:acc)
+
+
+-- | Lazy 'BSL.ByteString' version of 'scanSpecVersion'
+scanSpecVersionLazy :: BSL.ByteString -> Maybe Version
+scanSpecVersionLazy bs = do
+    fstline':_ <- pure (BC8L.lines bs)
+    scanSpecVersion (BSL.toStrict fstline')
+
+
+-- | Version of 'parseGenericPackageDescription' which also validates spec-version heuristics
+--
+-- * Result of 'parseSpecVerLazy' must agree with 'parseGenericPackageDescription'
+-- * If 'scanSpecVersionLazy' detects a version, then it must agree with 'parseGenericPackageDescription' as well
+-- * Starting with cabal-version:2.2 'scanSpecVersionLazy' must succeed
+--
+-- 'True' is returned in the first element if sanity checks passes.
+parseGenericPackageDescriptionChecked :: BSL.ByteString -> (Bool,[PWarning], Either (Maybe Version, [PError]) GenericPackageDescription)
+parseGenericPackageDescriptionChecked bs = case parseGenericPackageDescription' bs of
+   (warns, Left pe) -> (False, warns, Left $ fmap toList pe)
+   (warns, Right gpd)   -> (isOk (specVersion (packageDescription gpd)),warns, Right gpd)
+ where
+   isOk :: Version -> Bool
+   isOk v
+     | v /= parseSpecVerLazy bs           = False
+     | Just v' <- scanSpecVersionLazy bs  = v == v'
+     | otherwise                          = v < mkVersion [2,3]
+
+#if defined(MIN_VERSION_cabal_parsers)
+   parseGenericPackageDescription' bs' = compatParseGenericPackageDescription (BSL.toStrict bs')
+#else
+   parseGenericPackageDescription' bs' = runParseResult (parseGenericPackageDescription (BSL.toStrict bs'))
+#endif

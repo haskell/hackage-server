@@ -24,9 +24,11 @@ import qualified Distribution.Server.Packages.Unpack as Upload
 import Distribution.Server.Framework.BackupDump
 import Distribution.Server.Util.Parse (unpackUTF8)
 
-import Distribution.PackageDescription.Parse (parseGenericPackageDescription)
-import Distribution.ParseUtils (ParseResult(..), locatedErrorMsg, showPWarning)
+import Distribution.PackageDescription.Parsec (parseGenericPackageDescription, runParseResult)
+import Distribution.Parsec (showPError, showPWarning)
 
+import qualified Data.ByteString.Lazy as BS.L
+import qualified Data.List.NonEmpty as NE
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (formatTime)
 import Data.Time.Locale.Compat (defaultTimeLocale)
@@ -214,7 +216,7 @@ mirrorFeature ServerEnv{serverBlobStore = store}
     uploadTimeGet :: DynamicPath -> ServerPartE Response
     uploadTimeGet dpath = do
       pkg <- packageInPath dpath >>= lookupPackageId
-      return $ toResponse $ formatTime defaultTimeLocale "%c"
+      return $ toResponse $ formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ"
                                        (pkgLatestUploadTime pkg)
 
     -- curl -H 'Content-Type: text/plain' -u admin:admin -X PUT -d "Tue Oct 18 20:54:28 UTC 2010" http://localhost:8080/package/edit-distance-0.2.1/upload-time
@@ -239,14 +241,15 @@ mirrorFeature ServerEnv{serverBlobStore = store}
         fileContent <- expectTextPlain
         time <- liftIO getCurrentTime
         let uploadData = (time, uid)
-        case parseGenericPackageDescription . unpackUTF8 $ fileContent of
-            ParseFailed err -> badRequest (toResponse $ show (locatedErrorMsg err))
-            ParseOk _ pkg | pkgid /= packageId pkg ->
+            filename = display pkgid <.> "cabal"
+
+        case runParseResult $ parseGenericPackageDescription $ BS.L.toStrict $ fileContent of
+            (_, Left (_, err NE.:| _)) -> badRequest (toResponse $ showPError filename err)
+            (_, Right pkg) | pkgid /= packageId pkg ->
                 errBadRequest "Wrong package Id"
                   [MText $ "Expected " ++ display pkgid
                         ++ " but found " ++ display (packageId pkg)]
-            ParseOk warnings pkg -> do
+            (warnings, Right pkg) -> do
                 updateAddPackageRevision (packageId pkg)
                                          (CabalFileText fileContent) uploadData
-                let filename = display pkgid <.> "cabal"
                 return . toResponse $ unlines $ map (showPWarning filename) warnings

@@ -25,7 +25,6 @@ import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HashMap
 
-import Control.Monad (when)
 import Control.Arrow (first)
 import qualified Text.XHtml.Strict as X
 

@@ -27,10 +27,11 @@ import Control.Monad
 import Data.Maybe
 import Network.HTTP hiding (user)
 import Network.HTTP.Auth
-import Data.Aeson (Value(..), FromJSON(..), (.:))
+import Data.Aeson (Result(..), Value(..), FromJSON(..), (.:), fromJSON, json')
 
 import qualified Network.Http.Client as HC
 import qualified System.IO.Streams as Streams
+import qualified System.IO.Streams.Attoparsec as Streams
 import qualified Data.ByteString.Builder as BB
 
 import qualified Data.ByteString.Char8  as BS
@@ -230,6 +231,16 @@ invokeHtml5Validate htmlToValidate = do
                   HC.setHeader "User-Agent" "hackage-server-testsuite/0.1"
 
         HC.sendRequest c q bodyStreamer
-        HC.receiveResponse c HC.jsonHandler
+        HC.receiveResponse c jsonHandler
   where
     bodyStreamer = Streams.write (Just $ BB.stringUtf8 htmlToValidate)
+
+jsonHandler :: FromJSON a
+            => HC.Response
+            -> Streams.InputStream BS.ByteString
+            -> IO a
+jsonHandler _ i = do
+    v <- Streams.parseFromStream json' i
+    case fromJSON v of
+      (Success a) -> return a
+      (Error str) -> fail str

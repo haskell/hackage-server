@@ -9,6 +9,7 @@ import Distribution.Server.Framework.Templating
 import Text.XHtml.Strict (Html, toHtml, anchor, (<<), (!), href, paragraph)
 
 import Data.List hiding (find)
+import qualified Network.URI as URI
 import System.FilePath
 import System.Directory (getDirectoryContents)
 
@@ -37,7 +38,7 @@ find p dirPath = do
   return (filter p contents)
 
 staticFilesFeature :: ServerEnv -> Templates -> [FilePath] -> HackageFeature
-staticFilesFeature ServerEnv{serverStaticDir, serverTemplatesMode}
+staticFilesFeature ServerEnv{serverStaticDir, serverTemplatesMode, serverBaseURI}
                    templates staticFiles =
   (emptyHackageFeature "static-files") {
     featureResources =
@@ -50,13 +51,9 @@ staticFilesFeature ServerEnv{serverStaticDir, serverTemplatesMode}
 --            resourceGet  = [("", \_ -> serveStaticTemplates)]
 --          }
       , (resourceAt "/static/..") {
-            resourceGet  = [("", \_ -> serveStaticDirFiles)]
+            resourceGet  = [("", const serveStaticDirFiles)]
           }
-      ] ++
-      [ (resourceAt ("/" ++ filename)) {
-            resourceGet  = [("", \_ -> serveStaticToplevelFile mimetype filename)]
-          }
-      | (filename, mimetype) <- toplevelFiles ]
+      ]
         ++
       [ (resourceAt ("/" ++ dropExtension name)) {
             resourceGet  = [("", \_ -> serveStaticTemplate name)]
@@ -79,10 +76,10 @@ staticFilesFeature ServerEnv{serverStaticDir, serverTemplatesMode}
       cacheControlWithoutETag staticResourceCacheControls
       serveDirectory DisableBrowsing [] serverStaticDir
 
-    serveStaticToplevelFile :: String -> FilePath -> ServerPartE Response
-    serveStaticToplevelFile mimetype filename = do
-      cacheControlWithoutETag staticResourceCacheControls
-      serveFile (asContentType mimetype) (serverStaticDir </> filename)
+--    serveStaticToplevelFile :: String -> FilePath -> ServerPartE Response
+--    serveStaticToplevelFile mimetype filename = do
+--      cacheControlWithoutETag staticResourceCacheControls
+--      serveFile (asContentType mimetype) (serverStaticDir </> filename)
 
     serveStaticTemplate :: String -> ServerPartE Response
     serveStaticTemplate = serveTemplate
@@ -105,7 +102,9 @@ staticFilesFeature ServerEnv{serverStaticDir, serverTemplatesMode}
         Nothing       -> mzero
         Just template -> do
           cacheControlWithoutETag staticResourceCacheControls
-          ok $ toResponse $ template []
+          ok $ toResponse $ template [
+            "sbaseurl" $= show (serverBaseURI { URI.uriScheme = "https:" })
+            ]
 
     textErrorPage (ErrorResponse errCode hdrs errTitle message) = do
         template <- getTemplate templates "hackageErrorPage.txt"
@@ -136,7 +135,6 @@ staticFilesFeature ServerEnv{serverStaticDir, serverTemplatesMode}
     htmlErrorPage GenericErrorResponse =
       htmlErrorPage internalServerErrorResponse
 
-    toplevelFiles     = [("favicon.ico", "image/x-icon")]
     toplevelTemplates = map dropExtension staticFiles
 
 addHeaders :: Headers -> [(String, String)] -> Headers

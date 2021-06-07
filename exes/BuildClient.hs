@@ -1,33 +1,33 @@
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Main (main) where
 
 import Network.HTTP hiding (password)
 import Network.Browser
-import Network.URI (URI(..), parseRelativeReference, relativeTo)
-
+import Network.URI (URI(..))
 import Distribution.Client
 import Distribution.Client.Cron (cron, rethrowSignalsAsExceptions,
                                  Signal(..), ReceivedSignal(..))
 import qualified Distribution.Client.Index as Index
+import qualified Distribution.Server.Features.BuildReports.BuildReport as BR
 
 import Distribution.Package
 import Distribution.Text
-import qualified Text.PrettyPrint          as Disp
 import Distribution.Verbosity
 import Distribution.Simple.Utils hiding (intercalate)
-import Distribution.Version (Version, nullVersion)
+import Distribution.Version (Version)
 
+import Data.Either
 import Data.List
 import Data.Maybe
 import Data.Ord (Down(..))
-import Data.IORef
 import Data.Time
 import Control.Applicative as App
 import Control.Exception
 import Control.Monad
 import Control.Monad.Trans
-import qualified Data.ByteString.Lazy as BS
-import qualified Data.Map as M
+import qualified Data.ByteString.Lazy       as BS
+import qualified Data.Map                   as M
 
 import qualified Codec.Compression.GZip  as GZip
 import qualified Codec.Archive.Tar       as Tar
@@ -49,7 +49,8 @@ import Control.Concurrent
 import Paths_hackage_server (version)
 
 
-import Data.Aeson (eitherDecode)
+import Data.Aeson (eitherDecode, encode, parseJSON)
+import Data.Aeson.Types (parseEither)
 
 data Mode = Help [String]
           | Init URI [URI]
@@ -68,6 +69,7 @@ data BuildOpts = BuildOpts {
                      bo_password   :: Maybe String,
                      bo_buildAttempts :: Int,
                      -- ^ how many times to attempt to rebuild a failing package
+                     bo_buildOlderGHC :: Bool,
                      bo_buildOrder :: BuildOrder
                  }
 
@@ -158,7 +160,7 @@ parseRepositoryIndices :: Verbosity -> IO (M.Map PackageIdentifier Tar.EpochTime
 parseRepositoryIndices verbosity = do
     cabalDir <- getAppUserDataDirectory "cabal/packages"
     cacheDirs <- listDirectory cabalDir
-    indexFiles <- filterM doesFileExist $ map (\dir -> cabalDir </> dir </> "00-index.tar") cacheDirs
+    indexFiles <- filterM doesFileExist $ map (\dir -> cabalDir </> dir </> "01-index.tar") cacheDirs
     M.unions <$> mapM readIndex indexFiles
   where
     readIndex fname = do
@@ -243,9 +245,7 @@ stats opts = do
 
     notice verbosity "Initialising"
 
-    (didFail, _, _)  <- mkPackageFailed opts
-
-    pkgIdsHaveDocs <- getDocumentationStats verbosity config didFail
+    pkgIdsHaveDocs <- getDocumentationStats verbosity opts config Nothing
     infoStats verbosity (Just statsFile) pkgIdsHaveDocs
   where
     statsFile = bo_stateDir opts </> "stats"
@@ -379,41 +379,77 @@ docInfoTarGzURI config docInfo = docInfoBaseURI config docInfo <//> display (doc
 docInfoReports :: BuildConfig -> DocInfo -> URI
 docInfoReports config docInfo = docInfoBaseURI config docInfo <//> "reports/"
 
-getDocumentationStats :: Verbosity 
+parseJsonStats :: BS.ByteString -> ([String],[BR.PkgDetails])
+parseJsonStats = either (\x -> ([x],[])) (partitionEithers . map (parseEither parseJSON)) . eitherDecode
+
+getDocumentationStats :: Verbosity
+                      -> BuildOpts
                       -> BuildConfig
-                      -> (PackageId -> IO Bool)
+                      -> Maybe [PackageId]
                       -> IO [DocInfo]
-getDocumentationStats verbosity config didFail = do
+getDocumentationStats verbosity opts config pkgs = do
     notice verbosity "Downloading documentation index"
     httpSession verbosity "hackage-build" version $ do
-      mPackages   <- liftM eitherDecode `liftM` requestGET' packagesUri
-      mCandidates <- liftM eitherDecode `liftM` requestGET' candidatesUri
-
+      curGhcVersion <- liftIO $ case (bo_buildOlderGHC opts) of
+                                  True -> getGHCversion
+                                  False -> return Nothing
+      mPackages   <- fmap parseJsonStats <$> requestGET' (packagesUri False curGhcVersion)
+      mCandidates <- fmap parseJsonStats <$> requestGET' (packagesUri True curGhcVersion)
+      liftIO $ putStrLn $ show curGhcVersion
       case (mPackages, mCandidates) of
         -- Download failure
-        (Nothing, _) -> fail $ "Could not download " ++ show packagesUri
-        (_, Nothing) -> fail $ "Could not download " ++ show candidatesUri
-        -- Decoding failure
-        (Just (Left e), _) -> fail $ "Could not decode " ++ show packagesUri   ++ ": " ++ e
-        (_, Just (Left e)) -> fail $ "Could not decode " ++ show candidatesUri ++ ": " ++ e
+        (Nothing, _) -> fail $ "Could not download " ++ show (packagesUri False curGhcVersion)
+        (_, Nothing) -> fail $ "Could not download " ++ show (packagesUri True curGhcVersion)
         -- Success
-        (Just (Right packages), Just (Right candidates)) -> do
+        (Just (perrs, packages), Just (cerrs, candidates)) -> do
+          liftIO . when (not . null $ perrs) . putStrLn $ "failed package json parses: " ++ show perrs
+          liftIO . when (not . null $ cerrs) . putStrLn $ "failed candidate json parses: " ++ show cerrs
           packages'   <- liftIO $ mapM checkFailed packages
           candidates' <- liftIO $ mapM checkFailed candidates
           return $ map (setIsCandidate False) packages'
                 ++ map (setIsCandidate True)  candidates'
   where
-    packagesUri   = bc_srcURI config <//> "packages" </> "docs.json"
-    candidatesUri = bc_srcURI config <//> "packages" </> "candidates" </> "docs.json"
+    -- curGhcVersion = "f"
+    getGHCversion :: IO (Maybe String)
+    getGHCversion = do
+      let dirloc = (bo_stateDir opts) </> "ghc" <.> "log"
+      moutput <- openFile dirloc ReadWriteMode
+      ph <- runProcess "ghc" ["--info"] Nothing
+                    Nothing Nothing (Just moutput) Nothing
+      waitForProcess ph
+      hClose moutput
+      handler <- openFile dirloc ReadWriteMode
+      contents <- hGetContents handler
+      let res     = read contents :: [(String, String)]
+          version' = fmap (\(_,b) -> b) $ find (\(a,_)-> a=="Project version") res
+      return $ version'
 
-    checkFailed :: (String, Bool) -> IO (PackageIdentifier, HasDocs)
-    checkFailed (pkgId, docsBuilt) = do
-      let pkgId' = fromJust (simpleParse pkgId)
-      if docsBuilt
-        then return (pkgId', HasDocs)
-        else do failed <- didFail pkgId'
-                if failed then return (pkgId', DocsFailed)
-                          else return (pkgId', DocsNotBuilt)
+    getQry :: [PackageIdentifier] -> String
+    getQry [] = ""
+    getQry [pkg] = display pkg
+    getQry (x:y) = (display x) ++ "," ++ getQry y
+
+    packagesUri :: Bool -> Maybe String -> URI
+    packagesUri isCandidate curGhcVersion= do
+      addEnd pkgs curGhcVersion $ addCandi isCandidate getURI
+      where
+        getURI = bc_srcURI config <//> "packages"
+        addCandi True  uri  = uri <//> "candidates"
+        addCandi False uri  = uri
+        addEnd _            (Just a) uri = uri <//> "docs.json" ++ "?ghcid=" ++ a
+        addEnd (Just [])    Nothing  uri = uri <//> "docs.json" ++ "?doc=false&fail=" ++ (show $ bo_buildAttempts opts)
+        addEnd (Just pkgs') Nothing  uri = uri <//> "docs.json" ++ "?pkgs=" ++ (getQry pkgs')
+        addEnd Nothing      Nothing  uri = uri <//> "docs.json"
+
+    checkFailed :: BR.PkgDetails -> IO (PackageIdentifier, HasDocs)
+    checkFailed pkgDetails = do
+      let pkgId = BR.pkid pkgDetails
+      case (BR.docs pkgDetails, BR.failCnt pkgDetails) of
+        (True , _)                        -> return (pkgId, HasDocs)
+        (False, Just BR.BuildOK) -> return (pkgId, DocsFailed)
+        (False, Just (BR.BuildFailCnt a))
+            | a >= bo_buildAttempts opts  -> return (pkgId, DocsFailed)
+        (False, _)                        -> return (pkgId, DocsNotBuilt)
 
     setIsCandidate :: Bool -> (PackageIdentifier, HasDocs) -> DocInfo
     setIsCandidate isCandidate (pId, hasDocs) = DocInfo {
@@ -430,96 +466,68 @@ getDocumentationStats verbosity config didFail = do
 buildOnce :: BuildOpts -> [PackageId] -> IO ()
 buildOnce opts pkgs = keepGoing $ do
     config <- readConfig opts
-
     notice verbosity "Initialising"
-    (has_failed, mark_as_failed, persist_failed) <- mkPackageFailed opts
 
-    flip finally persist_failed $ do
-        updatePackageIndex
-        -- Due to caching sometimes the package repository state may lag behind the
-        -- documentation index. Consequently, we make sure that the packages we are
-        -- going to build actually appear in the repository before building. See
-        -- #543.
-        repoIndex <- parseRepositoryIndices verbosity
+    updatePackageIndex
+    -- Due to caching sometimes the package repository state may lag behind the
+    -- documentation index. Consequently, we make sure that the packages we are
+    -- going to build actually appear in the repository before building. See
+    -- #543.
+    repoIndex <- parseRepositoryIndices verbosity
 
-        pkgIdsHaveDocs <- getDocumentationStats verbosity config has_failed
-        infoStats verbosity Nothing pkgIdsHaveDocs
-        threadDelay (10^(7::Int))
+    pkgIdsHaveDocs <- getDocumentationStats verbosity opts config (Just pkgs)
+    infoStats verbosity Nothing pkgIdsHaveDocs
+    threadDelay (10^(7::Int))
 
-        let orderBuilds :: BuildOrder -> [DocInfo] -> [DocInfo]
-            orderBuilds LatestVersionFirst =
-                  latestFirst
-                . map (sortBy (flip (comparing docInfoPackageVersion)))
-                . groupBy (equating  docInfoPackageName)
-                . sortBy  (comparing docInfoPackageName)
-              where
-                -- NOTE: assumes all these lists are non-empty
-                latestFirst :: [[DocInfo]] -> [DocInfo]
-                latestFirst ids = map head ids ++ concatMap tail ids
+    let orderBuilds :: BuildOrder -> [DocInfo] -> [DocInfo]
+        orderBuilds LatestVersionFirst =
+              latestFirst
+            . map (sortBy (flip (comparing docInfoPackageVersion)))
+            . groupBy (equating  docInfoPackageName)
+            . sortBy  (comparing docInfoPackageName)
+          where
+            -- NOTE: assumes all these lists are non-empty
+            latestFirst :: [[DocInfo]] -> [DocInfo]
+            latestFirst ids = map head ids ++ concatMap tail ids
 
-            orderBuilds MostRecentlyUploadedFirst =
-                  map snd
-                . sortBy (comparing fst)
-                . mapMaybe (\pkg -> fmap (\uploadTime -> (Down uploadTime, pkg)) (M.lookup (docInfoPackage pkg) repoIndex))
+        orderBuilds MostRecentlyUploadedFirst =
+              map snd
+            . sortBy (comparing fst)
+            . mapMaybe (\pkg -> fmap (\uploadTime -> (Down uploadTime, pkg)) (M.lookup (docInfoPackage pkg) repoIndex))
 
 
-        -- Find those files *not* marked as having documentation in our cache
-        let toBuild :: [DocInfo]
-            toBuild = filter shouldBuild
-                    . filter (flip M.member repoIndex . docInfoPackage)
-                    . orderBuilds (bo_buildOrder opts)
-                    $ pkgIdsHaveDocs
+    let toBuild :: [DocInfo]
+        toBuild = filter (flip M.member repoIndex . docInfoPackage)
+                . orderBuilds (bo_buildOrder opts)
+                $ pkgIdsHaveDocs
 
-        notice verbosity $ show (length toBuild) ++ " package(s) to build"
+    notice verbosity $ show (length toBuild) ++ " package(s) to build"
 
-        -- Try to build each of them, uploading the documentation and
-        -- build reports along the way. We mark each package as having
-        -- documentation in the cache even if the build fails because
-        -- we don't want to keep continually trying to build a failing
-        -- package!
-        startTime <- getCurrentTime
+    -- Try to build each of them, uploading the documentation and
+    -- build reports along the way. We mark each package as having
+    -- documentation in the cache even if the build fails because
+    -- we don't want to keep continually trying to build a failing
+    -- package!
+    startTime <- getCurrentTime
 
-        let go :: [DocInfo] -> IO ()
-            go [] = return ()
-            go (docInfo : toBuild') = do
-              (mTgz, mRpt, logfile) <- buildPackage verbosity opts config docInfo
-              case mTgz of
-                Nothing -> mark_as_failed (docInfoPackage docInfo)
-                Just _  -> return ()
-              case mRpt of
-                Just _  | bo_dryRun opts -> return ()
-                Just report -> uploadResults verbosity config docInfo
-                                              mTgz report logfile
-                _           -> return ()
+    let go :: [DocInfo] -> IO ()
+        go [] = return ()
+        go (docInfo : toBuild') = do
+          processPkg verbosity opts config docInfo
 
-              -- We don't check the runtime until we've actually tried
-              -- to build a doc, so as to ensure we make progress.
-              outOfTime <- case bo_runTime opts of
-                  Nothing -> return False
-                  Just d  -> do
-                    currentTime <- getCurrentTime
-                    return $ (currentTime `diffUTCTime` startTime) > d
+          -- We don't check the runtime until we've actually tried
+          -- to build a doc, so as to ensure we make progress.
+          outOfTime <- case bo_runTime opts of
+              Nothing -> return False
+              Just d  -> do
+                currentTime <- getCurrentTime
+                return $ (currentTime `diffUTCTime` startTime) > d
 
-              if outOfTime then return ()
-                           else go toBuild'
+          if outOfTime then return ()
+                        else go toBuild'
 
-        go toBuild
+    go toBuild
   where
-    shouldBuild :: DocInfo -> Bool
-    shouldBuild docInfo =
-        case docInfoHasDocs docInfo of
-          DocsNotBuilt -> null pkgs || is_selected
-          _            -> is_selected -- rebuild package if the user explicitly requested it
-      where
-        is_selected = any (isSelectedPackage pkgid) pkgs
-        pkgid = docInfoPackage docInfo
-
-    -- do versionless matching if no version was given
-    isSelectedPackage pkgid pkgid'@(PackageIdentifier _ v)
-        | nullVersion == v =
-        packageName pkgid == packageName pkgid'
-    isSelectedPackage pkgid pkgid' =
-        pkgid == pkgid'
 
     keepGoing :: IO () -> IO ()
     keepGoing act
@@ -546,44 +554,110 @@ buildOnce opts pkgs = keepGoing $ do
       unless (update_ec == ExitSuccess) $
           dieNoVerbosity "Could not 'cabal update' from specified server"
 
--- | Builds a little memoised function that can tell us whether a
--- particular package failed to build its documentation, a function to mark a
--- package as having failed, and a function to write the final failed list back
--- to disk.
-mkPackageFailed :: BuildOpts
-                -> IO (PackageId -> IO Bool, PackageId -> IO (), IO ())
-mkPackageFailed opts = do
-    init_failed <- readFailedCache (bo_stateDir opts)
-    cache_var   <- newIORef init_failed
+-- Takes a single Package, process it and uploads result
+processPkg :: Verbosity -> BuildOpts -> BuildConfig
+             -> DocInfo -> IO ()
+processPkg verbosity opts config docInfo = do
+    prepareTempBuildDir
+    (mTgz, mRpt, logfile)   <- buildPackage verbosity opts config docInfo
+    buildReport             <- mapM readFile mRpt
+    let installOk = fmap ("install-outcome: InstallOk" `isInfixOf`) buildReport == Just True
 
-    let mark_as_failed pkg_id = atomicModifyIORef cache_var $ \already_failed ->
-                                  (M.insertWith (+) pkg_id 1 already_failed, ())
-        has_failed     pkg_id = f <$> readIORef cache_var
-          where f cache = M.findWithDefault 0 pkg_id cache > bo_buildAttempts opts
-        persist               = readIORef cache_var >>= writeFailedCache (bo_stateDir opts)
+    -- Run Tests if installOk, Run coverage is Tests runs
+    (testOutcome, hpcLoc)   <- case installOk of
+      True  -> testPackage verbosity opts docInfo
+      False -> return (Nothing, Nothing)
+    coverageFile <- mapM (coveragePackage verbosity opts docInfo) hpcLoc
 
-    return (has_failed, mark_as_failed, persist)
+    -- Modify test-outcome and rewrite report file.
+    mapM (setTestStatus mRpt buildReport) testOutcome
+
+    case bo_dryRun opts of
+      True -> return ()
+      False -> uploadResults verbosity config docInfo
+                                    mTgz mRpt logfile coverageFile installOk
   where
-    readFailedCache :: FilePath -> IO (M.Map PackageId Int)
-    readFailedCache cache_dir = do
-        pkgstrs <- handleDoesNotExist [] $ liftM lines $ readFile (cache_dir </> "failed")
-        let (pkgids, attempts) = unzip $ map (parseLine . words) pkgstrs
-               where
-                 parseLine [pkg_id] = (pkg_id, 1)
-                 parseLine [pkg_id, attempts']
-                   | [(n,_)] <- reads attempts' = (pkg_id, n)
-                   | otherwise                  = (pkg_id, 1)
-                 parseLine other = error $ "failed to parse failed list line: "++show other
-        case validatePackageIds pkgids of
-            Left theError -> dieNoVerbosity theError
-            Right pkgs -> return (M.fromList $ zip pkgs attempts)
+    prepareTempBuildDir :: IO ()
+    prepareTempBuildDir = do
+      handleDoesNotExist () $
+        removeDirectoryRecursive $ installDirectory opts
+      createDirectory $ installDirectory opts
+      createDirectoryIfMissing True $ resultsDirectory opts
+      notice verbosity $ "Writing cabal.project for " ++ display (docInfoPackage docInfo)
+      let projectFile = installDirectory opts </> "cabal.project"
+      writeFile projectFile $ "packages: " ++ show (docInfoTarGzURI config docInfo)
 
-    writeFailedCache :: FilePath -> M.Map PackageId Int -> IO ()
-    writeFailedCache cache_dir pkgs =
-      writeUTF8File (cache_dir </> "failed")
-      $ unlines
-      $ map (\(pkgid,n) -> show $ disp pkgid Disp.<+> disp n)
-      $ M.assocs pkgs
+    setTestOutcome :: String -> [String] -> [String]
+    setTestOutcome _ []                  = []
+    setTestOutcome a (xs:xt)
+      | "tests-outcome: " `isPrefixOf` xs = ("tests-outcome: " ++ a) : xt
+      | otherwise                         = xs : setTestOutcome a xt
+
+    rewriteRpt:: Maybe FilePath -> Maybe String -> IO ()
+    rewriteRpt (Just loc) (Just cnt) = do
+      writeFile (loc <.> "temp") cnt
+      renameFile (loc <.> "temp") loc
+    rewriteRpt _ _ = do return ()
+
+    setTestStatus :: Maybe FilePath -> Maybe String -> String -> IO ()
+    setTestStatus mRpt buildReport testOutcome = do
+        let buildReport' = fmap (unlines.setTestOutcome testOutcome) $ fmap lines buildReport
+        rewriteRpt mRpt buildReport'
+
+coveragePackage :: Verbosity -> BuildOpts -> DocInfo -> FilePath -> IO (FilePath)
+coveragePackage verbosity opts docInfo loc = do
+  let pkgid = docInfoPackage docInfo
+      dir = takeDirectory loc
+      mixLoc = dir </> ".." </> ".." </> "mix" </> display pkgid
+      tixLoc = dir </> ".." </> ".." </> "tix" </> display pkgid </> display pkgid <.> "tix"
+      all_args = ["report", tixLoc, "--hpcdir=" ++ mixLoc]
+      coverageFile = (resultsDirectory opts) </> display pkgid <.> "coverage"
+  buildCovg <- openFile coverageFile WriteMode
+
+  ph <- runProcess "hpc" all_args Nothing
+                        Nothing Nothing (Just buildCovg) (Just buildCovg)
+  waitForProcess ph
+  notice verbosity $ unlines
+      [ "Code coverage results for " ++ display pkgid ++ ":"
+      , coverageFile
+      ]
+  return coverageFile
+
+
+testPackage :: Verbosity -> BuildOpts -> DocInfo -> IO (Maybe String, Maybe FilePath)
+testPackage verbosity opts docInfo = do
+  let pkgid = docInfoPackage docInfo
+      testLogFile = (installDirectory opts) </> display pkgid <.> "test"
+      testReportFile = (installDirectory opts) </> "reports" </> display pkgid <.> "test"
+      testResultFile = (resultsDirectory opts) </> display pkgid <.> "test"
+      pkg_flags =
+        ["all",
+         "--enable-coverage",
+         "--test-log=" ++ testReportFile,
+         "--test-show-details=never",
+         "--disable-optimization"]
+  notice verbosity ("Testing " ++ display pkgid)
+
+  buildLogHnd <- openFile testLogFile WriteMode
+
+  void $ cabal opts "v2-test" pkg_flags (Just buildLogHnd)
+  testLog <- readFile testLogFile
+
+  let covgInd = elemIndex "Package coverage report written to" $ lines testLog
+      hpcLoc = fmap (\x -> (lines testLog)!!(x+1)) covgInd
+
+  testOutcome <- case ("Test suite" `isInfixOf` testLog) && (": PASS" `isInfixOf` testLog) of
+        True  -> return (Just "Ok")
+        False -> case ("Test suite" `isInfixOf` testLog) && (": FAIL" `isInfixOf` testLog) of
+            True  -> return (Just "Failed")
+            False -> return Nothing
+  renameFile testLogFile testResultFile
+
+  notice verbosity $ unlines
+      [ "Test results for " ++ display pkgid ++ ":"
+      , testResultFile
+      ]
+  return (testOutcome, hpcLoc)
 
 
 -- | Build documentation and return @(Just tgz)@ for the built tgz file
@@ -594,9 +668,7 @@ buildPackage :: Verbosity -> BuildOpts -> BuildConfig
 buildPackage verbosity opts config docInfo = do
     let pkgid = docInfoPackage docInfo
     notice verbosity ("Building " ++ display pkgid)
-    handleDoesNotExist () $
-        removeDirectoryRecursive $ installDirectory opts
-    createDirectory $ installDirectory opts
+
 
     -- Create the local package db
     let packageDb = installDirectory opts </> "packages.db"
@@ -655,6 +727,8 @@ buildPackage verbosity opts config docInfo = do
              -- We want both html documentation and hoogle database generated
              "--haddock-html",
              "--haddock-hoogle",
+             -- Generate the quickjump index files
+             "--haddock-option=--quickjump",
              -- For candidates we need to use the full URL, because
              -- otherwise cabal-install will not find the package.
              -- For regular packages however we need to use just the
@@ -678,14 +752,16 @@ buildPackage verbosity opts config docInfo = do
 
     -- We ignore the result of calling @cabal install@ because
     -- @cabal install@ succeeds even if the documentation fails to build.
-    void $ cabal opts "install" pkg_flags (Just buildLogHnd)
+    void $ cabal opts "v1-install" pkg_flags (Just buildLogHnd)
 
     -- Grab the report for the package we want. Stash it for safe keeping.
     report <- handleDoesNotExist Nothing $ do
                 renameFile (installDirectory opts </> "reports"
                                 </> display pkgid <.> "report")
                            resultReportFile
-                appendFile resultReportFile "\ndoc-builder: True"
+                appendFile resultReportFile "doc-builder: True\n"
+                -- TODO add real time
+                appendFile resultReportFile "time:\n"
                 return (Just resultReportFile)
 
     docs_generated <- fmap and $ sequence [
@@ -695,8 +771,9 @@ buildPackage verbosity opts config docInfo = do
     docs <- if docs_generated
               then do
                 when (bo_prune opts) (pruneHaddockFiles doc_dir_pkg)
-                BS.writeFile resultDocsTarball =<< tarGzDirectory doc_dir_pkg
-                return (Just resultDocsTarball)
+                try (tarGzDirectory doc_dir_pkg) >>= either
+                  (\(e :: SomeException) -> print e >> return Nothing)
+                  (\x -> BS.writeFile resultDocsTarball x >> return (Just resultDocsTarball))
               else return Nothing
 
     notice verbosity $ unlines
@@ -721,8 +798,8 @@ cabal opts cmd args moutput = do
                  : verbosityArgs
                 ++ args
     info verbosity $ unwords ("cabal":all_args)
-    ph <- runProcess "cabal" all_args Nothing
-                     Nothing Nothing moutput moutput
+    ph <- runProcess "cabal" all_args (Just $ installDirectory opts)
+                        Nothing Nothing moutput moutput
     waitForProcess ph
 
 pruneHaddockFiles :: FilePath -> IO ()
@@ -737,7 +814,7 @@ pruneHaddockFiles dir = do
     hackJsUtils
   where
     unwantedFile file
-      | "frames.html" == file             = True 
+      | "frames.html" == file             = True
       | "mini_" `isPrefixOf` file         = True
         -- The .haddock file is haddock-version specific
         -- so it is not useful to make available for download
@@ -770,10 +847,10 @@ tarGzDirectory dir = do
     BS.length res `seq` return res
   where (containing_dir, nested_dir) = splitFileName dir
 
-uploadResults :: Verbosity -> BuildConfig -> DocInfo
-              -> Maybe FilePath -> FilePath -> FilePath -> IO ()
+uploadResults :: Verbosity -> BuildConfig -> DocInfo -> Maybe FilePath
+                    -> Maybe FilePath -> FilePath -> Maybe FilePath -> Bool -> IO ()
 uploadResults verbosity config docInfo
-              mdocsTarballFile buildReportFile buildLogFile =
+              mdocsTarballFile buildReportFile buildLogFile coverageFile installOk =
     httpSession verbosity "hackage-build" version $ do
       -- Make sure we authenticate to Hackage
       setAuthorityGen (provideAuthInfo (bc_srcURI config)
@@ -783,55 +860,35 @@ uploadResults verbosity config docInfo
         Just docsTarballFile ->
           putDocsTarball config docInfo docsTarballFile
 
-      buildId <- postBuildReport config docInfo buildReportFile
-      putBuildLog buildId buildLogFile
+      putBuildFiles config docInfo buildReportFile buildLogFile coverageFile installOk
 
 putDocsTarball :: BuildConfig -> DocInfo -> FilePath -> HttpSession ()
 putDocsTarball config docInfo docsTarballFile =
     requestPUTFile (docInfoDocsURI config docInfo)
       "application/x-tar" (Just "gzip") docsTarballFile
 
-type BuildReportId = URI
-
-postBuildReport :: BuildConfig -> DocInfo -> FilePath -> HttpSession BuildReportId
-postBuildReport config docInfo reportFile = do
-    let uri = docInfoReports config docInfo
-    body <- liftIO $ BS.readFile reportFile
+putBuildFiles :: BuildConfig -> DocInfo -> Maybe FilePath
+                    -> FilePath -> Maybe FilePath -> Bool -> HttpSession ()
+putBuildFiles config docInfo reportFile buildLogFile coverageFile installOk = do
+    reportContent   <- liftIO $ traverse readFile reportFile
+    logContent      <- liftIO $ readFile buildLogFile
+    coverageContent <- liftIO $ traverse readFile coverageFile
+    let uri   = docInfoReports config docInfo
+        body  = encode $ BR.BuildFiles reportContent (Just logContent) coverageContent (not installOk)
     setAllowRedirects False
     (_, response) <- request Request {
       rqURI     = uri,
-      rqMethod  = POST,
-      rqHeaders = [Header HdrContentType   ("text/plain"),
-                   Header HdrContentLength (show (BS.length body)),
-                   Header HdrAccept        ("text/plain")],
+      rqMethod  = PUT,
+      rqHeaders = [Header HdrContentType   ("application/json"),
+                   Header HdrContentLength (show (BS.length body))],
       rqBody    = body
     }
     case rspCode response of
       --TODO: fix server to not do give 303, 201 is more appropriate
-      (3,0,3) | [Just buildId] <- [ do rel <- parseRelativeReference location
-                                       return $ relativeTo rel uri
-                                  | Header HdrLocation location <- rspHeaders response ]
-                -> return buildId
-      _         -> do checkStatus uri response
-                      fail "Unexpected response from server."
+      (3,0,3) -> return ()
+      _       -> do checkStatus uri response
+                    fail "Unexpected response from server."
 
-putBuildLog :: BuildReportId -> FilePath -> HttpSession ()
-putBuildLog reportId buildLogFile = do
-    body <- liftIO $ BS.readFile buildLogFile
-    let uri = reportId <//> "log"
-    setAllowRedirects False
-    (_, response) <- request Request {
-        rqURI     = uri,
-        rqMethod  = PUT,
-        rqHeaders = [Header HdrContentType   ("text/plain"),
-                     Header HdrContentLength (show (BS.length body)),
-                     Header HdrAccept        ("text/plain")],
-        rqBody    = body
-      }
-    case rspCode response of
-      --TODO: fix server to not to give 303, 201 is more appropriate
-      (3,0,3)   -> return ()
-      _         -> checkStatus uri response
 
 
 -------------------------
@@ -852,6 +909,7 @@ data BuildFlags = BuildFlags {
     flagUsername   :: Maybe String,
     flagPassword   :: Maybe String,
     flagBuildAttempts :: Maybe Int,
+    flagBuildOlderGHC :: Bool,
     flagBuildOrder :: Maybe BuildOrder
 }
 
@@ -870,6 +928,7 @@ emptyBuildFlags = BuildFlags {
   , flagUsername   = Nothing
   , flagPassword   = Nothing
   , flagBuildAttempts = Nothing
+  , flagBuildOlderGHC = False
   , flagBuildOrder = Nothing
   }
 
@@ -938,6 +997,10 @@ buildFlagDescrs =
                                 "recent-uploads-first" -> set MostRecentlyUploadedFirst
                                 _                      -> error "Can't parse build order") "ORDER")
      "What order should packages be built in? (latest-version-first or recent-uploads-first)"
+
+  , Option [] ["build-older-ghc"]
+      (NoArg (\opts -> opts { flagBuildOlderGHC = True }))
+      "Build packages that were previously built with an older version of GHC"
   ]
 
 validateOpts :: [String] -> IO (Mode, BuildOpts)
@@ -961,6 +1024,7 @@ validateOpts args = do
                    bo_username   = flagUsername flags,
                    bo_password   = flagPassword flags,
                    bo_buildAttempts = fromMaybe 3 $ flagBuildAttempts flags,
+                   bo_buildOlderGHC = flagBuildOlderGHC flags,
                    bo_buildOrder = fromMaybe LatestVersionFirst $ flagBuildOrder flags
                }
 
@@ -998,4 +1062,3 @@ validateOpts args = do
   where
 
     accum flags = foldr (flip (.)) id flags
-

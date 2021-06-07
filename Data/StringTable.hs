@@ -23,7 +23,7 @@ import Data.Word (Word32)
 import Distribution.Server.Framework.Instances()
 import Distribution.Server.Framework.MemSize
 
--- | An effecient mapping from strings to a dense set of integers.
+-- | An efficient mapping from strings to a dense set of integers.
 --
 data StringTable id
          = StringTable

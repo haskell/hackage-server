@@ -163,7 +163,7 @@ importHtPasswds = sequence . map fromRecord . drop 2
 
 legacyPasswdsToCSV :: BackupType -> LegacyPasswdsTable -> CSV
 legacyPasswdsToCSV backuptype (LegacyPasswdsTable tbl)
-    = ([display version]:) $
+    = ([showVersion version]:) $
       (headers:) $
 
       flip map (IntMap.toList tbl) $ \(uid, LegacyAuth.HtPasswdHash passwdhash) ->

@@ -6,7 +6,7 @@ $hackageCssTheme()$
 </head>
 
 <body>
-$hackagePageHeader()$
+$hackagePageHeader(deauthUser="1")$
 
 <div id="content">
 <h2>Manage user account $username$</h2>

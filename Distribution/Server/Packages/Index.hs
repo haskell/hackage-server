@@ -22,7 +22,7 @@ import Distribution.Server.Packages.Metadata
 import Distribution.Server.Users.Users
          ( Users, userIdToName )
 import Distribution.Server.Users.Types
-         ( UserName(..) )
+         ( UserId(..), UserName(..) )
 import Distribution.Server.Util.ParseSpecVer
 
 import Distribution.Text
@@ -57,7 +57,7 @@ data TarIndexEntry =
     -- can also be changed (this is used during mirroring, for instance).
     --
     -- The UTCTime and userName are used as file metadata in the tarball.
-    CabalFileEntry !PackageId !RevisionNo !UTCTime !UserName
+    CabalFileEntry !PackageId !RevisionNo !UTCTime !UserId !UserName
 
     -- | Package metadata
     --
@@ -80,7 +80,7 @@ data TarIndexEntry =
 type RevisionNo = Int
 
 instance MemSize TarIndexEntry where
-  memSize (CabalFileEntry a b c d) = memSize4 a b c d
+  memSize (CabalFileEntry a b c d e) = memSize5 a b c d e
   memSize (MetadataEntry  a b c)   = memSize3 a b c
   memSize (ExtraEntry     a b c)   = memSize3 a b c
 
@@ -98,13 +98,13 @@ writeIncremental pkgs =
     -- in case we'll skip them
     mkTarEntry :: TarIndexEntry -> Maybe Tar.Entry
 
-    mkTarEntry (CabalFileEntry pkgid revno timestamp username) = do
+    mkTarEntry (CabalFileEntry pkgid revno timestamp userid username) = do
         pkginfo   <- PackageIndex.lookupPackageId pkgs pkgid
         cabalfile <- fmap (cabalFileByteString . fst) $
                      pkgMetadataRevisions pkginfo Vec.!? revno
         tarPath   <- either (const Nothing) Just $
                      Tar.toTarPath False fileName
-        let !tarEntry = addTimestampAndOwner timestamp username $
+        let !tarEntry = addTimestampAndOwner timestamp userid username $
                           Tar.fileEntry tarPath cabalfile
         return tarEntry
       where
@@ -116,24 +116,24 @@ writeIncremental pkgs =
         pkginfo <- PackageIndex.lookupPackageId pkgs pkgid
         let (filePath, content) = computePkgMetadata pkginfo revno
         tarPath <- either (const Nothing) Just $ Tar.toTarPath False filePath
-        let !tarEntry = addTimestampAndOwner timestamp (UserName "Hackage") $
+        let !tarEntry = addTimestampAndOwner timestamp (UserId 0) (UserName "Hackage") $
                           Tar.fileEntry tarPath content
         return tarEntry
 
     mkTarEntry (ExtraEntry fileName content timestamp) = do
       tarPath <- either (const Nothing) Just $
                   Tar.toTarPath False fileName
-      let !tarEntry = addTimestampAndOwner timestamp (UserName "Hackage") $
+      let !tarEntry = addTimestampAndOwner timestamp (UserId 0) (UserName "Hackage") $
                         Tar.fileEntry tarPath content
       return tarEntry
 
-    addTimestampAndOwner timestamp (UserName username) entry =
+    addTimestampAndOwner timestamp (UserId uid) (UserName username) entry =
       entry {
         Tar.entryTime      = utcToUnixTime timestamp,
         Tar.entryOwnership = Tar.Ownership {
           Tar.ownerName = username,
           Tar.groupName = "Hackage",
-          Tar.ownerId = 0,
+          Tar.ownerId = uid,
           Tar.groupId = 0
         }
       }

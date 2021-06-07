@@ -18,35 +18,29 @@ import qualified Codec.Archive.Tar.Entry as Tar
 import qualified Codec.Archive.Tar.Check as Tar
 
 import Distribution.Version
-         ( nullVersion, mkVersion )
+         ( Version, nullVersion, mkVersion )
 import Distribution.Types.PackageName
          ( mkPackageName, unPackageName )
 import Distribution.Package
-         ( PackageIdentifier, packageVersion, packageName, PackageName )
+         ( PackageIdentifier, packageVersion, packageName )
 import Distribution.PackageDescription
          ( GenericPackageDescription(..), PackageDescription(..)
-         , allBuildInfo, allLibraries
-         , exposedModules, mixins, signatures, specVersion
-         )
-import Distribution.PackageDescription.Parse
-         ( parseGenericPackageDescription )
+         , licenseRaw, specVersion )
 import Distribution.PackageDescription.Configuration
          ( flattenPackageDescription )
 import Distribution.PackageDescription.Check
          ( PackageCheck(..), checkPackage, CheckPackageContentOps(..)
          , checkPackageContent )
-import Distribution.ParseUtils
-         ( ParseResult(..), locatedErrorMsg, showPWarning )
+import Distribution.Parsec
+         ( showPError, showPWarning )
 import Distribution.Text
-         ( Text(..), display, simpleParse )
-import Distribution.ModuleName
-         ( components )
-import Distribution.Server.Util.Parse
-         ( unpackUTF8 )
+         ( display, simpleParse )
+-- import Distribution.Parsec (Parsec(..))
+-- import qualified Distribution.Parsec as P
+-- import qualified Distribution.Compat.CharParsing as P
 import Distribution.Server.Util.ParseSpecVer
-import Distribution.License
-         ( License(..) )
-import qualified Distribution.Compat.ReadP as Parse
+import qualified Distribution.SPDX as SPDX
+import qualified Distribution.License as License
 
 import Control.Monad.Except
          ( ExceptT, runExceptT, MonadError, throwError )
@@ -59,16 +53,14 @@ import Data.Bits
 import Data.ByteString.Lazy
          ( ByteString )
 import qualified Data.ByteString.Lazy as LBS
-import qualified Data.ByteString.Lazy.Char8
 import Data.List
-         ( nub, (\\), partition, intercalate, isPrefixOf )
+         ( nub, partition, isPrefixOf )
 import qualified Data.Map.Strict as Map
          ( fromList, lookup )
 import Data.Time
          ( UTCTime(..), fromGregorian, addUTCTime )
 import Data.Time.Clock.POSIX
          ( posixSecondsToUTCTime )
-import qualified Data.Version
 import qualified Distribution.Server.Util.GZip as GZip
 import System.FilePath
          ( (</>), (<.>), splitDirectories, splitExtension, normalise )
@@ -77,7 +69,6 @@ import qualified System.FilePath.Windows
 import qualified System.FilePath.Posix
          ( takeFileName, takeDirectory, addTrailingPathSeparator
          , dropTrailingPathSeparator )
-import qualified Text.PrettyPrint as Disp
 import Text.Printf
          ( printf )
 
@@ -110,21 +101,6 @@ unpackPackageRaw tarGzFile contents =
   where
     noTime = UTCTime (fromGregorian 1970 1 1) 0
 
-data TaggedPackageId = TaggedPackageId {
-        _taggedPkgName   :: PackageName,
-        taggedPkgVersion :: Data.Version.Version
-    }
-
-instance Text TaggedPackageId where
-    disp (TaggedPackageId n v)
-        | v == Data.Version.Version [] [] = disp n
-        | otherwise = disp n Disp.<> Disp.char '-' Disp.<> disp v
-
-    parse = do
-        n <- parse
-        v <- (Parse.char '-' >> parse) Parse.<++ return (Data.Version.Version [] [])
-        return (TaggedPackageId n v)
-
 tarPackageChecks :: Bool -> UTCTime -> FilePath -> ByteString
                  -> UploadMonad (PackageIdentifier, TarIndex)
 tarPackageChecks lax now tarGzFile contents = do
@@ -134,22 +110,14 @@ tarPackageChecks lax now tarGzFile contents = do
   unless (ext == ".tar.gz") $
     throwError $ tarGzFile ++ " is not a gzipped tar file, it must have the .tar.gz extension"
 
-  let versionTags (Data.Version.Version _ ts) = ts
-
-  pkgid <- case (simpleParse pkgidStr, simpleParse pkgidStr) of
-    (Just pkgid, Just tagged_pkgid)
+  pkgid <- case simpleParse pkgidStr of
+    Just pkgid
       | (== nullVersion) . packageVersion $ pkgid
       -> throwError $ "Invalid package id " ++ quote pkgidStr
                    ++ ". It must include the package version number, and not just "
                    ++ "the package name, e.g. 'foo-1.0'."
 
       | display pkgid == pkgidStr -> return (pkgid :: PackageIdentifier)
-
-      -- NB: we have to use 'TaggedPackageId' here, because the 'PackageId'
-      -- parser will drop tags.
-      | not . null . versionTags . taggedPkgVersion $ tagged_pkgid
-      -> throwError $ "Hackage no longer accepts packages with version tags: "
-                   ++ intercalate ", " (versionTags (taggedPkgVersion tagged_pkgid))
 
     _ -> throwError $ "Invalid package id " ++ quote pkgidStr
                    ++ ". The tarball must use the name of the package."
@@ -199,18 +167,17 @@ basicChecks pkgid tarIndex = do
               ++ "save the package's cabal file as UTF8 without the BOM."
 
   -- Parse the Cabal file
-  let cabalFileContent = unpackUTF8 cabalEntry
-  (pkgDesc, warnings) <- case parseGenericPackageDescription cabalFileContent of
-    ParseFailed err -> throwError $ showError (locatedErrorMsg err)
-    ParseOk warnings pkgDesc ->
-      return (pkgDesc, map (showPWarning cabalFileName) warnings)
+  (specVerOk,pkgDesc, warnings) <- case parseGenericPackageDescriptionChecked cabalEntry of
+    (_, _, Left (_, err:_)) -> -- TODO: show all errors
+      throwError $ showPError cabalFileName err
+    (_, _, Left (_, [])) ->
+      throwError $ cabalFileName ++ ": parsing failed"
+    (specVerOk', warnings, Right pkgDesc) ->
+      return (specVerOk',pkgDesc, map (showPWarning cabalFileName) warnings)
 
   -- make sure the parseSpecVer heuristic agrees with the full parser
-  let specVer' = parseSpecVerLazy cabalEntry
-      specVer  = specVersion $ packageDescription pkgDesc
-
-  when (specVer' < mkVersion [1] || specVer /= specVer') $
-    throwError "The 'cabal-version' field could not be properly parsed."
+  let specVer = specVersion $ packageDescription pkgDesc
+  specVersionChecks specVerOk specVer
 
   -- Check that the name and version in Cabal file match
   when (packageName pkgDesc /= packageName pkgid) $
@@ -225,12 +192,35 @@ basicChecks pkgid tarIndex = do
   return (pkgDesc, warnings, cabalEntry)
 
   where
-    showError (Nothing, msg) = msg
-    showError (Just n, msg) = "line " ++ show n ++ ": " ++ msg
-
     -- these names are reserved for the time being, as they have
     -- special meaning in cabal's UI
     reservedPkgNames = map mkPackageName ["all","any","none","setup","lib","exe","test"]
+
+specVersionChecks :: MonadError String m => Bool -> Version -> m ()
+specVersionChecks specVerOk specVer = do
+  when (not specVerOk || specVer < mkVersion [1]) $
+    throwError "The 'cabal-version' field could not be properly parsed."
+
+  -- Don't allowing uploading new pre-1.2 .cabal files as the parser is likely too lax
+  -- TODO: slowly phase out ancient cabal spec versions below 1.10
+  when (specVer < mkVersion [1,2]) $
+    throwError "'cabal-version' must be at least 1.2"
+
+  -- Reject not well-defined cabal spec versions on upload
+  when (specVer >= mkVersion [1,25] && specVer < mkVersion [2]) $
+    throwError "'cabal-version' in unassigned >=1.25 && <2 range; use 'cabal-version: 2.0' instead"
+
+  -- Safeguard; should already be caught by parser
+  unless (specVer < mkVersion [2,5]) $
+    throwError "'cabal-version' must be lower than 2.5"
+
+  -- Check whether a known spec version had been used
+  -- TODO: move this into lib:Cabal
+  let knownSpecVersions = map mkVersion [ [1,18], [1,20], [1,22], [1,24], [2,0], [2,2], [2,4] ]
+  when (specVer >= mkVersion [1,18] && (specVer `notElem` knownSpecVersions)) $
+    throwError ("'cabal-version' refers to an unreleased/unknown cabal specification version "
+                ++ display specVer ++ "; for a list of valid specification versions please consult "
+                ++ "https://www.haskell.org/cabal/users-guide/file-format-changelog.html")
 
 -- | The issue is that browsers can upload the file name using either unix
 -- or windows convention, so we need to take the basename using either
@@ -289,10 +279,11 @@ tarOps pkgId tarIndex = CheckPackageContentOps {
                   , System.FilePath.Posix.takeDirectory fp == dir
                   , let fileName = System.FilePath.Posix.takeFileName fp
                   , fileName /= "" ])
+
+    fileContents :: FilePath -> UploadMonad ByteString
     fileContents path =
       case Map.lookup path fileMap of
-        Just (NormalFile contents) ->
-          return (Data.ByteString.Lazy.Char8.unpack contents)
+        Just (NormalFile contents) -> return contents
         Just (Link fp) -> fileContents fp
         _ -> throwError ("getFileContents: file does not exist: " ++ path)
 
@@ -315,38 +306,17 @@ extraChecks genPkgDesc pkgId tarIndex = do
   mapM_ (warn . explanation) warnings
 
   -- Proprietary License check (only active in central-server branch)
-  when (not allowAllRightsReserved && license pkgDesc == AllRightsReserved) $
+  unless (allowAllRightsReserved || isAcceptableLicense pkgDesc) $
     throwError $ "This server does not accept packages with 'license' "
-              ++ "field set to AllRightsReserved."
+              ++ "field set to e.g. AllRightsReserved. See "
+              ++ "https://hackage.haskell.org/upload for more information "
+              ++ "about accepted licenses."
 
   -- Check for an existing x-revision
   when (isJust (lookup "x-revision" (customFieldsPD pkgDesc))) $
     throwError $ "Newly uploaded packages must not specify the 'x-revision' "
               ++ "field in their .cabal file. This is only used for "
               ++ "post-release revisions."
-
-  -- Check reasonableness of names of exposed modules
-  let topLevel = case library pkgDesc of
-                 Nothing -> []
-                 Just l ->
-                     nub $ map head $ filter (not . null) $ map components $ exposedModules l
-      badTopLevel = topLevel \\ allocatedTopLevelNodes
-
-  unless (null badTopLevel) $
-          warn $ "Exposed modules use unallocated top-level names: " ++
-                          unwords badTopLevel
-
-  -- Check for experimental Backpack features
-  let usesBackpackInc  = any (not . null . mixins) (allBuildInfo pkgDesc)
-      usesBackpackSig  = any (not . null . signatures) (allLibraries pkgDesc)
-
-  when (usesBackpackInc || usesBackpackSig) $
-    throwError $ "Packages using experimental Backpack features "
-              ++ "(i.e. mixins or signatures) are not yet allowed on Hackage. "
-              ++ "Please use http://next.hackage.haskell.org:8080/ if you "
-              ++ "want to help testing Backpack in the meantime."
-
-  return ()
 
 -- Monad for uploading packages:
 --      WriterT for warning messages
@@ -359,13 +329,6 @@ warn msg = tell [msg]
 
 runUploadMonad :: UploadMonad a -> Either String (a, [String])
 runUploadMonad (UploadMonad m) = runIdentity . runExceptT . runWriterT $ m
-
--- | Registered top-level nodes in the class hierarchy.
-allocatedTopLevelNodes :: [String]
-allocatedTopLevelNodes = [
-        "Algebra", "Codec", "Control", "Data", "Database", "Debug",
-        "Distribution", "DotNet", "Foreign", "Graphics", "Language",
-        "Network", "Numeric", "Prelude", "Sound", "System", "Test", "Text"]
 
 selectEntries :: forall err a.
                  (err -> String)
@@ -395,7 +358,7 @@ tarballChecks :: Bool -> UTCTime -> FilePath
 tarballChecks lax now expectedDir =
     (if not lax then checkFutureTimes now else id)
   . checkTarbomb expectedDir
-  . checkUselessPermissions
+  . (if not lax then checkUselessPermissions else id)
   . (if lax then ignoreShortTrailer
             else fmapTarError (either id PortabilityError)
                . Tar.checkPortability)
@@ -511,3 +474,36 @@ quote s = "'" ++ s ++ "'"
 -- | Whether a UTF8 BOM is at the beginning of the input
 startsWithBOM :: ByteString -> Bool
 startsWithBOM bs = LBS.take 3 bs == LBS.pack [0xEF, 0xBB, 0xBF]
+
+-- | Licence acceptance predicate (only used on central-server)
+--
+-- * NONE is rejected
+--
+-- * "or later" syntax (+ postfix) is rejected
+--
+-- * "WITH exc" exceptions are rejected
+--
+-- * There should be a way to interpert license as (conjunction of)
+--   OSI-accepted licenses or CC0
+--
+isAcceptableLicense :: PackageDescription -> Bool
+isAcceptableLicense = either goSpdx goLegacy . licenseRaw
+  where
+    -- `cabal-version: 2.2` and later
+    goSpdx :: SPDX.License -> Bool
+    goSpdx SPDX.NONE = False
+    goSpdx (SPDX.License expr) = goExpr expr
+      where
+        goExpr (SPDX.EAnd a b)            = goExpr a && goExpr b
+        goExpr (SPDX.EOr a b)             = goExpr a || goExpr b
+        goExpr (SPDX.ELicense _ (Just _)) = False -- Don't allow exceptions
+        goExpr (SPDX.ELicense s Nothing)  = goSimple s
+
+        goSimple (SPDX.ELicenseRef _)      = False -- don't allow referenced licenses
+        goSimple (SPDX.ELicenseIdPlus _)   = False -- don't allow + licenses (use GPL-3.0-or-later e.g.)
+        goSimple (SPDX.ELicenseId SPDX.CC0_1_0) = True -- CC0 isn't OSI approved, but we allow it as "PublicDomain", this is eg. PublicDomain in http://hackage.haskell.org/package/string-qq-0.0.2/src/LICENSE
+        goSimple (SPDX.ELicenseId lid)     = SPDX.licenseIsOsiApproved lid -- allow only OSI approved licenses.
+
+    -- pre `cabal-version: 2.2`
+    goLegacy License.AllRightsReserved = False
+    goLegacy _                         = True

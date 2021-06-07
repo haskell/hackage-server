@@ -11,8 +11,6 @@ import Distribution.Server.Framework.BackupDump (dumpServerBackup, BackupType(..
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
 import Distribution.Server.Util.SigTerm
 
-import Distribution.Text
-         ( display )
 import Distribution.Simple.Utils
          ( topHandler, dieNoVerbosity )
 import Distribution.Verbosity as Verbosity
@@ -48,6 +46,8 @@ import Data.List
          ( intercalate, isInfixOf )
 import Data.Traversable
          ( forM )
+import Data.Version
+         ( showVersion )
 import Control.Monad
          ( void, unless, when, filterM )
 import Control.Applicative
@@ -86,7 +86,7 @@ main = topHandler $ do
     printErrors errs = do
       putStr (intercalate "\n" errs)
       exitWith (ExitFailure 1)
-    printVersion = putStrLn $ "hackage-server " ++ display version
+    printVersion = putStrLn $ "hackage-server " ++ showVersion version
 
     commands =
       [ runCommand     `commandAddActionNoArgs` runAction
@@ -248,7 +248,7 @@ runCommand =
           flagRunPort (\v flags -> flags { flagRunPort = v })
           (reqArgFlag "PORT")
       , option [] ["ip"]
-          "IPv4 address to listen on (default 0.0.0.0)"
+          "IPv4 address to listen on (default 127.0.0.1)"
           flagRunIP (\v flags -> flags { flagRunIP = v })
           (reqArgFlag "IP")
       , option [] ["base-uri"]

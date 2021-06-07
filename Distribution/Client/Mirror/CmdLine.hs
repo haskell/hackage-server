@@ -42,7 +42,7 @@ defaultMirrorFlags = MirrorFlags
   { flagCacheDir        = Nothing
   , flagContinuous      = False
   , flagInterval        = Nothing
-  , flagKeepGoing       = False
+  , flagKeepGoing       = True
   , flagMirrorUploaders = False
   , flagVerbosity       = normal
   , flagHelp            = False
@@ -70,9 +70,9 @@ mirrorFlagDescrs =
       (ReqArg (\int opts -> opts { flagInterval = Just int }) "MIN")
       "Set the mirroring interval in minutes (default 30)"
 
-  , Option [] ["keep-going"]
-      (NoArg (\opts -> opts { flagKeepGoing = True }))
-      "Don't fail on mirroring errors, keep going."
+  , Option [] ["fail-on-error"]
+      (NoArg (\opts -> opts { flagKeepGoing = False }))
+      "Fail on mirroring errors."
 
   , Option [] ["mirror-uploaders"]
       (NoArg (\opts -> opts { flagMirrorUploaders = True }))

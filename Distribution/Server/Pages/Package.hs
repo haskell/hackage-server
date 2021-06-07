@@ -24,23 +24,26 @@ module Distribution.Server.Pages.Package
 
 import Distribution.Server.Features.PreferredVersions
 
-import Distribution.Server.Pages.Template (hackagePageWith)
+import Distribution.Server.Pages.Template (hackagePageWithHead)
 import qualified Distribution.Server.Pages.Package.HaddockParse as Haddock
 import Distribution.Server.Pages.Package.HaddockHtml
 import Distribution.Server.Packages.ModuleForest
 import Distribution.Server.Packages.Render
 import Distribution.Server.Users.Types (userStatus, userName, isActiveAccount)
+import Distribution.Server.Util.Markdown (renderMarkdownRel, supposedToBeMarkdown)
 import Data.TarIndex (TarIndex)
+import qualified Data.TarIndex as Tar
 
 import qualified Distribution.ModuleName as Module
 import Distribution.ModuleName (ModuleName)
 import Distribution.Package
 import Distribution.PackageDescription as P
-import Distribution.Simple.Utils ( cabalVersion )
 import Distribution.Version
 import Distribution.Types.CondTree
 import Distribution.Text        (display)
+import Distribution.Utils.ShortText (fromShortText, ShortText)
 import Text.XHtml.Strict hiding (p, name, title, content)
+import qualified Text.XHtml.Strict
 
 import Data.Monoid              (Monoid(..), (<>))
 import Data.Maybe               (fromMaybe, maybeToList, isJust, mapMaybe)
@@ -49,19 +52,16 @@ import Control.Arrow            (second)
 import System.FilePath.Posix    ((</>), (<.>), takeFileName)
 import Data.Time.Locale.Compat  (defaultTimeLocale)
 import Data.Time.Format         (formatTime)
-import System.FilePath.Posix    (takeExtension)
-import Network.URI              (isRelativeReference)
-
-import qualified Cheapskate      as Markdown (markdown, Options(..), Inline(Link), walk)
-import qualified Cheapskate.Html as Markdown (renderDoc)
 
 import qualified Documentation.Haddock.Markup as Haddock
 
-import qualified Text.Blaze.Html.Renderer.Pretty as Blaze (renderHtml)
 import qualified Data.Text                as T
 import qualified Data.Text.Encoding       as T
-import qualified Data.Text.Encoding.Error as T
+import qualified Data.Text.Encoding.Error as T (lenientDecode)
 import qualified Data.ByteString.Lazy as BS (ByteString, toStrict)
+
+instance HTML ShortText where
+   toHtml = toHtml . fromShortText
 
 packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)]
             -> [(String, Html)] -> Maybe TarIndex -> Maybe BS.ByteString
@@ -70,7 +70,7 @@ packagePage :: PackageRender -> [Html] -> [Html] -> [(String, Html)]
 packagePage render headLinks top sections
             bottom mdocIndex mreadMe
             docURL isCandidate =
-    hackagePageWith [canonical] docTitle docSubtitle docBody [docFooter]
+    hackagePageWithHead [canonical] docTitle docBody
   where
     pkgid   = rendPkgId render
     pkgName = display $ packageName pkgid
@@ -80,12 +80,11 @@ packagePage render headLinks top sections
     canonical = thelink ! [ rel "canonical"
                           , href pkgUrl ] << noHtml
     docTitle = pkgName
-            ++ case synopsis (rendOther render) of
+            ++ case fromShortText $ synopsis (rendOther render) of
                  ""    -> ""
                  short -> ": " ++ short
-    docSubtitle = anchor ! [href pkgUrl] << docTitle
 
-    docBody = h1 << bodyTitle
+    docBody = bodyTitle
           : concat [
              candidateBanner,
              renderHeads,
@@ -98,7 +97,12 @@ packagePage render headLinks top sections
              readmeSection render mreadMe,
              map pair bottom
            ]
-    bodyTitle = "The " ++ pkgName ++ " package"
+
+    bodyTitle = case fromShortText $ synopsis (rendOther render) of
+      ""    -> h1 << pkgName
+      short -> h1 << [ toHtml (pkgName ++ ": ")
+                     , small (toHtml short)
+                     ]
 
     candidateBanner
       | isCandidate = [ thediv ! [theclass "candidate-info"]
@@ -116,14 +120,6 @@ packagePage render headLinks top sections
         items -> [thediv ! [thestyle "font-size: small"] <<
             (map (\item -> "[" +++ item +++ "] ") items)]
 
-    docFooter = thediv ! [identifier "footer"]
-                  << paragraph
-                       << [ toHtml "Produced by "
-                          , anchor ! [href "/"] << "hackage"
-                          , toHtml " and "
-                          , anchor ! [href cabalHomeURL] << "Cabal"
-                          , toHtml (" " ++ display cabalVersion) ]
-
     pair (title, content) =
         toHtml [ h2 << title, content ]
 
@@ -137,7 +133,7 @@ descriptionSection :: PackageRender -> URL -> [Html]
 descriptionSection PackageRender{..} docURL =
         [thediv ! [identifier "description"] <<
            renderHaddock (moduleToDocUrl PackageRender{..} docURL)
-                         (description rendOther)]
+                         (fromShortText $ description rendOther)]
      ++ readmeLink
   where
     readmeLink = case rendReadme of
@@ -167,36 +163,17 @@ readmeSection PackageRender { rendReadme = Just (_, _etag, _, filename)
               (Just content) =
     [ hr
     , h2 ! [identifier "readme"] << ("Readme for " ++ name)
+    , toHtml "["
+    , anchor ! [href "#description"] << "back to package description"
+    , toHtml "]"
     , thediv ! [theclass "embedded-author-content"]
             << if supposedToBeMarkdown filename
-                 then renderMarkdown (T.pack name) content
+                 then renderMarkdownRel name content
                  else pre << unpackUtf8 content
     ] where
       name = display pkgid
 readmeSection _ _ = []
 
-updateRelativeLinks :: T.Text -> Markdown.Inline -> Markdown.Inline
-updateRelativeLinks name (Markdown.Link inls url title) =
-  Markdown.Link inls url' title
-  where url' = if isRelativeReference $ T.unpack url then name <> T.pack "/src" <> url else url
-updateRelativeLinks _ x = x
-
-renderMarkdown :: T.Text -> BS.ByteString -> Html
-renderMarkdown name = primHtml . Blaze.renderHtml
-               . Markdown.renderDoc . Markdown.walk (updateRelativeLinks name)
-               . Markdown.markdown opts . T.decodeUtf8With T.lenientDecode
-               . BS.toStrict
-  where
-    opts =
-      Markdown.Options
-        { Markdown.sanitize           = True
-        , Markdown.allowRawHtml       = False
-        , Markdown.preserveHardBreaks = False
-        , Markdown.debug              = False
-        }
-
-supposedToBeMarkdown :: FilePath -> Bool
-supposedToBeMarkdown fname = takeExtension fname `elem` [".md", ".markdown"]
 
 unpackUtf8 :: BS.ByteString -> String
 unpackUtf8 = T.unpack
@@ -215,8 +192,17 @@ downloadSection :: PackageRender -> [Html]
 downloadSection PackageRender{..} =
     [ h2 << "Downloads"
     , ulist << map (li <<) downloadItems
+    , metadataNote
     ]
   where
+    metadataNote = if isJust rendUpdateInfo
+           then Text.XHtml.Strict.p <<
+                [ toHtml "Note: This package has "
+                , anchor ! [href revsURL] << "metadata revisions"
+                , toHtml " in the cabal description newer than included in the tarball. To unpack the package including the revisions, use 'cabal get'."
+                ]
+           else noHtml
+
     downloadItems =
       [ if rendHasTarball
           then [ anchor ! [href downloadURL] << tarGzFileName
@@ -226,11 +212,22 @@ downloadSection PackageRender{..} =
                , toHtml << " (Cabal source package)"
                ]
           else [ toHtml << "Package tarball not uploaded" ]
-      , [ anchor ! [href cabalURL] << "Package description"
-        , toHtml $ if rendHasTarball then " (included in the package)" else ""
-        ]
+      , case (rendHasTarball,rendUpdateInfo) of
+          (False,_) ->
+            [ anchor ! [href cabalURL] << "Package description" ]
+          (True,Nothing) ->
+            [ anchor ! [href cabalURL] << "Package description"
+            , toHtml " (as included in the package)"
+            ]
+          (True,Just _) ->
+            [ anchor ! [href cabalURL] << "Package description"
+            , toHtml " ("
+            , anchor ! [href revsURL] << "revised"
+            , toHtml " from the package)"
+            ]
       ]
 
+    revsURL       = rendPkgUri </> "revisions/"
     downloadURL   = rendPkgUri </> display rendPkgId <.> "tar.gz"
     cabalURL      = rendPkgUri </> display (packageName rendPkgId) <.> "cabal"
     srcURL        = rendPkgUri </> "src/"
@@ -266,7 +263,7 @@ renderPackageFlags render docURL =
           ,thespan << " to disable that flag. "
           ,anchor ! [href tipLink] << "More info"
           ]
-        tipLink = "http://www.haskell.org/cabal/users-guide/installing-packages.html#controlling-flag-assignments"
+        tipLink = "https://cabal.readthedocs.io/en/latest/setup-commands.html#controlling-flag-assignments"
         flagsTable flags =
           table ! [theclass "flags-table"] <<
           [thead << flagsHeadings
@@ -293,19 +290,20 @@ moduleSection render mdocIndex docURL quickNav =
                      , renderModuleForest docURL s ]
                 else []) ++
             (if not (null m)
-                then [ h2 << "Modules"
-                     , renderModuleForest docURL m ]
-                else []) ++
-            [renderDocIndexLink]
-        renderDocIndexLink
-          | isJust mdocIndex =
-            let docIndexURL = docURL </> "doc-index.html"
+                then [ h2 << "Modules"] ++
+                     [renderDocIndexLink] ++
+                     [renderModuleForest docURL m ]
+                else [])
+        renderDocIndexLink = case mdocIndex of
+          Just tindex ->
+            let docIndexURL | isJust (Tar.lookup tindex "doc-index-All.html") = docURL </> "doc-index-All.html"
+                            | otherwise = docURL </> "doc-index.html"
             in  paragraph ! [thestyle "font-size: small"]
                   << ("[" +++ anchor ! [href docIndexURL] << "Index" +++ "]" +++
                       (if quickNav
                        then " [" +++ anchor ! [identifier "quickjump-trigger", href "#"] << "Quick Jump" +++ "]"
                        else mempty))
-          | otherwise = mempty
+          Nothing -> mempty
 
 propertySection :: [(String, Html)] -> [Html]
 propertySection sections =
@@ -333,7 +331,7 @@ showDependencies :: [Dependency] -> Html
 showDependencies deps = commaList (map showDependency deps)
 
 showDependency ::  Dependency -> Html
-showDependency (Dependency (unPackageName -> pname) vs) = showPkg +++ vsHtml
+showDependency (Dependency (unPackageName -> pname) vs _) = nonbreakingSpan << (showPkg +++ vsHtml)
   where vsHtml = if vs == anyVersion then noHtml
                                      else toHtml (" (" ++ display vs ++ ")")
         -- mb_vers links to latest version in range. This is a bit computationally
@@ -344,12 +342,17 @@ showDependency (Dependency (unPackageName -> pname) vs) = showPkg +++ vsHtml
         -- passing along the PackageRender, which is not the case here
         showPkg = anchor ! [href . packageURL $ PackageIdentifier (mkPackageName pname) nullVersion] << pname
 
+nonbreakingSpan :: Html -> Html
+nonbreakingSpan str = thespan ! [thestyle "white-space: nowrap"] << str
+
 renderDetailedDependencies :: PackageRender -> Html
 renderDetailedDependencies pkgRender =
     tabulate $ map (second (fromMaybe noDeps . render)) targets
   where
     targets :: [(String, DependencyTree)]
-    targets = maybeToList library ++ rendExecutableDeps pkgRender
+    targets = maybeToList library
+        ++ rendSublibraryDeps pkgRender
+        ++ rendExecutableDeps pkgRender
       where
         library = (\lib -> ("library", lib)) `fmap` rendLibraryDeps pkgRender
 
@@ -429,7 +432,7 @@ renderVersion (PackageIdentifier pname pversion) allVersions info =
                                ++ map versionedLink laterVersions
         versionedLink (v, s) = anchor ! (status s ++ [href $ packageURL $ PackageIdentifier pname v]) << display v
         status st = case st of
-            NormalVersion -> []
+            NormalVersion -> [theclass "normal"]
             DeprecatedVersion  -> [theclass "deprecated"]
             UnpreferredVersion -> [theclass "unpreferred"]
         infoHtml = case info of Nothing -> noHtml; Just str -> " (" +++ (anchor ! [href str] << "info") +++ ")"
@@ -465,8 +468,8 @@ renderFields render = [
         ("Maintainer",  maintainField $ rendMaintainer render),
 --        ("Stability",   toHtml $ stability desc),
         ("Category",    commaList . map categoryField $ rendCategory render),
-        ("Home page",   linkField $ homepage desc),
-        ("Bug tracker", linkField $ bugReports desc),
+        ("Home page",   linkField . fromShortText $ homepage desc),
+        ("Bug tracker", linkField . fromShortText $ bugReports desc),
         ("Source repository", vList $ map sourceRepositoryField $ sourceRepos desc),
         ("Executables", commaList . map toHtml $ rendExecNames render),
         ("Uploaded", uncurry renderUploadInfo (rendUploadInfo render))
@@ -476,7 +479,7 @@ renderFields render = [
   where
     desc = rendOther render
     renderUploadInfo utime uinfo =
-        formatTime defaultTimeLocale "%c" utime +++ " by " +++ user
+        formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" utime +++ " by " +++ user
       where
         uname   = maybe "Unknown" (display . userName) uinfo
         uactive = maybe False (isActiveAccount . userStatus) uinfo
@@ -639,7 +642,3 @@ packageURL pkgId = "/package" </> display pkgId
 
 --cabalLogoURL :: URL
 --cabalLogoURL = "/built-with-cabal.png"
-
--- global URLs
-cabalHomeURL :: URL
-cabalHomeURL = "http://haskell.org/cabal/"

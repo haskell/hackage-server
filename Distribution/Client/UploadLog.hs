@@ -27,43 +27,76 @@ import Distribution.Server.Users.Types
 import Distribution.Package
          ( PackageId, PackageName, packageName, PackageIdentifier(..))
 import Distribution.Text
-         ( Text(..), simpleParse )
-import Distribution.ParseUtils ( parseMaybeQuoted )
-import qualified Distribution.Compat.ReadP as Parse
-import qualified Text.PrettyPrint          as Disp
+         ( simpleParse )
+import Distribution.Pretty (Pretty(..))
+import Distribution.Parsec (Parsec(..))
+import qualified Distribution.Parsec as P
+import qualified Distribution.Compat.CharParsing as P
+import qualified Text.PrettyPrint as Disp
 import Text.PrettyPrint
          ( (<+>) )
 import Distribution.Simple.Utils
-         ( comparing, equating )
+         ( equating )
 
 import Data.Time.Clock
          ( UTCTime )
 import Data.Time.LocalTime
-         ( zonedTimeToUTC )
+         ( ZonedTime, zonedTimeToUTC )
 import Data.Time.Format
          ( formatTime )
 import Data.Time.Locale.Compat
          ( defaultTimeLocale )
 import Data.List
-         ( sortBy, groupBy, nub )
+         ( groupBy, nub )
+import qualified Data.Char as Char
 
 data Entry = Entry UTCTime UserName PackageIdentifier
   deriving (Eq, Ord, Show)
 
-instance Text Entry where
-  disp (Entry time user pkgid) =
+instance Pretty Entry where
+  pretty (Entry time user pkgid) =
         Disp.text (formatTime defaultTimeLocale "%c" time)
-    <+> disp user <+> disp pkgid
-  parse = do
-    time <- readPTime' "%c"
-    Parse.skipSpaces
-    user <- parse
-    Parse.skipSpaces
-    pkg  <- parseMaybeQuoted parse
-    Parse.skipSpaces
-    ver  <- parse
+    <+> pretty user <+> pretty pkgid
+
+instance Parsec Entry where
+  parsec = do
+    time <- parseDateTimeFmt P.<?> "ZonedTime"
+    P.skipSpaces1
+    user <- parsec
+    P.skipSpaces1
+    pkg  <- P.parsecMaybeQuoted parsec
+    P.skipSpaces1 -- NB: we expect spaces here instead of '-' because the pre-existing 'instance Pretty Entry' also had this asymmetry; TODO: investigate whether this is intentional
+    ver  <- parsec
     let pkgid = PackageIdentifier pkg ver
     return (Entry (zonedTimeToUTC time) user pkgid)
+
+parseDateTimeFmt :: P.CabalParsing m => m ZonedTime
+parseDateTimeFmt = do
+    -- parseDateTimeFmt parses "%a %b %e %H:%M:%S %Z %Y",
+    p'a <- P.munch1 Char.isAlpha -- e.g. [Sun,Mon,..,Sat]
+    P.skipSpaces1
+    p'b <- P.munch1 Char.isAlpha -- e.g. [Jan .. Dec]
+    P.skipSpaces1
+    p'e <- P.munch1 Char.isDigit -- day of month
+    P.skipSpaces1
+    p'H <- digit2
+    P.char ':'
+    p'M <- digit2
+    P.char ':'
+    p'S <- digit2
+    P.skipSpaces1
+    -- timezone name (or else offset in the format ±HHMM)
+    p'Z <- liftM2 (:) (P.satisfy (\c -> Char.isAsciiLower c || Char.isAsciiUpper c || c == '+' || c == '-'))
+                      (P.munch (\c -> Char.isAsciiLower c || Char.isAsciiUpper c || Char.isDigit c))
+    P.skipSpaces1
+    p'Y <- P.munch1 Char.isDigit
+
+    let tstr = concat [ p'a, " ", p'b, " ", p'e, " ", p'H, ":", p'M, ":", p'S, " ", p'Z, " ", p'Y ]
+    case parseTimeMaybe "%a %b %e %H:%M:%S %Z %Y" tstr of
+      Nothing -> fail ("invalid ZonedTime '" ++ tstr ++ "'")
+      Just t  -> return t
+  where
+    digit2 = replicateM 2 P.digit
 
 -- | Returns a list of log entries, however some packages have been uploaded
 -- more than once, so each entry is paired with any older entries for the same

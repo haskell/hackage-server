@@ -46,6 +46,8 @@ module Distribution.Server.Packages.PackageIndex (
     allPackagesByName
   ) where
 
+import Distribution.Server.Prelude hiding (lookup)
+
 import Distribution.Server.Framework.MemSize
 import Distribution.Server.Util.Merge
 
@@ -54,11 +56,8 @@ import Control.Exception (assert)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import qualified Data.Foldable as Foldable
-import Data.List (groupBy, sortBy, find, isInfixOf)
-import Data.Monoid (Monoid(..))
-import Data.Maybe (fromMaybe)
+import Data.List (groupBy, find, isInfixOf)
 import Data.SafeCopy
-import Data.Typeable
 
 import Distribution.Types.PackageName
 import Distribution.Package
@@ -66,11 +65,11 @@ import Distribution.Package
          , Package(..), packageName, packageVersion )
 import Distribution.Types.Dependency
 import Distribution.Version ( withinRange )
-import Distribution.Simple.Utils (lowercase, comparing)
+import Distribution.Simple.Utils (lowercase)
 
 -- | The collection of information about packages from one or more 'PackageDB's.
 --
--- It can be searched effeciently by package name and version.
+-- It can be searched efficiently by package name and version.
 --
 newtype PackageIndex pkg = PackageIndex
   -- A mapping from package names to a non-empty list of  versions of that
@@ -100,10 +99,13 @@ instance Eq pkg => Eq (PackageIndex pkg) where
 
 instance Package pkg => Monoid (PackageIndex pkg) where
   mempty  = PackageIndex (Map.empty)
-  mappend = merge
+  mappend = (<>)
   --save one mappend with empty in the common case:
   mconcat [] = mempty
-  mconcat xs = foldr1 mappend xs
+  mconcat xs = foldr1 (<>) xs
+
+instance Package pkg => Semigroup (PackageIndex pkg) where
+  (<>) = merge
 
 invariant :: Package pkg => PackageIndex pkg -> Bool
 invariant (PackageIndex m) = all (uncurry goodBucket) (Map.toList m)
@@ -291,7 +293,7 @@ lookupPackageForId index pkgid =
 -- satisfying the version range constraint.
 --
 lookupDependency :: Package pkg => PackageIndex pkg -> Dependency -> [pkg]
-lookupDependency index (Dependency name versionRange) =
+lookupDependency index (Dependency name versionRange _) =
   [ pkg | pkg <- lookup index name
         , packageName pkg == name
         , packageVersion pkg `withinRange` versionRange ]

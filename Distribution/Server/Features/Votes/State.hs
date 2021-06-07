@@ -58,12 +58,15 @@ userVotedForPackage pkgname uid votes =
                   Nothing -> False
                   Just _ -> True
 
--- Using La Placian rule of succession to calculate scoring
+-- Using a Bayesian average (m=1.5, C=2) to calculate scoring
 votesScore :: Map UserId Score -> Float
 votesScore m =
-    let grouping = map (head &&& length) . group . sort . Map.elems $ m
-        score =  fromIntegral (sum $ map (uncurry (*)) grouping) / fromIntegral (4 + foldr (\(_,b) -> (+b) ) 0 grouping)
-    in score*10
+     let grouping = map (head &&& length) . group . sort . Map.elems $ m
+         score :: Float
+         score = fromIntegral ((sum $ map (uncurry (*)) grouping) + 3)/
+                 fromIntegral (2 + sum (map snd grouping))
+         roundedScore = fromIntegral (round (score * 4) :: Int) / 4
+     in roundedScore
 
 -- All the acid state transactions
 

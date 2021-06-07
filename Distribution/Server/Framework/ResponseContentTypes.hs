@@ -165,7 +165,7 @@ instance ToMessage OpenSearchXml where
     toMessage (OpenSearchXml bs) = bs
 
 instance ToMessage Aeson.Value where
-    toContentType _ = "application/json; charset=utf-8"
+    toContentType _ = "application/json"
     toMessage val = Aeson.encode val
 
 data CabalFile = CabalFile !BS.Lazy.ByteString !UTCTime
@@ -181,6 +181,12 @@ newtype BuildLog = BuildLog BS.Lazy.ByteString
 instance ToMessage BuildLog where
     toContentType _ = "text/plain"
     toMessage (BuildLog bs) = bs
+
+newtype BuildCovg = BuildCovg BS.Lazy.ByteString
+
+instance ToMessage BuildCovg where
+    toContentType _ = "text/plain"
+    toMessage (BuildCovg bs) = bs
 
 instance ToMessage RSS where
     toContentType _ = "application/rss+xml"

@@ -47,6 +47,7 @@ import Distribution.Server.Features.HoogleData          (initHoogleDataFeature)
 import Distribution.Server.Features.Votes               (initVotesFeature)
 import Distribution.Server.Features.Sitemap             (initSitemapFeature)
 import Distribution.Server.Features.UserNotify          (initUserNotifyFeature)
+import Distribution.Server.Features.PackageFeed         (initPackageFeedFeature)
 #endif
 import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
 
@@ -152,6 +153,8 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                                initSitemapFeature env
     mkUserNotifyFeature     <- logStartup "user notify" $
                                initUserNotifyFeature env
+    mkPackageFeedFeature    <- logStartup "package feed" $
+                               initPackageFeedFeature env
 #endif
 
     loginfo verbosity "Initialising features, part 2"
@@ -226,12 +229,14 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                          (map packageId . allPackages <$> queryGetPackageIndex coreFeature)
                          uploadFeature
                          tarIndexCacheFeature
+                         reportsCoreFeature
 
     documentationCandidatesFeature <- mkDocumentationCandidatesFeature
                          (candidatesCoreResource candidatesFeature)
                          (map packageId . allPackages <$> queryGetCandidateIndex candidatesFeature)
                          uploadFeature
                          tarIndexCacheFeature
+                         reportsCandidatesFeature
 
     downloadFeature <- mkDownloadFeature
                          coreFeature
@@ -325,6 +330,11 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
                            adminLogFeature
                            userDetailsFeature
 
+    packageFeedFeature <- mkPackageFeedFeature
+                            coreFeature
+                            usersFeature
+                            tarIndexCacheFeature
+
 #endif
 
     -- The order of initialization above should be the same as
@@ -365,6 +375,7 @@ initHackageFeatures env@ServerEnv{serverVerbosity = verbosity} = do
          , getFeatureInterface adminLogFeature
          , getFeatureInterface siteMapFeature
          , getFeatureInterface userNotifyFeature
+         , getFeatureInterface packageFeedFeature
 #endif
          , staticFilesFeature
          , serverIntrospectFeature allFeatures

@@ -275,7 +275,7 @@ deleteUser (UserId userId) users = do
 -- | Change the status of a user account to enabled or disabled.
 --
 -- Prevents the given user from performing any authenticated operations.
--- This operation is idempotent and reversable. Use 'enable' to re-enable a
+-- This operation is idempotent and reversible. Use 'enable' to re-enable a
 -- disabled account.
 --
 -- The disabled state is intended to be temporary. Use 'delete' to permanently

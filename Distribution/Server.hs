@@ -98,7 +98,7 @@ defaultServerConfig = do
                     },
     confListenOn  = ListenOn {
                         loPortNum = 8080,
-                        loIP = "0.0.0.0"
+                        loIP = "127.0.0.1"
                     },
     confStateDir  = "state",
     confStaticDir = dataDir,
@@ -326,7 +326,7 @@ impl server = logExceptions $
 
     logExceptions :: ServerPart Response -> ServerPart Response
     logExceptions act = Lifted.catch act $ \e -> do
-                          liftIO . lognotice verbosity $ "WARNING: Received exception: " ++ show e
+                          lognotice verbosity $ "WARNING: Received exception: " ++ show e
                           Lifted.throwIO (e :: SomeException)
 
     verbosity = serverVerbosity (serverEnv server)

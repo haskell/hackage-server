@@ -13,6 +13,7 @@ module Distribution.Server.Features.Security.SHA256 (
 import           Distribution.Server.Prelude
 
 import           Control.DeepSeq
+import           Data.Aeson                            (ToJSON (toJSON))
 import qualified Data.ByteString                       as BS
 import qualified Data.ByteString.Base16                as B16
 import           Data.SafeCopy
@@ -24,6 +25,7 @@ import qualified Data.Binary                           as Bin
 import qualified Data.Binary.Put                       as Bin
 import qualified Data.ByteString.Char8                 as BS.Char8
 import qualified Data.ByteString.Lazy                  as BS.Lazy
+import qualified Data.Text.Encoding                    as T
 
 -- cryptohash
 import qualified Crypto.Hash.SHA256                    as SHA256
@@ -63,15 +65,18 @@ getSHA256NoPfx = SHA256Digest <$> getWord64be
 instance Show SHA256Digest where
   show = BS.Char8.unpack . B16.encode . sha256DigestBytes
 
+-- | Encodes SHA256 hash as lower-case base-16 JSON string; i.e. as 64
+-- hex-digits.
+instance ToJSON SHA256Digest where
+  toJSON = toJSON . T.decodeLatin1 . B16.encode . sha256DigestBytes
+
 instance ReadDigest SHA256Digest where
   -- NOTE: This differs in an important way from the 'Serialize' instance:
   -- the base16-encoded digest doesn't have a length prefix
   readDigest str =
       case B16.decode (BS.Char8.pack str) of
-          (d,rest) | BS.null rest
-                   , BS.length d == 32 -> Right $! sha256digestFromBS d
-                   | otherwise         -> Left $ "Could not decode SHA256 " ++
-                                                 show str
+          Right d | BS.length d == 32 -> Right $! sha256digestFromBS d
+          _  -> Left $ "Could not decode SHA256 " ++ show str
 
 -- | Compute SHA256 digest
 sha256 :: BS.Lazy.ByteString -> SHA256Digest
@@ -81,6 +86,8 @@ instance MemSize SHA256Digest where
   memSize _ = 5
 
 instance SafeCopy SHA256Digest where
+    getCopy = contain get
+    putCopy = contain . put
   -- use default Serialize instance
 
 -- For legacy reasons this length-prefixes the serialised digest

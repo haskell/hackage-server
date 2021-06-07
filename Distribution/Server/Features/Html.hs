@@ -1,8 +1,11 @@
-{-# LANGUAGE RecursiveDo, FlexibleContexts, RankNTypes, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE RecursiveDo, FlexibleContexts, RankNTypes, NamedFieldPuns, RecordWildCards, LambdaCase #-}
 module Distribution.Server.Features.Html (
     HtmlFeature(..),
     initHtmlFeature
   ) where
+
+import Prelude ()
+import Distribution.Server.Prelude
 
 import Distribution.Server.Framework
 import qualified Distribution.Server.Framework.BlobStorage as BlobStorage
@@ -31,6 +34,8 @@ import Distribution.Server.Features.TarIndexCache
 import Distribution.Server.Features.UserDetails
 import Distribution.Server.Features.EditCabalFiles
 import Distribution.Server.Features.Html.HtmlUtilities
+import Distribution.Server.Features.Security.SHA256
+import qualified Distribution.Server.Features.BuildReports.BuildReport as BR
 
 import Distribution.Server.Users.Types
 import qualified Distribution.Server.Users.Group as Group
@@ -39,7 +44,6 @@ import Distribution.Server.Packages.Render
 import qualified Distribution.Server.Users.Users as Users
 import qualified Distribution.Server.Packages.PackageIndex as PackageIndex
 import Distribution.Server.Users.Group (UserGroup(..))
--- [reverse index disabled] import Distribution.Server.Packages.Reverse
 
 import qualified Distribution.Server.Pages.Package as Pages
 import qualified Distribution.Server.Pages.PackageFromTemplate as PagesNew
@@ -56,24 +60,20 @@ import Distribution.Simple.Utils ( cabalVersion )
 import Distribution.Package
 import Distribution.Version
 import Distribution.Text (display)
-import Distribution.PackageDescription
 
-import Data.List (intercalate, intersperse, insert, sortBy)
+import Data.Char (toLower)
+import Data.List (intercalate, intersperse, insert)
 import Data.Function (on)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Vector as Vec
-import Data.Maybe (fromMaybe, isJust)
-import Data.Monoid ((<>))
 import qualified Data.Text as T
 import Data.Traversable (traverse)
-import Control.Applicative (optional)
 import Data.Array (Array, listArray)
 import qualified Data.Array as Array
 import qualified Data.Ix    as Ix
-import Data.Time.Format (formatTime)
-import Data.Time.Locale.Compat (defaultTimeLocale)
-import qualified Data.ByteString.Lazy as BS (ByteString)
+import qualified Data.ByteString.Lazy.Char8 as BS (ByteString, pack)
+import qualified Network.URI as URI
 
 import Text.XHtml.Strict
 import qualified Text.XHtml.Strict as XHtml
@@ -130,10 +130,12 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                    , "package-page.html"
                    , "table-interface.html"
                    , "tag-edit.html"
+                   , "candidate-page.html"
+                   , "candidate-index.html"
                    ]
 
 
-    return $ \user core@CoreFeature{packageChangeHook}
+    return $ \user@UserFeature{groupChangedHook} core@CoreFeature{packageChangeHook}
               packages upload
               candidates versions
               -- [reverse index disabled] reverse
@@ -147,7 +149,7 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
               reportsCore
               usersdetails -> do
       -- do rec, tie the knot
-      rec let (feature, packageIndex, packagesPage) =
+      rec let (feature, packageIndex, packagesPage, browseTable) =
                 htmlFeature env user core
                             packages upload
                             candidates versions
@@ -159,8 +161,8 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                             tarIndexCache
                             reportsCore
                             usersdetails
-                            (htmlUtilities core tags user)
-                            mainCache namesCache
+                            (htmlUtilities core candidates tags user)
+                            mainCache namesCache browseCache
                             templates
 
           -- Index page caches
@@ -178,13 +180,23 @@ initHtmlFeature env@ServerEnv{serverTemplatesDir, serverTemplatesMode,
                             asyncCacheUpdateDelay  = serverCacheDelay,
                             asyncCacheLogVerbosity = verbosity
                           }
+          browseCache <- newAsyncCacheNF browseTable
+                          defaultAsyncCachePolicy {
+                            asyncCacheName = "browse packages",
+                            asyncCacheUpdateDelay  = serverCacheDelay,
+                            asyncCacheLogVerbosity = verbosity
+                          }
 
       registerHook itemUpdate $ \_ -> do
         prodAsyncCache mainCache  "item update"
         prodAsyncCache namesCache "item update"
+        prodAsyncCache browseCache "item update"
       registerHook packageChangeHook $ \_ -> do
         prodAsyncCache mainCache  "package change"
         prodAsyncCache namesCache "package change"
+        prodAsyncCache browseCache "package change"
+      registerHook groupChangedHook $ \_ -> do
+        prodAsyncCache browseCache "package change"
 
       return feature
 
@@ -210,8 +222,9 @@ htmlFeature :: ServerEnv
             -> HtmlUtilities
             -> AsyncCache Response
             -> AsyncCache Response
+            -> AsyncCache BS.ByteString
             -> Templates
-            -> (HtmlFeature, IO Response, IO Response)
+            -> (HtmlFeature, IO Response, IO Response, IO BS.ByteString)
 
 htmlFeature env@ServerEnv{..}
             user
@@ -221,7 +234,7 @@ htmlFeature env@ServerEnv{..}
             -- [reverse index disabled] ReverseFeature{..}
             tags download
             rank
-            list@ListFeature{getAllLists}
+            list@ListFeature{getAllLists, makeItemList}
             names
             mirror distros
             docsCore docsCandidates
@@ -229,9 +242,9 @@ htmlFeature env@ServerEnv{..}
             reportsCore
             usersdetails
             utilities@HtmlUtilities{..}
-            cachePackagesPage cacheNamesPage
+            cachePackagesPage cacheNamesPage cacheBrowseTable
             templates
-  = (HtmlFeature{..}, packageIndex, packagesPage)
+  = (HtmlFeature{..}, packageIndex, packagesPage, browseTable)
   where
     htmlFeatureInterface = (emptyHackageFeature "html") {
         featureResources = htmlResources
@@ -244,6 +257,10 @@ htmlFeature env@ServerEnv{..}
          , CacheComponent {
              cacheDesc       = "packages page by name",
              getCacheMemSize = memSize <$> readAsyncCache cacheNamesPage
+           }
+         , CacheComponent {
+             cacheDesc       = "package browse page",
+             getCacheMemSize = memSize <$> readAsyncCache cacheBrowseTable
            }
          ]
       , featurePostInit = syncAsyncCache cachePackagesPage
@@ -268,9 +285,10 @@ htmlFeature env@ServerEnv{..}
                                       htmlPreferred
                                       cachePackagesPage
                                       cacheNamesPage
+                                      cacheBrowseTable
                                       templates
-                                      list
                                       names
+                                      candidates
     htmlUsers      = mkHtmlUsers      user usersdetails
     htmlUploads    = mkHtmlUploads    utilities upload
     htmlDocUploads = mkHtmlDocUploads utilities core docsCore templates
@@ -281,7 +299,7 @@ htmlFeature env@ServerEnv{..}
                                       candidates templates
     htmlPreferred  = mkHtmlPreferred  utilities core versions
     htmlTags       = mkHtmlTags       utilities core upload user list tags templates
-    htmlSearch     = mkHtmlSearch     utilities core list names templates
+    htmlSearch     = mkHtmlSearch     utilities core list names cacheBrowseTable templates
 
     htmlResources = concat [
         htmlCoreResources       htmlCore
@@ -416,6 +434,14 @@ htmlFeature env@ServerEnv{..}
                 ]
         return htmlpage
 
+    browseTable :: IO BS.ByteString
+    browseTable = do
+      pkgIndex <- queryGetPackageIndex
+      let packageNames = sortOn (map toLower . unPackageName) $ Pages.toPackageNames pkgIndex
+      pkgDetails <- makeItemList packageNames
+      let rowList = map makeRow pkgDetails
+          tabledata = "" +++ rowList +++ ""
+      return . BS.pack . showHtmlFragment $ tabledata
 
     {-
     -- Currently unused, mainly because not all web browsers use eager authentication-sending
@@ -462,14 +488,15 @@ mkHtmlCore :: ServerEnv
            -> HtmlPreferred
            -> AsyncCache Response
            -> AsyncCache Response
+           -> AsyncCache BS.ByteString
            -> Templates
-           -> ListFeature
            -> SearchFeature
+           -> PackageCandidatesFeature
            -> HtmlCore
 mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            utilities@HtmlUtilities{..}
            UserFeature{queryGetUserDb, checkAuthenticated}
-           CoreFeature{coreResource, queryGetPackageIndex}
+           CoreFeature{coreResource}
            VersionsFeature{ versionsResource
                           , queryGetDeprecatedFor
                           , queryGetPreferredInfo
@@ -488,11 +515,13 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
            HtmlPreferred{..}
            cachePackagesPage
            cacheNamesPage
+           cacheBrowseTable
            templates
-           ListFeature{makeItemList}
            SearchFeature{..}
+           PackageCandidatesFeature{..}
   = HtmlCore{..}
   where
+    candidatesCore = candidatesCoreResource
     cores@CoreResource{packageInPath, lookupPackageName, lookupPackageId} = coreResource
     versions = versionsResource
     docs     = documentationResource
@@ -536,6 +565,15 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           }
       ]
 
+    serveBrowsePage :: DynamicPath -> ServerPartE Response
+    serveBrowsePage _dpath = do
+      template <- getTemplate templates "table-interface.html"
+      tabledata <- readAsyncCache cacheBrowseTable
+      return $ toResponse $ template
+          [ "heading"   $= "All packages"
+          , templateUnescaped "tabledata" tabledata]
+
+
     -- Currently the main package page is thrown together by querying a bunch
     -- of features about their attributes for the given package. It'll need
     -- reorganizing to look aesthetic, as opposed to the sleek and simple current
@@ -557,19 +595,21 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         totalDown     <- cmFind pkgname `liftM` totalPackageDownloads
         recentDown    <- cmFind pkgname `liftM` recentPackageDownloads
         pkgVotes      <- pkgNumVotes pkgname
-        pkgScore      <- fmap (/2) $ pkgNumScore pkgname
+        pkgScore      <- pkgNumScore pkgname
         auth          <- checkAuthenticated
         userRating    <- case auth of Just (uid,_) -> pkgUserVote pkgname uid; _ -> return Nothing
         mdoctarblob   <- queryDocumentation realpkg
         tags          <- queryTagsForPackage pkgname
         deprs         <- queryGetDeprecatedFor pkgname
         mreadme       <- makeReadme render
-
+        hasDocs       <- queryHasDocumentation documentationFeature realpkg
+        rptStats      <- queryLastReportStats reportsFeature realpkg
+        candidates    <- lookupCandidateName pkgname
         buildStatus   <- renderBuildStatus
           documentationFeature reportsFeature realpkg
         mdocIndex     <- maybe (return Nothing)
           (liftM Just . liftIO . cachedTarIndex) mdoctarblob
-
+        let (install, test, covg) = getBadgeStats rptStats
         let
           loadDocMeta
             | Just doctarblob <- mdoctarblob
@@ -592,7 +632,8 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
 
         return $ toResponse . template $
           -- IO-related items
-          [ "baseurl"           $= show (serverBaseURI)
+          [ "baseurl"           $= show (serverBaseURI { URI.uriScheme = "" })
+          , "sbaseurl"          $= show (serverBaseURI { URI.uriScheme = "https:" })
           , "cabalVersion"      $= display cabalVersion
           , "tags"              $= (renderTags tags)
           , "versions"          $= (PagesNew.renderVersion realpkg
@@ -601,9 +642,17 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           , "hasexecs"          $= not (null execs)
           , "recentDownloads"   $= recentDown
           , "votes"             $= pkgVotes
+          , "hasVotes"          $= pkgVotes > 0
           , "userRating"        $= userRating
           , "score"             $= pkgScore
           , "buildStatus"       $= buildStatus
+          , "hasDocs"           $= hasDocs
+          , "install"           $= install
+          , "test"              $= test
+          , "covg"              $= covg
+          , "candidates"        $= case candidates of
+                                    [] -> [ toHtml "No Candidates"]
+                                    _  -> [ PagesNew.commaList $ flip map candidates $ \cand -> anchor ! [href $ corePackageIdUri candidatesCore "" $ packageId cand] << display (packageVersion cand) ]
           ] ++
           -- Items not related to IO (mostly pure functions)
           PagesNew.packagePageTemplate render
@@ -611,6 +660,39 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
             docURL distributions
             deprs
             utilities
+            False
+      where
+        getBadgeStats (rpt, cvg) = (getInstall (fmap BR.installOutcome rpt), getTest (fmap BR.testsOutcome rpt), getAvgCovg cvg)
+
+        getInstall Nothing                        = (False, "", "")
+        getInstall (Just BR.InstallOk)            = (True, "success", "InstallOk")
+        getInstall (Just (BR.DependencyFailed _)) = (True, "critical", "DependencyFailed")
+        getInstall (Just k)                       = (True, "critical", show k)
+
+        getTest (Just BR.Ok)      = (True, "success", "Passed")
+        getTest (Just BR.Failed)  = (True, "critical", "Failed")
+        getTest _                 = (False, "False", "")
+
+        getAvgCovg :: Maybe BR.BuildCovg -> (Bool, String, Int)
+        getAvgCovg Nothing = (False, "", 100)
+        getAvgCovg (Just c) = do
+              let l = [
+                        BR.expressions c
+                      , BR.guards (BR.boolean c)
+                      , BR.ifConditions (BR.boolean c)
+                      , BR.qualifiers (BR.boolean c)
+                      , BR.alternatives c
+                      , BR.localDeclarations c
+                      , BR.topLevel c
+                      ]
+                  (used,total) = foldl (\(a,b) (x, y) -> (a+x, b+y)) (0,0) l
+                  per | total <= 0 = 100
+                      | otherwise = (used*100) `div` total
+              if per > 66
+                then (True, "brightgreen", per)
+                else if per > 33
+                  then (True, "yellowgreen", per)
+                  else (True, "red", per)
 
     serveDependenciesPage :: DynamicPath -> ServerPartE Response
     serveDependenciesPage dpath = do
@@ -632,21 +714,6 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         , "versions" $= map packageId pkgs
         ]
 
-    serveBrowsePage :: DynamicPath -> ServerPartE Response
-    serveBrowsePage _ = do
-      pkgIndex <- queryGetPackageIndex
-      let packageNames = Pages.toPackageNames pkgIndex
-      pkgDetails <- liftIO $ makeItemList packageNames
-      let rowList = map makeRow pkgDetails
-          tabledata = "" +++ rowList +++ ""
-      cacheControl [Public, maxAgeHours 1]
-                   (etagFromHash (PackageIndex.indexSize pkgIndex))
-      template <- getTemplate templates "table-interface.html"
-      return $ toResponse $ template
-        [ "heading"   $= "All packages"
-        , "content"   $= "A browsable index of all the packages"
-        , "tabledata" $= tabledata ]
-
     serveDistroMonitorPage :: DynamicPath -> ServerPartE Response
     serveDistroMonitorPage dpath = do
       pkgname <- packageInPath dpath
@@ -666,12 +733,22 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           pkgname      = packageName pkginfo
           revisions    = reverse $ Vec.toList (pkgMetadataRevisions pkginfo)
           numRevisions = pkgNumRevisions pkginfo
-          revchanges   = [ case diffCabalRevisionsByteString
-                                  (cabalFileByteString old)
-                                  (cabalFileByteString new)
-                           of Left _err     -> []
-                              Right changes -> changes
-                         | ((new, _), (old, _)) <- zip revisions (tail revisions) ]
+
+          revchanges   :: [(SHA256Digest, [Change])]
+          revchanges   = start revisions where
+            start []          = []
+            start (curr:rest) = go curr rest
+
+            go curr [] = [(sha256 (cabalFileByteString (fst curr)), [])]
+            go curr (prev:rest) =
+                ( sha256 (cabalFileByteString (fst curr))
+                , changes curr prev )
+                : go prev rest
+
+            changes curr prev = either (const []) id $
+              diffCabalRevisionsByteString
+                (cabalFileByteString (fst prev))
+                (cabalFileByteString (fst curr))
 
       cacheControl [NoCache] (etagFromHash numRevisions)
       template <- getTemplate templates "revisions.html"
@@ -681,18 +758,19 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
         , "revisions" $= zipWith3 (revisionToTemplate users)
                                   (map snd revisions)
                                   [numRevisions-1, numRevisions-2..]
-                                  (revchanges ++ [[]])
+                                  revchanges
         ]
       where
-        revisionToTemplate :: Users.Users -> UploadInfo -> Int -> [Change]
+        revisionToTemplate :: Users.Users -> UploadInfo -> Int
+                           -> (SHA256Digest, [Change])
                            -> TemplateVal
-        revisionToTemplate users (utime, uid) revision changes =
+        revisionToTemplate users (utime, uid) revision (sha256hash, changes) =
           let uname = Users.userIdToName users uid
            in templateDict
                 [ templateVal "number" revision
+                , templateVal "sha256" (show sha256hash)
                 , templateVal "user" (display uname)
-                , templateVal "time" (formatTime defaultTimeLocale "%c" utime)
-                , templateVal "posixtime" (formatTime defaultTimeLocale "%s" utime)
+                , utcTimeTemplateVal "htmltime" utime
                 , templateVal "changes" changes
                 ]
 
@@ -717,6 +795,7 @@ mkHtmlUsers :: UserFeature -> UserDetailsFeature -> HtmlUsers
 mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
   where
     users = userResource
+
 
     htmlUsersResources = [
         -- list of users with user links; if admin, a link to add user page
@@ -820,7 +899,7 @@ mkHtmlUsers UserFeature{..} UserDetailsFeature{..} = HtmlUsers{..}
           [toHtml "Changed password for ", anchor ! [href $ userPageUri users "" uname] << display uname]
 
 {-------------------------------------------------------------------------------
-  Uploads
+  Uploads(For new package lifecycle, this might need to be removed)
 -------------------------------------------------------------------------------}
 
 data HtmlUploads = HtmlUploads {
@@ -854,6 +933,7 @@ mkHtmlUploads HtmlUtilities{..} UploadFeature{..} = HtmlUploads{..}
                 [ input ! [thetype "file", name "package"]
                 , input ! [thetype "submit", value "Upload package"]
                 ]
+          , paragraph << [toHtml "If you want to deauthenticate first, ", anchor ! [href "/packages/deauth"] << "click here", toHtml "."]
           ]
 
     serveUploadResult :: DynamicPath -> ServerPartE Response
@@ -901,7 +981,7 @@ mkHtmlDocUploads HtmlUtilities{..} CoreFeature{coreResource} DocumentationFeatur
     serveDeleteDocumentation :: DynamicPath -> ServerPartE Response
     serveDeleteDocumentation dpath = do
         pkgid <- packageInPath dpath
-        deleteDocumentation dpath >> ignoreFilters  -- Override 204 No Content
+        deleteDocumentation dpath >> ignoreFilters -- Override 204 No Content
         return $ toResponse $ Resource.XHtml $ hackagePage "Documentation deleted" $
           [ paragraph << [toHtml "Successfully deleted documentation for ", packageLink pkgid, toHtml "!"]
           ]
@@ -911,7 +991,8 @@ mkHtmlDocUploads HtmlUtilities{..} CoreFeature{coreResource} DocumentationFeatur
         pkgid <- packageInPath dpath
         template <- getTemplate templates "maintain-docs.html"
         return $ toResponse $ template
-          [ "pkgid" $= (pkgid :: PackageIdentifier)
+          [ "pkgid"     $= (pkgid :: PackageIdentifier)
+          , "actionUrl" $= ""
           ]
 
 {-------------------------------------------------------------------------------
@@ -942,15 +1023,23 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
         pkgid <- packageInPath dpath
         cacheControl [Public, maxAgeMinutes 30] (etagFromHash (length reports))
         template <- getTemplate templates "reports.html"
+        details <- pkgReportDetails (pkgid,True)
+        let status = case BR.failCnt details of
+              Nothing -> "Not yet tried."
+              Just BR.BuildOK -> "Built successfully."
+              Just (BR.BuildFailCnt 1) -> "1 consecutive failure."
+              Just (BR.BuildFailCnt c) -> show(c) ++ " consecutive failures."
         return $ toResponse $ template
-          [ "pkgid" $= (pkgid :: PackageIdentifier)
+          [ "pkgid"   $= (pkgid :: PackageIdentifier)
           , "reports" $= reports
+          , "status"  $= status
           ]
 
     servePackageReport :: DynamicPath -> ServerPartE Response
     servePackageReport dpath = do
-        (repid, report, mlog) <- packageReport dpath
+        (repid, report, mlog, covg) <- packageReport dpath
         mlog' <- traverse queryBuildLog mlog
+        let covg' = fmap getCvgDet covg
         pkgid <- packageInPath dpath
         cacheControlWithoutETag [Public, maxAgeDays 30]
         template <- getTemplate templates "report.html"
@@ -958,7 +1047,22 @@ mkHtmlReports HtmlUtilities{..} CoreFeature{..} ReportsFeature{..} templates = H
           [ "pkgid" $= (pkgid :: PackageIdentifier)
           , "report" $= (repid, report)
           , "log" $= toMessage <$> mlog'
+          , "covg" $= covg'
           ]
+      where
+        getCvgDet c = (
+            det $ BR.expressions c,
+            det $ BR.guards $ BR.boolean c,
+            det $ BR.ifConditions $ BR.boolean c,
+            det $ BR.qualifiers $ BR.boolean c,
+            det $ BR.alternatives c,
+            det $ BR.localDeclarations c,
+            det $ BR.topLevel c
+          )
+
+        det::(Int,Int)->(Int,Int,Int)
+        det (_,0) = (100,0,0)
+        det (a,b) = ((a * 100) `div` b ,a,b)
 
 {-------------------------------------------------------------------------------
   Candidates
@@ -977,13 +1081,13 @@ mkHtmlCandidates :: HtmlUtilities
                  -> PackageCandidatesFeature
                  -> Templates
                  -> HtmlCandidates
-mkHtmlCandidates HtmlUtilities{..}
+mkHtmlCandidates utilities@HtmlUtilities{..}
                  CoreFeature{ coreResource = CoreResource{packageInPath}
                             , queryGetPackageIndex
                             }
                  VersionsFeature{ queryGetPreferredInfo }
-                 UploadFeature{ guardAuthorisedAsMaintainer }
-                 DocumentationFeature{documentationResource, queryDocumentation}
+                 UploadFeature{ guardAuthorisedAsMaintainer, guardAuthorisedAsMaintainerOrTrustee }
+                 DocumentationFeature{documentationResource, queryDocumentation,..}
                  TarIndexCacheFeature{cachedTarIndex}
                  PackageCandidatesFeature{..}
                  templates = HtmlCandidates{..}
@@ -997,6 +1101,9 @@ mkHtmlCandidates HtmlUtilities{..}
                           }
     candMaintainForm  = (resourceAt "/package/:package/candidate/maintain") {
                             resourceGet = [("html", serveCandidateMaintain)]
+                          }
+    candDocUploadForm = (resourceAt "/package/:package/candidate/maintain/docs"){
+                            resourceGet = [("html", serveCandDocUploadForm)]
                           }
 
     htmlCandidatesResources = [
@@ -1040,6 +1147,8 @@ mkHtmlCandidates HtmlUtilities{..}
       , pkgCandUploadForm
         -- maintenance for candidate packages
       , candMaintainForm
+        -- form for uploading documentation for a candidate
+      , candDocUploadForm
         -- form for publishing package
       , (extendResource $ publishPage candidates) {
            resourceDesc = [ (GET, "Show candidate publish form")
@@ -1055,6 +1164,17 @@ mkHtmlCandidates HtmlUtilities{..}
          , resourceGet  = [ ("html", serveDeleteForm) ]
          , resourcePost = [ ("html", doDeleteCandidate) ]
          }
+        -- form for deleting candidates
+      , (extendResource $ deleteCandidatesPage candidates) {
+            resourceDesc = [ (GET, "Show package candidates delete form")
+                           , (POST, "Delete package candidates") ]
+          , resourceGet  = [ ("html", serveCandidatesDeleteForm) ]
+          , resourcePost = [ ("html", doDeleteCandidates) ]
+          }
+      , (extendResource $ packageDocsWhole docs) {
+            resourcePut    = [ ("html", serveCandUploadDocumentation) ]
+          , resourceDelete = [ ("html", serveCandDeleteDocumentation) ]
+          }
       ]
 
     serveCandidateUploadForm :: DynamicPath -> ServerPartE Response
@@ -1079,19 +1199,30 @@ mkHtmlCandidates HtmlUtilities{..}
 
     serveCandidateMaintain :: DynamicPath -> ServerPartE Response
     serveCandidateMaintain dpath = do
+      pkgid <- packageInPath dpath
       candidate <- packageInPath dpath >>= lookupCandidateId
-      guardAuthorisedAsMaintainer (packageName candidate)
+      guardAuthorisedAsMaintainerOrTrustee (packageName candidate)
       template <- getTemplate templates "maintain-candidate.html"
       return $ toResponse $ template
         [ "pkgname"    $= packageName candidate
         , "pkgversion" $= packageVersion candidate
+        , "pkgid"   $= (pkgid :: PackageIdentifier)
         ]
     {-some useful URIs here: candidateUri check "" pkgid, packageCandidatesUri check "" pkgid, publishUri check "" pkgid-}
 
-    -- TODO: convert to template-based generation like 'servePackagePage' does
+    serveCandDocUploadForm :: DynamicPath -> ServerPartE Response
+    serveCandDocUploadForm dpath = do
+        pkgid <- packageInPath dpath
+        template <- getTemplate templates "maintain-docs.html"
+        return $ toResponse $ template
+          [ "pkgid" $= (pkgid :: PackageIdentifier)
+          , "actionUrl" $= "candidate/"
+          ]
+
     serveCandidatePage :: Resource -> DynamicPath -> ServerPartE Response
     serveCandidatePage maintain dpath = do
       cand <- packageInPath dpath >>= lookupCandidateId
+      template <- getTemplate templates "candidate-page.html"
       candRender <- liftIO $ candidateRender cand
       let PackageIdentifier pkgname version = packageId cand
           render = candPackageRender candRender
@@ -1099,11 +1230,7 @@ mkHtmlCandidates HtmlUtilities{..}
                      . flip PackageIndex.lookupPackageName pkgname
                    <$> queryGetPackageIndex
       prefInfo <- queryGetPreferredInfo pkgname
-      let sectionHtml = [ Pages.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing
-                        , Pages.renderChangelog render
-                        , Pages.renderDependencies render
-                        ] ++ Pages.renderFields render
-          maintainHtml = anchor ! [href $ renderResource maintain [display $ packageId cand]] << "maintain"
+      let maintainHtml = anchor ! [href $ renderResource maintain [display $ packageId cand]] << "maintain"
       -- bottom sections, currently documentation and readme
       mdoctarblob <- queryDocumentation (packageId cand)
       mdocIndex   <- maybe (return Nothing)
@@ -1118,9 +1245,16 @@ mkHtmlCandidates HtmlUtilities{..}
               [] -> []
               warn -> [thediv ! [theclass "candidate-warn"] << [paragraph << strong (toHtml "Warnings:"), unordList warn]]
 
-      return $ toResponse $ Resource.XHtml $
-          Pages.packagePage render [maintainHtml] warningBox sectionHtml
-                            [] mdocIndex mreadme docURL True
+      return $ toResponse . template $
+        [ "versions"          $= (PagesNew.renderVersion (packageId cand) (classifyVersions prefInfo $ insert version otherVersions) Nothing)
+        , "maintainHtml"      $= [maintainHtml]
+        , "warningBox"        $= warningBox
+        ] ++
+        PagesNew.packagePageTemplate render
+            mdocIndex Nothing mreadme
+            docURL [] Nothing
+            utilities
+            True
 
     serveDependenciesPage :: DynamicPath -> ServerPartE Response
     serveDependenciesPage dpath = do
@@ -1132,47 +1266,29 @@ mkHtmlCandidates HtmlUtilities{..}
     servePublishForm :: DynamicPath -> ServerPartE Response
     servePublishForm dpath = do
       candidate <- packageInPath dpath >>= lookupCandidateId
-      guardAuthorisedAsMaintainer (packageName candidate)
+      uid <- guardAuthorisedAsMaintainer (packageName candidate)
+
       let pkgid = packageId candidate
       packages <- queryGetPackageIndex
-      case checkPublish packages candidate of
+      checkPublish uid packages candidate >>= \case
           Just err -> throwError err
           Nothing  -> do
               return $ toResponse $ Resource.XHtml $ hackagePage "Publishing candidates"
-                  [form ! [theclass "box", XHtml.method "post", action $ publishUri candidatesResource "" pkgid]
+                  [form ! [theclass "box", XHtml.method "post", action $ publishUri candidates "" pkgid]
                       << input ! [thetype "submit", value "Publish package"]]
 
     serveCandidatesPage :: DynamicPath -> ServerPartE Response
     serveCandidatesPage _ = do
-        cands <- queryGetCandidateIndex
-        return $ toResponse $ Resource.XHtml $ hackagePage "Package candidates"
-          [ h2 << "Package candidates"
-          , paragraph <<
-              [ toHtml "Here follow all the candidate package versions on Hackage. "
-              , thespan ! [thestyle "color: gray"] <<
-                  [ toHtml "["
-                  , anchor ! [href "/packages/candidates/upload"] << "upload"
-                  , toHtml "]" ]
-              ]
-          , unordList $ map showCands $ PackageIndex.allPackagesByName cands
-          ]
-        -- note: each of the lists here should be non-empty, according to PackageIndex
-      where showCands pkgs =
-                -- TODO: Duncan changed this to packageSynopsis but without an
-                -- accomponaying definition of packageSynposis. Changed back for now.
-                let desc = packageDescription . pkgDesc . candPkgInfo $ last pkgs
-                    pkgname = packageName desc
-                in  [ anchor ! [href $ packageCandidatesUri candidates "" pkgname ] << display pkgname
-                    , toHtml ": "
-                    , toHtml $ intersperse (toHtml ", ") $ flip map pkgs $ \pkg ->
-                         anchor ! [href $ corePackageIdUri candidatesCore "" (packageId pkg)] << display (packageVersion pkg)
-                    , toHtml $ ". " ++ synopsis desc
-                    ]
+      template <- getTemplate templates "candidate-index.html"
+      cands <- queryGetCandidateIndex
+      return $ toResponse . template $
+        PagesNew.candidatesPageTemplate cands candidates candidatesCore
 
     servePackageCandidates :: Resource -> DynamicPath -> ServerPartE Response
     servePackageCandidates candPkgUp dpath = do
       pkgname <- packageInPath dpath
       pkgs <- lookupCandidateName pkgname
+      let delUri = "/package/"++(display pkgname)++"/candidates/delete"
       return $ toResponse $ Resource.XHtml $ hackagePage "Package candidates" $
         [ h3 << ("Candidates for " ++ display pkgname) ] ++
         case pkgs of
@@ -1182,13 +1298,12 @@ mkHtmlCandidates HtmlUtilities{..}
                 , anchor ! [href $ "/packages/candidates/upload"] << "another"
                 , toHtml " package?"
                 ]
-          _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ corePackageIdUri candidatesCore "" $ packageId pkg] << display (packageVersion pkg) ]
+          _  -> [ unordList $ flip map pkgs $ \pkg -> anchor ! [href $ corePackageIdUri candidatesCore "" $ packageId pkg] << display (packageVersion pkg)
+                , anchor ! [href $ delUri]<< "Delete All Candidates"]
 
-    -- TODO: make publishCandidate a member of the PackageCandidates feature, just like
-    -- putDeprecated and putPreferred are for the Versions feature.
     servePostPublish :: DynamicPath -> ServerPartE Response
     servePostPublish dpath = do
-        uresult <- publishCandidate dpath False
+        uresult <- publishCandidate dpath True
         return $ toResponse $ Resource.XHtml $ hackagePage "Publish successful" $
           [ paragraph << [toHtml "Successfully published ", packageLink (packageId $ uploadDesc uresult), toHtml "!"]
           ] ++ case uploadWarnings uresult of
@@ -1198,11 +1313,36 @@ mkHtmlCandidates HtmlUtilities{..}
     serveDeleteForm :: DynamicPath -> ServerPartE Response
     serveDeleteForm dpath = do
       candidate <- packageInPath dpath >>= lookupCandidateId
-      guardAuthorisedAsMaintainer (packageName candidate)
+      guardAuthorisedAsMaintainerOrTrustee (packageName candidate)
       let pkgid = packageId candidate
       return $ toResponse $ Resource.XHtml $ hackagePage "Deleting candidates"
-                  [form ! [theclass "box", XHtml.method "post", action $ deleteUri candidatesResource "" pkgid]
+                  [form ! [theclass "box", XHtml.method "post", action $ deleteUri candidates "" pkgid]
                       << input ! [thetype "submit", value "Delete package candidate"]]
+
+    serveCandidatesDeleteForm :: DynamicPath -> ServerPartE Response
+    serveCandidatesDeleteForm dpath = do
+      pkgname <- packageInPath dpath
+      guardAuthorisedAsMaintainerOrTrustee pkgname
+      -- let pkgname = packageName pkgid
+      return $ toResponse $ Resource.XHtml $ hackagePage "Deleting package candidates"
+                  [form ! [theclass "box", XHtml.method "post", action $ deleteCandidatesUri candidates "" pkgname]
+                      << input ! [thetype "submit", value "Delete All Candidates For This Package"]]
+
+    serveCandUploadDocumentation :: DynamicPath -> ServerPartE Response
+    serveCandUploadDocumentation dpath = do
+        pkgid <- packageInPath dpath
+        uploadDocumentation dpath >> ignoreFilters  -- Override 204 No Content
+        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation uploaded" $
+          [ paragraph << [toHtml "Successfully uploaded documentation for ", candidateLink pkgid, toHtml "!"]
+          ]
+
+    serveCandDeleteDocumentation :: DynamicPath -> ServerPartE Response
+    serveCandDeleteDocumentation dpath = do
+        pkgid <- packageInPath dpath
+        deleteDocumentation dpath >> ignoreFilters -- Override 204 No Content
+        return $ toResponse $ Resource.XHtml $ hackagePage "Documentation deleted" $
+          [ paragraph << [toHtml "Successfully deleted documentation for ", candidateLink pkgid, toHtml "!"]
+          ]
 
 dependenciesPage :: Bool -> PackageRender -> URL -> Resource.XHtml
 dependenciesPage isCandidate render docURL =
@@ -1362,10 +1502,10 @@ mkHtmlPreferred HtmlUtilities{..}
                   , intercalate ", " (map display deprs)]
         , toHtml "The version range given to this package, therefore, is " +++ strong (toHtml $ rendSumRange pref)
         , h4 << "Versions affected"
-        , paragraph << "Orange versions are normal versions. Green are those out of any preferred version ranges. Gray are deprecated."
-        , paragraph << (snd $ Pages.renderVersion
-                                  (PackageIdentifier pkgname $ nullVersion)
-                                  (classifyVersions prefInfo $ map packageVersion pkgs) Nothing)
+        , paragraph << "Green versions are normal versions. Yellow are those out of any preferred version ranges. Red are deprecated."
+        , paragraph ! [theclass "versions"] << snd (Pages.renderVersion
+                              (PackageIdentifier pkgname nullVersion)
+                              (classifyVersions prefInfo $ map packageVersion pkgs) Nothing)
         ]
 
     servePutPreferred :: DynamicPath -> ServerPartE Response
@@ -1672,12 +1812,14 @@ mkHtmlSearch :: HtmlUtilities
              -> CoreFeature
              -> ListFeature
              -> SearchFeature
+             -> AsyncCache BS.ByteString
              -> Templates
              -> HtmlSearch
 mkHtmlSearch HtmlUtilities{..}
              CoreFeature{..}
              ListFeature{makeItemList}
              SearchFeature{..}
+             cacheBrowseTable
              templates =
     HtmlSearch{..}
   where
@@ -1706,21 +1848,17 @@ mkHtmlSearch HtmlUtilities{..}
                 ]
 
           Just termsStr | terms <- words termsStr -> do
-            -- pkgIndex <- liftIO $ queryGetPackageIndex
-            -- currentTime <- liftIO $ getCurrentTime
-            pkgnames <- if null terms
-                        then fmap Pages.toPackageNames queryGetPackageIndex
-                        else searchPackages terms
-            -- let (pageResults, moreResults) = splitAt limit (drop offset pkgnames)
-            pkgDetails <- liftIO $ makeItemList pkgnames
-
-            let rowList = map makeRow pkgDetails
-                tabledata = "" +++ rowList
+            tabledata <- if null terms
+                         then readAsyncCache cacheBrowseTable
+                         else do
+                           names <- searchPackages terms
+                           pkgDetails <- liftIO $ makeItemList names
+                           let rowList = map makeRow pkgDetails
+                           return . BS.pack . showHtmlFragment $ "" +++ rowList
             template <- getTemplate templates "table-interface.html"
             return $ toResponse $ template
               [ "heading"   $= toHtml (searchForm termsStr False)
-              , "content"   $= "A browsable index of all the packages"
-              , "tabledata" $= tabledata
+              , templateUnescaped "tabledata" tabledata
               , "footer"    $= alternativeSearchTerms termsStr]
 
           _ ->
@@ -1744,20 +1882,14 @@ mkHtmlSearch HtmlUtilities{..}
         alternativeSearch =
           paragraph <<
             [ toHtml "Alternatively, if you are looking for a particular function then try "
-            , anchor ! [href hayooBaseLink] << "Hayoo"
-            , toHtml " or "
             , anchor ! [href hoogleBaseLink] << "Hoogle"
             ]
         alternativeSearchTerms termsStr =
           paragraph <<
             [ toHtml "Alternatively, if you are looking for a particular function then try "
-            , anchor ! [href (hayooLink termsStr)] << "Hayoo"
-            , toHtml " or "
             , anchor ! [href (hoogleLink termsStr)] << "Hoogle"
             ]
-        hayooBaseLink  = "http://holumbus.fh-wedel.de/hayoo/hayoo.html"
         hoogleBaseLink = "http://www.haskell.org/hoogle/"
-        hayooLink termsStr  = "http://hayoo.fh-wedel.de/?query=" <> termsStr
         hoogleLink termsStr = "http://www.haskell.org/hoogle/?hoogle=" <> termsStr
 
         explainResults :: (Maybe PackageName, [(Search.Explanation PkgDocField PkgDocFeatures T.Text, PackageName)]) -> [Html]

@@ -8,9 +8,12 @@ import Text.XHtml.Strict
 import qualified Data.Set as Set
 import Distribution.Server.Features.Tags
 import Distribution.Server.Features.Core
+import Distribution.Server.Features.PackageCandidates
 import Distribution.Text (display)
 import Data.List (intersperse, intercalate)
 import Data.Set (Set)
+import Data.Time.Locale.Compat  (defaultTimeLocale)
+import Data.Time.Format         (formatTime)
 import Distribution.Server.Features.PackageList
 import Distribution.Server.Pages.Util (packageType)
 import Distribution.Package
@@ -18,6 +21,7 @@ import Distribution.Server.Features.Users
 
 data HtmlUtilities = HtmlUtilities {
     packageLink :: PackageId -> Html
+  , candidateLink :: PackageId -> Html
   , packageNameLink :: PackageName -> Html
   , renderItem :: PackageItem -> Html
   , makeRow :: PackageItem -> Html
@@ -25,12 +29,16 @@ data HtmlUtilities = HtmlUtilities {
   , renderReviewTags :: Set Tag -> (Set Tag, Set Tag) -> PackageName -> [Html]
   }
 
-htmlUtilities :: CoreFeature -> TagsFeature -> UserFeature -> HtmlUtilities
+htmlUtilities :: CoreFeature -> PackageCandidatesFeature -> TagsFeature -> UserFeature -> HtmlUtilities
 htmlUtilities CoreFeature{coreResource}
+              PackageCandidatesFeature{candidatesCoreResource}
               TagsFeature{tagsResource} UserFeature{userResource} = HtmlUtilities{..}
   where
     packageLink :: PackageId -> Html
     packageLink pkgid = anchor ! [href $ corePackageIdUri cores "" pkgid] << display pkgid
+
+    candidateLink :: PackageId -> Html
+    candidateLink pkgid = anchor ! [href $ corePackageIdUri candidatesCoreResource "" pkgid] << display pkgid
 
     packageNameLink :: PackageName -> Html
     packageNameLink pkgname = anchor ! [href $ corePackageNameUri cores "" pkgname] << display pkgname
@@ -38,16 +46,17 @@ htmlUtilities CoreFeature{coreResource}
     makeRow :: PackageItem -> Html
     makeRow item = tr << [ td $ itemNameHtml
                          , td $ toHtml $ show $ itemDownloads item
-                         , td $ toHtml $ show $ itemVotes item / 2
-                         , td $ toHtml $ "" -- FIXME/TODO: show $ itemRevDepsCount item
+                         , td $ toHtml $ show $ itemVotes item
                          , td $ toHtml $ itemDesc item
                          , td $ " (" +++ renderTags (itemTags item) +++ ")"
+                         , td $ toHtml $ formatTime defaultTimeLocale "%F" (itemLastUpload item)
                          , td $ "" +++ intersperse (toHtml ", ") (map renderUser (itemMaintainer item))
                          ]
         where
             renderUser user = anchor ! [href $ userPageUri userResource "" user] << display user
             itemNameHtml = packageNameLink (itemName item) +++
                                case itemDeprecated item of
+                                       Just []   -> toHtml " (deprecated)"
                                        Just pkgs -> " (deprecated in favor of " +++ intersperse (toHtml ", ") (map packageNameLink pkgs) +++ ")"
                                        Nothing -> toHtml ""
 

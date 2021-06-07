@@ -27,6 +27,7 @@ import Distribution.Server.Packages.Types
 import Distribution.Package
 import Distribution.Version
 import Distribution.Text
+import Distribution.Types.LibraryName (LibraryName(LMainLibName))
 
 import Data.Function (fix)
 import Data.List (intercalate, find)
@@ -35,6 +36,7 @@ import Data.Time.Clock (getCurrentTime)
 import Control.Arrow (second)
 import Control.Applicative (optional)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Data.ByteString.Lazy.Char8 as BS (pack) -- Only used for ASCII data
 import Data.Aeson (Value(..))
 import qualified Data.HashMap.Strict as HashMap
@@ -378,7 +380,7 @@ versionsFeature ServerEnv{ serverVerbosity = verbosity }
 
     formatSinglePreferredVersions :: PackageName -> PreferredInfo -> Maybe String
     formatSinglePreferredVersions pkgname pref =
-      display . Dependency pkgname <$> sumRange pref
+      display . (\vr -> Dependency pkgname vr (Set.singleton LMainLibName)) <$> sumRange pref
 
     formatGlobalPreferredVersions :: [(PackageName, PreferredInfo)] -> String
     formatGlobalPreferredVersions =
