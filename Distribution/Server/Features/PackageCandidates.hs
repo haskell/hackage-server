@@ -339,14 +339,14 @@ candidatesFeature ServerEnv{serverBlobStore = store}
     doDeleteCandidate :: DynamicPath -> ServerPartE Response
     doDeleteCandidate dpath = do
       candidate <- packageInPath dpath >>= lookupCandidateId
-      guardAuthorisedAsMaintainer (packageName candidate)
+      guardAuthorisedAsMaintainerOrTrustee (packageName candidate)
       void $ updateState candidatesState $ DeleteCandidate (packageId candidate)
       seeOther (packageCandidatesUri candidatesResource "" $ packageName candidate) $ toResponse ()
 
     doDeleteCandidates :: DynamicPath -> ServerPartE Response
     doDeleteCandidates dpath = do
       pkgname <- packageInPath dpath
-      guardAuthorisedAsMaintainer pkgname
+      guardAuthorisedAsMaintainerOrTrustee pkgname
       void $ updateState candidatesState $ DeleteCandidates pkgname
       seeOther (packageCandidatesUri candidatesResource "" $ pkgname) $ toResponse ()
 
