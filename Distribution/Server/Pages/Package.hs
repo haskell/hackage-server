@@ -625,7 +625,10 @@ renderModuleForest docUrl forest =
           thespan ! [theclass "module"] << modName path
       moduleEntry True path =
           thespan ! [theclass "module"] << linkedName path
-      modName path = toHtml (intercalate "." path)
+      modName path = mconcat (intersperse (itag "wbr") (map toHtml (mapTail ('.':) path)))
+        where
+          mapTail f (x:xs) = x : map f xs
+          mapTail _ xs = xs
       linkedName path = anchor ! [href modUrl] << modName path
           where
             modUrl = docUrl ++ "/" ++ intercalate "-" path ++ ".html"
