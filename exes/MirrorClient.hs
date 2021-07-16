@@ -194,14 +194,20 @@ mirrorPackage verbosity opts sourceRepo targetRepo pkginfo = do
   where
     go :: MirrorSession ()
     go = do
-      rsp <- downloadPackage sourceRepo pkgid locCab locTgz
-      case rsp of
-        Just theError ->
-          notifyResponse (GetPackageFailed theError pkgid)
-        Nothing -> do
-          notifyResponse GetPackageOk
-          liftIO $ sanitiseTarball verbosity (stateDir opts) locTgz
-          uploadPackage targetRepo (mirrorUploaders opts) pkginfo locCab locTgz
+      skip <- if skipExists opts
+                then packageExists targetRepo pkginfo
+                else return False
+      if skip then
+         notifyResponse PackageSkipped
+      else do
+        rsp <- downloadPackage sourceRepo pkgid locCab locTgz
+        case rsp of
+          Just theError ->
+            notifyResponse (GetPackageFailed theError pkgid)
+          Nothing -> do
+            notifyResponse GetPackageOk
+            liftIO $ sanitiseTarball verbosity (stateDir opts) locTgz
+            uploadPackage targetRepo (mirrorUploaders opts) pkginfo locCab locTgz
 
     removeTempFiles :: MirrorSession ()
     removeTempFiles = liftIO $ handle ignoreDoesNotExist $ do
