@@ -324,6 +324,7 @@ data MirrorEvent =
   | GetPackageFailed GetError PackageId
   | PutPackageOk
   | PutPackageFailed ErrorResponse PackageId
+  | PackageSkipped
 
 notifyResponse :: MirrorEvent -> MirrorSession ()
 notifyResponse e = do
@@ -333,18 +334,20 @@ notifyResponse e = do
     put st'
   where
     handleEvent _ False st = case e of
-      GetIndexOk   -> return st
-      GetPackageOk -> return st
-      PutPackageOk -> return st
+      GetIndexOk     -> return st
+      GetPackageOk   -> return st
+      PutPackageOk   -> return st
+      PackageSkipped -> return st
       GetPackageFailed rsp pkgid ->
         mirrorError (GetEntityError (EntityPackage pkgid) rsp)
       PutPackageFailed rsp pkgid ->
         mirrorError (PutPackageError pkgid rsp)
 
     handleEvent verbosity True st = case e of
-      GetIndexOk   -> return st
-      GetPackageOk -> return st
-      PutPackageOk -> return st
+      GetIndexOk     -> return st
+      GetPackageOk   -> return st
+      PutPackageOk   -> return st
+      PackageSkipped -> return st
       GetPackageFailed rsp pkgid ->
         if getFailedPermanent rsp
           then do

@@ -2,6 +2,7 @@ module Distribution.Client.Mirror.Repo.Local (
     withTargetRepo
   , downloadIndex
   , uploadPackage
+  , packageExists
   ) where
 
 -- stdlib
@@ -63,3 +64,16 @@ uploadPackage targetRepoPath' pkginfo locTgz = liftIO $ do
     pkgFile = pkgDir   </> display pkgid <.> "tar.gz"
 
     PkgIndexInfo pkgid _ _ _ = pkginfo
+
+-- | Check if a package already exists
+packageExists :: FilePath
+              -> PkgIndexInfo
+              -> MirrorSession Bool
+packageExists targetRepoPath' pkginfo = liftIO $
+    doesFileExist pkgFile
+  where
+    pkgDir  = targetRepoPath' </> "package"
+    pkgFile = pkgDir   </> display pkgid <.> "tar.gz"
+
+    PkgIndexInfo pkgid _ _ _ = pkginfo
+
