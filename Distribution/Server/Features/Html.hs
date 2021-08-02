@@ -78,6 +78,8 @@ import qualified Network.URI as URI
 import Text.XHtml.Strict
 import qualified Text.XHtml.Strict as XHtml
 import Text.XHtml.Table (simpleTable)
+import Distribution.PackageDescription (hasLibs)
+import Distribution.PackageDescription.Configuration (flattenPackageDescription)
 
 
 -- TODO: move more of the below to Distribution.Server.Pages.*, it's getting
@@ -589,6 +591,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
             pkgname = packageName realpkg
             docURL  = packageDocsContentUri docs realpkg
             execs   = rendExecNames render
+            pkgdesc = flattenPackageDescription $ pkgDesc pkg
 
         prefInfo      <- queryGetPreferredInfo pkgname
         distributions <- queryPackageStatus pkgname
@@ -643,6 +646,7 @@ mkHtmlCore ServerEnv{serverBaseURI, serverBlobStore}
           , "recentDownloads"   $= recentDown
           , "votes"             $= pkgVotes
           , "hasVotes"          $= pkgVotes > 0
+          , "hasExecOnly"       $= (not . hasLibs) pkgdesc && (not . null) execs
           , "userRating"        $= userRating
           , "score"             $= pkgScore
           , "buildStatus"       $= buildStatus
