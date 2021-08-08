@@ -8,6 +8,13 @@
   <title>
     $package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$
   </title>
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:site" content="@hackage" />
+  <meta property="og:url" content="$baseurl$/package/$package.name$" />
+  <meta property="og:site_name" content="Hackage" />
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="$package.name$$if(package.optional.hasSynopsis)$: $package.optional.synopsis$$endif$" />
+  <meta property="og:description" content="$package.optional.description$" />
   <link rel="canonical" href="$sbaseurl$/package/$package.name$" />
   <script src="/static/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
