@@ -252,7 +252,7 @@ renderPackageFlags render docURL =
     [] -> mempty
     flags ->
       let (manualFlags, autoFlags) = partition flagManual flags
-      in  [h2 << "Flags"
+      in  [h2 << "Manual Flags"
           ,flagsTable ["manual-flags"] manualFlags
           ,collapsible "Automatic Flags" (flagsTable ["automatic-flags"] autoFlags)
           ,tip]
