@@ -47,7 +47,7 @@ import qualified Text.XHtml.Strict
 
 import Data.Monoid              (Monoid(..), (<>))
 import Data.Maybe               (fromMaybe, maybeToList, isJust, mapMaybe)
-import Data.List                (intersperse, intercalate)
+import Data.List                (intersperse, intercalate, partition)
 import Control.Arrow            (second)
 import System.FilePath.Posix    ((</>), (<.>), takeFileName)
 import Data.Time.Locale.Compat  (defaultTimeLocale)
@@ -251,9 +251,11 @@ renderPackageFlags render docURL =
   case rendFlags render of
     [] -> mempty
     flags ->
-      [h2 << "Flags"
-      ,flagsTable flags
-      ,tip]
+      let (manualFlags, autoFlags) = partition flagManual flags
+      in  [h2 << "Manual Flags"
+          ,flagsTable ["manual-flags"] manualFlags
+          ,collapsible "Automatic Flags" (flagsTable ["automatic-flags"] autoFlags)
+          ,tip]
   where tip =
           paragraph ! [theclass "tip"] <<
           [thespan << "Use "
@@ -264,21 +266,20 @@ renderPackageFlags render docURL =
           ,anchor ! [href tipLink] << "More info"
           ]
         tipLink = "https://cabal.readthedocs.io/en/latest/setup-commands.html#controlling-flag-assignments"
-        flagsTable flags =
-          table ! [theclass "flags-table"] <<
+        flagsTable classes flags =
+          table ! [theclass . unwords $ "flags-table" : classes] <<
           [thead << flagsHeadings
           ,tbody << map flagRow flags]
+        collapsible summary item =
+          tag "details" $ tag "summary" (toHtml summary) +++ item
         flagsHeadings = [th << "Name"
                         ,th << "Description"
-                        ,th << "Default"
-                        ,th << "Type"]
+                        ,th << "Default"]
         flagRow flag =
           tr << [td ! [theclass "flag-name"]   << code (unFlagName (flagName flag))
                 ,td ! [theclass "flag-desc"]   << renderHaddock (moduleToDocUrl render docURL) (flagDescription flag)
                 ,td ! [theclass (if flagDefault flag then "flag-enabled" else "flag-disabled")] <<
-                 if flagDefault flag then "Enabled" else "Disabled"
-                ,td ! [theclass (if flagManual flag then "flag-manual" else "flag-automatic")] <<
-                 if flagManual flag then "Manual" else "Automatic"]
+                 if flagDefault flag then "Enabled" else "Disabled"]
         code = (thespan ! [theclass "code"] <<)
 
 moduleSection :: PackageRender -> Maybe TarIndex -> URL -> Bool -> [Html]
