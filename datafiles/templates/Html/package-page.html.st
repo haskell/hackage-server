@@ -15,6 +15,9 @@
   <meta property="og:type" content="website">
   <meta property="og:title" content="$package.name$" />
   <meta property="og:description" content="$package.optional.synopsis$" />
+  $if(isDeprecated)$
+    <meta name="robots" contents="noindex">
+  $endif$
   <link rel="canonical" href="$sbaseurl$/package/$package.name$" />
   <script src="/static/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
