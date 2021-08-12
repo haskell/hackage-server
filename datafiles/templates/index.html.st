@@ -77,7 +77,7 @@ at <a href="mailto:hackage-admin@haskell.org">hackage-admin@haskell.org</a></p>
 <p>Scheduled infrastructure status information is available at <a href="http://status.haskell.org">status.haskell.org</a>
    and automated uptime information at <a href="http://auto-status.haskell.org/">auto-status.haskell.org</a>.
    Serious issues requiring immediate action should be reported to <a href="mailto:admin@haskell.org">admin@haskell.org</a> or on the
-   #haskell-infrastructure irc channel on freenode.</p>
+   #haskell-infrastructure irc channel on libera.chat.</p>
 
 <h2 id="hackage-api">The Hackage API</h2>
 
@@ -98,7 +98,7 @@ at <a href="mailto:hackage-admin@haskell.org">hackage-admin@haskell.org</a></p>
   and mirroring the central server.  You can ask questions on
   the <a href="http://www.haskell.org/pipermail/cabal-devel/">cabal-devel</a>
   mailing list or on IRC in the <code>#hackage</code> channel on
-  freenode.</p>
+  libera.chat.</p>
 
 <h2>Credits</h2>
 <p>The current Hackage codebase was spearheaded
