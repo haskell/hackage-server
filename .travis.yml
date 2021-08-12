@@ -15,7 +15,7 @@ git:
 notifications:
   irc:
     channels:
-      - "chat.freenode.net#hackage"
+      - "irc.libera.chat#hackage"
     skip_join: true
     template:
       - "\x0313hackage-server\x03/\x0306%{branch}\x03 \x0314%{commit}\x03 %{build_url} %{message}"
