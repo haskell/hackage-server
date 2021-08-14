@@ -221,7 +221,7 @@
 
     <div id="maintainer-corner">
       <h4>Maintainer's Corner</h4>
-      <p>For package maintainers and hackage trustees</p>
+      <p>For $package.maintainerURL$ and hackage trustees</p>
       <ul>
         <li>
           <a href="$baseurl$/package/$package.name$/maintain">
