@@ -28,6 +28,7 @@ import qualified Data.Array.Unboxed as A
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as V.U
 import qualified Data.Version as Ver
+import qualified Data.SearchEngine as SE
 
 import Distribution.Package  (PackageIdentifier(..), PackageName, unPackageName)
 import Distribution.PackageDescription (FlagName, unFlagName)
@@ -269,3 +270,9 @@ instance MemSize CompilerFlavor where
 
 instance MemSize CompilerId where
     memSize (CompilerId a b) = memSize2 a b
+
+
+instance MemSize key => MemSize (SE.SearchEngine doc key field feature) where
+  -- TODO: what can we do about MemSize for SearchEngine?
+  -- memSize SE.SearchEngine {searchIndex} = 25 + memSize searchIndex
+  memSize _ = memSize0

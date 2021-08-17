@@ -310,16 +310,9 @@ library lib-server
       Distribution.Server.Features.HaskellPlatform
       Distribution.Server.Features.HaskellPlatform.State
       Distribution.Server.Features.Search
-      Distribution.Server.Features.Search.BM25F
-      Distribution.Server.Features.Search.DocIdSet
-      Distribution.Server.Features.Search.DocTermIds
-      Distribution.Server.Features.Search.DocFeatVals
       Distribution.Server.Features.Search.ExtractDescriptionTerms
       Distribution.Server.Features.Search.ExtractNameTerms
       Distribution.Server.Features.Search.PkgSearch
-      Distribution.Server.Features.Search.SearchEngine
-      Distribution.Server.Features.Search.SearchIndex
-      Distribution.Server.Features.Search.TermBag
       Distribution.Server.Features.Sitemap.Functions
       Distribution.Server.Features.Votes
       Distribution.Server.Features.Votes.State
@@ -369,6 +362,7 @@ library lib-server
     , cryptohash-sha256     ^>= 0.11.100
     , csv                   ^>= 0.1
     , ed25519               ^>= 0.0.5
+    , full-text-search      ^>= 0.2.1.1
     , hackage-security      ^>= 0.6
     , hackage-security-HTTP ^>= 0.1.1
     , haddock-library       > 1.7 && < 2

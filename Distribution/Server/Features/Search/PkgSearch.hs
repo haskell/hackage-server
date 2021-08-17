@@ -2,15 +2,18 @@
 
 module Distribution.Server.Features.Search.PkgSearch (
     PkgSearchEngine,
+    PkgSearchRankParameters,
     initialPkgSearchEngine,
     defaultSearchRankParameters,
     PkgDocField(..),
     PkgDocFeatures,
   ) where
 
-import Distribution.Server.Features.Search.SearchEngine
+-- import Distribution.Server.Features.Search.SearchEngine
 import Distribution.Server.Features.Search.ExtractNameTerms
 import Distribution.Server.Features.Search.ExtractDescriptionTerms
+
+import Data.SearchEngine
 
 import Data.Ix
 import Data.Set (Set)
@@ -23,7 +26,6 @@ import Distribution.Package
 import Distribution.PackageDescription
 import Distribution.Utils.ShortText
 import Distribution.Text (display)
-import Data.Text (unpack)
 
 
 type PkgSearchEngine = SearchEngine
@@ -52,8 +54,7 @@ pkgSearchConfig =
       documentKey           = packageName . fst,
       extractDocumentTerms  = extractTokens . fst,
       transformQueryTerm    = normaliseQueryToken,
-      documentFeatureValue  = getFeatureValue,
-      makeKey               = mkPackageName . unpack
+      documentFeatureValue  = getFeatureValue
   }
   where
     extractTokens :: PackageDescription -> PkgDocField -> [Text]
@@ -74,7 +75,9 @@ pkgSearchConfig =
 
     getFeatureValue (_pkg, downloadcount) Downloads = fromIntegral downloadcount
 
-defaultSearchRankParameters :: SearchRankParameters PkgDocField PkgDocFeatures
+type PkgSearchRankParameters = SearchRankParameters PkgDocField PkgDocFeatures
+
+defaultSearchRankParameters :: PkgSearchRankParameters
 defaultSearchRankParameters =
     SearchRankParameters {
       paramK1,
@@ -83,7 +86,9 @@ defaultSearchRankParameters =
       paramFeatureWeights,
       paramFeatureFunctions,
       paramResultsetSoftLimit = 400,
-      paramResultsetHardLimit = 800
+      paramResultsetHardLimit = 800,
+      paramAutosuggestPrefilterLimit = 1000, -- TODO: what should these limits be?
+      paramAutosuggestPostfilterLimit = 1000
     }
   where
     paramK1 :: Float
