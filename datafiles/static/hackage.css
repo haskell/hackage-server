@@ -998,6 +998,12 @@ a.deprecated[href]:visited {
 .versions a.normal[href]:link {
     color: #61B01E;
 }
+
 .versions a.normal[href]:visited {
     color: #61B01E;
+}
+
+p.registration-email {
+    border: 1px solid rgb(196,69,29);
+    padding: 0 1em;
 }

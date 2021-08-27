@@ -1,7 +1,9 @@
-# hackage-server
+central-server branch: the hackage.haskell.org instance
+=======================================================
 
-[![Build Status](https://travis-ci.org/haskell/hackage-server.png?branch=master)](https://travis-ci.org/haskell/hackage-server)
-[![Build status](https://github.com/haskell/hackage-server/actions/workflows/ci.yml/badge.svg)](https://github.com/haskell/hackage-server/actions/workflows/ci.yml)
+This is the branch for the "official" Hackage server at hackage.haskell.org. Most changes should not be here, but should be made to master.
+
+# General Documentation
 
 This is the `hackage-server` code. This is what powers <http://hackage.haskell.org>, and many other private hackage instances. The `master` branch is suitable for general usage. Specific policy and documentation for the central hackage instance exists in the `central-server` branch.
 
@@ -242,3 +244,7 @@ flag `--continuous`. It will sync every 30 minutes (configurable with
 cannot be mirrored for some reason and remembers them so it doesn't
 try them again and again. You can force it to try again by deleting
 the state files it mentions.
+=======
+We use this branch for things that are specific to that instance, but which
+are not apprpriate for other instances that other people operate (e.g.
+certain user-facing documentation).

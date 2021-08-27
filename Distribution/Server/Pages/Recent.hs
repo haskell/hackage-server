@@ -160,7 +160,7 @@ channel updated =
   , RSS.Generator "rss-feed"
   ]
   where
-    email = "admin@hackage.haskell.org" --TODO: make this configurable
+    email = "hackage-admin@haskell.org" --TODO: make this configurable
 
 releaseItem :: Users -> URI -> PkgInfo -> [RSS.ItemElem]
 releaseItem users hostURI pkgInfo =

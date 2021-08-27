@@ -57,7 +57,7 @@
       <tbody>
 
         <tr>
-          <th>Versions <span style="font-weight:normal;font-size: small;">[<a href="/package/$package.name$.rss">RSS</a>]</span></th>
+          <th>Versions <span style="font-weight:normal;font-size: small;">[<a href="/package/$package.name$.rss">RSS</a>]  [<a href="https://pvp.haskell.org/faq">faq</a>]</span></th>
           <td>$versions$</td>
         </tr>
 
@@ -192,7 +192,7 @@
         </tr>
         <tr>
           <th>Status</th>
-          <td>$buildStatus$</td>
+	  <td><a href="https://matrix.hackage.haskell.org/package/$package.name$"><img src="https://matrix.hackage.haskell.org/api/v2/packages/$package.name$/badge" alt="Hackage Matrix CI" style="max-width:100%;" /></a><br/>$buildStatus$</td>
         </tr>
       </tbody>
     </table>

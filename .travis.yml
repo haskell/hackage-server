@@ -9,6 +9,10 @@
 language: c
 dist: xenial
 
+branches:
+  except:
+  - central-server
+
 git:
   submodules: false  # whether to recursively clone submodules
 
