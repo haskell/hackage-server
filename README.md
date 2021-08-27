@@ -150,7 +150,7 @@ By default the server runs on port `8080` with the following settings:
 
 To specify something different, see `hackage-server init --help` for details.
 
-The http://127.0.0.1:8080/packages/uploaders/edit is usel to add users
+The http://127.0.0.1:8080/packages/uploaders/edit is used to add users
 (e.g. `admin`) to *Uploaders* group.
 
 The server can be stopped by using `Control-C`.

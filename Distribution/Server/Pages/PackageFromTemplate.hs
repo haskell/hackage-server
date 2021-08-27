@@ -167,6 +167,8 @@ packagePageTemplate render
       , templateVal "license"       (Old.rendLicense render)
       , templateVal "author"        (toHtml $ author desc)
       , templateVal "maintainer"    (Old.maintainField $ rendMaintainer render)
+      , templateVal "maintainerURL" (toHtml $
+        anchor ! [href $ "/package" </> pkgName </> "maintainers" ] << "package maintainers")
       , templateVal "buildDepends"  (snd (Old.renderDependencies render))
       , templateVal "optional"      optionalPackageInfoTemplate
       , templateVal "candidateBanner" candidateBanner
