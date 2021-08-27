@@ -324,6 +324,7 @@ data MirrorEvent =
   | GetPackageFailed GetError PackageId
   | PutPackageOk
   | PutPackageFailed ErrorResponse PackageId
+  | PackageSkipped
 
 notifyResponse :: MirrorEvent -> MirrorSession ()
 notifyResponse e = do
@@ -333,18 +334,20 @@ notifyResponse e = do
     put st'
   where
     handleEvent _ False st = case e of
-      GetIndexOk   -> return st
-      GetPackageOk -> return st
-      PutPackageOk -> return st
+      GetIndexOk     -> return st
+      GetPackageOk   -> return st
+      PutPackageOk   -> return st
+      PackageSkipped -> return st
       GetPackageFailed rsp pkgid ->
         mirrorError (GetEntityError (EntityPackage pkgid) rsp)
       PutPackageFailed rsp pkgid ->
         mirrorError (PutPackageError pkgid rsp)
 
     handleEvent verbosity True st = case e of
-      GetIndexOk   -> return st
-      GetPackageOk -> return st
-      PutPackageOk -> return st
+      GetIndexOk     -> return st
+      GetPackageOk   -> return st
+      PutPackageOk   -> return st
+      PackageSkipped -> return st
       GetPackageFailed rsp pkgid ->
         if getFailedPermanent rsp
           then do
@@ -376,11 +379,13 @@ notifyResponse e = do
        case resp of
          ErrorResponse _ (4,0,4)    _ _ -> True
          ErrorResponse _ (4,1,0)    _ _ -> True
+         ErrorResponse _ (4,5,1)    _ _ -> True
          ErrorResponse _ _otherCode _ _ -> False
     getFailedPermanent (GetRemoteError (Sec.SomeRemoteError theError)) =
        case cast theError of
          Just (Sec.HTTP.UnexpectedResponse _ (4,0,4)) -> True
          Just (Sec.HTTP.UnexpectedResponse _ (4,1,0)) -> True
+         Just (Sec.HTTP.UnexpectedResponse _ (4,5,1)) -> True
          _otherwise                                   -> False
     getFailedPermanent (GetVerificationError _) = False
     getFailedPermanent (GetInvalidPackage _)    = True

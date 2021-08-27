@@ -24,7 +24,8 @@ data MirrorOpts = MirrorOpts {
                     selectedPkgs    :: [PackageId],
                     continuous      :: Maybe Int, -- if so, interval in minutes
                     mo_keepGoing    :: Bool,
-                    mirrorUploaders :: Bool
+                    mirrorUploaders :: Bool,
+                    skipExists      :: Bool
                   }
 
 data MirrorFlags = MirrorFlags {
@@ -33,6 +34,7 @@ data MirrorFlags = MirrorFlags {
     flagInterval        :: Maybe String,
     flagKeepGoing       :: Bool,
     flagMirrorUploaders :: Bool,
+    flagSkipExists      :: Bool,
     flagVerbosity       :: Verbosity,
     flagHelp            :: Bool
 }
@@ -44,6 +46,7 @@ defaultMirrorFlags = MirrorFlags
   , flagInterval        = Nothing
   , flagKeepGoing       = True
   , flagMirrorUploaders = False
+  , flagSkipExists      = False
   , flagVerbosity       = normal
   , flagHelp            = False
   }
@@ -77,6 +80,10 @@ mirrorFlagDescrs =
   , Option [] ["mirror-uploaders"]
       (NoArg (\opts -> opts { flagMirrorUploaders = True }))
       "Mirror the original uploaders which requires that they are already registered on the target hackage."
+
+  , Option [] ["skip-exists"]
+      (NoArg (\opts -> opts { flagSkipExists = True }))
+      "Skip already mirrored packages (only works for local repos)"
   ]
 
 validateOpts :: [String] -> IO (Verbosity, MirrorOpts)
@@ -104,7 +111,8 @@ validateOpts args = do
                                     then Just interval
                                     else Nothing,
                    mo_keepGoing = flagKeepGoing flags,
-                   mirrorUploaders = flagMirrorUploaders flags
+                   mirrorUploaders = flagMirrorUploaders flags,
+                   skipExists   = flagSkipExists flags
                  })
           where
             mpkgs     = validatePackageIds pkgstrs

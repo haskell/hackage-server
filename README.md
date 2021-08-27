@@ -7,16 +7,32 @@ This is the branch for the "official" Hackage server at hackage.haskell.org. Mos
 
 This is the `hackage-server` code. This is what powers <http://hackage.haskell.org>, and many other private hackage instances. The `master` branch is suitable for general usage. Specific policy and documentation for the central hackage instance exists in the `central-server` branch.
 
-## Installing ICU
+## Installing dependencies
+
+`hackage-server` depends on `icu` and `zlib`.
 
 ICU stands for "International Components for Unicode". The `icu4c` is a set
 of libraries that provide Unicode and Globalization support.
 The [text-icu](https://hackage.haskell.org/package/text-icu) Haskell package
 uses the [icu4c](http://icu-project.org/apiref/icu4c/) library to build.
 
+### Nix shell
+
+If you have the Nix package manager installed, the easiest way to obtain
+`hackage-server`'s dependencies is using the Nix shell:
+
+    nix-shell
+
+### Manually
+
+You can also install dependencies manually via your operating system's package
+manager.
+
+#### ICU
+
 You'll need to do the following to get hackage-server's dependency `text-icu` to build:
 
-### Mac OS X
+##### Mac OS X
 
     brew install icu4c
     brew link icu4c --force
@@ -29,13 +45,38 @@ package text-icu
   extra-lib-dirs: /usr/local/opt/icu4c/lib
 ```
 
-### Ubuntu/Debian
+##### Ubuntu/Debian
 
     sudo apt-get update
     sudo apt-get install unzip libicu-dev
 
-### Fedora/CentOS
+##### Fedora/CentOS
+
     sudo dnf install unzip libicu-devel
+
+##### Nix/NixOS
+
+    nix-shell --packages icu
+
+#### zlib
+
+#### Mac OS X
+
+    brew install zlib
+
+#### Ubuntu/Debian
+
+    sudo apt-get update
+    sudo apt-get install zlib
+
+#### Fedora/CentOS
+
+    sudo dnf install zlib
+
+##### Nix/NixOS
+
+    nix-shell --packages zlib
+
 
 ## Setting up security infrastructure
 
@@ -111,7 +152,7 @@ By default the server runs on port `8080` with the following settings:
 
 To specify something different, see `hackage-server init --help` for details.
 
-The http://127.0.0.1:8080/packages/uploaders/edit is usel to add users
+The http://127.0.0.1:8080/packages/uploaders/edit is used to add users
 (e.g. `admin`) to *Uploaders* group.
 
 The server can be stopped by using `Control-C`.

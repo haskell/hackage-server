@@ -11,10 +11,13 @@
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:site" content="@hackage" />
   <meta property="og:url" content="$baseurl$/package/$package.name$" />
-  <meta property="og:title" content="$package.name$: $package.optional.synopsis$" />
-  <meta property="og:description" content="Install via `cabal&nbsp;install&nbsp;$package.name$`. $if(hasVotes)$
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#10; [rating:$score$/3(n=$votes$)]$endif$" />
   <meta property="og:site_name" content="Hackage" />
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="$package.name$" />
+  <meta property="og:description" content="$package.optional.synopsis$" />
+  $if(isDeprecated)$
+    <meta name="robots" contents="noindex">
+  $endif$
   <link rel="canonical" href="$sbaseurl$/package/$package.name$" />
   <script src="/static/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
@@ -199,7 +202,7 @@
         $if(install.0)$<img src="https://img.shields.io/static/v1?label=Build&message=$install.2$&color=$install.1$" />$endif$
         $if(test.0)$<img src="https://img.shields.io/static/v1?label=Tests&message=$test.2$&color=$test.1$" />$endif$
         $if(covg.0)$<img src="https://img.shields.io/static/v1?label=Coverage&message=$covg.2$%&color=$covg.1$" />$endif$
-        <img src="https://img.shields.io/static/v1?label=Documentation&message=$if(hasDocs)$Available$else$Unavailable$endif$&color=$if(hasDocs)$success$else$critical$endif$" />
+        $if(!hasExecOnly)$<img src="https://img.shields.io/static/v1?label=Documentation&message=$if(hasDocs)$Available$else$Unavailable$endif$&color=$if(hasDocs)$success$else$critical$endif$" />$endif$
     </div>
 
     <div id="modules">
@@ -218,7 +221,7 @@
 
     <div id="maintainer-corner">
       <h4>Maintainer's Corner</h4>
-      <p>For package maintainers and hackage trustees</p>
+      <p>For $package.maintainerURL$ and hackage trustees</p>
       <ul>
         <li>
           <a href="$baseurl$/package/$package.name$/maintain">
