@@ -23,7 +23,6 @@ import Distribution.Pretty (Pretty(..))
 import Distribution.Parsec (Parsec(..))
 import qualified Distribution.Compat.CharParsing as P
 
-import Control.Applicative ((<$>))
 import Data.SafeCopy
 import Data.Typeable (Typeable)
 

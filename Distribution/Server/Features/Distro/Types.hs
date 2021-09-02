@@ -19,8 +19,6 @@ import qualified Data.Set as Set
 import qualified Distribution.Version as Version
 import Distribution.Package
 
-import Control.Applicative ((<$>))
-
 import Distribution.Pretty (Pretty(..))
 import Distribution.Parsec (Parsec(..))
 import qualified Distribution.Compat.CharParsing as P

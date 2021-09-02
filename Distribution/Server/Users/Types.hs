@@ -22,7 +22,6 @@ import qualified Data.Text as T
 import qualified Data.Map as M
 import qualified Data.List as L
 
-import Control.Applicative ((<$>))
 import Data.Aeson (ToJSON, FromJSON)
 import Data.SafeCopy (base, extension, deriveSafeCopy, Migrate(..))
 import Data.Typeable (Typeable)

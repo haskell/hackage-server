@@ -19,12 +19,9 @@ import Distribution.Server.Users.Types
 import Distribution.Server.Framework.MemSize
 
 import qualified Data.IntSet as IntSet
-import Data.Monoid (Monoid)
 import Data.SafeCopy (SafeCopy(..), contain)
 import qualified Data.Serialize as Serialize
-import Data.Typeable (Typeable)
 import Control.DeepSeq
-import Control.Applicative ((<$>))
 import Data.Aeson (ToJSON)
 
 

@@ -15,7 +15,6 @@ import Control.Monad.Reader (ask, asks)
 import Control.Monad.State (put, modify)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Control.Applicative ((<$>))
 
 import Data.Acid (Query, Update, makeAcidic)
 import Data.SafeCopy (base, deriveSafeCopy)

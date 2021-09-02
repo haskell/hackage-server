@@ -13,7 +13,6 @@ import Distribution.Package (PackageName)
 import Distribution.Parsec (Parsec(..))
 import Distribution.Version (VersionRange)
 import qualified Data.Map as Map
-import Control.Applicative ((<$>))
 import Text.CSV (CSV, Record)
 import Control.Monad (guard)
 

@@ -14,7 +14,6 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding       as T
 import qualified Data.Text.Encoding.Error as T (lenientDecode)
 import qualified Data.Text.Lazy as TL
-import Data.Semigroup
 import Network.URI (isRelativeReference)
 import Control.Monad.Identity
 import Text.HTML.SanitizeXSS as XSS

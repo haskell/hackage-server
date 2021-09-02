@@ -16,7 +16,6 @@ import Distribution.Package
 import Text.XHtml.Strict
 
 import Control.Arrow ((&&&))
-import Data.Foldable (foldMap)
 import Data.List (sortBy, maximumBy)
 import Data.Ord (comparing)
 import Data.Time (UTCTime(utctDay), showGregorian)

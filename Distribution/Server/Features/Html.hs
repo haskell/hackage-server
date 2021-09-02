@@ -68,7 +68,6 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Vector as Vec
 import qualified Data.Text as T
-import Data.Traversable (traverse)
 import Data.Array (Array, listArray)
 import qualified Data.Array as Array
 import qualified Data.Ix    as Ix
