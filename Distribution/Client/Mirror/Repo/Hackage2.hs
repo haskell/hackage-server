@@ -11,7 +11,6 @@ module Distribution.Client.Mirror.Repo.Hackage2 (
 
 -- stdlib
 import Data.Time
-import Data.Time.Locale.Compat (defaultTimeLocale)
 import Network.Browser
 import Network.URI
 import System.Directory

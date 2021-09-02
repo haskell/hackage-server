@@ -54,7 +54,6 @@ import Distribution.Server.Features.ServerIntrospect (serverIntrospectFeature)
 import Distribution.Server.Features.Crash
 #endif
 
-import Control.Applicative ((<$>))
 import Distribution.Server.Packages.PackageIndex (allPackages)
 import Distribution.Package (packageId)
 

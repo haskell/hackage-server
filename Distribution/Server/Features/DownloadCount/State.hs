@@ -18,7 +18,6 @@ import System.Directory (
     getDirectoryContents
   , createDirectoryIfMissing
   )
-import Control.Applicative ((<$>))
 import qualified Data.ByteString.Lazy as BSL
 import System.IO (withFile, IOMode (..), hPutStr)
 import System.IO.Unsafe (unsafeInterleaveIO)

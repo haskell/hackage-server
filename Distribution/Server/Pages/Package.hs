@@ -1,4 +1,5 @@
 -- Body of the HTML page for a package
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE PatternGuards, RecordWildCards, ViewPatterns #-}
 module Distribution.Server.Pages.Package
   ( packagePage
@@ -45,7 +46,6 @@ import Distribution.Utils.ShortText (fromShortText, ShortText)
 import Text.XHtml.Strict hiding (p, name, title, content)
 import qualified Text.XHtml.Strict
 
-import Data.Monoid              (Monoid(..), (<>))
 import Data.Maybe               (fromMaybe, maybeToList, isJust, mapMaybe)
 import Data.List                (intersperse, intercalate, partition)
 import Control.Arrow            (second)

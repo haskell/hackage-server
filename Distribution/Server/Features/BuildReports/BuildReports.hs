@@ -46,7 +46,6 @@ import qualified Data.Serialize as Serialize
 import Data.Serialize (Serialize, get, put)
 import Data.SafeCopy
 import Data.Typeable (Typeable)
-import Control.Applicative ((<$>))
 import qualified Data.List as L
 import qualified Data.Char as Char
 

@@ -13,7 +13,6 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Typeable (Typeable)
 import Text.CSV (CSV, Record)
-import Control.Applicative ((<$>), (<*>))
 
 import Data.SafeCopy (SafeCopy(..), safeGet, safePut, contain)
 

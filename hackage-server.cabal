@@ -27,7 +27,7 @@ copyright:    2008-2015 Duncan Coutts,
 license:      BSD-3-Clause
 license-file: LICENSE
 
-tested-with: GHC == { 8.10.4 }
+tested-with: GHC == { 8.10.5, 8.8.4 }
 
 data-dir: datafiles
 data-files:
